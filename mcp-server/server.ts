@@ -108,5 +108,3 @@ const httpServer = createServer(async (req, res) => {
 httpServer.listen(port, host, () => {
   console.log(`Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH}`);
 });
-
-
