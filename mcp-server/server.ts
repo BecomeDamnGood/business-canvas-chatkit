@@ -4,7 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 
 const port = Number(process.env.PORT ?? 8787);
-const host = "127.0.0.1";
+const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
 function createAppServer() {
@@ -20,6 +20,35 @@ function createAppServer() {
     async (args) => {
       const message = args?.message;
       return { content: [{ type: "text", text: message ? `pong: ${message}` : "pong" }] };
+    }
+  );
+
+  server.registerTool(
+    "run_step",
+    {
+      title: "Run Step",
+      description: "Thin wrapper tool for Agent Builder. Returns a JSON echo of inputs.",
+      inputSchema: {
+        current_step_id: z.string(),
+        user_message: z.string(),
+        state: z.record(z.any()).optional()
+      }
+    },
+    async (args) => {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ok: true,
+              tool: "run_step",
+              current_step_id: args.current_step_id,
+              user_message: args.user_message,
+              state: args.state ?? {}
+            })
+          }
+        ]
+      };
     }
   );
 
@@ -65,3 +94,4 @@ const httpServer = createServer(async (req, res) => {
 httpServer.listen(port, host, () => {
   console.log(`Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH}`);
 });
+
