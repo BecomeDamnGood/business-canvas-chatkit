@@ -1,0 +1,133 @@
+{
+  "version": "1.0",
+  "name": "Business Canvas Builder Intro",
+  "template": "{\"type\":\"Card\",\"theme\":\"light\",\"background\":\"white\",\"padding\":24,\"children\":[{\"type\":\"Title\",\"value\":\"Business Canvas Builder\",\"textAlign\":\"center\"},{\"type\":\"Caption\",\"value\":\"Creëer op basis van een aantal vragen en antwoorden een businessplan inclusief professionele presentatie.\",\"textAlign\":\"center\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Divider\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Image\",\"src\":\"https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/38f6df604438ba8375b4aa2e159fd1e01745cbb0/chatkit/Elevate%20Your%20Business.png\",\"alt\":\"Elevate Your Business\",\"fit\":\"cover\"},{\"type\":\"Spacer\",\"minSize\":10},{\"type\":\"Caption\",\"value\":\"Gebaseerd op het model van Ben Steenstra.\",\"textAlign\":\"center\"},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Text\",\"value\":\"Geef mij je (toekomstige) bedrijfsnaam en het soort bedrijf en we kunnen direct starten.\",\"textAlign\":\"center\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Form\",\"children\":[{\"type\":\"Textarea\",\"name\":\"answer\",\"placeholder\":\"Typ hier je antwoord…\"},{\"type\":\"Spacer\",\"minSize\":10},{\"type\":\"Button\",\"label\":\"Verstuur\",\"style\":\"primary\",\"submit\":true}]},{\"type\":\"Spacer\",\"minSize\":18},{\"type\":\"Row\",\"justify\":\"center\",\"children\":[{\"type\":\"Col\",\"width\":\"180px\",\"children\":[{\"type\":\"Image\",\"src\":\"https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/1339f31e1bd2f773806b58ea7afb6c76a63360e2/chatkit/ben_steenstra_Logo.png\",\"alt\":\"Ben Steenstra Logo\",\"fit\":\"contain\"}]}]}]}",
+  "jsonSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "stepIndex": {
+        "type": "number"
+      },
+      "stepTotal": {
+        "type": "number"
+      },
+      "stepName": {
+        "type": "string"
+      },
+      "agentMessage": {
+        "type": "string"
+      },
+      "choice1": {
+        "type": "string"
+      },
+      "choice2": {
+        "type": "string"
+      },
+      "choice3": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": true
+  },
+  "outputJsonPreview": {
+    "type": "Card",
+    "theme": "light",
+    "background": "white",
+    "padding": 24,
+    "children": [
+      {
+        "type": "Title",
+        "value": "Business Canvas Builder",
+        "textAlign": "center"
+      },
+      {
+        "type": "Caption",
+        "value": "Creëer op basis van een aantal vragen en antwoorden een businessplan inclusief professionele presentatie.",
+        "textAlign": "center"
+      },
+      {
+        "type": "Spacer",
+        "minSize": 16
+      },
+      {
+        "type": "Divider"
+      },
+      {
+        "type": "Spacer",
+        "minSize": 16
+      },
+      {
+        "type": "Image",
+        "src": "https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/38f6df604438ba8375b4aa2e159fd1e01745cbb0/chatkit/Elevate%20Your%20Business.png",
+        "alt": "Elevate Your Business",
+        "fit": "cover"
+      },
+      {
+        "type": "Spacer",
+        "minSize": 10
+      },
+      {
+        "type": "Caption",
+        "value": "Gebaseerd op het model van Ben Steenstra.",
+        "textAlign": "center"
+      },
+      {
+        "type": "Spacer",
+        "minSize": 14
+      },
+      {
+        "type": "Text",
+        "value": "Geef mij je (toekomstige) bedrijfsnaam en het soort bedrijf en we kunnen direct starten.",
+        "textAlign": "center"
+      },
+      {
+        "type": "Spacer",
+        "minSize": 16
+      },
+      {
+        "type": "Form",
+        "children": [
+          {
+            "type": "Textarea",
+            "name": "answer",
+            "placeholder": "Typ hier je antwoord…"
+          },
+          {
+            "type": "Spacer",
+            "minSize": 10
+          },
+          {
+            "type": "Button",
+            "label": "Verstuur",
+            "style": "primary",
+            "submit": true
+          }
+        ]
+      },
+      {
+        "type": "Spacer",
+        "minSize": 18
+      },
+      {
+        "type": "Row",
+        "justify": "center",
+        "children": [
+          {
+            "type": "Col",
+            "width": "180px",
+            "children": [
+              {
+                "type": "Image",
+                "src": "https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/1339f31e1bd2f773806b58ea7afb6c76a63360e2/chatkit/ben_steenstra_Logo.png",
+                "alt": "Ben Steenstra Logo",
+                "fit": "contain"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "encodedWidget": "eyJpZCI6IndpZ190eHA0YnM3MiIsIm5hbWUiOiJCdXNpbmVzcyBDYW52YXMgQnVpbGRlciBJbnRybyIsInZpZXciOiI8Q2FyZCB0aGVtZT1cImxpZ2h0XCIgYmFja2dyb3VuZD1cIndoaXRlXCIgcGFkZGluZz17MjR9PlxuICA8VGl0bGUgdmFsdWU9XCJCdXNpbmVzcyBDYW52YXMgQnVpbGRlclwiIHRleHRBbGlnbj1cImNlbnRlclwiIC8-XG5cbiAgPENhcHRpb25cbiAgICB2YWx1ZT1cIkNyZcOrZXIgb3AgYmFzaXMgdmFuIGVlbiBhYW50YWwgdnJhZ2VuIGVuIGFudHdvb3JkZW4gZWVuIGJ1c2luZXNzcGxhbiBpbmNsdXNpZWYgcHJvZmVzc2lvbmVsZSBwcmVzZW50YXRpZS5cIlxuICAgIHRleHRBbGlnbj1cImNlbnRlclwiXG4gIC8-XG5cbiAgPFNwYWNlciBtaW5TaXplPXsxNn0gLz5cbiAgPERpdmlkZXIgLz5cbiAgPFNwYWNlciBtaW5TaXplPXsxNn0gLz5cblxuICA8SW1hZ2VcbiAgICBzcmM9XCJodHRwczovL3Jhdy5naXRodWJ1c2VyY29udGVudC5jb20vQmVjb21lRGFtbkdvb2QvYnVzaW5lc3MtY2FudmFzLWNoYXRraXQvMzhmNmRmNjA0NDM4YmE4Mzc1YjRhYTJlMTU5ZmQxZTAxNzQ1Y2JiMC9jaGF0a2l0L0VsZXZhdGUlMjBZb3VyJTIwQnVzaW5lc3MucG5nXCJcbiAgICBhbHQ9XCJFbGV2YXRlIFlvdXIgQnVzaW5lc3NcIlxuICAgIGZpdD1cImNvdmVyXCJcbiAgLz5cblxuICA8U3BhY2VyIG1pblNpemU9ezEwfSAvPlxuXG4gIDxDYXB0aW9uIHZhbHVlPVwiR2ViYXNlZXJkIG9wIGhldCBtb2RlbCB2YW4gQmVuIFN0ZWVuc3RyYS5cIiB0ZXh0QWxpZ249XCJjZW50ZXJcIiAvPlxuXG4gIDxTcGFjZXIgbWluU2l6ZT17MTR9IC8-XG5cbiAgPFRleHRcbiAgICB2YWx1ZT1cIkdlZWYgbWlqIGplICh0b2Vrb21zdGlnZSkgYmVkcmlqZnNuYWFtIGVuIGhldCBzb29ydCBiZWRyaWpmIGVuIHdlIGt1bm5lbiBkaXJlY3Qgc3RhcnRlbi5cIlxuICAgIHRleHRBbGlnbj1cImNlbnRlclwiXG4gIC8-XG5cbiAgPFNwYWNlciBtaW5TaXplPXsxNn0gLz5cblxuICA8Rm9ybT5cbiAgICA8VGV4dGFyZWEgbmFtZT1cImFuc3dlclwiIHBsYWNlaG9sZGVyPVwiVHlwIGhpZXIgamUgYW50d29vcmTigKZcIiAvPlxuICAgIDxTcGFjZXIgbWluU2l6ZT17MTB9IC8-XG4gICAgPEJ1dHRvbiBsYWJlbD1cIlZlcnN0dXVyXCIgc3R5bGU9XCJwcmltYXJ5XCIgc3VibWl0IC8-XG4gIDwvRm9ybT5cblxuICA8U3BhY2VyIG1pblNpemU9ezE4fSAvPlxuXG4gIDxSb3cganVzdGlmeT1cImNlbnRlclwiPlxuICAgIDxDb2wgd2lkdGg9XCIxODBweFwiPlxuICAgICAgPEltYWdlXG4gICAgICAgIHNyYz1cImh0dHBzOi8vcmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbS9CZWNvbWVEYW1uR29vZC9idXNpbmVzcy1jYW52YXMtY2hhdGtpdC8xMzM5ZjMxZTFiZDJmNzczODA2YjU4ZWE3YWZiNmM3NmE2MzM2MGUyL2NoYXRraXQvYmVuX3N0ZWVuc3RyYV9Mb2dvLnBuZ1wiXG4gICAgICAgIGFsdD1cIkJlbiBTdGVlbnN0cmEgTG9nb1wiXG4gICAgICAgIGZpdD1cImNvbnRhaW5cIlxuICAgICAgLz5cbiAgICA8L0NvbD5cbiAgPC9Sb3c-XG48L0NhcmQ-XG4iLCJkZWZhdWx0U3RhdGUiOnsidGl0bGUiOiJCdXNpbmVzcyBDYW52YXMgQnVpbGRlciBJbnRybyJ9LCJzY2hlbWFNb2RlIjoianNvblNjaGVtYSIsImpzb25TY2hlbWEiOnsiJHNjaGVtYSI6Imh0dHBzOi8vanNvbi1zY2hlbWEub3JnL2RyYWZ0LzIwMjAtMTIvc2NoZW1hIiwidHlwZSI6Im9iamVjdCIsInByb3BlcnRpZXMiOnsic3RlcEluZGV4Ijp7InR5cGUiOiJudW1iZXIifSwic3RlcFRvdGFsIjp7InR5cGUiOiJudW1iZXIifSwic3RlcE5hbWUiOnsidHlwZSI6InN0cmluZyJ9LCJhZ2VudE1lc3NhZ2UiOnsidHlwZSI6InN0cmluZyJ9LCJjaG9pY2UxIjp7InR5cGUiOiJzdHJpbmcifSwiY2hvaWNlMiI6eyJ0eXBlIjoic3RyaW5nIn0sImNob2ljZTMiOnsidHlwZSI6InN0cmluZyJ9fSwiYWRkaXRpb25hbFByb3BlcnRpZXMiOnRydWV9LCJzY2hlbWEiOiJpbXBvcnQgeyB6IH0gZnJvbSBcInpvZFwiXG5cbmNvbnN0IFdpZGdldFN0YXRlID0gei5zdHJpY3RPYmplY3Qoe1xuICB0aXRsZTogei5zdHJpbmcoKSxcbn0pXG5cbmV4cG9ydCBkZWZhdWx0IFdpZGdldFN0YXRlIiwic3RhdGVzIjpbXSwic2NoZW1hVmFsaWRpdHkiOiJ2YWxpZCIsInZpZXdWYWxpZGl0eSI6InZhbGlkIiwiZGVmYXVsdFN0YXRlVmFsaWRpdHkiOiJ2YWxpZCJ9"
+}

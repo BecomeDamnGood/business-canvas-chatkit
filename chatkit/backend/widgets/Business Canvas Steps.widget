@@ -1,0 +1,140 @@
+{
+  "version": "1.0",
+  "name": "Business Canvas Steps",
+  "template": "{\"type\":\"Card\",\"theme\":\"light\",\"background\":\"white\",\"padding\":24,\"children\":[{\"type\":\"Row\",\"justify\":\"between\",\"children\":[{\"type\":\"Badge\",\"label\":{{ (((\"Stap \" + (stepIndex if stepIndex is defined and stepIndex is not none else 0) + \" van \") ~ ((stepTotal if stepTotal is defined and stepTotal is not none else 0)))) | tojson }}},{\"type\":\"Badge\",\"label\":{{ (stepName if stepName is defined and stepName is not none else \"\") | tojson }}}]},{\"type\":\"Spacer\",\"minSize\":12},{\"type\":\"Divider\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Text\",\"value\":{{ (agentMessage if agentMessage is defined and agentMessage is not none else \"\") | tojson }}},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Row\",\"justify\":\"center\",\"children\":[{\"type\":\"Button\",\"label\":{{ (choice1 if choice1 is defined and choice1 is not none else \"\") | tojson }},\"style\":\"secondary\"}]},{\"type\":\"Spacer\",\"minSize\":8},{\"type\":\"Row\",\"justify\":\"center\",\"children\":[{\"type\":\"Button\",\"label\":{{ (choice2 if choice2 is defined and choice2 is not none else \"\") | tojson }},\"style\":\"secondary\"}]},{\"type\":\"Spacer\",\"minSize\":8},{\"type\":\"Row\",\"justify\":\"center\",\"children\":[{\"type\":\"Button\",\"label\":{{ (choice3 if choice3 is defined and choice3 is not none else \"\") | tojson }},\"style\":\"secondary\"}]},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Form\",\"children\":[{\"type\":\"Textarea\",\"name\":\"answer\",\"placeholder\":\"Typ hier je antwoord…\"},{\"type\":\"Spacer\",\"minSize\":10},{\"type\":\"Button\",\"label\":\"Verstuur\",\"style\":\"primary\",\"submit\":true}]}]}",
+  "jsonSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "stepIndex": {
+        "type": "number"
+      },
+      "stepTotal": {
+        "type": "number"
+      },
+      "stepName": {
+        "type": "string"
+      },
+      "agentMessage": {
+        "type": "string"
+      },
+      "choice1": {
+        "type": "string"
+      },
+      "choice2": {
+        "type": "string"
+      },
+      "choice3": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": true
+  },
+  "outputJsonPreview": {
+    "type": "Card",
+    "theme": "light",
+    "background": "white",
+    "padding": 24,
+    "children": [
+      {
+        "type": "Row",
+        "justify": "between",
+        "children": [
+          {
+            "type": "Badge",
+            "label": "Stap 2 van 9"
+          },
+          {
+            "type": "Badge",
+            "label": "Dream"
+          }
+        ]
+      },
+      {
+        "type": "Spacer",
+        "minSize": 12
+      },
+      {
+        "type": "Divider"
+      },
+      {
+        "type": "Spacer",
+        "minSize": 16
+      },
+      {
+        "type": "Text",
+        "value": "Wat is jouw droom voor dit bedrijf over 3 jaar? (max 3 zinnen)"
+      },
+      {
+        "type": "Spacer",
+        "minSize": 14
+      },
+      {
+        "type": "Row",
+        "justify": "center",
+        "children": [
+          {
+            "type": "Button",
+            "label": "B2B",
+            "style": "secondary"
+          }
+        ]
+      },
+      {
+        "type": "Spacer",
+        "minSize": 8
+      },
+      {
+        "type": "Row",
+        "justify": "center",
+        "children": [
+          {
+            "type": "Button",
+            "label": "B2C",
+            "style": "secondary"
+          }
+        ]
+      },
+      {
+        "type": "Spacer",
+        "minSize": 8
+      },
+      {
+        "type": "Row",
+        "justify": "center",
+        "children": [
+          {
+            "type": "Button",
+            "label": "Geen voorkeur",
+            "style": "secondary"
+          }
+        ]
+      },
+      {
+        "type": "Spacer",
+        "minSize": 14
+      },
+      {
+        "type": "Form",
+        "children": [
+          {
+            "type": "Textarea",
+            "name": "answer",
+            "placeholder": "Typ hier je antwoord…"
+          },
+          {
+            "type": "Spacer",
+            "minSize": 10
+          },
+          {
+            "type": "Button",
+            "label": "Verstuur",
+            "style": "primary",
+            "submit": true
+          }
+        ]
+      }
+    ]
+  },
+  "encodedWidget": "eyJpZCI6IndpZ19vaXpyZHhrdiIsIm5hbWUiOiJCdXNpbmVzcyBDYW52YXMgU3RlcHMiLCJ2aWV3IjoiPENhcmQgdGhlbWU9XCJsaWdodFwiIGJhY2tncm91bmQ9XCJ3aGl0ZVwiIHBhZGRpbmc9ezI0fT5cbiAgPFJvdyBqdXN0aWZ5PVwiYmV0d2VlblwiPlxuICAgIDxCYWRnZSBsYWJlbD17XCJTdGFwIFwiICsgKHN0ZXBJbmRleCA_PyAwKSArIFwiIHZhbiBcIiArIChzdGVwVG90YWwgPz8gMCl9IC8-XG4gICAgPEJhZGdlIGxhYmVsPXtzdGVwTmFtZSA_PyBcIlwifSAvPlxuICA8L1Jvdz5cblxuICA8U3BhY2VyIG1pblNpemU9ezEyfSAvPlxuICA8RGl2aWRlciAvPlxuICA8U3BhY2VyIG1pblNpemU9ezE2fSAvPlxuXG4gIDxUZXh0IHZhbHVlPXthZ2VudE1lc3NhZ2UgPz8gXCJcIn0gLz5cblxuICA8U3BhY2VyIG1pblNpemU9ezE0fSAvPlxuXG4gIDxSb3cganVzdGlmeT1cImNlbnRlclwiPlxuICAgIDxCdXR0b24gbGFiZWw9e2Nob2ljZTEgPz8gXCJcIn0gc3R5bGU9XCJzZWNvbmRhcnlcIiAvPlxuICA8L1Jvdz5cbiAgPFNwYWNlciBtaW5TaXplPXs4fSAvPlxuICA8Um93IGp1c3RpZnk9XCJjZW50ZXJcIj5cbiAgICA8QnV0dG9uIGxhYmVsPXtjaG9pY2UyID8_IFwiXCJ9IHN0eWxlPVwic2Vjb25kYXJ5XCIgLz5cbiAgPC9Sb3c-XG4gIDxTcGFjZXIgbWluU2l6ZT17OH0gLz5cbiAgPFJvdyBqdXN0aWZ5PVwiY2VudGVyXCI-XG4gICAgPEJ1dHRvbiBsYWJlbD17Y2hvaWNlMyA_PyBcIlwifSBzdHlsZT1cInNlY29uZGFyeVwiIC8-XG4gIDwvUm93PlxuXG4gIDxTcGFjZXIgbWluU2l6ZT17MTR9IC8-XG5cbiAgPEZvcm0-XG4gICAgPFRleHRhcmVhIG5hbWU9XCJhbnN3ZXJcIiBwbGFjZWhvbGRlcj1cIlR5cCBoaWVyIGplIGFudHdvb3Jk4oCmXCIgLz5cbiAgICA8U3BhY2VyIG1pblNpemU9ezEwfSAvPlxuICAgIDxCdXR0b24gbGFiZWw9XCJWZXJzdHV1clwiIHN0eWxlPVwicHJpbWFyeVwiIHN1Ym1pdCAvPlxuICA8L0Zvcm0-XG48L0NhcmQ-XG4iLCJkZWZhdWx0U3RhdGUiOnsic3RlcEluZGV4IjoyLCJzdGVwVG90YWwiOjksInN0ZXBOYW1lIjoiRHJlYW0iLCJhZ2VudE1lc3NhZ2UiOiJXYXQgaXMgam91dyBkcm9vbSB2b29yIGRpdCBiZWRyaWpmIG92ZXIgMyBqYWFyPyAobWF4IDMgemlubmVuKSIsImNob2ljZTEiOiJCMkIiLCJjaG9pY2UyIjoiQjJDIiwiY2hvaWNlMyI6IkdlZW4gdm9vcmtldXIifSwic2NoZW1hTW9kZSI6Impzb25TY2hlbWEiLCJqc29uU2NoZW1hIjp7IiRzY2hlbWEiOiJodHRwczovL2pzb24tc2NoZW1hLm9yZy9kcmFmdC8yMDIwLTEyL3NjaGVtYSIsInR5cGUiOiJvYmplY3QiLCJwcm9wZXJ0aWVzIjp7InN0ZXBJbmRleCI6eyJ0eXBlIjoibnVtYmVyIn0sInN0ZXBUb3RhbCI6eyJ0eXBlIjoibnVtYmVyIn0sInN0ZXBOYW1lIjp7InR5cGUiOiJzdHJpbmcifSwiYWdlbnRNZXNzYWdlIjp7InR5cGUiOiJzdHJpbmcifSwiY2hvaWNlMSI6eyJ0eXBlIjoic3RyaW5nIn0sImNob2ljZTIiOnsidHlwZSI6InN0cmluZyJ9LCJjaG9pY2UzIjp7InR5cGUiOiJzdHJpbmcifX0sImFkZGl0aW9uYWxQcm9wZXJ0aWVzIjp0cnVlfSwic2NoZW1hIjoiaW1wb3J0IHsgeiB9IGZyb20gXCJ6b2RcIlxuXG5jb25zdCBXaWRnZXRTdGF0ZSA9IHouc3RyaWN0T2JqZWN0KHtcbiAgdGl0bGU6IHouc3RyaW5nKCksXG59KVxuXG5leHBvcnQgZGVmYXVsdCBXaWRnZXRTdGF0ZSIsInN0YXRlcyI6W10sInNjaGVtYVZhbGlkaXR5IjoidmFsaWQiLCJ2aWV3VmFsaWRpdHkiOiJ2YWxpZCIsImRlZmF1bHRTdGF0ZVZhbGlkaXR5IjoidmFsaWQifQ"
+}
