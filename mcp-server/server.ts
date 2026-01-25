@@ -7,6 +7,13 @@ const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
+// OpenAI Apps domain verification
+const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
+// Prefer env var so you can rotate tokens without changing code.
+// If not set, it falls back to the token you pasted.
+const OPENAI_APPS_CHALLENGE_TOKEN =
+  process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
+
 function createAppServer() {
   const server = new McpServer({ name: "business-canvas-mcp", version: "0.1.0" });
 
@@ -63,6 +70,13 @@ const httpServer = createServer(async (req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
 
+  // Domain verification endpoint must return only the token, as plain text.
+  if (req.method === "GET" && url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end(OPENAI_APPS_CHALLENGE_TOKEN);
+    return;
+  }
+
   if (req.method === "GET" && url.pathname === "/") {
     res.writeHead(200, { "content-type": "text/plain" }).end("Business Canvas MCP server");
     return;
@@ -94,4 +108,5 @@ const httpServer = createServer(async (req, res) => {
 httpServer.listen(port, host, () => {
   console.log(`Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH}`);
 });
+
 
