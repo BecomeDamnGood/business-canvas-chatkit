@@ -1,127 +1,19 @@
 {
   "version": "1.0",
   "name": "Business Canvas Steps",
-  "template": "{\"type\":\"Card\",\"theme\":\"light\",\"background\":\"white\",\"padding\":24,\"children\":[{\"type\":\"Row\",\"justify\":\"between\",\"children\":[{\"type\":\"Badge\",\"label\":{{ (((\"Stap \" + stepIndex + \" van \") ~ stepTotal)) | tojson }}},{\"type\":\"Badge\",\"label\":{{ (stepName) | tojson }}}]},{\"type\":\"Spacer\",\"minSize\":12},{\"type\":\"Divider\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Text\",\"value\":{{ (agentMessage if agentMessage is defined and agentMessage is not none else \"\") | tojson }}},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Col\",\"gap\":8,\"children\":[{\"type\":\"Button\",\"label\":{{ (choice1 if choice1 is defined and choice1 is not none else \"\") | tojson }},\"style\":\"secondary\",\"block\":true},{\"type\":\"Button\",\"label\":{{ (choice2 if choice2 is defined and choice2 is not none else \"\") | tojson }},\"style\":\"secondary\",\"block\":true},{\"type\":\"Button\",\"label\":{{ (choice3 if choice3 is defined and choice3 is not none else \"\") | tojson }},\"style\":\"secondary\",\"block\":true}]},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Form\",\"onSubmitAction\":{\"type\":\"bc.step.submit\"},\"children\":[{\"type\":\"Textarea\",\"name\":\"answer\",\"placeholder\":\"Typ hier je antwoord…\"},{\"type\":\"Spacer\",\"minSize\":10},{\"type\":\"Button\",\"label\":\"Verstuur\",\"style\":\"primary\",\"submit\":true,\"block\":true}]}]}",
+  "template": "{\"type\":\"Card\",\"theme\":\"light\",\"background\":\"white\",\"padding\":24,\"children\":[{\"type\":\"Row\",\"justify\":\"between\",\"children\":[{\"type\":\"Badge\",\"label\":{{ (\"Stap \" ~ stepIndex ~ \" van \" ~ stepTotal) | tojson }}},{\"type\":\"Badge\",\"label\":{{ (stepName if stepName is defined and stepName is not none else \"\") | tojson }}}]},{\"type\":\"Spacer\",\"minSize\":12},{\"type\":\"Divider\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Text\",\"value\":{{ (agentMessage if agentMessage is defined and agentMessage is not none else \"\") | tojson }}},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Col\",\"gap\":8,\"children\":[{\"type\":\"Button\",\"label\":{{ (choice1 if choice1 is defined and choice1 is not none else \"\") | tojson }},\"style\":\"secondary\",\"block\":true,\"disabled\":{{ (choice1 is not defined) or (choice1 is none) or (choice1 | length == 0) }},\"onClickAction\":{\"type\":\"bc.step.choice\",\"payload\":{\"label\":{{ (choice1 if choice1 is defined and choice1 is not none else \"\") | tojson }}}}},{\"type\":\"Button\",\"label\":{{ (choice2 if choice2 is defined and choice2 is not none else \"\") | tojson }},\"style\":\"secondary\",\"block\":true,\"disabled\":{{ (choice2 is not defined) or (choice2 is none) or (choice2 | length == 0) }},\"onClickAction\":{\"type\":\"bc.step.choice\",\"payload\":{\"label\":{{ (choice2 if choice2 is defined and choice2 is not none else \"\") | tojson }}}}},{\"type\":\"Button\",\"label\":{{ (choice3 if choice3 is defined and choice3 is not none else \"\") | tojson }},\"style\":\"secondary\",\"block\":true,\"disabled\":{{ (choice3 is not defined) or (choice3 is none) or (choice3 | length == 0) }},\"onClickAction\":{\"type\":\"bc.step.choice\",\"payload\":{\"label\":{{ (choice3 if choice3 is defined and choice3 is not none else \"\") | tojson }}}}}]},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Form\",\"onSubmitAction\":{\"type\":\"bc.step.submit\"},\"children\":[{\"type\":\"Textarea\",\"name\":\"answer\",\"placeholder\":\"Typ hier je antwoord…\"},{\"type\":\"Spacer\",\"minSize\":10},{\"type\":\"Button\",\"label\":\"Verstuur\",\"style\":\"primary\",\"submit\":true,\"block\":true}]}]}",
   "jsonSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
-      "stepIndex": {
-        "type": "number"
-      },
-      "stepTotal": {
-        "type": "number"
-      },
-      "stepName": {
-        "type": "string"
-      },
-      "agentMessage": {
-        "type": "string"
-      },
-      "choice1": {
-        "type": "string"
-      },
-      "choice2": {
-        "type": "string"
-      },
-      "choice3": {
-        "type": "string"
-      }
+      "stepIndex": { "type": "number" },
+      "stepTotal": { "type": "number" },
+      "stepName": { "type": "string" },
+      "agentMessage": { "type": "string" },
+      "choice1": { "type": "string" },
+      "choice2": { "type": "string" },
+      "choice3": { "type": "string" }
     },
     "additionalProperties": true
-  },
-  "outputJsonPreview": {
-    "type": "Card",
-    "theme": "light",
-    "background": "white",
-    "padding": 24,
-    "children": [
-      {
-        "type": "Row",
-        "justify": "between",
-        "children": [
-          {
-            "type": "Badge",
-            "label": "Stap 2 van 9"
-          },
-          {
-            "type": "Badge",
-            "label": "Dream"
-          }
-        ]
-      },
-      {
-        "type": "Spacer",
-        "minSize": 12
-      },
-      {
-        "type": "Divider"
-      },
-      {
-        "type": "Spacer",
-        "minSize": 16
-      },
-      {
-        "type": "Text",
-        "value": "Wat is jouw droom voor dit bedrijf over 3 jaar? (max 3 zinnen)"
-      },
-      {
-        "type": "Spacer",
-        "minSize": 14
-      },
-      {
-        "type": "Col",
-        "gap": 8,
-        "children": [
-          {
-            "type": "Button",
-            "label": "B2B",
-            "style": "secondary",
-            "block": true
-          },
-          {
-            "type": "Button",
-            "label": "B2C",
-            "style": "secondary",
-            "block": true
-          },
-          {
-            "type": "Button",
-            "label": "Geen voorkeur",
-            "style": "secondary",
-            "block": true
-          }
-        ]
-      },
-      {
-        "type": "Spacer",
-        "minSize": 14
-      },
-      {
-        "type": "Form",
-        "onSubmitAction": {
-          "type": "bc.step.submit"
-        },
-        "children": [
-          {
-            "type": "Textarea",
-            "name": "answer",
-            "placeholder": "Typ hier je antwoord…"
-          },
-          {
-            "type": "Spacer",
-            "minSize": 10
-          },
-          {
-            "type": "Button",
-            "label": "Verstuur",
-            "style": "primary",
-            "submit": true,
-            "block": true
-          }
-        ]
-      }
-    ]
-  },
-  "encodedWidget": "eyJpZCI6IndpZ19vaXpyZHhrdiIsIm5hbWUiOiJCdXNpbmVzcyBDYW52YXMgU3RlcHMiLCJ2aWV3IjoiPENhcmQgdGhlbWU9XCJsaWdodFwiIGJhY2tncm91bmQ9XCJ3aGl0ZVwiIHBhZGRpbmc9ezI0fT5cbiAgPFJvdyBqdXN0aWZ5PVwiYmV0d2VlblwiPlxuICAgIDxCYWRnZSBsYWJlbD17XCJTdGFwIFwiICsgc3RlcEluZGV4ICsgXCIgdmFuIFwiICsgc3RlcFRvdGFsfSAvPlxuICAgIDxCYWRnZSBsYWJlbD17c3RlcE5hbWV9IC8-XG4gIDwvUm93PlxuXG4gIDxTcGFjZXIgbWluU2l6ZT17MTJ9IC8-XG4gIDxEaXZpZGVyIC8-XG4gIDxTcGFjZXIgbWluU2l6ZT17MTZ9IC8-XG5cbiAgPFRleHQgdmFsdWU9e2FnZW50TWVzc2FnZSA_PyBcIlwifSAvPlxuXG4gIDxTcGFjZXIgbWluU2l6ZT17MTR9IC8-XG5cbiAgPENvbCBnYXA9ezh9PlxuICAgIDxCdXR0b24gbGFiZWw9e2Nob2ljZTEgPz8gXCJcIn0gc3R5bGU9XCJzZWNvbmRhcnlcIiBibG9jayAvPlxuICAgIDxCdXR0b24gbGFiZWw9e2Nob2ljZTIgPz8gXCJcIn0gc3R5bGU9XCJzZWNvbmRhcnlcIiBibG9jayAvPlxuICAgIDxCdXR0b24gbGFiZWw9e2Nob2ljZTMgPz8gXCJcIn0gc3R5bGU9XCJzZWNvbmRhcnlcIiBibG9jayAvPlxuICA8L0NvbD5cblxuICA8U3BhY2VyIG1pblNpemU9ezE0fSAvPlxuXG4gIDxGb3JtIG9uU3VibWl0QWN0aW9uPXt7IHR5cGU6IFwiYmMuc3RlcC5zdWJtaXRcIiB9fT5cbiAgICA8VGV4dGFyZWEgbmFtZT1cImFuc3dlclwiIHBsYWNlaG9sZGVyPVwiVHlwIGhpZXIgamUgYW50d29vcmTigKZcIiAvPlxuICAgIDxTcGFjZXIgbWluU2l6ZT17MTB9IC8-XG4gICAgPEJ1dHRvbiBsYWJlbD1cIlZlcnN0dXVyXCIgc3R5bGU9XCJwcmltYXJ5XCIgc3VibWl0IGJsb2NrIC8-XG4gIDwvRm9ybT5cbjwvQ2FyZD5cbiIsImRlZmF1bHRTdGF0ZSI6eyJzdGVwSW5kZXgiOjIsInN0ZXBUb3RhbCI6OSwic3RlcE5hbWUiOiJEcmVhbSIsImFnZW50TWVzc2FnZSI6IldhdCBpcyBqb3V3IGRyb29tIHZvb3IgZGl0IGJlZHJpamYgb3ZlciAzIGphYXI_IChtYXggMyB6aW5uZW4pIiwiY2hvaWNlMSI6IkIyQiIsImNob2ljZTIiOiJCMkMiLCJjaG9pY2UzIjoiR2VlbiB2b29ya2V1ciJ9LCJzY2hlbWFNb2RlIjoianNvblNjaGVtYSIsImpzb25TY2hlbWEiOnsiJHNjaGVtYSI6Imh0dHBzOi8vanNvbi1zY2hlbWEub3JnL2RyYWZ0LzIwMjAtMTIvc2NoZW1hIiwidHlwZSI6Im9iamVjdCIsInByb3BlcnRpZXMiOnsic3RlcEluZGV4Ijp7InR5cGUiOiJudW1iZXIifSwic3RlcFRvdGFsIjp7InR5cGUiOiJudW1iZXIifSwic3RlcE5hbWUiOnsidHlwZSI6InN0cmluZyJ9LCJhZ2VudE1lc3NhZ2UiOnsidHlwZSI6InN0cmluZyJ9LCJjaG9pY2UxIjp7InR5cGUiOiJzdHJpbmcifSwiY2hvaWNlMiI6eyJ0eXBlIjoic3RyaW5nIn0sImNob2ljZTMiOnsidHlwZSI6InN0cmluZyJ9fSwiYWRkaXRpb25hbFByb3BlcnRpZXMiOnRydWV9LCJzY2hlbWEiOiJpbXBvcnQgeyB6IH0gZnJvbSBcInpvZFwiXG5cbmNvbnN0IFdpZGdldFN0YXRlID0gei5zdHJpY3RPYmplY3Qoe1xuICB0aXRsZTogei5zdHJpbmcoKSxcbn0pXG5cbmV4cG9ydCBkZWZhdWx0IFdpZGdldFN0YXRlIiwic3RhdGVzIjpbXSwic2NoZW1hVmFsaWRpdHkiOiJ2YWxpZCIsInZpZXdWYWxpZGl0eSI6InZhbGlkIiwiZGVmYXVsdFN0YXRlVmFsaWRpdHkiOiJ2YWxpZCJ9"
+  }
 }
