@@ -1,21 +1,22 @@
+// mcp-server/server.ts
 import { createServer } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { runCanvasStep } from "./agents.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
-// Bump this every time you redeploy, so we can prove which version is live.
-const VERSION = "v11";
+const VERSION = "v12-agents";
 
 // OpenAI Apps domain verification
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
   process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
 
-// Minimal UI route (hardcoded HTML, no filesystem).
+// UI template settings
 const UI_HTTP_PATH = "/ui/step-card";
 const UI_MIME_TYPE = "text/html+skybridge";
 
@@ -77,9 +78,7 @@ function createAppServer() {
     },
     async (args) => {
       const message = args?.message;
-      return {
-        content: [{ type: "text", text: message ? `pong: ${message}` : "pong" }]
-      };
+      return { content: [{ type: "text", text: message ? `pong: ${message}` : "pong" }] };
     }
   );
 
@@ -87,7 +86,7 @@ function createAppServer() {
     "run_step",
     {
       title: "Run Step",
-      description: "Thin wrapper tool for Agent Builder. Returns an echo plus UI template metadata.",
+      description: "Runs the Business Canvas agents flow (router + specialists + integrator). Returns UI template metadata.",
       inputSchema: {
         current_step_id: z.string(),
         user_message: z.string(),
@@ -95,32 +94,18 @@ function createAppServer() {
       }
     },
     async (args) => {
-      const payload = {
-        ok: true,
-        tool: "run_step",
-        version: VERSION,
+      const result = await runCanvasStep({
         current_step_id: args.current_step_id,
         user_message: args.user_message,
         state: args.state ?? {}
-      };
-
-      const bodyText =
-        `version: ${VERSION}\n` +
-        `current_step_id: ${payload.current_step_id}\n` +
-        `user_message: ${payload.user_message}\n\n` +
-        `state:\n${JSON.stringify(payload.state, null, 2)}`;
+      });
 
       return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(payload)
-          }
-        ],
+        content: [{ type: "text", text: JSON.stringify(result) }],
         structuredContent: {
-          title: `Run Step Result (${VERSION})`,
-          body: bodyText,
-          meta: `templateUrl: ${UI_HTTP_PATH}`
+          title: `Business Canvas (${VERSION})`,
+          body: result.text,
+          meta: `step: ${result.state.current_step} | specialist: ${result.active_specialist} | templateUrl: ${UI_HTTP_PATH}`
         },
         _meta: {
           "openai/outputTemplateUrl": UI_HTTP_PATH
@@ -140,28 +125,18 @@ const httpServer = createServer(async (req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
 
-  // OpenAI domain verification
   if (req.method === "GET" && url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(OPENAI_APPS_CHALLENGE_TOKEN);
     return;
   }
 
-  // Proof endpoint
   if (req.method === "GET" && url.pathname === "/version") {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(`VERSION=${VERSION}`);
     return;
   }
 
-  // Health endpoint
-  if (req.method === "GET" && url.pathname === "/health") {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", version: VERSION }));
-    return;
-  }
-
-  // UI template endpoint
   if (req.method === "GET" && url.pathname === UI_HTTP_PATH) {
     res.writeHead(200, { "content-type": UI_MIME_TYPE });
     res.end(stepCardHtml());
@@ -169,8 +144,7 @@ const httpServer = createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/") {
-    res.writeHead(200, { "content-type": "text/plain" });
-    res.end(`Business Canvas MCP server (${VERSION})`);
+    res.writeHead(200, { "content-type": "text/plain" }).end(`Business Canvas MCP server (${VERSION})`);
     return;
   }
 
@@ -198,5 +172,5 @@ const httpServer = createServer(async (req, res) => {
 });
 
 httpServer.listen(port, host, () => {
-  console.log(`Business Canvas MCP server (${VERSION}) listening on http://${host}:${port}${MCP_PATH}`);
+  console.log(`Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`);
 });
