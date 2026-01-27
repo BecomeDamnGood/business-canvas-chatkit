@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Step Output Card</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
+        margin: 0;
+        padding: 16px;
+      }
+      .card {
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        border-radius: 14px;
+        padding: 14px 14px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      }
+      .title {
+        font-size: 16px;
+        font-weight: 700;
+        margin: 0 0 8px 0;
+      }
+      .body {
+        font-size: 14px;
+        line-height: 1.45;
+        margin: 0;
+        white-space: pre-wrap;
+      }
+      .muted {
+        opacity: 0.7;
+        font-size: 12px;
+        margin-top: 10px;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h3 class="title" id="title">Step Output</h3>
+      <p class="body" id="body">No content</p>
+      <div class="muted" id="meta"></div>
+    </div>
+
+    <script>
+      /*
+        Skybridge templates receive tool data as JSON.
+        Different hosts provide it under different globals. We support common variants.
+      */
+      function pickData() {
+        return (
+          (globalThis.__SKYBRIDGE__ && globalThis.__SKYBRIDGE__.data) ||
+          globalThis.skybridgeData ||
+          globalThis.templateData ||
+          {}
+        );
+      }
+
+      const data = pickData();
+
+      const title = data.title || "Step Output";
+      const body = data.body || data.text || "No content";
+      const meta = data.meta || "";
+
+      document.getElementById("title").textContent = title;
+      document.getElementById("body").textContent = body;
+      document.getElementById("meta").innerHTML = meta ? `<code>${meta}</code>` : "";
+    </script>
+  </body>
+</html>
