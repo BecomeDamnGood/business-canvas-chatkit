@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
@@ -9,13 +10,53 @@ const MCP_PATH = "/mcp";
 
 // OpenAI Apps domain verification
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
-// Prefer env var so you can rotate tokens without changing code.
-// If not set, it falls back to the token you pasted.
 const OPENAI_APPS_CHALLENGE_TOKEN =
   process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
 
+// UI template settings
+const UI_HTTP_PATH = "/ui/step-card";
+const UI_TEMPLATE_URI = "resource://ui/step-card";
+const UI_MIME_TYPE = "text/html+skybridge";
+
+function loadStepCardHtml(): string {
+  // This resolves to mcp-server/ui/step-card.html when running from server.ts
+  const fileUrl = new URL("./ui/step-card.html", import.meta.url);
+  return readFileSync(fileUrl, "utf-8");
+}
+
 function createAppServer() {
   const server = new McpServer({ name: "business-canvas-mcp", version: "0.1.0" });
+
+  // Register UI resource if the SDK supports it, but do not crash if it does not.
+  // We also serve the same template over plain HTTP at /ui/step-card as a fallback.
+  const html = loadStepCardHtml();
+  const anyServer = server as any;
+
+  if (typeof anyServer.registerResource === "function") {
+    try {
+      anyServer.registerResource(
+        UI_TEMPLATE_URI,
+        {
+          title: "Step Output Card",
+          description: "Minimal Skybridge UI template for rendering tool output.",
+          mimeType: UI_MIME_TYPE
+        },
+        async () => {
+          return {
+            contents: [
+              {
+                uri: UI_TEMPLATE_URI,
+                mimeType: UI_MIME_TYPE,
+                text: html
+              }
+            ]
+          };
+        }
+      );
+    } catch (e) {
+      console.warn("registerResource failed, continuing with HTTP fallback only:", e);
+    }
+  }
 
   server.registerTool(
     "ping",
@@ -34,7 +75,7 @@ function createAppServer() {
     "run_step",
     {
       title: "Run Step",
-      description: "Thin wrapper tool for Agent Builder. Returns a JSON echo of inputs.",
+      description: "Thin wrapper tool for Agent Builder. Returns a JSON echo of inputs and a UI template payload.",
       inputSchema: {
         current_step_id: z.string(),
         user_message: z.string(),
@@ -42,19 +83,37 @@ function createAppServer() {
       }
     },
     async (args) => {
+      const payload = {
+        ok: true,
+        tool: "run_step",
+        current_step_id: args.current_step_id,
+        user_message: args.user_message,
+        state: args.state ?? {}
+      };
+
+      const bodyText =
+        `current_step_id: ${payload.current_step_id}\n` +
+        `user_message: ${payload.user_message}\n\n` +
+        `state:\n${JSON.stringify(payload.state, null, 2)}`;
+
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
-              ok: true,
-              tool: "run_step",
-              current_step_id: args.current_step_id,
-              user_message: args.user_message,
-              state: args.state ?? {}
-            })
+            text: JSON.stringify(payload)
           }
-        ]
+        ],
+        structuredContent: {
+          title: "Run Step Result",
+          body: bodyText,
+          meta: `template: ${UI_TEMPLATE_URI}`
+        },
+        _meta: {
+          // Primary: MCP resource URI
+          "openai/outputTemplate": UI_TEMPLATE_URI,
+          // Fallback: direct HTTP URL path (useful in some hosts)
+          "openai/outputTemplateUrl": UI_HTTP_PATH
+        }
       };
     }
   );
@@ -74,6 +133,20 @@ const httpServer = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(OPENAI_APPS_CHALLENGE_TOKEN);
+    return;
+  }
+
+  // Serve Skybridge UI template over plain HTTP as a fallback.
+  if (req.method === "GET" && url.pathname === UI_HTTP_PATH) {
+    try {
+      const html = loadStepCardHtml();
+      res.writeHead(200, { "content-type": UI_MIME_TYPE });
+      res.end(html);
+    } catch (e) {
+      console.error("Failed to serve UI template:", e);
+      res.writeHead(500, { "content-type": "text/plain" });
+      res.end("Failed to load UI template");
+    }
     return;
   }
 
