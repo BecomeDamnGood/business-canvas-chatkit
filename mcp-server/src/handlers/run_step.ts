@@ -3,6 +3,7 @@ import { z } from "zod";
 import { callStrictJson } from "../core/llm";
 import { migrateState, type CanvasState } from "../core/state";
 import { integrateUserFacingOutput } from "../core/integrator";
+import { orchestrate, type OrchestratorDecision } from "../core/orchestrator";
 
 import {
   STEP_0_ID,
@@ -35,114 +36,147 @@ const RunStepArgsSchema = z.object({
 type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
 
 /**
- * Orchestrator routing (embedded for now; move to src/core/orchestrator.ts later)
- */
-const CanonicalSteps = [
-  "step_0",
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "strategy",
-  "rulesofthegame",
-  "presentation",
-] as const;
-
-type CanonicalStepId = (typeof CanonicalSteps)[number];
-
-function isCanonicalStepId(x: string): x is CanonicalStepId {
-  return (CanonicalSteps as readonly string[]).includes(x);
-}
-
-function routeNext(state: CanvasState) {
-  const specialistResult = state.last_specialist_result ?? {};
-
-  const triggerDream =
-    typeof specialistResult === "object" &&
-    String((specialistResult as any).proceed_to_dream ?? "") === "true";
-
-  // reserved
-  const triggerPurpose =
-    typeof specialistResult === "object" &&
-    String((specialistResult as any).proceed_to_purpose ?? "") === "true";
-
-  const triggerDreamExplainer =
-    typeof specialistResult === "object" &&
-    String((specialistResult as any).suggest_dreambuilder ?? "") === "true";
-
-  const handshakeStartExplainer =
-    typeof specialistResult === "object" &&
-    String((specialistResult as any).action ?? "") === "CONFIRM" &&
-    String((specialistResult as any).suggest_dreambuilder ?? "") === "true";
-
-  let next_step: CanonicalStepId = isCanonicalStepId(state.current_step as any)
-    ? (state.current_step as CanonicalStepId)
-    : "step_0";
-
-  let next_specialist: string =
-    next_step === "step_0"
-      ? STEP_0_SPECIALIST
-      : next_step === "dream"
-      ? DREAM_SPECIALIST
-      : STEP_0_SPECIALIST;
-
-  if (triggerDream) {
-    next_step = "dream";
-    next_specialist = DREAM_SPECIALIST;
-  } else if (triggerPurpose) {
-    next_step = "purpose";
-    next_specialist = "Purpose";
-  } else if (state.active_specialist === "DreamExplainer" && triggerDreamExplainer) {
-    next_step = "dream";
-    next_specialist = "DreamExplainer";
-  } else if (next_step === "dream" && handshakeStartExplainer) {
-    next_step = "dream";
-    next_specialist = "DreamExplainer";
-  } else {
-    if (!isCanonicalStepId(String(state.current_step))) {
-      next_step = "step_0";
-      next_specialist = STEP_0_SPECIALIST;
-    } else {
-      next_step = state.current_step as CanonicalStepId;
-      next_specialist =
-        next_step === "step_0"
-          ? STEP_0_SPECIALIST
-          : next_step === "dream"
-          ? DREAM_SPECIALIST
-          : STEP_0_SPECIALIST;
-    }
-  }
-
-  const show_session_intro: "true" | "false" =
-    state.intro_shown_session !== "true" ? "true" : "false";
-
-  const intro_shown_session: "true" | "false" = "true";
-
-  const show_step_intro: "true" | "false" =
-    state.intro_shown_for_step !== next_step ? "true" : "false";
-
-  return {
-    next_step,
-    specialist_to_call: next_specialist,
-    show_session_intro,
-    show_step_intro,
-    intro_shown_session,
-  };
-}
-
-/**
  * Chain rule:
  * If Step 0 returns proceed_to_dream == "true", immediately run Dream in the same tool call.
  */
 function shouldChainToDream(
-  step: CanonicalStepId,
-  specialistName: string,
+  decision: OrchestratorDecision,
   specialistResult: any
 ): boolean {
-  if (step !== "step_0") return false;
-  if (specialistName !== STEP_0_SPECIALIST) return false;
+  if (String(decision.next_step) !== STEP_0_ID) return false;
+  if (String(decision.specialist_to_call) !== STEP_0_SPECIALIST) return false;
   return String(specialistResult?.proceed_to_dream ?? "") === "true";
+}
+
+/**
+ * Persist state updates consistently (no nulls)
+ * - active_specialist
+ * - current_step
+ * - last_specialist_result
+ * - intro_shown_session
+ * - intro_shown_for_step (only when action==="INTRO" to avoid intro loops)
+ * - store step_0_final/business_name and dream_final conservatively
+ */
+function applyStateUpdate(params: {
+  prev: CanvasState;
+  decision: OrchestratorDecision;
+  specialistResult: any;
+}): CanvasState {
+  const { prev, decision, specialistResult } = params;
+
+  const action = String(specialistResult?.action ?? "");
+  const next_step = String(decision.next_step ?? "");
+  const active_specialist = String(decision.specialist_to_call ?? "");
+
+  let nextState: CanvasState = {
+    ...prev,
+    current_step: next_step,
+    active_specialist,
+    last_specialist_result:
+      typeof specialistResult === "object" && specialistResult !== null
+        ? specialistResult
+        : {},
+    intro_shown_session: decision.intro_shown_session,
+    intro_shown_for_step: action === "INTRO" ? next_step : prev.intro_shown_for_step,
+  };
+
+  // Step 0 persistence
+  if (next_step === STEP_0_ID) {
+    if (typeof specialistResult?.step_0 === "string" && specialistResult.step_0.trim()) {
+      nextState = { ...nextState, step_0_final: specialistResult.step_0.trim() };
+    }
+    if (
+      typeof specialistResult?.business_name === "string" &&
+      specialistResult.business_name.trim()
+    ) {
+      nextState = { ...nextState, business_name: specialistResult.business_name.trim() };
+    }
+  }
+
+  // Dream persistence (conservative)
+  if (next_step === DREAM_STEP_ID) {
+    if (
+      String(specialistResult?.action ?? "") === "CONFIRM" &&
+      typeof specialistResult?.dream === "string" &&
+      specialistResult.dream.trim()
+    ) {
+      nextState = { ...nextState, dream_final: specialistResult.dream.trim() };
+    }
+  }
+
+  return nextState;
+}
+
+/**
+ * Call specialist (strict JSON) based on orchestrator decision.
+ * We use step-specific builder inputs (parity), not the generic template.
+ */
+async function callSpecialistStrict(params: {
+  model: string;
+  state: CanvasState;
+  decision: OrchestratorDecision;
+  userMessage: string;
+}): Promise<{ specialistResult: any; attempts: number }> {
+  const { model, state, decision, userMessage } = params;
+  const specialist = String(decision.specialist_to_call ?? "");
+
+  if (specialist === STEP_0_SPECIALIST) {
+    const plannerInput = buildStep0SpecialistInput(userMessage);
+
+    const res = await callStrictJson<ValidationAndBusinessNameOutput>({
+      model,
+      instructions: VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS,
+      plannerInput,
+      schemaName: "ValidationAndBusinessName",
+      jsonSchema: ValidationAndBusinessNameJsonSchema,
+      zodSchema: ValidationAndBusinessNameZodSchema,
+      temperature: 0.2,
+      topP: 1,
+      maxOutputTokens: 2048,
+      debugLabel: "ValidationAndBusinessName",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  if (specialist === DREAM_SPECIALIST) {
+    // Dream expects the wrapper input string (INTRO_SHOWN_FOR_STEP/CURRENT_STEP/PLANNER_INPUT).
+    const plannerInput = buildDreamSpecialistInput(
+      userMessage,
+      state.intro_shown_for_step,
+      String(decision.next_step || DREAM_STEP_ID)
+    );
+
+    const res = await callStrictJson<DreamOutput>({
+      model,
+      instructions: DREAM_INSTRUCTIONS,
+      plannerInput,
+      schemaName: "Dream",
+      jsonSchema: DreamJsonSchema,
+      zodSchema: DreamZodSchema,
+      temperature: 0.3,
+      topP: 1,
+      maxOutputTokens: 10000,
+      debugLabel: "Dream",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  // Safe fallback: valid Step 0 ESCAPE payload (prevents ChatGPT fallback to its own BMC questions).
+  return {
+    specialistResult: {
+      action: "ESCAPE",
+      message: "Ik kan je hier alleen helpen met het bouwen van je Business Strategy Canvas.",
+      question: "Wil je nu doorgaan met verificatie?",
+      refined_formulation: "",
+      confirmation_question: "",
+      business_name: "TBD",
+      proceed_to_dream: "false",
+      step_0: "",
+    },
+    attempts: 0,
+  };
 }
 
 /**
@@ -151,11 +185,6 @@ function shouldChainToDream(
 export async function run_step(rawArgs: unknown): Promise<{
   state: CanvasState;
 
-  /**
-   * UI-facing output:
-   * - text is what the UI should show
-   * - specialist is still returned for Inspector/debug and for your UI template if you want it
-   */
   output: {
     text: string;
     current_step: string;
@@ -173,9 +202,11 @@ export async function run_step(rawArgs: unknown): Promise<{
     rendered_text: string;
     rendered_parts: Array<{ key: string; value: string }>;
     next_state: CanvasState;
-    attempts?: number;
+    attempts: number;
+    decision: OrchestratorDecision;
     chain?: {
       ran: boolean;
+      decision_after?: OrchestratorDecision;
       chained_step?: string;
       chained_specialist?: string;
       chained_action?: string;
@@ -186,171 +217,73 @@ export async function run_step(rawArgs: unknown): Promise<{
   const userMessage = args.user_message ?? "";
 
   // Canonicalize state + migrations
-  const state = migrateState(args.state ?? {});
+  const initialState = migrateState(args.state ?? {});
 
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
 
-  // --------- ROUTE ----------
-  const route = routeNext(state);
+  // --------- ORCHESTRATE (first decision) ----------
+  const decision1 = orchestrate(initialState);
 
-  // --------- CALL SPECIALIST (strict JSON) ----------
-  let specialistResult: any;
-  let attempts = 0;
+  // --------- CALL SPECIALIST (first) ----------
+  const call1 = await callSpecialistStrict({
+    model,
+    state: initialState,
+    decision: decision1,
+    userMessage,
+  });
 
-  if (route.specialist_to_call === STEP_0_SPECIALIST) {
-    const plannerInput = buildStep0SpecialistInput(userMessage);
+  let attempts = call1.attempts;
+  let specialistResult: any = call1.specialistResult;
 
-    const res = await callStrictJson<ValidationAndBusinessNameOutput>({
-      model,
-      instructions: VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS,
-      plannerInput,
-      schemaName: "ValidationAndBusinessName",
-      jsonSchema: ValidationAndBusinessNameJsonSchema,
-      zodSchema: ValidationAndBusinessNameZodSchema,
-      temperature: 0.2,
-      topP: 1,
-      maxOutputTokens: 2048,
-      debugLabel: "ValidationAndBusinessName",
-    });
+  // --------- UPDATE STATE (after first specialist) ----------
+  let nextState = applyStateUpdate({
+    prev: initialState,
+    decision: decision1,
+    specialistResult,
+  });
 
-    specialistResult = res.data;
-    attempts = res.attempts;
-  } else if (route.specialist_to_call === DREAM_SPECIALIST) {
-    const plannerInput = buildDreamSpecialistInput(
-      userMessage,
-      state.intro_shown_for_step,
-      String(route.next_step)
-    );
-
-    const res = await callStrictJson<DreamOutput>({
-      model,
-      instructions: DREAM_INSTRUCTIONS,
-      plannerInput,
-      schemaName: "Dream",
-      jsonSchema: DreamJsonSchema,
-      zodSchema: DreamZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "Dream",
-    });
-
-    specialistResult = res.data;
-    attempts = res.attempts;
-  } else {
-    // Safe fallback: valid Step 0 ESCAPE payload (prevents ChatGPT "BMC" fallback).
-    specialistResult = {
-      action: "ESCAPE",
-      message:
-        "Ik kan je hier alleen helpen met het bouwen van je Business Strategy Canvas.",
-      question: "Wil je nu doorgaan met verificatie?",
-      refined_formulation: "",
-      confirmation_question: "",
-      business_name: "TBD",
-      proceed_to_dream: "false",
-      step_0: "",
-    };
-    attempts = 0;
-  }
-
-  // --------- UPDATE STATE ----------
-  let nextState: CanvasState = {
-    ...state,
-    current_step: route.next_step,
-    active_specialist: route.specialist_to_call,
-    last_specialist_result: specialistResult,
-    intro_shown_session: route.intro_shown_session,
-    // To prevent endless INTRO loops, update intro_shown_for_step only when a specialist outputs INTRO.
-    intro_shown_for_step:
-      String(specialistResult?.action ?? "") === "INTRO"
-        ? route.next_step
-        : state.intro_shown_for_step,
-  };
-
-  // Persist Step 0 stable storage line when present
-  if (route.next_step === STEP_0_ID) {
-    if (typeof specialistResult?.step_0 === "string" && specialistResult.step_0.trim()) {
-      nextState = { ...nextState, step_0_final: specialistResult.step_0.trim() };
-    }
-    if (
-      typeof specialistResult?.business_name === "string" &&
-      specialistResult.business_name.trim()
-    ) {
-      nextState = { ...nextState, business_name: specialistResult.business_name.trim() };
-    }
-  }
-
-  // Persist Dream final (conservative)
-  if (route.next_step === DREAM_STEP_ID) {
-    if (
-      String(specialistResult?.action ?? "") === "CONFIRM" &&
-      typeof specialistResult?.dream === "string" &&
-      specialistResult.dream.trim()
-    ) {
-      nextState = { ...nextState, dream_final: specialistResult.dream.trim() };
-    }
-  }
-
-  // --------- CHAIN: STEP 0 -> DREAM ----------
+  // --------- OPTIONAL CHAIN: STEP 0 -> DREAM ----------
   const chainInfo: {
     ran: boolean;
+    decision_after?: OrchestratorDecision;
     chained_step?: string;
     chained_specialist?: string;
     chained_action?: string;
   } = { ran: false };
 
-  if (shouldChainToDream(route.next_step, route.specialist_to_call, specialistResult)) {
+  let finalDecision = decision1;
+
+  if (shouldChainToDream(decision1, specialistResult)) {
     chainInfo.ran = true;
 
-    // Prepare chain route reading the proceed trigger
-    const chainState: CanvasState = {
-      ...nextState,
-      current_step: "step_0",
-      last_specialist_result: specialistResult,
-      active_specialist: route.specialist_to_call,
-    };
+    // Re-orchestrate based on updated state containing proceed trigger
+    const decision2 = orchestrate(nextState);
+    chainInfo.decision_after = decision2;
 
-    const chainRoute = routeNext(chainState);
-
-    if (chainRoute.next_step === "dream" && chainRoute.specialist_to_call === DREAM_SPECIALIST) {
-      const chainPlannerInput = buildDreamSpecialistInput(
-        userMessage,
-        nextState.intro_shown_for_step,
-        "dream"
-      );
-
-      const chainRes = await callStrictJson<DreamOutput>({
+    // Only chain if it routes to Dream specialist
+    if (String(decision2.next_step) === DREAM_STEP_ID && String(decision2.specialist_to_call) === DREAM_SPECIALIST) {
+      const call2 = await callSpecialistStrict({
         model,
-        instructions: DREAM_INSTRUCTIONS,
-        plannerInput: chainPlannerInput,
-        schemaName: "Dream",
-        jsonSchema: DreamJsonSchema,
-        zodSchema: DreamZodSchema,
-        temperature: 0.3,
-        topP: 1,
-        maxOutputTokens: 10000,
-        debugLabel: "Dream:chain",
+        state: nextState,
+        decision: decision2,
+        userMessage,
       });
 
-      const dreamResult = chainRes.data;
+      attempts = Math.max(attempts, call2.attempts);
+      specialistResult = call2.specialistResult;
 
-      // User should see Dream output now
-      specialistResult = dreamResult;
-      attempts = Math.max(attempts, chainRes.attempts);
+      // Apply second state update (Dream becomes current output)
+      nextState = applyStateUpdate({
+        prev: nextState,
+        decision: decision2,
+        specialistResult,
+      });
 
-      nextState = {
-        ...nextState,
-        current_step: "dream",
-        active_specialist: DREAM_SPECIALIST,
-        last_specialist_result: dreamResult,
-        intro_shown_session: "true",
-        intro_shown_for_step:
-          String(dreamResult?.action ?? "") === "INTRO" ? "dream" : nextState.intro_shown_for_step,
-      };
+      chainInfo.chained_step = String(decision2.next_step);
+      chainInfo.chained_specialist = String(decision2.specialist_to_call);
+      chainInfo.chained_action = String(specialistResult?.action ?? "");
 
-      chainInfo.chained_step = "dream";
-      chainInfo.chained_specialist = DREAM_SPECIALIST;
-      chainInfo.chained_action = String(dreamResult?.action ?? "");
+      finalDecision = decision2;
     }
   }
 
@@ -358,8 +291,8 @@ export async function run_step(rawArgs: unknown): Promise<{
   const rendered = integrateUserFacingOutput({
     state: nextState,
     specialistOutput: specialistResult,
-    show_session_intro: route.show_session_intro,
-    show_step_intro: route.show_step_intro,
+    show_session_intro: finalDecision.show_session_intro,
+    show_step_intro: finalDecision.show_step_intro,
   });
 
   const action = String(specialistResult?.action ?? "");
@@ -368,21 +301,22 @@ export async function run_step(rawArgs: unknown): Promise<{
     state: nextState,
     output: {
       text: rendered.text,
-      current_step: nextState.current_step,
-      active_specialist: nextState.active_specialist,
+      current_step: String(nextState.current_step),
+      active_specialist: String(nextState.active_specialist),
       action,
-      show_session_intro: route.show_session_intro,
-      show_step_intro: route.show_step_intro,
+      show_session_intro: finalDecision.show_session_intro,
+      show_step_intro: finalDecision.show_step_intro,
       specialist: specialistResult,
     },
     debug: {
-      active_specialist: nextState.active_specialist,
-      current_step: nextState.current_step,
+      active_specialist: String(nextState.active_specialist),
+      current_step: String(nextState.current_step),
       action,
       rendered_text: rendered.text,
       rendered_parts: rendered.debug.rendered_parts,
       next_state: nextState,
       attempts,
+      decision: finalDecision,
       chain: chainInfo,
     },
   };
