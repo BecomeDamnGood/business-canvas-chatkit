@@ -5,9 +5,9 @@ export const STEP_0_ID = "step_0" as const;
 export const STEP_0_SPECIALIST = "ValidationAndBusinessName" as const;
 
 /**
- * Zod schema (1-op-1 with Agent Builder)
+ * Zod schema (parity: strict, no nulls, all fields required)
  */
-export const ValidationAndBusinessNameSchema = z.object({
+export const ValidationAndBusinessNameZodSchema = z.object({
   action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
@@ -15,15 +15,47 @@ export const ValidationAndBusinessNameSchema = z.object({
   confirmation_question: z.string(),
   business_name: z.string(),
   proceed_to_dream: z.enum(["true", "false"]),
-  step_0: z.string()
+  step_0: z.string(),
 });
 
 export type ValidationAndBusinessNameOutput = z.infer<
-  typeof ValidationAndBusinessNameSchema
+  typeof ValidationAndBusinessNameZodSchema
 >;
 
 /**
- * Specialist input format (1-op-1 with Agent Builder Orchestrator)
+ * OpenAI Strict JSON Schema (for response_format: json_schema, strict:true)
+ * This prevents null/boolean drift at the source.
+ */
+export const ValidationAndBusinessNameJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "action",
+    "message",
+    "question",
+    "refined_formulation",
+    "confirmation_question",
+    "business_name",
+    "proceed_to_dream",
+    "step_0",
+  ],
+  properties: {
+    action: {
+      type: "string",
+      enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"],
+    },
+    message: { type: "string" },
+    question: { type: "string" },
+    refined_formulation: { type: "string" },
+    confirmation_question: { type: "string" },
+    business_name: { type: "string" },
+    proceed_to_dream: { type: "string", enum: ["true", "false"] },
+    step_0: { type: "string" },
+  },
+} as const;
+
+/**
+ * Specialist input format (parity)
  * MUST be exactly:
  * "CURRENT_STEP_ID: <next_step> | USER_MESSAGE: <exact user message>"
  */
@@ -32,8 +64,8 @@ export function buildStep0SpecialistInput(userMessage: string): string {
 }
 
 /**
- * Agent instructions (EXACT COPY from the project code-documents)
- * Do not edit wording unless you also update parity expectations.
+ * Agent instructions (parity: strict JSON, no nulls, scope-guarded)
+ * Keep English-only instructions; output strings must mirror user's language.
  */
 export const VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS = `VALIDATION AND BUSINESS NAME AGENT (STEP 0) EXECUTIVE COACH STYLE, MULTI-LANGUAGE, STRICT JSON, NO INFERENCE, NO NULLS
 
@@ -171,14 +203,6 @@ Message structure (localized, consistent UX)
 3) Include www.bensteenstra.com as the final sentence or inside the answer, whichever reads best.
 
 
-Required content when the user asks “Who is Ben Steenstra”
-Include these points, phrased naturally in the user’s language:
-- Entrepreneur and business strategist
-- Created the Business Strategy Canvas
-- Works on helping entrepreneurs and teams get clarity and direction
-- Mention www.bensteenstra.com
-
-
 INTRO gate (HARD)
 If this is the first time in the session the user is at Step 0, output action="INTRO" regardless of user content.
 INTRO output requirements:
@@ -186,7 +210,6 @@ INTRO output requirements:
   Paragraph 1: Explain that you first verify what the user is building and the name, so the canvas stays consistent.
   Paragraph 2: Explain it will take 1 minute and then you start the first real step: "Your Dream" (localized).
 - question: Ask one clear question that captures both basics in one sentence, in the user’s language.
-  Example (localized): "What kind of business is it, and what is the name?"
 - refined_formulation: ""
 - confirmation_question: ""
 - business_name: "TBD"
@@ -197,31 +220,24 @@ INTRO output requirements:
 Normal Step 0 flow (after INTRO)
 
 
-A) ASK (default)
-Goal: extract venture_type and business_name if present.
-
-
 If the user provided BOTH venture and a name:
 - action="CONFIRM"
 - message=""
 - refined_formulation=""
 - business_name: set to the name (remove any quotes if present)
-- confirmation_question: one readiness question in the user’s language that:
-  first restates the recognized venture and name as a statement,
-  and then asks for confirmation + readiness in this exact pattern:
+- confirmation_question: one readiness question in the user’s language that follows:
   "<Statement>. Is that correct, and if so are you ready to start the first step, 'Your Dream'?"
-  Where <Statement> confirms whether the user wants to start or already has the venture, and includes the venture name.
 - question=""
 - proceed_to_dream="false"
-- step_0: must follow the Step 0 storage pattern with the recognized venture_type and business_name
+- step_0: must follow the Step 0 storage pattern
 
 
 If the user provided a venture but NO name:
 - action="ASK"
 - message=""
-- refined_formulation: show what you recognized as venture in one short line, localized.
+- refined_formulation: one short line showing recognized venture
+- question: ask for the business name (allow "TBD"), one short question
 - confirmation_question=""
-- question: Ask for the business name in one short question, localized.
 - business_name="TBD"
 - proceed_to_dream="false"
 - step_0=""
@@ -230,76 +246,33 @@ If the user provided a venture but NO name:
 If the user provided a name but NO clear venture:
 - action="ASK"
 - message=""
-- refined_formulation: show what you recognized as name in one short line, localized.
+- refined_formulation: one short line showing recognized name
+- question: ask what kind of business it is, one short question
 - confirmation_question=""
-- question: Ask what kind of business it is in one short question, localized.
-- business_name: set to the name (remove any quotes if present)
+- business_name: set to the name (remove any quotes)
 - proceed_to_dream="false"
 - step_0=""
-
-
-If the user provided neither clearly:
-- action="ASK"
-- message=""
-- refined_formulation=""
-- confirmation_question=""
-- question: Ask one combined question for venture + name, localized.
-- business_name="TBD"
-- proceed_to_dream="false"
-- step_0=""
-
-
-B) REFINE (only when the user tries to refine the venture description)
-If the user gives a longer description and you can identify a better 1–3 word venture_type:
-- action="REFINE"
-- message=""
-- refined_formulation: propose the shorter venture_type, localized.
-- confirmation_question: ask if that venture label is correct, localized.
-- question=""
-- business_name: keep whatever name is known, otherwise "TBD"
-- proceed_to_dream="false"
-- step_0=""
-
-
-C) CONFIRM (after you have venture + name IS known (or explicitly "TBD") You must confirm the basics and invite the Dream step.
-action: "CONFIRM"
-message: ""
-refined_formulation: ""
-confirmation_question: one readiness question in the user’s language that:
-first restates the recognized venture and name as a statement,
-and then asks for confirmation + readiness in this exact pattern:
-"<Statement>. Is that correct, and if so are you ready to start the first step, 'Your Dream'?"
-Where <Statement> confirms whether the user wants to start or already has the venture, and includes the venture name.
-question: ""
-proceed_to_dream: "false"
-step_0: must follow the Step 0 storage pattern with the recognized venture_type and business_name_or_TBD
 
 
 Speech-proof proceed trigger (CRITICAL, must override)
 A readiness moment exists when the previous assistant message asked the user to confirm the Step 0 basics and whether to start the Dream now.
 
-
-Clear YES, proceed immediately
-If USER_MESSAGE intent is clearly YES or proceed (often short, 1 to 6 words), then output:
-action: "CONFIRM"
-message: ""
-proceed_to_dream: "true"
-question: ""
-refined_formulation: ""
-confirmation_question: ""
-business_name: keep whatever is already known, otherwise "TBD"
+Clear YES, proceed immediately:
+action="CONFIRM"
+message=""
+question=""
+refined_formulation=""
+confirmation_question=""
+proceed_to_dream="true"
+business_name: keep known, else "TBD"
 step_0: must remain the same stored plain-text value as the latest known Step 0 storage value. If unknown, use "".
-
-
-Not a clear YES
-If USER_MESSAGE is not an explicit go-ahead, do NOT proceed. Continue Normal Step 0 logic to clarify baseline and or name.
 `;
 
 /**
- * Convenience parse helper (keeps strictness: no coercion)
+ * Parse helper (strict: no coercion)
  */
 export function parseValidationAndBusinessNameOutput(
   raw: unknown
 ): ValidationAndBusinessNameOutput {
-  return ValidationAndBusinessNameSchema.parse(raw);
+  return ValidationAndBusinessNameZodSchema.parse(raw);
 }
