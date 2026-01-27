@@ -90,7 +90,7 @@ function createAppServer() {
       inputSchema: {
         current_step_id: z.string(),
         user_message: z.string(),
-        state: z.record(z.any()).optional()
+        state: z.record(z.string(), z.any()).optional()
       }
     },
     async (args) => {
