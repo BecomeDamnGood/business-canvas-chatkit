@@ -177,7 +177,7 @@ async function openaiJson<T>(
     throw new Error(`OpenAI error ${resp.status}: ${text}`);
   }
 
-  const data = await resp.json();
+  const data: any = await resp.json();
   const outText: string | undefined =
     data?.output?.[0]?.content?.find?.((c: any) => c.type === "output_text")?.text ??
     data?.output_text;
