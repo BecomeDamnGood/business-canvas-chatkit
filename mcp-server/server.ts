@@ -32,52 +32,37 @@ function loadUiHtml(): string {
 function createAppServer() {
   const server = new McpServer({ name: "business-canvas-mcp", version: "0.1.0" });
 
-  // 1) Register Skybridge UI template as MCP resource (OpenAI expects this for widgets)
-  // mimeType MUST be text/html+skybridge
-  server.registerResource(
-    "bsc-step-card",
-    UI_RESOURCE_URI,
-    {},
-    async () => ({
-      contents: [
-        {
-          uri: UI_RESOURCE_URI,
-          mimeType: UI_MIME_TYPE,
-          text: loadUiHtml(),
-          _meta: {
-            // Optional cosmetics (safe to omit)
-            "openai/widgetPrefersBorder": true,
-          },
+  // 1) Register Skybridge UI template as MCP resource
+  server.registerResource("bsc-step-card", UI_RESOURCE_URI, {}, async () => ({
+    contents: [
+      {
+        uri: UI_RESOURCE_URI,
+        mimeType: UI_MIME_TYPE,
+        text: loadUiHtml(),
+        _meta: {
+          "openai/widgetPrefersBorder": true,
         },
-      ],
-    })
-  );
+      },
+    ],
+  }));
 
   // 2) Register tool with outputTemplate in the TOOL DESCRIPTOR (_meta)
-// This is the key piece that makes ChatGPT render the widget.
-server.registerTool(
-  "run_step",
-  {
-    title: "Run Step",
-    description:
-      "Runs the Business Strategy Canvas flow (router + specialists + integrator). Returns structured data for the widget.",
-    inputSchema: {
-      current_step_id: z.string(),
-      user_message: z.string(),
-      state: z.record(z.string(), z.any()).optional(),
+  server.registerTool(
+    "run_step",
+    {
+      title: "Run Step",
+      description:
+        "Runs the Business Strategy Canvas flow (router + specialists + integrator). Returns structured data for the widget.",
+      inputSchema: {
+        current_step_id: z.string(),
+        user_message: z.string(),
+        state: z.record(z.string(), z.any()).optional(),
+      },
+      _meta: {
+        "openai/outputTemplate": UI_RESOURCE_URI,
+        "openai/widgetAccessible": true,
+      },
     },
-
-    // OpenAI widget metadata must live on the tool descriptor
-    _meta: {
-      // The widget template to render when this tool is invoked
-      "openai/outputTemplate": UI_RESOURCE_URI,
-
-      // Allow widget to call tools (window.openai.callTool)
-      "openai/widgetAccessible": true,
-    },
-  },
-  // ... async handler stays the same
-);
     async (args) => {
       const result = await runCanvasStep({
         current_step_id: args.current_step_id,
@@ -85,7 +70,6 @@ server.registerTool(
         state: args.state ?? {},
       });
 
-      // What the widget reads (globalThis.__SKYBRIDGE__.data OR window.openai.toolOutput)
       const templateData = {
         title: `Business Strategy Canvas Builder (${VERSION})`,
         body: result.text,
@@ -96,10 +80,9 @@ server.registerTool(
       };
 
       return {
-        // Keep fallback text minimal (ChatGPT may still show it if UI fails)
+        // Keep fallback text minimal
         content: [{ type: "text", text: result.text || "" }],
-
-        // Structured payload for the widget
+        // Data for the widget
         structuredContent: templateData,
       };
     }
@@ -130,7 +113,7 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
-  // Optional debug UI template route (lets you inspect template in browser)
+  // Optional debug UI template route (inspect in browser)
   if (req.method === "GET" && url.pathname === UI_HTTP_PATH) {
     try {
       res.writeHead(200, { "content-type": UI_MIME_TYPE });
