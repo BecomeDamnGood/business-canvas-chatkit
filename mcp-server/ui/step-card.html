@@ -16,177 +16,36 @@
         --stepOff:#eef2f7;
       }
       *{ box-sizing:border-box; }
-      body{
-        margin:0;
-        padding:0;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
-        color:var(--text);
-        background:var(--bg);
-      }
-      .wrap{
-        max-width: 1080px;
-        margin: 0 auto;
-        padding: 36px 20px 60px;
-      }
-      .title{
-        text-align:center;
-        font-size: 46px;
-        letter-spacing: -0.02em;
-        margin: 10px 0 6px;
-        font-weight: 800;
-      }
-      .subtitle{
-        text-align:center;
-        font-size: 22px;
-        color: var(--muted);
-        margin: 0 0 26px;
-        font-weight: 500;
-      }
+      body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:var(--text); background:var(--bg); }
+      .wrap{ max-width: 1080px; margin: 0 auto; padding: 36px 20px 60px; }
+      .title{ text-align:center; font-size: 46px; letter-spacing: -0.02em; margin: 10px 0 6px; font-weight: 800; }
+      .subtitle{ text-align:center; font-size: 22px; color: var(--muted); margin: 0 0 26px; font-weight: 500; }
 
-      .stepperRow{
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        margin: 18px 0 22px;
-      }
-      .stepper{
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        gap: 0px;
-      }
-      .step{
-        width: 56px;
-        height: 56px;
-        border-radius: 999px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        font-weight: 800;
-        font-size: 18px;
-        background: var(--stepOff);
-        color: #64748b;
-      }
-      .step.active{
-        background: var(--blue);
-        color: white;
-        box-shadow: 0 0 0 6px rgba(47,91,234,0.12);
-      }
-      .stepLine{
-        width: 68px;
-        height: 2px;
-        background: var(--line);
-      }
+      .stepperRow{ display:flex; align-items:center; justify-content:center; margin: 18px 0 22px; }
+      .stepper{ display:flex; align-items:center; justify-content:center; gap: 0px; }
+      .step{ width: 56px; height: 56px; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight: 800; font-size: 18px; background: var(--stepOff); color: #64748b; }
+      .step.active{ background: var(--blue); color: white; box-shadow: 0 0 0 6px rgba(47,91,234,0.12); }
+      .stepLine{ width: 68px; height: 2px; background: var(--line); }
 
-      .sectionTitle{
-        text-align:center;
-        font-size: 30px;
-        font-weight: 900;
-        margin: 8px 0 22px;
-      }
+      .sectionTitle{ text-align:center; font-size: 30px; font-weight: 900; margin: 8px 0 22px; }
 
-      .card{
-        max-width: 920px;
-        margin: 0 auto;
-        border-radius: 28px;
-        border: 2px solid rgba(142,166,255,0.55);
-        padding: 28px 28px 26px;
-        background: var(--card);
-        box-shadow: var(--shadow);
-      }
-      .cardInner{
-        display:flex;
-        align-items:flex-start;
-        gap: 18px;
-      }
-      .badge{
-        width: 64px;
-        height: 64px;
-        border-radius: 999px;
-        background: var(--blue);
-        color: white;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        font-weight: 900;
-        font-size: 20px;
-        flex: 0 0 auto;
-      }
-      .cardTitle{
-        margin: 6px 0 6px;
-        font-size: 34px;
-        font-weight: 950;
-        letter-spacing: -0.01em;
-      }
-      .cardDesc{
-        margin: 0 0 18px;
-        font-size: 22px;
-        line-height: 1.45;
-        color: var(--muted);
-        max-width: 720px;
-      }
-      .prompt{
-        font-size: 28px;
-        font-weight: 900;
-        margin: 12px 0 14px;
-        letter-spacing: -0.01em;
-        white-space: pre-wrap;
-      }
+      .card{ max-width: 920px; margin: 0 auto; border-radius: 28px; border: 2px solid rgba(142,166,255,0.55); padding: 28px 28px 26px; background: var(--card); box-shadow: var(--shadow); }
+      .cardInner{ display:flex; align-items:flex-start; gap: 18px; }
+      .badge{ width: 64px; height: 64px; border-radius: 999px; background: var(--blue); color: white; display:flex; align-items:center; justify-content:center; font-weight: 900; font-size: 20px; flex: 0 0 auto; }
+      .cardTitle{ margin: 6px 0 6px; font-size: 34px; font-weight: 950; letter-spacing: -0.01em; }
+      .cardDesc{ margin: 0 0 10px; font-size: 20px; line-height: 1.45; color: var(--muted); max-width: 720px; white-space: pre-wrap; }
+      .prompt{ font-size: 26px; font-weight: 900; margin: 10px 0 14px; letter-spacing: -0.01em; white-space: pre-wrap; }
 
-      .inputWrap{
-        display:flex;
-        align-items:flex-end;
-        gap: 12px;
-        margin-top: 8px;
-      }
-      textarea{
-        width: 100%;
-        min-height: 92px;
-        resize: vertical;
-        border-radius: 18px;
-        border: 1px solid var(--line);
-        padding: 18px 18px;
-        font-size: 18px;
-        outline: none;
-      }
-      .send{
-        width: 64px;
-        height: 64px;
-        border: none;
-        border-radius: 18px;
-        background: rgba(142,166,255,0.85);
-        color: white;
-        cursor: pointer;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-      }
+      .inputWrap{ display:flex; align-items:flex-end; gap: 12px; margin-top: 8px; }
+      textarea{ width: 100%; min-height: 92px; resize: vertical; border-radius: 18px; border: 1px solid var(--line); padding: 18px 18px; font-size: 18px; outline: none; }
+      .send{ width: 64px; height: 64px; border: none; border-radius: 18px; background: rgba(142,166,255,0.85); color: white; cursor: pointer; display:flex; align-items:center; justify-content:center; }
       .send svg{ width: 26px; height: 26px; }
 
-      .row{
-        display:flex;
-        gap: 10px;
-        margin-top: 14px;
-        flex-wrap: wrap;
-      }
-      .btn{
-        border: 1px solid var(--line);
-        background: #fff;
-        border-radius: 999px;
-        padding: 10px 14px;
-        font-weight: 800;
-        cursor: pointer;
-      }
-      .btn.primary{
-        border-color: rgba(47,91,234,0.25);
-        background: rgba(47,91,234,0.08);
-      }
-      .status{
-        margin-top: 12px;
-        color: var(--muted);
-        font-size: 13px;
-        white-space: pre-wrap;
-      }
+      .row{ display:flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+      .btn{ border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 10px 14px; font-weight: 800; cursor: pointer; }
+      .btn.primary{ border-color: rgba(47,91,234,0.25); background: rgba(47,91,234,0.08); }
+      .status{ margin-top: 12px; color: var(--muted); font-size: 13px; white-space: pre-wrap; }
+
       @media (max-width: 720px){
         .title{ font-size: 34px; }
         .subtitle{ font-size: 18px; }
@@ -218,9 +77,8 @@
           <div style="flex:1">
             <div class="cardTitle" id="cardTitle">Validation & Business Name</div>
 
-            <div class="cardDesc" id="cardDesc">
-              Please share your company name and the kind of business it is to get started.
-            </div>
+            <!-- intro/message shows here -->
+            <div class="cardDesc" id="cardDesc"></div>
 
             <div class="prompt" id="prompt">…</div>
 
@@ -245,21 +103,6 @@
     </div>
 
     <script>
-      // Docs: ChatGPT injects structuredContent into window.openai.toolOutput
-      // Fallbacks remain for non-ChatGPT contexts (browser preview, older experiments)
-      function pickData() {
-        const openai = globalThis.openai;
-        const toolOutput = openai && openai.toolOutput ? openai.toolOutput : null;
-        if (toolOutput && typeof toolOutput === "object") return toolOutput;
-
-        return (
-          (globalThis.__SKYBRIDGE__ && globalThis.__SKYBRIDGE__.data) ||
-          globalThis.skybridgeData ||
-          globalThis.templateData ||
-          {}
-        );
-      }
-
       const ORDER = ["step_0","dream","purpose","bigwhy","role","entity","strategy","rulesofthegame","presentation"];
       const TITLES = {
         step_0: "Validation & Business Name",
@@ -272,6 +115,28 @@
         rulesofthegame: "Rules of the game",
         presentation: "Presentation"
       };
+
+      function normalizeToolOutput(raw) {
+        // raw is usually the structuredContent object returned by the tool
+        // but when calling openai.callTool inside the widget, some hosts return the whole tool result.
+        if (!raw || typeof raw !== "object") return {};
+        if (raw.structuredContent && typeof raw.structuredContent === "object") return raw.structuredContent;
+        return raw;
+      }
+
+      function pickData() {
+        const openai = globalThis.openai;
+        if (openai && openai.toolOutput) {
+          return normalizeToolOutput(openai.toolOutput);
+        }
+        // fallbacks for non-ChatGPT preview contexts
+        return (
+          (globalThis.__SKYBRIDGE__ && globalThis.__SKYBRIDGE__.data) ||
+          globalThis.skybridgeData ||
+          globalThis.templateData ||
+          {}
+        );
+      }
 
       function stepIndex(stepId) {
         const idx = ORDER.indexOf(stepId);
@@ -296,62 +161,85 @@
 
       function pickPrompt(ui) {
         const specialist = (ui && ui.specialist) || {};
-        const c = String(specialist.confirmation_question || "").trim();
+        const confirmQ = String(specialist.confirmation_question || "").trim();
         const q = String(specialist.question || "").trim();
-        return c || q || String(ui.text || "").trim();
+        return confirmQ || q || String(ui.text || "").trim();
+      }
+
+      function pickMessage(ui) {
+        const specialist = (ui && ui.specialist) || {};
+        return String(specialist.message || "").trim();
       }
 
       function shouldShowYesNo(ui) {
         const specialist = (ui && ui.specialist) || {};
-        const c = String(specialist.confirmation_question || "").trim();
-        return Boolean(c);
+        return Boolean(String(specialist.confirmation_question || "").trim());
       }
 
-      // Render
-      const data = pickData();
-      const ui = (data && data.ui && data.ui.result) ? data.ui.result : (data.ui || data.result || {});
-      const state = (ui && ui.state) ? ui.state : {};
-      const current = state.current_step || "step_0";
-      const idx = stepIndex(current);
+      function render(data) {
+        const ui = (data && data.ui && data.ui.result) ? data.ui.result : (data.ui || data.result || {});
+        const state = (ui && ui.state) ? ui.state : {};
+        const current = state.current_step || "step_0";
+        const idx = stepIndex(current);
 
-      buildStepper(idx);
+        buildStepper(idx);
 
-      document.getElementById("badge").textContent = String(idx + 1);
-      document.getElementById("sectionTitle").textContent = TITLES[current] || "Step";
-      document.getElementById("cardTitle").textContent = TITLES[current] || "Step";
+        document.getElementById("badge").textContent = String(idx + 1);
+        document.getElementById("sectionTitle").textContent = TITLES[current] || "Step";
+        document.getElementById("cardTitle").textContent = TITLES[current] || "Step";
 
-      if (current === "step_0") {
-        document.getElementById("cardDesc").textContent =
-          "Please share your company name and the kind of business it is to get started.";
-      } else {
-        document.getElementById("cardDesc").textContent = "";
+        const msg = pickMessage(ui);
+        // fallback only for step_0 if specialist message is empty
+        if (msg) {
+          document.getElementById("cardDesc").textContent = msg;
+        } else if (current === "step_0") {
+          document.getElementById("cardDesc").textContent =
+            "Please share your company name and the kind of business it is to get started.";
+        } else {
+          document.getElementById("cardDesc").textContent = "";
+        }
+
+        document.getElementById("prompt").textContent = pickPrompt(ui) || "";
+
+        const quick = document.getElementById("quickBtns");
+        quick.style.display = shouldShowYesNo(ui) ? "flex" : "none";
+
+        const hasOpenAI = Boolean(globalThis.openai);
+        const hasToolOutput = Boolean(globalThis.openai && globalThis.openai.toolOutput);
+        document.getElementById("status").textContent =
+          (data.meta || "") + (data.meta ? "\n" : "") + `openai:${hasOpenAI} toolOutput:${hasToolOutput}`;
+
+        // keep latest for callRunStep
+        globalThis.__BSC_LATEST__ = { data, ui, state };
       }
-
-      document.getElementById("prompt").textContent = pickPrompt(ui) || "";
-
-      const quick = document.getElementById("quickBtns");
-      quick.style.display = shouldShowYesNo(ui) ? "flex" : "none";
-
-      // Debug/status (helps prove what ChatGPT injected)
-      const hasOpenAI = Boolean(globalThis.openai);
-      const hasToolOutput = Boolean(globalThis.openai && globalThis.openai.toolOutput);
-      document.getElementById("status").textContent =
-        (data.meta || "") +
-        (data.meta ? "\n" : "") +
-        `openai:${hasOpenAI} toolOutput:${hasToolOutput}`;
 
       async function callRunStep(message) {
+        const latest = globalThis.__BSC_LATEST__ || {};
+        const state = (latest.state || { current_step: "step_0" });
+
         if (!globalThis.openai || !globalThis.openai.callTool) {
           document.getElementById("status").textContent =
-            "This UI can't call tools in this host. Please type your answer in chat.";
+            "Not connected (no openai.callTool). Click Connect/Continue in ChatGPT, then try again.";
           return;
         }
+
         const payload = {
           current_step_id: state.current_step || "step_0",
           user_message: message,
           state: state || {}
         };
-        await globalThis.openai.callTool("run_step", payload);
+
+        document.getElementById("status").textContent = "Sending…";
+
+        try {
+          const resp = await globalThis.openai.callTool("run_step", payload);
+          const nextData = normalizeToolOutput(resp);
+          // rerender immediately with returned structuredContent
+          render(nextData);
+        } catch (e) {
+          document.getElementById("status").textContent =
+            "Error calling tool: " + (e && e.message ? e.message : String(e));
+        }
       }
 
       document.getElementById("send").addEventListener("click", () => {
@@ -363,6 +251,9 @@
 
       document.getElementById("btnYes").addEventListener("click", () => callRunStep("yes"));
       document.getElementById("btnNo").addEventListener("click", () => callRunStep("no"));
+
+      // initial render
+      render(pickData());
     </script>
   </body>
 </html>
