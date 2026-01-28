@@ -302,8 +302,8 @@ async function callOpenAIJson({
     throw new Error(`OpenAI error ${res.status}: ${t}`);
   }
 
-  const data = await res.json();
-  const outText = data?.output_text ?? "";
+  const data: any = await res.json();
+  const outText: string = data?.output_text ?? "";
   const parsed = JSON.parse(outText);
   return parsed;
 }
