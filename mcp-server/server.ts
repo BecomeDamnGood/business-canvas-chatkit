@@ -10,38 +10,76 @@ const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
-const VERSION = "v31-ui-http";
+const VERSION = "v32-ui-resource";
 
 // OpenAI Apps domain verification
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
-  process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
+  process.env.OPENAI_APPS_CHALLENGE_TOKEN ??
+  "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
 
-// UI template settings (HTTP)
+// Optional debug UI route (NOT required for ChatGPT widget rendering)
 const UI_HTTP_PATH = "/ui/step-card";
 const UI_MIME_TYPE = "text/html+skybridge";
 
-const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? "";
+// Canonical widget URI (used by openai/outputTemplate)
+const UI_RESOURCE_URI = "ui://widget/step-card.html";
 
 function loadUiHtml(): string {
-  // In production build we copy ui to dist/ui (see Dockerfile), so this works from dist/server.js too.
   return readFileSync(new URL("./ui/step-card.html", import.meta.url), "utf8");
 }
 
 function createAppServer() {
   const server = new McpServer({ name: "business-canvas-mcp", version: "0.1.0" });
 
-  // NOTE: ping removed on purpose (prevents ChatGPT choosing it)
+  // 1) Register Skybridge UI template as MCP resource (OpenAI expects this for widgets)
+  // mimeType MUST be text/html+skybridge
+  server.registerResource(
+    "bsc-step-card",
+    UI_RESOURCE_URI,
+    {},
+    async () => ({
+      contents: [
+        {
+          uri: UI_RESOURCE_URI,
+          mimeType: UI_MIME_TYPE,
+          text: loadUiHtml(),
+          _meta: {
+            // Optional cosmetics (safe to omit)
+            "openai/widgetPrefersBorder": true,
+          },
+        },
+      ],
+    })
+  );
+
+  // 2) Register tool with outputTemplate in the TOOL DESCRIPTOR (_meta)
+  // This is the key piece that makes ChatGPT render the widget.
   server.registerTool(
     "run_step",
     {
       title: "Run Step",
       description:
-        "Runs the Business Strategy Canvas flow (router + specialists + integrator). Returns UI template metadata.",
+        "Runs the Business Strategy Canvas flow (router + specialists + integrator). Returns structured data for the widget.",
       inputSchema: {
         current_step_id: z.string(),
         user_message: z.string(),
         state: z.record(z.string(), z.any()).optional(),
+      },
+
+      // Preferred place for auth metadata (no auth)
+      securitySchemes: [{ type: "noauth" }],
+
+      // OpenAI widget metadata must live on the tool descriptor
+      _meta: {
+        // Back-compat mirror for some clients
+        securitySchemes: [{ type: "noauth" }],
+
+        // The widget template to render when this tool is invoked
+        "openai/outputTemplate": UI_RESOURCE_URI,
+
+        // Allow widget to call tools (window.openai.callTool)
+        "openai/widgetAccessible": true,
       },
     },
     async (args) => {
@@ -51,29 +89,22 @@ function createAppServer() {
         state: args.state ?? {},
       });
 
-      // The widget reads from __SKYBRIDGE__.data:
+      // What the widget reads (globalThis.__SKYBRIDGE__.data OR window.openai.toolOutput)
       const templateData = {
         title: `Business Strategy Canvas Builder (${VERSION})`,
         body: result.text,
         meta: `step: ${result.state.current_step} | specialist: ${result.active_specialist}`,
         ui: {
-          // Everything the widget needs to keep forced flow locally
           result,
         },
       };
 
       return {
-        // Keep chat output minimal to reduce "extra text" from host
+        // Keep fallback text minimal (ChatGPT may still show it if UI fails)
         content: [{ type: "text", text: result.text || "" }],
 
-        // Skybridge template data
+        // Structured payload for the widget
         structuredContent: templateData,
-
-        _meta: {
-        "openai/outputTemplateUrl": PUBLIC_BASE_URL
-        ? `${PUBLIC_BASE_URL}${UI_HTTP_PATH}`
-        : UI_HTTP_PATH,
-        },
       };
     }
   );
@@ -103,7 +134,7 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
-  // UI template (Skybridge)
+  // Optional debug UI template route (lets you inspect template in browser)
   if (req.method === "GET" && url.pathname === UI_HTTP_PATH) {
     try {
       res.writeHead(200, { "content-type": UI_MIME_TYPE });
@@ -116,7 +147,9 @@ const httpServer = createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/") {
-    res.writeHead(200, { "content-type": "text/plain" }).end(`Business Canvas MCP server (${VERSION})`);
+    res
+      .writeHead(200, { "content-type": "text/plain" })
+      .end(`Business Canvas MCP server (${VERSION})`);
     return;
   }
 
