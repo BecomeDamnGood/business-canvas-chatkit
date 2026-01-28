@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -43,37 +43,10 @@
         font-weight: 500;
       }
 
-      .topRight{
-        position: fixed;
-        right: 14px;
-        top: 10px;
-        display:flex;
-        gap: 10px;
-        align-items:center;
-        opacity: 0.95;
-        z-index: 10;
-      }
-      .langSelect{
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 6px 10px;
-        background: #fff;
-        font-weight: 700;
-      }
-      .resetBtn{
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 6px 10px;
-        background: #fff;
-        font-weight: 800;
-        cursor: pointer;
-      }
-
       .stepperRow{
         display:flex;
         align-items:center;
         justify-content:center;
-        gap: 16px;
         margin: 18px 0 22px;
       }
       .stepper{
@@ -93,7 +66,6 @@
         font-size: 18px;
         background: var(--stepOff);
         color: #64748b;
-        position: relative;
       }
       .step.active{
         background: var(--blue);
@@ -176,11 +148,6 @@
         padding: 18px 18px;
         font-size: 18px;
         outline: none;
-        box-shadow: inset 0 1px 0 rgba(0,0,0,0.02);
-      }
-      textarea:focus{
-        border-color: rgba(47,91,234,0.45);
-        box-shadow: 0 0 0 4px rgba(47,91,234,0.10);
       }
       .send{
         width: 64px;
@@ -193,11 +160,6 @@
         display:flex;
         align-items:center;
         justify-content:center;
-        box-shadow: 0 10px 20px rgba(47,91,234,0.18);
-      }
-      .send:disabled{
-        opacity: 0.5;
-        cursor: not-allowed;
       }
       .send svg{ width: 26px; height: 26px; }
 
@@ -219,31 +181,12 @@
         border-color: rgba(47,91,234,0.25);
         background: rgba(47,91,234,0.08);
       }
-
       .status{
         margin-top: 12px;
         color: var(--muted);
         font-size: 13px;
         white-space: pre-wrap;
       }
-
-      .welcome{
-        text-align: center;
-        padding: 18px 10px 6px;
-      }
-      .welcome h2{
-        font-size: 28px;
-        margin: 0 0 10px;
-        font-weight: 950;
-      }
-      .welcome p{
-        margin: 0 auto 14px;
-        max-width: 720px;
-        color: var(--muted);
-        font-size: 18px;
-        line-height: 1.5;
-      }
-
       @media (max-width: 720px){
         .title{ font-size: 34px; }
         .subtitle{ font-size: 18px; }
@@ -259,21 +202,6 @@
   </head>
 
   <body>
-    <div class="topRight">
-      <select id="lang" class="langSelect" aria-label="Language">
-        <option value="auto">Auto</option>
-        <option value="en">EN</option>
-        <option value="nl">NL</option>
-        <option value="de">DE</option>
-        <option value="fr">FR</option>
-        <option value="es">ES</option>
-        <option value="it">IT</option>
-        <option value="pt">PT</option>
-        <option value="tr">TR</option>
-      </select>
-      <button id="reset" class="resetBtn" title="Reset">↺</button>
-    </div>
-
     <div class="wrap">
       <div class="title" id="uiTitle">Business Strategy Canvas Builder</div>
       <div class="subtitle" id="uiSubtitle">Build your strategic foundation step by step</div>
@@ -282,23 +210,20 @@
         <div class="stepper" id="stepper"></div>
       </div>
 
-      <div class="sectionTitle" id="sectionTitle"></div>
+      <div class="sectionTitle" id="sectionTitle">Validation & Business Name</div>
 
       <div class="card">
         <div class="cardInner">
           <div class="badge" id="badge">1</div>
           <div style="flex:1">
-            <div class="cardTitle" id="cardTitle"></div>
+            <div class="cardTitle" id="cardTitle">Validation & Business Name</div>
 
-            <div id="welcome" class="welcome" style="display:none">
-              <h2 id="welcomeTitle">Welcome</h2>
-              <p id="welcomeBody">
-                We’ll go through a small number of steps, one by one, so each step is clear before moving on.
-              </p>
+            <!-- Forced description -->
+            <div class="cardDesc" id="cardDesc">
+              Please share your company name and the kind of business it is to get started.
             </div>
 
-            <div class="cardDesc" id="cardDesc"></div>
-            <div class="prompt" id="prompt"></div>
+            <div class="prompt" id="prompt">…</div>
 
             <div class="inputWrap">
               <textarea id="input" placeholder="Type here your answer..."></textarea>
@@ -320,127 +245,43 @@
       </div>
     </div>
 
-    <script type="module">
-      // Official pattern:
-      // - ChatGPT injects latest tool output into window.openai.toolOutput
-      // - UI can call tools again via window.openai.callTool(...) :contentReference[oaicite:2]{index=2}
+    <script>
+      function pickData() {
+        return (
+          (globalThis.__SKYBRIDGE__ && globalThis.__SKYBRIDGE__.data) ||
+          globalThis.skybridgeData ||
+          globalThis.templateData ||
+          {}
+        );
+      }
 
       const ORDER = ["step_0","dream","purpose","bigwhy","role","entity","strategy","rulesofthegame","presentation"];
       const TITLES = {
-        step_0: { en: "Validation & Business Name", nl: "Validatie & Bedrijfsnaam" },
-        dream: { en: "Dream", nl: "Droom" },
-        purpose: { en: "Purpose", nl: "Purpose" },
-        bigwhy: { en: "Big Why", nl: "Big Why" },
-        role: { en: "Role", nl: "Rol" },
-        entity: { en: "Entity", nl: "Entiteit" },
-        strategy: { en: "Strategy", nl: "Strategie" },
-        rulesofthegame: { en: "Rules of the game", nl: "Spelregels" },
-        presentation: { en: "Presentation", nl: "Presentatie" },
+        step_0: "Validation & Business Name",
+        dream: "Dream",
+        purpose: "Purpose",
+        bigwhy: "Big Why",
+        role: "Role",
+        entity: "Entity",
+        strategy: "Strategy",
+        rulesofthegame: "Rules of the game",
+        presentation: "Presentation"
       };
 
-      // UI i18n (expand anytime). Fallback to English.
-      const I18N = {
-        uiTitle: {
-          en: "Business Strategy Canvas Builder",
-          nl: "Business Strategy Canvas Builder",
-          de: "Business Strategy Canvas Builder",
-          fr: "Business Strategy Canvas Builder",
-          es: "Business Strategy Canvas Builder",
-          it: "Business Strategy Canvas Builder",
-          pt: "Business Strategy Canvas Builder",
-          tr: "Business Strategy Canvas Builder",
-        },
-        uiSubtitle: {
-          en: "Build your strategic foundation step by step",
-          nl: "Bouw je strategische fundament stap voor stap",
-          de: "Baue dein strategisches Fundament Schritt für Schritt",
-          fr: "Construisez votre fondation stratégique étape par étape",
-          es: "Construye tu base estratégica paso a paso",
-          it: "Costruisci la tua base strategica passo dopo passo",
-          pt: "Construa sua base estratégica passo a passo",
-          tr: "Stratejik temelini adım adım oluştur",
-        },
-        welcomeTitle: {
-          en: "Welcome",
-          nl: "Welkom",
-          de: "Willkommen",
-          fr: "Bienvenue",
-          es: "Bienvenido",
-          it: "Benvenuto",
-          pt: "Bem-vindo",
-          tr: "Hoş geldin",
-        },
-        welcomeBody: {
-          en: "We’ll go through a small number of steps, one by one, so each step is clear before moving on.",
-          nl: "We doorlopen een klein aantal stappen, één voor één, zodat elke stap duidelijk is voordat we verder gaan.",
-          de: "Wir gehen Schritt für Schritt vor, damit jeder Schritt klar ist, bevor wir weitermachen.",
-          fr: "Nous avançons étape par étape pour que chaque étape soit claire avant de continuer.",
-          es: "Iremos paso a paso para que cada etapa esté clara antes de continuar.",
-          it: "Andremo passo dopo passo affinché ogni fase sia chiara prima di continuare.",
-          pt: "Vamos passo a passo para que cada etapa fique clara antes de seguir.",
-          tr: "Her adımı netleştirerek adım adım ilerleyeceğiz.",
-        },
-        // Your required text (Step 1 description)
-        step0Desc: {
-          en: "Please share your company name and the kind of business it is to get started.",
-          nl: "Deel je bedrijfsnaam en wat voor bedrijf het is om te beginnen.",
-          de: "Teile deinen Firmennamen und die Art des Unternehmens, um zu starten.",
-          fr: "Partagez le nom de votre entreprise et le type d’activité pour commencer.",
-          es: "Comparte el nombre de tu empresa y el tipo de negocio para empezar.",
-          it: "Condividi il nome della tua azienda e il tipo di attività per iniziare.",
-          pt: "Compartilhe o nome da sua empresa e o tipo de negócio para começar.",
-          tr: "Başlamak için şirket adını ve işletme türünü paylaş.",
-        },
-        inputPlaceholder: {
-          en: "Type here your answer...",
-          nl: "Typ hier je antwoord...",
-          de: "Tippe hier deine Antwort...",
-          fr: "Tapez votre réponse ici...",
-          es: "Escribe tu respuesta aquí...",
-          it: "Scrivi qui la tua risposta...",
-          pt: "Digite sua resposta aqui...",
-          tr: "Yanıtını buraya yaz...",
-        },
-        yes: { en: "Yes", nl: "Ja", de: "Ja", fr: "Oui", es: "Sí", it: "Sì", pt: "Sim", tr: "Evet" },
-        no: { en: "No", nl: "Nee", de: "Nein", fr: "Non", es: "No", it: "No", pt: "Não", tr: "Hayır" },
-      };
-
-      function safeLocale(loc){
-        const supported = ["en","nl","de","fr","es","it","pt","tr"];
-        return supported.includes(loc) ? loc : "en";
-      }
-
-      function guessLocale(){
-        const stored = localStorage.getItem("bsc_locale") || "auto";
-        if (stored !== "auto") return safeLocale(stored);
-        const nav = (window.openai?.locale || navigator.language || "en").toLowerCase().slice(0,2);
-        return safeLocale(nav);
-      }
-
-      function t(key, loc){
-        const dict = I18N[key] || {};
-        return dict[loc] || dict["en"] || "";
-      }
-
-      function stepIndex(stepId){
+      function stepIndex(stepId) {
         const idx = ORDER.indexOf(stepId);
         return idx >= 0 ? idx : 0;
       }
 
-      function stepTitle(stepId, loc){
-        const item = TITLES[stepId] || {};
-        return item[loc] || item["en"] || "Step";
-      }
-
-      function buildStepper(activeIdx){
+      function buildStepper(activeIdx) {
         const el = document.getElementById("stepper");
         el.innerHTML = "";
-        for (let i=0;i<9;i++){
+        for (let i = 0; i < 9; i++) {
           const s = document.createElement("div");
-          s.className = "step" + (i===activeIdx ? " active" : "");
-          s.textContent = String(i+1);
+          s.className = "step" + (i === activeIdx ? " active" : "");
+          s.textContent = String(i + 1);
           el.appendChild(s);
-          if (i<8){
+          if (i < 8) {
             const line = document.createElement("div");
             line.className = "stepLine";
             el.appendChild(line);
@@ -448,215 +289,73 @@
         }
       }
 
-      function pickPrompt(ui){
-        const specialist = ui?.specialist || {};
+      function pickPrompt(ui) {
+        const specialist = (ui && ui.specialist) || {};
         const c = String(specialist.confirmation_question || "").trim();
         const q = String(specialist.question || "").trim();
-        // Prefer confirmation question > question > text fallback
-        return c || q || String(ui?.text || "").trim();
+        return c || q || String(ui.text || "").trim();
       }
 
-      function shouldShowYesNo(ui){
-        const specialist = ui?.specialist || {};
+      function shouldShowYesNo(ui) {
+        const specialist = (ui && ui.specialist) || {};
         const c = String(specialist.confirmation_question || "").trim();
         return Boolean(c);
       }
 
-      function agentLangFromLocale(loc){
-        // Your agents.ts currently supports NL/EN only.
-        // UI can be multi-language, but we map agent language to NL or EN for now.
-        return loc === "nl" ? "nl" : "en";
+      // Render
+      const data = pickData();
+      const ui = (data && data.ui && data.ui.result) ? data.ui.result : (data.ui || data.result || {});
+      const state = (ui && ui.state) ? ui.state : {};
+      const current = state.current_step || "step_0";
+      const idx = stepIndex(current);
+
+      buildStepper(idx);
+
+      document.getElementById("badge").textContent = String(idx + 1);
+      document.getElementById("sectionTitle").textContent = TITLES[current] || "Step";
+      document.getElementById("cardTitle").textContent = TITLES[current] || "Step";
+
+      // Force the description for step_0; can be expanded later for other steps
+      if (current === "step_0") {
+        document.getElementById("cardDesc").textContent =
+          "Please share your company name and the kind of business it is to get started.";
+      } else {
+        document.getElementById("cardDesc").textContent = "";
       }
 
-      function setText(id, value){
-        const el = document.getElementById(id);
-        if (el) el.textContent = value;
-      }
+      document.getElementById("prompt").textContent = pickPrompt(ui) || "";
 
-      function renderFromUi(ui, loc){
-        const state = ui?.state || {};
-        const current = state.current_step || "step_0";
-        const idx = stepIndex(current);
+      const quick = document.getElementById("quickBtns");
+      quick.style.display = shouldShowYesNo(ui) ? "flex" : "none";
 
-        buildStepper(idx);
+      document.getElementById("status").textContent =
+        (data.meta || "") + (data.meta ? "\n" : "") + "templateUrl: /ui/step-card";
 
-        const title = stepTitle(current, loc);
-        setText("sectionTitle", title);
-        setText("cardTitle", title);
-        setText("badge", String(idx + 1));
-
-        // Welcome block shown only once per widget-state (UI-level).
-        const welcome = document.getElementById("welcome");
-        const widgetState = window.openai?.widgetState || {};
-        const showWelcome = widgetState?.welcomeShown !== true;
-        if (welcome) welcome.style.display = showWelcome ? "block" : "none";
-
-        setText("welcomeTitle", t("welcomeTitle", loc));
-        setText("welcomeBody", t("welcomeBody", loc));
-
-        // Your forced description for step_0
-        const descEl = document.getElementById("cardDesc");
-        if (descEl){
-          descEl.textContent = current === "step_0" ? t("step0Desc", loc) : "";
+      // Optional: allow UI to call tool if host supports it.
+      // If not available, user can still answer in chat and the tool can be called again.
+      async function callRunStep(message) {
+        if (!globalThis.openai || !globalThis.openai.callTool) {
+          document.getElementById("status").textContent =
+            "This UI can’t call tools in this host. Please type your answer in chat.";
+          return;
         }
-
-        // Prompt coming from your tool output
-        setText("prompt", pickPrompt(ui));
-
-        // Yes/No quick buttons
-        const quick = document.getElementById("quickBtns");
-        if (quick) quick.style.display = shouldShowYesNo(ui) ? "flex" : "none";
-        setText("btnYes", t("yes", loc));
-        setText("btnNo", t("no", loc));
-
-        // Status line (debug)
-        const status = document.getElementById("status");
-        if (status){
-          status.textContent = [
-            "step: " + (state.current_step || ""),
-            "specialist: " + (ui?.active_specialist || ""),
-            "version: " + (ui?.version || "")
-          ].join(" | ");
-        }
-
-        // Persist our “app state” in widgetState snapshot
-        const nextWidgetState = {
-          ...widgetState,
-          state,
+        const payload = {
           current_step_id: state.current_step || "step_0",
-          locale: loc,
-          welcomeShown: true, // after first render
+          user_message: message,
+          state: state || {}
         };
-        window.openai?.setWidgetState?.(nextWidgetState);
+        await globalThis.openai.callTool("run_step", payload);
       }
 
-      function getToolOutputUi(){
-        // server.ts will set structuredContent.ui in the tool response
-        const out = window.openai?.toolOutput;
-        return out?.ui || null;
-      }
+      document.getElementById("send").addEventListener("click", () => {
+        const v = (document.getElementById("input").value || "").trim();
+        if (!v) return;
+        document.getElementById("input").value = "";
+        callRunStep(v);
+      });
 
-      function applyLocaleUi(){
-        const loc = guessLocale();
-        setText("uiTitle", t("uiTitle", loc));
-        setText("uiSubtitle", t("uiSubtitle", loc));
-        const input = document.getElementById("input");
-        if (input) input.placeholder = t("inputPlaceholder", loc);
-        return loc;
-      }
-
-      async function callRunStep(userMessage){
-        const loc = guessLocale();
-        const ws = window.openai?.widgetState || {};
-        const state = ws?.state || {};
-        const step = ws?.current_step_id || state?.current_step || "step_0";
-
-        // Force agent language to en/nl for now (UI stays multilingual)
-        const nextState = { ...state, language: agentLangFromLocale(loc) };
-
-        const payload = { current_step_id: step, user_message: userMessage, state: nextState };
-
-        const sendBtn = document.getElementById("send");
-        if (sendBtn) sendBtn.disabled = true;
-
-        try {
-          const resp = await window.openai.callTool("run_step", payload);
-          // resp.structuredContent contains { ui: ... }
-          const ui = resp?.structuredContent?.ui;
-          if (ui) renderFromUi(ui, loc);
-        } catch (e) {
-          const status = document.getElementById("status");
-          if (status) status.textContent = "Error: " + (e?.message || String(e));
-        } finally {
-          if (sendBtn) sendBtn.disabled = false;
-        }
-      }
-
-      function wireEvents(){
-        const input = document.getElementById("input");
-        const send = document.getElementById("send");
-        const btnYes = document.getElementById("btnYes");
-        const btnNo = document.getElementById("btnNo");
-        const lang = document.getElementById("lang");
-        const reset = document.getElementById("reset");
-
-        if (send){
-          send.addEventListener("click", () => {
-            const v = (input?.value || "").trim();
-            if (!v) return;
-            callRunStep(v);
-            input.value = "";
-          });
-        }
-
-        if (input){
-          input.addEventListener("keydown", (ev) => {
-            if (ev.key === "Enter" && !ev.shiftKey){
-              ev.preventDefault();
-              const v = input.value.trim();
-              if (!v) return;
-              callRunStep(v);
-              input.value = "";
-            }
-          });
-        }
-
-        if (btnYes) btnYes.addEventListener("click", () => callRunStep(t("yes", guessLocale()).toLowerCase()));
-        if (btnNo) btnNo.addEventListener("click", () => callRunStep(t("no", guessLocale()).toLowerCase()));
-
-        if (lang){
-          const stored = localStorage.getItem("bsc_locale") || "auto";
-          lang.value = stored;
-          lang.addEventListener("change", () => {
-            localStorage.setItem("bsc_locale", lang.value);
-            const loc = applyLocaleUi();
-            const ui = getToolOutputUi();
-            if (ui) renderFromUi(ui, loc);
-          });
-        }
-
-        if (reset){
-          reset.addEventListener("click", () => {
-            // Clear widget state snapshot
-            window.openai?.setWidgetState?.({});
-            // Re-render if toolOutput exists
-            const loc = applyLocaleUi();
-            const ui = getToolOutputUi();
-            if (ui) renderFromUi(ui, loc);
-          });
-        }
-
-        // Listen for globals updates (official pattern) :contentReference[oaicite:3]{index=3}
-        window.addEventListener("openai:set_globals", (event) => {
-          const loc = applyLocaleUi();
-          const ui = getToolOutputUi();
-          if (ui) renderFromUi(ui, loc);
-        }, { passive: true });
-      }
-
-      function bootstrap(){
-        const loc = applyLocaleUi();
-        wireEvents();
-
-        // If iframe loaded after a tool call, toolOutput should be present
-        const ui = getToolOutputUi();
-        if (ui){
-          renderFromUi(ui, loc);
-        } else {
-          // No toolOutput yet: show welcome and wait for the first tool call
-          const welcome = document.getElementById("welcome");
-          if (welcome) welcome.style.display = "block";
-          setText("welcomeTitle", t("welcomeTitle", loc));
-          setText("welcomeBody", t("welcomeBody", loc));
-          setText("sectionTitle", stepTitle("step_0", loc));
-          setText("cardTitle", stepTitle("step_0", loc));
-          setText("cardDesc", t("step0Desc", loc));
-          setText("prompt", "");
-          buildStepper(0);
-        }
-      }
-
-      bootstrap();
+      document.getElementById("btnYes").addEventListener("click", () => callRunStep("yes"));
+      document.getElementById("btnNo").addEventListener("click", () => callRunStep("no"));
     </script>
   </body>
 </html>
