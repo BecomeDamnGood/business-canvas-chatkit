@@ -10,7 +10,7 @@ const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
-const VERSION = "v33-ui-resource-meta";
+const VERSION = "v33-ui-resource-fixed";
 
 // OpenAI Apps domain verification
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
@@ -18,11 +18,11 @@ const OPENAI_APPS_CHALLENGE_TOKEN =
   process.env.OPENAI_APPS_CHALLENGE_TOKEN ??
   "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
 
-// Optional debug UI route (NOT required for ChatGPT widget rendering)
+// Optional debug UI route (handy for browser inspection)
 const UI_HTTP_PATH = "/ui/step-card";
 const UI_MIME_TYPE = "text/html+skybridge";
 
-// Canonical widget URI (used by openai/outputTemplate)
+// Canonical widget URI (OpenAI uses this in openai/outputTemplate)
 const UI_RESOURCE_URI = "ui://widget/step-card.html";
 
 function loadUiHtml(): string {
@@ -32,7 +32,7 @@ function loadUiHtml(): string {
 function createAppServer() {
   const server = new McpServer({ name: "business-canvas-mcp", version: "0.1.0" });
 
-  // 1) Register Skybridge UI template as MCP resource
+  // Register Skybridge UI template as MCP resource (ui://...)
   server.registerResource("bsc-step-card", UI_RESOURCE_URI, {}, async () => ({
     contents: [
       {
@@ -46,26 +46,26 @@ function createAppServer() {
     ],
   }));
 
-  // 2) Register tool with outputTemplate in the TOOL DESCRIPTOR (_meta)
+  // Register tool; OpenAI widget metadata must live on the TOOL DESCRIPTOR _meta
   server.registerTool(
     "run_step",
     {
       title: "Run Step",
       description:
-        "Runs the Business Strategy Canvas flow (router + specialists + integrator). Returns structured data for the widget.",
+        "Runs the Business Strategy Canvas flow. Returns structured data for the widget.",
       inputSchema: {
         current_step_id: z.string(),
         user_message: z.string(),
         state: z.record(z.string(), z.any()).optional(),
       },
       _meta: {
-        // Required per OpenAI widget reference
+        // Put auth metadata here (SDK type-safe: _meta is flexible)
         securitySchemes: [{ type: "noauth" }],
 
-        // The widget template to render when this tool is invoked
+        // Widget template to render when this tool is invoked
         "openai/outputTemplate": UI_RESOURCE_URI,
 
-        // Allow widget to call tools (window.openai.callTool)
+        // Allow widget to call tools via window.openai.callTool
         "openai/widgetAccessible": true,
       },
     },
@@ -76,18 +76,20 @@ function createAppServer() {
         state: args.state ?? {},
       });
 
-      const templateData = {
+      // Structured payload the widget reads from window.openai.toolOutput
+      const structuredContent = {
         title: `Business Strategy Canvas Builder (${VERSION})`,
-        body: result.text,
         meta: `step: ${result.state.current_step} | specialist: ${result.active_specialist}`,
-        ui: { result },
+        body: result.text ?? "",
+        ui: {
+          result,
+        },
       };
 
       return {
-        // Keep fallback text minimal
-        content: [{ type: "text", text: result.text || "" }],
-        // Data for the widget
-        structuredContent: templateData,
+        // keep chat output minimal; UI is the primary surface
+        content: [{ type: "text", text: "" }],
+        structuredContent,
       };
     }
   );
@@ -117,7 +119,7 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
-  // Optional debug UI template route (inspect in browser)
+  // Debug UI route (browser inspect)
   if (req.method === "GET" && url.pathname === UI_HTTP_PATH) {
     try {
       res.writeHead(200, { "content-type": UI_MIME_TYPE });
@@ -161,5 +163,7 @@ const httpServer = createServer(async (req, res) => {
 });
 
 httpServer.listen(port, host, () => {
-  console.log(`Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`);
+  console.log(
+    `Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`
+  );
 });
