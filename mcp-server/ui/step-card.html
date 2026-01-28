@@ -218,7 +218,6 @@
           <div style="flex:1">
             <div class="cardTitle" id="cardTitle">Validation & Business Name</div>
 
-            <!-- Forced description -->
             <div class="cardDesc" id="cardDesc">
               Please share your company name and the kind of business it is to get started.
             </div>
@@ -246,7 +245,13 @@
     </div>
 
     <script>
+      // Docs: ChatGPT injects structuredContent into window.openai.toolOutput
+      // Fallbacks remain for non-ChatGPT contexts (browser preview, older experiments)
       function pickData() {
+        const openai = globalThis.openai;
+        const toolOutput = openai && openai.toolOutput ? openai.toolOutput : null;
+        if (toolOutput && typeof toolOutput === "object") return toolOutput;
+
         return (
           (globalThis.__SKYBRIDGE__ && globalThis.__SKYBRIDGE__.data) ||
           globalThis.skybridgeData ||
@@ -315,7 +320,6 @@
       document.getElementById("sectionTitle").textContent = TITLES[current] || "Step";
       document.getElementById("cardTitle").textContent = TITLES[current] || "Step";
 
-      // Force the description for step_0; can be expanded later for other steps
       if (current === "step_0") {
         document.getElementById("cardDesc").textContent =
           "Please share your company name and the kind of business it is to get started.";
@@ -328,15 +332,18 @@
       const quick = document.getElementById("quickBtns");
       quick.style.display = shouldShowYesNo(ui) ? "flex" : "none";
 
+      // Debug/status (helps prove what ChatGPT injected)
+      const hasOpenAI = Boolean(globalThis.openai);
+      const hasToolOutput = Boolean(globalThis.openai && globalThis.openai.toolOutput);
       document.getElementById("status").textContent =
-        (data.meta || "") + (data.meta ? "\n" : "") + "templateUrl: /ui/step-card";
+        (data.meta || "") +
+        (data.meta ? "\n" : "") +
+        `openai:${hasOpenAI} toolOutput:${hasToolOutput}`;
 
-      // Optional: allow UI to call tool if host supports it.
-      // If not available, user can still answer in chat and the tool can be called again.
       async function callRunStep(message) {
         if (!globalThis.openai || !globalThis.openai.callTool) {
           document.getElementById("status").textContent =
-            "This UI can’t call tools in this host. Please type your answer in chat.";
+            "This UI can't call tools in this host. Please type your answer in chat.";
           return;
         }
         const payload = {
