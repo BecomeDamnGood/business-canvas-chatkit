@@ -17,41 +17,76 @@ const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
   process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
 
-// UI resource (Skybridge)
+// UI (Skybridge)
 const UI_RESOURCE_NAME = "bsc-step-card";
 const UI_RESOURCE_URI = "ui://widget/step-card.html";
 const UI_MIME_TYPE = "text/html+skybridge";
 
-function loadUiHtml(): string {
+// ---- Crash-proof global logging (so App Runner logs show the REAL error) ----
+process.on("uncaughtException", (err: any) => {
+  console.error("[FATAL] uncaughtException:", err?.stack || err);
+});
+process.on("unhandledRejection", (reason: any) => {
+  console.error("[FATAL] unhandledRejection:", reason?.stack || reason);
+});
+
+// ---- Fallback UI so the server never fails to boot ----
+function fallbackUiHtml(reason: string): string {
+  const safe = String(reason || "Unknown").slice(0, 5000);
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Business Canvas UI (fallback)</title>
+    <style>
+      body{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin:0; padding:18px; }
+      .card{ border:1px solid rgba(0,0,0,0.12); border-radius:14px; padding:14px; }
+      .t{ font-weight:800; font-size:16px; margin:0 0 6px; }
+      .m{ color:#475569; white-space:pre-wrap; }
+      code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <p class="t">UI template fallback loaded</p>
+      <div class="m">
+        <p>This means the widget HTML could not be loaded or registered.</p>
+        <p><strong>Reason:</strong></p>
+        <code>${safe.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</code>
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
+function safeLoadUiHtml(): { html: string; error?: string } {
   try {
-    // This resolves relative to this file (server.ts) at runtime in the container
-    return readFileSync(new URL("./ui/step-card.html", import.meta.url), "utf8");
+    // Read relative to this file at runtime in the container
+    const html = readFileSync(new URL("./ui/step-card.html", import.meta.url), "utf8");
+    return { html };
   } catch (e: any) {
-    // Make failure explicit (App Runner logs will show a normal error message)
     const msg = e?.message ? String(e.message) : String(e);
-    throw new Error(`Failed to load UI HTML (./ui/step-card.html). ${msg}`);
+    console.error("[UI] Failed to read ./ui/step-card.html:", msg);
+    return { html: fallbackUiHtml(msg), error: msg };
   }
 }
 
 function createAppServer() {
   const server = new McpServer({ name: "business-canvas-mcp", version: "0.1.0" });
-  const uiHtml = loadUiHtml();
-
-  // ---- Register UI as a Resource (robust across SDK variations) ----
-  // Some SDK versions differ slightly in resource registration signature.
-  // We detect available method(s) at runtime and register accordingly.
   const anyServer: any = server;
 
-  const resourceHandler = async (uriObj: any) => {
-    // SDK may pass a URL object, or a string. Normalize:
-    const href = typeof uriObj === "string" ? uriObj : (uriObj?.href ?? UI_RESOURCE_URI);
+  // ---- Register UI Resource (NEVER crash the server if this fails) ----
+  const ui = safeLoadUiHtml();
 
+  const resourceHandler = async (uriObj: any) => {
+    const href = typeof uriObj === "string" ? uriObj : (uriObj?.href ?? UI_RESOURCE_URI);
     return {
       contents: [
         {
           uri: href,
           mimeType: UI_MIME_TYPE,
-          text: uiHtml,
+          text: ui.html,
           _meta: { "openai/widgetPrefersBorder": true },
         },
       ],
@@ -60,34 +95,31 @@ function createAppServer() {
 
   try {
     if (typeof anyServer.registerResource === "function") {
-      // Expected signature in many versions:
-      // registerResource(name, uri, options, handler(uri))
       anyServer.registerResource(UI_RESOURCE_NAME, UI_RESOURCE_URI, {}, resourceHandler);
+      console.log("[UI] Resource registered via registerResource:", UI_RESOURCE_URI);
     } else if (typeof anyServer.resource === "function") {
-      // Alternative signature seen in some builds:
-      // resource(name, uri, handler(uri))
       anyServer.resource(UI_RESOURCE_NAME, UI_RESOURCE_URI, resourceHandler);
+      console.log("[UI] Resource registered via resource():", UI_RESOURCE_URI);
     } else {
-      console.warn("No resource registration method found on McpServer. UI widget may not render.");
+      console.warn("[UI] No resource registration method found on McpServer. Widget may not render.");
     }
   } catch (e: any) {
     const msg = e?.message ? String(e.message) : String(e);
-    throw new Error(`Failed to register UI resource (${UI_RESOURCE_URI}). ${msg}`);
+    // Do NOT throw — keep server alive.
+    console.error("[UI] Resource registration failed (continuing without widget):", msg);
   }
 
-  // ---- Tool: run_step (forced flow; widget calls this tool via window.openai.callTool) ----
+  // ---- Tool: run_step ----
   server.registerTool(
     "run_step",
     {
       title: "Run Step",
-      description:
-        "Runs the Business Strategy Canvas flow. Returns structured content for the widget and keeps state machine stable.",
+      description: "Runs the Business Strategy Canvas flow. Returns structured content for the widget.",
       inputSchema: {
         current_step_id: z.string(),
         user_message: z.string(),
         state: z.record(z.string(), z.any()).optional(),
       },
-      // Tool-level metadata (host hints)
       _meta: {
         "openai/outputTemplate": UI_RESOURCE_URI,
         "openai/widgetAccessible": true,
@@ -103,8 +135,8 @@ function createAppServer() {
         state: args.state ?? {},
       });
 
-      // Response-level metadata (some hosts prefer this location)
       return {
+        // Keep content minimal to reduce chat “extra text”
         content: [{ type: "text", text: result.text || "" }],
         structuredContent: {
           ui: {
@@ -135,14 +167,12 @@ const httpServer = createServer(async (req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
 
-  // OpenAI Apps domain verification
   if (req.method === "GET" && url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(OPENAI_APPS_CHALLENGE_TOKEN);
     return;
   }
 
-  // Health/version
   if (req.method === "GET" && url.pathname === "/version") {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(`VERSION=${VERSION}`);
@@ -154,7 +184,6 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
-  // MCP endpoint
   const MCP_METHODS = new Set(["POST", "GET", "DELETE", "OPTIONS"]);
   if (url.pathname === MCP_PATH && req.method && MCP_METHODS.has(req.method)) {
     let mcpServer: any;
@@ -176,7 +205,7 @@ const httpServer = createServer(async (req, res) => {
       await mcpServer.connect(transport);
       await transport.handleRequest(req, res);
     } catch (error: any) {
-      console.error("Error handling MCP request:", error);
+      console.error("Error handling MCP request:", error?.stack || error);
       if (!res.headersSent) res.writeHead(500).end("Internal server error");
     }
     return;
