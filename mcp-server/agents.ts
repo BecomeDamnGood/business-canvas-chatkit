@@ -117,7 +117,7 @@ const PresentationSchema = z.object({
 function detectLanguage(userMessage: string, state?: CanvasState): "nl" | "en" {
   if (state?.language) return state.language;
   const m = (userMessage || "").toLowerCase();
-  const nlHits = ["ik", "ja", "nee", "mijn", "bedrijf", "reclame", "droom", "waarom"];
+  const nlHits = ["ik", "ja", "nee", "mijn", "bedrijf", "droom", "waarom", "omdat", "doel", "klant"];
   const score = nlHits.reduce((acc, w) => acc + (m.includes(w) ? 1 : 0), 0);
   return score >= 2 ? "nl" : "en";
 }
@@ -135,28 +135,31 @@ function sessionIntro(lang: "nl" | "en"): string {
   ].join("\n");
 }
 
-// ---- Responses API helpers ----
+// ---- Responses API parsing helpers ----
 function extractOutputTextFromResponses(data: any): string | undefined {
-  // Preferred: output_text helper field (sometimes present)
+  // Some responses include an output_text convenience field.
   if (typeof data?.output_text === "string" && data.output_text.trim()) return data.output_text;
 
-  // Standard Responses shape: data.output = [{ type: "message", content: [{ type: "output_text", text: "..." }, ...] }, ...]
+  // Standard Responses: output is an array of items; messages contain content items.
   const out = data?.output;
-  if (Array.isArray(out)) {
-    for (const item of out) {
-      if (item?.type !== "message") continue;
-      const content = item?.content;
-      if (!Array.isArray(content)) continue;
-      const outTextItem = content.find((c: any) => c?.type === "output_text" && typeof c?.text === "string");
-      if (outTextItem?.text?.trim()) return outTextItem.text;
-    }
+  if (!Array.isArray(out)) return undefined;
+
+  for (const item of out) {
+    if (item?.type !== "message") continue;
+    const content = item?.content;
+    if (!Array.isArray(content)) continue;
+
+    const outTextItem = content.find(
+      (c: any) => c?.type === "output_text" && typeof c?.text === "string"
+    );
+    if (outTextItem?.text?.trim()) return outTextItem.text;
   }
 
   return undefined;
 }
 
 function extractFirstJsonObject(text: string): string | null {
-  // Robustly find the first balanced {...} in the text.
+  // Finds the first balanced {...} block, handling strings/escapes.
   const s = String(text ?? "");
   const start = s.indexOf("{");
   if (start < 0) return null;
@@ -196,7 +199,7 @@ function extractFirstJsonObject(text: string): string | null {
 }
 
 // ---- OpenAI call helper (Responses API via fetch) ----
-// NOTE: In Responses API, response_format is replaced by text.format.
+// IMPORTANT: Responses API uses `text.format` (not `response_format`).
 async function openaiJson<T>({
   apiKey,
   model,
@@ -212,30 +215,24 @@ async function openaiJson<T>({
   temperature?: number;
   maxOutputTokens?: number;
 }): Promise<T> {
-  const body = {
-    model,
-    input: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    // JSON mode in Responses API:
-    // text: { format: { type: "json_object" } }
-    text: {
-      format: { type: "json_object" as const },
-    },
-    temperature,
-    max_output_tokens: maxOutputTokens,
-    // Prefer not storing by default (optional, but safer)
-    store: false,
-  };
-
   const resp = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      model,
+      input: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      // JSON mode via Responses API:
+      text: { format: { type: "json_object" } },
+      temperature,
+      max_output_tokens: maxOutputTokens,
+      store: false,
+    }),
   });
 
   if (!resp.ok) {
@@ -250,10 +247,7 @@ async function openaiJson<T>({
     throw new Error("OpenAI response missing output_text (no message/output_text item found).");
   }
 
-  // Best-effort parsing:
-  // 1) direct JSON.parse
-  // 2) trim and parse
-  // 3) extract first {...} and parse
+  // Best-effort JSON parsing
   try {
     return JSON.parse(outText) as T;
   } catch {
@@ -538,7 +532,6 @@ export async function runCanvasStep(args: {
     specialistName = "ValidationAndBusinessName";
     specialistJson = await runValidation(apiKey, model, lang, userMessage, merged, showStepIntro);
 
-    // persist
     if (specialistJson.business_name) merged.business_name = specialistJson.business_name;
     if (specialistJson.step_0) merged.step_0 = specialistJson.step_0;
 
@@ -556,33 +549,13 @@ export async function runCanvasStep(args: {
     }
   } else if (merged.current_step === "purpose") {
     specialistName = "Purpose";
-    const res = await runGenericStep(
-      apiKey,
-      model,
-      lang,
-      "purpose",
-      "Purpose",
-      "Purpose",
-      userMessage,
-      merged,
-      showStepIntro
-    );
+    const res = await runGenericStep(apiKey, model, lang, "purpose", "Purpose", "Purpose", userMessage, merged, showStepIntro);
     specialistJson = res;
     if (res.value) merged.purpose = res.value;
     if (res.proceed_to_next === "true") merged.current_step = "bigwhy";
   } else if (merged.current_step === "bigwhy") {
     specialistName = "BigWhy";
-    const res = await runGenericStep(
-      apiKey,
-      model,
-      lang,
-      "bigwhy",
-      "Big Why",
-      "Big Why",
-      userMessage,
-      merged,
-      showStepIntro
-    );
+    const res = await runGenericStep(apiKey, model, lang, "bigwhy", "Big Why", "Big Why", userMessage, merged, showStepIntro);
     specialistJson = res;
     if (res.value) merged.bigwhy = res.value;
     if (res.proceed_to_next === "true") merged.current_step = "role";
@@ -594,17 +567,7 @@ export async function runCanvasStep(args: {
     if (res.proceed_to_next === "true") merged.current_step = "entity";
   } else if (merged.current_step === "entity") {
     specialistName = "Entity";
-    const res = await runGenericStep(
-      apiKey,
-      model,
-      lang,
-      "entity",
-      "Entiteit",
-      "Entity",
-      userMessage,
-      merged,
-      showStepIntro
-    );
+    const res = await runGenericStep(apiKey, model, lang, "entity", "Entiteit", "Entity", userMessage, merged, showStepIntro);
     specialistJson = res;
     if (res.value) merged.entity = res.value;
     if (res.proceed_to_next === "true") merged.current_step = "strategy";
@@ -626,13 +589,12 @@ export async function runCanvasStep(args: {
     specialistJson = res;
     if (res.presentation_brief) merged.presentation_brief = res.presentation_brief;
   } else {
-    // fallback
     specialistName = "ValidationAndBusinessName";
     merged.current_step = "step_0";
     specialistJson = await runValidation(apiKey, model, lang, userMessage, merged, showStepIntro);
   }
 
-  // Update intro tracking AFTER rendering
+  // Update intro tracking AFTER rendering (keep behavior aligned with your current flow)
   if (showSessionIntro) merged.intro_shown_session = "true";
   if (showStepIntro) merged.intro_shown_for_step = requested;
 
