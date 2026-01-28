@@ -10,7 +10,7 @@ const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
-const VERSION = "v32-ui-resource";
+const VERSION = "v33-ui-resource-meta";
 
 // OpenAI Apps domain verification
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
@@ -59,7 +59,13 @@ function createAppServer() {
         state: z.record(z.string(), z.any()).optional(),
       },
       _meta: {
+        // Required per OpenAI widget reference
+        securitySchemes: [{ type: "noauth" }],
+
+        // The widget template to render when this tool is invoked
         "openai/outputTemplate": UI_RESOURCE_URI,
+
+        // Allow widget to call tools (window.openai.callTool)
         "openai/widgetAccessible": true,
       },
     },
@@ -74,9 +80,7 @@ function createAppServer() {
         title: `Business Strategy Canvas Builder (${VERSION})`,
         body: result.text,
         meta: `step: ${result.state.current_step} | specialist: ${result.active_specialist}`,
-        ui: {
-          result,
-        },
+        ui: { result },
       };
 
       return {
