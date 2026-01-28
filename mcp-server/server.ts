@@ -54,34 +54,30 @@ function createAppServer() {
   );
 
   // 2) Register tool with outputTemplate in the TOOL DESCRIPTOR (_meta)
-  // This is the key piece that makes ChatGPT render the widget.
-  server.registerTool(
-    "run_step",
-    {
-      title: "Run Step",
-      description:
-        "Runs the Business Strategy Canvas flow (router + specialists + integrator). Returns structured data for the widget.",
-      inputSchema: {
-        current_step_id: z.string(),
-        user_message: z.string(),
-        state: z.record(z.string(), z.any()).optional(),
-      },
-
-      // Preferred place for auth metadata (no auth)
-      securitySchemes: [{ type: "noauth" }],
-
-      // OpenAI widget metadata must live on the tool descriptor
-      _meta: {
-        // Back-compat mirror for some clients
-        securitySchemes: [{ type: "noauth" }],
-
-        // The widget template to render when this tool is invoked
-        "openai/outputTemplate": UI_RESOURCE_URI,
-
-        // Allow widget to call tools (window.openai.callTool)
-        "openai/widgetAccessible": true,
-      },
+// This is the key piece that makes ChatGPT render the widget.
+server.registerTool(
+  "run_step",
+  {
+    title: "Run Step",
+    description:
+      "Runs the Business Strategy Canvas flow (router + specialists + integrator). Returns structured data for the widget.",
+    inputSchema: {
+      current_step_id: z.string(),
+      user_message: z.string(),
+      state: z.record(z.string(), z.any()).optional(),
     },
+
+    // OpenAI widget metadata must live on the tool descriptor
+    _meta: {
+      // The widget template to render when this tool is invoked
+      "openai/outputTemplate": UI_RESOURCE_URI,
+
+      // Allow widget to call tools (window.openai.callTool)
+      "openai/widgetAccessible": true,
+    },
+  },
+  // ... async handler stays the same
+);
     async (args) => {
       const result = await runCanvasStep({
         current_step_id: args.current_step_id,
