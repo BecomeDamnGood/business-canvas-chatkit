@@ -665,19 +665,6 @@ function createAppServer() {
   const server = new McpServer({ name: "business-canvas-mcp", version: "0.1.0" });
 
   server.registerTool(
-    "ping",
-    {
-      title: "Ping",
-      description: "Health check. Returns pong plus an optional echo message.",
-      inputSchema: { message: z.string().optional() },
-    },
-    async (args) => {
-      const message = args?.message;
-      return { content: [{ type: "text", text: message ? `pong: ${message}` : "pong" }] };
-    }
-  );
-
-  server.registerTool(
     "run_step",
     {
       title: "Run Step",
