@@ -46,10 +46,10 @@ const DEFAULT_STATE: CanvasState = {
   intro_shown_for_step: "",
   intro_shown_session: "false",
   active_specialist: "",
-  language: "nl"
+  language: "nl",
 };
 
-// ---- Schemas (compact, maar compatibel met jullie flow) ----
+// ---- Schemas (compact, but compatible with your flow) ----
 const ValidationSchema = z.object({
   action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
   message: z.string(),
@@ -58,7 +58,7 @@ const ValidationSchema = z.object({
   confirmation_question: z.string(),
   business_name: z.string(),
   proceed_to_dream: z.enum(["true", "false"]),
-  step_0: z.string()
+  step_0: z.string(),
 });
 
 const DreamSchema = z.object({
@@ -70,7 +70,7 @@ const DreamSchema = z.object({
   dream: z.string(),
   suggest_dreambuilder: z.enum(["true", "false"]),
   proceed_to_dream: z.enum(["true", "false"]),
-  proceed_to_purpose: z.enum(["true", "false"])
+  proceed_to_purpose: z.enum(["true", "false"]),
 });
 
 const GenericStepSchema = z.object({
@@ -80,7 +80,7 @@ const GenericStepSchema = z.object({
   refined_formulation: z.string(),
   confirmation_question: z.string(),
   value: z.string(),
-  proceed_to_next: z.enum(["true", "false"])
+  proceed_to_next: z.enum(["true", "false"]),
 });
 
 const StrategySchema = z.object({
@@ -90,7 +90,7 @@ const StrategySchema = z.object({
   refined_formulation: z.string(),
   confirmation_question: z.string(),
   strategy: z.string(),
-  proceed_to_next: z.enum(["true", "false"])
+  proceed_to_next: z.enum(["true", "false"]),
 });
 
 const RulesSchema = z.object({
@@ -100,7 +100,7 @@ const RulesSchema = z.object({
   refined_formulation: z.string(),
   confirmation_question: z.string(),
   rulesofthegame: z.string(),
-  proceed_to_next: z.enum(["true", "false"])
+  proceed_to_next: z.enum(["true", "false"]),
 });
 
 const PresentationSchema = z.object({
@@ -110,14 +110,14 @@ const PresentationSchema = z.object({
   refined_formulation: z.string(),
   confirmation_question: z.string(),
   presentation_brief: z.string(),
-  proceed_to_next: z.enum(["true", "false"])
+  proceed_to_next: z.enum(["true", "false"]),
 });
 
 // ---- Minimal NL/EN session intro ----
 function detectLanguage(userMessage: string, state?: CanvasState): "nl" | "en" {
   if (state?.language) return state.language;
   const m = (userMessage || "").toLowerCase();
-  const nlHits = ["ik", "ja", "nee", "mijn", "bedrijf", "reclame", "droom", "purpose", "waarom"];
+  const nlHits = ["ik", "ja", "nee", "mijn", "bedrijf", "reclame", "droom", "waarom"];
   const score = nlHits.reduce((acc, w) => acc + (m.includes(w) ? 1 : 0), 0);
   return score >= 2 ? "nl" : "en";
 }
@@ -126,50 +126,116 @@ function sessionIntro(lang: "nl" | "en"): string {
   if (lang === "nl") {
     return [
       "Welkom bij Ben Steenstra’s Business Strategy Canvas. We doorlopen een klein aantal stappen, één voor één, zodat elke stap duidelijk is voordat we verder gaan.",
-      "Aan het einde heb je een compleet en beknopt businessplan, klaar als richting voor jezelf en als heldere presentatie voor stakeholders."
+      "Aan het einde heb je een compleet en beknopt businessplan, klaar als richting voor jezelf en als heldere presentatie voor stakeholders.",
     ].join("\n");
   }
   return [
     "Welcome to Ben Steenstra’s Business Strategy Canvas. We’ll go through a small number of steps, one by one, so each step is clear before moving on.",
-    "At the end you’ll have a concise business plan, ready as direction for yourself and as a clear presentation for stakeholders."
+    "At the end you’ll have a concise business plan, ready as direction for yourself and as a clear presentation for stakeholders.",
   ].join("\n");
 }
 
-// ---- OpenAI call helper (Responses API via fetch) ----
-async function openaiJson<T>(
-  {
-    apiKey,
-    model,
-    system,
-    user,
-    temperature = 0.2,
-    maxOutputTokens = 1200
-  }: {
-    apiKey: string;
-    model: string;
-    system: string;
-    user: string;
-    temperature?: number;
-    maxOutputTokens?: number;
+// ---- Responses API helpers ----
+function extractOutputTextFromResponses(data: any): string | undefined {
+  // Preferred: output_text helper field (sometimes present)
+  if (typeof data?.output_text === "string" && data.output_text.trim()) return data.output_text;
+
+  // Standard Responses shape: data.output = [{ type: "message", content: [{ type: "output_text", text: "..." }, ...] }, ...]
+  const out = data?.output;
+  if (Array.isArray(out)) {
+    for (const item of out) {
+      if (item?.type !== "message") continue;
+      const content = item?.content;
+      if (!Array.isArray(content)) continue;
+      const outTextItem = content.find((c: any) => c?.type === "output_text" && typeof c?.text === "string");
+      if (outTextItem?.text?.trim()) return outTextItem.text;
+    }
   }
-): Promise<T> {
+
+  return undefined;
+}
+
+function extractFirstJsonObject(text: string): string | null {
+  // Robustly find the first balanced {...} in the text.
+  const s = String(text ?? "");
+  const start = s.indexOf("{");
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+
+    if (inStr) {
+      if (esc) {
+        esc = false;
+      } else if (ch === "\\") {
+        esc = true;
+      } else if (ch === '"') {
+        inStr = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inStr = true;
+      continue;
+    }
+
+    if (ch === "{") depth++;
+    if (ch === "}") depth--;
+
+    if (depth === 0) {
+      return s.slice(start, i + 1);
+    }
+  }
+
+  return null;
+}
+
+// ---- OpenAI call helper (Responses API via fetch) ----
+// NOTE: In Responses API, response_format is replaced by text.format.
+async function openaiJson<T>({
+  apiKey,
+  model,
+  system,
+  user,
+  temperature = 0.2,
+  maxOutputTokens = 1200,
+}: {
+  apiKey: string;
+  model: string;
+  system: string;
+  user: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+}): Promise<T> {
+  const body = {
+    model,
+    input: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    // JSON mode in Responses API:
+    // text: { format: { type: "json_object" } }
+    text: {
+      format: { type: "json_object" as const },
+    },
+    temperature,
+    max_output_tokens: maxOutputTokens,
+    // Prefer not storing by default (optional, but safer)
+    store: false,
+  };
+
   const resp = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      input: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ],
-      // JSON object mode (we validate with Zod afterwards)
-      response_format: { type: "json_object" },
-      temperature,
-      max_output_tokens: maxOutputTokens
-    })
+    body: JSON.stringify(body),
   });
 
   if (!resp.ok) {
@@ -178,32 +244,41 @@ async function openaiJson<T>(
   }
 
   const data: any = await resp.json();
-  const outText: string | undefined =
-    data?.output?.[0]?.content?.find?.((c: any) => c.type === "output_text")?.text ??
-    data?.output_text;
+  const outText = extractOutputTextFromResponses(data);
 
-  if (!outText) throw new Error("OpenAI response missing output_text");
+  if (!outText) {
+    throw new Error("OpenAI response missing output_text (no message/output_text item found).");
+  }
 
+  // Best-effort parsing:
+  // 1) direct JSON.parse
+  // 2) trim and parse
+  // 3) extract first {...} and parse
   try {
     return JSON.parse(outText) as T;
   } catch {
-    // Some models may include whitespace; attempt a last-resort trim.
-    return JSON.parse(String(outText).trim()) as T;
+    try {
+      return JSON.parse(String(outText).trim()) as T;
+    } catch {
+      const extracted = extractFirstJsonObject(outText);
+      if (!extracted) {
+        throw new Error(`Model output was not valid JSON. Raw output_text: ${outText.slice(0, 500)}`);
+      }
+      return JSON.parse(extracted) as T;
+    }
   }
 }
 
 // ---- Integrator (deterministic renderer) ----
-function integrateToText(
-  {
-    lang,
-    showSessionIntro,
-    specialistJson
-  }: {
-    lang: "nl" | "en";
-    showSessionIntro: boolean;
-    specialistJson: any;
-  }
-): string {
+function integrateToText({
+  lang,
+  showSessionIntro,
+  specialistJson,
+}: {
+  lang: "nl" | "en";
+  showSessionIntro: boolean;
+  specialistJson: any;
+}): string {
   const parts: string[] = [];
 
   if (showSessionIntro) parts.push(sessionIntro(lang));
@@ -221,9 +296,19 @@ function integrateToText(
   return parts.filter(Boolean).join("\n");
 }
 
-// ---- Router ----
+// ---- Router (kept for future use) ----
 function nextStepFrom(current: StepId): StepId {
-  const order: StepId[] = ["step_0", "dream", "purpose", "bigwhy", "role", "entity", "strategy", "rulesofthegame", "presentation"];
+  const order: StepId[] = [
+    "step_0",
+    "dream",
+    "purpose",
+    "bigwhy",
+    "role",
+    "entity",
+    "strategy",
+    "rulesofthegame",
+    "presentation",
+  ];
   const idx = order.indexOf(current);
   return order[Math.min(idx + 1, order.length - 1)];
 }
@@ -232,7 +317,7 @@ function nextStepFrom(current: StepId): StepId {
 function sysBase(lang: "nl" | "en"): string {
   return lang === "nl"
     ? "Je bent een specialist in Ben Steenstra’s Business Strategy Canvas. Antwoord ALLEEN als geldig JSON object. Geen markdown. Geen extra tekst."
-    : "You are a specialist in Ben Steenstra’s Business Strategy Canvas. Respond ONLY as valid JSON object. No markdown. No extra text.";
+    : "You are a specialist in Ben Steenstra’s Business Strategy Canvas. Respond ONLY as a valid JSON object. No markdown. No extra text.";
 }
 
 function userEnvelope(step: StepId, userMessage: string, state: CanvasState, showStepIntro: boolean): string {
@@ -240,7 +325,7 @@ function userEnvelope(step: StepId, userMessage: string, state: CanvasState, sho
     `CURRENT_STEP_ID: ${step}`,
     `SHOW_STEP_INTRO: ${showStepIntro ? "true" : "false"}`,
     `USER_MESSAGE: ${userMessage || ""}`,
-    `STATE_JSON: ${JSON.stringify(state)}`
+    `STATE_JSON: ${JSON.stringify(state)}`,
   ].join("\n");
 }
 
@@ -257,7 +342,7 @@ async function runValidation(
     lang === "nl"
       ? "Doel: haal bedrijfsnaam uit USER_MESSAGE. Als het al bekend is: vraag bevestiging. Als user 'ja' op bevestiging zegt: proceed_to_dream=true."
       : "Goal: extract business name from USER_MESSAGE. If already known: ask confirmation. If user confirms (yes): proceed_to_dream=true.",
-    "Schema velden: action,message,question,refined_formulation,confirmation_question,business_name,proceed_to_dream,step_0."
+    "Schema fields: action,message,question,refined_formulation,confirmation_question,business_name,proceed_to_dream,step_0.",
   ].join("\n");
 
   const user = userEnvelope("step_0", userMessage, state, showStepIntro);
@@ -266,7 +351,7 @@ async function runValidation(
     apiKey,
     model,
     system,
-    user
+    user,
   });
 
   return ValidationSchema.parse(raw);
@@ -285,7 +370,7 @@ async function runDream(
     lang === "nl"
       ? "Doel: maak een scherpe Droom. Als user bevestigt dat refined goed is: zet dream en vraag of door naar Purpose. Als user bevestigt en wil door: proceed_to_purpose=true."
       : "Goal: craft a sharp Dream. If user confirms refined is good: set dream and ask to proceed to Purpose. If user confirms and wants to proceed: proceed_to_purpose=true.",
-    "Schema velden: action,message,question,refined_formulation,confirmation_question,dream,suggest_dreambuilder,proceed_to_dream,proceed_to_purpose."
+    "Schema fields: action,message,question,refined_formulation,confirmation_question,dream,suggest_dreambuilder,proceed_to_dream,proceed_to_purpose.",
   ].join("\n");
 
   const user = userEnvelope("dream", userMessage, state, showStepIntro);
@@ -294,7 +379,7 @@ async function runDream(
     apiKey,
     model,
     system,
-    user
+    user,
   });
 
   return DreamSchema.parse(raw);
@@ -318,7 +403,7 @@ async function runGenericStep(
     lang === "nl"
       ? `Doel: help de gebruiker met stap ${label}. Produceer een refined_formulation als nodig. Bij duidelijke bevestiging: action=CONFIRM, value gevuld, proceed_to_next=true.`
       : `Goal: help the user with step ${label}. Produce a refined_formulation when needed. On clear confirmation: action=CONFIRM, value filled, proceed_to_next=true.`,
-    "Schema velden: action,message,question,refined_formulation,confirmation_question,value,proceed_to_next."
+    "Schema fields: action,message,question,refined_formulation,confirmation_question,value,proceed_to_next.",
   ].join("\n");
 
   const user = userEnvelope(step, userMessage, state, showStepIntro);
@@ -327,7 +412,7 @@ async function runGenericStep(
     apiKey,
     model,
     system,
-    user
+    user,
   });
 
   return GenericStepSchema.parse(raw);
@@ -346,7 +431,7 @@ async function runStrategy(
     lang === "nl"
       ? "Doel: Strategy als 3-5 focuspunten (elk op nieuwe regel). Geen takenlijst. Op bevestiging: strategy gevuld en proceed_to_next=true."
       : "Goal: Strategy as 3-5 focus points (each on a new line). Not a task list. On confirmation: strategy filled and proceed_to_next=true.",
-    "Schema velden: action,message,question,refined_formulation,confirmation_question,strategy,proceed_to_next."
+    "Schema fields: action,message,question,refined_formulation,confirmation_question,strategy,proceed_to_next.",
   ].join("\n");
 
   const user = userEnvelope("strategy", userMessage, state, showStepIntro);
@@ -355,7 +440,7 @@ async function runStrategy(
     apiKey,
     model,
     system,
-    user
+    user,
   });
 
   return StrategySchema.parse(raw);
@@ -374,7 +459,7 @@ async function runRules(
     lang === "nl"
       ? "Doel: Rules of the game als duidelijke bullets of korte alinea. Op bevestiging: rulesofthegame gevuld en proceed_to_next=true."
       : "Goal: Rules of the game as clear bullets or short paragraph. On confirmation: rulesofthegame filled and proceed_to_next=true.",
-    "Schema velden: action,message,question,refined_formulation,confirmation_question,rulesofthegame,proceed_to_next."
+    "Schema fields: action,message,question,refined_formulation,confirmation_question,rulesofthegame,proceed_to_next.",
   ].join("\n");
 
   const user = userEnvelope("rulesofthegame", userMessage, state, showStepIntro);
@@ -383,7 +468,7 @@ async function runRules(
     apiKey,
     model,
     system,
-    user
+    user,
   });
 
   return RulesSchema.parse(raw);
@@ -402,7 +487,7 @@ async function runPresentation(
     lang === "nl"
       ? "Doel: presentation brief kort, concreet, in bullets. Op bevestiging: presentation_brief gevuld en proceed_to_next=true."
       : "Goal: presentation brief short and concrete in bullets. On confirmation: presentation_brief filled and proceed_to_next=true.",
-    "Schema velden: action,message,question,refined_formulation,confirmation_question,presentation_brief,proceed_to_next."
+    "Schema fields: action,message,question,refined_formulation,confirmation_question,presentation_brief,proceed_to_next.",
   ].join("\n");
 
   const user = userEnvelope("presentation", userMessage, state, showStepIntro);
@@ -411,7 +496,7 @@ async function runPresentation(
     apiKey,
     model,
     system,
-    user
+    user,
   });
 
   return PresentationSchema.parse(raw);
@@ -431,7 +516,7 @@ export async function runCanvasStep(args: {
   const incomingState = (args.state ?? {}) as Partial<CanvasState>;
   const merged: CanvasState = {
     ...DEFAULT_STATE,
-    ...incomingState
+    ...incomingState,
   };
 
   const userMessage = args.user_message ?? "";
@@ -471,13 +556,33 @@ export async function runCanvasStep(args: {
     }
   } else if (merged.current_step === "purpose") {
     specialistName = "Purpose";
-    const res = await runGenericStep(apiKey, model, lang, "purpose", "Purpose", "Purpose", userMessage, merged, showStepIntro);
+    const res = await runGenericStep(
+      apiKey,
+      model,
+      lang,
+      "purpose",
+      "Purpose",
+      "Purpose",
+      userMessage,
+      merged,
+      showStepIntro
+    );
     specialistJson = res;
     if (res.value) merged.purpose = res.value;
     if (res.proceed_to_next === "true") merged.current_step = "bigwhy";
   } else if (merged.current_step === "bigwhy") {
     specialistName = "BigWhy";
-    const res = await runGenericStep(apiKey, model, lang, "bigwhy", "Big Why", "Big Why", userMessage, merged, showStepIntro);
+    const res = await runGenericStep(
+      apiKey,
+      model,
+      lang,
+      "bigwhy",
+      "Big Why",
+      "Big Why",
+      userMessage,
+      merged,
+      showStepIntro
+    );
     specialistJson = res;
     if (res.value) merged.bigwhy = res.value;
     if (res.proceed_to_next === "true") merged.current_step = "role";
@@ -489,7 +594,17 @@ export async function runCanvasStep(args: {
     if (res.proceed_to_next === "true") merged.current_step = "entity";
   } else if (merged.current_step === "entity") {
     specialistName = "Entity";
-    const res = await runGenericStep(apiKey, model, lang, "entity", "Entiteit", "Entity", userMessage, merged, showStepIntro);
+    const res = await runGenericStep(
+      apiKey,
+      model,
+      lang,
+      "entity",
+      "Entiteit",
+      "Entity",
+      userMessage,
+      merged,
+      showStepIntro
+    );
     specialistJson = res;
     if (res.value) merged.entity = res.value;
     if (res.proceed_to_next === "true") merged.current_step = "strategy";
@@ -527,7 +642,7 @@ export async function runCanvasStep(args: {
   const text = integrateToText({
     lang,
     showSessionIntro,
-    specialistJson
+    specialistJson,
   });
 
   return {
@@ -538,6 +653,6 @@ export async function runCanvasStep(args: {
     active_specialist: specialistName,
     text,
     specialist: specialistJson,
-    state: merged
+    state: merged,
   };
 }
