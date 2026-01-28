@@ -10,7 +10,7 @@ const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
-const VERSION = "v29-ui-http";
+const VERSION = "v31-ui-http";
 
 // OpenAI Apps domain verification
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
@@ -20,6 +20,8 @@ const OPENAI_APPS_CHALLENGE_TOKEN =
 // UI template settings (HTTP)
 const UI_HTTP_PATH = "/ui/step-card";
 const UI_MIME_TYPE = "text/html+skybridge";
+
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? "";
 
 function loadUiHtml(): string {
   // In production build we copy ui to dist/ui (see Dockerfile), so this works from dist/server.js too.
@@ -68,8 +70,9 @@ function createAppServer() {
         structuredContent: templateData,
 
         _meta: {
-          // IMPORTANT: HTTP template URL (the "proven" rendering path)
-          "openai/outputTemplateUrl": UI_HTTP_PATH,
+        "openai/outputTemplateUrl": PUBLIC_BASE_URL
+        ? `${PUBLIC_BASE_URL}${UI_HTTP_PATH}`
+        : UI_HTTP_PATH,
         },
       };
     }
