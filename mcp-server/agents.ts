@@ -49,9 +49,11 @@ const DEFAULT_STATE: CanvasState = {
   language: "nl",
 };
 
-// ---- Schemas (compact, but compatible with your flow) ----
+// ---- Zod Schemas (runtime validation) ----
+const ActionEnum = ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] as const;
+
 const ValidationSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
@@ -62,7 +64,7 @@ const ValidationSchema = z.object({
 });
 
 const DreamSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
@@ -74,7 +76,7 @@ const DreamSchema = z.object({
 });
 
 const GenericStepSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
@@ -84,7 +86,7 @@ const GenericStepSchema = z.object({
 });
 
 const StrategySchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
@@ -94,7 +96,7 @@ const StrategySchema = z.object({
 });
 
 const RulesSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
@@ -104,7 +106,7 @@ const RulesSchema = z.object({
 });
 
 const PresentationSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
@@ -113,11 +115,126 @@ const PresentationSchema = z.object({
   proceed_to_next: z.enum(["true", "false"]),
 });
 
+// ---- Structured Outputs JSON Schemas (for OpenAI text.format json_schema strict) ----
+type JsonSchema = Record<string, any>;
+
+function strictObjectSchema(name: string, properties: Record<string, any>, required: string[]): JsonSchema {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties,
+    required,
+    // Optional metadata:
+    title: name,
+  };
+}
+
+const ACTION_SCHEMA = { type: "string", enum: [...ActionEnum] };
+const BOOLSTR_SCHEMA = { type: "string", enum: ["true", "false"] };
+const STR_SCHEMA = { type: "string" };
+
+const ValidationJsonSchema = strictObjectSchema(
+  "validation_step_0",
+  {
+    action: ACTION_SCHEMA,
+    message: STR_SCHEMA,
+    question: STR_SCHEMA,
+    refined_formulation: STR_SCHEMA,
+    confirmation_question: STR_SCHEMA,
+    business_name: STR_SCHEMA,
+    proceed_to_dream: BOOLSTR_SCHEMA,
+    step_0: STR_SCHEMA,
+  },
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "business_name", "proceed_to_dream", "step_0"]
+);
+
+const DreamJsonSchema = strictObjectSchema(
+  "dream_step",
+  {
+    action: ACTION_SCHEMA,
+    message: STR_SCHEMA,
+    question: STR_SCHEMA,
+    refined_formulation: STR_SCHEMA,
+    confirmation_question: STR_SCHEMA,
+    dream: STR_SCHEMA,
+    suggest_dreambuilder: BOOLSTR_SCHEMA,
+    proceed_to_dream: BOOLSTR_SCHEMA,
+    proceed_to_purpose: BOOLSTR_SCHEMA,
+  },
+  [
+    "action",
+    "message",
+    "question",
+    "refined_formulation",
+    "confirmation_question",
+    "dream",
+    "suggest_dreambuilder",
+    "proceed_to_dream",
+    "proceed_to_purpose",
+  ]
+);
+
+const GenericJsonSchema = strictObjectSchema(
+  "generic_step",
+  {
+    action: ACTION_SCHEMA,
+    message: STR_SCHEMA,
+    question: STR_SCHEMA,
+    refined_formulation: STR_SCHEMA,
+    confirmation_question: STR_SCHEMA,
+    value: STR_SCHEMA,
+    proceed_to_next: BOOLSTR_SCHEMA,
+  },
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "value", "proceed_to_next"]
+);
+
+const StrategyJsonSchema = strictObjectSchema(
+  "strategy_step",
+  {
+    action: ACTION_SCHEMA,
+    message: STR_SCHEMA,
+    question: STR_SCHEMA,
+    refined_formulation: STR_SCHEMA,
+    confirmation_question: STR_SCHEMA,
+    strategy: STR_SCHEMA,
+    proceed_to_next: BOOLSTR_SCHEMA,
+  },
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "strategy", "proceed_to_next"]
+);
+
+const RulesJsonSchema = strictObjectSchema(
+  "rules_step",
+  {
+    action: ACTION_SCHEMA,
+    message: STR_SCHEMA,
+    question: STR_SCHEMA,
+    refined_formulation: STR_SCHEMA,
+    confirmation_question: STR_SCHEMA,
+    rulesofthegame: STR_SCHEMA,
+    proceed_to_next: BOOLSTR_SCHEMA,
+  },
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "rulesofthegame", "proceed_to_next"]
+);
+
+const PresentationJsonSchema = strictObjectSchema(
+  "presentation_step",
+  {
+    action: ACTION_SCHEMA,
+    message: STR_SCHEMA,
+    question: STR_SCHEMA,
+    refined_formulation: STR_SCHEMA,
+    confirmation_question: STR_SCHEMA,
+    presentation_brief: STR_SCHEMA,
+    proceed_to_next: BOOLSTR_SCHEMA,
+  },
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "presentation_brief", "proceed_to_next"]
+);
+
 // ---- Minimal NL/EN session intro ----
 function detectLanguage(userMessage: string, state?: CanvasState): "nl" | "en" {
   if (state?.language) return state.language;
   const m = (userMessage || "").toLowerCase();
-  const nlHits = ["ik", "ja", "nee", "mijn", "bedrijf", "droom", "waarom", "omdat", "doel", "klant"];
+  const nlHits = ["ik", "ja", "nee", "mijn", "bedrijf", "droom", "waarom", "omdat", "doel", "klant", "strategie"];
   const score = nlHits.reduce((acc, w) => acc + (m.includes(w) ? 1 : 0), 0);
   return score >= 2 ? "nl" : "en";
 }
@@ -137,10 +254,8 @@ function sessionIntro(lang: "nl" | "en"): string {
 
 // ---- Responses API parsing helpers ----
 function extractOutputTextFromResponses(data: any): string | undefined {
-  // Some responses include an output_text convenience field.
   if (typeof data?.output_text === "string" && data.output_text.trim()) return data.output_text;
 
-  // Standard Responses: output is an array of items; messages contain content items.
   const out = data?.output;
   if (!Array.isArray(out)) return undefined;
 
@@ -149,9 +264,7 @@ function extractOutputTextFromResponses(data: any): string | undefined {
     const content = item?.content;
     if (!Array.isArray(content)) continue;
 
-    const outTextItem = content.find(
-      (c: any) => c?.type === "output_text" && typeof c?.text === "string"
-    );
+    const outTextItem = content.find((c: any) => c?.type === "output_text" && typeof c?.text === "string");
     if (outTextItem?.text?.trim()) return outTextItem.text;
   }
 
@@ -159,7 +272,6 @@ function extractOutputTextFromResponses(data: any): string | undefined {
 }
 
 function extractFirstJsonObject(text: string): string | null {
-  // Finds the first balanced {...} block, handling strings/escapes.
   const s = String(text ?? "");
   const start = s.indexOf("{");
   if (start < 0) return null;
@@ -172,13 +284,9 @@ function extractFirstJsonObject(text: string): string | null {
     const ch = s[i];
 
     if (inStr) {
-      if (esc) {
-        esc = false;
-      } else if (ch === "\\") {
-        esc = true;
-      } else if (ch === '"') {
-        inStr = false;
-      }
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
       continue;
     }
 
@@ -190,21 +298,24 @@ function extractFirstJsonObject(text: string): string | null {
     if (ch === "{") depth++;
     if (ch === "}") depth--;
 
-    if (depth === 0) {
-      return s.slice(start, i + 1);
-    }
+    if (depth === 0) return s.slice(start, i + 1);
   }
-
   return null;
 }
 
 // ---- OpenAI call helper (Responses API via fetch) ----
-// IMPORTANT: Responses API uses `text.format` (not `response_format`).
+// Uses Structured Outputs (json_schema strict) when possible.
+// If the selected model does not support json_schema, it falls back to json_object mode.
+type TextFormat =
+  | { type: "json_schema"; name: string; strict: true; schema: JsonSchema }
+  | { type: "json_object" };
+
 async function openaiJson<T>({
   apiKey,
   model,
   system,
   user,
+  format,
   temperature = 0.2,
   maxOutputTokens = 1200,
 }: {
@@ -212,28 +323,59 @@ async function openaiJson<T>({
   model: string;
   system: string;
   user: string;
+  format: TextFormat;
   temperature?: number;
   maxOutputTokens?: number;
 }): Promise<T> {
-  const resp = await fetch("https://api.openai.com/v1/responses", {
+  const makeBody = (fmt: TextFormat) => ({
+    model,
+    input: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    text: { format: fmt },
+    temperature,
+    max_output_tokens: maxOutputTokens,
+    store: false,
+  });
+
+  // 1) Try Structured Outputs (json_schema strict) first if requested
+  let resp = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      input: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      // JSON mode via Responses API:
-      text: { format: { type: "json_object" } },
-      temperature,
-      max_output_tokens: maxOutputTokens,
-      store: false,
-    }),
+    body: JSON.stringify(makeBody(format)),
   });
+
+  // 2) If model rejects json_schema, fallback to json_object (keeps the app running)
+  if (!resp.ok && format.type === "json_schema") {
+    const errText = await resp.text().catch(() => "");
+    const looksLikeUnsupportedSchema =
+      errText.includes("json_schema") ||
+      errText.includes("text.format") ||
+      errText.includes("not supported") ||
+      errText.includes("Invalid parameter");
+
+    if (looksLikeUnsupportedSchema) {
+      resp = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(makeBody({ type: "json_object" })),
+      });
+
+      if (!resp.ok) {
+        const fallbackText = await resp.text().catch(() => "");
+        throw new Error(`OpenAI error ${resp.status}: ${fallbackText}`);
+      }
+    } else {
+      throw new Error(`OpenAI error ${resp.status}: ${errText}`);
+    }
+  }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => "");
@@ -247,7 +389,6 @@ async function openaiJson<T>({
     throw new Error("OpenAI response missing output_text (no message/output_text item found).");
   }
 
-  // Best-effort JSON parsing
   try {
     return JSON.parse(outText) as T;
   } catch {
@@ -290,28 +431,32 @@ function integrateToText({
   return parts.filter(Boolean).join("\n");
 }
 
-// ---- Router (kept for future use) ----
-function nextStepFrom(current: StepId): StepId {
-  const order: StepId[] = [
-    "step_0",
-    "dream",
-    "purpose",
-    "bigwhy",
-    "role",
-    "entity",
-    "strategy",
-    "rulesofthegame",
-    "presentation",
-  ];
-  const idx = order.indexOf(current);
-  return order[Math.min(idx + 1, order.length - 1)];
-}
-
-// ---- Specialists (compact prompts, replaceable later) ----
+// ---- Specialists (compact prompts) ----
 function sysBase(lang: "nl" | "en"): string {
-  return lang === "nl"
-    ? "Je bent een specialist in Ben Steenstra’s Business Strategy Canvas. Antwoord ALLEEN als geldig JSON object. Geen markdown. Geen extra tekst."
-    : "You are a specialist in Ben Steenstra’s Business Strategy Canvas. Respond ONLY as a valid JSON object. No markdown. No extra text.";
+  const base =
+    lang === "nl"
+      ? "Je bent een specialist in Ben Steenstra’s Business Strategy Canvas."
+      : "You are a specialist in Ben Steenstra’s Business Strategy Canvas.";
+
+  // This line is important even with structured outputs: it reduces “creative” schema breaks.
+  const formatRules =
+    lang === "nl"
+      ? [
+          "Antwoord ALLEEN met JSON dat exact past op het schema.",
+          "Vul ALLE velden altijd in (als iets niet van toepassing is: gebruik een lege string).",
+          "Gebruik voor booleans ALLEEN de strings \"true\" of \"false\".",
+          "Gebruik voor action ALLEEN: INTRO, ASK, REFINE, CONFIRM, ESCAPE.",
+          "Geen markdown. Geen extra tekst.",
+        ].join(" ")
+      : [
+          "Respond ONLY with JSON that exactly matches the schema.",
+          "Always include ALL fields (if not applicable: use an empty string).",
+          "For booleans, ONLY use the strings \"true\" or \"false\".",
+          "For action, ONLY use: INTRO, ASK, REFINE, CONFIRM, ESCAPE.",
+          "No markdown. No extra text.",
+        ].join(" ");
+
+  return `${base} ${formatRules}`;
 }
 
 function userEnvelope(step: StepId, userMessage: string, state: CanvasState, showStepIntro: boolean): string {
@@ -334,9 +479,9 @@ async function runValidation(
   const system = [
     sysBase(lang),
     lang === "nl"
-      ? "Doel: haal bedrijfsnaam uit USER_MESSAGE. Als het al bekend is: vraag bevestiging. Als user 'ja' op bevestiging zegt: proceed_to_dream=true."
-      : "Goal: extract business name from USER_MESSAGE. If already known: ask confirmation. If user confirms (yes): proceed_to_dream=true.",
-    "Schema fields: action,message,question,refined_formulation,confirmation_question,business_name,proceed_to_dream,step_0.",
+      ? "Doel: haal bedrijfsnaam uit USER_MESSAGE. Als het al bekend is: vraag bevestiging. Als user 'ja' bevestigt: proceed_to_dream=\"true\"."
+      : "Goal: extract business name from USER_MESSAGE. If already known: ask confirmation. If user confirms (yes): proceed_to_dream=\"true\".",
+    "Velden: action,message,question,refined_formulation,confirmation_question,business_name,proceed_to_dream,step_0.",
   ].join("\n");
 
   const user = userEnvelope("step_0", userMessage, state, showStepIntro);
@@ -346,6 +491,7 @@ async function runValidation(
     model,
     system,
     user,
+    format: { type: "json_schema", name: "validation_step_0", strict: true, schema: ValidationJsonSchema },
   });
 
   return ValidationSchema.parse(raw);
@@ -362,9 +508,9 @@ async function runDream(
   const system = [
     sysBase(lang),
     lang === "nl"
-      ? "Doel: maak een scherpe Droom. Als user bevestigt dat refined goed is: zet dream en vraag of door naar Purpose. Als user bevestigt en wil door: proceed_to_purpose=true."
-      : "Goal: craft a sharp Dream. If user confirms refined is good: set dream and ask to proceed to Purpose. If user confirms and wants to proceed: proceed_to_purpose=true.",
-    "Schema fields: action,message,question,refined_formulation,confirmation_question,dream,suggest_dreambuilder,proceed_to_dream,proceed_to_purpose.",
+      ? "Doel: maak een scherpe Droom. Bij bevestiging: zet dream. Vraag of door naar Purpose. Als user door wil: proceed_to_purpose=\"true\"."
+      : "Goal: craft a sharp Dream. On confirmation: set dream. Ask to proceed to Purpose. If user wants to proceed: proceed_to_purpose=\"true\".",
+    "Velden: action,message,question,refined_formulation,confirmation_question,dream,suggest_dreambuilder,proceed_to_dream,proceed_to_purpose.",
   ].join("\n");
 
   const user = userEnvelope("dream", userMessage, state, showStepIntro);
@@ -374,6 +520,7 @@ async function runDream(
     model,
     system,
     user,
+    format: { type: "json_schema", name: "dream_step", strict: true, schema: DreamJsonSchema },
   });
 
   return DreamSchema.parse(raw);
@@ -395,9 +542,9 @@ async function runGenericStep(
   const system = [
     sysBase(lang),
     lang === "nl"
-      ? `Doel: help de gebruiker met stap ${label}. Produceer een refined_formulation als nodig. Bij duidelijke bevestiging: action=CONFIRM, value gevuld, proceed_to_next=true.`
-      : `Goal: help the user with step ${label}. Produce a refined_formulation when needed. On clear confirmation: action=CONFIRM, value filled, proceed_to_next=true.`,
-    "Schema fields: action,message,question,refined_formulation,confirmation_question,value,proceed_to_next.",
+      ? `Doel: help de gebruiker met stap ${label}. Maak refined_formulation indien nodig. Bij duidelijke bevestiging: action=CONFIRM, value gevuld, proceed_to_next="true".`
+      : `Goal: help the user with step ${label}. Produce refined_formulation if needed. On clear confirmation: action=CONFIRM, value filled, proceed_to_next="true".`,
+    "Velden: action,message,question,refined_formulation,confirmation_question,value,proceed_to_next.",
   ].join("\n");
 
   const user = userEnvelope(step, userMessage, state, showStepIntro);
@@ -407,6 +554,7 @@ async function runGenericStep(
     model,
     system,
     user,
+    format: { type: "json_schema", name: `generic_${step}`, strict: true, schema: GenericJsonSchema },
   });
 
   return GenericStepSchema.parse(raw);
@@ -423,9 +571,9 @@ async function runStrategy(
   const system = [
     sysBase(lang),
     lang === "nl"
-      ? "Doel: Strategy als 3-5 focuspunten (elk op nieuwe regel). Geen takenlijst. Op bevestiging: strategy gevuld en proceed_to_next=true."
-      : "Goal: Strategy as 3-5 focus points (each on a new line). Not a task list. On confirmation: strategy filled and proceed_to_next=true.",
-    "Schema fields: action,message,question,refined_formulation,confirmation_question,strategy,proceed_to_next.",
+      ? "Doel: Strategy als 3-5 focuspunten (elk op nieuwe regel). Geen takenlijst. Op bevestiging: strategy gevuld en proceed_to_next=\"true\"."
+      : "Goal: Strategy as 3-5 focus points (each on a new line). Not a task list. On confirmation: strategy filled and proceed_to_next=\"true\".",
+    "Velden: action,message,question,refined_formulation,confirmation_question,strategy,proceed_to_next.",
   ].join("\n");
 
   const user = userEnvelope("strategy", userMessage, state, showStepIntro);
@@ -435,6 +583,7 @@ async function runStrategy(
     model,
     system,
     user,
+    format: { type: "json_schema", name: "strategy_step", strict: true, schema: StrategyJsonSchema },
   });
 
   return StrategySchema.parse(raw);
@@ -451,9 +600,9 @@ async function runRules(
   const system = [
     sysBase(lang),
     lang === "nl"
-      ? "Doel: Rules of the game als duidelijke bullets of korte alinea. Op bevestiging: rulesofthegame gevuld en proceed_to_next=true."
-      : "Goal: Rules of the game as clear bullets or short paragraph. On confirmation: rulesofthegame filled and proceed_to_next=true.",
-    "Schema fields: action,message,question,refined_formulation,confirmation_question,rulesofthegame,proceed_to_next.",
+      ? "Doel: Rules of the game als duidelijke bullets of korte alinea. Op bevestiging: rulesofthegame gevuld en proceed_to_next=\"true\"."
+      : "Goal: Rules of the game as clear bullets or short paragraph. On confirmation: rulesofthegame filled and proceed_to_next=\"true\".",
+    "Velden: action,message,question,refined_formulation,confirmation_question,rulesofthegame,proceed_to_next.",
   ].join("\n");
 
   const user = userEnvelope("rulesofthegame", userMessage, state, showStepIntro);
@@ -463,6 +612,7 @@ async function runRules(
     model,
     system,
     user,
+    format: { type: "json_schema", name: "rules_step", strict: true, schema: RulesJsonSchema },
   });
 
   return RulesSchema.parse(raw);
@@ -479,9 +629,9 @@ async function runPresentation(
   const system = [
     sysBase(lang),
     lang === "nl"
-      ? "Doel: presentation brief kort, concreet, in bullets. Op bevestiging: presentation_brief gevuld en proceed_to_next=true."
-      : "Goal: presentation brief short and concrete in bullets. On confirmation: presentation_brief filled and proceed_to_next=true.",
-    "Schema fields: action,message,question,refined_formulation,confirmation_question,presentation_brief,proceed_to_next.",
+      ? "Doel: presentation brief kort, concreet, in bullets. Op bevestiging: presentation_brief gevuld en proceed_to_next=\"true\"."
+      : "Goal: presentation brief short and concrete in bullets. On confirmation: presentation_brief filled and proceed_to_next=\"true\".",
+    "Velden: action,message,question,refined_formulation,confirmation_question,presentation_brief,proceed_to_next.",
   ].join("\n");
 
   const user = userEnvelope("presentation", userMessage, state, showStepIntro);
@@ -491,6 +641,7 @@ async function runPresentation(
     model,
     system,
     user,
+    format: { type: "json_schema", name: "presentation_step", strict: true, schema: PresentationJsonSchema },
   });
 
   return PresentationSchema.parse(raw);
@@ -505,7 +656,10 @@ export async function runCanvasStep(args: {
   const apiKey = process.env.OPENAI_API_KEY || "";
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY env var");
 
-  const model = process.env.OPENAI_MODEL || "gpt-4.1";
+  // NOTE: Structured Outputs (json_schema) is supported on gpt-4o-mini / gpt-4o-2024-08-06 and later.
+  // If you keep OPENAI_MODEL on something else, we will automatically fall back to json_object mode,
+  // but schema adherence may become weaker again.
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const incomingState = (args.state ?? {}) as Partial<CanvasState>;
   const merged: CanvasState = {
@@ -594,7 +748,7 @@ export async function runCanvasStep(args: {
     specialistJson = await runValidation(apiKey, model, lang, userMessage, merged, showStepIntro);
   }
 
-  // Update intro tracking AFTER rendering (keep behavior aligned with your current flow)
+  // Update intro tracking AFTER rendering (kept aligned with your current flow)
   if (showSessionIntro) merged.intro_shown_session = "true";
   if (showStepIntro) merged.intro_shown_for_step = requested;
 
