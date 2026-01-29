@@ -1,11 +1,11 @@
 // src/core/llm.ts
-import OpenAI from "openai";
 import { z } from "zod";
 
 export type StrictJsonSchema = {
   type: "object";
   additionalProperties: boolean;
-  required: string[];
+  // FIX: allow readonly arrays (when schemas are defined with `as const`)
+  required: readonly string[];
   properties: Record<string, any>;
 };
 
@@ -45,16 +45,14 @@ export type StrictJsonCallArgs<T> = {
   debugLabel?: string;
 };
 
-function getOpenAIClient(): OpenAI {
+function getApiKey(): string {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing env OPENAI_API_KEY");
-  }
-  return new OpenAI({ apiKey });
+  if (!apiKey) throw new Error("Missing env OPENAI_API_KEY");
+  return apiKey;
 }
 
 function extractOutputText(resp: any): string {
-  // Newer SDKs provide output_text
+  // Responses API typically provides output_text at top level
   if (typeof resp?.output_text === "string" && resp.output_text.trim().length) {
     return resp.output_text.trim();
   }
@@ -80,38 +78,53 @@ function safeJsonParse(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch (e) {
-    // Sometimes the model returns leading/trailing whitespace; attempt a minimal trim-only retry
     const trimmed = text.trim();
-    if (trimmed !== text) {
-      return JSON.parse(trimmed);
-    }
+    if (trimmed !== text) return JSON.parse(trimmed);
     throw e;
   }
 }
 
 async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema">) {
-  const client = getOpenAIClient();
+  const apiKey = getApiKey();
 
-  const resp = await client.responses.create({
-    model: args.model,
-    input: [
-      { role: "system", content: args.instructions },
-      { role: "user", content: args.plannerInput },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: args.schemaName,
-        strict: true,
-        schema: args.jsonSchema,
-      },
+  const resp = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
-    temperature: args.temperature ?? 0.2,
-    top_p: args.topP ?? 1,
-    max_output_tokens: args.maxOutputTokens ?? 2048,
+    body: JSON.stringify({
+      model: args.model,
+      input: [
+        { role: "system", content: args.instructions },
+        { role: "user", content: args.plannerInput },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: args.schemaName,
+          strict: true,
+          schema: args.jsonSchema,
+        },
+      },
+      temperature: args.temperature ?? 0.2,
+      top_p: args.topP ?? 1,
+      max_output_tokens: args.maxOutputTokens ?? 2048,
+    }),
   });
 
-  const text = extractOutputText(resp);
+  const json = await resp.json().catch(() => null);
+
+  if (!resp.ok) {
+    const msg =
+      (json && (json.error?.message || json.error?.toString?.())) ||
+      `OpenAI API error (${resp.status})`;
+    const err = new Error(msg);
+    (err as any).meta = { status: resp.status, body: json, debugLabel: args.debugLabel };
+    throw err;
+  }
+
+  const text = extractOutputText(json);
   const parsed = safeJsonParse(text);
 
   return { text, parsed };
@@ -188,10 +201,7 @@ Now return a corrected JSON output that matches the schema exactly.`;
     return { data: parsed2.data, rawText: attempt2.text, attempts: 2 };
   }
 
-  // If it still fails, throw a rich error for your logs/Inspector.
-  const err = new Error(
-    `Strict JSON call failed after repair pass for ${debugLabel}.`
-  );
+  const err = new Error(`Strict JSON call failed after repair pass for ${debugLabel}.`);
   (err as any).meta = {
     debugLabel,
     attempt1_text: attempt1.text,
