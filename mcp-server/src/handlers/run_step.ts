@@ -49,6 +49,59 @@ function langFromState(state: CanvasState): string {
 }
 
 /**
+ * One-time language detection (only if state.language is empty and user provided a real message).
+ * Multi-language without hardcoded non-English markers in code.
+ */
+const LanguageDetectZodSchema = z.object({
+  language: z.string().min(2).max(10),
+});
+
+const LanguageDetectJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["language"],
+  properties: {
+    language: { type: "string" },
+  },
+} as const;
+
+async function detectLanguageOnce(params: {
+  model: string;
+  state: CanvasState;
+  userMessage: string;
+}): Promise<CanvasState> {
+  const { model, state, userMessage } = params;
+
+  const current = String((state as any).language ?? "").trim();
+  if (current) return state;
+
+  const msg = String(userMessage ?? "").trim();
+  if (!msg) return { ...state, language: "en" };
+
+  try {
+    const res = await callStrictJson<{ language: string }>({
+      model,
+      instructions:
+        "Detect the user's language from the message. Return ISO 639-1 when possible (e.g., en, nl, de, fr, es). " +
+        "If uncertain, return 'en'. Return JSON only.",
+      plannerInput: { message: msg },
+      schemaName: "LanguageDetect",
+      jsonSchema: LanguageDetectJsonSchema as any,
+      zodSchema: LanguageDetectZodSchema,
+      temperature: 0,
+      topP: 1,
+      maxOutputTokens: 30,
+      debugLabel: "LanguageDetect",
+    });
+
+    const detected = String(res.data?.language ?? "").toLowerCase().trim();
+    return { ...state, language: detected || "en" };
+  } catch {
+    return { ...state, language: "en" };
+  }
+}
+
+/**
  * Render order (strict):
  * message -> refined_formulation
  * (NO session intro rendered here; pre-start UI owns the welcome text)
@@ -118,7 +171,7 @@ function isClearYes(userMessage: string, lang: string): boolean {
 
 /**
  * Some tool-callers incorrectly send a meta-instruction as `user_message`.
- * For a clean widget flow, we ignore that “meta” text when the state is still pristine.
+ * For a clean widget flow, we ignore that meta text when the state is still pristine.
  *
  * Language-neutral: English-only patterns + structural cues (no non-English hardcoding).
  */
@@ -128,12 +181,17 @@ function looksLikeMetaInstruction(userMessage: string): boolean {
 
   const lower = t.toLowerCase();
 
-  // Meta messages tend to be longish and instruction-like.
+  // Meta messages tend to be instruction-like and longer.
   const longish = t.length >= 80;
 
   // Structural cues
   const hasBullets = /(^|\n)\s*[-*]\s+/.test(t);
-  const hasSections = lower.includes("instructions") || lower.includes("context") || lower.includes("requirements");
+  const hasSections =
+    lower.includes("instructions") ||
+    lower.includes("context") ||
+    lower.includes("requirements") ||
+    lower.includes("goals");
+
   const hasUserFraming =
     lower.includes("the user") ||
     lower.includes("user wants") ||
@@ -223,54 +281,6 @@ function applyStateUpdate(params: {
 }
 
 /**
- * One-time language detection (only if state.language is empty and user provided a real message).
- * Multi-language without hardcoded non-English markers in code.
- */
-const LanguageDetectZodSchema = z.object({
-  language: z.string().min(2).max(10),
-});
-
-const LanguageDetectJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    language: { type: "string" },
-  },
-  required: ["language"],
-} as const;
-
-async function detectLanguageOnce(params: { model: string; state: CanvasState; userMessage: string }): Promise<CanvasState> {
-  const { model, state, userMessage } = params;
-  const current = String((state as any).language ?? "").trim();
-  if (current) return state;
-
-  const msg = String(userMessage ?? "").trim();
-  if (!msg) return { ...state, language: "en" };
-
-  try {
-    const res = await callStrictJson<{ language: string }>({
-      model,
-      instructions:
-        "Detect the user's language from the message. Return ISO 639-1 when possible (e.g., en, nl, de, fr, es). " +
-        "If uncertain, return 'en'. Return JSON only.",
-      plannerInput: { message: msg },
-      schemaName: "LanguageDetect",
-      jsonSchema: LanguageDetectJsonSchema as any,
-      zodSchema: LanguageDetectZodSchema,
-      temperature: 0,
-      topP: 1,
-      maxOutputTokens: 30,
-      debugLabel: "LanguageDetect",
-    });
-
-    const detected = String(res.data?.language ?? "").toLowerCase().trim();
-    return { ...state, language: detected || "en" };
-  } catch {
-    return { ...state, language: "en" };
-  }
-}
-
-/**
  * Call specialist (strict JSON) based on orchestrator decision.
  */
 async function callSpecialistStrict(params: {
@@ -303,10 +313,12 @@ async function callSpecialistStrict(params: {
   }
 
   if (specialist === DREAM_SPECIALIST) {
+    // NOTE: dream.ts expects a LANGUAGE line now (4th arg).
     const plannerInput = buildDreamSpecialistInput(
       userMessage,
       state.intro_shown_for_step,
-      String(decision.current_step || DREAM_STEP_ID)
+      String(decision.current_step || DREAM_STEP_ID),
+      String((state as any).language ?? "")
     );
 
     const res = await callStrictJson<DreamOutput>({
@@ -334,7 +346,9 @@ async function callSpecialistStrict(params: {
         l.startsWith("nl")
           ? "Ik kan je hier alleen helpen met het bouwen van je Business Strategy Canvas."
           : "I can only help you here with building your Business Strategy Canvas.",
-      question: l.startsWith("nl") ? "Wil je nu doorgaan met verificatie?" : "Do you want to continue with verification now?",
+      question: l.startsWith("nl")
+        ? "Wil je nu doorgaan met verificatie?"
+        : "Do you want to continue with verification now?",
       refined_formulation: "",
       confirmation_question: "",
       business_name: "TBD",
@@ -372,23 +386,28 @@ export async function run_step(rawArgs: unknown): Promise<{
 }> {
   const args: RunStepArgs = RunStepArgsSchema.parse(rawArgs);
 
-  let state = migrateState(args.state ?? {});
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
+
+  let state = migrateState(args.state ?? {});
 
   // Normalize user message:
   // - If we detect meta-instruction AND state is pristine, treat it as empty (start trigger).
   const userMessageRaw = String(args.user_message ?? "");
-  const userMessageCandidate =
-    looksLikeMetaInstruction(userMessageRaw) && isPristineStateForStart(state) ? "" : userMessageRaw;
+  const pristineAtEntry = isPristineStateForStart(state);
 
-  // If language is missing and we have a real user message, detect it once (multi-language).
+  const userMessageCandidate =
+    looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry ? "" : userMessageRaw;
+
+  // If language is missing and we have a real user message, detect it once.
   state = await detectLanguageOnce({ model, state, userMessage: userMessageCandidate });
+
   const lang = langFromState(state);
+  const userMessage = userMessageCandidate;
 
   // START trigger (widget start screen):
   // If empty userMessage and state is at step_0 and no history, return only the Step 0 question.
   const isStartTrigger =
-    userMessageCandidate.trim() === "" &&
+    userMessage.trim() === "" &&
     state.current_step === STEP_0_ID &&
     String(state.intro_shown_session) !== "true" &&
     String(state.step_0_final ?? "").trim() === "" &&
@@ -420,8 +439,6 @@ export async function run_step(rawArgs: unknown): Promise<{
       state: { ...state, active_specialist: STEP_0_SPECIALIST, last_specialist_result: specialist },
     };
   }
-
-  const userMessage = userMessageCandidate;
 
   // --------- SPEECH-PROOF PROCEED TRIGGER (Step 0 readiness moment) ---------
   const prev = state.last_specialist_result || {};
@@ -518,7 +535,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     debug: {
       decision: finalDecision,
       attempts,
-      meta_user_message_ignored: looksLikeMetaInstruction(userMessageRaw) && isPristineStateForStart(state),
+      meta_user_message_ignored: looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry,
     },
   };
 }
