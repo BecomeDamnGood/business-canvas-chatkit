@@ -40,6 +40,16 @@
       .cardInner{ display:flex; align-items:flex-start; gap: 16px; }
       .badge{ width: 54px; height: 54px; border-radius: 999px; background: var(--blue); color: white; display:flex; align-items:center; justify-content:center; font-weight: 900; font-size: 18px; flex: 0 0 auto; }
 
+      /* Pulse animation (loading) */
+      @keyframes badgePulse {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(47,91,234,0.35); }
+        60% { transform: scale(1.04); box-shadow: 0 0 0 10px rgba(47,91,234,0.00); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(47,91,234,0.00); }
+      }
+      .badge.loading{
+        animation: badgePulse 1.25s ease-in-out infinite;
+      }
+
       /* Card title not used (avoid repeating step title) */
       .cardTitle{ display:none; }
 
@@ -48,14 +58,50 @@
 
       .inputWrap{ display:flex; align-items:flex-end; gap: 12px; margin-top: 10px; }
       textarea{ width: 100%; min-height: 92px; resize: vertical; border-radius: 18px; border: 1px solid var(--line); padding: 16px 16px; font-size: 17px; outline: none; }
+      textarea:disabled{ background: #f8fafc; color: #94a3b8; cursor:not-allowed; }
 
       .send{ width: 60px; height: 60px; border: none; border-radius: 18px; background: rgba(142,166,255,0.85); color: white; cursor: pointer; display:flex; align-items:center; justify-content:center; }
       .send svg{ width: 24px; height: 24px; }
       .send:disabled{ background: var(--stepOff); color:#94a3b8; cursor:not-allowed; }
 
-      .row{ display:flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+      /* Choice buttons (Dream 1/2) under input */
+      .choiceWrap{ display:flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+      .choiceBtn{
+        width: 100%;
+        border: 1px solid rgba(47,91,234,0.25);
+        background: rgba(47,91,234,0.06);
+        border-radius: 16px;
+        padding: 12px 14px;
+        font-weight: 900;
+        font-size: 16px;
+        cursor: pointer;
+        text-align: left;
+      }
+      .choiceBtn:disabled{
+        background: #f1f5f9;
+        border-color: var(--line);
+        color: #94a3b8;
+        cursor:not-allowed;
+      }
+
+      .thinking{ margin-top: 10px; color: var(--muted); font-weight: 800; }
+
+      .row{ display:flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items:center; }
       .btn{ border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 10px 14px; font-weight: 800; cursor: pointer; }
       .btn.primary{ border-color: rgba(47,91,234,0.25); background: rgba(47,91,234,0.08); }
+      .btn:disabled{ background: #f1f5f9; border-color: var(--line); color: #94a3b8; cursor:not-allowed; }
+
+      /* Bigger Start button */
+      #btnStart{
+        padding: 14px 22px;
+        font-size: 18px;
+        border-radius: 16px;
+      }
+      .startHint{
+        color: var(--muted);
+        font-weight: 800;
+        margin-left: 2px;
+      }
 
       /* Hide dev/debug/status entirely for end-users */
       .status{ display:none; }
@@ -69,6 +115,8 @@
         .stepLine{ width: 10px; }
         .badge{ width: 48px; height: 48px; }
         .send{ width: 54px; height: 54px; border-radius: 16px; }
+
+        .startHint{ width: 100%; margin-left: 0; }
       }
     </style>
   </head>
@@ -111,9 +159,16 @@
               </button>
             </div>
 
+            <!-- Dream choice buttons (1/2) go here -->
+            <div class="choiceWrap" id="choiceWrap" style="display:none"></div>
+
+            <!-- Loader label -->
+            <div class="thinking" id="thinking" style="display:none">Thinking…</div>
+
             <!-- Controls: only Start (pre-start) and OK (confirm moment) -->
             <div class="row" id="controls">
               <button class="btn primary" id="btnStart">Start</button>
+              <div class="startHint" id="startHint"></div>
               <button class="btn primary" id="btnOk" style="display:none">OK</button>
             </div>
 
@@ -208,8 +263,81 @@
         document.getElementById("byText").textContent = "A business model by:";
       }
 
+      // Loading state
+      let isLoading = false;
+
+      function setLoading(next) {
+        isLoading = Boolean(next);
+
+        document.getElementById("thinking").style.display = isLoading ? "block" : "none";
+        document.getElementById("badge").classList.toggle("loading", isLoading);
+
+        const inputEl = document.getElementById("input");
+        const sendEl = document.getElementById("send");
+        const btnStart = document.getElementById("btnStart");
+        const btnOk = document.getElementById("btnOk");
+
+        if (inputEl) inputEl.disabled = isLoading;
+        if (btnStart) btnStart.disabled = isLoading;
+        if (btnOk) btnOk.disabled = isLoading;
+
+        // disable choice buttons
+        document.querySelectorAll("#choiceWrap button").forEach(b => b.disabled = isLoading);
+
+        // send depends on both loading and input
+        const v = (inputEl && inputEl.value ? inputEl.value : "").trim();
+        if (sendEl) sendEl.disabled = isLoading || v.length === 0;
+      }
+
       function setSendEnabled(enabled) {
-        document.getElementById("send").disabled = !enabled;
+        document.getElementById("send").disabled = isLoading || !enabled;
+      }
+
+      function extractChoicesFromPrompt(promptText) {
+        const raw = String(promptText || "");
+        const lines = raw.split(/\r?\n/);
+
+        const found = {};
+        const kept = [];
+
+        for (const line of lines) {
+          const m = line.match(/^\s*([12])[\)\.]\s*(.+?)\s*$/);
+          if (m && (m[1] === "1" || m[1] === "2")) {
+            found[m[1]] = m[2];
+            continue; // remove from prompt shown
+          }
+          kept.push(line);
+        }
+
+        const choices = [];
+        if (found["1"]) choices.push({ value: "1", label: found["1"] });
+        if (found["2"]) choices.push({ value: "2", label: found["2"] });
+
+        return { promptShown: kept.join("\n").trim(), choices };
+      }
+
+      function renderChoiceButtons(choices) {
+        const wrap = document.getElementById("choiceWrap");
+        wrap.innerHTML = "";
+
+        if (!choices || choices.length === 0) {
+          wrap.style.display = "none";
+          return;
+        }
+
+        wrap.style.display = "flex";
+        for (const c of choices) {
+          const btn = document.createElement("button");
+          btn.className = "choiceBtn";
+          btn.type = "button";
+          btn.textContent = c.label;
+          btn.disabled = isLoading;
+          btn.addEventListener("click", () => {
+            if (isLoading) return;
+            callRunStep(c.value);
+          });
+          wrap.appendChild(btn);
+        }
       }
 
       function render(data) {
@@ -239,6 +367,7 @@
         const inputWrap = document.getElementById("inputWrap");
         const btnStart = document.getElementById("btnStart");
         const btnOk = document.getElementById("btnOk");
+        const startHint = document.getElementById("startHint");
 
         // Specialist details (needed for confirm-readiness OK button)
         const specialist = (result && result.specialist) ? result.specialist : {};
@@ -252,24 +381,38 @@
         // PRE-START (no input, Start only, fixed welcome text)
         if (!hasToolOutput) {
           inputWrap.style.display = "none";
+          document.getElementById("choiceWrap").style.display = "none";
+
           btnStart.style.display = "inline-flex";
           btnOk.style.display = "none";
 
           document.getElementById("cardDesc").textContent = PRESTART_WELCOME_TEXT;
-          document.getElementById("prompt").textContent = "Click Start to begin.";
+          document.getElementById("prompt").textContent = "";
+
+          // Start helper text next to/under Start button
+          startHint.textContent = (lang === "nl") ? "Klik op Start om te beginnen." : "Click Start to begin.";
+
+          // ensure correct disabled states
+          setLoading(isLoading);
           return;
         }
 
         // AFTER START (tool output exists)
         inputWrap.style.display = "flex";
         btnStart.style.display = "none";
+        startHint.textContent = "";
 
         // Body + prompt from tool output
         const body = (result && typeof result.text === "string") ? result.text : "";
         const prompt = (result && typeof result.prompt === "string") ? result.prompt : "";
 
         document.getElementById("cardDesc").textContent = body;
-        document.getElementById("prompt").textContent = prompt;
+
+        // Extract Dream 1/2 choices from prompt (UI-only parsing)
+        const { promptShown, choices } = extractChoicesFromPrompt(prompt);
+        document.getElementById("prompt").textContent = promptShown || "";
+
+        renderChoiceButtons(choices);
 
         // OK button ONLY in confirm-readiness moment (Step 0)
         btnOk.style.display = isConfirmReadinessStep0 ? "inline-flex" : "none";
@@ -284,6 +427,9 @@
         setSendEnabled(v.length > 0);
 
         globalThis.__BSC_LATEST__ = { data, result, state, lang };
+
+        // keep disabled states consistent with current loading flag
+        setLoading(isLoading);
       }
 
       async function callRunStep(message) {
@@ -302,18 +448,34 @@
           state: nextState
         };
 
-        const resp = await globalThis.openai.callTool("run_step", payload);
-        const nextData = normalizeToolOutput(resp);
-        render(nextData);
+        setLoading(true);
+
+        try {
+          const resp = await globalThis.openai.callTool("run_step", payload);
+          const nextData = normalizeToolOutput(resp);
+          render(nextData);
+        } catch (e) {
+          console.error("run_step failed", e);
+          const latest2 = globalThis.__BSC_LATEST__ || {};
+          const lang2 = (latest2.lang || uiLanguage(latest2.state || {}));
+          document.getElementById("cardDesc").textContent =
+            (lang2 === "nl")
+              ? "Er ging iets mis bij het verwerken van je bericht. Probeer het opnieuw."
+              : "Something went wrong while processing your message. Please try again.";
+        } finally {
+          setLoading(false);
+        }
       }
 
       // Enable send only when there is text
       document.getElementById("input").addEventListener("input", () => {
+        if (isLoading) return;
         const v = (document.getElementById("input").value || "").trim();
         setSendEnabled(v.length > 0);
       });
 
       document.getElementById("send").addEventListener("click", () => {
+        if (isLoading) return;
         const v = (document.getElementById("input").value || "").trim();
         if (!v) return;
         document.getElementById("input").value = "";
@@ -321,10 +483,14 @@
         callRunStep(v);
       });
 
-      document.getElementById("btnStart").addEventListener("click", () => callRunStep(""));
+      document.getElementById("btnStart").addEventListener("click", () => {
+        if (isLoading) return;
+        callRunStep("");
+      });
 
       // OK sends a speech-proof "clear YES" (localized)
       document.getElementById("btnOk").addEventListener("click", () => {
+        if (isLoading) return;
         const latest = globalThis.__BSC_LATEST__ || {};
         const lang = (latest.lang || uiLanguage(latest.state || {}));
         callRunStep(lang === "nl" ? "ja" : "yes");
