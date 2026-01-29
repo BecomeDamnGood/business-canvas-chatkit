@@ -60,22 +60,26 @@ export const DreamJsonSchema = {
  * The Dream agent expects a single string that contains these lines:
  * - INTRO_SHOWN_FOR_STEP: <string>
  * - CURRENT_STEP: <string>
+ * - LANGUAGE: <string>
  * - PLANNER_INPUT: <string> (contains CURRENT_STEP_ID and USER_MESSAGE)
  */
 export function buildDreamSpecialistInput(
   userMessage: string,
   introShownForStep: string = "",
-  currentStep: string = DREAM_STEP_ID
+  currentStep: string = DREAM_STEP_ID,
+  language: string = ""
 ): string {
   const plannerInput = `CURRENT_STEP_ID: ${DREAM_STEP_ID} | USER_MESSAGE: ${userMessage}`;
   return `INTRO_SHOWN_FOR_STEP: ${introShownForStep}
 CURRENT_STEP: ${currentStep}
+LANGUAGE: ${language}
 PLANNER_INPUT: ${plannerInput}`;
 }
 
 /**
  * Dream agent instructions
- * NOTE: This is copied to match the provided logic document exactly (no creative rewrites).
+ * NOTE: This is copied to match the provided logic document exactly (no creative rewrites),
+ * with one minimal addition: enforce output language using LANGUAGE (state.language) when provided.
  */
 export const DREAM_INSTRUCTIONS = `DREAM
 DREAM AGENT (STEP: DREAM, EXECUTIVE COACH VOICE, MULTI-LANGUAGE, STRICT JSON, NO NULLS, SCOPE-GUARDED)
@@ -94,6 +98,7 @@ Scope guard (HARD)
 The user message contains:
 - INTRO_SHOWN_FOR_STEP: <string>
 - CURRENT_STEP: <string>
+- LANGUAGE: <string>
 - PLANNER_INPUT: <string> (contains CURRENT_STEP_ID and USER_MESSAGE)
 Assume chat history contains venture baseline and business name from Step 0 if provided.
 3) OUTPUT SCHEMA (fields and types)
@@ -135,8 +140,11 @@ so behavior remains identical.
 - Never invent facts. Use only what the user said and what is known from prior confirmed steps.
 5) Instruction language.
 - This instruction document is English-only.
-- All JSON string fields must be produced in the user’s language (mirror PLANNER_INPUT language), unless the step explicitly requires keeping a user-provided quote unchanged.
+- All JSON string fields must be produced in the user’s language, enforced by LANGUAGE when present.
+- If LANGUAGE is non-empty, it is the single source of truth for output language. Do not infer language from PLANNER_INPUT.
+- If LANGUAGE is empty, mirror PLANNER_INPUT language.
 - Do not mix languages inside JSON strings.
+- Do not translate user-provided proper names. Keep business names exactly as provided.
 5) GLOBAL MICROCOPY DICTIONARY (DO NOT EDIT)
 These are canonical phrases. Do not invent synonyms per step.
 Use localized equivalents in JSON strings.
