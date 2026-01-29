@@ -4,7 +4,7 @@ import { z } from "zod";
 export type StrictJsonSchema = {
   type: "object";
   additionalProperties: boolean;
-  // FIX: allow readonly arrays (when schemas are defined with `as const`)
+  // allow readonly arrays (when schemas are defined with `as const`)
   required: readonly string[];
   properties: Record<string, any>;
 };
@@ -22,7 +22,7 @@ export type StrictJsonCallArgs<T> = {
   plannerInput: string;
 
   /**
-   * OpenAI response_format json_schema parameters
+   * OpenAI structured output parameters
    */
   schemaName: string;
   jsonSchema: StrictJsonSchema;
@@ -52,7 +52,7 @@ function getApiKey(): string {
 }
 
 function extractOutputText(resp: any): string {
-  // Responses API typically provides output_text at top level
+  // Responses API provides output_text at top level
   if (typeof resp?.output_text === "string" && resp.output_text.trim().length) {
     return resp.output_text.trim();
   }
@@ -99,31 +99,35 @@ async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema
         { role: "system", content: args.instructions },
         { role: "user", content: args.plannerInput },
       ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
+
+      // ✅ IMPORTANT FIX:
+      // In the Responses API, `response_format` moved to `text.format`.
+      text: {
+        format: {
+          type: "json_schema",
           name: args.schemaName,
           strict: true,
           schema: args.jsonSchema,
         },
       },
+
       temperature: args.temperature ?? 0.2,
       top_p: args.topP ?? 1,
       max_output_tokens: args.maxOutputTokens ?? 2048,
     }),
   });
 
-const json: any = await resp.json().catch(() => null);
+  const json: any = await resp.json().catch(() => null);
 
-if (!resp.ok) {
-  const msg =
-    json?.error?.message ||
-    json?.error?.toString?.() ||
-    `OpenAI API error (${resp.status})`;
-  const err = new Error(msg);
-  (err as any).meta = { status: resp.status, body: json, debugLabel: args.debugLabel };
-  throw err;
-}
+  if (!resp.ok) {
+    const msg =
+      json?.error?.message ||
+      json?.error?.toString?.() ||
+      `OpenAI API error (${resp.status})`;
+    const err = new Error(msg);
+    (err as any).meta = { status: resp.status, body: json, debugLabel: args.debugLabel };
+    throw err;
+  }
 
   const text = extractOutputText(json);
   const parsed = safeJsonParse(text);
