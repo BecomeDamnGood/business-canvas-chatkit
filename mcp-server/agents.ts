@@ -1,15 +1,6 @@
 // mcp-server/agents.ts
 import { z } from "zod";
 
-/**
- * One-shot fix package:
- * 1) ✅ Responses API parsing (no reliance on `data.output_text` in raw fetch)
- * 2) ✅ Never JSON.parse("") → robust extraction + parsing + guarded fallbacks
- * 3) ✅ step_0 always first on fresh session (even if ChatGPT sends dream)
- * 4) ✅ intro flags mark the step actually rendered (not the progressed step)
- * 5) ✅ Debug included in tool return (without breaking strict specialist schemas)
- */
-
 export type StepId =
   | "step_0"
   | "dream"
@@ -46,8 +37,8 @@ export type CanvasState = {
   // last results
   last_specialist_result?: unknown;
 
-  // optional
-  language?: "nl" | "en";
+  // optional: store user's language hint if you want; keep generic
+  language?: string;
 };
 
 const DEFAULT_STATE: CanvasState = {
@@ -55,13 +46,17 @@ const DEFAULT_STATE: CanvasState = {
   intro_shown_for_step: "",
   intro_shown_session: "false",
   active_specialist: "",
-  language: "nl",
+  // IMPORTANT: do NOT default to nl/en; let the model follow user input language.
+  language: undefined,
 };
 
 // ---- Zod Schemas (runtime validation) ----
 const ActionEnum = ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] as const;
 
+// NOTE: session_intro is ALWAYS present (required) but can be empty string.
+// This avoids hardcoded NL/EN in code while keeping strict schemas.
 const ValidationSchema = z.object({
+  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -73,6 +68,7 @@ const ValidationSchema = z.object({
 });
 
 const DreamSchema = z.object({
+  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -85,6 +81,7 @@ const DreamSchema = z.object({
 });
 
 const GenericStepSchema = z.object({
+  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -95,6 +92,7 @@ const GenericStepSchema = z.object({
 });
 
 const StrategySchema = z.object({
+  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -105,6 +103,7 @@ const StrategySchema = z.object({
 });
 
 const RulesSchema = z.object({
+  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -115,6 +114,7 @@ const RulesSchema = z.object({
 });
 
 const PresentationSchema = z.object({
+  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -141,119 +141,102 @@ const ACTION_SCHEMA = { type: "string", enum: [...ActionEnum] };
 const BOOLSTR_SCHEMA = { type: "string", enum: ["true", "false"] };
 const STR_SCHEMA = { type: "string" };
 
+const COMMON_PROPS = {
+  session_intro: STR_SCHEMA,
+  action: ACTION_SCHEMA,
+  message: STR_SCHEMA,
+  question: STR_SCHEMA,
+  refined_formulation: STR_SCHEMA,
+  confirmation_question: STR_SCHEMA,
+};
+
+const COMMON_REQ = [
+  "session_intro",
+  "action",
+  "message",
+  "question",
+  "refined_formulation",
+  "confirmation_question",
+];
+
 const ValidationJsonSchema = strictObjectSchema(
   "validation_step_0",
   {
-    action: ACTION_SCHEMA,
-    message: STR_SCHEMA,
-    question: STR_SCHEMA,
-    refined_formulation: STR_SCHEMA,
-    confirmation_question: STR_SCHEMA,
+    ...COMMON_PROPS,
     business_name: STR_SCHEMA,
     proceed_to_dream: BOOLSTR_SCHEMA,
     step_0: STR_SCHEMA,
   },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "business_name", "proceed_to_dream", "step_0"]
+  [...COMMON_REQ, "business_name", "proceed_to_dream", "step_0"]
 );
 
 const DreamJsonSchema = strictObjectSchema(
   "dream_step",
   {
-    action: ACTION_SCHEMA,
-    message: STR_SCHEMA,
-    question: STR_SCHEMA,
-    refined_formulation: STR_SCHEMA,
-    confirmation_question: STR_SCHEMA,
+    ...COMMON_PROPS,
     dream: STR_SCHEMA,
     suggest_dreambuilder: BOOLSTR_SCHEMA,
     proceed_to_dream: BOOLSTR_SCHEMA,
     proceed_to_purpose: BOOLSTR_SCHEMA,
   },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "dream", "suggest_dreambuilder", "proceed_to_dream", "proceed_to_purpose"]
+  [...COMMON_REQ, "dream", "suggest_dreambuilder", "proceed_to_dream", "proceed_to_purpose"]
 );
 
 const GenericJsonSchema = strictObjectSchema(
   "generic_step",
   {
-    action: ACTION_SCHEMA,
-    message: STR_SCHEMA,
-    question: STR_SCHEMA,
-    refined_formulation: STR_SCHEMA,
-    confirmation_question: STR_SCHEMA,
+    ...COMMON_PROPS,
     value: STR_SCHEMA,
     proceed_to_next: BOOLSTR_SCHEMA,
   },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "value", "proceed_to_next"]
+  [...COMMON_REQ, "value", "proceed_to_next"]
 );
 
 const StrategyJsonSchema = strictObjectSchema(
   "strategy_step",
   {
-    action: ACTION_SCHEMA,
-    message: STR_SCHEMA,
-    question: STR_SCHEMA,
-    refined_formulation: STR_SCHEMA,
-    confirmation_question: STR_SCHEMA,
+    ...COMMON_PROPS,
     strategy: STR_SCHEMA,
     proceed_to_next: BOOLSTR_SCHEMA,
   },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "strategy", "proceed_to_next"]
+  [...COMMON_REQ, "strategy", "proceed_to_next"]
 );
 
 const RulesJsonSchema = strictObjectSchema(
   "rules_step",
   {
-    action: ACTION_SCHEMA,
-    message: STR_SCHEMA,
-    question: STR_SCHEMA,
-    refined_formulation: STR_SCHEMA,
-    confirmation_question: STR_SCHEMA,
+    ...COMMON_PROPS,
     rulesofthegame: STR_SCHEMA,
     proceed_to_next: BOOLSTR_SCHEMA,
   },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "rulesofthegame", "proceed_to_next"]
+  [...COMMON_REQ, "rulesofthegame", "proceed_to_next"]
 );
 
 const PresentationJsonSchema = strictObjectSchema(
   "presentation_step",
   {
-    action: ACTION_SCHEMA,
-    message: STR_SCHEMA,
-    question: STR_SCHEMA,
-    refined_formulation: STR_SCHEMA,
-    confirmation_question: STR_SCHEMA,
+    ...COMMON_PROPS,
     presentation_brief: STR_SCHEMA,
     proceed_to_next: BOOLSTR_SCHEMA,
   },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "presentation_brief", "proceed_to_next"]
+  [...COMMON_REQ, "presentation_brief", "proceed_to_next"]
 );
 
-// -------------------- Language + text integration --------------------
+// -------------------- Render integration (project-files order) --------------------
 
-function detectLanguage(userMessage: string, state: CanvasState): "nl" | "en" {
-  const t = (userMessage || "").toLowerCase();
-  if (state.language) return state.language;
-  if (/\b(hello|hi|please|company|business|name)\b/.test(t)) return "en";
-  return "nl";
-}
-
-function sessionIntro(lang: "nl" | "en"): string {
-  return lang === "nl"
-    ? "Welkom bij de Business Strategy Canvas. We doorlopen stap voor stap je basis en werken toe naar een heldere output."
-    : "Welcome to the Business Strategy Canvas. We'll go step by step toward a clear output.";
-}
-
-function integrateToText({
-  lang,
-  showSessionIntro,
-  specialistJson,
-}: {
-  lang: "nl" | "en";
+function integrateToText(opts: {
   showSessionIntro: boolean;
   specialistJson: any;
 }): string {
+  const { showSessionIntro, specialistJson } = opts;
+
   const parts: string[] = [];
-  if (showSessionIntro) parts.push(sessionIntro(lang));
+
+  // Session intro must come first (project-files behavior)
+  if (showSessionIntro) {
+    const intro = String(specialistJson?.session_intro ?? "").trim();
+    if (intro) parts.push(intro);
+  }
 
   const msg = String(specialistJson?.message ?? "").trim();
   const refined = String(specialistJson?.refined_formulation ?? "").trim();
@@ -298,7 +281,6 @@ function extractResponsesOutputText(data: any): string {
     }
   }
 
-  // Defensive fallbacks (never primary)
   if (chunks.length === 0 && typeof data?.output_text === "string") return data.output_text;
   if (chunks.length === 0 && typeof data?.text === "string") return data.text;
 
@@ -309,11 +291,9 @@ function tryParseJson(text: string): any | null {
   const t = (text || "").trim();
   if (!t) return null;
 
-  // Direct parse
   try {
     return JSON.parse(t);
   } catch {
-    // Extract first-to-last braces span
     const s = t.indexOf("{");
     const e = t.lastIndexOf("}");
     if (s >= 0 && e > s) {
@@ -379,7 +359,6 @@ async function callOpenAIJson({
   const data: any = await res.json();
   const responseId = typeof data?.id === "string" ? data.id : undefined;
 
-  // If something upstream provides already-parsed output, accept it
   if (data && typeof data === "object" && data.output_parsed && typeof data.output_parsed === "object") {
     return { parsed: data.output_parsed, debug: { response_id: responseId } as OpenAIDebug };
   }
@@ -399,274 +378,259 @@ async function callOpenAIJson({
   return { parsed, debug: { response_id: responseId } as OpenAIDebug };
 }
 
-// -------------------- Schema-safe fallbacks (strict; no extra fields) --------------------
+// -------------------- Shared “project intro” instruction (no NL/EN hardcode) --------------------
 
-function baseAsk(lang: "nl" | "en") {
+const PROJECT_SESSION_INTRO_EN =
+  "Welcome to Ben Steenstra’s Business Strategy Canvas, used in national and international organizations. " +
+  "We will go through a small number of steps, one by one, so each step is clear before we move on. " +
+  "At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear " +
+  "presentation for external stakeholders, partners, or team members.";
+
+// -------------------- Schema-safe fallbacks (allowed to be extra copy) --------------------
+
+function baseAsk(): {
+  session_intro: string;
+  action: "ASK";
+  message: string;
+  question: string;
+  refined_formulation: string;
+  confirmation_question: string;
+} {
   return {
-    action: "ASK" as const,
-    message:
-      lang === "nl"
-        ? "Ik kon de vorige output niet verwerken. Laten we het opnieuw proberen."
-        : "I couldn't process the previous output. Let's try again.",
-    question: lang === "nl" ? "Kun je je antwoord opnieuw sturen?" : "Could you resend your answer?",
+    session_intro: "",
+    action: "ASK",
+    message: "I couldn't process the previous output. Let's try again.",
+    question: "Could you resend your answer?",
     refined_formulation: "",
     confirmation_question: "",
   };
 }
 
-function fallbackValidation(lang: "nl" | "en", state: CanvasState) {
+function fallbackValidation(state: CanvasState) {
   return {
-    ...baseAsk(lang),
+    ...baseAsk(),
     business_name: String(state.business_name ?? ""),
     proceed_to_dream: "false" as const,
     step_0: String(state.step_0 ?? ""),
-    question:
-      lang === "nl"
-        ? "Wat is je bedrijfsnaam, en in één zin: wat doet je bedrijf?"
-        : "What's your business name, and in one sentence: what does it do?",
+    question: "What's your business name, and in one sentence: what does it do?",
   };
 }
 
-function fallbackDream(lang: "nl" | "en", state: CanvasState) {
+function fallbackDream(state: CanvasState) {
   return {
-    ...baseAsk(lang),
+    ...baseAsk(),
     dream: String(state.dream ?? ""),
     suggest_dreambuilder: "false" as const,
     proceed_to_dream: "false" as const,
     proceed_to_purpose: "false" as const,
-    question:
-      lang === "nl"
-        ? "Wat is jouw Dream? Beschrijf het gewenste toekomstbeeld."
-        : "What is your Dream? Describe the desired future state.",
+    question: "What is your Dream? Describe the desired future state.",
   };
 }
 
-function fallbackGeneric(lang: "nl" | "en", existing: string, stepLabelNl: string, stepLabelEn: string) {
+function fallbackGeneric(existing: string, stepLabelEn: string) {
   return {
-    ...baseAsk(lang),
+    ...baseAsk(),
     value: String(existing ?? ""),
     proceed_to_next: "false" as const,
-    question: lang === "nl"
-      ? `Kun je je antwoord voor '${stepLabelNl}' opnieuw geven?`
-      : `Could you answer the '${stepLabelEn}' step again?`,
+    question: `Could you answer the '${stepLabelEn}' step again?`,
   };
 }
 
-function fallbackStrategy(lang: "nl" | "en", state: CanvasState) {
+function fallbackStrategy(state: CanvasState) {
   return {
-    ...baseAsk(lang),
+    ...baseAsk(),
     strategy: String(state.strategy ?? ""),
     proceed_to_next: "false" as const,
-    question:
-      lang === "nl"
-        ? "Wat is je strategie in 2–5 bullets? (focus, keuzes, doelgroep, onderscheidend vermogen)"
-        : "What is your strategy in 2–5 bullets? (focus, choices, target, differentiation)",
+    question: "What is your strategy in 2–5 bullets? (focus, choices, target, differentiation)",
   };
 }
 
-function fallbackRules(lang: "nl" | "en", state: CanvasState) {
+function fallbackRules(state: CanvasState) {
   return {
-    ...baseAsk(lang),
+    ...baseAsk(),
     rulesofthegame: String(state.rulesofthegame ?? ""),
     proceed_to_next: "false" as const,
-    question:
-      lang === "nl"
-        ? "Wat zijn jullie Rules of the game? (principes/afspraken/gedragsregels)"
-        : "What are your Rules of the game? (principles/agreements/operating rules)",
+    question: "What are your Rules of the game? (principles/agreements/operating rules)",
   };
 }
 
-function fallbackPresentation(lang: "nl" | "en", state: CanvasState) {
+function fallbackPresentation(state: CanvasState) {
   return {
-    ...baseAsk(lang),
+    ...baseAsk(),
     presentation_brief: String(state.presentation_brief ?? ""),
     proceed_to_next: "false" as const,
-    question:
-      lang === "nl"
-        ? "Wat moet er in de presentatie komen? (doel, doelgroep, belangrijkste punten)"
-        : "What should be in the presentation? (goal, audience, key points)",
+    question: "What should be in the presentation? (goal, audience, key points)",
   };
 }
 
-// -------------------- Specialists --------------------
+// -------------------- Specialists (prompts enforce “same language as user input”) --------------------
 
-function validationSystem(lang: "nl" | "en", showIntro: boolean): string {
-  const intro = showIntro
-    ? (lang === "nl"
-        ? "Start met een korte introductie en leg uit wat je nodig hebt."
-        : "Start with a short introduction and explain what you need.")
-    : "";
-
+function specialistRules(showSessionIntro: boolean, showStepIntro: boolean): string {
+  // This is the key: NO hardcoded NL/EN. We tell the model to use the user's input language.
+  // session_intro must be the translated PROJECT_SESSION_INTRO_EN when showSessionIntro is true.
   return [
-    intro,
-    lang === "nl"
-      ? "Je bent een specialist die stap_0 doet: validatie + bedrijfsnaam. Output moet exact het schema volgen."
-      : "You are a specialist for step_0: validation + business name. Output must follow the schema exactly.",
-    "Gebruik action INTRO/ASK/REFINE/CONFIRM passend.",
-  ].filter(Boolean).join("\n");
+    "IMPORTANT LANGUAGE RULE: Write ALL strings in the same language as the user's latest input.",
+    "Do not mix languages.",
+    "",
+    "SESSION INTRO FIELD RULE:",
+    `If show_session_intro=true then set session_intro to a natural translation of this text (keep meaning, not necessarily word-for-word):`,
+    PROJECT_SESSION_INTRO_EN,
+    "If show_session_intro=false then set session_intro to an empty string.",
+    "",
+    showStepIntro
+      ? "STEP INTRO: You may briefly introduce the current step in the MESSAGE if appropriate."
+      : "STEP INTRO: Do not add an extra step introduction in MESSAGE.",
+  ].join("\n");
 }
 
-function dreamSystem(lang: "nl" | "en", showIntro: boolean): string {
-  const intro = showIntro
-    ? (lang === "nl"
-        ? "Introduceer kort de stap 'Dream' en waarom we dit vragen."
-        : "Briefly introduce the 'Dream' step and why we ask this.")
-    : "";
+function validationSystem(showSessionIntro: boolean, showStepIntro: boolean): string {
   return [
-    intro,
-    lang === "nl"
-      ? "Je bent een specialist voor 'Dream'. Output moet exact het schema volgen."
-      : "You are a specialist for 'Dream'. Output must follow the schema exactly.",
-  ].filter(Boolean).join("\n");
+    specialistRules(showSessionIntro, showStepIntro),
+    "",
+    "You are a specialist for step_0: validation + business name.",
+    "Output must follow the JSON schema exactly. Do not add extra fields.",
+    "Use action INTRO/ASK/REFINE/CONFIRM appropriately.",
+  ].join("\n");
 }
 
-function genericSystem(lang: "nl" | "en", stepLabelNl: string, stepLabelEn: string, showIntro: boolean): string {
-  const intro = showIntro
-    ? (lang === "nl"
-        ? `Introduceer kort de stap '${stepLabelNl}'.`
-        : `Briefly introduce the '${stepLabelEn}' step.`)
-    : "";
+function dreamSystem(showSessionIntro: boolean, showStepIntro: boolean): string {
   return [
-    intro,
-    lang === "nl"
-      ? `Je bent een specialist voor '${stepLabelNl}'. Output moet exact het schema volgen.`
-      : `You are a specialist for '${stepLabelEn}'. Output must follow the schema exactly.`,
-  ].filter(Boolean).join("\n");
+    specialistRules(showSessionIntro, showStepIntro),
+    "",
+    "You are a specialist for 'Dream'.",
+    "Output must follow the JSON schema exactly. Do not add extra fields.",
+  ].join("\n");
+}
+
+function genericSystem(stepLabelEn: string, showSessionIntro: boolean, showStepIntro: boolean): string {
+  return [
+    specialistRules(showSessionIntro, showStepIntro),
+    "",
+    `You are a specialist for '${stepLabelEn}'.`,
+    "Output must follow the JSON schema exactly. Do not add extra fields.",
+  ].join("\n");
 }
 
 async function runValidation(
   apiKey: string,
   model: string,
-  lang: "nl" | "en",
   userMessage: string,
   state: CanvasState,
-  showIntro: boolean
+  showSessionIntro: boolean,
+  showStepIntro: boolean
 ): Promise<{ value: z.infer<typeof ValidationSchema>; debug?: OpenAIDebug }> {
-  const system = validationSystem(lang, showIntro);
-  const user = lang === "nl"
-    ? `Input gebruiker: ${userMessage}\nBekende bedrijfsnaam: ${state.business_name ?? ""}`
-    : `User input: ${userMessage}\nKnown business name: ${state.business_name ?? ""}`;
+  const system = validationSystem(showSessionIntro, showStepIntro);
+  const user = `User input: ${userMessage}\nKnown business name: ${state.business_name ?? ""}`;
 
   try {
     const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: ValidationJsonSchema });
     return { value: ValidationSchema.parse(parsed), debug };
   } catch (e: any) {
     const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: ValidationSchema.parse(fallbackValidation(lang, state)), debug: dbg };
+    return { value: ValidationSchema.parse(fallbackValidation(state)), debug: dbg };
   }
 }
 
 async function runDream(
   apiKey: string,
   model: string,
-  lang: "nl" | "en",
   userMessage: string,
   state: CanvasState,
-  showIntro: boolean
+  showSessionIntro: boolean,
+  showStepIntro: boolean
 ): Promise<{ value: z.infer<typeof DreamSchema>; debug?: OpenAIDebug }> {
-  const system = dreamSystem(lang, showIntro);
-  const user = lang === "nl"
-    ? `Input gebruiker: ${userMessage}\nBedrijfsnaam: ${state.business_name ?? ""}\nHuidige dream: ${state.dream ?? ""}`
-    : `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nCurrent dream: ${state.dream ?? ""}`;
+  const system = dreamSystem(showSessionIntro, showStepIntro);
+  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nCurrent dream: ${state.dream ?? ""}`;
 
   try {
     const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: DreamJsonSchema });
     return { value: DreamSchema.parse(parsed), debug };
   } catch (e: any) {
     const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: DreamSchema.parse(fallbackDream(lang, state)), debug: dbg };
+    return { value: DreamSchema.parse(fallbackDream(state)), debug: dbg };
   }
 }
 
 async function runGenericStep(
   apiKey: string,
   model: string,
-  lang: "nl" | "en",
   stateKey: keyof CanvasState,
-  stepLabelNl: string,
   stepLabelEn: string,
   userMessage: string,
   state: CanvasState,
-  showIntro: boolean
+  showSessionIntro: boolean,
+  showStepIntro: boolean
 ): Promise<{ value: z.infer<typeof GenericStepSchema>; debug?: OpenAIDebug }> {
-  const system = genericSystem(lang, stepLabelNl, stepLabelEn, showIntro);
+  const system = genericSystem(stepLabelEn, showSessionIntro, showStepIntro);
   const existing = String((state as any)[stateKey] ?? "");
-  const user = lang === "nl"
-    ? `Input gebruiker: ${userMessage}\nBedrijfsnaam: ${state.business_name ?? ""}\nBestaande waarde: ${existing}`
-    : `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting value: ${existing}`;
+  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting value: ${existing}`;
 
   try {
     const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: GenericJsonSchema });
     return { value: GenericStepSchema.parse(parsed), debug };
   } catch (e: any) {
     const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: GenericStepSchema.parse(fallbackGeneric(lang, existing, stepLabelNl, stepLabelEn)), debug: dbg };
+    return { value: GenericStepSchema.parse(fallbackGeneric(existing, stepLabelEn)), debug: dbg };
   }
 }
 
 async function runStrategy(
   apiKey: string,
   model: string,
-  lang: "nl" | "en",
   userMessage: string,
   state: CanvasState,
-  showIntro: boolean
+  showSessionIntro: boolean,
+  showStepIntro: boolean
 ): Promise<{ value: z.infer<typeof StrategySchema>; debug?: OpenAIDebug }> {
-  const system = genericSystem(lang, "Strategie", "Strategy", showIntro);
-  const user = lang === "nl"
-    ? `Input gebruiker: ${userMessage}\nBedrijfsnaam: ${state.business_name ?? ""}\nBestaande strategie: ${state.strategy ?? ""}`
-    : `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting strategy: ${state.strategy ?? ""}`;
+  const system = genericSystem("Strategy", showSessionIntro, showStepIntro);
+  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting strategy: ${state.strategy ?? ""}`;
 
   try {
     const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: StrategyJsonSchema });
     return { value: StrategySchema.parse(parsed), debug };
   } catch (e: any) {
     const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: StrategySchema.parse(fallbackStrategy(lang, state)), debug: dbg };
+    return { value: StrategySchema.parse(fallbackStrategy(state)), debug: dbg };
   }
 }
 
 async function runRules(
   apiKey: string,
   model: string,
-  lang: "nl" | "en",
   userMessage: string,
   state: CanvasState,
-  showIntro: boolean
+  showSessionIntro: boolean,
+  showStepIntro: boolean
 ): Promise<{ value: z.infer<typeof RulesSchema>; debug?: OpenAIDebug }> {
-  const system = genericSystem(lang, "Rules of the game", "Rules of the game", showIntro);
-  const user = lang === "nl"
-    ? `Input gebruiker: ${userMessage}\nBedrijfsnaam: ${state.business_name ?? ""}\nBestaande rules: ${state.rulesofthegame ?? ""}`
-    : `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting rules: ${state.rulesofthegame ?? ""}`;
+  const system = genericSystem("Rules of the game", showSessionIntro, showStepIntro);
+  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting rules: ${state.rulesofthegame ?? ""}`;
 
   try {
     const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: RulesJsonSchema });
     return { value: RulesSchema.parse(parsed), debug };
   } catch (e: any) {
     const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: RulesSchema.parse(fallbackRules(lang, state)), debug: dbg };
+    return { value: RulesSchema.parse(fallbackRules(state)), debug: dbg };
   }
 }
 
 async function runPresentation(
   apiKey: string,
   model: string,
-  lang: "nl" | "en",
   userMessage: string,
   state: CanvasState,
-  showIntro: boolean
+  showSessionIntro: boolean,
+  showStepIntro: boolean
 ): Promise<{ value: z.infer<typeof PresentationSchema>; debug?: OpenAIDebug }> {
-  const system = genericSystem(lang, "Presentatie", "Presentation", showIntro);
-  const user = lang === "nl"
-    ? `Input gebruiker: ${userMessage}\nBedrijfsnaam: ${state.business_name ?? ""}\nBestaande brief: ${state.presentation_brief ?? ""}`
-    : `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting brief: ${state.presentation_brief ?? ""}`;
+  const system = genericSystem("Presentation", showSessionIntro, showStepIntro);
+  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting brief: ${state.presentation_brief ?? ""}`;
 
   try {
     const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: PresentationJsonSchema });
     return { value: PresentationSchema.parse(parsed), debug };
   } catch (e: any) {
     const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: PresentationSchema.parse(fallbackPresentation(lang, state)), debug: dbg };
+    return { value: PresentationSchema.parse(fallbackPresentation(state)), debug: dbg };
   }
 }
 
@@ -686,10 +650,10 @@ export async function runCanvasStep(args: {
   const merged: CanvasState = { ...DEFAULT_STATE, ...incomingState };
 
   const userMessage = args.user_message ?? "";
-  const lang = detectLanguage(userMessage, merged);
-  merged.language = lang;
+  // Keep the last seen language hint if you want later; not required for behavior.
+  merged.language = merged.language || "";
 
-  // ✅ step_0 consistency: force step_0 when the session looks fresh
+  // step_0 consistency: force step_0 when the session looks fresh
   const hasIncomingState = !!args.state && Object.keys(args.state).length > 0;
   const looksFreshSession =
     !hasIncomingState ||
@@ -716,10 +680,10 @@ export async function runCanvasStep(args: {
   const showSessionIntro = merged.intro_shown_session !== "true";
   const showStepIntro = merged.intro_shown_for_step !== merged.current_step;
 
-  // ✅ Track which step was actually rendered (for intro flag)
+  // Track which step was actually rendered (for intro flag)
   const renderedStep: StepId = merged.current_step;
 
-  // ✅ Collect debug across the specialist call
+  // Collect debug across the specialist call
   let debug: { openai?: OpenAIDebug } = {};
 
   let specialistName = "";
@@ -727,7 +691,7 @@ export async function runCanvasStep(args: {
 
   if (merged.current_step === "step_0") {
     specialistName = "ValidationAndBusinessName";
-    const r = await runValidation(apiKey, model, lang, userMessage, merged, showStepIntro);
+    const r = await runValidation(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
 
@@ -736,7 +700,7 @@ export async function runCanvasStep(args: {
     if (specialistJson.proceed_to_dream === "true") merged.current_step = "dream";
   } else if (merged.current_step === "dream") {
     specialistName = "Dream";
-    const r = await runDream(apiKey, model, lang, userMessage, merged, showStepIntro);
+    const r = await runDream(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
 
@@ -744,7 +708,7 @@ export async function runCanvasStep(args: {
     if (specialistJson.proceed_to_purpose === "true") merged.current_step = "purpose";
   } else if (merged.current_step === "purpose") {
     specialistName = "Purpose";
-    const r = await runGenericStep(apiKey, model, lang, "purpose", "Purpose", "Purpose", userMessage, merged, showStepIntro);
+    const r = await runGenericStep(apiKey, model, "purpose", "Purpose", userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
 
@@ -752,7 +716,7 @@ export async function runCanvasStep(args: {
     if (specialistJson.proceed_to_next === "true") merged.current_step = "bigwhy";
   } else if (merged.current_step === "bigwhy") {
     specialistName = "BigWhy";
-    const r = await runGenericStep(apiKey, model, lang, "bigwhy", "Big Why", "Big Why", userMessage, merged, showStepIntro);
+    const r = await runGenericStep(apiKey, model, "bigwhy", "Big Why", userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
 
@@ -760,7 +724,7 @@ export async function runCanvasStep(args: {
     if (specialistJson.proceed_to_next === "true") merged.current_step = "role";
   } else if (merged.current_step === "role") {
     specialistName = "Role";
-    const r = await runGenericStep(apiKey, model, lang, "role", "Rol", "Role", userMessage, merged, showStepIntro);
+    const r = await runGenericStep(apiKey, model, "role", "Role", userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
 
@@ -768,7 +732,7 @@ export async function runCanvasStep(args: {
     if (specialistJson.proceed_to_next === "true") merged.current_step = "entity";
   } else if (merged.current_step === "entity") {
     specialistName = "Entity";
-    const r = await runGenericStep(apiKey, model, lang, "entity", "Entiteit", "Entity", userMessage, merged, showStepIntro);
+    const r = await runGenericStep(apiKey, model, "entity", "Entity", userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
 
@@ -776,7 +740,7 @@ export async function runCanvasStep(args: {
     if (specialistJson.proceed_to_next === "true") merged.current_step = "strategy";
   } else if (merged.current_step === "strategy") {
     specialistName = "Strategy";
-    const r = await runStrategy(apiKey, model, lang, userMessage, merged, showStepIntro);
+    const r = await runStrategy(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
 
@@ -784,7 +748,7 @@ export async function runCanvasStep(args: {
     if (specialistJson.proceed_to_next === "true") merged.current_step = "rulesofthegame";
   } else if (merged.current_step === "rulesofthegame") {
     specialistName = "RulesOfTheGame";
-    const r = await runRules(apiKey, model, lang, userMessage, merged, showStepIntro);
+    const r = await runRules(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
 
@@ -792,7 +756,7 @@ export async function runCanvasStep(args: {
     if (specialistJson.proceed_to_next === "true") merged.current_step = "presentation";
   } else if (merged.current_step === "presentation") {
     specialistName = "Presentation";
-    const r = await runPresentation(apiKey, model, lang, userMessage, merged, showStepIntro);
+    const r = await runPresentation(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
 
@@ -800,29 +764,29 @@ export async function runCanvasStep(args: {
   } else {
     specialistName = "ValidationAndBusinessName";
     merged.current_step = "step_0";
-    const r = await runValidation(apiKey, model, lang, userMessage, merged, showStepIntro);
+    const r = await runValidation(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
     specialistJson = r.value;
     if (r.debug) debug.openai = r.debug;
   }
 
-  // ✅ Intro flags: mark what was rendered, not what we progressed to
+  // Intro flags: mark what was rendered, not what we progressed to
   if (showSessionIntro) merged.intro_shown_session = "true";
   if (showStepIntro) merged.intro_shown_for_step = renderedStep;
 
   merged.active_specialist = specialistName;
   merged.last_specialist_result = specialistJson;
 
-  const text = integrateToText({ lang, showSessionIntro, specialistJson });
+  const text = integrateToText({ showSessionIntro, specialistJson });
 
   return {
     ok: true,
     tool: "run_step",
-    version: "agents-v3",
+    version: "agents-v4",
     current_step_id: merged.current_step,
     active_specialist: specialistName,
     text,
     specialist: specialistJson,
     state: merged,
-    debug, // ✅ debug is outside strict step schemas; safe for UI inspection
+    debug,
   };
 }
