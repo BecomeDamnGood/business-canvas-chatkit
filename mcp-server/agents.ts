@@ -15,16 +15,20 @@ export type StepId =
 type BoolStr = "true" | "false";
 
 export type CanvasState = {
-  // routing
   current_step: StepId;
   intro_shown_for_step: StepId | "";
   intro_shown_session: BoolStr;
+
   active_specialist: string;
 
-  // collected data
-  step_0?: string;
-  business_name?: string;
+  // language hint coming from UI (e.g. "nl" / "en")
+  language?: string;
 
+  // stored baseline
+  business_name?: string; // must never be empty; use "TBD" if unknown
+  step_0?: string; // "Venture: <venture_type> | Name: <business_name_or_TBD>"
+
+  // step values
   dream?: string;
   purpose?: string;
   bigwhy?: string;
@@ -34,11 +38,8 @@ export type CanvasState = {
   rulesofthegame?: string;
   presentation_brief?: string;
 
-  // last results
-  last_specialist_result?: unknown;
-
-  // optional language hint (do not default)
-  language?: string;
+  // last specialist output (for readiness moment)
+  last_specialist_result?: any;
 };
 
 const DEFAULT_STATE: CanvasState = {
@@ -47,13 +48,15 @@ const DEFAULT_STATE: CanvasState = {
   intro_shown_session: "false",
   active_specialist: "",
   language: undefined,
+  business_name: undefined,
+  step_0: undefined,
+  last_specialist_result: undefined,
 };
 
-// ---- Zod Schemas ----
+// -------------------- SCHEMAS (match project logic: NO extra fields) --------------------
 const ActionEnum = ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] as const;
 
 const ValidationSchema = z.object({
-  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -65,7 +68,6 @@ const ValidationSchema = z.object({
 });
 
 const DreamSchema = z.object({
-  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -77,8 +79,7 @@ const DreamSchema = z.object({
   proceed_to_purpose: z.enum(["true", "false"]),
 });
 
-const GenericStepSchema = z.object({
-  session_intro: z.string(),
+const GenericSchema = z.object({
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -89,7 +90,6 @@ const GenericStepSchema = z.object({
 });
 
 const StrategySchema = z.object({
-  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -100,7 +100,6 @@ const StrategySchema = z.object({
 });
 
 const RulesSchema = z.object({
-  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -111,7 +110,6 @@ const RulesSchema = z.object({
 });
 
 const PresentationSchema = z.object({
-  session_intro: z.string(),
   action: z.enum(ActionEnum),
   message: z.string(),
   question: z.string(),
@@ -121,131 +119,128 @@ const PresentationSchema = z.object({
   proceed_to_next: z.enum(["true", "false"]),
 });
 
-// ---- Structured Outputs JSON Schemas ----
+// -------------------- JSON SCHEMA (Responses API structured outputs) --------------------
 type JsonSchema = Record<string, any>;
 
 function strictObjectSchema(name: string, properties: Record<string, any>, required: string[]): JsonSchema {
   return {
     type: "object",
     additionalProperties: false,
+    title: name,
     properties,
     required,
-    title: name,
   };
 }
 
-const ACTION_SCHEMA = { type: "string", enum: [...ActionEnum] };
-const BOOLSTR_SCHEMA = { type: "string", enum: ["true", "false"] };
-const STR_SCHEMA = { type: "string" };
-
-const COMMON_PROPS = {
-  session_intro: STR_SCHEMA,
-  action: ACTION_SCHEMA,
-  message: STR_SCHEMA,
-  question: STR_SCHEMA,
-  refined_formulation: STR_SCHEMA,
-  confirmation_question: STR_SCHEMA,
-};
-
-const COMMON_REQ = [
-  "session_intro",
-  "action",
-  "message",
-  "question",
-  "refined_formulation",
-  "confirmation_question",
-];
+const STR = { type: "string" };
+const ACTION = { type: "string", enum: [...ActionEnum] };
+const BOOLSTR = { type: "string", enum: ["true", "false"] };
 
 const ValidationJsonSchema = strictObjectSchema(
-  "validation_step_0",
+  "ValidationAndBusinessName",
   {
-    ...COMMON_PROPS,
-    business_name: STR_SCHEMA,
-    proceed_to_dream: BOOLSTR_SCHEMA,
-    step_0: STR_SCHEMA,
+    action: ACTION,
+    message: STR,
+    question: STR,
+    refined_formulation: STR,
+    confirmation_question: STR,
+    business_name: STR,
+    proceed_to_dream: BOOLSTR,
+    step_0: STR,
   },
-  [...COMMON_REQ, "business_name", "proceed_to_dream", "step_0"]
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "business_name", "proceed_to_dream", "step_0"]
 );
 
 const DreamJsonSchema = strictObjectSchema(
-  "dream_step",
+  "Dream",
   {
-    ...COMMON_PROPS,
-    dream: STR_SCHEMA,
-    suggest_dreambuilder: BOOLSTR_SCHEMA,
-    proceed_to_dream: BOOLSTR_SCHEMA,
-    proceed_to_purpose: BOOLSTR_SCHEMA,
+    action: ACTION,
+    message: STR,
+    question: STR,
+    refined_formulation: STR,
+    confirmation_question: STR,
+    dream: STR,
+    suggest_dreambuilder: BOOLSTR,
+    proceed_to_dream: BOOLSTR,
+    proceed_to_purpose: BOOLSTR,
   },
-  [...COMMON_REQ, "dream", "suggest_dreambuilder", "proceed_to_dream", "proceed_to_purpose"]
+  [
+    "action",
+    "message",
+    "question",
+    "refined_formulation",
+    "confirmation_question",
+    "dream",
+    "suggest_dreambuilder",
+    "proceed_to_dream",
+    "proceed_to_purpose",
+  ]
 );
 
 const GenericJsonSchema = strictObjectSchema(
-  "generic_step",
+  "GenericStep",
   {
-    ...COMMON_PROPS,
-    value: STR_SCHEMA,
-    proceed_to_next: BOOLSTR_SCHEMA,
+    action: ACTION,
+    message: STR,
+    question: STR,
+    refined_formulation: STR,
+    confirmation_question: STR,
+    value: STR,
+    proceed_to_next: BOOLSTR,
   },
-  [...COMMON_REQ, "value", "proceed_to_next"]
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "value", "proceed_to_next"]
 );
 
 const StrategyJsonSchema = strictObjectSchema(
-  "strategy_step",
+  "Strategy",
   {
-    ...COMMON_PROPS,
-    strategy: STR_SCHEMA,
-    proceed_to_next: BOOLSTR_SCHEMA,
+    action: ACTION,
+    message: STR,
+    question: STR,
+    refined_formulation: STR,
+    confirmation_question: STR,
+    strategy: STR,
+    proceed_to_next: BOOLSTR,
   },
-  [...COMMON_REQ, "strategy", "proceed_to_next"]
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "strategy", "proceed_to_next"]
 );
 
 const RulesJsonSchema = strictObjectSchema(
-  "rules_step",
+  "RulesOfTheGame",
   {
-    ...COMMON_PROPS,
-    rulesofthegame: STR_SCHEMA,
-    proceed_to_next: BOOLSTR_SCHEMA,
+    action: ACTION,
+    message: STR,
+    question: STR,
+    refined_formulation: STR,
+    confirmation_question: STR,
+    rulesofthegame: STR,
+    proceed_to_next: BOOLSTR,
   },
-  [...COMMON_REQ, "rulesofthegame", "proceed_to_next"]
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "rulesofthegame", "proceed_to_next"]
 );
 
 const PresentationJsonSchema = strictObjectSchema(
-  "presentation_step",
+  "Presentation",
   {
-    ...COMMON_PROPS,
-    presentation_brief: STR_SCHEMA,
-    proceed_to_next: BOOLSTR_SCHEMA,
+    action: ACTION,
+    message: STR,
+    question: STR,
+    refined_formulation: STR,
+    confirmation_question: STR,
+    presentation_brief: STR,
+    proceed_to_next: BOOLSTR,
   },
-  [...COMMON_REQ, "presentation_brief", "proceed_to_next"]
+  ["action", "message", "question", "refined_formulation", "confirmation_question", "presentation_brief", "proceed_to_next"]
 );
 
-// -------------------- Render integration --------------------
-function integrateToText(specialistJson: any): string {
-  const parts: string[] = [];
+// -------------------- intro text base (translated by model when show_session_intro=true) --------------------
+const SESSION_INTRO_EN =
+  "Welcome to Ben Steenstra’s Business Strategy Canvas, used in national and international organizations. " +
+  "We will go through a small number of steps, one by one, so each step is clear before we move on. " +
+  "At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear presentation for external stakeholders, partners, or team members.";
 
-  const intro = String(specialistJson?.session_intro ?? "").trim();
-  if (intro) parts.push(intro);
-
-  const msg = String(specialistJson?.message ?? "").trim();
-  const refined = String(specialistJson?.refined_formulation ?? "").trim();
-  const confirmQ = String(specialistJson?.confirmation_question ?? "").trim();
-  const q = String(specialistJson?.question ?? "").trim();
-
-  if (msg) parts.push(msg);
-  if (refined) parts.push(refined);
-  if (confirmQ) parts.push(confirmQ);
-  else if (q) parts.push(q);
-
-  return parts.filter(Boolean).join("\n");
-}
-
-// -------------------- Robust Responses parsing helpers --------------------
-type OpenAIDebug = {
-  response_id?: string;
-  http_status?: number;
-  parse_error?: string;
-  output_preview?: string;
-};
+// -------------------- OpenAI Responses structured outputs --------------------
+type OpenAIDebug = { response_id?: string; http_status?: number; parse_error?: string; output_preview?: string };
 
 class OpenAIJsonError extends Error {
   debug: OpenAIDebug;
@@ -259,7 +254,6 @@ class OpenAIJsonError extends Error {
 function extractResponsesOutputText(data: any): string {
   const outputs = Array.isArray(data?.output) ? data.output : [];
   const chunks: string[] = [];
-
   for (const item of outputs) {
     if (item?.type === "message" && item?.role === "assistant" && Array.isArray(item?.content)) {
       for (const c of item.content) {
@@ -267,17 +261,14 @@ function extractResponsesOutputText(data: any): string {
       }
     }
   }
-
   if (chunks.length === 0 && typeof data?.output_text === "string") return data.output_text;
   if (chunks.length === 0 && typeof data?.text === "string") return data.text;
-
   return chunks.join("\n").trim();
 }
 
 function tryParseJson(text: string): any | null {
   const t = (text || "").trim();
   if (!t) return null;
-
   try {
     return JSON.parse(t);
   } catch {
@@ -295,7 +286,6 @@ function tryParseJson(text: string): any | null {
   }
 }
 
-// ---- OpenAI Responses API call (Structured Outputs json_schema strict) ----
 async function callOpenAIJson({
   apiKey,
   model,
@@ -365,261 +355,7 @@ async function callOpenAIJson({
   return { parsed, debug: { response_id: responseId } as OpenAIDebug };
 }
 
-// -------------------- Session intro base (English only; model translates) --------------------
-const PROJECT_SESSION_INTRO_EN =
-  "Welcome to Ben Steenstra’s Business Strategy Canvas, used in national and international organizations. " +
-  "We will go through a small number of steps, one by one, so each step is clear before we move on. " +
-  "At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear " +
-  "presentation for external stakeholders, partners, or team members.";
-
-// -------------------- Schema-safe fallbacks --------------------
-function baseAsk(): {
-  session_intro: string;
-  action: "ASK";
-  message: string;
-  question: string;
-  refined_formulation: string;
-  confirmation_question: string;
-} {
-  return {
-    session_intro: "",
-    action: "ASK",
-    message: "I couldn't process the previous output. Let's try again.",
-    question: "Could you resend your answer?",
-    refined_formulation: "",
-    confirmation_question: "",
-  };
-}
-
-function fallbackValidation(state: CanvasState) {
-  return {
-    ...baseAsk(),
-    business_name: String(state.business_name ?? "TBD"),
-    proceed_to_dream: "false" as const,
-    step_0: String(state.step_0 ?? ""),
-    question: "What's your business name, and in one sentence: what does it do?",
-  };
-}
-
-function fallbackDream(state: CanvasState) {
-  return {
-    ...baseAsk(),
-    dream: String(state.dream ?? ""),
-    suggest_dreambuilder: "false" as const,
-    proceed_to_dream: "false" as const,
-    proceed_to_purpose: "false" as const,
-    question: "What is your Dream? Describe the desired future state.",
-  };
-}
-
-function fallbackGeneric(existing: string, stepLabelEn: string) {
-  return {
-    ...baseAsk(),
-    value: String(existing ?? ""),
-    proceed_to_next: "false" as const,
-    question: `Could you answer the '${stepLabelEn}' step again?`,
-  };
-}
-
-function fallbackStrategy(state: CanvasState) {
-  return {
-    ...baseAsk(),
-    strategy: String(state.strategy ?? ""),
-    proceed_to_next: "false" as const,
-    question: "What is your strategy in 2–5 bullets? (focus, choices, target, differentiation)",
-  };
-}
-
-function fallbackRules(state: CanvasState) {
-  return {
-    ...baseAsk(),
-    rulesofthegame: String(state.rulesofthegame ?? ""),
-    proceed_to_next: "false" as const,
-    question: "What are your Rules of the game? (principles/agreements/operating rules)",
-  };
-}
-
-function fallbackPresentation(state: CanvasState) {
-  return {
-    ...baseAsk(),
-    presentation_brief: String(state.presentation_brief ?? ""),
-    proceed_to_next: "false" as const,
-    question: "What should be in the presentation? (goal, audience, key points)",
-  };
-}
-
-// -------------------- Specialists (language mirrors latest user input) --------------------
-function specialistRules(showSessionIntro: boolean, showStepIntro: boolean): string {
-  return [
-    "IMPORTANT LANGUAGE RULE: Write ALL strings in the same language as the user's latest input.",
-    "Do not mix languages.",
-    "",
-    "SESSION INTRO FIELD RULE:",
-    `If show_session_intro=true then set session_intro to a natural translation of this text (keep meaning, not necessarily word-for-word):`,
-    PROJECT_SESSION_INTRO_EN,
-    "If show_session_intro=false then set session_intro to an empty string.",
-    "",
-    showStepIntro
-      ? "STEP INTRO: You may briefly introduce the current step in the MESSAGE if appropriate."
-      : "STEP INTRO: Do not add an extra step introduction in MESSAGE.",
-    "",
-    "CRITICAL: Do not invent new questions. Use the step's own QUESTION / CONFIRMATION_QUESTION fields only.",
-    "CRITICAL: If you present numbered options, put them ONLY in the question field with real line breaks.",
-  ].join("\n");
-}
-
-function validationSystem(showSessionIntro: boolean, showStepIntro: boolean): string {
-  return [
-    specialistRules(showSessionIntro, showStepIntro),
-    "",
-    "You are a specialist for step_0: validation + business name.",
-    "Output must follow the JSON schema exactly. Do not add extra fields.",
-    "Keep it short and aligned with the flow: confirm business name and ask if ready to start Dream when appropriate.",
-  ].join("\n");
-}
-
-function dreamSystem(showSessionIntro: boolean, showStepIntro: boolean): string {
-  return [
-    specialistRules(showSessionIntro, showStepIntro),
-    "",
-    "You are a specialist for 'Dream'.",
-    "Output must follow the JSON schema exactly. Do not add extra fields.",
-    "Do NOT ask about business name satisfaction here.",
-  ].join("\n");
-}
-
-function genericSystem(stepLabelEn: string, showSessionIntro: boolean, showStepIntro: boolean): string {
-  return [
-    specialistRules(showSessionIntro, showStepIntro),
-    "",
-    `You are a specialist for '${stepLabelEn}'.`,
-    "Output must follow the JSON schema exactly. Do not add extra fields.",
-  ].join("\n");
-}
-
-async function runValidation(
-  apiKey: string,
-  model: string,
-  userMessage: string,
-  state: CanvasState,
-  showSessionIntro: boolean,
-  showStepIntro: boolean
-): Promise<{ value: z.infer<typeof ValidationSchema>; debug?: OpenAIDebug }> {
-  const system = validationSystem(showSessionIntro, showStepIntro);
-  const user = `User input: ${userMessage}\nKnown business name: ${state.business_name ?? ""}\nKnown step_0: ${state.step_0 ?? ""}`;
-
-  try {
-    const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: ValidationJsonSchema });
-    return { value: ValidationSchema.parse(parsed), debug };
-  } catch (e: any) {
-    const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: ValidationSchema.parse(fallbackValidation(state)), debug: dbg };
-  }
-}
-
-async function runDream(
-  apiKey: string,
-  model: string,
-  userMessage: string,
-  state: CanvasState,
-  showSessionIntro: boolean,
-  showStepIntro: boolean
-): Promise<{ value: z.infer<typeof DreamSchema>; debug?: OpenAIDebug }> {
-  const system = dreamSystem(showSessionIntro, showStepIntro);
-  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nCurrent dream: ${state.dream ?? ""}`;
-
-  try {
-    const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: DreamJsonSchema });
-    return { value: DreamSchema.parse(parsed), debug };
-  } catch (e: any) {
-    const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: DreamSchema.parse(fallbackDream(state)), debug: dbg };
-  }
-}
-
-async function runGenericStep(
-  apiKey: string,
-  model: string,
-  stateKey: keyof CanvasState,
-  stepLabelEn: string,
-  userMessage: string,
-  state: CanvasState,
-  showSessionIntro: boolean,
-  showStepIntro: boolean
-): Promise<{ value: z.infer<typeof GenericStepSchema>; debug?: OpenAIDebug }> {
-  const system = genericSystem(stepLabelEn, showSessionIntro, showStepIntro);
-  const existing = String((state as any)[stateKey] ?? "");
-  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting value: ${existing}`;
-
-  try {
-    const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: GenericJsonSchema });
-    return { value: GenericStepSchema.parse(parsed), debug };
-  } catch (e: any) {
-    const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: GenericStepSchema.parse(fallbackGeneric(existing, stepLabelEn)), debug: dbg };
-  }
-}
-
-async function runStrategy(
-  apiKey: string,
-  model: string,
-  userMessage: string,
-  state: CanvasState,
-  showSessionIntro: boolean,
-  showStepIntro: boolean
-): Promise<{ value: z.infer<typeof StrategySchema>; debug?: OpenAIDebug }> {
-  const system = genericSystem("Strategy", showSessionIntro, showStepIntro);
-  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting strategy: ${state.strategy ?? ""}`;
-
-  try {
-    const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: StrategyJsonSchema });
-    return { value: StrategySchema.parse(parsed), debug };
-  } catch (e: any) {
-    const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: StrategySchema.parse(fallbackStrategy(state)), debug: dbg };
-  }
-}
-
-async function runRules(
-  apiKey: string,
-  model: string,
-  userMessage: string,
-  state: CanvasState,
-  showSessionIntro: boolean,
-  showStepIntro: boolean
-): Promise<{ value: z.infer<typeof RulesSchema>; debug?: OpenAIDebug }> {
-  const system = genericSystem("Rules of the game", showSessionIntro, showStepIntro);
-  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting rules: ${state.rulesofthegame ?? ""}`;
-
-  try {
-    const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: RulesJsonSchema });
-    return { value: RulesSchema.parse(parsed), debug };
-  } catch (e: any) {
-    const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: RulesSchema.parse(fallbackRules(state)), debug: dbg };
-  }
-}
-
-async function runPresentation(
-  apiKey: string,
-  model: string,
-  userMessage: string,
-  state: CanvasState,
-  showSessionIntro: boolean,
-  showStepIntro: boolean
-): Promise<{ value: z.infer<typeof PresentationSchema>; debug?: OpenAIDebug }> {
-  const system = genericSystem("Presentation", showSessionIntro, showStepIntro);
-  const user = `User input: ${userMessage}\nBusiness name: ${state.business_name ?? ""}\nExisting brief: ${state.presentation_brief ?? ""}`;
-
-  try {
-    const { parsed, debug } = await callOpenAIJson({ apiKey, model, system, user, jsonSchema: PresentationJsonSchema });
-    return { value: PresentationSchema.parse(parsed), debug };
-  } catch (e: any) {
-    const dbg = e?.name === "OpenAIJsonError" ? (e.debug as OpenAIDebug) : { parse_error: String(e?.message ?? e) };
-    return { value: PresentationSchema.parse(fallbackPresentation(state)), debug: dbg };
-  }
-}
-
+// -------------------- helpers --------------------
 function nextStepOf(step: StepId): StepId {
   const order: StepId[] = [
     "step_0",
@@ -637,7 +373,227 @@ function nextStepOf(step: StepId): StepId {
   return order[Math.min(idx + 1, order.length - 1)];
 }
 
-// -------------------- Exported entrypoint --------------------
+function isClearYes(userMessage: string, lang?: string): boolean {
+  const t = (userMessage || "").trim().toLowerCase();
+  if (!t) return false;
+
+  // keep it strict (1-6 words rule of thumb)
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 6) return false;
+
+  const isNl = (lang || "").toLowerCase().startsWith("nl");
+  const yesSetNl = new Set(["ja", "jazeker", "jep", "yep", "klopt", "ok", "oke", "akkoord", "prima", "doen", "gaan"]);
+  const yesSetEn = new Set(["yes", "yep", "yeah", "sure", "ok", "okay", "proceed", "lets go", "let's go", "go"]);
+
+  if (isNl) {
+    if (yesSetNl.has(t)) return true;
+    if (t === "1" || t === "y") return true;
+    return false;
+  }
+
+  if (yesSetEn.has(t)) return true;
+  if (t === "y" || t === "1") return true;
+  return false;
+}
+
+function buildTextForWidget(specialistJson: any): string {
+  const parts: string[] = [];
+  const msg = String(specialistJson?.message ?? "").trim();
+  const refined = String(specialistJson?.refined_formulation ?? "").trim();
+  if (msg) parts.push(msg);
+  if (refined) parts.push(refined);
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function pickPrompt(specialistJson: any): string {
+  const confirmQ = String(specialistJson?.confirmation_question ?? "").trim();
+  const q = String(specialistJson?.question ?? "").trim();
+  return confirmQ || q || "";
+}
+
+// -------------------- SYSTEM PROMPTS (lift logic 1:1; language mirrored; intro gate) --------------------
+function baseRules(showSessionIntro: boolean): string {
+  return [
+    "MULTI-LANGUAGE HARD RULE:",
+    "- Write ALL user-facing strings in the same language as the user's input (USER_MESSAGE).",
+    "- If USER_MESSAGE is empty, mirror STATE_LANGUAGE (nl/en) if provided.",
+    "- Do not mix languages.",
+    "- Use informal address in that language.",
+    "",
+    "STRICT JSON RULE:",
+    "- Output valid JSON only. No markdown. No extra keys. No trailing comments. No null values.",
+    "- All schema fields are required. If not applicable, use empty string \"\".",
+    "",
+    "SESSION INTRO RULE (CRITICAL):",
+    showSessionIntro
+      ? `- Prepend the following intro translated into the output language into the MESSAGE field (exact meaning, professional tone):\n${SESSION_INTRO_EN}\n- After that, continue normal step logic.\n`
+      : "- MESSAGE must NOT include the session intro (leave it out entirely).",
+  ].join("\n");
+}
+
+function validationSystem(showSessionIntro: boolean): string {
+  return [
+    "VALIDATION AND BUSINESS NAME AGENT (STEP 1: Validation & Business Name) EXECUTIVE COACH STYLE",
+    baseRules(showSessionIntro),
+    "",
+    "Inputs you receive:",
+    "- CURRENT_STEP_ID: step_0",
+    "- USER_MESSAGE: the exact user message text",
+    "- STATE_LANGUAGE: (nl/en) optional",
+    "- STORED_STEP_0: last known step_0 storage line (may be empty)",
+    "- STORED_BUSINESS_NAME: last known business name (may be empty)",
+    "- PREV_ACTION and PREV_CONFIRMATION_QUESTION: to detect readiness moment",
+    "",
+    "Hard rules:",
+    "Never output null. Use \"\" instead.",
+    "business_name must NEVER be empty. If unknown, it must be \"TBD\".",
+    "proceed_to_dream must always be \"true\" or \"false\" (string).",
+    "Never invent details. Only restate what the user actually said OR what is stored.",
+    "Keep it short. One question only.",
+    "",
+    "What Step 1 must accomplish:",
+    "Step 1 must confirm two basics:",
+    "1) Baseline venture: what the user is starting or running (broad is fine).",
+    "2) Business name: the name if provided, otherwise \"TBD\".",
+    "",
+    "Step 1 storage format (CRITICAL):",
+    "step_0 must be plain text (NOT mini-JSON). Store venture type and business name in one short, stable line using this exact pattern:",
+    "\"Venture: <venture_type> | Name: <business_name_or_TBD>\"",
+    "venture_type must be 1 to 3 words, in the user’s language.",
+    "step_0 must never contain line breaks and never contain double quotes.",
+    "",
+    "CONFIRM output requirement (MUST):",
+    "Whenever action is \"CONFIRM\", step_0 must NOT be empty and must follow the exact storage pattern.",
+    "",
+    "Readiness moment proceed trigger (CRITICAL):",
+    "A readiness moment exists when the previous assistant output asked the user to confirm the Step 1 basics and whether to start Dream now (i.e. previous action was CONFIRM and previous confirmation_question was non-empty).",
+    "If USER_MESSAGE intent is clearly YES/proceed (often short, 1 to 6 words), then output:",
+    "action:\"CONFIRM\", message:\"\", question:\"\", refined_formulation:\"\", confirmation_question:\"\", proceed_to_dream:\"true\", business_name: keep stored known name or \"TBD\", step_0: keep the stored step_0 line.",
+    "",
+    "Normal Step 1 logic:",
+    "- If venture baseline is not known: action:\"ASK\" and ask ONE combined question asking BOTH: (1) what type of venture it is and (2) what the name is, or whether it is still \"TBD\".",
+    "- If baseline is known but name is not known: action:\"ASK\" and ask for the name, explicitly allowing \"TBD\".",
+    "- If baseline is known AND name is known (or explicitly \"TBD\"): action:\"CONFIRM\" and set confirmation_question to a readiness question that first restates the venture+name as a statement, then asks confirmation + readiness in this exact pattern:",
+    "  EN pattern: \"<Statement>. Is that correct, and if so are you ready to start the first step, 'Your Dream'?\"",
+    "  NL equivalent must be localized and consistent, e.g. the same meaning as: \"<Statement>. Klopt dat, en ben je klaar om te starten met de eerste stap, 'Jouw Droom'?\"",
+  ].join("\n");
+}
+
+function dreamSystem(showStepIntro: boolean): string {
+  // keep it minimal but scope-guarded; still strict JSON
+  return [
+    "DREAM AGENT (STEP: DREAM) EXECUTIVE COACH STYLE",
+    baseRules(false),
+    "",
+    "Scope guard (HARD): Handle ONLY the Dream step. Never switch steps.",
+    "If the user asks something clearly unrelated to Dream, use action:\"ESCAPE\" and ask one short question to continue with Dream.",
+    "",
+    "You will receive stored baseline from Step 1 in STORED_STEP_0 (venture + name).",
+    showStepIntro ? "You may briefly explain what 'Dream' means in MESSAGE (short), then ask the Dream question." : "Do not add an extra step intro.",
+    "",
+    "Output the Dream JSON schema exactly.",
+  ].join("\n");
+}
+
+function genericSystem(stepLabelEn: string): string {
+  return [
+    `${stepLabelEn.toUpperCase()} AGENT EXECUTIVE COACH STYLE`,
+    baseRules(false),
+    "",
+    `Scope guard: Handle ONLY '${stepLabelEn}'.`,
+    "If off-topic, use action:\"ESCAPE\" and ask one short question to continue with this step.",
+  ].join("\n");
+}
+
+// -------------------- runners --------------------
+async function runValidationAgent(
+  apiKey: string,
+  model: string,
+  userMessage: string,
+  state: CanvasState,
+  showSessionIntro: boolean
+): Promise<{ value: z.infer<typeof ValidationSchema>; debug?: OpenAIDebug }> {
+  const system = validationSystem(showSessionIntro);
+
+  const prev = state.last_specialist_result || {};
+  const user = [
+    `CURRENT_STEP_ID: step_0`,
+    `USER_MESSAGE: ${userMessage}`,
+    `STATE_LANGUAGE: ${state.language ?? ""}`,
+    `STORED_STEP_0: ${state.step_0 ?? ""}`,
+    `STORED_BUSINESS_NAME: ${state.business_name ?? ""}`,
+    `PREV_ACTION: ${prev.action ?? ""}`,
+    `PREV_CONFIRMATION_QUESTION: ${prev.confirmation_question ?? ""}`,
+  ].join("\n");
+
+  const { parsed, debug } = await callOpenAIJson({
+    apiKey,
+    model,
+    system,
+    user,
+    jsonSchema: ValidationJsonSchema,
+  });
+
+  return { value: ValidationSchema.parse(parsed), debug };
+}
+
+async function runDreamAgent(
+  apiKey: string,
+  model: string,
+  userMessage: string,
+  state: CanvasState,
+  showStepIntro: boolean
+): Promise<{ value: z.infer<typeof DreamSchema>; debug?: OpenAIDebug }> {
+  const system = dreamSystem(showStepIntro);
+  const user = [
+    `CURRENT_STEP_ID: dream`,
+    `USER_MESSAGE: ${userMessage}`,
+    `STATE_LANGUAGE: ${state.language ?? ""}`,
+    `STORED_STEP_0: ${state.step_0 ?? ""}`,
+    `STORED_BUSINESS_NAME: ${state.business_name ?? ""}`,
+    `STORED_DREAM: ${state.dream ?? ""}`,
+  ].join("\n");
+
+  const { parsed, debug } = await callOpenAIJson({
+    apiKey,
+    model,
+    system,
+    user,
+    jsonSchema: DreamJsonSchema,
+  });
+
+  return { value: DreamSchema.parse(parsed), debug };
+}
+
+async function runGenericAgent(
+  apiKey: string,
+  model: string,
+  stepLabelEn: string,
+  userMessage: string,
+  state: CanvasState,
+  jsonSchema: JsonSchema,
+  zodSchema: any
+): Promise<{ value: any; debug?: OpenAIDebug }> {
+  const system = genericSystem(stepLabelEn);
+  const user = [
+    `CURRENT_STEP_ID: ${state.current_step}`,
+    `USER_MESSAGE: ${userMessage}`,
+    `STATE_LANGUAGE: ${state.language ?? ""}`,
+    `STORED_STEP_0: ${state.step_0 ?? ""}`,
+  ].join("\n");
+
+  const { parsed, debug } = await callOpenAIJson({
+    apiKey,
+    model,
+    system,
+    user,
+    jsonSchema,
+  });
+
+  return { value: zodSchema.parse(parsed), debug };
+}
+
+// -------------------- MAIN ENTRY --------------------
 export async function runCanvasStep(args: {
   current_step_id: string;
   user_message: string;
@@ -649,202 +605,205 @@ export async function runCanvasStep(args: {
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
   const incomingState = (args.state ?? {}) as Partial<CanvasState>;
-  const merged: CanvasState = { ...DEFAULT_STATE, ...incomingState };
+  const state: CanvasState = { ...DEFAULT_STATE, ...incomingState };
 
-  const userMessage = args.user_message ?? "";
+  // prefer incoming current_step_id if provided
+  const requested = (args.current_step_id || state.current_step || "step_0") as StepId;
+  state.current_step = requested;
 
-  // Determine if this is a fresh session (no state coming in)
-  const hasIncomingState = !!args.state && Object.keys(args.state).length > 0;
-  const looksFreshSession =
-    !hasIncomingState ||
-    (merged.intro_shown_session === "false" &&
-      merged.intro_shown_for_step === "" &&
-      merged.active_specialist === "" &&
-      !merged.business_name &&
-      !merged.step_0 &&
-      !merged.dream &&
-      !merged.purpose &&
-      !merged.bigwhy &&
-      !merged.role &&
-      !merged.entity &&
-      !merged.strategy &&
-      !merged.rulesofthegame &&
-      !merged.presentation_brief);
+  const userMessage = (args.user_message ?? "").trim();
 
-  const requested: StepId = looksFreshSession
-    ? "step_0"
-    : ((args.current_step_id || merged.current_step || "step_0") as StepId);
+  // SESSION INTRO must show exactly once per session
+  const showSessionIntro = state.intro_shown_session !== "true";
 
-  merged.current_step = requested;
-
-  // Debug collected across calls
-  let debug: { openai?: OpenAIDebug } = {};
-
-  // Session intro should appear exactly once per session.
-  const sessionIntroWanted = merged.intro_shown_session !== "true";
-
-  // We'll run 1+ specialists in a single call if we hit a "proceed" trigger.
-  // This matches the project flow behavior (e.g., step_0 proceed -> immediately show Dream INTRO):contentReference[oaicite:1]{index=1}.
-  let stepToRun: StepId = merged.current_step;
-  let finalSpecialistName = "";
-  let finalSpecialistJson: any = null;
-
-  // Carry intro text forward if we move to the next step in the same tool call
-  let carriedSessionIntro = "";
-
-  // Safety: avoid accidental infinite loops
+  // avoid infinite chains
   const MAX_HOPS = 3;
   let hops = 0;
 
+  let activeSpecialist = "";
+  let specialistJson: any = null;
+
+  // deterministic readiness gating for Step 1:
+  // only proceed if previous output was a readiness question AND we already have a stored step_0 line.
+  const prev = state.last_specialist_result || {};
+  const readinessAsked =
+    state.current_step === "step_0" &&
+    prev?.action === "CONFIRM" &&
+    typeof prev?.confirmation_question === "string" &&
+    prev.confirmation_question.trim() !== "" &&
+    prev?.proceed_to_dream === "false";
+
+  const canProceedFromStep0 = readinessAsked && isClearYes(userMessage, state.language) && !!state.step_0;
+
+  // Chain: step_0 "clear yes" => proceed_to_dream => immediately run Dream in same tool call
   while (hops < MAX_HOPS) {
     hops++;
 
-    const showSessionIntro = sessionIntroWanted && carriedSessionIntro === "";
-    const showStepIntro = merged.intro_shown_for_step !== stepToRun;
+    if (state.current_step === "step_0") {
+      activeSpecialist = "ValidationAndBusinessName";
 
-    let specialistName = "";
-    let specialistJson: any = null;
+      if (canProceedFromStep0) {
+        // exact proceed payload (no extra text)
+        specialistJson = {
+          action: "CONFIRM",
+          message: "",
+          question: "",
+          refined_formulation: "",
+          confirmation_question: "",
+          business_name: state.business_name ?? "TBD",
+          proceed_to_dream: "true",
+          step_0: state.step_0 ?? "",
+        };
+      } else {
+        const r = await runValidationAgent(apiKey, model, userMessage, state, showSessionIntro);
+        specialistJson = r.value;
 
-    if (stepToRun === "step_0") {
-      specialistName = "ValidationAndBusinessName";
-      const r = await runValidation(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
+        // store baseline
+        state.business_name = specialistJson.business_name || "TBD";
+        state.step_0 = specialistJson.step_0 || state.step_0 || "";
+      }
 
-      if (specialistJson.business_name) merged.business_name = specialistJson.business_name;
-      if (specialistJson.step_0) merged.step_0 = specialistJson.step_0;
-    } else if (stepToRun === "dream") {
-      specialistName = "Dream";
-      const r = await runDream(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
 
-      if (specialistJson.dream) merged.dream = specialistJson.dream;
-    } else if (stepToRun === "purpose") {
-      specialistName = "Purpose";
-      const r = await runGenericStep(apiKey, model, "purpose", "Purpose", userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
+      // mark intro flags
+      if (showSessionIntro) state.intro_shown_session = "true";
+      if (state.intro_shown_for_step !== "step_0") state.intro_shown_for_step = "step_0";
 
-      if (specialistJson.value) merged.purpose = specialistJson.value;
-    } else if (stepToRun === "bigwhy") {
-      specialistName = "BigWhy";
-      const r = await runGenericStep(apiKey, model, "bigwhy", "Big Why", userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
+      // only hop to Dream when proceed_to_dream is true
+      if (specialistJson.proceed_to_dream === "true") {
+        state.current_step = "dream";
+        // continue loop to run Dream immediately
+        continue;
+      }
 
-      if (specialistJson.value) merged.bigwhy = specialistJson.value;
-    } else if (stepToRun === "role") {
-      specialistName = "Role";
-      const r = await runGenericStep(apiKey, model, "role", "Role", userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
-
-      if (specialistJson.value) merged.role = specialistJson.value;
-    } else if (stepToRun === "entity") {
-      specialistName = "Entity";
-      const r = await runGenericStep(apiKey, model, "entity", "Entity", userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
-
-      if (specialistJson.value) merged.entity = specialistJson.value;
-    } else if (stepToRun === "strategy") {
-      specialistName = "Strategy";
-      const r = await runStrategy(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
-
-      if (specialistJson.strategy) merged.strategy = specialistJson.strategy;
-    } else if (stepToRun === "rulesofthegame") {
-      specialistName = "RulesOfTheGame";
-      const r = await runRules(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
-
-      if (specialistJson.rulesofthegame) merged.rulesofthegame = specialistJson.rulesofthegame;
-    } else if (stepToRun === "presentation") {
-      specialistName = "Presentation";
-      const r = await runPresentation(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
-
-      if (specialistJson.presentation_brief) merged.presentation_brief = specialistJson.presentation_brief;
-    } else {
-      specialistName = "ValidationAndBusinessName";
-      stepToRun = "step_0";
-      const r = await runValidation(apiKey, model, userMessage, merged, showSessionIntro, showStepIntro);
-      specialistJson = r.value;
-      if (r.debug) debug.openai = r.debug;
+      break;
     }
 
-    // If the specialist generated the session intro (translated), keep it for the final output.
-    const maybeIntro = String(specialistJson?.session_intro ?? "").trim();
-    if (showSessionIntro && maybeIntro) carriedSessionIntro = maybeIntro;
+    if (state.current_step === "dream") {
+      activeSpecialist = "Dream";
+      const showStepIntro = state.intro_shown_for_step !== "dream";
 
-    // Mark intro flags for what we actually ran
-    if (sessionIntroWanted) merged.intro_shown_session = "true";
-    if (showStepIntro) merged.intro_shown_for_step = stepToRun;
+      const r = await runDreamAgent(apiKey, model, userMessage, state, showStepIntro);
+      specialistJson = r.value;
 
-    // Keep "latest"
-    merged.active_specialist = specialistName;
-    merged.last_specialist_result = specialistJson;
+      state.dream = specialistJson.dream || state.dream || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
 
-    // Decide whether we must immediately advance (project-flow behavior)
-    const proceedToDream = stepToRun === "step_0" && specialistJson?.proceed_to_dream === "true";
-    const proceedToPurpose = stepToRun === "dream" && specialistJson?.proceed_to_purpose === "true";
-    const proceedToNext =
-      stepToRun !== "step_0" &&
-      stepToRun !== "dream" &&
-      stepToRun !== "presentation" &&
-      specialistJson?.proceed_to_next === "true";
+      if (showStepIntro) state.intro_shown_for_step = "dream";
 
-    // Set "final" as the last specialist we executed (unless we hop)
-    finalSpecialistName = specialistName;
-    finalSpecialistJson = specialistJson;
+      if (specialistJson.proceed_to_purpose === "true") {
+        state.current_step = "purpose";
+        continue;
+      }
 
-    // Advance rules:
-    // - step_0 -> dream if proceed_to_dream
-    // - dream -> purpose if proceed_to_purpose
-    // - other steps -> nextStepOf if proceed_to_next
-    // - presentation does not auto-advance in this minimal server
-    if (proceedToDream) {
-      stepToRun = "dream";
-      merged.current_step = "dream";
-      continue;
-    }
-    if (proceedToPurpose) {
-      stepToRun = "purpose";
-      merged.current_step = "purpose";
-      continue;
-    }
-    if (proceedToNext) {
-      const ns = nextStepOf(stepToRun);
-      stepToRun = ns;
-      merged.current_step = ns;
-      continue;
+      break;
     }
 
-    // No advance → stop
-    merged.current_step = stepToRun;
-    break;
+    if (state.current_step === "purpose") {
+      activeSpecialist = "Purpose";
+      const r = await runGenericAgent(apiKey, model, "Purpose", userMessage, state, GenericJsonSchema, GenericSchema);
+      specialistJson = r.value;
+
+      state.purpose = specialistJson.value || state.purpose || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
+
+      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
+      break;
+    }
+
+    if (state.current_step === "bigwhy") {
+      activeSpecialist = "BigWhy";
+      const r = await runGenericAgent(apiKey, model, "Big Why", userMessage, state, GenericJsonSchema, GenericSchema);
+      specialistJson = r.value;
+
+      state.bigwhy = specialistJson.value || state.bigwhy || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
+
+      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
+      break;
+    }
+
+    if (state.current_step === "role") {
+      activeSpecialist = "Role";
+      const r = await runGenericAgent(apiKey, model, "Role", userMessage, state, GenericJsonSchema, GenericSchema);
+      specialistJson = r.value;
+
+      state.role = specialistJson.value || state.role || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
+
+      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
+      break;
+    }
+
+    if (state.current_step === "entity") {
+      activeSpecialist = "Entity";
+      const r = await runGenericAgent(apiKey, model, "Entity", userMessage, state, GenericJsonSchema, GenericSchema);
+      specialistJson = r.value;
+
+      state.entity = specialistJson.value || state.entity || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
+
+      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
+      break;
+    }
+
+    if (state.current_step === "strategy") {
+      activeSpecialist = "Strategy";
+      const r = await runGenericAgent(apiKey, model, "Strategy", userMessage, state, StrategyJsonSchema, StrategySchema);
+      specialistJson = r.value;
+
+      state.strategy = specialistJson.strategy || state.strategy || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
+
+      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
+      break;
+    }
+
+    if (state.current_step === "rulesofthegame") {
+      activeSpecialist = "RulesOfTheGame";
+      const r = await runGenericAgent(apiKey, model, "Rules of the game", userMessage, state, RulesJsonSchema, RulesSchema);
+      specialistJson = r.value;
+
+      state.rulesofthegame = specialistJson.rulesofthegame || state.rulesofthegame || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
+
+      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
+      break;
+    }
+
+    if (state.current_step === "presentation") {
+      activeSpecialist = "Presentation";
+      const r = await runGenericAgent(apiKey, model, "Presentation", userMessage, state, PresentationJsonSchema, PresentationSchema);
+      specialistJson = r.value;
+
+      state.presentation_brief = specialistJson.presentation_brief || state.presentation_brief || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
+
+      break;
+    }
+
+    // fallback to step_0
+    state.current_step = "step_0";
   }
-
-  // Ensure the final output contains session_intro at most once
-  if (finalSpecialistJson && typeof finalSpecialistJson === "object") {
-    finalSpecialistJson.session_intro = carriedSessionIntro || "";
-  }
-
-  const text = integrateToText(finalSpecialistJson);
 
   return {
     ok: true,
     tool: "run_step",
-    version: "agents-v37",
-    current_step_id: merged.current_step,
-    active_specialist: finalSpecialistName,
-    text,
-    specialist: finalSpecialistJson,
-    state: merged,
-    debug,
+    current_step_id: state.current_step,
+    active_specialist: activeSpecialist,
+    // UI uses these:
+    text: buildTextForWidget(specialistJson),
+    prompt: pickPrompt(specialistJson),
+    specialist: specialistJson,
+    state,
   };
 }
