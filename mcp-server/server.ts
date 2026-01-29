@@ -18,7 +18,7 @@ const OPENAI_APPS_CHALLENGE_TOKEN =
   process.env.OPENAI_APPS_CHALLENGE_TOKEN ??
   "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
 
-// Optional debug UI route (handy for browser inspection)
+// Debug UI route (browser inspect)
 const UI_HTTP_PATH = "/ui/step-card";
 const UI_MIME_TYPE = "text/html+skybridge";
 
@@ -46,20 +46,18 @@ function createAppServer() {
     ],
   }));
 
-  // Register tool; OpenAI widget metadata must live on the TOOL DESCRIPTOR _meta
   server.registerTool(
     "run_step",
     {
       title: "Run Step",
-      description:
-        "Runs the Business Strategy Canvas flow. Returns structured data for the widget.",
+      description: "Runs the Business Strategy Canvas flow. Returns structured data for the widget.",
       inputSchema: {
         current_step_id: z.string(),
         user_message: z.string(),
         state: z.record(z.string(), z.any()).optional(),
       },
       _meta: {
-        // Put auth metadata here (SDK type-safe: _meta is flexible)
+        // Auth metadata here (SDK accepts _meta flexibly)
         securitySchemes: [{ type: "noauth" }],
 
         // Widget template to render when this tool is invoked
@@ -76,18 +74,17 @@ function createAppServer() {
         state: args.state ?? {},
       });
 
-      // Structured payload the widget reads from window.openai.toolOutput
+      // IMPORTANT: Keep the widget contract simple + app-leading:
+      // - put the full result at structuredContent.result (root)
+      // - keep chat text empty
       const structuredContent = {
         title: `Business Strategy Canvas Builder (${VERSION})`,
         meta: `step: ${result.state.current_step} | specialist: ${result.active_specialist}`,
-        body: result.text ?? "",
-        ui: {
-          result,
-        },
+        result, // <- widget reads this directly
       };
 
       return {
-        // keep chat output minimal; UI is the primary surface
+        // app-leading: keep chat output empty/minimal
         content: [{ type: "text", text: "" }],
         structuredContent,
       };
@@ -105,21 +102,18 @@ const httpServer = createServer(async (req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
 
-  // OpenAI Apps domain verification
   if (req.method === "GET" && url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(OPENAI_APPS_CHALLENGE_TOKEN);
     return;
   }
 
-  // Health/version
   if (req.method === "GET" && url.pathname === "/version") {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(`VERSION=${VERSION}`);
     return;
   }
 
-  // Debug UI route (browser inspect)
   if (req.method === "GET" && url.pathname === UI_HTTP_PATH) {
     try {
       res.writeHead(200, { "content-type": UI_MIME_TYPE });
@@ -132,13 +126,11 @@ const httpServer = createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/") {
-    res
-      .writeHead(200, { "content-type": "text/plain" })
-      .end(`Business Canvas MCP server (${VERSION})`);
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end(`Business Canvas MCP server (${VERSION})`);
     return;
   }
 
-  // MCP endpoint
   const MCP_METHODS = new Set(["POST", "GET", "DELETE", "OPTIONS"]);
   if (url.pathname === MCP_PATH && req.method && MCP_METHODS.has(req.method)) {
     const mcpServer = createAppServer();
@@ -163,7 +155,5 @@ const httpServer = createServer(async (req, res) => {
 });
 
 httpServer.listen(port, host, () => {
-  console.log(
-    `Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`
-  );
+  console.log(`Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`);
 });
