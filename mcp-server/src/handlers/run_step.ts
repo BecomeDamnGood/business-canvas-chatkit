@@ -294,7 +294,7 @@ async function callSpecialistStrict(params: {
   const contextBlock = buildSpecialistContextBlock(state);
 
   if (specialist === STEP_0_SPECIALIST) {
-    const plannerInput = buildStep0SpecialistInput(userMessage);
+    const plannerInput = buildStep0SpecialistInput(userMessage, String((state as any).language ?? ""));
 
     const res = await callStrictJson<ValidationAndBusinessNameOutput>({
       model,
