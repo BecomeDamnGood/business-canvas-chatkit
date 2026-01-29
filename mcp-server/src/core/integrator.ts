@@ -3,162 +3,128 @@ import { z } from "zod";
 import type { CanvasState, BoolString } from "./state";
 
 /**
- * Integrator goal (parity-first)
- * - Build user-facing text EXACTLY by deterministic rules
- * - No extra coaching text here (specialists do the content)
- * - Integrator only composes the fields in the correct order, and injects session/step intros when flags say so
+ * STEPS INTEGRATOR / RENDERER
  *
- * IMPORTANT:
- * - We do NOT "fix" content here.
- * - We do NOT interpret meaning beyond composition rules.
- * - We keep it minimal and stable for golden transcript testing.
+ * User-facing composition only.
+ * - Mirrors the language using state.language
+ * - Renders session intro (1× per session) only if SHOW_SESSION_INTRO == "true"
+ *   AND state.intro_shown_session != "true" (extra safety to prevent duplicates).
+ * - Renders specialist output strictly in this order:
+ *   1) message
+ *   2) refined_formulation
+ *   3) exactly ONE question line:
+ *      - if question non-empty -> question (single line)
+ *      - else if confirmation_question non-empty -> confirmation_question (single line)
+ *      - else -> nothing
+ * - Spacing: one blank line between rendered parts
  */
 
-/**
- * Generic specialist output fields we render (Step 0 + Dream share this set)
- */
 const RenderableSpecialistZod = z.object({
   action: z.string(),
   message: z.string().optional(),
   refined_formulation: z.string().optional(),
-  confirmation_question: z.string().optional(),
   question: z.string().optional(),
+  confirmation_question: z.string().optional(),
 });
 
 export type RenderedOutput = {
-  /**
-   * What the ChatGPT UI should show to the user.
-   * This is plain text, line breaks preserved.
-   */
   text: string;
-
-  /**
-   * Additional structured info for debugging / inspector
-   */
   debug: {
     rendered_parts: Array<{ key: string; value: string }>;
-    used_session_intro: boolean;
-    used_step_intro: boolean;
-    action: string;
   };
 };
 
-/**
- * Session intro (minimal, stable)
- * You can replace this with the exact Agent Builder session intro text if you have it centrally.
- *
- * For parity now:
- * - We only render the session intro marker line, because actual intro wording is driven by the step-specialist INTRO.
- * - This avoids doubling intros (session + step).
- */
-function renderSessionIntroMarker(): string {
-  return ""; // Intentionally empty to avoid content drift; Step INTRO handles the real intro text.
-}
+const SESSION_INTRO_EN =
+  "Welcome to Ben Steenstra’s Business Strategy Canvas, used in national and international organizations. We will go through a small number of steps, one by one, so each step is clear before we move on. At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear presentation for external stakeholders, partners, or team members.";
 
-/**
- * Step intro marker / wrapper (minimal, stable)
- * Same rationale: step-specialist INTRO already contains the real intro text.
- */
-function renderStepIntroMarker(): string {
-  return ""; // Intentionally empty to avoid content drift.
-}
-
-/**
- * Field render order (parity)
- * This matches how your UI template typically composes:
- * message -> refined_formulation -> confirmation_question -> question
- */
-const FIELD_ORDER: Array<keyof z.infer<typeof RenderableSpecialistZod>> = [
-  "message",
-  "refined_formulation",
-  "confirmation_question",
-  "question",
-];
+const SESSION_INTRO_NL =
+  "Welkom bij Ben Steenstra’s Business Strategy Canvas, gebruikt in nationale en internationale organisaties. We doorlopen een klein aantal stappen, één voor één, zodat elke stap duidelijk is voordat we verder gaan. Aan het einde heb je een compleet en beknopt businessplan, klaar als richting voor jezelf en als heldere presentatie voor externe stakeholders, partners of teamleden.";
 
 function normalizeLineBreaks(s: string): string {
-  // Keep real line breaks; trim only outer whitespace (do not collapse internal newlines)
   return String(s ?? "").replace(/\r\n/g, "\n").trim();
 }
 
-function addPart(parts: string[], debugParts: Array<{ key: string; value: string }>, key: string, value: string) {
-  const v = normalizeLineBreaks(value);
+/**
+ * The "question line" must be exactly one line.
+ * Convert any internal line breaks to spaces and trim.
+ */
+function normalizeQuestionLine(s: string): string {
+  return String(s ?? "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+}
+
+function addPart(
+  parts: string[],
+  debugParts: Array<{ key: string; value: string }>,
+  key: string,
+  value: string,
+  mode: "block" | "singleLine" = "block"
+) {
+  const v = mode === "singleLine" ? normalizeQuestionLine(value) : normalizeLineBreaks(value);
   if (!v) return;
   parts.push(v);
   debugParts.push({ key, value: v });
 }
 
-/**
- * Main integrator: compose final user-visible string.
- *
- * Inputs:
- * - state: canonical state
- * - specialistOutput: the JSON payload from the specialist
- * - show_session_intro / show_step_intro flags from orchestrator/handler
- *
- * Output:
- * - plain text for the user + debug composition list
- */
+function langFromState(state: CanvasState): "nl" | "en" {
+  const l = String((state as any).language ?? "").toLowerCase().trim();
+  if (l.startsWith("nl")) return "nl";
+  if (l.startsWith("en")) return "en";
+  return "en";
+}
+
 export function integrateUserFacingOutput(params: {
   state: CanvasState;
   specialistOutput: unknown;
   show_session_intro: BoolString;
-  show_step_intro: BoolString;
 }): RenderedOutput {
-  const parsed = RenderableSpecialistZod.parse(params.specialistOutput);
-  const action = String(parsed.action ?? "");
+  const parsed = RenderableSpecialistZod.safeParse(params.specialistOutput);
 
-  const textParts: string[] = [];
+  const parts: string[] = [];
   const debugParts: Array<{ key: string; value: string }> = [];
 
-  const usedSessionIntro = params.show_session_intro === "true";
-  const usedStepIntro = params.show_step_intro === "true";
-
-  if (usedSessionIntro) {
-    const si = renderSessionIntroMarker();
-    if (si) addPart(textParts, debugParts, "session_intro", si);
+  // Fallback if specialist is missing/unparseable
+  if (!parsed.success) {
+    const l = langFromState(params.state);
+    const fallback = l === "nl" ? "Wat wil je nu doen?" : "What would you like to do next?";
+    return { text: fallback, debug: { rendered_parts: [{ key: "fallback", value: fallback }] } };
   }
 
-  if (usedStepIntro) {
-    const sti = renderStepIntroMarker();
-    if (sti) addPart(textParts, debugParts, "step_intro", sti);
+  const sp = parsed.data;
+  const l = langFromState(params.state);
+
+  // Session intro (1× per sessie) - extra guard using state.intro_shown_session
+  const introAlreadyShown = String((params.state as any).intro_shown_session ?? "") === "true";
+  if (params.show_session_intro === "true" && !introAlreadyShown) {
+    addPart(parts, debugParts, "session_intro", l === "nl" ? SESSION_INTRO_NL : SESSION_INTRO_EN);
   }
 
-  for (const key of FIELD_ORDER) {
-    const val = (parsed as any)[key];
-    if (typeof val === "string") {
-      addPart(textParts, debugParts, String(key), val);
-    }
+  // Specialist fields (block mode preserves line breaks)
+  if (typeof sp.message === "string" && sp.message.trim()) {
+    addPart(parts, debugParts, "message", sp.message, "block");
   }
 
-  const text = textParts.join("\n\n").trim();
+  if (typeof sp.refined_formulation === "string" && sp.refined_formulation.trim()) {
+    addPart(parts, debugParts, "refined_formulation", sp.refined_formulation, "block");
+  }
+
+  // Exactly one question line (singleLine mode)
+  const q = typeof sp.question === "string" && sp.question.trim() ? sp.question : "";
+  const cq =
+    !q && typeof sp.confirmation_question === "string" && sp.confirmation_question.trim()
+      ? sp.confirmation_question
+      : "";
+
+  if (q) addPart(parts, debugParts, "question", q, "singleLine");
+  else if (cq) addPart(parts, debugParts, "confirmation_question", cq, "singleLine");
 
   return {
-    text,
-    debug: {
-      rendered_parts: debugParts,
-      used_session_intro: usedSessionIntro,
-      used_step_intro: usedStepIntro,
-      action,
-    },
+    text: parts.join("\n\n").trim(),
+    debug: { rendered_parts: debugParts },
   };
-}
-
-/**
- * Convenience integrator for Step 0 + Dream in your run_step handler:
- * - Takes the handler result and returns the exact "assistant text"
- */
-export function integrateFromRunStepOutput(runStepResult: {
-  state: CanvasState;
-  output: {
-    show_session_intro: BoolString;
-    show_step_intro: BoolString;
-    specialist: unknown;
-  };
-}): RenderedOutput {
-  return integrateUserFacingOutput({
-    state: runStepResult.state,
-    specialistOutput: runStepResult.output.specialist,
-    show_session_intro: runStepResult.output.show_session_intro,
-    show_step_intro: runStepResult.output.show_step_intro,
-  });
 }
