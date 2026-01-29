@@ -205,7 +205,8 @@ async function callSpecialistStrict(params: {
       instructions: `${VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS}\n\n${contextBlock}`,
       plannerInput,
       schemaName: "ValidationAndBusinessName",
-      jsonSchema: ValidationAndBusinessNameJsonSchema,
+      // NOTE: fix TS2322 (readonly arrays in JSON schema literals vs mutable typing expectations)
+      jsonSchema: ValidationAndBusinessNameJsonSchema as any,
       zodSchema: ValidationAndBusinessNameZodSchema,
       temperature: 0.2,
       topP: 1,
@@ -228,7 +229,8 @@ async function callSpecialistStrict(params: {
       instructions: `${DREAM_INSTRUCTIONS}\n\n${contextBlock}`,
       plannerInput,
       schemaName: "Dream",
-      jsonSchema: DreamJsonSchema,
+      // NOTE: fix TS2322 (readonly arrays in JSON schema literals vs mutable typing expectations)
+      jsonSchema: DreamJsonSchema as any,
       zodSchema: DreamZodSchema,
       temperature: 0.3,
       topP: 1,
