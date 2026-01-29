@@ -113,16 +113,17 @@ async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema
     }),
   });
 
-  const json = await resp.json().catch(() => null);
+const json: any = await resp.json().catch(() => null);
 
-  if (!resp.ok) {
-    const msg =
-      (json && (json.error?.message || json.error?.toString?.())) ||
-      `OpenAI API error (${resp.status})`;
-    const err = new Error(msg);
-    (err as any).meta = { status: resp.status, body: json, debugLabel: args.debugLabel };
-    throw err;
-  }
+if (!resp.ok) {
+  const msg =
+    json?.error?.message ||
+    json?.error?.toString?.() ||
+    `OpenAI API error (${resp.status})`;
+  const err = new Error(msg);
+  (err as any).meta = { status: resp.status, body: json, debugLabel: args.debugLabel };
+  throw err;
+}
 
   const text = extractOutputText(json);
   const parsed = safeJsonParse(text);
