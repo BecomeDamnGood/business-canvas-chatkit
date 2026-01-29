@@ -11,47 +11,49 @@
       }
       *{ box-sizing:border-box; }
       body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:var(--text); background:var(--bg); }
-      .wrap{ max-width: 1080px; margin: 0 auto; padding: 34px 18px 60px; }
-      .title{ text-align:center; font-size: 44px; letter-spacing: -0.02em; margin: 6px 0 4px; font-weight: 800; }
-      .subtitle{ text-align:center; font-size: 20px; color: var(--muted); margin: 0 0 10px; font-weight: 500; }
+      .wrap{ max-width: 1080px; margin: 0 auto; padding: 40px 18px 70px; }
+
+      .title{ text-align:center; font-size: 44px; letter-spacing: -0.02em; margin: 6px 0 6px; font-weight: 800; }
+      .subtitle{ text-align:center; font-size: 20px; color: var(--muted); margin: 0 0 16px; font-weight: 500; }
 
       .byline{
         display:flex;
         gap:10px;
         align-items:center;
         justify-content:center;
-        margin: 8px 0 18px;
+        margin: 10px 0 22px;
         color: var(--muted);
         font-size: 14px;
         font-weight: 600;
       }
-      .byline img{
-        height: 24px;
-        width: auto;
-        display:block;
-      }
+      .byline img{ height: 24px; width: auto; display:block; }
 
-      .stepperRow{ display:flex; align-items:center; justify-content:center; margin: 14px 0 16px; }
+      .stepperRow{ display:flex; align-items:center; justify-content:center; margin: 16px 0 18px; }
       .stepper{ display:flex; align-items:center; justify-content:center; gap: 0px; }
-      .step{ width: 34px; height: 34px; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight: 800; font-size: 13px; background: var(--stepOff); color: #64748b; }
+      .step{ width: 32px; height: 32px; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight: 800; font-size: 13px; background: var(--stepOff); color: #64748b; }
       .step.active{ background: var(--blue); color: white; box-shadow: 0 0 0 4px rgba(47,91,234,0.12); }
-      .stepLine{ width: 18px; height: 2px; background: var(--line); }
+      .stepLine{ width: 16px; height: 2px; background: var(--line); }
 
-      .sectionTitle{ text-align:center; font-size: 26px; font-weight: 900; margin: 8px 0 18px; }
+      .sectionTitle{ text-align:center; font-size: 26px; font-weight: 900; margin: 10px 0 22px; }
 
       .card{ max-width: 920px; margin: 0 auto; border-radius: 28px; border: 2px solid rgba(142,166,255,0.55); padding: 26px 26px 24px; background: var(--card); box-shadow: var(--shadow); }
       .cardInner{ display:flex; align-items:flex-start; gap: 16px; }
       .badge{ width: 54px; height: 54px; border-radius: 999px; background: var(--blue); color: white; display:flex; align-items:center; justify-content:center; font-weight: 900; font-size: 18px; flex: 0 0 auto; }
-      .cardTitle{ margin: 4px 0 8px; font-size: 30px; font-weight: 950; letter-spacing: -0.01em; }
-      .cardDesc{ margin: 0 0 12px; font-size: 18px; line-height: 1.45; color: var(--muted); max-width: 720px; white-space: pre-wrap; }
+
+      /* Card title not used (avoid repeating step title) */
+      .cardTitle{ display:none; }
+
+      .cardDesc{ margin: 0 0 14px; font-size: 18px; line-height: 1.48; color: var(--muted); max-width: 760px; white-space: pre-wrap; }
       .prompt{ font-size: 24px; font-weight: 900; margin: 10px 0 12px; letter-spacing: -0.01em; white-space: pre-wrap; }
 
-      .inputWrap{ display:flex; align-items:flex-end; gap: 12px; margin-top: 8px; }
+      .inputWrap{ display:flex; align-items:flex-end; gap: 12px; margin-top: 10px; }
       textarea{ width: 100%; min-height: 92px; resize: vertical; border-radius: 18px; border: 1px solid var(--line); padding: 16px 16px; font-size: 17px; outline: none; }
+
       .send{ width: 60px; height: 60px; border: none; border-radius: 18px; background: rgba(142,166,255,0.85); color: white; cursor: pointer; display:flex; align-items:center; justify-content:center; }
       .send svg{ width: 24px; height: 24px; }
+      .send:disabled{ background: var(--stepOff); color:#94a3b8; cursor:not-allowed; }
 
-      .row{ display:flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+      .row{ display:flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
       .btn{ border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 10px 14px; font-weight: 800; cursor: pointer; }
       .btn.primary{ border-color: rgba(47,91,234,0.25); background: rgba(47,91,234,0.08); }
 
@@ -59,9 +61,9 @@
       .status{ display:none; }
 
       @media (max-width: 720px){
+        .wrap{ padding: 32px 14px 56px; }
         .title{ font-size: 32px; }
         .subtitle{ font-size: 17px; }
-        .cardTitle{ font-size: 24px; }
         .prompt{ font-size: 20px; }
         .step{ width: 28px; height: 28px; font-size: 12px; }
         .stepLine{ width: 10px; }
@@ -102,16 +104,17 @@
             <!-- Input + Send (hidden until after Start/tool output exists) -->
             <div class="inputWrap" id="inputWrap" style="display:none">
               <textarea id="input" placeholder=""></textarea>
-              <button class="send" id="send" title="Send">
+              <button class="send" id="send" title="Send" disabled>
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M3 11.5L21 3L12.5 21L11 13L3 11.5Z" fill="currentColor"/>
                 </svg>
               </button>
             </div>
 
-            <!-- Only Start button (first screen) -->
+            <!-- Controls: only Start (pre-start) and OK (confirm moment) -->
             <div class="row" id="controls">
               <button class="btn primary" id="btnStart">Start</button>
+              <button class="btn primary" id="btnOk" style="display:none">OK</button>
             </div>
 
             <div class="status" id="status"></div>
@@ -146,6 +149,9 @@
         rulesofthegame: "Step 8: Rules of the game",
         presentation: "Step 9: Presentation"
       };
+
+      const PRESTART_WELCOME_TEXT =
+        "Welcome to Ben Steenstra’s Business Strategy Canvas, used in national and international organizations. We will go through a small number of steps, one by one, so each step is clear before we move on. At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear presentation for external stakeholders, partners, or team members.";
 
       function normalizeToolOutput(raw) {
         if (!raw || typeof raw !== "object") return {};
@@ -189,7 +195,6 @@
         const lang = (state && state.language) ? String(state.language).toLowerCase() : "";
         if (lang.startsWith("nl")) return "nl";
         if (lang.startsWith("en")) return "en";
-        // fallback from browser
         const nav = (navigator.language || "").toLowerCase();
         return nav.startsWith("nl") ? "nl" : "en";
       }
@@ -200,8 +205,11 @@
             ? "Gebruik de widget om door te gaan (niet de chat box)"
             : "Use the app widget to continue (not the chat box)";
 
-        document.getElementById("byText").textContent =
-          (lang === "nl") ? "A business model by:" : "A business model by:";
+        document.getElementById("byText").textContent = "A business model by:";
+      }
+
+      function setSendEnabled(enabled) {
+        document.getElementById("send").disabled = !enabled;
       }
 
       function render(data) {
@@ -215,7 +223,10 @@
         const lang = uiLanguage(state);
         setStaticStrings(lang);
 
-        const current = state.current_step || "step_0";
+        const hasToolOutput = Boolean(globalThis.openai && globalThis.openai.toolOutput);
+
+        // Always default to step_0 for pre-start (no state yet)
+        const current = hasToolOutput ? (state.current_step || "step_0") : "step_0";
         const idx = stepIndex(current);
         buildStepper(idx);
 
@@ -223,7 +234,35 @@
 
         document.getElementById("badge").textContent = String(idx + 1);
         document.getElementById("sectionTitle").textContent = titles[current] || "";
-        document.getElementById("cardTitle").textContent = titles[current] || "";
+        document.getElementById("cardTitle").textContent = ""; // avoid repeating step title in card
+
+        const inputWrap = document.getElementById("inputWrap");
+        const btnStart = document.getElementById("btnStart");
+        const btnOk = document.getElementById("btnOk");
+
+        // Specialist details (needed for confirm-readiness OK button)
+        const specialist = (result && result.specialist) ? result.specialist : {};
+        const isConfirmReadinessStep0 =
+          hasToolOutput &&
+          current === "step_0" &&
+          String(specialist.action || "") === "CONFIRM" &&
+          String(specialist.proceed_to_dream || "") === "false" &&
+          String(specialist.confirmation_question || "").trim() !== "";
+
+        // PRE-START (no input, Start only, fixed welcome text)
+        if (!hasToolOutput) {
+          inputWrap.style.display = "none";
+          btnStart.style.display = "inline-flex";
+          btnOk.style.display = "none";
+
+          document.getElementById("cardDesc").textContent = PRESTART_WELCOME_TEXT;
+          document.getElementById("prompt").textContent = "Click Start to begin.";
+          return;
+        }
+
+        // AFTER START (tool output exists)
+        inputWrap.style.display = "flex";
+        btnStart.style.display = "none";
 
         // Body + prompt from tool output
         const body = (result && typeof result.text === "string") ? result.text : "";
@@ -232,30 +271,19 @@
         document.getElementById("cardDesc").textContent = body;
         document.getElementById("prompt").textContent = prompt;
 
-        // Input visibility rules:
-        // - before first tool run: ONLY Start button (no textarea/send)
-        // - after tool output exists: show textarea+send, hide Start
-        const hasToolOutput = Boolean(globalThis.openai && globalThis.openai.toolOutput);
-        const inputWrap = document.getElementById("inputWrap");
-        const btnStart = document.getElementById("btnStart");
+        // OK button ONLY in confirm-readiness moment (Step 0)
+        btnOk.style.display = isConfirmReadinessStep0 ? "inline-flex" : "none";
 
-        if (!hasToolOutput) {
-          inputWrap.style.display = "none";
-          btnStart.style.display = "inline-flex";
+        // Placeholder + send disabled until user types
+        document.getElementById("input").placeholder =
+          (lang === "nl")
+            ? "Typ je antwoord hier (gebruik de widget, niet de chat box)…"
+            : "Type your answer here (use the widget, not the chat box)…";
 
-          document.getElementById("cardDesc").textContent = "";
-          document.getElementById("prompt").textContent = (lang === "nl") ? "Klik op Start om te beginnen." : "Click Start to begin.";
-        } else {
-          inputWrap.style.display = "flex";
-          btnStart.style.display = "none";
+        const v = (document.getElementById("input").value || "").trim();
+        setSendEnabled(v.length > 0);
 
-          document.getElementById("input").placeholder =
-            (lang === "nl")
-              ? "Typ je antwoord hier (gebruik de widget, niet de chat box)…"
-              : "Type your answer here (use the widget, not the chat box)…";
-        }
-
-        globalThis.__BSC_LATEST__ = { data, result, state };
+        globalThis.__BSC_LATEST__ = { data, result, state, lang };
       }
 
       async function callRunStep(message) {
@@ -279,14 +307,28 @@
         render(nextData);
       }
 
+      // Enable send only when there is text
+      document.getElementById("input").addEventListener("input", () => {
+        const v = (document.getElementById("input").value || "").trim();
+        setSendEnabled(v.length > 0);
+      });
+
       document.getElementById("send").addEventListener("click", () => {
         const v = (document.getElementById("input").value || "").trim();
         if (!v) return;
         document.getElementById("input").value = "";
+        setSendEnabled(false);
         callRunStep(v);
       });
 
       document.getElementById("btnStart").addEventListener("click", () => callRunStep(""));
+
+      // OK sends a speech-proof "clear YES" (localized)
+      document.getElementById("btnOk").addEventListener("click", () => {
+        const latest = globalThis.__BSC_LATEST__ || {};
+        const lang = (latest.lang || uiLanguage(latest.state || {}));
+        callRunStep(lang === "nl" ? "ja" : "yes");
+      });
 
       render(pickData());
     </script>
