@@ -1,23 +1,23 @@
 // mcp-server/server.ts
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 
-// Tool wiring: use src/handlers/run_step.ts (compiled to .js in dist builds)
-import { run_step } from "./src/handlers/run_step.js";
+import { run_step as runStepTool } from "./src/handlers/run_step.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
-const VERSION = "v39";
+// Keep this aligned with your release tag
+const VERSION = process.env.VERSION ?? "v39";
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
-  process.env.OPENAI_APPS_CHALLENGE_TOKEN ??
-  "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
+  process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
 
 const UI_HTTP_PATH = "/ui/step-card";
 const UI_MIME_TYPE = "text/html+skybridge";
@@ -30,6 +30,7 @@ function loadUiHtml(): string {
 function createAppServer() {
   const server = new McpServer({ name: "business-canvas-mcp", version: "0.1.0" });
 
+  // Widget resource (Skybridge)
   server.registerResource("bsc-step-card", UI_RESOURCE_URI, {}, async () => ({
     contents: [
       {
@@ -41,6 +42,7 @@ function createAppServer() {
     ],
   }));
 
+  // Tool: run_step (widget-leading)
   server.registerTool(
     "run_step",
     {
@@ -48,8 +50,8 @@ function createAppServer() {
       description:
         "Widget-leading Business Strategy Canvas flow. Always call this tool for each user interaction and render using the widget output template. The user should answer via the widget (not the chat box).",
       inputSchema: {
-        // UI currently sends this; backend may ignore it safely.
-        current_step_id: z.string().optional(),
+        // ChatGPT/Widget sometimes sends this as 'start'
+        current_step_id: z.string(),
         user_message: z.string(),
         state: z.record(z.string(), z.any()).optional(),
       },
@@ -60,23 +62,89 @@ function createAppServer() {
       },
     },
     async (args) => {
-      // Delegate all orchestration/steps/integration to the handler
-      const result = await run_step({
-        user_message: args.user_message,
-        state: args.state ?? {},
-      });
+      const current_step_id = String(args.current_step_id ?? "").trim();
+      const state = (args.state ?? {}) as Record<string, any>;
 
-      const structuredContent = {
-        title: `Business Strategy Canvas Builder (${VERSION})`,
-        meta: `step: ${result.state.current_step} | specialist: ${result.state.active_specialist ?? ""}`,
-        result,
-      };
+      // IMPORTANT:
+      // If the request is a "start" trigger, do NOT pass a meta-instruction as user_message.
+      // We force a clean start so the widget shows the Step 0 question.
+      const user_message_raw = String(args.user_message ?? "");
+      const user_message =
+        current_step_id.toLowerCase() === "start" ? "" : user_message_raw;
 
-      return {
-        // Keep chat minimal; widget-leading
-        content: [{ type: "text", text: "" }],
-        structuredContent,
-      };
+      // Basic request logging (so CloudWatch shows tool calls + failures)
+      console.log(
+        `[run_step] step_id=${current_step_id} user_message_len=${user_message_raw.length} state_keys=${Object.keys(
+          state
+        ).length}`
+      );
+
+      try {
+        const result = await runStepTool({
+          user_message,
+          state,
+        });
+
+        const structuredContent = {
+          title: `Business Strategy Canvas Builder (${VERSION})`,
+          meta: `step: ${result.state?.current_step ?? "unknown"} | specialist: ${
+            result.active_specialist ?? "unknown"
+          }`,
+          result,
+        };
+
+        // Keep chat empty; widget renders via outputTemplate + structuredContent
+        return {
+          content: [{ type: "text", text: "" }],
+          structuredContent,
+        };
+      } catch (error: any) {
+        console.error("[run_step] ERROR:", error?.message ?? error, error?.meta ?? "");
+
+        // Safe widget fallback (never throw; never return chat text)
+        const fallbackResult = {
+          ok: true,
+          tool: "run_step",
+          current_step_id: "step_0",
+          active_specialist: "ValidationAndBusinessName",
+          text: "",
+          prompt:
+            "Something went wrong on the server. Please try again (or restart the canvas).",
+          specialist: {
+            action: "ESCAPE",
+            message: "Something went wrong on the server.",
+            question: "Please try again.",
+            refined_formulation: "",
+            confirmation_question: "",
+          },
+          state: {
+            state_version: "1",
+            current_step: "step_0",
+            active_specialist: "ValidationAndBusinessName",
+            intro_shown_for_step: "",
+            intro_shown_session: "false",
+            last_specialist_result: {},
+            step_0_final: "",
+            dream_final: "",
+            business_name: "TBD",
+            summary_target: "unknown",
+          },
+          debug: {
+            error: String(error?.message ?? error),
+          },
+        };
+
+        const structuredContent = {
+          title: `Business Strategy Canvas Builder (${VERSION})`,
+          meta: `error: run_step failed`,
+          result: fallbackResult,
+        };
+
+        return {
+          content: [{ type: "text", text: "" }],
+          structuredContent,
+        };
+      }
     }
   );
 
@@ -87,30 +155,35 @@ const httpServer = createServer(async (req, res) => {
   if (!req.url) return void res.writeHead(400).end("Missing URL");
   const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
 
+  // OpenAI Apps verification
   if (req.method === "GET" && url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(OPENAI_APPS_CHALLENGE_TOKEN);
     return;
   }
 
+  // Health check (App Runner)
   if (req.method === "GET" && url.pathname === "/version") {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(`VERSION=${VERSION}`);
     return;
   }
 
+  // Widget HTML (debug)
   if (req.method === "GET" && url.pathname === UI_HTTP_PATH) {
     res.writeHead(200, { "content-type": UI_MIME_TYPE });
     res.end(loadUiHtml());
     return;
   }
 
+  // Root (debug)
   if (req.method === "GET" && url.pathname === "/") {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(`Business Canvas MCP server (${VERSION})`);
     return;
   }
 
+  // MCP transport
   const MCP_METHODS = new Set(["POST", "GET", "DELETE", "OPTIONS"]);
   if (url.pathname === MCP_PATH && req.method && MCP_METHODS.has(req.method)) {
     const mcpServer = createAppServer();
