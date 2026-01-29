@@ -42,7 +42,8 @@ export const CanvasStateZod = z.object({
   intro_shown_session: BoolStringZod,
 
   // last output (used for proceed triggers / transitions)
-  last_specialist_result: z.record(z.any()),
+  // FIX (Zod v4): record needs key + value schema
+  last_specialist_result: z.record(z.string(), z.any()),
 
   // stable stored lines / finals
   step_0_final: z.string(),
@@ -107,8 +108,7 @@ export function normalizeState(raw: unknown): CanvasState {
   const intro_shown_for_step = String(r.intro_shown_for_step ?? d.intro_shown_for_step);
 
   const intro_shown_session_raw = String(r.intro_shown_session ?? d.intro_shown_session).trim();
-  const intro_shown_session: BoolString =
-    intro_shown_session_raw === "true" ? "true" : "false";
+  const intro_shown_session: BoolString = intro_shown_session_raw === "true" ? "true" : "false";
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
