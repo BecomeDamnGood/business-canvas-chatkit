@@ -4,13 +4,15 @@ import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import { runCanvasStep } from "./agents.js";
+
+// Tool wiring: use src/handlers/run_step.ts (compiled to .js in dist builds)
+import { run_step } from "./src/handlers/run_step.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
-const VERSION = "v37";
+const VERSION = "v39";
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
@@ -46,7 +48,8 @@ function createAppServer() {
       description:
         "Widget-leading Business Strategy Canvas flow. Always call this tool for each user interaction and render using the widget output template. The user should answer via the widget (not the chat box).",
       inputSchema: {
-        current_step_id: z.string(),
+        // UI currently sends this; backend may ignore it safely.
+        current_step_id: z.string().optional(),
         user_message: z.string(),
         state: z.record(z.string(), z.any()).optional(),
       },
@@ -57,20 +60,20 @@ function createAppServer() {
       },
     },
     async (args) => {
-      const result = await runCanvasStep({
-        current_step_id: args.current_step_id,
+      // Delegate all orchestration/steps/integration to the handler
+      const result = await run_step({
         user_message: args.user_message,
         state: args.state ?? {},
       });
 
-      // Keep meta aligned with what is actually shown (current_step_id + active_specialist now match due to chaining)
       const structuredContent = {
         title: `Business Strategy Canvas Builder (${VERSION})`,
-        meta: `step: ${result.state.current_step} | specialist: ${result.active_specialist}`,
+        meta: `step: ${result.state.current_step} | specialist: ${result.state.active_specialist ?? ""}`,
         result,
       };
 
       return {
+        // Keep chat minimal; widget-leading
         content: [{ type: "text", text: "" }],
         structuredContent,
       };
@@ -132,5 +135,7 @@ const httpServer = createServer(async (req, res) => {
 });
 
 httpServer.listen(port, host, () => {
-  console.log(`Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`);
+  console.log(
+    `Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`
+  );
 });
