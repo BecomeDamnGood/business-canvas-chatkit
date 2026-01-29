@@ -1,4 +1,4 @@
-// src/handlers/run_step.ts
+// mcp-server/src/handlers/run_step.ts
 import { z } from "zod";
 
 import { callStrictJson } from "../core/llm";
@@ -35,16 +35,9 @@ const RunStepArgsSchema = z.object({
 
 type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
 
-const SESSION_INTRO_EN =
-  "Welcome to Ben Steenstra’s Business Strategy Canvas, used in national and international organizations. We will go through a small number of steps, one by one, so each step is clear before we move on. At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear presentation for external stakeholders, partners, or team members.";
-
-const SESSION_INTRO_NL =
-  "Welkom bij Ben Steenstra’s Business Strategy Canvas, gebruikt in nationale en internationale organisaties. We doorlopen een klein aantal stappen, één voor één, zodat elke stap duidelijk is voordat we verder gaan. Aan het einde heb je een compleet en beknopt businessplan, klaar als richting voor jezelf en als heldere presentatie voor externe stakeholders, partners of teamleden.";
-
 const STEP0_QUESTION_EN =
   "What type of venture are you starting or running, and what’s the name of your business (or is it still TBD)?";
 
-// NOTE: NL string is a direct translation for parity with the EN question.
 const STEP0_QUESTION_NL =
   "Wat voor onderneming start of run je, en wat is de naam van je bedrijf (of is het nog TBD)?";
 
@@ -55,17 +48,14 @@ function langFromState(state: CanvasState): "nl" | "en" {
   return "en";
 }
 
-function buildTextForWidget(params: {
-  state: CanvasState;
-  specialist: any;
-  showSessionIntro: BoolString;
-}): string {
-  const { state, specialist, showSessionIntro } = params;
+/**
+ * Render order (strict):
+ * message -> refined_formulation
+ * (NO session intro rendered here; pre-start UI owns the welcome text)
+ */
+function buildTextForWidget(params: { specialist: any }): string {
+  const { specialist } = params;
   const parts: string[] = [];
-
-  if (showSessionIntro === "true") {
-    parts.push(langFromState(state) === "nl" ? SESSION_INTRO_NL : SESSION_INTRO_EN);
-  }
 
   const msg = String(specialist?.message ?? "").trim();
   const refined = String(specialist?.refined_formulation ?? "").trim();
@@ -165,8 +155,8 @@ function applyStateUpdate(params: {
     last_specialist_result:
       typeof specialistResult === "object" && specialistResult !== null ? specialistResult : {},
 
-    // Orchestrator always returns intro_shown_session as "true" once it has been considered.
-    // However, we ONLY mark it as shown in state when we actually rendered it.
+    // We ONLY mark it as shown in state when we actually rendered it.
+    // NOTE: pre-start UI now owns the welcome text; run_step uses this only as a state flag.
     intro_shown_session: showSessionIntroUsed === "true" ? "true" : prev.intro_shown_session,
 
     // Only mark a step intro as shown when the specialist explicitly returns action="INTRO".
@@ -178,20 +168,14 @@ function applyStateUpdate(params: {
     if (typeof specialistResult?.step_0 === "string" && specialistResult.step_0.trim()) {
       nextState = { ...nextState, step_0_final: specialistResult.step_0.trim() };
     }
-    if (
-      typeof specialistResult?.business_name === "string" &&
-      specialistResult.business_name.trim()
-    ) {
+    if (typeof specialistResult?.business_name === "string" && specialistResult.business_name.trim()) {
       nextState = { ...nextState, business_name: specialistResult.business_name.trim() };
     }
   }
 
   // Dream persistence (only when action="CONFIRM" and dream provided)
   if (next_step === DREAM_STEP_ID) {
-    if (
-      String(specialistResult?.action ?? "") === "CONFIRM" &&
-      typeof specialistResult?.dream === "string"
-    ) {
+    if (String(specialistResult?.action ?? "") === "CONFIRM" && typeof specialistResult?.dream === "string") {
       const v = specialistResult.dream.trim();
       if (v) nextState = { ...nextState, dream_final: v };
     }
@@ -264,10 +248,7 @@ async function callSpecialistStrict(params: {
         l === "nl"
           ? "Ik kan je hier alleen helpen met het bouwen van je Business Strategy Canvas."
           : "I can only help you here with building your Business Strategy Canvas.",
-      question:
-        l === "nl"
-          ? "Wil je nu doorgaan met verificatie?"
-          : "Do you want to continue with verification now?",
+      question: l === "nl" ? "Wil je nu doorgaan met verificatie?" : "Do you want to continue with verification now?",
       refined_formulation: "",
       confirmation_question: "",
       business_name: "TBD",
@@ -287,8 +268,9 @@ function shouldChainToDream(decision: OrchestratorOutput, specialistResult: any)
 /**
  * MCP tool implementation (widget-leading)
  *
- * IMPORTANT change (handoff):
- * - The welcome text is shown on the pre-start screen (widget), so we must NOT show the session intro after Start.
+ * IMPORTANT (handoff):
+ * - The welcome text is shown on the pre-start screen (widget),
+ *   so run_step must NOT render the session intro.
  * - Start calls this tool with an empty user_message; we respond with the Step 0 question without calling the specialist.
  */
 export async function run_step(rawArgs: unknown): Promise<{
@@ -306,9 +288,7 @@ export async function run_step(rawArgs: unknown): Promise<{
   const userMessage = String(args.user_message ?? "");
   let state = migrateState(args.state ?? {});
 
-  // Ensure language stays stable (widget passes it; keep as-is)
   const lang = langFromState(state);
-
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
 
   const isStartTrigger =
@@ -382,8 +362,8 @@ export async function run_step(rawArgs: unknown): Promise<{
   // --------- ORCHESTRATE (decision 1) ----------
   const decision1 = orchestrate({ state, userMessage });
 
-  // show_session_intro should only be true if session intro hasn't been shown yet
-  // (NOTE: Start trigger above already marks intro_shown_session true)
+  // show_session_intro should only be true if session intro hasn't been shown yet.
+  // (We don't render it here; used only to keep state consistent if something calls it.)
   const showSessionIntro: BoolString = decision1.show_session_intro;
 
   // --------- CALL SPECIALIST (first) ----------
@@ -396,7 +376,8 @@ export async function run_step(rawArgs: unknown): Promise<{
     prev: state,
     decision: decision1,
     specialistResult,
-    showSessionIntroUsed: showSessionIntro,
+    // We do not render intro in this handler anymore. Keep it false here.
+    showSessionIntroUsed: "false",
   });
 
   // --------- OPTIONAL CHAIN: STEP 0 -> DREAM ----------
@@ -405,10 +386,7 @@ export async function run_step(rawArgs: unknown): Promise<{
   if (shouldChainToDream(decision1, specialistResult)) {
     const decision2 = orchestrate({ state: nextState, userMessage });
 
-    if (
-      String(decision2.current_step) === DREAM_STEP_ID &&
-      String(decision2.specialist_to_call) === DREAM_SPECIALIST
-    ) {
+    if (String(decision2.current_step) === DREAM_STEP_ID && String(decision2.specialist_to_call) === DREAM_SPECIALIST) {
       const call2 = await callSpecialistStrict({ model, state: nextState, decision: decision2, userMessage });
       attempts = Math.max(attempts, call2.attempts);
       specialistResult = call2.specialistResult;
@@ -417,7 +395,6 @@ export async function run_step(rawArgs: unknown): Promise<{
         prev: nextState,
         decision: decision2,
         specialistResult,
-        // session intro already handled on decision1 (only once)
         showSessionIntroUsed: "false",
       });
 
@@ -425,8 +402,14 @@ export async function run_step(rawArgs: unknown): Promise<{
     }
   }
 
-  const text = buildTextForWidget({ state: nextState, specialist: specialistResult, showSessionIntro });
+  const text = buildTextForWidget({ specialist: specialistResult });
   const prompt = pickPrompt(specialistResult);
+
+  // If orchestrator thought it should show session intro, we still don't render it here.
+  // Pre-start UI owns that copy. But we can still ensure state is consistent:
+  if (showSessionIntro === "true" && String(nextState.intro_shown_session) !== "true") {
+    nextState = { ...nextState, intro_shown_session: "true" };
+  }
 
   return {
     ok: true,
@@ -437,7 +420,6 @@ export async function run_step(rawArgs: unknown): Promise<{
     prompt,
     specialist: specialistResult,
     state: nextState,
-    // Debug is available for dev inspection but not rendered in the widget by default.
     debug: {
       decision: finalDecision,
       attempts,
