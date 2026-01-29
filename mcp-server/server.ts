@@ -12,17 +12,13 @@ const MCP_PATH = "/mcp";
 
 const VERSION = "v35";
 
-// OpenAI Apps domain verification
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
   process.env.OPENAI_APPS_CHALLENGE_TOKEN ??
   "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
 
-// Debug UI route (browser inspect)
 const UI_HTTP_PATH = "/ui/step-card";
 const UI_MIME_TYPE = "text/html+skybridge";
-
-// Canonical widget URI (OpenAI uses this in openai/outputTemplate)
 const UI_RESOURCE_URI = "ui://widget/step-card.html";
 
 function loadUiHtml(): string {
@@ -32,16 +28,13 @@ function loadUiHtml(): string {
 function createAppServer() {
   const server = new McpServer({ name: "business-canvas-mcp", version: "0.1.0" });
 
-  // Register Skybridge UI template as MCP resource (ui://...)
   server.registerResource("bsc-step-card", UI_RESOURCE_URI, {}, async () => ({
     contents: [
       {
         uri: UI_RESOURCE_URI,
         mimeType: UI_MIME_TYPE,
         text: loadUiHtml(),
-        _meta: {
-          "openai/widgetPrefersBorder": true,
-        },
+        _meta: { "openai/widgetPrefersBorder": true },
       },
     ],
   }));
@@ -57,13 +50,8 @@ function createAppServer() {
         state: z.record(z.string(), z.any()).optional(),
       },
       _meta: {
-        // Auth metadata here (SDK accepts _meta flexibly)
         securitySchemes: [{ type: "noauth" }],
-
-        // Widget template to render when this tool is invoked
         "openai/outputTemplate": UI_RESOURCE_URI,
-
-        // Allow widget to call tools via window.openai.callTool
         "openai/widgetAccessible": true,
       },
     },
@@ -74,17 +62,13 @@ function createAppServer() {
         state: args.state ?? {},
       });
 
-      // IMPORTANT: Keep the widget contract simple + app-leading:
-      // - put the full result at structuredContent.result (root)
-      // - keep chat text empty
       const structuredContent = {
         title: `Business Strategy Canvas Builder (${VERSION})`,
         meta: `step: ${result.state.current_step} | specialist: ${result.active_specialist}`,
-        result, // <- widget reads this directly
+        result,
       };
 
       return {
-        // app-leading: keep chat output empty/minimal
         content: [{ type: "text", text: "" }],
         structuredContent,
       };
@@ -95,11 +79,7 @@ function createAppServer() {
 }
 
 const httpServer = createServer(async (req, res) => {
-  if (!req.url) {
-    res.writeHead(400).end("Missing URL");
-    return;
-  }
-
+  if (!req.url) return void res.writeHead(400).end("Missing URL");
   const url = new URL(req.url, `http://${req.headers.host ?? "localhost"}`);
 
   if (req.method === "GET" && url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
@@ -115,13 +95,8 @@ const httpServer = createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === UI_HTTP_PATH) {
-    try {
-      res.writeHead(200, { "content-type": UI_MIME_TYPE });
-      res.end(loadUiHtml());
-    } catch (e: any) {
-      res.writeHead(500, { "content-type": "text/plain" });
-      res.end(`Failed to load UI template: ${e?.message ?? String(e)}`);
-    }
+    res.writeHead(200, { "content-type": UI_MIME_TYPE });
+    res.end(loadUiHtml());
     return;
   }
 
