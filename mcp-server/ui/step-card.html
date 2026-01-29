@@ -1,4 +1,3 @@
-<!-- mcp-server/ui/step-card.html -->
 <!doctype html>
 <html>
   <head>
@@ -15,12 +14,27 @@
       .wrap{ max-width: 1080px; margin: 0 auto; padding: 36px 20px 60px; }
       .title{ text-align:center; font-size: 46px; letter-spacing: -0.02em; margin: 10px 0 6px; font-weight: 800; }
       .subtitle{ text-align:center; font-size: 22px; color: var(--muted); margin: 0 0 26px; font-weight: 500; }
+
+      .banner{
+        margin: 0 auto 18px;
+        max-width: 920px;
+        border: 1px solid rgba(47,91,234,0.25);
+        background: rgba(47,91,234,0.06);
+        padding: 14px 16px;
+        border-radius: 16px;
+        color: var(--text);
+        display: none;
+      }
+      .banner strong{ font-weight: 900; }
+
       .stepperRow{ display:flex; align-items:center; justify-content:center; margin: 18px 0 22px; }
       .stepper{ display:flex; align-items:center; justify-content:center; gap: 0px; }
       .step{ width: 56px; height: 56px; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight: 800; font-size: 18px; background: var(--stepOff); color: #64748b; }
       .step.active{ background: var(--blue); color: white; box-shadow: 0 0 0 6px rgba(47,91,234,0.12); }
       .stepLine{ width: 68px; height: 2px; background: var(--line); }
+
       .sectionTitle{ text-align:center; font-size: 30px; font-weight: 900; margin: 8px 0 22px; }
+
       .card{ max-width: 920px; margin: 0 auto; border-radius: 28px; border: 2px solid rgba(142,166,255,0.55); padding: 28px 28px 26px; background: var(--card); box-shadow: var(--shadow); }
       .cardInner{ display:flex; align-items:flex-start; gap: 18px; }
       .badge{ width: 64px; height: 64px; border-radius: 999px; background: var(--blue); color: white; display:flex; align-items:center; justify-content:center; font-weight: 900; font-size: 20px; flex: 0 0 auto; }
@@ -37,18 +51,6 @@
       .btn{ border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 10px 14px; font-weight: 800; cursor: pointer; }
       .btn.primary{ border-color: rgba(47,91,234,0.25); background: rgba(47,91,234,0.08); }
       .status{ margin-top: 12px; color: var(--muted); font-size: 13px; white-space: pre-wrap; }
-
-      .banner{
-        margin: 0 auto 18px;
-        max-width: 920px;
-        border: 1px solid rgba(47,91,234,0.25);
-        background: rgba(47,91,234,0.06);
-        padding: 14px 16px;
-        border-radius: 16px;
-        color: var(--text);
-        display: none;
-      }
-      .banner strong{ font-weight: 900; }
 
       @media (max-width: 720px){
         .title{ font-size: 34px; }
@@ -86,10 +88,10 @@
           <div style="flex:1">
             <div class="cardTitle" id="cardTitle">Validation & Business Name</div>
 
-            <!-- Project-files behavior: show message + refined_formulation (in that order) -->
+            <!-- Project-files render order: session_intro (if present) + message + refined_formulation -->
             <div class="cardDesc" id="cardDesc"></div>
 
-            <!-- Project-files behavior: show confirmation_question else question -->
+            <!-- Project-files: confirmation_question else question -->
             <div class="prompt" id="prompt">…</div>
 
             <div class="inputWrap">
@@ -129,7 +131,7 @@
 
       function normalizeToolOutput(raw) {
         if (!raw || typeof raw !== "object") return {};
-        // callTool() often returns { structuredContent, content, ... }
+        // callTool() usually returns { structuredContent, content, ... }
         if (raw.structuredContent && typeof raw.structuredContent === "object") return raw.structuredContent;
         // openai.toolOutput is usually already structuredContent
         return raw;
@@ -138,7 +140,6 @@
       function pickData() {
         const openai = globalThis.openai;
         if (openai && openai.toolOutput) return normalizeToolOutput(openai.toolOutput);
-        // preview fallbacks
         return (
           (globalThis.__SKYBRIDGE__ && globalThis.__SKYBRIDGE__.data) ||
           globalThis.skybridgeData ||
@@ -155,12 +156,12 @@
       function buildStepper(activeIdx) {
         const el = document.getElementById("stepper");
         el.innerHTML = "";
-        for (let i = 0; i < 9; i++) {
+        for (let i = 0; i < ORDER.length; i++) {
           const s = document.createElement("div");
           s.className = "step" + (i === activeIdx ? " active" : "");
           s.textContent = String(i + 1);
           el.appendChild(s);
-          if (i < 8) {
+          if (i < ORDER.length - 1) {
             const line = document.createElement("div");
             line.className = "stepLine";
             el.appendChild(line);
@@ -168,15 +169,14 @@
         }
       }
 
-      // Project-files behavior: render message + refined_formulation; question is separate
       function pickBodyParts(result) {
         const specialist = (result && result.specialist) || {};
+        const sessionIntro = String(specialist.session_intro || "").trim();
         const msg = String(specialist.message || "").trim();
         const refined = String(specialist.refined_formulation || "").trim();
-        return [msg, refined].filter(Boolean).join("\n\n");
+        return [sessionIntro, msg, refined].filter(Boolean).join("\n\n");
       }
 
-      // Project-files behavior: show confirmation_question if present, otherwise question
       function pickPrompt(result) {
         const specialist = (result && result.specialist) || {};
         const confirmQ = String(specialist.confirmation_question || "").trim();
@@ -190,7 +190,13 @@
       }
 
       function render(data) {
-        const result = (data && data.result) ? data.result : (data && data.ui && data.ui.result) ? data.ui.result : {};
+        // Preferred contract: structuredContent.result
+        const result =
+          (data && data.result) ? data.result :
+          (data && data.ui && data.ui.result) ? data.ui.result :
+          (data && data.ui) ? data.ui :
+          {};
+
         const state = (result && result.state) ? result.state : {};
         const current = state.current_step || "step_0";
         const idx = stepIndex(current);
@@ -201,15 +207,12 @@
         document.getElementById("sectionTitle").textContent = TITLES[current] || "Step";
         document.getElementById("cardTitle").textContent = TITLES[current] || "Step";
 
-        // Card description: message + refined_formulation (project-files)
-        const desc = pickBodyParts(result);
-        document.getElementById("cardDesc").textContent = desc;
+        document.getElementById("cardDesc").textContent = pickBodyParts(result);
 
-        // Prompt: confirmation_question else question (project-files)
         const prompt = pickPrompt(result);
         document.getElementById("prompt").textContent = prompt || "Press Start to begin.";
 
-        // Yes/No row only when confirmation_question exists
+        // Controls
         const quick = document.getElementById("quickBtns");
         quick.style.display = "flex";
 
@@ -217,19 +220,17 @@
         document.getElementById("btnYes").style.display = yesNo ? "inline-flex" : "none";
         document.getElementById("btnNo").style.display  = yesNo ? "inline-flex" : "none";
 
-        // Start button shown when no toolOutput yet (first render) or no prompt
         const hasToolOutput = Boolean(globalThis.openai && globalThis.openai.toolOutput);
         const startNeeded = !hasToolOutput || !prompt;
         document.getElementById("btnStart").style.display = startNeeded ? "inline-flex" : "none";
 
-        // App-leading banner: show when not connected
-        const hasOpenAI = Boolean(globalThis.openai);
         const canCallTool = Boolean(globalThis.openai && globalThis.openai.callTool);
         document.getElementById("banner").style.display = (!canCallTool) ? "block" : "none";
 
-        // Status (compact + useful)
+        // Status + debug
+        const hasOpenAI = Boolean(globalThis.openai);
         const dbg = (result && result.debug && result.debug.openai) ? result.debug.openai : null;
-        const dbgLine = dbg ? `\nopenai_response_id:${dbg.response_id || ""} parse_error:${dbg.parse_error || ""}` : "";
+        const dbgLine = dbg ? `\nopenai_response_id:${dbg.response_id || ""} http_status:${dbg.http_status || ""} parse_error:${dbg.parse_error || ""}` : "";
         document.getElementById("status").textContent =
           (data.meta || "") + (data.meta ? "\n" : "") + `openai:${hasOpenAI} toolOutput:${hasToolOutput}` + dbgLine;
 
@@ -275,7 +276,6 @@
       document.getElementById("btnNo").addEventListener("click", () => callRunStep("no"));
       document.getElementById("btnStart").addEventListener("click", () => callRunStep(""));
 
-      // initial render
       render(pickData());
     </script>
   </body>
