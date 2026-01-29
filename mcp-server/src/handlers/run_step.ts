@@ -1,9 +1,9 @@
 // mcp-server/src/handlers/run_step.ts
 import { z } from "zod";
 
-import { callStrictJson } from "../core/llm";
-import { migrateState, type CanvasState, type BoolString } from "../core/state";
-import { orchestrate, type OrchestratorOutput } from "../core/orchestrator";
+import { callStrictJson } from "../core/llm.js";
+import { migrateState, type CanvasState, type BoolString } from "../core/state.js";
+import { orchestrate, type OrchestratorOutput } from "../core/orchestrator.js";
 
 import {
   STEP_0_ID,
@@ -13,7 +13,7 @@ import {
   ValidationAndBusinessNameZodSchema,
   buildStep0SpecialistInput,
   type ValidationAndBusinessNameOutput,
-} from "../steps/step_0_validation";
+} from "../steps/step_0_validation.js";
 
 import {
   DREAM_STEP_ID,
@@ -23,7 +23,7 @@ import {
   DreamZodSchema,
   buildDreamSpecialistInput,
   type DreamOutput,
-} from "../steps/dream";
+} from "../steps/dream.js";
 
 /**
  * Incoming tool args
