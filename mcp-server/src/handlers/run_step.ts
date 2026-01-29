@@ -45,60 +45,8 @@ const STEP0_QUESTION_NL =
 
 function langFromState(state: CanvasState): string {
   const l = String((state as any).language ?? "").toLowerCase().trim();
+  // Keep as-is (widget is the source of truth). Fallback to English.
   return l || "en";
-}
-
-/**
- * One-time language detection (only if state.language is empty and user provided a real message).
- * Multi-language without hardcoded non-English markers in code.
- */
-const LanguageDetectZodSchema = z.object({
-  language: z.string().min(2).max(10),
-});
-
-const LanguageDetectJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["language"],
-  properties: {
-    language: { type: "string" },
-  },
-} as const;
-
-async function detectLanguageOnce(params: {
-  model: string;
-  state: CanvasState;
-  userMessage: string;
-}): Promise<CanvasState> {
-  const { model, state, userMessage } = params;
-
-  const current = String((state as any).language ?? "").trim();
-  if (current) return state;
-
-  const msg = String(userMessage ?? "").trim();
-  if (!msg) return { ...(state as any), language: "en" } as CanvasState;
-
-  try {
-    const res = await callStrictJson<{ language: string }>({
-      model,
-      instructions:
-        "Detect the user's language from the message. Return ISO 639-1 when possible (e.g., en, nl, de, fr, es). " +
-        "If uncertain, return 'en'. Return JSON only.",
-      plannerInput: `MESSAGE: ${msg}`,
-      schemaName: "LanguageDetect",
-      jsonSchema: LanguageDetectJsonSchema as any,
-      zodSchema: LanguageDetectZodSchema,
-      temperature: 0,
-      topP: 1,
-      maxOutputTokens: 30,
-      debugLabel: "LanguageDetect",
-    });
-
-    const detected = String(res.data?.language ?? "").toLowerCase().trim();
-    return { ...(state as any), language: detected || "en" } as CanvasState;
-  } catch {
-    return { ...(state as any), language: "en" } as CanvasState;
-  }
 }
 
 /**
@@ -294,6 +242,7 @@ async function callSpecialistStrict(params: {
   const contextBlock = buildSpecialistContextBlock(state);
 
   if (specialist === STEP_0_SPECIALIST) {
+    // step_0_validation accepts optional language line now
     const plannerInput = buildStep0SpecialistInput(userMessage, String((state as any).language ?? ""));
 
     const res = await callStrictJson<ValidationAndBusinessNameOutput>({
@@ -313,7 +262,7 @@ async function callSpecialistStrict(params: {
   }
 
   if (specialist === DREAM_SPECIALIST) {
-    // NOTE: dream.ts expects a LANGUAGE line now (4th arg).
+    // dream.ts expects LANGUAGE line now (4th arg).
     const plannerInput = buildDreamSpecialistInput(
       userMessage,
       state.intro_shown_for_step,
@@ -342,10 +291,9 @@ async function callSpecialistStrict(params: {
   return {
     specialistResult: {
       action: "ESCAPE",
-      message:
-        l.startsWith("nl")
-          ? "Ik kan je hier alleen helpen met het bouwen van je Business Strategy Canvas."
-          : "I can only help you here with building your Business Strategy Canvas.",
+      message: l.startsWith("nl")
+        ? "Ik kan je hier alleen helpen met het bouwen van je Business Strategy Canvas."
+        : "I can only help you here with building your Business Strategy Canvas.",
       question: l.startsWith("nl")
         ? "Wil je nu doorgaan met verificatie?"
         : "Do you want to continue with verification now?",
@@ -397,9 +345,6 @@ export async function run_step(rawArgs: unknown): Promise<{
 
   const userMessageCandidate =
     looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry ? "" : userMessageRaw;
-
-  // If language is missing and we have a real user message, detect it once.
-  state = await detectLanguageOnce({ model, state, userMessage: userMessageCandidate });
 
   const lang = langFromState(state);
   const userMessage = userMessageCandidate;
