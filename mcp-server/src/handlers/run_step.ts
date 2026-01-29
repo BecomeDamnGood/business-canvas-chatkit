@@ -76,7 +76,7 @@ async function detectLanguageOnce(params: {
   if (current) return state;
 
   const msg = String(userMessage ?? "").trim();
-  if (!msg) return { ...state, language: "en" };
+  if (!msg) return { ...(state as any), language: "en" } as CanvasState;
 
   try {
     const res = await callStrictJson<{ language: string }>({
@@ -84,7 +84,7 @@ async function detectLanguageOnce(params: {
       instructions:
         "Detect the user's language from the message. Return ISO 639-1 when possible (e.g., en, nl, de, fr, es). " +
         "If uncertain, return 'en'. Return JSON only.",
-      plannerInput: { message: msg },
+      plannerInput: `MESSAGE: ${msg}`,
       schemaName: "LanguageDetect",
       jsonSchema: LanguageDetectJsonSchema as any,
       zodSchema: LanguageDetectZodSchema,
@@ -95,9 +95,9 @@ async function detectLanguageOnce(params: {
     });
 
     const detected = String(res.data?.language ?? "").toLowerCase().trim();
-    return { ...state, language: detected || "en" };
+    return { ...(state as any), language: detected || "en" } as CanvasState;
   } catch {
-    return { ...state, language: "en" };
+    return { ...(state as any), language: "en" } as CanvasState;
   }
 }
 
