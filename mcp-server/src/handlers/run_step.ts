@@ -27,8 +27,10 @@ import {
 
 /**
  * Incoming tool args
+ * NOTE: Some tool callers include current_step_id ("start") — we accept it but do not rely on it.
  */
 const RunStepArgsSchema = z.object({
+  current_step_id: z.string().optional(),
   user_message: z.string().default(""),
   state: z.record(z.string(), z.any()).optional().default({}),
 });
@@ -114,6 +116,45 @@ function isClearYes(userMessage: string, lang: "nl" | "en"): boolean {
   if (yesSetEn.has(t)) return true;
   if (t === "y" || t === "1") return true;
   return false;
+}
+
+/**
+ * Some tool-callers incorrectly send a meta-instruction as `user_message` (e.g. “De gebruiker wil…”).
+ * For a clean widget flow, we ignore that “meta” text when the state is still pristine.
+ */
+function looksLikeMetaInstruction(userMessage: string): boolean {
+  const t = String(userMessage ?? "").trim();
+  if (!t) return false;
+
+  // Conservative checks (NL + EN)
+  const hasNl =
+    t.includes("De gebruiker") ||
+    t.includes("Start de flow") ||
+    t.includes("Antwoord in het Nederlands") ||
+    t.includes("Start een") ||
+    t.includes("stap") && t.includes("flow");
+
+  const hasEn =
+    t.includes("The user") ||
+    t.includes("Start the flow") ||
+    t.includes("Answer in") ||
+    t.includes("Start a") ||
+    (t.toLowerCase().includes("start") && t.toLowerCase().includes("flow"));
+
+  // Meta messages tend to be longish and instruction-like.
+  const longish = t.length >= 80;
+
+  return longish && (hasNl || hasEn);
+}
+
+function isPristineStateForStart(s: CanvasState): boolean {
+  return (
+    String(s.current_step) === STEP_0_ID &&
+    String(s.step_0_final ?? "").trim() === "" &&
+    String(s.dream_final ?? "").trim() === "" &&
+    String(s.intro_shown_session ?? "") !== "true" &&
+    Object.keys(s.last_specialist_result ?? {}).length === 0
+  );
 }
 
 function buildSpecialistContextBlock(state: CanvasState): string {
@@ -205,7 +246,6 @@ async function callSpecialistStrict(params: {
       instructions: `${VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS}\n\n${contextBlock}`,
       plannerInput,
       schemaName: "ValidationAndBusinessName",
-      // NOTE: fix TS2322 (readonly arrays in JSON schema literals vs mutable typing expectations)
       jsonSchema: ValidationAndBusinessNameJsonSchema as any,
       zodSchema: ValidationAndBusinessNameZodSchema,
       temperature: 0.2,
@@ -229,7 +269,6 @@ async function callSpecialistStrict(params: {
       instructions: `${DREAM_INSTRUCTIONS}\n\n${contextBlock}`,
       plannerInput,
       schemaName: "Dream",
-      // NOTE: fix TS2322 (readonly arrays in JSON schema literals vs mutable typing expectations)
       jsonSchema: DreamJsonSchema as any,
       zodSchema: DreamZodSchema,
       temperature: 0.3,
@@ -287,12 +326,19 @@ export async function run_step(rawArgs: unknown): Promise<{
   debug?: any;
 }> {
   const args: RunStepArgs = RunStepArgsSchema.parse(rawArgs);
-  const userMessage = String(args.user_message ?? "");
-  let state = migrateState(args.state ?? {});
 
+  let state = migrateState(args.state ?? {});
   const lang = langFromState(state);
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
 
+  // Normalize user message:
+  // - If we detect meta-instruction AND state is pristine, treat it as empty (start trigger).
+  const userMessageRaw = String(args.user_message ?? "");
+  const userMessage =
+    looksLikeMetaInstruction(userMessageRaw) && isPristineStateForStart(state) ? "" : userMessageRaw;
+
+  // START trigger (widget start screen):
+  // If empty userMessage and state is at step_0 and no history, return only the Step 0 question.
   const isStartTrigger =
     userMessage.trim() === "" &&
     state.current_step === STEP_0_ID &&
@@ -300,7 +346,6 @@ export async function run_step(rawArgs: unknown): Promise<{
     String(state.step_0_final ?? "").trim() === "" &&
     Object.keys(state.last_specialist_result ?? {}).length === 0;
 
-  // START: show the Step 0 question (no specialist call; no session intro; no extra text)
   if (isStartTrigger) {
     // Mark session intro as already shown (pre-start screen contains the exact welcome text)
     state = { ...state, intro_shown_session: "true" };
@@ -340,7 +385,6 @@ export async function run_step(rawArgs: unknown): Promise<{
   const canProceedFromStep0 =
     readinessAsked && isClearYes(userMessage, lang) && String(state.step_0_final ?? "").trim() !== "";
 
-  // If clear YES in the readiness context: fabricate the exact proceed payload (no extra text)
   if (canProceedFromStep0) {
     const proceedPayload: ValidationAndBusinessNameOutput = {
       action: "CONFIRM",
@@ -353,7 +397,6 @@ export async function run_step(rawArgs: unknown): Promise<{
       step_0: state.step_0_final || "",
     };
 
-    // Update state as if Step 0 specialist produced it
     state = {
       ...state,
       active_specialist: STEP_0_SPECIALIST,
@@ -407,8 +450,8 @@ export async function run_step(rawArgs: unknown): Promise<{
   const text = buildTextForWidget({ specialist: specialistResult });
   const prompt = pickPrompt(specialistResult);
 
-  // If orchestrator thought it should show session intro, we still don't render it here.
-  // Pre-start UI owns that copy. But we can still ensure state is consistent:
+  // We still don't render session intro here; pre-start UI owns that copy.
+  // But keep state consistent:
   if (showSessionIntro === "true" && String(nextState.intro_shown_session) !== "true") {
     nextState = { ...nextState, intro_shown_session: "true" };
   }
@@ -425,6 +468,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     debug: {
       decision: finalDecision,
       attempts,
+      meta_user_message_ignored: looksLikeMetaInstruction(userMessageRaw) && isPristineStateForStart(state),
     },
   };
 }
