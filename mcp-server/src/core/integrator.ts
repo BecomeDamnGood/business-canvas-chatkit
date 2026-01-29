@@ -1,6 +1,6 @@
 // src/core/integrator.ts
 import { z } from "zod";
-import type { CanvasState, BoolString } from "./state";
+import type { CanvasState, BoolString } from "./state.js";
 
 /**
  * STEPS INTEGRATOR / RENDERER
