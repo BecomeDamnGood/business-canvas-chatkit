@@ -1,210 +1,257 @@
 // src/core/orchestrator.ts
 import { z } from "zod";
-import {
-  CANONICAL_STEPS,
-  isCanonicalStepId,
-  type BoolString,
-  type CanvasState,
-} from "./state";
-
-import { STEP_0_ID, STEP_0_SPECIALIST } from "../steps/step_0_validation";
-import { DREAM_STEP_ID, DREAM_SPECIALIST } from "../steps/dream";
+import { CANONICAL_STEPS, isCanonicalStepId, type BoolString, type CanvasState } from "./state";
 
 /**
- * Orchestrator output (parity-first)
- * - Determines which specialist to call next
- * - Determines step transitions based on proceed flags from last specialist result
- * - Computes intro flags
- * - Builds the specialist input format exactly (template)
+ * ORCHESTRATOR (ROUTER + STEP STATE)
  *
- * NOTE:
- * - This module does NOT call the LLM.
- * - This module does NOT render user text.
- * - This is pure routing logic.
+ * Parity-first implementation based on the logic document:
+ * - Output is strict JSON (no nulls) via Zod
+ * - Decides next specialist + next step
+ * - Computes show_session_intro + show_step_intro
+ * - Pass-through intro_shown_for_step (do NOT update it here)
+ *
+ * NOTE: This module is NOT user-facing.
  */
 
-/**
- * Canonical StepId type for routing
- */
 export type OrchestratorStepId = (typeof CANONICAL_STEPS)[number];
 
-/**
- * Some flows mention DreamExplainer/Purpose etc. even if not implemented yet.
- * Keep as string so you can add them later without breaking types.
- */
 export type SpecialistName =
-  | typeof STEP_0_SPECIALIST
-  | typeof DREAM_SPECIALIST
+  | "ValidationAndBusinessName"
+  | "Dream"
   | "DreamExplainer"
   | "Purpose"
-  | "Unknown";
+  | "BigWhy"
+  | "Role"
+  | "Entity"
+  | "Strategy"
+  | "RulesOfTheGame"
+  | "Presentation";
 
-/**
- * Orchestrator decisions returned for a single turn
- */
-export const OrchestratorDecisionZod = z.object({
-  next_step: z.string(),
-  specialist_to_call: z.string(),
-
-  show_session_intro: z.enum(["true", "false"]),
-  show_step_intro: z.enum(["true", "false"]),
+export const OrchestratorOutputZod = z.object({
+  specialist_to_call: z.enum([
+    "ValidationAndBusinessName",
+    "Dream",
+    "DreamExplainer",
+    "Purpose",
+    "BigWhy",
+    "Role",
+    "Entity",
+    "Strategy",
+    "RulesOfTheGame",
+    "Presentation",
+  ]),
+  specialist_input: z.string(),
+  current_step: z.enum([
+    "step_0",
+    "dream",
+    "purpose",
+    "bigwhy",
+    "role",
+    "entity",
+    "strategy",
+    "rulesofthegame",
+    "presentation",
+  ]),
+  intro_shown_for_step: z.enum(["", ...CANONICAL_STEPS] as any),
   intro_shown_session: z.enum(["true", "false"]),
-
-  /**
-   * Specialist input template:
-   * You still have to replace {{USER_MESSAGE}} in handler.
-   * Kept as template to make it easy to test and log deterministically.
-   */
-  specialist_input_template: z.string(),
-
-  /**
-   * Debug fields for inspector
-   */
-  debug: z.object({
-    current_step_in: z.string(),
-    active_specialist_in: z.string(),
-    triggers: z.object({
-      proceed_to_dream: z.enum(["true", "false"]),
-      proceed_to_purpose: z.enum(["true", "false"]),
-      suggest_dreambuilder: z.enum(["true", "false"]),
-      action: z.string(),
-    }),
-  }),
+  show_step_intro: z.enum(["true", "false"]),
+  show_session_intro: z.enum(["true", "false"]),
 });
 
-export type OrchestratorDecision = z.infer<typeof OrchestratorDecisionZod>;
+export type OrchestratorOutput = z.infer<typeof OrchestratorOutputZod>;
 
 function boolStr(x: unknown): BoolString {
   return String(x ?? "").trim() === "true" ? "true" : "false";
 }
 
-/**
- * Read proceed triggers from last specialist output (string-based)
- */
-function readTriggers(last: Record<string, any> | null | undefined) {
-  const obj = (last && typeof last === "object") ? last : {};
+function normalizeIntroShownForStep(x: unknown): string {
+  return String(x ?? "").trim();
+}
+
+function normalizeCurrentStep(x: unknown): OrchestratorStepId {
+  const v = String(x ?? "").trim() || "step_0";
+  return isCanonicalStepId(v) ? (v as OrchestratorStepId) : "step_0";
+}
+
+function normalizeActiveSpecialist(x: unknown): string {
+  return String(x ?? "").trim();
+}
+
+type TriggerFlags = {
+  proceed_to_dream: BoolString;
+  proceed_to_purpose: BoolString;
+  suggest_dreambuilder: BoolString;
+  action: string;
+};
+
+function readTriggersRobust(last: unknown): TriggerFlags {
+  // Object preferred
+  if (last && typeof last === "object" && !Array.isArray(last)) {
+    const obj = last as Record<string, any>;
+    return {
+      proceed_to_dream: boolStr(obj.proceed_to_dream),
+      proceed_to_purpose: boolStr(obj.proceed_to_purpose),
+      suggest_dreambuilder: boolStr(obj.suggest_dreambuilder),
+      action: String(obj.action ?? ""),
+    };
+  }
+
+  // String fallback (tolerate spacing)
+  const s = String(last ?? "");
+  const has = (a: string, b: string) => s.includes(a) || s.includes(b);
+
+  const proceed_to_dream = has('"proceed_to_dream":"true"', '"proceed_to_dream": "true"')
+    ? "true"
+    : "false";
+  const proceed_to_purpose = has('"proceed_to_purpose":"true"', '"proceed_to_purpose": "true"')
+    ? "true"
+    : "false";
+  const suggest_dreambuilder = has('"suggest_dreambuilder":"true"', '"suggest_dreambuilder": "true"')
+    ? "true"
+    : "false";
+  const action = has('"action":"CONFIRM"', '"action": "CONFIRM"') ? "CONFIRM" : "";
+
   return {
-    proceed_to_dream: boolStr((obj as any).proceed_to_dream),
-    proceed_to_purpose: boolStr((obj as any).proceed_to_purpose),
-    suggest_dreambuilder: boolStr((obj as any).suggest_dreambuilder),
-    action: String((obj as any).action ?? ""),
+    proceed_to_dream,
+    proceed_to_purpose,
+    suggest_dreambuilder,
+    action,
   };
 }
 
+const STEP_TO_SPECIALIST: Record<OrchestratorStepId, SpecialistName> = {
+  step_0: "ValidationAndBusinessName",
+  dream: "Dream",
+  purpose: "Purpose",
+  bigwhy: "BigWhy",
+  role: "Role",
+  entity: "Entity",
+  strategy: "Strategy",
+  rulesofthegame: "RulesOfTheGame",
+  presentation: "Presentation",
+};
+
+function wantsFullRestartCanvas(userMessage: string): boolean {
+  const t = String(userMessage ?? "").trim().toLowerCase();
+  if (!t) return false;
+
+  // Keep conservative to avoid false positives.
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length > 12) return false;
+
+  const hasAny = (arr: string[]) => arr.some((k) => t.includes(k));
+
+  const restartWords = [
+    "restart",
+    "reset",
+    "start over",
+    "start again",
+    "begin again",
+    "from scratch",
+    "opnieuw",
+    "overnieuw",
+    "herstart",
+    "resetten",
+    "opnieuw beginnen",
+    "helemaal opnieuw",
+  ];
+
+  // Prefer explicit canvas intent (but allow very short "restart/reset" messages).
+  const canvasWords = ["canvas", "business strategy canvas", "business canvas", "bsc"];
+
+  const restartHit = hasAny(restartWords);
+  const canvasHit = hasAny(canvasWords);
+
+  if (!restartHit) return false;
+  if (canvasHit) return true;
+
+  // If extremely short, allow "restart/reset" without needing "canvas".
+  if (words.length <= 3 && (t === "restart" || t === "reset" || t === "opnieuw" || t === "herstart")) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
- * Main orchestrator:
- * 1) Proceed triggers override
- * 2) Otherwise route based on current_step
- * 3) Compute intro flags:
- *    - show_session_intro if intro_shown_session != "true"
- *    - show_step_intro if intro_shown_for_step != next_step
- * 4) Provide specialist_input_template in the exact format:
- *    "CURRENT_STEP_ID: <step> | USER_MESSAGE: {{USER_MESSAGE}}"
+ * Returns a strict orchestrator output.
+ *
+ * - Does NOT reset to step_0 when off-topic.
+ * - Only resets to step_0 if current_step is invalid OR user explicitly requests full restart.
  */
-export function orchestrate(state: CanvasState): OrchestratorDecision {
-  const triggers = readTriggers(state.last_specialist_result as any);
+export function orchestrate(params: { state: CanvasState; userMessage: string }): OrchestratorOutput {
+  const { state, userMessage } = params;
 
-  // Default next_step = current_step (clamped)
-  const current_step_in = String(state.current_step ?? "").trim() || STEP_0_ID;
-  const current_step: OrchestratorStepId = isCanonicalStepId(current_step_in)
-    ? (current_step_in as OrchestratorStepId)
-    : STEP_0_ID;
+  // --- normalization (per logic doc) ---
+  const CURRENT_STEP = normalizeCurrentStep(state.current_step);
+  const INTRO_SHOWN_FOR_STEP = normalizeIntroShownForStep(state.intro_shown_for_step);
+  const INTRO_SHOWN_SESSION = boolStr(state.intro_shown_session);
+  const ACTIVE_SPECIALIST = normalizeActiveSpecialist(state.active_specialist);
 
-  let next_step: OrchestratorStepId = current_step;
-  let specialist_to_call: SpecialistName =
-    next_step === STEP_0_ID
-      ? STEP_0_SPECIALIST
-      : next_step === DREAM_STEP_ID
-      ? DREAM_SPECIALIST
-      : STEP_0_SPECIALIST;
+  const triggers = readTriggersRobust(state.last_specialist_result);
 
-  /**
-   * Priority 1: proceed triggers override
-   */
-  if (triggers.proceed_to_dream === "true") {
-    next_step = DREAM_STEP_ID;
-    specialist_to_call = DREAM_SPECIALIST;
-  } else if (triggers.proceed_to_purpose === "true") {
-    next_step = "purpose";
-    specialist_to_call = "Purpose";
-  } else if (
-    String(state.active_specialist ?? "") === "DreamExplainer" &&
-    triggers.suggest_dreambuilder === "true"
-  ) {
-    // If a DreamExplainer is running, keep routing there (reserved)
-    next_step = DREAM_STEP_ID;
-    specialist_to_call = "DreamExplainer";
-  } else if (
-    next_step === DREAM_STEP_ID &&
-    triggers.action === "CONFIRM" &&
-    triggers.suggest_dreambuilder === "true"
-  ) {
-    // Handshake start (reserved)
-    next_step = DREAM_STEP_ID;
-    specialist_to_call = "DreamExplainer";
+  // --- routing logic (priority order) ---
+  let next_step: OrchestratorStepId = CURRENT_STEP;
+  let next_specialist: SpecialistName = STEP_TO_SPECIALIST[next_step];
+
+  // Priority 0: explicit full restart (allowed by logic doc)
+  if (CURRENT_STEP !== "step_0" && wantsFullRestartCanvas(userMessage)) {
+    next_step = "step_0";
+    next_specialist = "ValidationAndBusinessName";
   } else {
-    /**
-     * Priority 4: default routing based on current_step
-     */
-    if (!isCanonicalStepId(current_step)) {
-      next_step = STEP_0_ID;
-      specialist_to_call = STEP_0_SPECIALIST;
+    // Priority 1: proceed triggers override everything
+    if (triggers.proceed_to_dream === "true") {
+      next_step = "dream";
+      next_specialist = "Dream";
+    } else if (triggers.proceed_to_purpose === "true") {
+      next_step = "purpose";
+      next_specialist = "Purpose";
+    } else if (ACTIVE_SPECIALIST === "DreamExplainer" && triggers.suggest_dreambuilder === "true") {
+      // Priority 2: DreamExplainer continuation
+      next_step = "dream";
+      next_specialist = "DreamExplainer";
+    } else if (
+      CURRENT_STEP === "dream" &&
+      triggers.action === "CONFIRM" &&
+      triggers.suggest_dreambuilder === "true"
+    ) {
+      // Priority 3: DreamExplainer start (handshake only)
+      next_step = "dream";
+      next_specialist = "DreamExplainer";
     } else {
-      if (current_step === STEP_0_ID) {
-        next_step = STEP_0_ID;
-        specialist_to_call = STEP_0_SPECIALIST;
-      } else if (current_step === DREAM_STEP_ID) {
-        next_step = DREAM_STEP_ID;
-        specialist_to_call = DREAM_SPECIALIST;
+      // Priority 4: default routing (SAFE)
+      if (isCanonicalStepId(CURRENT_STEP)) {
+        next_step = CURRENT_STEP;
+        next_specialist = STEP_TO_SPECIALIST[next_step];
       } else {
-        // Not implemented yet: safe fallback to step_0
-        next_step = STEP_0_ID;
-        specialist_to_call = STEP_0_SPECIALIST;
+        next_step = "step_0";
+        next_specialist = "ValidationAndBusinessName";
       }
     }
   }
 
-  /**
-   * Intro flags (parity structure)
-   */
-  const show_session_intro: BoolString =
-    String(state.intro_shown_session ?? "") === "true" ? "false" : "true";
-
-  // After this turn, session intro becomes shown
+  // --- intro flags logic ---
+  const show_session_intro: BoolString = INTRO_SHOWN_SESSION !== "true" ? "true" : "false";
   const intro_shown_session: BoolString = "true";
 
-  const show_step_intro: BoolString =
-    String(state.intro_shown_for_step ?? "") === String(next_step) ? "false" : "true";
+  const show_step_intro: BoolString = INTRO_SHOWN_FOR_STEP !== next_step ? "true" : "false";
 
-  /**
-   * Specialist input format (template)
-   * Handler will replace {{USER_MESSAGE}}.
-   */
-  const specialist_input_template = `CURRENT_STEP_ID: ${next_step} | USER_MESSAGE: {{USER_MESSAGE}}`;
+  // IMPORTANT: intro_shown_for_step is PASS-THROUGH here.
+  const intro_shown_for_step = INTRO_SHOWN_FOR_STEP;
 
-  const decision: OrchestratorDecision = {
-    next_step: String(next_step),
-    specialist_to_call: String(specialist_to_call),
+  // Specialist input format (must not paraphrase user message)
+  const specialist_input = `CURRENT_STEP_ID: ${next_step} | USER_MESSAGE: ${String(userMessage ?? "")}`;
 
-    show_session_intro,
-    show_step_intro,
+  const out: OrchestratorOutput = {
+    specialist_to_call: next_specialist,
+    specialist_input,
+    current_step: next_step,
+    intro_shown_for_step,
     intro_shown_session,
-
-    specialist_input_template,
-
-    debug: {
-      current_step_in,
-      active_specialist_in: String(state.active_specialist ?? ""),
-      triggers,
-    },
+    show_step_intro,
+    show_session_intro,
   };
 
-  return OrchestratorDecisionZod.parse(decision);
-}
-
-/**
- * Helper: returns the canonical specialist input (not a template)
- */
-export function buildSpecialistInput(decision: OrchestratorDecision, userMessage: string): string {
-  return String(decision.specialist_input_template).replace("{{USER_MESSAGE}}", userMessage);
+  return OrchestratorOutputZod.parse(out);
 }
