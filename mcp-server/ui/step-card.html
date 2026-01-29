@@ -10,58 +10,63 @@
         --shadow:0 10px 30px rgba(15,23,42,0.06); --blue:#2f5bea; --stepOff:#eef2f7;
       }
       *{ box-sizing:border-box; }
-      body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:var(--text); background:var(--bg); }
-      .wrap{ max-width: 1080px; margin: 0 auto; padding: 36px 20px 60px; }
-      .title{ text-align:center; font-size: 46px; letter-spacing: -0.02em; margin: 10px 0 6px; font-weight: 800; }
-      .subtitle{ text-align:center; font-size: 22px; color: var(--muted); margin: 0 0 26px; font-weight: 500; }
+      body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:var(--text); background:var(--bg); }
+      .wrap{ max-width: 1080px; margin: 0 auto; padding: 34px 18px 60px; }
+      .title{ text-align:center; font-size: 44px; letter-spacing: -0.02em; margin: 6px 0 4px; font-weight: 800; }
+      .subtitle{ text-align:center; font-size: 20px; color: var(--muted); margin: 0 0 10px; font-weight: 500; }
 
-      .banner{
-        margin: 0 auto 18px;
-        max-width: 920px;
-        border: 1px solid rgba(47,91,234,0.25);
-        background: rgba(47,91,234,0.06);
-        padding: 14px 16px;
-        border-radius: 16px;
-        color: var(--text);
-        display: none;
+      .byline{
+        display:flex;
+        gap:10px;
+        align-items:center;
+        justify-content:center;
+        margin: 8px 0 18px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 600;
       }
-      .banner strong{ font-weight: 900; }
+      .byline img{
+        height: 24px;
+        width: auto;
+        display:block;
+      }
 
-      .stepperRow{ display:flex; align-items:center; justify-content:center; margin: 18px 0 22px; }
+      .stepperRow{ display:flex; align-items:center; justify-content:center; margin: 14px 0 16px; }
       .stepper{ display:flex; align-items:center; justify-content:center; gap: 0px; }
-      .step{ width: 56px; height: 56px; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight: 800; font-size: 18px; background: var(--stepOff); color: #64748b; }
-      .step.active{ background: var(--blue); color: white; box-shadow: 0 0 0 6px rgba(47,91,234,0.12); }
-      .stepLine{ width: 68px; height: 2px; background: var(--line); }
+      .step{ width: 34px; height: 34px; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight: 800; font-size: 13px; background: var(--stepOff); color: #64748b; }
+      .step.active{ background: var(--blue); color: white; box-shadow: 0 0 0 4px rgba(47,91,234,0.12); }
+      .stepLine{ width: 18px; height: 2px; background: var(--line); }
 
-      .sectionTitle{ text-align:center; font-size: 30px; font-weight: 900; margin: 8px 0 22px; }
+      .sectionTitle{ text-align:center; font-size: 26px; font-weight: 900; margin: 8px 0 18px; }
 
-      .card{ max-width: 920px; margin: 0 auto; border-radius: 28px; border: 2px solid rgba(142,166,255,0.55); padding: 28px 28px 26px; background: var(--card); box-shadow: var(--shadow); }
-      .cardInner{ display:flex; align-items:flex-start; gap: 18px; }
-      .badge{ width: 64px; height: 64px; border-radius: 999px; background: var(--blue); color: white; display:flex; align-items:center; justify-content:center; font-weight: 900; font-size: 20px; flex: 0 0 auto; }
-      .cardTitle{ margin: 6px 0 6px; font-size: 34px; font-weight: 950; letter-spacing: -0.01em; }
-      .cardDesc{ margin: 0 0 10px; font-size: 20px; line-height: 1.45; color: var(--muted); max-width: 720px; white-space: pre-wrap; }
-      .prompt{ font-size: 26px; font-weight: 900; margin: 10px 0 14px; letter-spacing: -0.01em; white-space: pre-wrap; }
+      .card{ max-width: 920px; margin: 0 auto; border-radius: 28px; border: 2px solid rgba(142,166,255,0.55); padding: 26px 26px 24px; background: var(--card); box-shadow: var(--shadow); }
+      .cardInner{ display:flex; align-items:flex-start; gap: 16px; }
+      .badge{ width: 54px; height: 54px; border-radius: 999px; background: var(--blue); color: white; display:flex; align-items:center; justify-content:center; font-weight: 900; font-size: 18px; flex: 0 0 auto; }
+      .cardTitle{ margin: 4px 0 8px; font-size: 30px; font-weight: 950; letter-spacing: -0.01em; }
+      .cardDesc{ margin: 0 0 12px; font-size: 18px; line-height: 1.45; color: var(--muted); max-width: 720px; white-space: pre-wrap; }
+      .prompt{ font-size: 24px; font-weight: 900; margin: 10px 0 12px; letter-spacing: -0.01em; white-space: pre-wrap; }
 
       .inputWrap{ display:flex; align-items:flex-end; gap: 12px; margin-top: 8px; }
-      textarea{ width: 100%; min-height: 92px; resize: vertical; border-radius: 18px; border: 1px solid var(--line); padding: 18px 18px; font-size: 18px; outline: none; }
-      .send{ width: 64px; height: 64px; border: none; border-radius: 18px; background: rgba(142,166,255,0.85); color: white; cursor: pointer; display:flex; align-items:center; justify-content:center; }
-      .send svg{ width: 26px; height: 26px; }
+      textarea{ width: 100%; min-height: 92px; resize: vertical; border-radius: 18px; border: 1px solid var(--line); padding: 16px 16px; font-size: 17px; outline: none; }
+      .send{ width: 60px; height: 60px; border: none; border-radius: 18px; background: rgba(142,166,255,0.85); color: white; cursor: pointer; display:flex; align-items:center; justify-content:center; }
+      .send svg{ width: 24px; height: 24px; }
 
-      .row{ display:flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+      .row{ display:flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
       .btn{ border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 10px 14px; font-weight: 800; cursor: pointer; }
       .btn.primary{ border-color: rgba(47,91,234,0.25); background: rgba(47,91,234,0.08); }
-      .status{ margin-top: 12px; color: var(--muted); font-size: 13px; white-space: pre-wrap; }
+
+      /* Hide dev/debug/status entirely for end-users */
+      .status{ display:none; }
 
       @media (max-width: 720px){
-        .title{ font-size: 34px; }
-        .subtitle{ font-size: 18px; }
-        .cardTitle{ font-size: 26px; }
-        .cardDesc{ font-size: 18px; }
-        .prompt{ font-size: 22px; }
-        .step{ width: 46px; height: 46px; }
-        .stepLine{ width: 34px; }
-        .badge{ width: 54px; height: 54px; }
-        .send{ width: 56px; height: 56px; border-radius: 16px; }
+        .title{ font-size: 32px; }
+        .subtitle{ font-size: 17px; }
+        .cardTitle{ font-size: 24px; }
+        .prompt{ font-size: 20px; }
+        .step{ width: 28px; height: 28px; font-size: 12px; }
+        .stepLine{ width: 10px; }
+        .badge{ width: 48px; height: 48px; }
+        .send{ width: 54px; height: 54px; border-radius: 16px; }
       }
     </style>
   </head>
@@ -71,28 +76,32 @@
       <div class="title" id="uiTitle">Business Strategy Canvas Builder</div>
       <div class="subtitle" id="uiSubtitle">Use the app widget to continue (not the chat box)</div>
 
-      <div class="banner" id="banner">
-        <strong>App not connected yet.</strong>
-        Click <strong>Continue / Connect</strong> in ChatGPT, then press <strong>Start</strong> here.
+      <div class="byline">
+        <span id="byText">A business model by:</span>
+        <img
+          alt="Ben Steenstra"
+          src="https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/6c9ae4d13c7a12b72441bba643aeaadadc5524c4/chatkit/ben_steenstra_Logo.png"
+        />
       </div>
 
       <div class="stepperRow">
         <div class="stepper" id="stepper"></div>
       </div>
 
-      <div class="sectionTitle" id="sectionTitle">Validation & Business Name</div>
+      <div class="sectionTitle" id="sectionTitle"></div>
 
       <div class="card">
         <div class="cardInner">
           <div class="badge" id="badge">1</div>
           <div style="flex:1">
-            <div class="cardTitle" id="cardTitle">Validation & Business Name</div>
+            <div class="cardTitle" id="cardTitle"></div>
 
             <div class="cardDesc" id="cardDesc"></div>
-            <div class="prompt" id="prompt">…</div>
+            <div class="prompt" id="prompt"></div>
 
-            <div class="inputWrap">
-              <textarea id="input" placeholder="Type your answer here (use the widget, not the chat box)…"></textarea>
+            <!-- Input + Send (hidden until after Start/tool output exists) -->
+            <div class="inputWrap" id="inputWrap" style="display:none">
+              <textarea id="input" placeholder=""></textarea>
               <button class="send" id="send" title="Send">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M3 11.5L21 3L12.5 21L11 13L3 11.5Z" fill="currentColor"/>
@@ -100,10 +109,9 @@
               </button>
             </div>
 
-            <div class="row" id="quickBtns" style="display:none">
-              <button class="btn primary" id="btnYes">Yes</button>
-              <button class="btn" id="btnNo">No</button>
-              <button class="btn" id="btnStart" style="display:none">Start</button>
+            <!-- Only Start button (first screen) -->
+            <div class="row" id="controls">
+              <button class="btn primary" id="btnStart">Start</button>
             </div>
 
             <div class="status" id="status"></div>
@@ -114,16 +122,29 @@
 
     <script>
       const ORDER = ["step_0","dream","purpose","bigwhy","role","entity","strategy","rulesofthegame","presentation"];
-      const TITLES = {
-        step_0: "Validation & Business Name",
-        dream: "Dream",
-        purpose: "Purpose",
-        bigwhy: "Big Why",
-        role: "Role",
-        entity: "Entity",
-        strategy: "Strategy",
-        rulesofthegame: "Rules of the game",
-        presentation: "Presentation"
+
+      const TITLES_NL = {
+        step_0: "Stap 1: Validation & Business Name",
+        dream: "Stap 2: Dream",
+        purpose: "Stap 3: Purpose",
+        bigwhy: "Stap 4: Big Why",
+        role: "Stap 5: Role",
+        entity: "Stap 6: Entity",
+        strategy: "Stap 7: Strategy",
+        rulesofthegame: "Stap 8: Rules of the game",
+        presentation: "Stap 9: Presentation"
+      };
+
+      const TITLES_EN = {
+        step_0: "Step 1: Validation & Business Name",
+        dream: "Step 2: Dream",
+        purpose: "Step 3: Purpose",
+        bigwhy: "Step 4: Big Why",
+        role: "Step 5: Role",
+        entity: "Step 6: Entity",
+        strategy: "Step 7: Strategy",
+        rulesofthegame: "Step 8: Rules of the game",
+        presentation: "Step 9: Presentation"
       };
 
       function normalizeToolOutput(raw) {
@@ -164,30 +185,23 @@
         }
       }
 
-      function pickBodyParts(result) {
-        const specialist = (result && result.specialist) || {};
-        const sessionIntro = String(specialist.session_intro || "").trim();
-        const msg = String(specialist.message || "").trim();
-        const refined = String(specialist.refined_formulation || "").trim();
-        return [sessionIntro, msg, refined].filter(Boolean).join("\n\n");
+      function uiLanguage(state) {
+        const lang = (state && state.language) ? String(state.language).toLowerCase() : "";
+        if (lang.startsWith("nl")) return "nl";
+        if (lang.startsWith("en")) return "en";
+        // fallback from browser
+        const nav = (navigator.language || "").toLowerCase();
+        return nav.startsWith("nl") ? "nl" : "en";
       }
 
-      function pickPrompt(result) {
-        const specialist = (result && result.specialist) || {};
-        const confirmQ = String(specialist.confirmation_question || "").trim();
-        const q = String(specialist.question || "").trim();
-        return confirmQ || q || "";
-      }
+      function setStaticStrings(lang) {
+        document.getElementById("uiSubtitle").textContent =
+          (lang === "nl")
+            ? "Gebruik de widget om door te gaan (niet de chat box)"
+            : "Use the app widget to continue (not the chat box)";
 
-      // Show Yes/No only for true proceed-confirm moments:
-      // action=CONFIRM, confirmation_question set, and no numbered menu in question.
-      function shouldShowYesNo(result) {
-        const specialist = (result && result.specialist) || {};
-        const action = String(specialist.action || "").trim();
-        const confirmQ = String(specialist.confirmation_question || "").trim();
-        const q = String(specialist.question || "").trim();
-        const looksLikeMenu = /\n?\s*1\)/.test(q) || /\n?\s*1\./.test(q);
-        return action === "CONFIRM" && !!confirmQ && !looksLikeMenu;
+        document.getElementById("byText").textContent =
+          (lang === "nl") ? "A business model by:" : "A business model by:";
       }
 
       function render(data) {
@@ -198,50 +212,48 @@
           {};
 
         const state = (result && result.state) ? result.state : {};
+        const lang = uiLanguage(state);
+        setStaticStrings(lang);
+
         const current = state.current_step || "step_0";
         const idx = stepIndex(current);
-
         buildStepper(idx);
 
+        const titles = (lang === "nl") ? TITLES_NL : TITLES_EN;
+
         document.getElementById("badge").textContent = String(idx + 1);
-        document.getElementById("sectionTitle").textContent = TITLES[current] || "Step";
-        document.getElementById("cardTitle").textContent = TITLES[current] || "Step";
+        document.getElementById("sectionTitle").textContent = titles[current] || "";
+        document.getElementById("cardTitle").textContent = titles[current] || "";
 
-        document.getElementById("cardDesc").textContent = pickBodyParts(result);
+        // Body + prompt from tool output
+        const body = (result && typeof result.text === "string") ? result.text : "";
+        const prompt = (result && typeof result.prompt === "string") ? result.prompt : "";
 
-        const prompt = pickPrompt(result);
-        document.getElementById("prompt").textContent = prompt || "Press Start to begin.";
+        document.getElementById("cardDesc").textContent = body;
+        document.getElementById("prompt").textContent = prompt;
 
-        // Controls
-        const quick = document.getElementById("quickBtns");
-        quick.style.display = "flex";
-
-        const yesNo = shouldShowYesNo(result);
-        document.getElementById("btnYes").style.display = yesNo ? "inline-flex" : "none";
-        document.getElementById("btnNo").style.display  = yesNo ? "inline-flex" : "none";
-
+        // Input visibility rules:
+        // - before first tool run: ONLY Start button (no textarea/send)
+        // - after tool output exists: show textarea+send, hide Start
         const hasToolOutput = Boolean(globalThis.openai && globalThis.openai.toolOutput);
-        const startNeeded = !hasToolOutput || !prompt;
-        document.getElementById("btnStart").style.display = startNeeded ? "inline-flex" : "none";
+        const inputWrap = document.getElementById("inputWrap");
+        const btnStart = document.getElementById("btnStart");
 
-        const canCallTool = Boolean(globalThis.openai && globalThis.openai.callTool);
-        document.getElementById("banner").style.display = (!canCallTool) ? "block" : "none";
+        if (!hasToolOutput) {
+          inputWrap.style.display = "none";
+          btnStart.style.display = "inline-flex";
 
-        // Status + debug (only show fields that exist)
-        const lines = [];
-        if (data && data.meta) lines.push(String(data.meta));
+          document.getElementById("cardDesc").textContent = "";
+          document.getElementById("prompt").textContent = (lang === "nl") ? "Klik op Start om te beginnen." : "Click Start to begin.";
+        } else {
+          inputWrap.style.display = "flex";
+          btnStart.style.display = "none";
 
-        const hasOpenAI = Boolean(globalThis.openai);
-        lines.push(`openai:${hasOpenAI} toolOutput:${hasToolOutput}`);
-
-        const dbg = (result && result.debug && result.debug.openai) ? result.debug.openai : null;
-        if (dbg && typeof dbg === "object") {
-          if (dbg.response_id) lines.push(`openai_response_id:${dbg.response_id}`);
-          if (typeof dbg.http_status === "number") lines.push(`http_status:${dbg.http_status}`);
-          if (dbg.parse_error) lines.push(`parse_error:${dbg.parse_error}`);
+          document.getElementById("input").placeholder =
+            (lang === "nl")
+              ? "Typ je antwoord hier (gebruik de widget, niet de chat box)…"
+              : "Type your answer here (use the widget, not the chat box)…";
         }
-
-        document.getElementById("status").textContent = lines.join("\n");
 
         globalThis.__BSC_LATEST__ = { data, result, state };
       }
@@ -250,28 +262,21 @@
         const latest = globalThis.__BSC_LATEST__ || {};
         const state = (latest.state || { current_step: "step_0" });
 
-        if (!globalThis.openai || !globalThis.openai.callTool) {
-          document.getElementById("status").textContent =
-            "Not connected. Click Continue/Connect in ChatGPT, then press Start here.";
-          return;
-        }
+        if (!globalThis.openai || !globalThis.openai.callTool) return;
+
+        // ensure language is set once (for Start without input)
+        const lang = uiLanguage(state);
+        const nextState = Object.assign({}, state, { language: state.language || lang });
 
         const payload = {
-          current_step_id: state.current_step || "step_0",
+          current_step_id: nextState.current_step || "step_0",
           user_message: String(message || ""),
-          state: state || {}
+          state: nextState
         };
 
-        document.getElementById("status").textContent = "Sending…";
-
-        try {
-          const resp = await globalThis.openai.callTool("run_step", payload);
-          const nextData = normalizeToolOutput(resp);
-          render(nextData); // widget-leading: rerender from tool output only
-        } catch (e) {
-          document.getElementById("status").textContent =
-            "Error calling tool: " + (e && e.message ? e.message : String(e));
-        }
+        const resp = await globalThis.openai.callTool("run_step", payload);
+        const nextData = normalizeToolOutput(resp);
+        render(nextData);
       }
 
       document.getElementById("send").addEventListener("click", () => {
@@ -281,8 +286,6 @@
         callRunStep(v);
       });
 
-      document.getElementById("btnYes").addEventListener("click", () => callRunStep("yes"));
-      document.getElementById("btnNo").addEventListener("click", () => callRunStep("no"));
       document.getElementById("btnStart").addEventListener("click", () => callRunStep(""));
 
       render(pickData());
