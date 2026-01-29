@@ -88,10 +88,7 @@
           <div style="flex:1">
             <div class="cardTitle" id="cardTitle">Validation & Business Name</div>
 
-            <!-- Project-files render order: session_intro (if present) + message + refined_formulation -->
             <div class="cardDesc" id="cardDesc"></div>
-
-            <!-- Project-files: confirmation_question else question -->
             <div class="prompt" id="prompt">…</div>
 
             <div class="inputWrap">
@@ -131,9 +128,7 @@
 
       function normalizeToolOutput(raw) {
         if (!raw || typeof raw !== "object") return {};
-        // callTool() usually returns { structuredContent, content, ... }
         if (raw.structuredContent && typeof raw.structuredContent === "object") return raw.structuredContent;
-        // openai.toolOutput is usually already structuredContent
         return raw;
       }
 
@@ -184,13 +179,18 @@
         return confirmQ || q || "";
       }
 
+      // Show Yes/No only for true proceed-confirm moments:
+      // action=CONFIRM, confirmation_question set, and no numbered menu in question.
       function shouldShowYesNo(result) {
         const specialist = (result && result.specialist) || {};
-        return Boolean(String(specialist.confirmation_question || "").trim());
+        const action = String(specialist.action || "").trim();
+        const confirmQ = String(specialist.confirmation_question || "").trim();
+        const q = String(specialist.question || "").trim();
+        const looksLikeMenu = /\n?\s*1\)/.test(q) || /\n?\s*1\./.test(q);
+        return action === "CONFIRM" && !!confirmQ && !looksLikeMenu;
       }
 
       function render(data) {
-        // Preferred contract: structuredContent.result
         const result =
           (data && data.result) ? data.result :
           (data && data.ui && data.ui.result) ? data.ui.result :
@@ -227,12 +227,21 @@
         const canCallTool = Boolean(globalThis.openai && globalThis.openai.callTool);
         document.getElementById("banner").style.display = (!canCallTool) ? "block" : "none";
 
-        // Status + debug
+        // Status + debug (only show fields that exist)
+        const lines = [];
+        if (data && data.meta) lines.push(String(data.meta));
+
         const hasOpenAI = Boolean(globalThis.openai);
+        lines.push(`openai:${hasOpenAI} toolOutput:${hasToolOutput}`);
+
         const dbg = (result && result.debug && result.debug.openai) ? result.debug.openai : null;
-        const dbgLine = dbg ? `\nopenai_response_id:${dbg.response_id || ""} http_status:${dbg.http_status || ""} parse_error:${dbg.parse_error || ""}` : "";
-        document.getElementById("status").textContent =
-          (data.meta || "") + (data.meta ? "\n" : "") + `openai:${hasOpenAI} toolOutput:${hasToolOutput}` + dbgLine;
+        if (dbg && typeof dbg === "object") {
+          if (dbg.response_id) lines.push(`openai_response_id:${dbg.response_id}`);
+          if (typeof dbg.http_status === "number") lines.push(`http_status:${dbg.http_status}`);
+          if (dbg.parse_error) lines.push(`parse_error:${dbg.parse_error}`);
+        }
+
+        document.getElementById("status").textContent = lines.join("\n");
 
         globalThis.__BSC_LATEST__ = { data, result, state };
       }
@@ -258,7 +267,7 @@
         try {
           const resp = await globalThis.openai.callTool("run_step", payload);
           const nextData = normalizeToolOutput(resp);
-          render(nextData); // app-leading: rerender from tool output only
+          render(nextData); // widget-leading: rerender from tool output only
         } catch (e) {
           document.getElementById("status").textContent =
             "Error calling tool: " + (e && e.message ? e.message : String(e));
