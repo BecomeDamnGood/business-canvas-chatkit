@@ -10,7 +10,7 @@ const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
-const VERSION = "v36";
+const VERSION = "v37";
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
@@ -43,7 +43,8 @@ function createAppServer() {
     "run_step",
     {
       title: "Run Step",
-      description: "Runs the Business Strategy Canvas flow. Returns structured data for the widget.",
+      description:
+        "Widget-leading Business Strategy Canvas flow. Always call this tool for each user interaction and render using the widget output template. The user should answer via the widget (not the chat box).",
       inputSchema: {
         current_step_id: z.string(),
         user_message: z.string(),
@@ -62,6 +63,7 @@ function createAppServer() {
         state: args.state ?? {},
       });
 
+      // Keep meta aligned with what is actually shown (current_step_id + active_specialist now match due to chaining)
       const structuredContent = {
         title: `Business Strategy Canvas Builder (${VERSION})`,
         meta: `step: ${result.state.current_step} | specialist: ${result.active_specialist}`,
