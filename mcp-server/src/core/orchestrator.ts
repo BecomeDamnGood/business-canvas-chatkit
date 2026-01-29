@@ -1,6 +1,6 @@
 // src/core/orchestrator.ts
 import { z } from "zod";
-import { CANONICAL_STEPS, isCanonicalStepId, type BoolString, type CanvasState } from "./state";
+import { CANONICAL_STEPS, isCanonicalStepId, type BoolString, type CanvasState } from "./state.js";
 
 /**
  * ORCHESTRATOR (ROUTER + STEP STATE)
