@@ -10,7 +10,7 @@ const port = Number(process.env.PORT ?? 8787);
 const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
-const VERSION = "v35";
+const VERSION = "v36";
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
