@@ -30,7 +30,7 @@ import {
  */
 const RunStepArgsSchema = z.object({
   user_message: z.string().default(""),
-  state: z.record(z.any()).optional().default({}),
+  state: z.record(z.string(), z.any()).optional().default({}),
 });
 
 type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
