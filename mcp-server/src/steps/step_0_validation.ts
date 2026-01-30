@@ -168,7 +168,7 @@ If you cannot guarantee JSON-safe step_0, set step_0 to "" (empty string) rather
 CONFIRM output requirement (MUST)
 
 Whenever action is "CONFIRM", step_0 must NOT be empty and must follow the exact Step 0 storage pattern:
-"Venture: <venture_type> | Name: <business_name_or_TBD>"
+""Venture: <venture_type> | Name: <business_name_or_TBD> | Status: <existing_or_starting>"
 
 Exception:
 - META QUESTIONS HANDLER below may use action="CONFIRM" with step_0="" (because it is not confirming a venture; it is confirming readiness to continue Step 0).
