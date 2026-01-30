@@ -624,24 +624,40 @@ export async function run_step(rawArgs: unknown): Promise<{
 
   // START trigger (widget start screen)
   const isStartTrigger =
-    userMessage.trim() === "" &&
-    state.current_step === STEP_0_ID &&
-    String((state as any).intro_shown_session) !== "true" &&
-    String((state as any).step_0_final ?? "").trim() === "" &&
-    Object.keys((state as any).last_specialist_result ?? {}).length === 0;
+  userMessage.trim() === "" &&
+  state.current_step === STEP_0_ID &&
+  String((state as any).intro_shown_session) !== "true" &&
+  Object.keys((state as any).last_specialist_result ?? {}).length === 0;
 
   if (isStartTrigger) {
-    (state as any).intro_shown_session = "true";
+  (state as any).intro_shown_session = "true";
+
+  const step0Final = String((state as any).step_0_final ?? "").trim();
+
+  // If Step 0 is already known, show the combined confirmation directly.
+  if (step0Final) {
+    const nameMatch = step0Final.match(/Name:\s*([^|]+)\s*(\||$)/i);
+    const ventureMatch = step0Final.match(/Venture:\s*([^|]+)\s*(\||$)/i);
+    const statusMatch = step0Final.match(/Status:\s*(existing|starting)\s*(\||$)/i);
+
+    const venture = (ventureMatch?.[1] || "venture").trim();
+    const name = (nameMatch?.[1] || (state as any).business_name || "TBD").trim();
+    const status = (statusMatch?.[1] || "starting").toLowerCase();
+
+    const statement =
+      status === "existing"
+        ? `You have a ${venture} called ${name}.`
+        : `You want to start a ${venture} called ${name}.`;
 
     const specialist: ValidationAndBusinessNameOutput = {
-      action: "ASK",
+      action: "CONFIRM",
       message: "",
-      question: STEP0_QUESTION_EN,
+      question: "",
       refined_formulation: "",
-      confirmation_question: "",
-      business_name: (state as any).business_name || "TBD",
+      confirmation_question: `${statement} Is that correct, and if so are you ready to start the first step, 'Your Dream'?`,
+      business_name: name || "TBD",
       proceed_to_dream: "false",
-      step_0: (state as any).step_0_final || "",
+      step_0: step0Final,
     };
 
     return {
@@ -650,7 +666,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       current_step_id: String(state.current_step),
       active_specialist: STEP_0_SPECIALIST,
       text: "",
-      prompt: specialist.question,
+      prompt: specialist.confirmation_question,
       specialist,
       state: {
         ...state,
@@ -659,6 +675,34 @@ export async function run_step(rawArgs: unknown): Promise<{
       },
     };
   }
+
+  // Otherwise: first-time Step 0 setup question.
+  const specialist: ValidationAndBusinessNameOutput = {
+    action: "ASK",
+    message: "",
+    question: STEP0_QUESTION_EN,
+    refined_formulation: "",
+    confirmation_question: "",
+    business_name: (state as any).business_name || "TBD",
+    proceed_to_dream: "false",
+    step_0: "",
+  };
+
+  return {
+    ok: true,
+    tool: "run_step",
+    current_step_id: String(state.current_step),
+    active_specialist: STEP_0_SPECIALIST,
+    text: "",
+    prompt: specialist.question,
+    specialist,
+    state: {
+      ...state,
+      active_specialist: STEP_0_SPECIALIST,
+      last_specialist_result: specialist,
+    },
+  };
+}
 
   // --------- SPEECH-PROOF PROCEED TRIGGER (Step 0 readiness moment only) ---------
   const prev = (state as any).last_specialist_result || {};
