@@ -642,11 +642,15 @@ const isSeedMsg = trimmed.startsWith("__SEED__");
 
 // Seed is allowed ONLY once, and ONLY at the very start of Step 0 (language-agnostic).
 const seedUsed = String((state as any).seed_used ?? "") === "true";
+const last = (state as any).last_specialist_result ?? {};
+const lastQuestion = typeof last?.question === "string" ? String(last.question) : "";
+
 const seedEligible =
   String(state.current_step) === STEP_0_ID &&
   String((state as any).step_0_final ?? "").trim() === "" &&
   String((state as any).dream_final ?? "").trim() === "" &&
-  Object.keys((state as any).last_specialist_result ?? {}).length === 0;
+  // Allow seed right after the initial Step 0 ASK has been shown
+  (Object.keys(last).length === 0 || lastQuestion.trim() === STEP0_QUESTION_EN.trim());
 
 let userMessageCandidate = userMessageRaw;
 
