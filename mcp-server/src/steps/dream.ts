@@ -253,7 +253,7 @@ If user chooses the exercise option in any menu or asks for the exercise:
 - all other content fields empty strings
 - proceed flags remain "false"
 
-If the previous assistant asked readiness and user says YES:
+If the previous assistant asked readiness and the user clearly says YES OR the user message is exactly "1":
 - action="CONFIRM"
 - suggest_dreambuilder="true"
 - all text fields empty strings
