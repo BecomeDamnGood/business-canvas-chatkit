@@ -194,9 +194,23 @@
         return raw;
       }
 
-      function toolData() {
+      // NEW: cache last known tool output (makes UI resilient to host timing)
+      function setLastToolOutput(raw) {
+        try { globalThis.__BSC_LAST_TOOL_OUTPUT__ = normalizeToolOutput(raw); } catch {}
+      }
+      function getLastToolOutput() {
+        return (globalThis.__BSC_LAST_TOOL_OUTPUT__ && typeof globalThis.__BSC_LAST_TOOL_OUTPUT__ === "object")
+          ? globalThis.__BSC_LAST_TOOL_OUTPUT__
+          : {};
+      }
+
+      // UPDATED: allow render() to use callTool return value (doc-conform followups)
+      function toolData(overrideRaw) {
+        if (overrideRaw) return normalizeToolOutput(overrideRaw);
         const o = oa();
         if (o && o.toolOutput) return normalizeToolOutput(o.toolOutput);
+        const cached = getLastToolOutput();
+        if (cached && Object.keys(cached).length) return cached;
         return {};
       }
 
@@ -354,8 +368,13 @@
         return Object.assign({}, state || {}, { language: lang });
       }
 
-      function render() {
-        const data = toolData();
+      // UPDATED: render can accept override tool output (from callTool return)
+      function render(overrideToolOutput) {
+        const data = toolData(overrideToolOutput);
+
+        // Cache whatever we used, so future renders are stable even if host is slow
+        if (data && Object.keys(data).length) setLastToolOutput(data);
+
         const result =
           (data && data.result) ? data.result :
           (data && data.ui && data.ui.result) ? data.ui.result :
@@ -372,7 +391,7 @@
         // HARD RULE: Use LOCAL sessionStarted to decide whether to show pre-start.
         const showPreStart = !sessionStarted;
 
-        const hasToolOutput = Boolean(oa() && oa().toolOutput);
+        const hasToolOutput = Boolean(oa() && oa().toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
         const current = (!showPreStart && hasToolOutput) ? (state.current_step || "step_0") : "step_0";
         const idx = stepIndex(current);
         buildStepper(idx);
@@ -468,9 +487,11 @@
 
         try {
           const resp = await o.callTool("run_step", payload);
-          // Fallback render: clear loading even if host event is slow.
-          normalizeToolOutput(resp);
-          render();
+
+          // CRITICAL FIX: Use callTool RETURN VALUE to render immediately (doc-conform)
+          const normalized = normalizeToolOutput(resp);
+          setLastToolOutput(normalized);
+          render(normalized);
         } catch (e) {
           console.error("run_step failed", e);
           const lang2 = localeToLang(getLocale());
@@ -528,11 +549,11 @@
 
       window.addEventListener("openai:set_globals", () => {
         try {
+          // Host update -> render from host toolOutput (or cache), and always clear loading.
           render();
         } catch (e) {
           console.error(e);
         } finally {
-          // HARD: never leave the UI stuck on loading after host updates.
           if (isLoading) setLoading(false);
         }
       });
