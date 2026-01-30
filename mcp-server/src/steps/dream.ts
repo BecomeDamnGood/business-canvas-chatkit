@@ -248,7 +248,7 @@ Type your dream or choose an option.
 If user chooses the exercise option in any menu or asks for the exercise:
 - action="ASK"
 - message (localized): one short line confirming the exercise will start now.
-- question (localized): "Are you ready to start? Answer yes or no."
+- question (localized): "Are you ready to start?
 - suggest_dreambuilder="true"
 - all other content fields empty strings
 - proceed flags remain "false"
