@@ -142,7 +142,7 @@ Step 0 storage format (CRITICAL)
 step_0 must be plain text (NOT mini-JSON). It must store venture type and business name in one short, stable line.
 Use this exact pattern:
 
-"Venture: <venture_type> | Name: <business_name_or_TBD>"
+"Venture: <venture_type> | Name: <business_name_or_TBD> | Status: <existing_or_starting>"
 
 venture_type must be the venture category you recognize from the user's message (e.g., "advertising agency", "creative studio").
 Keep it short (1 to 3 words), in English.
@@ -159,7 +159,8 @@ step_0 is a JSON string value. Therefore it must not contain unescaped double qu
 Never include double quotes inside step_0.
 If you feel quotes are needed, omit them or use single quotes.
 
-Example VALID: "step_0":"Venture: advertising agency | Name: Mindd"
+Example VALID: "step_0":"Venture: advertising agency | Name: Mindd | Status: existing"
+Example VALID: "step_0":"Venture: advertising agency | Name: Mindd | Status: starting"
 Example INVALID (breaks JSON): "step_0":"Venture: "advertising agency" | Name: Mindd"
 
 If you cannot guarantee JSON-safe step_0, set step_0 to "" (empty string) rather than outputting a risky value.
@@ -172,13 +173,22 @@ Whenever action is "CONFIRM", step_0 must NOT be empty and must follow the exact
 Exception:
 - META QUESTIONS HANDLER below may use action="CONFIRM" with step_0="" (because it is not confirming a venture; it is confirming readiness to continue Step 0).
 
-Want to start vs already have (MUST)
+Want to start vs already have (HARD)
 
-If the user indicates they already have or run the venture (e.g., "I run", "I have"),
-then the confirmation_question must reflect that they already have it.
+You MUST classify the user's venture status as one of:
 
-If the user indicates they want to start the venture (e.g., "I want to start", "I'm going to start"),
-then the confirmation_question must reflect that they want to start it.
+- existing: the user indicates they already run / have the venture
+- starting: the user indicates they want to start / are going to start the venture
+
+If unclear, default to "starting".
+
+Storage rule (HARD)
+- step_0 MUST include "| Status: existing" or "| Status: starting" using the exact Step 0 storage pattern.
+
+Confirmation statement rule (HARD)
+Whenever you restate the venture in the confirmation_question:
+- If Status is existing: use "You have ..."
+- If Status is starting: use "You want to start ..."
 
 If it is unclear, keep the wording neutral and do not assume.
 
