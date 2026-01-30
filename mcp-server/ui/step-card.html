@@ -40,7 +40,6 @@
       .cardInner{ display:flex; align-items:flex-start; gap: 16px; }
       .badge{ width: 54px; height: 54px; border-radius: 999px; background: var(--blue); color: white; display:flex; align-items:center; justify-content:center; font-weight: 900; font-size: 18px; flex: 0 0 auto; }
 
-      /* Pulse animation (loading) */
       @keyframes badgePulse {
         0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(47,91,234,0.35); }
         60% { transform: scale(1.04); box-shadow: 0 0 0 10px rgba(47,91,234,0.00); }
@@ -49,7 +48,6 @@
       .badge.loading{ animation: badgePulse 1.25s ease-in-out infinite; }
 
       .cardTitle{ display:none; }
-
       .cardDesc{ margin: 0 0 14px; font-size: 18px; line-height: 1.48; color: var(--muted); max-width: 760px; white-space: pre-wrap; }
       .prompt{ font-size: 24px; font-weight: 900; margin: 10px 0 12px; letter-spacing: -0.01em; white-space: pre-wrap; }
 
@@ -61,7 +59,6 @@
       .send svg{ width: 24px; height: 24px; }
       .send:disabled{ background: var(--stepOff); color:#94a3b8; cursor:not-allowed; }
 
-      /* Choice buttons (Dream 1/2) under input */
       .choiceWrap{ display:flex; flex-direction: column; gap: 10px; margin-top: 12px; }
       .choiceBtn{
         width: 100%;
@@ -88,11 +85,9 @@
       .btn.primary{ border-color: rgba(47,91,234,0.25); background: rgba(47,91,234,0.08); }
       .btn:disabled{ background: #f1f5f9; border-color: var(--line); color: #94a3b8; cursor:not-allowed; }
 
-      /* Bigger Start button */
       #btnStart{ padding: 14px 22px; font-size: 18px; border-radius: 16px; }
       .startHint{ color: var(--muted); font-weight: 800; margin-left: 2px; }
 
-      /* Hide dev/debug/status entirely for end-users */
       .status{ display:none; }
 
       @media (max-width: 720px){
@@ -137,7 +132,6 @@
             <div class="cardDesc" id="cardDesc"></div>
             <div class="prompt" id="prompt"></div>
 
-            <!-- Input + Send (hidden until after Start/tool output exists) -->
             <div class="inputWrap" id="inputWrap" style="display:none">
               <textarea id="input" placeholder=""></textarea>
               <button class="send" id="send" title="Send" disabled>
@@ -147,13 +141,9 @@
               </button>
             </div>
 
-            <!-- Dream choice buttons (1/2) go here -->
             <div class="choiceWrap" id="choiceWrap" style="display:none"></div>
-
-            <!-- Loader label -->
             <div class="thinking" id="thinking" style="display:none">Thinking…</div>
 
-            <!-- Controls: Start (pre-start) and OK (confirm moment) -->
             <div class="row" id="controls">
               <button class="btn primary" id="btnStart">Start</button>
               <div class="startHint" id="startHint"></div>
@@ -196,9 +186,7 @@
       const PRESTART_WELCOME_TEXT =
         "Welcome to Ben Steenstra’s Business Strategy Canvas, used in national and international organizations. We will go through a small number of steps, one by one, so each step is clear before we move on. At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear presentation for external stakeholders, partners, or team members.";
 
-      function getOpenAI(){
-        return globalThis.openai;
-      }
+      function oa(){ return globalThis.openai; }
 
       function normalizeToolOutput(raw) {
         if (!raw || typeof raw !== "object") return {};
@@ -206,29 +194,42 @@
         return raw;
       }
 
-      function pickData() {
-        const oa = getOpenAI();
-        if (oa && oa.toolOutput) return normalizeToolOutput(oa.toolOutput);
-        // legacy fallbacks (keep, but do not depend on them)
-        return (
-          (globalThis.__SKYBRIDGE__ && globalThis.__SKYBRIDGE__.data) ||
-          globalThis.skybridgeData ||
-          globalThis.templateData ||
-          {}
-        );
+      function toolData() {
+        const o = oa();
+        if (o && o.toolOutput) return normalizeToolOutput(o.toolOutput);
+        return {};
+      }
+
+      function widgetState() {
+        const o = oa();
+        return (o && o.widgetState && typeof o.widgetState === "object") ? o.widgetState : {};
       }
 
       function getLocale() {
-        const oa = getOpenAI();
-        const l = (oa && oa.locale) ? String(oa.locale) : (navigator.language || "en");
+        const o = oa();
+        const l = (o && o.locale) ? String(o.locale) : (navigator.language || "en");
         return l;
       }
 
       function localeToLang(locale) {
         const s = String(locale || "en").toLowerCase();
-        // ISO 639-1 base
-        const base = s.split(/[-_]/)[0];
-        return base || "en";
+        return s.split(/[-_]/)[0] || "en";
+      }
+
+      function uiLang(resultState) {
+        const ws = widgetState();
+        const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
+        if (fromResult) return fromResult;
+        const fromWidget = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
+        if (fromWidget) return fromWidget;
+        return localeToLang(getLocale());
+      }
+
+      function setStaticStrings(lang) {
+        const isNl = String(lang).startsWith("nl");
+        document.getElementById("uiSubtitle").textContent =
+          isNl ? "Gebruik de widget om door te gaan (niet de chat box)" : "Use the app widget to continue (not the chat box)";
+        document.getElementById("byText").textContent = "A business model by:";
       }
 
       function stepIndex(stepId) {
@@ -252,33 +253,15 @@
         }
       }
 
-      function uiLangFromStateOrLocale(state) {
-        const fromState = (state && state.language) ? String(state.language).toLowerCase().trim() : "";
-        if (fromState) return fromState;
-        return localeToLang(getLocale());
-      }
-
-      function setStaticStrings(lang) {
-        // UI microcopy in NL/EN only (others fallback to EN)
-        const isNl = String(lang).toLowerCase().startsWith("nl");
-        document.getElementById("uiSubtitle").textContent =
-          isNl
-            ? "Gebruik de widget om door te gaan (niet de chat box)"
-            : "Use the app widget to continue (not the chat box)";
-        document.getElementById("byText").textContent = "A business model by:";
-      }
-
-      // Loading state
       let isLoading = false;
+      let didPersistLanguage = false;
 
       function setSendEnabled(enabled) {
-        const sendEl = document.getElementById("send");
-        sendEl.disabled = isLoading || !enabled;
+        document.getElementById("send").disabled = isLoading || !enabled;
       }
 
       function setLoading(next) {
         isLoading = Boolean(next);
-
         document.getElementById("thinking").style.display = isLoading ? "block" : "none";
         document.getElementById("badge").classList.toggle("loading", isLoading);
 
@@ -297,7 +280,6 @@
         if (sendEl) sendEl.disabled = isLoading || v.length === 0;
       }
 
-      // Parse lines starting with 1) and 2) (also accept "1." / "2.")
       function extractChoicesFromPrompt(promptText) {
         const raw = String(promptText || "");
         const lines = raw.split(/\r?\n/);
@@ -345,19 +327,24 @@
         }
       }
 
+      function persistWidgetLanguage(lang) {
+        const o = oa();
+        if (!o || typeof o.setWidgetState !== "function") return;
+        const ws = widgetState();
+        if (ws && ws.language) { didPersistLanguage = true; return; }
+        if (didPersistLanguage) return;
+        didPersistLanguage = true;
+        try { o.setWidgetState({ ...(ws || {}), language: lang }); } catch {}
+      }
+
       function ensureLanguageInState(state, lang) {
         const current = (state && state.language) ? String(state.language).trim() : "";
         if (current) return state;
         return Object.assign({}, state || {}, { language: lang });
       }
 
-      function persistWidgetState(partial) {
-        const oa = getOpenAI();
-        if (!oa || typeof oa.setWidgetState !== "function") return;
-        try { oa.setWidgetState(partial); } catch {}
-      }
-
-      function render(data) {
+      function render() {
+        const data = toolData();
         const result =
           (data && data.result) ? data.result :
           (data && data.ui && data.ui.result) ? data.ui.result :
@@ -365,28 +352,21 @@
           {};
 
         const state = (result && result.state) ? result.state : {};
-        const lang = uiLangFromStateOrLocale(state);
+        const lang = uiLang(state);
+
         setStaticStrings(lang);
+        persistWidgetLanguage(lang);
 
-        // If host provided a locale but state.language is missing, persist it into widgetState early
-        // (prevents "double open" confusion across widget interactions)
-        if (!state.language) {
-          persistWidgetState({ language: lang });
-        }
+        const o = oa();
+        const hasToolOutput = Boolean(o && o.toolOutput);
 
-        const oa = getOpenAI();
-        const hasToolOutput = Boolean(oa && oa.toolOutput);
-
-        // Determine step
         const current = hasToolOutput ? (state.current_step || "step_0") : "step_0";
         const idx = stepIndex(current);
         buildStepper(idx);
 
         const titles = String(lang).startsWith("nl") ? TITLES_NL : TITLES_EN;
-
         document.getElementById("badge").textContent = String(idx + 1);
         document.getElementById("sectionTitle").textContent = titles[current] || "";
-        document.getElementById("cardTitle").textContent = "";
 
         const inputWrap = document.getElementById("inputWrap");
         const btnStart = document.getElementById("btnStart");
@@ -401,11 +381,9 @@
           String(specialist.proceed_to_dream || "") === "false" &&
           String(specialist.confirmation_question || "").trim() !== "";
 
-        // PRE-START
         if (!hasToolOutput) {
           inputWrap.style.display = "none";
           document.getElementById("choiceWrap").style.display = "none";
-
           btnStart.style.display = "inline-flex";
           btnOk.style.display = "none";
 
@@ -413,12 +391,10 @@
           document.getElementById("prompt").textContent = "";
 
           startHint.textContent = String(lang).startsWith("nl") ? "Klik op Start om te beginnen." : "Click Start to begin.";
-
           setLoading(isLoading);
           return;
         }
 
-        // AFTER START
         inputWrap.style.display = "flex";
         btnStart.style.display = "none";
         startHint.textContent = "";
@@ -442,24 +418,22 @@
         const v = (document.getElementById("input").value || "").trim();
         setSendEnabled(v.length > 0);
 
-        globalThis.__BSC_LATEST__ = { data, result, state, lang };
+        globalThis.__BSC_LATEST__ = { state, lang };
 
-        // If we were waiting for a response, new toolOutput means we're done waiting.
         if (isLoading) setLoading(false);
       }
 
       async function callRunStep(message) {
-        const oa = getOpenAI();
-        if (!oa || typeof oa.callTool !== "function") return;
+        const o = oa();
+        if (!o || typeof o.callTool !== "function") return;
 
         const latest = globalThis.__BSC_LATEST__ || {};
         const state = latest.state || { current_step: "step_0" };
 
-        const lang = uiLangFromStateOrLocale(state);
-        const nextState = ensureLanguageInState(state, lang);
+        const lang = uiLang(state);
+        persistWidgetLanguage(lang);
 
-        // Persist language in widgetState for the host session
-        persistWidgetState({ language: nextState.language });
+        const nextState = ensureLanguageInState(state, lang);
 
         const payload = {
           current_step_id: nextState.current_step || "step_0",
@@ -470,23 +444,18 @@
         setLoading(true);
 
         try {
-          const resp = await oa.callTool("run_step", payload);
-          const nextData = normalizeToolOutput(resp);
-          render(nextData);
+          await o.callTool("run_step", payload);
+          // Do not depend on return value; host will update toolOutput and fire openai:set_globals.
         } catch (e) {
           console.error("run_step failed", e);
-          const latest2 = globalThis.__BSC_LATEST__ || {};
-          const lang2 = latest2.lang || uiLangFromStateOrLocale(latest2.state || {});
           document.getElementById("cardDesc").textContent =
-            String(lang2).startsWith("nl")
+            String(lang).startsWith("nl")
               ? "Er ging iets mis bij het verwerken van je bericht. Probeer het opnieuw."
               : "Something went wrong while processing your message. Please try again.";
-        } finally {
           setLoading(false);
         }
       }
 
-      // Input enablement
       document.getElementById("input").addEventListener("input", () => {
         if (isLoading) return;
         const v = (document.getElementById("input").value || "").trim();
@@ -504,27 +473,23 @@
 
       document.getElementById("btnStart").addEventListener("click", () => {
         if (isLoading) return;
-        // Start: call tool with empty message, but ensure language is persisted first
         const lang = localeToLang(getLocale());
-        persistWidgetState({ language: lang });
+        persistWidgetLanguage(lang);
         callRunStep("");
       });
 
       document.getElementById("btnOk").addEventListener("click", () => {
         if (isLoading) return;
         const latest = globalThis.__BSC_LATEST__ || {};
-        const lang = latest.lang || uiLangFromStateOrLocale(latest.state || {});
+        const lang = latest.lang || localeToLang(getLocale());
         callRunStep(String(lang).startsWith("nl") ? "ja" : "yes");
       });
 
-      // Host-driven updates (Apps SDK): re-render whenever globals update
-      // This is the documented mechanism for widgets to stay in sync.
       window.addEventListener("openai:set_globals", () => {
-        try { render(pickData()); } catch (e) { console.error(e); }
+        try { render(); } catch (e) { console.error(e); }
       });
 
-      // Initial render
-      render(pickData());
+      render();
     </script>
   </body>
 </html>
