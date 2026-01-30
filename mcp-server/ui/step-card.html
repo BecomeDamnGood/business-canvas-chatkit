@@ -383,7 +383,7 @@
         const startHint = document.getElementById("startHint");
 
         const specialist = (result && result.specialist) ? result.specialist : {};
-        cconst showContinue =
+        const showContinue =
         !showPreStart &&
         hasToolOutput &&
         (current === "step_0" || current === "dream") &&
@@ -426,7 +426,16 @@
         renderChoiceButtons(choices);
 
         // Continue button for step_0 confirmation moments (textarea remains available for questions).
-        btnOk.style.display = showContinue ? "inline-flex" : "none";
+        // Show OK/Continue also for DreamExplainer readiness (language-agnostic).
+        const isDreamExplainerReadiness =
+          current === "dream" &&
+          String(specialist.action || "") === "ASK" &&
+          String(specialist.suggest_dreambuilder || "") === "true" &&
+          Array.isArray(choices) &&
+          choices.length === 0 &&
+          String(promptRaw || "").trim() !== "";
+        
+        btnOk.style.display = (showContinue || isDreamExplainerReadiness) ? "inline-flex" : "none";
 
         document.getElementById("input").placeholder =
           "Type your answer here (use the widget, not the chat box)…";
