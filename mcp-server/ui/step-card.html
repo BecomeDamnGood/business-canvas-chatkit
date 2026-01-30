@@ -225,17 +225,17 @@
       }
 
       function uiLang(resultState) {
-  // Prefer language coming from the backend state, then widgetState, then browser locale.
-  const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
-  if (fromResult) return fromResult;
+        // Prefer language coming from the backend state, then widgetState, then browser locale.
+        const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
+        if (fromResult) return fromResult;
 
-  const ws = widgetState();
-  const fromWidget = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
-  if (fromWidget) return fromWidget;
+        const ws = widgetState();
+        const fromWidget = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
+        if (fromWidget) return fromWidget;
 
-  const nav = String(navigator.language || "en").toLowerCase();
-  return (nav.split(/[-_]/)[0] || "en");
-}
+        const nav = String(navigator.language || "en").toLowerCase();
+        return (nav.split(/[-_]/)[0] || "en");
+      }
 
       function setStaticStrings(_lang) {
         document.getElementById("uiSubtitle").textContent =
@@ -318,6 +318,31 @@
         return { promptShown: kept.join("\n").trim(), choices };
       }
 
+      // --- Seed (ONE-TIME, language-agnostic) ---
+      // We do NOT parse in the widget. We forward the first chat sentence once,
+      // wrapped with strict instructions to extract ONLY:
+      // business_type, business_name (if present), status (existing|starting ONLY if explicitly stated), dream (ONLY if explicitly stated).
+      function buildSeedMessage(seedRaw) {
+        const text = String(seedRaw || "").replace(/\s+/g, " ").trim();
+        if (!text) return "";
+
+        return [
+          "__SEED__",
+          "Extract ONLY the following fields from the user's first message (any language).",
+          "Rules:",
+          "- business_type: what kind of business it is (if stated).",
+          "- business_name: only if clearly present.",
+          "- status: ONLY if explicitly stated -> 'existing' or 'starting'. Otherwise leave empty.",
+          "- dream: ONLY if explicitly stated. Otherwise leave empty.",
+          "Output format (exactly these 4 lines, nothing else):",
+          "business_type: <...>",
+          "business_name: <...>",
+          "status: <existing|starting|>",
+          "dream: <...>",
+          "User message: " + JSON.stringify(text)
+        ].join("\n");
+      }
+
       function renderChoiceButtons(choices) {
         const wrap = document.getElementById("choiceWrap");
         wrap.innerHTML = "";
@@ -366,6 +391,12 @@
         const ws = widgetState();
         if (!ws.language) setWidgetStateSafe({ language: lang });
 
+        // NEW: store seed from initial tool payload (one-time), so Start can use it once.
+        const seedFromTool = String(data.seed_user_message || "").trim();
+        if (seedFromTool && !String(ws.seed_user_message || "").trim()) {
+          setWidgetStateSafe({ seed_user_message: seedFromTool });
+        }
+
         // Use local gate to decide whether to show pre-start screen.
         const showPreStart = !sessionStarted;
 
@@ -384,11 +415,11 @@
 
         const specialist = (result && result.specialist) ? result.specialist : {};
         const showContinue =
-        !showPreStart &&
-        hasToolOutput &&
-        (current === "step_0" || current === "dream") &&
-        String(specialist.action || "") === "CONFIRM" &&
-        String(specialist.confirmation_question || "").trim() !== "";
+          !showPreStart &&
+          hasToolOutput &&
+          (current === "step_0" || current === "dream") &&
+          String(specialist.action || "") === "CONFIRM" &&
+          String(specialist.confirmation_question || "").trim() !== "";
 
         if (showPreStart) {
           inputWrap.style.display = "none";
@@ -434,7 +465,7 @@
           Array.isArray(choices) &&
           choices.length === 0 &&
           String(promptRaw || "").trim() !== "";
-        
+
         btnOk.style.display = (showContinue || isDreamExplainerReadiness) ? "inline-flex" : "none";
 
         document.getElementById("input").placeholder =
@@ -504,7 +535,20 @@
         sessionStarted = true;
         sessionWelcomeShown = false;
 
-        setWidgetStateSafe({ language: "en", started: "true" });
+        // NEW: do not force a language here; keep it language-agnostic.
+        setWidgetStateSafe({ started: "true" });
+
+        // NEW: use seed exactly once (if present).
+        const ws = widgetState();
+        const seedRaw = String(ws.seed_user_message || "").trim();
+        const seedUsed = String(ws.seed_used || "") === "true";
+
+        if (seedRaw && !seedUsed) {
+          const seedMsg = buildSeedMessage(seedRaw);
+          setWidgetStateSafe({ seed_used: "true" });
+          callRunStep(seedMsg);
+          return;
+        }
 
         // If toolOutput already exists (e.g., chat composer triggered run_step), do not re-trigger.
         if (oa() && oa().toolOutput) {
