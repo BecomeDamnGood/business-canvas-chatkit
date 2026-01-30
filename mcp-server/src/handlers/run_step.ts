@@ -637,8 +637,32 @@ export async function run_step(rawArgs: unknown): Promise<{
   const pristineAtEntry = isPristineStateForStart(state);
 
  const userMessageRaw = String(args.user_message ?? "");
-const userMessageCandidate =
-  looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry ? "" : userMessageRaw;
+const trimmed = userMessageRaw.trim();
+const isSeedMsg = trimmed.startsWith("__SEED__");
+
+// Seed is allowed ONLY once, and ONLY at the very start of Step 0 (language-agnostic).
+const seedUsed = String((state as any).seed_used ?? "") === "true";
+const seedEligible =
+  String(state.current_step) === STEP_0_ID &&
+  String((state as any).step_0_final ?? "").trim() === "" &&
+  String((state as any).dream_final ?? "").trim() === "" &&
+  Object.keys((state as any).last_specialist_result ?? {}).length === 0;
+
+let userMessageCandidate = userMessageRaw;
+
+// If it's a seed message: accept only if eligible + not used, then lock it.
+if (isSeedMsg) {
+  if (!seedUsed && seedEligible) {
+    (state as any).seed_used = "true";
+    userMessageCandidate = userMessageRaw; // keep as-is; bypass meta-instruction filter
+  } else {
+    userMessageCandidate = ""; // block any late/repeated seed attempts
+  }
+} else {
+  // Existing behavior: ignore meta-instructions only on pristine entry
+  userMessageCandidate =
+    looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry ? "" : userMessageRaw;
+}
 
 // If user clicks a numbered option button, the UI sends "1"/"2".
 // Expand it to the real option label from the previous question, so every step can route correctly.
