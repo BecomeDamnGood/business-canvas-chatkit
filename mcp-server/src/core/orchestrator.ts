@@ -81,6 +81,7 @@ function normalizeActiveSpecialist(x: unknown): string {
 type TriggerFlags = {
   proceed_to_dream: BoolString;
   proceed_to_purpose: BoolString;
+  proceed_to_next: BoolString; // NEW (minimal): for purpose->bigwhy->... flow
   suggest_dreambuilder: BoolString;
   action: string;
 };
@@ -92,6 +93,7 @@ function readTriggersRobust(last: unknown): TriggerFlags {
     return {
       proceed_to_dream: boolStr(obj.proceed_to_dream),
       proceed_to_purpose: boolStr(obj.proceed_to_purpose),
+      proceed_to_next: boolStr(obj.proceed_to_next), // NEW
       suggest_dreambuilder: boolStr(obj.suggest_dreambuilder),
       action: String(obj.action ?? ""),
     };
@@ -107,6 +109,9 @@ function readTriggersRobust(last: unknown): TriggerFlags {
   const proceed_to_purpose = has('"proceed_to_purpose":"true"', '"proceed_to_purpose": "true"')
     ? "true"
     : "false";
+  const proceed_to_next = has('"proceed_to_next":"true"', '"proceed_to_next": "true"')
+    ? "true"
+    : "false";
   const suggest_dreambuilder = has('"suggest_dreambuilder":"true"', '"suggest_dreambuilder": "true"')
     ? "true"
     : "false";
@@ -115,6 +120,7 @@ function readTriggersRobust(last: unknown): TriggerFlags {
   return {
     proceed_to_dream,
     proceed_to_purpose,
+    proceed_to_next,
     suggest_dreambuilder,
     action,
   };
@@ -174,6 +180,14 @@ function wantsFullRestartCanvas(userMessage: string): boolean {
   return false;
 }
 
+// NEW (minimal): next-step mapping for proceed_to_next="true"
+function nextCanonicalStep(current: OrchestratorStepId): OrchestratorStepId {
+  const idx = CANONICAL_STEPS.indexOf(current);
+  if (idx < 0) return "step_0";
+  const next = CANONICAL_STEPS[idx + 1];
+  return (next ? (next as OrchestratorStepId) : current);
+}
+
 /**
  * Returns a strict orchestrator output.
  *
@@ -207,6 +221,10 @@ export function orchestrate(params: { state: CanvasState; userMessage: string })
     } else if (triggers.proceed_to_purpose === "true") {
       next_step = "purpose";
       next_specialist = "Purpose";
+    } else if (triggers.proceed_to_next === "true") {
+      // NEW (minimal): advance one canonical step (purpose -> bigwhy -> role -> ... -> presentation)
+      next_step = nextCanonicalStep(CURRENT_STEP);
+      next_specialist = STEP_TO_SPECIALIST[next_step];
     } else if (ACTIVE_SPECIALIST === "DreamExplainer" && triggers.suggest_dreambuilder === "true") {
       // Priority 2: DreamExplainer continuation
       next_step = "dream";
