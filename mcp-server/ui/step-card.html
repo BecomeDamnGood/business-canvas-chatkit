@@ -147,7 +147,7 @@
             <div class="row" id="controls">
               <button class="btn primary" id="btnStart">Start</button>
               <div class="startHint" id="startHint"></div>
-              <button class="btn primary" id="btnOk" style="display:none">OK</button>
+              <button class="btn primary" id="btnOk" style="display:none">Continue</button>
             </div>
 
             <div class="status" id="status"></div>
@@ -159,19 +159,7 @@
     <script>
       const ORDER = ["step_0","dream","purpose","bigwhy","role","entity","strategy","rulesofthegame","presentation"];
 
-      const TITLES_NL = {
-        step_0: "Stap 1: Validatie & Bedrijfsnaam",
-        dream: "Stap 2: Dream",
-        purpose: "Stap 3: Purpose",
-        bigwhy: "Stap 4: Big Why",
-        role: "Stap 5: Role",
-        entity: "Stap 6: Entity",
-        strategy: "Stap 7: Strategy",
-        rulesofthegame: "Stap 8: Rules of the game",
-        presentation: "Stap 9: Presentation"
-      };
-
-      const TITLES_EN = {
+      const TITLES = {
         step_0: "Step 1: Validation & Business Name",
         dream: "Step 2: Dream",
         purpose: "Step 3: Purpose",
@@ -194,7 +182,7 @@
         return raw;
       }
 
-      // NEW: cache last known tool output (makes UI resilient to host timing)
+      // Cache last known tool output (resilient to host timing).
       function setLastToolOutput(raw) {
         try { globalThis.__BSC_LAST_TOOL_OUTPUT__ = normalizeToolOutput(raw); } catch {}
       }
@@ -204,7 +192,7 @@
           : {};
       }
 
-      // UPDATED: allow render() to use callTool return value (doc-conform followups)
+      // Allow render() to use callTool return value (followups), otherwise fall back to host toolOutput / cache.
       function toolData(overrideRaw) {
         if (overrideRaw) return normalizeToolOutput(overrideRaw);
         const o = oa();
@@ -236,30 +224,17 @@
         try { o.setWidgetState(next); } catch {}
       }
 
-      function getLocale() {
-        const o = oa();
-        const l = (o && o.locale) ? String(o.locale) : (navigator.language || "en");
-        return l;
-      }
-
-      function localeToLang(locale) {
-        const s = String(locale || "en").toLowerCase();
-        return s.split(/[-_]/)[0] || "en";
-      }
-
-      function uiLang(resultState) {
+      function uiLang(_resultState) {
+        // Lock UI language to English to avoid mid-flow language switches.
         const ws = widgetState();
-        const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
-        if (fromResult) return fromResult;
-        const fromWidget = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
-        if (fromWidget) return fromWidget;
-        return localeToLang(getLocale());
+        const locked = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
+        if (locked) return locked;
+        return "en";
       }
 
-      function setStaticStrings(lang) {
-        const isNl = String(lang).startsWith("nl");
+      function setStaticStrings(_lang) {
         document.getElementById("uiSubtitle").textContent =
-          isNl ? "Gebruik de widget om door te gaan (niet de chat box)" : "Use the app widget to continue (not the chat box)";
+          "Use the app widget to continue (not the chat box)";
         document.getElementById("byText").textContent = "A business model by:";
       }
 
@@ -286,9 +261,9 @@
 
       let isLoading = false;
 
-      // Local-only: THIS load/session's start gate (prevents "chat composer tool call" from skipping intro).
+      // Local-only: this page-load session start gate.
       let sessionStarted = false;
-      // Local-only welcome prepend (prevents repeated prepend due to host events).
+      // Local-only: prevent repeating the welcome prepend.
       let sessionWelcomeShown = false;
 
       function setSendEnabled(enabled) {
@@ -368,11 +343,9 @@
         return Object.assign({}, state || {}, { language: lang });
       }
 
-      // UPDATED: render can accept override tool output (from callTool return)
       function render(overrideToolOutput) {
         const data = toolData(overrideToolOutput);
 
-        // Cache whatever we used, so future renders are stable even if host is slow
         if (data && Object.keys(data).length) setLastToolOutput(data);
 
         const result =
@@ -388,7 +361,7 @@
         const ws = widgetState();
         if (!ws.language) setWidgetStateSafe({ language: lang });
 
-        // HARD RULE: Use LOCAL sessionStarted to decide whether to show pre-start.
+        // Use local gate to decide whether to show pre-start screen.
         const showPreStart = !sessionStarted;
 
         const hasToolOutput = Boolean(oa() && oa().toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
@@ -396,9 +369,8 @@
         const idx = stepIndex(current);
         buildStepper(idx);
 
-        const titles = String(lang).startsWith("nl") ? TITLES_NL : TITLES_EN;
         document.getElementById("badge").textContent = String(idx + 1);
-        document.getElementById("sectionTitle").textContent = titles[current] || "";
+        document.getElementById("sectionTitle").textContent = TITLES[current] || "";
 
         const inputWrap = document.getElementById("inputWrap");
         const btnStart = document.getElementById("btnStart");
@@ -406,12 +378,11 @@
         const startHint = document.getElementById("startHint");
 
         const specialist = (result && result.specialist) ? result.specialist : {};
-        const isConfirmReadinessStep0 =
+        const showContinueStep0 =
           !showPreStart &&
           hasToolOutput &&
           current === "step_0" &&
           String(specialist.action || "") === "CONFIRM" &&
-          String(specialist.proceed_to_dream || "") === "false" &&
           String(specialist.confirmation_question || "").trim() !== "";
 
         if (showPreStart) {
@@ -422,7 +393,7 @@
 
           document.getElementById("cardDesc").textContent = PRESTART_WELCOME_TEXT;
           document.getElementById("prompt").textContent = "";
-          startHint.textContent = String(lang).startsWith("nl") ? "Klik op Start om te beginnen." : "Click Start to begin.";
+          startHint.textContent = "Click Start to begin.";
 
           if (isLoading) setLoading(false);
           return;
@@ -436,7 +407,7 @@
         const bodyRaw = (result && typeof result.text === "string") ? result.text : "";
         const promptRaw = (result && typeof result.prompt === "string") ? result.prompt : "";
 
-        // Combined welcome once per session
+        // Prepend welcome once per local session.
         let body = bodyRaw;
         if (!sessionWelcomeShown) {
           body = `${PRESTART_WELCOME_TEXT}\n\n${bodyRaw || ""}`.trim();
@@ -449,19 +420,17 @@
         document.getElementById("prompt").textContent = promptShown || "";
         renderChoiceButtons(choices);
 
-        btnOk.style.display = isConfirmReadinessStep0 ? "inline-flex" : "none";
+        // Continue button for step_0 confirmation moments (textarea remains available for questions).
+        btnOk.style.display = showContinueStep0 ? "inline-flex" : "none";
 
         document.getElementById("input").placeholder =
-          String(lang).startsWith("nl")
-            ? "Typ je antwoord hier (gebruik de widget, niet de chat box)…"
-            : "Type your answer here (use the widget, not the chat box)…";
+          "Type your answer here (use the widget, not the chat box)…";
 
         const v = (document.getElementById("input").value || "").trim();
         setSendEnabled(v.length > 0);
 
         globalThis.__BSC_LATEST__ = { state, lang };
 
-        // HARD: always stop loading once we can render a post-start view.
         if (isLoading) setLoading(false);
       }
 
@@ -487,20 +456,14 @@
 
         try {
           const resp = await o.callTool("run_step", payload);
-
-          // CRITICAL FIX: Use callTool RETURN VALUE to render immediately (doc-conform)
           const normalized = normalizeToolOutput(resp);
           setLastToolOutput(normalized);
           render(normalized);
         } catch (e) {
           console.error("run_step failed", e);
-          const lang2 = localeToLang(getLocale());
           document.getElementById("cardDesc").textContent =
-            String(lang2).startsWith("nl")
-              ? "Er ging iets mis bij het verwerken van je bericht. Probeer het opnieuw."
-              : "Something went wrong while processing your message. Please try again.";
+            "Something went wrong while processing your message. Please try again.";
         } finally {
-          // HARD: always clear loading after a widget-initiated call
           setLoading(false);
         }
       }
@@ -523,15 +486,13 @@
       document.getElementById("btnStart").addEventListener("click", () => {
         if (isLoading) return;
 
-        // User explicitly started THIS session.
+        // User explicitly started this local session.
         sessionStarted = true;
-        sessionWelcomeShown = false; // ensure prepend once after start
+        sessionWelcomeShown = false;
 
-        const lang = localeToLang(getLocale());
-        setWidgetStateSafe({ language: lang, started: "true" });
+        setWidgetStateSafe({ language: "en", started: "true" });
 
-        // If toolOutput already exists (chat composer ran run_step), DO NOT call run_step("").
-        // Just render post-start view and continue.
+        // If toolOutput already exists (e.g., chat composer triggered run_step), do not re-trigger.
         if (oa() && oa().toolOutput) {
           render();
           return;
@@ -542,14 +503,12 @@
 
       document.getElementById("btnOk").addEventListener("click", () => {
         if (isLoading) return;
-        const latest = globalThis.__BSC_LATEST__ || {};
-        const lang = latest.lang || localeToLang(getLocale());
-        callRunStep(String(lang).startsWith("nl") ? "ja" : "yes");
+        // Continue confirmation gate (keep textarea available for extra questions).
+        callRunStep("yes");
       });
 
       window.addEventListener("openai:set_globals", () => {
         try {
-          // Host update -> render from host toolOutput (or cache), and always clear loading.
           render();
         } catch (e) {
           console.error(e);
