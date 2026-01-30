@@ -205,6 +205,15 @@
         return (o && o.widgetState && typeof o.widgetState === "object") ? o.widgetState : {};
       }
 
+      function setWidgetStateSafe(patch) {
+        const o = oa();
+        if (!o || typeof o.setWidgetState !== "function") return;
+        try {
+          const ws = widgetState();
+          o.setWidgetState({ ...(ws || {}), ...(patch || {}) });
+        } catch {}
+      }
+
       function getLocale() {
         const o = oa();
         const l = (o && o.locale) ? String(o.locale) : (navigator.language || "en");
@@ -254,7 +263,6 @@
       }
 
       let isLoading = false;
-      let didPersistLanguage = false;
 
       function setSendEnabled(enabled) {
         document.getElementById("send").disabled = isLoading || !enabled;
@@ -327,20 +335,15 @@
         }
       }
 
-      function persistWidgetLanguage(lang) {
-        const o = oa();
-        if (!o || typeof o.setWidgetState !== "function") return;
-        const ws = widgetState();
-        if (ws && ws.language) { didPersistLanguage = true; return; }
-        if (didPersistLanguage) return;
-        didPersistLanguage = true;
-        try { o.setWidgetState({ ...(ws || {}), language: lang }); } catch {}
-      }
-
       function ensureLanguageInState(state, lang) {
         const current = (state && state.language) ? String(state.language).trim() : "";
         if (current) return state;
         return Object.assign({}, state || {}, { language: lang });
+      }
+
+      function isStarted() {
+        const ws = widgetState();
+        return String(ws.started || "") === "true";
       }
 
       function render() {
@@ -353,14 +356,19 @@
 
         const state = (result && result.state) ? result.state : {};
         const lang = uiLang(state);
-
         setStaticStrings(lang);
-        persistWidgetLanguage(lang);
 
-        const o = oa();
-        const hasToolOutput = Boolean(o && o.toolOutput);
+        // Persist language once (safe) - no loop: only if missing
+        const ws = widgetState();
+        if (!ws.language) setWidgetStateSafe({ language: lang });
 
-        const current = hasToolOutput ? (state.current_step || "step_0") : "step_0";
+        const started = isStarted();
+        const hasToolOutput = Boolean(oa() && oa().toolOutput);
+
+        // IMPORTANT: if not started, ALWAYS show pre-start UI (even if toolOutput exists due to chat composer).
+        const effectiveHasStarted = started === true;
+
+        const current = (effectiveHasStarted && hasToolOutput) ? (state.current_step || "step_0") : "step_0";
         const idx = stepIndex(current);
         buildStepper(idx);
 
@@ -375,13 +383,14 @@
 
         const specialist = (result && result.specialist) ? result.specialist : {};
         const isConfirmReadinessStep0 =
+          effectiveHasStarted &&
           hasToolOutput &&
           current === "step_0" &&
           String(specialist.action || "") === "CONFIRM" &&
           String(specialist.proceed_to_dream || "") === "false" &&
           String(specialist.confirmation_question || "").trim() !== "";
 
-        if (!hasToolOutput) {
+        if (!effectiveHasStarted) {
           inputWrap.style.display = "none";
           document.getElementById("choiceWrap").style.display = "none";
           btnStart.style.display = "inline-flex";
@@ -391,10 +400,13 @@
           document.getElementById("prompt").textContent = "";
 
           startHint.textContent = String(lang).startsWith("nl") ? "Klik op Start om te beginnen." : "Click Start to begin.";
-          setLoading(isLoading);
+
+          // If we ended up loading due to earlier actions, clear it in pre-start.
+          if (isLoading) setLoading(false);
           return;
         }
 
+        // Post-start UI
         inputWrap.style.display = "flex";
         btnStart.style.display = "none";
         startHint.textContent = "";
@@ -420,7 +432,8 @@
 
         globalThis.__BSC_LATEST__ = { state, lang };
 
-        if (isLoading) setLoading(false);
+        // If we were waiting, a new render means we can stop waiting.
+        if (isLoading && hasToolOutput) setLoading(false);
       }
 
       async function callRunStep(message) {
@@ -431,9 +444,10 @@
         const state = latest.state || { current_step: "step_0" };
 
         const lang = uiLang(state);
-        persistWidgetLanguage(lang);
-
         const nextState = ensureLanguageInState(state, lang);
+
+        // Always keep widgetState updated (language + started)
+        setWidgetStateSafe({ language: nextState.language, started: "true" });
 
         const payload = {
           current_step_id: nextState.current_step || "step_0",
@@ -444,12 +458,21 @@
         setLoading(true);
 
         try {
-          await o.callTool("run_step", payload);
-          // Do not depend on return value; host will update toolOutput and fire openai:set_globals.
+          const resp = await o.callTool("run_step", payload);
+
+          // IMPORTANT: fallback render on response to prevent "hang" if host event is delayed.
+          const normalized = normalizeToolOutput(resp);
+          if (normalized && typeof normalized === "object") {
+            render();
+          }
+
+          // Host will also emit openai:set_globals; render() will run again safely.
         } catch (e) {
           console.error("run_step failed", e);
+          const latest2 = globalThis.__BSC_LATEST__ || {};
+          const lang2 = latest2.lang || localeToLang(getLocale());
           document.getElementById("cardDesc").textContent =
-            String(lang).startsWith("nl")
+            String(lang2).startsWith("nl")
               ? "Er ging iets mis bij het verwerken van je bericht. Probeer het opnieuw."
               : "Something went wrong while processing your message. Please try again.";
           setLoading(false);
@@ -474,7 +497,7 @@
       document.getElementById("btnStart").addEventListener("click", () => {
         if (isLoading) return;
         const lang = localeToLang(getLocale());
-        persistWidgetLanguage(lang);
+        setWidgetStateSafe({ language: lang, started: "true" });
         callRunStep("");
       });
 
