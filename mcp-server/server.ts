@@ -42,113 +42,125 @@ function createAppServer() {
     ],
   }));
 
-  // Tool: run_step (widget-leading)
-  server.registerTool(
-    "run_step",
-    {
-      title: "Run Step",
-      description:
-        "Widget-leading Business Strategy Canvas flow. Always call this tool for each user interaction and render using the widget output template. The user should answer via the widget (not the chat box).",
-      inputSchema: {
-        // ChatGPT/Widget sometimes sends this as 'start'
-        current_step_id: z.string(),
-        user_message: z.string(),
-        state: z.record(z.string(), z.any()).optional(),
-      },
-      _meta: {
-        securitySchemes: [{ type: "noauth" }],
-        "openai/outputTemplate": UI_RESOURCE_URI,
-        "openai/widgetAccessible": true,
-      },
+ // Tool: run_step (widget-leading)
+server.registerTool(
+  "run_step",
+  {
+    title: "Run Step",
+    description:
+      "Widget-leading Business Strategy Canvas flow. Always call this tool for each user interaction and render using the widget output template. The user should answer via the widget (not the chat box).",
+    inputSchema: {
+      // ChatGPT/Widget sometimes sends this as 'start'
+      current_step_id: z.string(),
+      user_message: z.string(),
+      state: z.record(z.string(), z.any()).optional(),
     },
-    async (args) => {
-      const current_step_id = String(args.current_step_id ?? "").trim();
-      const state = (args.state ?? {}) as Record<string, any>;
+    _meta: {
+      securitySchemes: [{ type: "noauth" }],
+      "openai/outputTemplate": UI_RESOURCE_URI,
+      "openai/widgetAccessible": true,
+    },
+  },
+  async (args) => {
+    const current_step_id = String(args.current_step_id ?? "").trim();
+    const state = (args.state ?? {}) as Record<string, any>;
 
-      // IMPORTANT:
-      // If the request is a "start" trigger, do NOT pass a meta-instruction as user_message.
-      // We force a clean start so the widget shows the Step 0 question.
-      const user_message_raw = String(args.user_message ?? "");
-      const user_message =
-        current_step_id.toLowerCase() === "start" ? "" : user_message_raw;
+    // IMPORTANT:
+    // If the request is a "start" trigger, do NOT pass a meta-instruction as user_message.
+    // We force a clean start so the widget shows the Step 0 question.
+    const user_message_raw = String(args.user_message ?? "");
+    const user_message =
+      current_step_id.toLowerCase() === "start" ? "" : user_message_raw;
 
-      // Basic request logging (so CloudWatch shows tool calls + failures)
-      console.log(
-        `[run_step] step_id=${current_step_id} user_message_len=${user_message_raw.length} state_keys=${Object.keys(
-          state
-        ).length}`
-      );
+    // NEW: capture seed ONLY for the initial start trigger (widget will use it once after Start)
+    const seed_user_message =
+      current_step_id.toLowerCase() === "start" && user_message_raw.trim()
+        ? user_message_raw.trim()
+        : "";
 
-      try {
-        const result = await runStepTool({
-          user_message,
-          state,
-        });
+    // Basic request logging (so CloudWatch shows tool calls + failures)
+    console.log(
+      `[run_step] step_id=${current_step_id} user_message_len=${user_message_raw.length} state_keys=${Object.keys(
+        state
+      ).length}`
+    );
 
-        const structuredContent = {
-          title: `Business Strategy Canvas Builder (${VERSION})`,
-          meta: `step: ${result.state?.current_step ?? "unknown"} | specialist: ${
-            result.active_specialist ?? "unknown"
-          }`,
-          result,
-        };
+    try {
+      const result = await runStepTool({
+        user_message,
+        state,
+      });
 
-        // Keep chat empty; widget renders via outputTemplate + structuredContent
-        return {
-          content: [{ type: "text", text: "" }],
-          structuredContent,
-        };
-      } catch (error: any) {
-        console.error("[run_step] ERROR:", error?.message ?? error, error?.meta ?? "");
+      const structuredContent: any = {
+        title: `Business Strategy Canvas Builder (${VERSION})`,
+        meta: `step: ${result.state?.current_step ?? "unknown"} | specialist: ${
+          result.active_specialist ?? "unknown"
+        }`,
+        result,
+      };
 
-        // Safe widget fallback (never throw; never return chat text)
-        const fallbackResult = {
-          ok: true,
-          tool: "run_step",
-          current_step_id: "step_0",
+      // NEW: attach seed for the widget pre-start screen
+      if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
+
+      // Keep chat empty; widget renders via outputTemplate + structuredContent
+      return {
+        content: [{ type: "text", text: "" }],
+        structuredContent,
+      };
+    } catch (error: any) {
+      console.error("[run_step] ERROR:", error?.message ?? error, error?.meta ?? "");
+
+      // Safe widget fallback (never throw; never return chat text)
+      const fallbackResult = {
+        ok: true,
+        tool: "run_step",
+        current_step_id: "step_0",
+        active_specialist: "ValidationAndBusinessName",
+        text: "",
+        prompt:
+          "Something went wrong on the server. Please try again (or restart the canvas).",
+        specialist: {
+          action: "ESCAPE",
+          message: "Something went wrong on the server.",
+          question: "Please try again.",
+          refined_formulation: "",
+          confirmation_question: "",
+        },
+        state: {
+          state_version: "1",
+          current_step: "step_0",
           active_specialist: "ValidationAndBusinessName",
-          text: "",
-          prompt:
-            "Something went wrong on the server. Please try again (or restart the canvas).",
-          specialist: {
-            action: "ESCAPE",
-            message: "Something went wrong on the server.",
-            question: "Please try again.",
-            refined_formulation: "",
-            confirmation_question: "",
-          },
-          state: {
-            state_version: "1",
-            current_step: "step_0",
-            active_specialist: "ValidationAndBusinessName",
-            intro_shown_for_step: "",
-            intro_shown_session: "false",
-            last_specialist_result: {},
-            step_0_final: "",
-            dream_final: "",
-            business_name: "TBD",
-            summary_target: "unknown",
-          },
-          debug: {
-            error: String(error?.message ?? error),
-          },
-        };
+          intro_shown_for_step: "",
+          intro_shown_session: "false",
+          last_specialist_result: {},
+          step_0_final: "",
+          dream_final: "",
+          business_name: "TBD",
+          summary_target: "unknown",
+        },
+        debug: {
+          error: String(error?.message ?? error),
+        },
+      };
 
-        const structuredContent = {
-          title: `Business Strategy Canvas Builder (${VERSION})`,
-          meta: `error: run_step failed`,
-          result: fallbackResult,
-        };
+      const structuredContent: any = {
+        title: `Business Strategy Canvas Builder (${VERSION})`,
+        meta: `error: run_step failed`,
+        result: fallbackResult,
+      };
 
-        return {
-          content: [{ type: "text", text: "" }],
-          structuredContent,
-        };
-      }
+      // NEW: even on error, still pass seed if present (optional but nice)
+      if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
+
+      return {
+        content: [{ type: "text", text: "" }],
+        structuredContent,
+      };
     }
-  );
+  }
+);
 
-  return server;
+return server;
 }
 
 const httpServer = createServer(async (req, res) => {
