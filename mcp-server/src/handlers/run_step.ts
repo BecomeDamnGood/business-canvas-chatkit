@@ -25,9 +25,88 @@ import {
   type DreamOutput,
 } from "../steps/dream.js";
 
+import {
+  DREAM_EXPLAINER_SPECIALIST,
+  DREAM_EXPLAINER_INSTRUCTIONS,
+  DreamExplainerJsonSchema,
+  DreamExplainerZodSchema,
+  buildDreamExplainerSpecialistInput,
+  type DreamExplainerOutput,
+} from "../steps/dream_explainer.js";
+
+import {
+  PURPOSE_STEP_ID,
+  PURPOSE_SPECIALIST,
+  PURPOSE_INSTRUCTIONS,
+  PurposeJsonSchema,
+  PurposeZodSchema,
+  buildPurposeSpecialistInput,
+  type PurposeOutput,
+} from "../steps/purpose.js";
+
+import {
+  BIGWHY_STEP_ID,
+  BIGWHY_SPECIALIST,
+  BIGWHY_INSTRUCTIONS,
+  BigWhyJsonSchema,
+  BigWhyZodSchema,
+  buildBigWhySpecialistInput,
+  type BigWhyOutput,
+} from "../steps/bigwhy.js";
+
+import {
+  ROLE_STEP_ID,
+  ROLE_SPECIALIST,
+  ROLE_INSTRUCTIONS,
+  RoleJsonSchema,
+  RoleZodSchema,
+  buildRoleSpecialistInput,
+  type RoleOutput,
+} from "../steps/role.js";
+
+import {
+  ENTITY_STEP_ID,
+  ENTITY_SPECIALIST,
+  ENTITY_INSTRUCTIONS,
+  EntityJsonSchema,
+  EntityZodSchema,
+  buildEntitySpecialistInput,
+  type EntityOutput,
+} from "../steps/entity.js";
+
+import {
+  STRATEGY_STEP_ID,
+  STRATEGY_SPECIALIST,
+  STRATEGY_INSTRUCTIONS,
+  StrategyJsonSchema,
+  StrategyZodSchema,
+  buildStrategySpecialistInput,
+  type StrategyOutput,
+} from "../steps/strategy.js";
+
+import {
+  RULESOFTHEGAME_STEP_ID,
+  RULESOFTHEGAME_SPECIALIST,
+  RULESOFTHEGAME_INSTRUCTIONS,
+  RulesOfTheGameJsonSchema,
+  RulesOfTheGameZodSchema,
+  buildRulesOfTheGameSpecialistInput,
+  type RulesOfTheGameOutput,
+} from "../steps/rulesofthegame.js";
+
+import {
+  PRESENTATION_STEP_ID,
+  PRESENTATION_SPECIALIST,
+  PRESENTATION_INSTRUCTIONS,
+  PresentationJsonSchema,
+  PresentationZodSchema,
+  buildPresentationSpecialistInput,
+  type PresentationOutput,
+} from "../steps/presentation.js";
+
 /**
  * Incoming tool args
- * NOTE: Some tool callers include current_step_id ("start") — we accept it but do not rely on it.
+ * NOTE: Some tool callers include current_step_id ("start") — accepted but not relied on.
  */
 const RunStepArgsSchema = z.object({
   current_step_id: z.string().optional(),
@@ -40,19 +119,14 @@ type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
 const STEP0_QUESTION_EN =
   "What type of venture are you starting or running, and what’s the name of your business (or is it still TBD)?";
 
-const STEP0_QUESTION_NL =
-  "Wat voor onderneming start of run je, en wat is de naam van je bedrijf (of is het nog TBD)?";
-
 function langFromState(state: CanvasState): string {
-  const l = String((state as any).language ?? "").toLowerCase().trim();
-  // Keep as-is (widget is the source of truth). Fallback to English.
+  const l = String((state as any).language ?? "").trim().toLowerCase();
   return l || "en";
 }
 
 /**
  * Render order (strict):
  * message -> refined_formulation
- * (NO session intro rendered here; pre-start UI owns the welcome text)
  */
 function buildTextForWidget(params: { specialist: any }): string {
   const { specialist } = params;
@@ -72,28 +146,14 @@ function pickPrompt(specialist: any): string {
   return confirmQ || q || "";
 }
 
-function isClearYes(userMessage: string, lang: string): boolean {
+function isClearYes(userMessage: string): boolean {
   const t = String(userMessage ?? "").trim().toLowerCase();
   if (!t) return false;
 
-  // keep strict (1-6 words rule of thumb)
   const wc = t.split(/\s+/).filter(Boolean).length;
   if (wc > 6) return false;
 
-  const yesSetNl = new Set([
-    "ja",
-    "jazeker",
-    "jep",
-    "yep",
-    "klopt",
-    "ok",
-    "oke",
-    "akkoord",
-    "prima",
-    "doen",
-    "gaan",
-  ]);
-  const yesSetEn = new Set([
+  const yesSet = new Set([
     "yes",
     "yep",
     "yeah",
@@ -101,38 +161,33 @@ function isClearYes(userMessage: string, lang: string): boolean {
     "ok",
     "okay",
     "proceed",
+    "go",
     "lets go",
     "let's go",
-    "go",
+    // common Dutch affirmations (safe even in EN sessions)
+    "ja",
+    "jazeker",
+    "jep",
+    "klopt",
+    "oke",
+    "akkoord",
+    "prima",
+    "doen",
+    "gaan",
   ]);
 
-  if (lang.startsWith("nl")) {
-    if (yesSetNl.has(t)) return true;
-    if (t === "1" || t === "y") return true;
-    return false;
-  }
-
-  if (yesSetEn.has(t)) return true;
+  if (yesSet.has(t)) return true;
   if (t === "y" || t === "1") return true;
   return false;
 }
 
-/**
- * Some tool-callers incorrectly send a meta-instruction as `user_message`.
- * For a clean widget flow, we ignore that meta text when the state is still pristine.
- *
- * Language-neutral: English-only patterns + structural cues (no non-English hardcoding).
- */
 function looksLikeMetaInstruction(userMessage: string): boolean {
   const t = String(userMessage ?? "").trim();
   if (!t) return false;
 
   const lower = t.toLowerCase();
 
-  // Meta messages tend to be instruction-like and longer.
   const longish = t.length >= 80;
-
-  // Structural cues
   const hasBullets = /(^|\n)\s*[-*]\s+/.test(t);
   const hasSections =
     lower.includes("instructions") ||
@@ -153,32 +208,43 @@ function looksLikeMetaInstruction(userMessage: string): boolean {
 function isPristineStateForStart(s: CanvasState): boolean {
   return (
     String(s.current_step) === STEP_0_ID &&
-    String(s.step_0_final ?? "").trim() === "" &&
-    String(s.dream_final ?? "").trim() === "" &&
-    String(s.intro_shown_session ?? "") !== "true" &&
-    Object.keys(s.last_specialist_result ?? {}).length === 0
+    String((s as any).step_0_final ?? "").trim() === "" &&
+    String((s as any).dream_final ?? "").trim() === "" &&
+    String((s as any).intro_shown_session ?? "") !== "true" &&
+    Object.keys((s as any).last_specialist_result ?? {}).length === 0
   );
 }
 
+/**
+ * Specialist context block for reliability (used by Presentation and helps other steps avoid guesswork)
+ */
 function buildSpecialistContextBlock(state: CanvasState): string {
-  // English-only. Minimal facts so specialists don't need to infer chat history.
-  const safe = (s: any) => String(s ?? "").replace(/\r\n/g, "\n");
+  const safe = (v: any) => String(v ?? "").replace(/\r\n/g, "\n");
   const last =
     state.last_specialist_result && typeof state.last_specialist_result === "object"
       ? JSON.stringify(state.last_specialist_result)
       : "";
 
-  return `STATE CONTEXT (do not output this section)
-- step_0_final: ${safe(state.step_0_final)}
-- dream_final: ${safe(state.dream_final)}
-- business_name: ${safe(state.business_name)}
-- intro_shown_for_step: ${safe(state.intro_shown_for_step)}
-- intro_shown_session: ${safe(state.intro_shown_session)}
+  return `STATE FINALS (use these if needed; do not invent)
+- step_0_final: ${safe((state as any).step_0_final)}
+- dream_final: ${safe((state as any).dream_final)}
+- purpose_final: ${safe((state as any).purpose_final)}
+- bigwhy_final: ${safe((state as any).bigwhy_final)}
+- role_final: ${safe((state as any).role_final)}
+- entity_final: ${safe((state as any).entity_final)}
+- strategy_final: ${safe((state as any).strategy_final)}
+- rulesofthegame_final: ${safe((state as any).rulesofthegame_final)}
+
+STATE META (do not output this section)
+- business_name: ${safe((state as any).business_name)}
+- intro_shown_for_step: ${safe((state as any).intro_shown_for_step)}
+- intro_shown_session: ${safe((state as any).intro_shown_session)}
 - last_specialist_result_json: ${safe(last)}`;
 }
 
 /**
  * Persist state updates consistently (no nulls)
+ * Minimal: store finals when the specialist returns CONFIRM with its output field.
  */
 function applyStateUpdate(params: {
   prev: CanvasState;
@@ -199,38 +265,89 @@ function applyStateUpdate(params: {
     last_specialist_result:
       typeof specialistResult === "object" && specialistResult !== null ? specialistResult : {},
 
-    // We ONLY mark it as shown in state when we actually rendered it.
-    // NOTE: pre-start UI now owns the welcome text; run_step uses this only as a state flag.
-    intro_shown_session: showSessionIntroUsed === "true" ? "true" : prev.intro_shown_session,
+    intro_shown_session: showSessionIntroUsed === "true" ? "true" : (prev as any).intro_shown_session,
 
-    // Only mark a step intro as shown when the specialist explicitly returns action="INTRO".
-    intro_shown_for_step: action === "INTRO" ? next_step : prev.intro_shown_for_step,
+    // mark a step intro as shown only when the specialist actually outputs INTRO
+    intro_shown_for_step: action === "INTRO" ? next_step : (prev as any).intro_shown_for_step,
   };
 
-  // Step 0 persistence (conservative)
+  // ---- Step 0 ----
   if (next_step === STEP_0_ID) {
     if (typeof specialistResult?.step_0 === "string" && specialistResult.step_0.trim()) {
-      nextState = { ...nextState, step_0_final: specialistResult.step_0.trim() };
+      (nextState as any).step_0_final = specialistResult.step_0.trim();
     }
     if (typeof specialistResult?.business_name === "string" && specialistResult.business_name.trim()) {
-      nextState = { ...nextState, business_name: specialistResult.business_name.trim() };
+      (nextState as any).business_name = specialistResult.business_name.trim();
     }
   }
 
-  // Dream persistence (only when action="CONFIRM" and dream provided)
+  // ---- Dream (and DreamExplainer final Dream) ----
   if (next_step === DREAM_STEP_ID) {
-    if (String(specialistResult?.action ?? "") === "CONFIRM" && typeof specialistResult?.dream === "string") {
+    if (action === "CONFIRM" && typeof specialistResult?.dream === "string") {
       const v = specialistResult.dream.trim();
-      if (v) nextState = { ...nextState, dream_final: v };
+      if (v) (nextState as any).dream_final = v;
+    }
+  }
+
+  // ---- Purpose ----
+  if (next_step === PURPOSE_STEP_ID) {
+    if (action === "CONFIRM" && typeof specialistResult?.purpose === "string") {
+      const v = specialistResult.purpose.trim();
+      if (v) (nextState as any).purpose_final = v;
+    }
+  }
+
+  // ---- Big Why ----
+  if (next_step === BIGWHY_STEP_ID) {
+    if (action === "CONFIRM" && typeof specialistResult?.bigwhy === "string") {
+      const v = specialistResult.bigwhy.trim();
+      if (v) (nextState as any).bigwhy_final = v;
+    }
+  }
+
+  // ---- Role ----
+  if (next_step === ROLE_STEP_ID) {
+    if (action === "CONFIRM" && typeof specialistResult?.role === "string") {
+      const v = specialistResult.role.trim();
+      if (v) (nextState as any).role_final = v;
+    }
+  }
+
+  // ---- Entity ----
+  if (next_step === ENTITY_STEP_ID) {
+    if (action === "CONFIRM" && typeof specialistResult?.entity === "string") {
+      const v = specialistResult.entity.trim();
+      if (v) (nextState as any).entity_final = v;
+    }
+  }
+
+  // ---- Strategy ----
+  if (next_step === STRATEGY_STEP_ID) {
+    if (action === "CONFIRM" && typeof specialistResult?.strategy === "string") {
+      const v = specialistResult.strategy.trim();
+      if (v) (nextState as any).strategy_final = v;
+    }
+  }
+
+  // ---- Rules of the Game ----
+  if (next_step === RULESOFTHEGAME_STEP_ID) {
+    if (action === "CONFIRM" && typeof specialistResult?.rulesofthegame === "string") {
+      const v = specialistResult.rulesofthegame.trim();
+      if (v) (nextState as any).rulesofthegame_final = v;
+    }
+  }
+
+  // ---- Presentation ----
+  if (next_step === PRESENTATION_STEP_ID) {
+    if (action === "CONFIRM" && typeof specialistResult?.presentation_brief === "string") {
+      const v = specialistResult.presentation_brief.trim();
+      if (v) (nextState as any).presentation_brief_final = v;
     }
   }
 
   return nextState;
 }
 
-/**
- * Call specialist (strict JSON) based on orchestrator decision.
- */
 async function callSpecialistStrict(params: {
   model: string;
   state: CanvasState;
@@ -240,10 +357,10 @@ async function callSpecialistStrict(params: {
   const { model, state, decision, userMessage } = params;
   const specialist = String(decision.specialist_to_call ?? "");
   const contextBlock = buildSpecialistContextBlock(state);
+  const lang = langFromState(state);
 
   if (specialist === STEP_0_SPECIALIST) {
-    // step_0_validation accepts optional language line now
-    const plannerInput = buildStep0SpecialistInput(userMessage, String((state as any).language ?? ""));
+    const plannerInput = buildStep0SpecialistInput(userMessage, lang);
 
     const res = await callStrictJson<ValidationAndBusinessNameOutput>({
       model,
@@ -262,12 +379,11 @@ async function callSpecialistStrict(params: {
   }
 
   if (specialist === DREAM_SPECIALIST) {
-    // dream.ts expects LANGUAGE line now (4th arg).
     const plannerInput = buildDreamSpecialistInput(
       userMessage,
-      state.intro_shown_for_step,
+      (state as any).intro_shown_for_step,
       String(decision.current_step || DREAM_STEP_ID),
-      String((state as any).language ?? "")
+      lang
     );
 
     const res = await callStrictJson<DreamOutput>({
@@ -286,17 +402,196 @@ async function callSpecialistStrict(params: {
     return { specialistResult: res.data, attempts: res.attempts };
   }
 
-  // Safe fallback: Step 0 ESCAPE payload in user's language (based on state.language).
-  const l = langFromState(state);
+  if (specialist === DREAM_EXPLAINER_SPECIALIST) {
+    const plannerInput = buildDreamExplainerSpecialistInput(
+      userMessage,
+      (state as any).intro_shown_for_step,
+      String(decision.current_step || DREAM_STEP_ID)
+    );
+
+    const res = await callStrictJson<DreamExplainerOutput>({
+      model,
+      instructions: `${DREAM_EXPLAINER_INSTRUCTIONS}\n\n${contextBlock}`,
+      plannerInput,
+      schemaName: "DreamExplainer",
+      jsonSchema: DreamExplainerJsonSchema as any,
+      zodSchema: DreamExplainerZodSchema,
+      temperature: 0.3,
+      topP: 1,
+      maxOutputTokens: 10000,
+      debugLabel: "DreamExplainer",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  if (specialist === PURPOSE_SPECIALIST) {
+    const plannerInput = buildPurposeSpecialistInput(
+      userMessage,
+      (state as any).intro_shown_for_step,
+      String(decision.current_step || PURPOSE_STEP_ID)
+    );
+
+    const res = await callStrictJson<PurposeOutput>({
+      model,
+      instructions: `${PURPOSE_INSTRUCTIONS}\n\n${contextBlock}`,
+      plannerInput,
+      schemaName: "Purpose",
+      jsonSchema: PurposeJsonSchema as any,
+      zodSchema: PurposeZodSchema,
+      temperature: 0.3,
+      topP: 1,
+      maxOutputTokens: 10000,
+      debugLabel: "Purpose",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  if (specialist === BIGWHY_SPECIALIST) {
+    const plannerInput = buildBigWhySpecialistInput(
+      userMessage,
+      (state as any).intro_shown_for_step,
+      String(decision.current_step || BIGWHY_STEP_ID)
+    );
+
+    const res = await callStrictJson<BigWhyOutput>({
+      model,
+      instructions: `${BIGWHY_INSTRUCTIONS}\n\n${contextBlock}`,
+      plannerInput,
+      schemaName: "BigWhy",
+      jsonSchema: BigWhyJsonSchema as any,
+      zodSchema: BigWhyZodSchema,
+      temperature: 0.3,
+      topP: 1,
+      maxOutputTokens: 10000,
+      debugLabel: "BigWhy",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  if (specialist === ROLE_SPECIALIST) {
+    const plannerInput = buildRoleSpecialistInput(
+      userMessage,
+      (state as any).intro_shown_for_step,
+      String(decision.current_step || ROLE_STEP_ID)
+    );
+
+    const res = await callStrictJson<RoleOutput>({
+      model,
+      instructions: `${ROLE_INSTRUCTIONS}\n\n${contextBlock}`,
+      plannerInput,
+      schemaName: "Role",
+      jsonSchema: RoleJsonSchema as any,
+      zodSchema: RoleZodSchema,
+      temperature: 0.3,
+      topP: 1,
+      maxOutputTokens: 10000,
+      debugLabel: "Role",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  if (specialist === ENTITY_SPECIALIST) {
+    const plannerInput = buildEntitySpecialistInput(
+      userMessage,
+      (state as any).intro_shown_for_step,
+      String(decision.current_step || ENTITY_STEP_ID)
+    );
+
+    const res = await callStrictJson<EntityOutput>({
+      model,
+      instructions: `${ENTITY_INSTRUCTIONS}\n\n${contextBlock}`,
+      plannerInput,
+      schemaName: "Entity",
+      jsonSchema: EntityJsonSchema as any,
+      zodSchema: EntityZodSchema,
+      temperature: 0.3,
+      topP: 1,
+      maxOutputTokens: 10000,
+      debugLabel: "Entity",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  if (specialist === STRATEGY_SPECIALIST) {
+    const plannerInput = buildStrategySpecialistInput(
+      userMessage,
+      (state as any).intro_shown_for_step,
+      String(decision.current_step || STRATEGY_STEP_ID)
+    );
+
+    const res = await callStrictJson<StrategyOutput>({
+      model,
+      instructions: `${STRATEGY_INSTRUCTIONS}\n\n${contextBlock}`,
+      plannerInput,
+      schemaName: "Strategy",
+      jsonSchema: StrategyJsonSchema as any,
+      zodSchema: StrategyZodSchema,
+      temperature: 0.3,
+      topP: 1,
+      maxOutputTokens: 10000,
+      debugLabel: "Strategy",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  if (specialist === RULESOFTHEGAME_SPECIALIST) {
+    const plannerInput = buildRulesOfTheGameSpecialistInput(
+      userMessage,
+      (state as any).intro_shown_for_step,
+      String(decision.current_step || RULESOFTHEGAME_STEP_ID)
+    );
+
+    const res = await callStrictJson<RulesOfTheGameOutput>({
+      model,
+      instructions: `${RULESOFTHEGAME_INSTRUCTIONS}\n\n${contextBlock}`,
+      plannerInput,
+      schemaName: "RulesOfTheGame",
+      jsonSchema: RulesOfTheGameJsonSchema as any,
+      zodSchema: RulesOfTheGameZodSchema,
+      temperature: 0.3,
+      topP: 1,
+      maxOutputTokens: 10000,
+      debugLabel: "RulesOfTheGame",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  if (specialist === PRESENTATION_SPECIALIST) {
+    const plannerInput = buildPresentationSpecialistInput(
+      userMessage,
+      (state as any).intro_shown_for_step,
+      String(decision.current_step || PRESENTATION_STEP_ID)
+    );
+
+    const res = await callStrictJson<PresentationOutput>({
+      model,
+      instructions: `${PRESENTATION_INSTRUCTIONS}\n\n${contextBlock}`,
+      plannerInput,
+      schemaName: "Presentation",
+      jsonSchema: PresentationJsonSchema as any,
+      zodSchema: PresentationZodSchema,
+      temperature: 0.2,
+      topP: 1,
+      maxOutputTokens: 10000,
+      debugLabel: "Presentation",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts };
+  }
+
+  // Safe fallback: Step 0 ESCAPE payload (language-neutral English here; UI/flow will recover)
   return {
     specialistResult: {
       action: "ESCAPE",
-      message: l.startsWith("nl")
-        ? "Ik kan je hier alleen helpen met het bouwen van je Business Strategy Canvas."
-        : "I can only help you here with building your Business Strategy Canvas.",
-      question: l.startsWith("nl")
-        ? "Wil je nu doorgaan met verificatie?"
-        : "Do you want to continue with verification now?",
+      message: "I can only help you here with building your Business Strategy Canvas.",
+      question: "Do you want to continue with verification now?",
       refined_formulation: "",
       confirmation_question: "",
       business_name: "TBD",
@@ -307,19 +602,28 @@ async function callSpecialistStrict(params: {
   };
 }
 
-function shouldChainToDream(decision: OrchestratorOutput, specialistResult: any): boolean {
-  if (String(decision.current_step) !== STEP_0_ID) return false;
-  if (String(decision.specialist_to_call) !== STEP_0_SPECIALIST) return false;
-  return String(specialistResult?.proceed_to_dream ?? "") === "true";
+function shouldChainToNextStep(decision: OrchestratorOutput, specialistResult: any): boolean {
+  const step = String(decision.current_step ?? "");
+  if (!step) return false;
+
+  // Step 0 uses proceed_to_dream
+  if (step === STEP_0_ID && String(specialistResult?.proceed_to_dream ?? "") === "true") return true;
+
+  // Dream + DreamExplainer use proceed_to_purpose
+  if (step === DREAM_STEP_ID && String(specialistResult?.proceed_to_purpose ?? "") === "true") return true;
+
+  // Everything else uses proceed_to_next
+  if (String(specialistResult?.proceed_to_next ?? "") === "true") return true;
+
+  return false;
 }
 
 /**
  * MCP tool implementation (widget-leading)
  *
- * IMPORTANT (handoff):
- * - The welcome text is shown on the pre-start screen (widget),
- *   so run_step must NOT render the session intro.
- * - Start calls this tool with an empty user_message; we respond with the Step 0 question without calling the specialist.
+ * IMPORTANT:
+ * - Pre-start UI owns the welcome text.
+ * - Start calls this tool with empty user_message; we respond with Step 0 question without calling the specialist.
  */
 export async function run_step(rawArgs: unknown): Promise<{
   ok: true;
@@ -337,56 +641,55 @@ export async function run_step(rawArgs: unknown): Promise<{
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
 
   let state = migrateState(args.state ?? {});
-
-  // Normalize user message:
-  // - If we detect meta-instruction AND state is pristine, treat it as empty (start trigger).
-  const userMessageRaw = String(args.user_message ?? "");
   const pristineAtEntry = isPristineStateForStart(state);
 
+  const userMessageRaw = String(args.user_message ?? "");
   const userMessageCandidate =
     looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry ? "" : userMessageRaw;
 
-  const lang = langFromState(state);
   const userMessage = userMessageCandidate;
+  const lang = langFromState(state);
 
-  // START trigger (widget start screen):
-  // If empty userMessage and state is at step_0 and no history, return only the Step 0 question.
+  // START trigger (widget start screen)
   const isStartTrigger =
     userMessage.trim() === "" &&
     state.current_step === STEP_0_ID &&
-    String(state.intro_shown_session) !== "true" &&
-    String(state.step_0_final ?? "").trim() === "" &&
-    Object.keys(state.last_specialist_result ?? {}).length === 0;
+    String((state as any).intro_shown_session) !== "true" &&
+    String((state as any).step_0_final ?? "").trim() === "" &&
+    Object.keys((state as any).last_specialist_result ?? {}).length === 0;
 
   if (isStartTrigger) {
-    // Mark session intro as already shown (pre-start screen contains the exact welcome text)
-    state = { ...state, intro_shown_session: "true" };
+    (state as any).intro_shown_session = "true";
 
     const specialist: ValidationAndBusinessNameOutput = {
       action: "ASK",
       message: "",
-      question: lang.startsWith("nl") ? STEP0_QUESTION_NL : STEP0_QUESTION_EN,
+      question: STEP0_QUESTION_EN,
       refined_formulation: "",
       confirmation_question: "",
-      business_name: state.business_name || "TBD",
+      business_name: (state as any).business_name || "TBD",
       proceed_to_dream: "false",
-      step_0: state.step_0_final || "",
+      step_0: (state as any).step_0_final || "",
     };
 
     return {
       ok: true,
       tool: "run_step",
-      current_step_id: state.current_step,
+      current_step_id: String(state.current_step),
       active_specialist: STEP_0_SPECIALIST,
       text: "",
       prompt: specialist.question,
       specialist,
-      state: { ...state, active_specialist: STEP_0_SPECIALIST, last_specialist_result: specialist },
+      state: {
+        ...state,
+        active_specialist: STEP_0_SPECIALIST,
+        last_specialist_result: specialist,
+      },
     };
   }
 
-  // --------- SPEECH-PROOF PROCEED TRIGGER (Step 0 readiness moment) ---------
-  const prev = state.last_specialist_result || {};
+  // --------- SPEECH-PROOF PROCEED TRIGGER (Step 0 readiness moment only) ---------
+  const prev = (state as any).last_specialist_result || {};
   const readinessAsked =
     state.current_step === STEP_0_ID &&
     String(prev?.action ?? "") === "CONFIRM" &&
@@ -395,7 +698,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     String(prev?.proceed_to_dream ?? "") === "false";
 
   const canProceedFromStep0 =
-    readinessAsked && isClearYes(userMessage, lang) && String(state.step_0_final ?? "").trim() !== "";
+    readinessAsked && isClearYes(userMessage) && String((state as any).step_0_final ?? "").trim() !== "";
 
   if (canProceedFromStep0) {
     const proceedPayload: ValidationAndBusinessNameOutput = {
@@ -404,23 +707,19 @@ export async function run_step(rawArgs: unknown): Promise<{
       question: "",
       refined_formulation: "",
       confirmation_question: "",
-      business_name: state.business_name || "TBD",
+      business_name: (state as any).business_name || "TBD",
       proceed_to_dream: "true",
-      step_0: state.step_0_final || "",
+      step_0: (state as any).step_0_final || "",
     };
 
-    state = {
-      ...state,
-      active_specialist: STEP_0_SPECIALIST,
-      last_specialist_result: proceedPayload,
-    };
+    (state as any).active_specialist = STEP_0_SPECIALIST;
+    (state as any).last_specialist_result = proceedPayload;
   }
 
   // --------- ORCHESTRATE (decision 1) ----------
   const decision1 = orchestrate({ state, userMessage });
 
-  // show_session_intro should only be true if session intro hasn't been shown yet.
-  // (We don't render it here; used only to keep state consistent if something calls it.)
+  // We do not render a session intro here.
   const showSessionIntro: BoolString = decision1.show_session_intro;
 
   // --------- CALL SPECIALIST (first) ----------
@@ -433,17 +732,16 @@ export async function run_step(rawArgs: unknown): Promise<{
     prev: state,
     decision: decision1,
     specialistResult,
-    // We do not render intro in this handler anymore. Keep it false here.
     showSessionIntroUsed: "false",
   });
 
-  // --------- OPTIONAL CHAIN: STEP 0 -> DREAM ----------
+  // --------- OPTIONAL CHAIN: immediate next-step intro on proceed flags ----------
   let finalDecision = decision1;
 
-  if (shouldChainToDream(decision1, specialistResult)) {
+  if (shouldChainToNextStep(decision1, specialistResult)) {
     const decision2 = orchestrate({ state: nextState, userMessage });
 
-    if (String(decision2.current_step) === DREAM_STEP_ID && String(decision2.specialist_to_call) === DREAM_SPECIALIST) {
+    if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
       const call2 = await callSpecialistStrict({ model, state: nextState, decision: decision2, userMessage });
       attempts = Math.max(attempts, call2.attempts);
       specialistResult = call2.specialistResult;
@@ -462,17 +760,16 @@ export async function run_step(rawArgs: unknown): Promise<{
   const text = buildTextForWidget({ specialist: specialistResult });
   const prompt = pickPrompt(specialistResult);
 
-  // We still don't render session intro here; pre-start UI owns that copy.
-  // But keep state consistent:
-  if (showSessionIntro === "true" && String(nextState.intro_shown_session) !== "true") {
-    nextState = { ...nextState, intro_shown_session: "true" };
+  // keep state consistent even though we don't render session intro copy here
+  if (showSessionIntro === "true" && String((nextState as any).intro_shown_session) !== "true") {
+    (nextState as any).intro_shown_session = "true";
   }
 
   return {
     ok: true,
     tool: "run_step",
     current_step_id: String(nextState.current_step),
-    active_specialist: String(nextState.active_specialist),
+    active_specialist: String((nextState as any).active_specialist || ""),
     text,
     prompt,
     specialist: specialistResult,
@@ -480,6 +777,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     debug: {
       decision: finalDecision,
       attempts,
+      language: lang,
       meta_user_message_ignored: looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry,
     },
   };
