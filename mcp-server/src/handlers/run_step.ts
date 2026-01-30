@@ -146,6 +146,27 @@ function pickPrompt(specialist: any): string {
   return confirmQ || q || "";
 }
 
+function expandChoiceFromPreviousQuestion(userMsg: string, prevQuestion: string): string {
+  const t = String(userMsg ?? "").trim();
+  if (t !== "1" && t !== "2" && t !== "3") return userMsg; // safe for future 3-option menus
+
+  const q = String(prevQuestion ?? "");
+  if (!q) return userMsg;
+
+  const lines = q.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+  const wanted = `${t})`;
+  for (const line of lines) {
+    // Match "1) something" or "1. something"
+    const m = line.match(/^([123])[\)\.]\s*(.+?)\s*$/);
+    if (m && `${m[1]})` === wanted) {
+      return m[2].trim();
+    }
+  }
+
+  return userMsg;
+}
+
 function isClearYes(userMessage: string): boolean {
   // Language-agnostic: proceed only via explicit option selection.
   // The UI buttons (and "Continue/OK") should send "1".
@@ -615,11 +636,19 @@ export async function run_step(rawArgs: unknown): Promise<{
   let state = migrateState(args.state ?? {});
   const pristineAtEntry = isPristineStateForStart(state);
 
-  const userMessageRaw = String(args.user_message ?? "");
-  const userMessageCandidate =
-    looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry ? "" : userMessageRaw;
+ const userMessageRaw = String(args.user_message ?? "");
+const userMessageCandidate =
+  looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry ? "" : userMessageRaw;
 
-  const userMessage = userMessageCandidate;
+// If user clicks a numbered option button, the UI sends "1"/"2".
+// Expand it to the real option label from the previous question, so every step can route correctly.
+const prevQ =
+  typeof (state as any)?.last_specialist_result?.question === "string"
+    ? String((state as any).last_specialist_result.question)
+    : "";
+
+const userMessage = expandChoiceFromPreviousQuestion(userMessageCandidate, prevQ);
+
   const lang = langFromState(state);
 
   // START trigger (widget start screen)
