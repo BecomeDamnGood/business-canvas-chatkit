@@ -147,38 +147,10 @@ function pickPrompt(specialist: any): string {
 }
 
 function isClearYes(userMessage: string): boolean {
-  const t = String(userMessage ?? "").trim().toLowerCase();
-  if (!t) return false;
-
-  const wc = t.split(/\s+/).filter(Boolean).length;
-  if (wc > 6) return false;
-
-  const yesSet = new Set([
-    "yes",
-    "yep",
-    "yeah",
-    "sure",
-    "ok",
-    "okay",
-    "proceed",
-    "go",
-    "lets go",
-    "let's go",
-    // common Dutch affirmations (safe even in EN sessions)
-    "ja",
-    "jazeker",
-    "jep",
-    "klopt",
-    "oke",
-    "akkoord",
-    "prima",
-    "doen",
-    "gaan",
-  ]);
-
-  if (yesSet.has(t)) return true;
-  if (t === "y" || t === "1") return true;
-  return false;
+  // Language-agnostic: proceed only via explicit option selection.
+  // The UI buttons (and "Continue/OK") should send "1".
+  const t = String(userMessage ?? "").trim();
+  return t === "1";
 }
 
 function looksLikeMetaInstruction(userMessage: string): boolean {
