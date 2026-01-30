@@ -479,7 +479,7 @@
         if (isLoading) setLoading(false);
       }
 
-      async function callRunStep(message) {
+      async function callRunStep(message, forceStepId) {
         const o = oa();
         if (!o || typeof o.callTool !== "function") return;
 
@@ -492,7 +492,7 @@
         setWidgetStateSafe({ language: nextState.language, started: "true" });
 
         const payload = {
-          current_step_id: nextState.current_step || "step_0",
+          current_step_id: String(forceStepId || nextState.current_step || "step_0"),
           user_message: String(message || ""),
           state: nextState
         };
@@ -546,7 +546,7 @@
         if (seedRaw && !seedUsed) {
           const seedMsg = buildSeedMessage(seedRaw);
           setWidgetStateSafe({ seed_used: "true" });
-          callRunStep(seedMsg);
+          callRunStep(seedMsg, "step_0");
           return;
         }
 
