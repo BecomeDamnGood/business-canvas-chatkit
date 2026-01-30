@@ -205,7 +205,6 @@
         return (o && o.widgetState && typeof o.widgetState === "object") ? o.widgetState : {};
       }
 
-      // Only set widgetState when it actually changes (prevents loops).
       function setWidgetStateSafe(patch) {
         const o = oa();
         if (!o || typeof o.setWidgetState !== "function") return;
@@ -213,7 +212,6 @@
         const ws = widgetState() || {};
         const next = { ...ws, ...(patch || {}) };
 
-        // shallow compare
         const keys = Object.keys(next);
         let changed = false;
         for (const k of keys) {
@@ -273,6 +271,11 @@
       }
 
       let isLoading = false;
+
+      // Local-only: THIS load/session's start gate (prevents "chat composer tool call" from skipping intro).
+      let sessionStarted = false;
+      // Local-only welcome prepend (prevents repeated prepend due to host events).
+      let sessionWelcomeShown = false;
 
       function setSendEnabled(enabled) {
         document.getElementById("send").disabled = isLoading || !enabled;
@@ -351,16 +354,6 @@
         return Object.assign({}, state || {}, { language: lang });
       }
 
-      function isStarted() {
-        const ws = widgetState();
-        return String(ws.started || "") === "true";
-      }
-
-      function isWelcomeShown() {
-        const ws = widgetState();
-        return String(ws.welcome_shown || "") === "true";
-      }
-
       function render() {
         const data = toolData();
         const result =
@@ -373,16 +366,13 @@
         const lang = uiLang(state);
         setStaticStrings(lang);
 
-        // Ensure language stored once
         const ws = widgetState();
         if (!ws.language) setWidgetStateSafe({ language: lang });
 
-        const started = isStarted();
+        // HARD RULE: Use LOCAL sessionStarted to decide whether to show pre-start.
+        const showPreStart = !sessionStarted;
+
         const hasToolOutput = Boolean(oa() && oa().toolOutput);
-
-        // IMPORTANT: before Start, ALWAYS show pre-start UI, even if toolOutput exists via chat composer.
-        const showPreStart = !started;
-
         const current = (!showPreStart && hasToolOutput) ? (state.current_step || "step_0") : "step_0";
         const idx = stepIndex(current);
         buildStepper(idx);
@@ -413,10 +403,8 @@
 
           document.getElementById("cardDesc").textContent = PRESTART_WELCOME_TEXT;
           document.getElementById("prompt").textContent = "";
-
           startHint.textContent = String(lang).startsWith("nl") ? "Klik op Start om te beginnen." : "Click Start to begin.";
 
-          // If anything set loading earlier, clear it here.
           if (isLoading) setLoading(false);
           return;
         }
@@ -429,11 +417,11 @@
         const bodyRaw = (result && typeof result.text === "string") ? result.text : "";
         const promptRaw = (result && typeof result.prompt === "string") ? result.prompt : "";
 
-        // Combined intro + confirmation (once): show welcome text above the first visible step output.
+        // Combined welcome once per session
         let body = bodyRaw;
-        if (!isWelcomeShown()) {
+        if (!sessionWelcomeShown) {
           body = `${PRESTART_WELCOME_TEXT}\n\n${bodyRaw || ""}`.trim();
-          setWidgetStateSafe({ welcome_shown: "true" });
+          sessionWelcomeShown = true;
         }
 
         document.getElementById("cardDesc").textContent = body;
@@ -454,7 +442,7 @@
 
         globalThis.__BSC_LATEST__ = { state, lang };
 
-        // HARD: if something is visible, stop loading. This prevents "Thinking..." hanging.
+        // HARD: always stop loading once we can render a post-start view.
         if (isLoading) setLoading(false);
       }
 
@@ -468,7 +456,6 @@
         const lang = uiLang(state);
         const nextState = ensureLanguageInState(state, lang);
 
-        // Mark started (user is now in widget flow)
         setWidgetStateSafe({ language: nextState.language, started: "true" });
 
         const payload = {
@@ -481,23 +468,18 @@
 
         try {
           const resp = await o.callTool("run_step", payload);
-
-          // Fallback: use returned tool output immediately (prevents hang if globals event is delayed).
-          const normalized = normalizeToolOutput(resp);
-          if (normalized && typeof normalized === "object") {
-            // Render will read from openai.toolOutput, but we also render now to clear loading fast.
-            render();
-          } else {
-            render();
-          }
+          // Fallback render: clear loading even if host event is slow.
+          normalizeToolOutput(resp);
+          render();
         } catch (e) {
           console.error("run_step failed", e);
-          const latest2 = globalThis.__BSC_LATEST__ || {};
-          const lang2 = latest2.lang || localeToLang(getLocale());
+          const lang2 = localeToLang(getLocale());
           document.getElementById("cardDesc").textContent =
             String(lang2).startsWith("nl")
               ? "Er ging iets mis bij het verwerken van je bericht. Probeer het opnieuw."
               : "Something went wrong while processing your message. Please try again.";
+        } finally {
+          // HARD: always clear loading after a widget-initiated call
           setLoading(false);
         }
       }
@@ -520,18 +502,20 @@
       document.getElementById("btnStart").addEventListener("click", () => {
         if (isLoading) return;
 
+        // User explicitly started THIS session.
+        sessionStarted = true;
+        sessionWelcomeShown = false; // ensure prepend once after start
+
         const lang = localeToLang(getLocale());
         setWidgetStateSafe({ language: lang, started: "true" });
 
-        // IMPORTANT: if toolOutput already exists (from chat composer), do NOT call run_step("") again.
-        // Just render and let the user continue in the widget.
-        const hasToolOutput = Boolean(oa() && oa().toolOutput);
-        if (hasToolOutput) {
+        // If toolOutput already exists (chat composer ran run_step), DO NOT call run_step("").
+        // Just render post-start view and continue.
+        if (oa() && oa().toolOutput) {
           render();
           return;
         }
 
-        // Otherwise do the normal start trigger.
         callRunStep("");
       });
 
@@ -542,13 +526,15 @@
         callRunStep(String(lang).startsWith("nl") ? "ja" : "yes");
       });
 
-      // Host-driven updates
       window.addEventListener("openai:set_globals", () => {
         try {
           render();
-          // If a host update arrives while loading, always clear loading once we can render.
+        } catch (e) {
+          console.error(e);
+        } finally {
+          // HARD: never leave the UI stuck on loading after host updates.
           if (isLoading) setLoading(false);
-        } catch (e) { console.error(e); }
+        }
       });
 
       render();
