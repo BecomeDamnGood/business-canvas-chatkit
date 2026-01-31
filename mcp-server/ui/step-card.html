@@ -393,6 +393,11 @@
         setStaticStrings(lang);
 
         const ws = widgetState();
+        // Persist "started" across reloads via widgetState
+        if (String(ws.started || "") === "true") {
+          sessionStarted = true;
+        }
+
         // Only store language when it comes from backend state (stable, user-driven).
         const backendLang = (state && state.language) ? String(state.language).trim().toLowerCase() : "";
         if (backendLang && String(ws.language || "").trim().toLowerCase() !== backendLang) {
@@ -491,6 +496,11 @@
       }
 
       async function callRunStep(message, forceStepId) {
+        // Ensure UI is in post-start mode whenever we call the backend
+        sessionStarted = true;
+        sessionWelcomeShown = false;
+
+        
         const o = oa();
         if (!o || typeof o.callTool !== "function") return;
 
@@ -500,7 +510,11 @@
         const lang = uiLang(state);
         const nextState = ensureLanguageInState(state, lang);
 
-        setWidgetStateSafe({ language: nextState.language, started: "true" });
+        const patch = { started: "true" };
+        const maybeLang = (nextState && nextState.language) ? String(nextState.language).trim().toLowerCase() : "";
+        if (maybeLang) patch.language = maybeLang;
+        setWidgetStateSafe(patch);
+
 
         const payload = {
           current_step_id: String(forceStepId || nextState.current_step || "step_0"),
