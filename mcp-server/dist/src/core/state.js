@@ -32,19 +32,25 @@ export const CanvasStateZod = z.object({
     active_specialist: z.string(),
     intro_shown_for_step: z.string(), // stores last step-id for which intro was shown
     intro_shown_session: BoolStringZod,
+    // language handling (multi-language UX)
+    language: z.string(), // e.g. "nl", "en"
+    language_locked: BoolStringZod, // once set from a meaningful user message, we don't auto-flip
     // last output (used for proceed triggers / transitions)
     // FIX (Zod v4): record needs key + value schema
     last_specialist_result: z.record(z.string(), z.any()),
     // stable stored lines / finals
     step_0_final: z.string(),
     dream_final: z.string(),
-    // shared convenience fields (optional but helpful)
+    purpose_final: z.string(),
+    bigwhy_final: z.string(),
+    role_final: z.string(),
+    entity_final: z.string(),
+    strategy_final: z.string(),
+    rulesofthegame_final: z.string(),
+    presentation_brief_final: z.string(),
+    // shared convenience fields
     business_name: z.string(),
-    // user's preferred language (kept stable across the flow)
-    // user's preferred language (kept stable across the flow)
-    language: z.string(),
-    language_locked: BoolStringZod,
-    // reserved for later
+    // reserved
     summary_target: z.string(),
 });
 /**
@@ -62,12 +68,19 @@ export function getDefaultState() {
         active_specialist: "",
         intro_shown_for_step: "",
         intro_shown_session: "false",
+        language: "",
+        language_locked: "false",
         last_specialist_result: {},
         step_0_final: "",
         dream_final: "",
+        purpose_final: "",
+        bigwhy_final: "",
+        role_final: "",
+        entity_final: "",
+        strategy_final: "",
+        rulesofthegame_final: "",
+        presentation_brief_final: "",
         business_name: "TBD",
-        language: "",
-        language_locked: "false",
         summary_target: "unknown",
     };
 }
@@ -88,16 +101,22 @@ export function normalizeState(raw) {
     const intro_shown_for_step = String(r.intro_shown_for_step ?? d.intro_shown_for_step);
     const intro_shown_session_raw = String(r.intro_shown_session ?? d.intro_shown_session).trim();
     const intro_shown_session = intro_shown_session_raw === "true" ? "true" : "false";
+    const language = String(r.language ?? d.language).trim().toLowerCase();
+    const language_locked_raw = String(r.language_locked ?? d.language_locked).trim();
+    const language_locked = language_locked_raw === "true" ? "true" : "false";
     const last_specialist_result = typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
         ? r.last_specialist_result
         : {};
     const step_0_final = String(r.step_0_final ?? d.step_0_final);
     const dream_final = String(r.dream_final ?? d.dream_final);
+    const purpose_final = String(r.purpose_final ?? d.purpose_final);
+    const bigwhy_final = String(r.bigwhy_final ?? d.bigwhy_final);
+    const role_final = String(r.role_final ?? d.role_final);
+    const entity_final = String(r.entity_final ?? d.entity_final);
+    const strategy_final = String(r.strategy_final ?? d.strategy_final);
+    const rulesofthegame_final = String(r.rulesofthegame_final ?? d.rulesofthegame_final);
+    const presentation_brief_final = String(r.presentation_brief_final ?? d.presentation_brief_final);
     const business_name = String(r.business_name ?? d.business_name) || "TBD";
-    // Keep language stable and comparable; store as lowercase (e.g. "nl", "en", "pt-br")
-    const language = String(r.language ?? d.language).trim().toLowerCase();
-    const language_locked_raw = String(r.language_locked ?? d.language_locked).trim();
-    const language_locked = language_locked_raw === "true" ? "true" : "false";
     const summary_target = String(r.summary_target ?? d.summary_target) || "unknown";
     const normalized = {
         state_version,
@@ -105,12 +124,19 @@ export function normalizeState(raw) {
         active_specialist,
         intro_shown_for_step,
         intro_shown_session,
+        language,
+        language_locked,
         last_specialist_result,
         step_0_final,
         dream_final,
+        purpose_final,
+        bigwhy_final,
+        role_final,
+        entity_final,
+        strategy_final,
+        rulesofthegame_final,
+        presentation_brief_final,
         business_name,
-        language,
-        language_locked,
         summary_target,
     };
     // final Zod check (should always pass)
@@ -126,19 +152,21 @@ export function migrateState(raw) {
     // If already current, done
     if (s.state_version === CURRENT_STATE_VERSION)
         return s;
-    /**
-     * Example migration hooks (expand when needed)
-     * - If you previously stored booleans, normalizeState already stringifies them.
-     * - If you rename keys, map them here.
-     */
-    // v0 -> v1 (hypothetical): ensure business_name exists and defaults to TBD
-    if (s.state_version !== CURRENT_STATE_VERSION) {
-        s = {
-            ...s,
-            state_version: CURRENT_STATE_VERSION,
-            business_name: s.business_name?.trim() ? s.business_name : "TBD",
-        };
-    }
+    // v1 -> v2: add missing finals + language fields (defaults)
+    s = {
+        ...s,
+        state_version: CURRENT_STATE_VERSION,
+        business_name: s.business_name?.trim() ? s.business_name : "TBD",
+        language: String(s.language ?? "").trim().toLowerCase(),
+        language_locked: String(s.language_locked ?? "false") === "true" ? "true" : "false",
+        purpose_final: String(s.purpose_final ?? ""),
+        bigwhy_final: String(s.bigwhy_final ?? ""),
+        role_final: String(s.role_final ?? ""),
+        entity_final: String(s.entity_final ?? ""),
+        strategy_final: String(s.strategy_final ?? ""),
+        rulesofthegame_final: String(s.rulesofthegame_final ?? ""),
+        presentation_brief_final: String(s.presentation_brief_final ?? ""),
+    };
     return CanvasStateZod.parse(s);
 }
 /**

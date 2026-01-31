@@ -23,134 +23,30 @@ const RunStepArgsSchema = z.object({
     state: z.record(z.string(), z.any()).optional().default({}),
 });
 const STEP0_QUESTION_EN = "What type of venture are you starting or running, and what’s the name of your business (or is it still TBD)?";
-// --- Language detection (one-time) ---
-// Purpose: lock user language once, but avoid detecting language from ambiguous short inputs.
-// We intentionally DO NOT hardcode multilingual "yes/ok/..." lists.
-const LanguageDetectZodSchema = z.object({
-    language: z.string(),
-});
-const LanguageDetectJsonSchema = {
-    type: "object",
-    additionalProperties: false,
-    required: ["language"],
-    properties: {
-        language: { type: "string" },
-    },
-};
-const LANGUAGE_DETECT_INSTRUCTIONS = `LANGUAGE DETECTOR (STRICT JSON)
-
-Task:
-- Detect the user's language from USER_MESSAGE.
-- Output a lowercase BCP-47 style tag when possible (examples: "nl", "en", "pt-br", "es", "de", "fr", "it").
-- If uncertain, return FALLBACK.
-- Output ONLY strict JSON matching the schema.
-
-Output:
-{"language":"<tag>"}
-`;
-function isTrivialForLanguageDetection(msg) {
-    const t = String(msg ?? "").trim();
-    if (!t)
-        return true;
-    // Universal UI tokens (never use these to detect language)
-    if (t === "__CONTINUE__")
-        return true;
-    // Pure numbers are ambiguous
-    if (/^\d+$/.test(t))
-        return true;
-    // Too short => ambiguous and likely causes drift
-    if (t.length <= 3)
-        return true;
-    return false;
+const STEP0_QUESTION_NL = "Wat voor soort onderneming start of run je, en wat is de naam van je bedrijf (of is die nog TBD)?";
+function step0QuestionForLang(lang) {
+    const l = String(lang || "").toLowerCase();
+    return l.startsWith("nl") ? STEP0_QUESTION_NL : STEP0_QUESTION_EN;
 }
-async function detectLanguageOnce(params) {
-    const { model, userMessage, fallback } = params;
-    const res = await callStrictJson({
-        model,
-        instructions: LANGUAGE_DETECT_INSTRUCTIONS,
-        plannerInput: `USER_MESSAGE: ${userMessage}\nFALLBACK: ${fallback}`,
-        schemaName: "LanguageDetect",
-        jsonSchema: LanguageDetectJsonSchema,
-        zodSchema: LanguageDetectZodSchema,
-        temperature: 0,
-        topP: 1,
-        maxOutputTokens: 50,
-        debugLabel: "LanguageDetect",
-    });
-    const lang = String(res.data.language ?? "").trim().toLowerCase();
-    return lang || String(fallback || "en").trim().toLowerCase() || "en";
+function yesTokenForLang(lang) {
+    const l = String(lang || "").toLowerCase();
+    if (l.startsWith("nl"))
+        return "ja";
+    if (l.startsWith("fr"))
+        return "oui";
+    if (l.startsWith("es"))
+        return "sí";
+    if (l.startsWith("it"))
+        return "sì";
+    if (l.startsWith("pt"))
+        return "sim";
+    if (l.startsWith("de"))
+        return "ja";
+    return "yes";
 }
 function langFromState(state) {
     const l = String(state.language ?? "").trim().toLowerCase();
     return l || "en";
-}
-// --- Readiness intent detection (multi-language, no hardcoded yes/ok lists) ---
-// Used only when the previous prompt is a readiness gate ("Are you ready? yes/no").
-// This avoids enumerating all languages and keeps the UI token "__CONTINUE__" universal.
-const ReadinessIntentZodSchema = z.object({
-    intent: z.enum(["affirm", "deny", "other"]),
-});
-const ReadinessIntentJsonSchema = {
-    type: "object",
-    additionalProperties: false,
-    required: ["intent"],
-    properties: {
-        intent: { type: "string", enum: ["affirm", "deny", "other"] },
-    },
-};
-const READINESS_INTENT_INSTRUCTIONS = `READINESS INTENT CLASSIFIER (STRICT JSON)
-
-Task:
-- Decide whether USER_MESSAGE means the user wants to proceed ("affirm"), does not want to proceed ("deny"), or is something else ("other").
-- The user may write in any language.
-- Use LANGUAGE as a strong hint for interpretation.
-- Be robust to short confirmations like "ok", "fine", "sure", "let's go", etc.
-- Output ONLY strict JSON matching the schema.
-
-Output:
-{"intent":"affirm" | "deny" | "other"}
-`;
-async function detectReadinessIntent(params) {
-    const { model, language, userMessage } = params;
-    const res = await callStrictJson({
-        model,
-        instructions: READINESS_INTENT_INSTRUCTIONS,
-        plannerInput: `LANGUAGE: ${language}\nUSER_MESSAGE: ${userMessage}`,
-        schemaName: "ReadinessIntent",
-        jsonSchema: ReadinessIntentJsonSchema,
-        zodSchema: ReadinessIntentZodSchema,
-        temperature: 0,
-        topP: 1,
-        maxOutputTokens: 40,
-        debugLabel: "ReadinessIntent",
-    });
-    const intent = String(res.data.intent || "").trim();
-    if (intent === "affirm" || intent === "deny" || intent === "other")
-        return intent;
-    return "other";
-}
-// Detect Dream "exercise handshake" readiness prompt (Dream specialist asked: "Are you ready to start?")
-function isDreamExerciseReadinessAsked(state) {
-    const last = state.last_specialist_result || {};
-    const actionOk = String(last?.action ?? "") === "ASK";
-    const suggestOk = String(last?.suggest_dreambuilder ?? "") === "true";
-    const proceedDreamOk = String(last?.proceed_to_dream ?? "") === "false";
-    const proceedPurposeOk = String(last?.proceed_to_purpose ?? "") === "false";
-    const q = String(last?.question ?? "").trim();
-    const msg = String(last?.message ?? "").trim();
-    const refinedEmpty = String(last?.refined_formulation ?? "").trim() === "";
-    const confirmEmpty = String(last?.confirmation_question ?? "").trim() === "";
-    const dreamEmpty = String(last?.dream ?? "").trim() === "";
-    return (state.current_step === DREAM_STEP_ID &&
-        actionOk &&
-        suggestOk &&
-        proceedDreamOk &&
-        proceedPurposeOk &&
-        !!msg &&
-        !!q &&
-        refinedEmpty &&
-        confirmEmpty &&
-        dreamEmpty);
 }
 /**
  * Render order (strict):
@@ -175,17 +71,38 @@ function pickPrompt(specialist) {
 function expandChoiceFromPreviousQuestion(userMsg, prevQuestion) {
     const t = String(userMsg ?? "").trim();
     if (t !== "1" && t !== "2" && t !== "3")
-        return userMsg;
+        return userMsg; // safe for future 3-option menus
     const q = String(prevQuestion ?? "");
     if (!q)
         return userMsg;
     const lines = q.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const wanted = `${t})`;
     for (const line of lines) {
+        // Match "1) something" or "1. something"
         const m = line.match(/^([123])[\)\.]\s*(.+?)\s*$/);
-        if (m && m[1] === t)
+        if (m && `${m[1]})` === wanted) {
             return m[2].trim();
+        }
     }
     return userMsg;
+}
+function isClearYes(userMessage) {
+    const tRaw = String(userMessage ?? "").trim();
+    if (!tRaw)
+        return false;
+    // Always accept explicit option click.
+    if (tRaw === "1")
+        return true;
+    // Only treat very short replies as "clear yes" to avoid accidental triggers.
+    const t = tRaw.toLowerCase();
+    if (t.length > 24)
+        return false;
+    const yesPhrases = new Set([
+        "yes", "y", "yeah", "yep", "sure", "ok", "okay", "k", "continue", "go on",
+        "ja", "j", "jazeker", "zeker", "klopt", "prima", "goed", "doorgaan", "ga door", "verder",
+        "oui", "si", "sí", "sì", "sim",
+    ]);
+    return yesPhrases.has(t);
 }
 function looksLikeMetaInstruction(userMessage) {
     const t = String(userMessage ?? "").trim();
@@ -204,6 +121,55 @@ function looksLikeMetaInstruction(userMessage) {
         lower.includes("answer in") ||
         lower.includes("respond in");
     return longish && (hasUserFraming || hasSections || hasBullets);
+}
+function extractUserMessageFromWrappedInput(raw) {
+    const t = String(raw ?? "");
+    if (!t.trim())
+        return "";
+    // Common wrapper used by planners / orchestrators:
+    // "CURRENT_STEP_ID: step_0 | USER_MESSAGE: <text>"
+    const m1 = t.match(/\bUSER_MESSAGE\s*:\s*([\s\S]+)$/i);
+    if (m1 && typeof m1[1] === "string")
+        return m1[1].trim();
+    // Sometimes the wrapper is multi-line and includes "PLANNER_INPUT:".
+    const m2 = t.match(/\bPLANNER_INPUT\s*:\s*[\s\S]*?\bUSER_MESSAGE\s*:\s*([\s\S]+)$/i);
+    if (m2 && typeof m2[1] === "string")
+        return m2[1].trim();
+    // Otherwise, return empty to indicate "no extraction happened".
+    return "";
+}
+function detectLanguageHeuristic(text) {
+    const s = String(text ?? "").trim().toLowerCase();
+    if (!s)
+        return "en";
+    // Super-lightweight heuristic: count a few common stopwords.
+    const nl = [" de ", " het ", " een ", " ik ", " jij ", " je ", " mijn ", " niet ", " en ", " dat ", " dit ", " als ", " omdat ", " klaar "];
+    const en = [" the ", " a ", " an ", " i ", " you ", " my ", " not ", " and ", " that ", " this ", " because ", " ready "];
+    const pad = ` ${s} `;
+    const count = (arr) => arr.reduce((acc, w) => acc + (pad.includes(w) ? 1 : 0), 0);
+    const nlScore = count(nl);
+    const enScore = count(en);
+    if (nlScore > enScore)
+        return "nl";
+    return "en";
+}
+function ensureLanguageFromUserMessage(state, userMessage) {
+    const msg = String(userMessage ?? "").trim();
+    if (!msg)
+        return state;
+    const locked = String(state.language_locked ?? "false") === "true";
+    const current = String(state.language ?? "").trim().toLowerCase();
+    if (locked && current)
+        return state;
+    // Do not lock language on pure numeric menu clicks.
+    if (/^[0-9]+$/.test(msg))
+        return state;
+    const detected = detectLanguageHeuristic(msg);
+    return {
+        ...state,
+        language: current || detected,
+        language_locked: "true",
+    };
 }
 function isPristineStateForStart(s) {
     return (String(s.current_step) === STEP_0_ID &&
@@ -367,7 +333,7 @@ async function callSpecialistStrict(params) {
         return { specialistResult: res.data, attempts: res.attempts };
     }
     if (specialist === DREAM_EXPLAINER_SPECIALIST) {
-        const plannerInput = buildDreamExplainerSpecialistInput(userMessage, state.intro_shown_for_step, String(decision.current_step || DREAM_STEP_ID), lang);
+        const plannerInput = buildDreamExplainerSpecialistInput(userMessage, state.intro_shown_for_step, String(decision.current_step || DREAM_STEP_ID));
         const res = await callStrictJson({
             model,
             instructions: `${DREAM_EXPLAINER_INSTRUCTIONS}\n\n${contextBlock}`,
@@ -494,7 +460,7 @@ async function callSpecialistStrict(params) {
         });
         return { specialistResult: res.data, attempts: res.attempts };
     }
-    // Safe fallback
+    // Safe fallback: Step 0 ESCAPE payload (language-neutral English here; UI/flow will recover)
     return {
         specialistResult: {
             action: "ESCAPE",
@@ -513,10 +479,13 @@ function shouldChainToNextStep(decision, specialistResult) {
     const step = String(decision.current_step ?? "");
     if (!step)
         return false;
+    // Step 0 uses proceed_to_dream
     if (step === STEP_0_ID && String(specialistResult?.proceed_to_dream ?? "") === "true")
         return true;
+    // Dream + DreamExplainer use proceed_to_purpose
     if (step === DREAM_STEP_ID && String(specialistResult?.proceed_to_purpose ?? "") === "true")
         return true;
+    // Everything else uses proceed_to_next
     if (String(specialistResult?.proceed_to_next ?? "") === "true")
         return true;
     return false;
@@ -534,89 +503,18 @@ export async function run_step(rawArgs) {
     let state = migrateState(args.state ?? {});
     const pristineAtEntry = isPristineStateForStart(state);
     const userMessageRaw = String(args.user_message ?? "");
-    const trimmed = userMessageRaw.trim();
-    const isSeedMsg = trimmed.startsWith("__SEED__");
-    // Seed is allowed ONLY once, and ONLY at the very start of Step 0 (language-agnostic).
-    const seedUsed = String(state.seed_used ?? "") === "true";
-    const last0 = state.last_specialist_result ?? {};
-    const lastQuestion = typeof last0?.question === "string" ? String(last0.question) : "";
-    const seedEligible = String(state.current_step) === STEP_0_ID &&
-        String(state.step_0_final ?? "").trim() === "" &&
-        String(state.dream_final ?? "").trim() === "" &&
-        (Object.keys(last0).length === 0 || lastQuestion.trim() === STEP0_QUESTION_EN.trim());
-    let userMessageCandidate = userMessageRaw;
-    // If it's a seed message: accept only if eligible + not used, then lock it.
-    if (isSeedMsg) {
-        if (!seedUsed && seedEligible) {
-            state.seed_used = "true";
-            userMessageCandidate = userMessageRaw; // keep as-is; bypass meta-instruction filter
-        }
-        else {
-            userMessageCandidate = ""; // block any late/repeated seed attempts
-        }
-    }
-    else {
-        userMessageCandidate =
-            looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry ? "" : userMessageRaw;
-    }
-    // --- One-time language lock (multi-language) ---
-    // Only attempt detection on non-trivial user text.
-    const locked = String(state.language_locked ?? "false") === "true";
-    const existingLang = String(state.language ?? "").trim().toLowerCase();
-    if (!locked && existingLang) {
-        state.language_locked = "true";
-    }
-    else if (!locked && !isTrivialForLanguageDetection(userMessageCandidate)) {
-        const fallback = langFromState(state);
-        try {
-            const detected = await detectLanguageOnce({
-                model,
-                userMessage: userMessageCandidate,
-                fallback,
-            });
-            state.language = detected;
-            state.language_locked = "true";
-        }
-        catch {
-            // do not lock on classifier failure; keep flow stable
-        }
-    }
-    const lang = langFromState(state);
-    // Readiness context uses last specialist result (single source of truth)
-    const prevLast = state.last_specialist_result || {};
-    const step0ReadinessAsked = state.current_step === STEP_0_ID &&
-        String(prevLast?.action ?? "") === "CONFIRM" &&
-        typeof prevLast?.confirmation_question === "string" &&
-        prevLast.confirmation_question.trim() !== "" &&
-        String(prevLast?.proceed_to_dream ?? "") === "false";
-    const dreamExerciseReadinessAsked = isDreamExerciseReadinessAsked(state);
-    // Universal UI token:
-    // - In readiness gate => treat as "yes"
-    // - Otherwise => treat as menu choice "1" (Continue = option 1)
-    if (String(userMessageCandidate).trim() === "__CONTINUE__") {
-        userMessageCandidate = (step0ReadinessAsked || dreamExerciseReadinessAsked) ? "yes" : "1";
-    }
-    // Expand numbered options
+    const extracted = extractUserMessageFromWrappedInput(userMessageRaw);
+    const rawNormalized = extracted ? extracted : userMessageRaw;
+    const userMessageCandidate = looksLikeMetaInstruction(rawNormalized) && pristineAtEntry ? "" : rawNormalized;
+    // If user clicks a numbered option button, the UI sends "1"/"2"/"3".
+    // Expand it to the real option label from the previous question, so every step can route correctly.
     const prevQ = typeof state?.last_specialist_result?.question === "string"
         ? String(state.last_specialist_result.question)
         : "";
-    let userMessage = expandChoiceFromPreviousQuestion(userMessageCandidate, prevQ);
-    // If we are at a readiness gate, normalize any "ok/is goed/prima/..." (any language)
-    // into yes/no WITHOUT hardcoding language lists.
-    if ((step0ReadinessAsked || dreamExerciseReadinessAsked) && userMessage.trim() !== "") {
-        const t = userMessage.trim();
-        if (t === "1")
-            userMessage = "yes";
-        else if (t === "2")
-            userMessage = "no";
-        else if (t !== "yes" && t !== "no") {
-            const intent = await detectReadinessIntent({ model, language: lang, userMessage: t });
-            if (intent === "affirm")
-                userMessage = "yes";
-            else if (intent === "deny")
-                userMessage = "no";
-        }
-    }
+    const userMessage = expandChoiceFromPreviousQuestion(userMessageCandidate, prevQ);
+    // Lock language once we see a meaningful user message (prevents mid-flow flips).
+    state = ensureLanguageFromUserMessage(state, userMessage);
+    const lang = langFromState(state);
     // START trigger (widget start screen)
     const isStartTrigger = userMessage.trim() === "" &&
         state.current_step === STEP_0_ID &&
@@ -633,15 +531,22 @@ export async function run_step(rawArgs) {
             const venture = (ventureMatch?.[1] || "venture").trim();
             const name = (nameMatch?.[1] || state.business_name || "TBD").trim();
             const status = (statusMatch?.[1] || "starting").toLowerCase();
+            const langLocal = langFromState(state);
             const statement = status === "existing"
-                ? `You have a ${venture} called ${name}.`
-                : `You want to start a ${venture} called ${name}.`;
+                ? (langLocal.startsWith("nl")
+                    ? `Je hebt een ${venture} genaamd ${name}.`
+                    : `You have a ${venture} called ${name}.`)
+                : (langLocal.startsWith("nl")
+                    ? `Je wilt een ${venture} starten genaamd ${name}.`
+                    : `You want to start a ${venture} called ${name}.`);
             const specialist = {
                 action: "CONFIRM",
                 message: "",
                 question: "",
                 refined_formulation: "",
-                confirmation_question: `${statement} Is that correct, and if so are you ready to start the first step, 'Your Dream'?`,
+                confirmation_question: langLocal.startsWith("nl")
+                    ? `${statement} Klopt dat, en ben je klaar om te starten met de eerste stap, 'Jouw Droom'?`
+                    : `${statement} Is that correct, and if so are you ready to start the first step, 'Your Dream'?`,
                 business_name: name || "TBD",
                 proceed_to_dream: "false",
                 step_0: step0Final,
@@ -665,7 +570,7 @@ export async function run_step(rawArgs) {
         const specialist = {
             action: "ASK",
             message: "",
-            question: STEP0_QUESTION_EN,
+            question: step0QuestionForLang(langFromState(state)),
             refined_formulation: "",
             confirmation_question: "",
             business_name: state.business_name || "TBD",
@@ -687,10 +592,14 @@ export async function run_step(rawArgs) {
             },
         };
     }
-    // Step 0 readiness proceed
-    const canProceedFromStep0 = step0ReadinessAsked &&
-        (userMessage.trim().toLowerCase() === "yes" || userMessage.trim() === "1") &&
-        String(state.step_0_final ?? "").trim() !== "";
+    // --------- SPEECH-PROOF PROCEED TRIGGER (Step 0 readiness moment only) ---------
+    const prev = state.last_specialist_result || {};
+    const readinessAsked = state.current_step === STEP_0_ID &&
+        String(prev?.action ?? "") === "CONFIRM" &&
+        typeof prev?.confirmation_question === "string" &&
+        prev.confirmation_question.trim() !== "" &&
+        String(prev?.proceed_to_dream ?? "") === "false";
+    const canProceedFromStep0 = readinessAsked && isClearYes(userMessage) && String(state.step_0_final ?? "").trim() !== "";
     if (canProceedFromStep0) {
         const proceedPayload = {
             action: "CONFIRM",
@@ -718,46 +627,14 @@ export async function run_step(rawArgs) {
         prev: state,
         decision: decision1,
         specialistResult,
-        showSessionIntroUsed: showSessionIntro,
+        showSessionIntroUsed: "false",
     });
-    // --------- OPTIONAL CHAIN: Dream exercise handshake + proceed flags ----------
+    // --------- OPTIONAL CHAIN: immediate next-step intro on proceed flags ----------
     let finalDecision = decision1;
-    // 1) Dream exercise handshake: if Dream returns CONFIRM + suggest_dreambuilder=true,
-    // immediately call DreamExplainer in the SAME turn.
-    const shouldStartDreamExplainerNow = String(decision1.current_step ?? "") === DREAM_STEP_ID &&
-        String(specialistResult?.action ?? "") === "CONFIRM" &&
-        String(specialistResult?.suggest_dreambuilder ?? "") === "true";
-    if (shouldStartDreamExplainerNow) {
-        const chainUserMessage = "";
-        const decision2 = orchestrate({ state: nextState, userMessage: chainUserMessage });
-        if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
-            const call2 = await callSpecialistStrict({
-                model,
-                state: nextState,
-                decision: decision2,
-                userMessage: chainUserMessage,
-            });
-            attempts = Math.max(attempts, call2.attempts);
-            specialistResult = call2.specialistResult;
-            nextState = applyStateUpdate({
-                prev: nextState,
-                decision: decision2,
-                specialistResult,
-                showSessionIntroUsed: "false",
-            });
-            finalDecision = decision2;
-        }
-    }
-    else if (shouldChainToNextStep(decision1, specialistResult)) {
-        // 2) Existing proceed-chain behavior (step_0 -> dream, dream -> purpose, etc.)
+    if (shouldChainToNextStep(decision1, specialistResult)) {
         const decision2 = orchestrate({ state: nextState, userMessage });
         if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
-            const call2 = await callSpecialistStrict({
-                model,
-                state: nextState,
-                decision: decision2,
-                userMessage,
-            });
+            const call2 = await callSpecialistStrict({ model, state: nextState, decision: decision2, userMessage });
             attempts = Math.max(attempts, call2.attempts);
             specialistResult = call2.specialistResult;
             nextState = applyStateUpdate({
@@ -787,8 +664,8 @@ export async function run_step(rawArgs) {
         debug: {
             decision: finalDecision,
             attempts,
-            language: langFromState(nextState),
-            meta_user_message_ignored: looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry,
+            language: lang,
+            meta_user_message_ignored: looksLikeMetaInstruction(rawNormalized) && pristineAtEntry,
         },
     };
 }
