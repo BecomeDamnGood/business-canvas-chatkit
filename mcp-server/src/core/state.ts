@@ -89,6 +89,7 @@ export function getDefaultState(): CanvasState {
 
     business_name: "TBD",
     language: "",
+    language_locked: "false",
 
     summary_target: "unknown",
 
