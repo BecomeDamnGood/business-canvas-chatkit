@@ -1,4 +1,3 @@
-<!-- step-card.html — DEEL 1/4 -->
 <!doctype html>
 <html>
   <head>
@@ -160,7 +159,7 @@
     <script>
       const ORDER = ["step_0","dream","purpose","bigwhy","role","entity","strategy","rulesofthegame","presentation"];
 
-      const TITLES = {
+      const TITLES_DEFAULT = {
         step_0: "Step 1: Validation & Business Name",
         dream: "Step 2: Dream",
         purpose: "Step 3: Purpose",
@@ -172,8 +171,71 @@
         presentation: "Step 9: Presentation"
       };
 
-      const PRESTART_WELCOME_TEXT =
+      const TITLES_NL = {
+        step_0: "Stap 1: Validatie & Bedrijfsnaam",
+        dream: "Stap 2: Droom",
+        purpose: "Stap 3: Doel",
+        bigwhy: "Stap 4: Grote Waarom",
+        role: "Stap 5: Rol",
+        entity: "Stap 6: Entiteit",
+        strategy: "Stap 7: Strategie",
+        rulesofthegame: "Stap 8: Spelregels",
+        presentation: "Stap 9: Presentatie"
+      };
+
+      const PRESTART_WELCOME_DEFAULT =
         "Welcome to Ben Steenstra’s Business Strategy Canvas, used in national and international organizations. We will go through a small number of steps, one by one, so each step is clear before we move on. At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear presentation for external stakeholders, partners, or team members.";
+
+      const PRESTART_WELCOME_NL =
+        "Welkom bij Ben Steenstra’s Business Strategy Canvas, gebruikt in nationale en internationale organisaties. We doorlopen een klein aantal stappen, één voor één, zodat elke stap duidelijk is voordat we verder gaan. Aan het einde heb je een compleet en beknopt businessplan, klaar als richting voor jezelf en als heldere presentatie voor externe stakeholders, partners of teamleden.";
+
+      const UI_STRINGS = {
+        default: {
+          uiSubtitle: "Use the app widget to continue (not the chat box)",
+          byText: "A business model by:",
+          startHint: "Click Start to begin.",
+          inputPlaceholder: "Type your answer here (use the widget, not the chat box)…",
+          thinking: "Thinking…",
+          btnStart: "Start",
+          btnOk: "Continue",
+          sendTitle: "Send",
+          errorMessage: "Something went wrong while processing your message. Please try again."
+        },
+        nl: {
+          uiSubtitle: "Gebruik de app-widget om verder te gaan (niet het chatvak)",
+          byText: "Een businessmodel van:",
+          startHint: "Klik op Start om te beginnen.",
+          inputPlaceholder: "Typ je antwoord hier (gebruik de widget, niet het chatvak)…",
+          thinking: "Even denken…",
+          btnStart: "Start",
+          btnOk: "Doorgaan",
+          sendTitle: "Verstuur",
+          errorMessage: "Er ging iets mis tijdens het verwerken van je bericht. Probeer het opnieuw."
+        }
+      };
+
+      function baseLang(lang) {
+        const l = String(lang || "").toLowerCase();
+        return (l.split(/[-_]/)[0] || "default");
+      }
+
+      function t(lang, key) {
+        const b = baseLang(lang);
+        const table = UI_STRINGS[b] || UI_STRINGS.default;
+        return (table && table[key]) ? table[key] : (UI_STRINGS.default[key] || "");
+      }
+
+      function titlesForLang(lang) {
+        const b = baseLang(lang);
+        if (b === "nl") return TITLES_NL;
+        return TITLES_DEFAULT;
+      }
+
+      function prestartWelcomeForLang(lang) {
+        const b = baseLang(lang);
+        if (b === "nl") return PRESTART_WELCOME_NL;
+        return PRESTART_WELCOME_DEFAULT;
+      }
 
       function oa(){ return globalThis.openai; }
 
@@ -192,7 +254,7 @@
           ? globalThis.__BSC_LAST_TOOL_OUTPUT__
           : {};
       }
-<!-- step-card.html — DEEL 2/4 -->
+
       // Allow render() to use callTool return value (followups), otherwise fall back to host toolOutput / cache.
       function toolData(overrideRaw) {
         if (overrideRaw) return normalizeToolOutput(overrideRaw);
@@ -226,22 +288,25 @@
       }
 
       function uiLang(resultState) {
-  // Prefer language coming from the backend state, then widgetState, then browser locale.
-  const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
-  if (fromResult) return fromResult;
+        // Prefer language coming from the backend state, then widgetState, then browser locale.
+        const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
+        if (fromResult) return fromResult;
 
-  const ws = widgetState();
-  const fromWidget = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
-  if (fromWidget) return fromWidget;
+        const ws = widgetState();
+        const fromWidget = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
+        if (fromWidget) return fromWidget;
 
-  const nav = String(navigator.language || "en").toLowerCase();
-  return (nav.split(/[-_]/)[0] || "en");
-}
+        const nav = String(navigator.language || "en").toLowerCase();
+        return (nav.split(/[-_]/)[0] || "en");
+      }
 
-      function setStaticStrings(_lang) {
-        document.getElementById("uiSubtitle").textContent =
-          "Use the app widget to continue (not the chat box)";
-        document.getElementById("byText").textContent = "A business model by:";
+      function setStaticStrings(lang) {
+        document.getElementById("uiSubtitle").textContent = t(lang, "uiSubtitle");
+        document.getElementById("byText").textContent = t(lang, "byText");
+        document.getElementById("thinking").textContent = t(lang, "thinking");
+        document.getElementById("btnStart").textContent = t(lang, "btnStart");
+        document.getElementById("btnOk").textContent = t(lang, "btnOk");
+        document.getElementById("send").setAttribute("title", t(lang, "sendTitle"));
       }
 
       function stepIndex(stepId) {
@@ -341,7 +406,7 @@
           wrap.appendChild(btn);
         }
       }
-<!-- step-card.html — DEEL 3/4 -->
+
       function ensureLanguageInState(state, lang) {
         const current = (state && state.language) ? String(state.language).trim() : "";
         if (current) return state;
@@ -380,7 +445,7 @@
         buildStepper(idx);
 
         document.getElementById("badge").textContent = String(idx + 1);
-        document.getElementById("sectionTitle").textContent = TITLES[current] || "";
+        document.getElementById("sectionTitle").textContent = (titlesForLang(lang)[current] || "");
 
         const inputWrap = document.getElementById("inputWrap");
         const btnStart = document.getElementById("btnStart");
@@ -401,9 +466,9 @@
           btnStart.style.display = "inline-flex";
           btnOk.style.display = "none";
 
-          document.getElementById("cardDesc").textContent = PRESTART_WELCOME_TEXT;
+          document.getElementById("cardDesc").textContent = prestartWelcomeForLang(lang);
           document.getElementById("prompt").textContent = "";
-          startHint.textContent = "Click Start to begin.";
+          startHint.textContent = t(lang, "startHint");
 
           if (isLoading) setLoading(false);
           return;
@@ -420,7 +485,7 @@
         // Prepend welcome once per local session.
         let body = bodyRaw;
         if (!sessionWelcomeShown) {
-          body = `${PRESTART_WELCOME_TEXT}\n\n${bodyRaw || ""}`.trim();
+          body = `${prestartWelcomeForLang(lang)}\n\n${bodyRaw || ""}`.trim();
           sessionWelcomeShown = true;
         }
 
@@ -442,8 +507,7 @@
         
         btnOk.style.display = (showContinue || isDreamExplainerReadiness) ? "inline-flex" : "none";
 
-        document.getElementById("input").placeholder =
-          "Type your answer here (use the widget, not the chat box)…";
+        document.getElementById("input").placeholder = t(lang, "inputPlaceholder");
 
         const v = (document.getElementById("input").value || "").trim();
         setSendEnabled(v.length > 0);
@@ -481,7 +545,7 @@
         } catch (e) {
           console.error("run_step failed", e);
           document.getElementById("cardDesc").textContent =
-            "Something went wrong while processing your message. Please try again.";
+            t(uiLang((globalThis.__BSC_LATEST__||{}).state||{}), "errorMessage");
         } finally {
           setLoading(false);
         }
@@ -501,7 +565,7 @@
         setSendEnabled(false);
         callRunStep(v);
       });
-<!-- step-card.html — DEEL 4/4 -->
+
       document.getElementById("btnStart").addEventListener("click", () => {
         if (isLoading) return;
 
@@ -543,3 +607,4 @@
     </script>
   </body>
 </html>
+
