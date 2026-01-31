@@ -225,17 +225,18 @@
       }
 
       function uiLang(resultState) {
-        // Prefer language coming from the backend state, then widgetState, then browser locale.
-        const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
-        if (fromResult) return fromResult;
+  // Prefer language coming from the backend state, then widgetState.
+  // Do NOT default to browser locale here (we don't want to inject the wrong language).
+  const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
+  if (fromResult) return fromResult;
 
-        const ws = widgetState();
-        const fromWidget = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
-        if (fromWidget) return fromWidget;
+  const ws = widgetState();
+  const fromWidget = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
+  if (fromWidget) return fromWidget;
 
-        const nav = String(navigator.language || "en").toLowerCase();
-        return (nav.split(/[-_]/)[0] || "en");
-      }
+  return "en";
+}
+
 
       function setStaticStrings(_lang) {
         document.getElementById("uiSubtitle").textContent =
@@ -369,8 +370,12 @@
       function ensureLanguageInState(state, lang) {
         const current = (state && state.language) ? String(state.language).trim() : "";
         if (current) return state;
-        return Object.assign({}, state || {}, { language: lang });
+      
+        // If language is not known yet, do NOT inject a guess.
+        // Let the backend detect and lock it (structural fix).
+        return state;
       }
+
 
       function render(overrideToolOutput) {
         const data = toolData(overrideToolOutput);
@@ -388,7 +393,12 @@
         setStaticStrings(lang);
 
         const ws = widgetState();
-        if (!ws.language) setWidgetStateSafe({ language: lang });
+        // Only store language when it comes from backend state (stable, user-driven).
+        const backendLang = (state && state.language) ? String(state.language).trim().toLowerCase() : "";
+        if (backendLang && String(ws.language || "").trim().toLowerCase() !== backendLang) {
+        setWidgetStateSafe({ language: backendLang });
+        }
+
 
         // NEW: store seed from initial tool payload (one-time), so Start can use it once.
         const seedFromTool = String(data.seed_user_message || "").trim();
@@ -466,7 +476,9 @@
           String(promptRaw || "").trim() !== "";
 
         btnOk.style.display = (showContinue || isDreamExplainerReadiness) ? "inline-flex" : "none";
+        globalThis.__BSC_IS_DE_READINESS__ = Boolean(isDreamExplainerReadiness);
 
+        
         document.getElementById("input").placeholder =
           "Type your answer here (use the widget, not the chat box)…";
 
@@ -559,10 +571,12 @@
       });
 
       document.getElementById("btnOk").addEventListener("click", () => {
-        if (isLoading) return;
-        // Language-agnostic proceed: treat OK/Continue as choosing option 1.
-        callRunStep("1");
-      });
+  if (isLoading) return;
+  // Universal UI action token (backend interprets it based on context)
+  callRunStep("__CONTINUE__");
+});
+
+
 
       window.addEventListener("openai:set_globals", () => {
         try {
