@@ -1,8 +1,16 @@
+import OpenAI from "openai";
 function getApiKey() {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey)
         throw new Error("Missing env OPENAI_API_KEY");
     return apiKey;
+}
+let _client = null;
+function getClient() {
+    if (_client)
+        return _client;
+    _client = new OpenAI({ apiKey: getApiKey() });
+    return _client;
 }
 function extractOutputText(resp) {
     // Responses API provides output_text at top level
@@ -37,14 +45,9 @@ function safeJsonParse(text) {
     }
 }
 async function callOnceStrictJson(args) {
-    const apiKey = getApiKey();
-    const resp = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+    const client = getClient();
+    try {
+        const resp = await client.responses.create({
             model: args.model,
             input: [
                 { role: "system", content: args.instructions },
@@ -63,20 +66,20 @@ async function callOnceStrictJson(args) {
             temperature: args.temperature ?? 0.2,
             top_p: args.topP ?? 1,
             max_output_tokens: args.maxOutputTokens ?? 2048,
-        }),
-    });
-    const json = await resp.json().catch(() => null);
-    if (!resp.ok) {
-        const msg = json?.error?.message ||
-            json?.error?.toString?.() ||
-            `OpenAI API error (${resp.status})`;
+        });
+        const text = extractOutputText(resp);
+        const parsed = safeJsonParse(text);
+        return { text, parsed };
+    }
+    catch (e) {
+        const msg = e?.message ||
+            e?.error?.message ||
+            e?.error?.toString?.() ||
+            "OpenAI API error";
         const err = new Error(msg);
-        err.meta = { status: resp.status, body: json, debugLabel: args.debugLabel };
+        err.meta = { body: e, debugLabel: args.debugLabel };
         throw err;
     }
-    const text = extractOutputText(json);
-    const parsed = safeJsonParse(text);
-    return { text, parsed };
 }
 /**
  * Strict JSON call:
