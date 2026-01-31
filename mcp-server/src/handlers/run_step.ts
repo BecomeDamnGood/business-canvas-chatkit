@@ -1,3 +1,4 @@
+// run_step.ts — DEEL 1/3 (regels 1–320)
 // mcp-server/src/handlers/run_step.ts
 import { z } from "zod";
 
@@ -137,7 +138,6 @@ function yesTokenForLang(lang: string): string {
   return "yes";
 }
 
-
 function langFromState(state: CanvasState): string {
   const l = String((state as any).language ?? "").trim().toLowerCase();
   return l || "en";
@@ -230,7 +230,6 @@ function looksLikeMetaInstruction(userMessage: string): boolean {
   return longish && (hasUserFraming || hasSections || hasBullets);
 }
 
-
 function extractUserMessageFromWrappedInput(raw: string): string {
   const t = String(raw ?? "");
   if (!t.trim()) return "";
@@ -287,7 +286,6 @@ function ensureLanguageFromUserMessage(state: CanvasState, userMessage: string):
   } as CanvasState;
 }
 
-
 function isPristineStateForStart(s: CanvasState): boolean {
   return (
     String(s.current_step) === STEP_0_ID &&
@@ -318,6 +316,8 @@ function buildSpecialistContextBlock(state: CanvasState): string {
 - strategy_final: ${safe((state as any).strategy_final)}
 - rulesofthegame_final: ${safe((state as any).rulesofthegame_final)}
 
+`;
+// run_step.ts — DEEL 2/3 (regels 321–640)
 STATE META (do not output this section)
 - business_name: ${safe((state as any).business_name)}
 - intro_shown_for_step: ${safe((state as any).intro_shown_for_step)}
@@ -489,7 +489,8 @@ async function callSpecialistStrict(params: {
     const plannerInput = buildDreamExplainerSpecialistInput(
       userMessage,
       (state as any).intro_shown_for_step,
-      String(decision.current_step || DREAM_STEP_ID)
+      String(decision.current_step || DREAM_STEP_ID),
+      lang
     );
 
     const res = await callStrictJson<DreamExplainerOutput>({
@@ -637,6 +638,7 @@ async function callSpecialistStrict(params: {
       schemaName: "RulesOfTheGame",
       jsonSchema: RulesOfTheGameJsonSchema as any,
       zodSchema: RulesOfTheGameZodSchema,
+// run_step.ts — DEEL 3/3 (regels 641–943)
       temperature: 0.3,
       topP: 1,
       maxOutputTokens: 10000,
@@ -694,6 +696,16 @@ function shouldChainToNextStep(decision: OrchestratorOutput, specialistResult: a
 
   // Dream + DreamExplainer use proceed_to_purpose
   if (step === DREAM_STEP_ID && String(specialistResult?.proceed_to_purpose ?? "") === "true") return true;
+
+  // Dream exercise handshake: if Dream confirms readiness with suggest_dreambuilder=true,
+  // immediately chain into DreamExplainer so the exercise starts within the same interaction.
+  if (
+    step === DREAM_STEP_ID &&
+    String(specialistResult?.action ?? "") === "CONFIRM" &&
+    String(specialistResult?.suggest_dreambuilder ?? "") === "true"
+  ) {
+    return true;
+  }
 
   // Everything else uses proceed_to_next
   if (String(specialistResult?.proceed_to_next ?? "") === "true") return true;
