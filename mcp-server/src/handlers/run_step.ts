@@ -119,6 +119,72 @@ type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
 const STEP0_QUESTION_EN =
   "What type of venture are you starting or running, and what’s the name of your business (or is it still TBD)?";
 
+// --- Language detection (one-time) ---
+const LanguageDetectZodSchema = z.object({
+  language: z.string(),
+});
+
+const LanguageDetectJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["language"],
+  properties: {
+    language: { type: "string" },
+  },
+} as const;
+
+const LANGUAGE_DETECT_INSTRUCTIONS = `LANGUAGE DETECTOR (STRICT JSON)
+
+Task:
+- Detect the user's language from USER_MESSAGE.
+- Output a lowercase BCP-47 style tag when possible (examples: "nl", "en", "pt-br", "es", "de", "fr", "it").
+- If uncertain, return FALLBACK.
+
+Output (STRICT):
+{"language":"<tag>"}
+`;
+
+function isTrivialForLanguageDetection(msg: string): boolean {
+  const t = String(msg ?? "").trim().toLowerCase();
+  if (!t) return true;
+
+  // Common short confirmations / button payloads / menu choices
+  if (t === "1" || t === "2" || t === "3") return true;
+  if (t === "yes" || t === "no" || t === "y" || t === "n") return true;
+  if (t === "ja" || t === "nee") return true;
+  if (t === "ok" || t === "okay") return true;
+
+  // Very short tokens are often ambiguous and cause drift
+  if (t.length <= 2) return true;
+
+  return false;
+}
+
+async function detectLanguageOnce(params: {
+  model: string;
+  userMessage: string;
+  fallback: string;
+}): Promise<string> {
+  const { model, userMessage, fallback } = params;
+
+  const res = await callStrictJson<{ language: string }>({
+    model,
+    instructions: LANGUAGE_DETECT_INSTRUCTIONS,
+    plannerInput: `USER_MESSAGE: ${userMessage}\nFALLBACK: ${fallback}`,
+    schemaName: "LanguageDetect",
+    jsonSchema: LanguageDetectJsonSchema as any,
+    zodSchema: LanguageDetectZodSchema,
+    temperature: 0,
+    topP: 1,
+    maxOutputTokens: 50,
+    debugLabel: "LanguageDetect",
+  });
+
+  const lang = String(res.data.language ?? "").trim().toLowerCase();
+  return lang || String(fallback || "en").trim().toLowerCase() || "en";
+}
+
+
 function langFromState(state: CanvasState): string {
   const l = String((state as any).language ?? "").trim().toLowerCase();
   return l || "en";
@@ -679,7 +745,31 @@ const prevQ =
 
 const userMessage = expandChoiceFromPreviousQuestion(userMessageCandidate, prevQ);
 
+    // --- One-time language lock based on the user's first real message ---
+  const locked = String((state as any).language_locked ?? "false") === "true";
+
+  // Fallback comes from any existing state.language (could be UI/browser hint), otherwise "en"
+  const fallbackLang = langFromState(state);
+
+  if (!locked && !isTrivialForLanguageDetection(userMessageCandidate)) {
+    try {
+      const detected = await detectLanguageOnce({
+        model,
+        userMessage: userMessageCandidate,
+        fallback: fallbackLang,
+      });
+
+      (state as any).language = detected;
+      (state as any).language_locked = "true";
+    } catch {
+      // If detection fails, keep fallback but still lock to avoid repeated calls
+      (state as any).language = fallbackLang;
+      (state as any).language_locked = "true";
+    }
+  }
+
   const lang = langFromState(state);
+
 
   // START trigger (widget start screen)
   const isStartTrigger =
