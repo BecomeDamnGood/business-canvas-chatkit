@@ -128,6 +128,8 @@ export function normalizeState(raw: unknown): CanvasState {
 
   // Keep language stable and comparable; store as lowercase (e.g. "nl", "en", "pt-br")
   const language = String(r.language ?? d.language).trim().toLowerCase();
+  const language_locked_raw = String(r.language_locked ?? d.language_locked).trim();
+  const language_locked: BoolString = language_locked_raw === "true" ? "true" : "false";
   const summary_target = String(r.summary_target ?? d.summary_target) || "unknown";
 
 
@@ -142,6 +144,7 @@ export function normalizeState(raw: unknown): CanvasState {
     dream_final,
     business_name,
     language,
+    language_locked,
     summary_target,
   };
 
