@@ -13,7 +13,7 @@ const host = "0.0.0.0";
 const MCP_PATH = "/mcp";
 
 // Keep this aligned with your release tag
-const VERSION = process.env.VERSION ?? "v56";
+const VERSION = process.env.VERSION ?? "v57";
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
