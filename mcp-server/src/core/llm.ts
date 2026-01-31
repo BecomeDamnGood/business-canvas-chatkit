@@ -1,5 +1,6 @@
 // src/core/llm.ts
 import { z } from "zod";
+import OpenAI from "openai";
 
 export type StrictJsonSchema = {
   type: "object";
@@ -51,6 +52,13 @@ function getApiKey(): string {
   return apiKey;
 }
 
+let _client: OpenAI | null = null;
+function getClient(): OpenAI {
+  if (_client) return _client;
+  _client = new OpenAI({ apiKey: getApiKey() });
+  return _client;
+}
+
 function extractOutputText(resp: any): string {
   // Responses API provides output_text at top level
   if (typeof resp?.output_text === "string" && resp.output_text.trim().length) {
@@ -85,15 +93,10 @@ function safeJsonParse(text: string): unknown {
 }
 
 async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema">) {
-  const apiKey = getApiKey();
+  const client = getClient();
 
-  const resp = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  try {
+    const resp = await client.responses.create({
       model: args.model,
       input: [
         { role: "system", content: args.instructions },
@@ -114,25 +117,22 @@ async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema
       temperature: args.temperature ?? 0.2,
       top_p: args.topP ?? 1,
       max_output_tokens: args.maxOutputTokens ?? 2048,
-    }),
-  });
+    });
 
-  const json: any = await resp.json().catch(() => null);
+    const text = extractOutputText(resp);
+    const parsed = safeJsonParse(text);
 
-  if (!resp.ok) {
+    return { text, parsed };
+  } catch (e: any) {
     const msg =
-      json?.error?.message ||
-      json?.error?.toString?.() ||
-      `OpenAI API error (${resp.status})`;
+      e?.message ||
+      e?.error?.message ||
+      e?.error?.toString?.() ||
+      "OpenAI API error";
     const err = new Error(msg);
-    (err as any).meta = { status: resp.status, body: json, debugLabel: args.debugLabel };
+    (err as any).meta = { body: e, debugLabel: args.debugLabel };
     throw err;
   }
-
-  const text = extractOutputText(json);
-  const parsed = safeJsonParse(text);
-
-  return { text, parsed };
 }
 
 /**
@@ -216,3 +216,4 @@ Now return a corrected JSON output that matches the schema exactly.`;
   };
   throw err;
 }
+
