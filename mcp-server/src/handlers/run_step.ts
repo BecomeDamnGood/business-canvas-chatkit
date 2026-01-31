@@ -396,11 +396,13 @@ async function callSpecialistStrict(params: {
   }
 
   if (specialist === DREAM_EXPLAINER_SPECIALIST) {
-    const plannerInput = buildDreamExplainerSpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || DREAM_STEP_ID)
-    );
+  const plannerInput = buildDreamExplainerSpecialistInput(
+    userMessage,
+    (state as any).intro_shown_for_step,
+    String(decision.current_step || DREAM_STEP_ID),
+    lang
+  );
+
 
     const res = await callStrictJson<DreamExplainerOutput>({
       model,
