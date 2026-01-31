@@ -233,7 +233,7 @@ If user chooses "Give me a few dream suggestions":
   - Base them only on the venture type + business name if known (do NOT invent extra facts).
   - End with one short line: "I hope these suggestions inspire you to write your own Dream."
 - question must show exactly:
-1) I'm happy with this wording
+1) Pick one for me and continue
 2) Do a small exercise that helps to define your dream.
 
 Type your dream or choose an option.
