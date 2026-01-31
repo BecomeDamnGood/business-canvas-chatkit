@@ -49,11 +49,15 @@ export const CanvasStateZod = z.object({
   step_0_final: z.string(),
   dream_final: z.string(),
 
-  // shared convenience fields (optional but helpful)
+    // shared convenience fields (optional but helpful)
   business_name: z.string(),
+
+  // user's preferred language (kept stable across the flow)
+  language: z.string(),
 
   // reserved for later
   summary_target: z.string(),
+
 });
 
 export type CanvasState = z.infer<typeof CanvasStateZod>;
@@ -62,7 +66,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "1";
+export const CURRENT_STATE_VERSION = "2";
 
 /**
  * Hard defaults (no nulls)
@@ -82,8 +86,10 @@ export function getDefaultState(): CanvasState {
     dream_final: "",
 
     business_name: "TBD",
+    language: "",
 
     summary_target: "unknown",
+
   };
 }
 
@@ -119,9 +125,13 @@ export function normalizeState(raw: unknown): CanvasState {
   const dream_final = String(r.dream_final ?? d.dream_final);
 
   const business_name = String(r.business_name ?? d.business_name) || "TBD";
+
+  // Keep language stable and comparable; store as lowercase (e.g. "nl", "en", "pt-br")
+  const language = String(r.language ?? d.language).trim().toLowerCase();
   const summary_target = String(r.summary_target ?? d.summary_target) || "unknown";
 
-  const normalized: CanvasState = {
+
+    const normalized: CanvasState = {
     state_version,
     current_step,
     active_specialist,
@@ -131,8 +141,10 @@ export function normalizeState(raw: unknown): CanvasState {
     step_0_final,
     dream_final,
     business_name,
+    language,
     summary_target,
   };
+
 
   // final Zod check (should always pass)
   return CanvasStateZod.parse(normalized);
