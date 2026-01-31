@@ -411,10 +411,17 @@
           setWidgetStateSafe({ seed_user_message: seedFromTool });
         }
 
+        // Determine whether we have tool output (important: a fresh widget instance may have sessionStarted=false)
+        const hasToolOutput =
+          Boolean(oa() && oa().toolOutput) ||
+          Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
+
+        // If we have tool output, we are effectively "started" (prevents pre-start screen from eating responses)
+        if (hasToolOutput) sessionStarted = true;
+
         // Use local gate to decide whether to show pre-start screen.
         const showPreStart = !sessionStarted;
 
-        const hasToolOutput = Boolean(oa() && oa().toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
         const current = (!showPreStart && hasToolOutput) ? (state.current_step || "step_0") : "step_0";
         const idx = stepIndex(current);
         buildStepper(idx);
