@@ -1,4 +1,3 @@
-// run_step.ts — DEEL 1/3 (regels 1–320)
 // mcp-server/src/handlers/run_step.ts
 import { z } from "zod";
 
@@ -172,7 +171,10 @@ function expandChoiceFromPreviousQuestion(userMsg: string, prevQuestion: string)
   const q = String(prevQuestion ?? "");
   if (!q) return userMsg;
 
-  const lines = q.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = q
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
 
   const wanted = `${t})`;
   for (const line of lines) {
@@ -198,9 +200,31 @@ function isClearYes(userMessage: string): boolean {
   if (t.length > 24) return false;
 
   const yesPhrases = new Set([
-    "yes", "y", "yeah", "yep", "sure", "ok", "okay", "k", "continue", "go on",
-    "ja", "j", "jazeker", "zeker", "klopt", "prima", "goed", "doorgaan", "ga door", "verder",
-    "oui", "si", "sí", "sì", "sim",
+    "yes",
+    "y",
+    "yeah",
+    "yep",
+    "sure",
+    "ok",
+    "okay",
+    "k",
+    "continue",
+    "go on",
+    "ja",
+    "j",
+    "jazeker",
+    "zeker",
+    "klopt",
+    "prima",
+    "goed",
+    "doorgaan",
+    "ga door",
+    "verder",
+    "oui",
+    "si",
+    "sí",
+    "sì",
+    "sim",
   ]);
 
   return yesPhrases.has(t);
@@ -252,7 +276,22 @@ function detectLanguageHeuristic(text: string): string {
   if (!s) return "en";
 
   // Super-lightweight heuristic: count a few common stopwords.
-  const nl = [" de ", " het ", " een ", " ik ", " jij ", " je ", " mijn ", " niet ", " en ", " dat ", " dit ", " als ", " omdat ", " klaar "];
+  const nl = [
+    " de ",
+    " het ",
+    " een ",
+    " ik ",
+    " jij ",
+    " je ",
+    " mijn ",
+    " niet ",
+    " en ",
+    " dat ",
+    " dit ",
+    " als ",
+    " omdat ",
+    " klaar ",
+  ];
   const en = [" the ", " a ", " an ", " i ", " you ", " my ", " not ", " and ", " that ", " this ", " because ", " ready "];
 
   const pad = ` ${s} `;
@@ -316,8 +355,6 @@ function buildSpecialistContextBlock(state: CanvasState): string {
 - strategy_final: ${safe((state as any).strategy_final)}
 - rulesofthegame_final: ${safe((state as any).rulesofthegame_final)}
 
-`;
-// run_step.ts — DEEL 2/3 (regels 321–640)
 STATE META (do not output this section)
 - business_name: ${safe((state as any).business_name)}
 - intro_shown_for_step: ${safe((state as any).intro_shown_for_step)}
@@ -345,8 +382,7 @@ function applyStateUpdate(params: {
     ...prev,
     current_step: next_step,
     active_specialist,
-    last_specialist_result:
-      typeof specialistResult === "object" && specialistResult !== null ? specialistResult : {},
+    last_specialist_result: typeof specialistResult === "object" && specialistResult !== null ? specialistResult : {},
 
     intro_shown_session: showSessionIntroUsed === "true" ? "true" : (prev as any).intro_shown_session,
 
@@ -638,7 +674,6 @@ async function callSpecialistStrict(params: {
       schemaName: "RulesOfTheGame",
       jsonSchema: RulesOfTheGameJsonSchema as any,
       zodSchema: RulesOfTheGameZodSchema,
-// run_step.ts — DEEL 3/3 (regels 641–943)
       temperature: 0.3,
       topP: 1,
       maxOutputTokens: 10000,
@@ -738,12 +773,11 @@ export async function run_step(rawArgs: unknown): Promise<{
   let state = migrateState(args.state ?? {});
   const pristineAtEntry = isPristineStateForStart(state);
 
-   const userMessageRaw = String(args.user_message ?? "");
+  const userMessageRaw = String(args.user_message ?? "");
   const extracted = extractUserMessageFromWrappedInput(userMessageRaw);
   const rawNormalized = extracted ? extracted : userMessageRaw;
 
-  const userMessageCandidate =
-    looksLikeMetaInstruction(rawNormalized) && pristineAtEntry ? "" : rawNormalized;
+  const userMessageCandidate = looksLikeMetaInstruction(rawNormalized) && pristineAtEntry ? "" : rawNormalized;
 
   // If user clicks a numbered option button, the UI sends "1"/"2"/"3".
   // Expand it to the real option label from the previous question, so every step can route correctly.
@@ -756,52 +790,80 @@ export async function run_step(rawArgs: unknown): Promise<{
 
   // Lock language once we see a meaningful user message (prevents mid-flow flips).
   state = ensureLanguageFromUserMessage(state, userMessage);
-const lang = langFromState(state);
+  const lang = langFromState(state);
 
   // START trigger (widget start screen)
   const isStartTrigger =
-  userMessage.trim() === "" &&
-  state.current_step === STEP_0_ID &&
-  String((state as any).intro_shown_session) !== "true" &&
-  Object.keys((state as any).last_specialist_result ?? {}).length === 0;
+    userMessage.trim() === "" &&
+    state.current_step === STEP_0_ID &&
+    String((state as any).intro_shown_session) !== "true" &&
+    Object.keys((state as any).last_specialist_result ?? {}).length === 0;
 
   if (isStartTrigger) {
-  (state as any).intro_shown_session = "true";
+    (state as any).intro_shown_session = "true";
 
-  const step0Final = String((state as any).step_0_final ?? "").trim();
+    const step0Final = String((state as any).step_0_final ?? "").trim();
 
-  // If Step 0 is already known, show the combined confirmation directly.
-  if (step0Final) {
-    const nameMatch = step0Final.match(/Name:\s*([^|]+)\s*(\||$)/i);
-    const ventureMatch = step0Final.match(/Venture:\s*([^|]+)\s*(\||$)/i);
-    const statusMatch = step0Final.match(/Status:\s*(existing|starting)\s*(\||$)/i);
+    // If Step 0 is already known, show the combined confirmation directly.
+    if (step0Final) {
+      const nameMatch = step0Final.match(/Name:\s*([^|]+)\s*(\||$)/i);
+      const ventureMatch = step0Final.match(/Venture:\s*([^|]+)\s*(\||$)/i);
+      const statusMatch = step0Final.match(/Status:\s*(existing|starting)\s*(\||$)/i);
 
-    const venture = (ventureMatch?.[1] || "venture").trim();
-    const name = (nameMatch?.[1] || (state as any).business_name || "TBD").trim();
-    const status = (statusMatch?.[1] || "starting").toLowerCase();
+      const venture = (ventureMatch?.[1] || "venture").trim();
+      const name = (nameMatch?.[1] || (state as any).business_name || "TBD").trim();
+      const status = (statusMatch?.[1] || "starting").toLowerCase();
 
-        const langLocal = langFromState(state);
+      const langLocal = langFromState(state);
 
-    const statement =
-      status === "existing"
-        ? (langLocal.startsWith("nl")
+      const statement =
+        status === "existing"
+          ? langLocal.startsWith("nl")
             ? `Je hebt een ${venture} genaamd ${name}.`
-            : `You have a ${venture} called ${name}.`)
-        : (langLocal.startsWith("nl")
+            : `You have a ${venture} called ${name}.`
+          : langLocal.startsWith("nl")
             ? `Je wilt een ${venture} starten genaamd ${name}.`
-            : `You want to start a ${venture} called ${name}.`);
+            : `You want to start a ${venture} called ${name}.`;
 
+      const specialist: ValidationAndBusinessNameOutput = {
+        action: "CONFIRM",
+        message: "",
+        question: "",
+        refined_formulation: "",
+        confirmation_question: langLocal.startsWith("nl")
+          ? `${statement} Klopt dat, en ben je klaar om te starten met de eerste stap, 'Jouw Droom'?`
+          : `${statement} Is that correct, and if so are you ready to start the first step, 'Your Dream'?`,
+        business_name: name || "TBD",
+        proceed_to_dream: "false",
+        step_0: step0Final,
+      };
+
+      return {
+        ok: true,
+        tool: "run_step",
+        current_step_id: String(state.current_step),
+        active_specialist: STEP_0_SPECIALIST,
+        text: "",
+        prompt: specialist.confirmation_question,
+        specialist,
+        state: {
+          ...state,
+          active_specialist: STEP_0_SPECIALIST,
+          last_specialist_result: specialist,
+        },
+      };
+    }
+
+    // Otherwise: first-time Step 0 setup question.
     const specialist: ValidationAndBusinessNameOutput = {
-      action: "CONFIRM",
+      action: "ASK",
       message: "",
-      question: "",
+      question: step0QuestionForLang(langFromState(state)),
       refined_formulation: "",
-      confirmation_question: langLocal.startsWith("nl")
-        ? `${statement} Klopt dat, en ben je klaar om te starten met de eerste stap, 'Jouw Droom'?`
-        : `${statement} Is that correct, and if so are you ready to start the first step, 'Your Dream'?`,
-      business_name: name || "TBD",
+      confirmation_question: "",
+      business_name: (state as any).business_name || "TBD",
       proceed_to_dream: "false",
-      step_0: step0Final,
+      step_0: "",
     };
 
     return {
@@ -810,7 +872,7 @@ const lang = langFromState(state);
       current_step_id: String(state.current_step),
       active_specialist: STEP_0_SPECIALIST,
       text: "",
-      prompt: specialist.confirmation_question,
+      prompt: specialist.question,
       specialist,
       state: {
         ...state,
@@ -819,34 +881,6 @@ const lang = langFromState(state);
       },
     };
   }
-
-  // Otherwise: first-time Step 0 setup question.
-  const specialist: ValidationAndBusinessNameOutput = {
-    action: "ASK",
-    message: "",
-    question: step0QuestionForLang(langFromState(state)),
-    refined_formulation: "",
-    confirmation_question: "",
-    business_name: (state as any).business_name || "TBD",
-    proceed_to_dream: "false",
-    step_0: "",
-  };
-
-  return {
-    ok: true,
-    tool: "run_step",
-    current_step_id: String(state.current_step),
-    active_specialist: STEP_0_SPECIALIST,
-    text: "",
-    prompt: specialist.question,
-    specialist,
-    state: {
-      ...state,
-      active_specialist: STEP_0_SPECIALIST,
-      last_specialist_result: specialist,
-    },
-  };
-}
 
   // --------- SPEECH-PROOF PROCEED TRIGGER (Step 0 readiness moment only) ---------
   const prev = (state as any).last_specialist_result || {};
@@ -899,10 +933,24 @@ const lang = langFromState(state);
   let finalDecision = decision1;
 
   if (shouldChainToNextStep(decision1, specialistResult)) {
-    const decision2 = orchestrate({ state: nextState, userMessage });
+    // For the Dream exercise readiness handshake, always use a clear "yes" token
+    // for the chained DreamExplainer call to start deterministically.
+    const chainUserMessage =
+      String(decision1.current_step || "") === DREAM_STEP_ID &&
+      String(specialistResult?.action ?? "") === "CONFIRM" &&
+      String(specialistResult?.suggest_dreambuilder ?? "") === "true"
+        ? yesTokenForLang(lang)
+        : userMessage;
+
+    const decision2 = orchestrate({ state: nextState, userMessage: chainUserMessage });
 
     if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
-      const call2 = await callSpecialistStrict({ model, state: nextState, decision: decision2, userMessage });
+      const call2 = await callSpecialistStrict({
+        model,
+        state: nextState,
+        decision: decision2,
+        userMessage: chainUserMessage,
+      });
       attempts = Math.max(attempts, call2.attempts);
       specialistResult = call2.specialistResult;
 
