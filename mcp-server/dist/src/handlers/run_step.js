@@ -718,7 +718,7 @@ export async function run_step(rawArgs) {
         prev: state,
         decision: decision1,
         specialistResult,
-        showSessionIntroUsed: "false",
+        showSessionIntroUsed: showSessionIntro,
     });
     // --------- OPTIONAL CHAIN: Dream exercise handshake + proceed flags ----------
     let finalDecision = decision1;

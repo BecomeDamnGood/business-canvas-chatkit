@@ -67,6 +67,7 @@ export function getDefaultState() {
         dream_final: "",
         business_name: "TBD",
         language: "",
+        language_locked: "false",
         summary_target: "unknown",
     };
 }
