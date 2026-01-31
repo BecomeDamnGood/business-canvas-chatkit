@@ -64,13 +64,18 @@ export const DreamExplainerJsonSchema = {
 export function buildDreamExplainerSpecialistInput(
   userMessage: string,
   introShownForStep: string = "",
-  currentStep: string = "dream"
+  currentStep: string = "dream",
+  language: string = "en"
 ): string {
+  const lang = String(language ?? "").trim().toLowerCase() || "en";
   const plannerInput = `CURRENT_STEP_ID: ${currentStep} | USER_MESSAGE: ${userMessage}`;
-  return `INTRO_SHOWN_FOR_STEP: ${introShownForStep}
+
+  return `LANGUAGE: ${lang}
+INTRO_SHOWN_FOR_STEP: ${introShownForStep}
 CURRENT_STEP: ${currentStep}
 PLANNER_INPUT: ${plannerInput}`;
 }
+
 
 /**
  * DreamExplainer instructions
@@ -96,7 +101,7 @@ Strict JSON output rules
 - Output ONLY valid JSON. No markdown. No extra text.
 - Output ALL fields every time.
 - Never output null. Use empty strings "".
-- Mirror the user’s language from PLANNER_INPUT and respond in that language.
+- Mirror the user’s language from LANGUAGE if provided; otherwise infer it from PLANNER_INPUT.
 - Do not mix languages.
 - Ask no more than one question per turn.
 - proceed_to_dream must ALWAYS be "false".
