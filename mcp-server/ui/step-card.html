@@ -506,6 +506,7 @@
         // Ensure UI is in post-start mode whenever we call the backend
         sessionStarted = true;
         sessionWelcomeShown = false;
+        setWidgetStateSafe({ started: "true" });
 
         
         const o = oa();
