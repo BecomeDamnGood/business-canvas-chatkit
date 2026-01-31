@@ -53,7 +53,9 @@ export const CanvasStateZod = z.object({
   business_name: z.string(),
 
   // user's preferred language (kept stable across the flow)
+    // user's preferred language (kept stable across the flow)
   language: z.string(),
+  language_locked: BoolStringZod,
 
   // reserved for later
   summary_target: z.string(),
