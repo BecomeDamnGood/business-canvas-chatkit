@@ -76,7 +76,6 @@ CURRENT_STEP: ${currentStep}
 PLANNER_INPUT: ${plannerInput}`;
 }
 
-
 /**
  * DreamExplainer instructions
  * IMPORTANT: This string is intentionally identical to the spec you provided.
