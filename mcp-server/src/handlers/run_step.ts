@@ -986,11 +986,11 @@ export async function run_step(rawArgs: unknown): Promise<{
 
   // --------- UPDATE STATE (after first specialist) ----------
   let nextState = applyStateUpdate({
-    prev: state,
-    decision: decision1,
-    specialistResult,
-    showSessionIntroUsed: "false",
-  });
+  prev: state,
+  decision: decision1,
+  specialistResult,
+  showSessionIntroUsed: showSessionIntro,
+});
 
   // --------- OPTIONAL CHAIN: Dream exercise handshake + proceed flags ----------
   let finalDecision = decision1;
