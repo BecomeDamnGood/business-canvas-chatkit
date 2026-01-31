@@ -564,7 +564,7 @@
         setWidgetStateSafe({ started: "true" });
 
         // NEW: use seed exactly once (if present).
-        const ws = widgetState();
+        
         const seedRaw = String(ws.seed_user_message || "").trim();
         const seedUsed = String(ws.seed_used || "") === "true";
 
