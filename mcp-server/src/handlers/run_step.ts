@@ -809,26 +809,59 @@ const userMessage = expandChoiceFromPreviousQuestion(userMessageCandidate, prevQ
   });
 
   // --------- OPTIONAL CHAIN: immediate next-step intro on proceed flags ----------
-  let finalDecision = decision1;
+  // --------- OPTIONAL CHAIN: Dream exercise handshake + proceed flags ----------
+let finalDecision = decision1;
 
-  if (shouldChainToNextStep(decision1, specialistResult)) {
-    const decision2 = orchestrate({ state: nextState, userMessage });
+// 1) Dream exercise handshake: if Dream returns CONFIRM + suggest_dreambuilder=true,
+// immediately call DreamExplainer in the SAME turn (so "Continue" works).
+const shouldStartDreamExplainerNow =
+  String(decision1.current_step ?? "") === DREAM_STEP_ID &&
+  String(specialistResult?.action ?? "") === "CONFIRM" &&
+  String(specialistResult?.suggest_dreambuilder ?? "") === "true";
 
-    if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
-      const call2 = await callSpecialistStrict({ model, state: nextState, decision: decision2, userMessage });
-      attempts = Math.max(attempts, call2.attempts);
-      specialistResult = call2.specialistResult;
+if (shouldStartDreamExplainerNow) {
+  // Start DreamExplainer cleanly (no extra user text needed)
+  const chainUserMessage = "";
+  const decision2 = orchestrate({ state: nextState, userMessage: chainUserMessage });
 
-      nextState = applyStateUpdate({
-        prev: nextState,
-        decision: decision2,
-        specialistResult,
-        showSessionIntroUsed: "false",
-      });
+  if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
+    const call2 = await callSpecialistStrict({
+      model,
+      state: nextState,
+      decision: decision2,
+      userMessage: chainUserMessage,
+    });
+    attempts = Math.max(attempts, call2.attempts);
+    specialistResult = call2.specialistResult;
 
-      finalDecision = decision2;
-    }
+    nextState = applyStateUpdate({
+      prev: nextState,
+      decision: decision2,
+      specialistResult,
+      showSessionIntroUsed: "false",
+    });
+
+    finalDecision = decision2;
   }
+} else if (shouldChainToNextStep(decision1, specialistResult)) {
+  // 2) Existing proceed-chain behavior (step_0 -> dream, dream -> purpose, etc.)
+  const decision2 = orchestrate({ state: nextState, userMessage });
+
+  if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
+    const call2 = await callSpecialistStrict({ model, state: nextState, decision: decision2, userMessage });
+    attempts = Math.max(attempts, call2.attempts);
+    specialistResult = call2.specialistResult;
+
+    nextState = applyStateUpdate({
+      prev: nextState,
+      decision: decision2,
+      specialistResult,
+      showSessionIntroUsed: "false",
+    });
+
+    finalDecision = decision2;
+  }
+}
 
   const text = buildTextForWidget({ specialist: specialistResult });
   const prompt = pickPrompt(specialistResult);
