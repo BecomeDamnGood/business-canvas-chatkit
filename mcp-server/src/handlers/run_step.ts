@@ -195,6 +195,93 @@ function langFromState(state: CanvasState): string {
   return l || "en";
 }
 
+// --- Readiness intent detection (multi-language, no hardcoded yes/ok lists) ---
+// Used only when the previous prompt is a readiness gate ("Are you ready? yes/no").
+// This avoids enumerating all languages and keeps the UI token "__CONTINUE__" universal.
+
+const ReadinessIntentZodSchema = z.object({
+  intent: z.enum(["affirm", "deny", "other"]),
+});
+
+const ReadinessIntentJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["intent"],
+  properties: {
+    intent: { type: "string", enum: ["affirm", "deny", "other"] },
+  },
+} as const;
+
+const READINESS_INTENT_INSTRUCTIONS = `READINESS INTENT CLASSIFIER (STRICT JSON)
+
+Task:
+- Decide whether USER_MESSAGE means the user wants to proceed ("affirm"), does not want to proceed ("deny"), or is something else ("other").
+- The user may write in any language.
+- Use LANGUAGE as a strong hint for interpretation.
+- Be robust to short confirmations like "ok", "fine", "sure", "let's go", "is goed", etc.
+- Output ONLY strict JSON matching the schema.
+
+Output:
+{"intent":"affirm" | "deny" | "other"}
+`;
+
+async function detectReadinessIntent(params: {
+  model: string;
+  language: string;
+  userMessage: string;
+}): Promise<"affirm" | "deny" | "other"> {
+  const { model, language, userMessage } = params;
+
+  const res = await callStrictJson<{ intent: "affirm" | "deny" | "other" }>({
+    model,
+    instructions: READINESS_INTENT_INSTRUCTIONS,
+    plannerInput: `LANGUAGE: ${language}\nUSER_MESSAGE: ${userMessage}`,
+    schemaName: "ReadinessIntent",
+    jsonSchema: ReadinessIntentJsonSchema as any,
+    zodSchema: ReadinessIntentZodSchema,
+    temperature: 0,
+    topP: 1,
+    maxOutputTokens: 40,
+    debugLabel: "ReadinessIntent",
+  });
+
+  const intent = String(res.data.intent || "").trim();
+  if (intent === "affirm" || intent === "deny" || intent === "other") return intent;
+  return "other";
+}
+
+// Detect Dream "exercise handshake" readiness prompt (Dream specialist asked: "Are you ready to start?")
+function isDreamExerciseReadinessAsked(state: CanvasState): boolean {
+  const prev = (state as any).last_specialist_result || {};
+
+  // This matches the Dream spec: action=ASK, suggest_dreambuilder=true, question is readiness,
+  // and other content fields are empty strings.
+  const actionOk = String(prev?.action ?? "") === "ASK";
+  const suggestOk = String(prev?.suggest_dreambuilder ?? "") === "true";
+  const proceedDreamOk = String(prev?.proceed_to_dream ?? "") === "false";
+  const proceedPurposeOk = String(prev?.proceed_to_purpose ?? "") === "false";
+
+  const q = String(prev?.question ?? "").trim();
+  const msg = String(prev?.message ?? "").trim();
+
+  const refinedEmpty = String(prev?.refined_formulation ?? "").trim() === "";
+  const confirmEmpty = String(prev?.confirmation_question ?? "").trim() === "";
+  const dreamEmpty = String(prev?.dream ?? "").trim() === "";
+
+  // readiness prompt has both message + question set (question is "Are you ready..."), and empties elsewhere
+  return (
+    state.current_step === DREAM_STEP_ID &&
+    actionOk &&
+    suggestOk &&
+    proceedDreamOk &&
+    proceedPurposeOk &&
+    !!msg &&
+    !!q &&
+    refinedEmpty &&
+    confirmEmpty &&
+    dreamEmpty
+  );
+}
 
 /**
  * Render order (strict):
@@ -742,6 +829,26 @@ if (isSeedMsg) {
     looksLikeMetaInstruction(userMessageRaw) && pristineAtEntry ? "" : userMessageRaw;
 }
 
+const lang = langFromState(state);
+
+// --------- Readiness context detection (for universal "__CONTINUE__" and "ok/prima/etc") ----------
+const prev = (state as any).last_specialist_result || {};
+const step0ReadinessAsked =
+  state.current_step === STEP_0_ID &&
+  String(prev?.action ?? "") === "CONFIRM" &&
+  typeof prev?.confirmation_question === "string" &&
+  prev.confirmation_question.trim() !== "" &&
+  String(prev?.proceed_to_dream ?? "") === "false";
+
+const dreamExerciseReadinessAsked = isDreamExerciseReadinessAsked(state);
+
+// 1) Universal UI token:
+// - In readiness gate => treat as "yes"
+// - Otherwise => treat as menu choice "1" (keeps old behavior: Continue = option 1)
+if (String(userMessageCandidate).trim() === "__CONTINUE__") {
+  userMessageCandidate = (step0ReadinessAsked || dreamExerciseReadinessAsked) ? "yes" : "1";
+}
+
 // If user clicks a numbered option button, the UI sends "1"/"2".
 // Expand it to the real option label from the previous question, so every step can route correctly.
 const prevQ =
@@ -749,33 +856,24 @@ const prevQ =
     ? String((state as any).last_specialist_result.question)
     : "";
 
-const userMessage = expandChoiceFromPreviousQuestion(userMessageCandidate, prevQ);
+let userMessage = expandChoiceFromPreviousQuestion(userMessageCandidate, prevQ);
 
-    // --- One-time language lock based on the user's first real message ---
-  const locked = String((state as any).language_locked ?? "false") === "true";
+// 2) If we are at a readiness gate, interpret any "ok/is goed/prima/..." (any language)
+// into a normalized yes/no WITHOUT hardcoding language lists.
+if ((step0ReadinessAsked || dreamExerciseReadinessAsked) && userMessage.trim() !== "") {
+  const t = userMessage.trim();
 
-  // Fallback comes from any existing state.language (could be UI/browser hint), otherwise "en"
-  const fallbackLang = langFromState(state);
-
-  if (!locked && !isTrivialForLanguageDetection(userMessageCandidate)) {
-    try {
-      const detected = await detectLanguageOnce({
-        model,
-        userMessage: userMessageCandidate,
-        fallback: fallbackLang,
-      });
-
-      (state as any).language = detected;
-      (state as any).language_locked = "true";
-    } catch {
-      // If detection fails, keep fallback but still lock to avoid repeated calls
-      (state as any).language = fallbackLang;
-      (state as any).language_locked = "true";
-    }
+  // Keep numeric compatibility
+  if (t === "1") {
+    userMessage = "yes";
+  } else if (t === "2") {
+    userMessage = "no";
+  } else if (t !== "yes" && t !== "no") {
+    const intent = await detectReadinessIntent({ model, language: lang, userMessage: t });
+    if (intent === "affirm") userMessage = "yes";
+    else if (intent === "deny") userMessage = "no";
   }
-
-  const lang = langFromState(state);
-
+}
 
   // START trigger (widget start screen)
   const isStartTrigger =
@@ -869,7 +967,10 @@ const userMessage = expandChoiceFromPreviousQuestion(userMessageCandidate, prevQ
     String(prev?.proceed_to_dream ?? "") === "false";
 
   const canProceedFromStep0 =
-    readinessAsked && isClearYes(userMessage) && String((state as any).step_0_final ?? "").trim() !== "";
+  readinessAsked &&
+  (userMessage.trim() === "1" || userMessage.trim().toLowerCase() === "yes") &&
+  String((state as any).step_0_final ?? "").trim() !== "";
+
 
   if (canProceedFromStep0) {
     const proceedPayload: ValidationAndBusinessNameOutput = {
