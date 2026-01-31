@@ -120,6 +120,9 @@ const STEP0_QUESTION_EN =
   "What type of venture are you starting or running, and what’s the name of your business (or is it still TBD)?";
 
 // --- Language detection (one-time) ---
+// Purpose: lock user language once, but avoid detecting language from ambiguous short inputs.
+// We intentionally DO NOT hardcode multilingual "yes/ok/..." lists.
+
 const LanguageDetectZodSchema = z.object({
   language: z.string(),
 });
@@ -139,23 +142,26 @@ Task:
 - Detect the user's language from USER_MESSAGE.
 - Output a lowercase BCP-47 style tag when possible (examples: "nl", "en", "pt-br", "es", "de", "fr", "it").
 - If uncertain, return FALLBACK.
+- Output ONLY strict JSON matching the schema.
 
-Output (STRICT):
+Output:
 {"language":"<tag>"}
 `;
 
 function isTrivialForLanguageDetection(msg: string): boolean {
-  const t = String(msg ?? "").trim().toLowerCase();
+  const t = String(msg ?? "").trim();
+
   if (!t) return true;
 
-  // Common short confirmations / button payloads / menu choices
-  if (t === "1" || t === "2" || t === "3") return true;
-  if (t === "yes" || t === "no" || t === "y" || t === "n") return true;
-  if (t === "ja" || t === "nee") return true;
-  if (t === "ok" || t === "okay") return true;
+  // Universal UI tokens (never use these to detect language)
+  if (t === "__CONTINUE__") return true;
 
-  // Very short tokens are often ambiguous and cause drift
-  if (t.length <= 2) return true;
+  // Pure menu choices / numbers (ambiguous)
+  if (/^\d+$/.test(t)) return true;
+
+  // Too short => ambiguous and likely causes drift
+  // (e.g. "ok", "yo", "si", "ja" are not reliable for language detection)
+  if (t.length <= 3) return true;
 
   return false;
 }
@@ -184,11 +190,11 @@ async function detectLanguageOnce(params: {
   return lang || String(fallback || "en").trim().toLowerCase() || "en";
 }
 
-
 function langFromState(state: CanvasState): string {
   const l = String((state as any).language ?? "").trim().toLowerCase();
   return l || "en";
 }
+
 
 /**
  * Render order (strict):
