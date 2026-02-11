@@ -1844,6 +1844,17 @@ Estimated time: 10–15 minutes.`;
         const menuId = String(specialist?.menu_id || "").trim();
         const state = resultData?.state || {};
         const currentStep = String(state?.current_step || "").trim();
+        const uiPayload = (resultData && typeof resultData.ui === "object" && resultData.ui) ? resultData.ui : {};
+        const registryVersion = String(resultData?.registry_version || "").trim();
+        const registryActionCodes = Array.isArray(uiPayload.action_codes) ? uiPayload.action_codes : null;
+        const expectedChoiceCount =
+          (typeof uiPayload.expected_choice_count === "number")
+            ? uiPayload.expected_choice_count
+            : (registryActionCodes ? registryActionCodes.length : null);
+
+        if (registryVersion && menuId) {
+          console.log("[actioncode_render]", { registryVersion, menuId, currentStep });
+        }
 
         // HARD GUARD: Role REFINE menu must only show the confirm button
         if (currentStep === "role" && menuId === "ROLE_MENU_REFINE" && Array.isArray(choices) && choices.length > 1) {
@@ -1877,6 +1888,7 @@ Estimated time: 10–15 minutes.`;
         }
 
         // Pre-validate: all buttons must have labels and ActionCodes
+        const legacyActionCodes = [];
         for (const c of choices) {
           const label = String(c.label || "").trim();
           if (!label) {
@@ -1897,6 +1909,31 @@ Estimated time: 10–15 minutes.`;
             wrap.textContent = `Menu error: missing ActionCode mapping for ${menuId} option ${c.value}.`;
             return;
           }
+          legacyActionCodes.push(actionCode);
+        }
+
+        if (registryActionCodes) {
+          const mismatchIndices = [];
+          const maxLen = Math.max(legacyActionCodes.length, registryActionCodes.length);
+          for (let i = 0; i < maxLen; i++) {
+            if (legacyActionCodes[i] !== registryActionCodes[i]) mismatchIndices.push(i + 1);
+          }
+          const labelsCount = Array.isArray(choices) ? choices.length : 0;
+          const expectedCount = (typeof expectedChoiceCount === "number") ? expectedChoiceCount : registryActionCodes.length;
+          const countsMismatch = expectedCount !== labelsCount;
+          if (mismatchIndices.length || countsMismatch) {
+            const telemetry = {
+              kind: "actioncode_shadow_compare",
+              registry_version: registryVersion,
+              menu_id: menuId,
+              step: currentStep,
+              labels_count: labelsCount,
+              expected_choice_count: expectedCount,
+              mismatch_indices: mismatchIndices,
+            };
+            console.warn("[actioncode_shadow_compare]", telemetry);
+            try { globalThis.__BSC_UI_TELEMETRY__ = telemetry; } catch {}
+          }
         }
 
         wrap.style.display = "flex";
@@ -1910,6 +1947,9 @@ Estimated time: 10–15 minutes.`;
           btn.disabled = isLoading;
           btn.addEventListener("click", () => {
             if (isLoading) return;
+            if (registryVersion && menuId) {
+              console.log("[actioncode_click]", { registryVersion, menuId, currentStep, action_code: actionCode });
+            }
             callRunStep(actionCode);
           });
           wrap.appendChild(btn);
@@ -2484,11 +2524,18 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
 
         setWidgetStateSafe({ language: nextState.language, started: "true" });
 
+        const telemetry = (globalThis.__BSC_UI_TELEMETRY__ && typeof globalThis.__BSC_UI_TELEMETRY__ === "object")
+          ? globalThis.__BSC_UI_TELEMETRY__
+          : null;
+        if (telemetry) {
+          try { delete globalThis.__BSC_UI_TELEMETRY__; } catch {}
+        }
+
         const payload = {
           current_step_id: nextState.current_step || "step_0",
           user_message: String(message || ""),
           input_mode: "widget",
-          state: nextState
+          state: telemetry ? { ...nextState, __ui_telemetry: telemetry } : nextState
         };
 
         setLoading(true);

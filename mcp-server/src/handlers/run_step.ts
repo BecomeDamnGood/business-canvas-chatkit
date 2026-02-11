@@ -2061,6 +2061,10 @@ export async function run_step(rawArgs: unknown): Promise<{
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
 
   const rawState = (args.state ?? {}) as Record<string, unknown>;
+  const uiTelemetry = (rawState as any).__ui_telemetry;
+  if (uiTelemetry && typeof uiTelemetry === "object") {
+    console.log("[ui_telemetry]", uiTelemetry);
+  }
   const transientTextSubmit = typeof (rawState as any).__text_submit === "string"
     ? String((rawState as any).__text_submit)
     : "";
@@ -2069,6 +2073,9 @@ export async function run_step(rawArgs: unknown): Promise<{
     : null;
 
   let state = migrateState(args.state ?? {});
+  if ((state as any).__ui_telemetry) {
+    delete (state as any).__ui_telemetry;
+  }
   const fromArgs = String(rawState?.initial_user_message ?? "").trim();
   if (fromArgs && !String((state as any).initial_user_message ?? "").trim()) {
     (state as any).initial_user_message = fromArgs;
@@ -2105,6 +2112,21 @@ export async function run_step(rawArgs: unknown): Promise<{
 
   let actionCodeRaw = userMessageCandidate.startsWith("ACTION_") ? userMessageCandidate : "";
   let userMessage = userMessageCandidate;
+
+  if (actionCodeRaw) {
+    const menuId = String(lastSpecialistResult?.menu_id || "").trim();
+    if (menuId) {
+      const expectedCount = ACTIONCODE_REGISTRY.menus[menuId]?.length;
+      console.log("[actioncode_click]", {
+        registry_version: ACTIONCODE_REGISTRY.version,
+        menu_id: menuId,
+        step: String(state.current_step || ""),
+        expected_count: expectedCount,
+        action_code: actionCodeRaw,
+        input_mode: inputMode,
+      });
+    }
+  }
 
   if (actionCodeRaw === "ACTION_TEXT_SUBMIT") {
     const submitted = String(transientTextSubmit ?? "").trim();
