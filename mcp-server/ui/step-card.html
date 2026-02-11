@@ -1631,6 +1631,14 @@ Estimated time: 10–15 minutes.`;
         if (sendEl) sendEl.disabled = isLoading || v.length === 0;
       }
 
+      function sanitizeInlineText(raw) {
+        var s = String(raw || "");
+        s = s.replace(/<\s*strong\s*>/gi, "");
+        s = s.replace(/<\s*\/\s*strong\s*>/gi, "");
+        s = s.replace(/<[^>]*>/g, "");
+        return s;
+      }
+
       /**
        * Structure-only choice detection (language-agnostic).
        * Renders numbered lines as buttons when: one contiguous numbered block,
@@ -1736,7 +1744,7 @@ Estimated time: 10–15 minutes.`;
         }
 
         for (const c of choices) {
-          const label = String(c.label || "").trim();
+          const label = sanitizeInlineText(String(c.label || "")).trim();
           if (!label) {
             console.error("Empty choice label", { menuId, currentStep, choiceIndex: c.value });
             showOptionsError();
@@ -1751,7 +1759,7 @@ Estimated time: 10–15 minutes.`;
         wrap.style.display = "flex";
         let renderIndex = 0;
         for (const c of choices) {
-          const label = String(c.label || "").trim();
+          const label = sanitizeInlineText(String(c.label || "")).trim();
           const actionCode = registryActionCodes[renderIndex];
           const btn = document.createElement("button");
           btn.className = "choiceBtn";
@@ -1887,14 +1895,18 @@ Estimated time: 10–15 minutes.`;
         var isDreamDirectionView = current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
 
         const bodyRaw = (function () {
-          var raw = (result && typeof result.text === "string") ? result.text : "";
+          var raw = (result && typeof result.text === "string") ? sanitizeInlineText(result.text) : "";
           if (!raw && result && result.specialist && typeof result.specialist === "object") {
             var sp = result.specialist;
-            raw = String(sp.message || "").trim() || String(sp.refined_formulation || "").trim() || String(sp.question || "").trim() || "";
+            raw =
+              sanitizeInlineText(String(sp.message || "")).trim() ||
+              sanitizeInlineText(String(sp.refined_formulation || "")).trim() ||
+              sanitizeInlineText(String(sp.question || "")).trim() ||
+              "";
           }
           return raw;
         })();
-        const promptRaw = (result && typeof result.prompt === "string") ? result.prompt : "";
+        const promptRaw = (result && typeof result.prompt === "string") ? sanitizeInlineText(result.prompt) : "";
 
         // Post-scoring Dream direction: show only the question in the same screen (no Thanks, no statements panel).
         var body = bodyRaw;
