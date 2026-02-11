@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+const checkMode = process.argv.includes("--check");
 
 function readFile(filePath) {
   return fs.readFileSync(filePath, "utf8");
@@ -47,6 +48,59 @@ function extractStepRoutes(text) {
   return routes;
 }
 
+function extractSectionBlock(text, sectionName) {
+  const start = text.indexOf(`${sectionName}: {`);
+  if (start === -1) return "";
+  let i = text.indexOf("{", start);
+  if (i === -1) return "";
+  let depth = 0;
+  let end = -1;
+  for (; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end === -1) return "";
+  return text.slice(text.indexOf("{", start) + 1, end);
+}
+
+function extractObjectKeys(sectionText) {
+  const keys = new Set();
+  const lines = sectionText.split(/\r?\n/);
+  for (const line of lines) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*:/);
+    if (m) keys.add(m[1]);
+  }
+  return keys;
+}
+
+function extractRegistryActionRoutes(text) {
+  const routes = new Map();
+  const re = /(ACTION_[A-Z0-9_]+)\s*:\s*\{[^}]*?route:\s*"([^"]*)"/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    routes.set(m[1], m[2]);
+  }
+  return routes;
+}
+
+function extractMenuIdsFromSteps(text) {
+  const ids = new Set();
+  const re = /menu_id\s*(?:=|:)\s*"?([A-Z0-9_]+)"?/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const id = m[1];
+    if (id.includes("_")) ids.add(id);
+  }
+  return ids;
+}
+
 function mergeMaps(maps) {
   const out = new Map();
   for (const m of maps) {
@@ -70,6 +124,7 @@ const docsFiles = [
   ...listFiles(path.join(repoRoot, "mcp-server/docs"), ".md"),
 ];
 const distFiles = listFiles(path.join(repoRoot, "mcp-server/dist"), ".js");
+const registryFile = path.join(repoRoot, "mcp-server/src/core/actioncode_registry.ts");
 
 const uiCodes = new Set();
 const backendCodes = new Set();
@@ -107,6 +162,35 @@ for (const f of distFiles) {
   }
 }
 
+const registryText = fs.existsSync(registryFile) ? readFile(registryFile) : "";
+const registryActionsSection = extractSectionBlock(registryText, "actions");
+const registryMenusSection = extractSectionBlock(registryText, "menus");
+const registryActionKeys = extractObjectKeys(registryActionsSection);
+const registryMenuIds = extractObjectKeys(registryMenusSection);
+const registryActionRoutes = extractRegistryActionRoutes(registryText);
+const registryMenuActionCodes = extractActionCodes(registryMenusSection);
+
+const menuIdsFromSteps = new Set();
+for (const f of stepsFiles) {
+  if (!fs.existsSync(f)) continue;
+  const text = readFile(f);
+  for (const id of extractMenuIdsFromSteps(text)) menuIdsFromSteps.add(id);
+}
+
+const contractErrors = [];
+const missingMenuIds = toSortedArray([...menuIdsFromSteps].filter((id) => !registryMenuIds.has(id)));
+if (missingMenuIds.length) {
+  contractErrors.push({ type: "missing_menu_ids_in_registry", items: missingMenuIds });
+}
+const missingActionRoutes = toSortedArray([...registryActionKeys].filter((code) => !registryActionRoutes.has(code)));
+if (missingActionRoutes.length) {
+  contractErrors.push({ type: "missing_routes_for_registry_actions", items: missingActionRoutes });
+}
+const missingMenuActionCodes = toSortedArray([...registryMenuActionCodes].filter((code) => !registryActionKeys.has(code)));
+if (missingMenuActionCodes.length) {
+  contractErrors.push({ type: "menu_action_missing_in_registry_actions", items: missingMenuActionCodes });
+}
+
 const allCodes = new Set([
   ...uiCodes,
   ...backendCodes,
@@ -139,8 +223,21 @@ const srcUnion = new Set([...uiCodes, ...backendCodes, ...stepsCodes, ...docsCod
 const distOnly = toSortedArray([...distCodes].filter((c) => !srcUnion.has(c)));
 const srcOnly = toSortedArray([...srcUnion].filter((c) => !distCodes.has(c)));
 
+let generatedAt = new Date().toISOString();
+const outPath = path.join(repoRoot, "docs/actioncode-diff.json");
+if (checkMode && fs.existsSync(outPath)) {
+  try {
+    const existing = JSON.parse(readFile(outPath));
+    if (existing && typeof existing.generated_at === "string") {
+      generatedAt = existing.generated_at;
+    }
+  } catch {
+    // ignore parse errors; fallback to new timestamp
+  }
+}
+
 const report = {
-  generated_at: new Date().toISOString(),
+  generated_at: generatedAt,
   sources: {
     ui: uiFiles.map((p) => path.relative(repoRoot, p)),
     backend: backendFiles.map((p) => path.relative(repoRoot, p)),
@@ -166,9 +263,32 @@ const report = {
     dist_only: distOnly,
     src_only: srcOnly,
   },
+  contract_checks: {
+    registry_file: path.relative(repoRoot, registryFile),
+    missing_menu_ids_in_registry: missingMenuIds,
+    missing_routes_for_registry_actions: missingActionRoutes,
+    menu_action_missing_in_registry_actions: missingMenuActionCodes,
+  },
 };
+const output = JSON.stringify(report, null, 2) + "\n";
 
-const outPath = path.join(repoRoot, "docs/actioncode-diff.json");
-fs.writeFileSync(outPath, JSON.stringify(report, null, 2) + "\n");
+if (distOnly.length || srcOnly.length) {
+  console.warn(`::warning ::dist drift detected (dist_only=${distOnly.length}, src_only=${srcOnly.length})`);
+}
 
-console.log(`Wrote ${path.relative(repoRoot, outPath)}`);
+if (contractErrors.length) {
+  console.error("Contract checks failed:", JSON.stringify(contractErrors, null, 2));
+  if (checkMode) process.exit(1);
+}
+
+if (checkMode) {
+  const existing = fs.existsSync(outPath) ? readFile(outPath) : "";
+  if (existing !== output) {
+    console.error("actioncode-diff baseline out of date. Re-run script to update docs/actioncode-diff.json.");
+    process.exit(1);
+  }
+  console.log("actioncode-diff baseline up to date.");
+} else {
+  fs.writeFileSync(outPath, output);
+  console.log(`Wrote ${path.relative(repoRoot, outPath)}`);
+}
