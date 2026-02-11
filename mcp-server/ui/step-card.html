@@ -696,6 +696,18 @@
         max-width: 100%;
         white-space: pre-line;
       }
+
+      .inlineNotice {
+        margin-top: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        font-size: var(--font-size-md);
+        line-height: var(--line-height-relaxed);
+        color: #6b4f00;
+        background: #fff3cd;
+        border: 1px solid #ffe08a;
+        border-radius: var(--radius-md);
+        display: none;
+      }
       
       .cardDesc ul {
         margin: 0;
@@ -1182,6 +1194,7 @@
             <div class="cardTitle" id="cardTitle"></div>
 
           <div class="cardDesc" id="cardDesc"></div>
+          <div class="inlineNotice" id="inlineNotice"></div>
           <div class="presentationPreview" id="presentationPreview">
             <a class="presentationThumbLink" id="presentationThumbLink" target="_blank" rel="noopener noreferrer">
               <img class="presentationThumb" id="presentationThumb" alt="Presentation preview" />
@@ -1547,18 +1560,53 @@ Estimated time: 10–15 minutes.`;
       }
 
       let isLoading = false;
+      let rateLimitUntil = 0;
+      let rateLimitTimer = null;
+      let lastCallAt = 0;
+      const CLICK_DEBOUNCE_MS = 250;
 
       // Local-only: this page-load session start gate.
       let sessionStarted = false;
       // Local-only: prevent repeating the welcome prepend.
       let sessionWelcomeShown = false;
 
+      function isRateLimited() {
+        return rateLimitUntil > 0 && Date.now() < rateLimitUntil;
+      }
+
+      function setInlineNotice(message) {
+        var el = document.getElementById("inlineNotice");
+        if (!el) return;
+        el.textContent = String(message || "");
+        el.style.display = message ? "block" : "none";
+      }
+
+      function clearInlineNotice() {
+        var el = document.getElementById("inlineNotice");
+        if (!el) return;
+        el.textContent = "";
+        el.style.display = "none";
+      }
+
+      function lockRateLimit(ms) {
+        var delay = Number(ms);
+        if (isNaN(delay) || delay <= 0) delay = 1500;
+        rateLimitUntil = Date.now() + delay;
+        if (rateLimitTimer) clearTimeout(rateLimitTimer);
+        setLoading(true);
+        rateLimitTimer = setTimeout(function() {
+          rateLimitUntil = 0;
+          setLoading(false);
+          clearInlineNotice();
+        }, delay);
+      }
+
       function setSendEnabled(enabled) {
         document.getElementById("send").disabled = isLoading || !enabled;
       }
 
       function setLoading(next) {
-        isLoading = Boolean(next);
+        isLoading = isRateLimited() ? true : Boolean(next);
         document.getElementById("badge").classList.toggle("loading", isLoading);
 
         const inputEl = document.getElementById("input");
@@ -1740,6 +1788,13 @@ Estimated time: 10–15 minutes.`;
           {};
 
         const state = (result && result.state) ? result.state : {};
+        const errorObj = (result && result.error) ? result.error : null;
+        if (errorObj && errorObj.type === "rate_limited") {
+          setInlineNotice(errorObj.user_message || "Please wait a moment and try again.");
+          lockRateLimit(errorObj.retry_after_ms);
+        } else {
+          clearInlineNotice();
+        }
         const overrideStrings = (state && typeof state.ui_strings === "object" && state.ui_strings)
           ? state.ui_strings
           : (result && typeof result.ui_strings === "object" ? result.ui_strings : null);
@@ -2271,6 +2326,11 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
           if (errEl) errEl.textContent = t(uiLang((globalThis.__BSC_LATEST__ || {}).state || {}), "errorMessage");
           return;
         }
+
+        if (isRateLimited()) return;
+        const now = Date.now();
+        if (now - lastCallAt < CLICK_DEBOUNCE_MS) return;
+        lastCallAt = now;
 
         const hasToolOutput = Boolean(o.toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
         const persistedStarted = String((widgetState().started || "")).toLowerCase() === "true";

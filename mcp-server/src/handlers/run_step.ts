@@ -1666,6 +1666,12 @@ async function callSpecialistStrict(params: {
   const lang = langFromState(state);
 
   if (process.env.TS_NODE_TRANSPILE_ONLY === "true" && process.env.RUN_INTEGRATION_TESTS !== "1") {
+    if (process.env.TEST_FORCE_RATE_LIMIT === "1") {
+      const err = new Error("rate_limit_exceeded");
+      (err as any).rate_limited = true;
+      (err as any).retry_after_ms = 1500;
+      throw err;
+    }
     const base = {
       action: "ASK",
       message: "",
@@ -2043,6 +2049,52 @@ async function callSpecialistStrict(params: {
   };
 }
 
+function isRateLimitError(err: any): boolean {
+  return Boolean(
+    err &&
+    (err.rate_limited === true ||
+      err.code === "rate_limit_exceeded" ||
+      err.type === "rate_limit_exceeded" ||
+      err.status === 429)
+  );
+}
+
+function buildRateLimitErrorPayload(state: CanvasState, err: any): RunStepError {
+  const retryAfterMs = Number(err?.retry_after_ms) > 0 ? Number(err.retry_after_ms) : 1500;
+  const last = (state as any).last_specialist_result || {};
+  return attachRegistryPayload({
+    ok: false as const,
+    tool: "run_step" as const,
+    current_step_id: String(state.current_step || "step_0"),
+    active_specialist: String((state as any).active_specialist || ""),
+    text: "",
+    prompt: "",
+    specialist: last,
+    state,
+    error: {
+      type: "rate_limited",
+      retry_after_ms: retryAfterMs,
+      user_message: "Please wait a moment and try again.",
+      retry_action: "retry_same_action",
+    },
+  }, last);
+}
+
+async function callSpecialistStrictSafe(
+  params: { model: string; state: CanvasState; decision: OrchestratorOutput; userMessage: string },
+  stateForError: CanvasState
+): Promise<{ ok: true; value: { specialistResult: any; attempts: number } } | { ok: false; payload: RunStepError }> {
+  try {
+    const value = await callSpecialistStrict(params);
+    return { ok: true as const, value };
+  } catch (err: any) {
+    if (isRateLimitError(err)) {
+      return { ok: false as const, payload: buildRateLimitErrorPayload(stateForError, err) };
+    }
+    throw err;
+  }
+}
+
 function shouldChainToNextStep(decision: OrchestratorOutput, specialistResult: any): boolean {
   const step = String(decision.current_step ?? "");
   if (!step) return false;
@@ -2390,24 +2442,25 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     // Orchestrate to determine which specialist to call
     const decision = orchestrate({ state, userMessage: "" });
     // Call the specialist with empty message to get intro
-    const callResult = await callSpecialistStrict({
+    const callResult = await callSpecialistStrictSafe({
       model,
       state,
       decision,
       userMessage: "",
-    });
+    }, state);
+    if (!callResult.ok) return callResult.payload;
 
     // Update state with specialist result
     const nextState = applyStateUpdate({
       prev: state,
       decision,
-      specialistResult: callResult.specialistResult,
+      specialistResult: callResult.value.specialistResult,
       showSessionIntroUsed: "false",
     });
 
     // Build output
-    const text = buildTextForWidget({ specialist: callResult.specialistResult });
-    const prompt = pickPrompt(callResult.specialistResult);
+    const text = buildTextForWidget({ specialist: callResult.value.specialistResult });
+    const prompt = pickPrompt(callResult.value.specialistResult);
 
     return attachRegistryPayload({
       ok: true as const,
@@ -2416,15 +2469,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       active_specialist: String((nextState as any).active_specialist || ""),
       text,
       prompt,
-      specialist: callResult.specialistResult,
+      specialist: callResult.value.specialistResult,
       state: nextState,
       debug: {
         decision,
-        attempts: callResult.attempts,
+        attempts: callResult.value.attempts,
         language: lang,
         meta_user_message_ignored: false,
       },
-    }, callResult.specialistResult);
+    }, callResult.value.specialistResult);
   }
   // SKIP-MODUS (TEST-ONLY) - END
 
@@ -2836,13 +2889,14 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         show_step_intro: "false",
         show_session_intro: "false",
       };
-      const callFormulation = await callSpecialistStrict({
+      const callFormulation = await callSpecialistStrictSafe({
         model,
         state: nextStateScores,
         decision: forcedDecision,
         userMessage: "", // so USER_DREAM_DIRECTION = "(user chose to continue without text)" → Option A
-      });
-      const formulationResult = callFormulation.specialistResult;
+      }, nextStateScores);
+      if (!callFormulation.ok) return callFormulation.payload;
+      const formulationResult = callFormulation.value.specialistResult;
       const nextStateFormulation = applyStateUpdate({
         prev: nextStateScores,
         decision: forcedDecision,
@@ -2878,21 +2932,22 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       show_step_intro: "false",
       show_session_intro: "false",
     };
-    const callDream = await callSpecialistStrict({
+    const callDream = await callSpecialistStrictSafe({
       model,
       state,
       decision: forcedDecision,
       userMessage: "I want to write my dream in my own words.",
-    });
+    }, state);
+    if (!callDream.ok) return callDream.payload;
     const nextStateSwitch = applyStateUpdate({
       prev: state,
       decision: forcedDecision,
-      specialistResult: callDream.specialistResult,
+      specialistResult: callDream.value.specialistResult,
       showSessionIntroUsed: "false",
     });
     const nextStateSwitchUi = await ensureUiStringsForState(nextStateSwitch, model);
-    const textSwitch = buildTextForWidget({ specialist: callDream.specialistResult });
-    const promptSwitch = pickPrompt(callDream.specialistResult);
+    const textSwitch = buildTextForWidget({ specialist: callDream.value.specialistResult });
+    const promptSwitch = pickPrompt(callDream.value.specialistResult);
     return attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
@@ -2900,9 +2955,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       active_specialist: DREAM_SPECIALIST,
       text: textSwitch,
       prompt: promptSwitch,
-      specialist: callDream.specialistResult,
+      specialist: callDream.value.specialistResult,
       state: nextStateSwitchUi,
-    }, callDream.specialistResult, responseUiFlags);
+    }, callDream.value.specialistResult, responseUiFlags);
   }
 
   // START trigger (widget start screen)
@@ -3114,20 +3169,21 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         last_specialist_result: {},
       } as CanvasState;
       const decision = orchestrate({ state: stateForAdvance, userMessage: "" });
-      const call1 = await callSpecialistStrict({
+      const call1 = await callSpecialistStrictSafe({
         model,
         state: stateForAdvance,
         decision,
         userMessage: "",
-      });
+      }, stateForAdvance);
+      if (!call1.ok) return call1.payload;
       const nextState = applyStateUpdate({
         prev: stateForAdvance,
         decision,
-        specialistResult: call1.specialistResult,
+        specialistResult: call1.value.specialistResult,
         showSessionIntroUsed: "false",
       });
-      const text = buildTextForWidget({ specialist: call1.specialistResult });
-      const prompt = pickPrompt(call1.specialistResult);
+      const text = buildTextForWidget({ specialist: call1.value.specialistResult });
+      const prompt = pickPrompt(call1.value.specialistResult);
       return attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
@@ -3135,15 +3191,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         active_specialist: String((nextState as any).active_specialist || ""),
         text,
         prompt,
-        specialist: call1.specialistResult,
+        specialist: call1.value.specialistResult,
         state: nextState,
         debug: {
           decision,
-          attempts: call1.attempts,
+          attempts: call1.value.attempts,
           language: lang,
           meta_user_message_ignored: false,
         },
-      }, call1.specialistResult, responseUiFlags);
+      }, call1.value.specialistResult, responseUiFlags);
     }
   }
 
@@ -3171,15 +3227,16 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       show_step_intro: "false",
       show_session_intro: "false",
     };
-    const callDreamExplainer = await callSpecialistStrict({
+    const callDreamExplainer = await callSpecialistStrictSafe({
       model,
       state,
       decision: forcedDecision,
       userMessage,
-    });
+    }, state);
+    if (!callDreamExplainer.ok) return callDreamExplainer.payload;
     const normalizedDreamExplainer = normalizeConfirmFinals(
       String(forcedDecision.current_step || ""),
-      callDreamExplainer.specialistResult,
+      callDreamExplainer.value.specialistResult,
       state,
       lang
     );
@@ -3202,7 +3259,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       state: nextStateDream,
       debug: {
         decision: forcedDecision,
-        attempts: callDreamExplainer.attempts,
+        attempts: callDreamExplainer.value.attempts,
         language: lang,
         meta_user_message_ignored: false,
       },
@@ -3216,9 +3273,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const showSessionIntro: BoolString = decision1.show_session_intro;
 
   // --------- CALL SPECIALIST (first) ----------
-  const call1 = await callSpecialistStrict({ model, state, decision: decision1, userMessage });
-  let attempts = call1.attempts;
-  let specialistResult: any = call1.specialistResult;
+  const call1 = await callSpecialistStrictSafe({ model, state, decision: decision1, userMessage }, state);
+  if (!call1.ok) return call1.payload;
+  let attempts = call1.value.attempts;
+  let specialistResult: any = call1.value.specialistResult;
 
   // --------- PATCH: DreamExplainer scoring view must have statements ----------
   if (
@@ -3262,16 +3320,17 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const candidate = pickBigWhyCandidate(specialistResult);
     if (candidate && countWords(candidate) > BIGWHY_MAX_WORDS) {
       const shortenRequest = `__SHORTEN_BIGWHY__ ${candidate}`;
-      const callShorten = await callSpecialistStrict({
+      const callShorten = await callSpecialistStrictSafe({
         model,
         state,
         decision: decision1,
         userMessage: shortenRequest,
-      });
-      attempts = Math.max(attempts, callShorten.attempts);
+      }, state);
+      if (!callShorten.ok) return callShorten.payload;
+      attempts = Math.max(attempts, callShorten.value.attempts);
       specialistResult = normalizeConfirmFinals(
         String(decision1.current_step || ""),
-        callShorten.specialistResult,
+        callShorten.value.specialistResult,
         state,
         lang
       );
@@ -3301,17 +3360,18 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         userMessage: "Go to next step",
       });
       if (decisionNext.specialist_to_call === DREAM_EXPLAINER_SPECIALIST) {
-        const call2 = await callSpecialistStrict({
+        const call2 = await callSpecialistStrictSafe({
           model,
           state: stateAfterFirst,
           decision: decisionNext,
           userMessage: "Go to next step",
-        });
-        if (call2.specialistResult && String(call2.specialistResult.scoring_phase ?? "") === "true") {
-          attempts = Math.max(attempts, call2.attempts);
+        }, stateAfterFirst);
+        if (!call2.ok) return call2.payload;
+        if (call2.value.specialistResult && String(call2.value.specialistResult.scoring_phase ?? "") === "true") {
+          attempts = Math.max(attempts, call2.value.attempts);
           specialistResult = normalizeConfirmFinals(
             String(decisionNext.current_step || ""),
-            call2.specialistResult,
+            call2.value.specialistResult,
             stateAfterFirst,
             lang
           );
@@ -3355,11 +3415,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const decision2 = orchestrate({ state: nextState, userMessage });
 
     if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
-      const call2 = await callSpecialistStrict({ model, state: nextState, decision: decision2, userMessage });
-      attempts = Math.max(attempts, call2.attempts);
+      const call2 = await callSpecialistStrictSafe({ model, state: nextState, decision: decision2, userMessage }, nextState);
+      if (!call2.ok) return call2.payload;
+      attempts = Math.max(attempts, call2.value.attempts);
       specialistResult = normalizeConfirmFinals(
         String(decision2.current_step || ""),
-        call2.specialistResult,
+        call2.value.specialistResult,
         nextState,
         lang
       );

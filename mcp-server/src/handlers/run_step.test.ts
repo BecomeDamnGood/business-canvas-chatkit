@@ -56,6 +56,30 @@ test("language policy: explicit override wins", async () => {
   assert.equal(result?.state?.language_override, "true");
 });
 
+test("rate limit: returns structured error payload", async () => {
+  const prev = process.env.TEST_FORCE_RATE_LIMIT;
+  process.env.TEST_FORCE_RATE_LIMIT = "1";
+  const result = await run_step({
+    user_message: "test",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "true",
+      last_specialist_result: {},
+      started: "true",
+    },
+  });
+  if (prev === undefined) {
+    delete process.env.TEST_FORCE_RATE_LIMIT;
+  } else {
+    process.env.TEST_FORCE_RATE_LIMIT = prev;
+  }
+  assert.equal(result?.ok, false);
+  assert.equal(result?.error?.type, "rate_limited");
+  assert.equal(result?.error?.retry_action, "retry_same_action");
+  assert.equal(result?.error?.user_message, "Please wait a moment and try again.");
+  assert.ok(Number(result?.error?.retry_after_ms) > 0);
+});
+
 // Meta-filter: first message is never dropped (pristineAtEntry ? rawNormalized : ...) in run_step.ts.
 // Bullets/requirements/goals no longer trigger looksLikeMetaInstruction; only injection markers do.
 // Full flow with bulleted brief would require LLM mock; covered by code review and manual test.

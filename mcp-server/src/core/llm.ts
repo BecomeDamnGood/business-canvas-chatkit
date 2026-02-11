@@ -98,6 +98,25 @@ function safeJsonParse(text: string): unknown {
 
 const GLOSSARY_DEBUG = process.env.LOCAL_DEV === "1" || process.env.GLOSSARY_DEBUG === "1";
 
+function parseRetryAfterMs(value: unknown, msg: string): number | null {
+  const raw = typeof value === "number" || typeof value === "string" ? String(value) : "";
+  if (raw) {
+    const n = Number(raw);
+    if (!isNaN(n) && n > 0) {
+      return n < 1000 ? Math.round(n * 1000) : Math.round(n);
+    }
+  }
+  const fromMsg = msg.match(/retry after\\s*(\\d+(?:\\.\\d+)?)\\s*(ms|s)?/i);
+  if (fromMsg && fromMsg[1]) {
+    const n = Number(fromMsg[1]);
+    if (!isNaN(n) && n > 0) {
+      const unit = (fromMsg[2] || "ms").toLowerCase();
+      return unit === "s" ? Math.round(n * 1000) : Math.round(n);
+    }
+  }
+  return null;
+}
+
 async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema">) {
   const client = getClient();
   const instructionsWithGlossary = composeInstructionsWithGlossary(args.instructions);
@@ -141,6 +160,25 @@ async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema
       e?.error?.toString?.() ||
       "OpenAI API error";
     const err = new Error(msg);
+    const status = e?.status ?? e?.response?.status ?? e?.error?.status;
+    const code = e?.code ?? e?.error?.code ?? e?.error?.type ?? e?.type;
+    const type = e?.type ?? e?.error?.type;
+    const isRateLimited =
+      status === 429 ||
+      code === "rate_limit_exceeded" ||
+      type === "rate_limit_exceeded";
+    if (isRateLimited) {
+      const retryFromHeader =
+        e?.response?.headers?.["retry-after"] ||
+        e?.response?.headers?.["retry-after-ms"] ||
+        e?.error?.headers?.["retry-after"];
+      const retryAfterMs = parseRetryAfterMs(retryFromHeader, msg) ?? 1500;
+      (err as any).rate_limited = true;
+      (err as any).retry_after_ms = retryAfterMs;
+      (err as any).status = status;
+      (err as any).code = code;
+      (err as any).type = type;
+    }
     (err as any).meta = { body: e, debugLabel: args.debugLabel };
     throw err;
   }
@@ -227,4 +265,3 @@ Now return a corrected JSON output that matches the schema exactly.`;
   };
   throw err;
 }
-
