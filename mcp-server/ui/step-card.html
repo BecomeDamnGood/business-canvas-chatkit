@@ -1631,12 +1631,58 @@ Estimated time: 10–15 minutes.`;
         if (sendEl) sendEl.disabled = isLoading || v.length === 0;
       }
 
-      function sanitizeInlineText(raw) {
+      function stripInlineText(raw) {
         var s = String(raw || "");
-        s = s.replace(/<\s*strong\s*>/gi, "");
-        s = s.replace(/<\s*\/\s*strong\s*>/gi, "");
         s = s.replace(/<[^>]*>/g, "");
         return s;
+      }
+
+      function renderInlineText(el, raw) {
+        if (!el) return;
+        var s = String(raw || "");
+        var fragment = document.createDocumentFragment();
+        var buf = "";
+        var bold = false;
+        var i = 0;
+
+        function flush() {
+          if (!buf) return;
+          if (bold) {
+            var strong = document.createElement("strong");
+            strong.textContent = buf;
+            fragment.appendChild(strong);
+          } else {
+            fragment.appendChild(document.createTextNode(buf));
+          }
+          buf = "";
+        }
+
+        while (i < s.length) {
+          var lt = s.indexOf("<", i);
+          if (lt === -1) {
+            buf += s.slice(i);
+            break;
+          }
+          buf += s.slice(i, lt);
+          var gt = s.indexOf(">", lt + 1);
+          if (gt === -1) {
+            buf += s.slice(lt);
+            break;
+          }
+          var tag = s.slice(lt + 1, gt).trim().toLowerCase();
+          if (tag === "strong") {
+            flush();
+            bold = true;
+          } else if (tag === "/strong") {
+            flush();
+            bold = false;
+          }
+          i = gt + 1;
+        }
+        flush();
+
+        while (el.firstChild) el.removeChild(el.firstChild);
+        el.appendChild(fragment);
       }
 
       /**
@@ -1744,7 +1790,7 @@ Estimated time: 10–15 minutes.`;
         }
 
         for (const c of choices) {
-          const label = sanitizeInlineText(String(c.label || "")).trim();
+          const label = stripInlineText(String(c.label || "")).trim();
           if (!label) {
             console.error("Empty choice label", { menuId, currentStep, choiceIndex: c.value });
             showOptionsError();
@@ -1759,7 +1805,7 @@ Estimated time: 10–15 minutes.`;
         wrap.style.display = "flex";
         let renderIndex = 0;
         for (const c of choices) {
-          const label = sanitizeInlineText(String(c.label || "")).trim();
+          const label = stripInlineText(String(c.label || "")).trim();
           const actionCode = registryActionCodes[renderIndex];
           const btn = document.createElement("button");
           btn.className = "choiceBtn";
@@ -1895,18 +1941,18 @@ Estimated time: 10–15 minutes.`;
         var isDreamDirectionView = current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
 
         const bodyRaw = (function () {
-          var raw = (result && typeof result.text === "string") ? sanitizeInlineText(result.text) : "";
+          var raw = (result && typeof result.text === "string") ? String(result.text) : "";
           if (!raw && result && result.specialist && typeof result.specialist === "object") {
             var sp = result.specialist;
             raw =
-              sanitizeInlineText(String(sp.message || "")).trim() ||
-              sanitizeInlineText(String(sp.refined_formulation || "")).trim() ||
-              sanitizeInlineText(String(sp.question || "")).trim() ||
+              String(sp.message || "").trim() ||
+              String(sp.refined_formulation || "").trim() ||
+              String(sp.question || "").trim() ||
               "";
           }
           return raw;
         })();
-        const promptRaw = (result && typeof result.prompt === "string") ? sanitizeInlineText(result.prompt) : "";
+        const promptRaw = (result && typeof result.prompt === "string") ? String(result.prompt) : "";
 
         // Post-scoring Dream direction: show only the question in the same screen (no Thanks, no statements panel).
         var body = bodyRaw;
@@ -1929,8 +1975,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
         var cardDescEl = document.getElementById("cardDesc");
         if (cardDescEl) {
           cardDescEl.style.display = "block";
-          // UNSAFE (fixed): body contains LLM/tool output, so escape-first rendering.
-          cardDescEl.textContent = String(body || "");
+          renderInlineText(cardDescEl, body || "");
         }
 
         var previewWrap = document.getElementById("presentationPreview");
@@ -2173,7 +2218,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
           statementsPanelEl.style.display = "none";
         }
 
-        const { promptShown, choices } = extractChoicesFromPrompt(promptRaw);
+        const { promptShown, choices } = extractChoicesFromPrompt(stripInlineText(promptRaw));
         let promptText = isDreamDirectionView ? "" : (promptShown || "");
 
         // Generic choice prompt (i18n) for numbered menus
@@ -2211,7 +2256,10 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
           }
         }
 
-        document.getElementById("prompt").textContent = promptText;
+        var promptEl = document.getElementById("prompt");
+        if (promptEl) {
+          renderInlineText(promptEl, promptText || "");
+        }
         renderChoiceButtons(choices, result); // result includes specialist and state for ActionCode mapping
 
         var choiceMode = (choices && choices.length) > 0;
