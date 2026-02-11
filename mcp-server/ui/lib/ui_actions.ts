@@ -147,21 +147,186 @@ export function handleBridgeResponse(msg: any): boolean {
   return true;
 }
 
+type JSONValue = string | number | boolean | null | JSONValue[] | { [key: string]: JSONValue };
+
+type SanitizeResult =
+  | { kind: "keep"; value: JSONValue }
+  | { kind: "drop" };
+
+type SanitizeContext = {
+  seen: WeakMap<object, JSONValue>;
+  inProgress: WeakSet<object>;
+  removedPaths: string[];
+  maxRemovedPaths: number;
+};
+
+const DROP_KEYS = new Set(["signal", "abortSignal", "controller", "abortController"]);
+const DEV_LOG_HOSTNAME = "localhost";
+
+function isDevEnv(): boolean {
+  if (typeof location !== "undefined" && location.hostname === DEV_LOG_HOSTNAME) return true;
+  return (globalThis as { __DEV__?: boolean }).__DEV__ === true;
+}
+
+function recordRemovedPath(ctx: SanitizeContext, path: string): void {
+  if (ctx.removedPaths.length >= ctx.maxRemovedPaths) return;
+  ctx.removedPaths.push(path);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  return Object.prototype.toString.call(value) === "[object Object]";
+}
+
+function sanitizeValue(value: unknown, path: string, ctx: SanitizeContext): SanitizeResult {
+  if (value === null) return { kind: "keep", value: null };
+
+  const t = typeof value;
+  if (t === "string" || t === "boolean") return { kind: "keep", value: value as string | boolean };
+  if (t === "number") {
+    const num = value as number;
+    return { kind: "keep", value: Number.isFinite(num) ? num : null };
+  }
+  if (t === "bigint") return { kind: "keep", value: String(value) };
+  if (t === "undefined" || t === "function" || t === "symbol") {
+    recordRemovedPath(ctx, path);
+    return { kind: "drop" };
+  }
+
+  if (typeof value === "object") {
+    const obj = value as object;
+    if (ctx.seen.has(obj)) {
+      return { kind: "keep", value: ctx.seen.get(obj) as JSONValue };
+    }
+    if (ctx.inProgress.has(obj)) {
+      recordRemovedPath(ctx, path);
+      return { kind: "drop" };
+    }
+    ctx.inProgress.add(obj);
+
+    const tag = Object.prototype.toString.call(obj);
+    if (tag === "[object Error]") {
+      const err = obj as Error;
+      const out: { name: string; message: string; stack?: string } = {
+        name: String(err.name || "Error"),
+        message: String(err.message || ""),
+      };
+      if (err.stack) out.stack = String(err.stack);
+      ctx.inProgress.delete(obj);
+      ctx.seen.set(obj, out);
+      return { kind: "keep", value: out };
+    }
+    if (tag === "[object Date]") {
+      const date = obj as Date;
+      try {
+        const iso = date.toISOString();
+        ctx.inProgress.delete(obj);
+        ctx.seen.set(obj, iso);
+        return { kind: "keep", value: iso };
+      } catch {
+        const str = String(date);
+        ctx.inProgress.delete(obj);
+        ctx.seen.set(obj, str);
+        return { kind: "keep", value: str };
+      }
+    }
+    if (tag === "[object RegExp]") {
+      const str = String(obj);
+      ctx.inProgress.delete(obj);
+      ctx.seen.set(obj, str);
+      return { kind: "keep", value: str };
+    }
+
+    if (Array.isArray(obj)) {
+      const out: JSONValue[] = [];
+      for (let i = 0; i < obj.length; i += 1) {
+        const res = sanitizeValue(obj[i], `${path}[${i}]`, ctx);
+        if (res.kind === "keep") out.push(res.value);
+      }
+      ctx.inProgress.delete(obj);
+      ctx.seen.set(obj, out);
+      return { kind: "keep", value: out };
+    }
+
+    if (!isPlainObject(obj)) {
+      ctx.inProgress.delete(obj);
+      recordRemovedPath(ctx, path);
+      return { kind: "drop" };
+    }
+
+    const out: { [key: string]: JSONValue } = {};
+    for (const [key, val] of Object.entries(obj)) {
+      const nextPath = `${path}.${key}`;
+      if (DROP_KEYS.has(key)) {
+        recordRemovedPath(ctx, nextPath);
+        continue;
+      }
+      const res = sanitizeValue(val, nextPath, ctx);
+      if (res.kind === "keep") out[key] = res.value;
+    }
+    ctx.inProgress.delete(obj);
+    ctx.seen.set(obj, out);
+    return { kind: "keep", value: out };
+  }
+
+  recordRemovedPath(ctx, path);
+  return { kind: "drop" };
+}
+
+function sanitizeForPostMessage(
+  value: unknown,
+  opts?: { basePath?: string; maxRemovedPaths?: number }
+): { clean: JSONValue | null; removedPaths: string[] } {
+  const ctx: SanitizeContext = {
+    seen: new WeakMap(),
+    inProgress: new WeakSet(),
+    removedPaths: [],
+    maxRemovedPaths: opts?.maxRemovedPaths ?? 20,
+  };
+  const basePath = opts?.basePath ?? "value";
+  const res = sanitizeValue(value, basePath, ctx);
+  return { clean: res.kind === "keep" ? res.value : null, removedPaths: ctx.removedPaths };
+}
+
+function safePostMessage(message: unknown, removedPaths?: string[]): void {
+  const isDev = isDevEnv();
+  if (isDev && removedPaths && removedPaths.length > 0) {
+    const shown = removedPaths.slice(0, 20).join(", ");
+    const suffix = removedPaths.length > 20 ? " ..." : "";
+    console.warn(`[postMessage] sanitized ${removedPaths.length} path(s): ${shown}${suffix}`);
+  }
+  if (isDev && typeof structuredClone === "function") {
+    try {
+      structuredClone(message);
+    } catch (err) {
+      const lastPath = removedPaths && removedPaths.length ? removedPaths[removedPaths.length - 1] : "";
+      const name = (err as { name?: string }).name || "CloneError";
+      const msg = (err as Error)?.message || String(err);
+      console.warn(`[postMessage] structuredClone failed: ${name}${lastPath ? ` @ ${lastPath}` : ""} ${msg}`);
+    }
+  }
+  window.parent.postMessage(message, "*");
+}
+
 async function callToolViaBridge(name: string, args: unknown): Promise<unknown> {
   if (!canUseBridge() || typeof window === "undefined") {
     throw new Error("bridge unavailable");
   }
   const id = `bsc_${Date.now()}_${++bridgeSeq}`;
+  const { clean: argsClean, removedPaths } = sanitizeForPostMessage(args, {
+    basePath: "params.arguments",
+  });
+  const safeArgs = (argsClean ?? {}) as JSONValue;
   const message = {
     jsonrpc: "2.0",
     id,
     method: "tools/call",
-    params: { name, arguments: args },
+    params: { name, arguments: safeArgs },
   };
   return new Promise((resolve, reject) => {
     pendingBridgeCalls.set(id, { resolve, reject });
     try {
-      window.parent.postMessage(message, "*");
+      safePostMessage(message, removedPaths);
     } catch (e) {
       pendingBridgeCalls.delete(id);
       reject(e);
