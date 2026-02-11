@@ -61,7 +61,10 @@ test("language policy: explicit override wins", async () => {
 // Full flow with bulleted brief would require LLM mock; covered by code review and manual test.
 // Finals merge and wants_recap tests live in run_step_finals.test.ts (no LLM).
 
-test("__SWITCH_TO_SELF_DREAM__ routes to Dream specialist without intro and restores Dream step", { skip: !process.env.OPENAI_API_KEY }, async () => {
+test(
+  "__SWITCH_TO_SELF_DREAM__ routes to Dream specialist without intro and restores Dream step",
+  { skip: process.env.RUN_INTEGRATION_TESTS !== "1" || !process.env.OPENAI_API_KEY },
+  async () => {
   const result = await run_step({
     user_message: "__SWITCH_TO_SELF_DREAM__",
     state: {
@@ -78,4 +81,5 @@ test("__SWITCH_TO_SELF_DREAM__ routes to Dream specialist without intro and rest
   assert.equal(result?.state?.active_specialist, "Dream");
   assert.equal(result?.state?.intro_shown_for_step, "dream", "intro not shown again");
   assert.ok(result?.prompt?.trim().length > 0, "short prompt to write dream in own words");
-});
+  }
+);

@@ -1280,6 +1280,10 @@ async function getUiStringsForLang(lang: string, model: string): Promise<Record<
   const cached = UI_STRINGS_CACHE.get(normalized);
   if (cached) return cached;
 
+  if (process.env.TS_NODE_TRANSPILE_ONLY === "true" && process.env.RUN_INTEGRATION_TESTS !== "1") {
+    return UI_STRINGS_DEFAULT;
+  }
+
   if (!process.env.OPENAI_API_KEY) return UI_STRINGS_DEFAULT;
 
   const instructions = [
@@ -1660,6 +1664,24 @@ async function callSpecialistStrict(params: {
   const specialist = String(decision.specialist_to_call ?? "");
   const contextBlock = buildSpecialistContextBlock(state);
   const lang = langFromState(state);
+
+  if (process.env.TS_NODE_TRANSPILE_ONLY === "true" && process.env.RUN_INTEGRATION_TESTS !== "1") {
+    const base = {
+      action: "ASK",
+      message: "",
+      question: "Test question",
+      refined_formulation: "",
+      confirmation_question: "",
+      menu_id: "",
+      proceed_to_next: "false",
+      wants_recap: false,
+    };
+    const specialistResult =
+      specialist === STEP_0_SPECIALIST
+        ? { ...base, business_name: "TBD", step_0: "", proceed_to_dream: "false" }
+        : base;
+    return { specialistResult, attempts: 0 };
+  }
 
   if (specialist === STEP_0_SPECIALIST) {
     const langExplicit = String((state as any).language ?? "").trim();
