@@ -2,7 +2,7 @@
   "generated_at": "2026-02-11T07:47:48.828Z",
   "sources": {
     "ui": [
-      "mcp-server/ui/step-card.html"
+      "mcp-server/ui/step-card.template.html"
     ],
     "backend": [
       "mcp-server/src/handlers/run_step.ts"

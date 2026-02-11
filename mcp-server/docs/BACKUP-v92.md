@@ -27,7 +27,7 @@ This is version **v92** where all buttons up through the Big Why step were conve
    - Old `determineConfirmChoiceIndices()` function removed
    - `confirm_choice_indices` removed from return type
 
-2. **UI ActionCode Mapping** (`step-card.html`):
+2. **UI ActionCode Mapping** (`step-card.template.html`):
    - `getActionCodeForChoice()` implemented with hard-coded mapping from `menu_id` + `choiceIndex` + `currentStep` to ActionCode
    - `renderChoiceButtons()` updated to send ActionCodes instead of `choice:X` tokens
    - Pre-validation added: buttons are only rendered if an ActionCode mapping exists
@@ -84,7 +84,7 @@ This is version **v92** where all buttons up through the Big Why step were conve
   - `mapChoiceTokenToRoute()` kept as deprecated fallback
 
 ### Frontend
-- `/Users/MinddMacBen/business-canvas-chatkit/mcp-server/ui/step-card.html`
+- `/Users/MinddMacBen/business-canvas-chatkit/mcp-server/ui/step-card.template.html`
   - `getActionCodeForChoice()` function added
   - `renderChoiceButtons()` updated for ActionCode mapping
   - Pre-validation added

@@ -1,6 +1,6 @@
 # Button visibility & routing – investigation (Part A)
 
-## step-card.html – UI conditions
+## step-card.template.html – UI conditions
 
 ### showPreStart, sessionStarted, hasToolOutput
 - **showPreStart** = `!sessionStarted` (line ~396). Session is only set when user clicks Start (btnStart click sets `sessionStarted = true`).
@@ -53,7 +53,7 @@
 
 ## What changed
 
-### UI (step-card.html)
+### UI (step-card.template.html)
 1. **Single interaction mode per screen**
    - **Choice mode** (highest priority): if `choices.length > 0` → only choice buttons visible; `inputWrap`, `btnOk`, `btnStartDreamExercise`, `btnSwitchToSelfDream` hidden.
    - **Confirm mode**: if no choices and `specialist.action === "CONFIRM"` and there is a prompt (`confirmation_question` or `question`) → show only Continue button; removed the limitation `(current === "step_0" || current === "dream")` so Confirm works in all steps.

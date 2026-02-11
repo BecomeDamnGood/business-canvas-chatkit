@@ -51,7 +51,7 @@ This is version **v91** where the Purpose and Big Why steps were refined with im
 
 2. **Buttons are too “smart”**
    - Button behavior is too complex and “smart” — buttons are generated based on parsing LLM output
-   - The `extractChoicesFromPrompt()` function in `step-card.html` parses numbered options from the `question` field
+   - The `extractChoicesFromPrompt()` function in `step-card.template.html` parses numbered options from the `question` field
    - This makes button rendering dependent on specific LLM formatting and therefore fragile
    - **After this backup, the button behavior should be changed** to be more robust and less dependent on LLM formatting
 
@@ -65,7 +65,7 @@ This is version **v91** where the Purpose and Big Why steps were refined with im
 
 - `/Users/MinddMacBen/business-canvas-chatkit/mcp-server/src/steps/purpose.ts` - Routes A, D, E, F, G, H updated with consistent button text and new flows
 - `/Users/MinddMacBen/business-canvas-chatkit/mcp-server/src/steps/bigwhy.ts` - Routes A, B', E', F' added/updated, INTRO buttons updated, LLM instructions strengthened
-- `/Users/MinddMacBen/business-canvas-chatkit/mcp-server/ui/step-card.html` - Purpose instruction hint added; button rendering logic (extractChoicesFromPrompt) used for dynamic button generation
+- `/Users/MinddMacBen/business-canvas-chatkit/mcp-server/ui/step-card.template.html` - Purpose instruction hint added; button rendering logic (extractChoicesFromPrompt) used for dynamic button generation
 
 ## Use this backup as a reference
 

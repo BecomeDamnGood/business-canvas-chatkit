@@ -25,10 +25,10 @@ const DEFAULT_CSP_OPTIONS: CSPOptions = {
     "https://*.chatgpt.com",
   ], // Allow ChatGPT embedding
   allowedDomains: {
-    fonts: ["https://fonts.googleapis.com", "https://fonts.gstatic.com"],
+    fonts: [],
     scripts: [],
-    styles: ["https://fonts.googleapis.com"],
-    images: ["https://raw.githubusercontent.com"], // Widget uses GitHub raw image
+    styles: [],
+    images: [],
     connects: [],
   },
 };

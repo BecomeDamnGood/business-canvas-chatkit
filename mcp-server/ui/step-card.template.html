@@ -1,18 +1,15 @@
 <!doctype html>
-<html>
+<html data-ui-version="__UI_VERSION__">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230071e3'/></svg>" type="image/svg+xml" />
     <title>The Business Strategy Canvas Builder</title>
     <style>
       /**
        * Redesign tokens – light only, 768px base.
        * Legacy names (--text, --muted, --line, --bg, --card, --shadow, --blue, --stepOff)
-       * match mcp-server/ui/step-card.html for drop-in replacement.
+       * match mcp-server/ui/step-card.template.html for drop-in replacement.
        */
       
       :root {
@@ -50,7 +47,7 @@
         --color-placeholder-image-border: rgba(200, 150, 150, 0.6);
       
         /* Typography */
-        --font-sans: "Montserrat", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         --font-size-xs: 12px;
         --font-size-sm: 13px;
         --font-size-5: 14px;
@@ -186,10 +183,9 @@
         line-height: var(--line-height-normal);
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        /* Full-bleed: background covers entire viewport
-           ASSET: background.jpg – swap URL below for hosted version */
+        /* Full-bleed: background covers entire viewport */
         background-color: var(--color-bg-page);
-        background-image: url("https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/b97fd89cb05ac8ab05cbacfdf926d4b0ccbd8243/chatkit/frontend/background.jpg");
+        background-image: url("__ASSET_BG__");
         background-size: cover;
         background-position: center;
         background-attachment: scroll;
@@ -228,7 +224,7 @@
         }
       }
       /**
-       * Redesign components – same selectors/IDs as step-card.html.
+       * Redesign components – same selectors/IDs as step-card.template.html.
        * Light-only; 768px base; full-bleed header and thinking bar.
        */
       
@@ -915,8 +911,7 @@
         font-family: var(--font-sans);
         transition: border-color var(--duration-fast) var(--ease-default);
         background-color: var(--card);
-        /* ASSET: textbox_background.jpg – swap URL below for hosted version */
-        background-image: url("https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/b97fd89cb05ac8ab05cbacfdf926d4b0ccbd8243/chatkit/frontend/textbox_background.jpg");
+        background-image: url("__ASSET_TEXTBOX_BG__");
         background-repeat: no-repeat;
         background-position: top right;
         background-size: auto;
@@ -1173,7 +1168,7 @@
         <div class="byline">
           <span id="byText">A business model by</span>
           <img
-            src="https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/b97fd89cb05ac8ab05cbacfdf926d4b0ccbd8243/chatkit/frontend/business-model_by_ben-steenstra.svg"
+            src="__ASSET_HERO_SVG__"
             alt="Ben Steenstra – When it feels right it works"
             width="126"
             height="50"
@@ -1221,7 +1216,7 @@
             <div class="inputWrap" id="inputWrap" style="display:none">
               <textarea id="input" placeholder=""></textarea>
               <button class="send" id="send" title="Send" disabled>
-                <img src="https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/b97fd89cb05ac8ab05cbacfdf926d4b0ccbd8243/chatkit/frontend/send_icon.svg" alt="">
+                <img src="__ASSET_SEND_ICON__" alt="">
               </button>
             </div>
 
@@ -1245,6 +1240,6 @@
       <div id="debugOverlay" class="" aria-hidden="true"></div>
     </div>
 
-    <script type="module" src="/ui/lib/main.js"></script>
+    <!-- INLINE_BUNDLE -->
   </body>
 </html>

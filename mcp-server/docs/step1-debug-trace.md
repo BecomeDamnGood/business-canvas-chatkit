@@ -15,16 +15,16 @@
 - **Lines 467–472**: `isStartTrigger` = `userMessage === ""` and step_0, intro not shown, no last_specialist_result.
 - **Lines 474–528**: If `isStartTrigger`: sets `intro_shown_session`, then returns either (a) Step 0 confirmation (if `step0Final`) or (b) **first-time Step 0 question** via `step0QuestionForLang(langFromState(state))` (line 524).
 - **Lines 139–141, 764–765**: `langFromState(state)` = `state.language || "en"`. On pristine/empty state, **language is `"en"`**.
-- **Lines 576–583 (step-card.html)**: On Start click: if `oa().toolOutput` exists, only `render()`; else `callRunStep("")` → one tool call with `current_step_id: nextState.current_step || "step_0"`, `user_message: ""`, `state`.
+- **Lines 576–583 (step-card.template.html)**: On Start click: if `oa().toolOutput` exists, only `render()`; else `callRunStep("")` → one tool call with `current_step_id: nextState.current_step || "step_0"`, `user_message: ""`, `state`.
 
-### step-card.html (prestart/start rendering)
+### step-card.template.html (prestart/start rendering)
 - **Lines 409–421**: `render(overrideToolOutput)`: `toolData()` from override, then `oa().toolOutput`, then `getLastToolOutput()`.
 - **Lines 434–441**: `hasToolOutput` / `persistedStarted` → `sessionStarted = true`; `showPreStart = !sessionStarted`.
 - **Lines 423–424, 313–318**: `uiLang(state)` prefers `result.state.language`, then `widgetState.language`, then `navigator.language`.
 - **Lines 419–421**: When `showPreStart`, card shows `prestartWelcomeForLang(lang)` and Start button; no prompt.
 - **Lines 457–474**: Start click: `sessionStarted = true`; if `oa().toolOutput` exists → `render()` only; else `callRunStep("")`.
 
-So: **server.ts** → **run_step.ts** (start branch or orchestrate → specialist) → one tool result → **step-card.html** `render()` (one card per tool output).
+So: **server.ts** → **run_step.ts** (start branch or orchestrate → specialist) → one tool result → **step-card.template.html** `render()` (one card per tool output).
 
 ---
 
@@ -34,7 +34,7 @@ So: **server.ts** → **run_step.ts** (start branch or orchestrate → specialis
 - **Cause**: Two separate **invocations** of the `run_step` tool for the same logical “start” turn. Each invocation produces one tool result; the host renders one card per tool result (OpenAI SDK: one result per tool call).
 - **Where it happens**:
   - **server.ts:63–108**: Every tool call runs the handler once and returns one `structuredContent`. Two calls ⇒ two results ⇒ two cards.
-  - **step-card.html:578–584**: Widget only skips calling when `oa().toolOutput` already exists. If the user clicks Start before the composer has returned a tool result, the widget calls `run_step`. The composer can then also call `run_step` for the same turn (e.g. “start” intent) ⇒ second tool call ⇒ second card.
+  - **step-card.template.html:578–584**: Widget only skips calling when `oa().toolOutput` already exists. If the user clicks Start before the composer has returned a tool result, the widget calls `run_step`. The composer can then also call `run_step` for the same turn (e.g. “start” intent) ⇒ second tool call ⇒ second card.
 - **Exact condition**: (1) User clicks Start and/or sends a start-like message. (2) Widget calls `run_step("step_0", "", state)`. (3) Composer also calls `run_step("start" or "step_0", …)` for that turn. (4) No guarantee that `toolOutput` is set before the widget’s Start click, so the “if toolOutput exists, don’t call” guard does not prevent the second call when the composer calls after the widget.
 
 ### Language mix (EN question, then NL confirmation)
@@ -43,7 +43,7 @@ So: **server.ts** → **run_step.ts** (start branch or orchestrate → specialis
   - **run_step.ts:139–141**: `langFromState(state)` returns `state.language || "en"`. Pristine/empty state ⇒ `"en"`.
   - **run_step.ts:524**: First-time Step 0 question is `step0QuestionForLang(langFromState(state))` ⇒ EN when state has no language.
   - **run_step.ts:262–282, 764**: `ensureLanguageFromUserMessage(state, userMessage)` runs only when there is a non-empty `userMessage`; it sets and locks `state.language` from `detectLanguageHeuristic(userMessage)`. So the **first** card (empty message, start trigger) never sets language; the **second** interaction (user reply in another language) sets `state.language` from the heuristic and the confirmation follows that language.
-- **step-card.html:313–318**: `uiLang(state)` uses `result.state.language` then widgetState then navigator. So UI labels can switch to NL once state has `language: "nl"`, while the first backend question was already EN.
+- **step-card.template.html:313–318**: `uiLang(state)` uses `result.state.language` then widgetState then navigator. So UI labels can switch to NL once state has `language: "nl"`, while the first backend question was already EN.
 
 ### Initiator message not used immediately
 - **Cause**: When the **composer** sends a start call with the user’s message (e.g. `current_step_id: "start"`, `user_message: "I have a bakery"`), the **server** clears `user_message` to `""` and never passes that text into the backend. The backend therefore never sees the initiator for that request.
@@ -64,7 +64,7 @@ So: **server.ts** → **run_step.ts** (start branch or orchestrate → specialis
    **Change**: When in the “first-time Step 0 setup question” branch (no `step0Final`), if `state.language` is still empty, set language from `state.initial_user_message` via `detectLanguageHeuristic` and assign `state.language` (and optionally `language_locked`) so that `step0QuestionForLang(langFromState(state))` uses that language.  
    **Intended behavior**: First card can be in the user’s language when the only hint we have is `initial_user_message` (e.g. from fix 1), avoiding EN question followed by a different-language confirmation when the user already signaled that language.
 
-3. **File: step-card.html — exact area: Start button click (around lines 457–474)**  
+3. **File: step-card.template.html — exact area: Start button click (around lines 457–474)**  
    **Change**: When the user clicks Start and we are about to call `run_step`, pass `state` that includes `language` from the widget (e.g. from `uiLang(state)` / `widgetState.language` or `navigator.language`) so that the first backend question uses that language when state is otherwise empty. (Ensure `ensureLanguageInState` / payload already send this; if they do, add a short comment that this is required so the first card is not default EN.)  
    **Intended behavior**: When the **widget** is the sole caller for start (no composer message), the first Step 1 card uses the widget’s language (e.g. navigator) instead of default EN, reducing EN→other-language mix when the user’s locale is not English.
 

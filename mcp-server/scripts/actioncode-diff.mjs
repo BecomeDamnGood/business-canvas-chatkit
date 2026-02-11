@@ -115,7 +115,7 @@ function toSortedArray(setOrArray) {
   return Array.from(setOrArray).sort();
 }
 
-const uiFiles = [path.join(repoRoot, "mcp-server/ui/step-card.html")];
+const uiFiles = [path.join(repoRoot, "mcp-server/ui/step-card.template.html")];
 const backendFiles = [path.join(repoRoot, "mcp-server/src/handlers/run_step.ts")];
 const stepsFiles = listFiles(path.join(repoRoot, "mcp-server/src/steps"), ".ts");
 const docsFiles = [

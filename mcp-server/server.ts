@@ -13,7 +13,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { createRateLimitMiddleware } from "./src/middleware/rateLimit.js";
 import { applySecurityHeaders } from "./src/middleware/security.js";
-import { CanvasStateZod, getDefaultState } from "./src/core/state.js";
+import { CanvasStateZod, getDefaultState, getFinalsSnapshot } from "./src/core/state.js";
 import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
 import { safeString } from "./src/server_safe_string.js";
 
@@ -68,7 +68,7 @@ const host = process.env.HOST || "0.0.0.0";
 const isLocalDev = process.env.LOCAL_DEV === "1";
 
 // Keep this aligned with your release tag
-const VERSION = safeString(process.env.VERSION ?? "").trim() || "v89";
+const VERSION = safeString(process.env.VERSION ?? "").trim() || "v119";
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
@@ -181,25 +181,31 @@ async function readBodyWithLimit(req: any, maxBytes: number): Promise<Buffer> {
 }
 
 function injectUiVersion(html: string): string {
-  const v = encodeURIComponent(VERSION);
-  return html.replace(/\/ui\/lib\/main\.js(?:\?[^"']*)?/g, `/ui/lib/main.js?v=${v}`);
+  return html.replace(/__UI_VERSION__/g, VERSION);
 }
 
-function injectUiVersionInJs(js: string): string {
-  const v = encodeURIComponent(VERSION);
-  const withImports = js.replace(
-    /from\s+["'](\.\/[^"']+\.js)(?:\?[^"']*)?["']/g,
-    (_m, p1) => `from "${p1}?v=${v}"`
-  );
-  return withImports.replace(
-    /import\s+["'](\.\/[^"']+\.js)(?:\?[^"']*)?["']/g,
-    (_m, p1) => `import "${p1}?v=${v}"`
-  );
+function normalizeStepId(rawStepId: string): string {
+  const trimmed = safeString(rawStepId ?? "").trim();
+  if (!trimmed || trimmed.toLowerCase() === "start") return "step_0";
+  return trimmed;
+}
+
+function hasNonBusinessFinals(state: Record<string, unknown> | null | undefined): boolean {
+  const snapshot = getFinalsSnapshot((state ?? {}) as any);
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (key === "business_name") continue;
+    if (String(value ?? "").trim()) return true;
+  }
+  return false;
+}
+
+function isFirstStartStep(stepId: string, state: Record<string, unknown> | null | undefined): boolean {
+  return stepId === "step_0" && !hasNonBusinessFinals(state);
 }
 
 function loadUiHtml(): string {
   try {
-    const raw = readFileSync(new URL("./ui/step-card.html", import.meta.url), "utf-8");
+    const raw = readFileSync(new URL("./ui/step-card.bundled.html", import.meta.url), "utf-8");
     return injectUiVersion(raw);
   } catch (e) {
     console.error("[loadUiHtml] Failed:", e);
@@ -213,10 +219,10 @@ async function runStepHandler(args: {
   user_message: string;
   state?: Record<string, unknown>;
 }): Promise<{ structuredContent: Record<string, unknown> }> {
-  const current_step_id = safeString(args.current_step_id ?? "").trim();
+  const current_step_id = normalizeStepId(args.current_step_id ?? "");
   const state = (args.state ?? {}) as Record<string, unknown>;
   const user_message_raw = safeString(args.user_message ?? "");
-  const isStart = current_step_id.toLowerCase() === "start";
+  const isStart = current_step_id === "step_0";
   const user_message =
     isStart && !user_message_raw.trim() ? "" : user_message_raw;
   const seed_user_message =
@@ -322,11 +328,15 @@ async function runStepHandler(args: {
   }
 }
 
-function buildContentFromResult(result: Record<string, unknown> | null | undefined): string {
+function buildContentFromResult(
+  result: Record<string, unknown> | null | undefined,
+  options?: { isFirstStart?: boolean }
+): string {
   // App-only contract: keep chat silent on success.
   if (!result || typeof result !== "object") return "";
   const hasError = Boolean((result as any).error);
   if (hasError) return "Open de app om verder te gaan.";
+  if (options?.isFirstStart) return "Canvas Builder geopend in de app.";
   return "";
 }
 
@@ -429,8 +439,9 @@ function createAppServer(baseUrl: string): McpServer {
   server.registerTool(
     "run_step",
     {
+      title: "Business Strategy Canvas Builder",
       description:
-        "This tool drives the Business Strategy Canvas Builder UI. For any canvas or business plan request, call this tool and return the widget state. Do not generate the business plan in the chat. The widget collects inputs and produces the final outputs.",
+        "Use this tool whenever the user asks for a business plan, strategy, canvas, or growing an agency/business. This tool drives the primary UI experience (Business Strategy Canvas Builder). Start by calling run_step with current_step_id: \"step_0\" and the user's message. Keep chat output minimal; the UI should ask questions and capture answers via structuredContent.",
       inputSchema: RunStepInputSchema,
       annotations: {
         readOnlyHint: false, // Tool generates files and modifies state
@@ -444,18 +455,24 @@ function createAppServer(baseUrl: string): McpServer {
         securitySchemes: [{ type: "noauth" }],
         ui: {
           resourceUri: uiResourceUri,
-          visibility: ["app"],
+          visibility: ["model","app"],
         },
       },
     },
     async (args) => {
+      const normalizedStepId = normalizeStepId(args.current_step_id ?? "");
+      const isFirstStart = isFirstStartStep(
+        normalizedStepId,
+        (args.state ?? {}) as Record<string, unknown>
+      );
       const { structuredContent } = await runStepHandler({
         current_step_id: safeString(args.current_step_id ?? ""),
         user_message: safeString(args.user_message ?? ""),
         state: (args.state ?? {}) as Record<string, unknown>,
       });
       const contentText = buildContentFromResult(
-        (structuredContent && (structuredContent as any).result) ? (structuredContent as any).result : null
+        (structuredContent && (structuredContent as any).result) ? (structuredContent as any).result : null,
+        { isFirstStart }
       );
       return {
         content: [{ type: "text", text: contentText }],
@@ -616,12 +633,12 @@ const httpServer = async (req: any, res: any) => {
     }
   }
 
-  // Static root for /ui/* – serve step-card.html, lib/*.js, assets, etc.
+  // Static root for /ui/* – serve step-card.bundled.html, lib/*.js, assets, etc.
   if (req.method === "GET" && url.pathname.startsWith("/ui/")) {
     const uiDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "ui");
     let filePath: string;
     if (url.pathname === "/ui/step-card" || url.pathname === "/ui/step-card/") {
-      filePath = path.join(uiDir, "step-card.html");
+      filePath = path.join(uiDir, "step-card.bundled.html");
     } else {
       const rest = url.pathname.slice("/ui/".length).replace(/\/$/, "") || "index.html";
       filePath = path.join(uiDir, rest);
@@ -648,20 +665,8 @@ const httpServer = async (req: any, res: any) => {
         ext === ".png" ? "image/png" :
         ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
         "application/octet-stream";
-      if (path.basename(resolved) === "step-card.html") {
-        const raw = readFileSync(resolved, "utf-8");
-        const withVersion = injectUiVersion(raw);
-        res.writeHead(200, {
-          "content-type": contentType,
-          "cache-control": "public, max-age=3600",
-          "x-ui-version": VERSION,
-        });
-        res.end(withVersion);
-        return;
-      }
-      if (ext === ".js") {
-        const raw = readFileSync(resolved, "utf-8");
-        const withVersion = injectUiVersionInJs(raw);
+      if (path.basename(resolved) === "step-card.bundled.html") {
+        const withVersion = loadUiHtml();
         res.writeHead(200, {
           "content-type": contentType,
           "cache-control": "public, max-age=3600",
