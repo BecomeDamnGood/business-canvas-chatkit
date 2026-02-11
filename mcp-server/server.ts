@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { inspect } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -568,11 +569,47 @@ const httpServer = async (req: any, res: any) => {
     }
   }
 
-  // UI Resource endpoint (production + local dev) - serves the widget HTML
-  if (req.method === "GET" && url.pathname === UI_RESOURCE_PATH) {
-    const widgetHtml = loadUiHtml();
-    res.writeHead(200, { "content-type": "text/html;profile=mcp-app" });
-    res.end(widgetHtml);
+  // Static root for /ui/* – serve step-card.html, lib/*.js, assets, etc.
+  if (req.method === "GET" && url.pathname.startsWith("/ui/")) {
+    const uiDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "ui");
+    let filePath: string;
+    if (url.pathname === "/ui/step-card" || url.pathname === "/ui/step-card/") {
+      filePath = path.join(uiDir, "step-card.html");
+    } else {
+      const rest = url.pathname.slice("/ui/".length).replace(/\/$/, "") || "index.html";
+      filePath = path.join(uiDir, rest);
+    }
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(uiDir)) {
+      res.writeHead(403, { "content-type": "text/plain" });
+      res.end("Forbidden");
+      return;
+    }
+    try {
+      const stat = fs.statSync(resolved);
+      if (!stat.isFile()) {
+        res.writeHead(404, { "content-type": "text/plain" });
+        res.end("Not found");
+        return;
+      }
+      const ext = path.extname(resolved).toLowerCase();
+      const contentType =
+        ext === ".html" ? "text/html;profile=mcp-app" :
+        ext === ".js" ? "application/javascript" :
+        ext === ".css" ? "text/css" :
+        ext === ".svg" ? "image/svg+xml" :
+        ext === ".png" ? "image/png" :
+        ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
+        "application/octet-stream";
+      res.writeHead(200, {
+        "content-type": contentType,
+        "cache-control": "public, max-age=3600",
+      });
+      fs.createReadStream(resolved).pipe(res);
+    } catch {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("Not found");
+    }
     return;
   }
 

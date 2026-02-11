@@ -1,21 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { renderInlineText } from "../ui/lib/ui_text.js";
+import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.js";
+import { renderChoiceButtons } from "../ui/lib/ui_render.js";
+import { setIsLoading } from "../ui/lib/ui_state.js";
 
 test("renderInlineText builds STRONG nodes safely", () => {
-  const html = readFileSync(new URL("../ui/step-card.html", import.meta.url), "utf8");
-  const start = html.indexOf("function renderInlineText");
-  const end = html.indexOf("function extractChoicesFromPrompt", start);
-  assert.ok(start !== -1, "renderInlineText found");
-  assert.ok(end !== -1, "extractChoicesFromPrompt found");
-
-  const originalDocument = (globalThis as any).document;
+  const originalDocument = (globalThis as unknown as { document: unknown }).document;
   const fakeDocument = {
     createDocumentFragment() {
       return {
         nodeType: 11,
-        childNodes: [] as any[],
-        appendChild(node: any) {
+        childNodes: [] as unknown[],
+        appendChild(node: unknown) {
           this.childNodes.push(node);
           return node;
         },
@@ -29,67 +26,62 @@ test("renderInlineText builds STRONG nodes safely", () => {
         nodeType: 1,
         tagName: String(tag).toUpperCase(),
         textContent: "",
-        childNodes: [] as any[],
-        appendChild(node: any) {
+        childNodes: [] as unknown[],
+        appendChild(node: unknown) {
           this.childNodes.push(node);
           return node;
         },
       };
     },
   };
-  (globalThis as any).document = fakeDocument;
-
-  const fnSrc = `${html.slice(start, end)}; return renderInlineText;`;
-  const renderInlineText = new Function(fnSrc)() as (el: any, input: string) => void;
+  (globalThis as unknown as { document: unknown }).document = fakeDocument;
 
   const container = {
-    childNodes: [] as any[],
+    childNodes: [] as unknown[],
     get firstChild() {
       return this.childNodes.length ? this.childNodes[0] : null;
     },
     removeChild() {
       this.childNodes.shift();
     },
-    appendChild(node: any) {
+    appendChild(node: unknown) {
       this.childNodes.push(node);
       return node;
     },
   };
 
-  renderInlineText(container, "<strong>Hi</strong> there");
-  const fragment = container.childNodes[0];
+  renderInlineText(container as unknown as Element, "<strong>Hi</strong> there");
+  const fragment = container.childNodes[0] as { childNodes: { tagName: string; textContent: string }[] };
   assert.ok(fragment);
   assert.equal(fragment.childNodes.length, 2);
   assert.equal(fragment.childNodes[0].tagName, "STRONG");
   assert.equal(fragment.childNodes[0].textContent, "Hi");
   assert.equal(fragment.childNodes[1].textContent, " there");
 
-  (globalThis as any).document = originalDocument;
+  (globalThis as unknown as { document: unknown }).document = originalDocument;
 });
 
 test("extractChoicesFromPrompt keeps numbering with <strong> tags and renders buttons", () => {
-  const html = readFileSync(new URL("../ui/step-card.html", import.meta.url), "utf8");
-  const start = html.indexOf("function stripInlineText");
-  const end = html.indexOf("function ensureLanguageInState", start);
-  assert.ok(start !== -1, "stripInlineText found");
-  assert.ok(end !== -1, "ensureLanguageInState found");
-
-  const originalDocument = (globalThis as any).document;
-  const originalUiLang = (globalThis as any).uiLang;
-  const originalT = (globalThis as any).t;
-  const originalIsLoading = (globalThis as any).isLoading;
-
-  const wrap: any = {
-    childNodes: [] as any[],
+  const originalDocument = (globalThis as unknown as { document: unknown }).document;
+  const wrap: {
+    childNodes: unknown[];
+    style: { display: string };
+    appendChild: (node: unknown) => unknown;
+  } = {
+    childNodes: [] as unknown[],
     style: { display: "" },
-    appendChild(node: any) {
+    appendChild(node: unknown) {
       this.childNodes.push(node);
       return node;
     },
   };
   Object.defineProperty(wrap, "innerHTML", {
-    get() { return ""; },
-    set() { this.childNodes = []; },
+    get() {
+      return "";
+    },
+    set() {
+      wrap.childNodes = [];
+    },
   });
 
   const fakeDocument = {
@@ -105,9 +97,9 @@ test("extractChoicesFromPrompt keeps numbering with <strong> tags and renders bu
         type: "",
         textContent: "",
         disabled: false,
-        style: {} as any,
-        childNodes: [] as any[],
-        appendChild(node: any) {
+        style: {} as Record<string, string>,
+        childNodes: [] as unknown[],
+        appendChild(node: unknown) {
           this.childNodes.push(node);
           return node;
         },
@@ -120,8 +112,8 @@ test("extractChoicesFromPrompt keeps numbering with <strong> tags and renders bu
     createDocumentFragment() {
       return {
         nodeType: 11,
-        childNodes: [] as any[],
-        appendChild(node: any) {
+        childNodes: [] as unknown[],
+        appendChild(node: unknown) {
           this.childNodes.push(node);
           return node;
         },
@@ -129,33 +121,24 @@ test("extractChoicesFromPrompt keeps numbering with <strong> tags and renders bu
     },
   };
 
-  (globalThis as any).document = fakeDocument;
-  (globalThis as any).uiLang = () => "en";
-  (globalThis as any).t = () => "Options unavailable";
-  (globalThis as any).isLoading = false;
-
-  const fnSrc = `${html.slice(start, end)}; return { extractChoicesFromPrompt, renderChoiceButtons };`;
-  const fns = new Function(fnSrc)() as {
-    extractChoicesFromPrompt: (input: string) => { choices: Array<{ label: string; value: string }> };
-    renderChoiceButtons: (choices: Array<{ label: string; value: string }>, resultData: any) => void;
-  };
+  (globalThis as unknown as { document: unknown }).document = fakeDocument;
+  setIsLoading(false);
 
   const prompt = "Choose one:\n1) <strong>Alpha</strong>\n2) Beta";
-  const { choices } = fns.extractChoicesFromPrompt(prompt);
+  const { choices } = extractChoicesFromPrompt(prompt);
   assert.equal(choices.length, 2);
 
-  fns.renderChoiceButtons(choices, {
+  renderChoiceButtons(choices, {
     specialist: { menu_id: "TEST_MENU" },
     state: { current_step: "step_0" },
     ui: { action_codes: ["ACTION_ONE", "ACTION_TWO"], expected_choice_count: 2 },
     registry_version: "test",
   });
 
-  const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
+  const buttons = wrap.childNodes.filter(
+    (node: unknown) => node && (node as { tagName?: string }).tagName === "BUTTON"
+  );
   assert.equal(buttons.length, 2);
 
-  (globalThis as any).document = originalDocument;
-  (globalThis as any).uiLang = originalUiLang;
-  (globalThis as any).t = originalT;
-  (globalThis as any).isLoading = originalIsLoading;
+  (globalThis as unknown as { document: unknown }).document = originalDocument;
 });

@@ -1,0 +1,865 @@
+/**
+ * Main card rendering, choice buttons, stepper, formatText, error views.
+ */
+
+import {
+  STRATEGY_STEP_ID,
+  ORDER,
+  UI_STRINGS,
+  baseLang,
+  t,
+  titlesForLang,
+  prestartWelcomeForLang,
+  getSectionTitle,
+} from "./ui_constants.js";
+import { escapeHtml, renderInlineText, stripInlineText } from "./ui_text.js";
+import { extractChoicesFromPrompt, type Choice } from "./ui_choices.js";
+import {
+  callRunStep,
+  setLoading,
+  setSendEnabled,
+  setInlineNotice,
+  clearInlineNotice,
+  lockRateLimit,
+  toolData,
+  setLastToolOutput,
+  widgetState,
+  setWidgetStateSafe,
+  languageFromState,
+  uiLang,
+  hasToolOutput,
+} from "./ui_actions.js";
+import { getIsLoading, getSessionStarted, getSessionWelcomeShown, setSessionWelcomeShown } from "./ui_state.js";
+
+function stepIndex(stepId: string): number {
+  const idx = ORDER.indexOf(stepId);
+  return idx >= 0 ? idx : 0;
+}
+
+export function extractStepTitle(stepId: string, lang: string | null | undefined): string {
+  const titles = titlesForLang(lang);
+  const fullTitle = titles[stepId] || "";
+  return fullTitle.replace(/^Step \d+: /, "").replace(/^Stap \d+: /, "");
+}
+
+export function buildStepper(activeIdx: number, stepTitle: string | null | undefined): void {
+  const el = document.getElementById("stepper");
+  if (!el) return;
+  el.innerHTML = "";
+  for (let i = 0; i < ORDER.length; i++) {
+    const s = document.createElement("div");
+    let className = "step";
+    if (i < activeIdx) className += " completed";
+    if (i === activeIdx) className += " active";
+    s.className = className;
+    s.style.position = "relative";
+    if (i === activeIdx && stepTitle) {
+      const title = document.createElement("div");
+      title.className = "stepperTitle";
+      title.id = "stepperTitle";
+      title.textContent = stepTitle;
+      if (i === 0) title.classList.add("align-left");
+      if (i === ORDER.length - 1) title.classList.add("align-right");
+      s.appendChild(title);
+    }
+    s.appendChild(document.createTextNode(String(i + 1).padStart(2, "0")));
+    el.appendChild(s);
+    if (i < ORDER.length - 1) {
+      const line = document.createElement("div");
+      line.className = "stepLine";
+      el.appendChild(line);
+    }
+  }
+}
+
+export function formatText(text: string | null | undefined): string {
+  if (!text) return "";
+  const htmlTagPlaceholders: string[] = [];
+  let placeholderIndex = 0;
+  let temp = text.replace(/<[^>]+>/g, (match) => {
+    htmlTagPlaceholders[placeholderIndex] = match;
+    return `__HTML_TAG_${placeholderIndex++}__`;
+  });
+  temp = temp.replace(/\n\n+/g, "<br><br>");
+  temp = temp.replace(/\n/g, "<br>");
+  temp = temp.replace(/__HTML_TAG_(\d+)__/g, (_match, index) => {
+    return htmlTagPlaceholders[parseInt(index, 10)] || "";
+  });
+  temp = temp.replace(/<\/li>\s*<br>\s*<li>/gi, "</li><li>");
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  temp = temp.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+  return temp;
+}
+
+function setStaticStrings(lang: string): void {
+  const uiSubtitle = document.getElementById("uiSubtitle");
+  const byText = document.getElementById("byText");
+  const btnStart = document.getElementById("btnStart");
+  const send = document.getElementById("send");
+  if (uiSubtitle) uiSubtitle.textContent = t(lang, "uiSubtitle");
+  if (byText) byText.textContent = t(lang, "byText");
+  if (btnStart) btnStart.textContent = t(lang, "btnStart");
+  if (send) send.setAttribute("title", t(lang, "sendTitle"));
+}
+
+export function renderChoiceButtons(choices: Choice[] | null | undefined, resultData: Record<string, unknown>): void {
+  const wrap = document.getElementById("choiceWrap");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  if (!choices || choices.length === 0) {
+    wrap.style.display = "none";
+    return;
+  }
+
+  const specialist = (resultData?.specialist as Record<string, unknown>) || {};
+  const menuId = String(specialist?.menu_id || "").trim();
+  const state = (resultData?.state as Record<string, unknown>) || {};
+  const currentStep = String(state?.current_step || "").trim();
+  const uiPayload =
+    resultData && typeof resultData.ui === "object" && resultData.ui
+      ? (resultData.ui as Record<string, unknown>)
+      : {};
+  const registryVersion = String(resultData?.registry_version || "").trim();
+  const registryActionCodes = Array.isArray(uiPayload.action_codes) ? uiPayload.action_codes : null;
+  const expectedChoiceCount =
+    typeof uiPayload.expected_choice_count === "number"
+      ? uiPayload.expected_choice_count
+      : registryActionCodes
+        ? registryActionCodes.length
+        : null;
+  const labelsCount = Array.isArray(choices) ? choices.length : 0;
+  const lang = uiLang(state);
+
+  function showOptionsError(): void {
+    if (!wrap) return;
+    wrap.style.display = "flex";
+    wrap.innerHTML = "";
+    const err = document.createElement("div");
+    err.className = "choiceError";
+    err.textContent = t(lang, "optionsDisplayError");
+    wrap.appendChild(err);
+  }
+
+  let choicesCopy = [...choices];
+  if (currentStep === "role" && menuId === "ROLE_MENU_REFINE" && choicesCopy.length > 1) {
+    choicesCopy = choicesCopy.filter((c) => Number(c.value) === 1);
+  }
+
+  if (!menuId) {
+    console.warn("[menu_contract_missing]", {
+      registry_version: registryVersion,
+      current_step: currentStep,
+      labels_count: labelsCount,
+    });
+    showOptionsError();
+    return;
+  }
+
+  if (!registryActionCodes) {
+    console.warn("[actioncodes_missing]", {
+      registry_version: registryVersion,
+      menu_id: menuId,
+      current_step: currentStep,
+      labels_count: labelsCount,
+    });
+    showOptionsError();
+    return;
+  }
+
+  const expectedCount =
+    typeof expectedChoiceCount === "number" ? expectedChoiceCount : registryActionCodes.length;
+  if (expectedCount !== labelsCount) {
+    console.warn("[actioncodes_count_mismatch]", {
+      registry_version: registryVersion,
+      menu_id: menuId,
+      current_step: currentStep,
+      labels_count: labelsCount,
+      expected_choice_count: expectedCount,
+    });
+    showOptionsError();
+    return;
+  }
+
+  for (const c of choicesCopy) {
+    const label = stripInlineText(String(c.label || "")).trim();
+    if (!label) {
+      console.error("Empty choice label", { menuId, currentStep, choiceIndex: c.value });
+      showOptionsError();
+      return;
+    }
+  }
+
+  if (registryVersion && menuId) {
+    console.log("[actioncode_render]", { registryVersion, menuId, currentStep });
+  }
+
+  wrap.style.display = "flex";
+  const isLoading = getIsLoading();
+  let renderIndex = 0;
+  for (const c of choicesCopy) {
+    const label = stripInlineText(String(c.label || "")).trim();
+    const actionCode = registryActionCodes[renderIndex];
+    const btn = document.createElement("button");
+    btn.className = "choiceBtn";
+    btn.type = "button";
+    btn.textContent = label;
+    btn.disabled = isLoading;
+    btn.addEventListener("click", () => {
+      if (getIsLoading()) return;
+      if (registryVersion && menuId) {
+        console.log("[actioncode_click]", {
+          registryVersion,
+          menuId,
+          currentStep,
+          action_code: actionCode,
+        });
+      }
+      callRunStep(actionCode);
+    });
+    wrap.appendChild(btn);
+    renderIndex += 1;
+  }
+}
+
+export function render(overrideToolOutput?: unknown): void {
+  const data = toolData(overrideToolOutput);
+
+  if (data && Object.keys(data).length) setLastToolOutput(data);
+
+  const result =
+    (data && data.result)
+      ? (data.result as Record<string, unknown>)
+      : (data && data.ui && (data.ui as Record<string, unknown>).result)
+        ? ((data.ui as Record<string, unknown>).result as Record<string, unknown>)
+        : (data && data.ui)
+          ? (data.ui as Record<string, unknown>)
+          : {};
+
+  const state = (result?.state as Record<string, unknown>) || {};
+  const errorObj = result?.error as { type?: string; user_message?: string; retry_after_ms?: number } | null;
+  if (errorObj && errorObj.type === "rate_limited") {
+    setInlineNotice(errorObj.user_message || "Please wait a moment and try again.");
+    lockRateLimit(errorObj.retry_after_ms ?? 1500);
+  } else {
+    clearInlineNotice();
+  }
+
+  const overrideStrings =
+    (state?.ui_strings && typeof state.ui_strings === "object" ? state.ui_strings : null) ||
+    (result?.ui_strings && typeof result.ui_strings === "object" ? result.ui_strings : null);
+  const overrideLang = String((state?.ui_strings_lang || "") as string).trim().toLowerCase();
+  const lang = uiLang(state);
+  if (overrideStrings) {
+    const bucket = overrideLang || baseLang(lang);
+    UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...(overrideStrings as Record<string, string>) };
+  }
+  setStaticStrings(lang);
+
+  const ws = widgetState();
+  const langPersist = languageFromState(state);
+  if (
+    langPersist &&
+    (!ws.language ||
+      String(ws.language).toLowerCase().trim() !== String(langPersist).toLowerCase().trim())
+  ) {
+    setWidgetStateSafe({ language: langPersist });
+  }
+
+  const hasToolOutputVal = hasToolOutput();
+  const persistedStarted = String((ws?.started || "")).toLowerCase() === "true";
+  const sessionStarted = getSessionStarted();
+  const showPreStart = !sessionStarted;
+
+  const current =
+    !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
+  const idx = stepIndex(current);
+  const stepTitle = extractStepTitle(current, lang);
+  buildStepper(idx, stepTitle);
+
+  const badge = document.getElementById("badge");
+  if (badge) badge.textContent = String(idx + 1);
+
+  const inputWrap = document.getElementById("inputWrap");
+  const btnStart = document.getElementById("btnStart");
+  const btnOk = document.getElementById("btnOk");
+  const startHint = document.getElementById("startHint");
+  if (!inputWrap || !btnStart || !btnOk || !startHint) return;
+
+  const specialist = (result?.specialist as Record<string, unknown>) || {};
+  const sectionTitleEl = document.getElementById("sectionTitle");
+  const isIntroAction = String(specialist.action || "") === "INTRO";
+
+  if (sectionTitleEl) {
+    if (isIntroAction) {
+      const businessName = String((state?.business_name || "")).trim();
+      sectionTitleEl.textContent = getSectionTitle(lang, current, businessName);
+    } else {
+      sectionTitleEl.textContent = "";
+    }
+  }
+
+  const activeSpecialist = String(state?.active_specialist || "");
+  const isDreamExplainerMode = current === "dream" && activeSpecialist === "DreamExplainer";
+  const lastSpecialist = (state?.last_specialist_result as Record<string, unknown>) || {};
+  const isDreamStepPreExercise =
+    current === "dream" &&
+    activeSpecialist === "Dream" &&
+    String(specialist.suggest_dreambuilder || "") === "true" &&
+    String(specialist.action || "") === "ASK";
+  const hasPromptForConfirm =
+    String(specialist.confirmation_question || "").trim() !== "" ||
+    String(specialist.question || "").trim() !== "";
+  const showContinue =
+    !showPreStart &&
+    hasToolOutputVal &&
+    String(specialist.action || "") === "CONFIRM" &&
+    hasPromptForConfirm &&
+    !isDreamExplainerMode;
+
+  const btnOkLabelKey = current === STRATEGY_STEP_ID ? "btnOk_strategy" : "btnOk";
+  const btnOkEl = document.getElementById("btnOk");
+  if (btnOkEl) btnOkEl.textContent = t(lang, btnOkLabelKey);
+
+  const isLoading = getIsLoading();
+
+  if (showPreStart) {
+    inputWrap.style.display = "none";
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (choiceWrap) choiceWrap.style.display = "none";
+    (btnStart as HTMLElement).style.display = "inline-flex";
+    (btnOk as HTMLElement).style.display = "none";
+    const cardDesc = document.getElementById("cardDesc");
+    const prompt = document.getElementById("prompt");
+    if (cardDesc) cardDesc.innerHTML = formatText(prestartWelcomeForLang(lang));
+    if (prompt) prompt.textContent = "";
+    startHint.textContent = "";
+    if (isLoading) setLoading(false);
+    return;
+  }
+
+  inputWrap.style.display = "flex";
+  (btnStart as HTMLElement).style.display = "none";
+  startHint.textContent = "";
+
+  const isDreamDirectionView =
+    current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
+
+  const bodyRaw = ((): string => {
+    let raw = (result?.text && typeof result.text === "string" ? result.text : "") as string;
+    if (!raw && result?.specialist && typeof result.specialist === "object") {
+      const sp = result.specialist as Record<string, unknown>;
+      raw =
+        String(sp.message || "").trim() ||
+        String(sp.refined_formulation || "").trim() ||
+        String(sp.question || "").trim() ||
+        "";
+    }
+    return raw;
+  })();
+  const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") as string;
+
+  let body: string;
+  const sessionWelcomeShown = getSessionWelcomeShown();
+  if (isDreamDirectionView && promptRaw) {
+    body = promptRaw;
+  } else if (!sessionWelcomeShown) {
+    body = `${prestartWelcomeForLang(lang)}\n\n${bodyRaw || ""}`.trim();
+    setSessionWelcomeShown(true);
+  } else {
+    body = bodyRaw || "";
+  }
+
+  if (current === "purpose" && isIntroAction && bodyRaw) {
+    body = `Purpose is the deeper meaning that drives your business forward, even when results are uncertain. While your Dream sets the direction, what you want to change in the world, Purpose is the internal engine that keeps you and your team moving, especially when things get tough.
+
+Without Purpose, a Dream remains just an idea, and without a Dream, Purpose becomes a feeling without a destination. Purpose is not about money, growth, or recognition. Those are outcomes, not reasons for being. Instead, Purpose is the belief or value that makes your business matter, both to you and to those you serve. It's what gives your work meaning and resilience. When you're clear about your Purpose, it becomes easier to make decisions, inspire others, and stay true to your path, even under pressure.`;
+  }
+
+  const cardDescEl = document.getElementById("cardDesc");
+  if (cardDescEl) {
+    cardDescEl.style.display = "block";
+    renderInlineText(cardDescEl, body || "");
+  }
+
+  const previewWrap = document.getElementById("presentationPreview");
+  const previewImg = document.getElementById("presentationThumb") as HTMLImageElement;
+  const previewLink = document.getElementById("presentationThumbLink") as HTMLAnchorElement;
+  const previewDownload = document.getElementById("presentationDownload") as HTMLAnchorElement;
+  const presentationAssets = result?.presentation_assets as { png_url?: string; pdf_url?: string } | null;
+  if (previewWrap && previewImg && previewLink && previewDownload) {
+    if (presentationAssets?.png_url && presentationAssets?.pdf_url) {
+      previewWrap.classList.add("visible");
+      previewImg.src = String(presentationAssets.png_url);
+      previewLink.href = String(presentationAssets.pdf_url);
+      previewDownload.href = String(presentationAssets.pdf_url);
+    } else {
+      previewWrap.classList.remove("visible");
+      previewImg.removeAttribute("src");
+      previewLink.removeAttribute("href");
+      previewDownload.removeAttribute("href");
+    }
+  }
+
+  const purposeInstructionHintEl = document.getElementById("purposeInstructionHint");
+  if (purposeInstructionHintEl) {
+    const uiFlags =
+      result?.ui && typeof result.ui === "object" && (result.ui as Record<string, unknown>).flags
+        ? ((result.ui as Record<string, unknown>).flags as Record<string, unknown>)
+        : {};
+    const showPurposeHint =
+      current === "purpose" && (uiFlags.showPurposeHint as boolean) === true;
+    if (showPurposeHint) {
+      purposeInstructionHintEl.style.display = "block";
+      purposeInstructionHintEl.textContent =
+        t(lang, "purposeInstructionHint") || "Answer the question, formulate your own Purpose or make a choose";
+    } else {
+      purposeInstructionHintEl.style.display = "none";
+    }
+  }
+
+  const statementsPanelEl = document.getElementById("statementsPanel");
+  const statementsTitleEl = document.getElementById("statementsTitle");
+  const statementsCountEl = document.getElementById("statementsCount");
+  const statementsListEl = document.getElementById("statementsList");
+  let statementsArray = (result?.specialist as Record<string, unknown>)?.statements as string[] | null;
+  if (
+    current === "dream" &&
+    isDreamExplainerMode &&
+    (!statementsArray || statementsArray.length === 0)
+  ) {
+    if (
+      Array.isArray((lastSpecialist as { statements?: unknown }).statements) &&
+      (lastSpecialist as { statements: unknown[] }).statements.length > 0
+    ) {
+      statementsArray = (lastSpecialist as { statements: string[] }).statements;
+    } else if (
+      Array.isArray(state.dream_builder_statements) &&
+      (state.dream_builder_statements as unknown[]).length > 0
+    ) {
+      statementsArray = state.dream_builder_statements as string[];
+    }
+  }
+
+  const isScoringView =
+    current === "dream" &&
+    activeSpecialist === "DreamExplainer" &&
+    String(specialist.scoring_phase || "") === "true" &&
+    Array.isArray(specialist.clusters) &&
+    (specialist.clusters as unknown[]).length > 0 &&
+    statementsArray &&
+    statementsArray.length >= 20;
+
+  if (isScoringView) {
+    const clusters = specialist.clusters as Array<{ statement_indices: number[]; theme?: string }>;
+    if (cardDescEl) cardDescEl.style.display = "none";
+    if (statementsPanelEl) statementsPanelEl.style.display = "none";
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (choiceWrap) choiceWrap.style.display = "none";
+    const hideBtns = ["btnGoToNextStep", "btnStartDreamExercise", "btnOk"];
+    for (const id of hideBtns) {
+      const el = document.getElementById(id);
+      if (el) (el as HTMLElement).style.display = "none";
+    }
+    const showPrompt = document.getElementById("prompt");
+    if (showPrompt) {
+      showPrompt.textContent = t(lang, "scoringDreamQuestion");
+      showPrompt.style.display = "none";
+    }
+    inputWrap.style.display = "none";
+    const btnSelfDream = document.getElementById("btnSwitchToSelfDream");
+    if (btnSelfDream) {
+      (btnSelfDream as HTMLElement).style.display = "inline-block";
+      btnSelfDream.textContent = t(lang, "btnSwitchToSelfDream");
+    }
+
+    const scoringPanelEl = document.getElementById("scoringPanel");
+    if (scoringPanelEl) {
+      scoringPanelEl.classList.add("visible");
+      scoringPanelEl.style.display = "block";
+    }
+    const scoringIntro = document.getElementById("scoringIntro");
+    if (scoringIntro) {
+      scoringIntro.textContent =
+        t(lang, "scoringIntro1") + "\n\n" + t(lang, "scoringIntro2") + "\n\n" + t(lang, "scoringIntro3");
+    }
+
+    const win = globalThis as unknown as { __dreamScoringScores?: unknown[][] };
+    if (!win.__dreamScoringScores) win.__dreamScoringScores = [];
+    const scoringScores = win.__dreamScoringScores;
+    for (let ci = 0; ci < clusters.length; ci++) {
+      if (!scoringScores[ci]) scoringScores[ci] = [];
+      const indices = clusters[ci].statement_indices || [];
+      for (let si = 0; si < indices.length; si++) {
+        if (scoringScores[ci][si] === undefined) scoringScores[ci][si] = "";
+      }
+      scoringScores[ci].length = indices.length;
+    }
+    scoringScores.length = clusters.length;
+
+    const scoringClustersEl = document.getElementById("scoringClusters");
+    if (!scoringClustersEl) return;
+    scoringClustersEl.innerHTML = "";
+    for (let cii = 0; cii < clusters.length; cii++) {
+      const cluster = clusters[cii];
+      const indices = cluster.statement_indices || [];
+      const themeName = String(cluster.theme || "").trim() || "Category " + (cii + 1);
+      const clusterDiv = document.createElement("div");
+      clusterDiv.className = "scoringCluster";
+      clusterDiv.setAttribute("data-cluster-index", String(cii));
+      let filled = 0,
+        sum = 0;
+      for (let si = 0; si < indices.length; si++) {
+        const v = scoringScores[cii][si];
+        const n = Number(v);
+        if (v !== "" && v !== undefined && !isNaN(n) && n >= 1 && n <= 10) {
+          filled++;
+          sum += n;
+        }
+      }
+      const avgText = filled === 0 ? "—" : (sum / filled).toFixed(1);
+      const showStats = filled > 0;
+      const avgHtml = showStats
+        ? '<span class="avgScore">' + t(lang, "scoringAvg").replace("X", avgText) + "</span>"
+        : "";
+      clusterDiv.innerHTML =
+        '<div class="scoringClusterHeader"><span class="themeName">' +
+        escapeHtml(themeName) +
+        "</span>" +
+        avgHtml +
+        '</div><div class="scoringClusterRows"></div>';
+      const rowsEl = clusterDiv.querySelector(".scoringClusterRows");
+      for (let si = 0; si < indices.length; si++) {
+        const stIdx = indices[si];
+        const numIdx = typeof stIdx !== "number" ? parseInt(String(stIdx), 10) : stIdx;
+        if (isNaN(numIdx) || numIdx < 0 || !statementsArray || numIdx >= statementsArray.length)
+          continue;
+        const stText = statementsArray[numIdx];
+        const row = document.createElement("div");
+        row.className = "scoringRow";
+        const stSpan = document.createElement("span");
+        stSpan.className = "statementText";
+        stSpan.textContent = stText;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.inputMode = "numeric";
+        input.className = "scoreInput";
+        input.setAttribute("data-cluster", String(cii));
+        input.setAttribute("data-statement", String(si));
+        const rawVal = scoringScores[cii][si];
+        const numVal = rawVal !== "" && rawVal !== undefined ? Number(rawVal) : NaN;
+        input.value =
+          !isNaN(numVal) && numVal >= 1 && numVal <= 10 ? String(Math.round(numVal)) : "";
+        input.placeholder = "0";
+        input.setAttribute("aria-label", "Score 1 to 10");
+        row.appendChild(stSpan);
+        row.appendChild(input);
+        if (rowsEl) rowsEl.appendChild(row);
+      }
+      scoringClustersEl.appendChild(clusterDiv);
+    }
+
+    function updateScoringClusterHeader(ci: number): void {
+      const clusterDiv = document.querySelector(
+        '.scoringCluster[data-cluster-index="' + ci + '"]'
+      );
+      if (!clusterDiv) return;
+      const indices = clusters[ci].statement_indices || [];
+      let filled = 0,
+        sum = 0;
+      for (let si = 0; si < indices.length; si++) {
+        const v = scoringScores[ci][si];
+        const n = Number(v);
+        if (v !== "" && v !== undefined && !isNaN(n) && n >= 1 && n <= 10) {
+          filled++;
+          sum += n;
+        }
+      }
+      const avgText = filled === 0 ? "—" : (sum / filled).toFixed(1);
+      const themeName = String(clusters[ci].theme || "").trim() || "Category " + (ci + 1);
+      const showStats = filled > 0;
+      const avgHtml = showStats
+        ? '<span class="avgScore">' + t(lang, "scoringAvg").replace("X", avgText) + "</span>"
+        : "";
+      const headerEl = clusterDiv.querySelector(".scoringClusterHeader");
+      if (headerEl)
+        headerEl.innerHTML =
+          '<span class="themeName">' + escapeHtml(themeName) + "</span>" + avgHtml;
+    }
+
+    function allScoringFilled(): boolean {
+      for (let ci = 0; ci < clusters.length; ci++) {
+        for (let si = 0; si < (scoringScores[ci] || []).length; si++) {
+          const v = scoringScores[ci][si];
+          const n = Number(v);
+          if (v === "" || v === undefined || isNaN(n) || n < 1 || n > 10) return false;
+        }
+      }
+      return true;
+    }
+
+    function updateScoringDreamQuestionVisibility(): void {
+      const filled = allScoringFilled();
+      const promptEl = document.getElementById("prompt");
+      if (promptEl) promptEl.style.display = filled ? "block" : "none";
+      if (inputWrap) inputWrap.style.display = filled ? "flex" : "none";
+    }
+
+    updateScoringDreamQuestionVisibility();
+
+    scoringClustersEl.querySelectorAll(".scoreInput").forEach((input) => {
+      input.addEventListener("input", () => {
+        const ci = parseInt((input as HTMLElement).getAttribute("data-cluster") || "0", 10);
+        const si = parseInt((input as HTMLElement).getAttribute("data-statement") || "0", 10);
+        let val = (input as HTMLInputElement).value.trim();
+        const n = Number(val);
+        if (val !== "" && (isNaN(n) || n < 1 || n > 10)) {
+          (input as HTMLInputElement).value = "";
+          val = "";
+        } else if (val !== "" && n >= 1 && n <= 10) {
+          (input as HTMLInputElement).value = String(Math.round(n));
+          val = (input as HTMLInputElement).value;
+        }
+        scoringScores[ci][si] = val;
+        updateScoringClusterHeader(ci);
+        const btnScoringContinue = document.getElementById("btnScoringContinue");
+        if (btnScoringContinue)
+          (btnScoringContinue as HTMLButtonElement).disabled = !allScoringFilled();
+        updateScoringDreamQuestionVisibility();
+      });
+    });
+
+    const btnScoringContinueEl = document.getElementById("btnScoringContinue");
+    if (btnScoringContinueEl) {
+      btnScoringContinueEl.textContent = t(lang, "btnScoringContinue");
+      (btnScoringContinueEl as HTMLButtonElement).disabled = !allScoringFilled();
+      btnScoringContinueEl.onclick = () => {
+        if (!allScoringFilled() || getIsLoading()) return;
+        const payload: number[][] = [];
+        for (let ci = 0; ci < clusters.length; ci++) {
+          const row: number[] = [];
+          for (let si = 0; si < (scoringScores[ci] || []).length; si++) {
+            const v = Number(scoringScores[ci][si]);
+            row.push(isNaN(v) ? 0 : Math.max(1, Math.min(10, v)));
+          }
+          payload.push(row);
+        }
+        win.__dreamScoringScores = [];
+        callRunStep(JSON.stringify({ action: "submit_scores", scores: payload }));
+      };
+    }
+
+    (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__ =
+      { state, lang };
+
+    if (isLoading) setLoading(false);
+    return;
+  }
+
+  const scoringPanelPost = document.getElementById("scoringPanel");
+  if (scoringPanelPost) {
+    scoringPanelPost.classList.remove("visible");
+    scoringPanelPost.style.display = "none";
+  }
+  if (cardDescEl) cardDescEl.style.display = "block";
+  const promptPost = document.getElementById("prompt");
+  if (promptPost) promptPost.style.display = "block";
+
+  if (isDreamDirectionView) {
+    if (statementsPanelEl) statementsPanelEl.style.display = "none";
+  } else if (
+    current === "dream" &&
+    statementsArray !== null &&
+    statementsArray.length > 0 &&
+    statementsArray.length < 20
+  ) {
+    if (statementsPanelEl) statementsPanelEl.style.display = "block";
+    if (statementsTitleEl)
+      statementsTitleEl.textContent = t(lang, "dreamBuilder.statements.title");
+    if (statementsCountEl)
+      statementsCountEl.textContent = t(lang, "dreamBuilder.statements.count").replace(
+        "N",
+        String(statementsArray.length)
+      );
+    if (statementsListEl)
+      statementsListEl.textContent = statementsArray
+        .map((s, i) => (i + 1) + ". " + String(s))
+        .join("\n");
+  } else {
+    if (statementsPanelEl) statementsPanelEl.style.display = "none";
+  }
+
+  const { promptShown, choices } = extractChoicesFromPrompt(promptRaw);
+  let promptText = isDreamDirectionView ? "" : (promptShown || "");
+
+  const choiceModeHasMenu = choices && choices.length >= 2 && choices.length <= 6;
+  if (!isDreamDirectionView && choiceModeHasMenu) {
+    const trimmedPrompt = (promptText || "").trim();
+    const looksLikeLegacyChooseLine =
+      trimmedPrompt === "" ||
+      /^Choose\s+\d/.test(trimmedPrompt) ||
+      /^Kies\s+\d/.test(trimmedPrompt);
+    if (looksLikeLegacyChooseLine) {
+      promptText = t(lang, "generic.choicePrompt.shareOrOption");
+    }
+  }
+
+  if (
+    current === "purpose" &&
+    isIntroAction &&
+    promptText &&
+    promptText.includes("Please define your purpose or ask for more explanation.")
+  ) {
+    const businessName = String(state?.business_name || "").trim();
+    const hasBusinessName = businessName && businessName !== "" && businessName !== "TBD";
+    promptText = hasBusinessName
+      ? `Please define the purpose of ${businessName} or ask for more explanation.`
+      : "Please define the purpose of your future company or ask for more explanation.";
+  }
+
+  if (current === "strategy") {
+    const rawBusinessName = String(state?.business_name || "").trim();
+    const hasBusinessName =
+      rawBusinessName && rawBusinessName !== "" && rawBusinessName !== "TBD";
+    const displayName = hasBusinessName ? rawBusinessName : "your future company";
+    if (promptText === "Define your Strategy or choose an option.") {
+      promptText = `Define the Strategy of ${displayName} or choose an option.`;
+    } else if (promptText === "Is there more that you will always focus on?") {
+      promptText = `Is there more that ${displayName} will always focus on?`;
+    }
+  }
+
+  const promptEl = document.getElementById("prompt");
+  if (promptEl) renderInlineText(promptEl, promptText || "");
+  renderChoiceButtons(choices, result);
+
+  const choiceMode = (choices && choices.length) > 0;
+  const confirmMode = !choiceMode && showContinue;
+  let statementCount =
+    (statementsArray && statementsArray.length) || 0;
+  if (
+    current === "dream" &&
+    activeSpecialist === "DreamExplainer" &&
+    statementCount < 20 &&
+    Array.isArray((lastSpecialist as { statements?: unknown[] }).statements) &&
+    (lastSpecialist as { statements: unknown[] }).statements.length >= 20
+  ) {
+    statementCount = (lastSpecialist as { statements: unknown[] }).statements.length;
+  }
+  const effectiveStatementsForButton =
+    (statementsArray && statementsArray.length) ||
+    (Array.isArray((specialist as { statements?: unknown[] }).statements)
+      ? (specialist as { statements: unknown[] }).statements.length
+      : 0) ||
+    0;
+  const showGoToNextStep =
+    current === "dream" &&
+    activeSpecialist === "DreamExplainer" &&
+    effectiveStatementsForButton >= 20 &&
+    String(specialist.action || "") !== "CONFIRM";
+
+  inputWrap.style.display = "flex";
+  const sde = document.getElementById("btnStartDreamExercise");
+  const sb = document.getElementById("btnSwitchToSelfDream");
+
+  if (choiceMode) {
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (choiceWrap) choiceWrap.style.display = "flex";
+    (btnOk as HTMLElement).style.display = "none";
+    if (sde) (sde as HTMLElement).style.display = "none";
+    if (sb) (sb as HTMLElement).style.display = "none";
+  } else if (confirmMode) {
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (choiceWrap) choiceWrap.style.display = "none";
+    (btnOk as HTMLElement).style.display = "inline-flex";
+    if (sde) (sde as HTMLElement).style.display = "none";
+    if (sb) (sb as HTMLElement).style.display = "none";
+  } else {
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (choiceWrap) choiceWrap.style.display = "none";
+    (btnOk as HTMLElement).style.display = "none";
+    if (sde) {
+      (sde as HTMLElement).style.display = isDreamStepPreExercise ? "inline-flex" : "none";
+    }
+    if (sb) {
+      (sb as HTMLElement).style.display =
+        isDreamExplainerMode && String(specialist.action || "") !== "CONFIRM"
+          ? "inline-flex"
+          : "none";
+    }
+  }
+
+  const btnGoToNextStepEl = document.getElementById("btnGoToNextStep");
+  if (btnGoToNextStepEl) {
+    (btnGoToNextStepEl as HTMLElement).style.display =
+      showGoToNextStep && !getIsLoading() ? "inline-flex" : "none";
+    (btnGoToNextStepEl as HTMLButtonElement).disabled = getIsLoading();
+  }
+
+  const isDreamConfirm =
+    current === "dream" &&
+    activeSpecialist === "DreamExplainer" &&
+    String(specialist.action || "") === "CONFIRM" &&
+    !(choices && choices.length);
+  const btnDreamConfirmEl = document.getElementById("btnDreamConfirm");
+  if (btnDreamConfirmEl) {
+    (btnDreamConfirmEl as HTMLElement).style.display =
+      isDreamConfirm && !getIsLoading() ? "inline-flex" : "none";
+    (btnDreamConfirmEl as HTMLButtonElement).disabled = getIsLoading();
+  }
+
+  const debugMode = /\bdebug=1\b/.test(String(typeof window !== "undefined" ? window.location.search : ""));
+  const debugEl = document.getElementById("debugOverlay");
+  if (debugEl) {
+    if (debugMode) {
+      const debugPayload = {
+        current_step: current,
+        active_specialist: activeSpecialist,
+        "specialist.action": String(specialist.action || ""),
+        promptRaw200: (promptRaw || "").slice(0, 200),
+        choicesLength: (choices || []).length,
+        choiceLabels: (choices || []).map((c) => c.label),
+        showContinue,
+        isDreamStepPreExercise,
+        isDreamExplainerMode,
+        isLoading: getIsLoading(),
+      };
+      debugEl.textContent = JSON.stringify(debugPayload, null, 2);
+      debugEl.classList.add("visible");
+      debugEl.setAttribute("aria-hidden", "false");
+    } else {
+      debugEl.textContent = "";
+      debugEl.classList.remove("visible");
+      debugEl.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  const btnGoToNextStepEl2 = document.getElementById("btnGoToNextStep");
+  if (btnGoToNextStepEl2) btnGoToNextStepEl2.textContent = t(lang, "btnGoToNextStep");
+  const btnStartDreamExerciseEl = document.getElementById("btnStartDreamExercise");
+  if (btnStartDreamExerciseEl) {
+    btnStartDreamExerciseEl.textContent = t(lang, "dreamBuilder.startExercise");
+    (btnStartDreamExerciseEl as HTMLButtonElement).disabled = getIsLoading();
+  }
+  const btnSwitchToSelfDreamEl = document.getElementById("btnSwitchToSelfDream");
+  if (btnSwitchToSelfDreamEl) {
+    btnSwitchToSelfDreamEl.textContent = t(lang, "btnSwitchToSelfDream");
+    (btnSwitchToSelfDreamEl as HTMLButtonElement).disabled = getIsLoading();
+  }
+  const btnDreamConfirmEl2 = document.getElementById("btnDreamConfirm");
+  if (btnDreamConfirmEl2) {
+    btnDreamConfirmEl2.textContent = t(lang, "btnDreamConfirm");
+    (btnDreamConfirmEl2 as HTMLButtonElement).disabled = getIsLoading();
+  }
+
+  const input = document.getElementById("input");
+  if (input) (input as HTMLInputElement).placeholder = t(lang, "inputPlaceholder");
+
+  const inputVal = ((document.getElementById("input") as HTMLInputElement)?.value || "").trim();
+  setSendEnabled(inputVal.length > 0);
+
+  (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__ =
+    { state, lang };
+
+  if (getIsLoading()) setLoading(false);
+}
