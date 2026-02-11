@@ -422,7 +422,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
   const statementsCountEl = document.getElementById("statementsCount");
   const statementsListEl = document.getElementById("statementsList");
   const specialistStatements = (result?.specialist as Record<string, unknown>)?.statements;
-  let statementsArray = Array.isArray(specialistStatements) ? (specialistStatements as string[]) : null;
+  let statementsArray = Array.isArray(specialistStatements) ? (specialistStatements as string[]) : [];
   const lastStatements = Array.isArray((lastSpecialist as { statements?: unknown[] }).statements)
     ? (lastSpecialist as { statements: unknown[] }).statements
     : [];
