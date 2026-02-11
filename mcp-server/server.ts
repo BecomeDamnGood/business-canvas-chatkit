@@ -232,9 +232,13 @@ async function runStepHandler(args: {
       debug?: unknown;
       [key: string]: unknown;
     };
+    const stepMeta =
+      safeString((result as { state?: { current_step?: string } }).state?.current_step ?? "unknown") || "unknown";
+    const specialistMeta =
+      safeString((result as { active_specialist?: string }).active_specialist ?? "unknown") || "unknown";
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
-      meta: `step: ${(result as { state?: { current_step?: string }; active_specialist?: string }).state?.current_step ?? "unknown"} | specialist: ${(result as { active_specialist?: string }).active_specialist ?? "unknown"}`,
+      meta: `step: ${stepMeta} | specialist: ${specialistMeta}`,
       result: resultForClient,
     };
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
@@ -258,7 +262,7 @@ async function runStepHandler(args: {
     const currentStep = String((currentState as any).current_step || "step_0");
     
     const fallbackResult = {
-      ok: true,
+      ok: false as const,
       tool: "run_step",
       current_step_id: currentStep,
       active_specialist: "",

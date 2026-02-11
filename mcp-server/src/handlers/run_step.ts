@@ -2407,7 +2407,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     const prompt = pickPrompt(callResult.specialistResult);
 
     return attachRegistryPayload({
-      ok: true,
+      ok: true as const,
       tool: "run_step",
       current_step_id: String(nextState.current_step),
       active_specialist: String((nextState as any).active_specialist || ""),
@@ -2609,7 +2609,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     const routed = processActionCode(actionCodeInput, state.current_step, state, lastSpecialistResult);
     if (inputMode === "widget" && routed === actionCodeInput) {
       const errorPayload = {
-        ok: true,
+        ok: true as const,
         tool: "run_step",
         current_step_id: String(state.current_step),
         active_specialist: String((state as any).active_specialist || ""),
@@ -2703,7 +2703,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       };
 
       return attachRegistryPayload({
-        ok: true,
+        ok: true as const,
         tool: "run_step",
         current_step_id: String(state.current_step),
         active_specialist: PRESENTATION_SPECIALIST,
@@ -2741,7 +2741,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       };
 
       return attachRegistryPayload({
-        ok: true,
+        ok: true as const,
         tool: "run_step",
         current_step_id: String(state.current_step),
         active_specialist: PRESENTATION_SPECIALIST,
@@ -2851,7 +2851,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       const textFormulation = buildTextForWidget({ specialist: formulationResult });
       const promptFormulation = pickPrompt(formulationResult);
       return attachRegistryPayload({
-        ok: true,
+        ok: true as const,
         tool: "run_step",
         current_step_id: String(nextStateFormulation.current_step),
         active_specialist: DREAM_EXPLAINER_SPECIALIST,
@@ -2891,7 +2891,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     const textSwitch = buildTextForWidget({ specialist: callDream.specialistResult });
     const promptSwitch = pickPrompt(callDream.specialistResult);
     return attachRegistryPayload({
-      ok: true,
+      ok: true as const,
       tool: "run_step",
       current_step_id: String(nextStateSwitch.current_step),
       active_specialist: DREAM_SPECIALIST,
@@ -2930,7 +2930,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         wants_recap: false,
       };
       return attachRegistryPayload({
-        ok: true,
+        ok: true as const,
         tool: "run_step",
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
@@ -2950,7 +2950,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       (state as any).intro_shown_session = "true";
       const prompt = existingFirst.question?.trim() || existingFirst.confirmation_question?.trim() || "";
       return attachRegistryPayload({
-        ok: true,
+        ok: true as const,
         tool: "run_step",
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
@@ -2996,7 +2996,7 @@ export async function run_step(rawArgs: unknown): Promise<{
 
       const stateWithUi = await ensureUiStringsForState(state, model);
       return attachRegistryPayload({
-        ok: true,
+        ok: true as const,
         tool: "run_step",
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
@@ -3032,7 +3032,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     };
 
     return attachRegistryPayload({
-      ok: true,
+      ok: true as const,
       tool: "run_step",
       current_step_id: String(state.current_step),
       active_specialist: STEP_0_SPECIALIST,
@@ -3126,7 +3126,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       const text = buildTextForWidget({ specialist: call1.specialistResult });
       const prompt = pickPrompt(call1.specialistResult);
       return attachRegistryPayload({
-        ok: true,
+        ok: true as const,
         tool: "run_step",
         current_step_id: String(nextState.current_step),
         active_specialist: String((nextState as any).active_specialist || ""),
@@ -3189,7 +3189,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     const textDream = buildTextForWidget({ specialist: normalizedDreamExplainer });
     const promptDream = pickPrompt(normalizedDreamExplainer);
     return attachRegistryPayload({
-      ok: true,
+      ok: true as const,
       tool: "run_step",
       current_step_id: String(nextStateDream.current_step),
       active_specialist: String((nextStateDream as any).active_specialist || ""),
@@ -3387,7 +3387,7 @@ export async function run_step(rawArgs: unknown): Promise<{
   }
 
   return attachRegistryPayload({
-    ok: true,
+    ok: true as const,
     tool: "run_step",
     current_step_id: String(nextState.current_step),
     active_specialist: String((nextState as any).active_specialist || ""),
