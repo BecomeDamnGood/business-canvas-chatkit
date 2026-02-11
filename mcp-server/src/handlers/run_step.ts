@@ -662,6 +662,23 @@ function processActionCode(
   return actionCode;
 }
 
+function buildUiPayload(specialist: any): { action_codes: string[]; expected_choice_count: number; flags: Record<string, boolean> } | null {
+  const menuId = String(specialist?.menu_id || "").trim();
+  if (!menuId) return null;
+  const actionCodes = ACTIONCODE_REGISTRY.menus[menuId];
+  if (!actionCodes || actionCodes.length === 0) return null;
+  return { action_codes: actionCodes, expected_choice_count: actionCodes.length, flags: {} };
+}
+
+function attachRegistryPayload<T extends Record<string, unknown>>(payload: T, specialist: any): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
+  const ui = buildUiPayload(specialist);
+  return {
+    ...payload,
+    registry_version: ACTIONCODE_REGISTRY.version,
+    ...(ui ? { ui } : {}),
+  };
+}
+
 /**
  * Map choice:X token to explicit route token (100% deterministic).
  * Returns "yes" for confirm, or explicit route token like "__ROUTE__PURPOSE_EXPLAIN_MORE__".
@@ -2021,6 +2038,12 @@ export async function run_step(rawArgs: unknown): Promise<{
   text: string;
   prompt: string;
   specialist: any;
+  registry_version: string;
+  ui?: {
+    action_codes: string[];
+    expected_choice_count: number;
+    flags: Record<string, boolean>;
+  };
   presentation_assets?: {
     pdf_url: string;
     png_url: string;
@@ -2323,7 +2346,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     const text = buildTextForWidget({ specialist: callResult.specialistResult });
     const prompt = pickPrompt(callResult.specialistResult);
 
-    return {
+    return attachRegistryPayload({
       ok: true,
       tool: "run_step",
       current_step_id: String(nextState.current_step),
@@ -2338,7 +2361,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         language: lang,
         meta_user_message_ignored: false,
       },
-    };
+    }, callResult.specialistResult);
   }
   // SKIP-MODUS (TEST-ONLY) - END
 
@@ -2594,7 +2617,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         wants_recap: false,
       };
 
-      return {
+      return attachRegistryPayload({
         ok: true,
         tool: "run_step",
         current_step_id: String(state.current_step),
@@ -2612,7 +2635,7 @@ export async function run_step(rawArgs: unknown): Promise<{
           active_specialist: PRESENTATION_SPECIALIST,
           last_specialist_result: specialist,
         },
-      };
+      }, specialist);
     } catch (err) {
       console.error("[presentation] Generation failed", err);
       const message =
@@ -2632,7 +2655,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         wants_recap: false,
       };
 
-      return {
+      return attachRegistryPayload({
         ok: true,
         tool: "run_step",
         current_step_id: String(state.current_step),
@@ -2645,7 +2668,7 @@ export async function run_step(rawArgs: unknown): Promise<{
           active_specialist: PRESENTATION_SPECIALIST,
           last_specialist_result: specialist,
         },
-      };
+      }, specialist);
     }
   }
 
@@ -2742,7 +2765,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       const nextStateFormulationUi = await ensureUiStringsForState(nextStateFormulation, model);
       const textFormulation = buildTextForWidget({ specialist: formulationResult });
       const promptFormulation = pickPrompt(formulationResult);
-      return {
+      return attachRegistryPayload({
         ok: true,
         tool: "run_step",
         current_step_id: String(nextStateFormulation.current_step),
@@ -2752,7 +2775,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         specialist: formulationResult,
         state: nextStateFormulationUi,
         debug: { submit_scores_handled: true, formulation_direct: true, top_cluster_count: topClusters.length },
-      };
+      }, formulationResult);
     }
   }
 
@@ -2782,7 +2805,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     const nextStateSwitchUi = await ensureUiStringsForState(nextStateSwitch, model);
     const textSwitch = buildTextForWidget({ specialist: callDream.specialistResult });
     const promptSwitch = pickPrompt(callDream.specialistResult);
-    return {
+    return attachRegistryPayload({
       ok: true,
       tool: "run_step",
       current_step_id: String(nextStateSwitch.current_step),
@@ -2791,7 +2814,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       prompt: promptSwitch,
       specialist: callDream.specialistResult,
       state: nextStateSwitchUi,
-    };
+    }, callDream.specialistResult);
   }
 
   // START trigger (widget start screen)
@@ -2821,7 +2844,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         step_0: "",
         wants_recap: false,
       };
-      return {
+      return attachRegistryPayload({
         ok: true,
         tool: "run_step",
         current_step_id: String(state.current_step),
@@ -2830,7 +2853,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         prompt: specialist.question,
         specialist,
         state: { ...stateWithUi, active_specialist: STEP_0_SPECIALIST, last_specialist_result: specialist },
-      };
+      }, specialist);
     }
     const existingFirst = (state as any).last_specialist_result;
     const isReuseFirst =
@@ -2841,7 +2864,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       const stateWithUi = await ensureUiStringsForState(state, model);
       (state as any).intro_shown_session = "true";
       const prompt = existingFirst.question?.trim() || existingFirst.confirmation_question?.trim() || "";
-      return {
+      return attachRegistryPayload({
         ok: true,
         tool: "run_step",
         current_step_id: String(state.current_step),
@@ -2850,7 +2873,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         prompt,
         specialist: existingFirst,
         state: { ...stateWithUi, active_specialist: STEP_0_SPECIALIST, last_specialist_result: existingFirst },
-      };
+      }, existingFirst);
     }
 
     (state as any).intro_shown_session = "true";
@@ -2887,7 +2910,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       };
 
       const stateWithUi = await ensureUiStringsForState(state, model);
-      return {
+      return attachRegistryPayload({
         ok: true,
         tool: "run_step",
         current_step_id: String(state.current_step),
@@ -2901,7 +2924,7 @@ export async function run_step(rawArgs: unknown): Promise<{
           active_specialist: STEP_0_SPECIALIST,
           last_specialist_result: specialist,
         },
-      };
+      }, specialist);
     }
 
     // Otherwise: first-time Step 0 setup question.
@@ -2923,7 +2946,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       wants_recap: false,
     };
 
-    return {
+    return attachRegistryPayload({
       ok: true,
       tool: "run_step",
       current_step_id: String(state.current_step),
@@ -2937,7 +2960,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         active_specialist: STEP_0_SPECIALIST,
         last_specialist_result: specialist,
       },
-    };
+    }, specialist);
   }
 
   // --------- SPEECH-PROOF PROCEED TRIGGER (Step 0 readiness moment only) ---------
@@ -3017,7 +3040,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       });
       const text = buildTextForWidget({ specialist: call1.specialistResult });
       const prompt = pickPrompt(call1.specialistResult);
-      return {
+      return attachRegistryPayload({
         ok: true,
         tool: "run_step",
         current_step_id: String(nextState.current_step),
@@ -3032,7 +3055,7 @@ export async function run_step(rawArgs: unknown): Promise<{
           language: lang,
           meta_user_message_ignored: false,
         },
-      };
+      }, call1.specialistResult);
     }
   }
 
@@ -3078,7 +3101,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     });
     const textDream = buildTextForWidget({ specialist: normalizedDreamExplainer });
     const promptDream = pickPrompt(normalizedDreamExplainer);
-    return {
+    return attachRegistryPayload({
       ok: true,
       tool: "run_step",
       current_step_id: String(nextStateDream.current_step),
@@ -3093,7 +3116,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         language: lang,
         meta_user_message_ignored: false,
       },
-    };
+    }, normalizedDreamExplainer);
   }
 
   // --------- ORCHESTRATE (decision 1) ----------
@@ -3276,7 +3299,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     (nextState as any).intro_shown_session = "true";
   }
 
-  return {
+  return attachRegistryPayload({
     ok: true,
     tool: "run_step",
     current_step_id: String(nextState.current_step),
@@ -3291,5 +3314,5 @@ export async function run_step(rawArgs: unknown): Promise<{
       language: lang,
       meta_user_message_ignored: looksLikeMetaInstruction(rawNormalized) && pristineAtEntry,
     },
-  };
+  }, specialistResult);
 }
