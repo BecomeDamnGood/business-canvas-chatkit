@@ -519,9 +519,22 @@ const httpServer = async (req: any, res: any) => {
           user_message?: string;
           state?: Record<string, unknown>;
         };
+        const safeArgString = (v: unknown, fallback: string): string => {
+          if (typeof v === "string") return v;
+          if (v instanceof Error && typeof v.message === "string") return v.message;
+          if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
+          try {
+            const json = JSON.stringify(v);
+            if (typeof json === "string") return json;
+          } catch {}
+          try {
+            return inspect(v, { depth: 5, breakLength: 120 });
+          } catch {}
+          return fallback;
+        };
         const { structuredContent } = await runStepHandler({
-          current_step_id: String(args.current_step_id ?? "step_0"),
-          user_message: String(args.user_message ?? ""),
+          current_step_id: safeArgString(args.current_step_id ?? "step_0", "step_0"),
+          user_message: safeArgString(args.user_message ?? "", ""),
           state: args.state,
         });
         res.writeHead(200, { "content-type": "application/json" });
