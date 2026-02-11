@@ -113,6 +113,7 @@ export function ensureLanguageInState(
 let rateLimitTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCallAt = 0;
 const CLICK_DEBOUNCE_MS = 250;
+const RUN_STEP_TIMEOUT_MS = 25000;
 
 export function isRateLimited(): boolean {
   const until = getRateLimitUntil();
@@ -234,15 +235,37 @@ export async function callRunStep(
 
   setLoading(true);
 
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let didTimeout = false;
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      didTimeout = true;
+      if (controller) controller.abort();
+      reject(new Error("run_step timeout"));
+    }, RUN_STEP_TIMEOUT_MS);
+  });
+
   try {
-    const resp = await (o as { callTool: (name: string, args: unknown) => Promise<unknown> }).callTool(
+    const callPromise = (o as { callTool: (name: string, args: unknown, opts?: unknown) => Promise<unknown> }).callTool(
       "run_step",
-      payload
+      payload,
+      controller ? { signal: controller.signal } : undefined
     );
+    const resp = await Promise.race([callPromise, timeoutPromise]);
     const normalized = normalizeToolOutput(resp);
     setLastToolOutput(normalized);
     if (_render) _render(normalized);
   } catch (e) {
+    const msg = (e && (e as Error).message) ? String((e as Error).message) : "";
+    const isTimeout =
+      msg.toLowerCase().includes("timeout") ||
+      (e && (e as Error).name === "AbortError") ||
+      (e && (e as { type?: string }).type === "timeout");
+    if (isTimeout || didTimeout) {
+      setInlineNotice("This is taking longer than usual. Please try again.");
+      return;
+    }
     console.error("run_step failed", e);
     const errState =
       ((globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {}).state || {};
@@ -251,6 +274,7 @@ export async function callRunStep(
     const errEl = document.getElementById("cardDesc");
     if (errEl) errEl.textContent = errMsg;
   } finally {
+    if (timeoutId) clearTimeout(timeoutId);
     setLoading(false);
   }
 }
