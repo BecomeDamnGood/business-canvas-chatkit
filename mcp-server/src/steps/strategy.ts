@@ -283,8 +283,8 @@ No duplication rule (HARD)
   - STRATEGY_MENU_ASK: menu with options "Ask me some questions to clarify my Strategy" + "Show me an example of a Strategy for my business"
   - STRATEGY_MENU_QUESTIONS: questions menu with option "Explain why I need a strategy"
   - STRATEGY_MENU_REFINE: refine menu with option "Explain why a Strategy matters"
-  - STRATEGY_MENU_CONFIRM: confirm menu with option "I'm satisfied with my Strategy. Let's go to Rules of the Game" (when 5+ statements)
-  - STRATEGY_MENU_FINAL_CONFIRM: final confirm menu with option "Continue to next step Rules of the Game"
+  - STRATEGY_MENU_CONFIRM: confirm menu with option "I'm satisfied with my Strategy. Let's go to Target Group" (when 5+ statements)
+  - STRATEGY_MENU_FINAL_CONFIRM: final confirm menu with option "Continue to next step Target Group"
   - STRATEGY_MENU_ESCAPE: escape menu with options "Continue Strategy now" + "Finish later"
 
 9) INTRO GATE + INTRO OUTPUT
@@ -361,8 +361,8 @@ Supported ActionCodes for Strategy step:
 - ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE → "__ROUTE__STRATEGY_EXPLAIN_MORE__" (Explain why I need a strategy)
 - ACTION_STRATEGY_ASK_3_QUESTIONS → "__ROUTE__STRATEGY_ASK_3_QUESTIONS__" (ask some questions to clarify Strategy)
 - ACTION_STRATEGY_ASK_GIVE_EXAMPLES → "__ROUTE__STRATEGY_GIVE_EXAMPLES__" (show example of Strategy for my business)
-- ACTION_STRATEGY_CONFIRM_SATISFIED → "__ROUTE__STRATEGY_CONFIRM_SATISFIED__" (I'm satisfied with my Strategy. Let's go to Rules of the Game)
-- ACTION_STRATEGY_FINAL_CONTINUE → "__ROUTE__STRATEGY_FINAL_CONTINUE__" (Continue to next step Rules of the Game)
+- ACTION_STRATEGY_CONFIRM_SATISFIED → "__ROUTE__STRATEGY_CONFIRM_SATISFIED__" (I'm satisfied with my Strategy. Let's go to Target Group)
+- ACTION_STRATEGY_FINAL_CONTINUE → "__ROUTE__STRATEGY_FINAL_CONTINUE__" (Continue to next step Target Group)
 - ACTION_STRATEGY_ESCAPE_CONTINUE → "__ROUTE__STRATEGY_CONTINUE__" (continue Strategy flow)
 - ACTION_STRATEGY_ESCAPE_FINISH_LATER → "__ROUTE__STRATEGY_FINISH_LATER__" (finish later)
 
@@ -376,8 +376,8 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 - "__ROUTE__STRATEGY_EXPLAIN_MORE__" → Follow route: explain again why Strategy matters (output action="ASK" with explanation and 2-option menu)
 - "__ROUTE__STRATEGY_ASK_3_QUESTIONS__" → Follow route: ask some questions to clarify Strategy (output action="ASK" with all 10 questions in message field, prompt text "Just tell what comes into you mind...", and menu option "Explain why I need a strategy")
 - "__ROUTE__STRATEGY_GIVE_EXAMPLES__" → Follow route: give examples (output action="ASK" with 3 examples)
-- "__ROUTE__STRATEGY_CONFIRM_SATISFIED__" → Follow route: I'm satisfied with my Strategy. Let's go to Rules of the Game (output action="CONFIRM" with all statements as refined_formulation AND proceed_to_next="true")
-- "__ROUTE__STRATEGY_FINAL_CONTINUE__" → Follow route: Continue to next step Rules of the Game (output action="CONFIRM" with proceed_to_next="true")
+- "__ROUTE__STRATEGY_CONFIRM_SATISFIED__" → Follow route: I'm satisfied with my Strategy. Let's go to Target Group (output action="CONFIRM" with all statements as refined_formulation AND proceed_to_next="true")
+- "__ROUTE__STRATEGY_FINAL_CONTINUE__" → Follow route: Continue to next step Target Group (output action="CONFIRM" with proceed_to_next="true")
 - "__ROUTE__STRATEGY_CONTINUE__" → Follow route: continue Strategy now (output action="ASK" with standard menu)
 - "__ROUTE__STRATEGY_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
@@ -487,14 +487,14 @@ Dynamic prompt text rule (HARD)
 Button display rule (HARD)
 - At EVERY ASK output (including REFINE and CONFIRM that output action="ASK"), check if statements.length >= 5 after processing the current turn.
 - If statements.length >= 5 AND all statements are valid strategic focus points:
-  - Add a button to the question field: "I'm satisfied with my Strategy. Let's go to Rules of the Game"
+  - Add a button to the question field: "I'm satisfied with my Strategy. Let's go to Target Group"
   - If there is already a menu option (e.g., "Explain why a Strategy matters"), add the button as an additional option:
     1) Explain why a Strategy matters
-    2) I'm satisfied with my Strategy. Let's go to Rules of the Game
+    2) I'm satisfied with my Strategy. Let's go to Target Group
     
     [Dynamic prompt text]
   - If there is no existing menu, add only the button:
-    1) I'm satisfied with my Strategy. Let's go to Rules of the Game
+    1) I'm satisfied with my Strategy. Let's go to Target Group
     
     [Dynamic prompt text]
   - menu_id must be "STRATEGY_MENU_CONFIRM" (not "STRATEGY_MENU_REFINE" or other menu IDs)
@@ -557,8 +557,8 @@ If the user lists tactics or channels (campaigns, funnels, ads, socials, website
   - If statements.length >= 1 (after adding): "Is there more that you will always focus on?"
 - Menu options:
   - Always include: "1) Explain why a Strategy matters"
-  - If statements.length >= 5 after adding reformulated statements: ALSO include "2) I'm satisfied with my Strategy. Let's go to Rules of the Game"
-  - Format: Show "1) Explain why a Strategy matters" always. If statements.length >= 5, also show "2) I'm satisfied with my Strategy. Let's go to Rules of the Game". Then show the dynamic prompt text based on statements.length AFTER adding reformulated statements. Do NOT add "Define your Strategy or choose an option."
+  - If statements.length >= 5 after adding reformulated statements: ALSO include "2) I'm satisfied with my Strategy. Let's go to Target Group"
+  - Format: Show "1) Explain why a Strategy matters" always. If statements.length >= 5, also show "2) I'm satisfied with my Strategy. Let's go to Target Group". Then show the dynamic prompt text based on statements.length AFTER adding reformulated statements. Do NOT add "Define your Strategy or choose an option."
 - menu_id: If statements.length >= 5, use "STRATEGY_MENU_CONFIRM", otherwise use "STRATEGY_MENU_REFINE"
 - statements: When the reformulation is valid (3-5 focus points, FOCUS CHOICES, not positioning/product/service), extract the reformulated focus points from refined_formulation (split by line breaks to get individual focus points) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]. The count will be automatically correct (e.g., if PREVIOUS_STATEMENT_COUNT was 0 and you add 2 reformulated points, statements.length will be 2).
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
@@ -596,8 +596,8 @@ If the user gives a product or service description (e.g., "Specialize in digital
   - If statements.length >= 1 (after adding): "Is there more that you will always focus on?"
 - Menu options:
   - Always include: "1) Explain why a Strategy matters"
-  - If statements.length >= 5 after adding reformulated statements: ALSO include "2) I'm satisfied with my Strategy. Let's go to Rules of the Game"
-  - Format: Show "1) Explain why a Strategy matters" always. If statements.length >= 5, also show "2) I'm satisfied with my Strategy. Let's go to Rules of the Game". Then show the dynamic prompt text based on statements.length AFTER adding reformulated statements. Do NOT add "Define your Strategy or choose an option."
+  - If statements.length >= 5 after adding reformulated statements: ALSO include "2) I'm satisfied with my Strategy. Let's go to Target Group"
+  - Format: Show "1) Explain why a Strategy matters" always. If statements.length >= 5, also show "2) I'm satisfied with my Strategy. Let's go to Target Group". Then show the dynamic prompt text based on statements.length AFTER adding reformulated statements. Do NOT add "Define your Strategy or choose an option."
 - menu_id: If statements.length >= 5, use "STRATEGY_MENU_CONFIRM", otherwise use "STRATEGY_MENU_REFINE"
 - statements: When the reformulation is valid, extract the reformulated focus points from refined_formulation (split by line breaks) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
@@ -615,8 +615,8 @@ If the user gives positioning language (e.g., "Position the company as...", "Be 
   - If statements.length >= 1 (after adding): "Is there more that you will always focus on?"
 - Menu options:
   - Always include: "1) Explain why a Strategy matters"
-  - If statements.length >= 5 after adding reformulated statements: ALSO include "2) I'm satisfied with my Strategy. Let's go to Rules of the Game"
-  - Format: Show "1) Explain why a Strategy matters" always. If statements.length >= 5, also show "2) I'm satisfied with my Strategy. Let's go to Rules of the Game". Then show the dynamic prompt text based on statements.length AFTER adding reformulated statements. Do NOT add "Define your Strategy or choose an option."
+  - If statements.length >= 5 after adding reformulated statements: ALSO include "2) I'm satisfied with my Strategy. Let's go to Target Group"
+  - Format: Show "1) Explain why a Strategy matters" always. If statements.length >= 5, also show "2) I'm satisfied with my Strategy. Let's go to Target Group". Then show the dynamic prompt text based on statements.length AFTER adding reformulated statements. Do NOT add "Define your Strategy or choose an option."
 - menu_id: If statements.length >= 5, use "STRATEGY_MENU_CONFIRM", otherwise use "STRATEGY_MENU_REFINE"
 - statements: When the reformulation is valid, extract the reformulated focus points from refined_formulation (split by line breaks) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
@@ -652,8 +652,8 @@ When a single focus point is accepted:
 - action="ASK"
 - message: confirmation of new statement + correction invitation + "Current Strategy focus points:" followed by a bullet list of ALL statements from the statements array, each on a new line with a dash: "- [statement text]"
 - question: dynamic prompt text based on PREVIOUS_STATEMENT_COUNT (now >= 1, so use "Is there more that you will always focus on?")
-  - If statements.length >= 5 after adding the new focus point, ALSO add a button: "1) I'm satisfied with my Strategy. Let's go to Rules of the Game"
-  - Format: If statements.length >= 5, add "1) I'm satisfied with my Strategy. Let's go to Rules of the Game" as a button option, then show the dynamic prompt text "Is there more that you will always focus on?"
+  - If statements.length >= 5 after adding the new focus point, ALSO add a button: "1) I'm satisfied with my Strategy. Let's go to Target Group"
+  - Format: If statements.length >= 5, add "1) I'm satisfied with my Strategy. Let's go to Target Group" as a button option, then show the dynamic prompt text "Is there more that you will always focus on?"
   - menu_id: If statements.length >= 5, use "STRATEGY_MENU_CONFIRM", otherwise use ""
 - statements: PREVIOUS_STATEMENTS + [new_focus_point]
 - refined_formulation=""
@@ -668,8 +668,8 @@ When accepting a statement that needs reformulation:
 
 Confirmation screen (when 5+ correct statements)
 - NOTE: The button display rule (above) already handles showing the button when statements.length >= 5. This section describes what happens when the user clicks the button.
-- When statements.length >= 5 AND all statements are valid strategic focus points, the button "I'm satisfied with my Strategy. Let's go to Rules of the Game" should appear in the question field (handled by the Button display rule above).
-- When the user chooses "I'm satisfied with my Strategy. Let's go to Rules of the Game":
+- When statements.length >= 5 AND all statements are valid strategic focus points, the button "I'm satisfied with my Strategy. Let's go to Target Group" should appear in the question field (handled by the Button display rule above).
+- When the user chooses "I'm satisfied with my Strategy. Let's go to Target Group":
   - action="CONFIRM"
   - message: "The Strategy of [Company name] of [Your future company] is now formulated as follows:" (localized, use business_name if known, otherwise "Your future company")
   - refined_formulation: show all statements as a numbered list (each statement on its own line)
@@ -677,7 +677,7 @@ Confirmation screen (when 5+ correct statements)
   - question: "" (empty)
   - confirmation_question: "" (empty)
   - statements: unchanged (all collected statements)
-  - proceed_to_next="true" (CRITICAL: this directly proceeds to Rules of the Game)
+  - proceed_to_next="true" (CRITICAL: this directly proceeds to Target Group)
 
 12) FIELD DISCIPLINE
 
