@@ -107,7 +107,8 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   if (!wrap) return;
   wrap.innerHTML = "";
 
-  if (!choices || choices.length === 0) {
+  const choicesArr = Array.isArray(choices) ? choices : [];
+  if (choicesArr.length === 0) {
     wrap.style.display = "none";
     return;
   }
@@ -121,14 +122,12 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
       ? (resultData.ui as Record<string, unknown>)
       : {};
   const registryVersion = String(resultData?.registry_version || "").trim();
-  const registryActionCodes = Array.isArray(uiPayload.action_codes) ? uiPayload.action_codes : null;
+  const registryActionCodes = Array.isArray(uiPayload.action_codes) ? uiPayload.action_codes : [];
   const expectedChoiceCount =
     typeof uiPayload.expected_choice_count === "number"
       ? uiPayload.expected_choice_count
-      : registryActionCodes
-        ? registryActionCodes.length
-        : null;
-  const labelsCount = Array.isArray(choices) ? choices.length : 0;
+      : registryActionCodes.length;
+  const labelsCount = choicesArr.length;
   const lang = uiLang(state);
 
   function showOptionsError(): void {
@@ -141,7 +140,7 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
     wrap.appendChild(err);
   }
 
-  let choicesCopy = [...choices];
+  let choicesCopy = [...choicesArr];
   if (currentStep === "role" && menuId === "ROLE_MENU_REFINE" && choicesCopy.length > 1) {
     choicesCopy = choicesCopy.filter((c) => Number(c.value) === 1);
   }
@@ -156,7 +155,7 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
     return;
   }
 
-  if (!registryActionCodes) {
+  if (!registryActionCodes.length) {
     console.warn("[actioncodes_missing]", {
       registry_version: registryVersion,
       menu_id: menuId,
@@ -690,9 +689,10 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
   }
 
   const { promptShown, choices } = extractChoicesFromPrompt(promptRaw);
+  const choicesArr = Array.isArray(choices) ? choices : [];
   let promptText = isDreamDirectionView ? "" : (promptShown || "");
 
-  const choiceModeHasMenu = choices && choices.length >= 2 && choices.length <= 6;
+  const choiceModeHasMenu = choicesArr.length >= 2 && choicesArr.length <= 6;
   if (!isDreamDirectionView && choiceModeHasMenu) {
     const trimmedPrompt = (promptText || "").trim();
     const looksLikeLegacyChooseLine =
@@ -731,9 +731,9 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
 
   const promptEl = document.getElementById("prompt");
   if (promptEl) renderInlineText(promptEl, promptText || "");
-  renderChoiceButtons(choices, result);
+  renderChoiceButtons(choicesArr, result);
 
-  const choiceMode = (choices && choices.length) > 0;
+  const choiceMode = choicesArr.length > 0;
   const confirmMode = !choiceMode && showContinue;
   let statementCount =
     (statementsArray && statementsArray.length) || 0;
@@ -800,7 +800,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
     current === "dream" &&
     activeSpecialist === "DreamExplainer" &&
     String(specialist.action || "") === "CONFIRM" &&
-    !(choices && choices.length);
+    !(choicesArr.length);
   const btnDreamConfirmEl = document.getElementById("btnDreamConfirm");
   if (btnDreamConfirmEl) {
     (btnDreamConfirmEl as HTMLElement).style.display =
@@ -817,8 +817,8 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
         active_specialist: activeSpecialist,
         "specialist.action": String(specialist.action || ""),
         promptRaw200: (promptRaw || "").slice(0, 200),
-        choicesLength: (choices || []).length,
-        choiceLabels: (choices || []).map((c) => c.label),
+              choicesLength: choicesArr.length,
+              choiceLabels: choicesArr.map((c) => c.label),
         showContinue,
         isDreamStepPreExercise,
         isDreamExplainerMode,
