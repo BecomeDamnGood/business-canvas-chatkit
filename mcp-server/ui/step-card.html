@@ -2144,12 +2144,12 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
 
         var purposeInstructionHintEl = document.getElementById("purposeInstructionHint");
         if (purposeInstructionHintEl) {
-          var showPurposeHint = 
-            current === "purpose" && 
-            String(specialist.action || "") === "ASK" &&
-            (String(body || "").includes("What part of this Dream matters most") || 
-             String(body || "").includes("Which belief must be true") ||
-             String(body || "").includes("If your Dream became real"));
+          const uiFlags = (result && result.ui && typeof result.ui === "object" && result.ui.flags)
+            ? result.ui.flags
+            : {};
+          var showPurposeHint =
+            current === "purpose" &&
+            uiFlags.showPurposeHint === true;
           
           if (showPurposeHint) {
             purposeInstructionHintEl.style.display = "block";

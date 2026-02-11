@@ -662,16 +662,30 @@ function processActionCode(
   return actionCode;
 }
 
-function buildUiPayload(specialist: any): { action_codes: string[]; expected_choice_count: number; flags: Record<string, boolean> } | null {
+function buildUiPayload(
+  specialist: any,
+  flagsOverride?: Record<string, boolean> | null
+): { action_codes?: string[]; expected_choice_count?: number; flags: Record<string, boolean> } | null {
+  const flags = flagsOverride || {};
   const menuId = String(specialist?.menu_id || "").trim();
-  if (!menuId) return null;
-  const actionCodes = ACTIONCODE_REGISTRY.menus[menuId];
-  if (!actionCodes || actionCodes.length === 0) return null;
-  return { action_codes: actionCodes, expected_choice_count: actionCodes.length, flags: {} };
+  if (menuId) {
+    const actionCodes = ACTIONCODE_REGISTRY.menus[menuId];
+    if (actionCodes && actionCodes.length > 0) {
+      return { action_codes: actionCodes, expected_choice_count: actionCodes.length, flags };
+    }
+  }
+  if (Object.keys(flags).length > 0) {
+    return { flags };
+  }
+  return null;
 }
 
-function attachRegistryPayload<T extends Record<string, unknown>>(payload: T, specialist: any): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
-  const ui = buildUiPayload(specialist);
+function attachRegistryPayload<T extends Record<string, unknown>>(
+  payload: T,
+  specialist: any,
+  flagsOverride?: Record<string, boolean> | null
+): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
+  const ui = buildUiPayload(specialist, flagsOverride);
   return {
     ...payload,
     registry_version: ACTIONCODE_REGISTRY.version,
@@ -2057,6 +2071,7 @@ export async function run_step(rawArgs: unknown): Promise<{
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
     console.log("[run_step] input_mode", { inputMode });
   }
+  const widgetStrict = process.env.ACTIONCODE_WIDGET_STRICT === "1";
   const allowLegacyRouting = inputMode !== "widget";
 
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
@@ -2568,7 +2583,30 @@ export async function run_step(rawArgs: unknown): Promise<{
   }
   // NEW SYSTEM: Check if message is an ActionCode (starts with "ACTION_")
   if (!forcedProceed && userMessage.startsWith("ACTION_")) {
-    userMessage = processActionCode(userMessage, state.current_step, state, lastSpecialistResult);
+    const actionCodeInput = userMessage;
+    const routed = processActionCode(actionCodeInput, state.current_step, state, lastSpecialistResult);
+    if (inputMode === "widget" && routed === actionCodeInput) {
+      const errorPayload = {
+        ok: true,
+        tool: "run_step",
+        current_step_id: String(state.current_step),
+        active_specialist: String((state as any).active_specialist || ""),
+        text: "We could not process this choice. Please refresh and try again.",
+        prompt: "",
+        specialist: lastSpecialistResult || {},
+        state,
+        error: {
+          type: "unknown_actioncode",
+          action_code: actionCodeInput,
+          strict: widgetStrict,
+        },
+      };
+      if (widgetStrict) {
+        throw new Error(`Unknown ActionCode in widget mode: ${actionCodeInput}`);
+      }
+      return attachRegistryPayload(errorPayload, lastSpecialistResult);
+    }
+    userMessage = routed;
   } else if (allowLegacyRouting && userMessage.match(/^choice:[1-9]$/)) {
     // OLD SYSTEM: Map choice:X to explicit route token (100% deterministic)
     userMessage = mapChoiceTokenToRoute(userMessage, state.current_step, lastSpecialistResult);
@@ -2583,6 +2621,8 @@ export async function run_step(rawArgs: unknown): Promise<{
     // Backwards compatibility: expand oude "1"/"2"/"3" format
     userMessage = expandChoiceFromPreviousQuestion(userMessage, prevQ);
   }
+
+  const responseUiFlags = ACTIONCODE_REGISTRY.ui_flags[userMessage] || null;
 
   // Backend fallback: if Start arrives with empty input, reuse the captured initial message so Step 0 can extract Venture + Name.
   const initialUserMessage = String((state as any).initial_user_message ?? "").trim();
@@ -2658,7 +2698,7 @@ export async function run_step(rawArgs: unknown): Promise<{
           active_specialist: PRESENTATION_SPECIALIST,
           last_specialist_result: specialist,
         },
-      }, specialist);
+      }, specialist, responseUiFlags);
     } catch (err) {
       console.error("[presentation] Generation failed", err);
       const message =
@@ -2691,7 +2731,7 @@ export async function run_step(rawArgs: unknown): Promise<{
           active_specialist: PRESENTATION_SPECIALIST,
           last_specialist_result: specialist,
         },
-      }, specialist);
+      }, specialist, responseUiFlags);
     }
   }
 
@@ -2798,7 +2838,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         specialist: formulationResult,
         state: nextStateFormulationUi,
         debug: { submit_scores_handled: true, formulation_direct: true, top_cluster_count: topClusters.length },
-      }, formulationResult);
+      }, formulationResult, responseUiFlags);
     }
   }
 
@@ -2837,7 +2877,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       prompt: promptSwitch,
       specialist: callDream.specialistResult,
       state: nextStateSwitchUi,
-    }, callDream.specialistResult);
+    }, callDream.specialistResult, responseUiFlags);
   }
 
   // START trigger (widget start screen)
@@ -2876,7 +2916,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         prompt: specialist.question,
         specialist,
         state: { ...stateWithUi, active_specialist: STEP_0_SPECIALIST, last_specialist_result: specialist },
-      }, specialist);
+      }, specialist, responseUiFlags);
     }
     const existingFirst = (state as any).last_specialist_result;
     const isReuseFirst =
@@ -2896,7 +2936,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         prompt,
         specialist: existingFirst,
         state: { ...stateWithUi, active_specialist: STEP_0_SPECIALIST, last_specialist_result: existingFirst },
-      }, existingFirst);
+      }, existingFirst, responseUiFlags);
     }
 
     (state as any).intro_shown_session = "true";
@@ -2947,7 +2987,7 @@ export async function run_step(rawArgs: unknown): Promise<{
           active_specialist: STEP_0_SPECIALIST,
           last_specialist_result: specialist,
         },
-      }, specialist);
+      }, specialist, responseUiFlags);
     }
 
     // Otherwise: first-time Step 0 setup question.
@@ -2983,7 +3023,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         active_specialist: STEP_0_SPECIALIST,
         last_specialist_result: specialist,
       },
-    }, specialist);
+    }, specialist, responseUiFlags);
   }
 
   // --------- SPEECH-PROOF PROCEED TRIGGER (Step 0 readiness moment only) ---------
@@ -3078,7 +3118,7 @@ export async function run_step(rawArgs: unknown): Promise<{
           language: lang,
           meta_user_message_ignored: false,
         },
-      }, call1.specialistResult);
+      }, call1.specialistResult, responseUiFlags);
     }
   }
 
@@ -3141,7 +3181,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         language: lang,
         meta_user_message_ignored: false,
       },
-    }, normalizedDreamExplainer);
+    }, normalizedDreamExplainer, responseUiFlags);
   }
 
   // --------- ORCHESTRATE (decision 1) ----------
@@ -3339,5 +3379,5 @@ export async function run_step(rawArgs: unknown): Promise<{
       language: lang,
       meta_user_message_ignored: looksLikeMetaInstruction(rawNormalized) && pristineAtEntry,
     },
-  }, specialistResult);
+  }, specialistResult, responseUiFlags);
 }
