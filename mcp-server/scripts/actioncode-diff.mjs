@@ -223,8 +223,21 @@ const srcUnion = new Set([...uiCodes, ...backendCodes, ...stepsCodes, ...docsCod
 const distOnly = toSortedArray([...distCodes].filter((c) => !srcUnion.has(c)));
 const srcOnly = toSortedArray([...srcUnion].filter((c) => !distCodes.has(c)));
 
+let generatedAt = new Date().toISOString();
+const outPath = path.join(repoRoot, "docs/actioncode-diff.json");
+if (checkMode && fs.existsSync(outPath)) {
+  try {
+    const existing = JSON.parse(readFile(outPath));
+    if (existing && typeof existing.generated_at === "string") {
+      generatedAt = existing.generated_at;
+    }
+  } catch {
+    // ignore parse errors; fallback to new timestamp
+  }
+}
+
 const report = {
-  generated_at: new Date().toISOString(),
+  generated_at: generatedAt,
   sources: {
     ui: uiFiles.map((p) => path.relative(repoRoot, p)),
     backend: backendFiles.map((p) => path.relative(repoRoot, p)),
@@ -257,8 +270,6 @@ const report = {
     menu_action_missing_in_registry_actions: missingMenuActionCodes,
   },
 };
-
-const outPath = path.join(repoRoot, "docs/actioncode-diff.json");
 const output = JSON.stringify(report, null, 2) + "\n";
 
 if (distOnly.length || srcOnly.length) {
