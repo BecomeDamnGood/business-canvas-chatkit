@@ -2057,6 +2057,7 @@ export async function run_step(rawArgs: unknown): Promise<{
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
     console.log("[run_step] input_mode", { inputMode });
   }
+  const allowLegacyRouting = inputMode !== "widget";
 
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
 
@@ -2568,7 +2569,7 @@ export async function run_step(rawArgs: unknown): Promise<{
   // NEW SYSTEM: Check if message is an ActionCode (starts with "ACTION_")
   if (!forcedProceed && userMessage.startsWith("ACTION_")) {
     userMessage = processActionCode(userMessage, state.current_step, state, lastSpecialistResult);
-  } else if (userMessage.match(/^choice:[1-9]$/)) {
+  } else if (allowLegacyRouting && userMessage.match(/^choice:[1-9]$/)) {
     // OLD SYSTEM: Map choice:X to explicit route token (100% deterministic)
     userMessage = mapChoiceTokenToRoute(userMessage, state.current_step, lastSpecialistResult);
     // Dream fallback: if no route found, use text expansion
@@ -2578,7 +2579,7 @@ export async function run_step(rawArgs: unknown): Promise<{
         userMessage = expandChoiceFromPreviousQuestion(match[1], prevQ);
       }
     }
-  } else {
+  } else if (allowLegacyRouting) {
     // Backwards compatibility: expand oude "1"/"2"/"3" format
     userMessage = expandChoiceFromPreviousQuestion(userMessage, prevQ);
   }
@@ -2995,7 +2996,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     String(prev?.proceed_to_dream ?? "") === "false";
 
   const canProceedFromStep0 =
-    readinessAsked && isClearYes(userMessage) && String((state as any).step_0_final ?? "").trim() !== "";
+    readinessAsked && allowLegacyRouting && isClearYes(userMessage) && String((state as any).step_0_final ?? "").trim() !== "";
 
   if (canProceedFromStep0) {
     const proceedPayload: ValidationAndBusinessNameOutput = {
@@ -3036,7 +3037,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     (stepId === PRESENTATION_STEP_ID &&
       String((state as any).presentation_brief_final ?? "").trim() !== "");
   const confirmDetected = confirmAction && confirmPromptNonEmpty && hasFinal;
-  const userAffirmed = isClearYes(userMessage);
+  const userAffirmed = allowLegacyRouting && isClearYes(userMessage);
 
   if (confirmDetected && userAffirmed) {
     const idx = CANONICAL_STEPS.indexOf(stepId as (typeof CANONICAL_STEPS)[number]);
@@ -3084,10 +3085,12 @@ export async function run_step(rawArgs: unknown): Promise<{
   // --------- DREAM READINESS → DREAM EXPLAINER (guard) ----------
   const lastResult = (state as any).last_specialist_result || {};
   const dreamReadinessYes =
+    allowLegacyRouting &&
     state.current_step === DREAM_STEP_ID &&
     String(lastResult.suggest_dreambuilder ?? "") === "true" &&
     isClearYes(userMessage);
   const dreamReadinessFallback =
+    allowLegacyRouting &&
     state.current_step === DREAM_STEP_ID &&
     isClearYes(userMessage) &&
     String(lastResult.action ?? "") === "ASK" &&

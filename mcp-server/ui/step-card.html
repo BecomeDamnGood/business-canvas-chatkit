@@ -1868,7 +1868,7 @@ Estimated time: 10–15 minutes.`;
         }
 
         if (!menuId) {
-          console.error("Missing menu_id for choices", { currentStep, choices });
+          console.warn("[menu_contract_missing]", { registryVersion, currentStep, labelsCount });
           
           // Special fallback voor Purpose step
           if (currentStep === "purpose") {
@@ -1886,10 +1886,14 @@ Estimated time: 10–15 minutes.`;
             return;
           }
           
-          // Voor andere stappen: toon error message
-          wrap.style.display = "block";
-          wrap.textContent = "Menu error: missing menu_id for choices. Please refresh.";
+          // Voor andere stappen: fallback naar geen buttons (user kan typen)
+          wrap.style.display = "none";
+          wrap.textContent = "";
           return;
+        }
+
+        if (!registryActionCodes) {
+          console.warn("[menu_contract_unknown]", { registryVersion, menuId, currentStep, labelsCount });
         }
 
         // Pre-validate: all buttons must have labels and ActionCodes
