@@ -2218,7 +2218,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
           statementsPanelEl.style.display = "none";
         }
 
-        const { promptShown, choices } = extractChoicesFromPrompt(stripInlineText(promptRaw));
+        const { promptShown, choices } = extractChoicesFromPrompt(promptRaw);
         let promptText = isDreamDirectionView ? "" : (promptShown || "");
 
         // Generic choice prompt (i18n) for numbered menus
