@@ -989,6 +989,12 @@
         cursor: not-allowed;
       }
       
+      .choiceError {
+        padding: var(--space-4) var(--space-5);
+        font-size: var(--font-size-sm);
+        color: var(--color-text-muted);
+      }
+      
       /* ─── Thinking (in-card text, for widget) ─── */
       .thinking {
         margin: 0;
@@ -1231,11 +1237,6 @@
 
       const ORDER = ["step_0","dream","purpose","bigwhy","role","entity","strategy","targetgroup","productsservices","rulesofthegame","presentation"];
 
-      // debug_actioncodes: gate shadow-compare telemetry. Enable via ?debug_actioncodes=1 in URL.
-      function isActionCodeDebugEnabled() {
-        try { return /\bdebug_actioncodes=1\b/.test(String(window.location.search || "")); } catch { return false; }
-      }
-
       const TITLES_DEFAULT = {
         step_0: "Step 1: Validation & Business Name",
         dream: "Step 2: Dream",
@@ -1301,6 +1302,7 @@ Estimated time: 10–15 minutes.`;
           btnSwitchToSelfDream: "Switch back to self-formulate the dream",
           sendTitle: "Send",
           errorMessage: "Something went wrong while processing your message. Please try again.",
+          optionsDisplayError: "We can't safely display these options right now. Please try again.",
           scoringIntro1: "You now have more than 20 statements, so I've clustered them for you. You can still edit and add statements, but please give them a score.",
           scoringIntro2: "",
           scoringIntro3: "The average per cluster updates immediately while you type.",
@@ -1623,220 +1625,8 @@ Estimated time: 10–15 minutes.`;
         return { promptShown: promptShown, choices: choices };
       }
 
-      /**
-       * Hard-coded mapping van button label + menu_id + choiceIndex naar ActionCode.
-       * Retourneert ActionCode zoals "ACTION_DREAM_REFINE_CONFIRM".
-       */
-      function getActionCodeForChoice(choiceLabel, menuId, choiceIndex, currentStep) {
-        const menu = String(menuId || "").trim();
-        const idx = Number(choiceIndex);
-        const step = String(currentStep || "").trim();
-
-        if (step === "dream") {
-          if (menu === "DREAM_MENU_INTRO") {
-            if (idx === 1) return "ACTION_DREAM_INTRO_EXPLAIN_MORE";
-            if (idx === 2) return "ACTION_DREAM_INTRO_START_EXERCISE";
-          }
-          if (menu === "DREAM_MENU_WHY") {
-            if (idx === 1) return "ACTION_DREAM_WHY_GIVE_SUGGESTIONS";
-            if (idx === 2) return "ACTION_DREAM_WHY_START_EXERCISE";
-          }
-          if (menu === "DREAM_MENU_SUGGESTIONS") {
-            if (idx === 1) return "ACTION_DREAM_SUGGESTIONS_PICK_ONE";
-            if (idx === 2) return "ACTION_DREAM_SUGGESTIONS_START_EXERCISE";
-          }
-          if (menu === "DREAM_MENU_REFINE") {
-            if (idx === 1) return "ACTION_DREAM_REFINE_CONFIRM";
-            if (idx === 2) return "ACTION_DREAM_REFINE_START_EXERCISE";
-          }
-          if (menu === "DREAM_MENU_ESCAPE") {
-            if (idx === 1) return "ACTION_DREAM_ESCAPE_CONTINUE";
-            if (idx === 2) return "ACTION_DREAM_ESCAPE_FINISH_LATER";
-          }
-          if (menu === "DREAM_EXPLAINER_MENU_REFINE") {
-            if (idx === 1) return "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM";
-            if (idx === 2) return "ACTION_DREAM_EXPLAINER_REFINE_ADJUST";
-          }
-          if (menu === "DREAM_EXPLAINER_MENU_ESCAPE") {
-            if (idx === 1) return "ACTION_DREAM_EXPLAINER_CONTINUE";
-            if (idx === 2) return "ACTION_DREAM_EXPLAINER_FINISH_LATER";
-          }
-        }
-
-        if (step === "purpose") {
-          if (menu === "PURPOSE_MENU_INTRO") {
-            if (idx === 1) return "ACTION_PURPOSE_INTRO_EXPLAIN_MORE";
-          }
-          if (menu === "PURPOSE_MENU_EXPLAIN") {
-            if (idx === 1) return "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS";
-            if (idx === 2) return "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES";
-          }
-          if (menu === "PURPOSE_MENU_EXAMPLES") {
-            if (idx === 1) return "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS";
-            if (idx === 2) return "ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME";
-          }
-          if (menu === "PURPOSE_MENU_REFINE") {
-            if (idx === 1) return "ACTION_PURPOSE_REFINE_CONFIRM";
-            if (idx === 2) return "ACTION_PURPOSE_REFINE_ADJUST";
-          }
-          if (menu === "PURPOSE_MENU_CONFIRM_SINGLE") {
-            if (idx === 1) return "ACTION_PURPOSE_CONFIRM_SINGLE";
-          }
-          if (menu === "PURPOSE_MENU_ESCAPE") {
-            if (idx === 1) return "ACTION_PURPOSE_ESCAPE_CONTINUE";
-            if (idx === 2) return "ACTION_PURPOSE_ESCAPE_FINISH_LATER";
-          }
-        }
-
-        if (step === "bigwhy") {
-          if (menu === "BIGWHY_MENU_INTRO") {
-            if (idx === 1) return "ACTION_BIGWHY_INTRO_GIVE_EXAMPLE";
-            if (idx === 2) return "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE";
-          }
-          if (menu === "BIGWHY_MENU_A") {
-            if (idx === 1) return "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS";
-            if (idx === 2) return "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLES";
-            if (idx === 3) return "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE";
-          }
-          if (menu === "BIGWHY_MENU_REFINE") {
-            if (idx === 1) return "ACTION_BIGWHY_REFINE_CONFIRM";
-            if (idx === 2) return "ACTION_BIGWHY_REFINE_ADJUST";
-          }
-          if (menu === "BIGWHY_MENU_ESCAPE") {
-            if (idx === 1) return "ACTION_BIGWHY_ESCAPE_CONTINUE";
-            if (idx === 2) return "ACTION_BIGWHY_ESCAPE_FINISH_LATER";
-          }
-        }
-
-        if (step === "role") {
-          if (menu === "ROLE_MENU_INTRO") {
-            if (idx === 1) return "ACTION_ROLE_INTRO_GIVE_EXAMPLES";
-            if (idx === 2) return "ACTION_ROLE_INTRO_EXPLAIN_MORE";
-          }
-          if (menu === "ROLE_MENU_ASK") {
-            if (idx === 1) return "ACTION_ROLE_ASK_GIVE_EXAMPLES";
-          }
-          if (menu === "ROLE_MENU_REFINE") {
-            if (idx === 1) return "ACTION_ROLE_REFINE_CONFIRM";
-            if (idx === 2) return "ACTION_ROLE_REFINE_ADJUST";
-          }
-          if (menu === "ROLE_MENU_ESCAPE") {
-            if (idx === 1) return "ACTION_ROLE_ESCAPE_CONTINUE";
-            if (idx === 2) return "ACTION_ROLE_ESCAPE_FINISH_LATER";
-          }
-          if (menu === "ROLE_MENU_EXAMPLES") {
-            if (idx === 1) return "ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME";
-          }
-        }
-
-        if (step === "entity") {
-          if (menu === "ENTITY_MENU_INTRO") {
-            if (idx === 1) return "ACTION_ENTITY_INTRO_FORMULATE";
-            if (idx === 2) return "ACTION_ENTITY_INTRO_EXPLAIN_MORE";
-          }
-          if (menu === "ENTITY_MENU_EXAMPLE") {
-            if (idx === 1) return "ACTION_ENTITY_EXAMPLE_CONFIRM";
-            if (idx === 2) return "ACTION_ENTITY_EXAMPLE_REFINE";
-          }
-          if (menu === "ENTITY_MENU_FORMULATE") {
-            if (idx === 1) return "ACTION_ENTITY_FORMULATE_FOR_ME";
-          }
-          if (menu === "ENTITY_MENU_ESCAPE") {
-            if (idx === 1) return "ACTION_ENTITY_ESCAPE_CONTINUE";
-            if (idx === 2) return "ACTION_ENTITY_ESCAPE_FINISH_LATER";
-          }
-        }
-
-        if (step === "strategy") {
-          if (menu === "STRATEGY_MENU_INTRO") {
-            if (idx === 1) return "ACTION_STRATEGY_INTRO_EXPLAIN_MORE";
-          }
-          if (menu === "STRATEGY_MENU_ASK") {
-            if (idx === 1) return "ACTION_STRATEGY_ASK_3_QUESTIONS";
-            if (idx === 2) return "ACTION_STRATEGY_ASK_GIVE_EXAMPLES";
-          }
-          if (menu === "STRATEGY_MENU_REFINE") {
-            if (idx === 1) return "ACTION_STRATEGY_REFINE_EXPLAIN_MORE";
-          }
-          if (menu === "STRATEGY_MENU_QUESTIONS") {
-            if (idx === 1) return "ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE";
-          }
-          if (menu === "STRATEGY_MENU_CONFIRM") {
-            if (idx === 1) return "ACTION_STRATEGY_REFINE_EXPLAIN_MORE";  // "Explain why a Strategy matters"
-            if (idx === 2) return "ACTION_STRATEGY_CONFIRM_SATISFIED";     // "I'm satisfied with my Strategy. Let's go to Rules of the Game"
-          }
-          if (menu === "STRATEGY_MENU_FINAL_CONFIRM") {
-            if (idx === 1) return "ACTION_STRATEGY_FINAL_CONTINUE";
-          }
-          if (menu === "STRATEGY_MENU_ESCAPE") {
-            if (idx === 1) return "ACTION_STRATEGY_ESCAPE_CONTINUE";
-            if (idx === 2) return "ACTION_STRATEGY_ESCAPE_FINISH_LATER";
-          }
-        }
-
-        if (step === "targetgroup") {
-          if (menu === "TARGETGROUP_MENU_INTRO") {
-            if (idx === 1) return "ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE";  // "Explain me more about Target Groups"
-            if (idx === 2) return "ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS";  // "Ask me some questions to define my specific Target Group"
-          }
-          if (menu === "TARGETGROUP_MENU_EXPLAIN_MORE") {
-            if (idx === 1) return "ACTION_TARGETGROUP_EXPLAIN_ASK_QUESTIONS"; // "Ask me some questions to define my specific Target Group"
-          }
-          if (menu === "TARGETGROUP_MENU_POSTREFINE") {
-            if (idx === 1) return "ACTION_TARGETGROUP_POSTREFINE_CONFIRM";     // "Ja, dit is precies wat ik bedoel, ga naar stap Product and Services"
-            if (idx === 2) return "ACTION_TARGETGROUP_POSTREFINE_ASK_QUESTIONS"; // "Ask me some questions to define my specific Target Group"
-          }
-        }
-
-        if (step === "productsservices") {
-          if (menu === "PRODUCTSSERVICES_MENU_CONFIRM") {
-            if (idx === 1) return "ACTION_PRODUCTSSERVICES_CONFIRM"; // "This is all what we offer, continue to step Rules of the Game"
-          }
-        }
-
-        if (step === "rulesofthegame") {
-          if (menu === "RULES_MENU_INTRO") {
-            if (idx === 1) return "ACTION_RULES_INTRO_EXPLAIN_MORE";
-            if (idx === 2) return "ACTION_RULES_INTRO_GIVE_EXAMPLE";
-          }
-          if (menu === "RULES_MENU_ASK_EXPLAIN") {
-            if (idx === 1) return "ACTION_RULES_ASK_EXPLAIN_MORE";
-            if (idx === 2) return "ACTION_RULES_ASK_GIVE_EXAMPLE";
-          }
-          if (menu === "RULES_MENU_EXAMPLE_ONLY") {
-            if (idx === 1) return "ACTION_RULES_ASK_GIVE_EXAMPLE";
-          }
-          if (menu === "RULES_MENU_REFINE") {
-            if (idx === 1) return "ACTION_RULES_REFINE_CONFIRM";
-            if (idx === 2) return "ACTION_RULES_REFINE_ADJUST";
-          }
-          if (menu === "RULES_MENU_CONFIRM") {
-            if (idx === 1) return "ACTION_RULES_CONFIRM_ALL";
-            if (idx === 2) return "ACTION_RULES_ASK_EXPLAIN_MORE";
-            if (idx === 3) return "ACTION_RULES_ASK_GIVE_EXAMPLE";
-          }
-          if (menu === "RULES_MENU_ESCAPE") {
-            if (idx === 1) return "ACTION_RULES_ESCAPE_CONTINUE";
-            if (idx === 2) return "ACTION_RULES_ESCAPE_FINISH_LATER";
-          }
-        }
-
-        if (step === "presentation") {
-          if (menu === "PRESENTATION_MENU_ASK") {
-            if (idx === 1) return "ACTION_PRESENTATION_MAKE";
-          }
-          if (menu === "PRESENTATION_MENU_ESCAPE") {
-            if (idx === 1) return "ACTION_PRESENTATION_ESCAPE_CONTINUE";
-            if (idx === 2) return "ACTION_PRESENTATION_ESCAPE_FINISH_LATER";
-          }
-        }
-
-        return null;
-      }
-
       function renderChoiceButtons(choices, resultData) {
         const wrap = document.getElementById("choiceWrap");
-        // SAFE: Clear container (no user content).
         wrap.innerHTML = "";
 
         if (!choices || choices.length === 0) {
@@ -1844,7 +1634,6 @@ Estimated time: 10–15 minutes.`;
           return;
         }
 
-        // Read menu_id and current_step for ActionCode mapping
         const specialist = resultData?.specialist || {};
         const menuId = String(specialist?.menu_id || "").trim();
         const state = resultData?.state || {};
@@ -1857,118 +1646,65 @@ Estimated time: 10–15 minutes.`;
             ? uiPayload.expected_choice_count
             : (registryActionCodes ? registryActionCodes.length : null);
         const labelsCount = Array.isArray(choices) ? choices.length : 0;
-        const useRegistryCodes =
-          Boolean(registryActionCodes) &&
-          typeof expectedChoiceCount === "number" &&
-          expectedChoiceCount === labelsCount;
+        const lang = uiLang(state);
 
-        if (registryVersion && menuId) {
-          console.log("[actioncode_render]", { registryVersion, menuId, currentStep });
+        function showOptionsError() {
+          wrap.style.display = "flex";
+          wrap.innerHTML = "";
+          const err = document.createElement("div");
+          err.className = "choiceError";
+          err.textContent = t(lang, "optionsDisplayError");
+          wrap.appendChild(err);
         }
 
         // HARD GUARD: Role REFINE menu must only show the confirm button
         if (currentStep === "role" && menuId === "ROLE_MENU_REFINE" && Array.isArray(choices) && choices.length > 1) {
-          // Keep only the first / confirm option (value 1); ignore any extra options
           choices = choices.filter(function (c) { return Number(c.value) === 1; });
         }
 
         if (!menuId) {
-          console.warn("[menu_contract_missing]", { registryVersion, currentStep, labelsCount });
-          
-          // Special fallback voor Purpose step
-          if (currentStep === "purpose") {
-            wrap.style.display = "flex";
-            // SAFE: Clear container (no user content).
-            wrap.innerHTML = "";
-            const fallbackBtn = document.createElement("button");
-            fallbackBtn.className = "choiceBtn";
-            fallbackBtn.textContent = "Explain more about why a purpose is needed.";
-            fallbackBtn.addEventListener("click", function() {
-              if (isLoading) return;
-              callRunStep("ACTION_PURPOSE_INTRO_EXPLAIN_MORE");
-            });
-            wrap.appendChild(fallbackBtn);
-            return;
-          }
-          
-          // Voor andere stappen: fallback naar geen buttons (user kan typen)
-          wrap.style.display = "none";
-          wrap.textContent = "";
+          console.warn("[menu_contract_missing]", { registry_version: registryVersion, current_step: currentStep, labels_count: labelsCount });
+          showOptionsError();
           return;
         }
 
         if (!registryActionCodes) {
-          console.warn("[menu_contract_unknown]", { registryVersion, menuId, currentStep, labelsCount });
+          console.warn("[actioncodes_missing]", { registry_version: registryVersion, menu_id: menuId, current_step: currentStep, labels_count: labelsCount });
+          showOptionsError();
+          return;
         }
 
-        // Pre-validate: all buttons must have labels and ActionCodes
-        const legacyActionCodes = [];
-        let legacyIndex = 0;
+        const expectedCount = (typeof expectedChoiceCount === "number") ? expectedChoiceCount : registryActionCodes.length;
+        if (expectedCount !== labelsCount) {
+          console.warn("[actioncodes_count_mismatch]", {
+            registry_version: registryVersion,
+            menu_id: menuId,
+            current_step: currentStep,
+            labels_count: labelsCount,
+            expected_choice_count: expectedCount,
+          });
+          showOptionsError();
+          return;
+        }
+
         for (const c of choices) {
           const label = String(c.label || "").trim();
           if (!label) {
             console.error("Empty choice label", { menuId, currentStep, choiceIndex: c.value });
-            wrap.style.display = "block";
-            wrap.textContent = "Menu error: empty choice label.";
+            showOptionsError();
             return;
           }
-          const actionCode = getActionCodeForChoice(label, menuId, Number(c.value), currentStep);
-          if (!actionCode && !useRegistryCodes) {
-            console.error("No ActionCode mapping for button", {
-              label,
-              menuId,
-              choiceIndex: c.value,
-              currentStep
-            });
-            wrap.style.display = "block";
-            wrap.textContent = `Menu error: missing ActionCode mapping for ${menuId} option ${c.value}.`;
-            return;
-          }
-          legacyActionCodes.push(actionCode || "");
-          legacyIndex += 1;
         }
 
-        if (registryActionCodes) {
-          const mismatchIndices = [];
-          const maxLen = Math.max(legacyActionCodes.length, registryActionCodes.length);
-          for (let i = 0; i < maxLen; i++) {
-            if (legacyActionCodes[i] !== registryActionCodes[i]) mismatchIndices.push(i + 1);
-          }
-          const expectedCount = (typeof expectedChoiceCount === "number") ? expectedChoiceCount : registryActionCodes.length;
-          const countsMismatch = expectedCount !== labelsCount;
-          if (mismatchIndices.length || countsMismatch) {
-            if (isActionCodeDebugEnabled()) {
-              const telemetry = {
-                kind: "actioncode_shadow_compare",
-                registry_version: registryVersion,
-                menu_id: menuId,
-                step: currentStep,
-                labels_count: labelsCount,
-                expected_choice_count: expectedCount,
-                mismatch_indices: mismatchIndices,
-              };
-              console.warn("[actioncode_shadow_compare]", telemetry);
-              try { globalThis.__BSC_UI_TELEMETRY__ = telemetry; } catch {}
-            }
-          }
-          if (!useRegistryCodes) {
-            console.warn("[actioncode_fallback]", {
-              registry_version: registryVersion,
-              menu_id: menuId,
-              step: currentStep,
-              labels_count: labelsCount,
-              expected_choice_count: expectedCount,
-            });
-          }
+        if (registryVersion && menuId) {
+          console.log("[actioncode_render]", { registryVersion, menuId, currentStep });
         }
 
         wrap.style.display = "flex";
         let renderIndex = 0;
         for (const c of choices) {
           const label = String(c.label || "").trim();
-          const actionCode = useRegistryCodes && registryActionCodes
-            ? registryActionCodes[renderIndex]
-            : legacyActionCodes[renderIndex];
+          const actionCode = registryActionCodes[renderIndex];
           const btn = document.createElement("button");
           btn.className = "choiceBtn";
           btn.type = "button";
@@ -2554,17 +2290,11 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
 
         setWidgetStateSafe({ language: nextState.language, started: "true" });
 
-        let telemetry = null;
-        if (isActionCodeDebugEnabled() && globalThis.__BSC_UI_TELEMETRY__ && typeof globalThis.__BSC_UI_TELEMETRY__ === "object") {
-          telemetry = globalThis.__BSC_UI_TELEMETRY__;
-          try { delete globalThis.__BSC_UI_TELEMETRY__; } catch {}
-        }
-
         const payload = {
           current_step_id: nextState.current_step || "step_0",
           user_message: String(message || ""),
           input_mode: "widget",
-          state: telemetry ? { ...nextState, __ui_telemetry: telemetry } : nextState
+          state: nextState
         };
 
         setLoading(true);
