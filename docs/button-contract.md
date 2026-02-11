@@ -1,5 +1,7 @@
 # Button Contract (Hard-Coded)
 
+> Canonical reference: `mcp-server/docs/ui-interface-contract.md`. Keep this file in sync.
+
 These rules are mandatory to keep button behavior deterministic and stable.
 
 1. Every button sends an ActionCode.
