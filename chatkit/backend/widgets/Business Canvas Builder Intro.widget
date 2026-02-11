@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "name": "The Business Strategy Canvas Builder Intro",
+  "template": "{\"type\":\"Card\",\"theme\":\"light\",\"background\":\"white\",\"padding\":24,\"children\":[{\"type\":\"Title\",\"value\":\"The Business Strategy Canvas Builder\",\"textAlign\":\"center\"},{\"type\":\"Caption\",\"value\":\"Create a business plan, including a professional presentation, based on a series of questions and answers.\",\"textAlign\":\"center\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Divider\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Image\",\"src\":\"https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/38f6df604438ba8375b4aa2e159fd1e01745cbb0/chatkit/Elevate%20Your%20Business.png\",\"alt\":\"Elevate Your Business\",\"fit\":\"cover\"},{\"type\":\"Spacer\",\"minSize\":10},{\"type\":\"Caption\",\"value\":\"Based on the model by Ben Steenstra.\",\"textAlign\":\"center\"},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Text\",\"value\":\"Give me your (future) business name and type of business so we can start right away.\",\"textAlign\":\"center\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Form\",\"onSubmitAction\":{\"type\":\"bc.intro.submit\"},\"children\":[{\"type\":\"Textarea\",\"name\":\"answer\",\"placeholder\":\"Type your answer…\"},{\"type\":\"Spacer\",\"minSize\":10},{\"type\":\"Button\",\"label\":\"Send\",\"style\":\"primary\",\"submit\":true,\"block\":true}]},{\"type\":\"Spacer\",\"minSize\":18},{\"type\":\"Row\",\"justify\":\"center\",\"children\":[{\"type\":\"Col\",\"width\":\"180px\",\"children\":[{\"type\":\"Image\",\"src\":\"https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/1339f31e1bd2f773806b58ea7afb6c76a63360e2/chatkit/ben_steenstra_Logo.png\",\"alt\":\"Ben Steenstra Logo\",\"fit\":\"contain\"}]}]}]}",
+  "jsonSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "answer": { "type": "string" }
+    },
+    "additionalProperties": true
+  }
+}

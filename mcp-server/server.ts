@@ -1,0 +1,709 @@
+// mcp-server/server.ts
+import { createServer } from "node:http";
+import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { z } from "zod";
+import { createRateLimitMiddleware } from "./src/middleware/rateLimit.js";
+import { applySecurityHeaders } from "./src/middleware/security.js";
+import { CanvasStateZod, getDefaultState } from "./src/core/state.js";
+import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
+
+function loadDotEnv() {
+  try {
+    const raw = readFileSync(new URL("./.env", import.meta.url), "utf-8");
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const idx = trimmed.indexOf("=");
+      if (idx === -1) continue;
+      const key = trimmed.slice(0, idx).trim();
+      let value = trimmed.slice(idx + 1).trim();
+      if (!key) continue;
+      // Strip surrounding quotes if present.
+      if (
+        (value.startsWith("\"") && value.endsWith("\"")) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+      }
+    }
+  } catch {
+    // No .env file found; ignore.
+  }
+}
+
+loadDotEnv();
+
+// Lazy-load run_step so server can start and respond to /version even if handler deps fail at load time (App Runner startup/health).
+let runStepModule: typeof import("./src/handlers/run_step.js") | null = null;
+async function getRunStep() {
+  if (!runStepModule) runStepModule = await import("./src/handlers/run_step.js");
+  return runStepModule.run_step;
+}
+
+process.on("uncaughtException", (err) => {
+  console.error("[FATAL] Uncaught exception:", err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[FATAL] Unhandled rejection at:", promise, "reason:", reason);
+  process.exit(1);
+});
+
+const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || "0.0.0.0";
+const isLocalDev = process.env.LOCAL_DEV === "1";
+
+// Keep this aligned with your release tag
+const VERSION = (process.env.VERSION && String(process.env.VERSION).trim()) || "v89";
+
+const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
+const OPENAI_APPS_CHALLENGE_TOKEN =
+  process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
+
+const MCP_PATH = "/mcp";
+const UI_RESOURCE_PATH = "/ui/step-card";
+const UI_RESOURCE_NAME = "business-canvas-widget";
+const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
+const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
+
+function getHeader(req: any, name: string): string {
+  return String(req?.headers?.[name.toLowerCase()] || "");
+}
+
+function getCorrelationId(req: any): string {
+  const existing =
+    getHeader(req, "x-correlation-id") ||
+    getHeader(req, "x-request-id") ||
+    getHeader(req, "x-amzn-trace-id") ||
+    getHeader(req, "traceparent");
+  return existing ? String(existing) : randomUUID();
+}
+
+function ensureCorrelationHeader(res: any, correlationId: string) {
+  if (!res.headersSent) {
+    res.setHeader("X-Correlation-Id", correlationId);
+  }
+  const originalWriteHead = res.writeHead.bind(res);
+  res.writeHead = function (statusCode: number, headers?: Record<string, string>) {
+    const hdrs = headers ? { ...headers } : {};
+    if (!hdrs["X-Correlation-Id"] && !hdrs["x-correlation-id"]) {
+      hdrs["X-Correlation-Id"] = correlationId;
+    }
+    return originalWriteHead(statusCode, hdrs);
+  };
+}
+
+function jsonRpcErrorResponse(
+  status: number,
+  message: string,
+  data: Record<string, unknown>,
+  code = -32700
+) {
+  return {
+    status,
+    payload: {
+      jsonrpc: "2.0",
+      error: { code, message, data },
+      id: null,
+    },
+  };
+}
+
+async function readBodyWithLimit(req: any, maxBytes: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let done = false;
+
+    const cleanup = () => {
+      req.off("data", onData);
+      req.off("end", onEnd);
+      req.off("error", onError);
+      req.off("aborted", onAborted);
+    };
+
+    const onData = (chunk: Buffer) => {
+      if (done) return;
+      size += chunk.length;
+      if (size > maxBytes) {
+        done = true;
+        cleanup();
+        // Drain remaining data without destroying the request
+        try { req.resume(); } catch {}
+        const err = new Error("body_too_large");
+        (err as any).code = "body_too_large";
+        reject(err);
+        return;
+      }
+      chunks.push(chunk);
+    };
+    const onEnd = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      resolve(Buffer.concat(chunks, size));
+    };
+    const onError = (err: Error) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      reject(err);
+    };
+    const onAborted = () => {
+      if (done) return;
+      done = true;
+      cleanup();
+      const err = new Error("aborted");
+      (err as any).code = "aborted";
+      reject(err);
+    };
+
+    req.on("data", onData);
+    req.on("end", onEnd);
+    req.on("error", onError);
+    req.on("aborted", onAborted);
+  });
+}
+
+function loadUiHtml(): string {
+  try {
+    return readFileSync(new URL("./ui/step-card.html", import.meta.url), "utf-8");
+  } catch (e) {
+    console.error("[loadUiHtml] Failed:", e);
+    return "<html><body>UI not available</body></html>";
+  }
+}
+
+/** Shared run_step logic for MCP tool and POST /run_step (local testing). */
+async function runStepHandler(args: {
+  current_step_id: string;
+  user_message: string;
+  state?: Record<string, unknown>;
+}): Promise<{ structuredContent: Record<string, unknown> }> {
+  const safeString = (v: unknown): string => {
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean") return String(v);
+    return "";
+  };
+
+  const current_step_id = safeString(args.current_step_id ?? "").trim();
+  const state = (args.state ?? {}) as Record<string, unknown>;
+  const user_message_raw = safeString(args.user_message ?? "");
+  const isStart = current_step_id.toLowerCase() === "start";
+  const user_message =
+    isStart && !user_message_raw.trim() ? "" : user_message_raw;
+  const seed_user_message =
+    isStart && user_message_raw.trim()
+      ? user_message_raw.trim()
+      : "";
+  const hasInitiator = String(state?.initial_user_message ?? "").trim() !== "";
+  const stateForTool =
+    isStart && user_message_raw.trim()
+      ? {
+          ...state,
+          ...(hasInitiator ? {} : { initial_user_message: user_message_raw.trim() }),
+          started: "true",
+        }
+      : state;
+
+  const stepIdStr = String(current_step_id ?? "");
+  const msgLen = typeof user_message_raw === "string" ? user_message_raw.length : 0;
+  const stateKeysCount = stateForTool && typeof stateForTool === "object" && stateForTool !== null ? Object.keys(stateForTool).length : 0;
+  console.log(`[run_step] step_id=${stepIdStr} user_message_len=${msgLen} state_keys=${stateKeysCount}`);
+
+  try {
+    const runStepTool = await getRunStep();
+    const result = await runStepTool({
+      user_message,
+      state: stateForTool,
+    });
+    const { debug: _omit, ...resultForClient } = result as {
+      debug?: unknown;
+      [key: string]: unknown;
+    };
+    const structuredContent: Record<string, unknown> = {
+      title: `The Business Strategy Canvas Builder (${VERSION})`,
+      meta: `step: ${(result as { state?: { current_step?: string }; active_specialist?: string }).state?.current_step ?? "unknown"} | specialist: ${(result as { active_specialist?: string }).active_specialist ?? "unknown"}`,
+      result: resultForClient,
+    };
+    if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
+    return { structuredContent };
+  } catch (error: unknown) {
+    const err = error as { message?: string; stack?: string; meta?: string };
+    console.error("[run_step] ERROR:", err?.message ?? error, err?.meta ?? "");
+    if (err?.stack) {
+      console.error("[run_step] STACK:", err.stack);
+    }
+    if (isLocalDev) {
+      console.error("[run_step] DEV: exception message:", err?.message ?? String(error));
+      console.error("[run_step] DEV: stack:", err?.stack ?? "(no stack)");
+      console.error("[run_step] DEV: OPENAI_API_KEY present:", Boolean(process.env.OPENAI_API_KEY));
+    }
+    
+    // Use current state if available, otherwise use default state
+    const currentState = (stateForTool && typeof stateForTool === "object" && stateForTool !== null) 
+      ? stateForTool 
+      : getDefaultState();
+    const currentStep = String((currentState as any).current_step || "step_0");
+    
+    const fallbackResult = {
+      ok: true,
+      tool: "run_step",
+      current_step_id: currentStep,
+      active_specialist: "",
+      text: "", // Geen chat tekst
+      prompt: "",
+      specialist: {},
+      state: currentState,
+      error: {
+        type: "server_error",
+        message: "Probeer opnieuw", // UI message, niet chat
+        retry_action: "reload"
+      },
+    };
+    const structuredContent: Record<string, unknown> = {
+      title: `The Business Strategy Canvas Builder (${VERSION})`,
+      meta: "error",
+      result: fallbackResult,
+    };
+    if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
+    return { structuredContent };
+  }
+}
+
+function buildContentFromResult(result: Record<string, unknown> | null | undefined): string {
+  // Default: geen chat tekst (UI-first approach)
+  if (!result || typeof result !== "object") return "";
+  
+  // Alleen tekst als er een expliciete chat_message flag is (uitzondering)
+  const chatMessage = String((result as any).chat_message ?? "").trim();
+  if (chatMessage) return chatMessage;
+  
+  // Fallback: alleen bij echte fouten (geen UI beschikbaar)
+  const hasError = Boolean((result as any).error);
+  if (hasError) return "Open de app om verder te gaan."; // Max 1 korte zin
+  
+  // Default: geen chat tekst
+  return "";
+}
+
+function resolveBaseUrl(req?: any): string {
+  const explicit = String(process.env.PUBLIC_BASE_URL || process.env.BASE_URL || "").trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+  if (isLocalDev) {
+    const portStr = String(process.env.PORT || port).trim();
+    return `http://localhost:${portStr}`;
+  }
+  if (req) {
+    const host = getHeader(req, "x-forwarded-host") || getHeader(req, "host");
+    if (host) {
+      const protoHeader = getHeader(req, "x-forwarded-proto");
+      const scheme = protoHeader ? protoHeader.split(",")[0].trim() : "https";
+      return `${scheme}://${host}`.replace(/\/+$/, "");
+    }
+  }
+  return "";
+}
+
+function createAppServer(baseUrl: string): McpServer {
+  const server = new McpServer(
+    {
+      name: "business-canvas-chatkit",
+      version: VERSION,
+    },
+    {
+      capabilities: {
+        tools: {},
+        resources: {},
+      },
+    }
+  );
+
+  // Register UI resource
+  const uiResourceUri = baseUrl ? `${baseUrl}${UI_RESOURCE_PATH}` : UI_RESOURCE_PATH;
+  
+  server.registerResource(
+    UI_RESOURCE_NAME,
+    uiResourceUri,
+    {
+      mimeType: "text/html;profile=mcp-app",
+      description: "Business Strategy Canvas Builder widget UI",
+    },
+    async () => {
+      // Return the UI HTML content
+      return {
+        contents: [
+          {
+            uri: uiResourceUri,
+            text: loadUiHtml(),
+          },
+        ],
+      };
+    }
+  );
+
+  const RunStepInputSchema = z.object({
+    // ChatGPT/Widget sometimes sends this as "start" or omits it
+    current_step_id: z.string().optional().default("step_0"),
+    user_message: z.string().optional().default(""),
+    // Use CanvasStateZod schema for type safety and validation
+    // .partial() makes all fields optional (for empty/partial state)
+    // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
+    state: CanvasStateZod.partial().passthrough().optional(),
+  });
+
+  server.registerTool(
+    "run_step",
+    {
+      description:
+        "This tool drives the Business Strategy Canvas Builder UI. For any canvas or business plan request, call this tool and return the widget state. Do not generate the business plan in the chat. The widget collects inputs and produces the final outputs.",
+      inputSchema: RunStepInputSchema,
+      annotations: {
+        readOnlyHint: false, // Tool generates files and modifies state
+        openWorldHint: false, // No external posts
+        destructiveHint: false, // No destructive actions
+      },
+      // Note: securitySchemes is in _meta per MCP SDK implementation requirements.
+      // The MCP SDK does not support top-level securitySchemes in the current version.
+      // This is included in the MCP response JSON that ChatGPT/OpenAI receives.
+      _meta: {
+        securitySchemes: [{ type: "noauth" }],
+        ui: {
+          resourceUri: uiResourceUri,
+        },
+      },
+    },
+    async (args) => {
+      const { structuredContent } = await runStepHandler({
+        current_step_id: String(args.current_step_id ?? ""),
+        user_message: String(args.user_message ?? ""),
+        state: (args.state ?? {}) as Record<string, unknown>,
+      });
+      const contentText = buildContentFromResult(
+        (structuredContent && (structuredContent as any).result) ? (structuredContent as any).result : null
+      );
+      return {
+        content: [{ type: "text", text: contentText }],
+        structuredContent,
+      };
+    }
+  );
+
+  return server;
+}
+
+const httpServer = async (req: any, res: any) => {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+  // Apply security headers to all responses
+  applySecurityHeaders(res);
+
+  // OpenAI Apps Challenge endpoint (for App Store submission verification)
+  if (req.method === "GET" && url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end(OPENAI_APPS_CHALLENGE_TOKEN);
+    return;
+  }
+
+  // Health check (App Runner)
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/version") {
+    res.writeHead(200, { "content-type": "text/plain" });
+    if (req.method === "GET") {
+      res.end(`VERSION=${VERSION}`);
+    } else {
+      res.end();
+    }
+    return;
+  }
+
+  // Favicon: 200 + minimal 1x1 PNG so browser does not show 404
+  if (req.method === "GET" && url.pathname === "/favicon.ico") {
+    const faviconPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwEHgP5fFuuHAAAAAElFTkSuQmCC",
+      "base64"
+    );
+    res.writeHead(200, {
+      "content-type": "image/png",
+      "cache-control": "public, max-age=86400",
+    });
+    res.end(faviconPng);
+    return;
+  }
+
+  // Static template: Presentation PPTX
+  if (req.method === "GET" && url.pathname === "/templates/presentation.pptx") {
+    try {
+      const filePath = getPresentationTemplatePath();
+      const stat = fs.statSync(filePath);
+      res.writeHead(200, {
+        "content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "content-length": stat.size,
+        "cache-control": "public, max-age=86400",
+      });
+      fs.createReadStream(filePath).pipe(res);
+    } catch (e) {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("Template not found");
+    }
+    return;
+  }
+
+  // Generated presentations (local or server temp)
+  if (req.method === "GET" && url.pathname.startsWith("/presentations/")) {
+    try {
+      const fileName = path.basename(url.pathname);
+      const dir = path.join(os.tmpdir(), "business-canvas-presentations");
+      const filePath = path.join(dir, fileName);
+      const stat = fs.statSync(filePath);
+      const ext = path.extname(fileName).toLowerCase();
+
+      let contentType = "application/octet-stream";
+      let disposition = `attachment; filename="${fileName}"`;
+      if (ext === ".pptx") {
+        contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+      } else if (ext === ".pdf") {
+        contentType = "application/pdf";
+        disposition = `inline; filename="${fileName}"`;
+      } else if (ext === ".png") {
+        contentType = "image/png";
+        disposition = `inline; filename="${fileName}"`;
+      }
+
+      res.writeHead(200, {
+        "content-type": contentType,
+        "content-length": stat.size,
+        "content-disposition": disposition,
+        "cache-control": "no-store",
+      });
+      fs.createReadStream(filePath).pipe(res);
+    } catch (e) {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("Presentation not found");
+    }
+    return;
+  }
+
+  // --- Local dev only: /test and /run_step (no impact on production / MCP) ---
+  if (isLocalDev) {
+    // POST /run_step — bridge endpoint: same handler as MCP tool, same structuredContent shape.
+    if (req.method === "POST" && url.pathname === "/run_step") {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      try {
+        const args = JSON.parse(body || "{}") as {
+          current_step_id?: string;
+          user_message?: string;
+          state?: Record<string, unknown>;
+        };
+        const { structuredContent } = await runStepHandler({
+          current_step_id: String(args.current_step_id ?? "step_0"),
+          user_message: String(args.user_message ?? ""),
+          state: args.state,
+        });
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ structuredContent }));
+      } catch (e) {
+        console.error("[POST /run_step]", e);
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: String((e as Error).message) }));
+      }
+      return;
+    }
+
+    // GET /test — step-card HTML + injected openai bridge (callTool → fetch /run_step, set toolOutput, dispatch openai:set_globals).
+    if (req.method === "GET" && (url.pathname === "/test" || url.pathname === "/test/")) {
+      const widgetHtml = loadUiHtml();
+      const OPENAI_BRIDGE = `
+  <script>
+    (function() {
+      if (typeof globalThis.openai !== "undefined") return;
+      globalThis.openai = {
+        callTool: async function(name, args) {
+          const resp = await fetch("/run_step", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(args),
+          });
+          const data = await resp.json();
+          return data.structuredContent || data;
+        },
+        toolOutput: null,
+      };
+      window.dispatchEvent(new Event("openai:set_globals"));
+    })();
+  </script>
+`;
+      const withBridge = widgetHtml.replace("<body>", "<body>" + OPENAI_BRIDGE);
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(withBridge);
+      return;
+    }
+  }
+
+  // UI Resource endpoint (production + local dev) - serves the widget HTML
+  if (req.method === "GET" && url.pathname === UI_RESOURCE_PATH) {
+    const widgetHtml = loadUiHtml();
+    res.writeHead(200, { "content-type": "text/html;profile=mcp-app" });
+    res.end(widgetHtml);
+    return;
+  }
+
+  // MCP endpoint (production + local dev)
+  const MCP_METHODS = new Set(["POST", "GET", "DELETE", "OPTIONS"]);
+  if (url.pathname === MCP_PATH && req.method && MCP_METHODS.has(req.method)) {
+    const correlationId = getCorrelationId(req);
+    (req as any).__correlationId = correlationId;
+    ensureCorrelationHeader(res, correlationId);
+
+    const acceptHeader = getHeader(req, "accept");
+    const contentType = getHeader(req, "content-type");
+    const contentLength = Number(getHeader(req, "content-length") || 0);
+
+    // Apply rate limiting
+    const rateLimitMiddleware = createRateLimitMiddleware();
+    let rateLimitPassed = false;
+    
+    await new Promise<void>((resolve) => {
+      rateLimitMiddleware(req, res, () => {
+        rateLimitPassed = true;
+        resolve();
+      });
+      
+      // If headers were sent (rate limit hit), resolve immediately
+      if (res.headersSent) {
+        resolve();
+      }
+    });
+    
+    // If rate limited, stop here
+    if (!rateLimitPassed || res.headersSent) {
+      return;
+    }
+
+    const baseUrl = resolveBaseUrl(req);
+    const mcpServer = createAppServer(baseUrl);
+    const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true });
+
+    res.on("close", () => {
+      transport.close();
+      mcpServer.close();
+    });
+
+    let timeout: NodeJS.Timeout | null = null;
+    try {
+      let parsedBody: unknown | undefined = undefined;
+
+      // Pre-parse only when headers are spec-compliant, otherwise let SDK handle 406/415.
+      const shouldPreParse =
+        req.method === "POST" &&
+        acceptHeader.includes("application/json") &&
+        acceptHeader.includes("text/event-stream") &&
+        contentType.includes("application/json");
+
+      if (shouldPreParse) {
+        let raw: Buffer;
+        try {
+          raw = await readBodyWithLimit(req, MAX_REQUEST_SIZE_BYTES);
+        } catch (e: any) {
+          const code = String(e?.code || "");
+          if (code === "body_too_large") {
+            const errPayload = jsonRpcErrorResponse(413, "Request entity too large", {
+              error_code: "body_too_large",
+              correlation_id: correlationId,
+              max_size: MAX_REQUEST_SIZE_BYTES,
+            }, -32000);
+            res.writeHead(errPayload.status, { "Content-Type": "application/json" });
+            res.end(JSON.stringify(errPayload.payload));
+            return;
+          }
+          const errPayload = jsonRpcErrorResponse(400, "Request aborted", {
+            error_code: "request_aborted",
+            correlation_id: correlationId,
+          }, -32000);
+          res.writeHead(errPayload.status, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(errPayload.payload));
+          return;
+        }
+        (req as any).__bodySize = raw.length;
+        const hashPrefix = createHash("sha256").update(raw.slice(0, 256)).digest("hex");
+        console.warn(
+          "[mcp] request",
+          JSON.stringify({
+            correlationId,
+            method: req.method,
+            url: req.url,
+            contentType,
+            accept: acceptHeader,
+            contentLength,
+            bodySize: raw.length,
+            bodyHashPrefix: hashPrefix,
+          })
+        );
+        try {
+          parsedBody = JSON.parse(raw.toString("utf-8"));
+        } catch (e) {
+          const errPayload = jsonRpcErrorResponse(400, "Parse error: Invalid JSON", {
+            error_code: "invalid_json",
+            correlation_id: correlationId,
+          });
+          res.writeHead(errPayload.status, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(errPayload.payload));
+          return;
+        }
+      }
+
+      timeout = setTimeout(() => {
+        if (!res.headersSent) {
+          const errPayload = jsonRpcErrorResponse(408, "Request timeout", {
+            error_code: "timeout",
+            correlation_id: correlationId,
+          }, -32000);
+          res.writeHead(errPayload.status, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(errPayload.payload));
+        }
+        try { transport.close(); } catch {}
+        try { mcpServer.close(); } catch {}
+      }, REQUEST_TIMEOUT_MS);
+
+      await mcpServer.connect(transport);
+      await transport.handleRequest(req, res, parsedBody);
+    } catch (error) {
+      console.error("Error handling MCP request:", error);
+      if (!res.headersSent) {
+        const errPayload = jsonRpcErrorResponse(500, "Internal server error", {
+          error_code: "server_error",
+          correlation_id: correlationId,
+        }, -32000);
+        res.writeHead(errPayload.status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(errPayload.payload));
+      }
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+    return;
+  }
+
+  res.writeHead(404).end("Not Found");
+};
+
+httpServer.listen = createServer(httpServer).listen.bind(createServer(httpServer));
+
+httpServer.listen(port, host, () => {
+  console.log(
+    `Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`
+  );
+  if (isLocalDev) {
+    console.log(`Local dev: GET http://localhost:${port}/test  POST http://localhost:${port}/run_step`);
+  }
+});

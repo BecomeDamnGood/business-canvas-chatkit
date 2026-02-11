@@ -1,0 +1,2611 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&display=swap">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230071e3'/></svg>" type="image/svg+xml" />
+    <title>The Business Strategy Canvas Builder</title>
+    <style>
+      /**
+       * Redesign tokens – light only, 768px base.
+       * Legacy names (--text, --muted, --line, --bg, --card, --shadow, --blue, --stepOff)
+       * match mcp-server/ui/step-card.html for drop-in replacement.
+       */
+      
+      :root {
+        /* Legacy (widget compatibility) */
+        --text: #1d1d1f;
+        --muted: #6e6e73;
+        --line: #e5e5ea;
+        --bg: #f5f5f7;
+        --card: #ffffff;
+        --shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+        --blue: #2b83e6;
+        --stepOff: #e8e8ed;
+      
+        /* Color */
+        --color-bg-page: #f5f5f7;
+        --color-bg-surface: #ffffff;
+        --color-brand-primary: #2b83e6;
+        --color-brand-primary-soft: rgba(43, 131, 230, 0.9);
+        --color-brand-primary-muted: rgba(43, 131, 230, 0.18);
+        --color-brand-primary-subtle: rgba(43, 131, 230, 0.06);
+        --color-brand-primary-border: rgba(43, 131, 230, 0.28);
+        --color-brand-gradient-start: #63acff;
+        --color-brand-gradient-end: #2b83e6;
+        --color-text-primary: #1d1d1f;
+        --color-text-secondary: #424245;
+        --color-text-muted: #6e6e73;
+        --color-text-placeholder: #86868b;
+        --color-border-default: #e5e5ea;
+        --color-ui-step-inactive-bg: #ffffff;
+        --color-ui-step-inactive-text: #86868b;
+        --color-ui-step-active-bg: #2b83e6;
+        --color-ui-step-active-text: #ffffff;
+        --color-ui-disabled-bg: #f5f5f7;
+        --color-ui-disabled-text: #86868b;
+        --color-placeholder-image-border: rgba(200, 150, 150, 0.6);
+      
+        /* Typography */
+        --font-sans: "Montserrat", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --font-size-xs: 12px;
+        --font-size-sm: 13px;
+        --font-size-5: 14px;
+        --font-size-base: 15px;
+        --font-size-md: 16px;
+        --font-size-lg: 17px;
+        --font-size-xl: 18px;
+        --font-size-2xl: 22px;
+        --font-size-3xl: 26px;
+        --font-size-4xl: 28px;
+        --font-size-5xl: 40px;
+        --font-weight-normal: 400;
+        --font-weight-medium: 600;
+        --font-weight-bold: 700;
+        --font-weight-heavy: 800;
+        --letter-spacing-tighter: -0.025em;
+        --letter-spacing-tight: -0.015em;
+        --letter-spacing-wide: 0.02em;
+        --line-height-normal: 1.47;
+        --line-height-relaxed: 1.5;
+        --line-height-title: 1.2;
+      
+        /* Spacing */
+        --space-0: 0;
+        --space-1: 2px;
+        --space-2: 4px;
+        --space-3: 8px;
+        --space-4: 12px;
+        --space-5: 14px;
+        --space-6: 16px;
+        --space-8: 20px;
+        --space-10: 24px;
+        --space-12: 28px;
+        --space-15: 32px;
+        --space-16: 40px;
+        --space-20: 64px;
+      
+        /* Radius */
+        --radius-sm: 8px;
+        --radius-md: 10px;
+        --radius-lg: 14px;
+        --radius-xl: 18px;
+        --radius-2xl: 20px;
+        --radius-full: 50%;
+      
+        /* Card overlay (light theme: white at 55% over background) */
+        --card-overlay-opacity: 0.55;
+      
+        /* Layout – 768px base, full-bleed background */
+        --layout-base-width: 768px;
+        --layout-wrap-max-width: 768px;
+        --layout-wrap-padding: 0 24px 15px;
+        --layout-container-max-width: 720px;
+      
+        /* Component */
+        --component-step-size: 36px;
+        --component-step-line-width: 12px;
+        --component-step-line-height: 2px;
+        --component-badge-size: 52px;
+        --component-card-padding: 28px 24px 26px;
+        --component-card-gap: 20px;
+        --component-input-min-height: 96px;
+        --component-input-padding: 18px;
+        --component-send-size: 48px;
+        --component-send-radius: 12px;
+        --component-choice-padding: 14px 18px;
+        --component-thinking-bar-height: 48px;
+      
+        /* Motion */
+        --duration-fast: 0.15s;
+        --ease-default: ease;
+      
+        /* Breakpoints (for reference in media queries) */
+        --breakpoint-mobile: 480px;
+        --breakpoint-tablet: 768px;
+      }
+      
+      /* Wider viewports: allow content to grow slightly, background still full bleed */
+      @media (min-width: 900px) {
+        :root {
+          --layout-wrap-max-width: 860px;
+          --layout-container-max-width: 820px;
+        }
+      }
+      
+      @media (min-width: 1100px) {
+        :root {
+          --layout-wrap-max-width: 960px;
+          --layout-container-max-width: 920px;
+        }
+      }
+      
+      /* Mobile: comfortable text and touch, no shrinking */
+      @media (max-width: 480px) {
+        :root {
+          --layout-wrap-padding: 20px 16px 15px;
+          --font-size-5xl: 28px;
+          --font-size-3xl: 22px;
+          --font-size-2xl: 18px;
+          --font-size-xl: 16px;
+          --component-step-size: 32px;
+          --component-step-line-width: 8px;
+          --component-badge-size: 44px;
+          --component-card-padding: 20px 16px 20px;
+          --component-send-size: 48px;
+        }
+      }
+      /**
+       * Base styles – full-bleed background, body, layout.
+       * Background always stretches to outer canvas; content in max-width container.
+       */
+      
+      * {
+        box-sizing: border-box;
+      }
+      
+      /* Form elements: inherit font from page so <button>/<input> don't fall back
+         to the browser's UA stylesheet (which defaults to ~13.3px). */
+      button, input, select, textarea {
+        font: inherit;
+      }
+      
+      html {
+        min-height: 100%;
+      }
+      
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font-sans);
+        font-weight: var(--font-weight-normal);
+        color: var(--text);
+        line-height: var(--line-height-normal);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        /* Full-bleed: background covers entire viewport
+           ASSET: background.jpg – swap URL below for hosted version */
+        background-color: var(--color-bg-page);
+        background-image: url("https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/b97fd89cb05ac8ab05cbacfdf926d4b0ccbd8243/chatkit/frontend/background.jpg");
+        background-size: cover;
+        background-position: center;
+        background-attachment: scroll;
+      }
+      
+      @media (min-width: 769px) {
+        body {
+          background-attachment: fixed;
+        }
+      }
+      
+      :focus {
+        outline: none;
+      }
+      :focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 2px;
+      }
+      
+      /* Content wrapper – max-width, centered; background extends behind it */
+      .wrap {
+        max-width: var(--layout-wrap-max-width);
+        margin: 0 auto;
+        padding: var(--layout-wrap-padding);
+        position: relative;
+      }
+      
+      @media print {
+        body {
+          background: #fff;
+          color: #000;
+        }
+        .wrap {
+          max-width: none;
+          padding: 0;
+        }
+      }
+      /**
+       * Redesign components – same selectors/IDs as step-card.html.
+       * Light-only; 768px base; full-bleed header and thinking bar.
+       */
+      
+      /* ─── Page header (full-bleed; same background as body, no dark strip) ─── */
+      .page-header {
+        width: 100%;
+        background: transparent;
+        color: var(--text);
+        padding: 0;
+        margin-bottom: 10px;
+        position: relative;
+      }
+      
+      .page-header .wrap {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        padding: 20px 24px 20px;
+        max-width: var(--layout-container-max-width);
+        margin: 0 auto;
+        background: rgba(255, 255, 255, var(--card-overlay-opacity, 0.55));
+        border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
+        box-shadow: var(--shadow);
+        border: 1px solid var(--color-border-default);
+        border-top: none;
+      }
+      
+      .page-header .title,
+      .page-header .subtitle,
+      .page-header .byline {
+        color: inherit;
+      }
+      
+      /* Title – flows in grid row 1, pushes stepper down naturally when wrapping */
+      .page-header .title {
+        grid-column: 1;
+        grid-row: 1;
+        font-size: var(--font-size-3xl);
+        font-weight: var(--font-weight-medium);
+        letter-spacing: var(--letter-spacing-tighter);
+        line-height: var(--line-height-title);
+        margin: 0;
+        padding-right: 16px;
+      }
+      
+      .title {
+        font-size: var(--font-size-3xl);
+        font-weight: var(--font-weight-medium);
+        letter-spacing: var(--letter-spacing-tighter);
+        line-height: var(--line-height-title);
+        margin: 0 0 var(--space-2);
+        max-width: 100%;
+      }
+      
+      .subtitle {
+        font-size: var(--font-size-sm);
+        color: var(--color-text-muted);
+        margin: 0 0 var(--space-6);
+        font-weight: var(--font-weight-medium);
+      }
+      
+      /* Subtitle placed after card in .wrap container */
+      .subtitle {
+        text-align: center;
+        color: #2b83e6;
+        font-size: var(--font-size-sm);
+        font-weight: var(--font-weight-medium);
+        margin: 13px 0 0;
+        padding: 0;
+        display: block;
+      }
+      
+      /* Byline – flows in grid row 1 col 2 (right of title) */
+      .page-header .byline {
+        grid-column: 2;
+        grid-row: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--space-1);
+        margin: 0;
+        font-size: var(--font-size-5);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-text-secondary);
+      }
+      
+      .byline {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--space-1);
+        margin: 0;
+        font-size: var(--font-size-5);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-text-secondary);
+      }
+      
+      /* "A business model by" is in the SVG; hide the separate text in redesign */
+      .byline #byText {
+        display: none;
+      }
+      
+      .page-header .byline img,
+      .page-header .byline svg {
+        width: 126px;
+        height: auto;
+        display: block;
+        margin-top: 5px;
+      }
+      
+      .byline img,
+      .byline svg {
+        width: 126px;
+        height: auto;
+        display: block;
+      }
+      
+      .byline .bylineName {
+        font-size: var(--font-size-md);
+        font-weight: var(--font-weight-medium);
+        color: var(--text);
+      }
+      
+      .byline .bylineTagline {
+        font-size: var(--font-size-xs);
+        letter-spacing: var(--letter-spacing-wide);
+        color: var(--muted);
+      }
+      
+      /* ─── Stepper row: step title above + 11 steps; in header, inside 55% rounded block, no connecting lines ─── */
+      .stepperRow {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0;
+      }
+      
+      /* Header stepper row – visual container is now .page-header .wrap */
+      .page-header .stepperRow {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        width: 100%;
+        padding: 0;
+        margin: 0;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      
+      .page-header .stepper {
+        justify-content: space-between;
+        width: 100%;
+        gap: 4px;
+        margin-top: 32px; /* room for stepperTitle label above active step */
+      }
+      
+      .page-header .stepLine {
+        display: none;
+      }
+      
+      .stepperTitle {
+        font-size: var(--font-size-sm);
+        font-weight: var(--font-weight-normal);
+        color: var(--text);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+        margin: 0 0 6px 0;
+        white-space: nowrap;
+        width: auto;
+        min-width: max-content;
+        pointer-events: none; /* Prevent interfering with clicks if it overlaps */
+      }
+      
+      .stepperTitle.align-left {
+        left: 0;
+        transform: none;
+        text-align: left;
+      }
+      
+      .stepperTitle.align-right {
+        left: auto;
+        right: 0;
+        transform: none;
+        text-align: right;
+      }
+      
+      .stepper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        flex-wrap: nowrap;
+      }
+      
+      /* Step: number only + 5px bar underneath; no circles */
+      .step {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: auto;
+        min-width: 1.6em;
+        font-weight: var(--font-weight-normal);
+        font-size: var(--font-size-sm);
+        font-variant-numeric: tabular-nums;
+        color: #6e6e73;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      
+      .step::before {
+        content: "";
+        display: block;
+        width: 56px;
+        height: 5px;
+        margin-bottom: 6px;
+        border-radius: 3px;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      }
+      
+      .step.active {
+        font-weight: var(--font-weight-medium);
+        color: #1d1d20;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+      }
+      
+      .step.active::before {
+        background: #2b83e6;
+        border-color: #2b83e6;
+      }
+      
+      .step.completed::before {
+        background: #2b83e6;
+        border-color: #2b83e6;
+      }
+      
+      .stepLine {
+        width: var(--component-step-line-width);
+        height: var(--component-step-line-height);
+        min-width: var(--component-step-line-width);
+        background: var(--line);
+      }
+      
+      /* Steps: flex to fill equal space so bars scale down on narrow viewports */
+      .page-header .step {
+        flex: 1 1 0;
+        min-width: 0;
+        font-weight: var(--font-weight-normal);
+        color: #6e6e73;
+      }
+      
+      .page-header .step.active {
+        font-weight: var(--font-weight-medium);
+        color: #1d1d20;
+      }
+      
+      .page-header .step::before {
+        width: 100%;
+        max-width: 56px;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      }
+      
+      .page-header .step.active::before {
+        background: #2b83e6;
+        border-color: #2b83e6;
+      }
+      
+      .page-header .step.completed::before {
+        background: #2b83e6;
+        border-color: #2b83e6;
+      }
+      
+      .page-header .stepLine {
+        display: none;
+      }
+      
+      /* ─── Section title (inside card, next to badge) ─── */
+      /* Visible when a main step starts. Hidden during substeps so cardDesc moves up. */
+      .sectionTitle {
+        font-size: var(--font-size-3xl);
+        font-weight: var(--font-weight-medium);
+        margin: 0 0 var(--space-3);
+        color: var(--text);
+        line-height: 1;
+      }
+      
+      /* Collapse when empty (substep) – content below shifts up naturally */
+      .sectionTitle:empty {
+        display: none;
+      }
+      
+      /* Programmatic hide via hidden attribute */
+      .sectionTitle[hidden] {
+        display: none !important;
+        margin: 0;
+      }
+      
+      /* ─── Card ─── */
+      .card {
+        max-width: var(--layout-container-max-width);
+        margin: 0 auto;
+        padding: var(--component-card-padding);
+        background: rgba(255, 255, 255, var(--card-overlay-opacity, 0.55));
+        border-radius: var(--radius-2xl);
+        box-shadow: var(--shadow);
+        border: 1px solid var(--color-border-default);
+      }
+      
+      .cardInner {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--component-card-gap);
+      }
+      
+      .cardInner > div:last-child {
+        flex: 1;
+        min-width: 0;
+      }
+      
+      /* Badge: step number only + 5px blue bar underneath; no circle */
+      .badge {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: auto;
+        min-width: 50px;
+        font-variant-numeric: tabular-nums;
+        color: var(--text);
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        font-weight: var(--font-weight-medium);
+        font-size: var(--font-size-3xl);
+        line-height: 1;
+        flex: 0 0 auto;
+        position: relative;
+      }
+      
+      .badge::after {
+        content: "";
+        display: block;
+        width: 50px;
+        height: 5px;
+        margin-top: 4px;
+        border-radius: 3px;
+        background: #2b83e6;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      /* Knight Rider animation for thinking state */
+      .badge.loading::after {
+        background: rgba(43, 131, 230, 0.2);
+      }
+      
+      .badge.loading::before {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 50px;
+        height: 5px;
+        border-radius: 3px;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      
+      .badge.loading::before {
+        background: linear-gradient(90deg, transparent, transparent 0px, var(--blue) 13px, transparent 37px, transparent);
+        background-size: 50px 5px;
+        background-position: -24px 0;
+        background-repeat: no-repeat;
+        animation: badgeKnightRider 2s ease-in-out infinite;
+      }
+      
+      @keyframes badgeKnightRider {
+        0% { background-position: -24px 0; }
+        50% { background-position: 24px 0; }
+        100% { background-position: -24px 0; }
+      }
+      
+      @media (prefers-reduced-motion: reduce) {
+        .badge.loading::before {
+          animation: none;
+          background-position: 0 0;
+        }
+      }
+      
+      .cardTitle {
+        display: none;
+      }
+      
+      .presentationPreview {
+        display: none;
+        margin-top: var(--space-4);
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+      }
+      
+      .presentationPreview.visible {
+        display: block;
+      }
+      
+      .presentationThumbLink {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+      }
+      
+      .presentationThumb {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        border-radius: var(--radius-md);
+        object-fit: contain;
+      }
+      
+      .presentationActions {
+        margin-top: var(--space-4);
+      }
+      
+      .presentationDownload {
+        display: inline-block;
+        border: 1px solid var(--color-brand-primary-border);
+        background: var(--color-brand-primary-subtle);
+        color: #2b83e6;
+        border-radius: 999px;
+        padding: var(--space-4) var(--space-5);
+        font-size: var(--font-size-md);
+        font-weight: var(--font-weight-medium);
+        cursor: pointer;
+        font-family: var(--font-sans);
+        text-decoration: none;
+        transition: background-color var(--duration-fast) var(--ease-default), 
+                    border-color var(--duration-fast) var(--ease-default), 
+                    color var(--duration-fast) var(--ease-default);
+      }
+      
+      .presentationDownload:hover {
+        opacity: 0.9;
+      }
+      
+      .cardDesc {
+        margin: 0;
+        padding: 0;
+        font-size: var(--font-size-lg);
+        line-height: var(--line-height-relaxed);
+        color: var(--color-text-secondary);
+        max-width: 100%;
+        white-space: pre-line;
+      }
+      
+      .cardDesc ul {
+        margin: 0;
+        padding-left: 0;
+        list-style-position: inside;
+      }
+      
+      .cardDesc ul br:first-child {
+        display: none;
+      }
+      
+      .cardDesc li {
+        margin: 0;
+        padding-left: 0;
+      }
+      
+      /* ─── Image placeholder (OPTIONAL) ─── */
+      /* Design-time placeholder between cardDesc paragraphs.
+         Safe to omit entirely – content flows normally without it.
+         When present, shows a dashed outline where a future image will go. */
+      .cardDesc-image-placeholder {
+        min-height: 90px;
+        margin: var(--space-4) 0 var(--space-6);
+        border: 2px dashed var(--color-placeholder-image-border);
+        border-radius: var(--radius-md);
+        background: none;
+      }
+      
+      /* Hide placeholder programmatically without removing from DOM */
+      .cardDesc-image-placeholder[hidden] {
+        display: none !important;
+        margin: 0;
+      }
+      
+      /* Actual image in cardDesc after first paragraph (see IMAGE-INSERTION-IMPLEMENTATION.md) */
+      .cardDesc-image {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin: var(--space-4) 0;
+        border-radius: var(--radius-md);
+        object-fit: cover;
+      }
+      
+      /* Paragraph styling when cardDesc uses innerHTML with images */
+      .cardDesc-para {
+        margin: 0 0 var(--space-4);
+        font-size: var(--font-size-lg);
+        line-height: var(--line-height-relaxed);
+        color: var(--color-text-secondary);
+        white-space: pre-wrap;
+      }
+      
+      .cardDesc-para:last-child {
+        margin-bottom: 0;
+      }
+      
+      /* ─── Statements panel ─── */
+      .statementsPanel {
+        margin-top: var(--space-5);
+        margin-bottom: var(--space-5);
+      }
+      
+      .statementsTitle {
+        font-weight: var(--font-weight-medium);
+        font-size: var(--font-size-md);
+        color: var(--text);
+        margin-bottom: var(--space-2);
+      }
+      
+      .statementsCount {
+        font-size: var(--font-size-5);
+        color: var(--muted);
+        margin-bottom: var(--space-3);
+      }
+      
+      .statementsList {
+        font-size: var(--font-size-base);
+        line-height: var(--line-height-normal);
+        color: var(--text);
+        white-space: pre-wrap;
+      }
+      
+      /* ─── Scoring panel ─── */
+      .scoringPanel {
+        display: none;
+        margin-top: var(--space-5);
+        margin-bottom: var(--space-5);
+        max-width: 100%;
+      }
+      
+      .scoringPanel.visible {
+        display: block;
+      }
+      
+      .scoringIntro {
+        font-size: var(--font-size-xl);
+        line-height: var(--line-height-relaxed);
+        color: var(--muted);
+        margin-bottom: var(--space-8);
+        white-space: pre-wrap;
+      }
+      
+      .scoringCluster {
+        margin-bottom: var(--space-10);
+      }
+      
+      .scoringClusterHeader {
+        font-weight: var(--font-weight-medium);
+        font-size: var(--font-size-md);
+        color: var(--text);
+        margin-bottom: var(--space-3);
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+        flex-wrap: wrap;
+      }
+      
+      .scoringClusterHeader .themeName {
+        flex: 1 1 auto;
+      }
+      
+      .scoringClusterHeader .avgScore,
+      .scoringClusterHeader .filledCount {
+        color: var(--muted);
+        font-size: var(--font-size-5);
+        font-weight: var(--font-weight-medium);
+      }
+      
+      .scoringClusterRows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      
+      .scoringRow {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+      }
+      
+      .scoringRow .statementText {
+        flex: 1 1 auto;
+        font-size: var(--font-size-base);
+        line-height: 1.4;
+        color: var(--text);
+      }
+      
+      .scoringRow input.scoreInput {
+        width: 56px;
+        min-width: 56px;
+        padding: var(--space-3) var(--space-4);
+        font-size: var(--font-size-md);
+        text-align: center;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+      }
+      
+      .scoringRow input.scoreInput:focus {
+        outline: none;
+        border-color: var(--blue);
+      }
+      
+      .scoringContinueWrap {
+        margin-top: var(--space-10);
+      }
+      
+      .scoringContinueWrap .btn {
+        min-width: 140px;
+      }
+      
+      .scoringContinueWrap .btn:disabled {
+        opacity: 1;
+        cursor: not-allowed;
+      }
+      
+      /* ─── Prompt ─── */
+      .prompt {
+        font-size: var(--font-size-2xl);
+        font-weight: var(--font-weight-medium);
+        margin: var(--space-4) 0 var(--space-4);
+        letter-spacing: var(--letter-spacing-tight);
+        white-space: pre-wrap;
+        color: var(--text);
+      }
+      
+      /* ─── Input + Send (textbox background: top-right, no scale) ─── */
+      .inputWrap {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--space-4);
+        margin-top: var(--space-4);
+      }
+      
+      .inputWrap textarea {
+        width: 100%;
+        min-height: var(--component-input-min-height);
+        padding: var(--component-input-padding);
+        font-size: var(--font-size-lg);
+        color: #000000;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        resize: vertical;
+        outline: none;
+        font-family: var(--font-sans);
+        transition: border-color var(--duration-fast) var(--ease-default);
+        background-color: var(--card);
+        /* ASSET: textbox_background.jpg – swap URL below for hosted version */
+        background-image: url("https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/b97fd89cb05ac8ab05cbacfdf926d4b0ccbd8243/chatkit/frontend/textbox_background.jpg");
+        background-repeat: no-repeat;
+        background-position: top right;
+        background-size: auto;
+        -webkit-font-smoothing: subpixel-antialiased;
+        -moz-osx-font-smoothing: unset;
+        text-rendering: optimizeLegibility;
+        opacity: 1;
+      }
+      
+      .inputWrap textarea::placeholder {
+        color: var(--color-text-placeholder);
+      }
+      
+      .inputWrap textarea:disabled {
+        background-color: var(--color-ui-disabled-bg);
+        background-image: none;
+        color: var(--color-text-placeholder);
+        cursor: not-allowed;
+      }
+      
+      /* Send button – blue gradient + icon from assets */
+      .send {
+        width: var(--component-send-size);
+        height: var(--component-send-size);
+        min-width: var(--component-send-size);
+        min-height: var(--component-send-size);
+        border: none;
+        border-radius: var(--component-send-radius);
+        background: linear-gradient(180deg, var(--color-brand-gradient-start), var(--color-brand-gradient-end));
+        color: #fff;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity var(--duration-fast) var(--ease-default);
+      }
+      
+      .send:hover:not(:disabled) {
+        opacity: 0.95;
+      }
+      
+      .send img,
+      .send svg {
+        width: 24px;
+        height: 24px;
+        object-fit: contain;
+      }
+      
+      .send:disabled {
+        background: var(--stepOff);
+        color: var(--color-ui-disabled-text);
+        cursor: not-allowed;
+      }
+      
+      /* ─── Choice buttons (light blue bg, blue text, fully rounded, semi-bold) ─── */
+      .choiceWrap {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        margin-top: var(--space-4);
+      }
+      
+      .choiceBtn {
+        width: 100%;
+        padding: var(--space-4) var(--space-5);
+        font-size: var(--font-size-md);
+        font-weight: var(--font-weight-medium);
+        text-align: left;
+        border: 1px solid var(--color-brand-primary-border);
+        border-radius: 999px; /* Fully rounded pill shape */
+        background: var(--color-brand-primary-subtle);
+        color: #2b83e6;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        transition: background-color var(--duration-fast) var(--ease-default), border-color var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default);
+      }
+      
+      .choiceBtn:disabled {
+        background: var(--color-ui-disabled-bg);
+        border-color: var(--line);
+        color: var(--color-ui-disabled-text);
+        cursor: not-allowed;
+      }
+      
+      /* ─── Thinking (in-card text, for widget) ─── */
+      .thinking {
+        margin: 0;
+        color: var(--muted);
+        font-weight: var(--font-weight-medium);
+      }
+      
+      /* ─── Thinking bar (hidden – animation lives on .badge.loading instead) ─── */
+      /* HTML kept for widget compatibility; visually replaced by badge animation. */
+      .thinking-bar {
+        display: none;
+      }
+      
+      body.has-thinking-bar {
+        padding-bottom: 0;
+      }
+      
+      /* ─── Controls row ─── */
+      .row {
+        display: flex;
+        gap: var(--space-4);
+        margin-top: var(--space-4);
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+      
+      .btn {
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--text);
+        border-radius: 999px;
+        padding: var(--space-4) var(--space-5);
+        font-size: var(--font-size-md);          /* 16px – explicit to avoid UA default */
+        font-weight: var(--font-weight-medium);
+        cursor: pointer;
+        font-family: var(--font-sans);
+        transition: background-color var(--duration-fast) var(--ease-default), border-color var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default);
+      }
+      
+      .btn.primary {
+        border-color: var(--color-brand-primary-border);
+        background: var(--color-brand-primary-subtle);
+        color: #2b83e6;
+      }
+      
+      .btn:disabled {
+        background: var(--color-ui-disabled-bg);
+        border-color: var(--line);
+        color: var(--color-ui-disabled-text);
+        cursor: not-allowed;
+      }
+      
+      #btnStart {
+        border-radius: 23px;
+        width: fit-content;
+        max-width: 100%;
+      }
+      
+      .startHint {
+        color: var(--muted);
+        font-weight: var(--font-weight-medium);
+        margin-left: var(--space-1);
+      }
+      
+      /* ─── Status (hidden) ─── */
+      .status {
+        display: none;
+      }
+      
+      /* ─── Debug overlay ─── */
+      #debugOverlay {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        max-height: 220px;
+        overflow: auto;
+        background: rgba(28, 28, 31, 0.94);
+        color: #e8e8ed;
+        font-family: ui-monospace, monospace;
+        font-size: var(--font-size-xs);
+        line-height: 1.35;
+        padding: var(--space-4);
+        border-top: 1px solid var(--line);
+        white-space: pre-wrap;
+        word-break: break-word;
+        z-index: 100;
+      }
+      
+      #debugOverlay.visible {
+        display: block;
+      }
+      
+      /* ─── Tablet: tighten header padding, scale down byline logo ─── */
+      @media (max-width: 600px) {
+        .page-header .wrap {
+          padding: 16px 16px 16px;
+        }
+      
+        .page-header .byline img,
+        .page-header .byline svg {
+          width: 100px;
+        }
+      }
+      
+      /* ─── Mobile: reflow, no shrinking text ─── */
+      @media (max-width: 480px) {
+        .page-header .wrap {
+          grid-template-columns: 1fr;
+          padding: 16px 16px 16px;
+        }
+      
+        .page-header .title {
+          padding-right: 0;
+        }
+      
+        .page-header .byline {
+          grid-column: 1;
+          grid-row: 2;
+          align-items: flex-start;
+          margin-top: var(--space-2);
+        }
+      
+        .page-header .stepperRow {
+          grid-row: 3;
+        }
+      
+        .page-header .stepper {
+          margin-top: 28px;
+        }
+      
+        .page-header .byline img,
+        .page-header .byline svg {
+          width: 100px;
+        }
+      
+        .stepper {
+          gap: 0;
+        }
+      
+        .cardInner {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      
+        .inputWrap {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      
+        .send {
+          align-self: flex-end;
+        }
+      }
+      
+    </style>
+  </head>
+
+  <body>
+    <header class="page-header">
+      <div class="wrap">
+        <div class="title" id="uiTitle">Business Strategy Canvas Builder</div>
+        <div class="byline">
+          <span id="byText">A business model by</span>
+          <img
+            src="https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/b97fd89cb05ac8ab05cbacfdf926d4b0ccbd8243/chatkit/frontend/business-model_by_ben-steenstra.svg"
+            alt="Ben Steenstra – When it feels right it works"
+            width="126"
+            height="50"
+          />
+        </div>
+        <div class="stepperRow">
+          <div class="stepper" id="stepper"></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div class="card">
+        <div class="cardInner">
+          <div class="badge" id="badge">1</div>
+          <div style="flex:1">
+            <div class="sectionTitle" id="sectionTitle"></div>
+            <div class="cardTitle" id="cardTitle"></div>
+
+          <div class="cardDesc" id="cardDesc"></div>
+          <div class="presentationPreview" id="presentationPreview">
+            <a class="presentationThumbLink" id="presentationThumbLink" target="_blank" rel="noopener noreferrer">
+              <img class="presentationThumb" id="presentationThumb" alt="Presentation preview" />
+            </a>
+            <div class="presentationActions">
+              <a class="presentationDownload" id="presentationDownload" target="_blank" rel="noopener noreferrer">Download PDF</a>
+            </div>
+          </div>
+            <div class="purposeInstructionHint" id="purposeInstructionHint" style="display: none;"></div>
+            <div id="statementsPanel" class="statementsPanel" style="display:none">
+              <div class="statementsTitle" id="statementsTitle"></div>
+              <div class="statementsCount" id="statementsCount"></div>
+              <div class="statementsList" id="statementsList"></div>
+            </div>
+            <div id="scoringPanel" class="scoringPanel">
+              <div class="scoringIntro" id="scoringIntro"></div>
+              <div id="scoringClusters"></div>
+              <div class="scoringContinueWrap">
+                <button type="button" class="btn primary" id="btnScoringContinue" disabled>Formulate my dream based on what I find important.</button>
+              </div>
+            </div>
+            <div class="prompt" id="prompt"></div>
+
+            <div class="inputWrap" id="inputWrap" style="display:none">
+              <textarea id="input" placeholder=""></textarea>
+              <button class="send" id="send" title="Send" disabled>
+                <img src="https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/b97fd89cb05ac8ab05cbacfdf926d4b0ccbd8243/chatkit/frontend/send_icon.svg" alt="">
+              </button>
+            </div>
+
+            <div class="choiceWrap" id="choiceWrap" style="display:none"></div>
+
+            <div class="row" id="controls">
+              <button class="btn primary" id="btnStart">Start</button>
+              <div class="startHint" id="startHint"></div>
+              <button class="btn primary" id="btnOk" style="display:none">Continue</button>
+              <button class="btn primary" id="btnGoToNextStep" style="display:none">Go to next step</button>
+              <button class="btn primary" id="btnStartDreamExercise" style="display:none">Start the exercise</button>
+              <button class="btn" id="btnSwitchToSelfDream" style="display:none">Switch back to self-formulate the dream</button>
+              <button class="btn primary" id="btnDreamConfirm" style="display:none">I'm happy with this formulation, continue to the Purpose step</button>
+            </div>
+
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+      </div>
+      <div class="subtitle" id="uiSubtitle"></div>
+      <div id="debugOverlay" class="" aria-hidden="true"></div>
+    </div>
+
+    <script>
+      const STRATEGY_STEP_ID = "strategy";
+
+      const ORDER = ["step_0","dream","purpose","bigwhy","role","entity","strategy","targetgroup","productsservices","rulesofthegame","presentation"];
+
+      const TITLES_DEFAULT = {
+        step_0: "Step 1: Validation & Business Name",
+        dream: "Step 2: Dream",
+        purpose: "Step 3: Purpose",
+        bigwhy: "Step 4: Big Why",
+        role: "Step 5: Role",
+        entity: "Step 6: Entity",
+        strategy: "Step 7: Strategy",
+        targetgroup: "Step 8: Target Group",
+        productsservices: "Step 9: Products and Services",
+        rulesofthegame: "Step 10: Rules of the game",
+        presentation: "Step 11: Presentation"
+      };
+
+            const PRESTART_WELCOME_DEFAULT =
+        `Build a complete Business Model and Strategy Canvas step by step.
+
+<strong>The Proven Standard</strong>
+A globally implemented strategy canvas used by teams worldwide, built through Ben Steenstra's unique step-by-step method of questioning and structured development.
+
+<strong>By the end you'll have</strong><ul>
+<li>A focused canvas that fits on one page</li>
+<li>A presentation you can use immediately (PPTX)</li>
+<li>A plan your team can align around</li>
+</ul><strong>How it works</strong>
+One question at a time. Clear input, structured output.
+
+<strong>Time</strong>
+Estimated time: 10–15 minutes.`;
+
+
+
+
+        const UI_STRINGS = {
+          default: {
+          "title.step_0": TITLES_DEFAULT.step_0,
+          "title.dream": TITLES_DEFAULT.dream,
+          "title.purpose": TITLES_DEFAULT.purpose,
+          "title.bigwhy": TITLES_DEFAULT.bigwhy,
+          "title.role": TITLES_DEFAULT.role,
+          "title.entity": TITLES_DEFAULT.entity,
+          "title.strategy": TITLES_DEFAULT.strategy,
+          "title.targetgroup": TITLES_DEFAULT.targetgroup,
+          "title.productsservices": TITLES_DEFAULT.productsservices,
+          "title.rulesofthegame": TITLES_DEFAULT.rulesofthegame,
+          "title.presentation": TITLES_DEFAULT.presentation,
+          prestartWelcome: PRESTART_WELCOME_DEFAULT,
+          uiSubtitle: "Use the app widget to continue (not the chat box)",
+          uiUseWidgetToContinue: "Use the app widget to continue (not the chat box).",
+          btnGoToNextStep: "Go to next step",
+          byText: "A business model by:",
+          startHint: "Click Start to begin.",
+          inputPlaceholder: "Type your answer here (use the widget, not the chat box)…",
+          btnStart: "Start the proces with Validation & Business Name",
+          btnOk: "Continue",
+          btnOk_strategy: "I'm happy, continue to step 7 Strategy",
+          btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
+          "dreamBuilder.startExercise": "Start the exercise",
+          "dreamBuilder.statements.title": "Your Dream statements",
+          "dreamBuilder.statements.count": "N statements out of a minimum of 20 so far",
+          "dreamBuilder.statements.empty": "No statements yet.",
+          "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",
+          btnSwitchToSelfDream: "Switch back to self-formulate the dream",
+          sendTitle: "Send",
+          errorMessage: "Something went wrong while processing your message. Please try again.",
+          scoringIntro1: "You now have more than 20 statements, so I've clustered them for you. You can still edit and add statements, but please give them a score.",
+          scoringIntro2: "",
+          scoringIntro3: "The average per cluster updates immediately while you type.",
+          scoringDreamQuestion: "You can see above, based on your scores, which topics matter most to you. Do you now have a clearer idea of what your Dream could be about, and can you say something about it? Or would you prefer that I formulate a Dream for you based on what you find important?",
+          btnScoringContinue: "Formulate my dream for me based on what I find important.",
+          scoringFilled: "N/M",
+          scoringAvg: "Average: X",
+          purposeInstructionHint: "Answer the question, formulate your own Purpose, or choose an option",
+          "sectionTitle.dream": "Your Dream",
+          "sectionTitle.purposeOf": "The Purpose of {0}",
+          "sectionTitle.purposeOfFuture": "The Purpose of your future company",
+          "sectionTitle.bigwhyOf": "The Big Why of {0}",
+          "sectionTitle.bigwhyOfFuture": "The Big Why of your future company",
+          "sectionTitle.roleOf": "The Role of {0}",
+          "sectionTitle.roleOfFuture": "The Role of your future company",
+          "sectionTitle.entityOf": "The Entity of {0}",
+          "sectionTitle.entityOfFuture": "The Entity of your future company",
+          "sectionTitle.strategyOf": "The Strategy of {0}",
+          "sectionTitle.strategyOfFuture": "The Strategy of your future company",
+          "sectionTitle.targetgroupOf": "The Target Group of {0}",
+          "sectionTitle.targetgroupOfFuture": "The Target Group of your future company",
+          "sectionTitle.productsservicesOf": "The Products and Services of {0}",
+          "sectionTitle.productsservicesOfFuture": "The Products and Services of your future company",
+          "sectionTitle.rulesofthegameOf": "The Rules of the game of {0}",
+          "sectionTitle.rulesofthegameOfFuture": "The Rules of the game of your future company",
+          "sectionTitle.presentation": "Create your Presentation"
+        },
+      };
+
+      function baseLang(lang) {
+        const l = String(lang || "").toLowerCase();
+        return (l.split(/[-_]/)[0] || "default");
+      }
+
+      function escapeHtml(s) {
+        if (s == null) return "";
+        var div = document.createElement("div");
+        div.textContent = s;
+        // SAFE: Use DOM to escape text into HTML entities.
+        return div.innerHTML;
+      }
+
+      function t(lang, key) {
+        const b = baseLang(lang);
+        const table = UI_STRINGS[b] || UI_STRINGS.default;
+        return (table && table[key]) ? table[key] : (UI_STRINGS.default[key] || "");
+      }
+
+      function titlesForLang(lang) {
+        const b = baseLang(lang);
+        const table = UI_STRINGS[b] || UI_STRINGS.default;
+        const titles = { ...TITLES_DEFAULT };
+        for (const step of ORDER) {
+          const key = "title." + step;
+          if (table && table[key]) titles[step] = table[key];
+        }
+        return titles;
+      }
+
+      function prestartWelcomeForLang(lang) {
+        const b = baseLang(lang);
+        const table = UI_STRINGS[b] || UI_STRINGS.default;
+        return (table && table.prestartWelcome) ? table.prestartWelcome : PRESTART_WELCOME_DEFAULT;
+      }
+
+      function getSectionTitle(lang, stepId, businessName) {
+        const titles = titlesForLang(lang);
+        if (stepId === "step_0") return titles[stepId] || "";
+        if (stepId === "dream") return t(lang, "sectionTitle.dream");
+        if (stepId === "presentation") return t(lang, "sectionTitle.presentation");
+        const hasBusinessName = businessName && String(businessName).trim() !== "" && String(businessName).trim() !== "TBD";
+        const stepsWithCompany = ["purpose", "bigwhy", "role", "entity", "strategy", "targetgroup", "productsservices", "rulesofthegame"];
+        if (stepsWithCompany.indexOf(stepId) !== -1) {
+          const keyOf = "sectionTitle." + stepId + "Of";
+          const keyFuture = "sectionTitle." + stepId + "OfFuture";
+          const template = t(lang, keyOf);
+          const noName = t(lang, keyFuture);
+          if (hasBusinessName) return template.replace(/\{0\}/g, String(businessName).trim());
+          return noName;
+        }
+        return titles[stepId] || "";
+      }
+
+      function oa(){ return globalThis.openai; }
+
+      function normalizeToolOutput(raw) {
+        if (!raw || typeof raw !== "object") return {};
+        if (raw.structuredContent && typeof raw.structuredContent === "object") return raw.structuredContent;
+        return raw;
+      }
+
+      // Cache last known tool output (resilient to host timing).
+      function setLastToolOutput(raw) {
+        try { globalThis.__BSC_LAST_TOOL_OUTPUT__ = normalizeToolOutput(raw); } catch {}
+      }
+      function getLastToolOutput() {
+        return (globalThis.__BSC_LAST_TOOL_OUTPUT__ && typeof globalThis.__BSC_LAST_TOOL_OUTPUT__ === "object")
+          ? globalThis.__BSC_LAST_TOOL_OUTPUT__
+          : {};
+      }
+
+      // Allow render() to use callTool return value (followups), otherwise fall back to host toolOutput / cache.
+      function toolData(overrideRaw) {
+        if (overrideRaw) return normalizeToolOutput(overrideRaw);
+        const o = oa();
+        if (o && o.toolOutput) return normalizeToolOutput(o.toolOutput);
+        const cached = getLastToolOutput();
+        if (cached && Object.keys(cached).length) return cached;
+        return {};
+      }
+
+      function widgetState() {
+        const o = oa();
+        return (o && o.widgetState && typeof o.widgetState === "object") ? o.widgetState : {};
+      }
+
+      function setWidgetStateSafe(patch) {
+        const o = oa();
+        if (!o || typeof o.setWidgetState !== "function") return;
+
+        const ws = widgetState() || {};
+        const next = { ...ws, ...(patch || {}) };
+
+        const keys = Object.keys(next);
+        let changed = false;
+        for (const k of keys) {
+          if (String(ws[k] ?? "") !== String(next[k] ?? "")) { changed = true; break; }
+        }
+        if (!changed) return;
+
+        try { o.setWidgetState(next); } catch {}
+      }
+
+      function languageFromState(resultState) {
+        // Only trust backend state for language. No widget/browser fallback to avoid sticky wrong languages.
+        const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
+        return fromResult || "";
+      }
+
+      function uiLang(resultState) {
+        // UI display language: backend state > widgetState > default English.
+        return languageFromState(resultState) || "en";
+      }
+
+      function setStaticStrings(lang) {
+        document.getElementById("uiSubtitle").textContent = t(lang, "uiSubtitle");
+        document.getElementById("byText").textContent = t(lang, "byText");
+        document.getElementById("btnStart").textContent = t(lang, "btnStart");
+        // btnOk label wordt dynamisch gezet in render() op basis van de huidige stap
+        document.getElementById("send").setAttribute("title", t(lang, "sendTitle"));
+      }
+
+      function stepIndex(stepId) {
+        const idx = ORDER.indexOf(stepId);
+        return idx >= 0 ? idx : 0;
+      }
+
+      function buildStepper(activeIdx, stepTitle) {
+        const el = document.getElementById("stepper");
+        // SAFE: Clear container (no user content).
+        el.innerHTML = "";
+        for (let i = 0; i < ORDER.length; i++) {
+          const s = document.createElement("div");
+          let className = "step";
+          if (i < activeIdx) {
+            className += " completed";
+          }
+          if (i === activeIdx) {
+            className += " active";
+          }
+          s.className = className;
+          s.style.position = "relative"; // Voor stepperTitle positioning
+          
+          // Voeg stepperTitle toe aan actieve step
+          if (i === activeIdx && stepTitle) {
+            const title = document.createElement("div");
+            title.className = "stepperTitle";
+            title.id = "stepperTitle";
+            title.textContent = stepTitle;
+            
+            // Alignment voor eerste/laatste step
+            if (i === 0) title.classList.add("align-left");
+            if (i === ORDER.length - 1) title.classList.add("align-right");
+            
+            s.appendChild(title);
+          }
+          
+          // Step nummer toevoegen
+          s.appendChild(document.createTextNode(String(i + 1).padStart(2, '0')));
+          el.appendChild(s);
+          
+          // StepLine alleen voor niet-header stepper (design verbergt deze in header)
+          // Behoud voor backward compatibility
+          if (i < ORDER.length - 1) {
+            const line = document.createElement("div");
+            line.className = "stepLine";
+            el.appendChild(line);
+          }
+        }
+      }
+
+      function extractStepTitle(stepId, lang) {
+        const titles = titlesForLang(lang);
+        const fullTitle = titles[stepId] || "";
+        // Verwijder "Step X: " of "Stap X: " prefix
+        return fullTitle.replace(/^Step \d+: /, "").replace(/^Stap \d+: /, "");
+      }
+
+      // Format text: convert newlines to br tags while preserving HTML tags
+      function formatText(text) {
+        if (!text) return "";
+        
+        // Tijdelijk placeholder voor HTML tags om ze te behouden tijdens conversie
+        const htmlTagPlaceholders = [];
+        let placeholderIndex = 0;
+        
+        // Vervang HTML tags met placeholders
+        let temp = text.replace(/<[^>]+>/g, function(match) {
+          htmlTagPlaceholders[placeholderIndex] = match;
+          return `__HTML_TAG_${placeholderIndex++}__`;
+        });
+        
+        // Converteer dubbele nieuwe regels naar paragraaf scheidingen (twee <br> tags)
+        temp = temp.replace(/\n\n+/g, '<br><br>');
+        
+        // Converteer enkele nieuwe regels naar <br> tags
+        temp = temp.replace(/\n/g, '<br>');
+        
+        // Zet HTML tags terug
+        temp = temp.replace(/__HTML_TAG_(\d+)__/g, function(match, index) {
+          return htmlTagPlaceholders[parseInt(index)];
+        });
+        
+        // Verwijder <br> tags tussen </li> en <li> om lege regels tussen bullets te voorkomen
+        temp = temp.replace(/<\/li>\s*<br>\s*<li>/gi, '</li><li>');
+        
+        // Converteer URLs naar links
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        temp = temp.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+        
+        return temp;
+      }
+
+      let isLoading = false;
+
+      // Local-only: this page-load session start gate.
+      let sessionStarted = false;
+      // Local-only: prevent repeating the welcome prepend.
+      let sessionWelcomeShown = false;
+
+      function setSendEnabled(enabled) {
+        document.getElementById("send").disabled = isLoading || !enabled;
+      }
+
+      function setLoading(next) {
+        isLoading = Boolean(next);
+        document.getElementById("badge").classList.toggle("loading", isLoading);
+
+        const inputEl = document.getElementById("input");
+        const sendEl = document.getElementById("send");
+        const btnStart = document.getElementById("btnStart");
+        const btnOk = document.getElementById("btnOk");
+        const btnGoToNextStep = document.getElementById("btnGoToNextStep");
+        const btnStartDreamExercise = document.getElementById("btnStartDreamExercise");
+        const btnSwitchToSelfDream = document.getElementById("btnSwitchToSelfDream");
+
+        if (inputEl) inputEl.disabled = isLoading;
+        if (sendEl) sendEl.disabled = isLoading;
+        if (btnStart) btnStart.disabled = isLoading;
+        if (btnOk) btnOk.disabled = isLoading;
+        if (btnGoToNextStep) btnGoToNextStep.disabled = isLoading;
+        if (btnStartDreamExercise) btnStartDreamExercise.disabled = isLoading;
+        if (btnSwitchToSelfDream) btnSwitchToSelfDream.disabled = isLoading;
+
+        document.querySelectorAll("#choiceWrap button").forEach(function(b){ b.disabled = isLoading; });
+
+        const v = (inputEl && inputEl.value ? inputEl.value : "").trim();
+        if (sendEl) sendEl.disabled = isLoading || v.length === 0;
+      }
+
+      /**
+       * Structure-only choice detection (language-agnostic).
+       * Renders numbered lines as buttons when: one contiguous numbered block,
+       * consecutive from 1, count 2–6, prompt <= 12 lines, each label <= 140 chars.
+       * No "choose/type/select" cue required.
+       */
+      function extractChoicesFromPrompt(promptText) {
+        const raw = String(promptText || "");
+        const lines = raw.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+
+        const found = {};
+        const kept = [];
+
+        for (const line of lines) {
+          const m = line.match(/^\s*([1-9])[\)\.]\s*(.+?)\s*$/);
+          if (m && m[1] && m[2]) {
+            found[m[1]] = m[2].trim();
+            continue;
+          }
+          kept.push(line);
+        }
+
+        const keys = Object.keys(found).sort((a, b) => Number(a) - Number(b));
+        const choiceCount = keys.length;
+        var consecutive = choiceCount > 0;
+        for (var i = 0; i < keys.length; i++) {
+          if (Number(keys[i]) !== i + 1) { consecutive = false; break; }
+        }
+        var shortPrompt = lines.length <= 12;
+        var smallMenu = choiceCount >= 1 && choiceCount <= 6;
+        const maxLabelLen = 140;
+        var labelsReasonable = keys.every(function(k) { return String(found[k]).length <= maxLabelLen; });
+        var useAsChoices = consecutive && shortPrompt && smallMenu && labelsReasonable;
+
+        const choices = useAsChoices
+          ? keys.map((k) => ({ value: String(k), label: String(found[k]) }))
+          : [];
+        const promptShown = useAsChoices ? kept.join("\n").trim() : raw.trim();
+
+        return { promptShown: promptShown, choices: choices };
+      }
+
+      /**
+       * Hard-coded mapping van button label + menu_id + choiceIndex naar ActionCode.
+       * Retourneert ActionCode zoals "ACTION_DREAM_REFINE_CONFIRM".
+       */
+      function getActionCodeForChoice(choiceLabel, menuId, choiceIndex, currentStep) {
+        const menu = String(menuId || "").trim();
+        const idx = Number(choiceIndex);
+        const step = String(currentStep || "").trim();
+
+        if (step === "dream") {
+          if (menu === "DREAM_MENU_INTRO") {
+            if (idx === 1) return "ACTION_DREAM_INTRO_EXPLAIN_MORE";
+            if (idx === 2) return "ACTION_DREAM_INTRO_START_EXERCISE";
+          }
+          if (menu === "DREAM_MENU_WHY") {
+            if (idx === 1) return "ACTION_DREAM_WHY_GIVE_SUGGESTIONS";
+            if (idx === 2) return "ACTION_DREAM_WHY_START_EXERCISE";
+          }
+          if (menu === "DREAM_MENU_SUGGESTIONS") {
+            if (idx === 1) return "ACTION_DREAM_SUGGESTIONS_PICK_ONE";
+            if (idx === 2) return "ACTION_DREAM_SUGGESTIONS_START_EXERCISE";
+          }
+          if (menu === "DREAM_MENU_REFINE") {
+            if (idx === 1) return "ACTION_DREAM_REFINE_CONFIRM";
+            if (idx === 2) return "ACTION_DREAM_REFINE_START_EXERCISE";
+          }
+          if (menu === "DREAM_MENU_ESCAPE") {
+            if (idx === 1) return "ACTION_DREAM_ESCAPE_CONTINUE";
+            if (idx === 2) return "ACTION_DREAM_ESCAPE_FINISH_LATER";
+          }
+          if (menu === "DREAM_EXPLAINER_MENU_REFINE") {
+            if (idx === 1) return "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM";
+            if (idx === 2) return "ACTION_DREAM_EXPLAINER_REFINE_ADJUST";
+          }
+          if (menu === "DREAM_EXPLAINER_MENU_ESCAPE") {
+            if (idx === 1) return "ACTION_DREAM_EXPLAINER_CONTINUE";
+            if (idx === 2) return "ACTION_DREAM_EXPLAINER_FINISH_LATER";
+          }
+        }
+
+        if (step === "purpose") {
+          if (menu === "PURPOSE_MENU_INTRO") {
+            if (idx === 1) return "ACTION_PURPOSE_INTRO_EXPLAIN_MORE";
+          }
+          if (menu === "PURPOSE_MENU_EXPLAIN") {
+            if (idx === 1) return "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS";
+            if (idx === 2) return "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES";
+          }
+          if (menu === "PURPOSE_MENU_EXAMPLES") {
+            if (idx === 1) return "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS";
+            if (idx === 2) return "ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME";
+          }
+          if (menu === "PURPOSE_MENU_REFINE") {
+            if (idx === 1) return "ACTION_PURPOSE_REFINE_CONFIRM";
+            if (idx === 2) return "ACTION_PURPOSE_REFINE_ADJUST";
+          }
+          if (menu === "PURPOSE_MENU_CONFIRM_SINGLE") {
+            if (idx === 1) return "ACTION_PURPOSE_CONFIRM_SINGLE";
+          }
+          if (menu === "PURPOSE_MENU_ESCAPE") {
+            if (idx === 1) return "ACTION_PURPOSE_ESCAPE_CONTINUE";
+            if (idx === 2) return "ACTION_PURPOSE_ESCAPE_FINISH_LATER";
+          }
+        }
+
+        if (step === "bigwhy") {
+          if (menu === "BIGWHY_MENU_INTRO") {
+            if (idx === 1) return "ACTION_BIGWHY_INTRO_GIVE_EXAMPLE";
+            if (idx === 2) return "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE";
+          }
+          if (menu === "BIGWHY_MENU_A") {
+            if (idx === 1) return "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS";
+            if (idx === 2) return "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLES";
+            if (idx === 3) return "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE";
+          }
+          if (menu === "BIGWHY_MENU_REFINE") {
+            if (idx === 1) return "ACTION_BIGWHY_REFINE_CONFIRM";
+            if (idx === 2) return "ACTION_BIGWHY_REFINE_ADJUST";
+          }
+          if (menu === "BIGWHY_MENU_ESCAPE") {
+            if (idx === 1) return "ACTION_BIGWHY_ESCAPE_CONTINUE";
+            if (idx === 2) return "ACTION_BIGWHY_ESCAPE_FINISH_LATER";
+          }
+        }
+
+        if (step === "role") {
+          if (menu === "ROLE_MENU_INTRO") {
+            if (idx === 1) return "ACTION_ROLE_INTRO_GIVE_EXAMPLES";
+            if (idx === 2) return "ACTION_ROLE_INTRO_EXPLAIN_MORE";
+          }
+          if (menu === "ROLE_MENU_ASK") {
+            if (idx === 1) return "ACTION_ROLE_ASK_GIVE_EXAMPLES";
+          }
+          if (menu === "ROLE_MENU_REFINE") {
+            if (idx === 1) return "ACTION_ROLE_REFINE_CONFIRM";
+            if (idx === 2) return "ACTION_ROLE_REFINE_ADJUST";
+          }
+          if (menu === "ROLE_MENU_ESCAPE") {
+            if (idx === 1) return "ACTION_ROLE_ESCAPE_CONTINUE";
+            if (idx === 2) return "ACTION_ROLE_ESCAPE_FINISH_LATER";
+          }
+          if (menu === "ROLE_MENU_EXAMPLES") {
+            if (idx === 1) return "ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME";
+          }
+        }
+
+        if (step === "entity") {
+          if (menu === "ENTITY_MENU_INTRO") {
+            if (idx === 1) return "ACTION_ENTITY_INTRO_FORMULATE";
+            if (idx === 2) return "ACTION_ENTITY_INTRO_EXPLAIN_MORE";
+          }
+          if (menu === "ENTITY_MENU_EXAMPLE") {
+            if (idx === 1) return "ACTION_ENTITY_EXAMPLE_CONFIRM";
+            if (idx === 2) return "ACTION_ENTITY_EXAMPLE_REFINE";
+          }
+          if (menu === "ENTITY_MENU_FORMULATE") {
+            if (idx === 1) return "ACTION_ENTITY_FORMULATE_FOR_ME";
+          }
+          if (menu === "ENTITY_MENU_ESCAPE") {
+            if (idx === 1) return "ACTION_ENTITY_ESCAPE_CONTINUE";
+            if (idx === 2) return "ACTION_ENTITY_ESCAPE_FINISH_LATER";
+          }
+        }
+
+        if (step === "strategy") {
+          if (menu === "STRATEGY_MENU_INTRO") {
+            if (idx === 1) return "ACTION_STRATEGY_INTRO_EXPLAIN_MORE";
+          }
+          if (menu === "STRATEGY_MENU_ASK") {
+            if (idx === 1) return "ACTION_STRATEGY_ASK_3_QUESTIONS";
+            if (idx === 2) return "ACTION_STRATEGY_ASK_GIVE_EXAMPLES";
+          }
+          if (menu === "STRATEGY_MENU_REFINE") {
+            if (idx === 1) return "ACTION_STRATEGY_REFINE_EXPLAIN_MORE";
+          }
+          if (menu === "STRATEGY_MENU_QUESTIONS") {
+            if (idx === 1) return "ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE";
+          }
+          if (menu === "STRATEGY_MENU_CONFIRM") {
+            if (idx === 1) return "ACTION_STRATEGY_REFINE_EXPLAIN_MORE";  // "Explain why a Strategy matters"
+            if (idx === 2) return "ACTION_STRATEGY_CONFIRM_SATISFIED";     // "I'm satisfied with my Strategy. Let's go to Rules of the Game"
+          }
+          if (menu === "STRATEGY_MENU_FINAL_CONFIRM") {
+            if (idx === 1) return "ACTION_STRATEGY_FINAL_CONTINUE";
+          }
+          if (menu === "STRATEGY_MENU_ESCAPE") {
+            if (idx === 1) return "ACTION_STRATEGY_ESCAPE_CONTINUE";
+            if (idx === 2) return "ACTION_STRATEGY_ESCAPE_FINISH_LATER";
+          }
+        }
+
+        if (step === "targetgroup") {
+          if (menu === "TARGETGROUP_MENU_INTRO") {
+            if (idx === 1) return "ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE";  // "Explain me more about Target Groups"
+            if (idx === 2) return "ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS";  // "Ask me some questions to define my specific Target Group"
+          }
+          if (menu === "TARGETGROUP_MENU_EXPLAIN_MORE") {
+            if (idx === 1) return "ACTION_TARGETGROUP_EXPLAIN_ASK_QUESTIONS"; // "Ask me some questions to define my specific Target Group"
+          }
+          if (menu === "TARGETGROUP_MENU_POSTREFINE") {
+            if (idx === 1) return "ACTION_TARGETGROUP_POSTREFINE_CONFIRM";     // "Ja, dit is precies wat ik bedoel, ga naar stap Product and Services"
+            if (idx === 2) return "ACTION_TARGETGROUP_POSTREFINE_ASK_QUESTIONS"; // "Ask me some questions to define my specific Target Group"
+          }
+        }
+
+        if (step === "productsservices") {
+          if (menu === "PRODUCTSSERVICES_MENU_CONFIRM") {
+            if (idx === 1) return "ACTION_PRODUCTSSERVICES_CONFIRM"; // "This is all what we offer, continue to step Rules of the Game"
+          }
+        }
+
+        if (step === "rulesofthegame") {
+          if (menu === "RULES_MENU_INTRO") {
+            if (idx === 1) return "ACTION_RULES_INTRO_EXPLAIN_MORE";
+            if (idx === 2) return "ACTION_RULES_INTRO_GIVE_EXAMPLE";
+          }
+          if (menu === "RULES_MENU_ASK_EXPLAIN") {
+            if (idx === 1) return "ACTION_RULES_ASK_EXPLAIN_MORE";
+            if (idx === 2) return "ACTION_RULES_ASK_GIVE_EXAMPLE";
+          }
+          if (menu === "RULES_MENU_EXAMPLE_ONLY") {
+            if (idx === 1) return "ACTION_RULES_ASK_GIVE_EXAMPLE";
+          }
+          if (menu === "RULES_MENU_REFINE") {
+            if (idx === 1) return "ACTION_RULES_REFINE_CONFIRM";
+            if (idx === 2) return "ACTION_RULES_REFINE_ADJUST";
+          }
+          if (menu === "RULES_MENU_CONFIRM") {
+            if (idx === 1) return "ACTION_RULES_CONFIRM_ALL";
+            if (idx === 2) return "ACTION_RULES_ASK_EXPLAIN_MORE";
+            if (idx === 3) return "ACTION_RULES_ASK_GIVE_EXAMPLE";
+          }
+          if (menu === "RULES_MENU_ESCAPE") {
+            if (idx === 1) return "ACTION_RULES_ESCAPE_CONTINUE";
+            if (idx === 2) return "ACTION_RULES_ESCAPE_FINISH_LATER";
+          }
+        }
+
+        if (step === "presentation") {
+          if (menu === "PRESENTATION_MENU_ASK") {
+            if (idx === 1) return "ACTION_PRESENTATION_MAKE";
+          }
+          if (menu === "PRESENTATION_MENU_ESCAPE") {
+            if (idx === 1) return "ACTION_PRESENTATION_ESCAPE_CONTINUE";
+            if (idx === 2) return "ACTION_PRESENTATION_ESCAPE_FINISH_LATER";
+          }
+        }
+
+        return null;
+      }
+
+      function renderChoiceButtons(choices, resultData) {
+        const wrap = document.getElementById("choiceWrap");
+        // SAFE: Clear container (no user content).
+        wrap.innerHTML = "";
+
+        if (!choices || choices.length === 0) {
+          wrap.style.display = "none";
+          return;
+        }
+
+        // Read menu_id and current_step for ActionCode mapping
+        const specialist = resultData?.specialist || {};
+        const menuId = String(specialist?.menu_id || "").trim();
+        const state = resultData?.state || {};
+        const currentStep = String(state?.current_step || "").trim();
+
+        // HARD GUARD: Role REFINE menu must only show the confirm button
+        if (currentStep === "role" && menuId === "ROLE_MENU_REFINE" && Array.isArray(choices) && choices.length > 1) {
+          // Keep only the first / confirm option (value 1); ignore any extra options
+          choices = choices.filter(function (c) { return Number(c.value) === 1; });
+        }
+
+        if (!menuId) {
+          console.error("Missing menu_id for choices", { currentStep, choices });
+          
+          // Special fallback voor Purpose step
+          if (currentStep === "purpose") {
+            wrap.style.display = "flex";
+            // SAFE: Clear container (no user content).
+            wrap.innerHTML = "";
+            const fallbackBtn = document.createElement("button");
+            fallbackBtn.className = "choiceBtn";
+            fallbackBtn.textContent = "Explain more about why a purpose is needed.";
+            fallbackBtn.addEventListener("click", function() {
+              if (isLoading) return;
+              callRunStep("ACTION_PURPOSE_INTRO_EXPLAIN_MORE");
+            });
+            wrap.appendChild(fallbackBtn);
+            return;
+          }
+          
+          // Voor andere stappen: toon error message
+          wrap.style.display = "block";
+          wrap.textContent = "Menu error: missing menu_id for choices. Please refresh.";
+          return;
+        }
+
+        // Pre-validate: all buttons must have labels and ActionCodes
+        for (const c of choices) {
+          const label = String(c.label || "").trim();
+          if (!label) {
+            console.error("Empty choice label", { menuId, currentStep, choiceIndex: c.value });
+            wrap.style.display = "block";
+            wrap.textContent = "Menu error: empty choice label.";
+            return;
+          }
+          const actionCode = getActionCodeForChoice(label, menuId, Number(c.value), currentStep);
+          if (!actionCode) {
+            console.error("No ActionCode mapping for button", {
+              label,
+              menuId,
+              choiceIndex: c.value,
+              currentStep
+            });
+            wrap.style.display = "block";
+            wrap.textContent = `Menu error: missing ActionCode mapping for ${menuId} option ${c.value}.`;
+            return;
+          }
+        }
+
+        wrap.style.display = "flex";
+        for (const c of choices) {
+          const label = String(c.label || "").trim();
+          const actionCode = getActionCodeForChoice(label, menuId, Number(c.value), currentStep);
+          const btn = document.createElement("button");
+          btn.className = "choiceBtn";
+          btn.type = "button";
+          btn.textContent = label;
+          btn.disabled = isLoading;
+          btn.addEventListener("click", () => {
+            if (isLoading) return;
+            callRunStep(actionCode);
+          });
+          wrap.appendChild(btn);
+        }
+      }
+
+      function ensureLanguageInState(state, lang) {
+        const current = (state && state.language) ? String(state.language).trim() : "";
+        if (current) return state;
+        return Object.assign({}, state || {}, { language: lang });
+      }
+
+      function render(overrideToolOutput) {
+        const data = toolData(overrideToolOutput);
+
+        if (data && Object.keys(data).length) setLastToolOutput(data);
+
+        const result =
+          (data && data.result) ? data.result :
+          (data && data.ui && data.ui.result) ? data.ui.result :
+          (data && data.ui) ? data.ui :
+          {};
+
+        const state = (result && result.state) ? result.state : {};
+        const overrideStrings = (state && typeof state.ui_strings === "object" && state.ui_strings)
+          ? state.ui_strings
+          : (result && typeof result.ui_strings === "object" ? result.ui_strings : null);
+        const overrideLang = String((state && state.ui_strings_lang) || "").trim().toLowerCase();
+        const lang = uiLang(state);
+        if (overrideStrings) {
+          const bucket = overrideLang || baseLang(lang);
+          UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...overrideStrings };
+        }
+        setStaticStrings(lang);
+
+        const ws = widgetState();
+        const langPersist = languageFromState(state);
+        if (langPersist && (!ws.language || String(ws.language).toLowerCase().trim() !== String(langPersist).toLowerCase().trim())) {
+          setWidgetStateSafe({ language: langPersist });
+        }
+
+        const hasToolOutput = Boolean(oa() && oa().toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
+        const persistedStarted = String((ws && ws.started) || "").toLowerCase() === "true";
+
+        // Start gating: welcome stays until user clicks Start. Do NOT set sessionStarted from toolOutput or persisted flag.
+        const showPreStart = !sessionStarted;
+
+        const current = (!showPreStart && hasToolOutput) ? (state.current_step || "step_0") : "step_0";
+        const idx = stepIndex(current);
+        const stepTitle = extractStepTitle(current, lang);
+        buildStepper(idx, stepTitle);
+
+        document.getElementById("badge").textContent = String(idx + 1);
+
+        const inputWrap = document.getElementById("inputWrap");
+        const btnStart = document.getElementById("btnStart");
+        const btnOk = document.getElementById("btnOk");
+        const startHint = document.getElementById("startHint");
+
+        const specialist = (result && result.specialist) ? result.specialist : {};
+        
+        // SectionTitle: only show during step intro, hide during substeps
+        const sectionTitleEl = document.getElementById("sectionTitle");
+        const isIntroAction = String(specialist.action || "") === "INTRO";
+        
+        if (isIntroAction) {
+          const businessName = String((state && state.business_name) || "").trim();
+          const titleText = getSectionTitle(lang, current, businessName);
+          sectionTitleEl.textContent = titleText;
+        } else {
+          sectionTitleEl.textContent = ""; // Empty triggers :empty CSS rule to hide it
+        }
+        const activeSpecialist = String(state.active_specialist || "");
+        const isDreamExplainerMode = current === "dream" && activeSpecialist === "DreamExplainer";
+        const lastSpecialist = (state && state.last_specialist_result) ? state.last_specialist_result : {};
+        const isDreamStepPreExercise = current === "dream" && activeSpecialist === "Dream" &&
+          String(specialist.suggest_dreambuilder || "") === "true" &&
+          String(specialist.action || "") === "ASK";
+        var hasPromptForConfirm = (String(specialist.confirmation_question || "").trim() !== "" || String(specialist.question || "").trim() !== "");
+        const showContinue =
+        !showPreStart &&
+        hasToolOutput &&
+        String(specialist.action || "") === "CONFIRM" &&
+        hasPromptForConfirm &&
+        !isDreamExplainerMode;
+
+        // Dynamische labelkeuze voor btnOk op basis van de huidige stap
+        const btnOkLabelKey = current === STRATEGY_STEP_ID ? "btnOk_strategy" : "btnOk";
+        const btnOkEl = document.getElementById("btnOk");
+        if (btnOkEl) {
+          btnOkEl.textContent = t(lang, btnOkLabelKey);
+        }
+
+        if (showPreStart) {
+          inputWrap.style.display = "none";
+          document.getElementById("choiceWrap").style.display = "none";
+          btnStart.style.display = "inline-flex";
+          btnOk.style.display = "none";
+
+          // SAFE: Prestart welcome is a trusted static string with intentional HTML.
+          document.getElementById("cardDesc").innerHTML = formatText(prestartWelcomeForLang(lang));
+          document.getElementById("prompt").textContent = "";
+          startHint.textContent = ""; // Always empty - hint removed
+
+          if (isLoading) setLoading(false);
+          return;
+        }
+
+        // Post-start UI
+        inputWrap.style.display = "flex";
+        btnStart.style.display = "none";
+        startHint.textContent = "";
+
+        var isDreamDirectionView = current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
+
+        const bodyRaw = (function () {
+          var raw = (result && typeof result.text === "string") ? result.text : "";
+          if (!raw && result && result.specialist && typeof result.specialist === "object") {
+            var sp = result.specialist;
+            raw = String(sp.message || "").trim() || String(sp.refined_formulation || "").trim() || String(sp.question || "").trim() || "";
+          }
+          return raw;
+        })();
+        const promptRaw = (result && typeof result.prompt === "string") ? result.prompt : "";
+
+        // Post-scoring Dream direction: show only the question in the same screen (no Thanks, no statements panel).
+        var body = bodyRaw;
+        if (isDreamDirectionView && promptRaw) {
+          body = promptRaw;
+        } else if (!sessionWelcomeShown) {
+          body = `${prestartWelcomeForLang(lang)}\n\n${bodyRaw || ""}`.trim();
+          sessionWelcomeShown = true;
+        } else {
+          body = bodyRaw || "";
+        }
+
+        // Override Purpose INTRO message with exact text
+        if (current === "purpose" && isIntroAction && bodyRaw) {
+          body = `Purpose is the deeper meaning that drives your business forward, even when results are uncertain. While your Dream sets the direction, what you want to change in the world, Purpose is the internal engine that keeps you and your team moving, especially when things get tough.
+
+Without Purpose, a Dream remains just an idea, and without a Dream, Purpose becomes a feeling without a destination. Purpose is not about money, growth, or recognition. Those are outcomes, not reasons for being. Instead, Purpose is the belief or value that makes your business matter, both to you and to those you serve. It's what gives your work meaning and resilience. When you're clear about your Purpose, it becomes easier to make decisions, inspire others, and stay true to your path, even under pressure.`;
+        }
+
+        var cardDescEl = document.getElementById("cardDesc");
+        if (cardDescEl) {
+          cardDescEl.style.display = "block";
+          // UNSAFE (fixed): body contains LLM/tool output, so escape-first rendering.
+          cardDescEl.textContent = String(body || "");
+        }
+
+        var previewWrap = document.getElementById("presentationPreview");
+        var previewImg = document.getElementById("presentationThumb");
+        var previewLink = document.getElementById("presentationThumbLink");
+        var previewDownload = document.getElementById("presentationDownload");
+        var presentationAssets = (result && result.presentation_assets) ? result.presentation_assets : null;
+        if (previewWrap && previewImg && previewLink && previewDownload) {
+          if (presentationAssets && presentationAssets.png_url && presentationAssets.pdf_url) {
+            previewWrap.classList.add("visible");
+            previewImg.src = String(presentationAssets.png_url);
+            previewLink.href = String(presentationAssets.pdf_url);
+            previewDownload.href = String(presentationAssets.pdf_url);
+          } else {
+            previewWrap.classList.remove("visible");
+            previewImg.removeAttribute("src");
+            previewLink.removeAttribute("href");
+            previewDownload.removeAttribute("href");
+          }
+        }
+
+        var purposeInstructionHintEl = document.getElementById("purposeInstructionHint");
+        if (purposeInstructionHintEl) {
+          var showPurposeHint = 
+            current === "purpose" && 
+            String(specialist.action || "") === "ASK" &&
+            (String(body || "").includes("What part of this Dream matters most") || 
+             String(body || "").includes("Which belief must be true") ||
+             String(body || "").includes("If your Dream became real"));
+          
+          if (showPurposeHint) {
+            purposeInstructionHintEl.style.display = "block";
+            purposeInstructionHintEl.textContent = t(lang, "purposeInstructionHint") || "Answer the question, formulate your own Purpose or make a choose";
+          } else {
+            purposeInstructionHintEl.style.display = "none";
+          }
+        }
+
+        var statementsPanelEl = document.getElementById("statementsPanel");
+        var statementsTitleEl = document.getElementById("statementsTitle");
+        var statementsCountEl = document.getElementById("statementsCount");
+        var statementsListEl = document.getElementById("statementsList");
+        var statementsArray = result && result.specialist && Array.isArray(result.specialist.statements) ? result.specialist.statements : null;
+        if (current === "dream" && isDreamExplainerMode && (!statementsArray || statementsArray.length === 0)) {
+          if (Array.isArray(lastSpecialist.statements) && lastSpecialist.statements.length > 0) {
+            statementsArray = lastSpecialist.statements;
+          } else if (Array.isArray(state.dream_builder_statements) && state.dream_builder_statements.length > 0) {
+            statementsArray = state.dream_builder_statements;
+          }
+        }
+
+        var isScoringView = current === "dream" && activeSpecialist === "DreamExplainer" &&
+          String(specialist.scoring_phase || "") === "true" &&
+          Array.isArray(specialist.clusters) && specialist.clusters.length > 0 &&
+          statementsArray && statementsArray.length >= 20;
+
+        if (isScoringView) {
+          if (cardDescEl) cardDescEl.style.display = "none";
+          if (statementsPanelEl) statementsPanelEl.style.display = "none";
+          document.getElementById("choiceWrap").style.display = "none";
+          var hideBtns = ["btnGoToNextStep", "btnStartDreamExercise", "btnOk"];
+          for (var h = 0; h < hideBtns.length; h++) { var el = document.getElementById(hideBtns[h]); if (el) el.style.display = "none"; }
+          var showPrompt = document.getElementById("prompt");
+          var scoringDreamQ = t(lang, "scoringDreamQuestion");
+          if (showPrompt) { showPrompt.textContent = scoringDreamQ; showPrompt.style.display = "none"; }
+          inputWrap.style.display = "none";
+          var btnSelfDream = document.getElementById("btnSwitchToSelfDream");
+          if (btnSelfDream) { btnSelfDream.style.display = "inline-block"; btnSelfDream.textContent = t(lang, "btnSwitchToSelfDream"); }
+
+          var scoringPanelEl = document.getElementById("scoringPanel");
+          scoringPanelEl.classList.add("visible");
+          scoringPanelEl.style.display = "block";
+          var intro1 = t(lang, "scoringIntro1");
+          var intro2 = t(lang, "scoringIntro2");
+          var intro3 = t(lang, "scoringIntro3");
+          document.getElementById("scoringIntro").textContent = intro1 + "\n\n" + intro2 + "\n\n" + intro3;
+
+          if (!window.__dreamScoringScores) window.__dreamScoringScores = [];
+          var scoringScores = window.__dreamScoringScores;
+          var clusters = specialist.clusters;
+          for (var ci = 0; ci < clusters.length; ci++) {
+            if (!scoringScores[ci]) scoringScores[ci] = [];
+            var indices = clusters[ci].statement_indices || [];
+            for (var si = 0; si < indices.length; si++) {
+              if (scoringScores[ci][si] === undefined) scoringScores[ci][si] = "";
+            }
+            scoringScores[ci].length = indices.length;
+          }
+          scoringScores.length = clusters.length;
+
+          var scoringClustersEl = document.getElementById("scoringClusters");
+          // SAFE: Clear container (no user content).
+          scoringClustersEl.innerHTML = "";
+          for (var cii = 0; cii < clusters.length; cii++) {
+            var cluster = clusters[cii];
+            var indices = cluster.statement_indices || [];
+            var themeName = String(cluster.theme || "").trim() || ("Category " + (cii + 1));
+            var clusterDiv = document.createElement("div");
+            clusterDiv.className = "scoringCluster";
+            clusterDiv.setAttribute("data-cluster-index", String(cii));
+            var filled = 0, sum = 0;
+            for (var si = 0; si < indices.length; si++) {
+              var v = scoringScores[cii][si];
+              var n = Number(v);
+              if (v !== "" && v !== undefined && !isNaN(n) && n >= 1 && n <= 10) { filled++; sum += n; }
+            }
+            var avgText = filled === 0 ? "—" : (sum / filled).toFixed(1);
+            var showStats = filled > 0;
+            var avgHtml = showStats ? ("<span class=\"avgScore\">" + (t(lang, "scoringAvg").replace("X", avgText)) + "</span>") : "";
+            // SAFE: themeName is escaped; avgHtml is internal string.
+            clusterDiv.innerHTML = "<div class=\"scoringClusterHeader\"><span class=\"themeName\">" + escapeHtml(themeName) + "</span>" + avgHtml + "</div><div class=\"scoringClusterRows\"></div>";
+            var rowsEl = clusterDiv.querySelector(".scoringClusterRows");
+            var headerEl = clusterDiv.querySelector(".scoringClusterHeader");
+            for (var si = 0; si < indices.length; si++) {
+              var stIdx = indices[si];
+              if (typeof stIdx !== "number") stIdx = parseInt(stIdx, 10);
+              if (isNaN(stIdx) || stIdx < 0 || stIdx >= statementsArray.length) continue;
+              var stText = statementsArray[stIdx];
+              var row = document.createElement("div");
+              row.className = "scoringRow";
+              var stSpan = document.createElement("span");
+              stSpan.className = "statementText";
+              stSpan.textContent = stText;
+              var input = document.createElement("input");
+              input.type = "text";
+              input.inputMode = "numeric";
+              input.className = "scoreInput";
+              input.setAttribute("data-cluster", String(cii));
+              input.setAttribute("data-statement", String(si));
+              var rawVal = scoringScores[cii][si];
+              var numVal = (rawVal !== "" && rawVal !== undefined) ? Number(rawVal) : NaN;
+              input.value = (!isNaN(numVal) && numVal >= 1 && numVal <= 10) ? String(Math.round(numVal)) : "";
+              input.placeholder = "0";
+              input.setAttribute("aria-label", "Score 1 to 10");
+              row.appendChild(stSpan);
+              row.appendChild(input);
+              rowsEl.appendChild(row);
+            }
+            scoringClustersEl.appendChild(clusterDiv);
+          }
+
+          function updateScoringClusterHeader(ci) {
+            var clusterDiv = document.querySelector(".scoringCluster[data-cluster-index=\"" + ci + "\"]");
+            if (!clusterDiv) return;
+            var indices = clusters[ci].statement_indices || [];
+            var filled = 0, sum = 0;
+            for (var si = 0; si < indices.length; si++) {
+              var v = scoringScores[ci][si];
+              var n = Number(v);
+              if (v !== "" && v !== undefined && !isNaN(n) && n >= 1 && n <= 10) { filled++; sum += n; }
+            }
+            var avgText = filled === 0 ? "—" : (sum / filled).toFixed(1);
+            var headerEl = clusterDiv.querySelector(".scoringClusterHeader");
+            var themeName = String(clusters[ci].theme || "").trim() || ("Category " + (ci + 1));
+            var showStats = filled > 0;
+            var avgHtml = showStats ? ("<span class=\"avgScore\">" + (t(lang, "scoringAvg").replace("X", avgText)) + "</span>") : "";
+            // SAFE: themeName is escaped; avgHtml is internal string.
+            headerEl.innerHTML = "<span class=\"themeName\">" + escapeHtml(themeName) + "</span>" + avgHtml;
+          }
+          function allScoringFilled() {
+            for (var ci = 0; ci < clusters.length; ci++) {
+              for (var si = 0; si < (scoringScores[ci] || []).length; si++) {
+                var v = scoringScores[ci][si];
+                var n = Number(v);
+                if (v === "" || v === undefined || isNaN(n) || n < 1 || n > 10) return false;
+              }
+            }
+            return true;
+          }
+
+          function updateScoringDreamQuestionVisibility() {
+            var filled = allScoringFilled();
+            var promptEl = document.getElementById("prompt");
+            if (promptEl) promptEl.style.display = filled ? "block" : "none";
+            inputWrap.style.display = filled ? "flex" : "none";
+          }
+
+          updateScoringDreamQuestionVisibility();
+
+          scoringClustersEl.querySelectorAll(".scoreInput").forEach(function(input) {
+            input.addEventListener("input", function() {
+              var ci = parseInt(input.getAttribute("data-cluster"), 10);
+              var si = parseInt(input.getAttribute("data-statement"), 10);
+              var val = input.value.trim();
+              var n = Number(val);
+              if (val !== "" && (isNaN(n) || n < 1 || n > 10)) {
+                input.value = "";
+                val = "";
+              } else if (val !== "" && n >= 1 && n <= 10) {
+                input.value = String(Math.round(n));
+                val = input.value;
+              }
+              scoringScores[ci][si] = val;
+              updateScoringClusterHeader(ci);
+              document.getElementById("btnScoringContinue").disabled = !allScoringFilled();
+              updateScoringDreamQuestionVisibility();
+            });
+          });
+
+          var btnScoringContinueEl = document.getElementById("btnScoringContinue");
+          btnScoringContinueEl.textContent = t(lang, "btnScoringContinue");
+          btnScoringContinueEl.disabled = !allScoringFilled();
+          btnScoringContinueEl.onclick = function() {
+            if (!allScoringFilled() || isLoading) return;
+            var payload = [];
+            for (var ci = 0; ci < clusters.length; ci++) {
+              var row = [];
+              for (var si = 0; si < (scoringScores[ci] || []).length; si++) {
+                var v = Number(scoringScores[ci][si]);
+                row.push(isNaN(v) ? 0 : Math.max(1, Math.min(10, v)));
+              }
+              payload.push(row);
+            }
+            var userMessage = JSON.stringify({ action: "submit_scores", scores: payload });
+            window.__dreamScoringScores = [];
+            callRunStep(userMessage);
+          };
+
+          // Critical: keep __BSC_LATEST__ in sync so "Formulate my dream" sends state with clusters/statements
+          globalThis.__BSC_LATEST__ = { state, lang };
+
+          if (isLoading) setLoading(false);
+          return;
+        }
+
+        var scoringPanelPost = document.getElementById("scoringPanel");
+        if (scoringPanelPost) { scoringPanelPost.classList.remove("visible"); scoringPanelPost.style.display = "none"; }
+        if (cardDescEl) cardDescEl.style.display = "block";
+        var promptPost = document.getElementById("prompt");
+        if (promptPost) promptPost.style.display = "block";
+
+        if (isDreamDirectionView) {
+          statementsPanelEl.style.display = "none";
+        } else if (current === "dream" && statementsArray !== null && statementsArray.length > 0 && statementsArray.length < 20) {
+          statementsPanelEl.style.display = "block";
+          statementsTitleEl.textContent = t(lang, "dreamBuilder.statements.title");
+          statementsCountEl.textContent = t(lang, "dreamBuilder.statements.count").replace("N", String(statementsArray.length));
+          statementsListEl.textContent = statementsArray.map(function(s, i) { return (i + 1) + ". " + String(s); }).join("\n");
+        } else {
+          statementsPanelEl.style.display = "none";
+        }
+
+        const { promptShown, choices } = extractChoicesFromPrompt(promptRaw);
+        let promptText = isDreamDirectionView ? "" : (promptShown || "");
+
+        // Generic choice prompt (i18n) for numbered menus
+        const choiceModeHasMenu = (choices && choices.length >= 2 && choices.length <= 6);
+        if (!isDreamDirectionView && choiceModeHasMenu) {
+          const trimmedPrompt = (promptText || "").trim();
+          const looksLikeLegacyChooseLine =
+            trimmedPrompt === "" ||
+            /^Choose\s+\d/.test(trimmedPrompt) ||
+            /^Kies\s+\d/.test(trimmedPrompt);
+          if (looksLikeLegacyChooseLine) {
+            promptText = t(lang, "generic.choicePrompt.shareOrOption");
+          }
+        }
+
+        // Override Purpose INTRO prompt text with company name
+        if (current === "purpose" && isIntroAction && promptText && promptText.includes("Please define your purpose or ask for more explanation.")) {
+          const businessName = String((state && state.business_name) || "").trim();
+          const hasBusinessName = businessName && businessName !== "" && businessName !== "TBD";
+          promptText = hasBusinessName
+            ? `Please define the purpose of ${businessName} or ask for more explanation.`
+            : "Please define the purpose of your future company or ask for more explanation.";
+        }
+
+        // Strategy prompts: inject company name or fallback
+        if (current === "strategy") {
+          const rawBusinessName = String((state && state.business_name) || "").trim();
+          const hasBusinessName = rawBusinessName && rawBusinessName !== "" && rawBusinessName !== "TBD";
+          const displayName = hasBusinessName ? rawBusinessName : "your future company";
+
+          if (promptText === "Define your Strategy or choose an option.") {
+            promptText = `Define the Strategy of ${displayName} or choose an option.`;
+          } else if (promptText === "Is there more that you will always focus on?") {
+            promptText = `Is there more that ${displayName} will always focus on?`;
+          }
+        }
+
+        document.getElementById("prompt").textContent = promptText;
+        renderChoiceButtons(choices, result); // result includes specialist and state for ActionCode mapping
+
+        var choiceMode = (choices && choices.length) > 0;
+        var confirmMode = !choiceMode && showContinue;
+        var textMode = !choiceMode && !confirmMode;
+        var statementCount = (statementsArray && statementsArray.length) ? statementsArray.length : (Array.isArray(specialist.statements) ? specialist.statements.length : 0);
+        if (current === "dream" && activeSpecialist === "DreamExplainer" && statementCount < 20 && Array.isArray(lastSpecialist.statements) && lastSpecialist.statements.length >= 20) {
+          statementCount = lastSpecialist.statements.length;
+        }
+        var effectiveStatementsForButton = (statementsArray && statementsArray.length) ? statementsArray.length : (Array.isArray(specialist.statements) ? specialist.statements.length : 0);
+        var showGoToNextStep =
+          current === "dream" &&
+          activeSpecialist === "DreamExplainer" &&
+          effectiveStatementsForButton >= 20 &&
+          String(specialist.action || "") !== "CONFIRM";
+
+        // Input (textarea + Send) always visible after start so user can type a custom answer even when options exist.
+        inputWrap.style.display = "flex";
+        if (choiceMode) {
+          document.getElementById("choiceWrap").style.display = "flex";
+          btnOk.style.display = "none";
+          inputWrap.style.display = "flex";
+          var sde = document.getElementById("btnStartDreamExercise");
+          if (sde) sde.style.display = "none";
+          var sb = document.getElementById("btnSwitchToSelfDream");
+          if (sb) sb.style.display = "none";
+        } else if (confirmMode) {
+          document.getElementById("choiceWrap").style.display = "none";
+          btnOk.style.display = "inline-flex";
+          inputWrap.style.display = "flex";
+          sde = document.getElementById("btnStartDreamExercise");
+          if (sde) sde.style.display = "none";
+          sb = document.getElementById("btnSwitchToSelfDream");
+          if (sb) sb.style.display = "none";
+        } else {
+          document.getElementById("choiceWrap").style.display = "none";
+          btnOk.style.display = "none";
+          sde = document.getElementById("btnStartDreamExercise");
+          if (sde) {
+            sde.style.display = isDreamStepPreExercise ? "inline-flex" : "none";
+          }
+          sb = document.getElementById("btnSwitchToSelfDream");
+          if (sb) sb.style.display = (isDreamExplainerMode && String(specialist.action || "") !== "CONFIRM") ? "inline-flex" : "none";
+        }
+        var btnGoToNextStepEl = document.getElementById("btnGoToNextStep");
+        if (btnGoToNextStepEl) {
+          btnGoToNextStepEl.style.display = showGoToNextStep && !isLoading ? "inline-flex" : "none";
+          btnGoToNextStepEl.disabled = isLoading;
+        }
+
+        var btnDreamConfirmEl = document.getElementById("btnDreamConfirm");
+        var isDreamConfirm =
+          current === "dream" &&
+          activeSpecialist === "DreamExplainer" &&
+          String(specialist.action || "") === "CONFIRM" &&
+          !(choices && choices.length);
+        if (btnDreamConfirmEl) {
+          btnDreamConfirmEl.style.display = isDreamConfirm && !isLoading ? "inline-flex" : "none";
+          btnDreamConfirmEl.disabled = isLoading;
+        }
+
+        // Debug overlay (?debug=1)
+        const debugMode = /\bdebug=1\b/.test(String(window.location.search || ""));
+        const debugEl = document.getElementById("debugOverlay");
+        if (debugEl) {
+          if (debugMode) {
+            const debugPayload = {
+              current_step: current,
+              active_specialist: activeSpecialist,
+              "specialist.action": String(specialist.action || ""),
+              promptRaw200: (promptRaw || "").slice(0, 200),
+              choicesLength: (choices || []).length,
+              choiceLabels: (choices || []).map(function(c){ return c.label; }),
+              showContinue: showContinue,
+              isDreamStepPreExercise: isDreamStepPreExercise,
+              isDreamExplainerMode: isDreamExplainerMode,
+              isLoading: isLoading
+            };
+            debugEl.textContent = JSON.stringify(debugPayload, null, 2);
+            debugEl.classList.add("visible");
+            debugEl.setAttribute("aria-hidden", "false");
+          } else {
+            debugEl.textContent = "";
+            debugEl.classList.remove("visible");
+            debugEl.setAttribute("aria-hidden", "true");
+          }
+        }
+
+        var btnGoToNextStepEl = document.getElementById("btnGoToNextStep");
+        if (btnGoToNextStepEl) {
+          btnGoToNextStepEl.textContent = t(lang, "btnGoToNextStep");
+        }
+        var btnStartDreamExerciseEl = document.getElementById("btnStartDreamExercise");
+        if (btnStartDreamExerciseEl) {
+          btnStartDreamExerciseEl.textContent = t(lang, "dreamBuilder.startExercise");
+          btnStartDreamExerciseEl.disabled = isLoading;
+        }
+        var btnSwitchToSelfDreamEl = document.getElementById("btnSwitchToSelfDream");
+        if (btnSwitchToSelfDreamEl) {
+          btnSwitchToSelfDreamEl.textContent = t(lang, "btnSwitchToSelfDream");
+          btnSwitchToSelfDreamEl.disabled = isLoading;
+        }
+        var btnDreamConfirmEl2 = document.getElementById("btnDreamConfirm");
+        if (btnDreamConfirmEl2) {
+          btnDreamConfirmEl2.textContent = t(lang, "btnDreamConfirm");
+          btnDreamConfirmEl2.disabled = isLoading;
+        }
+
+        document.getElementById("input").placeholder = t(lang, "inputPlaceholder");
+
+        const inputVal = (document.getElementById("input").value || "").trim();
+        setSendEnabled(inputVal.length > 0);
+
+        globalThis.__BSC_LATEST__ = { state, lang };
+
+        if (isLoading) setLoading(false);
+      }
+
+      async function callRunStep(message, extraState) {
+        const o = oa();
+        if (!o || typeof o.callTool !== "function") {
+          console.warn("run_step: host did not provide callTool");
+          var errEl = document.getElementById("cardDesc");
+          if (errEl) errEl.textContent = t(uiLang((globalThis.__BSC_LATEST__ || {}).state || {}), "errorMessage");
+          return;
+        }
+
+        const hasToolOutput = Boolean(o.toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
+        const persistedStarted = String((widgetState().started || "")).toLowerCase() === "true";
+        if (String(message || "").trim() === "") {
+          if (hasToolOutput) return;
+          if (!persistedStarted) return;
+        }
+
+        const latest = globalThis.__BSC_LATEST__ || {};
+        const state = latest.state || { current_step: "step_0" };
+
+        const lang = uiLang(state) || (navigator.language || "en").slice(0, 2).toLowerCase();
+        let nextState = ensureLanguageInState(state, lang);
+        if (extraState && typeof extraState === "object") {
+          nextState = Object.assign({}, nextState, extraState);
+        }
+
+        setWidgetStateSafe({ language: nextState.language, started: "true" });
+
+        const payload = {
+          current_step_id: nextState.current_step || "step_0",
+          user_message: String(message || ""),
+          state: nextState
+        };
+
+        setLoading(true);
+
+        try {
+          const resp = await o.callTool("run_step", payload);
+          const normalized = normalizeToolOutput(resp);
+          setLastToolOutput(normalized);
+          render(normalized);
+        } catch (e) {
+          console.error("run_step failed", e);
+          var errMsg = (e && e.message) ? String(e.message) : t(uiLang((globalThis.__BSC_LATEST__||{}).state||{}), "errorMessage");
+          var errEl = document.getElementById("cardDesc");
+          if (errEl) errEl.textContent = errMsg;
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      document.getElementById("input").addEventListener("input", () => {
+        if (isLoading) return;
+        const inputVal = (document.getElementById("input").value || "").trim();
+        setSendEnabled(inputVal.length > 0);
+      });
+
+      document.getElementById("send").addEventListener("click", () => {
+        if (isLoading) return;
+        const inputVal = (document.getElementById("input").value || "").trim();
+        if (!inputVal) return;
+        // Special case: Dream scoring direction (use scores + user text to formulate Dream in one step)
+        var latest = globalThis.__BSC_LATEST__ || {};
+        var st = latest.state || {};
+        var isDreamScoringDirection =
+          st.current_step === "dream" &&
+          String(st.active_specialist || "") === "DreamExplainer" &&
+          Array.isArray(window.__dreamScoringScores) &&
+          window.__dreamScoringScores.length > 0;
+        if (isDreamScoringDirection) {
+          var scoringScores = window.__dreamScoringScores || [];
+          var payloadScores = [];
+          for (var ci = 0; ci < scoringScores.length; ci++) {
+            var row = scoringScores[ci] || [];
+            var normRow = [];
+            for (var si = 0; si < row.length; si++) {
+              var v = Number(row[si]);
+              normRow.push(isNaN(v) ? 0 : Math.max(1, Math.min(10, v)));
+            }
+            payloadScores.push(normRow);
+          }
+          var userMessageObj = { action: "submit_scores", scores: payloadScores, direction: inputVal };
+          document.getElementById("input").value = "";
+          setSendEnabled(false);
+          window.__dreamScoringScores = [];
+          callRunStep("ACTION_DREAM_EXPLAINER_SUBMIT_SCORES", { __pending_scores: payloadScores });
+          return;
+        }
+        document.getElementById("input").value = "";
+        setSendEnabled(false);
+        callRunStep("ACTION_TEXT_SUBMIT", { __text_submit: inputVal });
+      });
+
+      var btnDreamConfirm = document.getElementById("btnDreamConfirm");
+      if (btnDreamConfirm) {
+        btnDreamConfirm.addEventListener("click", () => {
+          if (isLoading) return;
+          // Hard-coded action: confirm Dream (DreamExplainer) and continue to Purpose
+          callRunStep("ACTION_DREAM_EXPLAINER_REFINE_CONFIRM");
+        });
+      }
+
+      document.getElementById("btnStart").addEventListener("click", () => {
+        if (isLoading) return;
+
+        // Start gating: only Start click sets sessionStarted.
+        sessionStarted = true;
+        sessionWelcomeShown = false;
+        setWidgetStateSafe({ started: "true" });
+        render();
+        // If host did not already provide tool output (e.g. local /test bridge), trigger first run_step so step 0 appears.
+        var hasToolOutput = Boolean(oa() && oa().toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
+        if (!hasToolOutput) {
+          callRunStep("ACTION_START", { started: "true" });
+        }
+      });
+
+      document.getElementById("btnOk").addEventListener("click", () => {
+        if (isLoading) return;
+        // Hard-coded action: generic confirm/continue
+        callRunStep("ACTION_CONFIRM_CONTINUE");
+      });
+
+      document.getElementById("btnGoToNextStep").addEventListener("click", () => {
+        if (isLoading) return;
+        callRunStep("ACTION_DREAM_EXPLAINER_NEXT_STEP");
+      });
+
+      document.getElementById("btnStartDreamExercise").addEventListener("click", () => {
+        if (isLoading) return;
+        // Readiness-phase confirm: triggers DreamExplainer via dreamReadiness guard
+        callRunStep("ACTION_CONFIRM_CONTINUE");
+      });
+
+      document.getElementById("btnSwitchToSelfDream").addEventListener("click", () => {
+        if (isLoading) return;
+        callRunStep("ACTION_DREAM_SWITCH_TO_SELF");
+      });
+
+      window.addEventListener("openai:set_globals", () => {
+        try {
+          render();
+        } catch (e) {
+          console.error(e);
+        } finally {
+          if (isLoading) setLoading(false);
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>

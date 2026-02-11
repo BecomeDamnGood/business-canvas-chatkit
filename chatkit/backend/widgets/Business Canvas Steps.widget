@@ -1,0 +1,19 @@
+{
+  "version": "1.0",
+  "name": "Business Canvas Steps",
+  "template": "{\"type\":\"Card\",\"theme\":\"light\",\"background\":\"white\",\"padding\":24,\"children\":[{\"type\":\"Row\",\"justify\":\"between\",\"children\":[{\"type\":\"Badge\",\"label\":{{ (\"Step \" ~ stepIndex ~ \" of \" ~ stepTotal) | tojson }}},{\"type\":\"Badge\",\"label\":{{ (stepName if stepName is defined and stepName is not none else \"\") | tojson }}}]},{\"type\":\"Spacer\",\"minSize\":12},{\"type\":\"Divider\"},{\"type\":\"Spacer\",\"minSize\":16},{\"type\":\"Text\",\"value\":{{ (agentMessage if agentMessage is defined and agentMessage is not none else \"\") | tojson }}},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Col\",\"gap\":8,\"children\":[{\"type\":\"Button\",\"label\":{{ (choice1 if choice1 is defined and choice1 is not none else \"\") | tojson }},\"style\":\"secondary\",\"block\":true,\"disabled\":{{ (choice1 is not defined) or (choice1 is none) or (choice1 | length == 0) }},\"onClickAction\":{\"type\":\"bc.step.choice\",\"payload\":{\"label\":{{ (choice1 if choice1 is defined and choice1 is not none else \"\") | tojson }}}}},{\"type\":\"Button\",\"label\":{{ (choice2 if choice2 is defined and choice2 is not none else \"\") | tojson }},\"style\":\"secondary\",\"block\":true,\"disabled\":{{ (choice2 is not defined) or (choice2 is none) or (choice2 | length == 0) }},\"onClickAction\":{\"type\":\"bc.step.choice\",\"payload\":{\"label\":{{ (choice2 if choice2 is defined and choice2 is not none else \"\") | tojson }}}}},{\"type\":\"Button\",\"label\":{{ (choice3 if choice3 is defined and choice3 is not none else \"\") | tojson }},\"style\":\"secondary\",\"block\":true,\"disabled\":{{ (choice3 is not defined) or (choice3 is none) or (choice3 | length == 0) }},\"onClickAction\":{\"type\":\"bc.step.choice\",\"payload\":{\"label\":{{ (choice3 if choice3 is defined and choice3 is not none else \"\") | tojson }}}}}]},{\"type\":\"Spacer\",\"minSize\":14},{\"type\":\"Form\",\"onSubmitAction\":{\"type\":\"bc.step.submit\"},\"children\":[{\"type\":\"Textarea\",\"name\":\"answer\",\"placeholder\":\"Type your answer…\"},{\"type\":\"Spacer\",\"minSize\":10},{\"type\":\"Button\",\"label\":\"Send\",\"style\":\"primary\",\"submit\":true,\"block\":true}]}]}",
+  "jsonSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "stepIndex": { "type": "number" },
+      "stepTotal": { "type": "number" },
+      "stepName": { "type": "string" },
+      "agentMessage": { "type": "string" },
+      "choice1": { "type": "string" },
+      "choice2": { "type": "string" },
+      "choice3": { "type": "string" }
+    },
+    "additionalProperties": true
+  }
+}

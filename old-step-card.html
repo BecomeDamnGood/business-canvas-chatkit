@@ -1,0 +1,587 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>The Business Strategy Canvas Builder</title>
+    <style>
+      :root{
+        --text:#0f172a; --muted:#64748b; --line:#e5e7eb; --bg:#ffffff; --card:#ffffff;
+        --shadow:0 10px 30px rgba(15,23,42,0.06); --blue:#2f5bea; --stepOff:#eef2f7;
+      }
+      *{ box-sizing:border-box; }
+      body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:var(--text); background:var(--bg); }
+      .wrap{ max-width: 1080px; margin: 0 auto; padding: 40px 18px 70px; }
+
+      .title{ text-align:center; font-size: 44px; letter-spacing: -0.02em; margin: 6px 0 6px; font-weight: 800; }
+      .subtitle{ text-align:center; font-size: 18px; color: var(--muted); margin: 0 0 16px; font-weight: 600; }
+
+      .byline{
+        display:flex;
+        gap:10px;
+        align-items:center;
+        justify-content:center;
+        margin: 10px 0 22px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .byline img{ height: 24px; width: auto; display:block; }
+
+      .stepperRow{ display:flex; align-items:center; justify-content:center; margin: 16px 0 18px; }
+      .stepper{ display:flex; align-items:center; justify-content:center; gap: 0px; }
+      .step{ width: 32px; height: 32px; border-radius: 999px; display:flex; align-items:center; justify-content:center; font-weight: 800; font-size: 13px; background: var(--stepOff); color: #64748b; }
+      .step.active{ background: var(--blue); color: white; box-shadow: 0 0 0 4px rgba(47,91,234,0.12); }
+      .stepLine{ width: 16px; height: 2px; background: var(--line); }
+
+      .sectionTitle{ text-align:center; font-size: 26px; font-weight: 900; margin: 10px 0 22px; }
+
+      .card{ max-width: 920px; margin: 0 auto; border-radius: 28px; border: 2px solid rgba(142,166,255,0.55); padding: 26px 26px 24px; background: var(--card); box-shadow: var(--shadow); }
+      .cardInner{ display:flex; align-items:flex-start; gap: 16px; }
+      .badge{ width: 54px; height: 54px; border-radius: 999px; background: var(--blue); color: white; display:flex; align-items:center; justify-content:center; font-weight: 900; font-size: 18px; flex: 0 0 auto; }
+
+      @keyframes badgePulse {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(47,91,234,0.35); }
+        60% { transform: scale(1.04); box-shadow: 0 0 0 10px rgba(47,91,234,0.00); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(47,91,234,0.00); }
+      }
+      .badge.loading{ animation: badgePulse 1.25s ease-in-out infinite; }
+
+      .cardTitle{ display:none; }
+      .cardDesc{ margin: 0 0 14px; font-size: 18px; line-height: 1.48; color: var(--muted); max-width: 760px; white-space: pre-wrap; }
+      .prompt{ font-size: 24px; font-weight: 900; margin: 10px 0 12px; letter-spacing: -0.01em; white-space: pre-wrap; }
+
+      .inputWrap{ display:flex; align-items:flex-end; gap: 12px; margin-top: 10px; }
+      textarea{ width: 100%; min-height: 92px; resize: vertical; border-radius: 18px; border: 1px solid var(--line); padding: 16px 16px; font-size: 17px; outline: none; }
+      textarea:disabled{ background: #f8fafc; color: #94a3b8; cursor:not-allowed; }
+
+      .send{ width: 60px; height: 60px; border: none; border-radius: 18px; background: rgba(142,166,255,0.85); color: white; cursor: pointer; display:flex; align-items:center; justify-content:center; }
+      .send svg{ width: 24px; height: 24px; }
+      .send:disabled{ background: var(--stepOff); color:#94a3b8; cursor:not-allowed; }
+
+      .choiceWrap{ display:flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+      .choiceBtn{
+        width: 100%;
+        border: 1px solid rgba(47,91,234,0.25);
+        background: rgba(47,91,234,0.06);
+        border-radius: 16px;
+        padding: 12px 14px;
+        font-weight: 900;
+        font-size: 16px;
+        cursor: pointer;
+        text-align: left;
+      }
+      .choiceBtn:disabled{
+        background: #f1f5f9;
+        border-color: var(--line);
+        color: #94a3b8;
+        cursor:not-allowed;
+      }
+
+      .thinking{ margin-top: 10px; color: var(--muted); font-weight: 800; }
+
+      .row{ display:flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items:center; }
+      .btn{ border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 10px 14px; font-weight: 800; cursor: pointer; }
+      .btn.primary{ border-color: rgba(47,91,234,0.25); background: rgba(47,91,234,0.08); }
+      .btn:disabled{ background: #f1f5f9; border-color: var(--line); color: #94a3b8; cursor:not-allowed; }
+
+      #btnStart{ padding: 14px 22px; font-size: 18px; border-radius: 16px; }
+      .startHint{ color: var(--muted); font-weight: 800; margin-left: 2px; }
+
+      .status{ display:none; }
+
+      @media (max-width: 720px){
+        .wrap{ padding: 32px 14px 56px; }
+        .title{ font-size: 32px; }
+        .subtitle{ font-size: 16px; }
+        .prompt{ font-size: 20px; }
+        .step{ width: 28px; height: 28px; font-size: 12px; }
+        .stepLine{ width: 10px; }
+        .badge{ width: 48px; height: 48px; }
+        .send{ width: 54px; height: 54px; border-radius: 16px; }
+        .startHint{ width: 100%; margin-left: 0; }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <div class="title" id="uiTitle">The Business Strategy Canvas Builder</div>
+      <div class="subtitle" id="uiSubtitle"></div>
+
+      <div class="byline">
+        <span id="byText">A business model by:</span>
+        <img
+          alt="Ben Steenstra"
+          src="https://raw.githubusercontent.com/BecomeDamnGood/business-canvas-chatkit/6c9ae4d13c7a12b72441bba643aeaadadc5524c4/chatkit/ben_steenstra_Logo.png"
+        />
+      </div>
+
+      <div class="stepperRow">
+        <div class="stepper" id="stepper"></div>
+      </div>
+
+      <div class="sectionTitle" id="sectionTitle"></div>
+
+      <div class="card">
+        <div class="cardInner">
+          <div class="badge" id="badge">1</div>
+          <div style="flex:1">
+            <div class="cardTitle" id="cardTitle"></div>
+
+            <div class="cardDesc" id="cardDesc"></div>
+            <div class="prompt" id="prompt"></div>
+
+            <div class="inputWrap" id="inputWrap" style="display:none">
+              <textarea id="input" placeholder=""></textarea>
+              <button class="send" id="send" title="Send" disabled>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 11.5L21 3L12.5 21L11 13L3 11.5Z" fill="currentColor"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="choiceWrap" id="choiceWrap" style="display:none"></div>
+            <div class="thinking" id="thinking" style="display:none">Thinking…</div>
+
+            <div class="row" id="controls">
+              <button class="btn primary" id="btnStart">Start</button>
+              <div class="startHint" id="startHint"></div>
+              <button class="btn primary" id="btnOk" style="display:none">Continue</button>
+            </div>
+
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const ORDER = ["step_0","dream","purpose","bigwhy","role","entity","strategy","rulesofthegame","presentation"];
+
+      const TITLES_DEFAULT = {
+        step_0: "Step 1: Validation & Business Name",
+        dream: "Step 2: Dream",
+        purpose: "Step 3: Purpose",
+        bigwhy: "Step 4: Big Why",
+        role: "Step 5: Role",
+        entity: "Step 6: Entity",
+        strategy: "Step 7: Strategy",
+        rulesofthegame: "Step 8: Rules of the game",
+        presentation: "Step 9: Presentation"
+      };
+
+      const PRESTART_WELCOME_DEFAULT =
+        "Welcome to The Business Strategy Canvas Builder, used in national and international organizations. We will go through a small number of steps, one by one, so each step is clear before we move on. At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear presentation for external stakeholders, partners, or team members.";
+
+
+      const PRESTART_WELCOME_NL =
+        "Welcome to The Business Strategy Canvas Builder, used in national and international organizations. We will go through a small number of steps, one by one, so each step is clear before we move on. At the end you will have a complete and concise business plan, ready as direction for yourself and as a clear presentation for external stakeholders, partners, or team members.";
+      const UI_STRINGS = {
+        default: {
+          uiSubtitle: "Use the app widget to continue (not the chat box)",
+          byText: "A business model by:",
+          startHint: "Click Start to begin.",
+          inputPlaceholder: "Type your answer here (use the widget, not the chat box)…",
+          thinking: "Thinking…",
+          btnStart: "Start",
+          btnOk: "Continue",
+          sendTitle: "Send",
+          errorMessage: "Something went wrong while processing your message. Please try again."
+        },
+        nl: {
+          uiSubtitle: "Use the app widget to continue (not the chat box)",
+          byText: "A business model by:",
+          startHint: "Click Start to begin.",
+          inputPlaceholder: "Type your answer here (use the widget, not the chat box)…",
+          thinking: "Even denken…",
+          btnStart: "Start",
+          btnOk: "Continue",
+          sendTitle: "Send",
+          errorMessage: "Something went wrong while processing your message. Please try again."
+        }
+      };
+
+      function baseLang(lang) {
+        const l = String(lang || "").toLowerCase();
+        return (l.split(/[-_]/)[0] || "default");
+      }
+
+      function t(lang, key) {
+        const b = baseLang(lang);
+        const table = UI_STRINGS[b] || UI_STRINGS.default;
+        return (table && table[key]) ? table[key] : (UI_STRINGS.default[key] || "");
+      }
+
+      function titlesForLang(_lang) {
+        return TITLES_DEFAULT;
+      }
+
+      function prestartWelcomeForLang(lang) {
+        return baseLang(lang) === "nl" ? PRESTART_WELCOME_NL : PRESTART_WELCOME_DEFAULT;
+      }
+
+      function oa(){ return globalThis.openai; }
+
+      function normalizeToolOutput(raw) {
+        if (!raw || typeof raw !== "object") return {};
+        if (raw.structuredContent && typeof raw.structuredContent === "object") return raw.structuredContent;
+        return raw;
+      }
+
+      // Cache last known tool output (resilient to host timing).
+      function setLastToolOutput(raw) {
+        try { globalThis.__BSC_LAST_TOOL_OUTPUT__ = normalizeToolOutput(raw); } catch {}
+      }
+      function getLastToolOutput() {
+        return (globalThis.__BSC_LAST_TOOL_OUTPUT__ && typeof globalThis.__BSC_LAST_TOOL_OUTPUT__ === "object")
+          ? globalThis.__BSC_LAST_TOOL_OUTPUT__
+          : {};
+      }
+
+      // Allow render() to use callTool return value (followups), otherwise fall back to host toolOutput / cache.
+      function toolData(overrideRaw) {
+        if (overrideRaw) return normalizeToolOutput(overrideRaw);
+        const o = oa();
+        if (o && o.toolOutput) return normalizeToolOutput(o.toolOutput);
+        const cached = getLastToolOutput();
+        if (cached && Object.keys(cached).length) return cached;
+        return {};
+      }
+
+      function widgetState() {
+        const o = oa();
+        return (o && o.widgetState && typeof o.widgetState === "object") ? o.widgetState : {};
+      }
+
+      function setWidgetStateSafe(patch) {
+        const o = oa();
+        if (!o || typeof o.setWidgetState !== "function") return;
+
+        const ws = widgetState() || {};
+        const next = { ...ws, ...(patch || {}) };
+
+        const keys = Object.keys(next);
+        let changed = false;
+        for (const k of keys) {
+          if (String(ws[k] ?? "") !== String(next[k] ?? "")) { changed = true; break; }
+        }
+        if (!changed) return;
+
+        try { o.setWidgetState(next); } catch {}
+      }
+
+      function uiLang(resultState) {
+        // Prefer language coming from the backend state, then widgetState, then browser locale.
+        const fromResult = (resultState && resultState.language) ? String(resultState.language).toLowerCase().trim() : "";
+        if (fromResult) return fromResult;
+
+        const ws = widgetState();
+        const fromWidget = (ws && ws.language) ? String(ws.language).toLowerCase().trim() : "";
+        if (fromWidget) return fromWidget;
+
+        const nav = String(navigator.language || "en").toLowerCase();
+        return (nav.split(/[-_]/)[0] || "en");
+      }
+
+      function setStaticStrings(lang) {
+        document.getElementById("uiSubtitle").textContent = t(lang, "uiSubtitle");
+        document.getElementById("byText").textContent = t(lang, "byText");
+        document.getElementById("thinking").textContent = t(lang, "thinking");
+        document.getElementById("btnStart").textContent = t(lang, "btnStart");
+        document.getElementById("btnOk").textContent = t(lang, "btnOk");
+        document.getElementById("send").setAttribute("title", t(lang, "sendTitle"));
+      }
+
+      function stepIndex(stepId) {
+        const idx = ORDER.indexOf(stepId);
+        return idx >= 0 ? idx : 0;
+      }
+
+      function buildStepper(activeIdx) {
+        const el = document.getElementById("stepper");
+        el.innerHTML = "";
+        for (let i = 0; i < ORDER.length; i++) {
+          const s = document.createElement("div");
+          s.className = "step" + (i === activeIdx ? " active" : "");
+          s.textContent = String(i + 1);
+          el.appendChild(s);
+          if (i < ORDER.length - 1) {
+            const line = document.createElement("div");
+            line.className = "stepLine";
+            el.appendChild(line);
+          }
+        }
+      }
+
+      let isLoading = false;
+
+      // Local-only: this page-load session start gate.
+      let sessionStarted = false;
+      // Local-only: prevent repeating the welcome prepend.
+      let sessionWelcomeShown = false;
+
+      function setSendEnabled(enabled) {
+        document.getElementById("send").disabled = isLoading || !enabled;
+      }
+
+      function setLoading(next) {
+        isLoading = Boolean(next);
+        document.getElementById("thinking").style.display = isLoading ? "block" : "none";
+        document.getElementById("badge").classList.toggle("loading", isLoading);
+
+        const inputEl = document.getElementById("input");
+        const sendEl = document.getElementById("send");
+        const btnStart = document.getElementById("btnStart");
+        const btnOk = document.getElementById("btnOk");
+
+        if (inputEl) inputEl.disabled = isLoading;
+        if (btnStart) btnStart.disabled = isLoading;
+        if (btnOk) btnOk.disabled = isLoading;
+
+        document.querySelectorAll("#choiceWrap button").forEach(b => b.disabled = isLoading);
+
+        const v = (inputEl && inputEl.value ? inputEl.value : "").trim();
+        if (sendEl) sendEl.disabled = isLoading || v.length === 0;
+      }
+
+      function extractChoicesFromPrompt(promptText) {
+        const raw = String(promptText || "");
+        const lines = raw.split(/\r?\n/);
+
+        const found = {};
+        const kept = [];
+
+        for (const line of lines) {
+          const m = line.match(/^\s*([1-9])[\)\.]\s*(.+?)\s*$/);
+          if (m && m[1] && m[2]) {
+            found[m[1]] = m[2];
+            continue;
+          }
+          kept.push(line);
+        }
+
+        const keys = Object.keys(found).sort((a, b) => Number(a) - Number(b));
+        const choices = keys.map((k) => ({ value: String(k), label: String(found[k]) }));
+
+        return { promptShown: kept.join("\n").trim(), choices };
+      }
+
+      function renderChoiceButtons(choices) {
+        const wrap = document.getElementById("choiceWrap");
+        wrap.innerHTML = "";
+
+        if (!choices || choices.length === 0) {
+          wrap.style.display = "none";
+          return;
+        }
+
+        wrap.style.display = "flex";
+        for (const c of choices) {
+          const btn = document.createElement("button");
+          btn.className = "choiceBtn";
+          btn.type = "button";
+          btn.textContent = c.label;
+          btn.disabled = isLoading;
+          btn.addEventListener("click", () => {
+            if (isLoading) return;
+            callRunStep(c.value);
+          });
+          wrap.appendChild(btn);
+        }
+      }
+
+      function ensureLanguageInState(state, lang) {
+        const current = (state && state.language) ? String(state.language).trim() : "";
+        if (current) return state;
+        return Object.assign({}, state || {}, { language: lang });
+      }
+
+      function render(overrideToolOutput) {
+        const data = toolData(overrideToolOutput);
+
+        if (data && Object.keys(data).length) setLastToolOutput(data);
+
+        const result =
+          (data && data.result) ? data.result :
+          (data && data.ui && data.ui.result) ? data.ui.result :
+          (data && data.ui) ? data.ui :
+          {};
+
+        const state = (result && result.state) ? result.state : {};
+        const lang = uiLang(state);
+        setStaticStrings(lang);
+
+        const ws = widgetState();
+        if (!ws.language) setWidgetStateSafe({ language: lang });
+
+        const hasToolOutput = Boolean(oa() && oa().toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
+        const persistedStarted = String((ws && ws.started) || "").toLowerCase() === "true";
+
+        // Start gating: welcome stays until user clicks Start. Do NOT set sessionStarted from toolOutput or persisted flag.
+        const showPreStart = !sessionStarted;
+
+        const current = (!showPreStart && hasToolOutput) ? (state.current_step || "step_0") : "step_0";
+        const idx = stepIndex(current);
+        buildStepper(idx);
+
+        document.getElementById("badge").textContent = String(idx + 1);
+        document.getElementById("sectionTitle").textContent = (titlesForLang(lang)[current] || "");
+
+        const inputWrap = document.getElementById("inputWrap");
+        const btnStart = document.getElementById("btnStart");
+        const btnOk = document.getElementById("btnOk");
+        const startHint = document.getElementById("startHint");
+
+        const specialist = (result && result.specialist) ? result.specialist : {};
+        const showContinue =
+        !showPreStart &&
+        hasToolOutput &&
+        (current === "step_0" || current === "dream") &&
+        String(specialist.action || "") === "CONFIRM" &&
+        String(specialist.confirmation_question || "").trim() !== "";
+
+        if (showPreStart) {
+          inputWrap.style.display = "none";
+          document.getElementById("choiceWrap").style.display = "none";
+          btnStart.style.display = "inline-flex";
+          btnOk.style.display = "none";
+
+          document.getElementById("cardDesc").textContent = prestartWelcomeForLang(lang);
+          document.getElementById("prompt").textContent = "";
+          startHint.textContent = t(lang, "startHint");
+
+          if (isLoading) setLoading(false);
+          return;
+        }
+
+        // Post-start UI
+        inputWrap.style.display = "flex";
+        btnStart.style.display = "none";
+        startHint.textContent = "";
+
+        const bodyRaw = (result && typeof result.text === "string") ? result.text : "";
+        const promptRaw = (result && typeof result.prompt === "string") ? result.prompt : "";
+
+        // Prepend welcome once per local session.
+        let body = bodyRaw;
+        if (!sessionWelcomeShown) {
+          body = `${prestartWelcomeForLang(lang)}\n\n${bodyRaw || ""}`.trim();
+          sessionWelcomeShown = true;
+        }
+
+        document.getElementById("cardDesc").textContent = body;
+
+        const { promptShown, choices } = extractChoicesFromPrompt(promptRaw);
+        document.getElementById("prompt").textContent = promptShown || "";
+        renderChoiceButtons(choices);
+
+        // Continue button for step_0 confirmation moments (textarea remains available for questions).
+        // Show OK/Continue also for DreamExplainer readiness (language-agnostic).
+        const isDreamExplainerReadiness =
+          current === "dream" &&
+          String(specialist.action || "") === "ASK" &&
+          String(specialist.suggest_dreambuilder || "") === "true" &&
+          Array.isArray(choices) &&
+          choices.length === 0 &&
+          String(promptRaw || "").trim() !== "";
+        
+        btnOk.style.display = (showContinue || isDreamExplainerReadiness) ? "inline-flex" : "none";
+
+        document.getElementById("input").placeholder = t(lang, "inputPlaceholder");
+
+        const v = (document.getElementById("input").value || "").trim();
+        setSendEnabled(v.length > 0);
+
+        globalThis.__BSC_LATEST__ = { state, lang };
+
+        if (isLoading) setLoading(false);
+      }
+
+      async function callRunStep(message) {
+        const o = oa();
+        if (!o || typeof o.callTool !== "function") return;
+
+        const hasToolOutput = Boolean(o.toolOutput) || Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
+        const persistedStarted = String((widgetState().started || "")).toLowerCase() === "true";
+        if (String(message || "").trim() === "") {
+          if (hasToolOutput) return;
+          if (!persistedStarted) return;
+        }
+
+        const latest = globalThis.__BSC_LATEST__ || {};
+        const state = latest.state || { current_step: "step_0" };
+
+        const lang = uiLang(state) || (navigator.language || "en").slice(0, 2).toLowerCase();
+        const nextState = ensureLanguageInState(state, lang);
+
+        setWidgetStateSafe({ language: nextState.language, started: "true" });
+
+        const payload = {
+          current_step_id: nextState.current_step || "step_0",
+          user_message: String(message || ""),
+          state: nextState
+        };
+
+        setLoading(true);
+
+        try {
+          const resp = await o.callTool("run_step", payload);
+          const normalized = normalizeToolOutput(resp);
+          setLastToolOutput(normalized);
+          render(normalized);
+        } catch (e) {
+          console.error("run_step failed", e);
+          document.getElementById("cardDesc").textContent =
+            t(uiLang((globalThis.__BSC_LATEST__||{}).state||{}), "errorMessage");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      document.getElementById("input").addEventListener("input", () => {
+        if (isLoading) return;
+        const v = (document.getElementById("input").value || "").trim();
+        setSendEnabled(v.length > 0);
+      });
+
+      document.getElementById("send").addEventListener("click", () => {
+        if (isLoading) return;
+        const v = (document.getElementById("input").value || "").trim();
+        if (!v) return;
+        document.getElementById("input").value = "";
+        setSendEnabled(false);
+        callRunStep(v);
+      });
+
+      document.getElementById("btnStart").addEventListener("click", () => {
+        if (isLoading) return;
+
+        // Start gating: only Start click sets sessionStarted.
+        sessionStarted = true;
+        sessionWelcomeShown = false;
+        setWidgetStateSafe({ language: (widgetState().language || (navigator.language || "en").slice(0,2)), started: "true" });
+        render();
+        // Composer is the single entrypoint for the first run_step call; widget does not call run_step on Start.
+      });
+
+      document.getElementById("btnOk").addEventListener("click", () => {
+        if (isLoading) return;
+        // OK/Continue sends a clear "yes" so the backend proceeds.
+        callRunStep("yes");
+      });
+
+      window.addEventListener("openai:set_globals", () => {
+        try {
+          render();
+        } catch (e) {
+          console.error(e);
+        } finally {
+          if (isLoading) setLoading(false);
+        }
+      });
+
+      render();
+    </script>
+  </body>
+</html>

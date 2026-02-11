@@ -1,0 +1,22 @@
+{
+  "name": "mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "LOCAL_DEV=1 node --loader ts-node/esm server.ts",
+    "build": "node scripts/prepare-presentation-assets.mjs && tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "test": "TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/core/orchestrator.test.ts src/core/state.test.ts src/core/glossary.test.ts src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts src/steps/dream_explainer.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "cld3-asm": "^4.0.0",
+    "openai": "^6.17.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
