@@ -2,7 +2,6 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { inspect } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -14,6 +13,7 @@ import { createRateLimitMiddleware } from "./src/middleware/rateLimit.js";
 import { applySecurityHeaders } from "./src/middleware/security.js";
 import { CanvasStateZod, getDefaultState } from "./src/core/state.js";
 import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
+import { safeString } from "./src/server_safe_string.js";
 
 function loadDotEnv() {
   try {
@@ -66,7 +66,7 @@ const host = process.env.HOST || "0.0.0.0";
 const isLocalDev = process.env.LOCAL_DEV === "1";
 
 // Keep this aligned with your release tag
-const VERSION = (process.env.VERSION && String(process.env.VERSION).trim()) || "v89";
+const VERSION = safeString(process.env.VERSION ?? "").trim() || "v89";
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
@@ -79,7 +79,7 @@ const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
 
 function getHeader(req: any, name: string): string {
-  return String(req?.headers?.[name.toLowerCase()] || "");
+  return safeString(req?.headers?.[name.toLowerCase()] || "");
 }
 
 function getCorrelationId(req: any): string {
@@ -88,7 +88,7 @@ function getCorrelationId(req: any): string {
     getHeader(req, "x-request-id") ||
     getHeader(req, "x-amzn-trace-id") ||
     getHeader(req, "traceparent");
-  return existing ? String(existing) : randomUUID();
+  return existing ? safeString(existing) : randomUUID();
 }
 
 function ensureCorrelationHeader(res: any, correlationId: string) {
@@ -192,20 +192,6 @@ async function runStepHandler(args: {
   user_message: string;
   state?: Record<string, unknown>;
 }): Promise<{ structuredContent: Record<string, unknown> }> {
-  const safeString = (v: unknown): string => {
-    if (typeof v === "string") return v;
-    if (v instanceof Error && typeof v.message === "string") return v.message;
-    if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
-    try {
-      const json = JSON.stringify(v);
-      if (typeof json === "string") return json;
-    } catch {}
-    try {
-      return inspect(v, { depth: 2, breakLength: 120 });
-    } catch {}
-    return "[unstringifiable]";
-  };
-
   const current_step_id = safeString(args.current_step_id ?? "").trim();
   const state = (args.state ?? {}) as Record<string, unknown>;
   const user_message_raw = safeString(args.user_message ?? "");
@@ -259,7 +245,7 @@ async function runStepHandler(args: {
       console.error("[run_step] STACK:", err.stack);
     }
     if (isLocalDev) {
-      console.error("[run_step] DEV: exception message:", err?.message ?? String(error));
+      console.error("[run_step] DEV: exception message:", safeString(err?.message ?? error));
       console.error("[run_step] DEV: stack:", err?.stack ?? "(no stack)");
       console.error("[run_step] DEV: OPENAI_API_KEY present:", Boolean(process.env.OPENAI_API_KEY));
     }
@@ -268,7 +254,7 @@ async function runStepHandler(args: {
     const currentState = (stateForTool && typeof stateForTool === "object" && stateForTool !== null) 
       ? stateForTool 
       : getDefaultState();
-    const currentStep = String((currentState as any).current_step || "step_0");
+    const currentStep = safeString((currentState as any).current_step ?? "step_0") || "step_0";
     
     const fallbackResult = {
       ok: false as const,
@@ -300,7 +286,7 @@ function buildContentFromResult(result: Record<string, unknown> | null | undefin
   if (!result || typeof result !== "object") return "";
   
   // Alleen tekst als er een expliciete chat_message flag is (uitzondering)
-  const chatMessage = String((result as any).chat_message ?? "").trim();
+  const chatMessage = safeString((result as any).chat_message ?? "").trim();
   if (chatMessage) return chatMessage;
   
   // Fallback: alleen bij echte fouten (geen UI beschikbaar)
@@ -312,10 +298,10 @@ function buildContentFromResult(result: Record<string, unknown> | null | undefin
 }
 
 function resolveBaseUrl(req?: any): string {
-  const explicit = String(process.env.PUBLIC_BASE_URL || process.env.BASE_URL || "").trim();
+  const explicit = safeString(process.env.PUBLIC_BASE_URL ?? process.env.BASE_URL ?? "").trim();
   if (explicit) return explicit.replace(/\/+$/, "");
   if (isLocalDev) {
-    const portStr = String(process.env.PORT || port).trim();
+    const portStr = safeString(process.env.PORT ?? port).trim();
     return `http://localhost:${portStr}`;
   }
   if (req) {
@@ -399,8 +385,8 @@ function createAppServer(baseUrl: string): McpServer {
     },
     async (args) => {
       const { structuredContent } = await runStepHandler({
-        current_step_id: String(args.current_step_id ?? ""),
-        user_message: String(args.user_message ?? ""),
+        current_step_id: safeString(args.current_step_id ?? ""),
+        user_message: safeString(args.user_message ?? ""),
         state: (args.state ?? {}) as Record<string, unknown>,
       });
       const contentText = buildContentFromResult(
@@ -417,7 +403,8 @@ function createAppServer(baseUrl: string): McpServer {
 }
 
 const httpServer = async (req: any, res: any) => {
-  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  const hostHeader = safeString(req?.headers?.host ?? "localhost");
+  const url = new URL(req.url || "/", `http://${hostHeader}`);
 
   // Apply security headers to all responses
   applySecurityHeaders(res);
@@ -519,22 +506,9 @@ const httpServer = async (req: any, res: any) => {
           user_message?: string;
           state?: Record<string, unknown>;
         };
-        const safeArgString = (v: unknown, fallback: string): string => {
-          if (typeof v === "string") return v;
-          if (v instanceof Error && typeof v.message === "string") return v.message;
-          if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
-          try {
-            const json = JSON.stringify(v);
-            if (typeof json === "string") return json;
-          } catch {}
-          try {
-            return inspect(v, { depth: 5, breakLength: 120 });
-          } catch {}
-          return fallback;
-        };
         const { structuredContent } = await runStepHandler({
-          current_step_id: safeArgString(args.current_step_id ?? "step_0", "step_0"),
-          user_message: safeArgString(args.user_message ?? "", ""),
+          current_step_id: safeString(args.current_step_id ?? "step_0") || "step_0",
+          user_message: safeString(args.user_message ?? ""),
           state: args.state,
         });
         res.writeHead(200, { "content-type": "application/json" });
@@ -542,7 +516,7 @@ const httpServer = async (req: any, res: any) => {
       } catch (e) {
         console.error("[POST /run_step]", e);
         res.writeHead(500, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: String((e as Error).message) }));
+        res.end(JSON.stringify({ error: safeString((e as Error)?.message ?? e) }));
       }
       return;
     }
@@ -642,7 +616,7 @@ const httpServer = async (req: any, res: any) => {
         try {
           raw = await readBodyWithLimit(req, MAX_REQUEST_SIZE_BYTES);
         } catch (e: any) {
-          const code = String(e?.code || "");
+          const code = safeString(e?.code ?? "");
           if (code === "body_too_large") {
             const errPayload = jsonRpcErrorResponse(413, "Request entity too large", {
               error_code: "body_too_large",

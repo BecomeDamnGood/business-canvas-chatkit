@@ -665,7 +665,7 @@ function processActionCode(
 function buildUiPayload(
   specialist: any,
   flagsOverride?: Record<string, boolean> | null
-): { action_codes?: string[]; expected_choice_count?: number; flags: Record<string, boolean> } | null {
+): { action_codes?: string[]; expected_choice_count?: number; flags: Record<string, boolean> } | undefined {
   const flags = flagsOverride || {};
   const menuId = String(specialist?.menu_id || "").trim();
   if (menuId) {
@@ -677,7 +677,7 @@ function buildUiPayload(
   if (Object.keys(flags).length > 0) {
     return { flags };
   }
-  return null;
+  return undefined;
 }
 
 function attachRegistryPayload<T extends Record<string, unknown>>(
