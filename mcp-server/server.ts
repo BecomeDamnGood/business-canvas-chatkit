@@ -2,6 +2,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { inspect } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -193,8 +194,16 @@ async function runStepHandler(args: {
 }): Promise<{ structuredContent: Record<string, unknown> }> {
   const safeString = (v: unknown): string => {
     if (typeof v === "string") return v;
-    if (typeof v === "number" || typeof v === "boolean") return String(v);
-    return "";
+    if (v instanceof Error && typeof v.message === "string") return v.message;
+    if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") return String(v);
+    try {
+      const json = JSON.stringify(v);
+      if (typeof json === "string") return json;
+    } catch {}
+    try {
+      return inspect(v, { depth: 2, breakLength: 120 });
+    } catch {}
+    return "[unstringifiable]";
   };
 
   const current_step_id = safeString(args.current_step_id ?? "").trim();
@@ -207,7 +216,7 @@ async function runStepHandler(args: {
     isStart && user_message_raw.trim()
       ? user_message_raw.trim()
       : "";
-  const hasInitiator = String(state?.initial_user_message ?? "").trim() !== "";
+  const hasInitiator = safeString(state?.initial_user_message ?? "").trim() !== "";
   const stateForTool =
     isStart && user_message_raw.trim()
       ? {
@@ -217,7 +226,7 @@ async function runStepHandler(args: {
         }
       : state;
 
-  const stepIdStr = String(current_step_id ?? "");
+  const stepIdStr = safeString(current_step_id ?? "");
   const msgLen = typeof user_message_raw === "string" ? user_message_raw.length : 0;
   const stateKeysCount = stateForTool && typeof stateForTool === "object" && stateForTool !== null ? Object.keys(stateForTool).length : 0;
   console.log(`[run_step] step_id=${stepIdStr} user_message_len=${msgLen} state_keys=${stateKeysCount}`);

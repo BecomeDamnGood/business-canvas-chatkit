@@ -2066,8 +2066,7 @@ function shouldChainToNextStep(decision: OrchestratorOutput, specialistResult: a
  * - Pre-start UI owns the welcome text.
  * - Start calls this tool with empty user_message; we respond with Step 0 question without calling the specialist.
  */
-export async function run_step(rawArgs: unknown): Promise<{
-  ok: true;
+type RunStepBase = {
   tool: "run_step";
   current_step_id: string;
   active_specialist: string;
@@ -2087,7 +2086,11 @@ export async function run_step(rawArgs: unknown): Promise<{
   };
   state: CanvasState;
   debug?: any;
-}> {
+};
+type RunStepSuccess = RunStepBase & { ok: true };
+type RunStepError = RunStepBase & { ok: false; error: Record<string, unknown> };
+
+export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunStepError> {
   const args: RunStepArgs = RunStepArgsSchema.parse(rawArgs);
   const inputMode = args.input_mode || "chat";
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
@@ -2408,7 +2411,7 @@ export async function run_step(rawArgs: unknown): Promise<{
 
     return attachRegistryPayload({
       ok: true as const,
-      tool: "run_step",
+      tool: "run_step" as const,
       current_step_id: String(nextState.current_step),
       active_specialist: String((nextState as any).active_specialist || ""),
       text,
@@ -2609,8 +2612,8 @@ export async function run_step(rawArgs: unknown): Promise<{
     const routed = processActionCode(actionCodeInput, state.current_step, state, lastSpecialistResult);
     if (inputMode === "widget" && routed === actionCodeInput) {
       const errorPayload = {
-        ok: true as const,
-        tool: "run_step",
+        ok: false as const,
+        tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: String((state as any).active_specialist || ""),
         text: "We could not process this choice. Please refresh and try again.",
@@ -2704,7 +2707,7 @@ export async function run_step(rawArgs: unknown): Promise<{
 
       return attachRegistryPayload({
         ok: true as const,
-        tool: "run_step",
+        tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: PRESENTATION_SPECIALIST,
         text: buildTextForWidget({ specialist }),
@@ -2742,7 +2745,7 @@ export async function run_step(rawArgs: unknown): Promise<{
 
       return attachRegistryPayload({
         ok: true as const,
-        tool: "run_step",
+        tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: PRESENTATION_SPECIALIST,
         text: buildTextForWidget({ specialist }),
@@ -2852,7 +2855,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       const promptFormulation = pickPrompt(formulationResult);
       return attachRegistryPayload({
         ok: true as const,
-        tool: "run_step",
+        tool: "run_step" as const,
         current_step_id: String(nextStateFormulation.current_step),
         active_specialist: DREAM_EXPLAINER_SPECIALIST,
         text: textFormulation,
@@ -2892,7 +2895,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     const promptSwitch = pickPrompt(callDream.specialistResult);
     return attachRegistryPayload({
       ok: true as const,
-      tool: "run_step",
+      tool: "run_step" as const,
       current_step_id: String(nextStateSwitch.current_step),
       active_specialist: DREAM_SPECIALIST,
       text: textSwitch,
@@ -2931,7 +2934,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       };
       return attachRegistryPayload({
         ok: true as const,
-        tool: "run_step",
+        tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
         text: "",
@@ -2951,7 +2954,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       const prompt = existingFirst.question?.trim() || existingFirst.confirmation_question?.trim() || "";
       return attachRegistryPayload({
         ok: true as const,
-        tool: "run_step",
+        tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
         text: "",
@@ -2997,7 +3000,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       const stateWithUi = await ensureUiStringsForState(state, model);
       return attachRegistryPayload({
         ok: true as const,
-        tool: "run_step",
+        tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
         text: "",
@@ -3033,7 +3036,7 @@ export async function run_step(rawArgs: unknown): Promise<{
 
     return attachRegistryPayload({
       ok: true as const,
-      tool: "run_step",
+      tool: "run_step" as const,
       current_step_id: String(state.current_step),
       active_specialist: STEP_0_SPECIALIST,
       text: "",
@@ -3127,7 +3130,7 @@ export async function run_step(rawArgs: unknown): Promise<{
       const prompt = pickPrompt(call1.specialistResult);
       return attachRegistryPayload({
         ok: true as const,
-        tool: "run_step",
+        tool: "run_step" as const,
         current_step_id: String(nextState.current_step),
         active_specialist: String((nextState as any).active_specialist || ""),
         text,
@@ -3190,7 +3193,7 @@ export async function run_step(rawArgs: unknown): Promise<{
     const promptDream = pickPrompt(normalizedDreamExplainer);
     return attachRegistryPayload({
       ok: true as const,
-      tool: "run_step",
+      tool: "run_step" as const,
       current_step_id: String(nextStateDream.current_step),
       active_specialist: String((nextStateDream as any).active_specialist || ""),
       text: textDream,
@@ -3388,7 +3391,7 @@ export async function run_step(rawArgs: unknown): Promise<{
 
   return attachRegistryPayload({
     ok: true as const,
-    tool: "run_step",
+    tool: "run_step" as const,
     current_step_id: String(nextState.current_step),
     active_specialist: String((nextState as any).active_specialist || ""),
     text,
