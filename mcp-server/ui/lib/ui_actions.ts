@@ -457,27 +457,25 @@ export async function callRunStep(
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let didTimeout = false;
-  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      didTimeout = true;
-      if (controller) controller.abort();
-      reject(new Error("run_step timeout"));
-    }, RUN_STEP_TIMEOUT_MS);
-  });
+  timeoutId = setTimeout(() => {
+    didTimeout = true;
+    setInlineNotice("This is taking longer than usual. Please try again.");
+    setLoading(false);
+  }, RUN_STEP_TIMEOUT_MS);
 
   try {
     const callPromise = canUseBridge()
       ? callToolViaBridge("run_step", payload)
-      : (o as { callTool: (name: string, args: unknown, opts?: unknown) => Promise<unknown> }).callTool(
+      : (o as { callTool: (name: string, args: unknown) => Promise<unknown> }).callTool(
           "run_step",
-          payload,
-          controller ? { signal: controller.signal } : undefined
+          payload
         );
-    const resp = await Promise.race([callPromise, timeoutPromise]);
+    const resp = await callPromise;
+    if (didTimeout) return;
     const normalized = applyToolResult(resp);
     if (_render) _render(normalized);
   } catch (e) {
+    if (didTimeout) return;
     const msg = (e && (e as Error).message) ? String((e as Error).message) : "";
     const isTimeout =
       msg.toLowerCase().includes("timeout") ||
@@ -496,6 +494,6 @@ export async function callRunStep(
     if (errEl) errEl.textContent = errMsg;
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
-    setLoading(false);
+    if (!didTimeout) setLoading(false);
   }
 }
