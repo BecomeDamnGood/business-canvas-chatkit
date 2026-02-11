@@ -76,6 +76,7 @@ const OPENAI_APPS_CHALLENGE_TOKEN =
 
 const MCP_PATH = "/mcp";
 const UI_RESOURCE_PATH = "/ui/step-card";
+const UI_RESOURCE_QUERY = `?v=${encodeURIComponent(VERSION)}`;
 const UI_RESOURCE_NAME = "business-canvas-widget";
 const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
@@ -179,9 +180,27 @@ async function readBodyWithLimit(req: any, maxBytes: number): Promise<Buffer> {
   });
 }
 
+function injectUiVersion(html: string): string {
+  const v = encodeURIComponent(VERSION);
+  return html.replace(/\/ui\/lib\/main\.js(?:\?[^"']*)?/g, `/ui/lib/main.js?v=${v}`);
+}
+
+function injectUiVersionInJs(js: string): string {
+  const v = encodeURIComponent(VERSION);
+  const withImports = js.replace(
+    /from\s+["'](\.\/[^"']+\.js)(?:\?[^"']*)?["']/g,
+    (_m, p1) => `from "${p1}?v=${v}"`
+  );
+  return withImports.replace(
+    /import\s+["'](\.\/[^"']+\.js)(?:\?[^"']*)?["']/g,
+    (_m, p1) => `import "${p1}?v=${v}"`
+  );
+}
+
 function loadUiHtml(): string {
   try {
-    return readFileSync(new URL("./ui/step-card.html", import.meta.url), "utf-8");
+    const raw = readFileSync(new URL("./ui/step-card.html", import.meta.url), "utf-8");
+    return injectUiVersion(raw);
   } catch (e) {
     console.error("[loadUiHtml] Failed:", e);
     return "<html><body>UI not available</body></html>";
@@ -238,6 +257,8 @@ async function runStepHandler(args: {
       meta: `step: ${stepMeta} | specialist: ${specialistMeta}`,
       result: resultForClient,
     };
+    const uiPayload = buildUiStructured(resultForClient);
+    if (uiPayload) structuredContent.ui = uiPayload;
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
     return { structuredContent };
   } catch (error: unknown) {
@@ -294,25 +315,48 @@ async function runStepHandler(args: {
       meta: "error",
       result: fallbackResult,
     };
+    const uiPayload = buildUiStructured(fallbackResult as Record<string, unknown>);
+    if (uiPayload) structuredContent.ui = uiPayload;
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
     return { structuredContent };
   }
 }
 
 function buildContentFromResult(result: Record<string, unknown> | null | undefined): string {
-  // Default: geen chat tekst (UI-first approach)
+  // App-only contract: keep chat silent on success.
   if (!result || typeof result !== "object") return "";
-  
-  // Alleen tekst als er een expliciete chat_message flag is (uitzondering)
-  const chatMessage = safeString((result as any).chat_message ?? "").trim();
-  if (chatMessage) return chatMessage;
-  
-  // Fallback: alleen bij echte fouten (geen UI beschikbaar)
   const hasError = Boolean((result as any).error);
-  if (hasError) return "Open de app om verder te gaan."; // Max 1 korte zin
-  
-  // Default: geen chat tekst
+  if (hasError) return "Open de app om verder te gaan.";
   return "";
+}
+
+function buildUiStructured(result: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
+  if (!result || typeof result !== "object") return null;
+  const uiObj = (result as any).ui && typeof (result as any).ui === "object" ? (result as any).ui : {};
+  const prompt = safeString((result as any).prompt ?? "");
+  const text = safeString((result as any).text ?? "");
+  const promptBody = prompt || text || "";
+  const actionCodes = Array.isArray(uiObj.action_codes) ? uiObj.action_codes : [];
+  const options = actionCodes.map((code: unknown, idx: number) => ({
+    id: safeString(idx + 1),
+    actionCode: safeString(code),
+  }));
+  const flags =
+    uiObj.flags && typeof uiObj.flags === "object" ? (uiObj.flags as Record<string, boolean>) : {};
+  const expectedChoiceCount =
+    typeof uiObj.expected_choice_count === "number"
+      ? uiObj.expected_choice_count
+      : (actionCodes.length ? actionCodes.length : undefined);
+  return {
+    prompt: { body: promptBody },
+    options,
+    state: {
+      menu_id: safeString((result as any)?.specialist?.menu_id ?? ""),
+      expected_choice_count: expectedChoiceCount,
+      flags,
+    },
+    view: { version: VERSION },
+  };
 }
 
 function resolveBaseUrl(req?: any): string {
@@ -348,7 +392,9 @@ function createAppServer(baseUrl: string): McpServer {
   );
 
   // Register UI resource
-  const uiResourceUri = baseUrl ? `${baseUrl}${UI_RESOURCE_PATH}` : UI_RESOURCE_PATH;
+  const uiResourceUri = baseUrl
+    ? `${baseUrl}${UI_RESOURCE_PATH}${UI_RESOURCE_QUERY}`
+    : `${UI_RESOURCE_PATH}${UI_RESOURCE_QUERY}`;
   
   server.registerResource(
     UI_RESOURCE_NAME,
@@ -398,6 +444,7 @@ function createAppServer(baseUrl: string): McpServer {
         securitySchemes: [{ type: "noauth" }],
         ui: {
           resourceUri: uiResourceUri,
+          visibility: ["app"],
         },
       },
     },
@@ -601,9 +648,32 @@ const httpServer = async (req: any, res: any) => {
         ext === ".png" ? "image/png" :
         ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
         "application/octet-stream";
+      if (path.basename(resolved) === "step-card.html") {
+        const raw = readFileSync(resolved, "utf-8");
+        const withVersion = injectUiVersion(raw);
+        res.writeHead(200, {
+          "content-type": contentType,
+          "cache-control": "public, max-age=3600",
+          "x-ui-version": VERSION,
+        });
+        res.end(withVersion);
+        return;
+      }
+      if (ext === ".js") {
+        const raw = readFileSync(resolved, "utf-8");
+        const withVersion = injectUiVersionInJs(raw);
+        res.writeHead(200, {
+          "content-type": contentType,
+          "cache-control": "public, max-age=3600",
+          "x-ui-version": VERSION,
+        });
+        res.end(withVersion);
+        return;
+      }
       res.writeHead(200, {
         "content-type": contentType,
         "cache-control": "public, max-age=3600",
+        "x-ui-version": VERSION,
       });
       fs.createReadStream(resolved).pipe(res);
     } catch {

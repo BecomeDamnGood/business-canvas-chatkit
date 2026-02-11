@@ -6,7 +6,10 @@ import { t } from "./ui_constants.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 import {
   initActionsConfig,
+  applyToolResult,
   callRunStep,
+  handleBridgeResponse,
+  setBridgeEnabled,
   setSendEnabled,
   setLoading,
   hasToolOutput,
@@ -55,6 +58,42 @@ if (isLocalDev && typeof window !== "undefined") {
     reportDevError(
       String((reason && reason.message) ? reason.message : reason || "unhandled rejection")
     );
+  });
+}
+
+if (typeof window !== "undefined") {
+  const extractToolResult = (params: any): unknown => {
+    if (!params || typeof params !== "object") return params;
+    if ("result" in params) return params.result;
+    if ("toolResult" in params) return params.toolResult;
+    if ("output" in params) return params.output;
+    return params;
+  };
+
+  window.addEventListener("message", (e: MessageEvent) => {
+    const data: any = e?.data;
+    if (!data || typeof data !== "object") return;
+    if (data.jsonrpc !== "2.0") return;
+    const method = typeof data.method === "string" ? data.method : "";
+    if (method.startsWith("ui/")) {
+      setBridgeEnabled(true);
+    }
+    if (method === "ui/notifications/tool-result") {
+      const payload = extractToolResult(data.params);
+      const normalized = applyToolResult(payload);
+      try {
+        render(normalized);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (getIsLoading()) setLoading(false);
+      }
+      return;
+    }
+    if (data.id) {
+      handleBridgeResponse(data);
+      return;
+    }
   });
 }
 

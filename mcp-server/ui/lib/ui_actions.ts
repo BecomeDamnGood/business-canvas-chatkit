@@ -14,6 +14,10 @@ import {
 let _render: (overrideRaw?: unknown) => void;
 let _t: (lang: string, key: string) => string;
 
+let bridgeEnabled = false;
+let bridgeSeq = 0;
+const pendingBridgeCalls = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
+
 export function initActionsConfig(config: {
   render: (overrideRaw?: unknown) => void;
   t: (lang: string, key: string) => string;
@@ -22,8 +26,18 @@ export function initActionsConfig(config: {
   _t = config.t;
 }
 
+export function setBridgeEnabled(enabled: boolean): void {
+  bridgeEnabled = enabled;
+}
+
 function oa(): unknown {
   return (globalThis as Record<string, unknown>).openai;
+}
+
+function canUseBridge(): boolean {
+  if (!bridgeEnabled) return false;
+  if (typeof window === "undefined") return false;
+  return Boolean(window.parent);
 }
 
 function normalizeToolOutput(raw: unknown): Record<string, unknown> {
@@ -33,6 +47,12 @@ function normalizeToolOutput(raw: unknown): Record<string, unknown> {
     return r.structuredContent as Record<string, unknown>;
   }
   return raw as Record<string, unknown>;
+}
+
+export function applyToolResult(raw: unknown): Record<string, unknown> {
+  const normalized = normalizeToolOutput(raw);
+  setLastToolOutput(normalized);
+  return normalized;
 }
 
 export function setLastToolOutput(raw: unknown): void {
@@ -115,6 +135,40 @@ let lastCallAt = 0;
 const CLICK_DEBOUNCE_MS = 250;
 const RUN_STEP_TIMEOUT_MS = 25000;
 
+export function handleBridgeResponse(msg: any): boolean {
+  if (!msg || typeof msg !== "object") return false;
+  if (msg.jsonrpc !== "2.0" || !msg.id) return false;
+  const id = String(msg.id);
+  const pending = pendingBridgeCalls.get(id);
+  if (!pending) return false;
+  pendingBridgeCalls.delete(id);
+  if (msg.error) pending.reject(msg.error);
+  else pending.resolve(msg.result);
+  return true;
+}
+
+async function callToolViaBridge(name: string, args: unknown): Promise<unknown> {
+  if (!canUseBridge() || typeof window === "undefined") {
+    throw new Error("bridge unavailable");
+  }
+  const id = `bsc_${Date.now()}_${++bridgeSeq}`;
+  const message = {
+    jsonrpc: "2.0",
+    id,
+    method: "tools/call",
+    params: { name, arguments: args },
+  };
+  return new Promise((resolve, reject) => {
+    pendingBridgeCalls.set(id, { resolve, reject });
+    try {
+      window.parent.postMessage(message, "*");
+    } catch (e) {
+      pendingBridgeCalls.delete(id);
+      reject(e);
+    }
+  });
+}
+
 export function isRateLimited(): boolean {
   const until = getRateLimitUntil();
   return until > 0 && Date.now() < until;
@@ -191,8 +245,9 @@ export async function callRunStep(
   extraState?: Record<string, unknown>
 ): Promise<void> {
   const o = oa();
-  if (!o || typeof (o as { callTool?: (name: string, args: unknown) => Promise<unknown> }).callTool !== "function") {
-    console.warn("run_step: host did not provide callTool");
+  const hasCallTool = Boolean(o && typeof (o as { callTool?: (name: string, args: unknown) => Promise<unknown> }).callTool === "function");
+  if (!hasCallTool && !canUseBridge()) {
+    console.warn("run_step: host did not provide callTool or MCP bridge");
     const errEl = document.getElementById("cardDesc");
     const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
     const state = latest?.state || {};
@@ -247,14 +302,15 @@ export async function callRunStep(
   });
 
   try {
-    const callPromise = (o as { callTool: (name: string, args: unknown, opts?: unknown) => Promise<unknown> }).callTool(
-      "run_step",
-      payload,
-      controller ? { signal: controller.signal } : undefined
-    );
+    const callPromise = canUseBridge()
+      ? callToolViaBridge("run_step", payload)
+      : (o as { callTool: (name: string, args: unknown, opts?: unknown) => Promise<unknown> }).callTool(
+          "run_step",
+          payload,
+          controller ? { signal: controller.signal } : undefined
+        );
     const resp = await Promise.race([callPromise, timeoutPromise]);
-    const normalized = normalizeToolOutput(resp);
-    setLastToolOutput(normalized);
+    const normalized = applyToolResult(resp);
     if (_render) _render(normalized);
   } catch (e) {
     const msg = (e && (e as Error).message) ? String((e as Error).message) : "";
