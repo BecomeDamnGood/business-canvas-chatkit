@@ -2,6 +2,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { inspect } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -239,14 +240,30 @@ async function runStepHandler(args: {
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
     return { structuredContent };
   } catch (error: unknown) {
-    const err = error as { message?: string; stack?: string; meta?: string };
-    console.error("[run_step] ERROR:", err?.message ?? error, err?.meta ?? "");
+    const err = error as any;
+    const debugEnabled =
+      process.env.LOCAL_DEV === "1" ||
+      safeString((stateForTool as any)?.debug?.enable ?? "").toLowerCase() === "true";
+    console.error("[run_step] ERROR:", safeString(err?.message ?? err), safeString(err?.meta ?? ""));
     if (err?.stack) {
-      console.error("[run_step] STACK:", err.stack);
+      console.error("[run_step] STACK:", safeString(err.stack));
     }
-    if (isLocalDev) {
-      console.error("[run_step] DEV: exception message:", safeString(err?.message ?? error));
-      console.error("[run_step] DEV: stack:", err?.stack ?? "(no stack)");
+    if (debugEnabled) {
+      const details = err instanceof Error
+        ? [err.message, err.stack].filter(Boolean).join("\n")
+        : inspect(err, { depth: 8, breakLength: 120 });
+      console.error("[run_step] DEV: exception details:", details);
+      if (err?.cause) {
+        console.error("[run_step] DEV: cause:", inspect(err.cause, { depth: 8, breakLength: 120 }));
+      }
+      const status = err?.status ?? err?.statusCode ?? err?.response?.status;
+      if (status !== undefined) {
+        console.error("[run_step] DEV: status:", safeString(status));
+      }
+      const code = err?.code ?? err?.response?.data?.code ?? err?.response?.data?.error?.code;
+      if (code !== undefined) {
+        console.error("[run_step] DEV: code:", safeString(code));
+      }
       console.error("[run_step] DEV: OPENAI_API_KEY present:", Boolean(process.env.OPENAI_API_KEY));
     }
     
