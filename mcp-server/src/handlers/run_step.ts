@@ -145,6 +145,7 @@ import {
   type PresentationOutput,
 } from "../steps/presentation.js";
 import { loadModule as loadCld3 } from "cld3-asm";
+import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 
 /**
  * Incoming tool args
@@ -653,115 +654,11 @@ function processActionCode(
   state: CanvasState,
   lastSpecialistResult: any
 ): string {
-  // Dream step ActionCodes
-  if (actionCode === "ACTION_DREAM_INTRO_EXPLAIN_MORE") return "__ROUTE__DREAM_EXPLAIN_MORE__";
-  if (actionCode === "ACTION_DREAM_INTRO_START_EXERCISE") return "__ROUTE__DREAM_START_EXERCISE__";
-  if (actionCode === "ACTION_DREAM_WHY_GIVE_SUGGESTIONS") return "__ROUTE__DREAM_GIVE_SUGGESTIONS__";
-  if (actionCode === "ACTION_DREAM_WHY_START_EXERCISE") return "__ROUTE__DREAM_START_EXERCISE__";
-  if (actionCode === "ACTION_DREAM_SUGGESTIONS_PICK_ONE") return "__ROUTE__DREAM_PICK_ONE__";
-  if (actionCode === "ACTION_DREAM_SUGGESTIONS_START_EXERCISE") return "__ROUTE__DREAM_START_EXERCISE__";
-  if (actionCode === "ACTION_DREAM_REFINE_CONFIRM") return "yes";
-  if (actionCode === "ACTION_DREAM_REFINE_START_EXERCISE") return "__ROUTE__DREAM_START_EXERCISE__";
-  if (actionCode === "ACTION_DREAM_ESCAPE_CONTINUE") return "__ROUTE__DREAM_CONTINUE__";
-  if (actionCode === "ACTION_DREAM_ESCAPE_FINISH_LATER") return "__ROUTE__DREAM_FINISH_LATER__";
-  if (actionCode === "ACTION_DREAM_SWITCH_TO_SELF") return "__SWITCH_TO_SELF_DREAM__";
-
-  // DreamExplainer step ActionCodes
-  if (actionCode === "ACTION_DREAM_EXPLAINER_CONTINUE") return "__ROUTE__DREAM_EXPLAINER_CONTINUE__";
-  if (actionCode === "ACTION_DREAM_EXPLAINER_FINISH_LATER") return "__ROUTE__DREAM_EXPLAINER_FINISH_LATER__";
-  if (actionCode === "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM") return "__ROUTE__DREAM_EXPLAINER_CONTINUE_TO_PURPOSE__";
-  if (actionCode === "ACTION_DREAM_EXPLAINER_REFINE_ADJUST") return "__ROUTE__DREAM_EXPLAINER_REFINE__";
-  if (actionCode === "ACTION_DREAM_EXPLAINER_NEXT_STEP") return "Next step";
-  if (actionCode === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES") return "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES";
-
-  // Purpose step ActionCodes
-  if (actionCode === "ACTION_PURPOSE_INTRO_EXPLAIN_MORE") return "__ROUTE__PURPOSE_EXPLAIN_MORE__";
-  if (actionCode === "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS") return "__ROUTE__PURPOSE_ASK_3_QUESTIONS__";
-  if (actionCode === "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES") return "__ROUTE__PURPOSE_GIVE_EXAMPLES__";
-  if (actionCode === "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS") return "__ROUTE__PURPOSE_ASK_3_QUESTIONS__";
-  if (actionCode === "ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME") return "__ROUTE__PURPOSE_CHOOSE_FOR_ME__";
-  if (actionCode === "ACTION_PURPOSE_REFINE_CONFIRM") return "yes";
-  if (actionCode === "ACTION_PURPOSE_REFINE_ADJUST") return "__ROUTE__PURPOSE_REFINE__";
-  if (actionCode === "ACTION_PURPOSE_CONFIRM_SINGLE") return "yes";
-  if (actionCode === "ACTION_PURPOSE_ESCAPE_CONTINUE") return "__ROUTE__PURPOSE_CONTINUE__";
-  if (actionCode === "ACTION_PURPOSE_ESCAPE_FINISH_LATER") return "__ROUTE__PURPOSE_FINISH_LATER__";
-
-  // Big Why step ActionCodes
-  if (actionCode === "ACTION_BIGWHY_INTRO_GIVE_EXAMPLE") return "__ROUTE__BIGWHY_GIVE_EXAMPLE__";
-  if (actionCode === "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE") return "__ROUTE__BIGWHY_EXPLAIN_IMPORTANCE__";
-  if (actionCode === "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS") return "__ROUTE__BIGWHY_ASK_3_QUESTIONS__";
-  if (actionCode === "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLES") return "__ROUTE__BIGWHY_GIVE_EXAMPLES__";
-  if (actionCode === "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE") return "__ROUTE__BIGWHY_GIVE_EXAMPLE__";
-  if (actionCode === "ACTION_BIGWHY_REFINE_CONFIRM") return "yes";
-  if (actionCode === "ACTION_BIGWHY_REFINE_ADJUST") return "__ROUTE__BIGWHY_REFINE__";
-  if (actionCode === "ACTION_BIGWHY_ESCAPE_CONTINUE") return "__ROUTE__BIGWHY_CONTINUE__";
-  if (actionCode === "ACTION_BIGWHY_ESCAPE_FINISH_LATER") return "__ROUTE__BIGWHY_FINISH_LATER__";
-
-  // Role step ActionCodes
-  if (actionCode === "ACTION_ROLE_INTRO_GIVE_EXAMPLES") return "__ROUTE__ROLE_GIVE_EXAMPLES__";
-  if (actionCode === "ACTION_ROLE_INTRO_EXPLAIN_MORE") return "__ROUTE__ROLE_EXPLAIN_MORE__";
-  if (actionCode === "ACTION_ROLE_ASK_GIVE_EXAMPLES") return "__ROUTE__ROLE_GIVE_EXAMPLES__";
-  if (actionCode === "ACTION_ROLE_REFINE_CONFIRM") return "yes";
-  if (actionCode === "ACTION_ROLE_REFINE_ADJUST") return "__ROUTE__ROLE_ADJUST__";
-  if (actionCode === "ACTION_ROLE_ESCAPE_CONTINUE") return "__ROUTE__ROLE_CONTINUE__";
-  if (actionCode === "ACTION_ROLE_ESCAPE_FINISH_LATER") return "__ROUTE__ROLE_FINISH_LATER__";
-  if (actionCode === "ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME") return "__ROUTE__ROLE_CHOOSE_FOR_ME__";
-
-  // Entity step ActionCodes
-  if (actionCode === "ACTION_ENTITY_INTRO_FORMULATE") return "__ROUTE__ENTITY_FORMULATE__";
-  if (actionCode === "ACTION_ENTITY_INTRO_EXPLAIN_MORE") return "__ROUTE__ENTITY_EXPLAIN_MORE__";
-  if (actionCode === "ACTION_ENTITY_EXAMPLE_CONFIRM") return "yes";
-  if (actionCode === "ACTION_ENTITY_EXAMPLE_REFINE") return "__ROUTE__ENTITY_REFINE__";
-  if (actionCode === "ACTION_ENTITY_FORMULATE_FOR_ME") return "__ROUTE__ENTITY_FORMULATE_FOR_ME__";
-  if (actionCode === "ACTION_ENTITY_ESCAPE_CONTINUE") return "__ROUTE__ENTITY_CONTINUE__";
-  if (actionCode === "ACTION_ENTITY_ESCAPE_FINISH_LATER") return "__ROUTE__ENTITY_FINISH_LATER__";
-
-  // Strategy step ActionCodes
-  if (actionCode === "ACTION_STRATEGY_INTRO_FORMULATE") return "__ROUTE__STRATEGY_FORMULATE__";
-  if (actionCode === "ACTION_STRATEGY_INTRO_EXPLAIN_MORE") return "__ROUTE__STRATEGY_EXPLAIN_MORE__";
-  if (actionCode === "ACTION_STRATEGY_REFINE_EXPLAIN_MORE") return "__ROUTE__STRATEGY_EXPLAIN_MORE__";
-  if (actionCode === "ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE") return "__ROUTE__STRATEGY_EXPLAIN_MORE__";
-  if (actionCode === "ACTION_STRATEGY_ASK_3_QUESTIONS") return "__ROUTE__STRATEGY_ASK_3_QUESTIONS__";
-  if (actionCode === "ACTION_STRATEGY_ASK_GIVE_EXAMPLES") return "__ROUTE__STRATEGY_GIVE_EXAMPLES__";
-  if (actionCode === "ACTION_STRATEGY_ASK_WRITE") return "__ROUTE__STRATEGY_FORMULATE__";
-  if (actionCode === "ACTION_STRATEGY_CONFIRM_SATISFIED") return "__ROUTE__STRATEGY_CONFIRM_SATISFIED__";
-  if (actionCode === "ACTION_STRATEGY_FINAL_CONTINUE") return "__ROUTE__STRATEGY_FINAL_CONTINUE__";
-  if (actionCode === "ACTION_STRATEGY_ESCAPE_CONTINUE") return "__ROUTE__STRATEGY_CONTINUE__";
-  if (actionCode === "ACTION_STRATEGY_ESCAPE_FINISH_LATER") return "__ROUTE__STRATEGY_FINISH_LATER__";
-
-  // Target Group step ActionCodes
-  if (actionCode === "ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE") return "__ROUTE__TARGETGROUP_EXPLAIN_MORE__";
-  if (actionCode === "ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS") return "__ROUTE__TARGETGROUP_ASK_QUESTIONS__";
-  if (actionCode === "ACTION_TARGETGROUP_EXPLAIN_ASK_QUESTIONS") return "__ROUTE__TARGETGROUP_ASK_QUESTIONS__";
-  if (actionCode === "ACTION_TARGETGROUP_POSTREFINE_CONFIRM") return "yes";
-  if (actionCode === "ACTION_TARGETGROUP_POSTREFINE_ASK_QUESTIONS") return "__ROUTE__TARGETGROUP_ASK_QUESTIONS__";
-
-  // Products and Services step ActionCodes
-  if (actionCode === "ACTION_PRODUCTSSERVICES_CONFIRM") return "__ROUTE__PRODUCTSSERVICES_CONFIRM__";
-
-  // Rules of the Game step ActionCodes
-  if (actionCode === "ACTION_RULES_INTRO_WRITE") return "__ROUTE__RULES_WRITE__";
-  if (actionCode === "ACTION_RULES_INTRO_EXPLAIN_MORE") return "__ROUTE__RULES_EXPLAIN_MORE__";
-  if (actionCode === "ACTION_RULES_INTRO_GIVE_EXAMPLE") return "__ROUTE__RULES_GIVE_EXAMPLE__";
-  if (actionCode === "ACTION_RULES_ASK_WRITE") return "__ROUTE__RULES_WRITE__";
-  if (actionCode === "ACTION_RULES_ASK_GIVE_EXAMPLE") return "__ROUTE__RULES_GIVE_EXAMPLE__";
-  if (actionCode === "ACTION_RULES_CONFIRM_ALL") return "__ROUTE__RULES_CONFIRM_ALL__";
-  if (actionCode === "ACTION_RULES_REFINE_CONFIRM") return "yes";
-  if (actionCode === "ACTION_RULES_REFINE_ADJUST") return "__ROUTE__RULES_ADJUST__";
-  if (actionCode === "ACTION_RULES_ESCAPE_CONTINUE") return "__ROUTE__RULES_CONTINUE__";
-  if (actionCode === "ACTION_RULES_ESCAPE_FINISH_LATER") return "__ROUTE__RULES_FINISH_LATER__";
-
-  // Presentation step ActionCodes
-  if (actionCode === "ACTION_PRESENTATION_CHANGE") return "__ROUTE__PRESENTATION_CHANGE__";
-  if (actionCode === "ACTION_PRESENTATION_MAKE") return "__ROUTE__PRESENTATION_MAKE__";
-  if (actionCode === "ACTION_PRESENTATION_ESCAPE_CONTINUE") return "__ROUTE__PRESENTATION_CONTINUE__";
-  if (actionCode === "ACTION_PRESENTATION_ESCAPE_FINISH_LATER") return "__ROUTE__PRESENTATION_FINISH_LATER__";
-
-  // Generic confirm/continue
-  if (actionCode === "ACTION_CONFIRM_CONTINUE") return "yes";
-  if (actionCode === "ACTION_START") return "";
-
-  // No ActionCode match: pass through original value (for backwards compatibility)
+  const entry = ACTIONCODE_REGISTRY.actions[actionCode];
+  if (entry) return entry.route;
+  if (actionCode.startsWith("ACTION_")) {
+    console.warn("[actioncode] Unknown ActionCode", { actionCode, currentStep });
+  }
   return actionCode;
 }
 
