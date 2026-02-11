@@ -18,7 +18,8 @@
 ## How to run integration tests (opt-in)
 - `RUN_INTEGRATION_TESTS=1 OPENAI_API_KEY=... npm test`
 
-## ActionCode shadow-compare debug mode
-- Enable: add `?debug_actioncodes=1` to the widget URL.
-- Effect: shadow-compare telemetry (registry vs legacy mapping mismatch) is emitted to `state.__ui_telemetry` and logged in console.
-- Default (debug OFF): no shadow-compare telemetry; widget behavior unchanged.
+## Widget mode: strict registry behavior (Cleanup PR B)
+- Widget mode uses only `ui.action_codes` from the backend. Legacy mapping and fallback are removed.
+- If `ui.action_codes` is missing or count mismatch: user sees "We can't safely display these options right now. Please try again." and no buttons are rendered.
+- Log events for diagnosis: `[menu_contract_missing]`, `[actioncodes_missing]`, `[actioncodes_count_mismatch]`.
+- Shadow-compare telemetry (`?debug_actioncodes=1`) removed (no legacy mapping to compare).
