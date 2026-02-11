@@ -32,7 +32,7 @@ test("getFinalsSnapshot: keys are stable (FINALS_KEYS)", () => {
   assert.ok(FINALS_KEYS.includes("step_0_final"));
   assert.ok(FINALS_KEYS.includes("dream_final"));
   assert.ok(FINALS_KEYS.includes("presentation_brief_final"));
-  assert.equal(FINALS_KEYS.length, 10);
+  assert.equal(FINALS_KEYS.length, 12);
 });
 
 test("finals persistence: normalizeState preserves existing finals", () => {
