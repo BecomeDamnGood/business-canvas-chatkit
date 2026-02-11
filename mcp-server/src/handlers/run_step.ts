@@ -153,6 +153,7 @@ import { loadModule as loadCld3 } from "cld3-asm";
 const RunStepArgsSchema = z.object({
   current_step_id: z.string().optional().default("step_0"),
   user_message: z.string().default(""),
+  input_mode: z.enum(["widget", "chat"]).optional().default("chat"),
   // Use CanvasStateZod schema for type safety and validation
   // .partial() makes all fields optional (for empty/partial state)
   // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
@@ -2132,6 +2133,10 @@ export async function run_step(rawArgs: unknown): Promise<{
   debug?: any;
 }> {
   const args: RunStepArgs = RunStepArgsSchema.parse(rawArgs);
+  const inputMode = args.input_mode || "chat";
+  if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
+    console.log("[run_step] input_mode", { inputMode });
+  }
 
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
 
