@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderChoiceButtons } from "../ui/lib/ui_render.js";
+import { render, renderChoiceButtons } from "../ui/lib/ui_render.js";
+import { setSessionStarted } from "../ui/lib/ui_state.js";
 
 function makeElement(tag: string) {
-  return {
+  const node: any = {
     nodeType: 1,
     tagName: String(tag).toUpperCase(),
     className: "",
@@ -11,19 +12,27 @@ function makeElement(tag: string) {
     textContent: "",
     style: {} as Record<string, string>,
     childNodes: [] as any[],
-    appendChild(node: any) {
-      this.childNodes.push(node);
-      return node;
+    disabled: false,
+    appendChild(child: any) {
+      this.childNodes.push(child);
+      return child;
     },
     addEventListener() {},
     setAttribute() {},
+    removeAttribute() {},
+    querySelector() {
+      return null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    classList: {
+      add() {},
+      remove() {},
+      toggle() {},
+    },
   };
-}
-
-test("renderChoiceButtons handles missing ui without throwing", () => {
-  const originalDocument = (globalThis as any).document;
-  const wrap: any = makeElement("div");
-  Object.defineProperty(wrap, "innerHTML", {
+  Object.defineProperty(node, "innerHTML", {
     get() {
       return "";
     },
@@ -31,16 +40,42 @@ test("renderChoiceButtons handles missing ui without throwing", () => {
       this.childNodes = [];
     },
   });
+  return node;
+}
 
-  const fakeDocument = {
+function makeDocument() {
+  const elements = new Map<string, any>();
+  return {
     getElementById(id: string) {
-      if (id === "choiceWrap") return wrap;
-      return null;
+      if (!elements.has(id)) elements.set(id, makeElement("div"));
+      return elements.get(id);
     },
     createElement(tag: string) {
       return makeElement(tag);
     },
+    createTextNode(text: string) {
+      return { nodeType: 3, textContent: String(text) };
+    },
+    createDocumentFragment() {
+      return {
+        nodeType: 11,
+        childNodes: [] as any[],
+        appendChild(child: any) {
+          this.childNodes.push(child);
+          return child;
+        },
+      };
+    },
+    querySelectorAll() {
+      return [];
+    },
   };
+}
+
+test("renderChoiceButtons handles missing ui without throwing", () => {
+  const originalDocument = (globalThis as any).document;
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
   (globalThis as any).document = fakeDocument;
 
   const choices = [
@@ -61,25 +96,8 @@ test("renderChoiceButtons handles missing ui without throwing", () => {
 
 test("renderChoiceButtons renders buttons when ui.action_codes exist", () => {
   const originalDocument = (globalThis as any).document;
-  const wrap: any = makeElement("div");
-  Object.defineProperty(wrap, "innerHTML", {
-    get() {
-      return "";
-    },
-    set() {
-      this.childNodes = [];
-    },
-  });
-
-  const fakeDocument = {
-    getElementById(id: string) {
-      if (id === "choiceWrap") return wrap;
-      return null;
-    },
-    createElement(tag: string) {
-      return makeElement(tag);
-    },
-  };
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
   (globalThis as any).document = fakeDocument;
 
   const choices = [
@@ -98,4 +116,45 @@ test("renderChoiceButtons renders buttons when ui.action_codes exist", () => {
   assert.equal(buttons.length, 2);
 
   (globalThis as any).document = originalDocument;
+});
+
+test("render handles Dream intro payload without ui and does not throw", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  assert.doesNotThrow(() => {
+    render({
+      result: {
+        registry_version: "test",
+        state: {
+          current_step: "dream",
+          active_specialist: "Dream",
+          intro_shown_session: "true",
+          intro_shown_for_step: "dream",
+          language: "en",
+        },
+        specialist: {
+          action: "ASK",
+          question: "1) Alpha\n2) Beta",
+          menu_id: "TEST_MENU",
+          suggest_dreambuilder: "false",
+        },
+      },
+    });
+  });
+  setSessionStarted(false);
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
 });

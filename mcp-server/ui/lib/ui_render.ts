@@ -421,17 +421,18 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
   const statementsTitleEl = document.getElementById("statementsTitle");
   const statementsCountEl = document.getElementById("statementsCount");
   const statementsListEl = document.getElementById("statementsList");
-  let statementsArray = (result?.specialist as Record<string, unknown>)?.statements as string[] | null;
+  const specialistStatements = (result?.specialist as Record<string, unknown>)?.statements;
+  let statementsArray = Array.isArray(specialistStatements) ? (specialistStatements as string[]) : null;
+  const lastStatements = Array.isArray((lastSpecialist as { statements?: unknown[] }).statements)
+    ? (lastSpecialist as { statements: unknown[] }).statements
+    : [];
   if (
     current === "dream" &&
     isDreamExplainerMode &&
     (!statementsArray || statementsArray.length === 0)
   ) {
-    if (
-      Array.isArray((lastSpecialist as { statements?: unknown }).statements) &&
-      (lastSpecialist as { statements: unknown[] }).statements.length > 0
-    ) {
-      statementsArray = (lastSpecialist as { statements: string[] }).statements;
+    if (lastStatements.length > 0) {
+      statementsArray = lastStatements as string[];
     } else if (
       Array.isArray(state.dream_builder_statements) &&
       (state.dream_builder_statements as unknown[]).length > 0
@@ -446,7 +447,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
     String(specialist.scoring_phase || "") === "true" &&
     Array.isArray(specialist.clusters) &&
     (specialist.clusters as unknown[]).length > 0 &&
-    statementsArray &&
+    Array.isArray(statementsArray) &&
     statementsArray.length >= 20;
 
   if (isScoringView) {
@@ -668,7 +669,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   } else if (
     current === "dream" &&
-    statementsArray !== null &&
+    Array.isArray(statementsArray) &&
     statementsArray.length > 0 &&
     statementsArray.length < 20
   ) {
@@ -736,18 +737,17 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
   const choiceMode = choicesArr.length > 0;
   const confirmMode = !choiceMode && showContinue;
   let statementCount =
-    (statementsArray && statementsArray.length) || 0;
+    (Array.isArray(statementsArray) ? statementsArray.length : 0) || 0;
   if (
     current === "dream" &&
     activeSpecialist === "DreamExplainer" &&
     statementCount < 20 &&
-    Array.isArray((lastSpecialist as { statements?: unknown[] }).statements) &&
-    (lastSpecialist as { statements: unknown[] }).statements.length >= 20
+    lastStatements.length >= 20
   ) {
-    statementCount = (lastSpecialist as { statements: unknown[] }).statements.length;
+    statementCount = lastStatements.length;
   }
   const effectiveStatementsForButton =
-    (statementsArray && statementsArray.length) ||
+    (Array.isArray(statementsArray) ? statementsArray.length : 0) ||
     (Array.isArray((specialist as { statements?: unknown[] }).statements)
       ? (specialist as { statements: unknown[] }).statements.length
       : 0) ||

@@ -16,6 +16,48 @@ import { render } from "./ui_render.js";
 
 initActionsConfig({ render, t });
 
+const isLocalDev = (globalThis as Record<string, unknown>).LOCAL_DEV === "1";
+if (isLocalDev && typeof window !== "undefined") {
+  const reportDevError = (message: string, file?: string, line?: number, col?: number) => {
+    const target =
+      document.getElementById("status") ||
+      document.getElementById("uiSubtitle");
+    if (!target) return;
+    const parts = [message];
+    if (file) parts.push(`@ ${file}${line ? ":" + line : ""}${col ? ":" + col : ""}`);
+    target.textContent = `[ui_error] ${parts.join(" ")}`.trim();
+  };
+
+  window.addEventListener("error", (e) => {
+    console.error(
+      "[ui_error]",
+      (e as ErrorEvent)?.message,
+      (e as ErrorEvent)?.filename,
+      (e as ErrorEvent)?.lineno,
+      (e as ErrorEvent)?.colno,
+      (e as ErrorEvent)?.error?.stack
+    );
+    reportDevError(
+      String((e as ErrorEvent)?.message || "unknown error"),
+      (e as ErrorEvent)?.filename,
+      (e as ErrorEvent)?.lineno,
+      (e as ErrorEvent)?.colno
+    );
+  });
+
+  window.addEventListener("unhandledrejection", (e) => {
+    const reason = (e as PromiseRejectionEvent)?.reason;
+    console.error(
+      "[ui_rejection]",
+      (reason && reason.message) ? reason.message : reason,
+      reason && reason.stack ? reason.stack : ""
+    );
+    reportDevError(
+      String((reason && reason.message) ? reason.message : reason || "unhandled rejection")
+    );
+  });
+}
+
 const inputEl = document.getElementById("input");
 if (inputEl) {
   inputEl.addEventListener("input", () => {
