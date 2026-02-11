@@ -2159,8 +2159,8 @@ type RunStepBase = {
   specialist: any;
   registry_version: string;
   ui?: {
-    action_codes: string[];
-    expected_choice_count: number;
+    action_codes?: string[];
+    expected_choice_count?: number;
     flags: Record<string, boolean>;
   };
   presentation_assets?: {
