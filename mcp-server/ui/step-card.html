@@ -1231,6 +1231,11 @@
 
       const ORDER = ["step_0","dream","purpose","bigwhy","role","entity","strategy","targetgroup","productsservices","rulesofthegame","presentation"];
 
+      // debug_actioncodes: gate shadow-compare telemetry. Enable via ?debug_actioncodes=1 in URL.
+      function isActionCodeDebugEnabled() {
+        try { return /\bdebug_actioncodes=1\b/.test(String(window.location.search || "")); } catch { return false; }
+      }
+
       const TITLES_DEFAULT = {
         step_0: "Step 1: Validation & Business Name",
         dream: "Step 2: Dream",
@@ -1932,17 +1937,19 @@ Estimated time: 10–15 minutes.`;
           const expectedCount = (typeof expectedChoiceCount === "number") ? expectedChoiceCount : registryActionCodes.length;
           const countsMismatch = expectedCount !== labelsCount;
           if (mismatchIndices.length || countsMismatch) {
-            const telemetry = {
-              kind: "actioncode_shadow_compare",
-              registry_version: registryVersion,
-              menu_id: menuId,
-              step: currentStep,
-              labels_count: labelsCount,
-              expected_choice_count: expectedCount,
-              mismatch_indices: mismatchIndices,
-            };
-            console.warn("[actioncode_shadow_compare]", telemetry);
-            try { globalThis.__BSC_UI_TELEMETRY__ = telemetry; } catch {}
+            if (isActionCodeDebugEnabled()) {
+              const telemetry = {
+                kind: "actioncode_shadow_compare",
+                registry_version: registryVersion,
+                menu_id: menuId,
+                step: currentStep,
+                labels_count: labelsCount,
+                expected_choice_count: expectedCount,
+                mismatch_indices: mismatchIndices,
+              };
+              console.warn("[actioncode_shadow_compare]", telemetry);
+              try { globalThis.__BSC_UI_TELEMETRY__ = telemetry; } catch {}
+            }
           }
           if (!useRegistryCodes) {
             console.warn("[actioncode_fallback]", {
@@ -2547,10 +2554,9 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
 
         setWidgetStateSafe({ language: nextState.language, started: "true" });
 
-        const telemetry = (globalThis.__BSC_UI_TELEMETRY__ && typeof globalThis.__BSC_UI_TELEMETRY__ === "object")
-          ? globalThis.__BSC_UI_TELEMETRY__
-          : null;
-        if (telemetry) {
+        let telemetry = null;
+        if (isActionCodeDebugEnabled() && globalThis.__BSC_UI_TELEMETRY__ && typeof globalThis.__BSC_UI_TELEMETRY__ === "object") {
+          telemetry = globalThis.__BSC_UI_TELEMETRY__;
           try { delete globalThis.__BSC_UI_TELEMETRY__; } catch {}
         }
 

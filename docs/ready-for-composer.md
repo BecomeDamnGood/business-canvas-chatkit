@@ -17,3 +17,8 @@
 
 ## How to run integration tests (opt-in)
 - `RUN_INTEGRATION_TESTS=1 OPENAI_API_KEY=... npm test`
+
+## ActionCode shadow-compare debug mode
+- Enable: add `?debug_actioncodes=1` to the widget URL.
+- Effect: shadow-compare telemetry (registry vs legacy mapping mismatch) is emitted to `state.__ui_telemetry` and logged in console.
+- Default (debug OFF): no shadow-compare telemetry; widget behavior unchanged.
