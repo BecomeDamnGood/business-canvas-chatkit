@@ -80,6 +80,29 @@ test("rate limit: returns structured error payload", async () => {
   assert.ok(Number(result?.error?.retry_after_ms) > 0);
 });
 
+test("timeout: returns structured error payload", async () => {
+  const prev = process.env.TEST_FORCE_TIMEOUT;
+  process.env.TEST_FORCE_TIMEOUT = "1";
+  const result = await run_step({
+    user_message: "test",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "true",
+      last_specialist_result: {},
+      started: "true",
+    },
+  });
+  if (prev === undefined) {
+    delete process.env.TEST_FORCE_TIMEOUT;
+  } else {
+    process.env.TEST_FORCE_TIMEOUT = prev;
+  }
+  assert.equal(result?.ok, false);
+  assert.equal(result?.error?.type, "timeout");
+  assert.equal(result?.error?.retry_action, "retry_same_action");
+  assert.equal(result?.error?.user_message, "This is taking longer than usual. Please try again.");
+});
+
 // Meta-filter: first message is never dropped (pristineAtEntry ? rawNormalized : ...) in run_step.ts.
 // Bullets/requirements/goals no longer trigger looksLikeMetaInstruction; only injection markers do.
 // Full flow with bulleted brief would require LLM mock; covered by code review and manual test.

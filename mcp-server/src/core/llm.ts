@@ -63,6 +63,10 @@ function getClient(): OpenAIClient {
   return _client;
 }
 
+export function __setTestClient(client: OpenAIClient | null) {
+  _client = client;
+}
+
 function extractOutputText(resp: any): string {
   // Responses API provides output_text at top level
   if (typeof resp?.output_text === "string" && resp.output_text.trim().length) {
@@ -97,6 +101,17 @@ function safeJsonParse(text: string): unknown {
 }
 
 const GLOSSARY_DEBUG = process.env.LOCAL_DEV === "1" || process.env.GLOSSARY_DEBUG === "1";
+const DEFAULT_TIMEOUT_MS = 25000;
+const MAX_RETRIES = 2;
+const RETRY_BACKOFF_MS = [500, 1200];
+const NETWORK_ERROR_CODES = new Set([
+  "ECONNRESET",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "ECONNREFUSED",
+  "EPIPE",
+]);
 
 function parseRetryAfterMs(value: unknown, msg: string): number | null {
   const raw = typeof value === "number" || typeof value === "string" ? String(value) : "";
@@ -117,6 +132,137 @@ function parseRetryAfterMs(value: unknown, msg: string): number | null {
   return null;
 }
 
+function getTimeoutMs(): number {
+  const raw = Number(process.env.LLM_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TIMEOUT_MS;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getErrorMessage(err: any): string {
+  return (
+    err?.message ||
+    err?.error?.message ||
+    err?.error?.toString?.() ||
+    "OpenAI API error"
+  );
+}
+
+function getErrorStatus(err: any): number | null {
+  const status = err?.status ?? err?.response?.status ?? err?.error?.status;
+  return typeof status === "number" ? status : null;
+}
+
+function getErrorCode(err: any): string | number | null {
+  const code = err?.code ?? err?.error?.code ?? err?.error?.type ?? err?.type;
+  return code ?? null;
+}
+
+function getErrorType(err: any): string | null {
+  const type = err?.type ?? err?.error?.type;
+  return typeof type === "string" ? type : null;
+}
+
+function isRateLimitError(err: any): boolean {
+  const status = getErrorStatus(err);
+  const code = getErrorCode(err);
+  const type = getErrorType(err);
+  return status === 429 || code === "rate_limit_exceeded" || type === "rate_limit_exceeded";
+}
+
+function isRetryableStatus(err: any): boolean {
+  const status = getErrorStatus(err);
+  return typeof status === "number" && status >= 500 && status < 600;
+}
+
+function isNetworkError(err: any): boolean {
+  const code = err?.code ?? err?.cause?.code;
+  return typeof code === "string" && NETWORK_ERROR_CODES.has(code);
+}
+
+function createTimeoutError(timeoutMs: number): Error {
+  const err = new Error(`OpenAI request timed out after ${timeoutMs}ms`);
+  (err as any).type = "timeout";
+  (err as any).retry_action = "retry_same_action";
+  (err as any).timeout_ms = timeoutMs;
+  return err;
+}
+
+function isTimeoutError(err: any): boolean {
+  return Boolean(err && err.type === "timeout");
+}
+
+function getRetryAfterMs(err: any, msg: string): number {
+  const retryFromHeader =
+    err?.response?.headers?.["retry-after"] ||
+    err?.response?.headers?.["retry-after-ms"] ||
+    err?.error?.headers?.["retry-after"];
+  return parseRetryAfterMs(retryFromHeader, msg) ?? 1500;
+}
+
+async function createResponseWithTimeout(
+  client: OpenAIClient,
+  body: Record<string, unknown>,
+  debugLabel?: string
+): Promise<any> {
+  const timeoutMs = getTimeoutMs();
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        controller.abort();
+        reject(createTimeoutError(timeoutMs));
+      }, timeoutMs);
+    });
+    return await Promise.race([
+      client.responses.create(body as any, { signal: controller.signal, maxRetries: 0 }),
+      timeoutPromise,
+    ]);
+  } catch (err: any) {
+    if (controller.signal.aborted || isTimeoutError(err)) {
+      const timeoutErr = createTimeoutError(timeoutMs);
+      (timeoutErr as any).meta = { debugLabel };
+      throw timeoutErr;
+    }
+    throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function createResponseWithRetries(
+  client: OpenAIClient,
+  body: Record<string, unknown>,
+  debugLabel?: string
+): Promise<any> {
+  let attempt = 0;
+  while (true) {
+    try {
+      return await createResponseWithTimeout(client, body, debugLabel);
+    } catch (err: any) {
+      if (isTimeoutError(err)) throw err;
+      const msg = getErrorMessage(err);
+      if (isRateLimitError(err)) {
+        const retryAfterMs = getRetryAfterMs(err, msg);
+        if (attempt < MAX_RETRIES) {
+          await sleep(retryAfterMs);
+          attempt += 1;
+          continue;
+        }
+      } else if ((isRetryableStatus(err) || isNetworkError(err)) && attempt < MAX_RETRIES) {
+        const backoffMs = RETRY_BACKOFF_MS[Math.min(attempt, RETRY_BACKOFF_MS.length - 1)];
+        await sleep(backoffMs);
+        attempt += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema">) {
   const client = getClient();
   const instructionsWithGlossary = composeInstructionsWithGlossary(args.instructions);
@@ -126,7 +272,7 @@ async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema
   }
 
   try {
-    const resp = await client.responses.create({
+    const resp = await createResponseWithRetries(client, {
       model: args.model,
       input: [
         { role: "system", content: instructionsWithGlossary },
@@ -147,32 +293,24 @@ async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema
       temperature: args.temperature ?? 0.2,
       top_p: args.topP ?? 1,
       max_output_tokens: args.maxOutputTokens ?? 2048,
-    });
+    }, args.debugLabel);
 
     const text = extractOutputText(resp);
     const parsed = safeJsonParse(text);
 
     return { text, parsed };
   } catch (e: any) {
-    const msg =
-      e?.message ||
-      e?.error?.message ||
-      e?.error?.toString?.() ||
-      "OpenAI API error";
+    if (isTimeoutError(e)) {
+      throw e;
+    }
+    const msg = getErrorMessage(e);
     const err = new Error(msg);
-    const status = e?.status ?? e?.response?.status ?? e?.error?.status;
-    const code = e?.code ?? e?.error?.code ?? e?.error?.type ?? e?.type;
-    const type = e?.type ?? e?.error?.type;
-    const isRateLimited =
-      status === 429 ||
-      code === "rate_limit_exceeded" ||
-      type === "rate_limit_exceeded";
+    const status = getErrorStatus(e);
+    const code = getErrorCode(e);
+    const type = getErrorType(e);
+    const isRateLimited = isRateLimitError(e);
     if (isRateLimited) {
-      const retryFromHeader =
-        e?.response?.headers?.["retry-after"] ||
-        e?.response?.headers?.["retry-after-ms"] ||
-        e?.error?.headers?.["retry-after"];
-      const retryAfterMs = parseRetryAfterMs(retryFromHeader, msg) ?? 1500;
+      const retryAfterMs = getRetryAfterMs(e, msg);
       (err as any).rate_limited = true;
       (err as any).retry_after_ms = retryAfterMs;
       (err as any).status = status;

@@ -1672,6 +1672,12 @@ async function callSpecialistStrict(params: {
       (err as any).retry_after_ms = 1500;
       throw err;
     }
+    if (process.env.TEST_FORCE_TIMEOUT === "1") {
+      const err = new Error("timeout");
+      (err as any).type = "timeout";
+      (err as any).retry_action = "retry_same_action";
+      throw err;
+    }
     const base = {
       action: "ASK",
       message: "",
@@ -2059,6 +2065,10 @@ function isRateLimitError(err: any): boolean {
   );
 }
 
+function isTimeoutError(err: any): boolean {
+  return Boolean(err && err.type === "timeout");
+}
+
 function buildRateLimitErrorPayload(state: CanvasState, err: any): RunStepError {
   const retryAfterMs = Number(err?.retry_after_ms) > 0 ? Number(err.retry_after_ms) : 1500;
   const last = (state as any).last_specialist_result || {};
@@ -2080,6 +2090,25 @@ function buildRateLimitErrorPayload(state: CanvasState, err: any): RunStepError 
   }, last);
 }
 
+function buildTimeoutErrorPayload(state: CanvasState, err: any): RunStepError {
+  const last = (state as any).last_specialist_result || {};
+  return attachRegistryPayload({
+    ok: false as const,
+    tool: "run_step" as const,
+    current_step_id: String(state.current_step || "step_0"),
+    active_specialist: String((state as any).active_specialist || ""),
+    text: "",
+    prompt: "",
+    specialist: last,
+    state,
+    error: {
+      type: "timeout",
+      user_message: "This is taking longer than usual. Please try again.",
+      retry_action: "retry_same_action",
+    },
+  }, last);
+}
+
 async function callSpecialistStrictSafe(
   params: { model: string; state: CanvasState; decision: OrchestratorOutput; userMessage: string },
   stateForError: CanvasState
@@ -2090,6 +2119,9 @@ async function callSpecialistStrictSafe(
   } catch (err: any) {
     if (isRateLimitError(err)) {
       return { ok: false as const, payload: buildRateLimitErrorPayload(stateForError, err) };
+    }
+    if (isTimeoutError(err)) {
+      return { ok: false as const, payload: buildTimeoutErrorPayload(stateForError, err) };
     }
     throw err;
   }
