@@ -217,6 +217,7 @@ function loadUiHtml(): string {
 async function runStepHandler(args: {
   current_step_id: string;
   user_message: string;
+  input_mode?: "widget" | "chat";
   state?: Record<string, unknown>;
 }): Promise<{ structuredContent: Record<string, unknown> }> {
   const current_step_id = normalizeStepId(args.current_step_id ?? "");
@@ -248,6 +249,7 @@ async function runStepHandler(args: {
     const runStepTool = await getRunStep();
     const result = await runStepTool({
       user_message,
+      input_mode: args.input_mode,
       state: stateForTool,
     });
     const { debug: _omit, ...resultForClient } = result as {
@@ -430,6 +432,7 @@ function createAppServer(baseUrl: string): McpServer {
     // ChatGPT/Widget sometimes sends this as "start" or omits it
     current_step_id: z.string().optional().default("step_0"),
     user_message: z.string().optional().default(""),
+    input_mode: z.enum(["widget", "chat"]).optional(),
     // Use CanvasStateZod schema for type safety and validation
     // .partial() makes all fields optional (for empty/partial state)
     // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
@@ -468,6 +471,7 @@ function createAppServer(baseUrl: string): McpServer {
       const { structuredContent } = await runStepHandler({
         current_step_id: safeString(args.current_step_id ?? ""),
         user_message: safeString(args.user_message ?? ""),
+        input_mode: args.input_mode,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
       const contentText = buildContentFromResult(
