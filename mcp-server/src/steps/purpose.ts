@@ -17,6 +17,7 @@ export const PurposeZodSchema = z.object({
   menu_id: z.string().optional().default(""),
   proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
+  is_offtopic: z.boolean(),
 });
 
 export type PurposeOutput = z.infer<typeof PurposeZodSchema>;
@@ -37,6 +38,7 @@ export const PurposeJsonSchema = {
     "menu_id",
     "proceed_to_next",
     "wants_recap",
+    "is_offtopic",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
@@ -48,6 +50,7 @@ export const PurposeJsonSchema = {
     menu_id: { type: "string" },
     proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
+    is_offtopic: { type: "boolean" },
   },
 } as const;
 

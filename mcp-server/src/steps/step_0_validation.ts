@@ -18,6 +18,7 @@ export const ValidationAndBusinessNameZodSchema = z.object({
   step_0: z.string(),
   menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
+  is_offtopic: z.boolean(),
 });
 
 export type ValidationAndBusinessNameOutput = z.infer<typeof ValidationAndBusinessNameZodSchema>;
@@ -40,6 +41,7 @@ export const ValidationAndBusinessNameJsonSchema = {
     "proceed_to_dream",
     "step_0",
     "wants_recap",
+    "is_offtopic",
   ],
   properties: {
     action: {
@@ -55,6 +57,7 @@ export const ValidationAndBusinessNameJsonSchema = {
     step_0: { type: "string" },
     menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
+    is_offtopic: { type: "boolean" },
   },
 } as const;
 

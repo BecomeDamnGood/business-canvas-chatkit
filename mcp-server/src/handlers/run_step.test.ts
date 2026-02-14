@@ -56,6 +56,42 @@ test("language policy: explicit override wins", async () => {
   assert.equal(result?.state?.language_override, "true");
 });
 
+test("language mode force_en: keeps language en and never triggers ui string translation call", async () => {
+  const prevMode = process.env.LANGUAGE_MODE;
+  process.env.LANGUAGE_MODE = "force_en";
+
+  const originalLog = console.log;
+  const logs: string[] = [];
+  console.log = (...args: any[]) => {
+    logs.push(String(args[0] ?? ""));
+  };
+
+  try {
+    const result = await run_step({
+      user_message: "",
+      state: {
+        current_step: "step_0",
+        intro_shown_session: "false",
+        last_specialist_result: {},
+        started: "true",
+        initial_user_message: "Minulla on leipomo nimeltä Sol.",
+      },
+    });
+    assert.equal(result?.ok, true);
+    assert.equal(result?.state?.language, "en");
+    assert.equal(result?.state?.ui_strings_lang, "en");
+    const translateLogs = logs.filter((line) => line.includes("[ui_strings_translate_call]"));
+    assert.equal(translateLogs.length, 0);
+  } finally {
+    console.log = originalLog;
+    if (prevMode === undefined) {
+      delete process.env.LANGUAGE_MODE;
+    } else {
+      process.env.LANGUAGE_MODE = prevMode;
+    }
+  }
+});
+
 test("rate limit: returns structured error payload", async () => {
   const prev = process.env.TEST_FORCE_RATE_LIMIT;
   process.env.TEST_FORCE_RATE_LIMIT = "1";
@@ -101,6 +137,27 @@ test("timeout: returns structured error payload", async () => {
   assert.equal(result?.error?.type, "timeout");
   assert.equal(result?.error?.retry_action, "retry_same_action");
   assert.equal(result?.error?.user_message, "This is taking longer than usual. Please try again.");
+});
+
+test("Step 0 confirm continue advances to Dream as before", async () => {
+  const result = await run_step({
+    user_message: "yes",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "true",
+      started: "true",
+      step_0_final: "Venture: advertising agency | Name: Mindd | Status: existing",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "CONFIRM",
+        confirmation_question: "You have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?",
+        proceed_to_dream: "false",
+      },
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(result?.current_step_id, "dream");
+  assert.equal(result?.state?.current_step, "dream");
 });
 
 // Meta-filter: first message is never dropped (pristineAtEntry ? rawNormalized : ...) in run_step.ts.

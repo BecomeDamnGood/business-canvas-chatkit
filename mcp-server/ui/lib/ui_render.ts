@@ -91,6 +91,21 @@ export function formatText(text: string | null | undefined): string {
   return temp;
 }
 
+export function dedupeBodyAgainstPrompt(bodyRaw: string, promptRaw: string): string {
+  const body = String(bodyRaw || "");
+  const prompt = String(promptRaw || "").trim();
+  if (!body.trim() || !prompt) return body;
+
+  const bodyTrimmed = body.trim();
+  if (bodyTrimmed === prompt) return "";
+
+  const bodyLeadingTrimmed = body.trimStart();
+  if (!bodyLeadingTrimmed.startsWith(prompt)) return body;
+  const rest = bodyLeadingTrimmed.slice(prompt.length);
+  if (!/^\s+/.test(rest)) return body;
+  return rest.replace(/^\s+/, "");
+}
+
 function setStaticStrings(lang: string): void {
   const uiSubtitle = document.getElementById("uiSubtitle");
   const byText = document.getElementById("byText");
@@ -357,19 +372,20 @@ export function render(overrideToolOutput?: unknown): void {
     return raw;
   })();
   const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") as string;
+  const bodyRawDedupe = dedupeBodyAgainstPrompt(bodyRaw, promptRaw);
 
   let body: string;
   const sessionWelcomeShown = getSessionWelcomeShown();
   if (isDreamDirectionView && promptRaw) {
     body = promptRaw;
   } else if (!sessionWelcomeShown) {
-    body = `${prestartWelcomeForLang(lang)}\n\n${bodyRaw || ""}`.trim();
+    body = `${prestartWelcomeForLang(lang)}\n\n${bodyRawDedupe || ""}`.trim();
     setSessionWelcomeShown(true);
   } else {
-    body = bodyRaw || "";
+    body = bodyRawDedupe || "";
   }
 
-  if (current === "purpose" && isIntroAction && bodyRaw) {
+  if (current === "purpose" && isIntroAction && bodyRawDedupe) {
     body = `Purpose is the deeper meaning that drives your business forward, even when results are uncertain. While your Dream sets the direction, what you want to change in the world, Purpose is the internal engine that keeps you and your team moving, especially when things get tough.
 
 Without Purpose, a Dream remains just an idea, and without a Dream, Purpose becomes a feeling without a destination. Purpose is not about money, growth, or recognition. Those are outcomes, not reasons for being. Instead, Purpose is the belief or value that makes your business matter, both to you and to those you serve. It's what gives your work meaning and resilience. When you're clear about your Purpose, it becomes easier to make decisions, inspire others, and stay true to your path, even under pressure.`;

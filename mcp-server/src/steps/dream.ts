@@ -20,6 +20,7 @@ export const DreamZodSchema = z.object({
   proceed_to_dream: z.enum(["true", "false"]),
   proceed_to_purpose: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
+  is_offtopic: z.boolean(),
 });
 
 export type DreamOutput = z.infer<typeof DreamZodSchema>;
@@ -42,6 +43,7 @@ export const DreamJsonSchema = {
     "proceed_to_dream",
     "proceed_to_purpose",
     "wants_recap",
+    "is_offtopic",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
@@ -55,6 +57,7 @@ export const DreamJsonSchema = {
     proceed_to_dream: { type: "string", enum: ["true", "false"] },
     proceed_to_purpose: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
+    is_offtopic: { type: "boolean" },
   },
 } as const;
 

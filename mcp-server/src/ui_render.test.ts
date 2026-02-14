@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { render, renderChoiceButtons } from "../ui/lib/ui_render.js";
+import { dedupeBodyAgainstPrompt, render, renderChoiceButtons } from "../ui/lib/ui_render.js";
 import { setSessionStarted } from "../ui/lib/ui_state.js";
 
 function makeElement(tag: string) {
@@ -219,4 +219,40 @@ test("render shows both Dream REFINE contract buttons when prompt/menu/action_co
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
   (globalThis as any).openai = originalOpenai;
+});
+
+test("renderChoiceButtons hides buttons when prompt/action_code counts mismatch", () => {
+  const originalDocument = (globalThis as any).document;
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
+  (globalThis as any).document = fakeDocument;
+
+  const choices = [
+    { value: "1", label: "Alpha" },
+    { value: "2", label: "Beta" },
+  ];
+
+  renderChoiceButtons(choices, {
+    specialist: { menu_id: "TEST_MENU" },
+    state: { current_step: "dream", language: "en" },
+    registry_version: "test",
+    ui: { action_codes: ["ACTION_ONLY_ONE"], expected_choice_count: 1 },
+  });
+
+  const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
+  assert.equal(buttons.length, 0);
+
+  (globalThis as any).document = originalDocument;
+});
+
+test("dedupeBodyAgainstPrompt removes full duplicate body", () => {
+  const prompt = "Define your Dream for Acme or choose an option.";
+  const body = "Define your Dream for Acme or choose an option.";
+  assert.equal(dedupeBodyAgainstPrompt(body, prompt), "");
+});
+
+test("dedupeBodyAgainstPrompt removes duplicated prompt prefix and keeps remainder", () => {
+  const prompt = "Define your Dream for Acme or choose an option.";
+  const body = "Define your Dream for Acme or choose an option.\n\nAdditional context.";
+  assert.equal(dedupeBodyAgainstPrompt(body, prompt), "Additional context.");
 });

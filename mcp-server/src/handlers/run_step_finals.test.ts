@@ -5,6 +5,7 @@ import fs from "node:fs";
 import { getDefaultState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import {
+  run_step,
   applyStateUpdate,
   enforceDreamMenuContract,
   pickPrompt,
@@ -13,8 +14,34 @@ import {
 } from "./run_step.js";
 import { BigWhyZodSchema } from "../steps/bigwhy.js";
 import { VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS } from "../steps/step_0_validation.js";
-import { DREAM_INSTRUCTIONS } from "../steps/dream.js";
 import { PURPOSE_INSTRUCTIONS } from "../steps/purpose.js";
+
+async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Promise<T> {
+  const prev = process.env[key];
+  process.env[key] = value;
+  try {
+    return await fn();
+  } finally {
+    if (prev === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = prev;
+    }
+  }
+}
+
+function countNumberedOptions(text: string): number {
+  const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  let count = 0;
+  for (const line of lines) {
+    const m = line.match(/^([1-9])[\)\.]\s+/);
+    if (!m) continue;
+    const idx = Number(m[1]);
+    if (idx !== count + 1) break;
+    count += 1;
+  }
+  return count;
+}
 
 test("finals merge: applyStateUpdate does not overwrite unrelated finals", () => {
   const prev = getDefaultState();
@@ -60,6 +87,7 @@ test("wants_recap: BigWhy schema accepts wants_recap and does not break validati
     bigwhy: "",
     proceed_to_next: "false" as const,
     wants_recap: true,
+    is_offtopic: false,
   };
   const parsed = BigWhyZodSchema.parse(output);
   assert.equal(parsed.wants_recap, true);
@@ -151,4 +179,146 @@ test("Dream menu contract: valid REFINE menu question is preserved", () => {
     } as any
   );
   assert.equal(corrected.question, specialist.question);
+});
+
+test("off-topic overlay applies only when specialist returns is_offtopic=true", async () => {
+  const baseState = {
+    ...getDefaultState(),
+    current_step: "dream",
+    active_specialist: "Dream",
+    intro_shown_session: "true",
+    intro_shown_for_step: "dream",
+    started: "true",
+    business_name: "Acme",
+    dream_final: "Become the trusted local partner.",
+    last_specialist_result: {
+      action: "REFINE",
+      menu_id: "DREAM_MENU_REFINE",
+      question:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+    },
+  };
+
+  const normalTurn = await run_step({
+    user_message: "We serve local makers.",
+    state: baseState,
+  });
+  assert.equal(normalTurn.ok, true);
+  assert.equal(String(normalTurn.prompt || ""), "Test question");
+
+  const offTopicTurn = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "Who is Ben Steenstra?",
+      state: baseState,
+    })
+  );
+  assert.equal(offTopicTurn.ok, true);
+  assert.equal(String(offTopicTurn.specialist?.is_offtopic || ""), "true");
+  assert.equal(String(offTopicTurn.specialist?.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.ok(Array.isArray(offTopicTurn.ui?.action_codes));
+  assert.equal(
+    countNumberedOptions(String(offTopicTurn.prompt || "")),
+    offTopicTurn.ui?.action_codes?.length || 0
+  );
+  assert.equal(String(offTopicTurn.prompt || "").includes("Continue Dream now"), false);
+});
+
+test("Step 0 off-topic overlay with no output: no continue/menu buttons", async () => {
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "Who is Ben Steenstra?",
+      state: {
+        ...getDefaultState(),
+        current_step: "step_0",
+        active_specialist: "ValidationAndBusinessName",
+        intro_shown_session: "true",
+        started: "true",
+        last_specialist_result: {},
+      },
+    })
+  );
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.is_offtopic || ""), "true");
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(String(result.specialist?.confirmation_question || ""), "");
+  assert.ok(String(result.prompt || "").includes("Define your Step 0"));
+  assert.ok(String(result.text || "").includes("We have not yet defined Step 0."));
+  assert.equal(Array.isArray(result.ui?.action_codes), false);
+});
+
+test("Step 0 off-topic overlay with valid output: continue shown, no step menu buttons", async () => {
+  const step0State = {
+    ...getDefaultState(),
+    current_step: "step_0",
+    active_specialist: "ValidationAndBusinessName",
+    intro_shown_session: "true",
+    started: "true",
+    step_0_final: "Venture: advertising agency | Name: Mindd | Status: existing",
+    business_name: "Mindd",
+    last_specialist_result: {},
+  };
+
+  const offTopic = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "Who is Ben Steenstra?",
+      state: step0State,
+    })
+  );
+  assert.equal(offTopic.ok, true);
+  assert.equal(String(offTopic.specialist?.action || ""), "CONFIRM");
+  assert.ok(String(offTopic.prompt || "").includes("Refine your Step 0 for Mindd or choose an option."));
+  assert.equal(Array.isArray(offTopic.ui?.action_codes), false);
+});
+
+test("Step 0 legacy confirm prompt is preserved (no global renderer rewrite)", async () => {
+  const result = await run_step({
+    user_message: "",
+    state: {
+      ...getDefaultState(),
+      current_step: "step_0",
+      active_specialist: "ValidationAndBusinessName",
+      intro_shown_session: "false",
+      started: "true",
+      step_0_final: "Venture: advertising agency | Name: Mindd | Status: existing",
+      business_name: "Mindd",
+      last_specialist_result: {},
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.action || ""), "CONFIRM");
+  assert.equal(
+    String(result.specialist?.confirmation_question || ""),
+    "You have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?"
+  );
+  assert.equal(
+    String(result.prompt || ""),
+    "You have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?"
+  );
+  assert.equal(String(result.prompt || "").includes("This is what we have established"), false);
+  assert.equal(String(result.prompt || "").includes("Refine your Step 0"), false);
+  assert.equal(String(result.specialist?.menu_id || ""), "");
+  assert.equal(Array.isArray(result.ui?.action_codes), false);
+});
+
+test("global free-text policy: ActionCode turn bypasses renderer", async () => {
+  const result = await run_step({
+    user_message: "ACTION_DREAM_REFINE_START_EXERCISE",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      started: "true",
+      dream_final: "Become the trusted local partner.",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "DREAM_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+      },
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(Array.isArray(result.ui?.action_codes), false);
 });

@@ -42,6 +42,7 @@ test("statement list: count equals statements.length", () => {
     statements: ["First.", "Tech will change work."],
     user_state: "ok",
     wants_recap: false,
+    is_offtopic: false,
   };
   assert.equal(output.statements.length, 2, "count equals length");
   const parsed = DreamExplainerZodSchema.parse(output);
@@ -66,6 +67,7 @@ test("recap includes all statements as bullets", () => {
     statements,
     user_state: "ok",
     wants_recap: false,
+    is_offtopic: false,
   };
   assert.equal(output.statements.length, 3);
   for (const s of statements) {
@@ -90,6 +92,7 @@ test("stuck scenario: question must NOT contain numbered pattern (no buttons)", 
     statements: [],
     user_state: "stuck",
     wants_recap: false,
+    is_offtopic: false,
   };
   assert.equal(output.user_state, "stuck");
   const numberedChoicePattern = /^\s*[1-9][\)\.]\s*/m;
@@ -113,6 +116,7 @@ test("parseDreamExplainerOutput accepts output with statements and user_state", 
     statements: [],
     user_state: "ok",
     wants_recap: false,
+    is_offtopic: false,
   };
   const parsed = parseDreamExplainerOutput(raw);
   assert.deepEqual(parsed.statements, []);
@@ -137,6 +141,7 @@ test("multi-statement: after adding 2 statements output includes both statements
     statements,
     user_state: "ok",
     wants_recap: false,
+    is_offtopic: false,
   };
   assert.equal(output.statements.length, 2);
   assert.ok(output.message.includes("1.") && output.message.includes("2."), "numbered list includes both");
@@ -163,6 +168,7 @@ test("total exactly 5: response has encouragement, list 1..5, and new question c
     statements,
     user_state: "ok",
     wants_recap: false,
+    is_offtopic: false,
   };
   assert.equal(output.statements.length, 5);
   assert.ok(output.message.includes("5") && (output.message.includes("statement") || output.message.includes("statements")), "explicitly states 5 statements");
@@ -191,6 +197,7 @@ test("milestone/progress output includes complete numbered statements list (1..N
     statements,
     user_state: "ok",
     wants_recap: false,
+    is_offtopic: false,
   };
   assert.equal(output.statements.length, 5);
   assert.ok(output.message.includes("Total: 5 statements."), "progress message includes total count");
@@ -214,6 +221,7 @@ test("off-topic/ESCAPE output: question contains 1) and 2) so UI renders two but
     statements: [],
     user_state: "ok",
     wants_recap: false,
+    is_offtopic: false,
   };
   assert.equal(output.action, "ESCAPE");
   assert.ok(output.question.includes("1)") && output.question.includes("2)"), "question must contain 1) and 2) so UI renders buttons");
@@ -240,6 +248,7 @@ test("recap: after adding 2 more statements output includes all 4 (not only the 
     statements,
     user_state: "ok",
     wants_recap: false,
+    is_offtopic: false,
   };
   assert.equal(output.statements.length, 4);
   assert.ok(output.message.includes("Total: 4 statements."));
@@ -265,6 +274,7 @@ test("stuck helper: two-paragraph intro, blank lines, bullets; no extra instruct
     statements: [],
     user_state: "stuck",
     wants_recap: false,
+    is_offtopic: false,
   };
   assert.equal(output.user_state, "stuck");
   assert.ok(!output.message.includes("Write one clear statement in your own words."), "stuck helper message must not contain the removed extra instruction line");
@@ -291,6 +301,7 @@ test("stuck helper formatting: blank lines between intro, instruction, and bulle
     statements: [],
     user_state: "stuck",
     wants_recap: false,
+    is_offtopic: false,
   };
   const lines = output.message.split(/\n/);
   const blankIndices = lines.map((l, i) => (l.trim() === "" ? i : -1)).filter((i) => i >= 0);

@@ -29,6 +29,7 @@ export const DreamExplainerZodSchema = z.object({
   statements: z.array(z.string()),
   user_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
+  is_offtopic: z.boolean(),
   scoring_phase: z.enum(["true", "false"]),
   clusters: z.array(ClusterSchema),
 });
@@ -55,6 +56,7 @@ export const DreamExplainerJsonSchema = {
     "statements",
     "user_state",
     "wants_recap",
+    "is_offtopic",
     "scoring_phase",
     "clusters",
   ],
@@ -72,6 +74,7 @@ export const DreamExplainerJsonSchema = {
     statements: { type: "array", items: { type: "string" } },
     user_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
+    is_offtopic: { type: "boolean" },
     scoring_phase: { type: "string", enum: ["true", "false"] },
     clusters: {
       type: "array",

@@ -17,6 +17,7 @@ export const RulesOfTheGameZodSchema = z.object({
   menu_id: z.string().optional().default(""),
   proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
+  is_offtopic: z.boolean(),
   statements: z.array(z.string()),
 });
 
@@ -38,6 +39,7 @@ export const RulesOfTheGameJsonSchema = {
     "menu_id",
     "proceed_to_next",
     "wants_recap",
+    "is_offtopic",
     "statements",
   ],
   properties: {
@@ -50,6 +52,7 @@ export const RulesOfTheGameJsonSchema = {
     menu_id: { type: "string" },
     proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
+    is_offtopic: { type: "boolean" },
     statements: { type: "array", items: { type: "string" } },
   },
 } as const;

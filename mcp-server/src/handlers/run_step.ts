@@ -146,6 +146,7 @@ import {
 } from "../steps/presentation.js";
 import { loadModule as loadCld3 } from "cld3-asm";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
+import { renderFreeTextTurnPolicy } from "../core/turn_policy_renderer.js";
 
 /**
  * Incoming tool args
@@ -166,7 +167,7 @@ type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
 const STEP0_CARDDESC_EN =
   "Just to set the context, we'll start with the basics.";
 const STEP0_QUESTION_EN =
-  "What type of venture is it, and what's the business name? If the name isn't final yet, write \"TBD\".";
+  "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?";
 function step0QuestionForLang(_lang: string): string {
   return STEP0_QUESTION_EN;
 }
@@ -271,12 +272,21 @@ const UiStringsJsonSchema = {
 const UI_STRINGS_CACHE = new Map<string, Record<string, string>>();
 
 function langFromState(state: CanvasState): string {
+  if (isForceEnglishLanguageMode()) return "en";
   const l = String((state as any).language ?? "").trim().toLowerCase();
   return l || "en";
 }
 
 function shouldLogLocalDevDiagnostics(): boolean {
   return process.env.LOCAL_DEV === "1" || process.env.MENU_POLICY_DEBUG === "1";
+}
+
+function languageModeFromEnv(): string {
+  return String(process.env.LANGUAGE_MODE || "").trim().toLowerCase();
+}
+
+function isForceEnglishLanguageMode(): boolean {
+  return languageModeFromEnv() === "force_en";
 }
 
 function baseUrlFromEnv(): string {
@@ -733,9 +743,17 @@ function processActionCode(
 
 function buildUiPayload(
   specialist: any,
-  flagsOverride?: Record<string, boolean> | null
+  flagsOverride?: Record<string, boolean> | null,
+  actionCodesOverride?: string[] | null
 ): { action_codes?: string[]; expected_choice_count?: number; flags: Record<string, boolean> } | undefined {
   const flags = flagsOverride || {};
+  if (Array.isArray(actionCodesOverride) && actionCodesOverride.length > 0) {
+    return {
+      action_codes: actionCodesOverride,
+      expected_choice_count: actionCodesOverride.length,
+      flags,
+    };
+  }
   const menuId = String(specialist?.menu_id || "").trim();
   if (menuId) {
     const actionCodes = ACTIONCODE_REGISTRY.menus[menuId];
@@ -752,9 +770,10 @@ function buildUiPayload(
 function attachRegistryPayload<T extends Record<string, unknown>>(
   payload: T,
   specialist: any,
-  flagsOverride?: Record<string, boolean> | null
+  flagsOverride?: Record<string, boolean> | null,
+  actionCodesOverride?: string[] | null
 ): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
-  const ui = buildUiPayload(specialist, flagsOverride);
+  const ui = buildUiPayload(specialist, flagsOverride, actionCodesOverride);
   return {
     ...payload,
     registry_version: ACTIONCODE_REGISTRY.version,
@@ -1344,6 +1363,7 @@ async function detectLanguageHeuristic(text: string): Promise<{ lang: string; co
 }
 
 async function getUiStringsForLang(lang: string, model: string): Promise<Record<string, string>> {
+  if (isForceEnglishLanguageMode()) return UI_STRINGS_DEFAULT;
   const normalized = normalizeLangCode(lang) || "en";
   if (normalized === "en") return UI_STRINGS_DEFAULT;
   const cached = UI_STRINGS_CACHE.get(normalized);
@@ -1393,6 +1413,16 @@ async function getUiStringsForLang(lang: string, model: string): Promise<Record<
 }
 
 async function ensureUiStringsForState(state: CanvasState, model: string): Promise<CanvasState> {
+  if (isForceEnglishLanguageMode()) {
+    return {
+      ...(state as any),
+      language: "en",
+      language_locked: "true",
+      language_override: "false",
+      ui_strings: UI_STRINGS_DEFAULT,
+      ui_strings_lang: "en",
+    } as CanvasState;
+  }
   const lang = normalizeLangCode(String((state as any).language ?? "")) || "en";
   const existingLang = String((state as any).ui_strings_lang ?? "").trim().toLowerCase();
   const existing = (state as any).ui_strings;
@@ -1408,6 +1438,16 @@ async function ensureUiStringsForState(state: CanvasState, model: string): Promi
 }
 
 async function ensureLanguageFromUserMessage(state: CanvasState, userMessage: string, model: string): Promise<CanvasState> {
+  if (isForceEnglishLanguageMode()) {
+    return {
+      ...(state as any),
+      language: "en",
+      language_locked: "true",
+      language_override: "false",
+      ui_strings: UI_STRINGS_DEFAULT,
+      ui_strings_lang: "en",
+    } as CanvasState;
+  }
   const msg = String(userMessage ?? "");
 
   // Explicit user request overrides everything.
@@ -1592,6 +1632,30 @@ If the user asks something unrelated to The Business Strategy Canvas Builder or 
 /** @deprecated Use UNIVERSAL_META_OFFTOPIC_POLICY. Kept for test backward compatibility. */
 export const OFF_TOPIC_POLICY = UNIVERSAL_META_OFFTOPIC_POLICY;
 
+const OFFTOPIC_FLAG_CONTRACT_INSTRUCTION = `OFFTOPIC CONTRACT (HARD)
+- Always return a boolean field "is_offtopic".
+- Set is_offtopic=false when the user's input can be incorporated into the current step output.
+- Set is_offtopic=true when the input is meta/off-topic/unrelated to this step.
+- If is_offtopic=true: answer briefly in message, do not ask to proceed to the next step, and keep proceed flags false.`;
+
+function composeSpecialistInstructions(
+  baseInstructions: string,
+  contextBlock: string,
+  options?: { includeUniversalMeta?: boolean }
+): string {
+  const blocks = [
+    baseInstructions,
+    LANGUAGE_LOCK_INSTRUCTION,
+    contextBlock,
+    RECAP_INSTRUCTION,
+  ];
+  if (options?.includeUniversalMeta) {
+    blocks.push(UNIVERSAL_META_OFFTOPIC_POLICY);
+  }
+  blocks.push(OFFTOPIC_FLAG_CONTRACT_INSTRUCTION);
+  return blocks.join("\n\n");
+}
+
 /**
  * Persist state updates consistently (no nulls)
  * Minimal: store finals when the specialist returns CONFIRM with its output field.
@@ -1752,6 +1816,7 @@ async function callSpecialistStrict(params: {
       (err as any).retry_action = "retry_same_action";
       throw err;
     }
+    const forceOfftopic = process.env.TEST_FORCE_OFFTOPIC === "1";
     const base = {
       action: "ASK",
       message: "",
@@ -1761,6 +1826,7 @@ async function callSpecialistStrict(params: {
       menu_id: "",
       proceed_to_next: "false",
       wants_recap: false,
+      is_offtopic: forceOfftopic,
     };
     const specialistResult =
       specialist === STEP_0_SPECIALIST
@@ -1775,7 +1841,7 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<ValidationAndBusinessNameOutput>({
       model,
-      instructions: `${VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}`,
+      instructions: composeSpecialistInstructions(VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS, contextBlock),
       plannerInput,
       schemaName: "ValidationAndBusinessName",
       jsonSchema: ValidationAndBusinessNameJsonSchema as any,
@@ -1800,7 +1866,7 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<DreamOutput>({
       model,
-      instructions: `${DREAM_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}`,
+      instructions: composeSpecialistInstructions(DREAM_INSTRUCTIONS, contextBlock),
       plannerInput,
       schemaName: "Dream",
       jsonSchema: DreamJsonSchema as any,
@@ -1846,7 +1912,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<DreamExplainerOutput>({
       model,
-      instructions: `${DREAM_EXPLAINER_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(DREAM_EXPLAINER_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "DreamExplainer",
       jsonSchema: DreamExplainerJsonSchema as any,
@@ -1870,7 +1938,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<PurposeOutput>({
       model,
-      instructions: `${PURPOSE_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(PURPOSE_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "Purpose",
       jsonSchema: PurposeJsonSchema as any,
@@ -1894,7 +1964,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<BigWhyOutput>({
       model,
-      instructions: `${BIGWHY_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(BIGWHY_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "BigWhy",
       jsonSchema: BigWhyJsonSchema as any,
@@ -1918,7 +1990,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<RoleOutput>({
       model,
-      instructions: `${ROLE_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(ROLE_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "Role",
       jsonSchema: RoleJsonSchema as any,
@@ -1942,7 +2016,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<EntityOutput>({
       model,
-      instructions: `${ENTITY_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(ENTITY_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "Entity",
       jsonSchema: EntityJsonSchema as any,
@@ -1969,7 +2045,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<StrategyOutput>({
       model,
-      instructions: `${STRATEGY_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(STRATEGY_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "Strategy",
       jsonSchema: StrategyJsonSchema as any,
@@ -1994,7 +2072,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<TargetGroupOutput>({
       model,
-      instructions: `${TARGETGROUP_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(TARGETGROUP_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "TargetGroup",
       jsonSchema: TargetGroupJsonSchema as any,
@@ -2019,7 +2099,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<ProductsServicesOutput>({
       model,
-      instructions: `${PRODUCTSSERVICES_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(PRODUCTSSERVICES_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "ProductsServices",
       jsonSchema: ProductsServicesJsonSchema as any,
@@ -2046,7 +2128,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<RulesOfTheGameOutput>({
       model,
-      instructions: `${RULESOFTHEGAME_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(RULESOFTHEGAME_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "RulesOfTheGame",
       jsonSchema: RulesOfTheGameJsonSchema as any,
@@ -2099,7 +2183,9 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<PresentationOutput>({
       model,
-      instructions: `${PRESENTATION_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: composeSpecialistInstructions(PRESENTATION_INSTRUCTIONS, contextBlock, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "Presentation",
       jsonSchema: PresentationJsonSchema as any,
@@ -2124,6 +2210,8 @@ async function callSpecialistStrict(params: {
       business_name: "TBD",
       proceed_to_dream: "false",
       step_0: "",
+      wants_recap: false,
+      is_offtopic: false,
     },
     attempts: 0,
   };
@@ -2333,6 +2421,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const prevQ = lastSpecialistResult ? pickPrompt(lastSpecialistResult) : "";
 
   let actionCodeRaw = userMessageCandidate.startsWith("ACTION_") ? userMessageCandidate : "";
+  const isActionCodeTurnForPolicy = actionCodeRaw !== "" && actionCodeRaw !== "ACTION_TEXT_SUBMIT";
   let userMessage = userMessageCandidate;
 
   if (actionCodeRaw) {
@@ -2583,18 +2672,19 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       callResult.value.specialistResult,
       state
     );
+    const normalizedSkipResultSafe = normalizeOfftopicContract(normalizedSkipResult);
 
     // Update state with specialist result
     const nextState = applyStateUpdate({
       prev: state,
       decision,
-      specialistResult: normalizedSkipResult,
+      specialistResult: normalizedSkipResultSafe,
       showSessionIntroUsed: "false",
     });
 
     // Build output
-    const text = buildTextForWidget({ specialist: normalizedSkipResult });
-    const prompt = pickPrompt(normalizedSkipResult);
+    const text = buildTextForWidget({ specialist: normalizedSkipResultSafe });
+    const prompt = pickPrompt(normalizedSkipResultSafe);
 
     return attachRegistryPayload({
       ok: true as const,
@@ -2603,7 +2693,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       active_specialist: String((nextState as any).active_specialist || ""),
       text,
       prompt,
-      specialist: normalizedSkipResult,
+      specialist: normalizedSkipResultSafe,
       state: nextState,
       debug: {
         decision,
@@ -2611,7 +2701,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         language: lang,
         meta_user_message_ignored: false,
       },
-    }, normalizedSkipResult);
+    }, normalizedSkipResultSafe);
   }
   // SKIP-MODUS (TEST-ONLY) - END
 
@@ -2657,6 +2747,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       menu_id: "",
       proceed_to_next: "false",
       wants_recap: false,
+      is_offtopic: false,
     };
   }
 
@@ -2753,6 +2844,22 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       return enforceDreamMenuContract(result, currentState);
     }
     return result;
+  }
+
+  function normalizeOfftopicContract(result: any): any {
+    const safe = result && typeof result === "object" ? { ...result } : {};
+    const isOfftopic = safe.is_offtopic === true;
+    safe.is_offtopic = isOfftopic;
+    if (!isOfftopic) return safe;
+
+    safe.action = "ASK";
+    safe.confirmation_question = "";
+    safe.proceed_to_dream = "false";
+    safe.proceed_to_purpose = "false";
+    safe.proceed_to_next = "false";
+    if (typeof safe.step_0 === "string") safe.step_0 = "";
+    if (typeof safe.business_name === "string") safe.business_name = "";
+    return safe;
   }
 
   // Hard-coded confirm actions: bypass LLM and proceed deterministically.
@@ -2897,6 +3004,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         menu_id: "",
         proceed_to_next: "false",
         wants_recap: false,
+        is_offtopic: false,
       };
 
       return attachRegistryPayload({
@@ -2935,6 +3043,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         menu_id: "",
         proceed_to_next: "false",
         wants_recap: false,
+        is_offtopic: false,
       };
 
       return attachRegistryPayload({
@@ -3012,6 +3121,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           statements,
           user_state: "ok",
           wants_recap: false,
+          is_offtopic: false,
           scoring_phase: "false",
           clusters: [],
         },
@@ -3085,15 +3195,16 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       callDream.value.specialistResult,
       state
     );
+    const normalizedSwitchResultSafe = normalizeOfftopicContract(normalizedSwitchResult);
     const nextStateSwitch = applyStateUpdate({
       prev: state,
       decision: forcedDecision,
-      specialistResult: normalizedSwitchResult,
+      specialistResult: normalizedSwitchResultSafe,
       showSessionIntroUsed: "false",
     });
     const nextStateSwitchUi = await ensureUiStringsForState(nextStateSwitch, model);
-    const textSwitch = buildTextForWidget({ specialist: normalizedSwitchResult });
-    const promptSwitch = pickPrompt(normalizedSwitchResult);
+    const textSwitch = buildTextForWidget({ specialist: normalizedSwitchResultSafe });
+    const promptSwitch = pickPrompt(normalizedSwitchResultSafe);
     return attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
@@ -3101,9 +3212,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       active_specialist: DREAM_SPECIALIST,
       text: textSwitch,
       prompt: promptSwitch,
-      specialist: normalizedSwitchResult,
+      specialist: normalizedSwitchResultSafe,
       state: nextStateSwitchUi,
-    }, normalizedSwitchResult, responseUiFlags);
+    }, normalizedSwitchResultSafe, responseUiFlags);
   }
 
   // START trigger (widget start screen)
@@ -3132,6 +3243,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         proceed_to_dream: "false",
         step_0: "",
         wants_recap: false,
+        is_offtopic: false,
       };
       return attachRegistryPayload({
         ok: true as const,
@@ -3182,8 +3294,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         status === "existing"
           ? `You have a ${venture} called ${name}.`
           : `You want to start a ${venture} called ${name}.`;
-      const confirmReady =
-        " Is that correct, and if so are you ready to start the first step, 'Your Dream'?";
+      const confirmReady = " Are you ready to start with the first step: the Dream?";
 
       const specialist: ValidationAndBusinessNameOutput = {
         action: "CONFIRM",
@@ -3196,6 +3307,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         proceed_to_dream: "false",
         step_0: step0Final,
         wants_recap: false,
+        is_offtopic: false,
       };
 
       const stateWithUi = await ensureUiStringsForState(state, model);
@@ -3233,6 +3345,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       proceed_to_dream: "false",
       step_0: "",
       wants_recap: false,
+      is_offtopic: false,
     };
 
     return attachRegistryPayload({
@@ -3276,6 +3389,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       proceed_to_dream: "true",
       step_0: (state as any).step_0_final || "",
       wants_recap: false,
+      is_offtopic: false,
     };
 
     (state as any).active_specialist = STEP_0_SPECIALIST;
@@ -3386,14 +3500,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       state,
       lang
     );
+    const normalizedDreamExplainerSafe = normalizeOfftopicContract(normalizedDreamExplainer);
     const nextStateDream = applyStateUpdate({
       prev: state,
       decision: forcedDecision,
-      specialistResult: normalizedDreamExplainer,
+      specialistResult: normalizedDreamExplainerSafe,
       showSessionIntroUsed: "false",
     });
-    const textDream = buildTextForWidget({ specialist: normalizedDreamExplainer });
-    const promptDream = pickPrompt(normalizedDreamExplainer);
+    const textDream = buildTextForWidget({ specialist: normalizedDreamExplainerSafe });
+    const promptDream = pickPrompt(normalizedDreamExplainerSafe);
     return attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
@@ -3401,7 +3516,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       active_specialist: String((nextStateDream as any).active_specialist || ""),
       text: textDream,
       prompt: promptDream,
-      specialist: normalizedDreamExplainer,
+      specialist: normalizedDreamExplainerSafe,
       state: nextStateDream,
       debug: {
         decision: forcedDecision,
@@ -3409,7 +3524,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         language: lang,
         meta_user_message_ignored: false,
       },
-    }, normalizedDreamExplainer, responseUiFlags);
+    }, normalizedDreamExplainerSafe, responseUiFlags);
   }
 
   // --------- ORCHESTRATE (decision 1) ----------
@@ -3467,6 +3582,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     specialistResult,
     state
   );
+  specialistResult = normalizeOfftopicContract(specialistResult);
   if (String(decision1.current_step || "") === BIGWHY_STEP_ID) {
     const candidate = pickBigWhyCandidate(specialistResult);
     if (candidate && countWords(candidate) > BIGWHY_MAX_WORDS) {
@@ -3490,6 +3606,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         specialistResult,
         state
       );
+      specialistResult = normalizeOfftopicContract(specialistResult);
       const shortened = pickBigWhyCandidate(specialistResult);
       if (!shortened || countWords(shortened) > BIGWHY_MAX_WORDS) {
         specialistResult = buildBigWhyTooLongFeedback(lang);
@@ -3536,6 +3653,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
             specialistResult,
             stateAfterFirst
           );
+          specialistResult = normalizeOfftopicContract(specialistResult);
           if (String(decisionNext.current_step || "") === BIGWHY_STEP_ID) {
             const candidate = pickBigWhyCandidate(specialistResult);
             if (!candidate || countWords(candidate) > BIGWHY_MAX_WORDS) {
@@ -3590,6 +3708,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         specialistResult,
         nextState
       );
+      specialistResult = normalizeOfftopicContract(specialistResult);
       if (String(decision2.current_step || "") === BIGWHY_STEP_ID) {
         const candidate = pickBigWhyCandidate(specialistResult);
         if (!candidate || countWords(candidate) > BIGWHY_MAX_WORDS) {
@@ -3605,6 +3724,39 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       });
 
       finalDecision = decision2;
+    }
+  }
+
+  let actionCodesOverride: string[] | null = null;
+  const globalTurnPolicyEnabled = process.env.GLOBAL_TURN_POLICY_ENABLED !== "0";
+  const sameStepTurn = String((nextState as any).current_step ?? "") === String((state as any).current_step ?? "");
+  const isOfftopicTurn = (specialistResult as any)?.is_offtopic === true;
+  const shouldApplyGlobalTurnPolicy =
+    globalTurnPolicyEnabled &&
+    !isActionCodeTurnForPolicy &&
+    isOfftopicTurn &&
+    sameStepTurn;
+  if (shouldApplyGlobalTurnPolicy) {
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: String((nextState as any).current_step ?? ""),
+      state: nextState,
+      specialist: (specialistResult || {}) as Record<string, unknown>,
+      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+    });
+    specialistResult = rendered.specialist;
+    actionCodesOverride = rendered.uiActionCodes;
+    (nextState as any).last_specialist_result = specialistResult;
+    if (process.env.GLOBAL_TURN_POLICY_DEBUG === "1" || shouldLogLocalDevDiagnostics()) {
+      console.log("[global_turn_policy]", {
+        applied: true,
+        step: String((nextState as any).current_step ?? ""),
+        status: rendered.status,
+        confirm_eligible: rendered.confirmEligible,
+        action_codes_count: actionCodesOverride.length,
+        parity_ok: countNumberedOptions(String((specialistResult as any)?.question ?? "")) === actionCodesOverride.length,
+        request_id: String((nextState as any).__request_id ?? ""),
+        client_action_id: String((nextState as any).__client_action_id ?? ""),
+      });
     }
   }
 
@@ -3631,5 +3783,5 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       language: lang,
       meta_user_message_ignored: looksLikeMetaInstruction(rawNormalized) && pristineAtEntry,
     },
-  }, specialistResult, responseUiFlags);
+  }, specialistResult, responseUiFlags, actionCodesOverride);
 }
