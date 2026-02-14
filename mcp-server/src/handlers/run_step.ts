@@ -637,7 +637,7 @@ function buildTextForWidget(params: { specialist: any }): string {
   return parts.join("\n\n").trim();
 }
 
-function pickPrompt(specialist: any): string {
+export function pickPrompt(specialist: any): string {
   const confirmQ = String(specialist?.confirmation_question ?? "").trim();
   const q = String(specialist?.question ?? "").trim();
   return confirmQ || q || "";

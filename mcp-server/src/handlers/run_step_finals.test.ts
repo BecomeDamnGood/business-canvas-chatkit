@@ -1,10 +1,12 @@
 // Unit tests for run_step: finals merge, wants_recap, off-topic policy (no LLM)
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { getDefaultState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import {
   applyStateUpdate,
+  pickPrompt,
   RECAP_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
 } from "./run_step.js";
@@ -84,4 +86,25 @@ test("UNIVERSAL_META_OFFTOPIC_POLICY: non-step_0 prompt assembly includes policy
   assert.ok(dreamInstructions.includes("Ben Steenstra"), "Ben factual reference present");
   assert.ok(dreamInstructions.includes("www.bensteenstra.com"), "Ben reference URL present");
   assert.ok(dreamInstructions.includes("maybe we're not the right fit"), "polite stop option present");
+});
+
+test("Dream menu prompt uses numbered question (not confirmation_question)", () => {
+  const prompt = pickPrompt({
+    menu_id: "DREAM_MENU_REFINE",
+    question:
+      "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+    confirmation_question: "Please confirm before continuing.",
+  });
+  assert.ok(prompt.startsWith("1) I'm happy with this wording"), "Dream menu must render from numbered question");
+});
+
+test("Dream specialist instructions must not append universal meta/off-topic policy block", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.equal(
+    source.includes(
+      "${DREAM_INSTRUCTIONS}\\n\\n${LANGUAGE_LOCK_INSTRUCTION}\\n\\n${contextBlock}\\n\\n${RECAP_INSTRUCTION}\\n\\n${UNIVERSAL_META_OFFTOPIC_POLICY}"
+    ),
+    false,
+    "Dream specialist should rely on Dream-local META/OFF-TOPIC rules only"
+  );
 });
