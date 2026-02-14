@@ -9,6 +9,9 @@ import {
   applyStateUpdate,
   enforceDreamMenuContract,
   isMaterialRewriteCandidate,
+  isClearlyGeneralOfftopicInput,
+  shouldTreatAsStepContributingInput,
+  pickDualChoiceSuggestion,
   pickPrompt,
   RECAP_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
@@ -355,6 +358,28 @@ test("wording choice: material rewrite heuristic ignores mini-fix but catches su
       "Our purpose is to help founders make strategic decisions with confidence and focus."
     ),
     true
+  );
+});
+
+test("off-topic guard: step-contributing input is not treated as general off-topic", () => {
+  assert.equal(isClearlyGeneralOfftopicInput("Who is Ben Steenstra?"), true);
+  assert.equal(shouldTreatAsStepContributingInput("I want to become Rich", "purpose"), true);
+  assert.equal(shouldTreatAsStepContributingInput("What is the time in London?", "purpose"), false);
+});
+
+test("wording choice: suggestion fallback extracts rewritten content from message", () => {
+  const suggestion = pickDualChoiceSuggestion(
+    "dream",
+    {
+      refined_formulation: "",
+      message:
+        "That’s a strong foundation. A Dream goes beyond purpose and paints a vivid picture of the world your business wants to help create.\n\nLet’s sharpen your thought into a clear Dream statement for Mindd.\n\nMindd dreams of a world in which every company is purpose-driven and earns a sustainable right to exist.",
+    },
+    {}
+  );
+  assert.equal(
+    suggestion,
+    "Mindd dreams of a world in which every company is purpose-driven and earns a sustainable right to exist."
   );
 });
 

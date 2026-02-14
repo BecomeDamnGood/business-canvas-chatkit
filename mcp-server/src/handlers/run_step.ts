@@ -876,6 +876,128 @@ export function isMaterialRewriteCandidate(userRaw: string, suggestionRaw: strin
   return editRatio > editThreshold || overlap < 0.85;
 }
 
+function hasStepKeyword(text: string): boolean {
+  return /\b(business|venture|company|dream|purpose|why|mission|role|entity|strategy|target|customer|client|product|service|rule|presentation|canvas|value|impact|income|revenue|profit|grow|growth|name|validate|existing|starting)\b/i.test(
+    text
+  );
+}
+
+export function isClearlyGeneralOfftopicInput(input: string): boolean {
+  const text = String(input || "").trim().toLowerCase();
+  if (!text) return false;
+  if (hasStepKeyword(text)) return false;
+  const patterns = [
+    /\bwho\s+is\s+/i,
+    /\bwhat\s+time\b/i,
+    /\bweather\b/i,
+    /\btemperature\b/i,
+    /\bcapital\s+of\b/i,
+    /\btranslate\b/i,
+    /\bnews\b/i,
+    /\bstock\b/i,
+    /\bcrypto\b/i,
+    /\bbitcoin\b/i,
+    /\bnba\b/i,
+    /\bnfl\b/i,
+    /\bben\s+steenstra\b/i,
+  ];
+  return patterns.some((re) => re.test(text));
+}
+
+export function shouldTreatAsStepContributingInput(input: string, stepId: string): boolean {
+  const text = String(input || "").trim();
+  if (!text) return false;
+  if (text.startsWith("ACTION_") || text.startsWith("__ROUTE__") || text.startsWith("choice:")) return false;
+  if (isClearlyGeneralOfftopicInput(text)) return false;
+
+  const words = tokenizeWords(text);
+  if (words.length === 0) return false;
+
+  const stepHints: Record<string, RegExp> = {
+    [STEP_0_ID]: /\b(name|venture|business|company|starting|running|existing|tbd)\b/i,
+    [DREAM_STEP_ID]: /\b(dream|vision|future|world|impact)\b/i,
+    [PURPOSE_STEP_ID]: /\b(purpose|meaning|reason|why|exist|rich|money|income|profit)\b/i,
+    [BIGWHY_STEP_ID]: /\b(why|driver|motivation|meaning)\b/i,
+    [ROLE_STEP_ID]: /\b(role|mission|contribution|responsibility)\b/i,
+    [ENTITY_STEP_ID]: /\b(entity|identity|character|personality)\b/i,
+    [STRATEGY_STEP_ID]: /\b(strategy|plan|choice|position|advantage|focus)\b/i,
+    [TARGETGROUP_STEP_ID]: /\b(target|audience|customer|client|segment|market)\b/i,
+    [PRODUCTSSERVICES_STEP_ID]: /\b(product|service|offer|offering|solution)\b/i,
+    [RULESOFTHEGAME_STEP_ID]: /\b(rule|principle|boundary|agreement|standard)\b/i,
+    [PRESENTATION_STEP_ID]: /\b(presentation|pitch|slide|story|narrative)\b/i,
+  };
+
+  const hintRegex = stepHints[stepId];
+  if (hintRegex && hintRegex.test(text)) return true;
+  if (hasStepKeyword(text)) return true;
+
+  const hasPersonalIntent = /\b(i|we|my|our)\b/i.test(text) && /\b(want|believe|help|build|create|become|grow|serve|offer|support)\b/i.test(text);
+  if (hasPersonalIntent) return true;
+
+  const isQuestion = /^\s*(who|what|when|where)\b/i.test(text);
+  if (!isQuestion && words.length >= 5) return true;
+  return false;
+}
+
+function extractSuggestionFromMessage(message: string): string {
+  const raw = String(message || "").trim();
+  if (!raw) return "";
+  const blocked = [
+    /^you are in the\b/i,
+    /^we have not yet defined\b/i,
+    /^define your\b/i,
+    /^refine your\b/i,
+    /^choose an option\b/i,
+    /^please click what suits you best\b/i,
+    /^for more information\b/i,
+  ];
+
+  const paragraphs = raw
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let i = paragraphs.length - 1; i >= 0; i -= 1) {
+    const paragraph = paragraphs[i];
+    if (blocked.some((re) => re.test(paragraph))) continue;
+    const sentences = paragraph
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (let j = sentences.length - 1; j >= 0; j -= 1) {
+      const sentence = sentences[j];
+      if (blocked.some((re) => re.test(sentence))) continue;
+      if (/off-?topic/i.test(sentence)) continue;
+      if (/choose an option/i.test(sentence)) continue;
+      if (sentence.length < 18) continue;
+      return sentence;
+    }
+    if (paragraph.length >= 18) return paragraph;
+  }
+  return "";
+}
+
+export function pickDualChoiceSuggestion(stepId: string, specialistResult: any, previousSpecialist: any): string {
+  const direct = String(specialistResult?.refined_formulation || "").trim();
+  if (direct) return direct;
+
+  const field = fieldForStep(stepId);
+  if (field) {
+    const fromField = String(specialistResult?.[field] || "").trim();
+    if (fromField) return fromField;
+  }
+
+  if (Array.isArray(specialistResult?.statements) && specialistResult.statements.length > 0) {
+    return (specialistResult.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean).join("\n");
+  }
+
+  const fromMessage = extractSuggestionFromMessage(String(specialistResult?.message || ""));
+  if (fromMessage) return fromMessage;
+
+  return String(previousSpecialist?.wording_choice_agent_current || previousSpecialist?.refined_formulation || "").trim();
+}
+
 function parseListItems(input: string): string[] {
   const raw = String(input || "").replace(/\r/g, "\n").trim();
   if (!raw) return [];
@@ -966,9 +1088,7 @@ function buildWordingChoiceFromTurn(params: {
   if (isOfftopic) return { specialist: specialistResult, wordingChoice: null };
   const fallbackUserRaw = String(previousSpecialist?.wording_choice_user_raw || previousSpecialist?.wording_choice_user_normalized || "").trim();
   const userRaw = String(userTextRaw || fallbackUserRaw).trim();
-  const suggestionRaw =
-    String(specialistResult?.refined_formulation || "").trim() ||
-    String(previousSpecialist?.wording_choice_agent_current || "").trim();
+  const suggestionRaw = pickDualChoiceSuggestion(stepId, specialistResult, previousSpecialist);
   if (!userRaw || !suggestionRaw) return { specialist: specialistResult, wordingChoice: null };
   if (!forcePending && !isMaterialRewriteCandidate(userRaw, suggestionRaw)) {
     return { specialist: specialistResult, wordingChoice: null };
@@ -2786,6 +2906,16 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }
   }
 
+  const freeTextUserInput = (() => {
+    if (submittedUserText.trim()) return submittedUserText.trim();
+    const fromCandidate = String(userMessageCandidate || "").trim();
+    if (!fromCandidate) return "";
+    if (fromCandidate.startsWith("ACTION_")) return "";
+    if (fromCandidate.startsWith("__ROUTE__")) return "";
+    if (fromCandidate.startsWith("choice:")) return "";
+    return fromCandidate;
+  })();
+
   // If we're at Step 0 with no final yet and the user just typed real text,
   // reset any stale language from previous sessions so language is determined
   // by this first message (not by old widget/browser state).
@@ -3182,7 +3312,26 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   function normalizeOfftopicContract(result: any): any {
     const safe = result && typeof result === "object" ? { ...result } : {};
-    const isOfftopic = safe.is_offtopic === true;
+    const hasEscapeSignal = (() => {
+      const menuId = String(safe.menu_id || "").trim();
+      const action = String(safe.action || "").trim();
+      const combined = `${String(safe.question || "")}\n${String(safe.message || "")}`.toLowerCase();
+      return (
+        menuId.endsWith("_MENU_ESCAPE") ||
+        action === "ESCAPE" ||
+        /\bfinish later\b/i.test(combined) ||
+        /\bcontinue\b.*\bnow\b/i.test(combined)
+      );
+    })();
+
+    let isOfftopic = safe.is_offtopic === true;
+    if (
+      isOfftopic &&
+      !hasEscapeSignal &&
+      shouldTreatAsStepContributingInput(freeTextUserInput, String(state.current_step || ""))
+    ) {
+      isOfftopic = false;
+    }
     safe.is_offtopic = isOfftopic;
     if (!isOfftopic) return safe;
 
@@ -4149,15 +4298,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }
   }
 
-  const rawUserInputForDualChoice = (() => {
-    if (submittedUserText.trim()) return submittedUserText.trim();
-    const fromCandidate = String(userMessageCandidate || "").trim();
-    if (!fromCandidate) return "";
-    if (fromCandidate.startsWith("ACTION_")) return "";
-    if (fromCandidate.startsWith("__ROUTE__")) return "";
-    if (fromCandidate.startsWith("choice:")) return "";
-    return fromCandidate;
-  })();
+  const rawUserInputForDualChoice = freeTextUserInput;
 
   if (inputMode === "widget" && sameStepTurn && (!isActionCodeTurnForPolicy || refineAdjustTurn) && !isOfftopicTurn) {
     const forceWordingChoice =
