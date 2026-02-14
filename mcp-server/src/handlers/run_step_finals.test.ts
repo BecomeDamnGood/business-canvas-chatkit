@@ -258,8 +258,11 @@ test("Step 0 off-topic overlay with no output: no continue/menu buttons", async 
   assert.equal(String(result.specialist?.is_offtopic || ""), "true");
   assert.equal(String(result.specialist?.action || ""), "ASK");
   assert.equal(String(result.specialist?.confirmation_question || ""), "");
-  assert.ok(String(result.prompt || "").includes("Define your Step 0"));
-  assert.ok(String(result.text || "").includes("We have not yet defined Step 0."));
+  assert.equal(
+    String(result.prompt || ""),
+    "What type of business are you starting or running, and what is the name? If you don't have a name yet, you can say 'TBD'."
+  );
+  assert.ok(String(result.text || "").includes("We did not validate your business and name yet"));
   assert.equal(Array.isArray(result.ui?.action_codes), false);
 });
 
@@ -283,7 +286,10 @@ test("Step 0 off-topic overlay with valid output: continue shown, no step menu b
   );
   assert.equal(offTopic.ok, true);
   assert.equal(String(offTopic.specialist?.action || ""), "CONFIRM");
-  assert.ok(String(offTopic.prompt || "").includes("Refine your Step 0 for Mindd or choose an option."));
+  assert.equal(
+    String(offTopic.prompt || ""),
+    "You have an advertising agency called Mindd. Are you ready to start with the first step: the Dream?"
+  );
   assert.equal(Array.isArray(offTopic.ui?.action_codes), false);
 });
 

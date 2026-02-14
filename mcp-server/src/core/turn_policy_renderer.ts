@@ -31,6 +31,11 @@ const STEP_LABELS: Record<string, string> = {
   presentation: "Presentation",
 };
 
+const STEP0_NO_OUTPUT_RECAP_EN = "We did not validate your business and name yet";
+const STEP0_NO_OUTPUT_PROMPT_EN =
+  "What type of business are you starting or running, and what is the name? If you don't have a name yet, you can say 'TBD'.";
+const STEP0_CONFIRM_SUFFIX_EN = "Are you ready to start with the first step: the Dream?";
+
 const FINAL_FIELD_BY_STEP: Record<string, string> = {
   step_0: "step_0_final",
   dream: "dream_final",
@@ -230,6 +235,21 @@ function companyNameForPrompt(state: CanvasState): string {
   return raw;
 }
 
+function englishIndefiniteArticle(nounPhrase: string): "a" | "an" {
+  const lower = String(nounPhrase || "").trim().toLowerCase();
+  if (!lower) return "a";
+  return /^[aeiou]/.test(lower) ? "an" : "a";
+}
+
+function step0ConfirmQuestion(venture: string, name: string): string {
+  const cleanVenture = String(venture || "").trim();
+  const cleanName = String(name || "").trim();
+  if (cleanVenture && cleanName) {
+    return `You have ${englishIndefiniteArticle(cleanVenture)} ${cleanVenture} called ${cleanName}. ${STEP0_CONFIRM_SUFFIX_EN}`;
+  }
+  return STEP0_CONFIRM_SUFFIX_EN;
+}
+
 function extractCandidate(stepId: string, specialist: Record<string, unknown>, prev: Record<string, unknown>): string {
   if (stepId === "step_0") {
     return String(specialist.step_0 ?? prev.step_0 ?? "").trim();
@@ -399,12 +419,22 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const message = [answerText, recap].filter(Boolean).join("\n\n").trim();
 
   if (stepId === "step_0") {
+    const parsedStep0 = parseStep0Line(
+      String((state as any).step_0_final ?? "").trim() || extractCandidate(stepId, specialist, prev)
+    );
+    const step0Recap = status === "no_output"
+      ? STEP0_NO_OUTPUT_RECAP_EN
+      : `<strong>This is what we have established so far based on our dialogue:</strong>\n${recapBody}`.trim();
+    const step0Message = [answerText, step0Recap].filter(Boolean).join("\n\n").trim();
+    const confirmQuestion = confirmEligible
+      ? step0ConfirmQuestion(parsedStep0.venture, parsedStep0.name)
+      : "";
     const step0Specialist: Record<string, unknown> = {
       ...specialist,
       action: confirmEligible ? "CONFIRM" : "ASK",
-      message,
-      question: confirmEligible ? "" : headline,
-      confirmation_question: confirmEligible ? headline : "",
+      message: step0Message,
+      question: confirmEligible ? "" : STEP0_NO_OUTPUT_PROMPT_EN,
+      confirmation_question: confirmQuestion,
       menu_id: "",
     };
     return {

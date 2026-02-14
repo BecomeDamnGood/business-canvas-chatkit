@@ -31,11 +31,19 @@ test("step_0: no output => ASK, no continue and no menu action codes", () => {
   });
   assert.equal(rendered.status, "no_output");
   assert.equal(String(rendered.specialist.action), "ASK");
+  assert.equal(
+    String(rendered.specialist.message || "").includes("We did not validate your business and name yet"),
+    true
+  );
+  assert.equal(
+    String(rendered.specialist.question || ""),
+    "What type of business are you starting or running, and what is the name? If you don't have a name yet, you can say 'TBD'."
+  );
   assert.equal(String(rendered.specialist.confirmation_question || ""), "");
   assert.equal(rendered.uiActionCodes.length, 0);
 });
 
-test("step_0: valid output => CONFIRM with continue headline only", () => {
+test("step_0: valid output => CONFIRM with Dream readiness question", () => {
   const state = getDefaultState();
   (state as any).step_0_final = "Venture: agency | Name: TBD | Status: starting";
   const rendered = renderFreeTextTurnPolicy({
@@ -51,7 +59,10 @@ test("step_0: valid output => CONFIRM with continue headline only", () => {
   });
   assert.equal(rendered.status, "valid_output");
   assert.equal(String(rendered.specialist.action), "CONFIRM");
-  assert.ok(String(rendered.specialist.confirmation_question || "").includes("Refine your Step 0"));
+  assert.equal(
+    String(rendered.specialist.confirmation_question || ""),
+    "You have an agency called TBD. Are you ready to start with the first step: the Dream?"
+  );
   assert.equal(String(rendered.specialist.menu_id || ""), "");
   assert.equal(rendered.uiActionCodes.length, 0);
 });
