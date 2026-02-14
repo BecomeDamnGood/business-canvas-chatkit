@@ -1001,6 +1001,52 @@
         font-size: var(--font-size-sm);
         color: var(--color-text-muted);
       }
+
+      .wordingChoiceWrap {
+        display: none;
+        flex-direction: column;
+        gap: var(--space-3);
+        margin-top: var(--space-4);
+      }
+
+      .wordingChoiceHeading {
+        font-size: var(--font-size-md);
+        font-weight: var(--font-weight-semibold);
+        color: var(--text);
+      }
+
+      .wordingChoiceCard {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: var(--card);
+        padding: var(--space-3) var(--space-4);
+      }
+
+      .wordingChoiceList {
+        margin: 0;
+        padding-left: var(--space-5);
+        max-height: 180px;
+        overflow-y: auto;
+      }
+
+      .wordingChoiceList li {
+        margin: 0 0 var(--space-2) 0;
+      }
+
+      .wordingChoiceText {
+        white-space: pre-wrap;
+        margin: 0 0 var(--space-3) 0;
+      }
+
+      .wordingChoiceSelectBtn {
+        width: 100%;
+      }
+
+      .wordingChoiceInstruction {
+        font-size: var(--font-size-sm);
+        font-weight: var(--font-weight-medium);
+        color: var(--muted);
+      }
       
       /* ─── Thinking (in-card text, for widget) ─── */
       .thinking {
@@ -1215,6 +1261,21 @@
                 <button type="button" class="btn primary" id="btnScoringContinue" disabled>Formulate my dream based on what I find important.</button>
               </div>
             </div>
+            <div class="wordingChoiceWrap" id="wordingChoiceWrap" style="display:none">
+              <div class="wordingChoiceHeading" id="wordingChoiceHeading"></div>
+              <div class="wordingChoiceCard" id="wordingChoiceUserCard">
+                <div class="wordingChoiceText" id="wordingChoiceUserText"></div>
+                <ul class="wordingChoiceList" id="wordingChoiceUserList"></ul>
+                <button class="choiceBtn wordingChoiceSelectBtn" id="wordingChoicePickUser" type="button"></button>
+              </div>
+              <div class="wordingChoiceCard" id="wordingChoiceSuggestionCard">
+                <div class="wordingChoiceText" id="wordingChoiceSuggestionText"></div>
+                <ul class="wordingChoiceList" id="wordingChoiceSuggestionList"></ul>
+                <button class="choiceBtn wordingChoiceSelectBtn" id="wordingChoicePickSuggestion" type="button"></button>
+              </div>
+              <div class="wordingChoiceInstruction" id="wordingChoiceInstruction"></div>
+            </div>
+
             <div class="prompt" id="prompt"></div>
 
             <div class="inputWrap" id="inputWrap" style="display:none">

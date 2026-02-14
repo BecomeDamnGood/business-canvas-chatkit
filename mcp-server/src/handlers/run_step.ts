@@ -218,6 +218,9 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   btnOk_step0_ready: "Yes, I'm ready. Let's start!",
   btnOk_strategy: "I'm happy, continue to step 7 Strategy",
   btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
+  wordingChoiceHeading: "This is your input:",
+  wordingChoiceSuggestionLabel: "This would be my suggestion",
+  wordingChoiceInstruction: "Please click what suits you best.",
   "dreamBuilder.startExercise": "Start the exercise",
   "dreamBuilder.statements.title": "Your Dream statements",
   "dreamBuilder.statements.count": "N statements out of a minimum of 20 so far",
@@ -773,28 +776,323 @@ function processActionCode(
   return actionCode;
 }
 
+type WordingChoiceMode = "text" | "list";
+
+type WordingChoiceUiPayload = {
+  enabled: boolean;
+  mode: WordingChoiceMode;
+  user_text: string;
+  suggestion_text: string;
+  user_items: string[];
+  suggestion_items: string[];
+  instruction: string;
+};
+
+function isConfirmActionCode(actionCode: string): boolean {
+  const entry = ACTIONCODE_REGISTRY.actions[actionCode];
+  if (!entry) return false;
+  if (Array.isArray(entry.flags) && entry.flags.includes("confirm")) return true;
+  if (actionCode === "ACTION_CONFIRM_CONTINUE") return true;
+  if (entry.route === "yes") return true;
+  const upper = actionCode.toUpperCase();
+  return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
+}
+
+function filterConfirmActionCodes(actionCodes: string[], allowConfirm: boolean): string[] {
+  if (allowConfirm) return actionCodes;
+  return actionCodes.filter((code) => !isConfirmActionCode(code));
+}
+
+function normalizeLightUserInput(input: string): string {
+  const collapsed = String(input || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!collapsed) return "";
+  const normalized = collapsed.charAt(0).toUpperCase() + collapsed.slice(1);
+  return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
+}
+
+function tokenizeWords(input: string): string[] {
+  const normalized = String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return [];
+  return normalized.split(" ").filter(Boolean);
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  const s = String(a || "");
+  const t = String(b || "");
+  const m = s.length;
+  const n = t.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const row: number[] = Array.from({ length: n + 1 }, (_, idx) => idx);
+  for (let i = 1; i <= m; i += 1) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= n; j += 1) {
+      const temp = row[j];
+      const cost = s[i - 1] === t[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
+      prev = temp;
+    }
+  }
+  return row[n];
+}
+
+function relativeEditDistance(a: string, b: string): number {
+  const left = String(a || "");
+  const right = String(b || "");
+  const base = Math.max(left.length, right.length, 1);
+  return levenshteinDistance(left, right) / base;
+}
+
+function tokenJaccardSimilarity(a: string, b: string): number {
+  const left = new Set(tokenizeWords(a));
+  const right = new Set(tokenizeWords(b));
+  if (left.size === 0 && right.size === 0) return 1;
+  if (left.size === 0 || right.size === 0) return 0;
+  let intersection = 0;
+  for (const token of left) {
+    if (right.has(token)) intersection += 1;
+  }
+  const union = left.size + right.size - intersection;
+  return union > 0 ? intersection / union : 0;
+}
+
+export function isMaterialRewriteCandidate(userRaw: string, suggestionRaw: string): boolean {
+  const user = normalizeLightUserInput(userRaw);
+  const suggestion = normalizeLightUserInput(suggestionRaw);
+  if (!user || !suggestion) return false;
+  if (user.toLowerCase() === suggestion.toLowerCase()) return false;
+
+  const editRatio = relativeEditDistance(user.toLowerCase(), suggestion.toLowerCase());
+  const overlap = tokenJaccardSimilarity(user, suggestion);
+  const userWords = tokenizeWords(user).length;
+  const editThreshold = userWords < 5 ? 0.25 : 0.15;
+  return editRatio > editThreshold || overlap < 0.85;
+}
+
+function parseListItems(input: string): string[] {
+  const raw = String(input || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+  const lines = raw
+    .split("\n")
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
+    .filter(Boolean);
+  if (lines.length >= 2) return lines;
+  const parts = raw
+    .split(/[;\n]+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return parts.length >= 2 ? parts : [raw];
+}
+
+function isListChoiceScope(stepId: string, activeSpecialist: string): boolean {
+  if (stepId === STRATEGY_STEP_ID || stepId === PRODUCTSSERVICES_STEP_ID) return true;
+  if (stepId === DREAM_STEP_ID && activeSpecialist === DREAM_EXPLAINER_SPECIALIST) return true;
+  return false;
+}
+
+function fieldForStep(stepId: string): string {
+  if (stepId === STEP_0_ID) return "step_0";
+  if (stepId === DREAM_STEP_ID) return "dream";
+  if (stepId === PURPOSE_STEP_ID) return "purpose";
+  if (stepId === BIGWHY_STEP_ID) return "bigwhy";
+  if (stepId === ROLE_STEP_ID) return "role";
+  if (stepId === ENTITY_STEP_ID) return "entity";
+  if (stepId === STRATEGY_STEP_ID) return "strategy";
+  if (stepId === TARGETGROUP_STEP_ID) return "targetgroup";
+  if (stepId === PRODUCTSSERVICES_STEP_ID) return "productsservices";
+  if (stepId === RULESOFTHEGAME_STEP_ID) return "rulesofthegame";
+  if (stepId === PRESENTATION_STEP_ID) return "presentation_brief";
+  return "";
+}
+
+function withUpdatedTargetField(result: any, stepId: string, value: string): any {
+  const field = fieldForStep(stepId);
+  if (!field || !value) return result;
+  return { ...result, [field]: value };
+}
+
+function pickWordingAgentBase(lastSpecialistResult: any): string {
+  const stored = String(lastSpecialistResult?.wording_choice_agent_current || "").trim();
+  if (stored) return stored;
+  return String(lastSpecialistResult?.refined_formulation || "").trim();
+}
+
+function pickWordingUserList(previousSpecialist: any, userText: string): string[] {
+  if (Array.isArray(previousSpecialist?.wording_choice_user_items) && previousSpecialist.wording_choice_user_items.length > 0) {
+    return (previousSpecialist.wording_choice_user_items as string[])
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+  }
+  if (Array.isArray(previousSpecialist?.statements) && previousSpecialist.statements.length > 0) {
+    return (previousSpecialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean);
+  }
+  return parseListItems(userText);
+}
+
+function pickWordingSuggestionList(currentSpecialist: any, fallbackText: string): string[] {
+  if (Array.isArray(currentSpecialist?.statements) && currentSpecialist.statements.length > 0) {
+    return (currentSpecialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean);
+  }
+  const refined = String(currentSpecialist?.refined_formulation || "").trim();
+  return parseListItems(refined || fallbackText);
+}
+
+function isRefineAdjustRouteToken(token: string): boolean {
+  const upper = String(token || "").toUpperCase();
+  return upper.includes("_REFINE__") || upper.includes("_ADJUST__");
+}
+
+function isWordingPickRouteToken(token: string): boolean {
+  return token === "__WORDING_PICK_USER__" || token === "__WORDING_PICK_SUGGESTION__";
+}
+
+function buildWordingChoiceFromTurn(params: {
+  stepId: string;
+  activeSpecialist: string;
+  previousSpecialist: any;
+  specialistResult: any;
+  userTextRaw: string;
+  isOfftopic: boolean;
+  forcePending?: boolean;
+}): { specialist: any; wordingChoice: WordingChoiceUiPayload | null } {
+  const { stepId, activeSpecialist, previousSpecialist, specialistResult, userTextRaw, isOfftopic, forcePending } = params;
+  if (isOfftopic) return { specialist: specialistResult, wordingChoice: null };
+  const fallbackUserRaw = String(previousSpecialist?.wording_choice_user_raw || previousSpecialist?.wording_choice_user_normalized || "").trim();
+  const userRaw = String(userTextRaw || fallbackUserRaw).trim();
+  const suggestionRaw =
+    String(specialistResult?.refined_formulation || "").trim() ||
+    String(previousSpecialist?.wording_choice_agent_current || "").trim();
+  if (!userRaw || !suggestionRaw) return { specialist: specialistResult, wordingChoice: null };
+  if (!forcePending && !isMaterialRewriteCandidate(userRaw, suggestionRaw)) {
+    return { specialist: specialistResult, wordingChoice: null };
+  }
+  const normalizedUser = normalizeLightUserInput(userRaw);
+  const mode: WordingChoiceMode = isListChoiceScope(stepId, activeSpecialist) ? "list" : "text";
+  const userItems = mode === "list" ? pickWordingUserList(previousSpecialist || {}, normalizedUser) : [];
+  const suggestionItems = mode === "list" ? pickWordingSuggestionList(specialistResult, suggestionRaw) : [];
+  const enriched = {
+    ...specialistResult,
+    wording_choice_pending: "true",
+    wording_choice_selected: "",
+    wording_choice_user_raw: userRaw,
+    wording_choice_user_normalized: normalizedUser,
+    wording_choice_user_items: userItems,
+    wording_choice_agent_current: suggestionRaw,
+    wording_choice_suggestion_items: suggestionItems,
+    wording_choice_mode: mode,
+    wording_choice_target_field: fieldForStep(stepId),
+  };
+  const wordingChoice: WordingChoiceUiPayload = {
+    enabled: true,
+    mode,
+    user_text: normalizedUser,
+    suggestion_text: suggestionRaw,
+    user_items: userItems,
+    suggestion_items: suggestionItems,
+    instruction: "Please click what suits you best.",
+  };
+  return { specialist: enriched, wordingChoice };
+}
+
+function applyWordingPickSelection(params: {
+  stepId: string;
+  routeToken: string;
+  state: CanvasState;
+}): { handled: boolean; specialist: any; nextState: CanvasState } {
+  const { stepId, routeToken, state } = params;
+  if (!isWordingPickRouteToken(routeToken)) {
+    return { handled: false, specialist: {}, nextState: state };
+  }
+  const prev = ((state as any).last_specialist_result || {}) as any;
+  if (String(prev.wording_choice_pending || "") !== "true") {
+    return { handled: false, specialist: prev, nextState: state };
+  }
+  const pickedUser = routeToken === "__WORDING_PICK_USER__";
+  const chosen = pickedUser
+    ? String(prev.wording_choice_user_normalized || prev.wording_choice_user_raw || "").trim()
+    : String(prev.wording_choice_agent_current || prev.refined_formulation || "").trim();
+  if (!chosen) return { handled: false, specialist: prev, nextState: state };
+  const selected = withUpdatedTargetField(
+    {
+      ...prev,
+      wording_choice_pending: "false",
+      wording_choice_selected: pickedUser ? "user" : "suggestion",
+      refined_formulation: chosen,
+    },
+    stepId,
+    chosen
+  );
+  const nextState: CanvasState = {
+    ...state,
+    last_specialist_result: selected,
+  };
+  return { handled: true, specialist: selected, nextState };
+}
+
+function buildWordingChoiceFromPendingSpecialist(specialist: any): WordingChoiceUiPayload | null {
+  if (String(specialist?.wording_choice_pending || "") !== "true") return null;
+  const mode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
+  const userItems = Array.isArray(specialist?.wording_choice_user_items)
+    ? (specialist.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+  const suggestionItems = Array.isArray(specialist?.wording_choice_suggestion_items)
+    ? (specialist.wording_choice_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+  return {
+    enabled: true,
+    mode,
+    user_text: String(specialist?.wording_choice_user_normalized || specialist?.wording_choice_user_raw || "").trim(),
+    suggestion_text: String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim(),
+    user_items: userItems,
+    suggestion_items: suggestionItems,
+    instruction: "Please click what suits you best.",
+  };
+}
+
 function buildUiPayload(
   specialist: any,
   flagsOverride?: Record<string, boolean> | null,
-  actionCodesOverride?: string[] | null
-): { action_codes?: string[]; expected_choice_count?: number; flags: Record<string, boolean> } | undefined {
+  actionCodesOverride?: string[] | null,
+  wordingChoiceOverride?: WordingChoiceUiPayload | null
+): {
+  action_codes?: string[];
+  expected_choice_count?: number;
+  flags: Record<string, boolean>;
+  wording_choice?: WordingChoiceUiPayload;
+} | undefined {
   const flags = flagsOverride || {};
-  if (Array.isArray(actionCodesOverride) && actionCodesOverride.length > 0) {
-    return {
-      action_codes: actionCodesOverride,
-      expected_choice_count: actionCodesOverride.length,
-      flags,
-    };
+  if (Array.isArray(actionCodesOverride)) {
+    if (actionCodesOverride.length > 0) {
+      return {
+        action_codes: actionCodesOverride,
+        expected_choice_count: actionCodesOverride.length,
+        flags,
+        ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+      };
+    }
+    return { flags, ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}) };
   }
   const menuId = String(specialist?.menu_id || "").trim();
   if (menuId) {
     const actionCodes = ACTIONCODE_REGISTRY.menus[menuId];
     if (actionCodes && actionCodes.length > 0) {
-      return { action_codes: actionCodes, expected_choice_count: actionCodes.length, flags };
+      return {
+        action_codes: actionCodes,
+        expected_choice_count: actionCodes.length,
+        flags,
+        ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+      };
     }
   }
-  if (Object.keys(flags).length > 0) {
-    return { flags };
+  if (Object.keys(flags).length > 0 || wordingChoiceOverride) {
+    return { flags, ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}) };
   }
   return undefined;
 }
@@ -803,9 +1101,10 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
   payload: T,
   specialist: any,
   flagsOverride?: Record<string, boolean> | null,
-  actionCodesOverride?: string[] | null
+  actionCodesOverride?: string[] | null,
+  wordingChoiceOverride?: WordingChoiceUiPayload | null
 ): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
-  const ui = buildUiPayload(specialist, flagsOverride, actionCodesOverride);
+  const ui = buildUiPayload(specialist, flagsOverride, actionCodesOverride, wordingChoiceOverride);
   return {
     ...payload,
     registry_version: ACTIONCODE_REGISTRY.version,
@@ -2379,6 +2678,7 @@ type RunStepBase = {
     action_codes?: string[];
     expected_choice_count?: number;
     flags: Record<string, boolean>;
+    wording_choice?: WordingChoiceUiPayload;
   };
   presentation_assets?: {
     pdf_url: string;
@@ -2455,6 +2755,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   let actionCodeRaw = userMessageCandidate.startsWith("ACTION_") ? userMessageCandidate : "";
   const isActionCodeTurnForPolicy = actionCodeRaw !== "" && actionCodeRaw !== "ACTION_TEXT_SUBMIT";
   let userMessage = userMessageCandidate;
+  let submittedUserText = "";
 
   if (actionCodeRaw) {
     const menuId = String(lastSpecialistResult?.menu_id || "").trim();
@@ -2473,6 +2774,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   if (actionCodeRaw === "ACTION_TEXT_SUBMIT") {
     const submitted = String(transientTextSubmit ?? "").trim();
+    submittedUserText = submitted;
     userMessage = submitted;
     actionCodeRaw = "";
     if (
@@ -2891,6 +3193,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     safe.proceed_to_next = "false";
     if (typeof safe.step_0 === "string") safe.step_0 = "";
     if (typeof safe.business_name === "string") safe.business_name = "";
+    safe.wording_choice_pending = "false";
+    safe.wording_choice_selected = "";
     return safe;
   }
 
@@ -2913,6 +3217,25 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   if (actionCodeRaw && HARD_CONFIRM_ACTIONS.has(actionCodeRaw)) {
     const stepId = String(state.current_step ?? "");
     const prev = (state as any).last_specialist_result || {};
+    if (String(prev.wording_choice_pending || "") === "true") {
+      const pendingSpecialist = { ...prev };
+      const pendingChoice = buildWordingChoiceFromPendingSpecialist(pendingSpecialist);
+      const menuId = String(pendingSpecialist.menu_id || "").trim();
+      const filteredActions = menuId
+        ? filterConfirmActionCodes(Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [], false)
+        : [];
+      const stateWithUi = await ensureUiStringsForState(state, model);
+      return attachRegistryPayload({
+        ok: true as const,
+        tool: "run_step" as const,
+        current_step_id: String(state.current_step),
+        active_specialist: String((state as any).active_specialist || ""),
+        text: buildTextForWidget({ specialist: pendingSpecialist }),
+        prompt: pickPrompt(pendingSpecialist),
+        specialist: pendingSpecialist,
+        state: stateWithUi,
+      }, pendingSpecialist, { require_wording_pick: true }, filteredActions, pendingChoice);
+    }
     const finalInfo = requireFinalValue(stepId, prev, state);
     // If we cannot find a final value, do not hard-confirm; fall back to normal handling.
     if (finalInfo.field && !finalInfo.value) {
@@ -2978,6 +3301,39 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   } else if (allowLegacyRouting) {
     // Backwards compatibility: expand oude "1"/"2"/"3" format
     userMessage = expandChoiceFromPreviousQuestion(userMessage, prevQ);
+  }
+
+  const wordingSelection = applyWordingPickSelection({
+    stepId: String(state.current_step ?? ""),
+    routeToken: userMessage,
+    state,
+  });
+  if (wordingSelection.handled) {
+    const stateWithUi = await ensureUiStringsForState(wordingSelection.nextState, model);
+    return attachRegistryPayload({
+      ok: true as const,
+      tool: "run_step" as const,
+      current_step_id: String(stateWithUi.current_step),
+      active_specialist: String((stateWithUi as any).active_specialist || ""),
+      text: buildTextForWidget({ specialist: wordingSelection.specialist }),
+      prompt: pickPrompt(wordingSelection.specialist),
+      specialist: wordingSelection.specialist,
+      state: stateWithUi,
+    }, wordingSelection.specialist);
+  }
+
+  const refineAdjustTurn = isRefineAdjustRouteToken(userMessage);
+  if (refineAdjustTurn) {
+    const prev = (state as any).last_specialist_result || {};
+    const agentBase = pickWordingAgentBase(prev);
+    if (agentBase) {
+      const nextPrev = {
+        ...prev,
+        refined_formulation: agentBase,
+        wording_choice_agent_current: agentBase,
+      };
+      (state as any).last_specialist_result = nextPrev;
+    }
   }
 
   const responseUiFlags = ACTIONCODE_REGISTRY.ui_flags[userMessage] || null;
@@ -3760,6 +4116,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
 
   let actionCodesOverride: string[] | null = null;
+  let wordingChoiceOverride: WordingChoiceUiPayload | null = null;
   const globalTurnPolicyEnabled = process.env.GLOBAL_TURN_POLICY_ENABLED !== "0";
   const sameStepTurn = String((nextState as any).current_step ?? "") === String((state as any).current_step ?? "");
   const isOfftopicTurn = (specialistResult as any)?.is_offtopic === true;
@@ -3792,6 +4149,49 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }
   }
 
+  const rawUserInputForDualChoice = (() => {
+    if (submittedUserText.trim()) return submittedUserText.trim();
+    const fromCandidate = String(userMessageCandidate || "").trim();
+    if (!fromCandidate) return "";
+    if (fromCandidate.startsWith("ACTION_")) return "";
+    if (fromCandidate.startsWith("__ROUTE__")) return "";
+    if (fromCandidate.startsWith("choice:")) return "";
+    return fromCandidate;
+  })();
+
+  if (inputMode === "widget" && sameStepTurn && (!isActionCodeTurnForPolicy || refineAdjustTurn) && !isOfftopicTurn) {
+    const forceWordingChoice =
+      refineAdjustTurn &&
+      String((lastSpecialistResult as any)?.wording_choice_user_raw || (lastSpecialistResult as any)?.wording_choice_user_normalized || "").trim() !== "";
+    const built = buildWordingChoiceFromTurn({
+      stepId: String((nextState as any).current_step ?? ""),
+      activeSpecialist: String((nextState as any).active_specialist ?? ""),
+      previousSpecialist: lastSpecialistResult || {},
+      specialistResult,
+      userTextRaw: rawUserInputForDualChoice,
+      isOfftopic: isOfftopicTurn,
+      forcePending: forceWordingChoice,
+    });
+    specialistResult = built.specialist;
+    wordingChoiceOverride = built.wordingChoice;
+    if (built.wordingChoice) {
+      (nextState as any).last_specialist_result = specialistResult;
+    }
+  }
+
+  const pendingChoice = isOfftopicTurn ? null : buildWordingChoiceFromPendingSpecialist(specialistResult);
+  const requireWordingPick = Boolean(pendingChoice);
+  if (requireWordingPick) {
+    wordingChoiceOverride = pendingChoice;
+    const currentActionCodes = (() => {
+      if (Array.isArray(actionCodesOverride)) return actionCodesOverride;
+      const menuId = String((specialistResult as any)?.menu_id || "").trim();
+      if (!menuId) return [];
+      return Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
+    })();
+    actionCodesOverride = filterConfirmActionCodes(currentActionCodes, false);
+  }
+
   const text = buildTextForWidget({ specialist: specialistResult });
   const prompt = pickPrompt(specialistResult);
 
@@ -3799,6 +4199,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   if (showSessionIntro === "true" && String((nextState as any).intro_shown_session) !== "true") {
     (nextState as any).intro_shown_session = "true";
   }
+
+  const mergedFlags = {
+    ...(responseUiFlags || {}),
+    ...(requireWordingPick ? { require_wording_pick: true } : {}),
+  };
 
   return attachRegistryPayload({
     ok: true as const,
@@ -3815,5 +4220,5 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       language: lang,
       meta_user_message_ignored: looksLikeMetaInstruction(rawNormalized) && pristineAtEntry,
     },
-  }, specialistResult, responseUiFlags, actionCodesOverride);
+  }, specialistResult, mergedFlags, actionCodesOverride, wordingChoiceOverride);
 }

@@ -153,6 +153,22 @@ if (btnDreamConfirm) {
   });
 }
 
+const wordingChoicePickUser = document.getElementById("wordingChoicePickUser");
+if (wordingChoicePickUser) {
+  wordingChoicePickUser.addEventListener("click", () => {
+    if (getIsLoading()) return;
+    callRunStep("ACTION_WORDING_PICK_USER");
+  });
+}
+
+const wordingChoicePickSuggestion = document.getElementById("wordingChoicePickSuggestion");
+if (wordingChoicePickSuggestion) {
+  wordingChoicePickSuggestion.addEventListener("click", () => {
+    if (getIsLoading()) return;
+    callRunStep("ACTION_WORDING_PICK_SUGGESTION");
+  });
+}
+
 const btnStart = document.getElementById("btnStart");
 if (btnStart) {
   btnStart.addEventListener("click", () => {

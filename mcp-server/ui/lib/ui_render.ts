@@ -236,6 +236,96 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   }
 }
 
+function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: string): boolean {
+  const wrap = document.getElementById("wordingChoiceWrap");
+  const headingEl = document.getElementById("wordingChoiceHeading");
+  const userTextEl = document.getElementById("wordingChoiceUserText");
+  const userListEl = document.getElementById("wordingChoiceUserList");
+  const suggestionTextEl = document.getElementById("wordingChoiceSuggestionText");
+  const suggestionListEl = document.getElementById("wordingChoiceSuggestionList");
+  const instructionEl = document.getElementById("wordingChoiceInstruction");
+  const userBtn = document.getElementById("wordingChoicePickUser") as HTMLButtonElement | null;
+  const suggestionBtn = document.getElementById("wordingChoicePickSuggestion") as HTMLButtonElement | null;
+  if (
+    !wrap ||
+    !headingEl ||
+    !userTextEl ||
+    !userListEl ||
+    !suggestionTextEl ||
+    !suggestionListEl ||
+    !instructionEl ||
+    !userBtn ||
+    !suggestionBtn
+  ) {
+    return false;
+  }
+
+  const uiPayload =
+    resultData && typeof resultData.ui === "object" && resultData.ui
+      ? (resultData.ui as Record<string, unknown>)
+      : {};
+  const flags =
+    uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags
+      ? (uiPayload.flags as Record<string, unknown>)
+      : {};
+  const wording =
+    uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice
+      ? (uiPayload.wording_choice as Record<string, unknown>)
+      : {};
+  const requirePick = String(flags.require_wording_pick || "false") === "true";
+  const enabled = requirePick || wording.enabled === true;
+  if (!enabled) {
+    (wrap as HTMLElement).style.display = "none";
+    return false;
+  }
+
+  const mode = String(wording.mode || "text") === "list" ? "list" : "text";
+  const userText = String(wording.user_text || "").trim();
+  const suggestionText = String(wording.suggestion_text || "").trim();
+  const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];
+  const suggestionItems = Array.isArray(wording.suggestion_items) ? wording.suggestion_items : [];
+  const instruction = String(wording.instruction || "").trim() || t(lang, "wordingChoiceInstruction");
+
+  headingEl.textContent = t(lang, "wordingChoiceHeading");
+  instructionEl.textContent = instruction;
+
+  if (mode === "list") {
+    (userTextEl as HTMLElement).style.display = "none";
+    (suggestionTextEl as HTMLElement).style.display = "none";
+    (userListEl as HTMLElement).style.display = "block";
+    (suggestionListEl as HTMLElement).style.display = "block";
+    userListEl.innerHTML = "";
+    suggestionListEl.innerHTML = "";
+    for (const item of userItems as unknown[]) {
+      const li = document.createElement("li");
+      li.textContent = String(item || "");
+      userListEl.appendChild(li);
+    }
+    for (const item of suggestionItems as unknown[]) {
+      const li = document.createElement("li");
+      li.textContent = String(item || "");
+      suggestionListEl.appendChild(li);
+    }
+    userBtn.textContent = "Choose this version";
+  } else {
+    (userTextEl as HTMLElement).style.display = "block";
+    (suggestionTextEl as HTMLElement).style.display = "block";
+    (userListEl as HTMLElement).style.display = "none";
+    (suggestionListEl as HTMLElement).style.display = "none";
+    userListEl.innerHTML = "";
+    suggestionListEl.innerHTML = "";
+    userTextEl.textContent = userText;
+    suggestionTextEl.textContent = suggestionText;
+    userBtn.textContent = userText || "Use this input";
+  }
+
+  suggestionBtn.textContent = t(lang, "wordingChoiceSuggestionLabel");
+  userBtn.disabled = getIsLoading();
+  suggestionBtn.disabled = getIsLoading();
+  (wrap as HTMLElement).style.display = "flex";
+  return requirePick;
+}
+
 export function render(overrideToolOutput?: unknown): void {
   const data = toolData(overrideToolOutput);
 
@@ -324,12 +414,15 @@ export function render(overrideToolOutput?: unknown): void {
   const hasPromptForConfirm =
     String(specialist.confirmation_question || "").trim() !== "" ||
     String(specialist.question || "").trim() !== "";
+  const requireWordingPickByFlag =
+    String(((result as Record<string, unknown>)?.ui as any)?.flags?.require_wording_pick || "false") === "true";
   const showContinue =
     !showPreStart &&
     hasToolOutputVal &&
     String(specialist.action || "") === "CONFIRM" &&
     hasPromptForConfirm &&
-    !isDreamExplainerMode;
+    !isDreamExplainerMode &&
+    !requireWordingPickByFlag;
 
   const btnOkLabelKey =
     current === "step_0" && showContinue
@@ -346,6 +439,8 @@ export function render(overrideToolOutput?: unknown): void {
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
+    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
     (btnStart as HTMLElement).style.display = "inline-flex";
     (btnOk as HTMLElement).style.display = "none";
     const cardDesc = document.getElementById("cardDesc");
@@ -479,6 +574,8 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
+    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
     const hideBtns = ["btnGoToNextStep", "btnStartDreamExercise", "btnOk"];
     for (const id of hideBtns) {
       const el = document.getElementById(id);
@@ -714,6 +811,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
 
   const { promptShown, choices } = extractChoicesFromPrompt(promptRaw);
   const choicesArr = Array.isArray(choices) ? choices : [];
+  const requireWordingPick = renderWordingChoicePanel(result, lang);
   let promptText = isDreamDirectionView ? "" : (promptShown || "");
 
   const choiceModeHasMenu = choicesArr.length >= 2 && choicesArr.length <= 6;
@@ -758,7 +856,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
   renderChoiceButtons(choicesArr, result);
 
   const choiceMode = choicesArr.length > 0;
-  const confirmMode = !choiceMode && showContinue;
+  const confirmMode = !choiceMode && showContinue && !requireWordingPick;
   let statementCount =
     (Array.isArray(statementsArray) ? statementsArray.length : 0) || 0;
   if (
@@ -779,7 +877,8 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
     current === "dream" &&
     activeSpecialist === "DreamExplainer" &&
     effectiveStatementsForButton >= 20 &&
-    String(specialist.action || "") !== "CONFIRM";
+    String(specialist.action || "") !== "CONFIRM" &&
+    !requireWordingPick;
 
   inputWrap.style.display = "flex";
   const sde = document.getElementById("btnStartDreamExercise");
@@ -823,6 +922,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
     current === "dream" &&
     activeSpecialist === "DreamExplainer" &&
     String(specialist.action || "") === "CONFIRM" &&
+    !requireWordingPick &&
     !(choicesArr.length);
   const btnDreamConfirmEl = document.getElementById("btnDreamConfirm");
   if (btnDreamConfirmEl) {

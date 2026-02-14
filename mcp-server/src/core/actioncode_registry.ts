@@ -127,6 +127,8 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_CONFIRM_CONTINUE: { route: "yes", step: "system", flags: ["confirm"], status: "system" },
     ACTION_START: { route: "", step: "system", status: "system" },
     ACTION_TEXT_SUBMIT: { route: "", step: "system", status: "system" },
+    ACTION_WORDING_PICK_USER: { route: "__WORDING_PICK_USER__", step: "system", status: "system" },
+    ACTION_WORDING_PICK_SUGGESTION: { route: "__WORDING_PICK_SUGGESTION__", step: "system", status: "system" },
   },
   menus: {
     // Dream

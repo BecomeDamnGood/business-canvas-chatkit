@@ -385,6 +385,8 @@ export function setLoading(next: boolean): void {
   const btnGoToNextStep = document.getElementById("btnGoToNextStep") as HTMLButtonElement | null;
   const btnStartDreamExercise = document.getElementById("btnStartDreamExercise") as HTMLButtonElement | null;
   const btnSwitchToSelfDream = document.getElementById("btnSwitchToSelfDream") as HTMLButtonElement | null;
+  const wordingChoicePickUser = document.getElementById("wordingChoicePickUser") as HTMLButtonElement | null;
+  const wordingChoicePickSuggestion = document.getElementById("wordingChoicePickSuggestion") as HTMLButtonElement | null;
 
   if (inputEl) (inputEl as HTMLInputElement).disabled = loading;
   if (sendEl) (sendEl as HTMLButtonElement).disabled = loading;
@@ -393,6 +395,8 @@ export function setLoading(next: boolean): void {
   if (btnGoToNextStep) btnGoToNextStep.disabled = loading;
   if (btnStartDreamExercise) btnStartDreamExercise.disabled = loading;
   if (btnSwitchToSelfDream) btnSwitchToSelfDream.disabled = loading;
+  if (wordingChoicePickUser) wordingChoicePickUser.disabled = loading;
+  if (wordingChoicePickSuggestion) wordingChoicePickSuggestion.disabled = loading;
 
   document.querySelectorAll("#choiceWrap button").forEach((b) => {
     (b as HTMLButtonElement).disabled = loading;

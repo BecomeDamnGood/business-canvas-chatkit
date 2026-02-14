@@ -256,3 +256,123 @@ test("dedupeBodyAgainstPrompt removes duplicated prompt prefix and keeps remaind
   const body = "Define your Dream for Acme or choose an option.\n\nAdditional context.";
   assert.equal(dedupeBodyAgainstPrompt(body, prompt), "Additional context.");
 });
+
+test("render shows wording choice panel in text mode and keeps confirm hidden until pick", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+        intro_shown_session: "true",
+        intro_shown_for_step: "purpose",
+        language: "en",
+      },
+      specialist: {
+        action: "CONFIRM",
+        question: "Please confirm your purpose.",
+        menu_id: "PURPOSE_MENU_REFINE",
+      },
+      prompt: "Please confirm your purpose.",
+      ui: {
+        flags: { require_wording_pick: true },
+        wording_choice: {
+          enabled: true,
+          mode: "text",
+          user_text: "Mindd helps teams with clarity.",
+          suggestion_text: "Mindd exists to restore focus and meaning in work.",
+          user_items: [],
+          suggestion_items: [],
+          instruction: "Please click what suits you best.",
+        },
+      },
+    },
+  });
+
+  const wordingWrap = (fakeDocument as any).getElementById("wordingChoiceWrap");
+  const userText = (fakeDocument as any).getElementById("wordingChoiceUserText");
+  const suggestionText = (fakeDocument as any).getElementById("wordingChoiceSuggestionText");
+  const suggestionBtn = (fakeDocument as any).getElementById("wordingChoicePickSuggestion");
+  const btnOk = (fakeDocument as any).getElementById("btnOk");
+  assert.equal(String(wordingWrap.style.display || ""), "flex");
+  assert.equal(String(userText.textContent || ""), "Mindd helps teams with clarity.");
+  assert.equal(String(suggestionText.textContent || ""), "Mindd exists to restore focus and meaning in work.");
+  assert.equal(String(suggestionBtn.textContent || ""), "This would be my suggestion");
+  assert.equal(String(btnOk.style.display || ""), "none");
+
+  setSessionStarted(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
+test("render shows wording choice panel in list mode with full items", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "strategy",
+        active_specialist: "Strategy",
+        intro_shown_session: "true",
+        intro_shown_for_step: "strategy",
+        language: "en",
+      },
+      specialist: {
+        action: "REFINE",
+        question: "Refine your strategy or choose an option.",
+        menu_id: "STRATEGY_MENU_REFINE",
+      },
+      prompt: "Refine your strategy or choose an option.",
+      ui: {
+        flags: { require_wording_pick: true },
+        wording_choice: {
+          enabled: true,
+          mode: "list",
+          user_text: "",
+          suggestion_text: "",
+          user_items: ["Build trust with clients", "Run monthly workshops"],
+          suggestion_items: ["Build trust systematically", "Run monthly workshops", "Track retention"],
+          instruction: "Please click what suits you best.",
+        },
+      },
+    },
+  });
+
+  const userList = (fakeDocument as any).getElementById("wordingChoiceUserList");
+  const suggestionList = (fakeDocument as any).getElementById("wordingChoiceSuggestionList");
+  const userBtn = (fakeDocument as any).getElementById("wordingChoicePickUser");
+  assert.equal(userList.childNodes.length, 2);
+  assert.equal(suggestionList.childNodes.length, 3);
+  assert.equal(String(userBtn.textContent || ""), "Choose this version");
+
+  setSessionStarted(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});

@@ -8,6 +8,7 @@ import {
   run_step,
   applyStateUpdate,
   enforceDreamMenuContract,
+  isMaterialRewriteCandidate,
   pickPrompt,
   RECAP_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
@@ -344,4 +345,185 @@ test("global free-text policy: ActionCode turn bypasses renderer", async () => {
   });
   assert.equal(result.ok, true);
   assert.equal(Array.isArray(result.ui?.action_codes), false);
+});
+
+test("wording choice: material rewrite heuristic ignores mini-fix but catches substantial rewrite", () => {
+  assert.equal(isMaterialRewriteCandidate("We help founders.", "We help founders."), false);
+  assert.equal(
+    isMaterialRewriteCandidate(
+      "We help founders with strategy.",
+      "Our purpose is to help founders make strategic decisions with confidence and focus."
+    ),
+    true
+  );
+});
+
+test("wording choice: pending state blocks confirm action until choice is made", async () => {
+  const result = await run_step({
+    user_message: "ACTION_DREAM_REFINE_CONFIRM",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      started: "true",
+      dream_final: "",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "DREAM_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+        refined_formulation: "Mindd dreams of a world with equitable access.",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "Mindd should support access.",
+        wording_choice_user_normalized: "Mindd should support access.",
+        wording_choice_agent_current: "Mindd dreams of a world with equitable access.",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.current_step_id, "dream");
+  assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
+  assert.ok(Array.isArray(result.ui?.action_codes));
+  assert.equal(
+    (result.ui?.action_codes || []).some((code: string) => code === "ACTION_DREAM_REFINE_CONFIRM"),
+    false
+  );
+});
+
+test("wording choice: selecting user variant updates candidate and clears pending", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "purpose",
+      active_specialist: "Purpose",
+      intro_shown_session: "true",
+      started: "true",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "PURPOSE_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording",
+        refined_formulation: "Mindd exists to restore focus and meaning in work.",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "Mindd helps teams with clarity",
+        wording_choice_user_normalized: "Mindd helps teams with clarity.",
+        wording_choice_agent_current: "Mindd exists to restore focus and meaning in work.",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "purpose",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "false");
+  assert.equal(String(result.specialist?.wording_choice_selected || ""), "user");
+  assert.equal(String(result.specialist?.purpose || ""), "Mindd helps teams with clarity.");
+});
+
+test("wording choice: off-topic overlay never exposes wording choice panel", async () => {
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "Who is Ben Steenstra?",
+      input_mode: "widget",
+      state: {
+        ...getDefaultState(),
+        current_step: "purpose",
+        active_specialist: "Purpose",
+        intro_shown_session: "true",
+        started: "true",
+        last_specialist_result: {
+          action: "REFINE",
+          menu_id: "PURPOSE_MENU_REFINE",
+          refined_formulation: "Mindd exists to restore focus and meaning in work.",
+          wording_choice_pending: "true",
+          wording_choice_user_raw: "Mindd helps teams with clarity",
+          wording_choice_user_normalized: "Mindd helps teams with clarity.",
+          wording_choice_agent_current: "Mindd exists to restore focus and meaning in work.",
+        },
+      },
+    })
+  );
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.is_offtopic || ""), "true");
+  assert.equal(
+    Boolean((result.ui as any)?.wording_choice?.enabled),
+    false
+  );
+});
+
+test("wording choice: refine adjust rebuilds pending choice from stored user variant", async () => {
+  const result = await run_step({
+    user_message: "ACTION_PURPOSE_REFINE_ADJUST",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "purpose",
+      active_specialist: "Purpose",
+      intro_shown_session: "true",
+      started: "true",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "PURPOSE_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording",
+        refined_formulation: "Mindd exists to restore focus and meaning in work.",
+        wording_choice_pending: "false",
+        wording_choice_selected: "user",
+        wording_choice_user_raw: "Mindd helps teams with clarity",
+        wording_choice_user_normalized: "Mindd helps teams with clarity.",
+        wording_choice_agent_current: "Mindd exists to restore focus and meaning in work.",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "true");
+  assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
+  assert.equal(
+    (result.ui?.action_codes || []).includes("ACTION_PURPOSE_REFINE_CONFIRM"),
+    false
+  );
+  assert.equal(
+    String((result.ui as any)?.wording_choice?.suggestion_text || ""),
+    "Mindd exists to restore focus and meaning in work."
+  );
+});
+
+test("wording choice: pending list mode returns full user and suggestion items", async () => {
+  const result = await run_step({
+    user_message: "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "DreamExplainer",
+      intro_shown_session: "true",
+      started: "true",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "DREAM_EXPLAINER_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Refine this formulation",
+        refined_formulation: "1) Impact one\n2) Impact two",
+        wording_choice_pending: "true",
+        wording_choice_mode: "list",
+        wording_choice_user_raw: "impact one, impact two",
+        wording_choice_user_normalized: "Impact one, impact two.",
+        wording_choice_user_items: ["Impact one", "Impact two"],
+        wording_choice_agent_current: "1) Impact one\n2) Impact two",
+        wording_choice_suggestion_items: ["Impact one", "Impact two"],
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
+  assert.equal(String((result.ui as any)?.wording_choice?.mode || ""), "list");
+  assert.deepEqual((result.ui as any)?.wording_choice?.user_items, ["Impact one", "Impact two"]);
+  assert.deepEqual((result.ui as any)?.wording_choice?.suggestion_items, ["Impact one", "Impact two"]);
 });
