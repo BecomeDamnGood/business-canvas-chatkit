@@ -863,80 +863,81 @@ function tokenJaccardSimilarity(a: string, b: string): number {
   return union > 0 ? intersection / union : 0;
 }
 
+function normalizeSurfaceSignature(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function countNewContentTokens(user: string, suggestion: string): number {
+  const userTokens = new Set(tokenizeWords(user));
+  const suggestionTokens = tokenizeWords(suggestion);
+  let count = 0;
+  for (const token of suggestionTokens) {
+    if (token.length <= 1) continue;
+    if (!userTokens.has(token)) count += 1;
+  }
+  return count;
+}
+
+function isMinorSurfaceCorrection(userRaw: string, suggestionRaw: string): boolean {
+  const user = normalizeLightUserInput(userRaw);
+  const suggestion = normalizeLightUserInput(suggestionRaw);
+  if (!user || !suggestion) return false;
+
+  const normalizedUser = normalizeSurfaceSignature(user);
+  const normalizedSuggestion = normalizeSurfaceSignature(suggestion);
+  if (normalizedUser === normalizedSuggestion) return true;
+
+  const userWords = tokenizeWords(normalizedUser);
+  const suggestionWords = tokenizeWords(normalizedSuggestion);
+  if (userWords.length === 0 || suggestionWords.length === 0) return false;
+
+  const overlap = tokenJaccardSimilarity(normalizedUser, normalizedSuggestion);
+  const editRatio = relativeEditDistance(normalizedUser, normalizedSuggestion);
+  const lengthDelta = Math.abs(userWords.length - suggestionWords.length);
+  const newContentTokens = countNewContentTokens(normalizedUser, normalizedSuggestion);
+  const allowedLengthDelta = Math.max(1, Math.ceil(userWords.length * 0.1));
+
+  const lexicalNearMatch =
+    overlap >= 0.92 && editRatio <= 0.24 && lengthDelta <= allowedLengthDelta && newContentTokens <= 2;
+  const structuralNearMatch = editRatio <= 0.22 && lengthDelta <= 2 && newContentTokens <= 2;
+  return lexicalNearMatch || structuralNearMatch;
+}
+
 export function isMaterialRewriteCandidate(userRaw: string, suggestionRaw: string): boolean {
   const user = normalizeLightUserInput(userRaw);
   const suggestion = normalizeLightUserInput(suggestionRaw);
   if (!user || !suggestion) return false;
-  if (user.toLowerCase() === suggestion.toLowerCase()) return false;
-
-  const editRatio = relativeEditDistance(user.toLowerCase(), suggestion.toLowerCase());
-  const overlap = tokenJaccardSimilarity(user, suggestion);
-  const userWords = tokenizeWords(user).length;
-  const editThreshold = userWords < 5 ? 0.25 : 0.15;
-  return editRatio > editThreshold || overlap < 0.85;
-}
-
-function hasStepKeyword(text: string): boolean {
-  return /\b(business|venture|company|dream|purpose|why|mission|role|entity|strategy|target|customer|client|product|service|rule|presentation|canvas|value|impact|income|revenue|profit|grow|growth|name|validate|existing|starting)\b/i.test(
-    text
-  );
+  if (isMinorSurfaceCorrection(user, suggestion)) return false;
+  return true;
 }
 
 export function isClearlyGeneralOfftopicInput(input: string): boolean {
-  const text = String(input || "").trim().toLowerCase();
+  const text = String(input || "").trim();
   if (!text) return false;
-  if (hasStepKeyword(text)) return false;
-  const patterns = [
-    /\bwho\s+is\s+/i,
-    /\bwhat\s+time\b/i,
-    /\bweather\b/i,
-    /\btemperature\b/i,
-    /\bcapital\s+of\b/i,
-    /\btranslate\b/i,
-    /\bnews\b/i,
-    /\bstock\b/i,
-    /\bcrypto\b/i,
-    /\bbitcoin\b/i,
-    /\bnba\b/i,
-    /\bnfl\b/i,
-    /\bben\s+steenstra\b/i,
-  ];
-  return patterns.some((re) => re.test(text));
+  if (/\?/.test(text)) return true;
+  if (/https?:\/\//i.test(text)) return true;
+  const letters = (text.match(/[^\W\d_]/g) || []).length;
+  const digits = (text.match(/\d/g) || []).length;
+  if (letters > 0 && digits > letters * 0.6) return true;
+  return false;
 }
 
 export function shouldTreatAsStepContributingInput(input: string, stepId: string): boolean {
   const text = String(input || "").trim();
+  void stepId;
   if (!text) return false;
   if (text.startsWith("ACTION_") || text.startsWith("__ROUTE__") || text.startsWith("choice:")) return false;
   if (isClearlyGeneralOfftopicInput(text)) return false;
 
+  const letters = (text.match(/[^\W\d_]/g) || []).length;
   const words = tokenizeWords(text);
-  if (words.length === 0) return false;
-
-  const stepHints: Record<string, RegExp> = {
-    [STEP_0_ID]: /\b(name|venture|business|company|starting|running|existing|tbd)\b/i,
-    [DREAM_STEP_ID]: /\b(dream|vision|future|world|impact)\b/i,
-    [PURPOSE_STEP_ID]: /\b(purpose|meaning|reason|why|exist|rich|money|income|profit)\b/i,
-    [BIGWHY_STEP_ID]: /\b(why|driver|motivation|meaning)\b/i,
-    [ROLE_STEP_ID]: /\b(role|mission|contribution|responsibility)\b/i,
-    [ENTITY_STEP_ID]: /\b(entity|identity|character|personality)\b/i,
-    [STRATEGY_STEP_ID]: /\b(strategy|plan|choice|position|advantage|focus)\b/i,
-    [TARGETGROUP_STEP_ID]: /\b(target|audience|customer|client|segment|market)\b/i,
-    [PRODUCTSSERVICES_STEP_ID]: /\b(product|service|offer|offering|solution)\b/i,
-    [RULESOFTHEGAME_STEP_ID]: /\b(rule|principle|boundary|agreement|standard)\b/i,
-    [PRESENTATION_STEP_ID]: /\b(presentation|pitch|slide|story|narrative)\b/i,
-  };
-
-  const hintRegex = stepHints[stepId];
-  if (hintRegex && hintRegex.test(text)) return true;
-  if (hasStepKeyword(text)) return true;
-
-  const hasPersonalIntent = /\b(i|we|my|our)\b/i.test(text) && /\b(want|believe|help|build|create|become|grow|serve|offer|support)\b/i.test(text);
-  if (hasPersonalIntent) return true;
-
-  const isQuestion = /^\s*(who|what|when|where)\b/i.test(text);
-  if (!isQuestion && words.length >= 5) return true;
-  return false;
+  if (letters < 8 || words.length < 3) return false;
+  if (text.length >= 20) return true;
+  return words.length >= 5;
 }
 
 function extractSuggestionFromMessage(message: string): string {
@@ -4300,13 +4301,19 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   const rawUserInputForDualChoice = freeTextUserInput;
 
-  if (inputMode === "widget" && sameStepTurn && (!isActionCodeTurnForPolicy || refineAdjustTurn) && !isOfftopicTurn) {
+  if (inputMode === "widget" && (!isActionCodeTurnForPolicy || refineAdjustTurn) && !isOfftopicTurn) {
+    const dualChoiceStepId = sameStepTurn
+      ? String((nextState as any).current_step ?? "")
+      : String((state as any).current_step ?? "");
+    const dualChoiceSpecialist = sameStepTurn
+      ? String((nextState as any).active_specialist ?? "")
+      : String((state as any).active_specialist ?? "");
     const forceWordingChoice =
       refineAdjustTurn &&
       String((lastSpecialistResult as any)?.wording_choice_user_raw || (lastSpecialistResult as any)?.wording_choice_user_normalized || "").trim() !== "";
     const built = buildWordingChoiceFromTurn({
-      stepId: String((nextState as any).current_step ?? ""),
-      activeSpecialist: String((nextState as any).active_specialist ?? ""),
+      stepId: dualChoiceStepId,
+      activeSpecialist: dualChoiceSpecialist,
       previousSpecialist: lastSpecialistResult || {},
       specialistResult,
       userTextRaw: rawUserInputForDualChoice,
@@ -4316,6 +4323,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     specialistResult = built.specialist;
     wordingChoiceOverride = built.wordingChoice;
     if (built.wordingChoice) {
+      if (!sameStepTurn) {
+        (nextState as any).current_step = String((state as any).current_step ?? "");
+        (nextState as any).active_specialist = String((state as any).active_specialist ?? "");
+      }
       (nextState as any).last_specialist_result = specialistResult;
     }
   }

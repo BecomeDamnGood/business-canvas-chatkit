@@ -354,8 +354,22 @@ test("wording choice: material rewrite heuristic ignores mini-fix but catches su
   assert.equal(isMaterialRewriteCandidate("We help founders.", "We help founders."), false);
   assert.equal(
     isMaterialRewriteCandidate(
+      "i want be rich",
+      "I want to be rich."
+    ),
+    false
+  );
+  assert.equal(
+    isMaterialRewriteCandidate(
       "We help founders with strategy.",
       "Our purpose is to help founders make strategic decisions with confidence and focus."
+    ),
+    true
+  );
+  assert.equal(
+    isMaterialRewriteCandidate(
+      "Companies with a purpose show less unethical behavior toward employees, customers, and their environment.",
+      "Mindd believes that a clear purpose helps companies act ethically toward employees, customers, and the environment."
     ),
     true
   );
