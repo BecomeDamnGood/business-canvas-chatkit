@@ -194,7 +194,7 @@ function hasNonBusinessFinals(state: Record<string, unknown> | null | undefined)
   const snapshot = getFinalsSnapshot((state ?? {}) as any);
   for (const [key, value] of Object.entries(snapshot)) {
     if (key === "business_name") continue;
-    if (String(value ?? "").trim()) return true;
+    if (safeString(value ?? "").trim()) return true;
   }
   return false;
 }
