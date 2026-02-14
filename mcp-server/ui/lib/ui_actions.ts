@@ -453,15 +453,38 @@ export async function callRunStep(
     state: nextState,
   };
 
+  const requestId = String((nextState as any).__request_id || "");
+  const clientActionId = String((nextState as any).__client_action_id || "");
+  const startedAt = Date.now();
+  const debugCalls = isDevEnv();
+  if (debugCalls) {
+    console.log("[ui_run_step_request]", {
+      request_id: requestId,
+      client_action_id: clientActionId,
+      current_step: String(nextState.current_step || ""),
+      user_message: String(message || ""),
+    });
+  }
+
   setLoading(true);
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let didTimeout = false;
+  const timeoutMs = RUN_STEP_TIMEOUT_MS;
   timeoutId = setTimeout(() => {
     didTimeout = true;
+    if (debugCalls) {
+      console.log("[ui_run_step_timeout]", {
+        request_id: requestId,
+        client_action_id: clientActionId,
+        current_step: String(nextState.current_step || ""),
+        elapsed_ms: Date.now() - startedAt,
+        timeout_ms: timeoutMs,
+      });
+    }
     setInlineNotice("This is taking longer than usual. Please try again.");
     setLoading(false);
-  }, RUN_STEP_TIMEOUT_MS);
+  }, timeoutMs);
 
   try {
     const callPromise = canUseBridge()
@@ -472,6 +495,14 @@ export async function callRunStep(
         );
     const resp = await callPromise;
     if (didTimeout) return;
+    if (debugCalls) {
+      console.log("[ui_run_step_response]", {
+        request_id: requestId,
+        client_action_id: clientActionId,
+        current_step: String(nextState.current_step || ""),
+        elapsed_ms: Date.now() - startedAt,
+      });
+    }
     const normalized = applyToolResult(resp);
     if (_render) _render(normalized);
   } catch (e) {
@@ -482,6 +513,14 @@ export async function callRunStep(
       (e && (e as Error).name === "AbortError") ||
       (e && (e as { type?: string }).type === "timeout");
     if (isTimeout || didTimeout) {
+      if (debugCalls) {
+        console.log("[ui_run_step_timeout_error]", {
+          request_id: requestId,
+          client_action_id: clientActionId,
+          current_step: String(nextState.current_step || ""),
+          elapsed_ms: Date.now() - startedAt,
+        });
+      }
       setInlineNotice("This is taking longer than usual. Please try again.");
       return;
     }
