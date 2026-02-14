@@ -158,3 +158,65 @@ test("render handles Dream intro payload without ui and does not throw", () => {
   (globalThis as any).window = originalWindow;
   (globalThis as any).openai = originalOpenai;
 });
+
+test("render shows both Dream REFINE contract buttons when prompt/menu/action_codes align", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+        intro_shown_session: "true",
+        intro_shown_for_step: "dream",
+        language: "en",
+        business_name: "Acme",
+      },
+      specialist: {
+        action: "REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+        menu_id: "DREAM_MENU_REFINE",
+        suggest_dreambuilder: "false",
+      },
+      prompt:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+      ui: {
+        action_codes: [
+          "ACTION_DREAM_REFINE_CONFIRM",
+          "ACTION_DREAM_REFINE_START_EXERCISE",
+        ],
+        expected_choice_count: 2,
+      },
+    },
+  });
+
+  const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
+  assert.equal(buttons.length, 2);
+  assert.equal(
+    String(buttons[0].textContent || ""),
+    "I'm happy with this wording, please continue to step 3 Purpose"
+  );
+  assert.equal(
+    String(buttons[1].textContent || ""),
+    "Do a small exercise that helps to define your dream."
+  );
+
+  setSessionStarted(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});

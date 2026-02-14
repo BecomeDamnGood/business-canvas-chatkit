@@ -6,6 +6,7 @@ import { getDefaultState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import {
   applyStateUpdate,
+  enforceDreamMenuContract,
   pickPrompt,
   RECAP_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
@@ -13,6 +14,7 @@ import {
 import { BigWhyZodSchema } from "../steps/bigwhy.js";
 import { VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS } from "../steps/step_0_validation.js";
 import { DREAM_INSTRUCTIONS } from "../steps/dream.js";
+import { PURPOSE_INSTRUCTIONS } from "../steps/purpose.js";
 
 test("finals merge: applyStateUpdate does not overwrite unrelated finals", () => {
   const prev = getDefaultState();
@@ -80,12 +82,15 @@ test("UNIVERSAL_META_OFFTOPIC_POLICY: recap instruction still present and not al
 });
 
 test("UNIVERSAL_META_OFFTOPIC_POLICY: non-step_0 prompt assembly includes policy", () => {
-  const dreamInstructions = `${DREAM_INSTRUCTIONS}\n\n${MINIMAL_CONTEXT}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`;
-  assert.ok(dreamInstructions.includes("UNIVERSAL_META_OFFTOPIC_POLICY"), "non-Step0 includes UNIVERSAL_META_OFFTOPIC_POLICY");
-  assert.ok(dreamInstructions.includes("wants_recap"), "recap behavior still present");
-  assert.ok(dreamInstructions.includes("Ben Steenstra"), "Ben factual reference present");
-  assert.ok(dreamInstructions.includes("www.bensteenstra.com"), "Ben reference URL present");
-  assert.ok(dreamInstructions.includes("maybe we're not the right fit"), "polite stop option present");
+  const purposeInstructions = `${PURPOSE_INSTRUCTIONS}\n\n${MINIMAL_CONTEXT}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`;
+  assert.ok(
+    purposeInstructions.includes("UNIVERSAL_META_OFFTOPIC_POLICY"),
+    "non-Step0 includes UNIVERSAL_META_OFFTOPIC_POLICY where applicable"
+  );
+  assert.ok(purposeInstructions.includes("wants_recap"), "recap behavior still present");
+  assert.ok(purposeInstructions.includes("Ben Steenstra"), "Ben factual reference present");
+  assert.ok(purposeInstructions.includes("www.bensteenstra.com"), "Ben reference URL present");
+  assert.ok(purposeInstructions.includes("maybe we're not the right fit"), "polite stop option present");
 });
 
 test("Dream menu prompt uses numbered question (not confirmation_question)", () => {
@@ -107,4 +112,43 @@ test("Dream specialist instructions must not append universal meta/off-topic pol
     false,
     "Dream specialist should rely on Dream-local META/OFF-TOPIC rules only"
   );
+});
+
+test("Dream menu contract: malformed ESCAPE menu question is rewritten to canonical two-option menu", () => {
+  const corrected = enforceDreamMenuContract(
+    {
+      action: "ASK",
+      menu_id: "DREAM_MENU_ESCAPE",
+      question: "Continue?",
+      confirmation_question: "old confirm prompt",
+    },
+    {
+      ...getDefaultState(),
+      current_step: "dream",
+      business_name: "Acme",
+    } as any
+  );
+  assert.equal(corrected.menu_id, "DREAM_MENU_ESCAPE");
+  assert.equal(corrected.confirmation_question, "");
+  assert.ok(String(corrected.question).includes("1) Continue Dream now"));
+  assert.ok(String(corrected.question).includes("2) Finish later"));
+});
+
+test("Dream menu contract: valid REFINE menu question is preserved", () => {
+  const specialist = {
+    action: "REFINE",
+    menu_id: "DREAM_MENU_REFINE",
+    question:
+      "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+    confirmation_question: "",
+  };
+  const corrected = enforceDreamMenuContract(
+    specialist,
+    {
+      ...getDefaultState(),
+      current_step: "dream",
+      business_name: "Acme",
+    } as any
+  );
+  assert.equal(corrected.question, specialist.question);
 });

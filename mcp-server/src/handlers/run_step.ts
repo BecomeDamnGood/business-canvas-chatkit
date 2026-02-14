@@ -275,6 +275,10 @@ function langFromState(state: CanvasState): string {
   return l || "en";
 }
 
+function shouldLogLocalDevDiagnostics(): boolean {
+  return process.env.LOCAL_DEV === "1" || process.env.MENU_POLICY_DEBUG === "1";
+}
+
 function baseUrlFromEnv(): string {
   const explicit = String(process.env.PUBLIC_BASE_URL || process.env.BASE_URL || "").trim();
   if (explicit) return explicit.replace(/\/+$/, "");
@@ -638,9 +642,74 @@ function buildTextForWidget(params: { specialist: any }): string {
 }
 
 export function pickPrompt(specialist: any): string {
-  const confirmQ = String(specialist?.confirmation_question ?? "").trim();
+  const menuId = String(specialist?.menu_id ?? "").trim();
   const q = String(specialist?.question ?? "").trim();
+  if (menuId && countNumberedOptions(q) > 0) return q;
+  const confirmQ = String(specialist?.confirmation_question ?? "").trim();
   return confirmQ || q || "";
+}
+
+function countNumberedOptions(prompt: string): number {
+  const lines = String(prompt || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  let count = 0;
+  for (const line of lines) {
+    const match = line.match(/^([1-9])[\)\.]\s+/);
+    if (!match) continue;
+    const n = Number(match[1]);
+    if (n !== count + 1) break;
+    count += 1;
+  }
+  return count;
+}
+
+const DREAM_MENU_QUESTIONS: Record<string, (businessName: string) => string> = {
+  DREAM_MENU_INTRO: () =>
+    "1) Tell me more about why a dream matters\n2) Do a small exercise that helps to define your dream.",
+  DREAM_MENU_WHY: () =>
+    "1) Give me a few dream suggestions\n2) Do a small exercise that helps to define your dream.",
+  DREAM_MENU_SUGGESTIONS: () =>
+    "1) Pick one for me and continue\n2) Do a small exercise that helps to define your dream.",
+  DREAM_MENU_REFINE: (businessName) =>
+    `1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.\n\nRefine the Dream of ${businessName || "your future company"} or choose an option.`,
+  DREAM_MENU_ESCAPE: () => "1) Continue Dream now\n2) Finish later\n\nChoose 1 or 2.",
+};
+
+export function enforceDreamMenuContract(specialist: any, state: CanvasState): any {
+  const menuId = String(specialist?.menu_id ?? "").trim();
+  if (!menuId.startsWith("DREAM_MENU_")) return specialist;
+  const expectedCount = ACTIONCODE_REGISTRY.menus[menuId]?.length ?? 0;
+  if (expectedCount <= 0) return specialist;
+
+  const rawQuestion = String(specialist?.question ?? "").trim();
+  const hasExpectedCount = countNumberedOptions(rawQuestion) === expectedCount;
+  if (hasExpectedCount) return specialist;
+
+  const builder = DREAM_MENU_QUESTIONS[menuId];
+  if (!builder) return specialist;
+
+  const rawBusinessName = String((state as any).business_name ?? "").trim();
+  const businessName = rawBusinessName && rawBusinessName !== "TBD" ? rawBusinessName : "your future company";
+
+  if (shouldLogLocalDevDiagnostics()) {
+    console.log("[dream_menu_contract_rewrite]", {
+      menu_id: menuId,
+      previous_choice_count: countNumberedOptions(rawQuestion),
+      expected_choice_count: expectedCount,
+      current_step: String((state as any).current_step ?? ""),
+      request_id: String((state as any).__request_id ?? ""),
+      client_action_id: String((state as any).__client_action_id ?? ""),
+    });
+  }
+
+  return {
+    ...specialist,
+    action: menuId === "DREAM_MENU_ESCAPE" ? "ASK" : specialist?.action,
+    confirmation_question: "",
+    question: builder(businessName),
+  };
 }
 
 /**
@@ -1299,6 +1368,11 @@ async function getUiStringsForLang(lang: string, model: string): Promise<Record<
   const plannerInput = `LANGUAGE: ${normalized}\nINPUT_JSON:\n${JSON.stringify(UI_STRINGS_DEFAULT)}`;
 
   try {
+    if (shouldLogLocalDevDiagnostics()) {
+      console.log("[ui_strings_translate_call]", {
+        lang: normalized,
+      });
+    }
     const res = await callStrictJson<Record<string, string>>({
       model,
       instructions,
@@ -1726,7 +1800,7 @@ async function callSpecialistStrict(params: {
 
     const res = await callStrictJson<DreamOutput>({
       model,
-      instructions: `${DREAM_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}\n\n${UNIVERSAL_META_OFFTOPIC_POLICY}`,
+      instructions: `${DREAM_INSTRUCTIONS}\n\n${LANGUAGE_LOCK_INSTRUCTION}\n\n${contextBlock}\n\n${RECAP_INSTRUCTION}`,
       plannerInput,
       schemaName: "Dream",
       jsonSchema: DreamJsonSchema as any,
@@ -2113,10 +2187,33 @@ async function callSpecialistStrictSafe(
   params: { model: string; state: CanvasState; decision: OrchestratorOutput; userMessage: string },
   stateForError: CanvasState
 ): Promise<{ ok: true; value: { specialistResult: any; attempts: number } } | { ok: false; payload: RunStepError }> {
+  const startedAt = Date.now();
+  const logDiagnostics = shouldLogLocalDevDiagnostics();
   try {
     const value = await callSpecialistStrict(params);
+    if (logDiagnostics) {
+      console.log("[run_step_llm_call]", {
+        ok: true,
+        specialist: String(params.decision?.specialist_to_call ?? ""),
+        current_step: String(params.decision?.current_step ?? ""),
+        elapsed_ms: Date.now() - startedAt,
+        request_id: String((stateForError as any).__request_id ?? ""),
+        client_action_id: String((stateForError as any).__client_action_id ?? ""),
+      });
+    }
     return { ok: true as const, value };
   } catch (err: any) {
+    if (logDiagnostics) {
+      console.log("[run_step_llm_call]", {
+        ok: false,
+        specialist: String(params.decision?.specialist_to_call ?? ""),
+        current_step: String(params.decision?.current_step ?? ""),
+        elapsed_ms: Date.now() - startedAt,
+        request_id: String((stateForError as any).__request_id ?? ""),
+        client_action_id: String((stateForError as any).__client_action_id ?? ""),
+        error_type: String(err?.type ?? err?.code ?? err?.name ?? "unknown"),
+      });
+    }
     if (isRateLimitError(err)) {
       return { ok: false as const, payload: buildRateLimitErrorPayload(stateForError, err) };
     }
@@ -2481,18 +2578,23 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       userMessage: "",
     }, state);
     if (!callResult.ok) return callResult.payload;
+    const normalizedSkipResult = normalizeMenuContracts(
+      String(decision.specialist_to_call || ""),
+      callResult.value.specialistResult,
+      state
+    );
 
     // Update state with specialist result
     const nextState = applyStateUpdate({
       prev: state,
       decision,
-      specialistResult: callResult.value.specialistResult,
+      specialistResult: normalizedSkipResult,
       showSessionIntroUsed: "false",
     });
 
     // Build output
-    const text = buildTextForWidget({ specialist: callResult.value.specialistResult });
-    const prompt = pickPrompt(callResult.value.specialistResult);
+    const text = buildTextForWidget({ specialist: normalizedSkipResult });
+    const prompt = pickPrompt(normalizedSkipResult);
 
     return attachRegistryPayload({
       ok: true as const,
@@ -2501,7 +2603,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       active_specialist: String((nextState as any).active_specialist || ""),
       text,
       prompt,
-      specialist: callResult.value.specialistResult,
+      specialist: normalizedSkipResult,
       state: nextState,
       debug: {
         decision,
@@ -2509,7 +2611,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         language: lang,
         meta_user_message_ignored: false,
       },
-    }, callResult.value.specialistResult);
+    }, normalizedSkipResult);
   }
   // SKIP-MODUS (TEST-ONLY) - END
 
@@ -2644,6 +2746,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       proceed_to_next: "false",
       proceed_to_purpose: "false",
     };
+  }
+
+  function normalizeMenuContracts(specialistName: string, result: any, currentState: CanvasState): any {
+    if (specialistName === DREAM_SPECIALIST) {
+      return enforceDreamMenuContract(result, currentState);
+    }
+    return result;
   }
 
   // Hard-coded confirm actions: bypass LLM and proceed deterministically.
@@ -2971,15 +3080,20 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       userMessage: "I want to write my dream in my own words.",
     }, state);
     if (!callDream.ok) return callDream.payload;
+    const normalizedSwitchResult = normalizeMenuContracts(
+      String(forcedDecision.specialist_to_call || ""),
+      callDream.value.specialistResult,
+      state
+    );
     const nextStateSwitch = applyStateUpdate({
       prev: state,
       decision: forcedDecision,
-      specialistResult: callDream.value.specialistResult,
+      specialistResult: normalizedSwitchResult,
       showSessionIntroUsed: "false",
     });
     const nextStateSwitchUi = await ensureUiStringsForState(nextStateSwitch, model);
-    const textSwitch = buildTextForWidget({ specialist: callDream.value.specialistResult });
-    const promptSwitch = pickPrompt(callDream.value.specialistResult);
+    const textSwitch = buildTextForWidget({ specialist: normalizedSwitchResult });
+    const promptSwitch = pickPrompt(normalizedSwitchResult);
     return attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
@@ -2987,9 +3101,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       active_specialist: DREAM_SPECIALIST,
       text: textSwitch,
       prompt: promptSwitch,
-      specialist: callDream.value.specialistResult,
+      specialist: normalizedSwitchResult,
       state: nextStateSwitchUi,
-    }, callDream.value.specialistResult, responseUiFlags);
+    }, normalizedSwitchResult, responseUiFlags);
   }
 
   // START trigger (widget start screen)
@@ -3348,6 +3462,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     state,
     lang
   );
+  specialistResult = normalizeMenuContracts(
+    String(decision1.specialist_to_call || ""),
+    specialistResult,
+    state
+  );
   if (String(decision1.current_step || "") === BIGWHY_STEP_ID) {
     const candidate = pickBigWhyCandidate(specialistResult);
     if (candidate && countWords(candidate) > BIGWHY_MAX_WORDS) {
@@ -3365,6 +3484,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         callShorten.value.specialistResult,
         state,
         lang
+      );
+      specialistResult = normalizeMenuContracts(
+        String(decision1.specialist_to_call || ""),
+        specialistResult,
+        state
       );
       const shortened = pickBigWhyCandidate(specialistResult);
       if (!shortened || countWords(shortened) > BIGWHY_MAX_WORDS) {
@@ -3406,6 +3530,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
             call2.value.specialistResult,
             stateAfterFirst,
             lang
+          );
+          specialistResult = normalizeMenuContracts(
+            String(decisionNext.specialist_to_call || ""),
+            specialistResult,
+            stateAfterFirst
           );
           if (String(decisionNext.current_step || "") === BIGWHY_STEP_ID) {
             const candidate = pickBigWhyCandidate(specialistResult);
@@ -3455,6 +3584,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         call2.value.specialistResult,
         nextState,
         lang
+      );
+      specialistResult = normalizeMenuContracts(
+        String(decision2.specialist_to_call || ""),
+        specialistResult,
+        nextState
       );
       if (String(decision2.current_step || "") === BIGWHY_STEP_ID) {
         const candidate = pickBigWhyCandidate(specialistResult);
