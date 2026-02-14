@@ -397,6 +397,24 @@ test("wording choice: suggestion fallback extracts rewritten content from messag
   );
 });
 
+test("wording choice: picks material candidate when refined echoes user input", () => {
+  const user = "Companies with a purpose show less unethical behavior toward employees, customers, and their environment.";
+  const suggestion = pickDualChoiceSuggestion(
+    "purpose",
+    {
+      refined_formulation: user,
+      message:
+        "I think I understand what you mean.\n\nMindd believes that a clear purpose helps companies act ethically toward employees, customers, and the environment.",
+    },
+    {},
+    user
+  );
+  assert.equal(
+    suggestion,
+    "Mindd believes that a clear purpose helps companies act ethically toward employees, customers, and the environment."
+  );
+});
+
 test("wording choice: pending state blocks confirm action until choice is made", async () => {
   const result = await run_step({
     user_message: "ACTION_DREAM_REFINE_CONFIRM",

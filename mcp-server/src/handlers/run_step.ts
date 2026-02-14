@@ -979,24 +979,40 @@ function extractSuggestionFromMessage(message: string): string {
   return "";
 }
 
-export function pickDualChoiceSuggestion(stepId: string, specialistResult: any, previousSpecialist: any): string {
-  const direct = String(specialistResult?.refined_formulation || "").trim();
-  if (direct) return direct;
+export function pickDualChoiceSuggestion(stepId: string, specialistResult: any, previousSpecialist: any, userRaw = ""): string {
+  const candidates: string[] = [];
+  const pushCandidate = (value: string) => {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return;
+    if (candidates.includes(trimmed)) return;
+    candidates.push(trimmed);
+  };
+
+  pushCandidate(String(specialistResult?.refined_formulation || ""));
 
   const field = fieldForStep(stepId);
-  if (field) {
-    const fromField = String(specialistResult?.[field] || "").trim();
-    if (fromField) return fromField;
-  }
+  if (field) pushCandidate(String(specialistResult?.[field] || ""));
 
   if (Array.isArray(specialistResult?.statements) && specialistResult.statements.length > 0) {
-    return (specialistResult.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean).join("\n");
+    pushCandidate(
+      (specialistResult.statements as string[])
+        .map((line) => String(line || "").trim())
+        .filter(Boolean)
+        .join("\n")
+    );
   }
 
-  const fromMessage = extractSuggestionFromMessage(String(specialistResult?.message || ""));
-  if (fromMessage) return fromMessage;
+  pushCandidate(extractSuggestionFromMessage(String(specialistResult?.message || "")));
+  pushCandidate(String(previousSpecialist?.wording_choice_agent_current || previousSpecialist?.refined_formulation || ""));
 
-  return String(previousSpecialist?.wording_choice_agent_current || previousSpecialist?.refined_formulation || "").trim();
+  const user = String(userRaw || "").trim();
+  if (user) {
+    for (const candidate of candidates) {
+      if (isMaterialRewriteCandidate(user, candidate)) return candidate;
+    }
+  }
+
+  return candidates[0] || "";
 }
 
 function parseListItems(input: string): string[] {
@@ -1089,7 +1105,7 @@ function buildWordingChoiceFromTurn(params: {
   if (isOfftopic) return { specialist: specialistResult, wordingChoice: null };
   const fallbackUserRaw = String(previousSpecialist?.wording_choice_user_raw || previousSpecialist?.wording_choice_user_normalized || "").trim();
   const userRaw = String(userTextRaw || fallbackUserRaw).trim();
-  const suggestionRaw = pickDualChoiceSuggestion(stepId, specialistResult, previousSpecialist);
+  const suggestionRaw = pickDualChoiceSuggestion(stepId, specialistResult, previousSpecialist, userRaw);
   if (!userRaw || !suggestionRaw) return { specialist: specialistResult, wordingChoice: null };
   if (!forcePending && !isMaterialRewriteCandidate(userRaw, suggestionRaw)) {
     return { specialist: specialistResult, wordingChoice: null };
