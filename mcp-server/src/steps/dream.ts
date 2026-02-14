@@ -147,8 +147,9 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
 7) MENU COPY (HARD)
 Whenever a menu is required, use the numbered options in the "question" field.
 After the numbered options, add ONE single-line choice prompt in the target language with this meaning:
-- If a business name is known from context/state (Step 0 / venture baseline; not empty, not "TBD"): "Refine the Dream of <business name> or choose an option."
-- Otherwise: "Refine the Dream of your future company or choose an option."
+- For DREAM_MENU_INTRO, DREAM_MENU_WHY, DREAM_MENU_SUGGESTIONS: use "Define the Dream of <business name> or choose an option."
+- For DREAM_MENU_REFINE: use "Refine the Dream of <business name> or choose an option."
+If a business name is unknown or "TBD", use "your future company" instead of the name.
 Use the business name from context (venture baseline, step_0_final). If it is missing or "TBD", use the equivalent of "your future company" in the target language. Output in the target language only.
 
 MENU_ID (HARD)

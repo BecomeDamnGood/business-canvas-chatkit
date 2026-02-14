@@ -69,6 +69,7 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     inputPlaceholder: "Type your answer here (use the widget, not the chat box)…",
     btnStart: "Start the proces with Validation & Business Name",
     btnOk: "Continue",
+    btnOk_step0_ready: "Yes, I'm ready. Let's start!",
     btnOk_strategy: "I'm happy, continue to step 7 Strategy",
     btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
     "dreamBuilder.startExercise": "Start the exercise",

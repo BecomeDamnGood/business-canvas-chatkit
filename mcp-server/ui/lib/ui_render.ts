@@ -331,7 +331,12 @@ export function render(overrideToolOutput?: unknown): void {
     hasPromptForConfirm &&
     !isDreamExplainerMode;
 
-  const btnOkLabelKey = current === STRATEGY_STEP_ID ? "btnOk_strategy" : "btnOk";
+  const btnOkLabelKey =
+    current === "step_0" && showContinue
+      ? "btnOk_step0_ready"
+      : current === STRATEGY_STEP_ID
+        ? "btnOk_strategy"
+        : "btnOk";
   const btnOkEl = document.getElementById("btnOk");
   if (btnOkEl) btnOkEl.textContent = t(lang, btnOkLabelKey);
 
@@ -348,6 +353,7 @@ export function render(overrideToolOutput?: unknown): void {
     if (cardDesc) cardDesc.innerHTML = formatText(prestartWelcomeForLang(lang));
     if (prompt) prompt.textContent = "";
     startHint.textContent = "";
+    (startHint as HTMLElement).style.display = "none";
     if (isLoading) setLoading(false);
     return;
   }
@@ -355,6 +361,7 @@ export function render(overrideToolOutput?: unknown): void {
   inputWrap.style.display = "flex";
   (btnStart as HTMLElement).style.display = "none";
   startHint.textContent = "";
+  (startHint as HTMLElement).style.display = "none";
 
   const isDreamDirectionView =
     current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
@@ -485,7 +492,7 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
     inputWrap.style.display = "none";
     const btnSelfDream = document.getElementById("btnSwitchToSelfDream");
     if (btnSelfDream) {
-      (btnSelfDream as HTMLElement).style.display = "inline-block";
+      (btnSelfDream as HTMLElement).style.display = "inline-flex";
       btnSelfDream.textContent = t(lang, "btnSwitchToSelfDream");
     }
 

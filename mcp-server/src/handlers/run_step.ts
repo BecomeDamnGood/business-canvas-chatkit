@@ -215,6 +215,7 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   thinking: "Thinking…",
   btnStart: "Start",
   btnOk: "Continue",
+  btnOk_step0_ready: "Yes, I'm ready. Let's start!",
   btnOk_strategy: "I'm happy, continue to step 7 Strategy",
   btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
   "dreamBuilder.startExercise": "Start the exercise",
@@ -286,7 +287,10 @@ function languageModeFromEnv(): string {
 }
 
 function isForceEnglishLanguageMode(): boolean {
-  return languageModeFromEnv() === "force_en";
+  const mode = languageModeFromEnv();
+  if (mode === "force_en") return true;
+  if (mode === "detect_once") return false;
+  return process.env.LOCAL_DEV === "1";
 }
 
 function baseUrlFromEnv(): string {
@@ -675,33 +679,61 @@ function countNumberedOptions(prompt: string): number {
   return count;
 }
 
+const DREAM_DEFINE_MENU_IDS = new Set(["DREAM_MENU_INTRO", "DREAM_MENU_WHY", "DREAM_MENU_SUGGESTIONS"]);
+
+function dreamDefineTail(businessName: string): string {
+  return `Define the Dream of ${businessName || "your future company"} or choose an option.`;
+}
+
+function normalizeDreamDefineTail(menuId: string, question: string, businessName: string): string {
+  if (!DREAM_DEFINE_MENU_IDS.has(menuId)) return question;
+  const raw = String(question || "").trim();
+  if (!raw) return raw;
+  let next = raw;
+  if (/refine the dream of/i.test(next)) {
+    next = next.replace(/refine the dream of/gi, "Define the Dream of");
+  }
+  if (!/define the dream of/i.test(next)) {
+    next = `${next}\n\n${dreamDefineTail(businessName)}`;
+  }
+  return next;
+}
+
 const DREAM_MENU_QUESTIONS: Record<string, (businessName: string) => string> = {
-  DREAM_MENU_INTRO: () =>
-    "1) Tell me more about why a dream matters\n2) Do a small exercise that helps to define your dream.",
-  DREAM_MENU_WHY: () =>
-    "1) Give me a few dream suggestions\n2) Do a small exercise that helps to define your dream.",
-  DREAM_MENU_SUGGESTIONS: () =>
-    "1) Pick one for me and continue\n2) Do a small exercise that helps to define your dream.",
+  DREAM_MENU_INTRO: (businessName) =>
+    `1) Tell me more about why a dream matters\n2) Do a small exercise that helps to define your dream.\n\n${dreamDefineTail(businessName)}`,
+  DREAM_MENU_WHY: (businessName) =>
+    `1) Give me a few dream suggestions\n2) Do a small exercise that helps to define your dream.\n\n${dreamDefineTail(businessName)}`,
+  DREAM_MENU_SUGGESTIONS: (businessName) =>
+    `1) Pick one for me and continue\n2) Do a small exercise that helps to define your dream.\n\n${dreamDefineTail(businessName)}`,
   DREAM_MENU_REFINE: (businessName) =>
     `1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.\n\nRefine the Dream of ${businessName || "your future company"} or choose an option.`,
-  DREAM_MENU_ESCAPE: () => "1) Continue Dream now\n2) Finish later\n\nChoose 1 or 2.",
 };
 
 export function enforceDreamMenuContract(specialist: any, state: CanvasState): any {
   const menuId = String(specialist?.menu_id ?? "").trim();
   if (!menuId.startsWith("DREAM_MENU_")) return specialist;
+  if (menuId === "DREAM_MENU_ESCAPE") return specialist;
   const expectedCount = ACTIONCODE_REGISTRY.menus[menuId]?.length ?? 0;
   if (expectedCount <= 0) return specialist;
 
   const rawQuestion = String(specialist?.question ?? "").trim();
-  const hasExpectedCount = countNumberedOptions(rawQuestion) === expectedCount;
-  if (hasExpectedCount) return specialist;
+  const rawBusinessName = String((state as any).business_name ?? "").trim();
+  const businessName = rawBusinessName && rawBusinessName !== "TBD" ? rawBusinessName : "your future company";
+  const normalizedQuestion = normalizeDreamDefineTail(menuId, rawQuestion, businessName);
+
+  const hasExpectedCount = countNumberedOptions(normalizedQuestion) === expectedCount;
+  if (hasExpectedCount) {
+    if (normalizedQuestion === rawQuestion) return specialist;
+    return {
+      ...specialist,
+      confirmation_question: "",
+      question: normalizedQuestion,
+    };
+  }
 
   const builder = DREAM_MENU_QUESTIONS[menuId];
   if (!builder) return specialist;
-
-  const rawBusinessName = String((state as any).business_name ?? "").trim();
-  const businessName = rawBusinessName && rawBusinessName !== "TBD" ? rawBusinessName : "your future company";
 
   if (shouldLogLocalDevDiagnostics()) {
     console.log("[dream_menu_contract_rewrite]", {
@@ -716,7 +748,7 @@ export function enforceDreamMenuContract(specialist: any, state: CanvasState): a
 
   return {
     ...specialist,
-    action: menuId === "DREAM_MENU_ESCAPE" ? "ASK" : specialist?.action,
+    action: specialist?.action,
     confirmation_question: "",
     question: builder(businessName),
   };

@@ -142,13 +142,32 @@ test("Dream specialist instructions must not append universal meta/off-topic pol
   );
 });
 
-test("Dream menu contract: malformed ESCAPE menu question is rewritten to canonical two-option menu", () => {
+test("Dream menu contract: ESCAPE menu is never rewritten by Dream contract", () => {
+  const specialist = {
+    action: "ASK",
+    menu_id: "DREAM_MENU_ESCAPE",
+    question: "Continue?",
+    confirmation_question: "old confirm prompt",
+  };
+  const corrected = enforceDreamMenuContract(
+    specialist,
+    {
+      ...getDefaultState(),
+      current_step: "dream",
+      business_name: "Acme",
+    } as any
+  );
+  assert.deepEqual(corrected, specialist);
+});
+
+test("Dream menu contract: INTRO menu rewrites leaked Refine prompt tail to Define", () => {
   const corrected = enforceDreamMenuContract(
     {
       action: "ASK",
-      menu_id: "DREAM_MENU_ESCAPE",
-      question: "Continue?",
-      confirmation_question: "old confirm prompt",
+      menu_id: "DREAM_MENU_INTRO",
+      question:
+        "1) Tell me more about why a dream matters\n2) Do a small exercise that helps to define your dream.\n\nRefine the Dream of Acme or choose an option.",
+      confirmation_question: "",
     },
     {
       ...getDefaultState(),
@@ -156,10 +175,8 @@ test("Dream menu contract: malformed ESCAPE menu question is rewritten to canoni
       business_name: "Acme",
     } as any
   );
-  assert.equal(corrected.menu_id, "DREAM_MENU_ESCAPE");
-  assert.equal(corrected.confirmation_question, "");
-  assert.ok(String(corrected.question).includes("1) Continue Dream now"));
-  assert.ok(String(corrected.question).includes("2) Finish later"));
+  assert.equal(String(corrected.question).includes("Refine the Dream of"), false);
+  assert.ok(String(corrected.question).includes("Define the Dream of Acme or choose an option."));
 });
 
 test("Dream menu contract: valid REFINE menu question is preserved", () => {

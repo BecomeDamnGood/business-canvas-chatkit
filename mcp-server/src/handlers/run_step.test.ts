@@ -92,6 +92,50 @@ test("language mode force_en: keeps language en and never triggers ui string tra
   }
 });
 
+test("language mode LOCAL_DEV=1 defaults to English lock and never triggers ui string translation call", async () => {
+  const prevLocalDev = process.env.LOCAL_DEV;
+  const prevMode = process.env.LANGUAGE_MODE;
+  process.env.LOCAL_DEV = "1";
+  delete process.env.LANGUAGE_MODE;
+
+  const originalLog = console.log;
+  const logs: string[] = [];
+  console.log = (...args: any[]) => {
+    logs.push(String(args[0] ?? ""));
+  };
+
+  try {
+    const result = await run_step({
+      user_message: "",
+      state: {
+        current_step: "step_0",
+        intro_shown_session: "false",
+        last_specialist_result: {},
+        started: "true",
+        language: "fi",
+        initial_user_message: "Minulla on leipomo nimeltä Sol.",
+      },
+    });
+    assert.equal(result?.ok, true);
+    assert.equal(result?.state?.language, "en");
+    assert.equal(result?.state?.ui_strings_lang, "en");
+    const translateLogs = logs.filter((line) => line.includes("[ui_strings_translate_call]"));
+    assert.equal(translateLogs.length, 0);
+  } finally {
+    console.log = originalLog;
+    if (prevLocalDev === undefined) {
+      delete process.env.LOCAL_DEV;
+    } else {
+      process.env.LOCAL_DEV = prevLocalDev;
+    }
+    if (prevMode === undefined) {
+      delete process.env.LANGUAGE_MODE;
+    } else {
+      process.env.LANGUAGE_MODE = prevMode;
+    }
+  }
+});
+
 test("rate limit: returns structured error payload", async () => {
   const prev = process.env.TEST_FORCE_RATE_LIMIT;
   process.env.TEST_FORCE_RATE_LIMIT = "1";
