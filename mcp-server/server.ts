@@ -590,11 +590,13 @@ const httpServer = async (req: any, res: any) => {
         const args = JSON.parse(body || "{}") as {
           current_step_id?: string;
           user_message?: string;
+          input_mode?: "widget" | "chat";
           state?: Record<string, unknown>;
         };
         const { structuredContent } = await runStepHandler({
           current_step_id: safeString(args.current_step_id ?? "step_0") || "step_0",
           user_message: safeString(args.user_message ?? ""),
+          input_mode: args.input_mode,
           state: args.state,
         });
         res.writeHead(200, { "content-type": "application/json" });
