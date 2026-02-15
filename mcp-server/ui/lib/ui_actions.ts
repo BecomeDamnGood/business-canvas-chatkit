@@ -507,6 +507,33 @@ export async function callRunStep(
         elapsed_ms: Date.now() - startedAt,
       });
     }
+    const normalizedRaw = normalizeToolOutput(resp);
+    const result =
+      (normalizedRaw && (normalizedRaw as any).result)
+        ? ((normalizedRaw as any).result as Record<string, unknown>)
+        : (normalizedRaw && (normalizedRaw as any).ui && ((normalizedRaw as any).ui as any).result)
+          ? (((normalizedRaw as any).ui as any).result as Record<string, unknown>)
+          : (normalizedRaw && (normalizedRaw as any).ui)
+            ? ((normalizedRaw as any).ui as Record<string, unknown>)
+            : {};
+    const errorObj = result?.error as
+      | { type?: string; user_message?: string; retry_after_ms?: number; retry_action?: string }
+      | null;
+    const transientRetryError =
+      result?.ok === false &&
+      errorObj &&
+      (errorObj.type === "timeout" || errorObj.type === "rate_limited") &&
+      (errorObj.retry_action === "retry_same_action" || errorObj.type === "rate_limited");
+    if (transientRetryError) {
+      if (errorObj.type === "rate_limited") {
+        setInlineNotice(errorObj.user_message || "Please wait a moment and try again.");
+        lockRateLimit(errorObj.retry_after_ms ?? 1500);
+      } else {
+        setInlineNotice(errorObj.user_message || "This is taking longer than usual. Please try again.");
+      }
+      return;
+    }
+
     const normalized = applyToolResult(resp);
     if (_render) _render(normalized);
   } catch (e) {

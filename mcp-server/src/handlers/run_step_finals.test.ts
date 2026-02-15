@@ -10,6 +10,7 @@ import {
   enforceDreamMenuContract,
   isWordingChoiceEligibleStep,
   isMaterialRewriteCandidate,
+  areEquivalentWordingVariants,
   isClearlyGeneralOfftopicInput,
   shouldTreatAsStepContributingInput,
   pickDualChoiceSuggestion,
@@ -245,6 +246,86 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
   assert.equal(String(offTopicTurn.prompt || "").includes("Continue Dream now"), false);
 });
 
+test("off-topic overlay keeps previous statement recap when no final exists yet", async () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "entity",
+    active_specialist: "Entity",
+    intro_shown_session: "true",
+    intro_shown_for_step: "entity",
+    started: "true",
+    business_name: "Mindd",
+    entity_final: "",
+    last_specialist_result: {
+      action: "REFINE",
+      menu_id: "ENTITY_MENU_EXAMPLE",
+      question:
+        "1) I'm happy with this wording, go to the next step Strategy.\n2) Refine the wording for me please",
+      refined_formulation: "Purpose-driven advertising agency",
+      entity: "Purpose-driven advertising agency",
+      confirmation_question: "",
+      proceed_to_next: "false",
+      wants_recap: false,
+      is_offtopic: false,
+    },
+  };
+
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "Who is Ben Steenstra?",
+      state,
+    })
+  );
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.is_offtopic || ""), "true");
+  assert.equal(String(result.text || "").includes("We have not yet defined Entity."), false);
+  assert.equal(
+    String(result.text || "").includes("Purpose-driven advertising agency"),
+    true
+  );
+});
+
+test("off-topic dream with existing candidate (no final) keeps both Dream refine actions", async () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "dream",
+    active_specialist: "Dream",
+    intro_shown_session: "true",
+    intro_shown_for_step: "dream",
+    started: "true",
+    business_name: "Mindd",
+    dream_final: "",
+    last_specialist_result: {
+      action: "REFINE",
+      menu_id: "DREAM_MENU_REFINE",
+      question:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+      refined_formulation: "Mindd dreams of a world with meaningful impact.",
+      dream: "Mindd dreams of a world with meaningful impact.",
+      confirmation_question: "",
+      proceed_to_next: "false",
+      wants_recap: false,
+      is_offtopic: false,
+    },
+  };
+
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "Who is Ben Steenstra?",
+      state,
+    })
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.is_offtopic || ""), "true");
+  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_DREAM_REFINE_CONFIRM",
+    "ACTION_DREAM_REFINE_START_EXERCISE",
+  ]);
+  assert.equal(countNumberedOptions(String(result.prompt || "")), 2);
+});
+
 test("Step 0 off-topic overlay with no output: no continue/menu buttons", async () => {
   const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
@@ -328,6 +409,52 @@ test("Step 0 legacy confirm prompt is preserved (no global renderer rewrite)", a
   assert.equal(Array.isArray(result.ui?.action_codes), false);
 });
 
+test("Step 0 initial ASK includes intro body text above prompt", async () => {
+  const result = await run_step({
+    user_message: "",
+    state: {
+      ...getDefaultState(),
+      current_step: "step_0",
+      active_specialist: "ValidationAndBusinessName",
+      intro_shown_session: "false",
+      started: "true",
+      step_0_final: "",
+      business_name: "TBD",
+      last_specialist_result: {},
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(
+    String(result.text || ""),
+    "Just to set the context, we'll start with the basics."
+  );
+  assert.equal(
+    String(result.prompt || ""),
+    "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?"
+  );
+});
+
+test("Step 0 ASK fallback injects canonical small intro text when specialist message is empty", async () => {
+  const result = await run_step({
+    user_message: "",
+    state: {
+      ...getDefaultState(),
+      current_step: "step_0",
+      active_specialist: "ValidationAndBusinessName",
+      intro_shown_session: "true",
+      started: "true",
+      step_0_final: "",
+      business_name: "TBD",
+      last_specialist_result: {},
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(String(result.text || ""), "Just to set the context, we'll start with the basics.");
+  assert.equal(String(result.prompt || ""), "Test question");
+});
+
 test("global free-text policy: ActionCode turn bypasses renderer", async () => {
   const result = await run_step({
     user_message: "ACTION_DREAM_REFINE_START_EXERCISE",
@@ -349,6 +476,40 @@ test("global free-text policy: ActionCode turn bypasses renderer", async () => {
   });
   assert.equal(result.ok, true);
   assert.equal(Array.isArray(result.ui?.action_codes), false);
+});
+
+test("wording choice: pending selection blocks extra free-text input until pick is made", async () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "strategy",
+    active_specialist: "Strategy",
+    intro_shown_session: "true",
+    started: "true",
+    last_specialist_result: {
+      action: "ASK",
+      menu_id: "STRATEGY_MENU_ASK",
+      question:
+        "1) Ask me some questions to clarify my Strategy\n2) Show me an example of a Strategy for my business",
+      wording_choice_pending: "true",
+      wording_choice_selected: "",
+      wording_choice_mode: "list",
+      wording_choice_target_field: "strategy",
+      wording_choice_user_items: ["Focus on NL"],
+      wording_choice_suggestion_items: ["Focus on profitable clients"],
+      wording_choice_user_raw: "Focus on NL",
+      wording_choice_user_normalized: "Focus on NL",
+      wording_choice_agent_current: "Focus on profitable clients",
+    },
+  };
+  const result = await run_step({
+    user_message: "Add one more strategy point",
+    input_mode: "widget",
+    state,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "strategy");
+  assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "true");
 });
 
 test("wording choice: material rewrite heuristic ignores mini-fix but catches substantial rewrite", () => {
@@ -373,6 +534,55 @@ test("wording choice: material rewrite heuristic ignores mini-fix but catches su
       "Mindd believes that a clear purpose helps companies act ethically toward employees, customers, and the environment."
     ),
     true
+  );
+});
+
+test("wording choice: equivalent text variants are auto-resolved (no A/B needed)", () => {
+  assert.equal(
+    areEquivalentWordingVariants({
+      mode: "text",
+      userRaw: "I want to be rich",
+      suggestionRaw: "I want to be rich.",
+      userItems: [],
+      suggestionItems: [],
+    }),
+    true
+  );
+});
+
+test("wording choice: equivalent list variants are auto-resolved (no A/B needed)", () => {
+  assert.equal(
+    areEquivalentWordingVariants({
+      mode: "list",
+      userRaw: "Focus on NL\nFocus on clients above 40k",
+      suggestionRaw: "Focus on clients above 40k\nFocus on NL",
+      userItems: [
+        "Focus on NL",
+        "Focus on clients above 40k",
+      ],
+      suggestionItems: [
+        "Focus on clients above 40k.",
+        "Focus on NL.",
+      ],
+    }),
+    true
+  );
+  assert.equal(
+    areEquivalentWordingVariants({
+      mode: "list",
+      userRaw: "Focus on NL\nFocus on clients above 40k",
+      suggestionRaw: "Focus on NL\nFocus on clients above 40k\nAdd one more",
+      userItems: [
+        "Focus on NL",
+        "Focus on clients above 40k",
+      ],
+      suggestionItems: [
+        "Focus on NL",
+        "Focus on clients above 40k",
+        "Add one more",
+      ],
+    }),
+    false
   );
 });
 
@@ -599,12 +809,74 @@ test("wording choice: user pick preserves multi-line strategy input and shows fe
   });
 
   assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.strategy || ""), "1) Build trust with clients\n2) Run monthly workshops");
-  assert.equal(String(result.specialist?.action || ""), "REFINE");
-  assert.equal(String(result.specialist?.menu_id || ""), "STRATEGY_MENU_REFINE");
-  assert.equal(
+  assert.equal(String(result.specialist?.strategy || ""), "Build trust with clients\nRun monthly workshops");
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(String(result.specialist?.menu_id || ""), "STRATEGY_MENU_ASK");
+  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"]);
+  assert.match(
     String(result.specialist?.message || ""),
-    "You chose your own wording and that's fine. But please remember that This wording is still broad and could be sharpened with clearer focus points.\n\nYour current Strategy for Mindd is:"
+    /You chose your own wording and that's fine\./
+  );
+  assert.match(
+    String(result.specialist?.message || ""),
+    /This wording is still broad and could be sharpened with clearer focus points\./
+  );
+});
+
+test("wording choice: strategy suggestion pick restores buttons and keeps progress recap line", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_SUGGESTION",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "strategy",
+      active_specialist: "Strategy",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "",
+        question: "Is there more that Mindd will always focus on?",
+        confirmation_question: "",
+        message:
+          "Both focus points are noted.\nFocus point 1 noted: Focus exclusively on clients in the Netherlands.\nFocus point 2 noted: Focus on clients with an annual budget above 40,000 euros.\nIf you meant something different, tell me and I'll adjust.\nSo far we have these 2 strategic focus points.",
+        statements: [
+          "Focus exclusively on clients in the Netherlands",
+          "Focus on clients with an annual budget above 40,000 euros",
+        ],
+        strategy:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        refined_formulation:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        wording_choice_pending: "true",
+        wording_choice_user_raw:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        wording_choice_user_normalized:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        wording_choice_agent_current:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        wording_choice_mode: "list",
+        wording_choice_target_field: "strategy",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(String(result.specialist?.menu_id || ""), "STRATEGY_MENU_ASK");
+  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"]);
+  assert.match(String(result.specialist?.message || ""), /This is what we have established so far based on our dialogue/);
+  assert.match(String(result.specialist?.message || ""), /• Focus exclusively on clients in the Netherlands/);
+  assert.match(String(result.specialist?.message || ""), /• Focus on clients with an annual budget above 40,000 euros/);
+  assert.equal(String(result.specialist?.message || "").includes("Focus point 1 noted:"), false);
+  assert.equal(
+    /Your current Strategy for Mindd is:\n\nFocus exclusively on clients in the Netherlands/i.test(
+      String(result.specialist?.message || "")
+    ),
+    false
   );
 });
 
@@ -765,6 +1037,43 @@ test("wording choice: Role user pick restores contract refine menu instead of ge
   assert.deepEqual(result.ui?.action_codes, ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"]);
 });
 
+test("wording choice: Rules user pick keeps incomplete-status menu buttons", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "rulesofthegame",
+      active_specialist: "RulesOfTheGame",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "",
+        question: "Do you want to add more rules?",
+        confirmation_question: "",
+        message: "So far we have these 2 rules.",
+        statements: ["Always be transparent", "Keep promises"],
+        rulesofthegame: "Always be transparent\nKeep promises",
+        refined_formulation: "Always be transparent\nKeep promises",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "Always be transparent\nKeep promises",
+        wording_choice_user_normalized: "Always be transparent\nKeep promises",
+        wording_choice_agent_current: "Always be transparent\nKeep promises",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "rulesofthegame",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(String(result.specialist?.menu_id || ""), "RULES_MENU_ASK_EXPLAIN");
+  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_RULES_ASK_EXPLAIN_MORE", "ACTION_RULES_ASK_GIVE_EXAMPLE"]);
+});
+
 test("wording choice: Entity suggestion pick normalizes sentence-like suggestion to short phrase", async () => {
   const result = await run_step({
     user_message: "ACTION_WORDING_PICK_SUGGESTION",
@@ -832,6 +1141,76 @@ test("wording choice: off-topic overlay never exposes wording choice panel", asy
     Boolean((result.ui as any)?.wording_choice?.enabled),
     false
   );
+});
+
+test("wording choice: obvious off-topic question in Strategy does not open A/B choice", async () => {
+  const result = await run_step({
+    user_message: "What have we spoken about so far?",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "strategy",
+      active_specialist: "Strategy",
+      intro_shown_session: "true",
+      started: "true",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "STRATEGY_MENU_REFINE",
+        question: "1) Explain why a Strategy matters",
+        refined_formulation: "",
+        strategy: "Focus on clients in the Netherlands",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.notEqual(String(result.specialist?.wording_choice_pending || ""), "true");
+  assert.equal(Boolean((result.ui as any)?.wording_choice?.enabled), false);
+  assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "");
+});
+
+test("wording choice: list pick stores merged committed list and clears stale pending fields", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_SUGGESTION",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "strategy",
+      active_specialist: "Strategy",
+      intro_shown_session: "true",
+      started: "true",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "STRATEGY_MENU_REFINE",
+        question: "1) Explain why a Strategy matters",
+        message: "Please click what suits you best.",
+        refined_formulation: "Focus on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        strategy: "Focus on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        wording_choice_pending: "true",
+        wording_choice_mode: "list",
+        wording_choice_user_raw: "work with healthy and profitable clients",
+        wording_choice_user_normalized: "Work with healthy and profitable clients.",
+        wording_choice_user_items: ["Work with healthy and profitable clients"],
+        wording_choice_base_items: [
+          "Focus on clients in the Netherlands",
+          "Focus on clients with an annual budget above 40,000 euros",
+        ],
+        wording_choice_agent_current:
+          "Focus on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros\nPrioritize partnerships with healthy and profitable clients",
+        wording_choice_suggestion_items: ["Prioritize partnerships with healthy and profitable clients"],
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "false");
+  assert.equal(String(result.specialist?.wording_choice_user_raw || ""), "");
+  assert.equal(String(result.specialist?.wording_choice_user_normalized || ""), "");
+  assert.deepEqual(result.specialist?.wording_choice_base_items, [
+    "Focus on clients in the Netherlands",
+    "Focus on clients with an annual budget above 40,000 euros",
+    "Prioritize partnerships with healthy and profitable clients",
+  ]);
 });
 
 test("wording choice: refine adjust rebuilds pending choice from stored user variant", async () => {

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { dedupeBodyAgainstPrompt, render, renderChoiceButtons } from "../ui/lib/ui_render.js";
-import { setSessionStarted } from "../ui/lib/ui_state.js";
+import { setSessionStarted, setSessionWelcomeShown } from "../ui/lib/ui_state.js";
 
 function makeElement(tag: string) {
   const node: any = {
@@ -465,6 +465,87 @@ test("render shows wording choice panel in list mode with full items", () => {
   assert.equal(String(suggestionBtn.textContent || ""), "Choose this version");
 
   setSessionStarted(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
+test("render ignores transient timeout payload and keeps previous visible view", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
+  const inlineNotice = (fakeDocument as any).getElementById("inlineNotice");
+  const btnOk = (fakeDocument as any).getElementById("btnOk");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  setSessionWelcomeShown(true);
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+        intro_shown_session: "true",
+        intro_shown_for_step: "dream",
+        language: "en",
+      },
+      specialist: {
+        action: "REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+        menu_id: "DREAM_MENU_REFINE",
+      },
+      prompt:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+      ui: {
+        action_codes: [
+          "ACTION_DREAM_REFINE_CONFIRM",
+          "ACTION_DREAM_REFINE_START_EXERCISE",
+        ],
+        expected_choice_count: 2,
+      },
+    },
+  });
+  assert.equal(String(wrap.style.display || ""), "flex");
+  assert.equal(String(btnOk.style.display || ""), "none");
+
+  render({
+    result: {
+      ok: false,
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+        intro_shown_session: "true",
+        intro_shown_for_step: "dream",
+        language: "en",
+      },
+      specialist: {
+        action: "CONFIRM",
+        confirmation_question: "Do you want to continue?",
+      },
+      error: {
+        type: "timeout",
+        user_message: "This is taking longer than usual. Please try again.",
+        retry_action: "retry_same_action",
+      },
+    },
+  });
+  assert.equal(String(inlineNotice.textContent || ""), "This is taking longer than usual. Please try again.");
+  assert.equal(String(inlineNotice.style.display || ""), "block");
+  assert.equal(String(wrap.style.display || ""), "flex");
+  assert.equal(String(btnOk.style.display || ""), "none");
+
+  setSessionStarted(false);
+  setSessionWelcomeShown(false);
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
   (globalThis as any).openai = originalOpenai;

@@ -347,9 +347,17 @@ export function render(overrideToolOutput?: unknown): void {
 
   const state = (result?.state as Record<string, unknown>) || {};
   const errorObj = result?.error as { type?: string; user_message?: string; retry_after_ms?: number } | null;
-  if (errorObj && errorObj.type === "rate_limited") {
-    setInlineNotice(errorObj.user_message || "Please wait a moment and try again.");
-    lockRateLimit(errorObj.retry_after_ms ?? 1500);
+  const transientError =
+    errorObj &&
+    (errorObj.type === "rate_limited" || errorObj.type === "timeout");
+  if (transientError) {
+    if (errorObj.type === "rate_limited") {
+      setInlineNotice(errorObj.user_message || "Please wait a moment and try again.");
+      lockRateLimit(errorObj.retry_after_ms ?? 1500);
+    } else {
+      setInlineNotice(errorObj.user_message || "This is taking longer than usual. Please try again.");
+    }
+    if (result?.ok === false) return;
   } else {
     clearInlineNotice();
   }

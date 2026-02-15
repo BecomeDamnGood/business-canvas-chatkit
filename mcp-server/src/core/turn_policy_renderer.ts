@@ -403,13 +403,26 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const companyName = companyNameForPrompt(state);
 
   const { status, confirmEligible, recapBody } = computeStatus(stepId, state, specialist, prev);
+  const isOfftopic = specialist.is_offtopic === true;
+  const candidateText = extractCandidate(stepId, specialist, prev);
+  const statementOfftopicSteps = new Set(["dream", "purpose", "bigwhy", "role", "entity", "targetgroup", "presentation"]);
+  const promoteIncompleteToValidForOfftopic =
+    isOfftopic &&
+    status === "incomplete_output" &&
+    !confirmEligible &&
+    statementOfftopicSteps.has(stepId) &&
+    Boolean(candidateText);
+  const effectiveStatus: TurnOutputStatus = promoteIncompleteToValidForOfftopic ? "valid_output" : status;
+  const effectiveConfirmEligible = promoteIncompleteToValidForOfftopic ? true : confirmEligible;
 
   const headlinePrefix =
-    status === "valid_output"
-      ? "Refine"
-      : status === "incomplete_output"
-        ? "Add more"
-        : "Define";
+    isOfftopic
+      ? (effectiveStatus === "no_output" ? "Define" : "Continue with")
+      : effectiveStatus === "valid_output"
+        ? "Refine"
+        : effectiveStatus === "incomplete_output"
+          ? "Add more"
+          : "Define";
   const headline = `${headlinePrefix} your ${stepLabel} for ${companyName} or choose an option.`;
 
   const answerText = String(specialist.message ?? "").trim() || String(specialist.refined_formulation ?? "").trim();
@@ -438,17 +451,17 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       menu_id: "",
     };
     return {
-      status,
+      status: effectiveStatus,
       confirmEligible,
       specialist: step0Specialist,
       uiActionCodes: [],
     };
   }
 
-  const menuId = pickMenuId(stepId, status, specialist, prev);
+  const menuId = pickMenuId(stepId, effectiveStatus, specialist, prev);
   const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
   const filteredActions = allActions.filter((code) => {
-    if (!confirmEligible && isConfirmActionCode(code)) return false;
+    if (!effectiveConfirmEligible && isConfirmActionCode(code)) return false;
     return true;
   });
   const actionCodes = filteredActions;
@@ -469,8 +482,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   };
 
   return {
-    status,
-    confirmEligible,
+    status: effectiveStatus,
+    confirmEligible: effectiveConfirmEligible,
     specialist: nextSpecialist,
     uiActionCodes: safeActionCodes,
   };

@@ -135,3 +135,53 @@ test("rules: valid output keeps confirm-capable menu with parity", () => {
   assert.ok(rendered.uiActionCodes.length >= 1);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), rendered.uiActionCodes.length);
 });
+
+test("off-topic with existing output never uses Refine headline", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).business_name = "Mindd";
+  (state as any).dream_final = "Mindd dreams of a world with meaningful impact.";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      is_offtopic: true,
+      message: "Ben Steenstra is an entrepreneur.",
+      question: "",
+      menu_id: "",
+    },
+  });
+  const headline = String(rendered.specialist.question || "");
+  assert.equal(headline.includes("Refine your Dream"), false);
+  assert.equal(headline.includes("Continue with your Dream"), true);
+});
+
+test("off-topic dream with candidate but no final keeps confirm-capable refine menu", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).business_name = "Mindd";
+  (state as any).dream_final = "";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      is_offtopic: true,
+      message: "Off-topic answer here.",
+      question: "",
+      menu_id: "",
+      dream: "Mindd dreams of a world with meaningful impact.",
+    },
+    previousSpecialist: {
+      action: "REFINE",
+      menu_id: "DREAM_MENU_REFINE",
+      question:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+    },
+  });
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(rendered.uiActionCodes.length, 2);
+});
