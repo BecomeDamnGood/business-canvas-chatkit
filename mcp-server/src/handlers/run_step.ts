@@ -1406,6 +1406,209 @@ function isBulletChoiceStep(stepId: string): boolean {
   return stepId === STRATEGY_STEP_ID || stepId === RULESOFTHEGAME_STEP_ID;
 }
 
+function isBulletConsistencyStep(stepId: string): boolean {
+  return (
+    stepId === STRATEGY_STEP_ID ||
+    stepId === PRODUCTSSERVICES_STEP_ID ||
+    stepId === RULESOFTHEGAME_STEP_ID
+  );
+}
+
+function isInformationalContextPolicyStep(stepId: string): boolean {
+  return (
+    stepId === DREAM_STEP_ID ||
+    stepId === PURPOSE_STEP_ID ||
+    stepId === BIGWHY_STEP_ID ||
+    stepId === ROLE_STEP_ID ||
+    stepId === ENTITY_STEP_ID ||
+    stepId === STRATEGY_STEP_ID ||
+    stepId === TARGETGROUP_STEP_ID ||
+    stepId === PRODUCTSSERVICES_STEP_ID ||
+    stepId === RULESOFTHEGAME_STEP_ID
+  );
+}
+
+const INFORMATIONAL_CONTEXT_ACTION_CODES = new Set<string>([
+  "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+  "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+  "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+  "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES",
+  "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS",
+  "ACTION_BIGWHY_INTRO_GIVE_EXAMPLE",
+  "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE",
+  "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS",
+  "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLES",
+  "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE",
+  "ACTION_ROLE_INTRO_GIVE_EXAMPLES",
+  "ACTION_ROLE_INTRO_EXPLAIN_MORE",
+  "ACTION_ROLE_ASK_GIVE_EXAMPLES",
+  "ACTION_ENTITY_INTRO_FORMULATE",
+  "ACTION_ENTITY_INTRO_EXPLAIN_MORE",
+  "ACTION_STRATEGY_INTRO_EXPLAIN_MORE",
+  "ACTION_STRATEGY_REFINE_EXPLAIN_MORE",
+  "ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE",
+  "ACTION_STRATEGY_ASK_3_QUESTIONS",
+  "ACTION_STRATEGY_ASK_GIVE_EXAMPLES",
+  "ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE",
+  "ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS",
+  "ACTION_TARGETGROUP_EXPLAIN_ASK_QUESTIONS",
+  "ACTION_TARGETGROUP_POSTREFINE_ASK_QUESTIONS",
+  "ACTION_RULES_INTRO_EXPLAIN_MORE",
+  "ACTION_RULES_INTRO_GIVE_EXAMPLE",
+  "ACTION_RULES_ASK_EXPLAIN_MORE",
+  "ACTION_RULES_ASK_GIVE_EXAMPLE",
+]);
+
+function isInformationalContextActionCode(actionCode: string): boolean {
+  const code = String(actionCode || "").trim().toUpperCase();
+  return code !== "" && INFORMATIONAL_CONTEXT_ACTION_CODES.has(code);
+}
+
+function sanitizeBulletStepPolicySpecialist(
+  specialist: Record<string, unknown>,
+  previous: Record<string, unknown>
+): Record<string, unknown> {
+  const currentStatements = Array.isArray(specialist.statements) ? specialist.statements : [];
+  const previousStatements = Array.isArray(previous.statements) ? previous.statements : [];
+  const statements = (currentStatements.length ? currentStatements : previousStatements)
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  if (statements.length === 0) return specialist;
+
+  const statementKeys = new Set(statements.map((line) => canonicalizeComparableText(line)).filter(Boolean));
+  const rawMessage = String(specialist.message || "").replace(/\r/g, "\n");
+  if (!rawMessage.trim()) return specialist;
+
+  const lineMatchesStatement = (lineRaw: string): boolean => {
+    const trimmed = String(lineRaw || "").trim();
+    if (!trimmed) return false;
+    const noTag = trimmed.replace(/<[^>]+>/g, "").trim();
+    const noMarker = noTag.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim();
+    const key = canonicalizeComparableText(noMarker);
+    return Boolean(key) && statementKeys.has(key);
+  };
+
+  const lines = rawMessage.split("\n");
+  const kept: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = String(lines[i] || "");
+    const trimmed = line.trim();
+    if (!trimmed) {
+      kept.push("");
+      continue;
+    }
+
+    if (lineMatchesStatement(trimmed)) continue;
+
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx > 0) {
+      const suffix = trimmed.slice(colonIdx + 1).trim();
+      if (suffix && lineMatchesStatement(suffix)) continue;
+    }
+
+    const plain = trimmed.replace(/<[^>]+>/g, "").trim();
+    const lower = plain.toLowerCase();
+    if (
+      lower.startsWith("so far we have these") ||
+      lower.includes("this is what we have established so far based on our dialogue") ||
+      lower.startsWith("your current strategy for") ||
+      lower.startsWith("your current products and services for") ||
+      lower.startsWith("your current rules of the game for")
+    ) {
+      continue;
+    }
+
+    if (/:$/.test(plain)) {
+      let nextNonEmpty = "";
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const candidate = String(lines[j] || "").trim();
+        if (!candidate) continue;
+        nextNonEmpty = candidate;
+        break;
+      }
+      if (nextNonEmpty && lineMatchesStatement(nextNonEmpty)) continue;
+    }
+
+    kept.push(line);
+  }
+
+  const message = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { ...specialist, message };
+}
+
+function sanitizePreviousForBulletPolicy(previous: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...previous,
+    menu_id: "",
+    question: "",
+    confirmation_question: "",
+  };
+}
+
+const FINAL_FIELD_BY_STEP_ID: Record<string, string> = {
+  [STEP_0_ID]: "step_0_final",
+  [DREAM_STEP_ID]: "dream_final",
+  [PURPOSE_STEP_ID]: "purpose_final",
+  [BIGWHY_STEP_ID]: "bigwhy_final",
+  [ROLE_STEP_ID]: "role_final",
+  [ENTITY_STEP_ID]: "entity_final",
+  [STRATEGY_STEP_ID]: "strategy_final",
+  [TARGETGROUP_STEP_ID]: "targetgroup_final",
+  [PRODUCTSSERVICES_STEP_ID]: "productsservices_final",
+  [RULESOFTHEGAME_STEP_ID]: "rulesofthegame_final",
+  [PRESENTATION_STEP_ID]: "presentation_brief_final",
+};
+
+function preserveProgressForInformationalAction(
+  stepId: string,
+  specialistResult: any,
+  previousSpecialist: Record<string, unknown>,
+  state: CanvasState
+): any {
+  const safe = specialistResult && typeof specialistResult === "object" ? { ...specialistResult } : {};
+  const field = fieldForStep(stepId);
+  const finalField = FINAL_FIELD_BY_STEP_ID[stepId] || "";
+  const finalValue = finalField ? String((state as any)[finalField] || "").trim() : "";
+
+  if (field) {
+    const currentValue = String((safe as any)[field] || "").trim();
+    const previousValue = String((previousSpecialist as any)[field] || "").trim();
+    if (!currentValue && (previousValue || finalValue)) {
+      (safe as any)[field] = previousValue || finalValue;
+    }
+  }
+
+  if (!String(safe.refined_formulation || "").trim()) {
+    const prevRefined = String((previousSpecialist as any).refined_formulation || "").trim();
+    if (prevRefined) {
+      safe.refined_formulation = prevRefined;
+    } else if (field) {
+      const carried = String((safe as any)[field] || "").trim();
+      if (carried) safe.refined_formulation = carried;
+    }
+  }
+
+  if (isBulletConsistencyStep(stepId)) {
+    const currentStatements = Array.isArray(safe.statements) ? safe.statements : [];
+    const previousStatements = Array.isArray((previousSpecialist as any).statements)
+      ? ((previousSpecialist as any).statements as string[])
+      : [];
+    if (currentStatements.length === 0 && previousStatements.length > 0) {
+      safe.statements = previousStatements
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+    }
+    if (!String((safe as any)[field] || "").trim() && Array.isArray(safe.statements) && safe.statements.length > 0) {
+      (safe as any)[field] = (safe.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean).join("\n");
+    }
+    if (!String(safe.refined_formulation || "").trim() && Array.isArray(safe.statements) && safe.statements.length > 0) {
+      safe.refined_formulation = (safe.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean).join("\n");
+    }
+  }
+
+  return safe;
+}
+
 function fieldForStep(stepId: string): string {
   if (stepId === STEP_0_ID) return "step_0";
   if (stepId === DREAM_STEP_ID) return "dream";
@@ -4471,6 +4674,49 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
 
   if (userMessage.trim() === SWITCH_TO_SELF_DREAM_TOKEN && state.current_step === DREAM_STEP_ID) {
+    const lastSwitchResult = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+    const existingDreamCandidate =
+      String((state as any).dream_final ?? "").trim() ||
+      String(lastSwitchResult.dream ?? "").trim() ||
+      String(lastSwitchResult.refined_formulation ?? "").trim();
+    if (!existingDreamCandidate) {
+      const rawBusinessName = String((state as any).business_name ?? "").trim();
+      const businessName = rawBusinessName && rawBusinessName !== "TBD" ? rawBusinessName : "your future company";
+      const specialist: DreamOutput = {
+        action: "ASK",
+        message:
+          "That's a great way to start. Writing your own dream helps clarify what really matters to you and your business.\n\nTake a moment to write a draft of your dream. I'll help you refine it if needed.",
+        question: DREAM_MENU_QUESTIONS.DREAM_MENU_INTRO(businessName),
+        refined_formulation: "",
+        confirmation_question: "",
+        dream: "",
+        menu_id: "DREAM_MENU_INTRO",
+        suggest_dreambuilder: "false",
+        proceed_to_dream: "false",
+        proceed_to_purpose: "false",
+        wants_recap: false,
+        is_offtopic: false,
+      };
+      const nextStateSwitch: CanvasState = {
+        ...state,
+        active_specialist: DREAM_SPECIALIST,
+        last_specialist_result: specialist,
+      } as CanvasState;
+      (nextStateSwitch as any).dream_awaiting_direction = "false";
+      const nextStateSwitchUi = await ensureUiStringsForState(nextStateSwitch, model);
+      const textSwitch = buildTextForWidget({ specialist });
+      const promptSwitch = pickPrompt(specialist);
+      return attachRegistryPayload({
+        ok: true as const,
+        tool: "run_step" as const,
+        current_step_id: String(nextStateSwitch.current_step),
+        active_specialist: DREAM_SPECIALIST,
+        text: textSwitch,
+        prompt: promptSwitch,
+        specialist,
+        state: nextStateSwitchUi,
+      }, specialist, responseUiFlags);
+    }
     (state as any).intro_shown_for_step = "dream";
     const forcedDecision: OrchestratorOutput = {
       specialist_to_call: DREAM_SPECIALIST,
@@ -4774,15 +5020,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   // --------- DREAM READINESS → DREAM EXPLAINER (guard) ----------
   const lastResult = (state as any).last_specialist_result || {};
+  const dreamStartRequested =
+    userMessage === "__ROUTE__DREAM_START_EXERCISE__" || isClearYes(userMessage);
   const dreamReadinessYes =
-    allowLegacyRouting &&
     state.current_step === DREAM_STEP_ID &&
     String(lastResult.suggest_dreambuilder ?? "") === "true" &&
-    isClearYes(userMessage);
+    dreamStartRequested;
   const dreamReadinessFallback =
-    allowLegacyRouting &&
     state.current_step === DREAM_STEP_ID &&
-    isClearYes(userMessage) &&
+    dreamStartRequested &&
     String(lastResult.action ?? "") === "ASK" &&
     /ready|start/i.test(String(lastResult.question ?? ""));
   const useDreamExplainerGuard = dreamReadinessYes || dreamReadinessFallback;
@@ -5116,6 +5362,91 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   if (requireWordingPick) {
     wordingChoiceOverride = pendingChoice;
     actionCodesOverride = [];
+  }
+
+  const policyPrevSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+  const infoPolicyStepId = String((nextState as any).current_step ?? "");
+  const shouldApplyInformationalContextPolicy =
+    globalTurnPolicyEnabled &&
+    isActionCodeTurnForPolicy &&
+    sameStepTurn &&
+    !requireWordingPick &&
+    (specialistResult as any)?.is_offtopic !== true &&
+    isInformationalContextPolicyStep(infoPolicyStepId) &&
+    isInformationalContextActionCode(actionCodeRaw) &&
+    String((specialistResult as any)?.action || "").toUpperCase() !== "CONFIRM";
+  if (shouldApplyInformationalContextPolicy) {
+    const preserved = preserveProgressForInformationalAction(
+      infoPolicyStepId,
+      specialistResult,
+      policyPrevSpecialist,
+      nextState
+    );
+    const isBulletScope = isBulletConsistencyStep(infoPolicyStepId);
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: infoPolicyStepId,
+      state: nextState,
+      specialist: isBulletScope
+        ? sanitizeBulletStepPolicySpecialist(preserved as Record<string, unknown>, policyPrevSpecialist)
+        : (preserved as Record<string, unknown>),
+      previousSpecialist: isBulletScope
+        ? sanitizePreviousForBulletPolicy(policyPrevSpecialist)
+        : policyPrevSpecialist,
+    });
+    specialistResult = rendered.specialist;
+    actionCodesOverride = rendered.uiActionCodes;
+    (nextState as any).last_specialist_result = specialistResult;
+    if (process.env.GLOBAL_TURN_POLICY_DEBUG === "1" || shouldLogLocalDevDiagnostics()) {
+      console.log("[informational_context_policy]", {
+        applied: true,
+        step: infoPolicyStepId,
+        action_code: actionCodeRaw,
+        status: rendered.status,
+        confirm_eligible: rendered.confirmEligible,
+        action_codes_count: actionCodesOverride.length,
+        parity_ok: countNumberedOptions(String((specialistResult as any)?.question ?? "")) === actionCodesOverride.length,
+        request_id: String((nextState as any).__request_id ?? ""),
+        client_action_id: String((nextState as any).__client_action_id ?? ""),
+      });
+    }
+  }
+
+  const bulletPolicyStepId = String((nextState as any).current_step ?? "");
+  const shouldApplyBulletConsistencyPolicy =
+    globalTurnPolicyEnabled &&
+    !isActionCodeTurnForPolicy &&
+    sameStepTurn &&
+    !requireWordingPick &&
+    (specialistResult as any)?.is_offtopic !== true &&
+    isBulletConsistencyStep(bulletPolicyStepId) &&
+    String((specialistResult as any)?.action || "").toUpperCase() !== "CONFIRM";
+  if (shouldApplyBulletConsistencyPolicy) {
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: bulletPolicyStepId,
+      state: nextState,
+      specialist: sanitizeBulletStepPolicySpecialist(
+        (specialistResult || {}) as Record<string, unknown>,
+        ((state as any).last_specialist_result || {}) as Record<string, unknown>
+      ),
+      previousSpecialist: sanitizePreviousForBulletPolicy(
+        (((state as any).last_specialist_result || {}) as Record<string, unknown>)
+      ),
+    });
+    specialistResult = rendered.specialist;
+    actionCodesOverride = rendered.uiActionCodes;
+    (nextState as any).last_specialist_result = specialistResult;
+    if (process.env.GLOBAL_TURN_POLICY_DEBUG === "1" || shouldLogLocalDevDiagnostics()) {
+      console.log("[bullet_turn_policy]", {
+        applied: true,
+        step: bulletPolicyStepId,
+        status: rendered.status,
+        confirm_eligible: rendered.confirmEligible,
+        action_codes_count: actionCodesOverride.length,
+        parity_ok: countNumberedOptions(String((specialistResult as any)?.question ?? "")) === actionCodesOverride.length,
+        request_id: String((nextState as any).__request_id ?? ""),
+        client_action_id: String((nextState as any).__client_action_id ?? ""),
+      });
+    }
   }
 
   const text = buildTextForWidget({ specialist: specialistResult });

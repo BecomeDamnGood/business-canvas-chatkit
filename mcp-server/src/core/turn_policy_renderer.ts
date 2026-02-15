@@ -108,18 +108,37 @@ const MENU_LABELS: Record<string, string[]> = {
     "Tell me more about why a dream matters",
     "Do a small exercise that helps to define your dream.",
   ],
+  DREAM_MENU_WHY: [
+    "Give me a few dream suggestions",
+    "Do a small exercise that helps to define your dream.",
+  ],
+  DREAM_MENU_SUGGESTIONS: [
+    "Pick one for me and continue",
+    "Do a small exercise that helps to define your dream.",
+  ],
   DREAM_MENU_REFINE: [
     "I'm happy with this wording, please continue to step 3 Purpose",
     "Do a small exercise that helps to define your dream.",
+  ],
+  DREAM_EXPLAINER_MENU_REFINE: [
+    "I'm happy with this wording, please continue to step 3 Purpose",
+    "Refine this formulation",
   ],
   PURPOSE_MENU_INTRO: ["Explain more about why a purpose is needed."],
   PURPOSE_MENU_EXPLAIN: [
     "Ask 3 questions to help me define the Purpose.",
     "Give 3 examples of how Purpose could sound.",
   ],
+  PURPOSE_MENU_EXAMPLES: [
+    "Ask 3 questions to help me define the Purpose.",
+    "Choose one for me",
+  ],
   PURPOSE_MENU_REFINE: [
     "I'm happy with this wording, please continue to next step Big Why.",
     "Refine the wording",
+  ],
+  PURPOSE_MENU_CONFIRM_SINGLE: [
+    "I'm happy with this wording, please continue to next step Big Why.",
   ],
   BIGWHY_MENU_INTRO: [
     "Give me an example of the Big Why",
@@ -135,7 +154,9 @@ const MENU_LABELS: Record<string, string[]> = {
     "Redefine the Big Why for me please",
   ],
   ROLE_MENU_INTRO: ["Give 3 short Role examples", "Explain why a Role matters"],
+  ROLE_MENU_ASK: ["Give 3 short Role examples"],
   ROLE_MENU_REFINE: ["Yes, this fits.", "I want to adjust it."],
+  ROLE_MENU_EXAMPLES: ["Choose one for me"],
   ENTITY_MENU_INTRO: [
     "Give me an example how my entity could sound",
     "Explain why having an Entity matters",
@@ -150,7 +171,13 @@ const MENU_LABELS: Record<string, string[]> = {
     "Ask me some questions to clarify my Strategy",
     "Show me an example of a Strategy for my business",
   ],
+  STRATEGY_MENU_REFINE: ["Explain why a Strategy matters"],
+  STRATEGY_MENU_QUESTIONS: ["Explain why a Strategy matters"],
   STRATEGY_MENU_CONFIRM: [
+    "Explain why a Strategy matters",
+    "I'm satisfied with my Strategy. Let's go to Rules of the Game",
+  ],
+  STRATEGY_MENU_FINAL_CONFIRM: [
     "I'm satisfied with my Strategy. Let's go to Rules of the Game",
   ],
   TARGETGROUP_MENU_INTRO: [
@@ -175,6 +202,10 @@ const MENU_LABELS: Record<string, string[]> = {
     "Please explain more about Rules of the Game",
     "Give one concrete example (Rule versus poster slogan)",
   ],
+  RULES_MENU_EXAMPLE_ONLY: [
+    "Give one concrete example (Rule versus poster slogan)",
+  ],
+  RULES_MENU_REFINE: ["Yes, this fits", "I want to adjust it."],
   RULES_MENU_CONFIRM: [
     "These are all my rules of the game, continue to Presentation",
     "Please explain more about Rules of the Game",
@@ -196,6 +227,16 @@ function parseStep0Line(step0Line: string): { venture: string; name: string; sta
 
 function isEscapeMenu(menuId: string): boolean {
   return menuId.endsWith("_MENU_ESCAPE");
+}
+
+function menuBelongsToStep(menuId: string, stepId: string): boolean {
+  const actions = ACTIONCODE_REGISTRY.menus[menuId];
+  if (!Array.isArray(actions) || actions.length === 0) return false;
+  return actions.every((actionCode) => {
+    const entry = ACTIONCODE_REGISTRY.actions[actionCode];
+    const actionStep = String(entry?.step || "").trim();
+    return actionStep === stepId || actionStep === "system";
+  });
 }
 
 function parseNumberedOptions(question: unknown): string[] {
@@ -361,11 +402,30 @@ function pickMenuId(
   prev: Record<string, unknown>
 ): string {
   const currentMenu = String(specialist.menu_id ?? "").trim();
-  if (currentMenu && !isEscapeMenu(currentMenu) && ACTIONCODE_REGISTRY.menus[currentMenu]) {
+  if (
+    currentMenu &&
+    !isEscapeMenu(currentMenu) &&
+    ACTIONCODE_REGISTRY.menus[currentMenu] &&
+    menuBelongsToStep(currentMenu, stepId)
+  ) {
     return currentMenu;
   }
+  const ignorePreviousMenuFallback =
+    stepId === "strategy" ||
+    stepId === "productsservices" ||
+    stepId === "rulesofthegame";
+  if (ignorePreviousMenuFallback) {
+    const defaults = DEFAULT_MENU_BY_STATUS[stepId];
+    if (!defaults) return "";
+    return defaults[status] || "";
+  }
   const prevMenu = String(prev.menu_id ?? "").trim();
-  if (prevMenu && !isEscapeMenu(prevMenu) && ACTIONCODE_REGISTRY.menus[prevMenu]) {
+  if (
+    prevMenu &&
+    !isEscapeMenu(prevMenu) &&
+    ACTIONCODE_REGISTRY.menus[prevMenu] &&
+    menuBelongsToStep(prevMenu, stepId)
+  ) {
     return prevMenu;
   }
   const defaults = DEFAULT_MENU_BY_STATUS[stepId];
@@ -393,6 +453,80 @@ function labelsForMenu(
   const fallback = MENU_LABELS[menuId] || [];
   if (fallback.length >= expectedCount) return fallback.slice(0, expectedCount);
   return [];
+}
+
+const RESILIENT_FALLBACK_MENUS: Record<string, string[]> = {
+  strategy: [
+    "STRATEGY_MENU_CONFIRM",
+    "STRATEGY_MENU_ASK",
+    "STRATEGY_MENU_REFINE",
+    "STRATEGY_MENU_INTRO",
+  ],
+  rulesofthegame: [
+    "RULES_MENU_CONFIRM",
+    "RULES_MENU_ASK_EXPLAIN",
+    "RULES_MENU_EXAMPLE_ONLY",
+    "RULES_MENU_INTRO",
+  ],
+  productsservices: ["PRODUCTSSERVICES_MENU_CONFIRM"],
+  purpose: [
+    "PURPOSE_MENU_REFINE",
+    "PURPOSE_MENU_EXPLAIN",
+    "PURPOSE_MENU_EXAMPLES",
+    "PURPOSE_MENU_INTRO",
+  ],
+  role: ["ROLE_MENU_REFINE", "ROLE_MENU_ASK", "ROLE_MENU_INTRO", "ROLE_MENU_EXAMPLES"],
+  entity: ["ENTITY_MENU_EXAMPLE", "ENTITY_MENU_FORMULATE", "ENTITY_MENU_INTRO"],
+};
+
+function resolveMenuContract(params: {
+  stepId: string;
+  status: TurnOutputStatus;
+  confirmEligible: boolean;
+  specialist: Record<string, unknown>;
+  prev: Record<string, unknown>;
+}): { menuId: string; actionCodes: string[]; labels: string[] } {
+  const { stepId, status, confirmEligible, specialist, prev } = params;
+  const preferredMenu = pickMenuId(stepId, status, specialist, prev);
+  const defaults = DEFAULT_MENU_BY_STATUS[stepId];
+  const defaultMenu = defaults ? String(defaults[status] || "").trim() : "";
+  const fallbackMenus = Array.isArray(RESILIENT_FALLBACK_MENUS[stepId]) ? RESILIENT_FALLBACK_MENUS[stepId] : [];
+  const menuCandidates: string[] = [];
+  const pushMenu = (menuId: string): void => {
+    const id = String(menuId || "").trim();
+    if (!id) return;
+    if (isEscapeMenu(id)) return;
+    if (!ACTIONCODE_REGISTRY.menus[id]) return;
+    if (!menuBelongsToStep(id, stepId)) return;
+    if (!menuCandidates.includes(id)) menuCandidates.push(id);
+  };
+  pushMenu(preferredMenu);
+  pushMenu(defaultMenu);
+  for (const menu of fallbackMenus) pushMenu(menu);
+
+  const mismatches: Array<{ menu_id: string; actions: number; labels: number }> = [];
+  for (const menuId of menuCandidates) {
+    const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
+    const actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
+    if (actionCodes.length === 0) continue;
+    const labels = labelsForMenu(menuId, actionCodes.length, specialist, prev);
+    if (labels.length === actionCodes.length) {
+      return { menuId, actionCodes, labels };
+    }
+    mismatches.push({ menu_id: menuId, actions: actionCodes.length, labels: labels.length });
+  }
+
+  if (mismatches.length > 0 && (process.env.GLOBAL_TURN_POLICY_DEBUG === "1" || process.env.LOCAL_DEV === "1")) {
+    console.log("[menu_contract_gap]", {
+      step: stepId,
+      status,
+      preferred_menu: preferredMenu,
+      default_menu: defaultMenu,
+      candidates: menuCandidates,
+      mismatches,
+    });
+  }
+  return { menuId: "", actionCodes: [], labels: [] };
 }
 
 export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPolicyRenderResult {
@@ -458,17 +592,16 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     };
   }
 
-  const menuId = pickMenuId(stepId, effectiveStatus, specialist, prev);
-  const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
-  const filteredActions = allActions.filter((code) => {
-    if (!effectiveConfirmEligible && isConfirmActionCode(code)) return false;
-    return true;
+  const resolved = resolveMenuContract({
+    stepId,
+    status: effectiveStatus,
+    confirmEligible: effectiveConfirmEligible,
+    specialist,
+    prev,
   });
-  const actionCodes = filteredActions;
-  const labels = labelsForMenu(menuId, actionCodes.length, specialist, prev);
-  const minCount = Math.min(actionCodes.length, labels.length);
-  const safeActionCodes = minCount > 0 ? actionCodes.slice(0, minCount) : [];
-  const safeLabels = minCount > 0 ? labels.slice(0, minCount) : [];
+  const menuId = resolved.menuId;
+  const safeActionCodes = resolved.actionCodes;
+  const safeLabels = resolved.labels;
 
   const question = buildNumberedPrompt(safeLabels, headline);
 

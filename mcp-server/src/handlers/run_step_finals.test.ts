@@ -711,6 +711,56 @@ test("Dream readiness confirm is excluded from hard-confirm fast path", () => {
   assert.match(source, /HARD_CONFIRM_ACTIONS\.has\(actionCodeRaw\)\s*&&\s*!isDreamReadinessConfirmTurn/);
 });
 
+test("Dream readiness guard accepts explicit start-exercise route in widget mode", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /const dreamStartRequested\s*=/);
+  assert.match(source, /userMessage === "__ROUTE__DREAM_START_EXERCISE__"\s*\|\|\s*isClearYes\(userMessage\)/);
+  assert.match(source, /const dreamReadinessYes =[\s\S]*String\(lastResult\.suggest_dreambuilder \?\? ""\) === "true"[\s\S]*dreamStartRequested;/);
+});
+
+test("switch-to-self without existing dream candidate returns Dream intro menu (Define, not Refine)", async () => {
+  const result = await run_step({
+    user_message: "ACTION_DREAM_SWITCH_TO_SELF",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "DreamExplainer",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      dream_final: "",
+      last_specialist_result: {
+        action: "ASK",
+        suggest_dreambuilder: "true",
+        message: "We will start the exercise to help clarify the Dream now.",
+        question: "Are you ready to begin?",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.active_specialist || ""), "Dream");
+  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_INTRO");
+  assert.equal(String(result.prompt || "").includes("Define the Dream of"), true);
+  assert.equal(String(result.prompt || "").includes("Refine the Dream of"), false);
+  assert.deepEqual(result.ui?.action_codes || [], [
+    "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+    "ACTION_DREAM_INTRO_START_EXERCISE",
+  ]);
+});
+
+test("bullet consistency policy is enforced for strategy/productsservices/rulesofthegame non-offtopic turns", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /function isBulletConsistencyStep\(stepId: string\): boolean/);
+  assert.match(source, /stepId === STRATEGY_STEP_ID/);
+  assert.match(source, /stepId === PRODUCTSSERVICES_STEP_ID/);
+  assert.match(source, /stepId === RULESOFTHEGAME_STEP_ID/);
+  assert.match(source, /const shouldApplyBulletConsistencyPolicy\s*=/);
+  assert.match(source, /sanitizeBulletStepPolicySpecialist/);
+  assert.match(source, /sanitizePreviousForBulletPolicy/);
+});
+
 test("wording choice: selecting user variant updates candidate and clears pending", async () => {
   const result = await run_step({
     user_message: "ACTION_WORDING_PICK_USER",
@@ -887,6 +937,82 @@ test("wording choice: strategy suggestion pick restores buttons and keeps progre
   );
 });
 
+test("informational action: strategy explain-more keeps established statements visible and preserved", async () => {
+  const result = await run_step({
+    user_message: "ACTION_STRATEGY_REFINE_EXPLAIN_MORE",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "strategy",
+      active_specialist: "Strategy",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "STRATEGY_MENU_ASK",
+        question:
+          "1) Ask me some questions to clarify my Strategy\n2) Show me an example of a Strategy for my business",
+        message: "So far we have these 2 strategic focus points.",
+        statements: [
+          "Focus exclusively on clients in the Netherlands",
+          "Focus on clients with an annual budget above 40,000 euros",
+        ],
+        strategy:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        refined_formulation:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "strategy");
+  assert.equal(String(result.specialist?.menu_id || ""), "STRATEGY_MENU_ASK");
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"]);
+  assert.match(String(result.specialist?.message || ""), /This is what we have established so far based on our dialogue/);
+  assert.match(String(result.specialist?.message || ""), /• Focus exclusively on clients in the Netherlands/);
+  assert.match(String(result.specialist?.message || ""), /• Focus on clients with an annual budget above 40,000 euros/);
+  assert.deepEqual(result.specialist?.statements, [
+    "Focus exclusively on clients in the Netherlands",
+    "Focus on clients with an annual budget above 40,000 euros",
+  ]);
+});
+
+test("informational action: purpose explain-more keeps previously chosen wording visible", async () => {
+  const result = await run_step({
+    user_message: "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "purpose",
+      active_specialist: "Purpose",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "PURPOSE_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording",
+        message: "Your current Purpose for Mindd is:",
+        purpose:
+          "Mindd exists to foster purpose-driven companies that act ethically toward employees, customers, and the environment.",
+        refined_formulation:
+          "Mindd exists to foster purpose-driven companies that act ethically toward employees, customers, and the environment.",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "purpose");
+  assert.equal(String(result.specialist?.menu_id || "").endsWith("_MENU_ESCAPE"), false);
+  assert.ok(Array.isArray(result.ui?.action_codes));
+  assert.ok((result.ui?.action_codes || []).length >= 1);
+  assert.match(String(result.specialist?.message || ""), /This is what we have established so far based on our dialogue/);
+  assert.match(String(result.specialist?.message || ""), /Mindd exists to foster purpose-driven companies/);
+});
+
 test("wording choice: generic Purpose acknowledgement is replaced with step-specific feedback", async () => {
   const result = await run_step({
     user_message: "ACTION_WORDING_PICK_USER",
@@ -928,6 +1054,19 @@ test("wording choice: generic Purpose acknowledgement is replaced with step-spec
   assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_REFINE");
   assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
   assert.deepEqual(result.ui?.action_codes, ["ACTION_PURPOSE_REFINE_CONFIRM", "ACTION_PURPOSE_REFINE_ADJUST"]);
+});
+
+test("informational context policy scope excludes presentation step", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /function isInformationalContextPolicyStep\(stepId: string\): boolean/);
+  const fnMatch = source.match(
+    /function isInformationalContextPolicyStep\(stepId: string\): boolean \{[\s\S]*?\n\}/
+  );
+  assert.ok(fnMatch && fnMatch[0], "scope helper exists");
+  const fnBody = String(fnMatch?.[0] || "");
+  assert.match(fnBody, /stepId === DREAM_STEP_ID/);
+  assert.match(fnBody, /stepId === RULESOFTHEGAME_STEP_ID/);
+  assert.doesNotMatch(fnBody, /stepId === PRESENTATION_STEP_ID/);
 });
 
 test("wording choice: Entity user pick restores contract menu buttons when source prompt has no numbered options", async () => {

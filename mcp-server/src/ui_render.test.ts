@@ -551,12 +551,12 @@ test("render ignores transient timeout payload and keeps previous visible view",
   (globalThis as any).openai = originalOpenai;
 });
 
-test("btnStartDreamExercise sends generic confirm actioncode", () => {
+test("btnStartDreamExercise sends Dream start-exercise actioncode", () => {
   const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
   const blockMatch = source.match(
     /const btnStartDreamExercise = document\.getElementById\("btnStartDreamExercise"\);[\s\S]*?if \(btnStartDreamExercise\) \{[\s\S]*?\n\}/
   );
   assert.ok(blockMatch, "Expected btnStartDreamExercise handler block in ui/lib/main.ts");
   const block = blockMatch[0];
-  assert.match(block, /callRunStep\("ACTION_CONFIRM_CONTINUE"\)/);
+  assert.match(block, /callRunStep\("ACTION_DREAM_INTRO_START_EXERCISE"\)/);
 });

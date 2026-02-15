@@ -203,7 +203,7 @@ const btnStartDreamExercise = document.getElementById("btnStartDreamExercise");
 if (btnStartDreamExercise) {
   btnStartDreamExercise.addEventListener("click", () => {
     if (getIsLoading()) return;
-    callRunStep("ACTION_CONFIRM_CONTINUE");
+    callRunStep("ACTION_DREAM_INTRO_START_EXERCISE");
   });
 }
 
