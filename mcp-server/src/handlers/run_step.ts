@@ -1390,8 +1390,14 @@ function sanitizePendingListMessage(messageRaw: string, knownItems: string[]): s
     .trim();
 }
 
-function isListChoiceScope(stepId: string, activeSpecialist: string): boolean {
-  if (stepId === STRATEGY_STEP_ID || stepId === PRODUCTSSERVICES_STEP_ID) return true;
+export function isListChoiceScope(stepId: string, activeSpecialist: string): boolean {
+  if (
+    stepId === STRATEGY_STEP_ID ||
+    stepId === PRODUCTSSERVICES_STEP_ID ||
+    stepId === RULESOFTHEGAME_STEP_ID
+  ) {
+    return true;
+  }
   if (stepId === DREAM_STEP_ID && activeSpecialist === DREAM_EXPLAINER_SPECIALIST) return true;
   return false;
 }

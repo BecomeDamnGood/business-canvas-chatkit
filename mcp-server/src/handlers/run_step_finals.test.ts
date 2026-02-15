@@ -9,6 +9,7 @@ import {
   applyStateUpdate,
   enforceDreamMenuContract,
   isWordingChoiceEligibleStep,
+  isListChoiceScope,
   isMaterialRewriteCandidate,
   areEquivalentWordingVariants,
   isClearlyGeneralOfftopicInput,
@@ -590,6 +591,12 @@ test("wording choice: step_0 is never eligible for dual-choice", () => {
   assert.equal(isWordingChoiceEligibleStep("step_0"), false);
   assert.equal(isWordingChoiceEligibleStep("dream"), true);
   assert.equal(isWordingChoiceEligibleStep("purpose"), true);
+});
+
+test("wording choice: Rules of the game uses list-choice scope like Strategy", () => {
+  assert.equal(isListChoiceScope("strategy", "Strategy"), true);
+  assert.equal(isListChoiceScope("rulesofthegame", "RulesOfTheGame"), true);
+  assert.equal(isListChoiceScope("dream", "Dream"), false);
 });
 
 test("off-topic guard: step-contributing input is not treated as general off-topic", () => {
