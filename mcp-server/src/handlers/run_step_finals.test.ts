@@ -8,6 +8,7 @@ import {
   run_step,
   applyStateUpdate,
   enforceDreamMenuContract,
+  isWordingChoiceEligibleStep,
   isMaterialRewriteCandidate,
   isClearlyGeneralOfftopicInput,
   shouldTreatAsStepContributingInput,
@@ -375,6 +376,12 @@ test("wording choice: material rewrite heuristic ignores mini-fix but catches su
   );
 });
 
+test("wording choice: step_0 is never eligible for dual-choice", () => {
+  assert.equal(isWordingChoiceEligibleStep("step_0"), false);
+  assert.equal(isWordingChoiceEligibleStep("dream"), true);
+  assert.equal(isWordingChoiceEligibleStep("purpose"), true);
+});
+
 test("off-topic guard: step-contributing input is not treated as general off-topic", () => {
   assert.equal(isClearlyGeneralOfftopicInput("Who is Ben Steenstra?"), true);
   assert.equal(shouldTreatAsStepContributingInput("I want to become Rich", "purpose"), true);
@@ -446,6 +453,47 @@ test("wording choice: pending state blocks confirm action until choice is made",
   assert.equal(Array.isArray(result.ui?.action_codes), false);
 });
 
+test("wording choice: pending text mode does not repeat suggestion in body text", async () => {
+  const suggestion = "Mindd dreams of a world with equitable access.";
+  const result = await run_step({
+    user_message: "ACTION_DREAM_REFINE_CONFIRM",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      started: "true",
+      dream_final: "",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "DREAM_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+        message: `Intro paragraph.\n\n${suggestion}`,
+        refined_formulation: suggestion,
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_user_raw: "Mindd should support access.",
+        wording_choice_user_normalized: "Mindd should support access.",
+        wording_choice_agent_current: suggestion,
+        wording_choice_target_field: "dream",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
+  assert.equal(String(result.text || "").includes(suggestion), false);
+});
+
+test("Dream readiness confirm is excluded from hard-confirm fast path", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /const isDreamReadinessConfirmTurn\s*=/);
+  assert.match(source, /actionCodeRaw === "ACTION_CONFIRM_CONTINUE"/);
+  assert.match(source, /HARD_CONFIRM_ACTIONS\.has\(actionCodeRaw\)\s*&&\s*!isDreamReadinessConfirmTurn/);
+});
+
 test("wording choice: selecting user variant updates candidate and clears pending", async () => {
   const result = await run_step({
     user_message: "ACTION_WORDING_PICK_USER",
@@ -456,11 +504,13 @@ test("wording choice: selecting user variant updates candidate and clears pendin
       active_specialist: "Purpose",
       intro_shown_session: "true",
       started: "true",
+      business_name: "Mindd",
       last_specialist_result: {
         action: "REFINE",
         menu_id: "PURPOSE_MENU_REFINE",
         question:
           "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording",
+        message: "A Purpose should capture deeper meaning, not just operational wording.",
         refined_formulation: "Mindd exists to restore focus and meaning in work.",
         wording_choice_pending: "true",
         wording_choice_user_raw: "Mindd helps teams with clarity",
@@ -476,6 +526,281 @@ test("wording choice: selecting user variant updates candidate and clears pendin
   assert.equal(String(result.specialist?.wording_choice_pending || ""), "false");
   assert.equal(String(result.specialist?.wording_choice_selected || ""), "user");
   assert.equal(String(result.specialist?.purpose || ""), "Mindd helps teams with clarity.");
+  assert.equal(String(result.specialist?.action || ""), "REFINE");
+  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_REFINE");
+  assert.equal(
+    String(result.specialist?.question || ""),
+    "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording"
+  );
+  assert.equal(
+    String(result.specialist?.message || ""),
+    "You chose your own wording and that's fine. But please remember that A Purpose should capture deeper meaning, not just operational wording.\n\nYour current Purpose for Mindd is:"
+  );
+  assert.equal(String(result.specialist?.confirmation_question || ""), "");
+});
+
+test("wording choice: selection message falls back to your future company when name is missing", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_SUGGESTION",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "TBD",
+      step_0_final: "",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "DREAM_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+        refined_formulation: "Mindd dreams of a world with equitable access.",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "I want to help teams",
+        wording_choice_user_normalized: "I want to help teams.",
+        wording_choice_agent_current: "Mindd dreams of a world with equitable access.",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "dream",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.message || ""), "Your current Dream for your future company is:");
+});
+
+test("wording choice: user pick preserves multi-line strategy input and shows feedback", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "strategy",
+      active_specialist: "Strategy",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "STRATEGY_MENU_REFINE",
+        message: "This wording is still broad and could be sharpened with clearer focus points.",
+        question: "Refine your strategy or choose an option.",
+        refined_formulation: "1) Focus\n2) Execute",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "1) Build trust with clients\n2) Run monthly workshops",
+        wording_choice_user_normalized: "1) Build trust with clients\n2) Run monthly workshops",
+        wording_choice_agent_current: "1) Focus\n2) Execute",
+        wording_choice_mode: "list",
+        wording_choice_target_field: "strategy",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.strategy || ""), "1) Build trust with clients\n2) Run monthly workshops");
+  assert.equal(String(result.specialist?.action || ""), "REFINE");
+  assert.equal(String(result.specialist?.menu_id || ""), "STRATEGY_MENU_REFINE");
+  assert.equal(
+    String(result.specialist?.message || ""),
+    "You chose your own wording and that's fine. But please remember that This wording is still broad and could be sharpened with clearer focus points.\n\nYour current Strategy for Mindd is:"
+  );
+});
+
+test("wording choice: generic Purpose acknowledgement is replaced with step-specific feedback", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "purpose",
+      active_specialist: "Purpose",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "CONFIRM",
+        menu_id: "",
+        question: "",
+        confirmation_question:
+          "Is this an accurate formulation of the Purpose of Mindd, or do you want to refine it?",
+        message: "I think I understand what you mean.",
+        refined_formulation:
+          "Mindd believes that a clear purpose helps companies act ethically toward employees, customers, and the environment.",
+        wording_choice_pending: "true",
+        wording_choice_user_raw:
+          "Companies with a purpose show less unethical behavior toward employees, customers, and their environment and therefor get more rich.",
+        wording_choice_user_normalized:
+          "Companies with a purpose show less unethical behavior toward employees, customers, and their environment and therefor get more rich.",
+        wording_choice_agent_current:
+          "Mindd believes that a clear purpose helps companies act ethically toward employees, customers, and the environment.",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "purpose",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.match(
+    String(result.specialist?.message || ""),
+    /Purpose should express deeper meaning and contribution, not personal outcomes like money or status\./
+  );
+  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_REFINE");
+  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_PURPOSE_REFINE_CONFIRM", "ACTION_PURPOSE_REFINE_ADJUST"]);
+});
+
+test("wording choice: Entity user pick restores contract menu buttons when source prompt has no numbered options", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "entity",
+      active_specialist: "Entity",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "",
+        question: "How would you qualify the agency in a few words so someone immediately understands what kind of agency it is?",
+        confirmation_question: "",
+        message: "The container word 'Advertising Agency' is correct, but it is still broad.",
+        entity: "Strategic Advertising Agency.",
+        refined_formulation: "Strategic Advertising Agency.",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "Advertising Agency",
+        wording_choice_user_normalized: "Advertising Agency.",
+        wording_choice_agent_current: "Strategic Advertising Agency.",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "entity",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.menu_id || ""), "ENTITY_MENU_EXAMPLE");
+  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_ENTITY_EXAMPLE_CONFIRM", "ACTION_ENTITY_EXAMPLE_REFINE"]);
+});
+
+test("wording choice: Big Why user pick downgrades generic confirm to contract refine menu", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "bigwhy",
+      active_specialist: "BigWhy",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "CONFIRM",
+        menu_id: "",
+        question: "",
+        confirmation_question: "Does this capture the Big Why of Mindd, and do you want to continue to the next step Role?",
+        message: "I think I understand what you mean.",
+        bigwhy:
+          "People deserve to live in a world where every business acts as a force for meaningful, sustainable impact, not just profit.",
+        refined_formulation:
+          "People deserve to live in a world where every business acts as a force for meaningful, sustainable impact, not just profit.",
+        wording_choice_pending: "true",
+        wording_choice_user_raw:
+          "People deserve to live in a world where every business acts as a force for meaningful, sustainable impact, not just profit.",
+        wording_choice_user_normalized:
+          "People deserve to live in a world where every business acts as a force for meaningful, sustainable impact, not just profit.",
+        wording_choice_agent_current:
+          "People deserve to live in a world where every business acts as a force for meaningful, sustainable impact, not just profit.",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "bigwhy",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(String(result.specialist?.menu_id || ""), "BIGWHY_MENU_REFINE");
+  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
+  assert.equal(String(result.specialist?.confirmation_question || ""), "");
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_BIGWHY_REFINE_CONFIRM", "ACTION_BIGWHY_REFINE_ADJUST"]);
+});
+
+test("wording choice: Role user pick restores contract refine menu instead of generic continue", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "role",
+      active_specialist: "Role",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "CONFIRM",
+        menu_id: "",
+        question: "",
+        confirmation_question: "Are you ready to continue to Entity?",
+        message: "I think I understand what you mean.",
+        role: "Mindd sets standards for purpose-driven business.",
+        refined_formulation: "Mindd sets standards for purpose-driven business.",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "We offer the best quality.",
+        wording_choice_user_normalized: "We offer the best quality.",
+        wording_choice_agent_current: "Mindd sets standards for purpose-driven business.",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "role",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(String(result.specialist?.menu_id || ""), "ROLE_MENU_REFINE");
+  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
+  assert.equal(String(result.specialist?.confirmation_question || ""), "");
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"]);
+});
+
+test("wording choice: Entity suggestion pick normalizes sentence-like suggestion to short phrase", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_SUGGESTION",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "entity",
+      active_specialist: "Entity",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "ENTITY_MENU_EXAMPLE",
+        question:
+          "1) I'm happy with this wording, go to the next step Strategy.\n2) Refine the wording for me please\n\nRefine your Entity in your own words or choose an option.",
+        message: "This how your entity could sound like:",
+        refined_formulation:
+          "We are a values-based brand studio\n\nHow does that sound to you? Do you recognize your self in it?",
+        entity: "We are a values-based brand studio",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "Strategic Advertising Agency.",
+        wording_choice_user_normalized: "Strategic Advertising Agency.",
+        wording_choice_agent_current:
+          "We are a values-based brand studio\n\nHow does that sound to you? Do you recognize your self in it?",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "entity",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.entity || ""), "a values-based brand studio");
+  assert.equal(String(result.specialist?.refined_formulation || ""), "a values-based brand studio");
+  assert.equal(String(result.specialist?.menu_id || ""), "ENTITY_MENU_EXAMPLE");
+  assert.equal(String(result.specialist?.confirmation_question || ""), "");
 });
 
 test("wording choice: off-topic overlay never exposes wording choice panel", async () => {

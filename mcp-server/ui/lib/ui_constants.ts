@@ -73,7 +73,7 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     btnOk_strategy: "I'm happy, continue to step 7 Strategy",
     btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
     wordingChoiceHeading: "This is your input:",
-    wordingChoiceSuggestionLabel: "This would be my suggestion",
+    wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "dreamBuilder.startExercise": "Start the exercise",
     "dreamBuilder.statements.title": "Your Dream statements",

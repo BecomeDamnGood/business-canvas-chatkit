@@ -274,7 +274,7 @@ HANDLE GIVE ME AN EXAMPLE HOW MY ENTITY COULD SOUND (option 1 from INTRO)
 If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE__":
 - action="REFINE"
 - message must be a localized sentence of the form: "Based on what I already know about {company_name} I suggest the following Entity:". Use the company name from the STATE FINALS / business_name context if available; otherwise use "your future company" (or the equivalent in the user's language).
-- refined_formulation: formulate ONE Entity phrase as a short noun phrase starting with the correct indefinite article (e.g., "A purpose-driven advertising agency" or "An impact-focused consultancy"). The Entity itself (after the article) should be 2 to 5 words (container + 1-2 qualifiers), making the total length 3-6 words. Base it on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). Do NOT repeat the company name inside the Entity phrase itself. Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. Ensure the article (A/An or the equivalent in the target language) matches the first sound of the Entity. After the Entity formulation, add exactly: "\n\nHow does that sound to you? Do you recognize your self in it?"
+- refined_formulation: formulate ONE Entity phrase as a short noun phrase starting with the correct indefinite article (e.g., "A purpose-driven advertising agency" or "An impact-focused consultancy"). The Entity itself (after the article) should be 2 to 5 words (container + 1-2 qualifiers), making the total length 3-6 words. Base it on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). Do NOT repeat the company name inside the Entity phrase itself. Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. Ensure the article (A/An or the equivalent in the target language) matches the first sound of the Entity.
 - question must show exactly this text (localized) with real line breaks, then one blank line, then these two options, then one blank line, then this prompt text:
 
 1) I'm happy with this wording, go to the next step Strategy.
@@ -283,7 +283,7 @@ If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE__":
 Refine your Entity in your own words or choose an option.
 
 - menu_id="ENTITY_MENU_EXAMPLE" (HARD: MUST be set when showing this menu)
-- entity: same as refined_formulation (but without the trailing question text - only the Entity part, e.g., "We are a strategic execution agency")
+- entity: same as refined_formulation (a short Entity phrase only, e.g., "A strategic execution agency")
 - confirmation_question=""
 - proceed_to_next="false"
 
@@ -363,14 +363,14 @@ If the previous assistant output was action="REFINE" with menu_id="ENTITY_MENU_E
 If USER_MESSAGE is "__ROUTE__ENTITY_REFINE__":
 - action="REFINE"
 - message must be exactly this text (localized, in the user's language): "This how your entity could sound like:"
-- refined_formulation: formulate a COMPLETELY NEW Entity phrase that starts with "We are" (e.g., "We are a purpose-driven consultancy"). The Entity itself (after "We are") should be 2 to 5 words (container + 1-2 qualifiers), making the total length 4-7 words. Base it on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). 
+- refined_formulation: formulate a COMPLETELY NEW Entity phrase as a short noun phrase with a correct indefinite article (e.g., "A purpose-driven consultancy"). The Entity phrase should be 2 to 5 words after the article (container + 1-2 qualifiers), making the total length 3-6 words. Base it on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). 
 
 CRITICAL VARIATION RULE (HARD): You MUST generate a DIFFERENT Entity than the previous one. Check the previous assistant output's refined_formulation field (or entity field) and ensure your new formulation is completely different:
 - Use a DIFFERENT container word (e.g., if previous was "agency", use "consultancy", "advisory firm", "partnership", "studio", etc.)
 - Use DIFFERENT qualifiers (e.g., if previous was "strategic execution", use "purpose-driven", "mission-aligned", "values-based", etc.)
-- Example: If the previous was "We are a strategic execution agency", do NOT use "strategic execution agency" again. Instead try "We are a purpose-driven consultancy" or "We are a mission-aligned advisory firm" or "We are a values-based partnership".
+- Example: If the previous was "A strategic execution agency", do NOT use "strategic execution agency" again. Instead try "A purpose-driven consultancy" or "A mission-aligned advisory firm" or "A values-based partnership".
 
-Always base it on the same known information, but explore different ways to express the same concept. Use company name if known, otherwise "the company". Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. After the Entity formulation, add exactly: "\n\nHow does that sound to you? Do you recognize your self in it?"
+Always base it on the same known information, but explore different ways to express the same concept. Use company name if known, otherwise "the company". Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it.
 - question must show exactly this text (localized) with real line breaks, then one blank line, then these two options, then one blank line, then this prompt text:
 
 1) I'm happy with this wording, go to the next step Strategy.
@@ -379,7 +379,7 @@ Always base it on the same known information, but explore different ways to expr
 Refine your Entity in your own words or choose an option.
 
 - menu_id="ENTITY_MENU_EXAMPLE" (HARD: MUST be set when showing this menu)
-- entity: same as refined_formulation (but without the trailing question text - only the Entity part, e.g., "We are a purpose-driven consultancy")
+- entity: same as refined_formulation (a short Entity phrase only, e.g., "A purpose-driven consultancy")
 - confirmation_question=""
 - proceed_to_next="false"
 

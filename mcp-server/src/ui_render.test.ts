@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { dedupeBodyAgainstPrompt, render, renderChoiceButtons } from "../ui/lib/ui_render.js";
 import { setSessionStarted } from "../ui/lib/ui_state.js";
 
@@ -330,11 +331,15 @@ test("render shows wording choice panel in text mode and keeps confirm hidden un
   const userText = (fakeDocument as any).getElementById("wordingChoiceUserText");
   const suggestionText = (fakeDocument as any).getElementById("wordingChoiceSuggestionText");
   const suggestionBtn = (fakeDocument as any).getElementById("wordingChoicePickSuggestion");
+  const heading = (fakeDocument as any).getElementById("wordingChoiceHeading");
   const btnOk = (fakeDocument as any).getElementById("btnOk");
   assert.equal(String(wordingWrap.style.display || ""), "flex");
-  assert.equal(String(userText.textContent || ""), "Mindd helps teams with clarity.");
-  assert.equal(String(suggestionText.textContent || ""), "Mindd exists to restore focus and meaning in work.");
-  assert.equal(String(suggestionBtn.textContent || ""), "This would be my suggestion");
+  assert.equal(String(heading.textContent || ""), "");
+  assert.equal(String(userText.style.display || ""), "block");
+  assert.equal(String(suggestionText.style.display || ""), "block");
+  assert.equal(String(userText.textContent || ""), "This is your input:");
+  assert.equal(String(suggestionText.textContent || ""), "This would be my suggestion:");
+  assert.equal(String(suggestionBtn.textContent || ""), "Mindd exists to restore focus and meaning in work.");
   assert.equal(String(btnOk.style.display || ""), "none");
 
   setSessionStarted(false);
@@ -448,13 +453,29 @@ test("render shows wording choice panel in list mode with full items", () => {
 
   const userList = (fakeDocument as any).getElementById("wordingChoiceUserList");
   const suggestionList = (fakeDocument as any).getElementById("wordingChoiceSuggestionList");
+  const userText = (fakeDocument as any).getElementById("wordingChoiceUserText");
+  const suggestionText = (fakeDocument as any).getElementById("wordingChoiceSuggestionText");
   const userBtn = (fakeDocument as any).getElementById("wordingChoicePickUser");
+  const suggestionBtn = (fakeDocument as any).getElementById("wordingChoicePickSuggestion");
   assert.equal(userList.childNodes.length, 2);
   assert.equal(suggestionList.childNodes.length, 3);
+  assert.equal(String(userText.textContent || ""), "This is your input:");
+  assert.equal(String(suggestionText.textContent || ""), "This would be my suggestion:");
   assert.equal(String(userBtn.textContent || ""), "Choose this version");
+  assert.equal(String(suggestionBtn.textContent || ""), "Choose this version");
 
   setSessionStarted(false);
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
   (globalThis as any).openai = originalOpenai;
+});
+
+test("btnStartDreamExercise sends generic confirm actioncode", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
+  const blockMatch = source.match(
+    /const btnStartDreamExercise = document\.getElementById\("btnStartDreamExercise"\);[\s\S]*?if \(btnStartDreamExercise\) \{[\s\S]*?\n\}/
+  );
+  assert.ok(blockMatch, "Expected btnStartDreamExercise handler block in ui/lib/main.ts");
+  const block = blockMatch[0];
+  assert.match(block, /callRunStep\("ACTION_CONFIRM_CONTINUE"\)/);
 });

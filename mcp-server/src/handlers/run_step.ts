@@ -219,7 +219,7 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   btnOk_strategy: "I'm happy, continue to step 7 Strategy",
   btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
   wordingChoiceHeading: "This is your input:",
-  wordingChoiceSuggestionLabel: "This would be my suggestion",
+  wordingChoiceSuggestionLabel: "This would be my suggestion:",
   wordingChoiceInstruction: "Please click what suits you best.",
   "dreamBuilder.startExercise": "Start the exercise",
   "dreamBuilder.statements.title": "Your Dream statements",
@@ -640,10 +640,29 @@ function buildTextForWidget(params: { specialist: any }): string {
   const { specialist } = params;
   const parts: string[] = [];
 
-  const msg = String(specialist?.message ?? "").trim();
+  const wordingPending = String(specialist?.wording_choice_pending || "") === "true";
+  const wordingMode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
+  const wordingSuggestion = String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim();
+  const normalizeLine = (value: string): string =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[.!?]+$/g, "")
+      .trim();
+  const suggestionNorm = normalizeLine(wordingSuggestion);
+
+  let msg = String(specialist?.message ?? "").trim();
+  if (wordingPending && wordingMode === "text" && suggestionNorm) {
+    const paragraphs = msg
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    const filtered = paragraphs.filter((p) => normalizeLine(p) !== suggestionNorm);
+    msg = filtered.join("\n\n").trim();
+  }
   const refined = String(specialist?.refined_formulation ?? "").trim();
   if (msg) parts.push(msg);
-  if (refined) {
+  if (refined && !wordingPending) {
     const refinedNormalized = refined.toLowerCase().replace(/\s+/g, " ");
     const messageNormalized = msg.toLowerCase().replace(/\s+/g, " ");
     if (!messageNormalized.includes(refinedNormalized)) {
@@ -680,6 +699,94 @@ function countNumberedOptions(prompt: string): number {
     count += 1;
   }
   return count;
+}
+
+function buildNumberedPrompt(labels: string[], headline: string): string {
+  const numbered = labels.map((label, idx) => `${idx + 1}) ${label}`);
+  if (!numbered.length) return headline;
+  return `${numbered.join("\n")}\n\n${headline}`.trim();
+}
+
+function hasValidMenuContract(menuIdRaw: string, questionRaw: string): boolean {
+  const menuId = String(menuIdRaw || "").trim();
+  if (!menuId || menuId.endsWith("_MENU_ESCAPE")) return false;
+  const expected = ACTIONCODE_REGISTRY.menus[menuId]?.length ?? 0;
+  if (expected <= 0) return false;
+  return countNumberedOptions(String(questionRaw || "")) === expected;
+}
+
+const WORDING_POST_PICK_MENU_BY_STEP: Record<string, string> = {
+  [DREAM_STEP_ID]: "DREAM_MENU_REFINE",
+  [PURPOSE_STEP_ID]: "PURPOSE_MENU_REFINE",
+  [BIGWHY_STEP_ID]: "BIGWHY_MENU_REFINE",
+  [ROLE_STEP_ID]: "ROLE_MENU_REFINE",
+  [ENTITY_STEP_ID]: "ENTITY_MENU_EXAMPLE",
+  [STRATEGY_STEP_ID]: "STRATEGY_MENU_CONFIRM",
+  [TARGETGROUP_STEP_ID]: "TARGETGROUP_MENU_POSTREFINE",
+  [PRODUCTSSERVICES_STEP_ID]: "PRODUCTSSERVICES_MENU_CONFIRM",
+  [RULESOFTHEGAME_STEP_ID]: "RULES_MENU_CONFIRM",
+  [PRESENTATION_STEP_ID]: "PRESENTATION_MENU_ASK",
+};
+
+const WORDING_POST_PICK_MENU_LABELS: Record<string, string[]> = {
+  DREAM_MENU_REFINE: [
+    "I'm happy with this wording, please continue to step 3 Purpose",
+    "Do a small exercise that helps to define your dream.",
+  ],
+  DREAM_EXPLAINER_MENU_REFINE: [
+    "I'm happy with this wording, please continue to step 3 Purpose",
+    "Refine this formulation",
+  ],
+  PURPOSE_MENU_REFINE: [
+    "I'm happy with this wording, please continue to next step Big Why.",
+    "Refine the wording",
+  ],
+  BIGWHY_MENU_REFINE: [
+    "I'm happy with this wording, continue to step 5 Role",
+    "Redefine the Big Why for me please",
+  ],
+  ROLE_MENU_REFINE: [
+    "Yes, this fits.",
+    "I want to adjust it.",
+  ],
+  ENTITY_MENU_EXAMPLE: [
+    "I'm happy with this wording, go to the next step Strategy.",
+    "Refine the wording for me please",
+  ],
+  STRATEGY_MENU_CONFIRM: [
+    "I'm satisfied with my Strategy. Let's go to Rules of the Game",
+  ],
+  TARGETGROUP_MENU_POSTREFINE: [
+    "I'm happy with this wording, continue to next step Products and Services",
+    "Ask me some questions to define my specific Target Group",
+  ],
+  PRODUCTSSERVICES_MENU_CONFIRM: [
+    "This is all what we offer, continue to step Rules of the Game",
+  ],
+  RULES_MENU_CONFIRM: [
+    "These are all my rules of the game, continue to Presentation",
+    "Please explain more about Rules of the Game",
+    "Give one concrete example (Rule versus poster slogan)",
+  ],
+  PRESENTATION_MENU_ASK: [
+    "Create my presentation now",
+  ],
+};
+
+function resolveWordingPostPickMenuId(stepId: string, state: CanvasState): string {
+  if (stepId === DREAM_STEP_ID && String((state as any)?.active_specialist || "") === DREAM_EXPLAINER_SPECIALIST) {
+    return "DREAM_EXPLAINER_MENU_REFINE";
+  }
+  return WORDING_POST_PICK_MENU_BY_STEP[stepId] || "";
+}
+
+function buildWordingPostPickFallbackQuestion(menuId: string, stepId: string, state: CanvasState): string {
+  const expected = ACTIONCODE_REGISTRY.menus[menuId]?.length ?? 0;
+  if (expected <= 0) return "";
+  const labels = (WORDING_POST_PICK_MENU_LABELS[menuId] || []).slice(0, expected);
+  if (labels.length !== expected) return "";
+  const headline = `Refine your ${wordingStepLabel(stepId)} for ${wordingCompanyName(state)} or choose an option.`;
+  return buildNumberedPrompt(labels, headline);
 }
 
 const DREAM_DEFINE_MENU_IDS = new Set(["DREAM_MENU_INTRO", "DREAM_MENU_WHY", "DREAM_MENU_SUGGESTIONS"]);
@@ -788,6 +895,10 @@ type WordingChoiceUiPayload = {
   instruction: string;
 };
 
+export function isWordingChoiceEligibleStep(stepId: string): boolean {
+  return String(stepId || "").trim() !== STEP_0_ID;
+}
+
 function isConfirmActionCode(actionCode: string): boolean {
   const entry = ACTIONCODE_REGISTRY.actions[actionCode];
   if (!entry) return false;
@@ -810,6 +921,33 @@ function normalizeLightUserInput(input: string): string {
   if (!collapsed) return "";
   const normalized = collapsed.charAt(0).toUpperCase() + collapsed.slice(1);
   return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
+}
+
+function normalizeEntityPhrase(raw: string): string {
+  let next = String(raw || "").replace(/\r/g, "\n").trim();
+  if (!next) return "";
+  next = next.split(/\n{2,}/)[0].trim();
+  next = next.replace(/\s+/g, " ").trim();
+  next = next.replace(/\s*How does that sound to you\?.*$/i, "").trim();
+  next = next.replace(/^we\s+are\s+/i, "");
+  next = next.replace(/^we['’]re\s+/i, "");
+  next = next.replace(/^it\s+is\s+/i, "");
+  next = next.replace(/^it['’]s\s+/i, "");
+  next = next.replace(/[“”"']+/g, "").trim();
+  next = next.replace(/[.!?]+$/g, "").trim();
+  return next;
+}
+
+function normalizeEntitySpecialistResult(stepId: string, specialist: any): any {
+  if (stepId !== ENTITY_STEP_ID || !specialist || typeof specialist !== "object") return specialist;
+  const normalizedRefined = normalizeEntityPhrase(String(specialist.refined_formulation || ""));
+  const normalizedEntity = normalizeEntityPhrase(String(specialist.entity || ""));
+  const canonical = normalizedEntity || normalizedRefined;
+  if (!canonical) return specialist;
+  const next = { ...specialist };
+  if (normalizedRefined) next.refined_formulation = normalizedRefined;
+  next.entity = canonical;
+  return next;
 }
 
 function tokenizeWords(input: string): string[] {
@@ -982,16 +1120,16 @@ function extractSuggestionFromMessage(message: string): string {
 export function pickDualChoiceSuggestion(stepId: string, specialistResult: any, previousSpecialist: any, userRaw = ""): string {
   const candidates: string[] = [];
   const pushCandidate = (value: string) => {
-    const trimmed = String(value || "").trim();
+    const raw = String(value || "").trim();
+    const trimmed = stepId === ENTITY_STEP_ID ? normalizeEntityPhrase(raw) : raw;
     if (!trimmed) return;
     if (candidates.includes(trimmed)) return;
     candidates.push(trimmed);
   };
 
-  pushCandidate(String(specialistResult?.refined_formulation || ""));
-
   const field = fieldForStep(stepId);
   if (field) pushCandidate(String(specialistResult?.[field] || ""));
+  pushCandidate(String(specialistResult?.refined_formulation || ""));
 
   if (Array.isArray(specialistResult?.statements) && specialistResult.statements.length > 0) {
     pushCandidate(
@@ -1051,6 +1189,160 @@ function fieldForStep(stepId: string): string {
   return "";
 }
 
+function wordingStepLabel(stepId: string): string {
+  if (stepId === DREAM_STEP_ID) return "Dream";
+  if (stepId === PURPOSE_STEP_ID) return "Purpose";
+  if (stepId === BIGWHY_STEP_ID) return "Big Why";
+  if (stepId === ROLE_STEP_ID) return "Role";
+  if (stepId === ENTITY_STEP_ID) return "Entity";
+  if (stepId === STRATEGY_STEP_ID) return "Strategy";
+  if (stepId === TARGETGROUP_STEP_ID) return "Target Group";
+  if (stepId === PRODUCTSSERVICES_STEP_ID) return "Products and Services";
+  if (stepId === RULESOFTHEGAME_STEP_ID) return "Rules of the game";
+  if (stepId === PRESENTATION_STEP_ID) return "Presentation";
+  return "step";
+}
+
+function wordingCompanyName(state: CanvasState): string {
+  const fromState = String((state as any)?.business_name || "").trim();
+  if (fromState && fromState !== "TBD") return fromState;
+
+  const step0Final = String((state as any)?.step_0_final || "").trim();
+  if (step0Final) {
+    const parsed = parseStep0Final(step0Final, "TBD");
+    const parsedName = String(parsed?.name || "").trim();
+    if (parsedName && parsedName !== "TBD") return parsedName;
+  }
+
+  return "your future company";
+}
+
+function wordingSelectionMessage(stepId: string, state: CanvasState): string {
+  return `Your current ${wordingStepLabel(stepId)} for ${wordingCompanyName(state)} is:`;
+}
+
+const STEP_FEEDBACK_FALLBACK: Record<string, string> = {
+  [PURPOSE_STEP_ID]: "Purpose should express deeper meaning and contribution, not personal outcomes like money or status.",
+  [BIGWHY_STEP_ID]: "Big Why should capture the deeper societal reason your company exists, not only ambition.",
+  [ROLE_STEP_ID]: "Role should describe the stable contribution your company brings, beyond services or positioning.",
+  [ENTITY_STEP_ID]: "Entity should be specific enough that outsiders instantly understand what kind of company this is.",
+  [STRATEGY_STEP_ID]: "Strategy should stay concrete and focused so choices remain clear in practice.",
+  [TARGETGROUP_STEP_ID]: "Target Group should be specific enough that decisions can be made for a clear audience.",
+  [PRODUCTSSERVICES_STEP_ID]: "Products and Services should stay concrete and distinguish what you actually offer.",
+  [RULESOFTHEGAME_STEP_ID]: "Rules of the game should be concrete behavior rules, not broad slogans.",
+  [DREAM_STEP_ID]: "Dream should describe the future world your company wants to help create, beyond general beliefs.",
+  [PRESENTATION_STEP_ID]: "Presentation brief should stay concrete so the output presentation remains actionable.",
+};
+
+function userChoiceFeedbackReason(stepId: string, prev: any): string {
+  const normalize = (value: string): string =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[.!?]+$/g, "")
+      .trim();
+
+  const suggestionNorm = normalize(String(prev?.wording_choice_agent_current || prev?.refined_formulation || ""));
+  const message = String(prev?.message || "").trim();
+  const genericAcknowledgements = [
+    /^i think i understand\b/i,
+    /^i understand\b/i,
+    /^thank you for sharing\b/i,
+    /^that'?s a strong\b/i,
+    /^i appreciate\b/i,
+    /^good point\b/i,
+  ];
+  if (message) {
+    const paragraphs = message
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    for (const paragraph of paragraphs) {
+      const pNorm = normalize(paragraph);
+      if (!pNorm) continue;
+      if (suggestionNorm && (pNorm === suggestionNorm || pNorm.includes(suggestionNorm))) continue;
+      if (/^your current\b/i.test(paragraph)) continue;
+      if (genericAcknowledgements.some((re) => re.test(paragraph))) continue;
+      if (paragraph.length >= 20) return paragraph;
+    }
+  }
+  return STEP_FEEDBACK_FALLBACK[stepId] || "this wording may be less precise for this step.";
+}
+
+function userChoiceFeedbackMessage(stepId: string, state: CanvasState, prev: any): string {
+  const reason = userChoiceFeedbackReason(stepId, prev);
+  const feedback = `You chose your own wording and that's fine. But please remember that ${reason}`;
+  return `${feedback}\n\n${wordingSelectionMessage(stepId, state)}`;
+}
+
+function enforceWordingPostPickMenuContract(stepId: string, state: CanvasState, selected: any, previous: any): any {
+  const safeAction = String(selected?.action || "").trim().toUpperCase() === "CONFIRM"
+    ? "ASK"
+    : String(selected?.action || "ASK");
+  const currentMenuId = String(selected?.menu_id || "").trim();
+  const currentQuestion = String(selected?.question || "").trim();
+  if (hasValidMenuContract(currentMenuId, currentQuestion)) {
+    return {
+      ...selected,
+      action: safeAction,
+      confirmation_question: "",
+    };
+  }
+  if (currentMenuId && ACTIONCODE_REGISTRY.menus[currentMenuId] && !currentMenuId.endsWith("_MENU_ESCAPE")) {
+    return {
+      ...selected,
+      action: safeAction,
+      confirmation_question: "",
+    };
+  }
+
+  const prevMenuId = String(previous?.menu_id || "").trim();
+  const prevQuestion = String(previous?.question || "").trim();
+  if (hasValidMenuContract(prevMenuId, prevQuestion)) {
+    return {
+      ...selected,
+      action: safeAction,
+      menu_id: prevMenuId,
+      question: prevQuestion,
+      confirmation_question: "",
+    };
+  }
+  if (prevMenuId && ACTIONCODE_REGISTRY.menus[prevMenuId] && !prevMenuId.endsWith("_MENU_ESCAPE")) {
+    return {
+      ...selected,
+      action: safeAction,
+      menu_id: prevMenuId,
+      question: prevQuestion,
+      confirmation_question: "",
+    };
+  }
+
+  const fallbackMenuId = resolveWordingPostPickMenuId(stepId, state);
+  const fallbackQuestion = fallbackMenuId
+    ? buildWordingPostPickFallbackQuestion(fallbackMenuId, stepId, state)
+    : "";
+  if (fallbackMenuId && fallbackQuestion && hasValidMenuContract(fallbackMenuId, fallbackQuestion)) {
+    return {
+      ...selected,
+      action: safeAction,
+      menu_id: fallbackMenuId,
+      question: fallbackQuestion,
+      confirmation_question: "",
+    };
+  }
+
+  const promptFallback =
+    String(selected?.question || "").trim() ||
+    String(selected?.confirmation_question || "").trim();
+  return {
+    ...selected,
+    action: safeAction,
+    menu_id: "",
+    question: promptFallback,
+    confirmation_question: "",
+  };
+}
+
 function withUpdatedTargetField(result: any, stepId: string, value: string): any {
   const field = fieldForStep(stepId);
   if (!field || !value) return result;
@@ -1102,6 +1394,16 @@ function buildWordingChoiceFromTurn(params: {
   forcePending?: boolean;
 }): { specialist: any; wordingChoice: WordingChoiceUiPayload | null } {
   const { stepId, activeSpecialist, previousSpecialist, specialistResult, userTextRaw, isOfftopic, forcePending } = params;
+  if (!isWordingChoiceEligibleStep(stepId)) {
+    return {
+      specialist: {
+        ...specialistResult,
+        wording_choice_pending: "false",
+        wording_choice_selected: "",
+      },
+      wordingChoice: null,
+    };
+  }
   if (isOfftopic) return { specialist: specialistResult, wordingChoice: null };
   const fallbackUserRaw = String(previousSpecialist?.wording_choice_user_raw || previousSpecialist?.wording_choice_user_normalized || "").trim();
   const userRaw = String(userTextRaw || fallbackUserRaw).trim();
@@ -1152,13 +1454,17 @@ function applyWordingPickSelection(params: {
     return { handled: false, specialist: prev, nextState: state };
   }
   const pickedUser = routeToken === "__WORDING_PICK_USER__";
-  const chosen = pickedUser
+  const rawChosen = pickedUser
     ? String(prev.wording_choice_user_normalized || prev.wording_choice_user_raw || "").trim()
     : String(prev.wording_choice_agent_current || prev.refined_formulation || "").trim();
+  const chosen = stepId === ENTITY_STEP_ID ? normalizeEntityPhrase(rawChosen) || rawChosen : rawChosen;
   if (!chosen) return { handled: false, specialist: prev, nextState: state };
   const selected = withUpdatedTargetField(
     {
       ...prev,
+      message: pickedUser
+        ? userChoiceFeedbackMessage(stepId, state, prev)
+        : wordingSelectionMessage(stepId, state),
       wording_choice_pending: "false",
       wording_choice_selected: pickedUser ? "user" : "suggestion",
       refined_formulation: chosen,
@@ -1166,15 +1472,17 @@ function applyWordingPickSelection(params: {
     stepId,
     chosen
   );
+  const selectedWithContract = enforceWordingPostPickMenuContract(stepId, state, selected, prev);
   const nextState: CanvasState = {
     ...state,
-    last_specialist_result: selected,
+    last_specialist_result: selectedWithContract,
   };
-  return { handled: true, specialist: selected, nextState };
+  return { handled: true, specialist: selectedWithContract, nextState };
 }
 
 function buildWordingChoiceFromPendingSpecialist(specialist: any): WordingChoiceUiPayload | null {
   if (String(specialist?.wording_choice_pending || "") !== "true") return null;
+  if (!isWordingChoiceEligibleStep(String(specialist?.wording_choice_target_field || ""))) return null;
   const mode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
   const userItems = Array.isArray(specialist?.wording_choice_user_items)
     ? (specialist.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
@@ -3380,10 +3688,17 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     "ACTION_CONFIRM_CONTINUE",
   ]);
 
-  if (actionCodeRaw && HARD_CONFIRM_ACTIONS.has(actionCodeRaw)) {
+  const prevForAction = (state as any).last_specialist_result || {};
+  const isDreamReadinessConfirmTurn =
+    actionCodeRaw === "ACTION_CONFIRM_CONTINUE" &&
+    String(state.current_step ?? "") === DREAM_STEP_ID &&
+    String(prevForAction?.action ?? "") === "ASK" &&
+    String(prevForAction?.suggest_dreambuilder ?? "") === "true";
+
+  if (actionCodeRaw && HARD_CONFIRM_ACTIONS.has(actionCodeRaw) && !isDreamReadinessConfirmTurn) {
     const stepId = String(state.current_step ?? "");
     const prev = (state as any).last_specialist_result || {};
-    if (String(prev.wording_choice_pending || "") === "true") {
+    if (String(prev.wording_choice_pending || "") === "true" && isWordingChoiceEligibleStep(stepId)) {
       const pendingSpecialist = { ...prev };
       const pendingChoice = buildWordingChoiceFromPendingSpecialist(pendingSpecialist);
       const stateWithUi = await ensureUiStringsForState(state, model);
@@ -3397,6 +3712,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         specialist: pendingSpecialist,
         state: stateWithUi,
       }, pendingSpecialist, { require_wording_pick: true }, [], pendingChoice);
+    }
+    if (String(prev.wording_choice_pending || "") === "true" && !isWordingChoiceEligibleStep(stepId)) {
+      (state as any).last_specialist_result = {
+        ...prev,
+        wording_choice_pending: "false",
+        wording_choice_selected: "",
+      };
     }
     const finalInfo = requireFinalValue(stepId, prev, state);
     // If we cannot find a final value, do not hard-confirm; fall back to normal handling.
@@ -4216,6 +4538,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
 
   // --------- UPDATE STATE (after first specialist) ----------
+  specialistResult = normalizeEntitySpecialistResult(String(decision1.current_step || ""), specialistResult);
+
   let nextState = applyStateUpdate({
     prev: state,
     decision: decision1,
@@ -4265,6 +4589,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           specialistResult = buildBigWhyTooLongFeedback(lang);
         }
       }
+
+      specialistResult = normalizeEntitySpecialistResult(String(decision2.current_step || ""), specialistResult);
 
       nextState = applyStateUpdate({
         prev: nextState,
@@ -4343,7 +4669,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }
   }
 
-  const pendingChoice = isOfftopicTurn ? null : buildWordingChoiceFromPendingSpecialist(specialistResult);
+  const pendingChoice =
+    isOfftopicTurn || !isWordingChoiceEligibleStep(String((nextState as any).current_step ?? ""))
+      ? null
+      : buildWordingChoiceFromPendingSpecialist(specialistResult);
   const requireWordingPick = Boolean(pendingChoice);
   if (requireWordingPick) {
     wordingChoiceOverride = pendingChoice;

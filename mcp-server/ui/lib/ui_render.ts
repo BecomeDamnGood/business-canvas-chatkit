@@ -282,13 +282,23 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];
   const suggestionItems = Array.isArray(wording.suggestion_items) ? wording.suggestion_items : [];
   const instruction = String(wording.instruction || "").trim() || t(lang, "wordingChoiceInstruction");
+  const ensureLabelColon = (value: string): string => {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return "";
+    return /[:]\s*$/.test(trimmed) ? trimmed : `${trimmed}:`;
+  };
+  const userLabel = ensureLabelColon(t(lang, "wordingChoiceHeading"));
+  const suggestionLabel = ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
 
-  headingEl.textContent = t(lang, "wordingChoiceHeading");
+  headingEl.textContent = "";
+  (headingEl as HTMLElement).style.display = "none";
   instructionEl.textContent = instruction;
+  userTextEl.textContent = userLabel || "This is your input:";
+  suggestionTextEl.textContent = suggestionLabel || "This would be my suggestion:";
 
   if (mode === "list") {
-    (userTextEl as HTMLElement).style.display = "none";
-    (suggestionTextEl as HTMLElement).style.display = "none";
+    (userTextEl as HTMLElement).style.display = "block";
+    (suggestionTextEl as HTMLElement).style.display = "block";
     (userListEl as HTMLElement).style.display = "block";
     (suggestionListEl as HTMLElement).style.display = "block";
     userListEl.innerHTML = "";
@@ -304,6 +314,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
       suggestionListEl.appendChild(li);
     }
     userBtn.textContent = "Choose this version";
+    suggestionBtn.textContent = "Choose this version";
   } else {
     (userTextEl as HTMLElement).style.display = "block";
     (suggestionTextEl as HTMLElement).style.display = "block";
@@ -311,12 +322,9 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     (suggestionListEl as HTMLElement).style.display = "none";
     userListEl.innerHTML = "";
     suggestionListEl.innerHTML = "";
-    userTextEl.textContent = userText;
-    suggestionTextEl.textContent = suggestionText;
     userBtn.textContent = userText || "Use this input";
+    suggestionBtn.textContent = suggestionText || suggestionLabel;
   }
-
-  suggestionBtn.textContent = t(lang, "wordingChoiceSuggestionLabel");
   userBtn.disabled = getIsLoading();
   suggestionBtn.disabled = getIsLoading();
   (wrap as HTMLElement).style.display = "flex";
