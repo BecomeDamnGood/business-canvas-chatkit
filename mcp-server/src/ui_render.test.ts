@@ -118,6 +118,30 @@ test("renderChoiceButtons renders buttons when ui.action_codes exist", () => {
   (globalThis as any).document = originalDocument;
 });
 
+test("renderChoiceButtons keeps both ROLE_MENU_REFINE choices", () => {
+  const originalDocument = (globalThis as any).document;
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
+  (globalThis as any).document = fakeDocument;
+
+  const choices = [
+    { value: "1", label: "Yes, this fits. Continue to step 6 Entity." },
+    { value: "2", label: "Adjust it" },
+  ];
+
+  renderChoiceButtons(choices, {
+    specialist: { menu_id: "ROLE_MENU_REFINE" },
+    state: { current_step: "role" },
+    registry_version: "test",
+    ui: { action_codes: ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"], expected_choice_count: 2 },
+  });
+
+  const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
+  assert.equal(buttons.length, 2);
+
+  (globalThis as any).document = originalDocument;
+});
+
 test("render handles Dream intro payload without ui and does not throw", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
@@ -312,6 +336,64 @@ test("render shows wording choice panel in text mode and keeps confirm hidden un
   assert.equal(String(suggestionText.textContent || ""), "Mindd exists to restore focus and meaning in work.");
   assert.equal(String(suggestionBtn.textContent || ""), "This would be my suggestion");
   assert.equal(String(btnOk.style.display || ""), "none");
+
+  setSessionStarted(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
+test("render hides regular choice buttons while wording choice is required", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "role",
+        active_specialist: "Role",
+        intro_shown_session: "true",
+        intro_shown_for_step: "role",
+        language: "en",
+      },
+      specialist: {
+        action: "REFINE",
+        question: "1) Yes, this fits. Continue to step 6 Entity.\n2) Adjust it",
+        menu_id: "ROLE_MENU_REFINE",
+      },
+      prompt: "1) Yes, this fits. Continue to step 6 Entity.\n2) Adjust it",
+      ui: {
+        action_codes: ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"],
+        expected_choice_count: 2,
+        flags: { require_wording_pick: true },
+        wording_choice: {
+          enabled: true,
+          mode: "text",
+          user_text: "we offer the best quality",
+          suggestion_text: "Mindd sets standards for purpose-driven quality.",
+          user_items: [],
+          suggestion_items: [],
+          instruction: "Please click what suits you best.",
+        },
+      },
+    },
+  });
+
+  const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
+  assert.equal(buttons.length, 0);
+  assert.equal(String(wrap.style.display || ""), "none");
 
   setSessionStarted(false);
   (globalThis as any).document = originalDocument;

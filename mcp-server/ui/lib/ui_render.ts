@@ -155,10 +155,7 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
     wrap.appendChild(err);
   }
 
-  let choicesCopy = [...choicesArr];
-  if (currentStep === "role" && menuId === "ROLE_MENU_REFINE" && choicesCopy.length > 1) {
-    choicesCopy = choicesCopy.filter((c) => Number(c.value) === 1);
-  }
+  const choicesCopy = [...choicesArr];
 
   if (!menuId) {
     console.warn("[menu_contract_missing]", {
@@ -853,9 +850,17 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
 
   const promptEl = document.getElementById("prompt");
   if (promptEl) renderInlineText(promptEl, promptText || "");
-  renderChoiceButtons(choicesArr, result);
+  if (requireWordingPick) {
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (choiceWrap) {
+      choiceWrap.innerHTML = "";
+      choiceWrap.style.display = "none";
+    }
+  } else {
+    renderChoiceButtons(choicesArr, result);
+  }
 
-  const choiceMode = choicesArr.length > 0;
+  const choiceMode = !requireWordingPick && choicesArr.length > 0;
   const confirmMode = !choiceMode && showContinue && !requireWordingPick;
   let statementCount =
     (Array.isArray(statementsArray) ? statementsArray.length : 0) || 0;

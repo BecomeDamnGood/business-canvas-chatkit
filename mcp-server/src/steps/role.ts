@@ -265,6 +265,7 @@ No duplication rule (HARD)
 Standard confirmation menu (HARD)
 Whenever you propose a refined_formulation (REFINE action) you must use this confirmation menu in the "question" field (localized):
 1) Yes, this fits. Continue to step 6 Entity.
+2) Adjust it
 
 (blank line)
 The choice prompt line must (localized) say: "Refine the Role of {company_name} or choose continue." Use the company name from the STATE FINALS / business_name context if available; otherwise use "your future company" (or the equivalent in the user's language).

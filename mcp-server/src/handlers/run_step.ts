@@ -3386,10 +3386,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     if (String(prev.wording_choice_pending || "") === "true") {
       const pendingSpecialist = { ...prev };
       const pendingChoice = buildWordingChoiceFromPendingSpecialist(pendingSpecialist);
-      const menuId = String(pendingSpecialist.menu_id || "").trim();
-      const filteredActions = menuId
-        ? filterConfirmActionCodes(Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [], false)
-        : [];
       const stateWithUi = await ensureUiStringsForState(state, model);
       return attachRegistryPayload({
         ok: true as const,
@@ -3400,7 +3396,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         prompt: pickPrompt(pendingSpecialist),
         specialist: pendingSpecialist,
         state: stateWithUi,
-      }, pendingSpecialist, { require_wording_pick: true }, filteredActions, pendingChoice);
+      }, pendingSpecialist, { require_wording_pick: true }, [], pendingChoice);
     }
     const finalInfo = requireFinalValue(stepId, prev, state);
     // If we cannot find a final value, do not hard-confirm; fall back to normal handling.
@@ -4351,13 +4347,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const requireWordingPick = Boolean(pendingChoice);
   if (requireWordingPick) {
     wordingChoiceOverride = pendingChoice;
-    const currentActionCodes = (() => {
-      if (Array.isArray(actionCodesOverride)) return actionCodesOverride;
-      const menuId = String((specialistResult as any)?.menu_id || "").trim();
-      if (!menuId) return [];
-      return Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
-    })();
-    actionCodesOverride = filterConfirmActionCodes(currentActionCodes, false);
+    actionCodesOverride = [];
   }
 
   const text = buildTextForWidget({ specialist: specialistResult });

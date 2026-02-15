@@ -443,11 +443,7 @@ test("wording choice: pending state blocks confirm action until choice is made",
   assert.equal(result.ok, true);
   assert.equal(result.current_step_id, "dream");
   assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
-  assert.ok(Array.isArray(result.ui?.action_codes));
-  assert.equal(
-    (result.ui?.action_codes || []).some((code: string) => code === "ACTION_DREAM_REFINE_CONFIRM"),
-    false
-  );
+  assert.equal(Array.isArray(result.ui?.action_codes), false);
 });
 
 test("wording choice: selecting user variant updates candidate and clears pending", async () => {
@@ -541,10 +537,7 @@ test("wording choice: refine adjust rebuilds pending choice from stored user var
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.wording_choice_pending || ""), "true");
   assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
-  assert.equal(
-    (result.ui?.action_codes || []).includes("ACTION_PURPOSE_REFINE_CONFIRM"),
-    false
-  );
+  assert.equal(Array.isArray(result.ui?.action_codes), false);
   assert.equal(
     String((result.ui as any)?.wording_choice?.suggestion_text || ""),
     "Mindd exists to restore focus and meaning in work."
