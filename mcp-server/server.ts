@@ -460,6 +460,10 @@ function createAppServer(baseUrl: string): McpServer {
           resourceUri: uiResourceUri,
           visibility: ["model","app"],
         },
+        "openai/outputTemplate": uiResourceUri,
+        "openai/widgetAccessible": true,
+        "openai/toolInvocation/invoking": "Thinking...",
+        "openai/toolInvocation/invoked": "Updated",
       },
     },
     async (args) => {

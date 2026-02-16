@@ -35,9 +35,12 @@ function oa(): unknown {
 }
 
 function canUseBridge(): boolean {
-  if (!bridgeEnabled) return false;
   if (typeof window === "undefined") return false;
-  return Boolean(window.parent);
+  if (!window.parent || window.parent === window) return false;
+  if (bridgeEnabled) return true;
+  // Some hosts do not emit the legacy ui/* handshake but still support JSON-RPC tool calls.
+  const host = oa();
+  return Boolean(host && typeof host === "object");
 }
 
 function normalizeToolOutput(raw: unknown): Record<string, unknown> {
