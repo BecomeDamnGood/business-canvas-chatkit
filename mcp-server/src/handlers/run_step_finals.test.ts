@@ -22,6 +22,7 @@ import {
 import { BigWhyZodSchema } from "../steps/bigwhy.js";
 import { VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS } from "../steps/step_0_validation.js";
 import { PURPOSE_INSTRUCTIONS } from "../steps/purpose.js";
+import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 
 async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Promise<T> {
   const prev = process.env[key];
@@ -37,6 +38,32 @@ async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Pro
   }
 }
 
+const HOLISTIC_FLAG_KEYS = [
+  "BSC_HOLISTIC_POLICY_V2",
+  "BSC_OFFTOPIC_V2",
+  "BSC_BULLET_RENDER_V2",
+  "BSC_WORDING_CHOICE_V2",
+  "BSC_TIMEOUT_GUARD_V2",
+] as const;
+
+const HOLISTIC_PREV_ENV: Partial<Record<(typeof HOLISTIC_FLAG_KEYS)[number], string | undefined>> = {};
+test.before(() => {
+  for (const key of HOLISTIC_FLAG_KEYS) {
+    HOLISTIC_PREV_ENV[key] = process.env[key];
+    process.env[key] = "1";
+  }
+});
+test.after(() => {
+  for (const key of HOLISTIC_FLAG_KEYS) {
+    const prev = HOLISTIC_PREV_ENV[key];
+    if (prev === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = prev;
+    }
+  }
+});
+
 function countNumberedOptions(text: string): number {
   const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   let count = 0;
@@ -49,6 +76,10 @@ function countNumberedOptions(text: string): number {
   }
   return count;
 }
+
+const ESCAPE_ACTION_CODES = Object.entries(ACTIONCODE_REGISTRY.menus)
+  .filter(([menuId]) => String(menuId || "").endsWith("_MENU_ESCAPE"))
+  .flatMap(([, codes]) => codes);
 
 test("finals merge: applyStateUpdate does not overwrite unrelated finals", () => {
   const prev = getDefaultState();
@@ -245,6 +276,38 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
     offTopicTurn.ui?.action_codes?.length || 0
   );
   assert.equal(String(offTopicTurn.prompt || "").includes("Continue Dream now"), false);
+});
+
+test("widget escape suppression: response never returns escape menu/action codes/labels", async () => {
+  const result = await run_step({
+    input_mode: "widget",
+    user_message: "ACTION_UNKNOWN_SHOULD_NOT_ROUTE",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ESCAPE",
+        menu_id: "DREAM_MENU_ESCAPE",
+        question: "1) Continue Dream now\n2) Finish later",
+        message: "You can Continue Dream now or Finish later.",
+        is_offtopic: false,
+      },
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(String(result.specialist?.menu_id || ""), "");
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(String(result.prompt || "").includes("Continue Dream now"), false);
+  assert.equal(String(result.prompt || "").includes("Finish later"), false);
+
+  const actionCodes = Array.isArray(result.ui?.action_codes) ? result.ui?.action_codes : [];
+  assert.equal(actionCodes.some((code) => ESCAPE_ACTION_CODES.includes(String(code || ""))), false);
 });
 
 test("off-topic overlay keeps previous statement recap when no final exists yet", async () => {
@@ -639,6 +702,20 @@ test("wording choice: picks material candidate when refined echoes user input", 
   );
 });
 
+test("wording choice: generic acknowledgement is not used as suggestion fallback", () => {
+  const user = "Mindd believes in empowering companies to become purpose-driven and create lasting value.";
+  const suggestion = pickDualChoiceSuggestion(
+    "purpose",
+    {
+      refined_formulation: "",
+      message: "I think I understand what you mean.",
+    },
+    {},
+    user
+  );
+  assert.equal(suggestion, "");
+});
+
 test("wording choice: pending state blocks confirm action until choice is made", async () => {
   const result = await run_step({
     user_message: "ACTION_DREAM_REFINE_CONFIRM",
@@ -718,6 +795,21 @@ test("Dream readiness guard accepts explicit start-exercise route in widget mode
   assert.match(source, /const dreamReadinessYes =[\s\S]*String\(lastResult\.suggest_dreambuilder \?\? ""\) === "true"[\s\S]*dreamStartRequested;/);
 });
 
+test("holistic policy flags are wired in run_step", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /BSC_HOLISTIC_POLICY_V2/);
+  assert.match(source, /BSC_OFFTOPIC_V2/);
+  assert.match(source, /BSC_BULLET_RENDER_V2/);
+  assert.match(source, /BSC_WORDING_CHOICE_V2/);
+  assert.match(source, /BSC_TIMEOUT_GUARD_V2/);
+  assert.match(source, /policyFlags\.offtopicV2/);
+  assert.match(source, /policyFlags\.bulletRenderV2/);
+  assert.match(source, /policyFlags\.wordingChoiceV2/);
+  assert.match(source, /envFlagEnabled\("BSC_HOLISTIC_POLICY_V2", false\)/);
+  assert.match(source, /envFlagEnabled\("BSC_OFFTOPIC_V2", false\)/);
+  assert.match(source, /envFlagEnabled\("BSC_TIMEOUT_GUARD_V2", false\)/);
+});
+
 test("switch-to-self without existing dream candidate returns Dream intro menu (Define, not Refine)", async () => {
   const result = await run_step({
     user_message: "ACTION_DREAM_SWITCH_TO_SELF",
@@ -748,6 +840,36 @@ test("switch-to-self without existing dream candidate returns Dream intro menu (
     "ACTION_DREAM_INTRO_EXPLAIN_MORE",
     "ACTION_DREAM_INTRO_START_EXERCISE",
   ]);
+});
+
+test("switch-to-self ignores long statement-like refined text as Dream candidate", async () => {
+  const longListLike =
+    "People’s lives will be positively impacted by meaningful work and businesses. Businesses and their contributions will have lasting influence beyond the founders. Society will value freedom in time and choices for individuals. People will feel genuine pride in the work they do. Businesses will increasingly reflect the values and identity of their founders. Solutions will address problems that people deeply care about.";
+  const result = await run_step({
+    user_message: "ACTION_DREAM_SWITCH_TO_SELF",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "DreamExplainer",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      dream_final: "",
+      last_specialist_result: {
+        action: "ASK",
+        suggest_dreambuilder: "true",
+        refined_formulation: longListLike,
+        message: "So far we have these statements.",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.active_specialist || ""), "Dream");
+  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_INTRO");
+  assert.equal(String(result.prompt || "").includes("Define the Dream of"), true);
+  assert.equal(String(result.prompt || "").includes("Refine the Dream of"), false);
 });
 
 test("bullet consistency policy is enforced for strategy/productsservices/rulesofthegame non-offtopic turns", () => {
@@ -937,6 +1059,49 @@ test("wording choice: strategy suggestion pick restores buttons and keeps progre
   );
 });
 
+test("wording choice: strategy suggestion pick removes duplicate 'Focus point noted' lines even without statements array", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_SUGGESTION",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "strategy",
+      active_specialist: "Strategy",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "",
+        question: "Is there more that Mindd will always focus on?",
+        confirmation_question: "",
+        message:
+          "Both focus points are noted.\nFocus point 1 noted: Focus exclusively on clients in the Netherlands.\nFocus point 2 noted: Focus on clients with an annual budget above 40,000 euros.\nIf you meant something different, tell me and I'll adjust.",
+        strategy:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        refined_formulation:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        wording_choice_pending: "true",
+        wording_choice_user_raw:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        wording_choice_user_normalized:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        wording_choice_agent_current:
+          "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros",
+        wording_choice_mode: "list",
+        wording_choice_target_field: "strategy",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  const message = String(result.specialist?.message || "");
+  assert.equal(message.includes("Focus point 1 noted:"), false);
+  assert.equal(message.includes("Focus point 2 noted:"), false);
+  assert.match(message, /• Focus exclusively on clients in the Netherlands/);
+  assert.match(message, /• Focus on clients with an annual budget above 40,000 euros/);
+});
+
 test("informational action: strategy explain-more keeps established statements visible and preserved", async () => {
   const result = await run_step({
     user_message: "ACTION_STRATEGY_REFINE_EXPLAIN_MORE",
@@ -1067,6 +1232,18 @@ test("informational context policy scope excludes presentation step", () => {
   assert.match(fnBody, /stepId === DREAM_STEP_ID/);
   assert.match(fnBody, /stepId === RULESOFTHEGAME_STEP_ID/);
   assert.doesNotMatch(fnBody, /stepId === PRESENTATION_STEP_ID/);
+});
+
+test("informational context policy skips rewrite when specialist already returned a valid menu contract", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(
+    source,
+    /const infoPolicyHasValidMenuContract = hasValidMenuContract\(infoPolicyMenuId, infoPolicyQuestion\);/
+  );
+  assert.match(
+    source,
+    /const shouldApplyInformationalContextPolicy =[\s\S]*?!infoPolicyHasValidMenuContract[\s\S]*?isInformationalContextPolicyStep/
+  );
 });
 
 test("wording choice: Entity user pick restores contract menu buttons when source prompt has no numbered options", async () => {
