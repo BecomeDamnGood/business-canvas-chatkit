@@ -313,13 +313,16 @@ function envFlagEnabled(name: string, fallback: boolean): boolean {
 }
 
 function resolveHolisticPolicyFlags(): HolisticPolicyFlags {
-  const holisticPolicyV2 = envFlagEnabled("BSC_HOLISTIC_POLICY_V2", false);
+  // In local development we keep the holistic policy stack enabled by default
+  // so `LOCAL_DEV=1 npm run dev` is sufficient and consistent.
+  const localDevDefaults = process.env.LOCAL_DEV === "1";
+  const holisticPolicyV2 = envFlagEnabled("BSC_HOLISTIC_POLICY_V2", localDevDefaults);
   return {
     holisticPolicyV2,
-    offtopicV2: holisticPolicyV2 && envFlagEnabled("BSC_OFFTOPIC_V2", false),
-    bulletRenderV2: holisticPolicyV2 && envFlagEnabled("BSC_BULLET_RENDER_V2", false),
-    wordingChoiceV2: holisticPolicyV2 && envFlagEnabled("BSC_WORDING_CHOICE_V2", false),
-    timeoutGuardV2: holisticPolicyV2 && envFlagEnabled("BSC_TIMEOUT_GUARD_V2", false),
+    offtopicV2: holisticPolicyV2 && envFlagEnabled("BSC_OFFTOPIC_V2", localDevDefaults),
+    bulletRenderV2: holisticPolicyV2 && envFlagEnabled("BSC_BULLET_RENDER_V2", localDevDefaults),
+    wordingChoiceV2: holisticPolicyV2 && envFlagEnabled("BSC_WORDING_CHOICE_V2", localDevDefaults),
+    timeoutGuardV2: holisticPolicyV2 && envFlagEnabled("BSC_TIMEOUT_GUARD_V2", localDevDefaults),
   };
 }
 
@@ -723,7 +726,7 @@ function convertPdfToPng(pdfPath: string, outDir: string): string {
  * message -> refined_formulation; if both empty, fallback to question.
  * Only append refined_formulation if it is not already contained in message (prevents duplicate display e.g. Rules REFINE).
  */
-function buildTextForWidget(params: { specialist: any }): string {
+export function buildTextForWidget(params: { specialist: any }): string {
   const { specialist } = params;
   const parts: string[] = [];
 
@@ -745,16 +748,31 @@ function buildTextForWidget(params: { specialist: any }): string {
         .map((line) => canonicalizeComparableText(String(line || "")))
         .filter(Boolean)
     );
+    const stripMarkers = (line: string): string =>
+      String(line || "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "")
+        .trim();
     const cleanedLines = msg
       .replace(/\r/g, "\n")
       .split("\n")
       .filter((lineRaw) => {
         const line = String(lineRaw || "").trim();
         if (!line) return true;
+        const stripped = stripMarkers(line);
+        const lineKey = canonicalizeComparableText(stripped);
+        if (lineKey && statementKeys.has(lineKey)) return false;
+        if (/^your dream statements$/i.test(stripped)) return false;
+        if (
+          /^\d+\s+statements?\b/i.test(stripped) &&
+          /(minimum|so far|out of|at least)/i.test(stripped)
+        ) {
+          return false;
+        }
         const colonIdx = line.indexOf(":");
         if (colonIdx <= 0) return true;
-        const prefix = line.slice(0, colonIdx).trim();
-        const suffix = line.slice(colonIdx + 1).trim();
+        const prefix = stripMarkers(line.slice(0, colonIdx));
+        const suffix = stripMarkers(line.slice(colonIdx + 1));
         const suffixKey = canonicalizeComparableText(suffix);
         if (!suffixKey || !statementKeys.has(suffixKey)) return true;
         return tokenizeWords(prefix).length > 8;
@@ -770,6 +788,16 @@ function buildTextForWidget(params: { specialist: any }): string {
     msg = filtered.join("\n\n").trim();
   }
   const refined = String(specialist?.refined_formulation ?? "").trim();
+  const menuId = String(specialist?.menu_id || "").trim().toUpperCase();
+  const statementLines = Array.isArray(specialist?.statements)
+    ? (specialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+  const dreamBuilderRenderContext =
+    statementLines.length > 0 &&
+    (
+      String(specialist?.suggest_dreambuilder || "").trim() === "true" ||
+      menuId.startsWith("DREAM_EXPLAINER_MENU_")
+    );
   const normalizeForDedupe = (value: string): string =>
     String(value || "")
       .replace(/<[^>]+>/g, " ")
@@ -790,6 +818,16 @@ function buildTextForWidget(params: { specialist: any }): string {
       .filter(Boolean);
   if (msg) parts.push(msg);
   if (refined && !wordingPending) {
+    const statementComparable = statementLines
+      .map((line) => canonicalizeComparableText(line))
+      .filter(Boolean);
+    const refinedComparableLines = normalizedLines(refined)
+      .map((line) => canonicalizeComparableText(line))
+      .filter(Boolean);
+    const refinedMatchesStatements =
+      statementComparable.length > 0 &&
+      refinedComparableLines.length === statementComparable.length &&
+      refinedComparableLines.every((line, idx) => line === statementComparable[idx]);
     const refinedNormalized = canonicalizeComparableText(refined);
     const messageNormalized = canonicalizeComparableText(msg);
     const messageLineSet = new Set(normalizedLines(msg).map((line) => canonicalizeComparableText(line)).filter(Boolean));
@@ -801,7 +839,7 @@ function buildTextForWidget(params: { specialist: any }): string {
         const normalized = canonicalizeComparableText(line);
         return Boolean(normalized) && messageLineSet.has(normalized);
       });
-    if (!duplicateByWhole && !duplicateByLines) {
+    if (!(dreamBuilderRenderContext && refinedMatchesStatements) && !duplicateByWhole && !duplicateByLines) {
       parts.push(refined);
     }
   }
@@ -1082,6 +1120,52 @@ type WordingChoiceUiPayload = {
 
 export function isWordingChoiceEligibleStep(stepId: string): boolean {
   return String(stepId || "").trim() !== STEP_0_ID;
+}
+
+function isDreamBuilderContext(
+  stepId: string,
+  activeSpecialist: string,
+  specialist?: Record<string, unknown> | null,
+  previousSpecialist?: Record<string, unknown> | null
+): boolean {
+  const step = String(stepId || "").trim().toLowerCase();
+  if (step !== DREAM_STEP_ID) return false;
+  const specialistName = String(activeSpecialist || "").trim().toLowerCase();
+  if (specialistName === "dreamexplainer") return true;
+
+  const current = specialist && typeof specialist === "object" ? specialist : {};
+  const previous = previousSpecialist && typeof previousSpecialist === "object" ? previousSpecialist : {};
+  const currentMenu = String((current as any).menu_id || "").trim().toUpperCase();
+  const previousMenu = String((previous as any).menu_id || "").trim().toUpperCase();
+  const suggestFlag =
+    String((current as any).suggest_dreambuilder || (previous as any).suggest_dreambuilder || "").trim();
+  const scoringFlag = String((current as any).scoring_phase || (previous as any).scoring_phase || "").trim();
+  const hasStatements =
+    (Array.isArray((current as any).statements) && (current as any).statements.length > 0) ||
+    (Array.isArray((previous as any).statements) && (previous as any).statements.length > 0);
+
+  if (suggestFlag === "true") return true;
+  if (scoringFlag === "true") return true;
+  if (hasStatements) return true;
+  if (currentMenu.startsWith("DREAM_EXPLAINER_MENU_")) return true;
+  if (previousMenu.startsWith("DREAM_EXPLAINER_MENU_")) return true;
+  return false;
+}
+
+export function isWordingChoiceEligibleContext(
+  stepId: string,
+  activeSpecialist: string,
+  specialist?: Record<string, unknown> | null,
+  previousSpecialist?: Record<string, unknown> | null
+): boolean {
+  if (!isWordingChoiceEligibleStep(stepId)) return false;
+  if (isDreamBuilderContext(stepId, activeSpecialist, specialist, previousSpecialist)) {
+    const current = specialist && typeof specialist === "object" ? specialist : {};
+    const previous = previousSpecialist && typeof previousSpecialist === "object" ? previousSpecialist : {};
+    const scoringPhase = String((current as any).scoring_phase || (previous as any).scoring_phase || "").trim();
+    if (scoringPhase === "true") return false;
+  }
+  return true;
 }
 
 function isConfirmActionCode(actionCode: string): boolean {
@@ -1417,6 +1501,32 @@ function parseListItems(input: string): string[] {
   return parts.length >= 2 ? parts : [raw];
 }
 
+function splitSentenceItems(input: string): string[] {
+  const raw = String(input || "")
+    .replace(/\r/g, " ")
+    .replace(/\n+/g, " ")
+    .trim();
+  if (!raw) return [];
+  const items = raw
+    .split(/(?<=[.!?])\s+(?=\S)/)
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  return items.length >= 2 ? items : [];
+}
+
+function parseUserListItemsForStep(stepId: string, userRaw: string, suggestionItems: string[]): string[] {
+  const items = parseListItems(userRaw)
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  if (stepId !== DREAM_STEP_ID || items.length !== 1) return items;
+  const sentenceItems = splitSentenceItems(userRaw);
+  if (sentenceItems.length < 2) return items;
+  // DreamBuilder often receives paragraph-style input with multiple statements.
+  // Splitting sentences keeps the list-choice cards readable and consistent with bullet steps.
+  if (suggestionItems.length > 0) return sentenceItems;
+  return items;
+}
+
 function extractCommittedListItems(stepId: string, previousSpecialist: any): string[] {
   if (Array.isArray(previousSpecialist?.wording_choice_base_items)) {
     return (previousSpecialist.wording_choice_base_items as string[])
@@ -1551,6 +1661,12 @@ function sanitizePendingTextMessage(messageRaw: string, suggestionRaw: string): 
 }
 
 export function isListChoiceScope(stepId: string, activeSpecialist: string): boolean {
+  if (
+    stepId === DREAM_STEP_ID &&
+    String(activeSpecialist || "").trim() === DREAM_EXPLAINER_SPECIALIST
+  ) {
+    return true;
+  }
   if (
     stepId === STRATEGY_STEP_ID ||
     stepId === PRODUCTSSERVICES_STEP_ID ||
@@ -1743,44 +1859,87 @@ function preserveProgressForInformationalAction(
   const field = fieldForStep(stepId);
   const finalField = FINAL_FIELD_BY_STEP_ID[stepId] || "";
   const finalValue = finalField ? String((state as any)[finalField] || "").trim() : "";
+  const previousValue = field ? String((previousSpecialist as any)[field] || "").trim() : "";
+  const carriedValue = previousValue || finalValue;
+  const previousRefined = String((previousSpecialist as any).refined_formulation || "").trim();
+  const carriedRefined = previousRefined || carriedValue;
 
   if (field) {
-    const currentValue = String((safe as any)[field] || "").trim();
-    const previousValue = String((previousSpecialist as any)[field] || "").trim();
-    if (!currentValue && (previousValue || finalValue)) {
-      (safe as any)[field] = previousValue || finalValue;
-    }
+    (safe as any)[field] = carriedValue;
   }
 
-  if (!String(safe.refined_formulation || "").trim()) {
-    const prevRefined = String((previousSpecialist as any).refined_formulation || "").trim();
-    if (prevRefined) {
-      safe.refined_formulation = prevRefined;
-    } else if (field) {
-      const carried = String((safe as any)[field] || "").trim();
-      if (carried) safe.refined_formulation = carried;
-    }
-  }
+  safe.refined_formulation = carriedRefined;
 
   if (isBulletConsistencyStep(stepId)) {
-    const currentStatements = Array.isArray(safe.statements) ? safe.statements : [];
     const previousStatements = Array.isArray((previousSpecialist as any).statements)
       ? ((previousSpecialist as any).statements as string[])
       : [];
-    if (currentStatements.length === 0 && previousStatements.length > 0) {
-      safe.statements = previousStatements
-        .map((line) => String(line || "").trim())
-        .filter(Boolean);
+    const carriedStatements = previousStatements
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+    const fallbackStatements = parseListItems(carriedValue || carriedRefined)
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+    const statements = carriedStatements.length > 0 ? carriedStatements : fallbackStatements;
+    safe.statements = statements;
+    const joined = statements.join("\n");
+    if (field) {
+      (safe as any)[field] = joined;
     }
-    if (!String((safe as any)[field] || "").trim() && Array.isArray(safe.statements) && safe.statements.length > 0) {
-      (safe as any)[field] = (safe.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean).join("\n");
-    }
-    if (!String(safe.refined_formulation || "").trim() && Array.isArray(safe.statements) && safe.statements.length > 0) {
-      safe.refined_formulation = (safe.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean).join("\n");
-    }
+    safe.refined_formulation = joined;
   }
 
   return safe;
+}
+
+function informationalProgressFingerprint(
+  stepId: string,
+  specialist: Record<string, unknown>,
+  state: CanvasState
+): { value: string; statements: string[] } {
+  const field = fieldForStep(stepId);
+  const finalField = FINAL_FIELD_BY_STEP_ID[stepId] || "";
+  const finalValue = finalField ? String((state as any)[finalField] || "").trim() : "";
+  const fieldValue = field ? String((specialist as any)[field] || "").trim() : "";
+  const refined = String((specialist as any).refined_formulation || "").trim();
+  const value = fieldValue || refined || finalValue;
+  const statements = isBulletConsistencyStep(stepId)
+    ? (
+      Array.isArray((specialist as any).statements)
+        ? ((specialist as any).statements as string[])
+        : parseListItems(value)
+    )
+      .map((line) => String(line || "").trim())
+      .filter(Boolean)
+    : [];
+  return { value, statements };
+}
+
+export function informationalActionMutatesProgress(
+  stepId: string,
+  specialistResult: Record<string, unknown>,
+  previousSpecialist: Record<string, unknown>,
+  state: CanvasState
+): boolean {
+  if (!isInformationalContextPolicyStep(stepId)) return false;
+  const baseline = informationalProgressFingerprint(
+    stepId,
+    preserveProgressForInformationalAction(stepId, {}, previousSpecialist, state),
+    state
+  );
+  const current = informationalProgressFingerprint(stepId, specialistResult, state);
+  const baselineValue = canonicalizeComparableText(baseline.value);
+  const currentValue = canonicalizeComparableText(current.value);
+  if (baselineValue !== currentValue) return true;
+  if (isBulletConsistencyStep(stepId)) {
+    const baselineItems = baseline.statements.map((line) => canonicalizeComparableText(line));
+    const currentItems = current.statements.map((line) => canonicalizeComparableText(line));
+    if (baselineItems.length !== currentItems.length) return true;
+    for (let i = 0; i < baselineItems.length; i += 1) {
+      if (baselineItems[i] !== currentItems[i]) return true;
+    }
+  }
+  return false;
 }
 
 function fieldForStep(stepId: string): string {
@@ -1990,7 +2149,7 @@ function buildWordingChoiceFromTurn(params: {
   forcePending?: boolean;
 }): { specialist: any; wordingChoice: WordingChoiceUiPayload | null } {
   const { stepId, activeSpecialist, previousSpecialist, specialistResult, userTextRaw, isOfftopic, forcePending } = params;
-  if (!isWordingChoiceEligibleStep(stepId)) {
+  if (!isWordingChoiceEligibleContext(stepId, activeSpecialist, specialistResult, previousSpecialist)) {
     return {
       specialist: {
         ...specialistResult,
@@ -2010,11 +2169,20 @@ function buildWordingChoiceFromTurn(params: {
   }
   const suggestionRaw = pickDualChoiceSuggestion(stepId, specialistResult, previousSpecialist, userRaw);
   if (!userRaw || !suggestionRaw) return { specialist: specialistResult, wordingChoice: null };
-  const mode: WordingChoiceMode = isListChoiceScope(stepId, activeSpecialist) ? "list" : "text";
+  const dreamBuilderContext = isDreamBuilderContext(
+    stepId,
+    activeSpecialist,
+    specialistResult,
+    previousSpecialist
+  );
+  const mode: WordingChoiceMode =
+    isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
   const normalizedUser = mode === "list" ? normalizeListUserInput(userRaw) : normalizeLightUserInput(userRaw);
   const baseItems = mode === "list" ? extractCommittedListItems(stepId, previousSpecialist || {}) : [];
-  const userRawItems = mode === "list" ? parseListItems(userRaw) : [];
   const suggestionFullItems = mode === "list" ? pickWordingSuggestionList(specialistResult, suggestionRaw) : [];
+  const userRawItems = mode === "list"
+    ? parseUserListItemsForStep(stepId, userRaw, suggestionFullItems)
+    : [];
   const userItems = mode === "list" ? diffListItems(baseItems, userRawItems) : [];
   const suggestionItems = mode === "list" ? diffListItems(baseItems, suggestionFullItems) : [];
   if (mode === "list" && !forcePending && userItems.length === 0) {
@@ -2188,9 +2356,22 @@ function applyWordingPickSelection(params: {
   return { handled: true, specialist: selectedWithContract, nextState };
 }
 
-function buildWordingChoiceFromPendingSpecialist(specialist: any): WordingChoiceUiPayload | null {
+function buildWordingChoiceFromPendingSpecialist(
+  specialist: any,
+  activeSpecialist: string,
+  previousSpecialist?: any
+): WordingChoiceUiPayload | null {
   if (String(specialist?.wording_choice_pending || "") !== "true") return null;
-  if (!isWordingChoiceEligibleStep(String(specialist?.wording_choice_target_field || ""))) return null;
+  if (
+    !isWordingChoiceEligibleContext(
+      String(specialist?.wording_choice_target_field || ""),
+      activeSpecialist,
+      specialist,
+      previousSpecialist || {}
+    )
+  ) {
+    return null;
+  }
   const mode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
   const userItems = Array.isArray(specialist?.wording_choice_user_items)
     ? (specialist.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
@@ -4565,10 +4746,19 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     if (
       policyFlags.wordingChoiceV2 &&
       String(prev.wording_choice_pending || "") === "true" &&
-      isWordingChoiceEligibleStep(stepId)
+      isWordingChoiceEligibleContext(
+        stepId,
+        String((state as any).active_specialist || ""),
+        prev,
+        prev
+      )
     ) {
       const pendingSpecialist = { ...prev };
-      const pendingChoice = buildWordingChoiceFromPendingSpecialist(pendingSpecialist);
+      const pendingChoice = buildWordingChoiceFromPendingSpecialist(
+        pendingSpecialist,
+        String((state as any).active_specialist || ""),
+        prev
+      );
       const stateWithUi = await ensureUiStringsForState(state, model);
       return attachRegistryPayload({
         ok: true as const,
@@ -4584,7 +4774,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     if (
       policyFlags.wordingChoiceV2 &&
       String(prev.wording_choice_pending || "") === "true" &&
-      !isWordingChoiceEligibleStep(stepId)
+      !isWordingChoiceEligibleContext(
+        stepId,
+        String((state as any).active_specialist || ""),
+        prev,
+        prev
+      )
     ) {
       (state as any).last_specialist_result = {
         ...prev,
@@ -4670,7 +4865,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     policyFlags.wordingChoiceV2 &&
     inputMode === "widget" &&
     String(pendingBeforeTurn.wording_choice_pending || "") === "true" &&
-    isWordingChoiceEligibleStep(String(state.current_step || "")) &&
+    isWordingChoiceEligibleContext(
+      String(state.current_step || ""),
+      String((state as any).active_specialist || ""),
+      pendingBeforeTurn,
+      pendingBeforeTurn
+    ) &&
     !isWordingPickRouteToken(userMessage) &&
     !isClearlyGeneralOfftopicInput(userMessage)
   ) {
@@ -4702,7 +4902,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       };
     } else {
       const pendingSpecialist = { ...pendingBeforeTurn };
-      const pendingChoice = buildWordingChoiceFromPendingSpecialist(pendingSpecialist);
+      const pendingChoice = buildWordingChoiceFromPendingSpecialist(
+        pendingSpecialist,
+        String((state as any).active_specialist || ""),
+        pendingBeforeTurn
+      );
       const stateWithUi = await ensureUiStringsForState(state, model);
       console.log("[wording_choice_pending_blocked]", {
         step: String(state.current_step || ""),
@@ -5673,9 +5877,18 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const pendingChoice =
     !policyFlags.wordingChoiceV2 ||
       isOfftopicTurn ||
-      !isWordingChoiceEligibleStep(String((nextState as any).current_step ?? ""))
+      !isWordingChoiceEligibleContext(
+        String((nextState as any).current_step ?? ""),
+        String((nextState as any).active_specialist ?? ""),
+        (specialistResult || {}) as Record<string, unknown>,
+        ((state as any).last_specialist_result || {}) as Record<string, unknown>
+      )
       ? null
-      : buildWordingChoiceFromPendingSpecialist(specialistResult);
+      : buildWordingChoiceFromPendingSpecialist(
+        specialistResult,
+        String((nextState as any).active_specialist ?? ""),
+        ((state as any).last_specialist_result || {}) as Record<string, unknown>
+      );
   const requireWordingPick = Boolean(pendingChoice);
   if (requireWordingPick) {
     wordingChoiceOverride = pendingChoice;
@@ -5687,13 +5900,19 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const infoPolicyMenuId = String((specialistResult as any)?.menu_id || "").trim();
   const infoPolicyQuestion = String((specialistResult as any)?.question || "").trim();
   const infoPolicyHasValidMenuContract = hasValidMenuContract(infoPolicyMenuId, infoPolicyQuestion);
+  const infoPolicyMutatesProgress = informationalActionMutatesProgress(
+    infoPolicyStepId,
+    (specialistResult || {}) as Record<string, unknown>,
+    policyPrevSpecialist,
+    nextState
+  );
   const shouldApplyInformationalContextPolicy =
     holisticPolicyEnabled &&
     isActionCodeTurnForPolicy &&
     sameStepTurn &&
     !requireWordingPick &&
     (specialistResult as any)?.is_offtopic !== true &&
-    !infoPolicyHasValidMenuContract &&
+    (!infoPolicyHasValidMenuContract || infoPolicyMutatesProgress) &&
     isInformationalContextPolicyStep(infoPolicyStepId) &&
     isInformationalContextActionCode(actionCodeRaw) &&
     String((specialistResult as any)?.action || "").toUpperCase() !== "CONFIRM";
@@ -5732,6 +5951,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         applied: true,
         step: infoPolicyStepId,
         action_code: actionCodeRaw,
+        mutates_progress: infoPolicyMutatesProgress,
         status: rendered.status,
         confirm_eligible: rendered.confirmEligible,
         action_codes_count: actionCodesOverride.length,

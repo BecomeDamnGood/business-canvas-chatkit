@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run build:ui && node scripts/build-ui.mjs && LOCAL_DEV=1 node --loader ts-node/esm server.ts",
+    "dev": "npm run build:ui && node scripts/build-ui.mjs && node scripts/dev-start.mjs",
     "build": "node scripts/prepare-presentation-assets.mjs && npm run build:ui && node scripts/build-ui.mjs && tsc -p tsconfig.build.json && node scripts/copy-ui-dist.mjs",
     "build:ui": "tsc -p tsconfig.ui.json",
     "start": "node dist/server.js",

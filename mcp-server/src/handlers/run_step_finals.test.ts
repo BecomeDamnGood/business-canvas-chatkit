@@ -7,8 +7,11 @@ import type { OrchestratorOutput } from "../core/orchestrator.js";
 import {
   run_step,
   applyStateUpdate,
+  buildTextForWidget,
   enforceDreamMenuContract,
   isWordingChoiceEligibleStep,
+  isWordingChoiceEligibleContext,
+  informationalActionMutatesProgress,
   isListChoiceScope,
   isMaterialRewriteCandidate,
   areEquivalentWordingVariants,
@@ -654,6 +657,77 @@ test("wording choice: step_0 is never eligible for dual-choice", () => {
   assert.equal(isWordingChoiceEligibleStep("step_0"), false);
   assert.equal(isWordingChoiceEligibleStep("dream"), true);
   assert.equal(isWordingChoiceEligibleStep("purpose"), true);
+  assert.equal(isWordingChoiceEligibleContext("dream", "DreamExplainer"), true);
+  assert.equal(isWordingChoiceEligibleContext("dream", "Dream"), true);
+  assert.equal(
+    isWordingChoiceEligibleContext("dream", "Dream", { suggest_dreambuilder: "true" }, {}),
+    true
+  );
+  assert.equal(
+    isWordingChoiceEligibleContext(
+      "dream",
+      "Dream",
+      { menu_id: "DREAM_EXPLAINER_MENU_ASK" },
+      {}
+    ),
+    true
+  );
+  assert.equal(
+    isWordingChoiceEligibleContext("dream", "DreamExplainer", { scoring_phase: "true" }, {}),
+    false
+  );
+});
+
+test("list-choice scope includes DreamBuilder specialist", () => {
+  assert.equal(isListChoiceScope("dream", "DreamExplainer"), true);
+  assert.equal(isListChoiceScope("dream", "Dream"), false);
+});
+
+test("buildTextForWidget: DreamBuilder avoids duplicate plain list when statements panel is present", () => {
+  const line1 = "A world where work contributes to a positive difference in people's lives.";
+  const line2 = "A future where businesses are built to create lasting impact for generations.";
+  const text = buildTextForWidget({
+    specialist: {
+      menu_id: "DREAM_EXPLAINER_MENU_ASK",
+      suggest_dreambuilder: "true",
+      message: `Your current Dream for Mindd is:\n\n${line1}\n${line2}`,
+      refined_formulation: `${line1}\n${line2}`,
+      statements: [line1, line2],
+    },
+  });
+
+  assert.equal(text.includes(line1), false);
+  assert.equal(text.includes(line2), false);
+});
+
+test("informational action mutation guard flags implicit output injection", () => {
+  const state = getDefaultState();
+  const previous: Record<string, unknown> = {};
+  const mutating = informationalActionMutatesProgress(
+    "bigwhy",
+    {
+      action: "ASK",
+      message: "Based on the Dream and Purpose, your Big Why could sound like this:",
+      bigwhy: "A world where every business creates meaningful value for society.",
+      refined_formulation: "A world where every business creates meaningful value for society.",
+    },
+    previous,
+    state
+  );
+  assert.equal(mutating, true);
+
+  const notMutating = informationalActionMutatesProgress(
+    "bigwhy",
+    {
+      action: "ASK",
+      message: "Here are 3 example directions you can use as inspiration.",
+      bigwhy: "",
+      refined_formulation: "",
+    },
+    previous,
+    state
+  );
+  assert.equal(notMutating, false);
 });
 
 test("wording choice: Rules of the game uses list-choice scope like Strategy", () => {
@@ -805,9 +879,10 @@ test("holistic policy flags are wired in run_step", () => {
   assert.match(source, /policyFlags\.offtopicV2/);
   assert.match(source, /policyFlags\.bulletRenderV2/);
   assert.match(source, /policyFlags\.wordingChoiceV2/);
-  assert.match(source, /envFlagEnabled\("BSC_HOLISTIC_POLICY_V2", false\)/);
-  assert.match(source, /envFlagEnabled\("BSC_OFFTOPIC_V2", false\)/);
-  assert.match(source, /envFlagEnabled\("BSC_TIMEOUT_GUARD_V2", false\)/);
+  assert.match(source, /const localDevDefaults = process\.env\.LOCAL_DEV === "1"/);
+  assert.match(source, /envFlagEnabled\("BSC_HOLISTIC_POLICY_V2", localDevDefaults\)/);
+  assert.match(source, /envFlagEnabled\("BSC_OFFTOPIC_V2", localDevDefaults\)/);
+  assert.match(source, /envFlagEnabled\("BSC_TIMEOUT_GUARD_V2", localDevDefaults\)/);
 });
 
 test("switch-to-self without existing dream candidate returns Dream intro menu (Define, not Refine)", async () => {
@@ -1234,7 +1309,7 @@ test("informational context policy scope excludes presentation step", () => {
   assert.doesNotMatch(fnBody, /stepId === PRESENTATION_STEP_ID/);
 });
 
-test("informational context policy skips rewrite when specialist already returned a valid menu contract", () => {
+test("informational context policy rewrites when turn mutates progress even with valid menu contract", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
   assert.match(
     source,
@@ -1242,7 +1317,11 @@ test("informational context policy skips rewrite when specialist already returne
   );
   assert.match(
     source,
-    /const shouldApplyInformationalContextPolicy =[\s\S]*?!infoPolicyHasValidMenuContract[\s\S]*?isInformationalContextPolicyStep/
+    /const infoPolicyMutatesProgress = informationalActionMutatesProgress\(/
+  );
+  assert.match(
+    source,
+    /const shouldApplyInformationalContextPolicy =[\s\S]*?\(!infoPolicyHasValidMenuContract \|\| infoPolicyMutatesProgress\)[\s\S]*?isInformationalContextPolicyStep/
   );
 });
 
@@ -1571,9 +1650,9 @@ test("wording choice: refine adjust rebuilds pending choice from stored user var
   );
 });
 
-test("wording choice: pending list mode returns full user and suggestion items", async () => {
+test("wording choice: DreamExplainer pending panel stays list-mode like Strategy", async () => {
   const result = await run_step({
-    user_message: "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
+    user_message: "",
     input_mode: "widget",
     state: {
       ...getDefaultState(),
@@ -1582,13 +1661,16 @@ test("wording choice: pending list mode returns full user and suggestion items",
       intro_shown_session: "true",
       started: "true",
       last_specialist_result: {
-        action: "REFINE",
+        action: "ASK",
         menu_id: "DREAM_EXPLAINER_MENU_REFINE",
         question:
           "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Refine this formulation",
-        refined_formulation: "1) Impact one\n2) Impact two",
+        suggest_dreambuilder: "true",
+        statements: ["Impact one", "Impact two"],
+        refined_formulation: "Impact one\nImpact two",
         wording_choice_pending: "true",
         wording_choice_mode: "list",
+        wording_choice_target_field: "dream",
         wording_choice_user_raw: "impact one, impact two",
         wording_choice_user_normalized: "Impact one, impact two.",
         wording_choice_user_items: ["Impact one", "Impact two"],
@@ -1599,6 +1681,7 @@ test("wording choice: pending list mode returns full user and suggestion items",
   });
 
   assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "true");
   assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
   assert.equal(String((result.ui as any)?.wording_choice?.mode || ""), "list");
   assert.deepEqual((result.ui as any)?.wording_choice?.user_items, ["Impact one", "Impact two"]);
