@@ -164,8 +164,7 @@ const RunStepArgsSchema = z.object({
 
 type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
 
-const STEP0_CARDDESC_EN =
-  "Just to set the context, we'll start with the basics.";
+const STEP0_CARDDESC_EN = "";
 const STEP0_QUESTION_EN =
   "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?";
 function step0QuestionForLang(_lang: string): string {
@@ -294,16 +293,23 @@ type HolisticPolicyFlags = {
 };
 
 const WIDGET_ESCAPE_MENU_SUFFIX = "_MENU_ESCAPE";
+const DREAM_EXPLAINER_ESCAPE_MENU_ID = "DREAM_EXPLAINER_MENU_ESCAPE";
 const WIDGET_ESCAPE_LABEL_PATTERNS: RegExp[] = [
   /\bfinish\s+later\b/i,
   /\bcontinue\b[^\n\r]{0,80}\bnow\b/i,
 ];
+const DREAM_EXPLAINER_ESCAPE_ACTION_CODES = new Set(
+  (ACTIONCODE_REGISTRY.menus[DREAM_EXPLAINER_ESCAPE_MENU_ID] || [])
+    .map((code) => String(code || "").trim())
+    .filter(Boolean)
+);
 const WIDGET_ESCAPE_ACTION_CODE_BAN = new Set<string>(
   Object.entries(ACTIONCODE_REGISTRY.menus)
     .filter(([menuId]) => String(menuId || "").trim().endsWith(WIDGET_ESCAPE_MENU_SUFFIX))
     .flatMap(([, actionCodes]) => (Array.isArray(actionCodes) ? actionCodes : []))
     .map((code) => String(code || "").trim())
     .filter(Boolean)
+    .filter((code) => !DREAM_EXPLAINER_ESCAPE_ACTION_CODES.has(code))
 );
 
 function envFlagEnabled(name: string, fallback: boolean): boolean {
@@ -330,6 +336,11 @@ function isEscapeMenuId(menuId: string): boolean {
   return String(menuId || "").trim().endsWith(WIDGET_ESCAPE_MENU_SUFFIX);
 }
 
+function isWidgetSuppressedEscapeMenuId(menuId: string): boolean {
+  const id = String(menuId || "").trim();
+  return isEscapeMenuId(id) && id !== DREAM_EXPLAINER_ESCAPE_MENU_ID;
+}
+
 function hasEscapeLabelPhrase(input: string): boolean {
   const text = String(input || "");
   if (!text) return false;
@@ -339,11 +350,12 @@ function hasEscapeLabelPhrase(input: string): boolean {
 function sanitizeEscapeInWidget(specialist: any): any {
   const safe = specialist && typeof specialist === "object" ? { ...specialist } : {};
   const menuId = String(safe.menu_id || "").trim();
+  if (menuId === DREAM_EXPLAINER_ESCAPE_MENU_ID) return safe;
   const action = String(safe.action || "").trim().toUpperCase();
   const question = String(safe.question || "");
   const message = String(safe.message || "");
   const hasEscapeSignal =
-    isEscapeMenuId(menuId) ||
+    isWidgetSuppressedEscapeMenuId(menuId) ||
     action === "ESCAPE" ||
     hasEscapeLabelPhrase(question) ||
     hasEscapeLabelPhrase(message);
@@ -356,7 +368,7 @@ function sanitizeEscapeInWidget(specialist: any): any {
   safe.proceed_to_next = "false";
   safe.proceed_to_purpose = "false";
   safe.proceed_to_dream = "false";
-  if (isEscapeMenuId(menuId) || action === "ESCAPE" || hasEscapeLabelPhrase(question)) {
+  if (isWidgetSuppressedEscapeMenuId(menuId) || action === "ESCAPE" || hasEscapeLabelPhrase(question)) {
     safe.question = "";
   }
   if (hasEscapeLabelPhrase(message)) {
@@ -883,7 +895,7 @@ function buildNumberedPrompt(labels: string[], headline: string): string {
 
 function hasValidMenuContract(menuIdRaw: string, questionRaw: string): boolean {
   const menuId = String(menuIdRaw || "").trim();
-  if (!menuId || menuId.endsWith("_MENU_ESCAPE")) return false;
+  if (!menuId || isWidgetSuppressedEscapeMenuId(menuId)) return false;
   const expected = ACTIONCODE_REGISTRY.menus[menuId]?.length ?? 0;
   if (expected <= 0) return false;
   return countNumberedOptions(String(questionRaw || "")) === expected;
@@ -1231,10 +1243,18 @@ function normalizeEntitySpecialistResult(stepId: string, specialist: any): any {
 
 function normalizeStep0AskDisplayContract(stepId: string, specialist: any, state: CanvasState): any {
   if (stepId !== STEP_0_ID || !specialist || typeof specialist !== "object") return specialist;
-  if (String(specialist.action || "").trim() !== "ASK") return specialist;
+  const action = String(specialist.action || "").trim().toUpperCase();
   const next = { ...specialist };
+  if (action === "INTRO") {
+    next.action = "ASK";
+    next.message = "";
+    next.question = String(next.question || "").trim() || step0QuestionForLang(langFromState(state));
+    next.confirmation_question = "";
+    next.menu_id = "";
+  }
+  if (String(next.action || "").trim() !== "ASK") return next;
   const isOfftopic = next.is_offtopic === true || String(next.is_offtopic || "").trim().toLowerCase() === "true";
-  if (!isOfftopic) next.message = STEP0_CARDDESC_EN;
+  if (!isOfftopic) next.message = "";
   if (!String(next.question || "").trim()) next.question = step0QuestionForLang(langFromState(state));
   return next;
 }
@@ -2425,7 +2445,7 @@ function buildUiPayload(
   }
   const menuId = String(specialist?.menu_id || "").trim();
   if (menuId) {
-    if (isEscapeMenuId(menuId)) {
+    if (isWidgetSuppressedEscapeMenuId(menuId)) {
       if (localDev) flags.escape_menu_suppressed = true;
       if (Object.keys(flags).length > 0 || wordingChoiceOverride) {
         return { flags, ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}) };
@@ -4590,6 +4610,32 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     if (stepId === STEP_0_ID) {
       const step0 = String(result.step_0 ?? "").trim();
       if (step0) return result;
+      const storedStep0Final = String((currentState as any).step_0_final ?? "").trim();
+      if (storedStep0Final) {
+        const parsed = parseStep0Final(
+          storedStep0Final,
+          String((currentState as any).business_name ?? "TBD")
+        );
+        return {
+          ...result,
+          action: "CONFIRM",
+          question: "",
+          confirmation_question: confirmationPrompt,
+          business_name: parsed.name || "TBD",
+          step_0: storedStep0Final,
+          proceed_to_dream: "false",
+        };
+      }
+      const isOfftopic = result?.is_offtopic === true || String(result?.is_offtopic || "").trim().toLowerCase() === "true";
+      if (isOfftopic) {
+        return {
+          ...result,
+          action: "CONFIRM",
+          question: "",
+          confirmation_question: confirmationPrompt,
+          proceed_to_dream: "false",
+        };
+      }
       const businessName = String(result.business_name ?? (currentState as any).business_name ?? "TBD").trim() || "TBD";
       return {
         ...result,
@@ -4642,6 +4688,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const safe = result && typeof result === "object" ? { ...result } : {};
     if (!policyFlags.offtopicV2) return safe;
     const stepId = String((state as any).current_step || "");
+    const activeSpecialist = String((state as any).active_specialist || "");
     const prevSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
     const finalFieldByStep: Record<string, string> = {
       [STEP_0_ID]: "step_0_final",
@@ -4678,6 +4725,93 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }
     safe.is_offtopic = isOfftopic;
     if (!isOfftopic) return safe;
+
+    const inDreamBuilderContext = isDreamBuilderContext(
+      stepId,
+      activeSpecialist,
+      safe,
+      prevSpecialist
+    );
+    if (inDreamBuilderContext) {
+      const previousMenu = String((prevSpecialist as any).menu_id || "").trim();
+      const currentMenu = String(safe.menu_id || "").trim();
+      let resolvedMenu = currentMenu;
+      if (!resolvedMenu.startsWith("DREAM_EXPLAINER_MENU_")) {
+        resolvedMenu = previousMenu.startsWith("DREAM_EXPLAINER_MENU_")
+          ? previousMenu
+          : DREAM_EXPLAINER_ESCAPE_MENU_ID;
+      }
+
+      safe.action = "ASK";
+      safe.confirmation_question = "";
+      safe.proceed_to_dream = "false";
+      safe.proceed_to_purpose = "false";
+      safe.proceed_to_next = "false";
+      safe.suggest_dreambuilder = "true";
+      safe.menu_id = resolvedMenu;
+
+      const expectedChoices = ACTIONCODE_REGISTRY.menus[resolvedMenu]?.length ?? 0;
+      if (
+        expectedChoices > 0 &&
+        countNumberedOptions(String(safe.question || "")) !== expectedChoices
+      ) {
+        const previousQuestion = String((prevSpecialist as any).question || "").trim();
+        if (countNumberedOptions(previousQuestion) === expectedChoices) {
+          safe.question = previousQuestion;
+        }
+      }
+
+      if (
+        (!Array.isArray(safe.statements) || safe.statements.length === 0) &&
+        Array.isArray((prevSpecialist as any).statements) &&
+        (prevSpecialist as any).statements.length > 0
+      ) {
+        safe.statements = (prevSpecialist as any).statements;
+      }
+      safe.wording_choice_pending = "false";
+      safe.wording_choice_selected = "";
+      return safe;
+    }
+
+    if (stepId === STEP_0_ID) {
+      const step0Final = String((state as any).step_0_final || "").trim();
+      if (step0Final) {
+        const parsed = parseStep0Final(step0Final, String((state as any).business_name || "TBD"));
+        const statement =
+          String(parsed.status || "").toLowerCase() === "existing"
+            ? `You have a ${parsed.venture} called ${parsed.name}.`
+            : `You want to start a ${parsed.venture} called ${parsed.name}.`;
+        safe.action = "CONFIRM";
+        safe.question = "";
+        safe.confirmation_question = `${statement} Are you ready to start with the first step: the Dream?`;
+        safe.business_name = parsed.name || "TBD";
+        safe.step_0 = step0Final;
+        safe.proceed_to_dream = "false";
+        safe.proceed_to_purpose = "false";
+        safe.proceed_to_next = "false";
+        safe.menu_id = "";
+        safe.wording_choice_pending = "false";
+        safe.wording_choice_selected = "";
+        return safe;
+      }
+      const confirmationQuestion = String(safe.confirmation_question || "").trim();
+      const question = String(safe.question || "").trim();
+      const action = String(safe.action || "").trim().toUpperCase();
+      safe.proceed_to_dream = "false";
+      safe.proceed_to_purpose = "false";
+      safe.proceed_to_next = "false";
+      safe.menu_id = "";
+      if (confirmationQuestion) {
+        safe.action = "CONFIRM";
+      } else if (question && action === "ESCAPE") {
+        safe.action = "ESCAPE";
+      } else {
+        safe.action = "ASK";
+      }
+      safe.wording_choice_pending = "false";
+      safe.wording_choice_selected = "";
+      return safe;
+    }
 
     safe.action = "ASK";
     safe.confirmation_question = "";
@@ -5802,12 +5936,23 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const holisticPolicyEnabled = globalTurnPolicyEnabled && policyFlags.holisticPolicyV2;
   const sameStepTurn = String((nextState as any).current_step ?? "") === String((state as any).current_step ?? "");
   const isOfftopicTurn = (specialistResult as any)?.is_offtopic === true;
+  const skipOfftopicOverlayForDreamBuilder = isDreamBuilderContext(
+    String((nextState as any).current_step ?? ""),
+    String((nextState as any).active_specialist ?? ""),
+    (specialistResult || {}) as Record<string, unknown>,
+    ((state as any).last_specialist_result || {}) as Record<string, unknown>
+  );
+  const skipOfftopicOverlayForStep0 =
+    String((nextState as any).current_step ?? "") === STEP_0_ID &&
+    isOfftopicTurn;
   const shouldApplyGlobalTurnPolicy =
     holisticPolicyEnabled &&
     policyFlags.offtopicV2 &&
     !isActionCodeTurnForPolicy &&
     isOfftopicTurn &&
-    sameStepTurn;
+    sameStepTurn &&
+    !skipOfftopicOverlayForDreamBuilder &&
+    !skipOfftopicOverlayForStep0;
   if (shouldApplyGlobalTurnPolicy) {
     const rendered = renderFreeTextTurnPolicy({
       stepId: String((nextState as any).current_step ?? ""),
