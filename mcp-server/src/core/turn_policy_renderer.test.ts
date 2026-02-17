@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import { getDefaultState } from "./state.js";
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
+import { MENU_LABELS } from "./menu_contract.js";
 import { renderFreeTextTurnPolicy } from "./turn_policy_renderer.js";
 
 function countNumberedOptions(text: string): number {
@@ -613,19 +613,91 @@ test("all non-escape menus keep parity and confirm-filter contract in both eligi
   }
 });
 
-test("non-escape menu labels stay in parity with action registry", () => {
-  const source = fs.readFileSync(new URL("./turn_policy_renderer.ts", import.meta.url), "utf8");
-  const match = source.match(/const MENU_LABELS: Record<string, string\[]> = \{([\s\S]*?)\n\};/);
-  assert.ok(match && match[1], "MENU_LABELS block exists");
-  const labelCounts: Record<string, number> = {};
-  for (const entry of (`\n${String(match?.[1] || "")}`).matchAll(/\n\s*([A-Z0-9_]+):\s*\[((?:.|\n)*?)\],/g)) {
-    labelCounts[entry[1]] = ((entry[2].match(/"/g) || []).length / 2);
-  }
+test("labelsForMenu precedence: specialist.question parsed labels override prev/question and fallback", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).purpose_final = "Committed purpose";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      menu_id: "PURPOSE_MENU_REFINE",
+      message: "Current message",
+      question: "1) Specialist label one\n2) Specialist label two",
+      purpose: "Committed purpose",
+    },
+    previousSpecialist: {
+      menu_id: "PURPOSE_MENU_REFINE",
+      question: "1) Previous label one\n2) Previous label two",
+    },
+  });
+  assert.deepEqual(
+    rendered.uiActions.map((action) => String(action.label || "")),
+    ["Specialist label one", "Specialist label two"]
+  );
+});
 
+test("labelsForMenu precedence: prev.question parsed labels are used when specialist.question is unusable", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).purpose_final = "Committed purpose";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      menu_id: "PURPOSE_MENU_REFINE",
+      message: "Current message",
+      question: "Please answer freely.",
+      purpose: "Committed purpose",
+    },
+    previousSpecialist: {
+      menu_id: "PURPOSE_MENU_REFINE",
+      question: "1) Previous label one\n2) Previous label two",
+    },
+  });
+  assert.deepEqual(
+    rendered.uiActions.map((action) => String(action.label || "")),
+    ["Previous label one", "Previous label two"]
+  );
+});
+
+test("labelsForMenu precedence: static MENU_LABELS fallback is used when parsed labels are unavailable", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).purpose_final = "Committed purpose";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      menu_id: "PURPOSE_MENU_REFINE",
+      message: "Current message",
+      question: "No numbered options here.",
+      purpose: "Committed purpose",
+    },
+    previousSpecialist: {
+      menu_id: "PURPOSE_MENU_REFINE",
+      question: "Still no numbered options.",
+    },
+  });
+  assert.deepEqual(
+    rendered.uiActions.map((action) => String(action.label || "")),
+    MENU_LABELS.PURPOSE_MENU_REFINE
+  );
+});
+
+test("non-escape menu labels stay in parity with action registry", () => {
   for (const [menuId, actionCodes] of Object.entries(ACTIONCODE_REGISTRY.menus)) {
     if (menuId.endsWith("_MENU_ESCAPE")) continue;
+    const labels = MENU_LABELS[menuId];
+    assert.ok(Array.isArray(labels), `MENU_LABELS missing for ${menuId}`);
     assert.equal(
-      labelCounts[menuId],
+      labels.length,
       actionCodes.length,
       `menu parity mismatch for ${menuId}`
     );

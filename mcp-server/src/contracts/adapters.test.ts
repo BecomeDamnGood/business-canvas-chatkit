@@ -31,3 +31,49 @@ test("intentToActionCode preserves route tokens", () => {
   assert.equal(actionCode, "__ROUTE__PURPOSE_EXPLAIN_MORE__");
 });
 
+test("intentToActionCode throws for context-required intents", () => {
+  const blockedIntents = [
+    { type: "CONFIRM" as const },
+    { type: "CONTINUE" as const },
+    { type: "FINISH_LATER" as const },
+    { type: "START_EXERCISE" as const, exerciseType: "dream_builder" as const },
+    { type: "REQUEST_EXPLANATION" as const, topic: "dream_intro" as const },
+    { type: "NAVIGATE_STEP" as const, step: "purpose" as const },
+  ];
+
+  for (const intent of blockedIntents) {
+    assert.throws(
+      () => intentToActionCode(intent),
+      /requires step\/menu context/i,
+      `Expected blocked generic mapping for ${intent.type}`
+    );
+  }
+});
+
+test("actionCodeToIntent -> intentToActionCode round-trip is unsupported for generic confirm/continue intents", () => {
+  const nonRoundTripRoutes = ["yes", "__ROUTE__PURPOSE_CONTINUE__", "__ROUTE__PURPOSE_FINISH_LATER__"];
+  for (const route of nonRoundTripRoutes) {
+    const intent = actionCodeToIntent({
+      actionCode: "ACTION_TEST",
+      route,
+    });
+    assert.throws(
+      () => intentToActionCode(intent),
+      /requires step\/menu context/i
+    );
+  }
+});
+
+test("supported intents still round-trip through adapters", () => {
+  const routeIntent = actionCodeToIntent({
+    actionCode: "ACTION_TEST_ROUTE",
+    route: "__ROUTE__TARGETGROUP_ASK_QUESTIONS__",
+  });
+  assert.equal(intentToActionCode(routeIntent), "__ROUTE__TARGETGROUP_ASK_QUESTIONS__");
+
+  const wordingIntent = actionCodeToIntent({ actionCode: "ACTION_WORDING_PICK_USER" });
+  assert.equal(intentToActionCode(wordingIntent), "ACTION_WORDING_PICK_USER");
+
+  const scoresIntent = actionCodeToIntent({ actionCode: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" });
+  assert.equal(intentToActionCode(scoresIntent), "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
+});

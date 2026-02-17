@@ -106,6 +106,17 @@ export function dedupeBodyAgainstPrompt(bodyRaw: string, promptRaw: string): str
   return rest.replace(/^\s+/, "");
 }
 
+export function stripStructuredChoiceLines(promptRaw: string): string {
+  const lines = String(promptRaw || "").split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (!lines.length) return "";
+  const kept: string[] = [];
+  for (const line of lines) {
+    if (/^\s*[1-9][\)\.]\s+/.test(line)) continue;
+    kept.push(line);
+  }
+  return kept.join("\n").trim();
+}
+
 function setStaticStrings(lang: string): void {
   const uiSubtitle = document.getElementById("uiSubtitle");
   const byText = document.getElementById("byText");
@@ -882,10 +893,16 @@ export function render(overrideToolOutput?: unknown): void {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   }
 
-  const { promptShown, choices } = extractChoicesFromPrompt(promptSource);
-  const choicesArr = Array.isArray(choices) ? choices : [];
+  let choicesArr: Choice[] = [];
+  let promptText = isDreamDirectionView ? "" : promptSource;
+  if (hasStructuredActions) {
+    promptText = isDreamDirectionView ? "" : stripStructuredChoiceLines(promptSource);
+  } else {
+    const parsed = extractChoicesFromPrompt(promptSource);
+    choicesArr = Array.isArray(parsed.choices) ? parsed.choices : [];
+    promptText = isDreamDirectionView ? "" : parsed.promptShown;
+  }
   const requireWordingPick = renderWordingChoicePanel(result, lang);
-  let promptText = isDreamDirectionView ? "" : (promptShown || "");
 
   const promptEl = document.getElementById("prompt");
   if (promptEl) renderInlineText(promptEl, promptText || "");

@@ -3,6 +3,8 @@ import type { StepIntent } from "../contracts/intents.js";
 function routeToIntent(route: string): StepIntent {
   const normalized = String(route || "").trim();
   if (!normalized) return { type: "SUBMIT_TEXT", text: "", context: "free_text" };
+  // NOTE: CONFIRM/CONTINUE/FINISH_LATER intents are produced for intent-layer handling only.
+  // They are intentionally not guaranteed to round-trip through intentToActionCode without step/menu context.
   if (normalized === "yes") return { type: "CONFIRM" };
   if (normalized.includes("FINISH_LATER")) return { type: "FINISH_LATER" };
   if (normalized.includes("CONTINUE")) return { type: "CONTINUE" };
@@ -36,4 +38,3 @@ export function actionCodeToIntent(params: {
   }
   return routeToIntent(route);
 }
-

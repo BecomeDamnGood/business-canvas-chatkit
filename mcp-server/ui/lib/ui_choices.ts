@@ -1,6 +1,7 @@
 /**
  * Prompt parsing and choice extraction.
  * extractChoicesFromPrompt MUST receive raw prompt (not stripped).
+ * DEPRECATED: this parser is fallback-only when structured ui.actions are not available.
  */
 
 export interface Choice {

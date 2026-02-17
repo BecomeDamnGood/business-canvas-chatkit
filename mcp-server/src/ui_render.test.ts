@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { dedupeBodyAgainstPrompt, render, renderChoiceButtons } from "../ui/lib/ui_render.js";
+import {
+  dedupeBodyAgainstPrompt,
+  render,
+  renderChoiceButtons,
+  stripStructuredChoiceLines,
+} from "../ui/lib/ui_render.js";
 import { setSessionStarted, setSessionWelcomeShown } from "../ui/lib/ui_state.js";
 
 function makeElement(tag: string) {
@@ -374,6 +379,24 @@ test("dedupeBodyAgainstPrompt removes duplicated prompt prefix and keeps remaind
   const prompt = "Define your Dream for Acme or choose an option.";
   const body = "Define your Dream for Acme or choose an option.\n\nAdditional context.";
   assert.equal(dedupeBodyAgainstPrompt(body, prompt), "Additional context.");
+});
+
+test("stripStructuredChoiceLines removes numbered options and keeps headline text", () => {
+  const prompt = [
+    "1) Confirm wording",
+    "2) Refine wording",
+    "",
+    "Refine your Purpose or choose an option.",
+  ].join("\n");
+  assert.equal(
+    stripStructuredChoiceLines(prompt),
+    "Refine your Purpose or choose an option."
+  );
+});
+
+test("stripStructuredChoiceLines keeps plain prompt unchanged", () => {
+  const prompt = "Please share your thoughts.";
+  assert.equal(stripStructuredChoiceLines(prompt), prompt);
 });
 
 test("render shows wording choice panel in text mode and keeps confirm hidden until pick", () => {
