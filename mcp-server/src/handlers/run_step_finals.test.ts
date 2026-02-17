@@ -18,6 +18,7 @@ import {
   isClearlyGeneralOfftopicInput,
   shouldTreatAsStepContributingInput,
   pickDualChoiceSuggestion,
+  stripUnsupportedReformulationClaims,
   pickPrompt,
   RECAP_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
@@ -609,7 +610,7 @@ test("Step 0 legacy confirm prompt is preserved (no global renderer rewrite)", a
   assert.equal(Array.isArray(result.ui?.action_codes), false);
 });
 
-test("Step 0 initial ASK shows canonical prompt without extra intro line", async () => {
+test("Step 0 initial ASK shows context line above canonical prompt", async () => {
   const result = await run_step({
     user_message: "",
     state: {
@@ -627,7 +628,7 @@ test("Step 0 initial ASK shows canonical prompt without extra intro line", async
   assert.equal(String(result.specialist?.action || ""), "ASK");
   assert.equal(
     String(result.text || ""),
-    "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?"
+    "Just to set the context, we'll start with the basics."
   );
   assert.equal(
     String(result.prompt || ""),
@@ -635,7 +636,7 @@ test("Step 0 initial ASK shows canonical prompt without extra intro line", async
   );
 });
 
-test("Step 0 ASK fallback keeps canonical question and no extra intro line", async () => {
+test("Step 0 ASK fallback keeps context line and canonical question", async () => {
   const result = await run_step({
     user_message: "",
     state: {
@@ -651,7 +652,7 @@ test("Step 0 ASK fallback keeps canonical question and no extra intro line", asy
   });
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(String(result.text || ""), "Test question");
+  assert.equal(String(result.text || ""), "Just to set the context, we'll start with the basics.");
   assert.equal(String(result.prompt || ""), "Test question");
 });
 
@@ -831,6 +832,126 @@ test("buildTextForWidget: DreamBuilder avoids duplicate plain list when statemen
 
   assert.equal(text.includes(line1), false);
   assert.equal(text.includes(line2), false);
+  assert.equal(text.includes("Your current Dream for Mindd is:"), false);
+});
+
+test("buildTextForWidget strips generic choose lines when menu is interactive", () => {
+  const text = buildTextForWidget({
+    specialist: {
+      menu_id: "PURPOSE_MENU_REFINE",
+      question:
+        "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording",
+      message:
+        "I'll propose a Purpose based on your Dream.\n\nWe exist to enrich lives.\n\nPlease choose 1 or 2.",
+      refined_formulation: "",
+    },
+  });
+
+  assert.equal(text.includes("Please choose 1 or 2"), false);
+  assert.equal(text.includes("We exist to enrich lives."), true);
+});
+
+test("buildTextForWidget strips generic choose lines when widget actions are present", () => {
+  const text = buildTextForWidget({
+    specialist: {
+      menu_id: "",
+      question: "",
+      message: "Please choose one option.",
+      refined_formulation: "Refined sentence stays visible.",
+    },
+    hasWidgetActions: true,
+  });
+
+  assert.equal(text.includes("Please choose one option."), false);
+  assert.equal(text.includes("Refined sentence stays visible."), true);
+});
+
+test("buildTextForWidget strips choose-noise for all confirm-filtered single-action menus", () => {
+  const riskCases = [
+    { stepId: "dream", menuId: "DREAM_MENU_REFINE", expectedAction: "ACTION_DREAM_REFINE_START_EXERCISE", field: "dream" },
+    { stepId: "dream", menuId: "DREAM_EXPLAINER_MENU_REFINE", expectedAction: "ACTION_DREAM_EXPLAINER_REFINE_ADJUST", field: "dream" },
+    { stepId: "purpose", menuId: "PURPOSE_MENU_REFINE", expectedAction: "ACTION_PURPOSE_REFINE_ADJUST", field: "purpose" },
+    { stepId: "bigwhy", menuId: "BIGWHY_MENU_REFINE", expectedAction: "ACTION_BIGWHY_REFINE_ADJUST", field: "bigwhy" },
+    { stepId: "role", menuId: "ROLE_MENU_REFINE", expectedAction: "ACTION_ROLE_REFINE_ADJUST", field: "role" },
+    { stepId: "entity", menuId: "ENTITY_MENU_EXAMPLE", expectedAction: "ACTION_ENTITY_EXAMPLE_REFINE", field: "entity" },
+    { stepId: "strategy", menuId: "STRATEGY_MENU_CONFIRM", expectedAction: "ACTION_STRATEGY_REFINE_EXPLAIN_MORE", field: "strategy" },
+    { stepId: "targetgroup", menuId: "TARGETGROUP_MENU_POSTREFINE", expectedAction: "ACTION_TARGETGROUP_POSTREFINE_ASK_QUESTIONS", field: "targetgroup" },
+    { stepId: "rulesofthegame", menuId: "RULES_MENU_REFINE", expectedAction: "ACTION_RULES_REFINE_ADJUST", field: "rulesofthegame" },
+  ] as const;
+
+  for (const risk of riskCases) {
+    const state = getDefaultState();
+    (state as any).current_step = risk.stepId;
+    (state as any).business_name = "Mindd";
+
+    const specialist: Record<string, unknown> = {
+      action: "ASK",
+      menu_id: risk.menuId,
+      question: "",
+      message: "Generated candidate.\n\nPlease choose 1 or 2.",
+      refined_formulation: "",
+    };
+    specialist[risk.field] = "";
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: risk.stepId,
+      state,
+      specialist,
+    });
+
+    assert.deepEqual(
+      rendered.uiActionCodes,
+      [risk.expectedAction],
+      `${risk.menuId} must degrade to the non-confirm action only`
+    );
+    assert.equal(
+      countNumberedOptions(String(rendered.specialist.question || "")),
+      1,
+      `${risk.menuId} question must stay in parity with one remaining action`
+    );
+
+    const text = buildTextForWidget({
+      specialist: rendered.specialist,
+      hasWidgetActions: rendered.uiActionCodes.length > 0,
+    });
+    assert.equal(
+      /please\s+choose\s+1\s+or\s+2/i.test(String(text || "")),
+      false,
+      `${risk.menuId} text must not leak the generic choose-line`
+    );
+  }
+});
+
+test("buildTextForWidget strips chooser-noise for every registered menu in widget mode", () => {
+  for (const [menuId, actionCodes] of Object.entries(ACTIONCODE_REGISTRY.menus)) {
+    const question = actionCodes.map((_, idx) => `${idx + 1}) Option ${idx + 1}`).join("\n");
+    const text = buildTextForWidget({
+      specialist: {
+        menu_id: menuId,
+        question,
+        message:
+          "Generated candidate text.\n\nPlease choose 1 or 2.\nSelect 1 or 2.\n**Pick one option.**",
+        refined_formulation: "",
+      },
+      hasWidgetActions: true,
+    });
+
+    assert.equal(
+      /please\s+choose\s+1\s+or\s+2/i.test(String(text || "")),
+      false,
+      `${menuId} must not leak "Please choose 1 or 2" in card text`
+    );
+    assert.equal(
+      /select\s+1\s+or\s+2/i.test(String(text || "")),
+      false,
+      `${menuId} must not leak "Select 1 or 2" in card text`
+    );
+    assert.equal(
+      /pick\s+one\s+option/i.test(String(text || "")),
+      false,
+      `${menuId} must not leak generic pick-line in card text`
+    );
+  }
 });
 
 test("informational action mutation guard flags implicit output injection", () => {
@@ -889,6 +1010,20 @@ test("wording choice: suggestion fallback extracts rewritten content from messag
     suggestion,
     "Mindd dreams of a world in which every company is purpose-driven and earns a sustainable right to exist."
   );
+});
+
+test("message contract: strips reformulation claims when no choice/output is available", () => {
+  const input = [
+    "You've provided some clear focus points, which is a great start.",
+    "",
+    "I've reformulated your input into valid strategy focus choices:",
+    "",
+    "If you want to sharpen or adjust these, let me know.",
+  ].join("\n");
+  const cleaned = stripUnsupportedReformulationClaims(input);
+  assert.equal(cleaned.includes("provided some clear focus points"), false);
+  assert.equal(cleaned.includes("reformulated your input"), false);
+  assert.equal(cleaned.includes("If you want to sharpen or adjust these, let me know."), true);
 });
 
 test("wording choice: picks material candidate when refined echoes user input", () => {
@@ -986,6 +1121,30 @@ test("wording choice: pending text mode does not repeat suggestion in body text"
   assert.equal(result.ok, true);
   assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
   assert.equal(String(result.text || "").includes(suggestion), false);
+});
+
+test("wording choice: pending list mode does not repeat suggestion paragraph in body text", () => {
+  const s1 = "A growing number of people will seek meaningful work that positively impacts others in the next 5 to 10 years.";
+  const s2 = "More businesses will focus on creating lasting legacies that endure for generations.";
+  const s3 = "The desire for autonomy and freedom in work and life will become a defining trend.";
+  const text = buildTextForWidget({
+    specialist: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_user_items: [
+        "I want my work to make a positive difference in people's lives.",
+        "I want to build something that lasts beyond me.",
+      ],
+      wording_choice_suggestion_items: [s1, s2, s3],
+      wording_choice_agent_current: `${s1} ${s2} ${s3}`,
+      message: `I've rewritten your wishes as future-facing statements and added them:\n\n${s1} ${s2} ${s3}\n\nStatements 1 to 3 noted. If you mean something different, tell me and I'll adjust.`,
+      refined_formulation: "",
+    },
+  });
+
+  assert.equal(text.includes(s2), false);
+  assert.equal(text.includes("I've rewritten your wishes as future-facing statements and added them:"), true);
+  assert.equal(text.includes("Statements 1 to 3 noted."), true);
 });
 
 test("Dream readiness confirm is excluded from hard-confirm fast path", () => {
@@ -1458,6 +1617,22 @@ test("informational context policy rewrites when turn mutates progress even with
   );
 });
 
+test("menu safety policy enforces status-safe actions for widget menu turns", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /const shouldApplyMenuSafetyPolicy =[\s\S]*?inputMode === "widget"/);
+  assert.match(source, /const shouldApplyMenuSafetyPolicy =[\s\S]*?menuSafetyMenuId !== ""/);
+  assert.match(source, /if \(shouldApplyMenuSafetyPolicy\) \{[\s\S]*?renderFreeTextTurnPolicy\(/);
+  assert.match(source, /actionCodesOverride = rendered\.uiActionCodes;/);
+  assert.match(source, /renderedActionsOverride = rendered\.uiActions;/);
+});
+
+test("bullet consistency policy derives statements from bulleted message content", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /function extractBulletedItemsFromMessage\(messageRaw: string\): string\[]/);
+  assert.match(source, /const fromMessageBullets = extractBulletedItemsFromMessage\(rawMessage\)/);
+  assert.match(source, /const statements = fromStatements.length > 0[\s\S]*fromMessageBullets/);
+});
+
 test("off-topic guard: DreamBuilder skips generic overlay", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
   assert.match(source, /const skipOfftopicOverlayForDreamBuilder = isDreamBuilderContext\(/);
@@ -1827,4 +2002,42 @@ test("wording choice: DreamExplainer pending panel stays list-mode like Strategy
   assert.equal(String((result.ui as any)?.wording_choice?.mode || ""), "list");
   assert.deepEqual((result.ui as any)?.wording_choice?.user_items, ["Impact one", "Impact two"]);
   assert.deepEqual((result.ui as any)?.wording_choice?.suggestion_items, ["Impact one", "Impact two"]);
+});
+
+test("wording choice: DreamExplainer pick does not prepend generic current-dream line", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_SUGGESTION",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "DreamExplainer",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "DREAM_EXPLAINER_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Refine this formulation",
+        suggest_dreambuilder: "true",
+        statements: ["Impact one", "Impact two"],
+        refined_formulation: "Impact one\nImpact two",
+        wording_choice_pending: "true",
+        wording_choice_mode: "list",
+        wording_choice_target_field: "dream",
+        wording_choice_user_raw: "impact one, impact two",
+        wording_choice_user_normalized: "Impact one, impact two.",
+        wording_choice_user_items: ["Impact one", "Impact two"],
+        wording_choice_agent_current: "1) Impact one\n2) Impact two",
+        wording_choice_suggestion_items: ["Impact one", "Impact two"],
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(
+    String(result.specialist?.message || "").toLowerCase().includes("your current dream for"),
+    false
+  );
 });

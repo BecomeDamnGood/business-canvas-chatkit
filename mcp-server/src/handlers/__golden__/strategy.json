@@ -1,0 +1,13 @@
+{
+  "id": "strategy_golden",
+  "step": "strategy",
+  "input": {
+    "state": { "current_step": "strategy" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "strategy", "to": "strategy" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

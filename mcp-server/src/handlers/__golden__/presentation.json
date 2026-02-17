@@ -1,0 +1,13 @@
+{
+  "id": "presentation_golden",
+  "step": "presentation",
+  "input": {
+    "state": { "current_step": "presentation" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "presentation", "to": "presentation" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

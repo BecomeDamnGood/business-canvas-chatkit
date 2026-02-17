@@ -1,0 +1,13 @@
+{
+  "id": "targetgroup_golden",
+  "step": "targetgroup",
+  "input": {
+    "state": { "current_step": "targetgroup" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "targetgroup", "to": "targetgroup" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

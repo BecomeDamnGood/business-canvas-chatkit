@@ -16,7 +16,13 @@ import {
   type CanvasState,
   type BoolString,
 } from "../core/state.js";
-import { orchestrate, type OrchestratorOutput } from "../core/orchestrator.js";
+import {
+  deriveTransitionEventFromLegacy,
+  orchestrate,
+  orchestrateFromTransition,
+  sameOrchestratorOutput,
+  type OrchestratorOutput,
+} from "../core/orchestrator.js";
 import {
   getPresentationTemplatePath,
   hasPresentationTemplate,
@@ -147,6 +153,8 @@ import {
 import { loadModule as loadCld3 } from "cld3-asm";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { renderFreeTextTurnPolicy } from "../core/turn_policy_renderer.js";
+import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
+import type { RenderedAction } from "../contracts/ui_actions.js";
 
 /**
  * Incoming tool args
@@ -164,7 +172,7 @@ const RunStepArgsSchema = z.object({
 
 type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
 
-const STEP0_CARDDESC_EN = "";
+const STEP0_CARDDESC_EN = "Just to set the context, we'll start with the basics.";
 const STEP0_QUESTION_EN =
   "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?";
 function step0QuestionForLang(_lang: string): string {
@@ -292,6 +300,13 @@ type HolisticPolicyFlags = {
   timeoutGuardV2: boolean;
 };
 
+type MigrationFlags = {
+  intentsV1: boolean;
+  structuredActionsV1: boolean;
+  transitionsV1: boolean;
+  legacyChoiceParser: boolean;
+};
+
 const WIDGET_ESCAPE_MENU_SUFFIX = "_MENU_ESCAPE";
 const DREAM_EXPLAINER_ESCAPE_MENU_ID = "DREAM_EXPLAINER_MENU_ESCAPE";
 const WIDGET_ESCAPE_LABEL_PATTERNS: RegExp[] = [
@@ -329,6 +344,16 @@ function resolveHolisticPolicyFlags(): HolisticPolicyFlags {
     bulletRenderV2: holisticPolicyV2 && envFlagEnabled("BSC_BULLET_RENDER_V2", localDevDefaults),
     wordingChoiceV2: holisticPolicyV2 && envFlagEnabled("BSC_WORDING_CHOICE_V2", localDevDefaults),
     timeoutGuardV2: holisticPolicyV2 && envFlagEnabled("BSC_TIMEOUT_GUARD_V2", localDevDefaults),
+  };
+}
+
+function resolveMigrationFlags(): MigrationFlags {
+  const localDevDefaults = process.env.LOCAL_DEV === "1";
+  return {
+    intentsV1: envFlagEnabled("BSC_INTENTS_V1", true),
+    structuredActionsV1: envFlagEnabled("BSC_STRUCTURED_ACTIONS_V1", localDevDefaults),
+    transitionsV1: envFlagEnabled("BSC_TRANSITIONS_V1", localDevDefaults),
+    legacyChoiceParser: envFlagEnabled("BSC_LEGACY_CHOICE_PARSER", true),
   };
 }
 
@@ -738,7 +763,7 @@ function convertPdfToPng(pdfPath: string, outDir: string): string {
  * message -> refined_formulation; if both empty, fallback to question.
  * Only append refined_formulation if it is not already contained in message (prevents duplicate display e.g. Rules REFINE).
  */
-export function buildTextForWidget(params: { specialist: any }): string {
+export function buildTextForWidget(params: { specialist: any; hasWidgetActions?: boolean }): string {
   const { specialist } = params;
   const parts: string[] = [];
 
@@ -775,6 +800,7 @@ export function buildTextForWidget(params: { specialist: any }): string {
         const lineKey = canonicalizeComparableText(stripped);
         if (lineKey && statementKeys.has(lineKey)) return false;
         if (/^your dream statements$/i.test(stripped)) return false;
+        if (/^your current dream for\b.*\bis:?$/i.test(stripped)) return false;
         if (
           /^\d+\s+statements?\b/i.test(stripped) &&
           /(minimum|so far|out of|at least)/i.test(stripped)
@@ -799,8 +825,20 @@ export function buildTextForWidget(params: { specialist: any }): string {
     const filtered = paragraphs.filter((p) => normalizeLine(p) !== suggestionNorm);
     msg = filtered.join("\n\n").trim();
   }
+  if (wordingPending && wordingMode === "list" && msg) {
+    const userItems = Array.isArray(specialist?.wording_choice_user_items)
+      ? (specialist.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+      : [];
+    const suggestionItems = Array.isArray(specialist?.wording_choice_suggestion_items)
+      ? (specialist.wording_choice_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+      : [];
+    const knownItems = mergeListItems(userItems, suggestionItems);
+    const fallbackItems = knownItems.length > 0 ? knownItems : splitSentenceItems(wordingSuggestion);
+    msg = sanitizePendingListMessage(msg, fallbackItems);
+  }
   const refined = String(specialist?.refined_formulation ?? "").trim();
   const menuId = String(specialist?.menu_id || "").trim().toUpperCase();
+  if (msg) msg = stripChoiceInstructionNoise(msg);
   const statementLines = Array.isArray(specialist?.statements)
     ? (specialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean)
     : [];
@@ -863,6 +901,28 @@ export function buildTextForWidget(params: { specialist: any }): string {
   return parts.join("\n\n").trim();
 }
 
+function stripChoiceInstructionNoise(value: string): string {
+  const choicePatterns = [
+    /^(please\s+)?(choose|pick|select)\s+(one|an?)\s+option(s)?(\s+below)?\.?$/i,
+    /^(please\s+)?(choose|pick|select)\s+\d+(?:\s*(?:,|\/|or|and)\s*\d+)*\.?$/i,
+    /^(please\s+)?(choose|pick|select)\s+between\s+\d+\s+and\s+\d+\.?$/i,
+    /^(please\s+)?(choose|pick|select)\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
+    /^(kies|selecteer)\s+\d+(?:\s*(?:,|\/|of|en)\s*\d+)*\.?$/i,
+    /^(kies|selecteer)\s+een\s+optie(\s+hieronder)?\.?$/i,
+  ];
+  const lines = String(value || "").replace(/\r/g, "\n").split("\n");
+  const kept = lines.filter((line) => {
+    const normalized = String(line || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[*_`~]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) return true;
+    return !choicePatterns.some((pattern) => pattern.test(normalized));
+  });
+  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 export function pickPrompt(specialist: any): string {
   const menuId = String(specialist?.menu_id ?? "").trim();
   const q = String(specialist?.question ?? "").trim();
@@ -887,10 +947,61 @@ function countNumberedOptions(prompt: string): number {
   return count;
 }
 
+function extractNumberedLabels(prompt: string): string[] {
+  const lines = String(prompt || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const out: string[] = [];
+  for (const line of lines) {
+    const match = line.match(/^([1-9])[\)\.]\s+(.+)$/);
+    if (!match) continue;
+    const idx = Number(match[1]);
+    if (idx !== out.length + 1) break;
+    out.push(String(match[2] || "").trim());
+  }
+  return out;
+}
+
+function buildRenderedActions(actionCodes: string[], labels: string[]): RenderedAction[] {
+  const safeCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
+  return safeCodes.map((actionCode, idx) => {
+    const entry = ACTIONCODE_REGISTRY.actions[actionCode];
+    const label = String(labels[idx] || actionCode).trim() || actionCode;
+    const route = String(entry?.route || actionCode).trim();
+    return {
+      id: `${actionCode}:${idx + 1}`,
+      label,
+      action_code: actionCode,
+      intent: actionCodeToIntent({ actionCode, route }),
+      primary: idx === 0,
+    };
+  });
+}
+
 function buildNumberedPrompt(labels: string[], headline: string): string {
   const numbered = labels.map((label, idx) => `${idx + 1}) ${label}`);
   if (!numbered.length) return headline;
   return `${numbered.join("\n")}\n\n${headline}`.trim();
+}
+
+function stripNumberedOptions(prompt: string): string {
+  const kept = String(prompt || "")
+    .split(/\r?\n/)
+    .map((line) => String(line || "").trim())
+    .filter(Boolean)
+    .filter((line) => !/^[1-9][\)\.]\s+/.test(line));
+  return kept.join("\n").trim();
+}
+
+function buildQuestionTextFromActions(prompt: string, actions: RenderedAction[]): string {
+  if (!Array.isArray(actions) || actions.length === 0) return String(prompt || "").trim();
+  const labels = actions
+    .map((action) => String(action?.label || "").trim())
+    .filter(Boolean);
+  if (labels.length !== actions.length) return String(prompt || "").trim();
+  const headline = stripNumberedOptions(prompt) || "Please choose an option.";
+  return buildNumberedPrompt(labels, headline);
 }
 
 function hasValidMenuContract(menuIdRaw: string, questionRaw: string): boolean {
@@ -1254,7 +1365,7 @@ function normalizeStep0AskDisplayContract(stepId: string, specialist: any, state
   }
   if (String(next.action || "").trim() !== "ASK") return next;
   const isOfftopic = next.is_offtopic === true || String(next.is_offtopic || "").trim().toLowerCase() === "true";
-  if (!isOfftopic) next.message = "";
+  if (!isOfftopic) next.message = STEP0_CARDDESC_EN;
   if (!String(next.question || "").trim()) next.question = step0QuestionForLang(langFromState(state));
   return next;
 }
@@ -1653,8 +1764,17 @@ function sanitizePendingListMessage(messageRaw: string, knownItems: string[]): s
     if (/^<\/?strong>/i.test(trimmed) && /so far/i.test(trimmed)) continue;
     if (/^so far\b/i.test(trimmed)) continue;
     if (/^<\/?strong>/i.test(trimmed) && /established so far/i.test(trimmed)) continue;
+    if (/^(this is your input|this would be my suggestion)\s*:?\s*$/i.test(trimmed.replace(/<[^>]+>/g, "").trim())) continue;
     const withoutMarker = trimmed.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim();
-    if (known.has(canonicalizeComparableText(withoutMarker))) continue;
+    const directKey = canonicalizeComparableText(withoutMarker);
+    if (known.has(directKey)) continue;
+    const sentenceItems = splitSentenceItems(withoutMarker);
+    if (sentenceItems.length >= 2) {
+      const sentenceKeys = sentenceItems
+        .map((line) => canonicalizeComparableText(line))
+        .filter(Boolean);
+      if (sentenceKeys.length >= 2 && sentenceKeys.every((key) => known.has(key))) continue;
+    }
     kept.push(line);
   }
   return kept
@@ -1759,6 +1879,23 @@ function isInformationalContextActionCode(actionCode: string): boolean {
   return code !== "" && INFORMATIONAL_CONTEXT_ACTION_CODES.has(code);
 }
 
+function extractBulletedItemsFromMessage(messageRaw: string): string[] {
+  const lines = String(messageRaw || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").replace(/<[^>]+>/g, "").trim())
+    .filter(Boolean);
+  const out: string[] = [];
+  for (const line of lines) {
+    const match = line.match(/^(?:[-*•]|\d+[\).])\s+(.+)$/);
+    if (!match) continue;
+    const item = String(match[1] || "").trim();
+    if (!item) continue;
+    out.push(item);
+  }
+  return out;
+}
+
 function sanitizeBulletStepPolicySpecialist(
   specialist: Record<string, unknown>,
   previous: Record<string, unknown>
@@ -1782,12 +1919,20 @@ function sanitizeBulletStepPolicySpecialist(
   const fromListField = parseListItems(listFieldCandidate)
     .map((line) => String(line || "").trim())
     .filter(Boolean);
-  const statements = fromStatements.length > 0 ? fromStatements : fromListField;
+  const rawMessage = String(specialist.message || "").replace(/\r/g, "\n");
+  const fromMessageBullets = extractBulletedItemsFromMessage(rawMessage)
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const statements = fromStatements.length > 0
+    ? fromStatements
+    : fromListField.length > 0
+      ? fromListField
+      : fromMessageBullets;
   if (statements.length === 0) return specialist;
 
   const statementKeys = new Set(statements.map((line) => canonicalizeComparableText(line)).filter(Boolean));
-  const rawMessage = String(specialist.message || "").replace(/\r/g, "\n");
-  if (!rawMessage.trim()) return specialist;
+  const specialistWithStatements = { ...specialist, statements };
+  if (!rawMessage.trim()) return specialistWithStatements;
 
   const lineMatchesStatement = (lineRaw: string): boolean => {
     const trimmed = String(lineRaw || "").trim();
@@ -1843,7 +1988,7 @@ function sanitizeBulletStepPolicySpecialist(
   }
 
   const message = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { ...specialist, message };
+  return { ...specialistWithStatements, message };
 }
 
 function sanitizePreviousForBulletPolicy(previous: Record<string, unknown>): Record<string, unknown> {
@@ -2005,7 +2150,9 @@ function wordingCompanyName(state: CanvasState): string {
   return "your future company";
 }
 
-function wordingSelectionMessage(stepId: string, state: CanvasState): string {
+function wordingSelectionMessage(stepId: string, state: CanvasState, activeSpecialist = ""): string {
+  const specialist = String(activeSpecialist || (state as any)?.active_specialist || "").trim();
+  if (stepId === DREAM_STEP_ID && specialist === DREAM_EXPLAINER_SPECIALIST) return "";
   return `Your current ${wordingStepLabel(stepId)} for ${wordingCompanyName(state)} is:`;
 }
 
@@ -2057,10 +2204,11 @@ function userChoiceFeedbackReason(stepId: string, prev: any): string {
   return STEP_FEEDBACK_FALLBACK[stepId] || "this wording may be less precise for this step.";
 }
 
-function userChoiceFeedbackMessage(stepId: string, state: CanvasState, prev: any): string {
+function userChoiceFeedbackMessage(stepId: string, state: CanvasState, prev: any, activeSpecialist = ""): string {
   const reason = userChoiceFeedbackReason(stepId, prev);
   const feedback = `You chose your own wording and that's fine. But please remember that ${reason}`;
-  return `${feedback}\n\n${wordingSelectionMessage(stepId, state)}`;
+  const selection = wordingSelectionMessage(stepId, state, activeSpecialist);
+  return selection ? `${feedback}\n\n${selection}` : feedback;
 }
 
 function mergeUniqueMessageBlocks(primary: string, secondary: string): string {
@@ -2157,6 +2305,32 @@ function isRefineAdjustRouteToken(token: string): boolean {
 
 function isWordingPickRouteToken(token: string): boolean {
   return token === "__WORDING_PICK_USER__" || token === "__WORDING_PICK_SUGGESTION__";
+}
+
+export function stripUnsupportedReformulationClaims(messageRaw: string): string {
+  const message = String(messageRaw || "").replace(/\r/g, "\n");
+  if (!message.trim()) return "";
+  const blocked = [
+    /\b(i['’]?ve|i have)\s+reformulat\w*\b/i,
+    /\b(i['’]?ve|i have)\s+rewritten\b/i,
+    /\byou['’]?ve provided some clear focus points\b/i,
+  ];
+  const lines = message.split("\n");
+  const kept: string[] = [];
+  for (const lineRaw of lines) {
+    const line = String(lineRaw || "");
+    const trimmed = line.trim();
+    if (!trimmed) {
+      kept.push("");
+      continue;
+    }
+    if (blocked.some((re) => re.test(trimmed))) continue;
+    kept.push(line);
+  }
+  return kept
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function buildWordingChoiceFromTurn(params: {
@@ -2318,8 +2492,11 @@ function applyWordingPickSelection(params: {
     : fallbackPickedRaw;
   const chosen = stepId === ENTITY_STEP_ID ? normalizeEntityPhrase(rawChosen) || rawChosen : rawChosen;
   if (!chosen) return { handled: false, specialist: prev, nextState: state };
-  const userFeedback = userChoiceFeedbackMessage(stepId, state, prev);
-  const selectedMessage = pickedUser ? userFeedback : wordingSelectionMessage(stepId, state);
+  const activeSpecialist = String((state as any)?.active_specialist || "").trim();
+  const userFeedback = userChoiceFeedbackMessage(stepId, state, prev, activeSpecialist);
+  const selectedMessage = pickedUser
+    ? userFeedback
+    : wordingSelectionMessage(stepId, state, activeSpecialist);
   const selected = withUpdatedTargetField(
     {
       ...prev,
@@ -2414,15 +2591,26 @@ function buildUiPayload(
   specialist: any,
   flagsOverride?: Record<string, boolean> | null,
   actionCodesOverride?: string[] | null,
-  wordingChoiceOverride?: WordingChoiceUiPayload | null
+  renderedActionsOverride?: RenderedAction[] | null,
+  wordingChoiceOverride?: WordingChoiceUiPayload | null,
+  migrationFlags?: MigrationFlags
 ): {
   action_codes?: string[];
   expected_choice_count?: number;
+  actions?: RenderedAction[];
+  questionText?: string;
   flags: Record<string, boolean>;
   wording_choice?: WordingChoiceUiPayload;
 } | undefined {
   const localDev = shouldLogLocalDevDiagnostics();
   const flags = { ...(flagsOverride || {}) };
+  const featureFlags = migrationFlags || resolveMigrationFlags();
+  const rawQuestionText = pickPrompt(specialist);
+  const labels = extractNumberedLabels(rawQuestionText);
+  const overrideActions =
+    Array.isArray(renderedActionsOverride) && renderedActionsOverride.length > 0
+      ? renderedActionsOverride
+      : [];
   if (Array.isArray(actionCodesOverride)) {
     const safeOverrideCodes = sanitizeWidgetActionCodes(
       actionCodesOverride.map((code) => String(code || "").trim()).filter(Boolean)
@@ -2431,9 +2619,18 @@ function buildUiPayload(
       flags.escape_actioncodes_suppressed = true;
     }
     if (safeOverrideCodes.length > 0) {
+      const renderedActions =
+        overrideActions.length > 0
+          ? overrideActions
+          : featureFlags.structuredActionsV1 || featureFlags.intentsV1
+          ? buildRenderedActions(safeOverrideCodes, labels)
+          : [];
+      const questionText = buildQuestionTextFromActions(rawQuestionText, renderedActions);
       return {
         action_codes: safeOverrideCodes,
         expected_choice_count: safeOverrideCodes.length,
+        ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
+        ...(questionText ? { questionText } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
@@ -2466,9 +2663,18 @@ function buildUiPayload(
         }
         return undefined;
       }
+      const renderedActions =
+        overrideActions.length > 0
+          ? overrideActions
+          : featureFlags.structuredActionsV1 || featureFlags.intentsV1
+          ? buildRenderedActions(safeCodes, labels)
+          : [];
+      const questionText = buildQuestionTextFromActions(rawQuestionText, renderedActions);
       return {
         action_codes: safeCodes,
         expected_choice_count: safeCodes.length,
+        ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
+        ...(questionText ? { questionText } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
@@ -2485,20 +2691,30 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
   specialist: any,
   flagsOverride?: Record<string, boolean> | null,
   actionCodesOverride?: string[] | null,
+  renderedActionsOverride?: RenderedAction[] | null,
   wordingChoiceOverride?: WordingChoiceUiPayload | null
 ): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
   const safeSpecialist = sanitizeEscapeInWidget(specialist);
+  const ui = buildUiPayload(
+    safeSpecialist,
+    flagsOverride,
+    actionCodesOverride,
+    renderedActionsOverride,
+    wordingChoiceOverride
+  );
+  const hasWidgetActions =
+    (Array.isArray(ui?.action_codes) && ui.action_codes.length > 0) ||
+    (Array.isArray(ui?.actions) && ui.actions.length > 0);
   const safePayload = {
     ...payload,
     specialist: safeSpecialist,
     ...(Object.prototype.hasOwnProperty.call(payload, "text")
-      ? { text: buildTextForWidget({ specialist: safeSpecialist }) }
+      ? { text: buildTextForWidget({ specialist: safeSpecialist, hasWidgetActions }) }
       : {}),
     ...(Object.prototype.hasOwnProperty.call(payload, "prompt")
       ? { prompt: pickPrompt(safeSpecialist) }
       : {}),
   } as T;
-  const ui = buildUiPayload(safeSpecialist, flagsOverride, actionCodesOverride, wordingChoiceOverride);
   return {
     ...safePayload,
     registry_version: ACTIONCODE_REGISTRY.version,
@@ -3395,6 +3611,7 @@ export function applyStateUpdate(params: {
   const { prev, decision, specialistResult, showSessionIntroUsed } = params;
 
   const action = String(specialistResult?.action ?? "");
+  const isOfftopic = specialistResult?.is_offtopic === true;
   const next_step = String(decision.current_step ?? "");
   const active_specialist = String(decision.specialist_to_call ?? "");
 
@@ -3410,6 +3627,11 @@ export function applyStateUpdate(params: {
     // mark a step intro as shown only when the specialist actually outputs INTRO
     intro_shown_for_step: action === "INTRO" ? next_step : (prev as any).intro_shown_for_step,
   };
+
+  // Contract rule: off-topic turns must never mutate canonical finals.
+  if (isOfftopic) {
+    return nextState;
+  }
 
   // ---- Step 0 ----
   if (next_step === STEP_0_ID) {
@@ -4144,6 +4366,8 @@ type RunStepBase = {
   ui?: {
     action_codes?: string[];
     expected_choice_count?: number;
+    actions?: RenderedAction[];
+    questionText?: string;
     flags: Record<string, boolean>;
     wording_choice?: WordingChoiceUiPayload;
   };
@@ -4162,11 +4386,45 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const args: RunStepArgs = RunStepArgsSchema.parse(rawArgs);
   const inputMode = args.input_mode || "chat";
   const policyFlags = resolveHolisticPolicyFlags();
+  const migrationFlags = resolveMigrationFlags();
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
     console.log("[run_step] input_mode", { inputMode });
   }
-  const widgetStrict = process.env.ACTIONCODE_WIDGET_STRICT === "1";
-  const allowLegacyRouting = inputMode !== "widget";
+  const allowLegacyRouting = inputMode !== "widget" && migrationFlags.legacyChoiceParser;
+
+  const decideOrchestration = (routeState: CanvasState, routeUserMessage: string): OrchestratorOutput => {
+    const legacyDecision = orchestrate({ state: routeState, userMessage: routeUserMessage });
+    const event = deriveTransitionEventFromLegacy({ state: routeState, userMessage: routeUserMessage });
+    const typedDecision = orchestrateFromTransition({
+      state: routeState,
+      userMessage: routeUserMessage,
+      event,
+    });
+    if (!sameOrchestratorOutput(legacyDecision, typedDecision)) {
+      console.warn("[transitions_shadow_mismatch]", {
+        current_step: String((routeState as any)?.current_step || ""),
+        active_specialist: String((routeState as any)?.active_specialist || ""),
+        event_type: String((event as any)?.type || ""),
+        legacy: {
+          specialist_to_call: String((legacyDecision as any)?.specialist_to_call || ""),
+          current_step: String((legacyDecision as any)?.current_step || ""),
+          show_step_intro: String((legacyDecision as any)?.show_step_intro || ""),
+          show_session_intro: String((legacyDecision as any)?.show_session_intro || ""),
+          intro_shown_for_step: String((legacyDecision as any)?.intro_shown_for_step || ""),
+          intro_shown_session: String((legacyDecision as any)?.intro_shown_session || ""),
+        },
+        typed: {
+          specialist_to_call: String((typedDecision as any)?.specialist_to_call || ""),
+          current_step: String((typedDecision as any)?.current_step || ""),
+          show_step_intro: String((typedDecision as any)?.show_step_intro || ""),
+          show_session_intro: String((typedDecision as any)?.show_session_intro || ""),
+          intro_shown_for_step: String((typedDecision as any)?.intro_shown_for_step || ""),
+          intro_shown_session: String((typedDecision as any)?.intro_shown_session || ""),
+        },
+      });
+    }
+    return migrationFlags.transitionsV1 ? typedDecision : legacyDecision;
+  };
 
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
 
@@ -4470,7 +4728,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const lang = langFromState(state);
 
     // Orchestrate to determine which specialist to call
-    const decision = orchestrate({ state, userMessage: "" });
+    const decision = decideOrchestration(state, "");
     // Call the specialist with empty message to get intro
     const callResult = await callSpecialistStrictSafe({
       model,
@@ -4903,7 +5161,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         prompt: pickPrompt(pendingSpecialist),
         specialist: pendingSpecialist,
         state: stateWithUi,
-      }, pendingSpecialist, { require_wording_pick: true }, [], pendingChoice);
+      }, pendingSpecialist, { require_wording_pick: true }, [], [], pendingChoice);
     }
     if (
       policyFlags.wordingChoiceV2 &&
@@ -4964,12 +5222,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         error: {
           type: "unknown_actioncode",
           action_code: actionCodeInput,
-          strict: widgetStrict,
+          strict: true,
         },
       };
-      if (widgetStrict) {
-        throw new Error(`Unknown ActionCode in widget mode: ${actionCodeInput}`);
-      }
       return attachRegistryPayload(errorPayload, lastSpecialistResult);
     }
     userMessage = routed;
@@ -5056,7 +5311,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         prompt: pickPrompt(pendingSpecialist),
         specialist: pendingSpecialist,
         state: stateWithUi,
-      }, pendingSpecialist, { require_wording_pick: true }, [], pendingChoice);
+      }, pendingSpecialist, { require_wording_pick: true }, [], [], pendingChoice);
     }
   }
 
@@ -5625,7 +5880,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         current_step: nextStepId,
         last_specialist_result: {},
       } as CanvasState;
-      const decision = orchestrate({ state: stateForAdvance, userMessage: "" });
+      const decision = decideOrchestration(stateForAdvance, "");
       const call1 = await callSpecialistStrictSafe({
         model,
         state: stateForAdvance,
@@ -5725,7 +5980,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
 
   // --------- ORCHESTRATE (decision 1) ----------
-  const decision1 = orchestrate({ state, userMessage });
+  const decision1 = decideOrchestration(state, userMessage);
 
   // We do not render a session intro here.
   const showSessionIntro: BoolString = decision1.show_session_intro;
@@ -5825,10 +6080,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         specialistResult,
         showSessionIntroUsed: "false",
       });
-      const decisionNext = orchestrate({
-        state: stateAfterFirst,
-        userMessage: "Go to next step",
-      });
+      const decisionNext = decideOrchestration(stateAfterFirst, "Go to next step");
       if (decisionNext.specialist_to_call === DREAM_EXPLAINER_SPECIALIST) {
         const call2 = await callSpecialistStrictSafe({
           model,
@@ -5891,7 +6143,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   let finalDecision = decision1;
 
   if (shouldChainToNextStep(decision1, specialistResult)) {
-    const decision2 = orchestrate({ state: nextState, userMessage });
+    const decision2 = decideOrchestration(nextState, userMessage);
 
     if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
       const call2 = await callSpecialistStrictSafe({ model, state: nextState, decision: decision2, userMessage }, nextState);
@@ -5931,6 +6183,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
 
   let actionCodesOverride: string[] | null = null;
+  let renderedActionsOverride: RenderedAction[] | null = null;
   let wordingChoiceOverride: WordingChoiceUiPayload | null = null;
   const globalTurnPolicyEnabled = process.env.GLOBAL_TURN_POLICY_ENABLED !== "0";
   const holisticPolicyEnabled = globalTurnPolicyEnabled && policyFlags.holisticPolicyV2;
@@ -5962,6 +6215,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     });
     specialistResult = rendered.specialist;
     actionCodesOverride = rendered.uiActionCodes;
+    renderedActionsOverride = rendered.uiActions;
     (nextState as any).last_specialist_result = specialistResult;
     if (process.env.GLOBAL_TURN_POLICY_DEBUG === "1" || shouldLogLocalDevDiagnostics()) {
       console.log("[global_turn_policy]", {
@@ -6038,6 +6292,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   if (requireWordingPick) {
     wordingChoiceOverride = pendingChoice;
     actionCodesOverride = [];
+    renderedActionsOverride = [];
   }
 
   const policyPrevSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
@@ -6082,6 +6337,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     });
     specialistResult = rendered.specialist;
     actionCodesOverride = rendered.uiActionCodes;
+    renderedActionsOverride = rendered.uiActions;
     (nextState as any).last_specialist_result = specialistResult;
     if (!hadMenuBefore && actionCodesOverride.length > 0) {
       console.log("[buttonless_screen_prevented]", {
@@ -6132,6 +6388,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     });
     specialistResult = rendered.specialist;
     actionCodesOverride = rendered.uiActionCodes;
+    renderedActionsOverride = rendered.uiActions;
     (nextState as any).last_specialist_result = specialistResult;
     if (!hadMenuBefore && actionCodesOverride.length > 0) {
       console.log("[buttonless_screen_prevented]", {
@@ -6152,6 +6409,65 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         request_id: String((nextState as any).__request_id ?? ""),
         client_action_id: String((nextState as any).__client_action_id ?? ""),
       });
+    }
+  }
+
+  const menuSafetyStepId = String((nextState as any).current_step ?? "");
+  const menuSafetyMenuId = String((specialistResult as any)?.menu_id || "").trim();
+  const shouldApplyMenuSafetyPolicy =
+    holisticPolicyEnabled &&
+    inputMode === "widget" &&
+    !requireWordingPick &&
+    (specialistResult as any)?.is_offtopic !== true &&
+    menuSafetyMenuId !== "" &&
+    actionCodesOverride === null &&
+    renderedActionsOverride === null &&
+    String((specialistResult as any)?.action || "").toUpperCase() !== "CONFIRM";
+  if (shouldApplyMenuSafetyPolicy) {
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: menuSafetyStepId,
+      state: nextState,
+      specialist: (specialistResult || {}) as Record<string, unknown>,
+      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+    });
+    if (rendered.uiActionCodes.length > 0) {
+      actionCodesOverride = rendered.uiActionCodes;
+      renderedActionsOverride = rendered.uiActions;
+    }
+    if (process.env.GLOBAL_TURN_POLICY_DEBUG === "1" || shouldLogLocalDevDiagnostics()) {
+      console.log("[menu_safety_policy]", {
+        applied: rendered.uiActionCodes.length > 0,
+        step: menuSafetyStepId,
+        status: rendered.status,
+        confirm_eligible: rendered.confirmEligible,
+        menu_id: menuSafetyMenuId,
+        action_codes_count: rendered.uiActionCodes.length,
+        parity_ok: countNumberedOptions(String((rendered.specialist as any)?.question ?? "")) === rendered.uiActionCodes.length,
+        request_id: String((nextState as any).__request_id ?? ""),
+        client_action_id: String((nextState as any).__client_action_id ?? ""),
+      });
+    }
+  }
+
+  const stepForClaimSanitizer = String((nextState as any).current_step ?? "");
+  const hasWordingChoicePanel = Boolean(wordingChoiceOverride) || requireWordingPick;
+  if (!hasWordingChoicePanel) {
+    const field = fieldForStep(stepForClaimSanitizer);
+    const fieldValue = field ? String((specialistResult as any)?.[field] || "").trim() : "";
+    const refinedValue = String((specialistResult as any)?.refined_formulation || "").trim();
+    const statementCount = Array.isArray((specialistResult as any)?.statements)
+      ? ((specialistResult as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
+      : 0;
+    if (!fieldValue && !refinedValue && statementCount === 0) {
+      const currentMessage = String((specialistResult as any)?.message || "");
+      const sanitizedMessage = stripUnsupportedReformulationClaims(currentMessage);
+      if (sanitizedMessage !== currentMessage) {
+        specialistResult = {
+          ...specialistResult,
+          message: sanitizedMessage,
+        };
+        (nextState as any).last_specialist_result = specialistResult;
+      }
     }
   }
 
@@ -6183,5 +6499,5 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       language: lang,
       meta_user_message_ignored: looksLikeMetaInstruction(rawNormalized) && pristineAtEntry,
     },
-  }, specialistResult, mergedFlags, actionCodesOverride, wordingChoiceOverride);
+  }, specialistResult, mergedFlags, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride);
 }

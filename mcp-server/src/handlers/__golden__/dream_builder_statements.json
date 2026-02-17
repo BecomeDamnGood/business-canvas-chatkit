@@ -1,0 +1,17 @@
+{
+  "id": "dream_builder_statements",
+  "step": "dream_explainer",
+  "input": {
+    "state": {
+      "current_step": "dream",
+      "active_specialist": "DreamExplainer",
+      "dream_scoring_statements": ["S1", "S2"]
+    },
+    "userMessage": "Add another statement"
+  },
+  "expected": {
+    "transition": { "from": "dream", "to": "dream" },
+    "stateMutation": ["last_specialist_result.statements"],
+    "actions": ["ACTION_DREAM_EXPLAINER_SUBMIT_SCORES"]
+  }
+}

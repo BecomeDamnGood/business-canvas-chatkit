@@ -1,0 +1,13 @@
+{
+  "id": "bigwhy_golden",
+  "step": "bigwhy",
+  "input": {
+    "state": { "current_step": "bigwhy" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "bigwhy", "to": "bigwhy" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

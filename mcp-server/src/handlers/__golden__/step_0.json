@@ -1,0 +1,13 @@
+{
+  "id": "step_0_golden",
+  "step": "step_0",
+  "input": {
+    "state": { "current_step": "step_0" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "step_0", "to": "step_0" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

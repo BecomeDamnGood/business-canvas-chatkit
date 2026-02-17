@@ -119,6 +119,100 @@ test("renderChoiceButtons renders buttons when ui.action_codes exist", () => {
   (globalThis as any).document = originalDocument;
 });
 
+test("renderChoiceButtons renders structured ui.actions without numbered prompt choices", () => {
+  const originalDocument = (globalThis as any).document;
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
+  (globalThis as any).document = fakeDocument;
+
+  renderChoiceButtons([], {
+    specialist: { menu_id: "DREAM_MENU_REFINE" },
+    state: { current_step: "dream" },
+    registry_version: "test",
+    ui: {
+      actions: [
+        { id: "a1", label: "Action one", action_code: "ACTION_ONE", intent: { type: "ROUTE", route: "__ROUTE__ONE__" } },
+        { id: "a2", label: "Action two", action_code: "ACTION_TWO", intent: { type: "ROUTE", route: "__ROUTE__TWO__" } },
+      ],
+    },
+  });
+
+  const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
+  assert.equal(buttons.length, 2);
+
+  (globalThis as any).document = originalDocument;
+});
+
+test("renderChoiceButtons shows safe error when action_codes exist but prompt labels are missing", () => {
+  const originalDocument = (globalThis as any).document;
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
+  (globalThis as any).document = fakeDocument;
+
+  renderChoiceButtons([], {
+    specialist: { menu_id: "PURPOSE_MENU_REFINE" },
+    state: { current_step: "purpose", language: "en" },
+    registry_version: "test",
+    ui: { action_codes: ["ACTION_PURPOSE_REFINE_ADJUST"], expected_choice_count: 1 },
+  });
+
+  const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
+  assert.equal(buttons.length, 0);
+  assert.equal(String(wrap.style.display || ""), "flex");
+
+  (globalThis as any).document = originalDocument;
+});
+
+test("render keeps structured actions visible even when prompt has no numbered options", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const wrap = (fakeDocument as any).getElementById("choiceWrap");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+        intro_shown_session: "true",
+        intro_shown_for_step: "purpose",
+        language: "en",
+      },
+      specialist: {
+        action: "ASK",
+        question: "Please share your thoughts.",
+        menu_id: "PURPOSE_MENU_REFINE",
+      },
+      prompt: "Please choose 1 or 2.",
+      ui: {
+        questionText: "Please share your thoughts.",
+        actions: [
+          { id: "a1", label: "Confirm wording", action_code: "ACTION_PURPOSE_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__PURPOSE_REFINE_CONFIRM__" } },
+          { id: "a2", label: "Adjust wording", action_code: "ACTION_PURPOSE_REFINE_ADJUST", intent: { type: "ROUTE", route: "__ROUTE__PURPOSE_REFINE_ADJUST__" } },
+        ],
+      },
+    },
+  });
+
+  const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
+  assert.equal(buttons.length, 2);
+
+  setSessionStarted(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
 test("renderChoiceButtons keeps both ROLE_MENU_REFINE choices", () => {
   const originalDocument = (globalThis as any).document;
   const fakeDocument = makeDocument();

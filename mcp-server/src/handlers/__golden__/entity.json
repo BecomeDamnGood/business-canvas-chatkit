@@ -1,0 +1,13 @@
+{
+  "id": "entity_golden",
+  "step": "entity",
+  "input": {
+    "state": { "current_step": "entity" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "entity", "to": "entity" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

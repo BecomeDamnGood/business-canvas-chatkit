@@ -1,0 +1,13 @@
+{
+  "id": "dream_explainer_golden",
+  "step": "dream_explainer",
+  "input": {
+    "state": { "current_step": "dream_explainer" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "dream_explainer", "to": "dream_explainer" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "role_golden",
+  "step": "role",
+  "input": {
+    "state": { "current_step": "role" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "role", "to": "role" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

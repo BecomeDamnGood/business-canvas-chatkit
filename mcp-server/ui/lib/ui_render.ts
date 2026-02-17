@@ -122,12 +122,6 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   if (!wrap) return;
   wrap.innerHTML = "";
 
-  const choicesArr = Array.isArray(choices) ? choices : [];
-  if (choicesArr.length === 0) {
-    wrap.style.display = "none";
-    return;
-  }
-
   const specialist = (resultData?.specialist as Record<string, unknown>) || {};
   const menuId = String(specialist?.menu_id || "").trim();
   const state = (resultData?.state as Record<string, unknown>) || {};
@@ -136,6 +130,10 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
     resultData && typeof resultData.ui === "object" && resultData.ui
       ? (resultData.ui as Record<string, unknown>)
       : {};
+  const structuredActions = Array.isArray(uiPayload.actions)
+    ? (uiPayload.actions as Array<Record<string, unknown>>)
+    : [];
+  const choicesArr = Array.isArray(choices) ? choices : [];
   const registryVersion = String(resultData?.registry_version || "").trim();
   const registryActionCodes = Array.isArray(uiPayload.action_codes) ? uiPayload.action_codes : [];
   const expectedChoiceCount =
@@ -157,6 +155,64 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
 
   const choicesCopy = [...choicesArr];
 
+  if (structuredActions.length > 0) {
+    const isLoading = getIsLoading();
+    const langForStructured = uiLang(state);
+    wrap.style.display = "flex";
+    for (const action of structuredActions) {
+      const label = stripInlineText(String(action?.label || "")).trim();
+      const actionCode = String(action?.action_code || "").trim();
+      if (!label || !actionCode) {
+        console.warn("[structured_actions_invalid]", {
+          registry_version: registryVersion,
+          menu_id: menuId,
+          current_step: currentStep,
+        });
+        continue;
+      }
+      const btn = document.createElement("button");
+      btn.className = "choiceBtn";
+      btn.type = "button";
+      btn.textContent = label;
+      btn.disabled = isLoading;
+      btn.addEventListener("click", () => {
+        if (getIsLoading()) return;
+        if (registryVersion && menuId) {
+          console.log("[actioncode_click]", {
+            registryVersion,
+            menuId,
+            currentStep,
+            action_code: actionCode,
+            source: "structured_actions",
+          });
+        }
+        callRunStep(actionCode);
+      });
+      wrap.appendChild(btn);
+    }
+    if (wrap.childNodes.length === 0) {
+      wrap.style.display = "none";
+      setInlineNotice(t(langForStructured, "optionsDisplayError"));
+    }
+    return;
+  }
+
+  if (choicesArr.length === 0) {
+    if (menuId || registryActionCodes.length > 0) {
+      console.warn("[actioncodes_labels_missing]", {
+        registry_version: registryVersion,
+        menu_id: menuId,
+        current_step: currentStep,
+        labels_count: labelsCount,
+        expected_choice_count: expectedChoiceCount,
+      });
+      showOptionsError();
+      return;
+    }
+    wrap.style.display = "none";
+    return;
+  }
+
   if (!menuId) {
     console.warn("[menu_contract_missing]", {
       registry_version: registryVersion,
@@ -168,11 +224,11 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   }
 
   if (!registryActionCodes.length) {
-    console.warn("[actioncodes_missing]", {
-      registry_version: registryVersion,
-      menu_id: menuId,
-      current_step: currentStep,
-      labels_count: labelsCount,
+      console.warn("[actioncodes_missing]", {
+        registry_version: registryVersion,
+        menu_id: menuId,
+        current_step: currentStep,
+        labels_count: labelsCount,
     });
     showOptionsError();
     return;
@@ -486,24 +542,28 @@ export function render(overrideToolOutput?: unknown): void {
     }
     return raw;
   })();
+  const uiPayload =
+    result?.ui && typeof result.ui === "object"
+      ? (result.ui as Record<string, unknown>)
+      : {};
+  const uiQuestionText = String(uiPayload.questionText || "").trim();
+  const structuredActions = Array.isArray(uiPayload.actions)
+    ? (uiPayload.actions as Array<Record<string, unknown>>)
+    : [];
+  const hasStructuredActions = structuredActions.length > 0;
   const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") as string;
-  const bodyRawDedupe = dedupeBodyAgainstPrompt(bodyRaw, promptRaw);
+  const promptSource = uiQuestionText || promptRaw;
+  const bodyRawDedupe = dedupeBodyAgainstPrompt(bodyRaw, promptSource);
 
   let body: string;
   const sessionWelcomeShown = getSessionWelcomeShown();
-  if (isDreamDirectionView && promptRaw) {
-    body = promptRaw;
+  if (isDreamDirectionView && promptSource) {
+    body = promptSource;
   } else if (!sessionWelcomeShown) {
     body = `${prestartWelcomeForLang(lang)}\n\n${bodyRawDedupe || ""}`.trim();
     setSessionWelcomeShown(true);
   } else {
     body = bodyRawDedupe || "";
-  }
-
-  if (current === "purpose" && isIntroAction && bodyRawDedupe) {
-    body = `Purpose is the deeper meaning that drives your business forward, even when results are uncertain. While your Dream sets the direction, what you want to change in the world, Purpose is the internal engine that keeps you and your team moving, especially when things get tough.
-
-Without Purpose, a Dream remains just an idea, and without a Dream, Purpose becomes a feeling without a destination. Purpose is not about money, growth, or recognition. Those are outcomes, not reasons for being. Instead, Purpose is the belief or value that makes your business matter, both to you and to those you serve. It's what gives your work meaning and resilience. When you're clear about your Purpose, it becomes easier to make decisions, inspire others, and stay true to your path, even under pressure.`;
   }
 
   const cardDescEl = document.getElementById("cardDesc");
@@ -822,47 +882,10 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   }
 
-  const { promptShown, choices } = extractChoicesFromPrompt(promptRaw);
+  const { promptShown, choices } = extractChoicesFromPrompt(promptSource);
   const choicesArr = Array.isArray(choices) ? choices : [];
   const requireWordingPick = renderWordingChoicePanel(result, lang);
   let promptText = isDreamDirectionView ? "" : (promptShown || "");
-
-  const choiceModeHasMenu = choicesArr.length >= 2 && choicesArr.length <= 6;
-  if (!isDreamDirectionView && choiceModeHasMenu) {
-    const trimmedPrompt = (promptText || "").trim();
-    const looksLikeLegacyChooseLine =
-      trimmedPrompt === "" ||
-      /^Choose\s+\d/.test(trimmedPrompt) ||
-      /^Kies\s+\d/.test(trimmedPrompt);
-    if (looksLikeLegacyChooseLine) {
-      promptText = t(lang, "generic.choicePrompt.shareOrOption");
-    }
-  }
-
-  if (
-    current === "purpose" &&
-    isIntroAction &&
-    promptText &&
-    promptText.includes("Please define your purpose or ask for more explanation.")
-  ) {
-    const businessName = String(state?.business_name || "").trim();
-    const hasBusinessName = businessName && businessName !== "" && businessName !== "TBD";
-    promptText = hasBusinessName
-      ? `Please define the purpose of ${businessName} or ask for more explanation.`
-      : "Please define the purpose of your future company or ask for more explanation.";
-  }
-
-  if (current === "strategy") {
-    const rawBusinessName = String(state?.business_name || "").trim();
-    const hasBusinessName =
-      rawBusinessName && rawBusinessName !== "" && rawBusinessName !== "TBD";
-    const displayName = hasBusinessName ? rawBusinessName : "your future company";
-    if (promptText === "Define your Strategy or choose an option.") {
-      promptText = `Define the Strategy of ${displayName} or choose an option.`;
-    } else if (promptText === "Is there more that you will always focus on?") {
-      promptText = `Is there more that ${displayName} will always focus on?`;
-    }
-  }
 
   const promptEl = document.getElementById("prompt");
   if (promptEl) renderInlineText(promptEl, promptText || "");
@@ -876,7 +899,13 @@ Without Purpose, a Dream remains just an idea, and without a Dream, Purpose beco
     renderChoiceButtons(choicesArr, result);
   }
 
-  const choiceMode = !requireWordingPick && choicesArr.length > 0;
+  const renderedChoiceButtons = (() => {
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (!choiceWrap) return false;
+    return choiceWrap.childNodes.length > 0;
+  })();
+  const choiceMode =
+    !requireWordingPick && (renderedChoiceButtons || hasStructuredActions || choicesArr.length > 0);
   const confirmMode = !choiceMode && showContinue && !requireWordingPick;
   let statementCount =
     (Array.isArray(statementsArray) ? statementsArray.length : 0) || 0;

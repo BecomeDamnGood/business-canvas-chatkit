@@ -1,0 +1,13 @@
+{
+  "id": "purpose_golden",
+  "step": "purpose",
+  "input": {
+    "state": { "current_step": "purpose" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "purpose", "to": "purpose" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

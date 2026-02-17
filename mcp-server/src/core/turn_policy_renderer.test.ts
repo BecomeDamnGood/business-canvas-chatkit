@@ -18,6 +18,65 @@ function countNumberedOptions(text: string): number {
   return count;
 }
 
+function isConfirmActionCode(actionCode: string): boolean {
+  const entry = ACTIONCODE_REGISTRY.actions[actionCode];
+  if (!entry) return false;
+  if (Array.isArray(entry.flags) && entry.flags.includes("confirm")) return true;
+  if (actionCode === "ACTION_CONFIRM_CONTINUE") return true;
+  if (entry.route === "yes") return true;
+  const upper = actionCode.toUpperCase();
+  return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
+}
+
+function stepIdForMenu(menuId: string): string {
+  const actionCodes = ACTIONCODE_REGISTRY.menus[menuId] || [];
+  const steps = [
+    ...new Set(
+      actionCodes
+        .map((code) => String(ACTIONCODE_REGISTRY.actions[code]?.step || "").trim())
+        .filter((step) => step && step !== "system")
+    ),
+  ];
+  assert.equal(steps.length, 1, `menu ${menuId} must map to exactly one non-system step`);
+  return String(steps[0] || "");
+}
+
+function finalFieldForStep(stepId: string): string {
+  const byStep: Record<string, string> = {
+    dream: "dream_final",
+    purpose: "purpose_final",
+    bigwhy: "bigwhy_final",
+    role: "role_final",
+    entity: "entity_final",
+    strategy: "strategy_final",
+    targetgroup: "targetgroup_final",
+    productsservices: "productsservices_final",
+    rulesofthegame: "rulesofthegame_final",
+    presentation: "presentation_brief_final",
+  };
+  return String(byStep[stepId] || "");
+}
+
+function makeMenuQuestion(actionCount: number): string {
+  return Array.from({ length: actionCount }, (_, idx) => `${idx + 1}) Option ${idx + 1}`).join("\n");
+}
+
+function applyBaselineState(state: Record<string, unknown>, stepId: string, menuId: string): void {
+  state.current_step = stepId;
+  state.business_name = "Mindd";
+  if (stepId === "dream") {
+    state.active_specialist = menuId.startsWith("DREAM_EXPLAINER_MENU_") ? "DreamExplainer" : "Dream";
+  }
+}
+
+function applyConfirmEligibleState(state: Record<string, unknown>, stepId: string, menuId: string): void {
+  applyBaselineState(state, stepId, menuId);
+  const finalField = finalFieldForStep(stepId);
+  if (finalField) {
+    state[finalField] = `Committed ${stepId} value`;
+  }
+}
+
 test("step_0: no output => ASK, no continue and no menu action codes", () => {
   const state = getDefaultState();
   const rendered = renderFreeTextTurnPolicy({
@@ -97,6 +156,37 @@ test("dream: free-text render uses non-escape menu with parity", () => {
   assert.equal(String(rendered.specialist.question || "").includes("Continue Dream now"), false);
 });
 
+test("dream: candidate without final keeps continue button in Dream refine context", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).dream_final = "";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Here is a Dream line I would suggest for Mindd.",
+      refined_formulation:
+        "Mindd dreams of a world in which creative minds feel empowered to share their ideas freely and find meaningful connections that help them grow.",
+      dream: "",
+      question:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+      menu_id: "DREAM_MENU_REFINE",
+    },
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_DREAM_REFINE_CONFIRM",
+    "ACTION_DREAM_REFINE_START_EXERCISE",
+  ]);
+  assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 2);
+});
+
 test("strategy: incomplete output hides confirm action", () => {
   const state = getDefaultState();
   (state as any).current_step = "strategy";
@@ -115,6 +205,148 @@ test("strategy: incomplete output hides confirm action", () => {
   assert.equal(rendered.confirmEligible, false);
   assert.equal(rendered.uiActionCodes.some((code) => code.includes("CONFIRM")), false);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), rendered.uiActionCodes.length);
+});
+
+test("bigwhy: when confirm is not eligible, filtered menu keeps matching label for remaining action", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "bigwhy";
+  (state as any).business_name = "Mindd";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "bigwhy",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Based on Dream and Purpose, your Big Why could sound like this:",
+      refined_formulation: "",
+      bigwhy: "",
+      question:
+        "1) I'm happy with this wording, continue to step 5 Role\n2) Redefine the Big Why for me please",
+      menu_id: "BIGWHY_MENU_REFINE",
+    },
+  });
+
+  assert.equal(rendered.status, "no_output");
+  assert.equal(rendered.confirmEligible, false);
+  assert.deepEqual(rendered.uiActionCodes, ["ACTION_BIGWHY_REFINE_ADJUST"]);
+  assert.equal(String(rendered.uiActions[0]?.label || ""), "Redefine the Big Why for me please");
+  assert.equal(String(rendered.specialist.question || "").includes("I'm happy with this wording"), false);
+  assert.equal(String(rendered.specialist.question || "").includes("Redefine the Big Why for me please"), true);
+});
+
+test("confirm-filtered menus collapse to one non-confirm action with strict question parity", () => {
+  const riskCases = [
+    { stepId: "dream", menuId: "DREAM_MENU_REFINE", expectedAction: "ACTION_DREAM_REFINE_START_EXERCISE", field: "dream" },
+    { stepId: "dream", menuId: "DREAM_EXPLAINER_MENU_REFINE", expectedAction: "ACTION_DREAM_EXPLAINER_REFINE_ADJUST", field: "dream" },
+    { stepId: "purpose", menuId: "PURPOSE_MENU_REFINE", expectedAction: "ACTION_PURPOSE_REFINE_ADJUST", field: "purpose" },
+    { stepId: "bigwhy", menuId: "BIGWHY_MENU_REFINE", expectedAction: "ACTION_BIGWHY_REFINE_ADJUST", field: "bigwhy" },
+    { stepId: "role", menuId: "ROLE_MENU_REFINE", expectedAction: "ACTION_ROLE_REFINE_ADJUST", field: "role" },
+    { stepId: "entity", menuId: "ENTITY_MENU_EXAMPLE", expectedAction: "ACTION_ENTITY_EXAMPLE_REFINE", field: "entity" },
+    { stepId: "strategy", menuId: "STRATEGY_MENU_CONFIRM", expectedAction: "ACTION_STRATEGY_REFINE_EXPLAIN_MORE", field: "strategy" },
+    { stepId: "targetgroup", menuId: "TARGETGROUP_MENU_POSTREFINE", expectedAction: "ACTION_TARGETGROUP_POSTREFINE_ASK_QUESTIONS", field: "targetgroup" },
+    { stepId: "rulesofthegame", menuId: "RULES_MENU_REFINE", expectedAction: "ACTION_RULES_REFINE_ADJUST", field: "rulesofthegame" },
+  ] as const;
+
+  for (const risk of riskCases) {
+    const state = getDefaultState();
+    (state as any).current_step = risk.stepId;
+    (state as any).business_name = "Mindd";
+
+    const specialist: Record<string, unknown> = {
+      action: "ASK",
+      menu_id: risk.menuId,
+      message: "Candidate generated by specialist.",
+      question: "",
+      refined_formulation: "",
+    };
+    specialist[risk.field] = "";
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: risk.stepId,
+      state,
+      specialist,
+    });
+
+    assert.equal(rendered.confirmEligible, false, `${risk.menuId} should be non-confirm state`);
+    assert.deepEqual(rendered.uiActionCodes, [risk.expectedAction], `${risk.menuId} should keep only non-confirm action`);
+    assert.equal(
+      countNumberedOptions(String(rendered.specialist.question || "")),
+      rendered.uiActionCodes.length,
+      `${risk.menuId} question/action parity must stay exact`
+    );
+  }
+});
+
+test("entity: no-output with leaked refine menu never exposes next-step confirm", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "entity";
+  (state as any).business_name = "Mindd";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "entity",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Based on what I already know about Mindd I suggest the following Entity:",
+      refined_formulation: "",
+      entity: "",
+      question: "Define your Entity for Mindd or choose an option.",
+      menu_id: "ENTITY_MENU_EXAMPLE",
+    },
+  });
+
+  assert.equal(rendered.status, "no_output");
+  assert.equal(rendered.confirmEligible, false);
+  assert.deepEqual(rendered.uiActionCodes, ["ACTION_ENTITY_EXAMPLE_REFINE"]);
+  assert.equal(String(rendered.uiActions[0]?.label || ""), "Refine the wording for me please");
+  assert.equal(String(rendered.specialist.question || "").includes("I'm happy with this wording"), false);
+  assert.equal(String(rendered.specialist.question || "").includes("Refine the wording for me please"), true);
+});
+
+test("productsservices: single statement is treated as valid output and keeps confirm action", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "productsservices";
+  (state as any).business_name = "Mindd";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "productsservices",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "This is what you offer:",
+      productsservices: "",
+      refined_formulation: "",
+      statements: ["Advertising services"],
+      menu_id: "PRODUCTSSERVICES_MENU_CONFIRM",
+    },
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.deepEqual(rendered.uiActionCodes, ["ACTION_PRODUCTSSERVICES_CONFIRM"]);
+  assert.equal(
+    String(rendered.specialist.question || "").includes("This is all what we offer, continue to step Rules of the Game"),
+    true
+  );
+});
+
+test("productsservices: no-output state with no actions does not claim a selectable option", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "productsservices";
+  (state as any).business_name = "Mindd";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "productsservices",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "",
+      productsservices: "",
+      refined_formulation: "",
+      question: "",
+      menu_id: "",
+    },
+  });
+
+  assert.equal(rendered.status, "no_output");
+  assert.equal(rendered.uiActionCodes.length, 0);
+  assert.equal(String(rendered.specialist.question || "").includes("or choose an option"), false);
 });
 
 test("strategy: ignores previous menu fallback and uses deterministic status menu", () => {
@@ -309,6 +541,76 @@ test("role ask sidepath keeps its single option", () => {
   assert.equal(String(rendered.specialist.menu_id || ""), "ROLE_MENU_ASK");
   assert.deepEqual(rendered.uiActionCodes, ["ACTION_ROLE_ASK_GIVE_EXAMPLES"]);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 1);
+});
+
+test("all non-escape menus keep parity and confirm-filter contract in both eligibility states", () => {
+  const menuEntries = Object.entries(ACTIONCODE_REGISTRY.menus)
+    .filter(([menuId]) => !String(menuId).endsWith("_MENU_ESCAPE"));
+
+  for (const [menuId, menuActions] of menuEntries) {
+    const stepId = stepIdForMenu(menuId);
+    const question = makeMenuQuestion(menuActions.length);
+
+    const nonConfirmState = getDefaultState();
+    applyBaselineState(nonConfirmState as any, stepId, menuId);
+    const nonConfirmRendered = renderFreeTextTurnPolicy({
+      stepId,
+      state: nonConfirmState,
+      specialist: {
+        action: "ASK",
+        menu_id: menuId,
+        message: "Please choose 1 or 2.",
+        question,
+        refined_formulation: "",
+      },
+    });
+
+    assert.equal(
+      nonConfirmRendered.confirmEligible,
+      false,
+      `${menuId} should start in non-confirm context when no final exists`
+    );
+    assert.equal(
+      nonConfirmRendered.uiActionCodes.some((code) => isConfirmActionCode(String(code || ""))),
+      false,
+      `${menuId} non-confirm context may not expose confirm actions`
+    );
+    assert.equal(
+      countNumberedOptions(String(nonConfirmRendered.specialist.question || "")),
+      nonConfirmRendered.uiActionCodes.length,
+      `${menuId} non-confirm question/action parity must stay exact`
+    );
+
+    const confirmState = getDefaultState();
+    applyConfirmEligibleState(confirmState as any, stepId, menuId);
+    const confirmRendered = renderFreeTextTurnPolicy({
+      stepId,
+      state: confirmState,
+      specialist: {
+        action: "ASK",
+        menu_id: menuId,
+        message: "Please choose 1 or 2.",
+        question,
+        refined_formulation: "",
+      },
+    });
+
+    assert.equal(
+      confirmRendered.confirmEligible,
+      true,
+      `${menuId} should be confirm-eligible when final value is present`
+    );
+    assert.deepEqual(
+      confirmRendered.uiActionCodes,
+      menuActions,
+      `${menuId} confirm context must keep full menu action set`
+    );
+    assert.equal(
+      countNumberedOptions(String(confirmRendered.specialist.question || "")),
+      confirmRendered.uiActionCodes.length,
+      `${menuId} confirm question/action parity must stay exact`
+    );
+  }
 });
 
 test("non-escape menu labels stay in parity with action registry", () => {

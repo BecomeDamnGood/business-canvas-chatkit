@@ -24,6 +24,28 @@ test("Start gating: empty state without started yields Click Start (no advance)"
   assert.ok(result?.prompt?.includes("Click Start"), "prompt tells user to click Start");
 });
 
+test("ACTION_START smoke: widget start returns first Step 0 question", async () => {
+  const result = await run_step({
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(result?.current_step_id, "step_0");
+  assert.equal(result?.active_specialist, "ValidationAndBusinessName");
+  assert.equal(String(result?.state?.started || "").toLowerCase(), "true");
+  const prompt = String(result?.prompt || "").toLowerCase();
+  assert.ok(
+    prompt.includes("to get started") || prompt.includes("what type of business"),
+    "start action should return first business validation question"
+  );
+});
+
 test("i18n: detect language from initial_user_message on start trigger", async () => {
   const result = await run_step({
     user_message: "",

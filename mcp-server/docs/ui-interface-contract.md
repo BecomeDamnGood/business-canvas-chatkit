@@ -22,6 +22,9 @@ Success (`ok: true`):
 - `registry_version`: version tag for the ActionCode registry
 - `result`: step payload
 - `ui` (optional):
+  - `actions`: array of structured rendered actions (canonical button source)
+    - each action has `id`, `label`, `action_code`, and typed `intent`
+  - `questionText`: display-only numbered prompt text generated from `actions`
   - `action_codes`: array of ActionCodes aligned to the parsed prompt options
   - `expected_choice_count`: integer (length of `action_codes`)
   - `flags`: UI hints (e.g. `showPurposeHint`)
@@ -44,7 +47,9 @@ Error (`ok: false`):
 ## 4) Button Rendering Rules
 
 - The widget parses **raw prompt** text for numbered options.
-- Buttons are rendered by index-matching parsed labels with `ui.action_codes`.
+- Canonical rendering path: buttons come from `ui.actions`.
+- Legacy fallback path: index-match parsed labels with `ui.action_codes`.
+- If `ui.action_codes` exist but numbered labels cannot be parsed, widget must show safe error (never render guessed buttons).
 - If counts mismatch, the widget should surface a safe error state (no fallback routing).
 - Display rendering is sanitized and does not influence parsing.
 
@@ -62,6 +67,7 @@ Error (`ok: false`):
 ## 7) Invariants
 
 - Widget mode uses ActionCodes as the canonical routing input.
+- Structured actions are the canonical render source (`ui.actions`).
 - `menu_id` must be present whenever buttons are rendered.
 - No legacy fallback routing in widget mode.
 - `registry_version` should be logged with menu/button interactions.

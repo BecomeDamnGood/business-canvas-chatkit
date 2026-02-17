@@ -1,0 +1,16 @@
+{
+  "id": "dream_switch_to_self",
+  "step": "dream",
+  "input": {
+    "state": {
+      "current_step": "dream",
+      "active_specialist": "DreamExplainer"
+    },
+    "userMessage": "__SWITCH_TO_SELF_DREAM__"
+  },
+  "expected": {
+    "transition": { "from": "dream", "to": "dream" },
+    "stateMutation": ["active_specialist"],
+    "actions": ["ACTION_DREAM_INTRO_START_EXERCISE"]
+  }
+}

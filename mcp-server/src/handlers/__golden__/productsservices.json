@@ -1,0 +1,13 @@
+{
+  "id": "productsservices_golden",
+  "step": "productsservices",
+  "input": {
+    "state": { "current_step": "productsservices" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "productsservices", "to": "productsservices" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

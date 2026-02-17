@@ -1,0 +1,13 @@
+{
+  "id": "dream_golden",
+  "step": "dream",
+  "input": {
+    "state": { "current_step": "dream" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "dream", "to": "dream" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

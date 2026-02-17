@@ -1,0 +1,13 @@
+{
+  "id": "rulesofthegame_golden",
+  "step": "rulesofthegame",
+  "input": {
+    "state": { "current_step": "rulesofthegame" },
+    "userMessage": "sample"
+  },
+  "expected": {
+    "transition": { "from": "rulesofthegame", "to": "rulesofthegame" },
+    "stateMutation": [],
+    "actions": []
+  }
+}

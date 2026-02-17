@@ -1,5 +1,7 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
 import type { CanvasState } from "./state.js";
+import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
+import type { RenderedAction } from "../contracts/ui_actions.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -15,6 +17,7 @@ export type TurnPolicyRenderResult = {
   confirmEligible: boolean;
   specialist: Record<string, unknown>;
   uiActionCodes: string[];
+  uiActions: RenderedAction[];
 };
 
 const STEP_LABELS: Record<string, string> = {
@@ -260,6 +263,20 @@ function buildNumberedPrompt(labels: string[], headline: string): string {
   return `${numbered.join("\n")}\n\n${headline}`.trim();
 }
 
+function buildRenderedActions(actionCodes: string[], labels: string[]): RenderedAction[] {
+  return actionCodes.map((code, idx) => {
+    const entry = ACTIONCODE_REGISTRY.actions[code];
+    const route = String(entry?.route || code).trim();
+    return {
+      id: `${code}:${idx + 1}`,
+      label: String(labels[idx] || code).trim() || code,
+      action_code: code,
+      intent: actionCodeToIntent({ actionCode: code, route }),
+      primary: idx === 0,
+    };
+  });
+}
+
 function isConfirmActionCode(actionCode: string): boolean {
   const entry = ACTIONCODE_REGISTRY.actions[actionCode];
   if (!entry) return false;
@@ -350,6 +367,24 @@ function computeStatus(
       }).filter(Boolean).map((line) => `• ${line}`).join("\n")
     : "";
 
+  if (stepId === "dream") {
+    const activeSpecialist = String((state as any).active_specialist ?? "").trim();
+    const menuId = String(specialist.menu_id ?? "").trim().toUpperCase();
+    const isDreamExplainerContext =
+      activeSpecialist === "DreamExplainer" || menuId.startsWith("DREAM_EXPLAINER_MENU_");
+    if (!isDreamExplainerContext) {
+      const dreamValue = finalValue || candidate;
+      if (dreamValue) {
+        return {
+          status: "valid_output",
+          confirmEligible: true,
+          recapBody: dreamValue,
+        };
+      }
+      return { status: "no_output", confirmEligible: false, recapBody: "" };
+    }
+  }
+
   if (stepId === "strategy") {
     if (finalValue || statementCount >= 5) {
       return {
@@ -381,6 +416,17 @@ function computeStatus(
         status: "incomplete_output",
         confirmEligible: false,
         recapBody: statementBullets || candidate,
+      };
+    }
+    return { status: "no_output", confirmEligible: false, recapBody: "" };
+  }
+
+  if (stepId === "productsservices") {
+    if (finalValue || statementCount > 0 || candidate) {
+      return {
+        status: "valid_output",
+        confirmEligible: true,
+        recapBody: finalValue || statementBullets || candidate,
       };
     }
     return { status: "no_output", confirmEligible: false, recapBody: "" };
@@ -435,24 +481,52 @@ function pickMenuId(
 
 function labelsForMenu(
   menuId: string,
-  expectedCount: number,
+  actionCodes: string[],
   specialist: Record<string, unknown>,
   prev: Record<string, unknown>
 ): string[] {
-  if (!menuId || expectedCount <= 0) return [];
-  const currentMenu = String(specialist.menu_id ?? "").trim();
-  if (currentMenu === menuId) {
-    const parsed = parseNumberedOptions(specialist.question);
-    if (parsed.length >= expectedCount) return parsed.slice(0, expectedCount);
+  if (!menuId || actionCodes.length <= 0) return [];
+
+  const fullActionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
+    ? ACTIONCODE_REGISTRY.menus[menuId]
+    : [];
+  if (fullActionCodes.length === 0) return [];
+
+  const pickAllLabels = (): string[] => {
+    const currentMenu = String(specialist.menu_id ?? "").trim();
+    if (currentMenu === menuId) {
+      const parsed = parseNumberedOptions(specialist.question);
+      if (parsed.length >= fullActionCodes.length) return parsed.slice(0, fullActionCodes.length);
+    }
+    const prevMenu = String(prev.menu_id ?? "").trim();
+    if (prevMenu === menuId) {
+      const parsed = parseNumberedOptions(prev.question);
+      if (parsed.length >= fullActionCodes.length) return parsed.slice(0, fullActionCodes.length);
+    }
+    const fallback = MENU_LABELS[menuId] || [];
+    if (fallback.length >= fullActionCodes.length) return fallback.slice(0, fullActionCodes.length);
+    return [];
+  };
+
+  const allLabels = pickAllLabels();
+  if (allLabels.length !== fullActionCodes.length) return [];
+
+  const usedIndices = new Set<number>();
+  const filteredLabels: string[] = [];
+  for (const actionCode of actionCodes) {
+    let matchedIndex = -1;
+    for (let i = 0; i < fullActionCodes.length; i += 1) {
+      if (usedIndices.has(i)) continue;
+      if (String(fullActionCodes[i] || "").trim() !== String(actionCode || "").trim()) continue;
+      matchedIndex = i;
+      break;
+    }
+    if (matchedIndex < 0) return [];
+    usedIndices.add(matchedIndex);
+    filteredLabels.push(String(allLabels[matchedIndex] || "").trim());
   }
-  const prevMenu = String(prev.menu_id ?? "").trim();
-  if (prevMenu === menuId) {
-    const parsed = parseNumberedOptions(prev.question);
-    if (parsed.length >= expectedCount) return parsed.slice(0, expectedCount);
-  }
-  const fallback = MENU_LABELS[menuId] || [];
-  if (fallback.length >= expectedCount) return fallback.slice(0, expectedCount);
-  return [];
+  if (filteredLabels.some((label) => !label)) return [];
+  return filteredLabels;
 }
 
 const RESILIENT_FALLBACK_MENUS: Record<string, string[]> = {
@@ -509,7 +583,7 @@ function resolveMenuContract(params: {
     const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
     const actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
     if (actionCodes.length === 0) continue;
-    const labels = labelsForMenu(menuId, actionCodes.length, specialist, prev);
+    const labels = labelsForMenu(menuId, actionCodes, specialist, prev);
     if (labels.length === actionCodes.length) {
       return { menuId, actionCodes, labels };
     }
@@ -557,7 +631,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         : effectiveStatus === "incomplete_output"
           ? "Add more"
           : "Define";
-  const headline = `${headlinePrefix} your ${stepLabel} for ${companyName} or choose an option.`;
+  const headlineBase = `${headlinePrefix} your ${stepLabel} for ${companyName}`;
 
   const answerText = String(specialist.message ?? "").trim() || String(specialist.refined_formulation ?? "").trim();
   const recap = status === "no_output"
@@ -589,6 +663,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       confirmEligible,
       specialist: step0Specialist,
       uiActionCodes: [],
+      uiActions: [],
     };
   }
 
@@ -602,6 +677,9 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const menuId = resolved.menuId;
   const safeActionCodes = resolved.actionCodes;
   const safeLabels = resolved.labels;
+  const headline = safeActionCodes.length > 0
+    ? `${headlineBase} or choose an option.`
+    : `${headlineBase}.`;
 
   const question = buildNumberedPrompt(safeLabels, headline);
 
@@ -619,5 +697,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     confirmEligible: effectiveConfirmEligible,
     specialist: nextSpecialist,
     uiActionCodes: safeActionCodes,
+    uiActions: buildRenderedActions(safeActionCodes, safeLabels),
   };
 }

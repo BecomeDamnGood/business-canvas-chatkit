@@ -46,7 +46,7 @@ function loadDotEnv() {
 
 loadDotEnv();
 
-// Lazy-load run_step so server can start and respond to /version even if handler deps fail at load time (App Runner startup/health).
+// Keep module reference cached, but force-load during boot so startup fails fast on handler/type errors.
 let runStepModule: typeof import("./src/handlers/run_step.js") | null = null;
 async function getRunStep() {
   if (!runStepModule) runStepModule = await import("./src/handlers/run_step.js");
@@ -838,11 +838,22 @@ const httpServer = async (req: any, res: any) => {
 
 httpServer.listen = createServer(httpServer).listen.bind(createServer(httpServer));
 
-httpServer.listen(port, host, () => {
-  console.log(
-    `Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`
-  );
-  if (isLocalDev) {
-    console.log(`Local dev: GET http://localhost:${port}/test  POST http://localhost:${port}/run_step`);
+async function startServer(): Promise<void> {
+  try {
+    await getRunStep();
+  } catch (err) {
+    console.error("[FATAL] run_step module failed to load at startup:", err);
+    process.exit(1);
   }
-});
+
+  httpServer.listen(port, host, () => {
+    console.log(
+      `Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`
+    );
+    if (isLocalDev) {
+      console.log(`Local dev: GET http://localhost:${port}/test  POST http://localhost:${port}/run_step`);
+    }
+  });
+}
+
+void startServer();
