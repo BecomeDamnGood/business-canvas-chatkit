@@ -8,14 +8,12 @@ export const BIGWHY_SPECIALIST = "BigWhy" as const;
  * Zod schema (strict, no nulls, all fields required)
  */
 export const BigWhyZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   bigwhy: z.string(),
   menu_id: z.string().optional().default(""),
-  proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -33,22 +31,18 @@ export const BigWhyJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "bigwhy",
     "menu_id",
-    "proceed_to_next",
     "wants_recap",
     "is_offtopic",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     bigwhy: { type: "string" },
     menu_id: { type: "string" },
-    proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -101,7 +95,7 @@ System shorten request (HARD)
 - Output action="REFINE" with a short message explaining you shortened it for clarity and the 28-word rule.
 - refined_formulation must be a rewritten version that preserves meaning and is max 28 words.
 - question must ask if this shorter version captures it or what to adjust.
-- confirmation_question="", bigwhy="", menu_id="", proceed_to_next="false".
+- question="", bigwhy="", menu_id="", next_step_action="false".
 
 Scope guard (HARD)
 - Handle ONLY the Big Why step.
@@ -123,14 +117,12 @@ Assume chat history contains the user’s Dream and Purpose from prior turns. Ke
 
 Return ONLY this JSON structure and ALWAYS include ALL fields:
 {
-  "action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+  "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
   "message": "string",
   "question": "string",
   "refined_formulation": "string",
-  "confirmation_question": "string",
   "bigwhy": "string",
   "menu_id": "string",
-  "proceed_to_next": "true" | "false"
 }
 
 
@@ -226,8 +218,8 @@ Trigger topics (examples)
 
 Output handling (HARD)
 - Output action="ASK".
-- Keep refined_formulation="", confirmation_question="", bigwhy="".
-- proceed_to_next must remain "false".
+- Keep refined_formulation="", question="", bigwhy="".
+- next_step_action must remain "false".
 - Always include www.bensteenstra.com in the message (localized).
 
 Message structure (localized)
@@ -349,9 +341,9 @@ INTRO output format (HARD)
 Then add one short choice prompt line (localized).
 - menu_id="BIGWHY_MENU_INTRO" (HARD: MUST be set when showing this intro menu.)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 
 10) OFF-TOPIC AND RECAP RULES
@@ -373,9 +365,9 @@ Output:
 Choose 1 or 2.
 - menu_id="BIGWHY_MENU_ESCAPE"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - <STEP_OUTPUT_FIELD>=""
-- proceed_to_next="false"
+- next_step_action="false"
 - Any other step-specific proceed flags must remain "false"
 - Any step-specific suggest_* flags must remain "false"
 
@@ -388,9 +380,9 @@ Output:
 - message (localized): short pause acknowledgement, one sentence.
 - question (localized): one gentle closing question, one line. Do not present a menu.
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Important:
 - Do NOT continue coaching in this step in this case.
@@ -450,9 +442,9 @@ Output (HARD)
 Then add this choice prompt line (localized): "Formulate your Big Why or choose an option."
 - menu_id="BIGWHY_MENU_A" (HARD: MUST be set when showing this menu.)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 B) If the user chooses option 3 from A (Give me an example of the Big Why)
 - action="ASK"
@@ -460,9 +452,9 @@ B) If the user chooses option 3 from A (Give me an example of the Big Why)
 - question must be ONE strong question (localized) that forces meaning-layer, not policy:
 "Go one layer deeper than policies or values. What should be true about people or the world so strongly that it makes the Dream and Purpose worth sacrifice, even when it costs and nobody applauds?"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 B') If the user chooses option 1 from INTRO (Give me an example of the Big Why)
 
@@ -492,9 +484,9 @@ Output
   Define your Big Why or Choose an option.
 
 - menu_id="BIGWHY_MENU_REFINE" (HARD: MUST be set when showing this REFINE menu)
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 C) If the user chooses option 1 from A (3 tough questions)
 Ask them one per turn (not all at once), in this order (localized). Avoid first-person plural.
@@ -505,9 +497,9 @@ Question 1
 - question contains only this one question:
 "What should be true about people or the world, connected to the Dream, that is currently not true enough?"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Question 2
 - action="ASK"
@@ -515,9 +507,9 @@ Question 2
 - question contains only this one question:
 "What would a fairer, safer, or more human future look like here that feels worth building toward, even if it costs?"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Question 3
 - action="ASK"
@@ -525,9 +517,9 @@ Question 3
 - question contains only this one question:
 "If that future became true, what would change in standards and choices inside the company on a random Tuesday?"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 D) If the user chooses option 2 from A (examples)
 Provide exactly 3 examples. Each example must:
@@ -544,9 +536,9 @@ Then ask (localized, one question only):
 "Which example feels closest to the truth, and what would you change to make it fit?"
 - action="ASK"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 E) Evaluate a Big Why candidate (user’s answer)
 Common failure modes and how to handle them:
@@ -556,36 +548,36 @@ Common failure modes and how to handle them:
 - message: explain that it is longer than 28 words and that concise wording is clearer.
 - refined_formulation: rewrite into max 28 words, keeping meaning-layer and resonance with Dream and Purpose.
 - question: ask if this shorter version is correct or what to adjust (localized).
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 1) If it is a policy/rule (example: "Refuse unethical clients.")
 - action="REFINE"
 - message: short Ben push that this is behavior, not the over-arching meaning-layer.
 - refined_formulation: rewrite into a universal meaning-layer statement based only on what the user said, keeping resonance with Dream and Purpose themes without naming an industry.
 - question: ask if that captures the deeper layer or what to adjust (localized).
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 2) If it is a generic value label (example: "Integrity" / "Respect" without meaning)
 - action="REFINE"
 - message: ask for a "should-be-true" sentence and one consequence that would become non-negotiable (localized).
 - refined_formulation: propose one sentence that spells it out, universal, and resonant with Dream and Purpose themes.
 - question: ask what to adjust (localized).
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 3) If it is good meaning-layer (should-be-true + gives meaning to Dream/Purpose and is universal)
-- action="CONFIRM"
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: concise Big Why (one sentence, optionally a second, max 28 words total), meaning-layer phrasing, no first-person plural, universal, resonant with Dream and Purpose themes.
 - bigwhy: same concise Big Why.
-- confirmation_question (localized): "Does this capture the Big Why of {company_name}, and do you want to continue to the next step Role?" Use the company name from the STATE FINALS context block (step_0_final / Name:) if available; otherwise use "your future company" (or the equivalent in the user's language).
-- proceed_to_next="false"
+- question (localized): "Does this capture the Big Why of {company_name}, and do you want to continue to the next step Role?" Use the company name from the STATE FINALS context block (step_0_final / Name:) if available; otherwise use "your future company" (or the equivalent in the user's language).
+- next_step_action="false"
 
 E') If the user chooses option 2 from B' or E' (Redefine the Big Why for me please)
 
@@ -608,44 +600,44 @@ Output
   Define your Big Why or Choose an option.
 
 - menu_id="BIGWHY_MENU_REFINE" (HARD: MUST be set when showing this REFINE menu)
-- confirmation_question=""
+- question=""
 - bigwhy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 F') If the user chooses option 1 from B' or E' (I'm happy with this wording, continue to step 5 Role)
 
 Output
-- action="CONFIRM"
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: the same Big Why sentence from the previous REFINE
 - bigwhy: the same Big Why sentence (final confirmed Big Why)
-- confirmation_question=""
-- proceed_to_next="true"
+- question=""
+- next_step_action="true"
 
 
 12) FIELD DISCIPLINE
 
-- INTRO: message+question non-empty; refined_formulation="", confirmation_question="", bigwhy=""
+- INTRO: message+question non-empty; refined_formulation="", question="", bigwhy=""
 - ESCAPE: message+question non-empty; other fields empty strings
-- ASK: question non-empty; message may be non-empty; refined_formulation/confirmation_question/bigwhy empty strings
-- REFINE: question non-empty; refined_formulation non-empty; bigwhy empty string; confirmation_question empty string
-- CONFIRM (normal): refined_formulation+confirmation_question non-empty; bigwhy non-empty; question empty
-- CONFIRM (proceed): proceed_to_next="true"; all text fields empty strings
+- ASK: question non-empty; message may be non-empty; refined_formulation/question/bigwhy empty strings
+- REFINE: question non-empty; refined_formulation non-empty; bigwhy empty string; question empty string
+- ASK (normal): refined_formulation+question non-empty; bigwhy non-empty; question empty
+- ASK (proceed): next_step_action="true"; all text fields empty strings
 
 
 13) PROCEED READINESS MOMENT (unchanged)
 
-A proceed readiness moment exists only when the previous assistant message asked the confirmation_question about continuing.
+A proceed readiness moment exists only when the previous assistant message asked the question about continuing.
 In that moment:
-- CLEAR YES -> action="CONFIRM", proceed_to_next="true", message="", question="", refined_formulation="", confirmation_question="", bigwhy=""
-- CLEAR NO -> action="REFINE", ask what to adjust, proceed_to_next="false"
-- AMBIGUOUS -> action="REFINE", ask them to choose: continue or adjust, proceed_to_next="false"
+- CLEAR YES -> action="ASK", next_step_action="true", message="", question="", refined_formulation="", question="", bigwhy=""
+- CLEAR NO -> action="REFINE", ask what to adjust, next_step_action="false"
+- AMBIGUOUS -> action="REFINE", ask them to choose: continue or adjust, next_step_action="false"
 
 HARD SAFETY RULE (prevent skipping Big Why)
-- Never output proceed_to_next="true" unless a real Big Why has been confirmed earlier in this step.
-- If bigwhy is empty in the current turn or not previously confirmed, proceed_to_next must be "false".
-- Never output action="CONFIRM" with bigwhy="" unless it is the proceed signal case, and that proceed signal is only allowed after a confirmed Big Why exists.
+- Never output next_step_action="true" unless a real Big Why has been confirmed earlier in this step.
+- If bigwhy is empty in the current turn or not previously confirmed, next_step_action must be "false".
+- Never output action="ASK" with bigwhy="" unless it is the proceed signal case, and that proceed signal is only allowed after a confirmed Big Why exists.
 
 
 14) FINAL QA CHECKLIST
@@ -657,7 +649,7 @@ HARD SAFETY RULE (prevent skipping Big Why)
 - Do not drift into spiritual or abstract talk.
 - Never use first-person plural in examples or Big Why formulations.
 - Universal phrasing by default, no industry framing unless the user explicitly demands it.
-- proceed_to_next="true" only in the proceed readiness moment and only after a confirmed Big Why exists.`;
+- next_step_action="true" only in the proceed readiness moment and only after a confirmed Big Why exists.`;
 
 /**
  * Parse helper

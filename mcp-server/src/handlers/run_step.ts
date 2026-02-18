@@ -221,9 +221,6 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   inputPlaceholder: "Type your answer here (use The Business Strategy Canvas Builder widget, not the chat box)…",
   thinking: "Thinking…",
   btnStart: "Start the process with Validation & Business Name",
-  btnOk: "Continue",
-  btnOk_step0_ready: "Yes, I'm ready. Let's start!",
-  btnOk_strategy: "I'm happy, continue to step 7 Strategy",
   btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
   wordingChoiceHeading: "This is your input:",
   wordingChoiceSuggestionLabel: "This would be my suggestion:",
@@ -471,10 +468,6 @@ function sanitizeEscapeInWidget(specialist: any): any {
   safe.is_offtopic = true;
   safe.action = "ASK";
   safe.menu_id = "";
-  safe.confirmation_question = "";
-  safe.proceed_to_next = "false";
-  safe.proceed_to_purpose = "false";
-  safe.proceed_to_dream = "false";
   if (isWidgetSuppressedEscapeMenuId(menuId) || action === "ESCAPE" || hasEscapeLabelPhrase(question)) {
     safe.question = "";
   }
@@ -1148,11 +1141,8 @@ function stripPromptEchoFromMessage(messageRaw: string, promptRaw: string): stri
 }
 
 export function pickPrompt(specialist: any): string {
-  const menuId = String(specialist?.menu_id ?? "").trim();
   const q = String(specialist?.question ?? "").trim();
-  if (menuId && countNumberedOptions(q) > 0) return q;
-  const confirmQ = String(specialist?.confirmation_question ?? "").trim();
-  return confirmQ || q || "";
+  return q || "";
 }
 
 function countNumberedOptions(prompt: string): number {
@@ -1244,7 +1234,6 @@ function sanitizeMenuContractPayload(payload: any): any {
   return {
     ...payload,
     menu_id: "",
-    confirmation_question: "",
   };
 }
 
@@ -1407,7 +1396,6 @@ export function enforceDreamMenuContract(specialist: any, state: CanvasState): a
     if (normalizedQuestion === rawQuestion) return specialist;
     return {
       ...specialist,
-      confirmation_question: "",
       question: normalizedQuestion,
     };
   }
@@ -1429,7 +1417,6 @@ export function enforceDreamMenuContract(specialist: any, state: CanvasState): a
   return {
     ...specialist,
     action: specialist?.action,
-    confirmation_question: "",
     question: builder(businessName),
   };
 }
@@ -1595,7 +1582,6 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
     next.action = "ASK";
     next.message = "";
     next.question = step0QuestionForLang(langFromState(state));
-    next.confirmation_question = "";
     next.menu_id = "";
   }
   const isOfftopic = next.is_offtopic === true || String(next.is_offtopic || "").trim().toLowerCase() === "true";
@@ -1604,11 +1590,11 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
     !hasStep0Draft &&
     hasRawInput &&
     !isLikelyStepContributing &&
-    (action === "CONFIRM" || action === "ESCAPE" || isOfftopic || isClearlyGeneralOfftopicInput(normalizedInput));
+    (action === "ESCAPE" || isOfftopic || isClearlyGeneralOfftopicInput(normalizedInput));
   if (mustForceAskWithoutFinal) {
     return normalizeStep0OfftopicToAsk(next, state, normalizedInput);
   }
-  if (hasStep0Final && (action === "CONFIRM" || (action === "ASK" && !String(next.menu_id || "").trim()))) {
+  if (hasStep0Final && action === "ASK" && !String(next.menu_id || "").trim()) {
     const parsed = parseStep0Final(String((state as any).step_0_final || ""), String((state as any).business_name || "TBD"));
     const statement =
       String(parsed.status || "").toLowerCase() === "existing"
@@ -1616,13 +1602,9 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
         : `You want to start a ${parsed.venture} called ${parsed.name}.`;
     next.action = "ASK";
     next.question = `1) Yes, I'm ready. Let's start!\n\n${statement} Are you ready to start with the first step: the Dream?`;
-    next.confirmation_question = "";
     next.business_name = parsed.name || "TBD";
     next.step_0 = String((state as any).step_0_final || "");
     next.menu_id = "STEP0_MENU_READY_START";
-    next.proceed_to_dream = "false";
-    next.proceed_to_purpose = "false";
-    next.proceed_to_next = "false";
     next.wording_choice_pending = "false";
     next.wording_choice_selected = "";
     return next;
@@ -1632,14 +1614,12 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
     String(next.action || "").trim() === "ASK" &&
     String(next.menu_id || "").trim() === "STEP0_MENU_READY_START"
   ) {
-    next.confirmation_question = "";
     return next;
   }
   if (String(next.action || "").trim() !== "ASK") return next;
   next.message = STEP0_CARDDESC_EN;
   next.question = step0QuestionForLang(langFromState(state));
   next.menu_id = "";
-  next.confirmation_question = "";
   return next;
 }
 
@@ -1654,11 +1634,7 @@ export function normalizeStep0OfftopicToAsk(specialist: any, state: CanvasState,
     action: "ASK",
     message: hasMessage ? cleanedMessage : STEP0_CARDDESC_EN,
     question: step0QuestionForLang(langFromState(state)),
-    confirmation_question: "",
     menu_id: "",
-    proceed_to_dream: "false",
-    proceed_to_purpose: "false",
-    proceed_to_next: "false",
     wording_choice_pending: "false",
     wording_choice_selected: "",
     step_0: "",
@@ -2362,7 +2338,6 @@ function sanitizePreviousForBulletPolicy(previous: Record<string, unknown>): Rec
     ...previous,
     menu_id: "",
     question: "",
-    confirmation_question: "",
   };
 }
 
@@ -2637,16 +2612,13 @@ function mergeUniqueMessageBlocks(primary: string, secondary: string): string {
 }
 
 function enforceWordingPostPickMenuContract(stepId: string, state: CanvasState, selected: any, previous: any): any {
-  const safeAction = String(selected?.action || "").trim().toUpperCase() === "CONFIRM"
-    ? "ASK"
-    : String(selected?.action || "ASK");
+  const safeAction = String(selected?.action || "ASK");
   const currentMenuId = String(selected?.menu_id || "").trim();
   const currentQuestion = String(selected?.question || "").trim();
   if (hasValidMenuContract(currentMenuId, currentQuestion)) {
     return {
       ...selected,
       action: safeAction,
-      confirmation_question: "",
     };
   }
 
@@ -2658,7 +2630,6 @@ function enforceWordingPostPickMenuContract(stepId: string, state: CanvasState, 
       action: safeAction,
       menu_id: prevMenuId,
       question: prevQuestion,
-      confirmation_question: "",
     };
   }
 
@@ -2672,19 +2643,15 @@ function enforceWordingPostPickMenuContract(stepId: string, state: CanvasState, 
       action: safeAction,
       menu_id: fallbackMenuId,
       question: fallbackQuestion,
-      confirmation_question: "",
     };
   }
 
-  const promptFallback =
-    String(selected?.question || "").trim() ||
-    String(selected?.confirmation_question || "").trim();
+  const promptFallback = String(selected?.question || "").trim();
   return {
     ...selected,
     action: safeAction,
     menu_id: "",
     question: promptFallback,
-    confirmation_question: "",
   };
 }
 
@@ -2943,7 +2910,6 @@ function applyWordingPickSelection(params: {
     ),
     question: String(renderedSpecialist?.question || ""),
     menu_id: String(renderedSpecialist?.menu_id || ""),
-    confirmation_question: "",
     wording_choice_pending: "false",
     wording_choice_selected: pickedUser ? "user" : "suggestion",
     ui_contract_id: String((renderedSpecialist as any)?.ui_contract_id || rendered.contractId || ""),
@@ -3626,7 +3592,7 @@ BEN STEENSTRA FACTUAL REFERENCE (use when answering Ben/method credibility quest
 2) OFF-TOPIC OR NONSENSE (reject with light humor + redirect)
 If the user asks something unrelated to The Business Strategy Canvas Builder or the current step:
 - Reply in message with a short, light-humored boundary (never insulting, never sarcastic), then redirect.
-- Offer ONLY two plain-text outcomes. Do NOT format them as "1) … 2) …" in question or confirmation_question (that may render as buttons). Put the two options in message as bullets, and keep question as a single open question (e.g. "Do you want to continue with the current step, or pause here?").
+- Offer ONLY two plain-text outcomes. Do NOT format them as "1) … 2) …" in any prompt field (that may render as buttons). Put the two options in message as bullets, and keep question as a single open question (e.g. "Do you want to continue with the current step, or pause here?").
 - The two outcomes: (a) Continue with the current step now. (b) Stop politely—e.g. "No worries—maybe we're not the right fit right now."
 - Then set question to your normal next question for this step.`;
 
@@ -3792,15 +3758,13 @@ async function callSpecialistStrict(params: {
       message: "",
       question: "Test question",
       refined_formulation: "",
-      confirmation_question: "",
       menu_id: "",
-      proceed_to_next: "false",
       wants_recap: false,
       is_offtopic: forceOfftopic,
     };
     const specialistResult =
       specialist === STEP_0_SPECIALIST
-        ? { ...base, business_name: "TBD", step_0: "", proceed_to_dream: "false" }
+        ? { ...base, business_name: "TBD", step_0: "" }
         : base;
     return {
       specialistResult,
@@ -4191,9 +4155,7 @@ async function callSpecialistStrict(params: {
       message: "I can only help you here with The Business Strategy Canvas Builder.",
       question: "Do you want to continue with verification now?",
       refined_formulation: "",
-      confirmation_question: "",
       business_name: "TBD",
-      proceed_to_dream: "false",
       step_0: "",
       wants_recap: false,
       is_offtopic: false,
@@ -4245,10 +4207,8 @@ function buildTransientFallbackSpecialist(state: CanvasState): Record<string, un
       message: STEP0_CARDDESC_EN,
       question: step0QuestionForLang(langFromState(state)),
       refined_formulation: "",
-      confirmation_question: "",
       business_name: String((state as any).business_name || "TBD"),
       menu_id: "",
-      proceed_to_dream: "false",
       step_0: "",
       wants_recap: false,
       is_offtopic: false,
@@ -4263,7 +4223,6 @@ function buildTransientFallbackSpecialist(state: CanvasState): Record<string, un
       message: "",
       question: "",
       refined_formulation: "",
-      confirmation_question: "",
       menu_id: "",
       wants_recap: false,
       is_offtopic: false,
@@ -4781,10 +4740,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       message,
       question,
       refined_formulation: "",
-      confirmation_question: "",
       bigwhy: "",
       menu_id: "",
-      proceed_to_next: "false",
       wants_recap: false,
       is_offtopic: false,
     };
@@ -5013,7 +4970,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     if (rebuilt.wordingChoice) {
       const pendingSpecialist = {
         ...rebuilt.specialist,
-        confirmation_question: "",
       };
       (state as any).last_specialist_result = pendingSpecialist;
       const stateWithUi = await ensureUiStrings(state, userMessage);
@@ -5093,10 +5049,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         message,
         question: "",
         refined_formulation: "",
-        confirmation_question: "",
         presentation_brief: "",
         menu_id: "",
-        proceed_to_next: "false",
         wants_recap: false,
         is_offtopic: false,
       };
@@ -5132,10 +5086,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         message,
         question: "",
         refined_formulation: "",
-        confirmation_question: "",
         presentation_brief: "",
         menu_id: "",
-        proceed_to_next: "false",
         wants_recap: false,
         is_offtopic: false,
       };
@@ -5207,11 +5159,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           message: "",
           question: "",
           refined_formulation: "",
-          confirmation_question: "",
           dream: "",
           suggest_dreambuilder: "true",
-          proceed_to_dream: "false",
-          proceed_to_purpose: "false",
           statements,
           user_state: "ok",
           wants_recap: false,
@@ -5278,12 +5227,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           "That's a great way to start. Writing your own dream helps clarify what really matters to you and your business.\n\nTake a moment to write a draft of your dream. I'll help you refine it if needed.",
         question: DREAM_MENU_QUESTIONS.DREAM_MENU_INTRO(businessName),
         refined_formulation: "",
-        confirmation_question: "",
         dream: "",
         menu_id: "DREAM_MENU_INTRO",
         suggest_dreambuilder: "false",
-        proceed_to_dream: "false",
-        proceed_to_purpose: "false",
         wants_recap: false,
         is_offtopic: false,
       };
@@ -5398,10 +5344,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         message: "",
         question: startHint,
         refined_formulation: "",
-        confirmation_question: "",
         business_name: (state as any).business_name || "TBD",
         menu_id: "",
-        proceed_to_dream: "false",
         step_0: "",
         wants_recap: false,
         is_offtopic: false,
@@ -5421,7 +5365,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const isReuseFirst =
       existingFirst &&
       String(existingFirst.action) === "ASK" &&
-      (String(existingFirst.question ?? "").trim() !== "" || String(existingFirst.confirmation_question ?? "").trim() !== "");
+      String(existingFirst.question ?? "").trim() !== "";
     if (isReuseFirst) {
       const stateWithUi = await ensureUiStrings(state, userMessage);
       (state as any).intro_shown_session = "true";
@@ -5431,7 +5375,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         action: "ASK",
         message: STEP0_CARDDESC_EN,
         question: prompt,
-        confirmation_question: "",
       };
       return finalizeResponse(attachRegistryPayload({
         ok: true as const,
@@ -5469,10 +5412,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         message: "",
         question: `1) Yes, I'm ready. Let's start!\n\n${statement}${confirmReady}`,
         refined_formulation: "",
-        confirmation_question: "",
         business_name: name || "TBD",
         menu_id: "STEP0_MENU_READY_START",
-        proceed_to_dream: "false",
         step_0: step0Final,
         wants_recap: false,
         is_offtopic: false,
@@ -5507,10 +5448,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       message: STEP0_CARDDESC_EN,
       question: step0QuestionForLang(langFromState(state)),
       refined_formulation: "",
-      confirmation_question: "",
       business_name: (state as any).business_name || "TBD",
       menu_id: "",
-      proceed_to_dream: "false",
       step_0: "",
       wants_recap: false,
       is_offtopic: false,
@@ -5815,10 +5754,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       action: "ASK",
       menu_id: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
       suggest_dreambuilder: "true",
-      confirmation_question: "",
-      proceed_to_dream: "false",
-      proceed_to_purpose: "false",
-      proceed_to_next: "false",
       message: cleanMessage ? `${cleanMessage}\n\n${backToExerciseLine}` : backToExerciseLine,
       statements:
         Array.isArray((specialistResult as any)?.statements) && (specialistResult as any).statements.length > 0

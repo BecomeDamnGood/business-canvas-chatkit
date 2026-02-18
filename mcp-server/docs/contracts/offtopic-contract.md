@@ -13,8 +13,8 @@ This contract defines behavior when a specialist marks a turn as off-topic.
 
 ## Menu Behavior
 
-- Reuse prior valid menu contract when available.
-- Do not introduce hidden fallback routing.
+- Resolve menu only from current step contract-state (`step + status (+ context)`).
+- Never route via `confirmation_question`, `proceed_to_*`, or implicit continue logic.
 - Widget safety rules still apply for suppressed escape menus.
 
 ## Message Behavior
@@ -27,4 +27,3 @@ This contract defines behavior when a specialist marks a turn as off-topic.
 
 - User can recover by sending on-topic input.
 - Recovery resumes normal step flow with same ownership rules.
-

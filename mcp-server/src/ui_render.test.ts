@@ -449,7 +449,6 @@ test("render shows wording choice panel in text mode and keeps confirm hidden un
   const suggestionText = (fakeDocument as any).getElementById("wordingChoiceSuggestionText");
   const suggestionBtn = (fakeDocument as any).getElementById("wordingChoicePickSuggestion");
   const heading = (fakeDocument as any).getElementById("wordingChoiceHeading");
-  const btnOk = (fakeDocument as any).getElementById("btnOk");
   assert.equal(String(wordingWrap.style.display || ""), "flex");
   assert.equal(String(heading.textContent || ""), "");
   assert.equal(String(userText.style.display || ""), "block");
@@ -457,7 +456,6 @@ test("render shows wording choice panel in text mode and keeps confirm hidden un
   assert.equal(String(userText.textContent || ""), "This is your input:");
   assert.equal(String(suggestionText.textContent || ""), "This would be my suggestion:");
   assert.equal(String(suggestionBtn.textContent || ""), "Mindd exists to restore focus and meaning in work.");
-  assert.equal(String(btnOk.style.display || ""), "none");
 
   setSessionStarted(false);
   (globalThis as any).document = originalDocument;
@@ -595,7 +593,6 @@ test("render ignores transient timeout payload and keeps previous visible view",
   const fakeDocument = makeDocument();
   const wrap = (fakeDocument as any).getElementById("choiceWrap");
   const inlineNotice = (fakeDocument as any).getElementById("inlineNotice");
-  const btnOk = (fakeDocument as any).getElementById("btnOk");
   (globalThis as any).document = fakeDocument;
   (globalThis as any).window = {
     location: { search: "" },
@@ -633,7 +630,6 @@ test("render ignores transient timeout payload and keeps previous visible view",
     },
   });
   assert.equal(String(wrap.style.display || ""), "flex");
-  assert.equal(String(btnOk.style.display || ""), "none");
 
   render({
     result: {
@@ -646,8 +642,8 @@ test("render ignores transient timeout payload and keeps previous visible view",
         language: "en",
       },
       specialist: {
-        action: "CONFIRM",
-        confirmation_question: "Do you want to continue?",
+        action: "ASK",
+        question: "Do you want to continue?",
       },
       error: {
         type: "timeout",
@@ -659,7 +655,6 @@ test("render ignores transient timeout payload and keeps previous visible view",
   assert.equal(String(inlineNotice.textContent || ""), "This is taking longer than usual. Please try again.");
   assert.equal(String(inlineNotice.style.display || ""), "block");
   assert.equal(String(wrap.style.display || ""), "flex");
-  assert.equal(String(btnOk.style.display || ""), "none");
 
   setSessionStarted(false);
   setSessionWelcomeShown(false);

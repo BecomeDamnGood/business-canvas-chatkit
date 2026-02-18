@@ -8,14 +8,12 @@ export const PRESENTATION_SPECIALIST = "Presentation" as const;
  * Zod schema (strict, no nulls, all fields required)
  */
 export const PresentationZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   presentation_brief: z.string(),
   menu_id: z.string().optional().default(""),
-  proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -33,22 +31,18 @@ export const PresentationJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "presentation_brief",
     "menu_id",
-    "proceed_to_next",
     "wants_recap",
     "is_offtopic",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     presentation_brief: { type: "string" },
     menu_id: { type: "string" },
-    proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -116,14 +110,12 @@ Return ONLY this JSON structure and ALWAYS include ALL fields.
 Never output null. Use empty strings "".
 
 {
-  "action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+  "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
   "message": "string",
   "question": "string",
   "refined_formulation": "string",
-  "confirmation_question": "string",
   "presentation_brief": "string",
   "menu_id": "string",
-  "proceed_to_next": "true" | "false"
 }
 
 4) GLOBAL NON-NEGOTIABLES (DO NOT EDIT)
@@ -178,9 +170,9 @@ Tell me what to adjust or create your presentation
         "<strong>Label:</strong>" on its own line, then each numbered line on its own line (preserve the numbering format).
       - CRITICAL: Each final must be formatted separately. Do NOT combine content from strategy_final, targetgroup_final, productsservices_final, or rulesofthegame_final into one section. Each final has its own label and its own content.
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
-- confirmation_question=""
+- question=""
 - presentation_brief=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 5.5) ACTION CODE INTERPRETATION (HARD, MANDATORY)
 
@@ -199,7 +191,7 @@ ActionCodes are explicit and deterministic - the backend handles conversion to r
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:
 
 - "__ROUTE__PRESENTATION_CHANGE__" → Follow route: I want to change something in the summary (output action="REFINE" with change question)
-- "__ROUTE__PRESENTATION_MAKE__" → Follow route: Create The Business Strategy Canvas Builder Presentation (output action="CONFIRM" with recap and confirmation question)
+- "__ROUTE__PRESENTATION_MAKE__" → Follow route: Create The Business Strategy Canvas Builder Presentation (output action="ASK" with recap and confirmation question)
 - "__ROUTE__PRESENTATION_CONTINUE__" → Follow route: continue Presentation now (output action="ASK" with standard menu)
 - "__ROUTE__PRESENTATION_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
@@ -232,9 +224,9 @@ Output:
 - question: the same one-option menu as above.
 - menu_id="PRESENTATION_MENU_ASK" (HARD: MUST be set when showing this menu.)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - presentation_brief=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 B) REFINE (user chooses option 1, or clearly wants changes)
 Output:
@@ -243,13 +235,13 @@ Output:
 - question: ask ONE question only:
   "Which part do you want to change, and what should the new version be?" (localized).
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - presentation_brief=""
-- proceed_to_next="false"
+- next_step_action="false"
 
-C) CONFIRM (user chooses option 2: make the presentation)
+C) ASK (user chooses option 2: make the presentation)
 Output:
-- action="CONFIRM"
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: a polished final recap built ONLY from the finals, using the same formatting structure as ASK:
@@ -269,33 +261,33 @@ Output:
       - CRITICAL: Each final must be formatted separately. Do NOT combine content from strategy_final, targetgroup_final, productsservices_final, or rulesofthegame_final into one section. Each final has its own label and its own content.
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
 - presentation_brief: identical to refined_formulation.
-- confirmation_question: one line (localized):
+- question: one line (localized):
   Ask if they are satisfied with this summary and want to proceed to creating The Business Strategy Canvas Builder Presentation.
-- proceed_to_next="false"
+- next_step_action="false"
 
 D) PROCEED READINESS MOMENT (HARD)
-A proceed readiness moment exists only when the previous assistant message asked the confirmation_question about proceeding.
+A proceed readiness moment exists only when the previous assistant message asked the question about proceeding.
 
 In that moment:
 - CLEAR YES:
-  - action="CONFIRM"
-  - proceed_to_next="true"
+  - action="ASK"
+  - next_step_action="true"
   - ALL text fields must be empty strings:
-    message="", question="", refined_formulation="", confirmation_question="", presentation_brief=""
+    message="", question="", refined_formulation="", question="", presentation_brief=""
 
 - CLEAR NO:
   - action="REFINE"
   - message: short and practical (localized)
   - question: ask what they want to adjust in the summary (one question)
-  - proceed_to_next="false"
-  - refined_formulation="", confirmation_question="", presentation_brief=""
+  - next_step_action="false"
+  - refined_formulation="", question="", presentation_brief=""
 
 - AMBIGUOUS:
   - action="REFINE"
   - message: short (localized)
   - question: ask them to choose: proceed as-is or change something (one question)
-  - proceed_to_next="false"
-  - refined_formulation="", confirmation_question="", presentation_brief=""
+  - next_step_action="false"
+  - refined_formulation="", question="", presentation_brief=""
 
 7) ESCAPE (OFF-TOPIC)
 
@@ -317,9 +309,9 @@ Choose 1 or 2.
 
 - menu_id="PRESENTATION_MENU_ESCAPE"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - presentation_brief=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 10) FINAL QA CHECKLIST
 
@@ -328,7 +320,7 @@ Choose 1 or 2.
 - User language mirrored, no language mixing.
 - One question per turn.
 - Recap uses ONLY finals from specialist context.
-- proceed_to_next="true" only in the proceed readiness moment and only with all text fields empty.`;
+- next_step_action="true" only in the proceed readiness moment and only with all text fields empty.`;
 
 /**
  * Parse helper

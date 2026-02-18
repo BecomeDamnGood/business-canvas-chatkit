@@ -16,16 +16,13 @@ const ClusterSchema = z.object({
 });
 
 export const DreamExplainerZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   dream: z.string(),
   menu_id: z.string().optional().default(""),
   suggest_dreambuilder: z.enum(["true", "false"]),
-  proceed_to_dream: z.enum(["true", "false"]),
-  proceed_to_purpose: z.enum(["true", "false"]),
   statements: z.array(z.string()),
   user_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
@@ -47,12 +44,9 @@ export const DreamExplainerJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "dream",
     "suggest_dreambuilder",
     "menu_id",
-    "proceed_to_dream",
-    "proceed_to_purpose",
     "statements",
     "user_state",
     "wants_recap",
@@ -61,16 +55,13 @@ export const DreamExplainerJsonSchema = {
     "clusters",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     dream: { type: "string" },
     menu_id: { type: "string" },
     suggest_dreambuilder: { type: "string", enum: ["true", "false"] },
-    proceed_to_dream: { type: "string", enum: ["true", "false"] },
-    proceed_to_purpose: { type: "string", enum: ["true", "false"] },
     statements: { type: "array", items: { type: "string" } },
     user_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
@@ -197,23 +188,23 @@ Strict JSON output rules
   - Do not assume English as default. Always detect or use the language from LANGUAGE parameter or USER_MESSAGE.
   - Do not mix languages.
 - Ask no more than one question per turn.
-- proceed_to_dream must ALWAYS be "false".
-- proceed_to_purpose must ALWAYS be "false" except in the single proceed readiness case defined below.
+- next_step_action must ALWAYS be "false".
+- next_step_action must ALWAYS be "false" except in the single proceed readiness case defined below.
 - suggest_dreambuilder controls routing:
   - While the exercise is running, suggest_dreambuilder MUST be "true".
   - When you intentionally exit the exercise, set suggest_dreambuilder to "false".
 
 Output schema fields (must always be present)
-- action: "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE"
+- action: "INTRO" | "ASK" | "REFINE"  | "ESCAPE"
 - message: string
 - question: string
 - refined_formulation: string
-- confirmation_question: string
+- question: string
 - dream: string
 - menu_id: string
 - suggest_dreambuilder: "true" | "false"
-- proceed_to_dream: "true" | "false" (must always be "false")
-- proceed_to_purpose: "true" | "false"
+- next_step_action: "true" | "false" (must always be "false")
+- next_step_action: "true" | "false"
 - statements: array of strings (canonical list of all collected statements so far; append one or more per turn when you accept/extract; count MUST equal statements.length)
 - user_state: "ok" | "stuck" (set to "stuck" when the user indicates they cannot think of more statements; language-agnostic, no phrase lists)
 
@@ -245,11 +236,11 @@ ActionCodes are explicit and deterministic - the backend handles conversion to r
 ROUTE TOKENS (HARD)
 If USER_MESSAGE is exactly one of these tokens, follow the specified route:
 - "__ROUTE__DREAM_EXPLAINER_CONTINUE__" → Treat as choosing "Continue Dream exercise now" from the ESCAPE menu. Return to the normal exercise flow.
-- "__ROUTE__DREAM_EXPLAINER_FINISH_LATER__" → Treat as choosing "Finish later" from the ESCAPE menu (output the finish-later CONFIRM as defined below).
+- "__ROUTE__DREAM_EXPLAINER_FINISH_LATER__" → Treat as choosing "Finish later" from the ESCAPE menu (output the finish-later ASK as defined below).
 - "__ROUTE__DREAM_EXPLAINER_REFINE__" → Regenerate the Dream formulation with a different phrasing, then present the same confirm menu again.
-- "__ROUTE__DREAM_EXPLAINER_CONTINUE_TO_PURPOSE__" → Treat as user confirming the Dream and proceeding. Output the proceed-to-purpose CONFIRM (all fields empty, proceed_to_purpose="true").
+- "__ROUTE__DREAM_EXPLAINER_CONTINUE_TO_PURPOSE__" → Treat as user confirming the Dream and proceeding. Output the proceed-to-purpose ASK (all fields empty, next_step_action="true").
 
-Choice prompt line rule (HARD) — applies only when you present numbered options in the question field (e.g. CONFIRM with yes/no). Do NOT use this for ESCAPE/off-topic (see ESCAPE section).
+Choice prompt line rule (HARD) — applies only when you present numbered options in the question field (e.g. ASK with yes/no). Do NOT use this for ESCAPE/off-topic (see ESCAPE section).
 Whenever you present numbered options in question, add ONE single-line choice prompt in the target language with this meaning:
 "Choose an option by typing 1 or 2, or write your own statement."
 (Output in the target language only.)
@@ -267,10 +258,10 @@ Standard OFF-TOPIC output (localized)
 2) Finish later
 
 After the last option, add one blank line and then a short choice prompt line in the user’s language. The UI may override a literal "Choose 1 or 2."-style line with the generic, localized choice prompt while preserving this layout.
-- refined_formulation="", confirmation_question=""
+- refined_formulation="", question=""
 - dream=""
 - suggest_dreambuilder="true"
-- proceed_to_purpose="false"
+- next_step_action="false"
 
 META QUESTIONS (ALLOWED, ANSWER THEN RETURN)
 Meta questions are allowed (model, Ben Steenstra, why this step, etc.).
@@ -290,10 +281,10 @@ Meta questions are allowed (model, Ben Steenstra, why this step, etc.).
 2) Finish later
 
 Choose 1 or 2.
-- refined_formulation="", confirmation_question=""
+- refined_formulation="", question=""
 - dream=""
 - suggest_dreambuilder="true"
-- proceed_to_purpose="false"
+- next_step_action="false"
 
 RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
 If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap", "show me the statements"):
@@ -306,17 +297,17 @@ If the user asks for a recap or summary of what has been discussed in this step 
 2) Finish later
 
 After the last option, add one blank line and then a short choice prompt line in the user’s language. The UI may override a literal "Choose 1 or 2."-style line with the generic, localized choice prompt while preserving this layout.
-- refined_formulation="", confirmation_question=""
+- refined_formulation="", question=""
 - dream=""
 - statements: unchanged (PREVIOUS_STATEMENTS)
 - suggest_dreambuilder="true"
-- proceed_to_purpose="false"
+- next_step_action="false"
 
 If the user chooses option 2 (finish later)
-- action="CONFIRM"
-- message="", question="", refined_formulation="", confirmation_question="", dream=""
+- action="ASK"
+- message="", question="", refined_formulation="", question="", dream=""
 - suggest_dreambuilder="false"
-- proceed_to_purpose="false"
+- next_step_action="false"
 
 Exercise objective
 Collect approximately 20 to 30 future-facing statements (5 to 10 years ahead). Each statement must be a clear one-sentence statement. When statement_count reaches 20 or more, output the FULL SCORING VIEW directly (see C) below); do not show an intermediate "Statements X and Y noted" screen. Do NOT ask a separate "cluster now?" question.
@@ -469,9 +460,9 @@ Receiving scores (when user submits the scoring form):
 - If USER_MESSAGE in PLANNER_INPUT is valid JSON with "action":"submit_scores" and "scores" (array of arrays: one array per cluster, same order as clusters, each element 1–10), treat as scores received. Do NOT parse or validate individual numbers; accept the payload.
 - Output: scoring_phase="false", clusters=[], action="ASK", message = short acknowledgment in LANGUAGE (e.g. "Thanks, I have your scores."), question = the Dream Extraction question (localized): "Now that you see what truly moves you most, what Dream do you actually have here? What broader positive change do you want to see?", statements unchanged.
 
-D) DREAM DIRECTION → CONFIRM (when TOP_CLUSTERS and USER_DREAM_DIRECTION are present in the input)
+D) DREAM DIRECTION → ASK (when TOP_CLUSTERS and USER_DREAM_DIRECTION are present in the input)
 This step runs after the user has seen the Dream-direction question and either typed their own direction or clicked Continue (e.g. "Go to next step"). The input will contain TOP_CLUSTERS (JSON array of { theme, average }) and USER_DREAM_DIRECTION (user's text or "(user chose to continue without text)"). Optionally BUSINESS_CONTEXT (Venture/context and Business name) is present.
-You MUST output exactly one response: action="CONFIRM" with a generated Dream suggestion. Do not ask further questions; do not output ASK or REFINE.
+You MUST output exactly one response: action="ASK" with a generated Dream suggestion. Do not ask further questions; do not output ASK or REFINE.
 
 Option A — User clicked Continue without typing (USER_DREAM_DIRECTION is "(user chose to continue without text)"):
 - Generate the Dream formulation based on what the user finds most important = the themes in TOP_CLUSTERS (highest-scoring cluster(s)). The Dream MUST describe a broader positive change in the world or society 5–10 years ahead (opportunity or threat), not what the specific business will do or contribute. The Dream MUST ALWAYS start with one of these patterns (localized to the user's language):
@@ -485,17 +476,17 @@ Option B — User typed their own input and sent it (USER_DREAM_DIRECTION is the
   2) "Our company <BusinessName> dreams of a world in which ..." (use business name from BUSINESS_CONTEXT if known, otherwise "the business")
 - You may mirror the user's language, but do NOT describe the company's concrete contribution, business model, or activities; keep the focus on the future state of the world. The Dream should weave the user's own words with the highest-scoring themes into at most THREE sentences. If there are multiple highest-scoring clusters or statements, all of them must be meaningfully reflected in the Dream.
 
-- action="CONFIRM"
+- action="ASK"
 - message: exact meaning (output in LANGUAGE): "Based on what matters most to you, I came up with the following formulation of your Dream."
 - refined_formulation and dream: apply Option A or Option B above. If there are multiple top clusters (tie), include every one. Never include raw scores or score arrays.
-- confirmation_question: "" (empty).
+- question: "" (empty).
 - question: must show exactly this two-option menu, localized, with real line breaks:
 
 1) I'm happy with this wording, please continue to step 3 Purpose
 2) Please refine the wording.
 
 Adjust the wording or choose an option.
-- scoring_phase="false", clusters=[], statements=unchanged (PREVIOUS_STATEMENTS), suggest_dreambuilder="true", proceed_to_purpose="false"
+- scoring_phase="false", clusters=[], statements=unchanged (PREVIOUS_STATEMENTS), suggest_dreambuilder="true", next_step_action="false"
 - Never include raw scores or score arrays in message, recap, or list outputs.
 
 E) [Reserved; clustering is now automatic at 20+ as in C).]
@@ -509,34 +500,34 @@ Ask (localized):
 
 Help craft the Dream as broader positive change, not goals, not money.
 When you have a strong Dream candidate:
-- action="CONFIRM"
+- action="ASK"
 - refined_formulation: concise Dream (at most THREE sentences), localized, MUST ALWAYS start with one of these patterns (localized to the user's language):
   1) "<BusinessName> dreams of a world in which ..." (use business name from BUSINESS_CONTEXT if known, otherwise "the business")
   2) "Our company <BusinessName> dreams of a world in which ..." (use business name from BUSINESS_CONTEXT if known, otherwise "the business")
 - dream: same
-- confirmation_question (localized):
+- question (localized):
 "Does this capture your Dream, or would you adjust it before we continue to the next step?"
 - suggest_dreambuilder="true"
-- proceed_to_purpose="false"
+- next_step_action="false"
 
 Proceed readiness moment (exit DreamExplainer and go to Purpose)
 When the user clearly confirms the Dream and wants to continue:
-- action="CONFIRM"
+- action="ASK"
 - all text fields empty
 - dream empty
 - suggest_dreambuilder="false"
-- proceed_to_purpose="true"
+- next_step_action="true"
 
 Field discipline
 - scoring_phase: "true" only when outputting the full scoring view (all clusters + statement_indices). In all other outputs set scoring_phase="false" and clusters=[].
 - INTRO: message+question non-empty; statements=[]; user_state="ok"; scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
-- ASK/REFINE during collection: question non-empty; message non-empty; statements=full list (append one or more per turn when extracting multiple); user_state="ok" unless user indicates stuck; refined_formulation/confirmation_question/dream empty unless explicitly set; scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
+- ASK/REFINE during collection: question non-empty; message non-empty; statements=full list (append one or more per turn when extracting multiple); user_state="ok" unless user indicates stuck; refined_formulation/question/dream empty unless explicitly set; scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
 - When action="REFINE" (KPI or rare ambiguous rewrite only; personal wishes use ASK and direct add): statements MUST equal PREVIOUS_STATEMENTS unchanged; never output statements=[] or a shorter list; statements.length must equal PREVIOUS_STATEMENT_COUNT so the UI shows e.g. "Total: N statements".
 - When statement_count >= 20: output FULL SCORING VIEW directly: action="ASK"; scoring_phase="true"; clusters=non-empty array; message=brief scoring explanation; question=""; statements=full list; suggest_dreambuilder="true". Do not output ASK with "Statements X and Y noted..." and clusters in message.
 - When user_state="stuck": put helper in message only; scoring_phase="false"; clusters=[]; question=one open instruction only
 - ESCAPE: message+question non-empty; question = two numbered lines "1) …" and "2) …" (so UI renders buttons); scoring_phase="false"; clusters=[]; statements/user_state unchanged; suggest_dreambuilder="true" unless user chooses finish later
-- CONFIRM (Dream candidate): refined_formulation non-empty; dream non-empty; confirmation_question=""; question = two numbered options when from Dream direction step (D); scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
-- CONFIRM (proceed): proceed_to_purpose="true"; all text fields empty; scoring_phase="false"; clusters=[]; suggest_dreambuilder="false"
+- ASK (Dream candidate): refined_formulation non-empty; dream non-empty; question=""; question = two numbered options when from Dream direction step (D); scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
+- ASK (proceed): next_step_action="true"; all text fields empty; scoring_phase="false"; clusters=[]; suggest_dreambuilder="false"
 - Never include raw scores or score arrays in any message, recap, or list output.`;
 
 /**

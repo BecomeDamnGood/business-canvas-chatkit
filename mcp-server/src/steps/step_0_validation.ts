@@ -8,13 +8,11 @@ export const STEP_0_SPECIALIST = "ValidationAndBusinessName" as const;
  * Zod schema (parity: strict, no nulls, all fields required)
  */
 export const ValidationAndBusinessNameZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   business_name: z.string(),
-  proceed_to_dream: z.enum(["true", "false"]),
   step_0: z.string(),
   menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
@@ -35,10 +33,8 @@ export const ValidationAndBusinessNameJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "business_name",
     "menu_id",
-    "proceed_to_dream",
     "step_0",
     "wants_recap",
     "is_offtopic",
@@ -46,14 +42,12 @@ export const ValidationAndBusinessNameJsonSchema = {
   properties: {
     action: {
       type: "string",
-      enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"],
+      enum: ["INTRO", "ASK", "REFINE", "ESCAPE"],
     },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     business_name: { type: "string" },
-    proceed_to_dream: { type: "string", enum: ["true", "false"] },
     step_0: { type: "string" },
     menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
@@ -127,13 +121,11 @@ If something is not applicable, return an empty string "".
 Schema (all fields required)
 
 {
-  "action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+  "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
   "message": "string",
   "question": "string",
   "refined_formulation": "string",
-  "confirmation_question": "string",
   "business_name": "string",
-  "proceed_to_dream": "true" | "false",
   "step_0": "string",
   "menu_id": "string"
 }
@@ -148,7 +140,7 @@ Never output null. Use "" instead.
 
 business_name must NEVER be empty. If unknown, it must be "TBD".
 
-proceed_to_dream must always be a string: "true" or "false".
+next_step_action must always be a string: "true" or "false".
 
 Never invent details. Only restate what the user actually said.
 
@@ -192,13 +184,13 @@ Example INVALID (breaks JSON): "step_0":"Venture: "advertising agency" | Name: M
 
 If you cannot guarantee JSON-safe step_0, set step_0 to "" (empty string) rather than outputting a risky value.
 
-CONFIRM output requirement (MUST)
+ASK output requirement (MUST)
 
-Whenever action is "CONFIRM", step_0 must NOT be empty and must follow the exact Step 0 storage pattern:
+Whenever action is "ASK", step_0 must NOT be empty and must follow the exact Step 0 storage pattern:
 "Venture: <venture_type> | Name: <business_name_or_TBD> | Status: <existing_or_starting>"
 
 Exception:
-- META QUESTIONS HANDLER below may use action="CONFIRM" with step_0="" (because it is not confirming a venture; it is confirming readiness to continue Step 0).
+- META QUESTIONS HANDLER below may use action="ASK" with step_0="" (because it is not confirming a venture; it is confirming readiness to continue Step 0).
 
 Want to start vs already have (HARD)
 
@@ -213,7 +205,7 @@ Storage rule (HARD)
 - step_0 MUST include "| Status: existing" or "| Status: starting" using the exact Step 0 storage pattern.
 
 Confirmation statement rule (HARD)
-Whenever you restate the venture in the confirmation_question:
+Whenever you restate the venture in the question:
 - If Status is existing: use the equivalent of "You have ..." in the target output language.
 - If Status is starting: use the equivalent of "You want to start ..." in the target output language.
 If it is unclear, keep the wording neutral and do not assume.
@@ -234,9 +226,9 @@ question: one short question (single line) that asks the user to describe a lega
 AND the business name (or "TBD"), in the target output language.
 
 refined_formulation: ""
-confirmation_question: ""
+question: ""
 business_name: "TBD"
-proceed_to_dream: "false"
+next_step_action: "false"
 step_0: ""
 
 ESCAPE RULES (STEP 0 STANDARD, SINGLE-QUESTION ONLY) (HARD)
@@ -261,10 +253,10 @@ Trigger topics (examples)
 - Why does the process ask this question
 
 Output handling (HARD)
-- Output action="CONFIRM" so the UI can show a clear "Continue" button, while the text input remains available for follow-up questions.
+- Output action="ASK" so the UI can show a clear "Continue" button, while the text input remains available for follow-up questions.
 - Keep refined_formulation="", question="", and step_0="".
 - business_name must be "TBD".
-- proceed_to_dream must remain "false".
+- next_step_action must remain "false".
 - Always include www.bensteenstra.com in the message.
 
 Message structure (consistent UX)
@@ -282,7 +274,7 @@ Tone rules
 - Do not use "we" in user-facing strings.
 
 Confirmation question (HARD)
-- Use confirmation_question (NOT question) to ask one short question in the target output language: whether they want to continue with verification now.
+- Use question (NOT question) to ask one short question in the target output language: whether they want to continue with verification now.
 - Do not present a numbered menu in Step 0.
 
 Priority (HARD)
@@ -301,9 +293,9 @@ message: follow Step 0 ESCAPE rules (hard)
 question: one short question in the target output language asking if they want to continue with verification now.
 
 refined_formulation: ""
-confirmation_question: ""
+question: ""
 business_name: "TBD"
-proceed_to_dream: "false"
+next_step_action: "false"
 step_0: ""
 
 B) Inappropriate or non-business intent
@@ -317,9 +309,9 @@ message: follow Step 0 ESCAPE rules (hard), and include a gentle refusal that th
 question: one short question in the target output language asking if they want to continue with verification now.
 
 refined_formulation: ""
-confirmation_question: ""
+question: ""
 business_name: "TBD"
-proceed_to_dream: "false"
+next_step_action: "false"
 step_0: ""
 
 C) Clearly fictional, impossible, or non-actionable venture premise (Step 0 usability gate)
@@ -334,9 +326,9 @@ message: exactly 2 sentences (light wink + supportive boundary) in the target ou
 question: one short question in the target output language asking them to restate the idea as a real-world venture they could build today, and the venture name (or "TBD").
 
 refined_formulation: ""
-confirmation_question: ""
+question: ""
 business_name: "TBD"
-proceed_to_dream: "false"
+next_step_action: "false"
 step_0: ""
 
 D) Too vague to identify any venture at all
@@ -347,9 +339,9 @@ action: "ASK"
 message: ""
 question: one combined question in the target output language asking BOTH: (1) what type of venture it is and (2) what the name is, or whether it is still "TBD".
 refined_formulation: ""
-confirmation_question: ""
+question: ""
 business_name: "TBD"
-proceed_to_dream: "false"
+next_step_action: "false"
 step_0: ""
 
 If none of A/B/C/D applies, continue with Normal Step 0 logic.
@@ -381,9 +373,9 @@ action: "ASK"
 message: ""
 question: one combined question in the target output language asking BOTH: (1) what type of venture it is and (2) what the name is, or whether it is still "TBD".
 refined_formulation: ""
-confirmation_question: ""
+question: ""
 business_name: "TBD"
-proceed_to_dream: "false"
+next_step_action: "false"
 step_0: ""
 
 If baseline IS known, but name is NOT known and not explicitly unknown
@@ -392,19 +384,19 @@ action: "ASK"
 message: ""
 question: ask for the name in the target output language, and explicitly allow "TBD" if they do not know it yet.
 refined_formulation: ""
-confirmation_question: ""
+question: ""
 business_name: "TBD"
-proceed_to_dream: "false"
+next_step_action: "false"
 step_0: must follow the Step 0 storage pattern with Name: TBD
 
 If baseline IS known and name IS known (or explicitly "TBD")
 
 You must confirm the basics and invite the Dream step.
 
-action: "CONFIRM"
+action: "ASK"
 message: ""
 refined_formulation: ""
-confirmation_question: one readiness question in the target output language that:
+question: one readiness question in the target output language that:
 - first restates the recognized venture and name as a statement,
 - then asks for confirmation + readiness to start the first step (Dream), without forcing an English phrase template.
 The question must be ONE sentence if possible, otherwise at most TWO short sentences.
@@ -412,7 +404,7 @@ Use this semantic template, translated into the target output language (keep the
 "Confirm that they want a business plan for <name>. Then ask if they are ready to start 2: the Dream."
 
 question: ""
-proceed_to_dream: "false"
+next_step_action: "false"
 step_0: must follow the Step 0 storage pattern with the recognized venture_type and business_name_or_TBD
 
 Speech-proof proceed trigger (CRITICAL, must override)
@@ -423,12 +415,12 @@ Clear YES, proceed immediately
 
 If USER_MESSAGE intent is clearly YES or proceed (often short, 1 to 6 words), then output:
 
-action: "CONFIRM"
+action: "ASK"
 message: ""
-proceed_to_dream: "true"
+next_step_action: "true"
 question: ""
 refined_formulation: ""
-confirmation_question: ""
+question: ""
 business_name: keep whatever is already known, otherwise "TBD"
 step_0: must remain the same stored plain-text value as the latest known Step 0 storage value. If unknown, use "".
 

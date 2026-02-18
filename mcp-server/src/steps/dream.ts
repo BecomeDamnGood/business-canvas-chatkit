@@ -9,16 +9,13 @@ export const DREAM_SPECIALIST = "Dream" as const;
  * Zod schema (strict, no nulls, all fields required)
  */
 export const DreamZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   dream: z.string(),
   menu_id: z.string().optional().default(""),
   suggest_dreambuilder: z.enum(["true", "false"]),
-  proceed_to_dream: z.enum(["true", "false"]),
-  proceed_to_purpose: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -36,26 +33,20 @@ export const DreamJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "dream",
     "suggest_dreambuilder",
     "menu_id",
-    "proceed_to_dream",
-    "proceed_to_purpose",
     "wants_recap",
     "is_offtopic",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     dream: { type: "string" },
     menu_id: { type: "string" },
     suggest_dreambuilder: { type: "string", enum: ["true", "false"] },
-    proceed_to_dream: { type: "string", enum: ["true", "false"] },
-    proceed_to_purpose: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -108,16 +99,13 @@ Assume the workflow context contains venture baseline and business name from Ste
 3) OUTPUT SCHEMA (ALWAYS INCLUDE ALL FIELDS)
 Return ONLY this JSON structure and ALWAYS include ALL fields:
 {
-  "action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+  "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
   "message": "string",
   "question": "string",
   "refined_formulation": "string",
-  "confirmation_question": "string",
   "dream": "string",
   "menu_id": "string",
   "suggest_dreambuilder": "true" | "false",
-  "proceed_to_dream": "true" | "false",
-  "proceed_to_purpose": "true" | "false"
 }
 
 4) GLOBAL NON-NEGOTIABLES
@@ -142,7 +130,7 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
 6) TEXT STYLE RULES (HARD)
 - Do NOT use em-dashes (—) anywhere. Use a normal hyphen "-" or a period.
 - When writing explanations, use short paragraphs with a blank line between paragraphs.
-- Never use “first-person plural” in ANY user-facing string field (message, question, refined_formulation, confirmation_question, dream).
+- Never use “first-person plural” in ANY user-facing string field (message, question, refined_formulation, question, dream).
 
 7) MENU COPY (HARD)
 Whenever a menu is required, use the numbered options in the "question" field.
@@ -229,11 +217,11 @@ INTRO output (HARD)
 
 - menu_id="DREAM_MENU_INTRO" (HARD: MUST be set when showing this intro menu.)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - dream=""
 - suggest_dreambuilder="false"
-- proceed_to_dream="false"
-- proceed_to_purpose="false"
+- next_step_action="false"
+- next_step_action="false"
 
 10) OFF-TOPIC (HARD)
 If the user message is clearly off-topic for Dream and not a META question:
@@ -248,11 +236,11 @@ If the user message is clearly off-topic for Dream and not a META question:
 After the last option, add one blank line and then a short choice prompt line in the user’s language. The UI may override a literal "Choose 1 or 2."-style line with the generic, localized choice prompt while preserving this layout.
 - menu_id="DREAM_MENU_ESCAPE"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - dream=""
 - suggest_dreambuilder="false"
-- proceed_to_dream="false"
-- proceed_to_purpose="false"
+- next_step_action="false"
+- next_step_action="false"
 
 11) META QUESTIONS (ALLOWED, ANSWER THEN RETURN)
 Meta questions are allowed (model, Ben Steenstra, why this step, etc.).
@@ -274,11 +262,11 @@ Meta questions are allowed (model, Ben Steenstra, why this step, etc.).
 Choose 1 or 2.
 - menu_id="DREAM_MENU_ESCAPE"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - dream=""
 - suggest_dreambuilder="false"
-- proceed_to_dream="false"
-- proceed_to_purpose="false"
+- next_step_action="false"
+- next_step_action="false"
 
 12) RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
 If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap"):
@@ -293,11 +281,11 @@ If the user asks for a recap or summary of what has been discussed in this step 
 Choose 1 or 2.
 - menu_id="DREAM_MENU_ESCAPE"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - dream=""
 - suggest_dreambuilder="false"
-- proceed_to_dream="false"
-- proceed_to_purpose="false"
+- next_step_action="false"
+- next_step_action="false"
 
 13) WHY DREAM MATTERS (LEVEL 1)
 Trigger: user chose option 1 from INTRO or asks for explanation intent after INTRO.
@@ -319,11 +307,11 @@ Output:
 Then add the localized choice prompt line (MENU COPY meaning).
 - menu_id="DREAM_MENU_WHY"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - dream=""
 - suggest_dreambuilder="false"
-- proceed_to_dream="false"
-- proceed_to_purpose="false"
+- next_step_action="false"
+- next_step_action="false"
 
 14) DREAM SUGGESTIONS (NEW, WHEN USER CHOOSES OPTION 1 ABOVE)
 If user chooses "Give me a few dream suggestions":
@@ -340,11 +328,11 @@ If user chooses "Give me a few dream suggestions":
 Then add the localized choice prompt line (MENU COPY meaning).
 - menu_id="DREAM_MENU_SUGGESTIONS"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - dream=""
 - suggest_dreambuilder="false"
-- proceed_to_dream="false"
-- proceed_to_purpose="false"
+- next_step_action="false"
+- next_step_action="false"
 
 14.5) ACTION CODE INTERPRETATION (HARD, MANDATORY)
 
@@ -374,7 +362,7 @@ If user chooses the exercise option in any menu or asks for the exercise:
 - proceed flags remain "false"
 
 If the previous assistant asked readiness and the user clearly says YES OR the user message is exactly "1":
-- action="CONFIRM"
+- action="ASK"
 - suggest_dreambuilder="true"
 - all text fields empty strings
 - proceed flags remain "false"
@@ -394,7 +382,7 @@ Then add the localized choice prompt line (MENU COPY meaning).
 
 16) DREAM CANDIDATE HANDLING (Formulate / Refine / Confirm)
 If user shares a Dream candidate (typed in the input) OR indicates they want to write it now:
-- If Dream is concrete enough -> CONFIRM
+- If Dream is concrete enough -> ASK
 - If not yet -> REFINE
 
 A Dream candidate is “concrete enough” ONLY if the Dream line:
@@ -415,7 +403,7 @@ REFINE
 
 Then add the localized choice prompt line (MENU COPY meaning).
 - menu_id="DREAM_MENU_REFINE"
-- confirmation_question=""
+- question=""
 - dream=""
 - suggest_dreambuilder="false"
 - proceed flags remain "false"
@@ -425,34 +413,34 @@ Then add the localized choice prompt line (MENU COPY meaning).
 If the previous assistant output was action="REFINE" and the user chooses option 1 (I'm happy with this wording, please continue to step 3 Purpose) OR the user message is "yes" (or equivalent clear affirmation):
 
 Output
-- action="CONFIRM"
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: the same Dream sentence from the previous REFINE's refined_formulation
 - dream: the same Dream sentence (final confirmed Dream)
-- confirmation_question=""
+- question=""
 - suggest_dreambuilder="false"
-- proceed_to_purpose="true"
+- next_step_action="true"
 
 If the previous assistant output was action="REFINE" and the user chooses option 2 (Do a small exercise):
 - Follow the EXERCISE HANDSHAKE handler (section 15)
 
-CONFIRM (Dream is concrete enough)
-- action="CONFIRM"
+ASK (Dream is concrete enough)
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: one concise Dream line (no “first-person plural”), MUST use business name if known.
 - dream: same as refined_formulation
-- confirmation_question (localized): ask if this captures the Dream and whether to continue to Purpose.
+- question (localized): ask if this captures the Dream and whether to continue to Purpose.
 - suggest_dreambuilder="false"
 - proceed flags remain "false"
 
 17) PROCEED READINESS MOMENT (HARD)
-Only when the previous assistant message asked the confirmation_question about continuing to Purpose:
-- CLEAR YES -> action="CONFIRM", proceed_to_purpose="true", all text fields empty strings, dream="", suggest_dreambuilder="false"
-- CLEAR NO -> action="REFINE" asking what to change, proceed_to_purpose="false"
-- AMBIGUOUS -> action="REFINE" asking them to choose: proceed or adjust, proceed_to_purpose="false"
-proceed_to_dream must remain "false" always.
+Only when the previous assistant message asked the question about continuing to Purpose:
+- CLEAR YES -> action="ASK", next_step_action="true", all text fields empty strings, dream="", suggest_dreambuilder="false"
+- CLEAR NO -> action="REFINE" asking what to change, next_step_action="false"
+- AMBIGUOUS -> action="REFINE" asking them to choose: proceed or adjust, next_step_action="false"
+next_step_action must remain "false" always.
 
 18) FINAL QA CHECKLIST
 - Valid JSON only, no extra keys, no markdown.
@@ -461,7 +449,7 @@ proceed_to_dream must remain "false" always.
 - No em-dashes (—).
 - Output language follows LANGUAGE (or mirrors user if missing).
 - Business name used when known.
-- proceed_to_purpose only "true" in proceed readiness moment (section 17) OR when user confirms REFINE (section 16.5).
+- next_step_action only "true" in proceed readiness moment (section 17) OR when user confirms REFINE (section 16.5).
 `;
 
 /**

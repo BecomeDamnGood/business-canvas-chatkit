@@ -605,7 +605,7 @@ test("Step 0 off-topic with no output always returns canonical Step 0 ask contra
   assert.equal(Array.isArray(result.ui?.action_codes), false);
 });
 
-test("Step 0 contract: meta confirm is downgraded to canonical ASK when no step_0_final exists", () => {
+test("Step 0 contract: meta/off-topic ASK is normalized to canonical Step 0 prompt when no step_0_final exists", () => {
   const state = {
     ...getDefaultState(),
     current_step: "step_0",
@@ -613,14 +613,12 @@ test("Step 0 contract: meta confirm is downgraded to canonical ASK when no step_
     business_name: "",
   };
   const specialist = {
-    action: "CONFIRM",
+    action: "ASK",
     message: "Ben Steenstra is a Dutch entrepreneur and author.",
-    question: "",
-    confirmation_question: "Would you like to continue with the business verification now?",
+    question: "Would you like to continue with the business verification now?",
     business_name: "TBD",
     step_0: "",
-    proceed_to_dream: "false",
-    is_offtopic: false,
+    is_offtopic: true,
   };
   const normalized = normalizeStep0AskDisplayContract(
     "step_0",
@@ -629,7 +627,6 @@ test("Step 0 contract: meta confirm is downgraded to canonical ASK when no step_
     "Who is Ben Steenstra?"
   );
   assert.equal(String(normalized.action || ""), "ASK");
-  assert.equal(String(normalized.confirmation_question || ""), "");
   assert.equal(String(normalized.question || "").toLowerCase().includes("what type of business"), true);
   assert.equal(String(normalized.message || "").toLowerCase().includes("ben steenstra"), true);
   assert.equal(String(normalized.menu_id || ""), "");
@@ -645,18 +642,16 @@ test("Step 0 contract: fallback off-topic answer is never empty for clear non-st
     action: "ASK",
     message: "",
     question: "What type of business are you starting?",
-    confirmation_question: "",
     step_0: "",
     is_offtopic: true,
   };
   const normalized = normalizeStep0OfftopicToAsk(specialist, state, "What time is it in London?");
   assert.equal(String(normalized.action || ""), "ASK");
-  assert.equal(String(normalized.confirmation_question || ""), "");
   assert.equal(String(normalized.question || "").toLowerCase().includes("what type of business"), true);
   assert.equal(String(normalized.message || "").includes("Just to set the context, we'll start with the basics."), true);
 });
 
-test("Step 0 contract: known business rewrites legacy confirm into canonical ASK + menu contract", () => {
+test("Step 0 contract: known business ASK maps to canonical readiness menu contract", () => {
   const state = {
     ...getDefaultState(),
     current_step: "step_0",
@@ -664,15 +659,13 @@ test("Step 0 contract: known business rewrites legacy confirm into canonical ASK
     business_name: "Mindd",
   };
   const specialist = {
-    action: "CONFIRM",
-    is_offtopic: false,
+    action: "ASK",
+    is_offtopic: true,
     message:
       "Ben Steenstra is a Dutch entrepreneur, author, and business strategist. You can find more about him at https://www.bensteenstra.com. Now, back to The Business Strategy Canvas Builder.",
     question: "",
-    confirmation_question: "Would you like to continue with the verification now?",
     refined_formulation: "",
     business_name: "TBD",
-    proceed_to_dream: "false",
     step_0: "",
     menu_id: "",
   };
@@ -683,7 +676,6 @@ test("Step 0 contract: known business rewrites legacy confirm into canonical ASK
     "Who is Ben Steenstra?"
   );
   assert.equal(String(normalized.action || ""), "ASK");
-  assert.equal(String(normalized.confirmation_question || ""), "");
   assert.equal(
     String(normalized.question || "").includes(
       "You have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?"
@@ -728,14 +720,12 @@ test("Step 0 renderer fallback produces readiness ASK + menu when called directl
     business_name: "Mindd",
   };
   const specialist = {
-    action: "CONFIRM",
+    action: "ASK",
     is_offtopic: true,
     message: "Ben Steenstra is an entrepreneur and executive coach.",
     question: "",
-    confirmation_question: "Do you want to continue with Step 0 verification now?",
     refined_formulation: "",
     business_name: "TBD",
-    proceed_to_dream: "false",
     step_0: "",
     menu_id: "",
   };
@@ -748,7 +738,6 @@ test("Step 0 renderer fallback produces readiness ASK + menu when called directl
   });
 
   assert.equal(String(rendered.specialist.action || ""), "ASK");
-  assert.equal(String(rendered.specialist.confirmation_question || ""), "");
   assert.equal(String(rendered.specialist.menu_id || ""), "STEP0_MENU_READY_START");
   assert.equal(String(rendered.specialist.question || "").includes("Are you ready to start with the first step: the Dream?"), true);
   assert.equal(String(rendered.specialist.message || "").includes("This is what we have established so far"), false);

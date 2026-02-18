@@ -474,9 +474,8 @@ export function render(overrideToolOutput?: unknown): void {
 
   const inputWrap = document.getElementById("inputWrap");
   const btnStart = document.getElementById("btnStart");
-  const btnOk = document.getElementById("btnOk");
   const startHint = document.getElementById("startHint");
-  if (!inputWrap || !btnStart || !btnOk || !startHint) return;
+  if (!inputWrap || !btnStart || !startHint) return;
 
   const specialist = (result?.specialist as Record<string, unknown>) || {};
   const sectionTitleEl = document.getElementById("sectionTitle");
@@ -501,9 +500,6 @@ export function render(overrideToolOutput?: unknown): void {
     String(specialist.action || "") === "ASK";
   const requireWordingPickByFlag =
     String(((result as Record<string, unknown>)?.ui as any)?.flags?.require_wording_pick || "false") === "true";
-  const btnOkEl = document.getElementById("btnOk");
-  if (btnOkEl) btnOkEl.textContent = t(lang, "btnOk");
-
   const isLoading = getIsLoading();
 
   if (showPreStart) {
@@ -513,7 +509,6 @@ export function render(overrideToolOutput?: unknown): void {
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
     (btnStart as HTMLElement).style.display = "inline-flex";
-    (btnOk as HTMLElement).style.display = "none";
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
     if (cardDesc) cardDesc.innerHTML = formatText(prestartWelcomeForLang(lang));
@@ -655,7 +650,7 @@ export function render(overrideToolOutput?: unknown): void {
     if (choiceWrap) choiceWrap.style.display = "none";
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
-    const hideBtns = ["btnGoToNextStep", "btnStartDreamExercise", "btnOk"];
+    const hideBtns = ["btnGoToNextStep", "btnStartDreamExercise"];
     for (const id of hideBtns) {
       const el = document.getElementById(id);
       if (el) (el as HTMLElement).style.display = "none";
@@ -947,13 +942,11 @@ export function render(overrideToolOutput?: unknown): void {
   if (choiceMode) {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "flex";
-    (btnOk as HTMLElement).style.display = "none";
     if (sde) (sde as HTMLElement).style.display = "none";
     if (sb) (sb as HTMLElement).style.display = "none";
   } else {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
-    (btnOk as HTMLElement).style.display = "none";
     if (sde) {
       (sde as HTMLElement).style.display = isDreamStepPreExercise ? "inline-flex" : "none";
     }

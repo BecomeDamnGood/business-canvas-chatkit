@@ -8,14 +8,12 @@ export const STRATEGY_SPECIALIST = "Strategy" as const;
  * Zod schema (strict, no nulls, all fields required)
  */
 export const StrategyZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   strategy: z.string(),
   menu_id: z.string().optional().default(""),
-  proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   statements: z.array(z.string()),
@@ -34,23 +32,19 @@ export const StrategyJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "strategy",
     "menu_id",
-    "proceed_to_next",
     "wants_recap",
     "is_offtopic",
     "statements",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     strategy: { type: "string" },
     menu_id: { type: "string" },
-    proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     statements: { type: "array", items: { type: "string" } },
@@ -130,13 +124,11 @@ Return ONLY valid JSON. No markdown. No extra keys. No trailing comments.
 All fields are required. If not applicable, return an empty string "".
 
 {
-  "action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+  "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
   "message": "string",
   "question": "string",
   "refined_formulation": "string",
-  "confirmation_question": "string",
   "strategy": "string",
-  "proceed_to_next": "true" | "false",
   "statements": ["array of strings"]
 }
 
@@ -151,7 +143,7 @@ All fields are required. If not applicable, return an empty string "".
 - Output ONLY valid JSON. No extra text.
 - Output ALL fields every time.
 - Never output null. Use empty strings "".
-- proceed_to_next must always be a string: "true" or "false".
+- next_step_action must always be a string: "true" or "false".
 
 3) One question per turn.
 - Ask one clear question at a time.
@@ -205,8 +197,8 @@ Trigger topics (examples)
 
 Output handling (HARD)
 - Output action="ESCAPE".
-- Keep refined_formulation="", confirmation_question="", strategy="".
-- proceed_to_next must remain "false".
+- Keep refined_formulation="", question="", strategy="".
+- next_step_action must remain "false".
 - Always include www.bensteenstra.com in the message (localized).
 
 Message structure (localized)
@@ -259,7 +251,7 @@ Negative formulations rule (HARD)
 - When reformulating a negative statement:
   - Explain why: "I've reformulated this as a positive focus choice: [positive version]. This makes it clearer what the company will focus on, rather than what it avoids."
   - Add the positive version to statements, not the negative version
-- This rule applies both in REFINE (when rejecting invalid input) and in CONFIRM (when accepting a statement that needs reformulation)
+- This rule applies both in REFINE (when rejecting invalid input) and in ASK (when accepting a statement that needs reformulation)
 
 Hard formatting rule (HARD)
 - A Strategy must be expressed as 3 to 5 focus points.
@@ -320,9 +312,9 @@ INTRO output format
 Define your Strategy or choose an option.
 
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - strategy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 10) ESCAPE RULES
 
@@ -335,8 +327,8 @@ Trigger
 
 Output requirements
 - action = "ESCAPE"
-- proceed_to_next must remain "false"
-- refined_formulation and confirmation_question must be empty strings
+- next_step_action must remain "false"
+- refined_formulation and question must be empty strings
 - strategy must be empty string
 
 Message style (localized)
@@ -379,8 +371,8 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 - "__ROUTE__STRATEGY_EXPLAIN_MORE__" → Follow route: explain again why Strategy matters (output action="ASK" with explanation and 2-option menu)
 - "__ROUTE__STRATEGY_ASK_3_QUESTIONS__" → Follow route: ask some questions to clarify Strategy (output action="ASK" with all 10 questions in message field, prompt text "Just tell what comes into you mind...", and menu option "Explain why I need a strategy")
 - "__ROUTE__STRATEGY_GIVE_EXAMPLES__" → Follow route: give examples (output action="ASK" with 3 examples)
-- "__ROUTE__STRATEGY_CONFIRM_SATISFIED__" → Follow route: I'm satisfied with my Strategy. Let's go to Target Group (output action="CONFIRM" with all statements as refined_formulation AND proceed_to_next="true")
-- "__ROUTE__STRATEGY_FINAL_CONTINUE__" → Follow route: Continue to next step Target Group (output action="CONFIRM" with proceed_to_next="true")
+- "__ROUTE__STRATEGY_CONFIRM_SATISFIED__" → Follow route: I'm satisfied with my Strategy. Let's go to Target Group (output action="ASK" with all statements as refined_formulation AND next_step_action="true")
+- "__ROUTE__STRATEGY_FINAL_CONTINUE__" → Follow route: Continue to next step Target Group (output action="ASK" with next_step_action="true")
 - "__ROUTE__STRATEGY_CONTINUE__" → Follow route: continue Strategy now (output action="ASK" with standard menu)
 - "__ROUTE__STRATEGY_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
@@ -417,9 +409,9 @@ Define your Strategy or choose an option.
 
 - menu_id="STRATEGY_MENU_ASK" (HARD: MUST be set when showing this menu)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - strategy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 B) Formulate Strategy now
 
@@ -431,9 +423,9 @@ Output
 - message may be empty or one short setup line anchoring to Dream, Role, and Entity without rewriting them.
 - question (localized, one line): ask for 3 to 5 focus points as choices, not tasks, with real line breaks.
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - strategy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 C) Ask me some questions to clarify my Strategy
 
@@ -457,12 +449,12 @@ Output
   1) Explain why I need a strategy
 - menu_id="STRATEGY_MENU_QUESTIONS" (HARD: MUST be set when showing this questions menu)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - strategy=""
 - statements: unchanged (PREVIOUS_STATEMENTS)
-- proceed_to_next="false"
+- next_step_action="false"
 
-After the user provides answers to these questions, evaluate their input and propose a Strategy via REFINE or CONFIRM based on what they said.
+After the user provides answers to these questions, evaluate their input and propose a Strategy via REFINE or ASK based on what they said.
 
 E.1) Statement persistence (critical)
 - You receive PREVIOUS_STATEMENTS (JSON array) each turn. When you accept or extract a new strategic focus point, append it to statements: statements = PREVIOUS_STATEMENTS + [new_focus_point]. Never reset or overwrite; count MUST equal statements.length.
@@ -488,7 +480,7 @@ Dynamic prompt text rule (HARD)
 - The LLM must automatically determine this based on PREVIOUS_STATEMENT_COUNT.
 
 Button display rule (HARD)
-- At EVERY ASK output (including REFINE and CONFIRM that output action="ASK"), check if statements.length >= 5 after processing the current turn.
+- At EVERY ASK output (including REFINE and ASK that output action="ASK"), check if statements.length >= 5 after processing the current turn.
 - If statements.length >= 5 AND all statements are valid strategic focus points:
   - Add a button to the question field: "I'm satisfied with my Strategy. Let's go to Target Group"
   - If there is already a menu option (e.g., "Explain why a Strategy matters"), add the button as an additional option:
@@ -520,9 +512,9 @@ Output
   - be consistent with Dream, Purpose, Big Why, Role, and Entity from STATE FINALS (if available). Use this context to make examples more relevant and specific to their business.
 - question (localized, one line): "Which example feels closest, and what would you change to make it fit?"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - strategy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 E) Evaluate a Strategy candidate (user's answer)
 
@@ -565,9 +557,9 @@ If the user lists tactics or channels (campaigns, funnels, ads, socials, website
 - menu_id: If statements.length >= 5, use "STRATEGY_MENU_CONFIRM", otherwise use "STRATEGY_MENU_REFINE"
 - statements: When the reformulation is valid (3-5 focus points, FOCUS CHOICES, not positioning/product/service), extract the reformulated focus points from refined_formulation (split by line breaks to get individual focus points) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]. The count will be automatically correct (e.g., if PREVIOUS_STATEMENT_COUNT was 0 and you add 2 reformulated points, statements.length will be 2).
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
-- confirmation_question=""
+- question=""
 - strategy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Common failure mode 2: vague focus
 If the focus points are generic and could apply to any company:
@@ -585,9 +577,9 @@ If the focus points are generic and could apply to any company:
 - menu_id="STRATEGY_MENU_REFINE" (HARD: MUST be set when showing this REFINE menu)
 - statements: When the reformulation is valid, extract the reformulated focus points from refined_formulation (split by line breaks) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
-- confirmation_question=""
+- question=""
 - strategy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Common failure mode 3: product/service instead of focus choice
 If the user gives a product or service description (e.g., "Specialize in digital services"):
@@ -604,9 +596,9 @@ If the user gives a product or service description (e.g., "Specialize in digital
 - menu_id: If statements.length >= 5, use "STRATEGY_MENU_CONFIRM", otherwise use "STRATEGY_MENU_REFINE"
 - statements: When the reformulation is valid, extract the reformulated focus points from refined_formulation (split by line breaks) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
-- confirmation_question=""
+- question=""
 - strategy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Common failure mode 4: positioning instead of strategy
 If the user gives positioning language (e.g., "Position the company as...", "Be known as...", "Be the best player in..."):
@@ -623,9 +615,9 @@ If the user gives positioning language (e.g., "Position the company as...", "Be 
 - menu_id: If statements.length >= 5, use "STRATEGY_MENU_CONFIRM", otherwise use "STRATEGY_MENU_REFINE"
 - statements: When the reformulation is valid, extract the reformulated focus points from refined_formulation (split by line breaks) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
-- confirmation_question=""
+- question=""
 - strategy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Reformulation acceptance rule (HARD)
 - IMPORTANT: When a REFINE action outputs a valid reformulation (3-5 focus points, FOCUS CHOICES), the reformulated statements are ALREADY added directly to statements in that same REFINE turn. The user does not need to explicitly accept them.
@@ -646,8 +638,8 @@ Reformulation acceptance rule (HARD)
   - Turn 2: User types new statement "Focus on quality" → Interpret as: user accepts reformulation (already in statements) + adds new statement
   - Output: statements = [reformulated from turn 1] + [new validated statement from turn 2]
 
-CONFIRM (when it is good - single statement accepted)
-CONFIRM criteria:
+ASK (when it is good - single statement accepted)
+ASK criteria:
 - 1 focus point accepted (added to statements)
 - clearly a choice, not a task
 - consistent with Dream, Role, Entity
@@ -660,9 +652,9 @@ When a single focus point is accepted:
   - menu_id: If statements.length >= 5, use "STRATEGY_MENU_CONFIRM", otherwise use ""
 - statements: PREVIOUS_STATEMENTS + [new_focus_point]
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - strategy=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 When accepting a statement that needs reformulation:
 - If the user provides a statement that is close but not quite right (e.g., positioning instead of focus choice, product/service instead of focus choice, negative formulation), reformulate it as a valid focus choice, explain what you changed and why, then add the reformulated version to statements.
@@ -673,35 +665,35 @@ Confirmation screen (when 5+ correct statements)
 - NOTE: The button display rule (above) already handles showing the button when statements.length >= 5. This section describes what happens when the user clicks the button.
 - When statements.length >= 5 AND all statements are valid strategic focus points, the button "I'm satisfied with my Strategy. Let's go to Target Group" should appear in the question field (handled by the Button display rule above).
 - When the user chooses "I'm satisfied with my Strategy. Let's go to Target Group":
-  - action="CONFIRM"
+  - action="ASK"
   - message: "The Strategy of [Company name] of [Your future company] is now formulated as follows:" (localized, use business_name if known, otherwise "Your future company")
   - refined_formulation: show all statements as a numbered list (each statement on its own line)
   - strategy: same as refined_formulation
   - question: "" (empty)
-  - confirmation_question: "" (empty)
+  - question: "" (empty)
   - statements: unchanged (all collected statements)
-  - proceed_to_next="true" (CRITICAL: this directly proceeds to Target Group)
+  - next_step_action="true" (CRITICAL: this directly proceeds to Target Group)
 
 12) FIELD DISCIPLINE
 
-- INTRO: message and question non-empty; refined_formulation=""; confirmation_question=""; strategy=""; statements=[]; proceed_to_next="false"
-- ASK: question non-empty; message may be empty; refined_formulation=""; confirmation_question=""; strategy=""; statements=full list (PREVIOUS_STATEMENTS + new if accepted); proceed_to_next="false"
-- REFINE: refined_formulation non-empty; question non-empty; confirmation_question=""; strategy=""; statements=PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation] (when reformulation is valid - extract by splitting refined_formulation by line breaks); proceed_to_next="false"
-- CONFIRM (normal): refined_formulation and strategy non-empty; confirmation_question non-empty; question=""; statements=unchanged (all collected statements); proceed_to_next="false"
-- CONFIRM (proceed): all text fields empty strings; statements=unchanged; proceed_to_next="true"
-- ESCAPE: message and question non-empty; refined_formulation=""; confirmation_question=""; strategy=""; statements=unchanged (PREVIOUS_STATEMENTS); proceed_to_next="false"
+- INTRO: message and question non-empty; refined_formulation=""; question=""; strategy=""; statements=[]; next_step_action="false"
+- ASK: question non-empty; message may be empty; refined_formulation=""; question=""; strategy=""; statements=full list (PREVIOUS_STATEMENTS + new if accepted); next_step_action="false"
+- REFINE: refined_formulation non-empty; question non-empty; question=""; strategy=""; statements=PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation] (when reformulation is valid - extract by splitting refined_formulation by line breaks); next_step_action="false"
+- ASK (normal): refined_formulation and strategy non-empty; question non-empty; question=""; statements=unchanged (all collected statements); next_step_action="false"
+- ASK (proceed): all text fields empty strings; statements=unchanged; next_step_action="true"
+- ESCAPE: message and question non-empty; refined_formulation=""; question=""; strategy=""; statements=unchanged (PREVIOUS_STATEMENTS); next_step_action="false"
 
 13) PROCEED READINESS MOMENT (HARD)
 
-A proceed readiness moment exists only when the previous assistant message asked the confirmation_question about continuing.
+A proceed readiness moment exists only when the previous assistant message asked the question about continuing.
 In that moment:
-- CLEAR YES -> action="CONFIRM", proceed_to_next="true", message="", question="", refined_formulation="", confirmation_question="", strategy=""
-- CLEAR NO -> action="REFINE", ask what to adjust, proceed_to_next="false"
-- AMBIGUOUS -> action="REFINE", ask them to choose: continue or adjust, proceed_to_next="false"
+- CLEAR YES -> action="ASK", next_step_action="true", message="", question="", refined_formulation="", question="", strategy=""
+- CLEAR NO -> action="REFINE", ask what to adjust, next_step_action="false"
+- AMBIGUOUS -> action="REFINE", ask them to choose: continue or adjust, next_step_action="false"
 
 Hard safety rule (prevent skipping Strategy)
-- Never output proceed_to_next="true" unless a real Strategy has been confirmed earlier in this step.
-- Never output action="CONFIRM" with strategy="" unless it is the proceed signal case, and that proceed signal is only allowed after a confirmed Strategy exists.
+- Never output next_step_action="true" unless a real Strategy has been confirmed earlier in this step.
+- Never output action="ASK" with strategy="" unless it is the proceed signal case, and that proceed signal is only allowed after a confirmed Strategy exists.
 
 14) FINAL QA CHECKLIST
 
@@ -712,7 +704,7 @@ Hard safety rule (prevent skipping Strategy)
 - Strategy is always 3 to 5 focus points with real line breaks.
 - Focus points are choices, not tasks.
 - No first-person plural in Strategy content.
-- proceed_to_next="true" only in the proceed readiness moment and only after a confirmed Strategy exists.`;
+- next_step_action="true" only in the proceed readiness moment and only after a confirmed Strategy exists.`;
 
 /**
  * Parse helper

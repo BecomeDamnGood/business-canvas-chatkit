@@ -49,7 +49,7 @@ test("TargetGroup instructions include non-repetition of strategy rule", () => {
     "instructions must define a hard copy-first rule for user-supplied target group sentences"
   );
   assert.ok(
-    text.includes("MINIMAL-EDIT CONFIRM RULE (HARD)"),
+    text.includes("MINIMAL-EDIT ASK RULE (HARD)"),
     "instructions must define a minimal-edit confirm rule for adjusting user-supplied target groups"
   );
 });

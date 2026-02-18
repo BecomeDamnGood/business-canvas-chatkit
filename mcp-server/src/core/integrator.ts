@@ -13,7 +13,6 @@ import type { CanvasState, BoolString } from "./state.js";
  *   2) refined_formulation
  *   3) exactly ONE question line:
  *      - if question non-empty -> question (single line)
- *      - else if confirmation_question non-empty -> confirmation_question (single line)
  *      - else -> nothing
  * - Spacing: one blank line between rendered parts
  */
@@ -23,7 +22,6 @@ const RenderableSpecialistZod = z.object({
   message: z.string().optional(),
   refined_formulation: z.string().optional(),
   question: z.string().optional(),
-  confirmation_question: z.string().optional(),
 });
 
 export type RenderedOutput = {
@@ -125,13 +123,7 @@ export function integrateUserFacingOutput(params: {
 
   // Exactly one question line (singleLine mode)
   const q = typeof sp.question === "string" && sp.question.trim() ? sp.question : "";
-  const cq =
-    !q && typeof sp.confirmation_question === "string" && sp.confirmation_question.trim()
-      ? sp.confirmation_question
-      : "";
-
   if (q) addPart(parts, debugParts, "question", q, "singleLine");
-  else if (cq) addPart(parts, debugParts, "confirmation_question", cq, "singleLine");
 
   return {
     text: parts.join("\n\n").trim(),

@@ -8,14 +8,12 @@ export const PRODUCTSSERVICES_SPECIALIST = "ProductsServices" as const;
  * Zod schema (strict, no nulls, all fields required)
  */
 export const ProductsServicesZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   productsservices: z.string(),
   menu_id: z.string().optional().default(""),
-  proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -33,22 +31,18 @@ export const ProductsServicesJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "productsservices",
     "menu_id",
-    "proceed_to_next",
     "wants_recap",
     "is_offtopic",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     productsservices: { type: "string" },
     menu_id: { type: "string" },
-    proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -119,14 +113,12 @@ Return ONLY valid JSON. No markdown. No extra keys. No trailing comments.
 All fields are required. If not applicable, return an empty string "".
 
 {
-  "action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+  "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
   "message": "string",
   "question": "string",
   "refined_formulation": "string",
-  "confirmation_question": "string",
   "productsservices": "string",
   "menu_id": "string",
-  "proceed_to_next": "true" | "false",
   "wants_recap": boolean
 }
 
@@ -170,10 +162,10 @@ Replace "we offer solutions" with the tailored phrase based on business type.
 
 - question: "Describe what [Company name] offers." (localized; use business_name if known, otherwise "<your future company>")
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - productsservices=""
 - menu_id="" (NO button under the introduction text)
-- proceed_to_next="false"
+- next_step_action="false"
 - wants_recap=false
 
 6) VALIDATION AND SUMMARIZATION (B)
@@ -200,15 +192,15 @@ Is this everything [Company name] offers or is there more? (localized; use busin
 - menu_id: When a list is shown in message, set menu_id="PRODUCTSSERVICES_MENU_CONFIRM" (not empty). This ensures the button is rendered. If no list is shown (single statement only), you may set menu_id="" and use a plain question without numbered options.
 - CRITICAL FOR REFINE/ASK OUTPUTS: After showing the products and services list in the message field as a bullet list, you MUST set refined_formulation to an empty string (refined_formulation=""). The list is already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. The backend function buildTextForWidget() combines both message and refined_formulation, so if both contain the list, they will be shown twice.
 - refined_formulation: "" (empty string to prevent duplication - the list is shown in message only)
-- confirmation_question=""
+- question=""
 - productsservices="" (do not save yet)
-- proceed_to_next="false"
+- next_step_action="false"
 - wants_recap=false
 
 7) CONFIRMATION SCREEN (C)
 
 When user confirms (via button "This is all what we offer, continue to step Rules of the Game" or direct confirmation):
-- action="CONFIRM"
+- action="ASK"
 - message: Show only the intro text (localized), do NOT include the productsservices summary:
   "The Products and Services of [Company name] are now formulated as follows:" (localized; use business_name if known, otherwise "<your future company>")
 - question: Show exactly one option (localized) with real line breaks, then one blank line, then this exact prompt (localized):
@@ -217,15 +209,15 @@ When user confirms (via button "This is all what we offer, continue to step Rule
 
 Refine your Products and Services or go to next step Rules of the Game
 - refined_formulation: The final summary (single statement or short grouped list, 3-7 items max) - this will be displayed below the message
-- confirmation_question: "Continue to next step Rules of the Game"
+- question: "Continue to next step Rules of the Game"
 - productsservices: The final summary (single statement or short grouped list, 3-7 items max)
 - menu_id="PRODUCTSSERVICES_MENU_CONFIRM"
-- proceed_to_next="true"
+- next_step_action="true"
 - wants_recap=false
 
 8) FINAL OUTPUT FORMAT (D)
 
-When saving productsservices_final (action="CONFIRM"), enforce:
+When saving productsservices_final (action="ASK"), enforce:
 - Clear, not generic and not exhaustive summary of what the business offers
 - Either a single clear statement OR a short grouped list (3-7 items maximum)
 - Must align with strategy and target group

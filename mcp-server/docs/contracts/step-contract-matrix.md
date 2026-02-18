@@ -10,6 +10,11 @@ This document is the contract-first source of truth for step behavior in the Bus
 - `wording_choice_pending=true` blocks normal confirm/proceed until a wording pick action is handled.
 - Wording-choice decision rule is strict: show `user vs suggestion` whenever wording/content/order differs; only suppress when difference is spelling/surface-only with otherwise identical content.
 - Language must be resolved before specialist call and must remain stable unless explicit override exists.
+- Runtime is contract-only:
+- interactive turns must be `ASK` with `menu_id + action_codes`.
+- `CONFIRM`, `confirmation_question`, and `proceed_to_*` are not valid runtime drivers.
+- Step transitions are actioncode-driven only.
+- Legacy sessions with old markers are blocked with `session_upgrade_required` and must restart.
 
 ## step_0
 
@@ -20,7 +25,7 @@ This document is the contract-first source of truth for step behavior in the Bus
 - `state.language` / `state.language_locked`
 - `state.initial_user_message` (when available)
 - Special flow:
-- Proceed gate to Dream (`proceed_to_dream="true"`)
+- Proceed gate to Dream via `ACTION_STEP0_READY_START`
 - Allowed transitions:
 - `step_0 -> dream`
 - Exceptions:
@@ -38,7 +43,7 @@ This document is the contract-first source of truth for step behavior in the Bus
 - Self mode / builder mode switch, and handoff to `dream_explainer`
 - Allowed transitions:
 - `dream -> dream`
-- `dream -> purpose` (only when proceed contract is satisfied)
+- `dream -> purpose` (only via contract actioncode)
 - Exceptions:
 - `ACTION_DREAM_SWITCH_TO_SELF` keeps same step and switches specialist path.
 
@@ -187,4 +192,4 @@ This document is the contract-first source of truth for step behavior in the Bus
 - presentation asset preparation output path
 - Allowed transitions:
 - `presentation -> presentation`
-- terminal proceed / finish-later behavior
+- terminal continue / finish-later behavior via actioncodes
