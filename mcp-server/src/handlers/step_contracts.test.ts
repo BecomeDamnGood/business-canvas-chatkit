@@ -26,7 +26,7 @@ test("offtopic contract: applyStateUpdate does not mutate canonical finals", () 
   assert.equal(String((next as any).purpose_final || ""), "");
 });
 
-test("final ownership: dream confirm mutates dream_final only", () => {
+test("final ownership: dream output is staged and does not mutate other committed finals", () => {
   const prev = getDefaultState();
   const decision: any = {
     current_step: "dream",
@@ -46,7 +46,7 @@ test("final ownership: dream confirm mutates dream_final only", () => {
     showSessionIntroUsed: "false",
   });
 
-  assert.equal(String((next as any).dream_final || ""), "A clear dream");
+  assert.equal(String((next as any).dream_final || ""), "");
+  assert.equal(String((next as any).provisional_by_step?.dream || ""), "A clear dream");
   assert.equal(String((next as any).purpose_final || ""), "");
 });
-

@@ -9,7 +9,6 @@ import {
   buildContractId,
   buildContractTextKeys,
   buildHeadlineForContract,
-  buildNoOutputRecap,
 } from "./ui_contract_matrix.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
@@ -46,9 +45,9 @@ const STEP_LABELS: Record<string, string> = {
   presentation: "Presentation",
 };
 
-const STEP0_NO_OUTPUT_RECAP_EN = "We did not validate your business and name yet";
 const STEP0_NO_OUTPUT_PROMPT_EN =
-  "What type of business are you starting or running, and what is the name? If you don't have a name yet, you can say 'TBD'.";
+  "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?";
+const STEP0_CARDDESC_EN = "Just to set the context, we'll start with the basics.";
 const STEP0_CONFIRM_SUFFIX_EN = "Are you ready to start with the first step: the Dream?";
 
 const FINAL_FIELD_BY_STEP: Record<string, string> = {
@@ -64,6 +63,14 @@ const FINAL_FIELD_BY_STEP: Record<string, string> = {
   rulesofthegame: "rulesofthegame_final",
   presentation: "presentation_brief_final",
 };
+
+function provisionalForStep(state: CanvasState, stepId: string): string {
+  const raw =
+    (state as any).provisional_by_step && typeof (state as any).provisional_by_step === "object"
+      ? ((state as any).provisional_by_step as Record<string, unknown>)
+      : {};
+  return String(raw[stepId] || "").trim();
+}
 
 function parseStep0Line(step0Line: string): { venture: string; name: string; status: string } {
   const ventureMatch = step0Line.match(/Venture:\s*([^|]+)/i);
@@ -90,21 +97,6 @@ function menuBelongsToStep(menuId: string, stepId: string): boolean {
   });
 }
 
-function parseNumberedOptions(question: unknown): string[] {
-  const text = String(question || "").trim();
-  if (!text) return [];
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const out: string[] = [];
-  for (const line of lines) {
-    const m = line.match(/^([1-9])[\)\.]\s+(.+)$/);
-    if (!m) continue;
-    const idx = Number(m[1]);
-    if (idx !== out.length + 1) break;
-    out.push(m[2].trim());
-  }
-  return out;
-}
-
 function buildNumberedPrompt(labels: string[], headline: string): string {
   const numbered = labels.map((label, idx) => `${idx + 1}) ${label}`);
   if (!numbered.length) return headline;
@@ -129,10 +121,28 @@ function isConfirmActionCode(actionCode: string): boolean {
   const entry = ACTIONCODE_REGISTRY.actions[actionCode];
   if (!entry) return false;
   if (Array.isArray(entry.flags) && entry.flags.includes("confirm")) return true;
-  if (actionCode === "ACTION_CONFIRM_CONTINUE") return true;
   if (entry.route === "yes") return true;
   const upper = actionCode.toUpperCase();
   return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
+}
+
+function menuHasConfirmAction(menuId: string): boolean {
+  const actionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
+    ? ACTIONCODE_REGISTRY.menus[menuId]
+    : [];
+  return actionCodes.some((code) => isConfirmActionCode(String(code || "").trim()));
+}
+
+function parseMenuFromContractId(contractIdRaw: unknown, stepId: string): string {
+  const contractId = String(contractIdRaw || "").trim();
+  if (!contractId) return "";
+  const parts = contractId.split(":");
+  if (parts.length < 3) return "";
+  const [contractStep, , ...menuParts] = parts;
+  if (String(contractStep || "").trim() !== stepId) return "";
+  const menuId = menuParts.join(":").trim();
+  if (!menuId || menuId === "NO_MENU") return "";
+  return menuId;
 }
 
 function companyNameForPrompt(state: CanvasState): string {
@@ -201,7 +211,9 @@ function computeStatus(
   }
 
   const finalField = FINAL_FIELD_BY_STEP[stepId] || "";
-  const finalValue = finalField ? String((state as any)[finalField] ?? "").trim() : "";
+  const committedFinalValue = finalField ? String((state as any)[finalField] ?? "").trim() : "";
+  const provisionalValue = provisionalForStep(state, stepId);
+  const finalValue = provisionalValue || committedFinalValue;
   const candidate = extractCandidate(stepId, specialist, prev);
   const statementCount = extractStatementCount(specialist, prev);
   const statementBullets = statementCount > 0
@@ -280,6 +292,18 @@ function computeStatus(
     return { status: "no_output", confirmEligible: false, recapBody: "" };
   }
 
+  const candidateDrivenValidSteps = new Set([
+    "purpose",
+    "bigwhy",
+    "role",
+    "entity",
+    "targetgroup",
+    "presentation",
+  ]);
+  if (candidate && candidateDrivenValidSteps.has(stepId)) {
+    return { status: "valid_output", confirmEligible: true, recapBody: candidate };
+  }
+
   if (finalValue) {
     return { status: "valid_output", confirmEligible: true, recapBody: finalValue };
   }
@@ -289,49 +313,11 @@ function computeStatus(
   return { status: "no_output", confirmEligible: false, recapBody: "" };
 }
 
-function pickMenuId(
-  stepId: string,
-  status: TurnOutputStatus,
-  specialist: Record<string, unknown>,
-  prev: Record<string, unknown>
-): string {
-  const currentMenu = String(specialist.menu_id ?? "").trim();
-  if (
-    currentMenu &&
-    !isEscapeMenu(currentMenu) &&
-    ACTIONCODE_REGISTRY.menus[currentMenu] &&
-    menuBelongsToStep(currentMenu, stepId)
-  ) {
-    return currentMenu;
-  }
-  const ignorePreviousMenuFallback =
-    stepId === "strategy" ||
-    stepId === "productsservices" ||
-    stepId === "rulesofthegame";
-  if (ignorePreviousMenuFallback) {
-    const defaults = DEFAULT_MENU_BY_STATUS[stepId];
-    if (!defaults) return "";
-    return defaults[status] || "";
-  }
-  const prevMenu = String(prev.menu_id ?? "").trim();
-  if (
-    prevMenu &&
-    !isEscapeMenu(prevMenu) &&
-    ACTIONCODE_REGISTRY.menus[prevMenu] &&
-    menuBelongsToStep(prevMenu, stepId)
-  ) {
-    return prevMenu;
-  }
-  const defaults = DEFAULT_MENU_BY_STATUS[stepId];
-  if (!defaults) return "";
-  return defaults[status] || "";
-}
-
 function labelsForMenu(
   menuId: string,
   actionCodes: string[],
-  specialist: Record<string, unknown>,
-  prev: Record<string, unknown>
+  _specialist: Record<string, unknown>,
+  _prev: Record<string, unknown>
 ): string[] {
   if (!menuId || actionCodes.length <= 0) return [];
 
@@ -340,23 +326,7 @@ function labelsForMenu(
     : [];
   if (fullActionCodes.length === 0) return [];
 
-  const pickAllLabels = (): string[] => {
-    const currentMenu = String(specialist.menu_id ?? "").trim();
-    if (currentMenu === menuId) {
-      const parsed = parseNumberedOptions(specialist.question);
-      if (parsed.length >= fullActionCodes.length) return parsed.slice(0, fullActionCodes.length);
-    }
-    const prevMenu = String(prev.menu_id ?? "").trim();
-    if (prevMenu === menuId) {
-      const parsed = parseNumberedOptions(prev.question);
-      if (parsed.length >= fullActionCodes.length) return parsed.slice(0, fullActionCodes.length);
-    }
-    const fallback = MENU_LABELS[menuId] || [];
-    if (fallback.length >= fullActionCodes.length) return fallback.slice(0, fullActionCodes.length);
-    return [];
-  };
-
-  const allLabels = pickAllLabels();
+  const allLabels = (MENU_LABELS[menuId] || []).slice(0, fullActionCodes.length);
   if (allLabels.length !== fullActionCodes.length) return [];
 
   const usedIndices = new Set<number>();
@@ -377,90 +347,127 @@ function labelsForMenu(
   return filteredLabels;
 }
 
-const RESILIENT_FALLBACK_MENUS: Record<string, string[]> = {
-  strategy: [
-    "STRATEGY_MENU_CONFIRM",
-    "STRATEGY_MENU_ASK",
-    "STRATEGY_MENU_REFINE",
-    "STRATEGY_MENU_INTRO",
-  ],
-  rulesofthegame: [
-    "RULES_MENU_CONFIRM",
-    "RULES_MENU_ASK_EXPLAIN",
-    "RULES_MENU_EXAMPLE_ONLY",
-    "RULES_MENU_INTRO",
-  ],
-  productsservices: ["PRODUCTSSERVICES_MENU_CONFIRM"],
-  purpose: [
-    "PURPOSE_MENU_REFINE",
-    "PURPOSE_MENU_EXPLAIN",
-    "PURPOSE_MENU_EXAMPLES",
-    "PURPOSE_MENU_INTRO",
-  ],
-  role: ["ROLE_MENU_REFINE", "ROLE_MENU_ASK", "ROLE_MENU_INTRO", "ROLE_MENU_EXAMPLES"],
-  entity: ["ENTITY_MENU_EXAMPLE", "ENTITY_MENU_FORMULATE", "ENTITY_MENU_INTRO"],
-};
-
 function resolveMenuContract(params: {
   stepId: string;
   status: TurnOutputStatus;
   confirmEligible: boolean;
+  state: CanvasState;
   specialist: Record<string, unknown>;
   prev: Record<string, unknown>;
 }): { menuId: string; actionCodes: string[]; labels: string[] } {
-  const { stepId, status, confirmEligible, specialist, prev } = params;
-  const preferredMenu = pickMenuId(stepId, status, specialist, prev);
+  const { stepId, status, confirmEligible, state, specialist, prev } = params;
   const defaults = DEFAULT_MENU_BY_STATUS[stepId];
   const defaultMenu = defaults ? String(defaults[status] || "").trim() : "";
-  const fallbackMenus = Array.isArray(RESILIENT_FALLBACK_MENUS[stepId]) ? RESILIENT_FALLBACK_MENUS[stepId] : [];
-  const menuCandidates: string[] = [];
-  const pushMenu = (menuId: string): void => {
-    const id = String(menuId || "").trim();
-    if (!id) return;
-    if (isEscapeMenu(id)) return;
-    if (!ACTIONCODE_REGISTRY.menus[id]) return;
-    if (!menuBelongsToStep(id, stepId)) return;
-    if (!menuCandidates.includes(id)) menuCandidates.push(id);
+  const activeSpecialist = String((state as any).active_specialist ?? "").trim();
+  const isOfftopic = specialist.is_offtopic === true;
+  const ignorePhaseForOfftopicNoOutput = isOfftopic && status === "no_output";
+  const phaseMap = (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
+    ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
+    : {};
+  const phaseMenu = ignorePhaseForOfftopicNoOutput ? "" : parseMenuFromContractId(phaseMap[stepId], stepId);
+  const specialistMenu = String(specialist.menu_id ?? "").trim();
+  const menuIsValidForStep = (menuRaw: string): boolean => {
+    const menu = String(menuRaw || "").trim();
+    if (!menu || isEscapeMenu(menu)) return false;
+    if (!ACTIONCODE_REGISTRY.menus[menu]) return false;
+    if (!menuBelongsToStep(menu, stepId)) return false;
+    return true;
   };
-  pushMenu(preferredMenu);
-  pushMenu(defaultMenu);
-  for (const menu of fallbackMenus) pushMenu(menu);
-
-  const mismatches: Array<{ menu_id: string; actions: number; labels: number }> = [];
-  for (const menuId of menuCandidates) {
-    const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
-    const actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
-    if (actionCodes.length === 0) continue;
-    const labels = labelsForMenu(menuId, actionCodes, specialist, prev);
-    if (labels.length === actionCodes.length) {
-      return { menuId, actionCodes, labels };
+  const allowSpecialistContextMenus = new Set([
+    "DREAM_MENU_WHY",
+    "DREAM_MENU_SUGGESTIONS",
+    "PURPOSE_MENU_EXAMPLES",
+    "ROLE_MENU_ASK",
+    "RULES_MENU_EXAMPLE_ONLY",
+    "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+    "DREAM_EXPLAINER_MENU_REFINE",
+  ]);
+  const specialistMenuAllowedByStatus =
+    menuIsValidForStep(specialistMenu) &&
+    (
+      allowSpecialistContextMenus.has(specialistMenu) ||
+      (
+        stepId === "dream" &&
+        activeSpecialist === "DreamExplainer" &&
+        specialistMenu.startsWith("DREAM_EXPLAINER_MENU_")
+      ) ||
+      (status === "no_output" && !confirmEligible && menuHasConfirmAction(specialistMenu))
+    );
+  let menuId = menuIsValidForStep(phaseMenu)
+    ? phaseMenu
+    : (specialistMenuAllowedByStatus ? specialistMenu : defaultMenu);
+  if (stepId === "dream" && activeSpecialist === "DreamExplainer") {
+    if (isOfftopic) {
+      menuId = "DREAM_EXPLAINER_MENU_SWITCH_SELF";
+    } else if (status === "valid_output" && !menuIsValidForStep(menuId)) {
+      menuId = "DREAM_EXPLAINER_MENU_REFINE";
+    } else if (status !== "valid_output" && !String(menuId || "").startsWith("DREAM_EXPLAINER_MENU_")) {
+      menuId = "DREAM_EXPLAINER_MENU_SWITCH_SELF";
     }
-    mismatches.push({ menu_id: menuId, actions: actionCodes.length, labels: labels.length });
+  }
+  if (!menuIsValidForStep(menuId)) {
+    menuId = menuIsValidForStep(defaultMenu) ? defaultMenu : "";
+  }
+  if (
+    status === "valid_output" &&
+    confirmEligible &&
+    menuIsValidForStep(defaultMenu) &&
+    menuHasConfirmAction(defaultMenu) &&
+    !menuHasConfirmAction(menuId)
+  ) {
+    const finalField = String(FINAL_FIELD_BY_STEP[stepId] || "").trim();
+    const hasCommittedFinal = finalField
+      ? Boolean(String((state as any)[finalField] || "").trim())
+      : false;
+    const hasProvisionalFinal = Boolean(provisionalForStep(state, stepId));
+    const hasStoredFinalLikeValue = hasCommittedFinal || hasProvisionalFinal;
+    const isDreamExplainerMenu = stepId === "dream" && String(menuId || "").startsWith("DREAM_EXPLAINER_MENU_");
+    const keepNonConfirmValidMenus = new Set([
+      "PURPOSE_MENU_EXAMPLES",
+      "ROLE_MENU_ASK",
+      "RULES_MENU_EXAMPLE_ONLY",
+      "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+    ]);
+    const lowStatusMenus = new Set(
+      [defaults?.no_output, defaults?.incomplete_output]
+        .map((menu) => String(menu || "").trim())
+        .filter(Boolean)
+    );
+    if (
+      lowStatusMenus.has(String(menuId || "").trim()) ||
+      !keepNonConfirmValidMenus.has(String(menuId || "").trim()) ||
+      (hasStoredFinalLikeValue && !isDreamExplainerMenu)
+    ) {
+      menuId = defaultMenu;
+    }
   }
 
-  if (mismatches.length > 0 && (process.env.GLOBAL_TURN_POLICY_DEBUG === "1" || process.env.LOCAL_DEV === "1")) {
-    console.log("[menu_contract_gap]", {
-      step: stepId,
-      status,
-      preferred_menu: preferredMenu,
-      default_menu: defaultMenu,
-      candidates: menuCandidates,
-      mismatches,
-    });
-  }
-  return { menuId: "", actionCodes: [], labels: [] };
+  if (!menuId || isEscapeMenu(menuId)) return { menuId: "", actionCodes: [], labels: [] };
+  if (!ACTIONCODE_REGISTRY.menus[menuId]) return { menuId: "", actionCodes: [], labels: [] };
+  if (!menuBelongsToStep(menuId, stepId)) return { menuId: "", actionCodes: [], labels: [] };
+
+  const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
+  const actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
+  if (actionCodes.length === 0) return { menuId: "", actionCodes: [], labels: [] };
+
+  const labels = labelsForMenu(menuId, actionCodes, specialist, prev);
+  if (labels.length !== actionCodes.length) return { menuId: "", actionCodes: [], labels: [] };
+
+  return { menuId, actionCodes, labels };
 }
 
 export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPolicyRenderResult {
   const { stepId, state } = params;
   const specialist = params.specialist || {};
   const prev = params.previousSpecialist || {};
+  const activeSpecialist = String((state as any).active_specialist ?? "").trim();
   const stepLabel = STEP_LABELS[stepId] || "Current step";
   const companyName = companyNameForPrompt(state);
 
-  const { status, confirmEligible, recapBody } = computeStatus(stepId, state, specialist, prev);
   const isOfftopic = specialist.is_offtopic === true;
-  const candidateText = extractCandidate(stepId, specialist, prev);
+  const statusSource = isOfftopic ? prev : specialist;
+  const { status, confirmEligible, recapBody } = computeStatus(stepId, state, statusSource, prev);
+  const candidateText = extractCandidate(stepId, statusSource, prev);
   const statementOfftopicSteps = new Set(["dream", "purpose", "bigwhy", "role", "entity", "targetgroup", "presentation"]);
   const promoteIncompleteToValidForOfftopic =
     isOfftopic &&
@@ -471,52 +478,110 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const effectiveStatus: TurnOutputStatus = promoteIncompleteToValidForOfftopic ? "valid_output" : status;
   const effectiveConfirmEligible = promoteIncompleteToValidForOfftopic ? true : confirmEligible;
 
-  const answerText = String(specialist.message ?? "").trim() || String(specialist.refined_formulation ?? "").trim();
-  const recap = effectiveStatus === "no_output"
-    ? buildNoOutputRecap(stepLabel)
-    : `<strong>This is what we have established so far based on our dialogue:</strong>\n${recapBody}`.trim();
-  const message = [answerText, recap].filter(Boolean).join("\n\n").trim();
+  const specialistForDisplay: Record<string, unknown> = { ...specialist };
+  if (isOfftopic && stepId !== "step_0") {
+    const field = stepId === "rulesofthegame" ? "rulesofthegame" : stepId;
+    const finalField = FINAL_FIELD_BY_STEP[stepId] || "";
+    const existingField = String((specialistForDisplay as any)[field] || "").trim();
+    const existingRefined = String((specialistForDisplay as any).refined_formulation || "").trim();
+    const previousField = String((prev as any)[field] || "").trim();
+    const stateFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
+    const stateProvisional = provisionalForStep(state, stepId);
+    const carry = previousField || stateProvisional || stateFinal;
+    if (!existingField && carry) {
+      (specialistForDisplay as any)[field] = carry;
+    }
+    if (!existingRefined && carry) {
+      (specialistForDisplay as any).refined_formulation = carry;
+    }
+    if (
+      (!Array.isArray((specialistForDisplay as any).statements) ||
+        (specialistForDisplay as any).statements.length === 0) &&
+      Array.isArray((prev as any).statements) &&
+      (prev as any).statements.length > 0
+    ) {
+      (specialistForDisplay as any).statements = (prev as any).statements;
+    }
+  }
+
+  const answerText =
+    String((specialistForDisplay as any).message ?? "").trim() ||
+    String((specialistForDisplay as any).refined_formulation ?? "").trim();
+  const recapText = String(recapBody || "").trim();
+  const message = (() => {
+    if (
+      isOfftopic &&
+      stepId !== "step_0" &&
+      effectiveStatus !== "no_output" &&
+      recapText
+    ) {
+      if (!answerText) return recapText;
+      const answerKey = answerText.toLowerCase().replace(/\s+/g, " ").trim();
+      const recapKey = recapText.toLowerCase().replace(/\s+/g, " ").trim();
+      if (recapKey && answerKey.includes(recapKey)) return answerText;
+      return `${answerText}\n\n${recapText}`.trim();
+    }
+    return answerText || (effectiveStatus === "valid_output" ? recapText : "");
+  })();
 
   if (stepId === "step_0") {
     const parsedStep0 = parseStep0Line(
-      String((state as any).step_0_final ?? "").trim() || extractCandidate(stepId, specialist, prev)
+      String((state as any).step_0_final ?? "").trim() || extractCandidate(stepId, statusSource, prev)
     );
-    const step0Recap = status === "no_output"
-      ? STEP0_NO_OUTPUT_RECAP_EN
-      : `<strong>This is what we have established so far based on our dialogue:</strong>\n${recapBody}`.trim();
-    const step0Message = [answerText, step0Recap].filter(Boolean).join("\n\n").trim();
-    const confirmQuestion = confirmEligible
+    const step0Message = answerText || STEP0_CARDDESC_EN;
+    const step0MenuId = effectiveStatus === "valid_output" ? "STEP0_MENU_READY_START" : "";
+    const step0ActionCodes = step0MenuId
+      ? ((ACTIONCODE_REGISTRY.menus[step0MenuId] || []).map((code) => String(code || "").trim()).filter(Boolean))
+      : [];
+    const step0Labels = step0MenuId
+      ? labelsForMenu(step0MenuId, step0ActionCodes, specialist, prev)
+      : [];
+    const step0Headline = effectiveStatus === "valid_output"
       ? step0ConfirmQuestion(parsedStep0.venture, parsedStep0.name)
-      : "";
+      : STEP0_NO_OUTPUT_PROMPT_EN;
+    const step0Question = step0ActionCodes.length > 0
+      ? buildNumberedPrompt(step0Labels, step0Headline)
+      : step0Headline;
+    const step0ContractId = buildContractId(stepId, effectiveStatus, step0MenuId);
+    const step0TextKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId: step0MenuId });
     const step0Specialist: Record<string, unknown> = {
-      ...specialist,
-      action: confirmEligible ? "CONFIRM" : "ASK",
+      ...specialistForDisplay,
+      action: "ASK",
       message: step0Message,
-      question: confirmEligible ? "" : STEP0_NO_OUTPUT_PROMPT_EN,
-      confirmation_question: confirmQuestion,
-      menu_id: "",
-      ui_contract_id: buildContractId(stepId, effectiveStatus, ""),
+      question: step0Question,
+      menu_id: step0MenuId,
+      ui_contract_id: step0ContractId,
       ui_contract_version: UI_CONTRACT_VERSION,
-      ui_text_keys: buildContractTextKeys({ stepId, status: effectiveStatus, menuId: "" }),
+      ui_text_keys: step0TextKeys,
     };
     return {
       status: effectiveStatus,
-      confirmEligible,
+      confirmEligible: effectiveConfirmEligible,
       specialist: step0Specialist,
-      uiActionCodes: [],
-      uiActions: [],
-      contractId: buildContractId(stepId, effectiveStatus, ""),
+      uiActionCodes: step0ActionCodes,
+      uiActions: buildRenderedActions(step0ActionCodes, step0Labels),
+      contractId: step0ContractId,
       contractVersion: UI_CONTRACT_VERSION,
-      textKeys: buildContractTextKeys({ stepId, status: effectiveStatus, menuId: "" }),
+      textKeys: step0TextKeys,
     };
   }
+
+  const specialistForMenu =
+    isOfftopic && effectiveStatus === "no_output"
+      ? { ...specialistForDisplay, menu_id: "" }
+      : specialistForDisplay;
+  const prevForMenu =
+    isOfftopic && effectiveStatus === "no_output"
+      ? { ...prev, menu_id: "" }
+      : prev;
 
   const resolved = resolveMenuContract({
     stepId,
     status: effectiveStatus,
     confirmEligible: effectiveConfirmEligible,
-    specialist,
-    prev,
+    state,
+    specialist: specialistForMenu,
+    prev: prevForMenu,
   });
   const menuId = resolved.menuId;
   const safeActionCodes = resolved.actionCodes;
@@ -528,16 +593,22 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     hasOptions: safeActionCodes.length > 0,
   });
 
-  const question = buildNumberedPrompt(safeLabels, headline);
+  const dreamExplainerPrompt =
+    stepId === "dream" &&
+    activeSpecialist === "DreamExplainer" &&
+    !isOfftopic &&
+    menuId === "DREAM_EXPLAINER_MENU_SWITCH_SELF"
+      ? String((specialistForDisplay as any).question || "").trim()
+      : "";
+  const question = buildNumberedPrompt(safeLabels, dreamExplainerPrompt || headline);
   const contractId = buildContractId(stepId, effectiveStatus, menuId);
   const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
 
   const nextSpecialist: Record<string, unknown> = {
-    ...specialist,
+    ...specialistForDisplay,
     action: "ASK",
     message,
     question,
-    confirmation_question: "",
     menu_id: safeActionCodes.length > 0 ? menuId : "",
     ui_contract_id: contractId,
     ui_contract_version: UI_CONTRACT_VERSION,

@@ -18,6 +18,10 @@ export const ACTIONCODE_REGISTRY_VERSION =
 export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
   version: ACTIONCODE_REGISTRY_VERSION,
   actions: {
+    // Step 0
+    ACTION_STEP0_META_RETURN: { route: "__ROUTE__STEP0_META_RETURN__", step: "step_0" },
+    ACTION_STEP0_READY_START: { route: "__ROUTE__STEP0_READY_START__", step: "step_0" },
+
     // Dream
     ACTION_DREAM_INTRO_EXPLAIN_MORE: { route: "__ROUTE__DREAM_EXPLAIN_MORE__", step: "dream" },
     ACTION_DREAM_INTRO_START_EXERCISE: { route: "__ROUTE__DREAM_START_EXERCISE__", step: "dream" },
@@ -124,13 +128,16 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_PRESENTATION_ESCAPE_FINISH_LATER: { route: "__ROUTE__PRESENTATION_FINISH_LATER__", step: "presentation" },
 
     // Generic/system
-    ACTION_CONFIRM_CONTINUE: { route: "yes", step: "system", flags: ["confirm"], status: "system" },
     ACTION_START: { route: "", step: "system", status: "system" },
     ACTION_TEXT_SUBMIT: { route: "", step: "system", status: "system" },
     ACTION_WORDING_PICK_USER: { route: "__WORDING_PICK_USER__", step: "system", status: "system" },
     ACTION_WORDING_PICK_SUGGESTION: { route: "__WORDING_PICK_SUGGESTION__", step: "system", status: "system" },
   },
   menus: {
+    // Step 0
+    STEP0_MENU_META_RETURN: ["ACTION_STEP0_META_RETURN"],
+    STEP0_MENU_READY_START: ["ACTION_STEP0_READY_START"],
+
     // Dream
     DREAM_MENU_INTRO: [
       "ACTION_DREAM_INTRO_EXPLAIN_MORE",
@@ -160,9 +167,15 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_DREAM_EXPLAINER_CONTINUE",
       "ACTION_DREAM_EXPLAINER_FINISH_LATER",
     ],
+    DREAM_EXPLAINER_MENU_SWITCH_SELF: [
+      "ACTION_DREAM_SWITCH_TO_SELF",
+    ],
 
     // Purpose
-    PURPOSE_MENU_INTRO: ["ACTION_PURPOSE_INTRO_EXPLAIN_MORE"],
+    PURPOSE_MENU_INTRO: [
+      "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+      "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+    ],
     PURPOSE_MENU_EXPLAIN: [
       "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
       "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES",

@@ -7,3 +7,4 @@ dist/
 ui/lib/*.js
 ui/lib/*.js.map
 ui/step-card.bundled.html
+session-logs/

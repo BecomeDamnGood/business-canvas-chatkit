@@ -1,0 +1,43 @@
+{
+  "version": "v1",
+  "enabled": true,
+  "default_model": "gpt-4.1",
+  "budget_model": "gpt-4o-mini",
+  "translation_model": "gpt-4o-mini",
+  "hard_pinned_4_1": {
+    "action_codes": [
+      "ACTION_CONFIRM_CONTINUE",
+      "ACTION_DREAM_REFINE_CONFIRM",
+      "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
+      "ACTION_PURPOSE_REFINE_CONFIRM",
+      "ACTION_BIGWHY_REFINE_CONFIRM",
+      "ACTION_ROLE_REFINE_CONFIRM",
+      "ACTION_ENTITY_EXAMPLE_CONFIRM",
+      "ACTION_TARGETGROUP_POSTREFINE_CONFIRM",
+      "ACTION_PRODUCTSSERVICES_CONFIRM",
+      "ACTION_RULES_REFINE_CONFIRM"
+    ],
+    "intents": ["CONFIRM", "SUBMIT_SCORES"],
+    "specialists": ["DreamExplainer", "Presentation"]
+  },
+  "by_action_code": {
+    "ACTION_DREAM_INTRO_EXPLAIN_MORE": "gpt-4o-mini",
+    "ACTION_DREAM_EXPLAINER_CONTINUE": "gpt-4o-mini",
+    "ACTION_DREAM_EXPLAINER_FINISH_LATER": "gpt-4o-mini",
+    "ACTION_PURPOSE_EXPLAIN_MORE": "gpt-4o-mini",
+    "ACTION_BIGWHY_EXPLAIN_MORE": "gpt-4o-mini",
+    "ACTION_ROLE_EXPLAIN_MORE": "gpt-4o-mini",
+    "ACTION_ENTITY_EXPLAIN_MORE": "gpt-4o-mini",
+    "ACTION_STRATEGY_REFINE_EXPLAIN_MORE": "gpt-4o-mini",
+    "ACTION_TARGETGROUP_EXPLAIN_MORE": "gpt-4o-mini",
+    "ACTION_RULES_EXPLAIN_MORE": "gpt-4o-mini"
+  },
+  "by_intent": {
+    "REQUEST_EXPLANATION": "gpt-4o-mini",
+    "CONTINUE": "gpt-4o-mini",
+    "FINISH_LATER": "gpt-4o-mini"
+  },
+  "by_specialist": {
+    "ValidationAndBusinessName": "gpt-4o-mini"
+  }
+}

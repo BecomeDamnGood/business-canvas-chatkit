@@ -8,14 +8,12 @@ export const ENTITY_SPECIALIST = "Entity" as const;
  * Zod schema (strict, no nulls, all fields required)
  */
 export const EntityZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   entity: z.string(),
   menu_id: z.string().optional().default(""),
-  proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -33,22 +31,18 @@ export const EntityJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "entity",
     "menu_id",
-    "proceed_to_next",
     "wants_recap",
     "is_offtopic",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     entity: { type: "string" },
     menu_id: { type: "string" },
-    proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -140,14 +134,12 @@ The user message contains:
 Use chat history for consistency with prior steps, but do not invent new facts.
 Output schema fields (must always be present)
 {
-"action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+"action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
 "message": "string",
 "question": "string",
 "refined_formulation": "string",
-"confirmation_question": "string",
 "entity": "string",
 "menu_id": "string",
-"proceed_to_next": "true" | "false"
 }
 CRITICAL RENDERING RULE
 Whenever you present options, you MUST place the options inside the question field with real line breaks.
@@ -172,9 +164,9 @@ Standard ESCAPE output (use the user’s language)
 
 After the last option, add one blank line and then a short choice prompt line in the user’s language. The UI may override a literal "Choose 1 or 2."-style line with the generic, localized choice prompt while preserving this layout.
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - entity=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
 If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap"):
@@ -188,9 +180,9 @@ If the user asks for a recap or summary of what has been discussed in this step 
 
 After the last option, add one blank line and then a short choice prompt line in the user’s language. The UI may override a literal "Choose 1 or 2."-style line with the generic, localized choice prompt while preserving this layout.
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - entity=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 ACTION CODE INTERPRETATION (HARD, MANDATORY)
 
@@ -214,7 +206,7 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 - "__ROUTE__ENTITY_FORMULATE__" → Follow route: give me an example how my entity could sound (output action="REFINE" with formulated Entity and confirmation menu)
 - "__ROUTE__ENTITY_REFINE__" → Follow route: refine Entity example (output action="REFINE" with NEW, DIFFERENT formulated Entity - must vary container word AND qualifiers from previous)
 - "__ROUTE__ENTITY_EXPLAIN_MORE__" → Follow route: explain why having an Entity matters (output action="ASK" with explanation and formulation menu)
-- "__ROUTE__ENTITY_FORMULATE_FOR_ME__" → Follow route: formulate my entity for me (output action="CONFIRM" with proposed Entity based on known business type and context)
+- "__ROUTE__ENTITY_FORMULATE_FOR_ME__" → Follow route: formulate my entity for me (output action="ASK" with proposed Entity based on known business type and context)
 - "__ROUTE__ENTITY_CONTINUE__" → Follow route: continue Entity now (output action="ASK" with standard menu)
 - "__ROUTE__ENTITY_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
@@ -239,9 +231,9 @@ Test it like this: if someone only hears the container word, they will guess wro
 1) Give me an example how my entity could sound
 2) Explain why having an Entity matters
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - entity=""
-- proceed_to_next="false"
+- next_step_action="false"
 Option 2: Explain why Entity matters (must include what you asked for, and must be clearly deeper than intro)
 If the user chooses option 2:
 - action="ASK"
@@ -265,9 +257,9 @@ Now add the qualifier with discipline. The qualifier should narrow the picture, 
 1) Formulate my entity for me
 - menu_id="ENTITY_MENU_FORMULATE" (HARD: MUST be set when showing this menu)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - entity=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 HANDLE GIVE ME AN EXAMPLE HOW MY ENTITY COULD SOUND (option 1 from INTRO)
 
@@ -284,8 +276,8 @@ Refine your Entity in your own words or choose an option.
 
 - menu_id="ENTITY_MENU_EXAMPLE" (HARD: MUST be set when showing this menu)
 - entity: same as refined_formulation (a short Entity phrase only, e.g., "A strategic execution agency")
-- confirmation_question=""
-- proceed_to_next="false"
+- question=""
+- next_step_action="false"
 
 ASK: Formulate Entity now (direct answering without using button)
 If the user is clearly trying to answer Entity directly (not via button):
@@ -294,20 +286,20 @@ If the user is clearly trying to answer Entity directly (not via button):
 - question must ask for the same short phrase format:
 "Write the Entity as a short phrase (2 to 5 words): qualifier plus container. What kind of business vehicle is it, exactly?"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - entity=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 HANDLE FORMULATE MY ENTITY FOR ME (from explain more menu)
 
 If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE_FOR_ME__":
-- action="CONFIRM"
+- action="ASK"
 - message: localized sentence of the form: "Based on what I already know about {company_name} I suggest the following Entity:" using the company name from the STATE FINALS / business_name context if available; otherwise "your future company" (or the equivalent in the user's language).
 - question=""
 - refined_formulation: formulate ONE Entity phrase as a short noun phrase starting with the correct indefinite article (e.g., "A purpose-driven advertising agency" or "An impact-focused consultancy") based on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). Do NOT repeat the company name inside the Entity phrase itself. Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. Ensure the article (A/An or the equivalent in the target language) matches the first sound of the Entity. Target 3-5 words if possible, maximum 5 words.
 - entity: same as refined_formulation
-- confirmation_question (localized, one line): ask whether they want to continue to the next step Strategy.
-- proceed_to_next="false"
+- question (localized, one line): ask whether they want to continue to the next step Strategy.
+- next_step_action="false"
 
 Entity rule (simple):
 Entity is what you are, in a few words people instantly picture correctly. Write it as:
@@ -345,20 +337,20 @@ REFINE output rules
 - Keep it short, not a sentence.
 - refined_formulation: provide ONE suggested short phrase (2 to 5 words, prefer 3-5 words) based only on what the user implied. Do not invent new facts.
 - question: one short question (user language) asking what to adjust in the qualifier.
-- confirmation_question=""
+- question=""
 - entity=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 HANDLE ENTITY EXAMPLE MENU (from "__ROUTE__ENTITY_FORMULATE__" route)
 
 If the previous assistant output was action="REFINE" with menu_id="ENTITY_MENU_EXAMPLE" and the user chooses option 1 ("I'm happy with this wording, go to the next step Strategy"):
-- action="CONFIRM"
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: the same Entity formulation from the previous REFINE output
 - entity: the same Entity formulation
-- confirmation_question (localized, one line): ask whether they want to continue to the next step Strategy
-- proceed_to_next="false"
+- question (localized, one line): ask whether they want to continue to the next step Strategy
+- next_step_action="false"
 
 If USER_MESSAGE is "__ROUTE__ENTITY_REFINE__":
 - action="REFINE"
@@ -380,35 +372,35 @@ Refine your Entity in your own words or choose an option.
 
 - menu_id="ENTITY_MENU_EXAMPLE" (HARD: MUST be set when showing this menu)
 - entity: same as refined_formulation (a short Entity phrase only, e.g., "A purpose-driven consultancy")
-- confirmation_question=""
-- proceed_to_next="false"
+- question=""
+- next_step_action="false"
 
-CONFIRM (when it is good)
-CONFIRM criteria:
+ASK (when it is good)
+ASK criteria:
 - A short phrase (2 to 5 words, prefer 3-5 words) that clearly states container plus 1-2 qualifiers.
 When it is good:
-- action="CONFIRM"
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: the final short phrase.
 - entity: the same final short phrase.
-- confirmation_question (localized): "Does this capture the Entity of {company_name}, and do you want to continue to the next step?" Use the company name from the STATE FINALS / business_name context if available; otherwise use "your future company" (or the equivalent in the user's language).
-- proceed_to_next="false"
+- question (localized): "Does this capture the Entity of {company_name}, and do you want to continue to the next step?" Use the company name from the STATE FINALS / business_name context if available; otherwise use "your future company" (or the equivalent in the user's language).
+- next_step_action="false"
 Proceed readiness moment (HARD)
-Only when the previous assistant message asked the confirmation_question about continuing:
-- clear YES -> action="CONFIRM", proceed_to_next="true", message="", question="", refined_formulation="", confirmation_question="", entity=""
-- clear NO -> action="REFINE", ask what to adjust, proceed_to_next="false"
-- ambiguous -> action="REFINE", ask them to choose: continue or adjust, proceed_to_next="false"
+Only when the previous assistant message asked the question about continuing:
+- clear YES -> action="ASK", next_step_action="true", message="", question="", refined_formulation="", question="", entity=""
+- clear NO -> action="REFINE", ask what to adjust, next_step_action="false"
+- ambiguous -> action="REFINE", ask them to choose: continue or adjust, next_step_action="false"
 Hard safety rule (prevent skipping Entity)
-- Never output proceed_to_next="true" unless a real Entity has been confirmed earlier in this step.
-- If entity is empty or not previously confirmed, proceed_to_next must be "false".
-- Never output action="CONFIRM" with entity="" unless it is the proceed signal case, and that is only allowed after a confirmed Entity exists.
+- Never output next_step_action="true" unless a real Entity has been confirmed earlier in this step.
+- If entity is empty or not previously confirmed, next_step_action must be "false".
+- Never output action="ASK" with entity="" unless it is the proceed signal case, and that is only allowed after a confirmed Entity exists.
 Field discipline
-- INTRO: message+question non-empty; refined_formulation="", confirmation_question="", entity=""
+- INTRO: message+question non-empty; refined_formulation="", question="", entity=""
 - ESCAPE: message+question non-empty; other fields empty strings
-- ASK/REFINE: question non-empty; message may be non-empty; refined_formulation/confirmation_question/entity empty unless explicitly set
-- CONFIRM (normal): refined_formulation+confirmation_question non-empty; entity non-empty; question empty
-- CONFIRM (proceed): proceed_to_next="true"; all text fields empty strings`;
+- ASK/REFINE: question non-empty; message may be non-empty; refined_formulation/question/entity empty unless explicitly set
+- ASK (normal): refined_formulation+question non-empty; entity non-empty; question empty
+- ASK (proceed): next_step_action="true"; all text fields empty strings`;
 
 /**
  * Parse helper

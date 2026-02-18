@@ -8,14 +8,12 @@ export const TARGETGROUP_SPECIALIST = "TargetGroup" as const;
  * Zod schema (strict, no nulls, all fields required)
  */
 export const TargetGroupZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   targetgroup: z.string(),
   menu_id: z.string().optional().default(""),
-  proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -33,22 +31,18 @@ export const TargetGroupJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "targetgroup",
     "menu_id",
-    "proceed_to_next",
     "wants_recap",
     "is_offtopic",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     targetgroup: { type: "string" },
     menu_id: { type: "string" },
-    proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -119,14 +113,12 @@ Return ONLY valid JSON. No markdown. No extra keys. No trailing comments.
 All fields are required. If not applicable, return an empty string "".
 
 {
-  "action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+  "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
   "message": "string",
   "question": "string",
   "refined_formulation": "string",
-  "confirmation_question": "string",
   "targetgroup": "string",
   "menu_id": "string",
-  "proceed_to_next": "true" | "false",
   "wants_recap": boolean
 }
 
@@ -138,7 +130,7 @@ ACTION CODE INTERPRETATION:
   - ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE → __ROUTE__TARGETGROUP_EXPLAIN_MORE__
   - ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS → __ROUTE__TARGETGROUP_ASK_QUESTIONS__
   - ACTION_TARGETGROUP_EXPLAIN_ASK_QUESTIONS → __ROUTE__TARGETGROUP_ASK_QUESTIONS__
-  - ACTION_TARGETGROUP_POSTREFINE_CONFIRM → yes (or proceed_to_next="true")
+  - ACTION_TARGETGROUP_POSTREFINE_CONFIRM → yes (or next_step_action="true")
   - ACTION_TARGETGROUP_POSTREFINE_ASK_QUESTIONS → __ROUTE__TARGETGROUP_ASK_QUESTIONS__
 
 ROUTE TOKEN INTERPRETATION:
@@ -171,10 +163,10 @@ Where:
 - <BUSINESS_NAME_OR_FALLBACK> = the exact phrase "your future company" when business_name is not present or is empty.
 
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - targetgroup=""
 - menu_id="TARGETGROUP_MENU_INTRO"
-- proceed_to_next="false"
+- next_step_action="false"
 - wants_recap=false
 
 6) EXPLAIN-MORE SCREEN (B) - Must be used verbatim
@@ -206,10 +198,10 @@ Where:
 - <BUSINESS_NAME_OR_FALLBACK> = the exact phrase "your future company" when business_name is not present or is empty.
 
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - targetgroup=""
 - menu_id="TARGETGROUP_MENU_EXPLAIN_MORE"
-- proceed_to_next="false"
+- next_step_action="false"
 - wants_recap=false
 
 7) FIVE-QUESTION MODE (C) - No scripted lead-in sentences
@@ -234,10 +226,10 @@ Output for B2C (ask exactly these five questions, no scripted lead-in):
   5. What is the main need or reason they would choose you?
 - question: "" (no scripted lead-in sentence)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - targetgroup=""
 - menu_id="" (no menu, user types answer)
-- proceed_to_next="false"
+- next_step_action="false"
 - wants_recap=false
 
 Output for B2B (ask exactly these five questions, no scripted lead-in):
@@ -250,10 +242,10 @@ Output for B2B (ask exactly these five questions, no scripted lead-in):
   5. What is the main need or trigger that makes them buy now?
 - question: "" (no scripted lead-in sentence)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - targetgroup=""
 - menu_id="" (no menu, user types answer)
-- proceed_to_next="false"
+- next_step_action="false"
 - wants_recap=false
 
 8) VALIDATION AND REFINE LOGIC (D)
@@ -293,10 +285,10 @@ Required response behavior when invalid input happens:
 2) Ask me some questions to define my specific Target Group
 
 Refine your Target Group or choose an option
-- confirmation_question=""
+- question=""
 - targetgroup="" (do not save yet)
 - menu_id="TARGETGROUP_MENU_POSTREFINE"
-- proceed_to_next="false"
+- next_step_action="false"
 - wants_recap=false
 
 IMPORTANT - Handling follow-up questions after REFINE:
@@ -322,7 +314,7 @@ HARD LISTENING RULE (MINIMAL EDIT)
 - You MUST NOT introduce a new industry, niche, maturity stage, decision-maker role, channel focus, or capability unless the user explicitly mentioned it.
 
 WHEN USER INPUT IS SPECIFIC ENOUGH
-- If the user's description can be made compliant via minimal edits, use action="CONFIRM" (save) or action="REFINE" (if confirmation is still needed by your flow), but do not change the segment meaning.
+- If the user's description can be made compliant via minimal edits, use action="ASK" (save) or action="REFINE" (if confirmation is still needed by your flow), but do not change the segment meaning.
 
 WHEN USER INPUT IS TOO GENERIC
 - If the user's input is still generic or lacks 2 dimensions after removing forbidden terms, do NOT invent missing dimensions.
@@ -337,7 +329,7 @@ FORBIDDEN AUTO-REPLACEMENT
 
 9) FINAL OUTPUT FORMAT (E) — UPDATED (STRICT NON-REPETITION, MAX 7 WORDS)
 
-When saving targetgroup_final (action="CONFIRM"), enforce:
+When saving targetgroup_final (action="ASK"), enforce:
 
 HARD FORMAT RULES
 - Exactly one sentence.
@@ -366,7 +358,7 @@ COPY-FIRST RULE (HARD)
   - and contains no forbidden Strategy/STATE FINALS terms,
   then you MUST output it unchanged in the targetgroup field.
 
-MINIMAL-EDIT CONFIRM RULE (HARD)
+MINIMAL-EDIT ASK RULE (HARD)
 - If the user has provided a specific target group but it is not compliant with the HARD FORMAT and HARD NON-REPETITION RULES, you MUST produce the final targetgroup by applying ONLY minimal edits:
   1) delete forbidden terms found in Strategy/STATE FINALS,
   2) shorten to the word limit by removing non-essential words,
@@ -405,20 +397,20 @@ POST-PROCESSING RULES (REPLACE OLD ONES)
 - If targetgroup contains forbidden Strategy/STATE FINALS terms, remove them.
 - Never replace removed forbidden terms with invented new dimensions. If removal makes the sentence too generic, follow the \"IF COMPLIANCE REMOVAL MAKES IT TOO VAGUE\" instructions above and ASK instead of inventing.
 
-10) CONFIRM SCREEN (F)
+10) ASK SCREEN (F)
 
 When user confirms (via button "Yes this is exactly what I mean to say......" or direct confirmation):
-- action="CONFIRM"
+- action="ASK"
 - message: Show the confirmed target group with intro text (localized):
   "The Target Group of [Company name] is now formulated as follows:
 
 [targetgroup sentence]"
 - question: "Refine your Target Group or go to next step Products and Services"
 - refined_formulation=""
-- confirmation_question: "Continue to next step Products and Services"
+- question: "Continue to next step Products and Services"
 - targetgroup: The final one-sentence target group (maximum 10 words)
 - menu_id="" (no menu, user can type or click confirmation button)
-- proceed_to_next="true"
+- next_step_action="true"
 - wants_recap=false
 
 11) LANGUAGE RULE (CRITICAL)

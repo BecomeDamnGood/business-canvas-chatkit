@@ -384,7 +384,6 @@ export function setLoading(next: boolean): void {
   const inputEl = document.getElementById("input");
   const sendEl = document.getElementById("send");
   const btnStart = document.getElementById("btnStart") as HTMLButtonElement | null;
-  const btnOk = document.getElementById("btnOk") as HTMLButtonElement | null;
   const btnGoToNextStep = document.getElementById("btnGoToNextStep") as HTMLButtonElement | null;
   const btnStartDreamExercise = document.getElementById("btnStartDreamExercise") as HTMLButtonElement | null;
   const btnSwitchToSelfDream = document.getElementById("btnSwitchToSelfDream") as HTMLButtonElement | null;
@@ -394,7 +393,6 @@ export function setLoading(next: boolean): void {
   if (inputEl) (inputEl as HTMLInputElement).disabled = loading;
   if (sendEl) (sendEl as HTMLButtonElement).disabled = loading;
   if (btnStart) btnStart.disabled = loading;
-  if (btnOk) btnOk.disabled = loading;
   if (btnGoToNextStep) btnGoToNextStep.disabled = loading;
   if (btnStartDreamExercise) btnStartDreamExercise.disabled = loading;
   if (btnSwitchToSelfDream) btnSwitchToSelfDream.disabled = loading;

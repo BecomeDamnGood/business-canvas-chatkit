@@ -97,11 +97,7 @@ function normalizeActiveSpecialist(x: unknown): string {
 }
 
 type TriggerFlags = {
-  proceed_to_dream: BoolString;
-  proceed_to_purpose: BoolString;
-  proceed_to_next: BoolString; // NEW (minimal): for purpose->bigwhy->... flow
   suggest_dreambuilder: BoolString;
-  action: string;
 };
 
 function readTriggersRobust(last: unknown): TriggerFlags {
@@ -109,11 +105,7 @@ function readTriggersRobust(last: unknown): TriggerFlags {
   if (last && typeof last === "object" && !Array.isArray(last)) {
     const obj = last as Record<string, any>;
     return {
-      proceed_to_dream: boolStr(obj.proceed_to_dream),
-      proceed_to_purpose: boolStr(obj.proceed_to_purpose),
-      proceed_to_next: boolStr(obj.proceed_to_next), // NEW
       suggest_dreambuilder: boolStr(obj.suggest_dreambuilder),
-      action: String(obj.action ?? ""),
     };
   }
 
@@ -121,26 +113,12 @@ function readTriggersRobust(last: unknown): TriggerFlags {
   const s = String(last ?? "");
   const has = (a: string, b: string) => s.includes(a) || s.includes(b);
 
-  const proceed_to_dream = has('"proceed_to_dream":"true"', '"proceed_to_dream": "true"')
-    ? "true"
-    : "false";
-  const proceed_to_purpose = has('"proceed_to_purpose":"true"', '"proceed_to_purpose": "true"')
-    ? "true"
-    : "false";
-  const proceed_to_next = has('"proceed_to_next":"true"', '"proceed_to_next": "true"')
-    ? "true"
-    : "false";
   const suggest_dreambuilder = has('"suggest_dreambuilder":"true"', '"suggest_dreambuilder": "true"')
     ? "true"
     : "false";
-  const action = has('"action":"CONFIRM"', '"action": "CONFIRM"') ? "CONFIRM" : "";
 
   return {
-    proceed_to_dream,
-    proceed_to_purpose,
-    proceed_to_next,
     suggest_dreambuilder,
-    action,
   };
 }
 
@@ -194,7 +172,6 @@ function wantsFullRestartCanvas(userMessage: string): boolean {
   return false;
 }
 
-// NEW (minimal): next-step mapping for proceed_to_next="true"
 function nextCanonicalStep(current: OrchestratorStepId): OrchestratorStepId {
   const idx = CANONICAL_STEPS.indexOf(current);
   if (idx < 0) return "step_0";
@@ -219,31 +196,10 @@ export function deriveTransitionEventFromLegacy(params: {
   if (CURRENT_STEP !== "step_0" && wantsFullRestartCanvas(userMessage)) {
     return { type: "RESTART_STEP", step: "step_0", reason: "user_request" };
   }
-  if (triggers.proceed_to_dream === "true") {
-    return { type: "PROCEED_TO_SPECIFIC", fromStep: CURRENT_STEP, toStep: "dream" };
-  }
-  if (triggers.proceed_to_purpose === "true") {
-    return { type: "PROCEED_TO_SPECIFIC", fromStep: CURRENT_STEP, toStep: "purpose" };
-  }
-  if (triggers.proceed_to_next === "true") {
-    return { type: "PROCEED_TO_NEXT", fromStep: CURRENT_STEP };
-  }
   if (ACTIVE_SPECIALIST === "DreamExplainer" && triggers.suggest_dreambuilder === "true") {
     return {
       type: "SPECIALIST_SWITCH",
       fromSpecialist: "DreamExplainer",
-      toSpecialist: "DreamExplainer",
-      sameStep: true,
-    };
-  }
-  if (
-    CURRENT_STEP === "dream" &&
-    triggers.action === "CONFIRM" &&
-    triggers.suggest_dreambuilder === "true"
-  ) {
-    return {
-      type: "SPECIALIST_SWITCH",
-      fromSpecialist: "Dream",
       toSpecialist: "DreamExplainer",
       sameStep: true,
     };

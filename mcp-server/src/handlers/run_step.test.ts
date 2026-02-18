@@ -1,6 +1,9 @@
 // Unit tests for run_step: Start gating, i18n, meta-instruction behavior
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { run_step } from "./run_step.js";
 
 test("Start gating: when state.started is not true, start trigger returns Click Start prompt", async () => {
@@ -205,9 +208,10 @@ test("timeout: returns structured error payload", async () => {
   assert.equal(result?.error?.user_message, "This is taking longer than usual. Please try again.");
 });
 
-test("Step 0 confirm continue advances to Dream as before", async () => {
+test("Step 0 ready-start actioncode advances to Dream", async () => {
   const result = await run_step({
-    user_message: "yes",
+    user_message: "ACTION_STEP0_READY_START",
+    input_mode: "widget",
     state: {
       current_step: "step_0",
       intro_shown_session: "true",
@@ -215,15 +219,59 @@ test("Step 0 confirm continue advances to Dream as before", async () => {
       step_0_final: "Venture: advertising agency | Name: Mindd | Status: existing",
       business_name: "Mindd",
       last_specialist_result: {
-        action: "CONFIRM",
-        confirmation_question: "You have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?",
-        proceed_to_dream: "false",
+        action: "ASK",
+        menu_id: "STEP0_MENU_READY_START",
+        question:
+          "1) Yes, I'm ready. Let's start!\n\nYou have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?",
       },
     },
   });
   assert.equal(result?.ok, true);
   assert.equal(result?.current_step_id, "dream");
   assert.equal(result?.state?.current_step, "dream");
+});
+
+test("session id persists and token markdown log is written per turn", async () => {
+  const prevTokenLogging = process.env.BSC_TOKEN_LOGGING_V1;
+  const prevLogDir = process.env.BSC_SESSION_LOG_DIR;
+  const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "bsc-session-log-test-"));
+  process.env.BSC_TOKEN_LOGGING_V1 = "1";
+  process.env.BSC_SESSION_LOG_DIR = logDir;
+
+  try {
+    const first = await run_step({
+      user_message: "",
+      state: {
+        current_step: "step_0",
+        intro_shown_session: "false",
+        last_specialist_result: {},
+        started: "false",
+      },
+    });
+    assert.equal(first?.ok, true);
+    const firstSession = String((first as any)?.state?.__session_id || "");
+    assert.ok(firstSession.length > 0, "session id should be created");
+
+    const second = await run_step({
+      user_message: "ACTION_START",
+      input_mode: "widget",
+      state: (first as any).state,
+    });
+    assert.equal(second?.ok, true);
+    assert.equal(String((second as any)?.state?.__session_id || ""), firstSession, "session id should persist");
+
+    const logPath = String((second as any)?.state?.__session_log_file || "");
+    assert.ok(logPath.length > 0, "session log path should be stored in state");
+    assert.ok(fs.existsSync(logPath), "session log file should exist");
+    const markdown = fs.readFileSync(logPath, "utf-8");
+    assert.match(markdown, /# Session Token Report/);
+    assert.match(markdown, /\| step_0 \|/);
+  } finally {
+    if (prevTokenLogging === undefined) delete process.env.BSC_TOKEN_LOGGING_V1;
+    else process.env.BSC_TOKEN_LOGGING_V1 = prevTokenLogging;
+    if (prevLogDir === undefined) delete process.env.BSC_SESSION_LOG_DIR;
+    else process.env.BSC_SESSION_LOG_DIR = prevLogDir;
+  }
 });
 
 // Meta-filter: first message is never dropped (pristineAtEntry ? rawNormalized : ...) in run_step.ts.

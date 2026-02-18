@@ -109,9 +109,17 @@ export function dedupeBodyAgainstPrompt(bodyRaw: string, promptRaw: string): str
 export function stripStructuredChoiceLines(promptRaw: string): string {
   const lines = String(promptRaw || "").split(/\r?\n/).filter((line) => line.trim().length > 0);
   if (!lines.length) return "";
+  const chooserNoise = [
+    /^(please\s+)?(choose|pick|select)\s+\d+(?:\s*(?:,|\/|or|and)\s*\d+)*\.?$/i,
+    /^(please\s+)?(choose|pick|select)\s+an?\s+option(\s+below)?\.?$/i,
+    /^(please\s+)?(choose|pick|select)\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
+    /^choose\s+an?\s+option\s+by\s+typing\s+.+$/i,
+  ];
   const kept: string[] = [];
   for (const line of lines) {
-    if (/^\s*[1-9][\)\.]\s+/.test(line)) continue;
+    const normalized = String(line || "").trim();
+    if (/^\s*[1-9][\)\.]\s+/.test(normalized)) continue;
+    if (chooserNoise.some((pattern) => pattern.test(normalized))) continue;
     kept.push(line);
   }
   return kept.join("\n").trim();
@@ -466,9 +474,8 @@ export function render(overrideToolOutput?: unknown): void {
 
   const inputWrap = document.getElementById("inputWrap");
   const btnStart = document.getElementById("btnStart");
-  const btnOk = document.getElementById("btnOk");
   const startHint = document.getElementById("startHint");
-  if (!inputWrap || !btnStart || !btnOk || !startHint) return;
+  if (!inputWrap || !btnStart || !startHint) return;
 
   const specialist = (result?.specialist as Record<string, unknown>) || {};
   const sectionTitleEl = document.getElementById("sectionTitle");
@@ -491,28 +498,8 @@ export function render(overrideToolOutput?: unknown): void {
     activeSpecialist === "Dream" &&
     String(specialist.suggest_dreambuilder || "") === "true" &&
     String(specialist.action || "") === "ASK";
-  const hasPromptForConfirm =
-    String(specialist.confirmation_question || "").trim() !== "" ||
-    String(specialist.question || "").trim() !== "";
   const requireWordingPickByFlag =
     String(((result as Record<string, unknown>)?.ui as any)?.flags?.require_wording_pick || "false") === "true";
-  const showContinue =
-    !showPreStart &&
-    hasToolOutputVal &&
-    String(specialist.action || "") === "CONFIRM" &&
-    hasPromptForConfirm &&
-    !isDreamExplainerMode &&
-    !requireWordingPickByFlag;
-
-  const btnOkLabelKey =
-    current === "step_0" && showContinue
-      ? "btnOk_step0_ready"
-      : current === STRATEGY_STEP_ID
-        ? "btnOk_strategy"
-        : "btnOk";
-  const btnOkEl = document.getElementById("btnOk");
-  if (btnOkEl) btnOkEl.textContent = t(lang, btnOkLabelKey);
-
   const isLoading = getIsLoading();
 
   if (showPreStart) {
@@ -522,7 +509,6 @@ export function render(overrideToolOutput?: unknown): void {
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
     (btnStart as HTMLElement).style.display = "inline-flex";
-    (btnOk as HTMLElement).style.display = "none";
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
     if (cardDesc) cardDesc.innerHTML = formatText(prestartWelcomeForLang(lang));
@@ -664,7 +650,7 @@ export function render(overrideToolOutput?: unknown): void {
     if (choiceWrap) choiceWrap.style.display = "none";
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
-    const hideBtns = ["btnGoToNextStep", "btnStartDreamExercise", "btnOk"];
+    const hideBtns = ["btnGoToNextStep", "btnStartDreamExercise"];
     for (const id of hideBtns) {
       const el = document.getElementById(id);
       if (el) (el as HTMLElement).style.display = "none";
@@ -927,7 +913,6 @@ export function render(overrideToolOutput?: unknown): void {
   })();
   const choiceMode =
     !requireWordingPick && (renderedChoiceButtons || hasStructuredActions || choicesArr.length > 0);
-  const confirmMode = !choiceMode && showContinue && !requireWordingPick;
   let statementCount =
     (Array.isArray(statementsArray) ? statementsArray.length : 0) || 0;
   if (
@@ -948,7 +933,6 @@ export function render(overrideToolOutput?: unknown): void {
     current === "dream" &&
     activeSpecialist === "DreamExplainer" &&
     effectiveStatementsForButton >= 20 &&
-    String(specialist.action || "") !== "CONFIRM" &&
     !requireWordingPick;
 
   inputWrap.style.display = "flex";
@@ -958,25 +942,17 @@ export function render(overrideToolOutput?: unknown): void {
   if (choiceMode) {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "flex";
-    (btnOk as HTMLElement).style.display = "none";
-    if (sde) (sde as HTMLElement).style.display = "none";
-    if (sb) (sb as HTMLElement).style.display = "none";
-  } else if (confirmMode) {
-    const choiceWrap = document.getElementById("choiceWrap");
-    if (choiceWrap) choiceWrap.style.display = "none";
-    (btnOk as HTMLElement).style.display = "inline-flex";
     if (sde) (sde as HTMLElement).style.display = "none";
     if (sb) (sb as HTMLElement).style.display = "none";
   } else {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
-    (btnOk as HTMLElement).style.display = "none";
     if (sde) {
       (sde as HTMLElement).style.display = isDreamStepPreExercise ? "inline-flex" : "none";
     }
     if (sb) {
       (sb as HTMLElement).style.display =
-        isDreamExplainerMode && String(specialist.action || "") !== "CONFIRM"
+        isDreamExplainerMode
           ? "inline-flex"
           : "none";
     }
@@ -989,12 +965,7 @@ export function render(overrideToolOutput?: unknown): void {
     (btnGoToNextStepEl as HTMLButtonElement).disabled = getIsLoading();
   }
 
-  const isDreamConfirm =
-    current === "dream" &&
-    activeSpecialist === "DreamExplainer" &&
-    String(specialist.action || "") === "CONFIRM" &&
-    !requireWordingPick &&
-    !(choicesArr.length);
+  const isDreamConfirm = false;
   const btnDreamConfirmEl = document.getElementById("btnDreamConfirm");
   if (btnDreamConfirmEl) {
     (btnDreamConfirmEl as HTMLElement).style.display =
@@ -1013,7 +984,6 @@ export function render(overrideToolOutput?: unknown): void {
         promptRaw200: (promptRaw || "").slice(0, 200),
               choicesLength: choicesArr.length,
               choiceLabels: choicesArr.map((c) => c.label),
-        showContinue,
         isDreamStepPreExercise,
         isDreamExplainerMode,
         isLoading: getIsLoading(),

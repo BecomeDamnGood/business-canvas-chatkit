@@ -4,6 +4,7 @@ import { getDefaultState } from "./state.js";
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
 import { MENU_LABELS } from "./menu_contract.js";
 import { renderFreeTextTurnPolicy } from "./turn_policy_renderer.js";
+import { DEFAULT_MENU_BY_STATUS } from "./ui_contract_matrix.js";
 
 function countNumberedOptions(text: string): number {
   const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -22,7 +23,6 @@ function isConfirmActionCode(actionCode: string): boolean {
   const entry = ACTIONCODE_REGISTRY.actions[actionCode];
   if (!entry) return false;
   if (Array.isArray(entry.flags) && entry.flags.includes("confirm")) return true;
-  if (actionCode === "ACTION_CONFIRM_CONTINUE") return true;
   if (entry.route === "yes") return true;
   const upper = actionCode.toUpperCase();
   return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
@@ -43,6 +43,7 @@ function stepIdForMenu(menuId: string): string {
 
 function finalFieldForStep(stepId: string): string {
   const byStep: Record<string, string> = {
+    step_0: "step_0_final",
     dream: "dream_final",
     purpose: "purpose_final",
     bigwhy: "bigwhy_final",
@@ -73,11 +74,14 @@ function applyConfirmEligibleState(state: Record<string, unknown>, stepId: strin
   applyBaselineState(state, stepId, menuId);
   const finalField = finalFieldForStep(stepId);
   if (finalField) {
-    state[finalField] = `Committed ${stepId} value`;
+    state[finalField] =
+      stepId === "step_0"
+        ? "Venture: agency | Name: Mindd | Status: existing"
+        : `Committed ${stepId} value`;
   }
 }
 
-test("step_0: no output => ASK, no continue and no menu action codes", () => {
+test("step_0: no output => ASK without menu actions", () => {
   const state = getDefaultState();
   const rendered = renderFreeTextTurnPolicy({
     stepId: "step_0",
@@ -92,19 +96,16 @@ test("step_0: no output => ASK, no continue and no menu action codes", () => {
   });
   assert.equal(rendered.status, "no_output");
   assert.equal(String(rendered.specialist.action), "ASK");
-  assert.equal(
-    String(rendered.specialist.message || "").includes("We did not validate your business and name yet"),
-    true
-  );
+  assert.equal(String(rendered.specialist.message || ""), "Answer");
   assert.equal(
     String(rendered.specialist.question || ""),
-    "What type of business are you starting or running, and what is the name? If you don't have a name yet, you can say 'TBD'."
+    "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?"
   );
   assert.equal(String(rendered.specialist.confirmation_question || ""), "");
   assert.equal(rendered.uiActionCodes.length, 0);
 });
 
-test("step_0: valid output => CONFIRM with Dream readiness question", () => {
+test("step_0: valid output => ASK with contract menu and readiness prompt", () => {
   const state = getDefaultState();
   (state as any).step_0_final = "Venture: agency | Name: TBD | Status: starting";
   const rendered = renderFreeTextTurnPolicy({
@@ -119,13 +120,21 @@ test("step_0: valid output => CONFIRM with Dream readiness question", () => {
     },
   });
   assert.equal(rendered.status, "valid_output");
-  assert.equal(String(rendered.specialist.action), "CONFIRM");
+  assert.equal(String(rendered.specialist.action), "ASK");
   assert.equal(
     String(rendered.specialist.confirmation_question || ""),
-    "You have an agency called TBD. Are you ready to start with the first step: the Dream?"
+    ""
   );
-  assert.equal(String(rendered.specialist.menu_id || ""), "");
-  assert.equal(rendered.uiActionCodes.length, 0);
+  assert.equal(String(rendered.specialist.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.deepEqual(rendered.uiActionCodes, ["ACTION_STEP0_READY_START"]);
+  assert.equal(
+    String(rendered.specialist.question || "").includes("Are you ready to start with the first step: the Dream?"),
+    true
+  );
+  assert.equal(
+    String(rendered.specialist.message || "").includes("This is what we have established so far based on our dialogue:"),
+    false
+  );
 });
 
 test("dream: free-text render uses non-escape menu with parity", () => {
@@ -154,6 +163,35 @@ test("dream: free-text render uses non-escape menu with parity", () => {
   assert.equal(rendered.uiActionCodes.length, 2);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), rendered.uiActionCodes.length);
   assert.equal(String(rendered.specialist.question || "").includes("Continue Dream now"), false);
+});
+
+test("dream: valid output does not keep intro-only menu when confirm menu exists", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).business_name = "Mindd";
+  (state as any).dream_final = "Mindd dreams of a world where purpose creates lasting value.";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Your current Dream for Mindd is:",
+      question:
+        "1) Tell me more about why a dream matters\n2) Do a small exercise that helps to define your dream.\n\nDefine the Dream of Mindd or choose an option.",
+      menu_id: "DREAM_MENU_INTRO",
+    },
+  });
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(
+    rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"),
+    true
+  );
+  assert.equal(
+    rendered.uiActionCodes.includes("ACTION_DREAM_INTRO_EXPLAIN_MORE"),
+    false
+  );
 });
 
 test("dream: candidate without final keeps continue button in Dream refine context", () => {
@@ -185,6 +223,113 @@ test("dream: candidate without final keeps continue button in Dream refine conte
     "ACTION_DREAM_REFINE_START_EXERCISE",
   ]);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 2);
+});
+
+test("dream: staged provisional value is treated as valid output before explicit next-step commit", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).dream_final = "";
+  (state as any).provisional_by_step = {
+    dream: "Mindd dreams of a world where purpose-driven companies stay human under pressure.",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "A quick detour answer.",
+      question: "What is the next question?",
+      menu_id: "DREAM_MENU_WHY",
+      is_offtopic: true,
+    },
+    previousSpecialist: {
+      action: "ASK",
+      menu_id: "",
+      question: "",
+    },
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
+  assert.equal(
+    String(rendered.specialist.message || "").includes("Mindd dreams of a world where purpose-driven companies stay human under pressure."),
+    true
+  );
+});
+
+test("dream: explain-more flow keeps WHY menu and does not loop intro button", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).dream_final = "";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "A Dream matters because it anchors long-term direction.",
+      question:
+        "1) Give me a few dream suggestions\n2) Do a small exercise that helps to define your dream.\n\nDefine your Dream for Mindd or choose an option.",
+      menu_id: "DREAM_MENU_WHY",
+      dream: "",
+      refined_formulation: "",
+    },
+  });
+
+  assert.equal(rendered.status, "no_output");
+  assert.equal(rendered.confirmEligible, false);
+  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_WHY");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_DREAM_WHY_GIVE_SUGGESTIONS",
+    "ACTION_DREAM_WHY_START_EXERCISE",
+  ]);
+  assert.equal(
+    String(rendered.specialist.question || "").includes("Tell me more about why a dream matters"),
+    false
+  );
+});
+
+test("dream explainer intro keeps exercise question and avoids Dream intro fallback menu", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "DreamExplainer";
+  (state as any).business_name = "Mindd";
+  (state as any).dream_final = "";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "INTRO",
+      message: "Let's start the exercise.",
+      question:
+        "Looking 5 to 10 years ahead, what major opportunity or threat do you see, and what positive change do you hope for? Write it as one clear statement.",
+      menu_id: "",
+      suggest_dreambuilder: "true",
+      dream: "",
+      refined_formulation: "",
+    },
+  });
+
+  assert.equal(rendered.status, "no_output");
+  assert.equal(rendered.confirmEligible, false);
+  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
+  assert.deepEqual(rendered.uiActionCodes, ["ACTION_DREAM_SWITCH_TO_SELF"]);
+  assert.equal(
+    String(rendered.specialist.question || "").includes("Looking 5 to 10 years ahead"),
+    true
+  );
+  assert.equal(
+    String(rendered.specialist.question || "").includes("Define your Dream for Mindd"),
+    false
+  );
 });
 
 test("strategy: incomplete output hides confirm action", () => {
@@ -416,6 +561,10 @@ test("off-topic with existing output still uses contract-driven Refine headline"
   const headline = String(rendered.specialist.question || "");
   assert.equal(headline.includes("Continue with your Dream"), false);
   assert.equal(headline.includes("Refine your Dream"), true);
+  assert.equal(
+    String(rendered.specialist.message || "").includes("Mindd dreams of a world with meaningful impact."),
+    true
+  );
 });
 
 test("renderer emits contract metadata for deterministic UI", () => {
@@ -462,6 +611,7 @@ test("off-topic dream with candidate but no final keeps confirm-capable refine m
     previousSpecialist: {
       action: "REFINE",
       menu_id: "DREAM_MENU_REFINE",
+      dream: "Mindd dreams of a world with meaningful impact.",
       question:
         "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
     },
@@ -470,6 +620,94 @@ test("off-topic dream with candidate but no final keeps confirm-capable refine m
   assert.equal(rendered.confirmEligible, true);
   assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_REFINE");
   assert.equal(rendered.uiActionCodes.length, 2);
+});
+
+test("off-topic dream carries previously selected temporary formulation in message", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).dream_final = "";
+  const previousSpecialist = {
+    action: "ASK",
+    menu_id: "DREAM_MENU_REFINE",
+    dream: "Mindd dreams of a world where purpose-driven companies create long-term value.",
+    refined_formulation:
+      "Mindd dreams of a world where purpose-driven companies create long-term value.",
+    question:
+      "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      is_offtopic: true,
+      message:
+        "Ben Steenstra is a Dutch entrepreneur and business strategist. For more information visit https://www.bensteenstra.com",
+      question: "",
+      menu_id: "",
+    },
+    previousSpecialist,
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_DREAM_REFINE_CONFIRM",
+    "ACTION_DREAM_REFINE_START_EXERCISE",
+  ]);
+  assert.equal(
+    String(rendered.specialist.message || "").includes(
+      "Mindd dreams of a world where purpose-driven companies create long-term value."
+    ),
+    true
+  );
+});
+
+test("off-topic keeps committed context and valid-output contract menu across steps", () => {
+  const stepIds = Object.keys(DEFAULT_MENU_BY_STATUS).filter((stepId) => stepId !== "step_0");
+
+  for (const stepId of stepIds) {
+    const state = getDefaultState();
+    (state as any).current_step = stepId;
+    (state as any).business_name = "Mindd";
+    if (stepId === "dream") {
+      (state as any).active_specialist = "Dream";
+    }
+    const finalField = finalFieldForStep(stepId);
+    const committedValue = `Committed ${stepId} value.`;
+    if (finalField) {
+      (state as any)[finalField] = committedValue;
+    }
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        is_offtopic: true,
+        message: "A quick detour. Back to your business step now.",
+        question: "",
+        menu_id: "",
+      },
+    });
+
+    assert.equal(rendered.status, "valid_output", `${stepId} should stay valid on off-topic`);
+    assert.equal(
+      String(rendered.specialist.menu_id || ""),
+      String(DEFAULT_MENU_BY_STATUS[stepId]?.valid_output || ""),
+      `${stepId} should keep valid-output contract menu`
+    );
+    assert.ok((rendered.uiActionCodes || []).length > 0, `${stepId} should keep at least one action button`);
+    assert.equal(
+      String(rendered.specialist.message || "").includes(committedValue),
+      true,
+      `${stepId} should include committed context in off-topic response`
+    );
+  }
 });
 
 test("strategy valid-output from sidepath never renders buttonless screen", () => {
@@ -547,6 +785,29 @@ test("purpose examples sidepath keeps both options (no silent drop)", () => {
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 2);
 });
 
+test("purpose no-output intro shows explain-more and ask-3-questions actions", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).business_name = "Mindd";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "",
+      menu_id: "",
+      question: "",
+      purpose: "",
+      refined_formulation: "",
+    },
+  });
+  assert.equal(String(rendered.specialist.menu_id || ""), "PURPOSE_MENU_INTRO");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+    "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+  ]);
+});
+
 test("role ask sidepath keeps its single option", () => {
   const state = getDefaultState();
   (state as any).current_step = "role";
@@ -570,7 +831,8 @@ test("role ask sidepath keeps its single option", () => {
 
 test("all non-escape menus keep parity and confirm-filter contract in both eligibility states", () => {
   const menuEntries = Object.entries(ACTIONCODE_REGISTRY.menus)
-    .filter(([menuId]) => !String(menuId).endsWith("_MENU_ESCAPE"));
+    .filter(([menuId]) => !String(menuId).endsWith("_MENU_ESCAPE"))
+    .filter(([menuId]) => menuId !== "STEP0_MENU_META_RETURN");
 
   for (const [menuId, menuActions] of menuEntries) {
     const stepId = stepIdForMenu(menuId);
@@ -625,9 +887,15 @@ test("all non-escape menus keep parity and confirm-filter contract in both eligi
       true,
       `${menuId} should be confirm-eligible when final value is present`
     );
+    const defaultValidMenu = String(DEFAULT_MENU_BY_STATUS[stepId]?.valid_output || "").trim();
+    const isDreamExplainerMenu = stepId === "dream" && menuId.startsWith("DREAM_EXPLAINER_MENU_");
+    const expectedMenuActions =
+      !isDreamExplainerMenu && defaultValidMenu
+        ? (ACTIONCODE_REGISTRY.menus[defaultValidMenu] || [])
+        : menuActions;
     assert.deepEqual(
       confirmRendered.uiActionCodes,
-      menuActions,
+      expectedMenuActions,
       `${menuId} confirm context must keep full menu action set`
     );
     assert.equal(
@@ -638,7 +906,7 @@ test("all non-escape menus keep parity and confirm-filter contract in both eligi
   }
 });
 
-test("labelsForMenu precedence: specialist.question parsed labels override prev/question and fallback", () => {
+test("labelsForMenu uses contract labels even when specialist question has custom numbered labels", () => {
   const state = getDefaultState();
   (state as any).current_step = "purpose";
   (state as any).business_name = "Mindd";
@@ -658,13 +926,11 @@ test("labelsForMenu precedence: specialist.question parsed labels override prev/
       question: "1) Previous label one\n2) Previous label two",
     },
   });
-  assert.deepEqual(
-    rendered.uiActions.map((action) => String(action.label || "")),
-    ["Specialist label one", "Specialist label two"]
-  );
+  const expected = MENU_LABELS.PURPOSE_MENU_REFINE;
+  assert.deepEqual(rendered.uiActions.map((action) => String(action.label || "")), expected);
 });
 
-test("labelsForMenu precedence: prev.question parsed labels are used when specialist.question is unusable", () => {
+test("labelsForMenu uses contract labels even when previous question has custom numbered labels", () => {
   const state = getDefaultState();
   (state as any).current_step = "purpose";
   (state as any).business_name = "Mindd";
@@ -684,10 +950,8 @@ test("labelsForMenu precedence: prev.question parsed labels are used when specia
       question: "1) Previous label one\n2) Previous label two",
     },
   });
-  assert.deepEqual(
-    rendered.uiActions.map((action) => String(action.label || "")),
-    ["Previous label one", "Previous label two"]
-  );
+  const expected = MENU_LABELS.PURPOSE_MENU_REFINE;
+  assert.deepEqual(rendered.uiActions.map((action) => String(action.label || "")), expected);
 });
 
 test("labelsForMenu precedence: static MENU_LABELS fallback is used when parsed labels are unavailable", () => {

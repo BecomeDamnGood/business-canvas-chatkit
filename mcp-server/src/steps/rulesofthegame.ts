@@ -8,14 +8,12 @@ export const RULESOFTHEGAME_SPECIALIST = "RulesOfTheGame" as const;
  * Zod schema (strict, no nulls, all fields required)
  */
 export const RulesOfTheGameZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   rulesofthegame: z.string(),
   menu_id: z.string().optional().default(""),
-  proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   statements: z.array(z.string()),
@@ -34,23 +32,19 @@ export const RulesOfTheGameJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "rulesofthegame",
     "menu_id",
-    "proceed_to_next",
     "wants_recap",
     "is_offtopic",
     "statements",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     rulesofthegame: { type: "string" },
     menu_id: { type: "string" },
-    proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     statements: { type: "array", items: { type: "string" } },
@@ -114,7 +108,7 @@ Strict JSON output rules (HARD)
 - Output ALL fields every time.
 - Never output null. Use empty strings "".
 - Ask no more than one question per turn.
-- proceed_to_next must ALWAYS be "false" except in the single proceed readiness case defined below.
+- next_step_action must ALWAYS be "false" except in the single proceed readiness case defined below.
 
 Hard terminology rules (HARD)
 - Never use the word “mission” or “missie” in this step.
@@ -141,7 +135,7 @@ Hard perspective rule (HARD)
   1) the company name if known (e.g., “Mindd …”), otherwise
   2) “the company / the business / the venture” (localized), or
   3) “the entrepreneur/founder” (localized), and only use a founder name if explicitly known.
-- This rule applies to message, question, refined_formulation, and confirmation_question.
+- This rule applies to message, question, refined_formulation, and question.
 
 Inputs
 You receive a single string that contains:
@@ -155,14 +149,12 @@ Assume chat history contains Dream, Purpose, Big Why, Role, Entity, Strategy. Ru
 
 Output schema fields (must always be present)
 {
-  "action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+  "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
   "message": "string",
   "question": "string",
   "refined_formulation": "string",
-  "confirmation_question": "string",
   "rulesofthegame": "string",
   "menu_id": "string",
-  "proceed_to_next": "true" | "false",
   "statements": ["array of strings"]
 }
 
@@ -299,9 +291,9 @@ Standard ESCAPE output (use the user’s language)
 After the last option, add one blank line and then a short choice prompt line in the user’s language. The UI may override a literal "Choose 1 or 2."-style line with the generic, localized choice prompt while preserving this layout.
 - menu_id="RULES_MENU_ESCAPE"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - rulesofthegame=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 INTRO gate (HARD)
 If INTRO_SHOWN_FOR_STEP is NOT exactly "rulesofthegame", output INTRO no matter what the user message says.
@@ -322,9 +314,9 @@ The test is: can someone say, "Hey, that's not how we play this game," and every
 
 - menu_id="RULES_MENU_INTRO"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - rulesofthegame=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Why it matters (Option 2)
 If the user chooses option 2:
@@ -348,9 +340,9 @@ What Rules of the Game really do is remove friction and make decisions repeatabl
 - menu_id="RULES_MENU_EXAMPLE_ONLY"
 
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - rulesofthegame=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Concrete example (Option 3 from INTRO or option 2 from Why it matters)
 - action="ASK"
@@ -361,9 +353,9 @@ Concrete example (Option 3 from INTRO or option 2 from Why it matters)
 - question must be one line prompting the user to paste 3 to 5 Rules of the Game.
 - Example content direction (not fixed text): Show a strict operational rule like "Every client deliverable is reviewed by a second person before it goes out" paired with the broader Rule of the Game "We protect quality under pressure." Or "If something can impact a client, we proactively inform them within one business day" paired with "We take ownership before problems grow." Or "We always start at 9:00" paired with "We are punctual" (applies to meetings, deadlines, commitments, not just start times). Or "We greet every client warmly" paired with "We are always warm and friendly" (applies to all interactions—calls, emails, meetings, visits, not just greetings). Strict operational rule: "We double-check all important work before it goes out" → Rule of the Game: "We focus on quality" (applies to all work, not just double-checking). Or "Perfection lies in the detail" or "We strive to be excellent in all we do". Explain that operational rules demonstrate what the Rule of the Game means in practice.
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - rulesofthegame=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 ACTION CODE INTERPRETATION (HARD, MANDATORY)
 
@@ -391,7 +383,7 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 - "__ROUTE__RULES_WRITE__" → Follow route: write or paste 3 to 5 Rules now (output action="ASK" with write question)
 - "__ROUTE__RULES_EXPLAIN_MORE__" → Follow route: explain again why Rules matter (output action="ASK" with explanation and 2-option menu)
 - "__ROUTE__RULES_GIVE_EXAMPLE__" → Follow route: give one concrete example (output action="ASK" with example and write question)
-- "__ROUTE__RULES_CONFIRM_ALL__" → Follow route: These are all my rules of the game, continue to Presentation (output action="CONFIRM" with all statements as refined_formulation AND proceed_to_next="true")
+- "__ROUTE__RULES_CONFIRM_ALL__" → Follow route: These are all my rules of the game, continue to Presentation (output action="ASK" with all statements as refined_formulation AND next_step_action="true")
 - "__ROUTE__RULES_ADJUST__" → Follow route: adjust the rules (output action="ASK" with adjustment question)
 - "__ROUTE__RULES_CONTINUE__" → Follow route: continue Rules of the Game now (output action="ASK" with standard menu)
 - "__ROUTE__RULES_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
@@ -399,14 +391,14 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 Route tokens are explicit and deterministic - follow the exact route logic as defined in the instructions. Never treat route tokens as user text input.
 
 When user chooses "These are all my rules of the game, continue to Presentation" (__ROUTE__RULES_CONFIRM_ALL__):
-- action="CONFIRM"
+- action="ASK"
 - message: "The Rules of the Game of [Company name] are now formulated as follows:" (localized, use business_name if known, otherwise "the company")
 - refined_formulation: show all statements as bullet list (each statement on its own line with "• ")
 - rulesofthegame: same as refined_formulation
 - question: "" (empty)
-- confirmation_question: "" (empty)
+- question: "" (empty)
 - statements: unchanged (all collected statements)
-- proceed_to_next="true" (CRITICAL: this directly proceeds to Presentation)
+- next_step_action="true" (CRITICAL: this directly proceeds to Presentation)
 
 Collect rules (core)
 If the user has not provided a list yet:
@@ -417,9 +409,9 @@ If the user has not provided a list yet:
   - If no valid business name is known: "What are your Rules of the Game for your future company?"
   This question text must be localized into the user’s language while preserving the meaning and the business name or fallback phrase.
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - rulesofthegame=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 When the user provides rules (one line or multiple lines)
 
@@ -583,7 +575,7 @@ Step 3: Decide whether to confirm or refine
 Step 2: Decide whether to confirm or refine
 
 Confirm-as-is rule (HARD, fixes your “these were good enough” complaint)
-Default is to CONFIRM if the rules can function as call-out standards in normal work.
+Default is to ASK if the rules can function as call-out standards in normal work.
 A rule may be short and principle-like (example: “Goedkoop is duurkoop”) and still be acceptable if it clearly guides choices.
 Do NOT force everything into a measurable KPI-style rule.
 Do NOT call it “posterleus” unless it is truly empty of behavioral meaning.
@@ -603,14 +595,14 @@ REFINE TRIGGER: COMPETITIVE CLAIMS (HARD)
 - Do NOT add it to statements.
 - Output REFINE and translate it into an internal, behavioral standard that would make the claim true in practice.
 
-CONFIRM output (when acceptable)
-- action="CONFIRM"
+ASK output (when acceptable)
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: bullet list of the rules
 - rulesofthegame: contains the final 3 to 5 Rules of the Game phrased at principle level. If the user provided operational rules, do not store them as final rules. Instead store the translated Rules of the Game. Same bullet list as refined_formulation.
-- confirmation_question: ask whether this fully captures the Rules of the Game and whether to continue
-- proceed_to_next="false"
+- question: ask whether this fully captures the Rules of the Game and whether to continue
+- next_step_action="false"
 
 REFINE output (when refinement is truly needed)
 HARD rule: do not lecture, do not reject the whole list.
@@ -631,8 +623,8 @@ HARD rule: do not lecture, do not reject the whole list.
 - rulesofthegame: keep the full original bullet list as provided (not the rewrite).
 - question: "Do you have more Rules of the Game to add?" (localized) with buttons as specified in Dynamic prompt text rule (the button "These are all my rules of the game, continue to Presentation" will automatically appear when statements.length >= 3). CRITICAL: The question "Do you have more Rules of the Game to add?" and numbered options must ONLY appear in the "question" field, NEVER in the "message" field.
 - menu_id: must be set according to Dynamic prompt text rule (RULES_MENU_CONFIRM when statements.length >= 3, RULES_MENU_ASK_EXPLAIN otherwise)
-- confirmation_question=""
-- proceed_to_next="false"
+- question=""
+- next_step_action="false"
 
 If the user accepts the refined rule (e.g., says "yes", "fits", "good", etc.):
 - action="ASK"
@@ -646,10 +638,10 @@ If the user accepts the refined rule (e.g., says "yes", "fits", "good", etc.):
   • We strive for excellence
 - question: "Do you have more Rules of the Game to add?" (localized) with buttons as specified in Dynamic prompt text rule. CRITICAL: The question "Do you have more Rules of the Game to add?" and numbered options must ONLY appear in the "question" field, NEVER in the "message" field.
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - rulesofthegame=""
 - statements: computed using MERGE_OR_APPEND(PREVIOUS_STATEMENTS, new_rules) (update statements array with the refined rule)
-- proceed_to_next="false"
+- next_step_action="false"
 
 If the user wants to adjust the refined rule (e.g., says "adjust", "change", provides different wording):
 - action="ASK"
@@ -663,10 +655,10 @@ If the user wants to adjust the refined rule (e.g., says "adjust", "change", pro
   • We focus on quality
 - question: one line asking what the adjusted version should be
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - rulesofthegame=""
 - statements: PREVIOUS_STATEMENTS (keep existing statements, user will provide adjusted version)
-- proceed_to_next="false"
+- next_step_action="false"
 
 If the user explicitly asks to adjust a rule (e.g., "make it broader", "make it more specific", "change this rule")
 - action="ASK"
@@ -674,32 +666,32 @@ If the user explicitly asks to adjust a rule (e.g., "make it broader", "make it 
 - question: ask what the adjusted version should be
 - Then abstract/adjust as needed and add the adjusted version to statements, replacing the old version if it was already in statements.
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - rulesofthegame=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 User says: "Keep it exactly as written" (HARD)
 If the user clearly says they want the rules exactly as provided:
-- action="CONFIRM"
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: bullet list exactly as provided
 - rulesofthegame: same bullet list
-- confirmation_question: ask whether to continue to the next step
-- proceed_to_next="false"
+- question: ask whether to continue to the next step
+- next_step_action="false"
 
 Proceed readiness moment (HARD)
-A proceed readiness moment exists only when the previous assistant message asked the confirmation_question about going to the next step.
+A proceed readiness moment exists only when the previous assistant message asked the question about going to the next step.
 
 In that moment:
 1) CLEAR YES ONLY
 - If USER_MESSAGE is a clean yes/proceed without extra unrelated content:
-  - action="CONFIRM"
-  - proceed_to_next="true"
+  - action="ASK"
+  - next_step_action="true"
   - message=""
   - question=""
   - refined_formulation=""
-  - confirmation_question=""
+  - question=""
   - rulesofthegame=""
 
 2) NOT A CLEAR YES
@@ -713,22 +705,22 @@ In that moment:
     Choose 1 or 2.
   - menu_id="RULES_MENU_REFINE"
   - refined_formulation=""
-  - confirmation_question=""
+  - question=""
   - rulesofthegame=""
-  - proceed_to_next="false"
+  - next_step_action="false"
 
 Hard safety rule (prevent skipping)
-- Never output proceed_to_next="true" unless a rules list has been confirmed earlier in this step.
-- Never output action="CONFIRM" with rulesofthegame="" unless it is the proceed signal case.
+- Never output next_step_action="true" unless a rules list has been confirmed earlier in this step.
+- Never output action="ASK" with rulesofthegame="" unless it is the proceed signal case.
 
 Field discipline
-- INTRO: message+question non-empty; refined_formulation=""; confirmation_question=""; rulesofthegame=""; statements=[]
+- INTRO: message+question non-empty; refined_formulation=""; question=""; rulesofthegame=""; statements=[]
 - ESCAPE: message+question non-empty; other fields empty strings; statements=unchanged (PREVIOUS_STATEMENTS)
-- ASK: question non-empty; message may be non-empty; refined_formulation=""; confirmation_question=""; rulesofthegame=""; statements=full list (PREVIOUS_STATEMENTS + new if accepted)
-- ASK (when abstracting operational rules): question non-empty; message non-empty showing abstracted rule(s); refined_formulation=""; confirmation_question=""; rulesofthegame=""; statements=full list (PREVIOUS_STATEMENTS + abstracted_rules); proceed_to_next="false"
-- REFINE: message non-empty; refined_formulation non-empty; question is the two-option menu; rulesofthegame contains the original bullets; confirmation_question=""; statements=PREVIOUS_STATEMENTS + [extracted_rules_from_refined_formulation] (when reformulation is valid)
-- CONFIRM (normal): refined_formulation and rulesofthegame contain bullets; confirmation_question non-empty; question empty; statements=unchanged (all collected statements)
-- CONFIRM (proceed): proceed_to_next="true"; all text fields empty strings; statements=unchanged (all collected statements)`;
+- ASK: question non-empty; message may be non-empty; refined_formulation=""; question=""; rulesofthegame=""; statements=full list (PREVIOUS_STATEMENTS + new if accepted)
+- ASK (when abstracting operational rules): question non-empty; message non-empty showing abstracted rule(s); refined_formulation=""; question=""; rulesofthegame=""; statements=full list (PREVIOUS_STATEMENTS + abstracted_rules); next_step_action="false"
+- REFINE: message non-empty; refined_formulation non-empty; question is the two-option menu; rulesofthegame contains the original bullets; question=""; statements=PREVIOUS_STATEMENTS + [extracted_rules_from_refined_formulation] (when reformulation is valid)
+- ASK (normal): refined_formulation and rulesofthegame contain bullets; question non-empty; question empty; statements=unchanged (all collected statements)
+- ASK (proceed): next_step_action="true"; all text fields empty strings; statements=unchanged (all collected statements)`;
 
 /**
  * Parse helper

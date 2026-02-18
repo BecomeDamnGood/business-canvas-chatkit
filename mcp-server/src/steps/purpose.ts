@@ -8,14 +8,12 @@ export const PURPOSE_SPECIALIST = "Purpose" as const;
  * Zod schema (strict, no nulls, all fields required)
  */
 export const PurposeZodSchema = z.object({
-  action: z.enum(["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"]),
+  action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
   refined_formulation: z.string(),
-  confirmation_question: z.string(),
   purpose: z.string(),
   menu_id: z.string().optional().default(""),
-  proceed_to_next: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -33,22 +31,18 @@ export const PurposeJsonSchema = {
     "message",
     "question",
     "refined_formulation",
-    "confirmation_question",
     "purpose",
     "menu_id",
-    "proceed_to_next",
     "wants_recap",
     "is_offtopic",
   ],
   properties: {
-    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "CONFIRM", "ESCAPE"] },
+    action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
     refined_formulation: { type: "string" },
-    confirmation_question: { type: "string" },
     purpose: { type: "string" },
     menu_id: { type: "string" },
-    proceed_to_next: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -113,14 +107,12 @@ Return ONLY valid JSON. No markdown. No extra keys. No trailing comments.
 All fields are required. If not applicable, return an empty string "".
 
 {
-  "action": "INTRO" | "ASK" | "REFINE" | "CONFIRM" | "ESCAPE",
+  "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
   "message": "string",
   "question": "string",
   "refined_formulation": "string",
-  "confirmation_question": "string",
   "purpose": "string",
   "menu_id": "string",
-  "proceed_to_next": "true" | "false"
 }
 
 4) GLOBAL NON-NEGOTIABLES (DO NOT EDIT)
@@ -134,7 +126,7 @@ All fields are required. If not applicable, return an empty string "".
 - Output ONLY valid JSON. No extra text.
 - Output ALL fields every time.
 - Never output null. Use empty strings "".
-- proceed_to_next must always be a string: "true" or "false".
+- next_step_action must always be a string: "true" or "false".
 
 3) One question per turn.
 - Ask one clear question at a time.
@@ -184,8 +176,8 @@ Trigger topics (examples)
 
 Output handling (HARD)
 - Output action="ASK".
-- Keep refined_formulation="", confirmation_question="", purpose="".
-- proceed_to_next must remain "false".
+- Keep refined_formulation="", question="", purpose="".
+- next_step_action must remain "false".
 - Always include www.bensteenstra.com in the message (localized).
 
 Message structure (localized)
@@ -280,9 +272,9 @@ Please define your purpose or ask for more explanation.
 
 - menu_id="PURPOSE_MENU_INTRO" (HARD: MUST be set when showing this intro menu.)
 refined_formulation=""
-confirmation_question=""
+question=""
 purpose=""
-proceed_to_next="false"
+next_step_action="false"
 
 9) STANDARD OFF-TOPIC (FRIENDLY, SHORT)
 
@@ -303,9 +295,9 @@ Choose 1 or 2.
 
 - menu_id="PURPOSE_MENU_ESCAPE"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 10) RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
 If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap"):
@@ -320,9 +312,9 @@ If the user asks for a recap or summary of what has been discussed in this step 
 Choose 1 or 2.
 - menu_id="PURPOSE_MENU_ESCAPE"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 11) OFF-TOPIC OPTION 2 CHOSEN (FINISH LATER)
 
@@ -334,9 +326,9 @@ Output
 - message (localized): short pause acknowledgement, one sentence.
 - question (localized): one gentle closing question, one line. Do not present a menu.
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Important
 - Do NOT continue coaching in this step in this case.
@@ -349,9 +341,9 @@ If you do not have the Dream in context and cannot connect Purpose to it:
 - question (localized, one line):
 "Before Purpose: what is the confirmed Dream in one sentence?"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 Then continue Purpose. Do not ask for Dream again.
 
@@ -418,9 +410,9 @@ If the user already gave usable Purpose meaning:
   1) I'm happy with this wording, please continue to next step Big Why.
 
 - menu_id="PURPOSE_MENU_CONFIRM_SINGLE" (HARD: MUST be set when showing this single-option confirm menu.)
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 If the user did NOT give usable Purpose meaning:
 - action="ASK"
@@ -428,9 +420,9 @@ If the user did NOT give usable Purpose meaning:
 - question (localized, one question only):
   "In one sentence: what is the belief or value under your Dream that drives the company, even when it gets difficult?"
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 B) If the user chooses the option from INTRO (Explain more about why a purpose is needed) OR asks to explain Purpose
 
@@ -461,9 +453,9 @@ Please define the Purpose or choose an option to continue.
 
 - menu_id="PURPOSE_MENU_EXPLAIN" (HARD: MUST be set when showing this menu.)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 C) If the user chooses option 2 from B (Give 3 examples of how Purpose could sound)
 
@@ -494,9 +486,9 @@ Please define the Purpose or choose an option to continue.
 
 - menu_id="PURPOSE_MENU_EXAMPLES" (HARD: MUST be set when showing this menu.)
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 D) If the user chooses option 2 from C (Choose a purpose for me)
 
@@ -513,9 +505,9 @@ Output
 (choice prompt line in the user's language)
 
 - menu_id="PURPOSE_MENU_REFINE" (HARD: MUST be set when showing this REFINE menu.)
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 E) If the user chooses option 2 from D, E, or H (Refine the wording)
 
@@ -532,20 +524,20 @@ Output
 (choice prompt line in the user's language)
 
 - menu_id="PURPOSE_MENU_REFINE" (HARD: MUST be set when showing this REFINE menu.)
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 F) If the user chooses option 1 from D, E, or H (I'm happy with this wording, please continue to next step Big Why)
 
 Output
-- action="CONFIRM"
+- action="ASK"
 - message=""
 - question=""
 - refined_formulation: the same Purpose sentence from the previous REFINE
 - purpose: the same Purpose sentence (final confirmed Purpose)
-- confirmation_question=""
-- proceed_to_next="true"
+- question=""
+- next_step_action="true"
 
 G) If the user chooses option 1 from B or C (Ask 3 questions to help me define the Purpose)
 
@@ -575,9 +567,9 @@ Output
 
 - question=""
 - refined_formulation=""
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 
 H) If the user answers the 3 questions from G (provides answers to the Purpose discovery questions)
 
@@ -594,7 +586,7 @@ Output
 (choice prompt line in the user's language)
 
 - menu_id="PURPOSE_MENU_REFINE" (HARD: MUST be set when showing this REFINE menu.)
-- confirmation_question=""
+- question=""
 - purpose=""
-- proceed_to_next="false"
+- next_step_action="false"
 `;

@@ -7,22 +7,56 @@ import {
   clickButtonContaining
 } from './helpers';
 
+async function completeStep0ToDream(page: import('@playwright/test').Page): Promise<void> {
+  await page.getByRole('button', { name: 'Start' }).click();
+  await waitForResponse(page);
+  await takeScreenshot(page, 'complete-02-step0');
+
+  // Preferred canonical Step 0 input from existing test data.
+  await fillAndSend(page, 'I run an advertising agency called Mindd');
+  await waitForResponse(page);
+  await takeScreenshot(page, 'complete-03-step0-after-first-input');
+
+  // Step 0 can ask one follow-up (name/TBD). Handle it deterministically.
+  for (let i = 0; i < 3; i++) {
+    const continued = await clickContinue(page);
+    if (continued) {
+      await waitForResponse(page);
+      return;
+    }
+
+    const asksName = await page.getByText(/name of your business|what is the name|is it still tbd/i).isVisible().catch(() => false);
+    if (asksName) {
+      await fillAndSend(page, 'Mindd');
+      await waitForResponse(page);
+      await takeScreenshot(page, `complete-03b-step0-name-followup-${i + 1}`);
+      continue;
+    }
+
+    const asksStep0Again = await page.getByText(/what type of business are you starting or running/i).isVisible().catch(() => false);
+    if (asksStep0Again) {
+      await fillAndSend(page, 'I run an advertising agency called Mindd');
+      await waitForResponse(page);
+      await takeScreenshot(page, `complete-03c-step0-repeat-${i + 1}`);
+      continue;
+    }
+
+    await fillAndSend(page, 'Yes');
+    await waitForResponse(page);
+  }
+
+  throw new Error('Step 0 did not reach a continue state for Dream within expected retries.');
+}
+
 test.describe('Complete Flow - Happy Path', () => {
   test('Complete flow through all steps with screenshots', async ({ page }) => {
+    test.setTimeout(180000); // 3 min – many steps + LLM calls
     await page.goto('/test');
     await takeScreenshot(page, 'complete-01-start');
 
     // Step 0: Validation & Business Name
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
-    await takeScreenshot(page, 'complete-02-step0');
-
-    await fillAndSend(page, 'Strategic marketing agency Mindd');
-    await waitForResponse(page);
+    await completeStep0ToDream(page);
     await takeScreenshot(page, 'complete-03-step0-confirm');
-
-    await clickContinue(page);
-    await waitForResponse(page);
 
     // Step 1: Dream
     await takeScreenshot(page, 'complete-04-dream');
@@ -139,14 +173,7 @@ test.describe('Complete Flow - Happy Path', () => {
 
   test('State persistence verification', async ({ page }) => {
     await page.goto('/test');
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
-    await fillAndSend(page, 'Test Company');
-    await waitForResponse(page);
-
-    // Verify state is stored (check if we can continue)
-    await clickContinue(page);
-    await waitForResponse(page);
+    await completeStep0ToDream(page);
 
     // Should be on next step with previous data remembered
     const textbox = page.getByRole('textbox');
