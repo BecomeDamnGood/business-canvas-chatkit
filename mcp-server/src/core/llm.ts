@@ -50,6 +50,13 @@ export type StrictJsonCallArgs<T> = {
   debugLabel?: string;
 };
 
+export type LLMUsage = {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  provider_available: boolean;
+};
+
 function getApiKey(): string {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing env OPENAI_API_KEY");
@@ -98,6 +105,46 @@ function safeJsonParse(text: string): unknown {
     if (trimmed !== text) return JSON.parse(trimmed);
     throw e;
   }
+}
+
+function normalizeUsageToken(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value < 0) return null;
+  return Math.round(value);
+}
+
+function usageFromResponse(resp: any): LLMUsage {
+  const usage = resp?.usage || {};
+  const input = normalizeUsageToken(usage?.input_tokens ?? usage?.prompt_tokens);
+  const output = normalizeUsageToken(usage?.output_tokens ?? usage?.completion_tokens);
+  const total =
+    normalizeUsageToken(usage?.total_tokens) ??
+    (input !== null && output !== null ? input + output : null);
+  const providerAvailable = input !== null || output !== null || total !== null;
+  return {
+    input_tokens: input,
+    output_tokens: output,
+    total_tokens: total,
+    provider_available: providerAvailable,
+  };
+}
+
+function mergeUsage(first: LLMUsage, second: LLMUsage): LLMUsage {
+  const inputUnknown = first.input_tokens === null || second.input_tokens === null;
+  const outputUnknown = first.output_tokens === null || second.output_tokens === null;
+  const totalUnknown = first.total_tokens === null || second.total_tokens === null;
+  const firstInput = first.input_tokens ?? 0;
+  const secondInput = second.input_tokens ?? 0;
+  const firstOutput = first.output_tokens ?? 0;
+  const secondOutput = second.output_tokens ?? 0;
+  const firstTotal = first.total_tokens ?? 0;
+  const secondTotal = second.total_tokens ?? 0;
+  return {
+    input_tokens: inputUnknown ? null : firstInput + secondInput,
+    output_tokens: outputUnknown ? null : firstOutput + secondOutput,
+    total_tokens: totalUnknown ? null : firstTotal + secondTotal,
+    provider_available: first.provider_available || second.provider_available,
+  };
 }
 
 const GLOSSARY_DEBUG = process.env.LOCAL_DEV === "1" || process.env.GLOSSARY_DEBUG === "1";
@@ -297,8 +344,9 @@ async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema
 
     const text = extractOutputText(resp);
     const parsed = safeJsonParse(text);
+    const usage = usageFromResponse(resp);
 
-    return { text, parsed };
+    return { text, parsed, usage };
   } catch (e: any) {
     if (isTimeoutError(e)) {
       throw e;
@@ -334,6 +382,7 @@ export async function callStrictJson<T>(
   data: T;
   rawText: string;
   attempts: number;
+  usage: LLMUsage;
 }> {
   const debugLabel = args.debugLabel ?? args.schemaName;
 
@@ -352,7 +401,12 @@ export async function callStrictJson<T>(
 
   const parsed1 = args.zodSchema.safeParse(attempt1.parsed);
   if (parsed1.success) {
-    return { data: parsed1.data, rawText: attempt1.text, attempts: 1 };
+    return {
+      data: parsed1.data,
+      rawText: attempt1.text,
+      attempts: 1,
+      usage: attempt1.usage,
+    };
   }
 
   // Repair pass (Attempt 2)
@@ -390,7 +444,12 @@ Now return a corrected JSON output that matches the schema exactly.`;
 
   const parsed2 = args.zodSchema.safeParse(attempt2.parsed);
   if (parsed2.success) {
-    return { data: parsed2.data, rawText: attempt2.text, attempts: 2 };
+    return {
+      data: parsed2.data,
+      rawText: attempt2.text,
+      attempts: 2,
+      usage: mergeUsage(attempt1.usage, attempt2.usage),
+    };
   }
 
   const err = new Error(`Strict JSON call failed after repair pass for ${debugLabel}.`);

@@ -7,11 +7,6 @@ export const SubmitTextIntentZod = z.object({
   context: z.enum(["free_text", "builder_statement", "refine_input"]).optional(),
 });
 
-export const ConfirmIntentZod = z.object({
-  type: z.literal("CONFIRM"),
-  value: z.string().optional(),
-});
-
 export const RequestExplanationIntentZod = z.object({
   type: z.literal("REQUEST_EXPLANATION"),
   topic: z.string(),
@@ -52,7 +47,6 @@ export const FinishLaterIntentZod = z.object({
 
 export const StepIntentZod = z.discriminatedUnion("type", [
   SubmitTextIntentZod,
-  ConfirmIntentZod,
   RequestExplanationIntentZod,
   StartExerciseIntentZod,
   SubmitScoresIntentZod,
@@ -64,4 +58,3 @@ export const StepIntentZod = z.discriminatedUnion("type", [
 ]);
 
 export type StepIntent = z.infer<typeof StepIntentZod>;
-

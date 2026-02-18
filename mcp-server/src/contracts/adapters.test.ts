@@ -33,7 +33,6 @@ test("intentToActionCode preserves route tokens", () => {
 
 test("intentToActionCode throws for context-required intents", () => {
   const blockedIntents = [
-    { type: "CONFIRM" as const },
     { type: "CONTINUE" as const },
     { type: "FINISH_LATER" as const },
     { type: "START_EXERCISE" as const, exerciseType: "dream_builder" as const },
@@ -50,8 +49,8 @@ test("intentToActionCode throws for context-required intents", () => {
   }
 });
 
-test("actionCodeToIntent -> intentToActionCode round-trip is unsupported for generic confirm/continue intents", () => {
-  const nonRoundTripRoutes = ["yes", "__ROUTE__PURPOSE_CONTINUE__", "__ROUTE__PURPOSE_FINISH_LATER__"];
+test("actionCodeToIntent -> intentToActionCode round-trip is unsupported for generic continue/finish-later intents", () => {
+  const nonRoundTripRoutes = ["__ROUTE__PURPOSE_CONTINUE__", "__ROUTE__PURPOSE_FINISH_LATER__"];
   for (const route of nonRoundTripRoutes) {
     const intent = actionCodeToIntent({
       actionCode: "ACTION_TEST",

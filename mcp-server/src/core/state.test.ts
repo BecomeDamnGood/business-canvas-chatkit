@@ -49,7 +49,7 @@ test("finals persistence: normalizeState preserves existing finals", () => {
   assert.equal(snapshot.purpose_final, "Purpose text");
 });
 
-test("finals persistence: migrateState preserves finals", () => {
+test("state migration v4: legacy sessions are hard-reset and clear legacy finals", () => {
   const raw = {
     state_version: "1",
     current_step: "step_0",
@@ -66,6 +66,7 @@ test("finals persistence: migrateState preserves finals", () => {
   };
   const migrated = migrateState(raw);
   const snapshot = getFinalsSnapshot(migrated);
-  assert.equal(snapshot.dream_final, "Existing dream");
-  assert.equal(snapshot.business_name, "Venture");
+  assert.equal(snapshot.dream_final, undefined);
+  assert.equal(snapshot.business_name, undefined);
+  assert.equal(String((migrated as any).state_version), "4");
 });

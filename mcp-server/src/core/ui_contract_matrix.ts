@@ -8,6 +8,12 @@ export type UiContractStateDefinition = {
 };
 
 export const MENU_LABELS: Record<string, string[]> = {
+  STEP0_MENU_META_RETURN: [
+    "Continue with business verification now.",
+  ],
+  STEP0_MENU_READY_START: [
+    "Yes, I'm ready. Let's start!",
+  ],
   DREAM_MENU_INTRO: [
     "Tell me more about why a dream matters",
     "Do a small exercise that helps to define your dream.",
@@ -28,7 +34,13 @@ export const MENU_LABELS: Record<string, string[]> = {
     "I'm happy with this wording, please continue to step 3 Purpose",
     "Refine this formulation",
   ],
-  PURPOSE_MENU_INTRO: ["Explain more about why a purpose is needed."],
+  DREAM_EXPLAINER_MENU_SWITCH_SELF: [
+    "Switch back to self-formulate the dream",
+  ],
+  PURPOSE_MENU_INTRO: [
+    "Explain more about why a purpose is needed.",
+    "Ask 3 questions to help me define the Purpose.",
+  ],
   PURPOSE_MENU_EXPLAIN: [
     "Ask 3 questions to help me define the Purpose.",
     "Give 3 examples of how Purpose could sound.",
@@ -119,6 +131,11 @@ export const MENU_LABELS: Record<string, string[]> = {
 };
 
 export const DEFAULT_MENU_BY_STATUS: Record<string, Record<TurnOutputStatus, string>> = {
+  step_0: {
+    no_output: "",
+    incomplete_output: "",
+    valid_output: "STEP0_MENU_READY_START",
+  },
   dream: {
     no_output: "DREAM_MENU_INTRO",
     incomplete_output: "DREAM_MENU_INTRO",

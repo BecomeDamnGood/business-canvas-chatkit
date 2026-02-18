@@ -8,6 +8,7 @@ This document is the contract-first source of truth for step behavior in the Bus
 - A step may only mutate its owned final field(s).
 - `is_offtopic=true` never mutates any `*_final` field.
 - `wording_choice_pending=true` blocks normal confirm/proceed until a wording pick action is handled.
+- Wording-choice decision rule is strict: show `user vs suggestion` whenever wording/content/order differs; only suppress when difference is spelling/surface-only with otherwise identical content.
 - Language must be resolved before specialist call and must remain stable unless explicit override exists.
 
 ## step_0
@@ -187,4 +188,3 @@ This document is the contract-first source of truth for step behavior in the Bus
 - Allowed transitions:
 - `presentation -> presentation`
 - terminal proceed / finish-later behavior
-

@@ -68,6 +68,9 @@ export const CanvasStateZod = z.object({
   rulesofthegame_final: z.string(),
   presentation_brief_final: z.string(),
 
+  // staged per-step value (chosen wording before explicit next-step confirm)
+  provisional_by_step: z.record(z.string(), z.string()),
+
   // shared convenience fields
   business_name: z.string(),
 
@@ -81,7 +84,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "3";
+export const CURRENT_STATE_VERSION = "4";
 
 /**
  * Hard defaults (no nulls)
@@ -114,6 +117,8 @@ export function getDefaultState(): CanvasState {
     productsservices_final: "",
     rulesofthegame_final: "",
     presentation_brief_final: "",
+
+    provisional_by_step: {},
 
     business_name: "TBD",
 
@@ -174,6 +179,13 @@ export function normalizeState(raw: unknown): CanvasState {
   const productsservices_final = String(r.productsservices_final ?? d.productsservices_final);
   const rulesofthegame_final = String(r.rulesofthegame_final ?? d.rulesofthegame_final);
   const presentation_brief_final = String(r.presentation_brief_final ?? d.presentation_brief_final);
+  const provisional_raw =
+    typeof r.provisional_by_step === "object" && r.provisional_by_step !== null
+      ? (r.provisional_by_step as Record<string, unknown>)
+      : {};
+  const provisional_by_step = Object.fromEntries(
+    Object.entries(provisional_raw).map(([k, v]) => [String(k), String(v ?? "").trim()])
+  );
 
   const business_name = String(r.business_name ?? d.business_name) || "TBD";
   const summary_target = String(r.summary_target ?? d.summary_target) || "unknown";
@@ -205,6 +217,8 @@ export function normalizeState(raw: unknown): CanvasState {
     rulesofthegame_final,
     presentation_brief_final,
 
+    provisional_by_step,
+
     business_name,
     summary_target,
   };
@@ -224,15 +238,38 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v3 -> v4: hard reset legacy confirm/proceed sessions (no compatibility layer).
+  if (s.state_version === "3") {
+    const fresh = getDefaultState();
+    s = {
+      ...fresh,
+      language: String((s as any).language ?? "").trim().toLowerCase(),
+      language_locked: String((s as any).language_locked ?? "false") === "true" ? "true" : "false",
+      language_override: String((s as any).language_override ?? "false") === "true" ? "true" : "false",
+      ui_strings:
+        typeof (s as any).ui_strings === "object" && (s as any).ui_strings !== null
+          ? Object.fromEntries(
+              Object.entries((s as any).ui_strings as Record<string, unknown>).map(([k, v]) => [
+                String(k),
+                String(v ?? ""),
+              ])
+            )
+          : {},
+      ui_strings_lang: String((s as any).ui_strings_lang ?? "").trim().toLowerCase(),
+      provisional_by_step: {},
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v2 -> v3: add targetgroup_final and productsservices_final
   if (s.state_version === "2") {
     s = {
       ...s,
-      state_version: CURRENT_STATE_VERSION,
+      state_version: "3",
       targetgroup_final: String((s as any).targetgroup_final ?? ""),
       productsservices_final: String((s as any).productsservices_final ?? ""),
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v1 -> v2: add missing finals + language fields (defaults)
@@ -254,7 +291,7 @@ export function migrateState(raw: unknown): CanvasState {
     productsservices_final: "",
   };
 
-  // Recursively migrate to v3 if needed
+  // Recursively migrate to current version if needed
   return migrateState(s);
 }
 

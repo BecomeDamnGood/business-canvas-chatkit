@@ -7,14 +7,13 @@ import {
   orchestrateFromTransition,
 } from "./orchestrator.js";
 
-test("deriveTransitionEventFromLegacy maps proceed_to_purpose", () => {
+test("deriveTransitionEventFromLegacy ignores legacy proceed_to_purpose flags", () => {
   const state = getDefaultState();
   (state as any).current_step = "dream";
   (state as any).last_specialist_result = { proceed_to_purpose: "true" };
 
   const event = deriveTransitionEventFromLegacy({ state, userMessage: "" });
-  assert.equal(event.type, "PROCEED_TO_SPECIFIC");
-  assert.equal((event as any).toStep, "purpose");
+  assert.equal(event.type, "NO_TRANSITION");
 });
 
 test("orchestrateFromTransition handles specialist switch in same step", () => {
@@ -34,4 +33,3 @@ test("orchestrateFromTransition handles specialist switch in same step", () => {
   assert.equal(decision.current_step, "dream");
   assert.equal(decision.specialist_to_call, "DreamExplainer");
 });
-

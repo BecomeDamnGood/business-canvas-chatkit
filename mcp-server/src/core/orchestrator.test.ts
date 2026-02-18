@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 import { orchestrate } from "./orchestrator.js";
 import { getDefaultState, type CanvasState } from "./state.js";
 import { STEP_0_ID, STEP_0_SPECIALIST } from "../steps/step_0_validation.js";
-import { DREAM_STEP_ID, DREAM_SPECIALIST } from "../steps/dream.js";
 
 function makeState(partial: Partial<CanvasState> = {}): CanvasState {
   return { ...getDefaultState(), ...partial };
@@ -49,7 +48,7 @@ test("orchestrate: once intros are shown, show_* flags become false for same ste
   assert.equal(d.intro_shown_session, "true");
 });
 
-test("orchestrate: proceed_to_dream overrides routing to Dream specialist", () => {
+test("orchestrate: ignores legacy proceed_to_dream and stays on current step", () => {
   const s = makeState({
     current_step: STEP_0_ID,
     intro_shown_session: "true",
@@ -62,15 +61,13 @@ test("orchestrate: proceed_to_dream overrides routing to Dream specialist", () =
 
   const d = orchestrate({ state: s, userMessage: "" });
 
-  assert.equal(d.current_step, DREAM_STEP_ID);
-  assert.equal(d.specialist_to_call, DREAM_SPECIALIST);
-
-  // step intro should show if dream intro not shown yet
-  assert.equal(d.show_step_intro, "true");
+  assert.equal(d.current_step, STEP_0_ID);
+  assert.equal(d.specialist_to_call, STEP_0_SPECIALIST);
+  assert.equal(d.show_step_intro, "false");
   assert.equal(d.show_session_intro, "false");
 });
 
-test("orchestrate: proceed_to_purpose overrides routing to Purpose specialist", () => {
+test("orchestrate: ignores legacy proceed_to_purpose and stays on current step", () => {
   const s = makeState({
     current_step: "dream",
     intro_shown_session: "true",
@@ -82,8 +79,8 @@ test("orchestrate: proceed_to_purpose overrides routing to Purpose specialist", 
 
   const d = orchestrate({ state: s, userMessage: "" });
 
-  assert.equal(d.current_step, "purpose");
-  assert.equal(d.specialist_to_call, "Purpose");
+  assert.equal(d.current_step, "dream");
+  assert.equal(d.specialist_to_call, "Dream");
 });
 
 test("orchestrate: when active_specialist is DreamExplainer and suggest_dreambuilder=true, keep DreamExplainer", () => {
@@ -103,7 +100,7 @@ test("orchestrate: when active_specialist is DreamExplainer and suggest_dreambui
   assert.equal(d.specialist_to_call, "DreamExplainer");
 });
 
-test("orchestrate: handshake start routes to DreamExplainer when in dream and action=CONFIRM & suggest_dreambuilder=true", () => {
+test("orchestrate: no Dream->DreamExplainer handshake on legacy CONFIRM", () => {
   const s = makeState({
     current_step: "dream",
     active_specialist: "Dream",
@@ -117,7 +114,7 @@ test("orchestrate: handshake start routes to DreamExplainer when in dream and ac
   const d = orchestrate({ state: s, userMessage: "" });
 
   assert.equal(d.current_step, "dream");
-  assert.equal(d.specialist_to_call, "DreamExplainer");
+  assert.equal(d.specialist_to_call, "Dream");
 });
 
 test("orchestrate: invalid current_step clamps to step_0", () => {

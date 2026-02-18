@@ -14,8 +14,6 @@ export function intentToActionCode(intent: StepIntent): string {
         : "ACTION_WORDING_PICK_SUGGESTION";
     case "SUBMIT_SCORES":
       return "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES";
-    case "CONFIRM":
-      return requiresStepOrMenuContext(intent.type);
     case "START_EXERCISE":
       return requiresStepOrMenuContext(intent.type);
     case "CONTINUE":

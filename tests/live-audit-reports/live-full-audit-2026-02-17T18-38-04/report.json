@@ -1,0 +1,388 @@
+{
+  "generatedAt": "2026-02-17T18:43:50.605Z",
+  "settleMs": 7000,
+  "scenarios": [
+    {
+      "id": "step0-initial",
+      "description": "Step 0 open state",
+      "ok": true,
+      "issues": [],
+      "finalPrompt": "",
+      "finalCardDesc": "Build a complete Business Model and Strategy Canvas step by step.\n\nThe Proven Standard\nA globally implemented strategy canvas used by teams worldwide, built through Ben Steenstra's unique step-by-step method of questioning and structured development.\n\nBy the end you'll have\nA focused canvas that fits on one page\nA presentation you can use immediately (PPTX)\nA plan your team can align around\nHow it works\nOne question at a time. Clear input, structured output.\n\nTime\nEstimated time: 10–15 minutes.",
+      "finalButtons": [],
+      "logs": [
+        {
+          "index": 1,
+          "label": "Start",
+          "type": "click",
+          "value": "Start the proces with Validation & Business Name",
+          "ok": true,
+          "error": "",
+          "screenshot": "0002-start.png"
+        }
+      ]
+    },
+    {
+      "id": "dream-initial",
+      "description": "Reach Dream",
+      "ok": true,
+      "issues": [],
+      "finalPrompt": "Define the Dream of Mindd or choose an option.",
+      "finalCardDesc": "Vision comes from the Greek visio, meaning to see. A real visionary dreams of a future image before it is obvious. That is why this step is called Dream. A Dream is a desired future image.\n\nThis is not a revenue goal, not a tactic, and not a disguised product or service pitch. It is a human future image that creates emotional resonance. It must be effect-first, not tool-first or execution-first. Please try a first draft. For example: \"Mindd dreams of a world in which creativity in advertising empowers brands to connect with people on a deeper level.\"",
+      "finalButtons": [
+        "Tell me more about why a dream matters",
+        "Do a small exercise that helps to define your dream."
+      ],
+      "logs": [
+        {
+          "index": 1,
+          "label": "Start",
+          "type": "click",
+          "value": "Start the proces with Validation & Business Name",
+          "ok": true,
+          "error": "",
+          "screenshot": "0002-start.png"
+        },
+        {
+          "index": 2,
+          "label": "Step0 business input-try-1",
+          "type": "fill",
+          "value": "Venture: advertising agency | Name: Mindd | Status: existing",
+          "ok": true,
+          "error": "",
+          "screenshot": "0003-step0-business-input-try-1.png"
+        },
+        {
+          "index": 3,
+          "label": "Step0 fallback business input-try-1",
+          "type": "fill",
+          "value": "I run an advertising agency called Mindd",
+          "ok": true,
+          "error": "",
+          "screenshot": "0004-step0-fallback-business-input-try-1.png"
+        },
+        {
+          "index": 4,
+          "label": "Step0 continue to Dream",
+          "type": "click",
+          "value": "Yes, I'm ready. Let's start!",
+          "ok": true,
+          "error": "",
+          "screenshot": "0005-step0-continue-to-dream.png"
+        }
+      ]
+    },
+    {
+      "id": "purpose-initial",
+      "description": "Reach Purpose",
+      "ok": true,
+      "issues": [],
+      "finalPrompt": "Refine the Dream of Mindd or choose an option.",
+      "finalCardDesc": "Your current Dream for Mindd is:\n\nMindd dreams of a world in which businesses thrive by creating genuine connections with people, inspiring trust and growth for everyone involved.",
+      "finalButtons": [
+        "I'm happy with this wording, please continue to step 3 Purpose",
+        "Do a small exercise that helps to define your dream."
+      ],
+      "logs": [
+        {
+          "index": 1,
+          "label": "Start",
+          "type": "click",
+          "value": "Start the proces with Validation & Business Name",
+          "ok": true,
+          "error": "",
+          "screenshot": "0002-start.png"
+        },
+        {
+          "index": 2,
+          "label": "Step0 business input-try-1",
+          "type": "fill",
+          "value": "Venture: advertising agency | Name: Mindd | Status: existing",
+          "ok": true,
+          "error": "",
+          "screenshot": "0003-step0-business-input-try-1.png"
+        },
+        {
+          "index": 3,
+          "label": "Step0 fallback business input-try-1",
+          "type": "fill",
+          "value": "I run an advertising agency called Mindd",
+          "ok": true,
+          "error": "",
+          "screenshot": "0004-step0-fallback-business-input-try-1.png"
+        },
+        {
+          "index": 4,
+          "label": "Step0 continue to Dream",
+          "type": "click",
+          "value": "Yes, I'm ready. Let's start!",
+          "ok": true,
+          "error": "",
+          "screenshot": "0005-step0-continue-to-dream.png"
+        },
+        {
+          "index": 5,
+          "label": "Dream answer-after-fill-wording-suggestion",
+          "type": "click",
+          "value": "#wordingChoicePickSuggestion",
+          "ok": true,
+          "error": "",
+          "screenshot": "0006-dream-answer-after-fill-wording-suggestion.png"
+        },
+        {
+          "index": 6,
+          "label": "Dream answer-try-1",
+          "type": "fill",
+          "value": "A world where businesses thrive.",
+          "ok": true,
+          "error": "",
+          "screenshot": "0007-dream-answer-try-1.png"
+        },
+        {
+          "index": 7,
+          "label": "Dream continue to Purpose",
+          "type": "click",
+          "value": "I'm happy with this wording, please continue to step 3 Purpose",
+          "ok": true,
+          "error": "",
+          "screenshot": "0008-dream-continue-to-purpose.png"
+        }
+      ]
+    },
+    {
+      "id": "bigwhy-initial",
+      "description": "Reach Big Why",
+      "ok": true,
+      "issues": [],
+      "finalPrompt": "Share your thoughts or choose an option.",
+      "finalCardDesc": "Many companies have a 'Why' statement that sounds good on a website, but the real Big Why goes deeper. It’s the internal, sometimes raw reason that sits above the Dream and Purpose—your true roof. The Dream is your desired future image; the Purpose is why that Dream matters to you and your business. The Big Why is the deeper, universal meaning-layer: the 'should-be-true' about people or the world that makes the Dream and Purpose feel urgent and worth sacrifice. This is not a marketing slogan or a value label; it’s the backbone that guides tough choices, even when nobody is watching. It doesn’t need to be shared publicly—sometimes it’s better if it isn’t. What matters is that it’s honest and strong enough to guide you when things get tough.\n\nReady to explore your Big Why? You can start now or get more explanation first.",
+      "finalButtons": [
+        "Give me an example of the Big Why",
+        "Explain the importance of a Big Why"
+      ],
+      "logs": [
+        {
+          "index": 1,
+          "label": "Start",
+          "type": "click",
+          "value": "Start the proces with Validation & Business Name",
+          "ok": true,
+          "error": "",
+          "screenshot": "0002-start.png"
+        },
+        {
+          "index": 2,
+          "label": "Step0 business input-try-1",
+          "type": "fill",
+          "value": "Venture: advertising agency | Name: Mindd | Status: existing",
+          "ok": true,
+          "error": "",
+          "screenshot": "0003-step0-business-input-try-1.png"
+        },
+        {
+          "index": 3,
+          "label": "Step0 fallback business input-try-1",
+          "type": "fill",
+          "value": "I run an advertising agency called Mindd",
+          "ok": true,
+          "error": "",
+          "screenshot": "0004-step0-fallback-business-input-try-1.png"
+        },
+        {
+          "index": 4,
+          "label": "Step0 continue to Dream",
+          "type": "click",
+          "value": "Yes, I'm ready. Let's start!",
+          "ok": true,
+          "error": "",
+          "screenshot": "0005-step0-continue-to-dream.png"
+        },
+        {
+          "index": 5,
+          "label": "Dream answer-after-fill-wording-suggestion",
+          "type": "click",
+          "value": "#wordingChoicePickSuggestion",
+          "ok": true,
+          "error": "",
+          "screenshot": "0006-dream-answer-after-fill-wording-suggestion.png"
+        },
+        {
+          "index": 6,
+          "label": "Dream answer-try-1",
+          "type": "fill",
+          "value": "A world where businesses thrive.",
+          "ok": true,
+          "error": "",
+          "screenshot": "0007-dream-answer-try-1.png"
+        },
+        {
+          "index": 7,
+          "label": "Dream continue to Purpose",
+          "type": "click",
+          "value": "I'm happy with this wording, please continue to step 3 Purpose",
+          "ok": true,
+          "error": "",
+          "screenshot": "0008-dream-continue-to-purpose.png"
+        },
+        {
+          "index": 8,
+          "label": "Purpose answer-after-fill-wording-suggestion",
+          "type": "click",
+          "value": "#wordingChoicePickSuggestion",
+          "ok": true,
+          "error": "",
+          "screenshot": "0009-purpose-answer-after-fill-wording-suggestion.png"
+        },
+        {
+          "index": 9,
+          "label": "Purpose answer-try-1",
+          "type": "fill",
+          "value": "We help companies grow.",
+          "ok": true,
+          "error": "",
+          "screenshot": "0010-purpose-answer-try-1.png"
+        },
+        {
+          "index": 10,
+          "label": "Purpose continue to Big Why",
+          "type": "click",
+          "value": "I'm happy with this wording, please continue to next step Big Why.",
+          "ok": true,
+          "error": "",
+          "screenshot": "0011-purpose-continue-to-big-why.png"
+        }
+      ]
+    },
+    {
+      "id": "role-initial",
+      "description": "Reach Role",
+      "ok": true,
+      "issues": [],
+      "finalPrompt": "Define the Role of Mindd or choose an option.",
+      "finalCardDesc": "Let's get clear on your Role. Your Role is the chosen position that translates your Dream, Purpose, and Big Why into a consistent contribution. It's not about titles, tasks, or services, but about the stance your business takes in the world.\n\nA clear Role creates consequences: it makes it easier to say no, reduces randomness, and gives your business a stronger backbone. Your Role is about contribution, not completion, because your Dream can remain bigger than your company. If you're ever unsure, remember that activity is execution, while your Role is the stable position and effect that stays true even when tactics change. I'll help you find the right Role for Mindd. Ready to get started?",
+      "finalButtons": [
+        "Give 3 short Role examples",
+        "Explain why a Role matters"
+      ],
+      "logs": [
+        {
+          "index": 1,
+          "label": "Start",
+          "type": "click",
+          "value": "Start the proces with Validation & Business Name",
+          "ok": true,
+          "error": "",
+          "screenshot": "0002-start.png"
+        },
+        {
+          "index": 2,
+          "label": "Step0 business input-try-1",
+          "type": "fill",
+          "value": "Venture: advertising agency | Name: Mindd | Status: existing",
+          "ok": true,
+          "error": "",
+          "screenshot": "0003-step0-business-input-try-1.png"
+        },
+        {
+          "index": 3,
+          "label": "Step0 fallback business input-try-1",
+          "type": "fill",
+          "value": "I run an advertising agency called Mindd",
+          "ok": true,
+          "error": "",
+          "screenshot": "0004-step0-fallback-business-input-try-1.png"
+        },
+        {
+          "index": 4,
+          "label": "Step0 continue to Dream",
+          "type": "click",
+          "value": "Yes, I'm ready. Let's start!",
+          "ok": true,
+          "error": "",
+          "screenshot": "0005-step0-continue-to-dream.png"
+        },
+        {
+          "index": 5,
+          "label": "Dream answer-after-fill-wording-suggestion",
+          "type": "click",
+          "value": "#wordingChoicePickSuggestion",
+          "ok": true,
+          "error": "",
+          "screenshot": "0006-dream-answer-after-fill-wording-suggestion.png"
+        },
+        {
+          "index": 6,
+          "label": "Dream answer-try-1",
+          "type": "fill",
+          "value": "A world where businesses thrive.",
+          "ok": true,
+          "error": "",
+          "screenshot": "0007-dream-answer-try-1.png"
+        },
+        {
+          "index": 7,
+          "label": "Dream continue to Purpose",
+          "type": "click",
+          "value": "I'm happy with this wording, please continue to step 3 Purpose",
+          "ok": true,
+          "error": "",
+          "screenshot": "0008-dream-continue-to-purpose.png"
+        },
+        {
+          "index": 8,
+          "label": "Purpose answer-after-fill-wording-suggestion",
+          "type": "click",
+          "value": "#wordingChoicePickSuggestion",
+          "ok": true,
+          "error": "",
+          "screenshot": "0009-purpose-answer-after-fill-wording-suggestion.png"
+        },
+        {
+          "index": 9,
+          "label": "Purpose answer-try-1",
+          "type": "fill",
+          "value": "We help companies grow.",
+          "ok": true,
+          "error": "",
+          "screenshot": "0010-purpose-answer-try-1.png"
+        },
+        {
+          "index": 10,
+          "label": "Purpose continue to Big Why",
+          "type": "click",
+          "value": "I'm happy with this wording, please continue to next step Big Why.",
+          "ok": true,
+          "error": "",
+          "screenshot": "0011-purpose-continue-to-big-why.png"
+        },
+        {
+          "index": 11,
+          "label": "Big Why answer-after-fill-wording-suggestion",
+          "type": "click",
+          "value": "#wordingChoicePickSuggestion",
+          "ok": true,
+          "error": "",
+          "screenshot": "0012-big-why-answer-after-fill-wording-suggestion.png"
+        },
+        {
+          "index": 12,
+          "label": "Big Why answer-try-1",
+          "type": "fill",
+          "value": "Because growth matters.",
+          "ok": true,
+          "error": "",
+          "screenshot": "0013-big-why-answer-try-1.png"
+        },
+        {
+          "index": 13,
+          "label": "Big Why continue to Role",
+          "type": "click",
+          "value": "I'm happy with this wording, continue to step 5 Role",
+          "ok": true,
+          "error": "",
+          "screenshot": "0014-big-why-continue-to-role.png"
+        }
+      ]
+    }
+  ]
+}

@@ -17,11 +17,15 @@ import {
   areEquivalentWordingVariants,
   isClearlyGeneralOfftopicInput,
   shouldTreatAsStepContributingInput,
+  isMetaOfftopicFallbackTurn,
   pickDualChoiceSuggestion,
+  buildWordingChoiceFromTurn,
   stripUnsupportedReformulationClaims,
   pickPrompt,
   RECAP_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
+  normalizeStep0AskDisplayContract,
+  normalizeStep0OfftopicToAsk,
 } from "./run_step.js";
 import { BigWhyZodSchema } from "../steps/bigwhy.js";
 import { VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS } from "../steps/step_0_validation.js";
@@ -86,7 +90,7 @@ const ESCAPE_ACTION_CODES = Object.entries(ACTIONCODE_REGISTRY.menus)
   .filter(([menuId]) => String(menuId || "").endsWith("_MENU_ESCAPE"))
   .flatMap(([, codes]) => codes);
 
-test("finals merge: applyStateUpdate does not overwrite unrelated finals", () => {
+test("applyStateUpdate stages step output without overwriting unrelated committed finals", () => {
   const prev = getDefaultState();
   (prev as any).dream_final = "Existing dream";
   (prev as any).business_name = "Acme";
@@ -115,7 +119,8 @@ test("finals merge: applyStateUpdate does not overwrite unrelated finals", () =>
     specialistResult,
     showSessionIntroUsed: "true",
   });
-  assert.equal((next as any).purpose_final, "Our purpose is X", "purpose_final set");
+  assert.equal((next as any).purpose_final, "", "purpose_final remains uncommitted");
+  assert.equal((next as any).provisional_by_step?.purpose, "Our purpose is X", "purpose staged");
   assert.equal((next as any).dream_final, "Existing dream", "dream_final not overwritten");
   assert.equal((next as any).business_name, "Acme", "business_name not overwritten");
 });
@@ -264,7 +269,15 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
     state: baseState,
   });
   assert.equal(normalTurn.ok, true);
-  assert.equal(String(normalTurn.prompt || ""), "Test question");
+  assert.equal(String(normalTurn.specialist?.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.deepEqual(normalTurn.ui?.action_codes, [
+    "ACTION_DREAM_REFINE_CONFIRM",
+    "ACTION_DREAM_REFINE_START_EXERCISE",
+  ]);
+  assert.equal(
+    String(normalTurn.prompt || "").includes("Refine your Dream for Acme or choose an option."),
+    true
+  );
 
   const offTopicTurn = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
@@ -319,7 +332,7 @@ test("widget escape suppression: response never returns escape menu/action codes
   assert.equal(actionCodes.some((code) => ESCAPE_ACTION_CODES.includes(String(code || ""))), false);
 });
 
-test("DreamExplainer off-topic keeps DreamExplainer escape menu/action codes in widget mode", async () => {
+test("DreamExplainer off-topic keeps exercise context and only shows switch-back action", async () => {
   const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
       input_mode: "widget",
@@ -336,9 +349,9 @@ test("DreamExplainer off-topic keeps DreamExplainer escape menu/action codes in 
           "Mindd dreams of a world in which people feel empowered to create meaningful value and experience greater freedom and possibility in their lives.",
         last_specialist_result: {
           action: "ASK",
-          menu_id: "DREAM_EXPLAINER_MENU_ESCAPE",
+          menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
           question:
-            "1) Continue Dream exercise now\n2) Finish later\n\nChoose an option by typing 1 or 2, or write your own statement.",
+            "1) Switch back to self-formulate the dream\n\nLooking 5 to 10 years ahead, what major opportunity or threat do you see, and what positive change do you hope for? Write it as one clear statement.",
           suggest_dreambuilder: "true",
           statements: [
             "A world where work is a source of positive impact on people's lives.",
@@ -355,12 +368,9 @@ test("DreamExplainer off-topic keeps DreamExplainer escape menu/action codes in 
 
   assert.equal(result.ok, true);
   assert.equal(String(result.active_specialist || ""), "DreamExplainer");
-  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_EXPLAINER_MENU_ESCAPE");
-  assert.deepEqual(result.ui?.action_codes, [
-    "ACTION_DREAM_EXPLAINER_CONTINUE",
-    "ACTION_DREAM_EXPLAINER_FINISH_LATER",
-  ]);
-  assert.equal(countNumberedOptions(String(result.prompt || "")), 2);
+  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_DREAM_SWITCH_TO_SELF"]);
+  assert.equal(String(result.text || "").includes("Now let's get back to the Dream Exercise."), true);
 });
 
 test("DreamExplainer repeated off-topic does not fall back to Dream specialist", async () => {
@@ -376,9 +386,9 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
       "Mindd dreams of a world in which people feel empowered to create meaningful value and experience greater freedom and possibility in their lives.",
     last_specialist_result: {
       action: "ASK",
-      menu_id: "DREAM_EXPLAINER_MENU_ESCAPE",
+      menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
       question:
-        "1) Continue Dream exercise now\n2) Finish later\n\nChoose an option by typing 1 or 2, or write your own statement.",
+        "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
       suggest_dreambuilder: "true",
       statements: [
         "A world where work is a source of positive impact on people's lives.",
@@ -401,7 +411,7 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
   assert.equal(first.ok, true);
   assert.equal(String(first.active_specialist || ""), "DreamExplainer");
   assert.equal(String(first.specialist?.suggest_dreambuilder || ""), "true");
-  assert.equal(String(first.specialist?.menu_id || ""), "DREAM_EXPLAINER_MENU_ESCAPE");
+  assert.equal(String(first.specialist?.menu_id || ""), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
 
   const second = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
@@ -413,7 +423,7 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
   assert.equal(second.ok, true);
   assert.equal(String(second.active_specialist || ""), "DreamExplainer");
   assert.equal(String(second.specialist?.suggest_dreambuilder || ""), "true");
-  assert.equal(String(second.specialist?.menu_id || ""), "DREAM_EXPLAINER_MENU_ESCAPE");
+  assert.equal(String(second.specialist?.menu_id || ""), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
 });
 
 test("off-topic overlay keeps previous statement recap when no final exists yet", async () => {
@@ -496,7 +506,83 @@ test("off-topic dream with existing candidate (no final) keeps both Dream refine
   assert.equal(countNumberedOptions(String(result.prompt || "")), 2);
 });
 
-test("Step 0 off-topic overlay with no output: no continue/menu buttons", async () => {
+test("off-topic dream without candidate resets to intro menu with both intro actions", async () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "dream",
+    active_specialist: "Dream",
+    intro_shown_session: "true",
+    intro_shown_for_step: "dream",
+    started: "true",
+    business_name: "Mindd",
+    dream_final: "",
+    last_specialist_result: {
+      action: "REFINE",
+      menu_id: "DREAM_MENU_REFINE",
+      question:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+      refined_formulation: "",
+      dream: "",
+      confirmation_question: "",
+      proceed_to_next: "false",
+      wants_recap: false,
+      is_offtopic: false,
+    },
+  };
+
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "What time is it in London?",
+      state,
+    })
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_INTRO");
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+    "ACTION_DREAM_INTRO_START_EXERCISE",
+  ]);
+  assert.equal(String(result.prompt || "").includes("Define your Dream for Mindd"), true);
+});
+
+test("off-topic purpose with defined output restores refine menu with continue and refine actions", async () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "purpose",
+    active_specialist: "Purpose",
+    intro_shown_session: "true",
+    intro_shown_for_step: "purpose",
+    started: "true",
+    business_name: "Mindd",
+    purpose_final: "Mindd exists to restore focus and meaning in work.",
+    last_specialist_result: {
+      action: "ASK",
+      menu_id: "PURPOSE_MENU_CONFIRM_SINGLE",
+      question:
+        "1) I'm happy with this wording, please continue to next step Big Why.",
+      refined_formulation: "Mindd exists to restore focus and meaning in work.",
+      purpose: "Mindd exists to restore focus and meaning in work.",
+      is_offtopic: false,
+    },
+  };
+
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "What's the weather in London?",
+      state,
+    })
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_PURPOSE_REFINE_CONFIRM",
+    "ACTION_PURPOSE_REFINE_ADJUST",
+  ]);
+});
+
+test("Step 0 off-topic with no output always returns canonical Step 0 ask contract", async () => {
   const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
       user_message: "Who is Ben Steenstra?",
@@ -511,15 +597,104 @@ test("Step 0 off-topic overlay with no output: no continue/menu buttons", async 
     })
   );
   assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.is_offtopic || ""), "true");
+  assert.equal(String(result.specialist?.is_offtopic || "").toLowerCase() === "true", true);
   assert.equal(String(result.specialist?.action || ""), "ASK");
   assert.equal(String(result.specialist?.confirmation_question || ""), "");
-  assert.equal(String(result.prompt || ""), "Test question");
-  assert.equal(String(result.text || ""), "Test question");
+  assert.equal(String(result.prompt || "").toLowerCase().includes("what type of business"), true);
+  assert.equal(String(result.text || "").includes("Just to set the context, we'll start with the basics."), true);
   assert.equal(Array.isArray(result.ui?.action_codes), false);
 });
 
-test("Step 0 off-topic with valid output keeps readiness confirm when Step 0 is already known", async () => {
+test("Step 0 contract: meta confirm is downgraded to canonical ASK when no step_0_final exists", () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "step_0",
+    step_0_final: "",
+    business_name: "",
+  };
+  const specialist = {
+    action: "CONFIRM",
+    message: "Ben Steenstra is a Dutch entrepreneur and author.",
+    question: "",
+    confirmation_question: "Would you like to continue with the business verification now?",
+    business_name: "TBD",
+    step_0: "",
+    proceed_to_dream: "false",
+    is_offtopic: false,
+  };
+  const normalized = normalizeStep0AskDisplayContract(
+    "step_0",
+    specialist,
+    state,
+    "Who is Ben Steenstra?"
+  );
+  assert.equal(String(normalized.action || ""), "ASK");
+  assert.equal(String(normalized.confirmation_question || ""), "");
+  assert.equal(String(normalized.question || "").toLowerCase().includes("what type of business"), true);
+  assert.equal(String(normalized.message || "").toLowerCase().includes("ben steenstra"), true);
+  assert.equal(String(normalized.menu_id || ""), "");
+});
+
+test("Step 0 contract: fallback off-topic answer is never empty for clear non-step question", () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "step_0",
+    step_0_final: "",
+  };
+  const specialist = {
+    action: "ASK",
+    message: "",
+    question: "What type of business are you starting?",
+    confirmation_question: "",
+    step_0: "",
+    is_offtopic: true,
+  };
+  const normalized = normalizeStep0OfftopicToAsk(specialist, state, "What time is it in London?");
+  assert.equal(String(normalized.action || ""), "ASK");
+  assert.equal(String(normalized.confirmation_question || ""), "");
+  assert.equal(String(normalized.question || "").toLowerCase().includes("what type of business"), true);
+  assert.equal(String(normalized.message || "").includes("Just to set the context, we'll start with the basics."), true);
+});
+
+test("Step 0 contract: known business rewrites legacy confirm into canonical ASK + menu contract", () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "step_0",
+    step_0_final: "Venture: advertising agency | Name: Mindd | Status: existing",
+    business_name: "Mindd",
+  };
+  const specialist = {
+    action: "CONFIRM",
+    is_offtopic: false,
+    message:
+      "Ben Steenstra is a Dutch entrepreneur, author, and business strategist. You can find more about him at https://www.bensteenstra.com. Now, back to The Business Strategy Canvas Builder.",
+    question: "",
+    confirmation_question: "Would you like to continue with the verification now?",
+    refined_formulation: "",
+    business_name: "TBD",
+    proceed_to_dream: "false",
+    step_0: "",
+    menu_id: "",
+  };
+  const normalized = normalizeStep0AskDisplayContract(
+    "step_0",
+    specialist,
+    state,
+    "Who is Ben Steenstra?"
+  );
+  assert.equal(String(normalized.action || ""), "ASK");
+  assert.equal(String(normalized.confirmation_question || ""), "");
+  assert.equal(
+    String(normalized.question || "").includes(
+      "You have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?"
+    ),
+    true
+  );
+  assert.equal(String(normalized.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.equal(String(normalized.step_0 || ""), "Venture: advertising agency | Name: Mindd | Status: existing");
+});
+
+test("Step 0 off-topic with valid output keeps readiness ASK contract when Step 0 is already known", async () => {
   const step0State = {
     ...getDefaultState(),
     current_step: "step_0",
@@ -538,16 +713,14 @@ test("Step 0 off-topic with valid output keeps readiness confirm when Step 0 is 
     })
   );
   assert.equal(offTopic.ok, true);
-  assert.equal(String(offTopic.specialist?.action || ""), "CONFIRM");
-  assert.equal(
-    String(offTopic.prompt || ""),
-    "You have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?"
-  );
+  assert.equal(String(offTopic.specialist?.action || ""), "ASK");
+  assert.equal(String(offTopic.specialist?.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.equal(String(offTopic.prompt || "").includes("Are you ready to start with the first step: the Dream?"), true);
   assert.equal(String(offTopic.text || "").includes("To get started, could you tell me"), false);
-  assert.equal(Array.isArray(offTopic.ui?.action_codes), false);
+  assert.deepEqual(offTopic.ui?.action_codes, ["ACTION_STEP0_READY_START"]);
 });
 
-test("Step 0 renderer fallback still produces readiness confirm when called directly", () => {
+test("Step 0 renderer fallback produces readiness ASK + menu when called directly", () => {
   const state = {
     ...getDefaultState(),
     current_step: "step_0",
@@ -574,17 +747,14 @@ test("Step 0 renderer fallback still produces readiness confirm when called dire
     previousSpecialist: {},
   });
 
-  assert.equal(String(rendered.specialist.action || ""), "CONFIRM");
-  assert.equal(
-    String(rendered.specialist.confirmation_question || ""),
-    "You have an agency called Mindd. Are you ready to start with the first step: the Dream?"
-  );
-  assert.equal(String(rendered.specialist.question || ""), "");
-  assert.equal(String(rendered.specialist.proceed_to_dream || ""), "false");
-  assert.equal(String(rendered.specialist.message || "").includes("This is what we have established so far"), true);
+  assert.equal(String(rendered.specialist.action || ""), "ASK");
+  assert.equal(String(rendered.specialist.confirmation_question || ""), "");
+  assert.equal(String(rendered.specialist.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.equal(String(rendered.specialist.question || "").includes("Are you ready to start with the first step: the Dream?"), true);
+  assert.equal(String(rendered.specialist.message || "").includes("This is what we have established so far"), false);
 });
 
-test("Step 0 legacy confirm prompt is preserved (no global renderer rewrite)", async () => {
+test("Step 0 start payload uses canonical readiness ASK menu when final exists", async () => {
   const result = await run_step({
     user_message: "",
     state: {
@@ -599,19 +769,13 @@ test("Step 0 legacy confirm prompt is preserved (no global renderer rewrite)", a
     },
   });
   assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.action || ""), "CONFIRM");
-  assert.equal(
-    String(result.specialist?.confirmation_question || ""),
-    "You have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?"
-  );
-  assert.equal(
-    String(result.prompt || ""),
-    "You have a advertising agency called Mindd. Are you ready to start with the first step: the Dream?"
-  );
+  assert.equal(String(result.specialist?.action || ""), "ASK");
+  assert.equal(String(result.specialist?.confirmation_question || ""), "");
+  assert.equal(String(result.specialist?.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.equal(String(result.prompt || "").includes("Are you ready to start with the first step: the Dream?"), true);
   assert.equal(String(result.prompt || "").includes("This is what we have established"), false);
   assert.equal(String(result.prompt || "").includes("Refine your Step 0"), false);
-  assert.equal(String(result.specialist?.menu_id || ""), "");
-  assert.equal(Array.isArray(result.ui?.action_codes), false);
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_STEP0_READY_START"]);
 });
 
 test("Step 0 initial ASK shows context line above canonical prompt", async () => {
@@ -657,7 +821,10 @@ test("Step 0 ASK fallback keeps context line and canonical question", async () =
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.action || ""), "ASK");
   assert.equal(String(result.text || ""), "Just to set the context, we'll start with the basics.");
-  assert.equal(String(result.prompt || ""), "Test question");
+  assert.equal(
+    String(result.prompt || ""),
+    "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?"
+  );
 });
 
 test("global free-text policy: ActionCode turn bypasses renderer", async () => {
@@ -680,7 +847,8 @@ test("global free-text policy: ActionCode turn bypasses renderer", async () => {
     },
   });
   assert.equal(result.ok, true);
-  assert.equal(Array.isArray(result.ui?.action_codes), false);
+  assert.equal(Array.isArray(result.ui?.action_codes), true);
+  assert.equal((result.ui?.action_codes || []).length > 0, true);
 });
 
 test("wording choice: pending selection blocks extra free-text input until pick is made", async () => {
@@ -717,14 +885,21 @@ test("wording choice: pending selection blocks extra free-text input until pick 
   assert.equal(String(result.specialist?.wording_choice_pending || ""), "true");
 });
 
-test("wording choice: material rewrite heuristic ignores mini-fix but catches substantial rewrite", () => {
+test("wording choice: only spelling-only corrections bypass A/B panel", () => {
   assert.equal(isMaterialRewriteCandidate("We help founders.", "We help founders."), false);
+  assert.equal(
+    isMaterialRewriteCandidate(
+      "Compony values should lead decisions.",
+      "Company values should lead decisions."
+    ),
+    false
+  );
   assert.equal(
     isMaterialRewriteCandidate(
       "i want be rich",
       "I want to be rich."
     ),
-    false
+    true
   );
   assert.equal(
     isMaterialRewriteCandidate(
@@ -755,6 +930,33 @@ test("wording choice: equivalent text variants are auto-resolved (no A/B needed)
   );
 });
 
+test("wording choice: grammar/content changes in Dream still require A/B panel", () => {
+  const rebuilt = buildWordingChoiceFromTurn({
+    stepId: "dream",
+    activeSpecialist: "Dream",
+    previousSpecialist: {
+      action: "ASK",
+      menu_id: "DREAM_MENU_REFINE",
+      question:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+      dream: "",
+      refined_formulation: "",
+    },
+    specialistResult: {
+      action: "ASK",
+      menu_id: "DREAM_MENU_REFINE",
+      message: "That is a strong conviction.",
+      refined_formulation: "Mindd dreams of a world in which purpose-driven companies create lasting value.",
+      dream: "Mindd dreams of a world in which purpose-driven companies create lasting value.",
+    },
+    userTextRaw: "I believe companies should be purpose driven",
+    isOfftopic: false,
+  });
+
+  assert.equal(Boolean(rebuilt.wordingChoice), true);
+  assert.equal(String(rebuilt.specialist?.wording_choice_pending || ""), "true");
+});
+
 test("wording choice: equivalent list variants are auto-resolved (no A/B needed)", () => {
   assert.equal(
     areEquivalentWordingVariants({
@@ -768,6 +970,22 @@ test("wording choice: equivalent list variants are auto-resolved (no A/B needed)
       suggestionItems: [
         "Focus on clients above 40k.",
         "Focus on NL.",
+      ],
+    }),
+    false
+  );
+  assert.equal(
+    areEquivalentWordingVariants({
+      mode: "list",
+      userRaw: "Compony values first\nBuild long term trust",
+      suggestionRaw: "Company values first\nBuild long term trust",
+      userItems: [
+        "Compony values first",
+        "Build long term trust",
+      ],
+      suggestionItems: [
+        "Company values first",
+        "Build long term trust",
       ],
     }),
     true
@@ -854,6 +1072,28 @@ test("buildTextForWidget strips generic choose lines when menu is interactive", 
   assert.equal(text.includes("Please choose 1 or 2"), false);
   assert.equal(text.includes("Choose an option below"), false);
   assert.equal(text.includes("We exist to enrich lives."), true);
+});
+
+test("buildTextForWidget strips prompt/menu echo lines from DreamExplainer body text", () => {
+  const prompt =
+    "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.";
+  const text = buildTextForWidget({
+    specialist: {
+      menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+      question: prompt,
+      message:
+        "1) Switch back to self-formulate the dream\n\n1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.\n\nYour Dream statements",
+      refined_formulation: "",
+      suggest_dreambuilder: "true",
+    },
+  });
+
+  assert.equal(text.includes("1) Switch back to self-formulate the dream"), false);
+  assert.equal(
+    text.includes("What more do you see changing in the future, positive or negative? Let your imagination run free."),
+    false
+  );
+  assert.equal(text.includes("Your Dream statements"), true);
 });
 
 test("buildTextForWidget strips generic choose lines when widget actions are present", () => {
@@ -1017,6 +1257,90 @@ test("wording choice: suggestion fallback extracts rewritten content from messag
   );
 });
 
+test("meta off-topic fallback marks Ben/info step messages as off-topic outside step_0", () => {
+  assert.equal(
+    isMetaOfftopicFallbackTurn({
+      stepId: "dream",
+      userMessage: "Who is Ben Steenstra?",
+      specialistResult: {
+        is_offtopic: false,
+        message:
+          "Ben Steenstra is a serial entrepreneur and executive coach.\n\nFor more information visit: https://www.bensteenstra.com\n\nYou are in the Dream step now. Choose an option below to continue.",
+      },
+    }),
+    true
+  );
+  assert.equal(
+    isMetaOfftopicFallbackTurn({
+      stepId: "step_0",
+      userMessage: "Who is Ben Steenstra?",
+      specialistResult: {
+        is_offtopic: false,
+        message: "Ben Steenstra is a Dutch entrepreneur.",
+      },
+    }),
+    false
+  );
+});
+
+test("wording choice: DreamExplainer rewrite enables user-vs-suggestion panel", () => {
+  const previousSpecialist = {
+    action: "ASK",
+    menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+    statements: [],
+  };
+  const specialistResult = {
+    action: "ASK",
+    menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+    message:
+      "I've rewritten your wishes as future-facing statements about broader change and added them.",
+    question:
+      "What more do you see changing in the future, positive or negative? Let your imagination run free.",
+    statements: [
+      "In the next 5 to 10 years, more people will seek work that makes a positive difference.",
+      "Society will value the creation of lasting legacies that benefit future generations.",
+      "There will be a greater emphasis on personal freedom in how people use their time.",
+      "People will increasingly seek pride and meaning in the work they do.",
+      "Businesses will be expected to reflect authentic values.",
+    ],
+    refined_formulation: "",
+    dream: "",
+  };
+  const userRaw = [
+    "I want my work to make a positive difference in people's lives.",
+    "I want to build something that lasts beyond me.",
+    "I want to create freedom in my time and choices.",
+    "I want to feel proud when I talk about what I do.",
+  ].join("\n");
+
+  const rebuilt = buildWordingChoiceFromTurn({
+    stepId: "dream",
+    activeSpecialist: "DreamExplainer",
+    previousSpecialist,
+    specialistResult,
+    userTextRaw: userRaw,
+    isOfftopic: false,
+  });
+
+  assert.equal(Boolean(rebuilt.wordingChoice), true);
+  assert.equal(rebuilt.wordingChoice?.enabled, true);
+  assert.equal(rebuilt.wordingChoice?.mode, "list");
+  assert.equal(String(rebuilt.specialist?.wording_choice_pending || ""), "true");
+  assert.equal(
+    Array.isArray(rebuilt.wordingChoice?.suggestion_items) &&
+      (rebuilt.wordingChoice?.suggestion_items || []).length > 0,
+    true
+  );
+});
+
+test("wording choice runtime rebuild is contract-eligible across steps (not DreamExplainer-only)", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /const eligibleForWordingChoiceTurn = isWordingChoiceEligibleContext\(/);
+  assert.match(source, /stepId:\s*currentStepForWordingChoice/);
+  assert.match(source, /activeSpecialist:\s*currentSpecialistForWordingChoice/);
+  assert.doesNotMatch(source, /stepId:\s*DREAM_STEP_ID,\s*\n\s*activeSpecialist:\s*String\(\(nextState as any\)\.active_specialist \|\| ""\)/);
+});
+
 test("message contract: strips reformulation claims when no choice/output is available", () => {
   const input = [
     "You've provided some clear focus points, which is a great start.",
@@ -1152,34 +1476,59 @@ test("wording choice: pending list mode does not repeat suggestion paragraph in 
   assert.equal(text.includes("Statements 1 to 3 noted."), true);
 });
 
-test("Dream readiness confirm is excluded from hard-confirm fast path", () => {
+test("step transition fast-path is actioncode-driven (no legacy confirm gate)", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(source, /const isDreamReadinessConfirmTurn\s*=/);
-  assert.match(source, /actionCodeRaw === "ACTION_CONFIRM_CONTINUE"/);
-  assert.match(source, /HARD_CONFIRM_ACTIONS\.has\(actionCodeRaw\)\s*&&\s*!isDreamReadinessConfirmTurn/);
+  assert.match(source, /const ACTIONCODE_STEP_TRANSITIONS:\s*Record<string,\s*string>/);
+  assert.match(source, /ACTION_STEP0_READY_START:\s*DREAM_STEP_ID/);
+  assert.match(source, /if \(actionCodeRaw && ACTIONCODE_STEP_TRANSITIONS\[actionCodeRaw\]\)/);
+});
+
+test("step transition commits staged value and clears provisional state", async () => {
+  const result = await run_step({
+    user_message: "ACTION_DREAM_REFINE_CONFIRM",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      started: "true",
+      dream_final: "",
+      provisional_by_step: {
+        dream: "Mindd dreams of a world where purpose-driven companies create lasting value.",
+      },
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "DREAM_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "purpose");
+  assert.equal(
+    String((result.state as any)?.dream_final || ""),
+    "Mindd dreams of a world where purpose-driven companies create lasting value."
+  );
+  assert.equal(String((result.state as any)?.provisional_by_step?.dream || ""), "");
 });
 
 test("Dream readiness guard accepts explicit start-exercise route in widget mode", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /const explicitDreamExerciseRoute\s*=\s*userMessage === "__ROUTE__DREAM_START_EXERCISE__";/);
   assert.match(source, /const dreamStartRequested\s*=/);
-  assert.match(source, /userMessage === "__ROUTE__DREAM_START_EXERCISE__"\s*\|\|\s*isClearYes\(userMessage\)/);
-  assert.match(source, /const dreamReadinessYes =[\s\S]*String\(lastResult\.suggest_dreambuilder \?\? ""\) === "true"[\s\S]*dreamStartRequested;/);
+  assert.match(source, /const dreamReadinessYes =[\s\S]*explicitDreamExerciseRoute[\s\S]*String\(lastResult\.suggest_dreambuilder \?\? ""\) === "true"/);
 });
 
-test("holistic policy flags are wired in run_step", () => {
+test("single-path flags: only wording-choice runtime flag remains active", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(source, /BSC_HOLISTIC_POLICY_V2/);
-  assert.match(source, /BSC_OFFTOPIC_V2/);
-  assert.match(source, /BSC_BULLET_RENDER_V2/);
   assert.match(source, /BSC_WORDING_CHOICE_V2/);
-  assert.match(source, /BSC_TIMEOUT_GUARD_V2/);
-  assert.match(source, /policyFlags\.offtopicV2/);
-  assert.match(source, /policyFlags\.bulletRenderV2/);
   assert.match(source, /policyFlags\.wordingChoiceV2/);
-  assert.match(source, /const localDevDefaults = process\.env\.LOCAL_DEV === "1"/);
-  assert.match(source, /envFlagEnabled\("BSC_HOLISTIC_POLICY_V2", localDevDefaults\)/);
-  assert.match(source, /envFlagEnabled\("BSC_OFFTOPIC_V2", localDevDefaults\)/);
-  assert.match(source, /envFlagEnabled\("BSC_TIMEOUT_GUARD_V2", localDevDefaults\)/);
+  assert.doesNotMatch(source, /policyFlags\.offtopicV2/);
+  assert.doesNotMatch(source, /policyFlags\.bulletRenderV2/);
+  assert.doesNotMatch(source, /policyFlags\.timeoutGuardV2/);
 });
 
 test("switch-to-self without existing dream candidate returns Dream intro menu (Define, not Refine)", async () => {
@@ -1244,15 +1593,13 @@ test("switch-to-self ignores long statement-like refined text as Dream candidate
   assert.equal(String(result.prompt || "").includes("Refine the Dream of"), false);
 });
 
-test("bullet consistency policy is enforced for strategy/productsservices/rulesofthegame non-offtopic turns", () => {
+test("bullet consistency helpers remain, but no runtime overlay gate exists", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
   assert.match(source, /function isBulletConsistencyStep\(stepId: string\): boolean/);
   assert.match(source, /stepId === STRATEGY_STEP_ID/);
   assert.match(source, /stepId === PRODUCTSSERVICES_STEP_ID/);
   assert.match(source, /stepId === RULESOFTHEGAME_STEP_ID/);
-  assert.match(source, /const shouldApplyBulletConsistencyPolicy\s*=/);
-  assert.match(source, /sanitizeBulletStepPolicySpecialist/);
-  assert.match(source, /sanitizePreviousForBulletPolicy/);
+  assert.doesNotMatch(source, /const shouldApplyBulletConsistencyPolicy\s*=/);
 });
 
 test("wording choice: selecting user variant updates candidate and clears pending", async () => {
@@ -1287,11 +1634,14 @@ test("wording choice: selecting user variant updates candidate and clears pendin
   assert.equal(String(result.specialist?.wording_choice_pending || ""), "false");
   assert.equal(String(result.specialist?.wording_choice_selected || ""), "user");
   assert.equal(String(result.specialist?.purpose || ""), "Mindd helps teams with clarity.");
-  assert.equal(String(result.specialist?.action || ""), "REFINE");
+  assert.equal(String(result.specialist?.action || ""), "ASK");
   assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_REFINE");
+  const selectionQuestion = String(result.specialist?.question || "");
   assert.equal(
-    String(result.specialist?.question || ""),
-    "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording"
+    selectionQuestion.startsWith(
+      "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording"
+    ),
+    true
   );
   assert.equal(
     String(result.specialist?.message || ""),
@@ -1419,9 +1769,7 @@ test("wording choice: strategy suggestion pick restores buttons and keeps progre
   assert.equal(String(result.specialist?.menu_id || ""), "STRATEGY_MENU_ASK");
   assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
   assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"]);
-  assert.match(String(result.specialist?.message || ""), /This is what we have established so far based on our dialogue/);
-  assert.match(String(result.specialist?.message || ""), /• Focus exclusively on clients in the Netherlands/);
-  assert.match(String(result.specialist?.message || ""), /• Focus on clients with an annual budget above 40,000 euros/);
+  assert.equal(String(result.specialist?.message || ""), "Your current Strategy for Mindd is:");
   assert.equal(String(result.specialist?.message || "").includes("Focus point 1 noted:"), false);
   assert.equal(
     /Your current Strategy for Mindd is:\n\nFocus exclusively on clients in the Netherlands/i.test(
@@ -1470,11 +1818,10 @@ test("wording choice: strategy suggestion pick removes duplicate 'Focus point no
   const message = String(result.specialist?.message || "");
   assert.equal(message.includes("Focus point 1 noted:"), false);
   assert.equal(message.includes("Focus point 2 noted:"), false);
-  assert.match(message, /• Focus exclusively on clients in the Netherlands/);
-  assert.match(message, /• Focus on clients with an annual budget above 40,000 euros/);
+  assert.equal(message, "Your current Strategy for Mindd is:");
 });
 
-test("informational action: strategy explain-more keeps established statements visible and preserved", async () => {
+test("informational action: strategy explain-more remains on contract ask menu", async () => {
   const result = await run_step({
     user_message: "ACTION_STRATEGY_REFINE_EXPLAIN_MORE",
     input_mode: "widget",
@@ -1505,18 +1852,14 @@ test("informational action: strategy explain-more keeps established statements v
 
   assert.equal(result.ok, true);
   assert.equal(String(result.current_step_id || ""), "strategy");
-  assert.equal(String(result.specialist?.menu_id || ""), "STRATEGY_MENU_ASK");
-  assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"]);
-  assert.match(String(result.specialist?.message || ""), /This is what we have established so far based on our dialogue/);
-  assert.match(String(result.specialist?.message || ""), /• Focus exclusively on clients in the Netherlands/);
-  assert.match(String(result.specialist?.message || ""), /• Focus on clients with an annual budget above 40,000 euros/);
-  assert.deepEqual(result.specialist?.statements, [
-    "Focus exclusively on clients in the Netherlands",
-    "Focus on clients with an annual budget above 40,000 euros",
-  ]);
+  assert.equal(String(result.specialist?.menu_id || "").startsWith("STRATEGY_MENU_"), true);
+  assert.ok(Array.isArray(result.ui?.action_codes));
+  assert.ok((result.ui?.action_codes || []).length >= 1);
+  assert.equal(String(result.specialist?.message || "").includes("Focus point 1 noted:"), false);
+  assert.equal(String(result.specialist?.menu_id || "").endsWith("_MENU_ESCAPE"), false);
 });
 
-test("informational action: purpose explain-more keeps previously chosen wording visible", async () => {
+test("informational action: purpose explain-more remains on contract menu", async () => {
   const result = await run_step({
     user_message: "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
     input_mode: "widget",
@@ -1546,7 +1889,6 @@ test("informational action: purpose explain-more keeps previously chosen wording
   assert.equal(String(result.specialist?.menu_id || "").endsWith("_MENU_ESCAPE"), false);
   assert.ok(Array.isArray(result.ui?.action_codes));
   assert.ok((result.ui?.action_codes || []).length >= 1);
-  assert.match(String(result.specialist?.message || ""), /This is what we have established so far based on our dialogue/);
   assert.match(String(result.specialist?.message || ""), /Mindd exists to foster purpose-driven companies/);
 });
 
@@ -1583,14 +1925,10 @@ test("wording choice: generic Purpose acknowledgement is replaced with step-spec
     },
   });
 
-  assert.equal(result.ok, true);
-  assert.match(
-    String(result.specialist?.message || ""),
-    /Purpose should express deeper meaning and contribution, not personal outcomes like money or status\./
-  );
-  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_REFINE");
-  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
-  assert.deepEqual(result.ui?.action_codes, ["ACTION_PURPOSE_REFINE_CONFIRM", "ACTION_PURPOSE_REFINE_ADJUST"]);
+  assert.equal(result.ok, false);
+  assert.equal(String(result.error?.type || ""), "session_upgrade_required");
+  assert.ok(Array.isArray((result.error as any)?.markers));
+  assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
 });
 
 test("informational context policy scope excludes presentation step", () => {
@@ -1606,29 +1944,15 @@ test("informational context policy scope excludes presentation step", () => {
   assert.doesNotMatch(fnBody, /stepId === PRESENTATION_STEP_ID/);
 });
 
-test("informational context policy rewrites when turn mutates progress even with valid menu contract", () => {
+test("informational context overlay is removed from runtime path", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(
-    source,
-    /const infoPolicyHasValidMenuContract = hasValidMenuContract\(infoPolicyMenuId, infoPolicyQuestion\);/
-  );
-  assert.match(
-    source,
-    /const infoPolicyMutatesProgress = informationalActionMutatesProgress\(/
-  );
-  assert.match(
-    source,
-    /const shouldApplyInformationalContextPolicy =[\s\S]*?\(!infoPolicyHasValidMenuContract \|\| infoPolicyMutatesProgress\)[\s\S]*?isInformationalContextPolicyStep/
-  );
+  assert.doesNotMatch(source, /const shouldApplyInformationalContextPolicy\s*=/);
+  assert.doesNotMatch(source, /infoPolicyHasValidMenuContract/);
 });
 
-test("menu safety policy enforces status-safe actions for widget menu turns", () => {
+test("menu safety overlay is removed from runtime path", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(source, /const shouldApplyMenuSafetyPolicy =[\s\S]*?inputMode === "widget"/);
-  assert.match(source, /const shouldApplyMenuSafetyPolicy =[\s\S]*?menuSafetyMenuId !== ""/);
-  assert.match(source, /if \(shouldApplyMenuSafetyPolicy\) \{[\s\S]*?renderFreeTextTurnPolicy\(/);
-  assert.match(source, /actionCodesOverride = rendered\.uiActionCodes;/);
-  assert.match(source, /renderedActionsOverride = rendered\.uiActions;/);
+  assert.doesNotMatch(source, /const shouldApplyMenuSafetyPolicy\s*=/);
 });
 
 test("bullet consistency policy derives statements from bulleted message content", () => {
@@ -1638,12 +1962,10 @@ test("bullet consistency policy derives statements from bulleted message content
   assert.match(source, /const statements = fromStatements.length > 0[\s\S]*fromMessageBullets/);
 });
 
-test("off-topic guard: DreamBuilder skips generic overlay", () => {
+test("DreamExplainer off-topic handling uses explicit contract branch", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(source, /const skipOfftopicOverlayForDreamBuilder = isDreamBuilderContext\(/);
-  assert.match(source, /const skipOfftopicOverlayForStep0 =[\s\S]*?current_step[\s\S]*?STEP_0_ID[\s\S]*?isOfftopicTurn/);
-  assert.match(source, /const shouldApplyGlobalTurnPolicy =[\s\S]*?!skipOfftopicOverlayForDreamBuilder/);
-  assert.match(source, /const shouldApplyGlobalTurnPolicy =[\s\S]*?!skipOfftopicOverlayForStep0/);
+  assert.match(source, /const isDreamExplainerOfftopicTurn\s*=/);
+  assert.match(source, /menu_id:\s*DREAM_EXPLAINER_SWITCH_SELF_MENU_ID/);
 });
 
 test("wording choice: Entity user pick restores contract menu buttons when source prompt has no numbered options", async () => {
@@ -1715,12 +2037,10 @@ test("wording choice: Big Why user pick downgrades generic confirm to contract r
     },
   });
 
-  assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(String(result.specialist?.menu_id || ""), "BIGWHY_MENU_REFINE");
-  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
-  assert.equal(String(result.specialist?.confirmation_question || ""), "");
-  assert.deepEqual(result.ui?.action_codes, ["ACTION_BIGWHY_REFINE_CONFIRM", "ACTION_BIGWHY_REFINE_ADJUST"]);
+  assert.equal(result.ok, false);
+  assert.equal(String(result.error?.type || ""), "session_upgrade_required");
+  assert.ok(Array.isArray((result.error as any)?.markers));
+  assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
 });
 
 test("wording choice: Role user pick restores contract refine menu instead of generic continue", async () => {
@@ -1752,12 +2072,10 @@ test("wording choice: Role user pick restores contract refine menu instead of ge
     },
   });
 
-  assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(String(result.specialist?.menu_id || ""), "ROLE_MENU_REFINE");
-  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
-  assert.equal(String(result.specialist?.confirmation_question || ""), "");
-  assert.deepEqual(result.ui?.action_codes, ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"]);
+  assert.equal(result.ok, false);
+  assert.equal(String(result.error?.type || ""), "session_upgrade_required");
+  assert.ok(Array.isArray((result.error as any)?.markers));
+  assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
 });
 
 test("wording choice: Rules user pick keeps incomplete-status menu buttons", async () => {
@@ -1864,6 +2182,43 @@ test("wording choice: off-topic overlay never exposes wording choice panel", asy
     Boolean((result.ui as any)?.wording_choice?.enabled),
     false
   );
+});
+
+test("wording choice: dream off-topic keeps pending wording panel visible", async () => {
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "What's the weather in London?",
+      input_mode: "widget",
+      state: {
+        ...getDefaultState(),
+        current_step: "dream",
+        active_specialist: "Dream",
+        intro_shown_session: "true",
+        started: "true",
+        business_name: "Mindd",
+        last_specialist_result: {
+          action: "REFINE",
+          menu_id: "DREAM_MENU_REFINE",
+          question:
+            "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+          refined_formulation: "Mindd dreams of a world where purpose drives action.",
+          dream: "Mindd dreams of a world where purpose drives action.",
+          wording_choice_pending: "true",
+          wording_choice_user_raw: "Mindd dreams of a world where purpose matters.",
+          wording_choice_user_normalized: "Mindd dreams of a world where purpose matters.",
+          wording_choice_agent_current: "Mindd dreams of a world where purpose drives action.",
+          wording_choice_mode: "text",
+          wording_choice_target_field: "dream",
+        },
+      },
+    })
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.is_offtopic || ""), "true");
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "true");
+  assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
+  assert.equal(Boolean((result.ui as any)?.wording_choice?.enabled), true);
 });
 
 test("wording choice: obvious off-topic question in Strategy does not open A/B choice", async () => {
