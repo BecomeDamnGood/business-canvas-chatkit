@@ -397,7 +397,7 @@ test("rules: valid output keeps confirm-capable menu with parity", () => {
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), rendered.uiActionCodes.length);
 });
 
-test("off-topic with existing output never uses Refine headline", () => {
+test("off-topic with existing output still uses contract-driven Refine headline", () => {
   const state = getDefaultState();
   (state as any).current_step = "dream";
   (state as any).business_name = "Mindd";
@@ -414,8 +414,33 @@ test("off-topic with existing output never uses Refine headline", () => {
     },
   });
   const headline = String(rendered.specialist.question || "");
-  assert.equal(headline.includes("Refine your Dream"), false);
-  assert.equal(headline.includes("Continue with your Dream"), true);
+  assert.equal(headline.includes("Continue with your Dream"), false);
+  assert.equal(headline.includes("Refine your Dream"), true);
+});
+
+test("renderer emits contract metadata for deterministic UI", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).business_name = "Mindd";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "",
+      question: "",
+      menu_id: "",
+      purpose: "",
+      refined_formulation: "",
+    },
+  });
+  assert.equal(typeof rendered.contractId, "string");
+  assert.equal(rendered.contractId.startsWith("purpose:no_output:"), true);
+  assert.equal(typeof rendered.contractVersion, "string");
+  assert.equal(rendered.contractVersion.length > 0, true);
+  assert.equal(Array.isArray(rendered.textKeys), true);
+  assert.equal(rendered.textKeys.length > 0, true);
+  assert.equal(String((rendered.specialist as any).ui_contract_id || "").length > 0, true);
 });
 
 test("off-topic dream with candidate but no final keeps confirm-capable refine menu", () => {

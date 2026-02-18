@@ -67,7 +67,7 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     byText: "A business model by:",
     startHint: "Click Start to begin.",
     inputPlaceholder: "Type your answer here (use the widget, not the chat box)…",
-    btnStart: "Start the proces with Validation & Business Name",
+    btnStart: "Start the process with Validation & Business Name",
     btnOk: "Continue",
     btnOk_step0_ready: "Yes, I'm ready. Let's start!",
     btnOk_strategy: "I'm happy, continue to step 7 Strategy",

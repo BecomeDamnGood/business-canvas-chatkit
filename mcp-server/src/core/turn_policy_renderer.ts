@@ -3,6 +3,14 @@ import { MENU_LABELS } from "./menu_contract.js";
 import type { CanvasState } from "./state.js";
 import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
+import {
+  DEFAULT_MENU_BY_STATUS,
+  UI_CONTRACT_VERSION,
+  buildContractId,
+  buildContractTextKeys,
+  buildHeadlineForContract,
+  buildNoOutputRecap,
+} from "./ui_contract_matrix.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -19,6 +27,9 @@ export type TurnPolicyRenderResult = {
   specialist: Record<string, unknown>;
   uiActionCodes: string[];
   uiActions: RenderedAction[];
+  contractId: string;
+  contractVersion: string;
+  textKeys: string[];
 };
 
 const STEP_LABELS: Record<string, string> = {
@@ -52,59 +63,6 @@ const FINAL_FIELD_BY_STEP: Record<string, string> = {
   productsservices: "productsservices_final",
   rulesofthegame: "rulesofthegame_final",
   presentation: "presentation_brief_final",
-};
-
-const DEFAULT_MENU_BY_STATUS: Record<string, Record<TurnOutputStatus, string>> = {
-  dream: {
-    no_output: "DREAM_MENU_INTRO",
-    incomplete_output: "DREAM_MENU_INTRO",
-    valid_output: "DREAM_MENU_REFINE",
-  },
-  purpose: {
-    no_output: "PURPOSE_MENU_INTRO",
-    incomplete_output: "PURPOSE_MENU_EXPLAIN",
-    valid_output: "PURPOSE_MENU_REFINE",
-  },
-  bigwhy: {
-    no_output: "BIGWHY_MENU_INTRO",
-    incomplete_output: "BIGWHY_MENU_A",
-    valid_output: "BIGWHY_MENU_REFINE",
-  },
-  role: {
-    no_output: "ROLE_MENU_INTRO",
-    incomplete_output: "ROLE_MENU_INTRO",
-    valid_output: "ROLE_MENU_REFINE",
-  },
-  entity: {
-    no_output: "ENTITY_MENU_INTRO",
-    incomplete_output: "ENTITY_MENU_FORMULATE",
-    valid_output: "ENTITY_MENU_EXAMPLE",
-  },
-  strategy: {
-    no_output: "STRATEGY_MENU_INTRO",
-    incomplete_output: "STRATEGY_MENU_ASK",
-    valid_output: "STRATEGY_MENU_CONFIRM",
-  },
-  targetgroup: {
-    no_output: "TARGETGROUP_MENU_INTRO",
-    incomplete_output: "TARGETGROUP_MENU_EXPLAIN_MORE",
-    valid_output: "TARGETGROUP_MENU_POSTREFINE",
-  },
-  productsservices: {
-    no_output: "PRODUCTSSERVICES_MENU_CONFIRM",
-    incomplete_output: "PRODUCTSSERVICES_MENU_CONFIRM",
-    valid_output: "PRODUCTSSERVICES_MENU_CONFIRM",
-  },
-  rulesofthegame: {
-    no_output: "RULES_MENU_INTRO",
-    incomplete_output: "RULES_MENU_ASK_EXPLAIN",
-    valid_output: "RULES_MENU_CONFIRM",
-  },
-  presentation: {
-    no_output: "PRESENTATION_MENU_ASK",
-    incomplete_output: "PRESENTATION_MENU_ASK",
-    valid_output: "PRESENTATION_MENU_ASK",
-  },
 };
 
 function parseStep0Line(step0Line: string): { venture: string; name: string; status: string } {
@@ -513,19 +471,9 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const effectiveStatus: TurnOutputStatus = promoteIncompleteToValidForOfftopic ? "valid_output" : status;
   const effectiveConfirmEligible = promoteIncompleteToValidForOfftopic ? true : confirmEligible;
 
-  const headlinePrefix =
-    isOfftopic
-      ? (effectiveStatus === "no_output" ? "Define" : "Continue with")
-      : effectiveStatus === "valid_output"
-        ? "Refine"
-        : effectiveStatus === "incomplete_output"
-          ? "Add more"
-          : "Define";
-  const headlineBase = `${headlinePrefix} your ${stepLabel} for ${companyName}`;
-
   const answerText = String(specialist.message ?? "").trim() || String(specialist.refined_formulation ?? "").trim();
-  const recap = status === "no_output"
-    ? `We have not yet defined ${stepLabel}.`
+  const recap = effectiveStatus === "no_output"
+    ? buildNoOutputRecap(stepLabel)
     : `<strong>This is what we have established so far based on our dialogue:</strong>\n${recapBody}`.trim();
   const message = [answerText, recap].filter(Boolean).join("\n\n").trim();
 
@@ -547,6 +495,9 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       question: confirmEligible ? "" : STEP0_NO_OUTPUT_PROMPT_EN,
       confirmation_question: confirmQuestion,
       menu_id: "",
+      ui_contract_id: buildContractId(stepId, effectiveStatus, ""),
+      ui_contract_version: UI_CONTRACT_VERSION,
+      ui_text_keys: buildContractTextKeys({ stepId, status: effectiveStatus, menuId: "" }),
     };
     return {
       status: effectiveStatus,
@@ -554,6 +505,9 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       specialist: step0Specialist,
       uiActionCodes: [],
       uiActions: [],
+      contractId: buildContractId(stepId, effectiveStatus, ""),
+      contractVersion: UI_CONTRACT_VERSION,
+      textKeys: buildContractTextKeys({ stepId, status: effectiveStatus, menuId: "" }),
     };
   }
 
@@ -567,11 +521,16 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const menuId = resolved.menuId;
   const safeActionCodes = resolved.actionCodes;
   const safeLabels = resolved.labels;
-  const headline = safeActionCodes.length > 0
-    ? `${headlineBase} or choose an option.`
-    : `${headlineBase}.`;
+  const headline = buildHeadlineForContract({
+    stepLabel,
+    companyName,
+    status: effectiveStatus,
+    hasOptions: safeActionCodes.length > 0,
+  });
 
   const question = buildNumberedPrompt(safeLabels, headline);
+  const contractId = buildContractId(stepId, effectiveStatus, menuId);
+  const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
 
   const nextSpecialist: Record<string, unknown> = {
     ...specialist,
@@ -580,6 +539,9 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     question,
     confirmation_question: "",
     menu_id: safeActionCodes.length > 0 ? menuId : "",
+    ui_contract_id: contractId,
+    ui_contract_version: UI_CONTRACT_VERSION,
+    ui_text_keys: textKeys,
   };
 
   return {
@@ -588,5 +550,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     specialist: nextSpecialist,
     uiActionCodes: safeActionCodes,
     uiActions: buildRenderedActions(safeActionCodes, safeLabels),
+    contractId,
+    contractVersion: UI_CONTRACT_VERSION,
+    textKeys,
   };
 }

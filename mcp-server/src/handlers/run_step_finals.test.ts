@@ -280,6 +280,10 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
     countNumberedOptions(String(offTopicTurn.prompt || "")),
     offTopicTurn.ui?.action_codes?.length || 0
   );
+  assert.equal(typeof offTopicTurn.ui?.contract_id, "string");
+  assert.equal(String(offTopicTurn.ui?.contract_id || "").startsWith("dream:"), true);
+  assert.equal(typeof offTopicTurn.ui?.contract_version, "string");
+  assert.equal(Array.isArray(offTopicTurn.ui?.text_keys), true);
   assert.equal(String(offTopicTurn.prompt || "").includes("Continue Dream now"), false);
 });
 
@@ -842,12 +846,13 @@ test("buildTextForWidget strips generic choose lines when menu is interactive", 
       question:
         "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording",
       message:
-        "I'll propose a Purpose based on your Dream.\n\nWe exist to enrich lives.\n\nPlease choose 1 or 2.",
+        "I'll propose a Purpose based on your Dream.\n\nWe exist to enrich lives.\n\nPlease choose 1 or 2.\nChoose an option below.",
       refined_formulation: "",
     },
   });
 
   assert.equal(text.includes("Please choose 1 or 2"), false);
+  assert.equal(text.includes("Choose an option below"), false);
   assert.equal(text.includes("We exist to enrich lives."), true);
 });
 

@@ -6,7 +6,9 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 
-import { callStrictJson } from "../core/llm.js";
+import { callStrictJson, type LLMUsage } from "../core/llm.js";
+import { resolveModelForCall } from "../core/model_routing.js";
+import { appendSessionTokenLog } from "../core/session_token_log.js";
 import {
   CANONICAL_STEPS,
   getFinalsSnapshot,
@@ -153,6 +155,7 @@ import {
 import { loadModule as loadCld3 } from "cld3-asm";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { renderFreeTextTurnPolicy } from "../core/turn_policy_renderer.js";
+import { UI_CONTRACT_VERSION } from "../core/ui_contract_matrix.js";
 import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 
@@ -220,7 +223,7 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   startHint: "Click Start to begin.",
   inputPlaceholder: "Type your answer here (use The Business Strategy Canvas Builder widget, not the chat box)…",
   thinking: "Thinking…",
-  btnStart: "Start",
+  btnStart: "Start the process with Validation & Business Name",
   btnOk: "Continue",
   btnOk_step0_ready: "Yes, I'm ready. Let's start!",
   btnOk_strategy: "I'm happy, continue to step 7 Strategy",
@@ -307,6 +310,32 @@ type MigrationFlags = {
   legacyChoiceParser: boolean;
 };
 
+type CallUsageSnapshot = {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  provider_available: boolean;
+};
+
+type TurnLlmAccumulator = {
+  calls: number;
+  attempts: number;
+  input_tokens_sum: number;
+  output_tokens_sum: number;
+  total_tokens_sum: number;
+  input_unknown: boolean;
+  output_unknown: boolean;
+  total_unknown: boolean;
+  provider_available: boolean;
+  models: Set<string>;
+};
+
+type TurnLlmCallMeta = {
+  model: string;
+  attempts: number;
+  usage: CallUsageSnapshot;
+};
+
 const WIDGET_ESCAPE_MENU_SUFFIX = "_MENU_ESCAPE";
 const DREAM_EXPLAINER_ESCAPE_MENU_ID = "DREAM_EXPLAINER_MENU_ESCAPE";
 const WIDGET_ESCAPE_LABEL_PATTERNS: RegExp[] = [
@@ -354,6 +383,65 @@ function resolveMigrationFlags(): MigrationFlags {
     structuredActionsV1: envFlagEnabled("BSC_STRUCTURED_ACTIONS_V1", localDevDefaults),
     transitionsV1: envFlagEnabled("BSC_TRANSITIONS_V1", localDevDefaults),
     legacyChoiceParser: envFlagEnabled("BSC_LEGACY_CHOICE_PARSER", true),
+  };
+}
+
+function createTurnLlmAccumulator(): TurnLlmAccumulator {
+  return {
+    calls: 0,
+    attempts: 0,
+    input_tokens_sum: 0,
+    output_tokens_sum: 0,
+    total_tokens_sum: 0,
+    input_unknown: false,
+    output_unknown: false,
+    total_unknown: false,
+    provider_available: false,
+    models: new Set<string>(),
+  };
+}
+
+function normalizeUsage(usage?: LLMUsage | null): CallUsageSnapshot {
+  return {
+    input_tokens: typeof usage?.input_tokens === "number" ? usage.input_tokens : null,
+    output_tokens: typeof usage?.output_tokens === "number" ? usage.output_tokens : null,
+    total_tokens: typeof usage?.total_tokens === "number" ? usage.total_tokens : null,
+    provider_available: Boolean(usage?.provider_available),
+  };
+}
+
+function registerTurnLlmCall(acc: TurnLlmAccumulator, meta: TurnLlmCallMeta): void {
+  const usage = normalizeUsage(meta.usage);
+  const model = String(meta.model || "").trim();
+  if (model) acc.models.add(model);
+  acc.calls += 1;
+  acc.attempts += Number.isFinite(meta.attempts) ? Math.max(0, Math.trunc(meta.attempts)) : 0;
+  acc.provider_available = acc.provider_available || usage.provider_available;
+
+  if (usage.input_tokens === null) acc.input_unknown = true;
+  else acc.input_tokens_sum += usage.input_tokens;
+
+  if (usage.output_tokens === null) acc.output_unknown = true;
+  else acc.output_tokens_sum += usage.output_tokens;
+
+  if (usage.total_tokens === null) acc.total_unknown = true;
+  else acc.total_tokens_sum += usage.total_tokens;
+}
+
+function turnUsageFromAccumulator(acc: TurnLlmAccumulator): CallUsageSnapshot {
+  if (acc.calls === 0) {
+    return {
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      provider_available: true,
+    };
+  }
+  return {
+    input_tokens: acc.input_unknown ? null : acc.input_tokens_sum,
+    output_tokens: acc.output_unknown ? null : acc.output_tokens_sum,
+    total_tokens: acc.total_unknown ? null : acc.total_tokens_sum,
+    provider_available: acc.provider_available,
   };
 }
 
@@ -902,24 +990,44 @@ export function buildTextForWidget(params: { specialist: any; hasWidgetActions?:
 }
 
 function stripChoiceInstructionNoise(value: string): string {
-  const choicePatterns = [
+  const fullLineChoicePatterns = [
     /^(please\s+)?(choose|pick|select)\s+(one|an?)\s+option(s)?(\s+below)?\.?$/i,
     /^(please\s+)?(choose|pick|select)\s+\d+(?:\s*(?:,|\/|or|and)\s*\d+)*\.?$/i,
     /^(please\s+)?(choose|pick|select)\s+between\s+\d+\s+and\s+\d+\.?$/i,
     /^(please\s+)?(choose|pick|select)\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
+    /^(please\s+)?(choose|pick|select)\s+an?\s+option(\s+below)?(\s+by\s+typing\s+\d+(?:\s*(?:or|\/|,|and)\s*\d+)*)?\.?$/i,
+    /^choose\s+an?\s+option\s+by\s+typing\s+.+$/i,
     /^(kies|selecteer)\s+\d+(?:\s*(?:,|\/|of|en)\s*\d+)*\.?$/i,
     /^(kies|selecteer)\s+een\s+optie(\s+hieronder)?\.?$/i,
   ];
+  const inlineNoisePatterns = [
+    /\s*choose\s+an?\s+option\s+below\.?/gi,
+    /\s*choose\s+an?\s+option\.?/gi,
+    /\s*choose\s+one\s+of\s+the\s+options(\s+below)?\.?/gi,
+    /\s*choose\s+\d+(?:\s*(?:,|\/|or|and)\s*\d+)*\.?/gi,
+    /\s*choose\s+between\s+\d+\s+and\s+\d+\.?/gi,
+    /\s*choose\s+an?\s+option\s+by\s+typing\s+\d+(?:\s*(?:or|\/|,|and)\s*\d+)*(?:,\s*or\s*write\s+your\s+own\s+statement)?\.?/gi,
+  ];
   const lines = String(value || "").replace(/\r/g, "\n").split("\n");
-  const kept = lines.filter((line) => {
-    const normalized = String(line || "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/[*_`~]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!normalized) return true;
-    return !choicePatterns.some((pattern) => pattern.test(normalized));
-  });
+  const kept = lines
+    .map((line) => {
+      const normalized = String(line || "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/[*_`~]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!normalized) return "";
+      if (fullLineChoicePatterns.some((pattern) => pattern.test(normalized))) return "";
+      let candidate = String(line || "");
+      for (const pattern of inlineNoisePatterns) {
+        candidate = candidate.replace(pattern, "");
+      }
+      return candidate
+        .replace(/\s{2,}/g, " ")
+        .replace(/\s+([,.!?;:])/g, "$1")
+        .trim();
+    })
+    .filter(Boolean);
   return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -2516,6 +2624,7 @@ function applyWordingPickSelection(params: {
     chosen
   );
   let selectedWithContract = selected;
+  let selectedContractId = String((selected as any)?.ui_contract_id || "");
   if (isBulletChoiceStep(stepId)) {
     const renderSpecialist = sanitizeMenuContractPayload({
       ...selected,
@@ -2542,14 +2651,22 @@ function applyWordingPickSelection(params: {
       confirmation_question: "",
       wording_choice_pending: "false",
       wording_choice_selected: pickedUser ? "user" : "suggestion",
+      ui_contract_id: String((renderedSpecialist as any)?.ui_contract_id || rendered.contractId || ""),
+      ui_contract_version: String((renderedSpecialist as any)?.ui_contract_version || rendered.contractVersion || ""),
+      ui_text_keys: Array.isArray((renderedSpecialist as any)?.ui_text_keys)
+        ? (renderedSpecialist as any)?.ui_text_keys
+        : rendered.textKeys,
     };
+    selectedContractId = String(rendered.contractId || (selectedWithContract as any)?.ui_contract_id || "");
   } else {
     selectedWithContract = enforceWordingPostPickMenuContract(stepId, state, selected, prev);
+    selectedContractId = String((selectedWithContract as any)?.ui_contract_id || "");
   }
   const nextState: CanvasState = {
     ...state,
     last_specialist_result: selectedWithContract,
   };
+  applyUiPhaseByStep(nextState, stepId, selectedContractId);
   return { handled: true, specialist: selectedWithContract, nextState };
 }
 
@@ -2587,23 +2704,71 @@ function buildWordingChoiceFromPendingSpecialist(
   };
 }
 
+type UiContractMeta = {
+  contractId?: string;
+  contractVersion?: string;
+  textKeys?: string[];
+};
+
+function normalizeUiContractMeta(
+  specialist: any,
+  contractMetaOverride?: UiContractMeta | null
+): UiContractMeta {
+  const overrideId = String(contractMetaOverride?.contractId || "").trim();
+  const specialistId = String(specialist?.ui_contract_id || "").trim();
+  const contractId = overrideId || specialistId;
+
+  const overrideVersion = String(contractMetaOverride?.contractVersion || "").trim();
+  const specialistVersion = String(specialist?.ui_contract_version || "").trim();
+  const contractVersion = overrideVersion || specialistVersion || UI_CONTRACT_VERSION;
+
+  const overrideTextKeys: unknown[] = Array.isArray(contractMetaOverride?.textKeys)
+    ? contractMetaOverride.textKeys
+    : [];
+  const specialistTextKeys: unknown[] = Array.isArray(specialist?.ui_text_keys) ? specialist.ui_text_keys : [];
+  const textKeys = (overrideTextKeys.length > 0 ? overrideTextKeys : specialistTextKeys)
+    .map((key: unknown) => String(key || "").trim())
+    .filter(Boolean);
+
+  return {
+    ...(contractId ? { contractId } : {}),
+    ...(contractVersion ? { contractVersion } : {}),
+    ...(textKeys.length > 0 ? { textKeys } : {}),
+  };
+}
+
+function applyUiPhaseByStep(state: CanvasState, stepId: string, contractId: string): void {
+  const safeStepId = String(stepId || "").trim();
+  const safeContractId = String(contractId || "").trim();
+  if (!safeStepId || !safeContractId) return;
+  const existing = (state as any).__ui_phase_by_step;
+  const next = existing && typeof existing === "object" ? { ...existing } : {};
+  next[safeStepId] = safeContractId;
+  (state as any).__ui_phase_by_step = next;
+}
+
 function buildUiPayload(
   specialist: any,
   flagsOverride?: Record<string, boolean> | null,
   actionCodesOverride?: string[] | null,
   renderedActionsOverride?: RenderedAction[] | null,
   wordingChoiceOverride?: WordingChoiceUiPayload | null,
-  migrationFlags?: MigrationFlags
+  migrationFlags?: MigrationFlags,
+  contractMetaOverride?: UiContractMeta | null
 ): {
   action_codes?: string[];
   expected_choice_count?: number;
   actions?: RenderedAction[];
   questionText?: string;
+  contract_id?: string;
+  contract_version?: string;
+  text_keys?: string[];
   flags: Record<string, boolean>;
   wording_choice?: WordingChoiceUiPayload;
 } | undefined {
   const localDev = shouldLogLocalDevDiagnostics();
   const flags = { ...(flagsOverride || {}) };
+  const contractMeta = normalizeUiContractMeta(specialist, contractMetaOverride);
   const featureFlags = migrationFlags || resolveMigrationFlags();
   const rawQuestionText = pickPrompt(specialist);
   const labels = extractNumberedLabels(rawQuestionText);
@@ -2631,12 +2796,21 @@ function buildUiPayload(
         expected_choice_count: safeOverrideCodes.length,
         ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
         ...(questionText ? { questionText } : {}),
+        ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
+        ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
+        ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
     }
-    if (Object.keys(flags).length > 0 || wordingChoiceOverride) {
-      return { flags, ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}) };
+    if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId) {
+      return {
+        ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
+        ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
+        ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
+        flags,
+        ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+      };
     }
     return undefined;
   }
@@ -2644,8 +2818,14 @@ function buildUiPayload(
   if (menuId) {
     if (isWidgetSuppressedEscapeMenuId(menuId)) {
       if (localDev) flags.escape_menu_suppressed = true;
-      if (Object.keys(flags).length > 0 || wordingChoiceOverride) {
-        return { flags, ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}) };
+      if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId) {
+        return {
+          ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
+          ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
+          ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
+          flags,
+          ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+        };
       }
       return undefined;
     }
@@ -2658,8 +2838,14 @@ function buildUiPayload(
         flags.escape_actioncodes_suppressed = true;
       }
       if (safeCodes.length === 0) {
-        if (Object.keys(flags).length > 0 || wordingChoiceOverride) {
-          return { flags, ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}) };
+        if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId) {
+          return {
+            ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
+            ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
+            ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
+            flags,
+            ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+          };
         }
         return undefined;
       }
@@ -2675,13 +2861,22 @@ function buildUiPayload(
         expected_choice_count: safeCodes.length,
         ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
         ...(questionText ? { questionText } : {}),
+        ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
+        ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
+        ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
     }
   }
-  if (Object.keys(flags).length > 0 || wordingChoiceOverride) {
-    return { flags, ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}) };
+  if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId) {
+    return {
+      ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
+      ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
+      ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
+      flags,
+      ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+    };
   }
   return undefined;
 }
@@ -2692,15 +2887,29 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
   flagsOverride?: Record<string, boolean> | null,
   actionCodesOverride?: string[] | null,
   renderedActionsOverride?: RenderedAction[] | null,
-  wordingChoiceOverride?: WordingChoiceUiPayload | null
+  wordingChoiceOverride?: WordingChoiceUiPayload | null,
+  contractMetaOverride?: UiContractMeta | null
 ): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
   const safeSpecialist = sanitizeEscapeInWidget(specialist);
+  const payloadState = (payload as any)?.state as CanvasState | undefined;
+  const payloadStepId = String((payload as any)?.current_step_id || payloadState?.current_step || "").trim();
+  const phaseMap = payloadState && typeof (payloadState as any).__ui_phase_by_step === "object"
+    ? ((payloadState as any).__ui_phase_by_step as Record<string, unknown>)
+    : {};
+  const phaseContractId = payloadStepId ? String(phaseMap[payloadStepId] || "").trim() : "";
+  const effectiveContractOverride: UiContractMeta = {
+    ...(contractMetaOverride || {}),
+    ...(contractMetaOverride?.contractId ? {} : (phaseContractId ? { contractId: phaseContractId } : {})),
+    ...(contractMetaOverride?.contractVersion ? {} : { contractVersion: UI_CONTRACT_VERSION }),
+  };
   const ui = buildUiPayload(
     safeSpecialist,
     flagsOverride,
     actionCodesOverride,
     renderedActionsOverride,
-    wordingChoiceOverride
+    wordingChoiceOverride,
+    undefined,
+    effectiveContractOverride
   );
   const hasWidgetActions =
     (Array.isArray(ui?.action_codes) && ui.action_codes.length > 0) ||
@@ -3744,7 +3953,7 @@ async function callSpecialistStrict(params: {
   state: CanvasState;
   decision: OrchestratorOutput;
   userMessage: string;
-}): Promise<{ specialistResult: any; attempts: number }> {
+}): Promise<{ specialistResult: any; attempts: number; usage: LLMUsage; model: string }> {
   const { model, state, decision, userMessage } = params;
   const specialist = String(decision.specialist_to_call ?? "");
   const contextBlock = buildSpecialistContextBlock(state);
@@ -3779,7 +3988,17 @@ async function callSpecialistStrict(params: {
       specialist === STEP_0_SPECIALIST
         ? { ...base, business_name: "TBD", step_0: "", proceed_to_dream: "false" }
         : base;
-    return { specialistResult, attempts: 0 };
+    return {
+      specialistResult,
+      attempts: 0,
+      usage: {
+        input_tokens: null,
+        output_tokens: null,
+        total_tokens: null,
+        provider_available: false,
+      },
+      model,
+    };
   }
 
   if (specialist === STEP_0_SPECIALIST) {
@@ -3799,7 +4018,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "ValidationAndBusinessName",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === DREAM_SPECIALIST) {
@@ -3824,7 +4043,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "Dream",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === DREAM_EXPLAINER_SPECIALIST) {
@@ -3872,7 +4091,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "DreamExplainer",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === PURPOSE_SPECIALIST) {
@@ -3898,7 +4117,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "Purpose",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === BIGWHY_SPECIALIST) {
@@ -3924,7 +4143,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "BigWhy",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === ROLE_SPECIALIST) {
@@ -3950,7 +4169,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "Role",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === ENTITY_SPECIALIST) {
@@ -3976,7 +4195,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "Entity",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === STRATEGY_SPECIALIST) {
@@ -4005,7 +4224,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "Strategy",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === TARGETGROUP_SPECIALIST) {
@@ -4032,7 +4251,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "TargetGroup",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === PRODUCTSSERVICES_SPECIALIST) {
@@ -4059,7 +4278,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "ProductsServices",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === RULESOFTHEGAME_SPECIALIST) {
@@ -4117,7 +4336,7 @@ async function callSpecialistStrict(params: {
       }
     }
 
-    return { specialistResult: data, attempts: res.attempts };
+    return { specialistResult: data, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === PRESENTATION_SPECIALIST) {
@@ -4143,7 +4362,7 @@ async function callSpecialistStrict(params: {
       debugLabel: "Presentation",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts };
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
   }
 
   // Safe fallback: Step 0 ESCAPE payload (language-neutral English here; UI/flow will recover)
@@ -4161,6 +4380,13 @@ async function callSpecialistStrict(params: {
       is_offtopic: false,
     },
     attempts: 0,
+    usage: {
+      input_tokens: null,
+      output_tokens: null,
+      total_tokens: null,
+      provider_available: false,
+    },
+    model,
   };
 }
 
@@ -4293,17 +4519,58 @@ function buildTimeoutErrorPayload(state: CanvasState, err: any): RunStepError {
 
 async function callSpecialistStrictSafe(
   params: { model: string; state: CanvasState; decision: OrchestratorOutput; userMessage: string },
+  routing: {
+    enabled: boolean;
+    shadow: boolean;
+    actionCode?: string;
+    intentType?: string;
+  },
   stateForError: CanvasState
-): Promise<{ ok: true; value: { specialistResult: any; attempts: number } } | { ok: false; payload: RunStepError }> {
+): Promise<{
+  ok: true;
+  value: { specialistResult: any; attempts: number; usage: LLMUsage; model: string };
+} | { ok: false; payload: RunStepError }> {
   const startedAt = Date.now();
   const logDiagnostics = shouldLogLocalDevDiagnostics();
+  const routeDecision = resolveModelForCall({
+    fallbackModel: params.model,
+    routingEnabled: routing.enabled,
+    actionCode: routing.actionCode,
+    intentType: routing.intentType,
+    specialist: String(params.decision?.specialist_to_call ?? ""),
+    purpose: "specialist",
+  });
+  if (
+    !routeDecision.applied &&
+    routing.shadow &&
+    (shouldLogLocalDevDiagnostics() || process.env.BSC_MODEL_ROUTING_SHADOW_LOG === "1") &&
+    routeDecision.candidate_model &&
+    routeDecision.candidate_model !== params.model
+  ) {
+    console.log("[model_routing_shadow]", {
+      specialist: String(params.decision?.specialist_to_call ?? ""),
+      current_step: String(params.decision?.current_step ?? ""),
+      baseline_model: params.model,
+      shadow_model: routeDecision.candidate_model,
+      source: routeDecision.source,
+      config_version: routeDecision.config_version,
+      request_id: String((stateForError as any).__request_id ?? ""),
+      client_action_id: String((stateForError as any).__client_action_id ?? ""),
+    });
+  }
+  const callParams = {
+    ...params,
+    model: routeDecision.model,
+  };
   try {
-    const value = await callSpecialistStrict(params);
+    const value = await callSpecialistStrict(callParams);
     if (logDiagnostics) {
       console.log("[run_step_llm_call]", {
         ok: true,
         specialist: String(params.decision?.specialist_to_call ?? ""),
         current_step: String(params.decision?.current_step ?? ""),
+        model: String(value.model || routeDecision.model || ""),
+        model_source: routeDecision.source,
         elapsed_ms: Date.now() - startedAt,
         request_id: String((stateForError as any).__request_id ?? ""),
         client_action_id: String((stateForError as any).__client_action_id ?? ""),
@@ -4316,6 +4583,8 @@ async function callSpecialistStrictSafe(
         ok: false,
         specialist: String(params.decision?.specialist_to_call ?? ""),
         current_step: String(params.decision?.current_step ?? ""),
+        model: String(routeDecision.model || ""),
+        model_source: routeDecision.source,
         elapsed_ms: Date.now() - startedAt,
         request_id: String((stateForError as any).__request_id ?? ""),
         client_action_id: String((stateForError as any).__client_action_id ?? ""),
@@ -4368,6 +4637,9 @@ type RunStepBase = {
     expected_choice_count?: number;
     actions?: RenderedAction[];
     questionText?: string;
+    contract_id?: string;
+    contract_version?: string;
+    text_keys?: string[];
     flags: Record<string, boolean>;
     wording_choice?: WordingChoiceUiPayload;
   };
@@ -4426,7 +4698,20 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     return migrationFlags.transitionsV1 ? typedDecision : legacyDecision;
   };
 
-  const model = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
+  const baselineModel = process.env.OPENAI_MODEL?.trim() || "gpt-4.1";
+  const model = baselineModel;
+  const modelRoutingEnabled = envFlagEnabled("BSC_MODEL_ROUTING_V1", false);
+  const modelRoutingShadow = envFlagEnabled("BSC_MODEL_ROUTING_SHADOW", true);
+  const tokenLoggingEnabled = envFlagEnabled("BSC_TOKEN_LOGGING_V1", process.env.LOCAL_DEV === "1");
+  const llmTurnAccumulator = createTurnLlmAccumulator();
+
+  const rememberLlmCall = (value: { attempts: number; usage: LLMUsage; model: string }) => {
+    registerTurnLlmCall(llmTurnAccumulator, {
+      attempts: value.attempts,
+      usage: normalizeUsage(value.usage),
+      model: value.model,
+    });
+  };
 
   const rawState = (args.state ?? {}) as Record<string, unknown>;
   const uiTelemetry = (rawState as any).__ui_telemetry;
@@ -4441,6 +4726,29 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     : null;
 
   let state = migrateState(args.state ?? {});
+  const incomingSessionId = String((rawState as any).__session_id || "").trim();
+  const incomingSessionStartedAt = String((rawState as any).__session_started_at || "").trim();
+  const incomingSessionLogFile = String((rawState as any).__session_log_file || "").trim();
+  const incomingSessionTurnIndex = Number((rawState as any).__session_turn_index ?? 0);
+  if (incomingSessionId) (state as any).__session_id = incomingSessionId;
+  if (incomingSessionStartedAt) (state as any).__session_started_at = incomingSessionStartedAt;
+  if (incomingSessionLogFile) (state as any).__session_log_file = incomingSessionLogFile;
+  if (Number.isFinite(incomingSessionTurnIndex) && incomingSessionTurnIndex >= 0) {
+    (state as any).__session_turn_index = Math.trunc(incomingSessionTurnIndex);
+  }
+  if (!String((state as any).__session_id || "").trim()) {
+    (state as any).__session_id = crypto.randomUUID();
+    (state as any).__session_started_at = new Date().toISOString();
+    (state as any).__session_turn_index = 0;
+  }
+  if (!String((state as any).__session_started_at || "").trim()) {
+    (state as any).__session_started_at = new Date().toISOString();
+  }
+  const previousTurnIndex = Number((state as any).__session_turn_index || 0);
+  const nextTurnIndex = Number.isFinite(previousTurnIndex) ? previousTurnIndex + 1 : 1;
+  (state as any).__session_turn_index = nextTurnIndex;
+  const requestScopedTurnId = String((rawState as any).__request_id || "").trim();
+  (state as any).__session_turn_id = requestScopedTurnId || crypto.randomUUID();
   if ((state as any).__ui_telemetry) {
     delete (state as any).__ui_telemetry;
   }
@@ -4482,6 +4790,109 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const isActionCodeTurnForPolicy = actionCodeRaw !== "" && actionCodeRaw !== "ACTION_TEXT_SUBMIT";
   let userMessage = userMessageCandidate;
   let submittedUserText = "";
+
+  const deriveIntentTypeForRouting = (actionCode: string, routeOrText: string): string => {
+    const normalizedActionCode = String(actionCode || "").trim();
+    const normalizedRoute = String(routeOrText || "").trim();
+    if (!normalizedActionCode && !normalizedRoute) return "";
+    try {
+      const routeFromRegistry =
+        normalizedActionCode && ACTIONCODE_REGISTRY.actions[normalizedActionCode]
+          ? String(ACTIONCODE_REGISTRY.actions[normalizedActionCode]?.route || "").trim()
+          : "";
+      const intent = actionCodeToIntent({
+        actionCode: normalizedActionCode,
+        route: routeFromRegistry || normalizedRoute,
+      });
+      return String(intent?.type || "").trim();
+    } catch {
+      return "";
+    }
+  };
+
+  const buildRoutingContext = (routeOrText: string) => {
+    return {
+      enabled: modelRoutingEnabled,
+      shadow: modelRoutingShadow,
+      actionCode: actionCodeRaw,
+      intentType: deriveIntentTypeForRouting(actionCodeRaw, routeOrText),
+    };
+  };
+
+  const resolveTranslationModel = (routeOrText: string): string => {
+    const routing = buildRoutingContext(routeOrText);
+    const decision = resolveModelForCall({
+      fallbackModel: baselineModel,
+      routingEnabled: routing.enabled,
+      actionCode: routing.actionCode,
+      intentType: routing.intentType,
+      purpose: "translation",
+    });
+    if (
+      !decision.applied &&
+      routing.shadow &&
+      (shouldLogLocalDevDiagnostics() || process.env.BSC_MODEL_ROUTING_SHADOW_LOG === "1") &&
+      decision.candidate_model &&
+      decision.candidate_model !== baselineModel
+    ) {
+      console.log("[model_routing_shadow]", {
+        specialist: "UiStrings",
+        current_step: String((state as any).current_step || ""),
+        baseline_model: baselineModel,
+        shadow_model: decision.candidate_model,
+        source: decision.source,
+        config_version: decision.config_version,
+        request_id: String((state as any).__request_id ?? ""),
+        client_action_id: String((state as any).__client_action_id ?? ""),
+      });
+    }
+    return decision.model;
+  };
+
+  const finalizeResponse = <T extends RunStepSuccess | RunStepError>(response: T): T => {
+    if (!tokenLoggingEnabled) return response;
+    try {
+      const responseState = (response as any)?.state as CanvasState | undefined;
+      if (!responseState) return response;
+      const sessionId = String((responseState as any).__session_id || "").trim();
+      const sessionStartedAt = String((responseState as any).__session_started_at || "").trim();
+      const turnId = String((responseState as any).__session_turn_id || "").trim();
+      if (!sessionId || !sessionStartedAt || !turnId) return response;
+      const usage = turnUsageFromAccumulator(llmTurnAccumulator);
+      const modelList = [...llmTurnAccumulator.models.values()];
+      const model = modelList.length > 0 ? modelList.join(",") : baselineModel;
+      const appendResult = appendSessionTokenLog({
+        sessionId,
+        sessionStartedAt,
+        filePath: String((responseState as any).__session_log_file || "").trim() || undefined,
+        turn: {
+          turn_id: turnId,
+          timestamp: new Date().toISOString(),
+          step_id: String((response as any).current_step_id || (responseState as any).current_step || ""),
+          specialist: String((response as any).active_specialist || (responseState as any).active_specialist || ""),
+          model,
+          attempts: llmTurnAccumulator.attempts,
+          usage,
+        },
+      });
+      (responseState as any).__session_log_file = appendResult.filePath;
+    } catch (err: any) {
+      console.warn("[session_token_log_write_failed]", {
+        message: String(err?.message || err || "unknown"),
+      });
+    }
+    return response;
+  };
+
+  const ensureUiStrings = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
+    const translationModel = resolveTranslationModel(routeOrText);
+    return ensureUiStringsForState(targetState, translationModel);
+  };
+
+  const ensureLanguage = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
+    const translationModel = resolveTranslationModel(routeOrText);
+    return ensureLanguageFromUserMessage(targetState, routeOrText, translationModel);
+  };
 
   if (actionCodeRaw) {
     const menuId = String(lastSpecialistResult?.menu_id || "").trim();
@@ -4724,7 +5135,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     // This simulates arriving at the new step with empty message (triggers intro)
     // IMPORTANT: This return ONLY happens inside the SKIP-modus block, so it has ZERO impact on normal flow
     // Ensure language is set from the SKIP input
-    state = await ensureLanguageFromUserMessage(state, String(userMessage ?? "").trim(), model);
+    state = await ensureLanguage(state, String(userMessage ?? "").trim());
     const lang = langFromState(state);
 
     // Orchestrate to determine which specialist to call
@@ -4735,8 +5146,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       state,
       decision,
       userMessage: "",
-    }, state);
-    if (!callResult.ok) return callResult.payload;
+    }, buildRoutingContext(userMessage), state);
+    if (!callResult.ok) return finalizeResponse(callResult.payload);
+    rememberLlmCall(callResult.value);
     const normalizedSkipResult = normalizeMenuContracts(
       String(decision.specialist_to_call || ""),
       callResult.value.specialistResult,
@@ -4756,7 +5168,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const text = buildTextForWidget({ specialist: normalizedSkipResultSafe });
     const prompt = pickPrompt(normalizedSkipResultSafe);
 
-    return attachRegistryPayload({
+    return finalizeResponse(attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
       current_step_id: String(nextState.current_step),
@@ -4771,7 +5183,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         language: lang,
         meta_user_message_ignored: false,
       },
-    }, normalizedSkipResultSafe);
+    }, normalizedSkipResultSafe));
   }
   // SKIP-MODUS (TEST-ONLY) - END
 
@@ -5151,8 +5563,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         String((state as any).active_specialist || ""),
         prev
       );
-      const stateWithUi = await ensureUiStringsForState(state, model);
-      return attachRegistryPayload({
+      const stateWithUi = await ensureUiStrings(state, userMessage);
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
@@ -5161,7 +5573,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         prompt: pickPrompt(pendingSpecialist),
         specialist: pendingSpecialist,
         state: stateWithUi,
-      }, pendingSpecialist, { require_wording_pick: true }, [], [], pendingChoice);
+      }, pendingSpecialist, { require_wording_pick: true }, [], [], pendingChoice));
     }
     if (
       policyFlags.wordingChoiceV2 &&
@@ -5225,7 +5637,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           strict: true,
         },
       };
-      return attachRegistryPayload(errorPayload, lastSpecialistResult);
+      return finalizeResponse(attachRegistryPayload(errorPayload, lastSpecialistResult));
     }
     userMessage = routed;
   } else if (allowLegacyRouting && userMessage.match(/^choice:[1-9]$/)) {
@@ -5296,13 +5708,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         String((state as any).active_specialist || ""),
         pendingBeforeTurn
       );
-      const stateWithUi = await ensureUiStringsForState(state, model);
+      const stateWithUi = await ensureUiStrings(state, userMessage);
       console.log("[wording_choice_pending_blocked]", {
         step: String(state.current_step || ""),
         request_id: String((state as any).__request_id ?? ""),
         client_action_id: String((state as any).__client_action_id ?? ""),
       });
-      return attachRegistryPayload({
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
@@ -5311,7 +5723,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         prompt: pickPrompt(pendingSpecialist),
         specialist: pendingSpecialist,
         state: stateWithUi,
-      }, pendingSpecialist, { require_wording_pick: true }, [], [], pendingChoice);
+      }, pendingSpecialist, { require_wording_pick: true }, [], [], pendingChoice));
     }
   }
 
@@ -5323,8 +5735,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     })
     : ({ handled: false, specialist: (state as any).last_specialist_result || {}, nextState: state } as const);
   if (wordingSelection.handled) {
-    const stateWithUi = await ensureUiStringsForState(wordingSelection.nextState, model);
-    return attachRegistryPayload({
+    const stateWithUi = await ensureUiStrings(wordingSelection.nextState, userMessage);
+    return finalizeResponse(attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
       current_step_id: String(stateWithUi.current_step),
@@ -5333,7 +5745,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       prompt: pickPrompt(wordingSelection.specialist),
       specialist: wordingSelection.specialist,
       state: stateWithUi,
-    }, wordingSelection.specialist);
+    }, wordingSelection.specialist));
   }
 
   const refineAdjustTurn = isRefineAdjustRouteToken(userMessage);
@@ -5365,7 +5777,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
 
   // Lock language once we see a meaningful user message (prevents mid-flow flips).
-  state = await ensureLanguageFromUserMessage(state, userMessage, model);
+  state = await ensureLanguage(state, userMessage);
   const lang = langFromState(state);
 
   // Presentation: create PPTX on button click (no LLM)
@@ -5409,7 +5821,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         is_offtopic: false,
       };
 
-      return attachRegistryPayload({
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
@@ -5427,7 +5839,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           active_specialist: PRESENTATION_SPECIALIST,
           last_specialist_result: specialist,
         },
-      }, specialist, responseUiFlags);
+      }, specialist, responseUiFlags));
     } catch (err) {
       console.error("[presentation] Generation failed", err);
       const message =
@@ -5448,7 +5860,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         is_offtopic: false,
       };
 
-      return attachRegistryPayload({
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
@@ -5461,7 +5873,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           active_specialist: PRESENTATION_SPECIALIST,
           last_specialist_result: specialist,
         },
-      }, specialist, responseUiFlags);
+      }, specialist, responseUiFlags));
     }
   }
 
@@ -5547,8 +5959,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         state: nextStateScores,
         decision: forcedDecision,
         userMessage: "", // so USER_DREAM_DIRECTION = "(user chose to continue without text)" → Option A
-      }, nextStateScores);
-      if (!callFormulation.ok) return callFormulation.payload;
+      }, buildRoutingContext(userMessage), nextStateScores);
+      if (!callFormulation.ok) return finalizeResponse(callFormulation.payload);
+      rememberLlmCall(callFormulation.value);
       const formulationResult = callFormulation.value.specialistResult;
       const nextStateFormulation = applyStateUpdate({
         prev: nextStateScores,
@@ -5557,10 +5970,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         showSessionIntroUsed: "false",
       });
       (nextStateFormulation as any).dream_awaiting_direction = "false";
-      const nextStateFormulationUi = await ensureUiStringsForState(nextStateFormulation, model);
+      const nextStateFormulationUi = await ensureUiStrings(nextStateFormulation, userMessage);
       const textFormulation = buildTextForWidget({ specialist: formulationResult });
       const promptFormulation = pickPrompt(formulationResult);
-      return attachRegistryPayload({
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(nextStateFormulation.current_step),
@@ -5570,7 +5983,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         specialist: formulationResult,
         state: nextStateFormulationUi,
         debug: { submit_scores_handled: true, formulation_direct: true, top_cluster_count: topClusters.length },
-      }, formulationResult, responseUiFlags);
+      }, formulationResult, responseUiFlags));
     }
   }
 
@@ -5600,10 +6013,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         last_specialist_result: specialist,
       } as CanvasState;
       (nextStateSwitch as any).dream_awaiting_direction = "false";
-      const nextStateSwitchUi = await ensureUiStringsForState(nextStateSwitch, model);
+      const nextStateSwitchUi = await ensureUiStrings(nextStateSwitch, userMessage);
       const textSwitch = buildTextForWidget({ specialist });
       const promptSwitch = pickPrompt(specialist);
-      return attachRegistryPayload({
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(nextStateSwitch.current_step),
@@ -5612,7 +6025,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         prompt: promptSwitch,
         specialist,
         state: nextStateSwitchUi,
-      }, specialist, responseUiFlags);
+      }, specialist, responseUiFlags));
     }
     (state as any).intro_shown_for_step = "dream";
     const forcedDecision: OrchestratorOutput = {
@@ -5629,8 +6042,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       state,
       decision: forcedDecision,
       userMessage: "I want to write my dream in my own words.",
-    }, state);
-    if (!callDream.ok) return callDream.payload;
+    }, buildRoutingContext(userMessage), state);
+    if (!callDream.ok) return finalizeResponse(callDream.payload);
+    rememberLlmCall(callDream.value);
     const normalizedSwitchResult = normalizeMenuContracts(
       String(forcedDecision.specialist_to_call || ""),
       callDream.value.specialistResult,
@@ -5643,10 +6057,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       specialistResult: normalizedSwitchResultSafe,
       showSessionIntroUsed: "false",
     });
-    const nextStateSwitchUi = await ensureUiStringsForState(nextStateSwitch, model);
+    const nextStateSwitchUi = await ensureUiStrings(nextStateSwitch, userMessage);
     const textSwitch = buildTextForWidget({ specialist: normalizedSwitchResultSafe });
     const promptSwitch = pickPrompt(normalizedSwitchResultSafe);
-    return attachRegistryPayload({
+    return finalizeResponse(attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
       current_step_id: String(nextStateSwitch.current_step),
@@ -5655,7 +6069,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       prompt: promptSwitch,
       specialist: normalizedSwitchResultSafe,
       state: nextStateSwitchUi,
-    }, normalizedSwitchResultSafe, responseUiFlags);
+    }, normalizedSwitchResultSafe, responseUiFlags));
   }
 
   // START trigger (widget start screen)
@@ -5668,7 +6082,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   if (isStartTrigger) {
     const started = String((state as any).started ?? "").trim().toLowerCase() === "true";
     if (!started) {
-      const stateWithUi = await ensureUiStringsForState(state, model);
+      const stateWithUi = await ensureUiStrings(state, userMessage);
       const startHint =
         typeof (stateWithUi as any).ui_strings?.startHint === "string"
           ? String((stateWithUi as any).ui_strings.startHint)
@@ -5686,7 +6100,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         wants_recap: false,
         is_offtopic: false,
       };
-      return attachRegistryPayload({
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
@@ -5695,7 +6109,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         prompt: specialist.question,
         specialist,
         state: { ...stateWithUi, active_specialist: STEP_0_SPECIALIST, last_specialist_result: specialist },
-      }, specialist, responseUiFlags);
+      }, specialist, responseUiFlags));
     }
     const existingFirst = (state as any).last_specialist_result;
     const isReuseFirst =
@@ -5703,7 +6117,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       (String(existingFirst.action) === "ASK" || String(existingFirst.action) === "CONFIRM") &&
       (String(existingFirst.question ?? "").trim() !== "" || String(existingFirst.confirmation_question ?? "").trim() !== "");
     if (isReuseFirst) {
-      const stateWithUi = await ensureUiStringsForState(state, model);
+      const stateWithUi = await ensureUiStrings(state, userMessage);
       (state as any).intro_shown_session = "true";
       const reuseAction = String(existingFirst.action || "").trim();
       const isStep0AskReuse = reuseAction === "ASK";
@@ -5717,7 +6131,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
             question: prompt,
           }
         : existingFirst;
-      return attachRegistryPayload({
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
@@ -5726,7 +6140,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         prompt,
         specialist: specialistForReuse,
         state: { ...stateWithUi, active_specialist: STEP_0_SPECIALIST, last_specialist_result: specialistForReuse },
-      }, specialistForReuse, responseUiFlags);
+      }, specialistForReuse, responseUiFlags));
     }
 
     (state as any).intro_shown_session = "true";
@@ -5762,8 +6176,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         is_offtopic: false,
       };
 
-      const stateWithUi = await ensureUiStringsForState(state, model);
-      return attachRegistryPayload({
+      const stateWithUi = await ensureUiStrings(state, userMessage);
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
@@ -5777,15 +6191,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           active_specialist: STEP_0_SPECIALIST,
           last_specialist_result: specialist,
         },
-      }, specialist, responseUiFlags);
+      }, specialist, responseUiFlags));
     }
 
     // Otherwise: first-time Step 0 setup question.
     const initialMsg = String((state as any).initial_user_message ?? "").trim();
     if (!String((state as any).language ?? "").trim() && initialMsg) {
-      state = await ensureLanguageFromUserMessage(state, initialMsg, model);
+      state = await ensureLanguage(state, initialMsg);
     }
-    const stateWithUi = await ensureUiStringsForState(state, model);
+    const stateWithUi = await ensureUiStrings(state, userMessage);
     const specialist: ValidationAndBusinessNameOutput = {
       action: "ASK",
       message: STEP0_CARDDESC_EN,
@@ -5800,7 +6214,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       is_offtopic: false,
     };
 
-    return attachRegistryPayload({
+    return finalizeResponse(attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
       current_step_id: String(state.current_step),
@@ -5814,7 +6228,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         active_specialist: STEP_0_SPECIALIST,
         last_specialist_result: specialist,
       },
-    }, specialist, responseUiFlags);
+    }, specialist, responseUiFlags));
   }
 
   // --------- SPEECH-PROOF PROCEED TRIGGER (Step 0 readiness moment only) ---------
@@ -5886,8 +6300,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         state: stateForAdvance,
         decision,
         userMessage: "",
-      }, stateForAdvance);
-      if (!call1.ok) return call1.payload;
+      }, buildRoutingContext(userMessage), stateForAdvance);
+      if (!call1.ok) return finalizeResponse(call1.payload);
+      rememberLlmCall(call1.value);
       const nextState = applyStateUpdate({
         prev: stateForAdvance,
         decision,
@@ -5896,7 +6311,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       });
       const text = buildTextForWidget({ specialist: call1.value.specialistResult });
       const prompt = pickPrompt(call1.value.specialistResult);
-      return attachRegistryPayload({
+      return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(nextState.current_step),
@@ -5911,7 +6326,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           language: lang,
           meta_user_message_ignored: false,
         },
-      }, call1.value.specialistResult, responseUiFlags);
+      }, call1.value.specialistResult, responseUiFlags));
     }
   }
 
@@ -5944,8 +6359,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       state,
       decision: forcedDecision,
       userMessage,
-    }, state);
-    if (!callDreamExplainer.ok) return callDreamExplainer.payload;
+    }, buildRoutingContext(userMessage), state);
+    if (!callDreamExplainer.ok) return finalizeResponse(callDreamExplainer.payload);
+    rememberLlmCall(callDreamExplainer.value);
     const normalizedDreamExplainer = normalizeConfirmFinals(
       String(forcedDecision.current_step || ""),
       callDreamExplainer.value.specialistResult,
@@ -5961,7 +6377,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     });
     const textDream = buildTextForWidget({ specialist: normalizedDreamExplainerSafe });
     const promptDream = pickPrompt(normalizedDreamExplainerSafe);
-    return attachRegistryPayload({
+    return finalizeResponse(attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
       current_step_id: String(nextStateDream.current_step),
@@ -5976,7 +6392,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         language: lang,
         meta_user_message_ignored: false,
       },
-    }, normalizedDreamExplainerSafe, responseUiFlags);
+    }, normalizedDreamExplainerSafe, responseUiFlags));
   }
 
   // --------- ORCHESTRATE (decision 1) ----------
@@ -5986,8 +6402,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const showSessionIntro: BoolString = decision1.show_session_intro;
 
   // --------- CALL SPECIALIST (first) ----------
-  const call1 = await callSpecialistStrictSafe({ model, state, decision: decision1, userMessage }, state);
-  if (!call1.ok) return call1.payload;
+  const call1 = await callSpecialistStrictSafe(
+    { model, state, decision: decision1, userMessage },
+    buildRoutingContext(userMessage),
+    state
+  );
+  if (!call1.ok) return finalizeResponse(call1.payload);
+  rememberLlmCall(call1.value);
   let attempts = call1.value.attempts;
   let specialistResult: any = call1.value.specialistResult;
 
@@ -6044,8 +6465,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         state,
         decision: decision1,
         userMessage: shortenRequest,
-      }, state);
-      if (!callShorten.ok) return callShorten.payload;
+      }, buildRoutingContext(shortenRequest), state);
+      if (!callShorten.ok) return finalizeResponse(callShorten.payload);
+      rememberLlmCall(callShorten.value);
       attempts = Math.max(attempts, callShorten.value.attempts);
       specialistResult = normalizeConfirmFinals(
         String(decision1.current_step || ""),
@@ -6087,8 +6509,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           state: stateAfterFirst,
           decision: decisionNext,
           userMessage: "Go to next step",
-        }, stateAfterFirst);
-        if (!call2.ok) return call2.payload;
+        }, buildRoutingContext("Go to next step"), stateAfterFirst);
+        if (!call2.ok) return finalizeResponse(call2.payload);
+        rememberLlmCall(call2.value);
         if (call2.value.specialistResult && String(call2.value.specialistResult.scoring_phase ?? "") === "true") {
           attempts = Math.max(attempts, call2.value.attempts);
           specialistResult = normalizeConfirmFinals(
@@ -6146,8 +6569,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const decision2 = decideOrchestration(nextState, userMessage);
 
     if (String(decision2.specialist_to_call || "") && String(decision2.current_step || "")) {
-      const call2 = await callSpecialistStrictSafe({ model, state: nextState, decision: decision2, userMessage }, nextState);
-      if (!call2.ok) return call2.payload;
+      const call2 = await callSpecialistStrictSafe(
+        { model, state: nextState, decision: decision2, userMessage },
+        buildRoutingContext(userMessage),
+        nextState
+      );
+      if (!call2.ok) return finalizeResponse(call2.payload);
+      rememberLlmCall(call2.value);
       attempts = Math.max(attempts, call2.value.attempts);
       specialistResult = normalizeConfirmFinals(
         String(decision2.current_step || ""),
@@ -6185,6 +6613,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   let actionCodesOverride: string[] | null = null;
   let renderedActionsOverride: RenderedAction[] | null = null;
   let wordingChoiceOverride: WordingChoiceUiPayload | null = null;
+  let contractMetaOverride: UiContractMeta | null = null;
   const globalTurnPolicyEnabled = process.env.GLOBAL_TURN_POLICY_ENABLED !== "0";
   const holisticPolicyEnabled = globalTurnPolicyEnabled && policyFlags.holisticPolicyV2;
   const sameStepTurn = String((nextState as any).current_step ?? "") === String((state as any).current_step ?? "");
@@ -6216,6 +6645,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     specialistResult = rendered.specialist;
     actionCodesOverride = rendered.uiActionCodes;
     renderedActionsOverride = rendered.uiActions;
+    contractMetaOverride = {
+      contractId: rendered.contractId,
+      contractVersion: rendered.contractVersion,
+      textKeys: rendered.textKeys,
+    };
+    applyUiPhaseByStep(nextState, String((nextState as any).current_step ?? ""), rendered.contractId);
     (nextState as any).last_specialist_result = specialistResult;
     if (process.env.GLOBAL_TURN_POLICY_DEBUG === "1" || shouldLogLocalDevDiagnostics()) {
       console.log("[global_turn_policy]", {
@@ -6338,6 +6773,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     specialistResult = rendered.specialist;
     actionCodesOverride = rendered.uiActionCodes;
     renderedActionsOverride = rendered.uiActions;
+    contractMetaOverride = {
+      contractId: rendered.contractId,
+      contractVersion: rendered.contractVersion,
+      textKeys: rendered.textKeys,
+    };
+    applyUiPhaseByStep(nextState, infoPolicyStepId, rendered.contractId);
     (nextState as any).last_specialist_result = specialistResult;
     if (!hadMenuBefore && actionCodesOverride.length > 0) {
       console.log("[buttonless_screen_prevented]", {
@@ -6389,6 +6830,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     specialistResult = rendered.specialist;
     actionCodesOverride = rendered.uiActionCodes;
     renderedActionsOverride = rendered.uiActions;
+    contractMetaOverride = {
+      contractId: rendered.contractId,
+      contractVersion: rendered.contractVersion,
+      textKeys: rendered.textKeys,
+    };
+    applyUiPhaseByStep(nextState, bulletPolicyStepId, rendered.contractId);
     (nextState as any).last_specialist_result = specialistResult;
     if (!hadMenuBefore && actionCodesOverride.length > 0) {
       console.log("[buttonless_screen_prevented]", {
@@ -6434,6 +6881,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       actionCodesOverride = rendered.uiActionCodes;
       renderedActionsOverride = rendered.uiActions;
     }
+    contractMetaOverride = {
+      contractId: rendered.contractId,
+      contractVersion: rendered.contractVersion,
+      textKeys: rendered.textKeys,
+    };
+    applyUiPhaseByStep(nextState, menuSafetyStepId, rendered.contractId);
     if (process.env.GLOBAL_TURN_POLICY_DEBUG === "1" || shouldLogLocalDevDiagnostics()) {
       console.log("[menu_safety_policy]", {
         applied: rendered.uiActionCodes.length > 0,
@@ -6471,6 +6924,21 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }
   }
 
+  const currentStepForContract = String((nextState as any).current_step ?? "");
+  const specialistContractId = String((specialistResult as any)?.ui_contract_id || "").trim();
+  if (currentStepForContract && specialistContractId) {
+    applyUiPhaseByStep(nextState, currentStepForContract, specialistContractId);
+    if (!contractMetaOverride?.contractId) {
+      contractMetaOverride = {
+        contractId: specialistContractId,
+        contractVersion: String((specialistResult as any)?.ui_contract_version || UI_CONTRACT_VERSION),
+        textKeys: Array.isArray((specialistResult as any)?.ui_text_keys)
+          ? (specialistResult as any)?.ui_text_keys
+          : [],
+      };
+    }
+  }
+
   const text = buildTextForWidget({ specialist: specialistResult });
   const prompt = pickPrompt(specialistResult);
 
@@ -6484,7 +6952,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     ...(requireWordingPick ? { require_wording_pick: true } : {}),
   };
 
-  return attachRegistryPayload({
+  return finalizeResponse(attachRegistryPayload({
     ok: true as const,
     tool: "run_step" as const,
     current_step_id: String(nextState.current_step),
@@ -6499,5 +6967,5 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       language: lang,
       meta_user_message_ignored: looksLikeMetaInstruction(rawNormalized) && pristineAtEntry,
     },
-  }, specialistResult, mergedFlags, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride);
+  }, specialistResult, mergedFlags, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride));
 }

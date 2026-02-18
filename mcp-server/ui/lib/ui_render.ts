@@ -608,12 +608,16 @@ export function render(overrideToolOutput?: unknown): void {
       result?.ui && typeof result.ui === "object" && (result.ui as Record<string, unknown>).flags
         ? ((result.ui as Record<string, unknown>).flags as Record<string, unknown>)
         : {};
+    const menuId = String((result?.specialist as Record<string, unknown>)?.menu_id || "").trim();
+    const purposeHintAllowedMenus = new Set(["PURPOSE_MENU_EXPLAIN", "PURPOSE_MENU_EXAMPLES"]);
     const showPurposeHint =
-      current === "purpose" && (uiFlags.showPurposeHint as boolean) === true;
+      current === "purpose" &&
+      (uiFlags.showPurposeHint as boolean) === true &&
+      purposeHintAllowedMenus.has(menuId);
     if (showPurposeHint) {
       purposeInstructionHintEl.style.display = "block";
       purposeInstructionHintEl.textContent =
-        t(lang, "purposeInstructionHint") || "Answer the question, formulate your own Purpose or make a choose";
+        t(lang, "purposeInstructionHint") || "Answer the question, formulate your own Purpose, or choose an option";
     } else {
       purposeInstructionHintEl.style.display = "none";
     }
