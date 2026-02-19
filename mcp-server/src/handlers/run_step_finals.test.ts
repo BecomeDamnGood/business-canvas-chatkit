@@ -1049,11 +1049,11 @@ test("wording choice: step_0 is never eligible for dual-choice", () => {
   assert.equal(isWordingChoiceEligibleStep("step_0"), false);
   assert.equal(isWordingChoiceEligibleStep("dream"), true);
   assert.equal(isWordingChoiceEligibleStep("purpose"), true);
-  assert.equal(isWordingChoiceEligibleContext("dream", "DreamExplainer"), true);
+  assert.equal(isWordingChoiceEligibleContext("dream", "DreamExplainer"), false);
   assert.equal(isWordingChoiceEligibleContext("dream", "Dream"), true);
   assert.equal(
     isWordingChoiceEligibleContext("dream", "Dream", { suggest_dreambuilder: "true" }, {}),
-    true
+    false
   );
   assert.equal(
     isWordingChoiceEligibleContext(
@@ -1062,7 +1062,7 @@ test("wording choice: step_0 is never eligible for dual-choice", () => {
       { menu_id: "DREAM_EXPLAINER_MENU_ASK" },
       {}
     ),
-    true
+    false
   );
   assert.equal(
     isWordingChoiceEligibleContext("dream", "DreamExplainer", { scoring_phase: "true" }, {}),
@@ -1146,6 +1146,30 @@ test("buildTextForWidget strips prompt/menu echo lines from DreamExplainer body 
       refined_formulation: "",
       suggest_dreambuilder: "true",
     },
+  });
+
+  assert.equal(text.includes("1) Switch back to self-formulate the dream"), false);
+  assert.equal(
+    text.includes("What more do you see changing in the future, positive or negative? Let your imagination run free."),
+    false
+  );
+  assert.equal(text.includes("Your Dream statements"), true);
+});
+
+test("buildTextForWidget strips prompt/menu echo using ui question override when specialist question is plain", () => {
+  const uiQuestion =
+    "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.";
+  const text = buildTextForWidget({
+    specialist: {
+      menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+      question: "What more do you see changing in the future, positive or negative? Let your imagination run free.",
+      message:
+        "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.\n\nYour Dream statements",
+      refined_formulation:
+        "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.\n\nYour Dream statements",
+      suggest_dreambuilder: "true",
+    },
+    questionTextOverride: uiQuestion,
   });
 
   assert.equal(text.includes("1) Switch back to self-formulate the dream"), false);
@@ -1344,7 +1368,7 @@ test("meta off-topic fallback marks Ben/info step messages as off-topic outside 
   );
 });
 
-test("wording choice: DreamExplainer rewrite enables user-vs-suggestion panel", () => {
+test("wording choice: DreamExplainer rewrite is not eligible for user-vs-suggestion panel", () => {
   const previousSpecialist = {
     action: "ASK",
     menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
@@ -1383,15 +1407,8 @@ test("wording choice: DreamExplainer rewrite enables user-vs-suggestion panel", 
     isOfftopic: false,
   });
 
-  assert.equal(Boolean(rebuilt.wordingChoice), true);
-  assert.equal(rebuilt.wordingChoice?.enabled, true);
-  assert.equal(rebuilt.wordingChoice?.mode, "list");
-  assert.equal(String(rebuilt.specialist?.wording_choice_pending || ""), "true");
-  assert.equal(
-    Array.isArray(rebuilt.wordingChoice?.suggestion_items) &&
-      (rebuilt.wordingChoice?.suggestion_items || []).length > 0,
-    true
-  );
+  assert.equal(Boolean(rebuilt.wordingChoice), false);
+  assert.equal(String(rebuilt.specialist?.wording_choice_pending || ""), "false");
 });
 
 test("wording choice runtime rebuild is contract-eligible across steps (not DreamExplainer-only)", () => {
@@ -2387,7 +2404,7 @@ test("wording choice: refine adjust rebuilds pending choice from stored user var
   );
 });
 
-test("wording choice: DreamExplainer pending panel stays list-mode like Strategy", async () => {
+test("wording choice: DreamExplainer pending panel is suppressed in DreamBuilder mode", async () => {
   const result = await run_step({
     user_message: "",
     input_mode: "widget",
@@ -2418,11 +2435,9 @@ test("wording choice: DreamExplainer pending panel stays list-mode like Strategy
   });
 
   assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.wording_choice_pending || ""), "true");
-  assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
-  assert.equal(String((result.ui as any)?.wording_choice?.mode || ""), "list");
-  assert.deepEqual((result.ui as any)?.wording_choice?.user_items, ["Impact one", "Impact two"]);
-  assert.deepEqual((result.ui as any)?.wording_choice?.suggestion_items, ["Impact one", "Impact two"]);
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "false");
+  assert.notEqual(String(result.ui?.flags?.require_wording_pick || ""), "true");
+  assert.equal(Boolean((result.ui as any)?.wording_choice?.enabled), false);
 });
 
 test("wording choice: DreamExplainer pick does not prepend generic current-dream line", async () => {

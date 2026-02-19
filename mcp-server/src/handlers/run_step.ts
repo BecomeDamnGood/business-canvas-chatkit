@@ -989,7 +989,11 @@ function convertPdfToPng(pdfPath: string, outDir: string): string {
  * message -> refined_formulation; if both empty, fallback to question.
  * Only append refined_formulation if it is not already contained in message (prevents duplicate display e.g. Rules REFINE).
  */
-export function buildTextForWidget(params: { specialist: any; hasWidgetActions?: boolean }): string {
+export function buildTextForWidget(params: {
+  specialist: any;
+  hasWidgetActions?: boolean;
+  questionTextOverride?: string;
+}): string {
   const { specialist } = params;
   const parts: string[] = [];
 
@@ -1062,11 +1066,17 @@ export function buildTextForWidget(params: { specialist: any; hasWidgetActions?:
     const fallbackItems = knownItems.length > 0 ? knownItems : splitSentenceItems(wordingSuggestion);
     msg = sanitizePendingListMessage(msg, fallbackItems);
   }
-  const refined = String(specialist?.refined_formulation ?? "").trim();
+  const promptFromSpecialist = String(specialist?.question ?? "").trim();
+  const promptOverride = String(params.questionTextOverride || "").trim();
+  const prompt = promptOverride || promptFromSpecialist;
+  let refined = String(specialist?.refined_formulation ?? "").trim();
   const menuId = String(specialist?.menu_id || "").trim().toUpperCase();
   if (msg) msg = stripChoiceInstructionNoise(msg);
-  const prompt = String(specialist?.question ?? "").trim();
   if (msg && prompt) msg = stripPromptEchoFromMessage(msg, prompt);
+  if (refined) {
+    refined = stripChoiceInstructionNoise(refined);
+    if (prompt) refined = stripPromptEchoFromMessage(refined, prompt);
+  }
   const statementLines = Array.isArray(specialist?.statements)
     ? (specialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean)
     : [];
@@ -1121,10 +1131,7 @@ export function buildTextForWidget(params: { specialist: any; hasWidgetActions?:
       parts.push(refined);
     }
   }
-  if (parts.length === 0) {
-    const q = prompt;
-    if (q) parts.push(q);
-  }
+  if (parts.length === 0 && prompt) parts.push(prompt);
 
   return parts.join("\n\n").trim();
 }
@@ -1418,11 +1425,14 @@ function isDreamBuilderContext(
   const currentMenu = String((current as any).menu_id || "").trim().toUpperCase();
   const previousMenu = String((previous as any).menu_id || "").trim().toUpperCase();
   const scoringFlag = String((current as any).scoring_phase || (previous as any).scoring_phase || "").trim();
+  const suggestDreamBuilder =
+    String((current as any).suggest_dreambuilder || (previous as any).suggest_dreambuilder || "").trim() === "true";
   const hasStatements =
     (Array.isArray((current as any).statements) && (current as any).statements.length > 0) ||
     (Array.isArray((previous as any).statements) && (previous as any).statements.length > 0);
 
   if (scoringFlag === "true") return true;
+  if (suggestDreamBuilder) return true;
   if (hasStatements) return true;
   if (currentMenu.startsWith("DREAM_EXPLAINER_MENU_")) return true;
   if (previousMenu.startsWith("DREAM_EXPLAINER_MENU_")) return true;
@@ -1436,14 +1446,16 @@ export function isWordingChoiceEligibleContext(
   previousSpecialist?: Record<string, unknown> | null
 ): boolean {
   if (!isWordingChoiceEligibleStep(stepId)) return false;
-  if (isDreamBuilderContext(stepId, activeSpecialist, specialist, previousSpecialist)) {
-    const current = specialist && typeof specialist === "object" ? specialist : {};
-    const previous = previousSpecialist && typeof previousSpecialist === "object" ? previousSpecialist : {};
-    const scoringPhase = String((current as any).scoring_phase || (previous as any).scoring_phase || "").trim();
-    if (scoringPhase === "true") return false;
-  }
+  if (isDreamBuilderContext(stepId, activeSpecialist, specialist, previousSpecialist)) return false;
   return true;
 }
+
+type UiViewMode =
+  | "default"
+  | "wording_choice"
+  | "dream_builder_collect"
+  | "dream_builder_scoring"
+  | "dream_builder_refine";
 
 function isConfirmActionCode(actionCode: string): boolean {
   const entry = ACTIONCODE_REGISTRY.actions[actionCode];
@@ -2936,6 +2948,8 @@ function buildUiPayload(
   actionCodesOverride?: string[] | null,
   renderedActionsOverride?: RenderedAction[] | null,
   wordingChoiceOverride?: WordingChoiceUiPayload | null,
+  stateOverride?: CanvasState | null,
+  stepIdOverride?: string,
   migrationFlags?: MigrationFlags,
   contractMetaOverride?: UiContractMeta | null
 ): {
@@ -2946,6 +2960,7 @@ function buildUiPayload(
   contract_id?: string;
   contract_version?: string;
   text_keys?: string[];
+  view_mode?: UiViewMode;
   flags: Record<string, boolean>;
   wording_choice?: WordingChoiceUiPayload;
 } | undefined {
@@ -2959,6 +2974,40 @@ function buildUiPayload(
     Array.isArray(renderedActionsOverride) && renderedActionsOverride.length > 0
       ? renderedActionsOverride
       : [];
+  const effectiveState = (stateOverride && typeof stateOverride === "object" ? stateOverride : null) as
+    | CanvasState
+    | null;
+  const effectiveStepId = String(stepIdOverride || (effectiveState as any)?.current_step || "").trim();
+  const dreamRuntimeMode = String((effectiveState as any)?.__dream_runtime_mode || "").trim();
+  const statementsCount = Array.isArray((specialist as any)?.statements)
+    ? ((specialist as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
+    : 0;
+  const canonicalStatementsCount =
+    Array.isArray((effectiveState as any)?.dream_builder_statements)
+      ? ((effectiveState as any).dream_builder_statements as unknown[]).length
+      : 0;
+  const scoringPhase = String((specialist as any)?.scoring_phase || "").trim() === "true";
+  const hasClusters =
+    Array.isArray((specialist as any)?.clusters) &&
+    ((specialist as any).clusters as unknown[]).length > 0;
+  const wordingPickPending =
+    Boolean(wordingChoiceOverride?.enabled) ||
+    String((specialist as any)?.wording_choice_pending || "").trim() === "true" ||
+    Boolean((flagsOverride || {}).require_wording_pick);
+  let viewMode: UiViewMode = "default";
+  if (
+    effectiveStepId === DREAM_STEP_ID &&
+    ((scoringPhase && hasClusters && Math.max(statementsCount, canonicalStatementsCount) >= 20) ||
+      dreamRuntimeMode === "builder_scoring")
+  ) {
+    viewMode = "dream_builder_scoring";
+  } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_refine") {
+    viewMode = "dream_builder_refine";
+  } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_collect") {
+    viewMode = "dream_builder_collect";
+  } else if (wordingPickPending) {
+    viewMode = "wording_choice";
+  }
   if (Array.isArray(actionCodesOverride)) {
     const safeOverrideCodes = sanitizeWidgetActionCodes(
       actionCodesOverride.map((code) => String(code || "").trim()).filter(Boolean)
@@ -2982,6 +3031,7 @@ function buildUiPayload(
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
+        ...(viewMode ? { view_mode: viewMode } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
@@ -2991,6 +3041,7 @@ function buildUiPayload(
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
+        ...(viewMode ? { view_mode: viewMode } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
@@ -3026,6 +3077,7 @@ function buildUiPayload(
             ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
             ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
             ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
+            ...(viewMode ? { view_mode: viewMode } : {}),
             flags,
             ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
           };
@@ -3047,6 +3099,7 @@ function buildUiPayload(
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
+        ...(viewMode ? { view_mode: viewMode } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
@@ -3057,6 +3110,7 @@ function buildUiPayload(
       ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
       ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
       ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
+      ...(viewMode ? { view_mode: viewMode } : {}),
       flags,
       ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
     };
@@ -3070,7 +3124,7 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
   flagsOverride?: Record<string, boolean> | null,
   actionCodesOverride?: string[] | null,
   renderedActionsOverride?: RenderedAction[] | null,
-  wordingChoiceOverride?: WordingChoiceUiPayload | null,
+    wordingChoiceOverride?: WordingChoiceUiPayload | null,
   contractMetaOverride?: UiContractMeta | null
 ): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
   const safeSpecialist = sanitizeEscapeInWidget(specialist);
@@ -3091,6 +3145,8 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
     actionCodesOverride,
     renderedActionsOverride,
     wordingChoiceOverride,
+    payloadState,
+    payloadStepId,
     undefined,
     effectiveContractOverride
   );
@@ -3101,7 +3157,13 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
     ...payload,
     specialist: safeSpecialist,
     ...(Object.prototype.hasOwnProperty.call(payload, "text")
-      ? { text: buildTextForWidget({ specialist: safeSpecialist, hasWidgetActions }) }
+      ? {
+          text: buildTextForWidget({
+            specialist: safeSpecialist,
+            hasWidgetActions,
+            questionTextOverride: String(ui?.questionText || ""),
+          }),
+        }
       : {}),
     ...(Object.prototype.hasOwnProperty.call(payload, "prompt")
       ? { prompt: pickPrompt(safeSpecialist) }
@@ -5961,6 +6023,21 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
   const currentStepForWordingChoice = String((nextState as any).current_step || "");
   const currentSpecialistForWordingChoice = String((nextState as any).active_specialist || "");
+  const previousSpecialistForWordingChoice = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+  const dreamBuilderContextForWording = isDreamBuilderContext(
+    currentStepForWordingChoice,
+    currentSpecialistForWordingChoice,
+    (specialistResult || {}) as Record<string, unknown>,
+    previousSpecialistForWordingChoice
+  );
+  if (dreamBuilderContextForWording) {
+    specialistResult = {
+      ...specialistResult,
+      wording_choice_pending: "false",
+      wording_choice_selected: "",
+    };
+    (nextState as any).last_specialist_result = specialistResult;
+  }
   const isCurrentTurnOfftopic =
     specialistResult?.is_offtopic === true ||
     String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
@@ -5989,7 +6066,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const rebuilt = buildWordingChoiceFromTurn({
       stepId: currentStepForWordingChoice,
       activeSpecialist: currentSpecialistForWordingChoice,
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+      previousSpecialist: previousSpecialistForWordingChoice,
       specialistResult,
       userTextRaw: userTextForWordingChoice,
       isOfftopic: false,
@@ -5998,12 +6075,20 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
   (nextState as any).last_specialist_result = specialistResult;
   if (wordingChoiceEnabled && inputMode === "widget") {
-    const pendingChoice = buildWordingChoiceFromPendingSpecialist(
-      specialistResult,
+    const pendingEligible = isWordingChoiceEligibleContext(
+      String((nextState as any).current_step || ""),
       String((nextState as any).active_specialist || ""),
-      ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-      String((nextState as any).current_step || "")
+      (specialistResult || {}) as Record<string, unknown>,
+      previousSpecialistForWordingChoice
     );
+    const pendingChoice = pendingEligible
+      ? buildWordingChoiceFromPendingSpecialist(
+          specialistResult,
+          String((nextState as any).active_specialist || ""),
+          previousSpecialistForWordingChoice,
+          String((nextState as any).current_step || "")
+        )
+      : null;
     if (pendingChoice) {
       wordingChoiceOverride = pendingChoice;
       requireWordingPick = true;

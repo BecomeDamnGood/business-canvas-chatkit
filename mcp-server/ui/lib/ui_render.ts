@@ -542,6 +542,12 @@ export function render(overrideToolOutput?: unknown): void {
     result?.ui && typeof result.ui === "object"
       ? (result.ui as Record<string, unknown>)
       : {};
+  const uiViewMode = String(uiPayload.view_mode || "").trim();
+  const hasExplicitViewMode = uiViewMode.length > 0;
+  const isViewModeWordingChoice = uiViewMode === "wording_choice";
+  const isViewModeDreamBuilderCollect = uiViewMode === "dream_builder_collect";
+  const isViewModeDreamBuilderRefine = uiViewMode === "dream_builder_refine";
+  const isViewModeDreamBuilderScoring = uiViewMode === "dream_builder_scoring";
   const uiQuestionText = String(uiPayload.questionText || "").trim();
   const structuredActions = Array.isArray(uiPayload.actions)
     ? (uiPayload.actions as Array<Record<string, unknown>>)
@@ -634,12 +640,17 @@ export function render(overrideToolOutput?: unknown): void {
 
   const isScoringView =
     current === "dream" &&
-    isDreamExplainerMode &&
-    String(specialist.scoring_phase || "") === "true" &&
-    Array.isArray(specialist.clusters) &&
-    (specialist.clusters as unknown[]).length > 0 &&
-    Array.isArray(statementsArray) &&
-    statementsArray.length >= 20;
+    (
+      isViewModeDreamBuilderScoring ||
+      (
+        isDreamExplainerMode &&
+        String(specialist.scoring_phase || "") === "true" &&
+        Array.isArray(specialist.clusters) &&
+        (specialist.clusters as unknown[]).length > 0 &&
+        Array.isArray(statementsArray) &&
+        statementsArray.length >= 20
+      )
+    );
 
   if (isScoringView) {
     const clusters = specialist.clusters as Array<{ statement_indices: number[]; theme?: string }>;
@@ -862,6 +873,7 @@ export function render(overrideToolOutput?: unknown): void {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   } else if (
     current === "dream" &&
+    (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine || (!hasExplicitViewMode && isDreamExplainerMode)) &&
     Array.isArray(statementsArray) &&
     statementsArray.length > 0 &&
     statementsArray.length < 20
@@ -891,7 +903,16 @@ export function render(overrideToolOutput?: unknown): void {
     choicesArr = Array.isArray(parsed.choices) ? parsed.choices : [];
     promptText = isDreamDirectionView ? "" : parsed.promptShown;
   }
-  const requireWordingPick = renderWordingChoicePanel(result, lang);
+  let requireWordingPick = false;
+  const suppressWordingChoice =
+    (hasExplicitViewMode && !isViewModeWordingChoice) ||
+    (current === "dream" && isDreamExplainerMode && !isViewModeWordingChoice);
+  if (!suppressWordingChoice) {
+    requireWordingPick = renderWordingChoicePanel(result, lang);
+  } else {
+    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+  }
 
   const promptEl = document.getElementById("prompt");
   if (promptEl) renderInlineText(promptEl, promptText || "");
@@ -928,10 +949,14 @@ export function render(overrideToolOutput?: unknown): void {
       ? (specialist as { statements: unknown[] }).statements.length
       : 0) ||
     0;
+  const inDreamBuilderView = hasExplicitViewMode
+    ? (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine || isViewModeDreamBuilderScoring)
+    : isDreamExplainerMode;
   const showGoToNextStep =
     current === "dream" &&
-    isDreamExplainerMode &&
+    inDreamBuilderView &&
     effectiveStatementsForButton >= 20 &&
+    !isViewModeDreamBuilderScoring &&
     !requireWordingPick;
 
   inputWrap.style.display = "flex";
@@ -950,8 +975,11 @@ export function render(overrideToolOutput?: unknown): void {
       (sde as HTMLElement).style.display = isDreamStepPreExercise ? "inline-flex" : "none";
     }
     if (sb) {
+      const showSwitchByMode = hasExplicitViewMode
+        ? (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine)
+        : isDreamExplainerMode;
       (sb as HTMLElement).style.display =
-        isDreamExplainerMode
+        showSwitchByMode
           ? "inline-flex"
           : "none";
     }
