@@ -479,9 +479,10 @@ export function render(overrideToolOutput?: unknown): void {
 
   const specialist = (result?.specialist as Record<string, unknown>) || {};
   const sectionTitleEl = document.getElementById("sectionTitle");
+  const specialistAction = String(specialist.action || "").trim().toUpperCase();
 
   if (sectionTitleEl) {
-    if (!showPreStart && current !== "step_0") {
+    if (!showPreStart && current !== "step_0" && specialistAction === "INTRO") {
       const businessName = String((state?.business_name || "")).trim();
       sectionTitleEl.textContent = getSectionTitle(lang, current, businessName);
     } else {
@@ -526,16 +527,19 @@ export function render(overrideToolOutput?: unknown): void {
     current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
 
   const bodyRaw = ((): string => {
-    let raw = (result?.text && typeof result.text === "string" ? result.text : "") as string;
-    if (!raw && result?.specialist && typeof result.specialist === "object") {
+    if (result && typeof result === "object" && Object.prototype.hasOwnProperty.call(result, "text")) {
+      return typeof result.text === "string" ? result.text : "";
+    }
+    if (result?.specialist && typeof result.specialist === "object") {
       const sp = result.specialist as Record<string, unknown>;
-      raw =
+      return (
         String(sp.message || "").trim() ||
         String(sp.refined_formulation || "").trim() ||
         String(sp.question || "").trim() ||
-        "";
+        ""
+      );
     }
-    return raw;
+    return "";
   })();
   const uiPayload =
     result?.ui && typeof result.ui === "object"
@@ -554,17 +558,15 @@ export function render(overrideToolOutput?: unknown): void {
   const hasStructuredActions = structuredActions.length > 0;
   const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") as string;
   const promptSource = uiQuestionText || promptRaw;
-  const bodyRawDedupe = dedupeBodyAgainstPrompt(bodyRaw, promptSource);
-
   let body: string;
   const sessionWelcomeShown = getSessionWelcomeShown();
   if (isDreamDirectionView && promptSource) {
     body = promptSource;
   } else if (!sessionWelcomeShown) {
-    body = `${prestartWelcomeForLang(lang)}\n\n${bodyRawDedupe || ""}`.trim();
+    body = `${prestartWelcomeForLang(lang)}\n\n${bodyRaw || ""}`.trim();
     setSessionWelcomeShown(true);
   } else {
-    body = bodyRawDedupe || "";
+    body = bodyRaw || "";
   }
 
   const cardDescEl = document.getElementById("cardDesc");

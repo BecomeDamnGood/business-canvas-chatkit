@@ -814,20 +814,20 @@ test("strategy valid-output from sidepath never renders buttonless screen", () =
 test("rules sidepath menu has label parity and keeps button visible", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
-  setPhaseContract(state as any, "rulesofthegame", "RULES_MENU_EXAMPLE_ONLY");
+  setPhaseContract(state as any, "rulesofthegame", "RULES_MENU_GIVE_EXAMPLE_ONLY");
   const rendered = renderFreeTextTurnPolicy({
     stepId: "rulesofthegame",
     state,
     specialist: {
       action: "ASK",
       message: "Need one concrete example.",
-      menu_id: "RULES_MENU_EXAMPLE_ONLY",
+      menu_id: "RULES_MENU_GIVE_EXAMPLE_ONLY",
       question: "",
       statements: ["We focus on quality"],
       rulesofthegame: "We focus on quality",
     },
   });
-  assert.equal(String(rendered.specialist.menu_id || ""), "RULES_MENU_EXAMPLE_ONLY");
+  assert.equal(String(rendered.specialist.menu_id || ""), "RULES_MENU_GIVE_EXAMPLE_ONLY");
   assert.deepEqual(rendered.uiActionCodes, ["ACTION_RULES_ASK_GIVE_EXAMPLE"]);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 1);
 });

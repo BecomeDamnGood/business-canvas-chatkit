@@ -151,6 +151,7 @@ import {
 } from "../steps/presentation.js";
 import { loadModule as loadCld3 } from "cld3-asm";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
+import { MENU_LABELS } from "../core/menu_contract.js";
 import { renderFreeTextTurnPolicy, type TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
 import {
   NEXT_MENU_BY_ACTIONCODE,
@@ -605,6 +606,18 @@ function validateRenderedContractTurn(
   for (const code of actionCodes) {
     if (!ACTIONCODE_REGISTRY.actions[code]) return `unknown_action_code:${code}`;
   }
+  if (state) {
+    const clickedLabel = String((state as any).__last_clicked_label_for_contract || "").trim();
+    if (clickedLabel) {
+      const clickedKey = clickedLabel.toLowerCase();
+      const nextLabels = uiActions
+        .map((action) => String((action as any)?.label || "").trim().toLowerCase())
+        .filter(Boolean);
+      if (nextLabels.includes(clickedKey)) {
+        return "repeated_clicked_label_after_transition";
+      }
+    }
+  }
   if (menuId) {
     const allowed = new Set((ACTIONCODE_REGISTRY.menus[menuId] || []).map((code) => String(code || "").trim()));
     if (allowed.size === 0) return "menu_has_no_registry_actions";
@@ -618,6 +631,9 @@ function validateRenderedContractTurn(
     rendered.status !== "no_output" &&
     actionCodes.length === 0
   ) {
+    if (state && inferUiRenderModeForStep(state, stepId) === "no_buttons") {
+      return null;
+    }
     return "missing_action_codes_for_interactive_step";
   }
 
@@ -1131,8 +1147,6 @@ export function buildTextForWidget(params: {
       parts.push(refined);
     }
   }
-  if (parts.length === 0 && prompt) parts.push(prompt);
-
   return parts.join("\n\n").trim();
 }
 
@@ -2891,6 +2905,29 @@ function applyUiPhaseByStep(state: CanvasState, stepId: string, contractId: stri
   (state as any).__ui_phase_by_step = next;
 }
 
+function setUiRenderModeByStep(
+  state: CanvasState,
+  stepId: string,
+  mode: "menu" | "no_buttons"
+): void {
+  const safeStepId = String(stepId || "").trim();
+  if (!safeStepId) return;
+  const existing = (state as any).__ui_render_mode_by_step;
+  const next = existing && typeof existing === "object" ? { ...existing } : {};
+  next[safeStepId] = mode;
+  (state as any).__ui_render_mode_by_step = next;
+}
+
+function inferUiRenderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
+  const safeStepId = String(stepId || "").trim();
+  if (!safeStepId) return "menu";
+  const existing =
+    (state as any).__ui_render_mode_by_step && typeof (state as any).__ui_render_mode_by_step === "object"
+      ? ((state as any).__ui_render_mode_by_step as Record<string, unknown>)
+      : {};
+  return String(existing[safeStepId] || "").trim() === "no_buttons" ? "no_buttons" : "menu";
+}
+
 function parseMenuFromContractIdForStep(contractIdRaw: unknown, stepId: string): string {
   const contractId = String(contractIdRaw || "").trim();
   const safeStepId = String(stepId || "").trim();
@@ -2929,21 +2966,69 @@ export function resolveActionCodeMenuTransition(
   stepId: string,
   sourceMenuId: string
 ): string {
+  const resolved = resolveActionCodeTransition(actionCode, stepId, sourceMenuId);
+  if (!resolved) return "";
+  if (resolved.renderMode !== "menu") return "";
+  if (resolved.targetStepId !== String(stepId || "").trim()) return "";
+  return resolved.targetMenuId;
+}
+
+type ResolvedActionCodeTransition = {
+  actionCode: string;
+  stepId: string;
+  sourceMenuId: string;
+  targetStepId: string;
+  targetMenuId: string;
+  renderMode: "menu" | "no_buttons";
+};
+
+function resolveActionCodeTransition(
+  actionCode: string,
+  stepId: string,
+  sourceMenuId: string
+): ResolvedActionCodeTransition | null {
   const safeActionCode = String(actionCode || "").trim().toUpperCase();
   const safeStepId = String(stepId || "").trim();
   const safeSourceMenu = String(sourceMenuId || "").trim();
-  if (!safeActionCode || !safeStepId) return "";
+  if (!safeActionCode || !safeStepId) return null;
   const transition = NEXT_MENU_BY_ACTIONCODE[safeActionCode];
-  if (!transition) return "";
-  if (String(transition.step_id || "").trim() !== safeStepId) return "";
+  if (!transition) return null;
+  if (String(transition.step_id || "").trim() !== safeStepId) return null;
   const fromMenus = Array.isArray(transition.from_menu_ids)
     ? transition.from_menu_ids.map((menu) => String(menu || "").trim()).filter(Boolean)
     : [];
-  if (fromMenus.length > 0 && !fromMenus.includes(safeSourceMenu)) return "";
+  if (fromMenus.length > 0 && !fromMenus.includes(safeSourceMenu)) return null;
+  const targetStepId = String(transition.to_step_id || safeStepId).trim();
+  if (!targetStepId) return null;
+  const renderMode: "menu" | "no_buttons" =
+    String(transition.render_mode || "").trim() === "no_buttons" ? "no_buttons" : "menu";
   const targetMenuId = String(transition.to_menu_id || "").trim();
-  if (!targetMenuId) return "";
-  if (!menuBelongsToStep(targetMenuId, safeStepId)) return "";
-  return targetMenuId;
+  if (renderMode === "menu") {
+    if (!targetMenuId) return null;
+    if (!menuBelongsToStep(targetMenuId, targetStepId)) return null;
+  }
+  return {
+    actionCode: safeActionCode,
+    stepId: safeStepId,
+    sourceMenuId: safeSourceMenu,
+    targetStepId,
+    targetMenuId: renderMode === "menu" ? targetMenuId : "",
+    renderMode,
+  };
+}
+
+function labelForActionInMenu(menuId: string, actionCode: string): string {
+  const safeMenuId = String(menuId || "").trim();
+  const safeActionCode = String(actionCode || "").trim();
+  if (!safeMenuId || !safeActionCode) return "";
+  const actionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[safeMenuId])
+    ? ACTIONCODE_REGISTRY.menus[safeMenuId].map((code) => String(code || "").trim())
+    : [];
+  if (actionCodes.length === 0) return "";
+  const idx = actionCodes.findIndex((code) => code === safeActionCode);
+  if (idx < 0) return "";
+  const labels = Array.isArray(MENU_LABELS[safeMenuId]) ? MENU_LABELS[safeMenuId] : [];
+  return String(labels[idx] || "").trim();
 }
 
 function buildUiPayload(
@@ -4518,6 +4603,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const isActionCodeTurnForPolicy = actionCodeRaw !== "" && actionCodeRaw !== "ACTION_TEXT_SUBMIT";
   let userMessage = userMessageCandidate;
   let submittedUserText = "";
+  let clickedLabelForNoRepeat = "";
+  let clickedActionCodeForNoRepeat = "";
 
   const deriveIntentTypeForRouting = (actionCode: string, routeOrText: string): string => {
     const normalizedActionCode = String(actionCode || "").trim();
@@ -4578,6 +4665,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   };
 
   const finalizeResponse = <T extends RunStepSuccess | RunStepError>(response: T): T => {
+    const responseStateForCleanup = (response as any)?.state as CanvasState | undefined;
+    if (responseStateForCleanup) {
+      if (Object.prototype.hasOwnProperty.call(responseStateForCleanup as any, "__last_clicked_label_for_contract")) {
+        delete (responseStateForCleanup as any).__last_clicked_label_for_contract;
+      }
+      if (Object.prototype.hasOwnProperty.call(responseStateForCleanup as any, "__last_clicked_action_for_contract")) {
+        delete (responseStateForCleanup as any).__last_clicked_action_for_contract;
+      }
+    }
     if (!tokenLoggingEnabled) return response;
     try {
       const responseState = (response as any)?.state as CanvasState | undefined;
@@ -4656,6 +4752,16 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         input_mode: inputMode,
       });
     }
+    const sourceStep = String(state.current_step || "").trim();
+    const sourceMenu = inferCurrentMenuForStep(
+      state,
+      sourceStep,
+      (lastSpecialistResult || {}) as Record<string, unknown>
+    );
+    clickedActionCodeForNoRepeat = String(actionCodeRaw || "").trim().toUpperCase();
+    clickedLabelForNoRepeat = labelForActionInMenu(sourceMenu, clickedActionCodeForNoRepeat);
+    (state as any).__last_clicked_action_for_contract = clickedActionCodeForNoRepeat;
+    (state as any).__last_clicked_label_for_contract = clickedLabelForNoRepeat;
   }
 
   if (actionCodeRaw === "ACTION_TEXT_SUBMIT") {
@@ -4663,6 +4769,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     submittedUserText = submitted;
     userMessage = submitted;
     actionCodeRaw = "";
+    clickedActionCodeForNoRepeat = "";
+    clickedLabelForNoRepeat = "";
+    (state as any).__last_clicked_action_for_contract = "";
+    (state as any).__last_clicked_label_for_contract = "";
     if (
       String((state as any).initial_user_message ?? "").trim() === "" &&
       submitted &&
@@ -4786,8 +4896,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     ACTION_BIGWHY_REFINE_CONFIRM: ROLE_STEP_ID,
     ACTION_ROLE_REFINE_CONFIRM: ENTITY_STEP_ID,
     ACTION_ENTITY_EXAMPLE_CONFIRM: STRATEGY_STEP_ID,
-    ACTION_STRATEGY_CONFIRM_SATISFIED: RULESOFTHEGAME_STEP_ID,
-    ACTION_STRATEGY_FINAL_CONTINUE: RULESOFTHEGAME_STEP_ID,
+    ACTION_STRATEGY_CONFIRM_SATISFIED: TARGETGROUP_STEP_ID,
+    ACTION_STRATEGY_FINAL_CONTINUE: TARGETGROUP_STEP_ID,
     ACTION_TARGETGROUP_POSTREFINE_CONFIRM: PRODUCTSSERVICES_STEP_ID,
     ACTION_PRODUCTSSERVICES_CONFIRM: RULESOFTHEGAME_STEP_ID,
     ACTION_RULES_CONFIRM_ALL: PRESENTATION_STEP_ID,
@@ -4842,6 +4952,16 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       };
     }
     const finalInfo = requireFinalValue(stepId, prev, state);
+    const sourceMenuForTransition = inferCurrentMenuForStep(
+      state,
+      stepId,
+      (prev || {}) as Record<string, unknown>
+    );
+    const resolvedTransition = resolveActionCodeTransition(
+      actionCodeRaw,
+      stepId,
+      sourceMenuForTransition
+    );
     // If we cannot find a required value, fall back to regular actioncode routing.
     if (finalInfo.field && !finalInfo.value) {
     } else {
@@ -4849,7 +4969,28 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         (state as any)[finalInfo.field] = finalInfo.value;
         state = withProvisionalValue(state, stepId, "");
       }
-      (state as any).current_step = String(ACTIONCODE_STEP_TRANSITIONS[actionCodeRaw] || stepId);
+      const nextStepForProceed = resolvedTransition?.targetStepId || String(ACTIONCODE_STEP_TRANSITIONS[actionCodeRaw] || stepId);
+      (state as any).current_step = String(nextStepForProceed || stepId);
+      if (resolvedTransition) {
+        setUiRenderModeByStep(
+          state,
+          resolvedTransition.targetStepId,
+          resolvedTransition.renderMode
+        );
+        applyUiPhaseByStep(
+          state,
+          resolvedTransition.targetStepId,
+          buildContractId(
+            resolvedTransition.targetStepId,
+            "incomplete_output",
+            resolvedTransition.renderMode === "no_buttons"
+              ? "NO_MENU"
+              : resolvedTransition.targetMenuId
+          )
+        );
+      } else {
+        setUiRenderModeByStep(state, String((state as any).current_step || stepId), "menu");
+      }
       (state as any).active_specialist = "";
       (state as any).last_specialist_result = {};
       if (String((state as any).current_step || "") !== DREAM_STEP_ID) {
@@ -4870,12 +5011,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       (lastSpecialistResult || {}) as Record<string, unknown>
     );
     const transitionSpec = NEXT_MENU_BY_ACTIONCODE[safeActionCodeInput];
-    const targetMenuForTransition = resolveActionCodeMenuTransition(
+    const resolvedTransition = resolveActionCodeTransition(
       safeActionCodeInput,
       currentStepForMenuTransition,
       sourceMenuForTransition
     );
-    if (transitionSpec && !targetMenuForTransition) {
+    if (transitionSpec && !resolvedTransition) {
       const specialistSnapshot = (lastSpecialistResult || {}) as Record<string, unknown>;
       return finalizeResponse(attachRegistryPayload({
         ok: false as const,
@@ -4896,11 +5037,22 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         },
       }, specialistSnapshot));
     }
-    if (targetMenuForTransition) {
+    if (resolvedTransition) {
+      setUiRenderModeByStep(
+        state,
+        resolvedTransition.targetStepId,
+        resolvedTransition.renderMode
+      );
       applyUiPhaseByStep(
         state,
-        currentStepForMenuTransition,
-        buildContractId(currentStepForMenuTransition, "incomplete_output", targetMenuForTransition)
+        resolvedTransition.targetStepId,
+        buildContractId(
+          resolvedTransition.targetStepId,
+          "incomplete_output",
+          resolvedTransition.renderMode === "no_buttons"
+            ? "NO_MENU"
+            : resolvedTransition.targetMenuId
+        )
       );
     }
     if (currentStepForMenuTransition === DREAM_STEP_ID) {

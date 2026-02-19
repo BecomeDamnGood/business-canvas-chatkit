@@ -225,8 +225,8 @@ test("renderChoiceButtons keeps both ROLE_MENU_REFINE choices", () => {
   (globalThis as any).document = fakeDocument;
 
   const choices = [
-    { value: "1", label: "Yes, this fits. Continue to step 6 Entity." },
-    { value: "2", label: "Adjust it" },
+    { value: "1", label: "I'm happy with this wording, continue to step 6 Entity." },
+    { value: "2", label: "I want to adjust it." },
   ];
 
   renderChoiceButtons(choices, {
@@ -369,6 +369,136 @@ test("renderChoiceButtons hides buttons when prompt/action_code counts mismatch"
   (globalThis as any).document = originalDocument;
 });
 
+test("render respects explicit empty result.text and does not fall back to specialist.question", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const cardDesc = (fakeDocument as any).getElementById("cardDesc");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  setSessionWelcomeShown(true);
+
+  render({
+    result: {
+      text: "",
+      registry_version: "test",
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        intro_shown_session: "true",
+        intro_shown_for_step: "dream",
+        language: "en",
+      },
+      specialist: {
+        action: "ASK",
+        menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+        question:
+          "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
+      },
+      prompt:
+        "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
+      ui: {
+        questionText:
+          "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
+        action_codes: ["ACTION_DREAM_SWITCH_TO_SELF"],
+        expected_choice_count: 1,
+      },
+    },
+  });
+
+  assert.equal(String(cardDesc.textContent || "").trim(), "");
+
+  setSessionStarted(false);
+  setSessionWelcomeShown(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
+test("render shows section title only on INTRO action for a step", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const sectionTitle = (fakeDocument as any).getElementById("sectionTitle");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: { ok: true }, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  setSessionWelcomeShown(true);
+
+  render({
+    result: {
+      text: "Purpose intro body",
+      registry_version: "test",
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+        intro_shown_session: "true",
+        intro_shown_for_step: "purpose",
+        language: "en",
+        business_name: "Mindd",
+      },
+      specialist: {
+        action: "INTRO",
+        menu_id: "PURPOSE_MENU_INTRO",
+      },
+      prompt: "Please define your purpose.",
+      ui: {
+        action_codes: ["ACTION_PURPOSE_INTRO_EXPLAIN_MORE", "ACTION_PURPOSE_INTRO_DEFINE"],
+        expected_choice_count: 2,
+      },
+    },
+  });
+
+  assert.equal(String(sectionTitle.textContent || ""), "The Purpose of Mindd");
+
+  render({
+    result: {
+      text: "Purpose follow-up body",
+      registry_version: "test",
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+        intro_shown_session: "true",
+        intro_shown_for_step: "purpose",
+        language: "en",
+        business_name: "Mindd",
+      },
+      specialist: {
+        action: "ASK",
+        menu_id: "PURPOSE_MENU_REFINE",
+      },
+      prompt: "Refine your Purpose for Mindd or choose an option.",
+      ui: {
+        action_codes: ["ACTION_PURPOSE_REFINE_CONFIRM", "ACTION_PURPOSE_REFINE_ADJUST"],
+        expected_choice_count: 2,
+      },
+    },
+  });
+
+  assert.equal(String(sectionTitle.textContent || ""), "");
+
+  setSessionStarted(false);
+  setSessionWelcomeShown(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
 test("dedupeBodyAgainstPrompt removes full duplicate body", () => {
   const prompt = "Define your Dream for Acme or choose an option.";
   const body = "Define your Dream for Acme or choose an option.";
@@ -490,10 +620,10 @@ test("render hides regular choice buttons while wording choice is required", () 
       },
       specialist: {
         action: "REFINE",
-        question: "1) Yes, this fits. Continue to step 6 Entity.\n2) Adjust it",
+        question: "1) I'm happy with this wording, continue to step 6 Entity.\n2) I want to adjust it.",
         menu_id: "ROLE_MENU_REFINE",
       },
-      prompt: "1) Yes, this fits. Continue to step 6 Entity.\n2) Adjust it",
+      prompt: "1) I'm happy with this wording, continue to step 6 Entity.\n2) I want to adjust it.",
       ui: {
         action_codes: ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"],
         expected_choice_count: 2,

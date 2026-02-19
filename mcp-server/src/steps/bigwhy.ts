@@ -359,7 +359,6 @@ Important:
 - ACTION_BIGWHY_INTRO_GIVE_EXAMPLE → "__ROUTE__BIGWHY_GIVE_EXAMPLE__" (give example of Big Why)
 - ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE → "__ROUTE__BIGWHY_EXPLAIN_IMPORTANCE__" (explain importance of Big Why)
 - ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS → "__ROUTE__BIGWHY_ASK_3_QUESTIONS__" (ask 3 tough questions)
-- ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLES → "__ROUTE__BIGWHY_GIVE_EXAMPLES__" (give 3 examples)
 - ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE → "__ROUTE__BIGWHY_GIVE_EXAMPLE__" (give example of Big Why)
 - ACTION_BIGWHY_REFINE_CONFIRM → "yes" (confirm Big Why and proceed to Role)
 - ACTION_BIGWHY_REFINE_ADJUST → "__ROUTE__BIGWHY_REFINE__" (refine the Big Why)
@@ -373,7 +372,6 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 
 - "__ROUTE__BIGWHY_GIVE_EXAMPLE__" → Follow route B' (give example of Big Why, output action="REFINE" with Big Why formulation)
 - "__ROUTE__BIGWHY_ASK_3_QUESTIONS__" → Follow route C (ask 3 tough questions, output action="ASK" with first question)
-- "__ROUTE__BIGWHY_GIVE_EXAMPLES__" → Follow route D (give 3 examples, output action="ASK" with 3 examples)
 - "__ROUTE__BIGWHY_REFINE__" → Follow route E' (refine the Big Why, output action="REFINE" with a DIFFERENT Big Why formulation)
 - "__ROUTE__BIGWHY_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
@@ -466,25 +464,6 @@ Question 3
 - message short
 - question contains only this one question:
 "If that future became true, what would change in standards and choices inside the company on a random Tuesday?"
-- refined_formulation=""
-- question=""
-- bigwhy=""
-- next_step_action="false"
-
-D) If the user chooses option 2 from A (examples)
-Provide exactly 3 examples. Each example must:
-- be a "should-be-true" statement about people or the world (meaning-layer).
-- be universal, not industry-specific, not mentioning the sector, profession, marketing, or customers.
-- reuse at least one theme-word from the user’s Dream or Purpose (for resonance), but keep the sentence universal.
-- NOT be a company policy or rule.
-- NOT be a generic value label (avoid single words like integrity/respect without context).
-- imply a trade-off or cost indirectly (what becomes non-negotiable, what must be protected, what must change).
-- be one sentence, optionally two, max 28 words total.
-- not invent facts beyond the user’s Dream and Purpose.
-
-Then ask (localized, one question only):
-"Which example feels closest to the truth, and what would you change to make it fit?"
-- action="ASK"
 - refined_formulation=""
 - question=""
 - bigwhy=""

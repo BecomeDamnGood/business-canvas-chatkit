@@ -31,7 +31,7 @@ import { BigWhyZodSchema } from "../steps/bigwhy.js";
 import { VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS } from "../steps/step_0_validation.js";
 import { PURPOSE_INSTRUCTIONS } from "../steps/purpose.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { NEXT_MENU_BY_ACTIONCODE } from "../core/ui_contract_matrix.js";
+import { MENU_LABELS, NEXT_MENU_BY_ACTIONCODE } from "../core/ui_contract_matrix.js";
 import { renderFreeTextTurnPolicy } from "../core/turn_policy_renderer.js";
 
 async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Promise<T> {
@@ -112,13 +112,19 @@ test("resolveActionCodeMenuTransition maps informational actions to deterministi
     ["ACTION_DREAM_SUGGESTIONS_START_EXERCISE", "dream", "DREAM_MENU_SUGGESTIONS", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
     ["ACTION_DREAM_REFINE_START_EXERCISE", "dream", "DREAM_MENU_REFINE", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
     ["ACTION_PURPOSE_INTRO_EXPLAIN_MORE", "purpose", "PURPOSE_MENU_INTRO", "PURPOSE_MENU_EXPLAIN"],
+    ["ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS", "purpose", "PURPOSE_MENU_INTRO", "PURPOSE_MENU_POST_ASK"],
+    ["ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS", "purpose", "PURPOSE_MENU_EXAMPLES", "PURPOSE_MENU_POST_ASK"],
     ["ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES", "purpose", "PURPOSE_MENU_EXPLAIN", "PURPOSE_MENU_EXAMPLES"],
-    ["ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE", "bigwhy", "BIGWHY_MENU_INTRO", "BIGWHY_MENU_A"],
+    ["ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE", "bigwhy", "BIGWHY_MENU_INTRO", "BIGWHY_MENU_FROM_EXPLAIN"],
+    ["ACTION_BIGWHY_INTRO_GIVE_EXAMPLE", "bigwhy", "BIGWHY_MENU_INTRO", "BIGWHY_MENU_FROM_GIVE"],
     ["ACTION_ROLE_INTRO_EXPLAIN_MORE", "role", "ROLE_MENU_INTRO", "ROLE_MENU_ASK"],
     ["ACTION_ENTITY_INTRO_EXPLAIN_MORE", "entity", "ENTITY_MENU_INTRO", "ENTITY_MENU_FORMULATE"],
     ["ACTION_STRATEGY_INTRO_EXPLAIN_MORE", "strategy", "STRATEGY_MENU_INTRO", "STRATEGY_MENU_ASK"],
+    ["ACTION_STRATEGY_REFINE_EXPLAIN_MORE", "strategy", "STRATEGY_MENU_CONFIRM", "STRATEGY_MENU_ASK"],
     ["ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE", "targetgroup", "TARGETGROUP_MENU_INTRO", "TARGETGROUP_MENU_EXPLAIN_MORE"],
-    ["ACTION_RULES_INTRO_EXPLAIN_MORE", "rulesofthegame", "RULES_MENU_INTRO", "RULES_MENU_ASK_EXPLAIN"],
+    ["ACTION_RULES_INTRO_EXPLAIN_MORE", "rulesofthegame", "RULES_MENU_INTRO", "RULES_MENU_GIVE_EXAMPLE_ONLY"],
+    ["ACTION_RULES_ASK_EXPLAIN_MORE", "rulesofthegame", "RULES_MENU_ASK_EXPLAIN", "RULES_MENU_GIVE_EXAMPLE_ONLY"],
+    ["ACTION_RULES_ASK_GIVE_EXAMPLE", "rulesofthegame", "RULES_MENU_GIVE_EXAMPLE_ONLY", "RULES_MENU_EXPLAIN_ONLY"],
   ];
 
   for (const [actionCode, stepId, sourceMenu, expectedMenu] of cases) {
@@ -183,9 +189,88 @@ test("NEXT_MENU_BY_ACTIONCODE contract transitions reference valid actions and m
       String(transition.step_id || ""),
       `step mismatch for ${actionCode}`
     );
-    const menuActions = ACTIONCODE_REGISTRY.menus[String(transition.to_menu_id || "")];
-    assert.ok(Array.isArray(menuActions) && menuActions.length > 0, `missing target menu ${transition.to_menu_id}`);
+    const renderMode = String((transition as any).render_mode || "").trim() === "no_buttons" ? "no_buttons" : "menu";
+    if (renderMode === "no_buttons") continue;
+    const targetMenuId = String((transition as any).to_menu_id || "").trim();
+    assert.ok(targetMenuId, `missing target menu ${targetMenuId || "(empty)"} for ${actionCode}`);
+    const menuActions = ACTIONCODE_REGISTRY.menus[targetMenuId];
+    assert.ok(Array.isArray(menuActions) && menuActions.length > 0, `missing target menu ${targetMenuId}`);
   }
+});
+
+test("contract audit: route actions in non-escape menus never repeat the clicked button label", () => {
+  const issues: Array<Record<string, unknown>> = [];
+  for (const [menuIdRaw, codesRaw] of Object.entries(ACTIONCODE_REGISTRY.menus)) {
+    const menuId = String(menuIdRaw || "").trim();
+    if (!menuId || menuId.endsWith("_MENU_ESCAPE")) continue;
+    const codes = Array.isArray(codesRaw) ? codesRaw : [];
+    for (let index = 0; index < codes.length; index += 1) {
+      const actionCode = String(codes[index] || "").trim();
+      if (!actionCode) continue;
+      const actionEntry = ACTIONCODE_REGISTRY.actions[actionCode];
+      const route = String(actionEntry?.route || "").trim();
+      const step = String(actionEntry?.step || "").trim();
+      if (!route || step === "system") continue;
+      const transition = NEXT_MENU_BY_ACTIONCODE[actionCode];
+      if (!transition) {
+        issues.push({ type: "missing_transition", actionCode, menuId });
+        continue;
+      }
+      if (String(transition.step_id || "").trim() !== step) {
+        issues.push({
+          type: "transition_step_mismatch",
+          actionCode,
+          menuId,
+          actionStep: step,
+          transitionStep: String(transition.step_id || "").trim(),
+        });
+        continue;
+      }
+      const fromMenus = Array.isArray(transition.from_menu_ids)
+        ? transition.from_menu_ids.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      if (fromMenus.length > 0 && !fromMenus.includes(menuId)) {
+        issues.push({
+          type: "source_menu_not_covered",
+          actionCode,
+          menuId,
+          fromMenus,
+        });
+        continue;
+      }
+      const renderMode = String(transition.render_mode || "").trim() === "no_buttons" ? "no_buttons" : "menu";
+      if (renderMode === "no_buttons") continue;
+      const targetMenuId = String(transition.to_menu_id || "").trim();
+      if (!targetMenuId) {
+        issues.push({ type: "missing_target_menu", actionCode, menuId });
+        continue;
+      }
+      const targetCodes = ACTIONCODE_REGISTRY.menus[targetMenuId];
+      if (!Array.isArray(targetCodes) || targetCodes.length === 0) {
+        issues.push({
+          type: "invalid_target_menu",
+          actionCode,
+          menuId,
+          targetMenuId,
+        });
+        continue;
+      }
+      const sourceLabel = String((MENU_LABELS[menuId] || [])[index] || "").trim();
+      const targetLabels = (MENU_LABELS[targetMenuId] || [])
+        .map((label) => String(label || "").trim())
+        .filter(Boolean);
+      if (sourceLabel && targetLabels.includes(sourceLabel)) {
+        issues.push({
+          type: "same_button_repeated_after_click",
+          actionCode,
+          menuId,
+          targetMenuId,
+          sourceLabel,
+        });
+      }
+    }
+  }
+  assert.deepEqual(issues, []);
 });
 
 test("applyStateUpdate stages step output without overwriting unrelated committed finals", () => {
@@ -1180,6 +1265,29 @@ test("buildTextForWidget strips prompt/menu echo using ui question override when
   assert.equal(text.includes("Your Dream statements"), true);
 });
 
+test("buildTextForWidget does not re-inject prompt when DreamBuilder body becomes empty after sanitization", () => {
+  const uiQuestion =
+    "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.";
+  const text = buildTextForWidget({
+    specialist: {
+      menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+      question: uiQuestion,
+      message:
+        "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.\n\nYour Dream statements\n\n1. A\n2. B",
+      refined_formulation: "",
+      suggest_dreambuilder: "true",
+      statements: ["A", "B"],
+    },
+    questionTextOverride: uiQuestion,
+  });
+
+  assert.equal(text.includes("1) Switch back to self-formulate the dream"), false);
+  assert.equal(
+    text.includes("What more do you see changing in the future, positive or negative? Let your imagination run free."),
+    false
+  );
+});
+
 test("buildTextForWidget strips generic choose lines when widget actions are present", () => {
   const text = buildTextForWidget({
     specialist: {
@@ -1968,6 +2076,67 @@ test("informational action: purpose explain-more remains on contract menu", asyn
   assert.ok(Array.isArray(result.ui?.action_codes));
   assert.ok((result.ui?.action_codes || []).length >= 1);
   assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_EXPLAIN");
+});
+
+test("informational action: purpose ask-3-questions keeps explain/examples buttons (no repeated ask-3 button)", async () => {
+  const result = await run_step({
+    user_message: "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "purpose",
+      active_specialist: "Purpose",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "PURPOSE_MENU_INTRO",
+        question:
+          "1) Explain more about why a purpose is needed.\n2) Ask 3 questions to help me define the Purpose.",
+        message: "Please define your purpose or ask for more explanation.",
+        purpose: "",
+        refined_formulation: "",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "purpose");
+  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_POST_ASK");
+  assert.deepEqual(result.ui?.action_codes || [], [
+    "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+    "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES",
+  ]);
+});
+
+test("informational action: rules explain-more shows only concrete-example button", async () => {
+  const result = await run_step({
+    user_message: "ACTION_RULES_ASK_EXPLAIN_MORE",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "rulesofthegame",
+      active_specialist: "RulesOfTheGame",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "RULES_MENU_ASK_EXPLAIN",
+        question:
+          "1) Please explain more about Rules of the Game\n2) Give one concrete example (Rule versus poster slogan)",
+        message: "Rules context.",
+        rulesofthegame: "",
+        refined_formulation: "",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "rulesofthegame");
+  assert.equal(String(result.specialist?.menu_id || ""), "RULES_MENU_GIVE_EXAMPLE_ONLY");
+  assert.deepEqual(result.ui?.action_codes || [], ["ACTION_RULES_ASK_GIVE_EXAMPLE"]);
 });
 
 test("wording choice: generic Purpose acknowledgement is replaced with step-specific feedback", async () => {

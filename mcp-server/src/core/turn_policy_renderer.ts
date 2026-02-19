@@ -167,6 +167,14 @@ function parseMenuFromContractId(contractIdRaw: unknown, stepId: string): string
   return menuId;
 }
 
+function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
+  const phaseMap =
+    (state as any).__ui_render_mode_by_step && typeof (state as any).__ui_render_mode_by_step === "object"
+      ? ((state as any).__ui_render_mode_by_step as Record<string, unknown>)
+      : {};
+  return String(phaseMap[stepId] || "").trim() === "no_buttons" ? "no_buttons" : "menu";
+}
+
 function companyNameForPrompt(state: CanvasState): string {
   const raw = String((state as any).business_name ?? "").trim();
   if (!raw || raw === "TBD") return "<your future company>";
@@ -415,6 +423,9 @@ function resolveMenuContract(params: {
   prev: Record<string, unknown>;
 }): { menuId: string; actionCodes: string[]; labels: string[] } {
   const { stepId, status, confirmEligible, state, specialist, prev } = params;
+  if (renderModeForStep(state, stepId) === "no_buttons") {
+    return { menuId: "", actionCodes: [], labels: [] };
+  }
   if (stepId === "dream") {
     const dreamMode = dreamRuntimeModeFromState(state);
     const forcedMenuId =
