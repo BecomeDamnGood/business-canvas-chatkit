@@ -479,10 +479,9 @@ export function render(overrideToolOutput?: unknown): void {
 
   const specialist = (result?.specialist as Record<string, unknown>) || {};
   const sectionTitleEl = document.getElementById("sectionTitle");
-  const isIntroAction = String(specialist.action || "") === "INTRO";
 
   if (sectionTitleEl) {
-    if (isIntroAction) {
+    if (!showPreStart && current !== "step_0") {
       const businessName = String((state?.business_name || "")).trim();
       sectionTitleEl.textContent = getSectionTitle(lang, current, businessName);
     } else {

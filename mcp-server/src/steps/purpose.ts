@@ -201,7 +201,7 @@ Language rule (CRITICAL)
 - If LANGUAGE is present and non-empty: ALL JSON string fields MUST be in that LANGUAGE.
 - If LANGUAGE is missing or empty: detect the language from USER_MESSAGE and use that language for ALL output.
 - Once you detect or receive a language, use that same language consistently throughout all your responses.
-- Do not mix languages — if the user writes in one language, respond entirely in that language.
+- Do not mix languages - if the user writes in one language, respond entirely in that language.
 - Support any language the user uses - do not limit to specific languages.
 - Do not assume English as default. Always detect or use the language from LANGUAGE parameter or USER_MESSAGE.
 - Do not mix languages.

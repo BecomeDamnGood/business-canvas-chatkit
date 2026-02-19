@@ -120,14 +120,14 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
 - If LANGUAGE is present and non-empty: ALL JSON string fields MUST be in that LANGUAGE.
 - If LANGUAGE is missing or empty: detect the language from USER_MESSAGE and use that language for ALL output.
 - Once you detect or receive a language, use that same language consistently throughout all your responses.
-- Do not mix languages — if the user writes in one language, respond entirely in that language.
+- Do not mix languages - if the user writes in one language, respond entirely in that language.
 - Support any language the user uses - do not limit to specific languages.
 - Do not assume English as default. Always detect or use the language from LANGUAGE parameter or USER_MESSAGE.
 - Do not mix languages inside JSON strings.
 - Do not translate user-provided proper names. Keep business names exactly as provided.
 
 6) TEXT STYLE RULES (HARD)
-- Do NOT use em-dashes (—) anywhere. Use a normal hyphen "-" or a period.
+- Do NOT use em-dashes (-) anywhere. Use a normal hyphen "-" or a period.
 - When writing explanations, use short paragraphs with a blank line between paragraphs.
 - Never use “first-person plural” in ANY user-facing string field (message, question, refined_formulation, question, dream).
 
@@ -380,7 +380,7 @@ next_step_action must remain "false" always.
 - Valid JSON only, no extra keys, no markdown.
 - All schema fields present, no nulls.
 - One question per turn.
-- No em-dashes (—).
+- No em-dashes (-).
 - Output language follows LANGUAGE (or mirrors user if missing).
 - Business name used when known.
 - next_step_action only "true" in proceed readiness moment (section 17) OR when user confirms REFINE (section 16.5).

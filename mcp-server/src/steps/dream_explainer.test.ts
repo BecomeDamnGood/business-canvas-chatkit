@@ -233,7 +233,7 @@ test("recap: after adding 2 more statements output includes all 4 (not only the 
 test("stuck helper: two-paragraph intro, blank lines, bullets; no extra instruction line in message", () => {
   const output: DreamExplainerOutput = {
     action: "ASK",
-    message: "Maybe I can help a bit. When you imagine the world 5–10 years from now, do these themes spark an opinion?\n\nJust write whatever comes to mind.\n\n• Do people become more connected, or more lonely?\n• Does technology free us, or control attention?\n• Does work become more human, or more pressured?",
+    message: "Maybe I can help a bit. When you imagine the world 5-10 years from now, do these themes spark an opinion?\n\nJust write whatever comes to mind.\n\n• Do people become more connected, or more lonely?\n• Does technology free us, or control attention?\n• Does work become more human, or more pressured?",
     question: "Write one clear statement in your own words.",
     refined_formulation: "",
     dream: "",

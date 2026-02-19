@@ -1726,7 +1726,7 @@ test("wording choice: selecting user variant updates candidate and clears pendin
   );
   assert.equal(
     String(result.specialist?.message || ""),
-    "You chose your own wording and that's fine. But please remember that A Purpose should capture deeper meaning, not just operational wording.\n\nYour current Purpose for Mindd is:"
+    "You chose your own wording and that's fine. Please note: A Purpose should capture deeper meaning, not just operational wording.\n\nYour current Purpose for Mindd is:"
   );
   assert.equal(String(result.specialist?.confirmation_question || ""), "");
 });

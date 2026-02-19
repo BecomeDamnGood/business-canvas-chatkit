@@ -290,7 +290,7 @@ IMPORTANT - Handling follow-up questions after REFINE:
   - If the user's input provides useful clarification, use action="ASK" to gather more information or action="REFINE" with an updated interpretation
 - Never ignore user input. Always provide a response that moves the conversation forward.
 
-IMPORTANT — Handling user input after REFINE (LISTENING + MINIMAL EDIT)
+IMPORTANT - Handling user input after REFINE (LISTENING + MINIMAL EDIT)
 - Goal: preserve the user's intended segment. Do not "improve" by inventing new segment details.
 - After outputting action="REFINE", the user may provide clarification or a proposed target group.
 - You MUST always respond and move forward.
@@ -317,7 +317,7 @@ FORBIDDEN AUTO-REPLACEMENT
 - Do NOT use any rule that automatically "removes and replaces with a new dimension".
 - Removing forbidden terms may reduce specificity; in that case, ASK instead of inventing.
 
-9) FINAL OUTPUT FORMAT (E) — UPDATED (STRICT NON-REPETITION, MAX 7 WORDS)
+9) FINAL OUTPUT FORMAT (E) - UPDATED (STRICT NON-REPETITION, MAX 7 WORDS)
 
 When saving targetgroup_final (action="ASK"), enforce:
 

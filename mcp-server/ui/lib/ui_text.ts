@@ -25,15 +25,27 @@ export function renderInlineText(el: Element | null, raw: string | null | undefi
   let bold = false;
   let i = 0;
 
+  function appendTextPreservingLines(text: string, useBold: boolean): void {
+    const normalized = String(text || "").replace(/\r\n?/g, "\n");
+    const lines = normalized.split("\n");
+    for (let idx = 0; idx < lines.length; idx += 1) {
+      const line = lines[idx] ?? "";
+      if (useBold) {
+        const strong = document.createElement("strong");
+        strong.textContent = line;
+        fragment.appendChild(strong);
+      } else {
+        fragment.appendChild(document.createTextNode(line));
+      }
+      if (idx < lines.length - 1) {
+        fragment.appendChild(document.createElement("br"));
+      }
+    }
+  }
+
   function flush(): void {
     if (!buf) return;
-    if (bold) {
-      const strong = document.createElement("strong");
-      strong.textContent = buf;
-      fragment.appendChild(strong);
-    } else {
-      fragment.appendChild(document.createTextNode(buf));
-    }
+    appendTextPreservingLines(buf, bold);
     buf = "";
   }
 

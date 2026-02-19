@@ -218,7 +218,7 @@ When refining a vague Role, sharpen it by adding a clearer effect and an implied
 
 Missionary Brevity Rule (HARD)
 
-Any proposed Role sentence (examples and refined_formulation) must be short and "missionary-like": target 6–12 words, maximum 14 words.
+Any proposed Role sentence (examples and refined_formulation) must be short and "missionary-like": target 6-12 words, maximum 14 words.
 
 Non-negotiable rules for Role examples (CRITICAL)
 - Provide exactly 3 examples when examples are requested.

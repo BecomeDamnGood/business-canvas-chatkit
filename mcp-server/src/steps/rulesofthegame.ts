@@ -117,7 +117,7 @@ Hard terminology rules (HARD)
 - Never call it "the rule". Always use "Rule of the Game".
 - Never use "real rule" - always use "Rule of the Game".
 
-RULE FORM CONSTRAINT (HARD) — PRINCIPLE-LEVEL GAME RULES ONLY
+RULE FORM CONSTRAINT (HARD) - PRINCIPLE-LEVEL GAME RULES ONLY
 
 - Each Rule of the Game must be a short, principle-level behavioral standard.
 - Required shape: "We <verb phrase>." (one clause only)
@@ -188,7 +188,7 @@ If the user provides strict operational rules, translate them into 3 to 5 broade
 
 Do not copy operational thresholds into the final Rules of the Game list unless the user explicitly wants operational rules.
 
-The broader rule must be significantly more general than the operational rule. It should apply to multiple aspects of behavior, not just the specific scenario mentioned. For example, "We always start at 9:00" should become "We are punctual" (applies to meetings, deadlines, commitments, not just start times), not "We respect agreed starting times" (still too specific to time). For example, "We greet every client warmly" should become "We are always warm and friendly" (applies to all interactions—calls, emails, meetings, visits, not just greetings), not "We greet every client warmly" (still too specific to greetings).
+The broader rule must be significantly more general than the operational rule. It should apply to multiple aspects of behavior, not just the specific scenario mentioned. For example, "We always start at 9:00" should become "We are punctual" (applies to meetings, deadlines, commitments, not just start times), not "We respect agreed starting times" (still too specific to time). For example, "We greet every client warmly" should become "We are always warm and friendly" (applies to all interactions-calls, emails, meetings, visits, not just greetings), not "We greet every client warmly" (still too specific to greetings).
 
 The broader rule must remove the specific action or scenario and capture the underlying behavioral principle that applies across many situations.
 
@@ -325,7 +325,7 @@ Concrete example (Option 3 from INTRO or option 2 from Why it matters)
   - one broader Rule of the Game that captures the intention behind the strict rule
   - one short sentence that explains that strict rules are examples and evidence of the broader rule, not the final rule list.
 - question must be one line prompting the user to paste 3 to 5 Rules of the Game.
-- Example content direction (not fixed text): Show a strict operational rule like "Every client deliverable is reviewed by a second person before it goes out" paired with the broader Rule of the Game "We protect quality under pressure." Or "If something can impact a client, we proactively inform them within one business day" paired with "We take ownership before problems grow." Or "We always start at 9:00" paired with "We are punctual" (applies to meetings, deadlines, commitments, not just start times). Or "We greet every client warmly" paired with "We are always warm and friendly" (applies to all interactions—calls, emails, meetings, visits, not just greetings). Strict operational rule: "We double-check all important work before it goes out" → Rule of the Game: "We focus on quality" (applies to all work, not just double-checking). Or "Perfection lies in the detail" or "We strive to be excellent in all we do". Explain that operational rules demonstrate what the Rule of the Game means in practice.
+- Example content direction (not fixed text): Show a strict operational rule like "Every client deliverable is reviewed by a second person before it goes out" paired with the broader Rule of the Game "We protect quality under pressure." Or "If something can impact a client, we proactively inform them within one business day" paired with "We take ownership before problems grow." Or "We always start at 9:00" paired with "We are punctual" (applies to meetings, deadlines, commitments, not just start times). Or "We greet every client warmly" paired with "We are always warm and friendly" (applies to all interactions-calls, emails, meetings, visits, not just greetings). Strict operational rule: "We double-check all important work before it goes out" → Rule of the Game: "We focus on quality" (applies to all work, not just double-checking). Or "Perfection lies in the detail" or "We strive to be excellent in all we do". Explain that operational rules demonstrate what the Rule of the Game means in practice.
 - refined_formulation=""
 - question=""
 - rulesofthegame=""
@@ -454,7 +454,7 @@ Formatting: Convert the user's list into bullet format using "• " per line.
 Step 2: Extract individual rules and add to statements
 - Split the normalized/abstracted list into individual rules (split on line breaks).
 - Extract each rule as a separate statement.
-- CRITICAL OUTPUT REQUIREMENT: When you abstract operational rules into broader Rules of the Game, you MUST output statements computed using MERGE_OR_APPEND(PREVIOUS_STATEMENTS, new_rules) in your JSON response. The statements array is the canonical list that the UI displays. Do not only show the abstracted rule in the message field—it must also be in the statements array.
+- CRITICAL OUTPUT REQUIREMENT: When you abstract operational rules into broader Rules of the Game, you MUST output statements computed using MERGE_OR_APPEND(PREVIOUS_STATEMENTS, new_rules) in your JSON response. The statements array is the canonical list that the UI displays. Do not only show the abstracted rule in the message field-it must also be in the statements array.
   
   Example: If PREVIOUS_STATEMENTS = ["We are punctual"] and you abstract "We double-check all work" to "We focus on quality", then statements = ["We are punctual", "We focus on quality"] and message MUST start with:
   

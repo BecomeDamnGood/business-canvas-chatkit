@@ -2498,8 +2498,12 @@ function userChoiceFeedbackReason(stepId: string, prev: any): string {
 }
 
 function userChoiceFeedbackMessage(stepId: string, state: CanvasState, prev: any, activeSpecialist = ""): string {
-  const reason = userChoiceFeedbackReason(stepId, prev);
-  const feedback = `You chose your own wording and that's fine. But please remember that ${reason}`;
+  const rawReason = userChoiceFeedbackReason(stepId, prev);
+  const reason = String(rawReason || "")
+    .trim()
+    .replace(/^(that|because)\s+/i, "");
+  const normalizedReason = /[.!?]$/.test(reason) ? reason : `${reason}.`;
+  const feedback = `You chose your own wording and that's fine. Please note: ${normalizedReason}`;
   const selection = wordingSelectionMessage(stepId, state, activeSpecialist);
   return selection ? `${feedback}\n\n${selection}` : feedback;
 }

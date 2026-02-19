@@ -268,13 +268,13 @@ If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE_FOR_ME__":
 
 Entity rule (simple):
 Entity is what you are, in a few words people instantly picture correctly. Write it as:
-Container word + 1–2 qualifiers.
+Container word + 1-2 qualifiers.
 Example pattern: "a [container] for [who/what]" or "a [qualifier] [container]".
 
 Must do:
 - Use 1 container (the category people already know).
-- Add 1–2 qualifiers that remove the wrong interpretation immediately.
-- Keep it short (max 3–5 words total if possible, maximum 5 words).
+- Add 1-2 qualifiers that remove the wrong interpretation immediately.
+- Keep it short (max 3-5 words total if possible, maximum 5 words).
 
 Must not do:
 - No Dream, Purpose, Role language.
