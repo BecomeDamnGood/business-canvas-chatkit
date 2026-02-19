@@ -1063,6 +1063,30 @@ test("buildTextForWidget strips generic choose lines when menu is interactive", 
   assert.equal(text.includes("We exist to enrich lives."), true);
 });
 
+test("buildTextForWidget strips leaked headline tails ending with 'or choose an option'", () => {
+  const text = buildTextForWidget({
+    specialist: {
+      menu_id: "DREAM_MENU_REFINE",
+      question:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.\n\nRefine your Dream for Mindd or choose an option.",
+      message:
+        "That's a good question about the time in London.\n\nContinue the Dream for Mindd or choose an option.\nMindd dreams of a world in which companies are guided by a deeper purpose.",
+      refined_formulation: "",
+    },
+    hasWidgetActions: true,
+  });
+
+  assert.equal(
+    /continue the dream for mindd or/i.test(String(text || "")),
+    false,
+    "leaked headline tail must not remain in card text"
+  );
+  assert.equal(
+    text.includes("Mindd dreams of a world in which companies are guided by a deeper purpose."),
+    true
+  );
+});
+
 test("buildTextForWidget strips prompt/menu echo lines from DreamExplainer body text", () => {
   const prompt =
     "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.";

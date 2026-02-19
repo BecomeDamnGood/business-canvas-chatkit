@@ -1064,6 +1064,8 @@ function stripChoiceInstructionNoise(value: string): string {
     /^choose\s+an?\s+option\s+by\s+typing\s+.+$/i,
     /^(kies|selecteer)\s+\d+(?:\s*(?:,|\/|of|en)\s*\d+)*\.?$/i,
     /^(kies|selecteer)\s+een\s+optie(\s+hieronder)?\.?$/i,
+    /^.+\s+or\s+choose\s+an?\s+option(s)?(\s+below)?\.?$/i,
+    /^.+\s+or\s+choose\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
   ];
   const inlineNoisePatterns = [
     /\s*choose\s+an?\s+option\s+below\.?/gi,
@@ -1083,6 +1085,8 @@ function stripChoiceInstructionNoise(value: string): string {
         .trim();
       if (!normalized) return "";
       if (fullLineChoicePatterns.some((pattern) => pattern.test(normalized))) return "";
+      if (/\bor\s+choose\s+an?\s+option(s)?(\s+below)?\.?$/i.test(normalized)) return "";
+      if (/\bor\s+choose\s+one\s+of\s+the\s+options(\s+below)?\.?$/i.test(normalized)) return "";
       let candidate = String(line || "");
       for (const pattern of inlineNoisePatterns) {
         candidate = candidate.replace(pattern, "");
