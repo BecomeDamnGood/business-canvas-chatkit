@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderInlineText } from "../ui/lib/ui_text.js";
+import { renderInlineText, renderStructuredText } from "../ui/lib/ui_text.js";
 import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.js";
 import { renderChoiceButtons } from "../ui/lib/ui_render.js";
 import { setIsLoading } from "../ui/lib/ui_state.js";
@@ -139,6 +139,57 @@ test("extractChoicesFromPrompt keeps numbering with <strong> tags and renders bu
     (node: unknown) => node && (node as { tagName?: string }).tagName === "BUTTON"
   );
   assert.equal(buttons.length, 2);
+
+  (globalThis as unknown as { document: unknown }).document = originalDocument;
+});
+
+test("renderStructuredText groups paragraphs, ordered lists, and bullets", () => {
+  const originalDocument = (globalThis as unknown as { document: unknown }).document;
+  const fakeDocument = {
+    createElement(tag: string) {
+      return {
+        nodeType: 1,
+        tagName: String(tag).toUpperCase(),
+        className: "",
+        textContent: "",
+        childNodes: [] as unknown[],
+        appendChild(node: unknown) {
+          this.childNodes.push(node);
+          return node;
+        },
+      };
+    },
+  };
+  (globalThis as unknown as { document: unknown }).document = fakeDocument;
+
+  const container = {
+    innerHTML: "",
+    childNodes: [] as unknown[],
+    appendChild(node: unknown) {
+      this.childNodes.push(node);
+      return node;
+    },
+  };
+
+  renderStructuredText(
+    container as unknown as Element,
+    [
+      "<strong>The Proven Standard</strong>",
+      "A globally implemented strategy canvas used by teams worldwide.",
+      "",
+      "1. First ordered item",
+      "2. Second ordered item",
+      "",
+      "- First bullet",
+      "- Second bullet",
+    ].join("\n")
+  );
+
+  assert.equal(container.childNodes.length, 4);
+  assert.equal((container.childNodes[0] as { className: string }).className, "cardSubheading");
+  assert.equal((container.childNodes[1] as { tagName: string }).tagName, "P");
+  assert.equal((container.childNodes[2] as { tagName: string }).tagName, "OL");
+  assert.equal((container.childNodes[3] as { tagName: string }).tagName, "UL");
 
   (globalThis as unknown as { document: unknown }).document = originalDocument;
 });

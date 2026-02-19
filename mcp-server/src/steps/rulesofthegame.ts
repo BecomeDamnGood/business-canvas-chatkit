@@ -331,22 +331,6 @@ Concrete example (Option 3 from INTRO or option 2 from Why it matters)
 - rulesofthegame=""
 - next_step_action="false"
 
-ACTION CODE INTERPRETATION (HARD, MANDATORY)
-
-
-- ACTION_RULES_INTRO_WRITE → "__ROUTE__RULES_WRITE__" (write or paste 3 to 5 Rules now)
-- ACTION_RULES_INTRO_EXPLAIN_MORE → "__ROUTE__RULES_EXPLAIN_MORE__" (explain again why Rules matter)
-- ACTION_RULES_INTRO_GIVE_EXAMPLE → "__ROUTE__RULES_GIVE_EXAMPLE__" (give one concrete example)
-- ACTION_RULES_ASK_WRITE → "__ROUTE__RULES_WRITE__" (write or paste 3 to 5 Rules now)
-- ACTION_RULES_ASK_EXPLAIN_MORE → "__ROUTE__RULES_EXPLAIN_MORE__" (Please explain more about Rules of the Game)
-- ACTION_RULES_ASK_GIVE_EXAMPLE → "__ROUTE__RULES_GIVE_EXAMPLE__" (give one concrete example)
-- ACTION_RULES_CONFIRM_ALL → "__ROUTE__RULES_CONFIRM_ALL__" (These are all my rules of the game, continue to Presentation)
-- ACTION_RULES_REFINE_CONFIRM → "yes" (confirm Rules and proceed to Presentation)
-- ACTION_RULES_REFINE_ADJUST → "__ROUTE__RULES_ADJUST__" (adjust the rules)
-- ACTION_RULES_ESCAPE_CONTINUE → "__ROUTE__RULES_CONTINUE__" (continue Rules flow)
-- ACTION_RULES_ESCAPE_FINISH_LATER → "__ROUTE__RULES_FINISH_LATER__" (finish later)
-
-
 ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:

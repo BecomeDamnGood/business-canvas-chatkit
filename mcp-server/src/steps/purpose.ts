@@ -316,21 +316,6 @@ If you do not have the Dream in context and cannot connect Purpose to it:
 
 Then continue Purpose. Do not ask for Dream again.
 
-12.5) ACTION CODE INTERPRETATION (HARD, MANDATORY)
-
-
-- ACTION_PURPOSE_INTRO_EXPLAIN_MORE → "__ROUTE__PURPOSE_EXPLAIN_MORE__" (explain Purpose in detail)
-- ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS → "__ROUTE__PURPOSE_ASK_3_QUESTIONS__" (ask 3 questions to help define Purpose)
-- ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES → "__ROUTE__PURPOSE_GIVE_EXAMPLES__" (give 3 examples of how Purpose could sound)
-- ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS → "__ROUTE__PURPOSE_ASK_3_QUESTIONS__" (ask 3 questions to help define Purpose)
-- ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME → "__ROUTE__PURPOSE_CHOOSE_FOR_ME__" (choose a purpose for me)
-- ACTION_PURPOSE_REFINE_CONFIRM → "yes" (confirm Purpose and proceed to Big Why)
-- ACTION_PURPOSE_REFINE_ADJUST → "__ROUTE__PURPOSE_REFINE__" (refine the wording)
-- ACTION_PURPOSE_CONFIRM_SINGLE → "yes" (confirm Purpose and proceed to Big Why)
-- ACTION_PURPOSE_ESCAPE_CONTINUE → "__ROUTE__PURPOSE_CONTINUE__" (continue Purpose flow)
-- ACTION_PURPOSE_ESCAPE_FINISH_LATER → "__ROUTE__PURPOSE_FINISH_LATER__" (finish later)
-
-
 12.6) ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:

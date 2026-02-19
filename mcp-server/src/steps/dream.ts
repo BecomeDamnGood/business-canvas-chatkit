@@ -282,21 +282,6 @@ If user chooses "Give me a few dream suggestions":
 - next_step_action="false"
 - next_step_action="false"
 
-14.5) ACTION CODE INTERPRETATION (HARD, MANDATORY)
-
-
-- ACTION_DREAM_INTRO_EXPLAIN_MORE → "__ROUTE__DREAM_EXPLAIN_MORE__" (explain why Dream matters)
-- ACTION_DREAM_INTRO_START_EXERCISE → "__ROUTE__DREAM_START_EXERCISE__" (start DreamExplainer exercise)
-- ACTION_DREAM_WHY_GIVE_SUGGESTIONS → "__ROUTE__DREAM_GIVE_SUGGESTIONS__" (show dream suggestions)
-- ACTION_DREAM_WHY_START_EXERCISE → "__ROUTE__DREAM_START_EXERCISE__" (start DreamExplainer exercise)
-- ACTION_DREAM_SUGGESTIONS_PICK_ONE → "__ROUTE__DREAM_PICK_ONE__" (pick one suggestion)
-- ACTION_DREAM_SUGGESTIONS_START_EXERCISE → "__ROUTE__DREAM_START_EXERCISE__" (start DreamExplainer exercise)
-- ACTION_DREAM_REFINE_CONFIRM → "yes" (confirm Dream and proceed to Purpose)
-- ACTION_DREAM_REFINE_START_EXERCISE → "__ROUTE__DREAM_START_EXERCISE__" (start DreamExplainer exercise)
-- ACTION_DREAM_ESCAPE_CONTINUE → "__ROUTE__DREAM_CONTINUE__" (continue Dream flow)
-- ACTION_DREAM_ESCAPE_FINISH_LATER → "__ROUTE__DREAM_FINISH_LATER__" (finish later)
-
-
 15) EXERCISE HANDSHAKE (DreamExplainer trigger)
 If user chooses the exercise option in any option-set or asks for the exercise:
 - action="ASK"

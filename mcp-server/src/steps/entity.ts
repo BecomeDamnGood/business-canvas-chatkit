@@ -167,18 +167,6 @@ If the user asks for a recap or summary of what has been discussed in this step 
 - entity=""
 - next_step_action="false"
 
-ACTION CODE INTERPRETATION (HARD, MANDATORY)
-
-
-- ACTION_ENTITY_INTRO_FORMULATE → "__ROUTE__ENTITY_FORMULATE__" (give me an example how my entity could sound)
-- ACTION_ENTITY_INTRO_EXPLAIN_MORE → "__ROUTE__ENTITY_EXPLAIN_MORE__" (explain why having an Entity matters)
-- ACTION_ENTITY_EXAMPLE_CONFIRM → "yes" (confirm Entity and proceed to Strategy)
-- ACTION_ENTITY_EXAMPLE_REFINE → "__ROUTE__ENTITY_REFINE__" (refine the wording - generate new, DIFFERENT formulation)
-- ACTION_ENTITY_FORMULATE_FOR_ME → "__ROUTE__ENTITY_FORMULATE_FOR_ME__" (formulate my entity for me)
-- ACTION_ENTITY_ESCAPE_CONTINUE → "__ROUTE__ENTITY_CONTINUE__" (continue Entity flow)
-- ACTION_ENTITY_ESCAPE_FINISH_LATER → "__ROUTE__ENTITY_FINISH_LATER__" (finish later)
-
-
 ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:

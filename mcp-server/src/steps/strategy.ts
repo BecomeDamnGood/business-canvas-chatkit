@@ -324,20 +324,6 @@ Question (localized) must show exactly:
 
 (blank line)
 
-10.5) ACTION CODE INTERPRETATION (HARD, MANDATORY)
-
-
-- ACTION_STRATEGY_INTRO_EXPLAIN_MORE → "__ROUTE__STRATEGY_EXPLAIN_MORE__" (Explain why a Strategy matters)
-- ACTION_STRATEGY_REFINE_EXPLAIN_MORE → "__ROUTE__STRATEGY_EXPLAIN_MORE__" (Explain why a Strategy matters)
-- ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE → "__ROUTE__STRATEGY_EXPLAIN_MORE__" (Explain why I need a strategy)
-- ACTION_STRATEGY_ASK_3_QUESTIONS → "__ROUTE__STRATEGY_ASK_3_QUESTIONS__" (ask some questions to clarify Strategy)
-- ACTION_STRATEGY_ASK_GIVE_EXAMPLES → "__ROUTE__STRATEGY_GIVE_EXAMPLES__" (show example of Strategy for my business)
-- ACTION_STRATEGY_CONFIRM_SATISFIED → "__ROUTE__STRATEGY_CONFIRM_SATISFIED__" (I'm satisfied with my Strategy. Let's go to Target Group)
-- ACTION_STRATEGY_FINAL_CONTINUE → "__ROUTE__STRATEGY_FINAL_CONTINUE__" (Continue to next step Target Group)
-- ACTION_STRATEGY_ESCAPE_CONTINUE → "__ROUTE__STRATEGY_CONTINUE__" (continue Strategy flow)
-- ACTION_STRATEGY_ESCAPE_FINISH_LATER → "__ROUTE__STRATEGY_FINISH_LATER__" (finish later)
-
-
 10.6) ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:

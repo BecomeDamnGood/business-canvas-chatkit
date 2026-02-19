@@ -353,19 +353,6 @@ Output:
 Important:
 - Do NOT continue coaching in this step in this case.
 
-10.5) ACTION CODE INTERPRETATION (HARD, MANDATORY)
-
-
-- ACTION_BIGWHY_INTRO_GIVE_EXAMPLE → "__ROUTE__BIGWHY_GIVE_EXAMPLE__" (give example of Big Why)
-- ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE → "__ROUTE__BIGWHY_EXPLAIN_IMPORTANCE__" (explain importance of Big Why)
-- ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS → "__ROUTE__BIGWHY_ASK_3_QUESTIONS__" (ask 3 tough questions)
-- ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE → "__ROUTE__BIGWHY_GIVE_EXAMPLE__" (give example of Big Why)
-- ACTION_BIGWHY_REFINE_CONFIRM → "yes" (confirm Big Why and proceed to Role)
-- ACTION_BIGWHY_REFINE_ADJUST → "__ROUTE__BIGWHY_REFINE__" (refine the Big Why)
-- ACTION_BIGWHY_ESCAPE_CONTINUE → "__ROUTE__BIGWHY_CONTINUE__" (continue Big Why flow)
-- ACTION_BIGWHY_ESCAPE_FINISH_LATER → "__ROUTE__BIGWHY_FINISH_LATER__" (finish later)
-
-
 10.6) ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:

@@ -529,6 +529,67 @@ test("stripStructuredChoiceLines keeps plain prompt unchanged", () => {
   assert.equal(stripStructuredChoiceLines(prompt), prompt);
 });
 
+test("render structures only cardDesc body while prompt stays plain inline text", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const cardDesc = (fakeDocument as any).getElementById("cardDesc");
+  const promptEl = (fakeDocument as any).getElementById("prompt");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(true);
+  setSessionWelcomeShown(true);
+
+  render({
+    result: {
+      text: [
+        "A paragraph line.",
+        "",
+        "1. First ordered item",
+        "2. Second ordered item",
+        "",
+        "- First bullet",
+        "- Second bullet",
+      ].join("\n"),
+      registry_version: "test",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+        intro_shown_session: "true",
+        intro_shown_for_step: "dream",
+        language: "en",
+      },
+      specialist: {
+        action: "ASK",
+        menu_id: "DREAM_MENU_INTRO",
+        question: "Define your Dream for Mindd or choose an option.",
+      },
+      prompt: "Define your Dream for Mindd or choose an option.",
+    },
+  });
+
+  const cardNodes = cardDesc.childNodes || [];
+  assert.ok(cardNodes.some((node: any) => node && node.tagName === "P"));
+  assert.ok(cardNodes.some((node: any) => node && node.tagName === "OL"));
+  assert.ok(cardNodes.some((node: any) => node && node.tagName === "UL"));
+  assert.equal((promptEl.childNodes || []).length > 0, true);
+  assert.equal((promptEl.childNodes || []).some((node: any) => node && node.tagName === "OL"), false);
+  assert.equal((promptEl.childNodes || []).some((node: any) => node && node.tagName === "UL"), false);
+
+  setSessionStarted(false);
+  setSessionWelcomeShown(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
 test("render shows wording choice panel in text mode and keeps confirm hidden until pick", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;

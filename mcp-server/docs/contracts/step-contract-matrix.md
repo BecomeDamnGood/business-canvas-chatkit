@@ -15,6 +15,8 @@ This document is the contract-first source of truth for step behavior in the Bus
 - `CONFIRM`, `confirmation_question`, and `proceed_to_*` are not valid runtime drivers.
 - Step transitions are actioncode-driven only.
 - Legacy sessions with old markers are blocked with `session_upgrade_required` and must restart.
+- Backup docs are historical only and non-normative for runtime behavior (example: `mcp-server/docs/BACKUP-v92.md`).
+- Step prompts may describe route-token semantics, but may not include ActionCode to route mappings or ActionCode to `"yes"` mappings.
 
 ## step_0
 

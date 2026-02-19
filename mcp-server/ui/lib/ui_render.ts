@@ -12,7 +12,7 @@ import {
   prestartWelcomeForLang,
   getSectionTitle,
 } from "./ui_constants.js";
-import { escapeHtml, renderInlineText, stripInlineText } from "./ui_text.js";
+import { escapeHtml, renderInlineText, renderStructuredText, stripInlineText } from "./ui_text.js";
 import { extractChoicesFromPrompt, type Choice } from "./ui_choices.js";
 import {
   callRunStep,
@@ -572,7 +572,7 @@ export function render(overrideToolOutput?: unknown): void {
   const cardDescEl = document.getElementById("cardDesc");
   if (cardDescEl) {
     cardDescEl.style.display = "block";
-    renderInlineText(cardDescEl, body || "");
+    renderStructuredText(cardDescEl, body || "");
   }
 
   const previewWrap = document.getElementById("presentationPreview");

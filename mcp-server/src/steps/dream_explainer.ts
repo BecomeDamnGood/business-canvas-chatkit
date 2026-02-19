@@ -212,15 +212,6 @@ User-friendly formatting rules
 - If you need line breaks, use real line breaks inside strings.
 - Keep content compact and readable.
 
-ACTION CODE INTERPRETATION (HARD, MANDATORY)
-
-
-- ACTION_DREAM_EXPLAINER_CONTINUE → "__ROUTE__DREAM_EXPLAINER_CONTINUE__" (continue Dream exercise now)
-- ACTION_DREAM_EXPLAINER_FINISH_LATER → "__ROUTE__DREAM_EXPLAINER_FINISH_LATER__" (finish later)
-- ACTION_DREAM_EXPLAINER_REFINE_CONFIRM → "__ROUTE__DREAM_EXPLAINER_CONTINUE_TO_PURPOSE__" (confirm Dream and proceed to Purpose)
-- ACTION_DREAM_EXPLAINER_REFINE_ADJUST → "__ROUTE__DREAM_EXPLAINER_REFINE__" (refine the wording)
-
-
 ROUTE TOKENS (HARD)
 If USER_MESSAGE is exactly one of these tokens, follow the specified route:
 - "__ROUTE__DREAM_EXPLAINER_CONTINUE_TO_PURPOSE__" → Treat as user confirming the Dream and proceeding. Output the proceed-to-purpose ASK (all fields empty, next_step_action="true").

@@ -1,5 +1,9 @@
 # Backup: version v92
 
+> Historical snapshot only.
+> This file is archival context and is not normative for current runtime contracts.
+> Current contract behavior is defined in active files under `mcp-server/docs/contracts/`.
+
 **Version:** v92  
 **Backup note date:** 2026-02-02
 

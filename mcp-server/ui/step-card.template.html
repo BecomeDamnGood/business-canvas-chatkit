@@ -690,7 +690,7 @@
         line-height: var(--line-height-relaxed);
         color: var(--color-text-secondary);
         max-width: 100%;
-        white-space: pre-line;
+        white-space: normal;
       }
 
       .inlineNotice {
@@ -705,19 +705,54 @@
         display: none;
       }
       
-      .cardDesc ul {
-        margin: 0;
-        padding-left: 0;
-        list-style-position: inside;
+      .cardDesc p {
+        margin: 0 0 var(--space-4);
       }
-      
-      .cardDesc ul br:first-child {
-        display: none;
+
+      .cardDesc p:last-child {
+        margin-bottom: 0;
       }
-      
-      .cardDesc li {
-        margin: 0;
-        padding-left: 0;
+
+      .cardDesc .cardSubheading {
+        font-family: var(--font-sans);
+        font-size: var(--font-size-lg);
+        font-weight: var(--font-weight-medium);
+        letter-spacing: 0.02em;
+        text-transform: none;
+        color: var(--text);
+        margin: var(--space-2) 0 var(--space-2);
+      }
+
+      .cardDesc .structuredList {
+        margin: 0 0 var(--space-4);
+        padding-left: var(--space-7);
+      }
+
+      .cardDesc ul,
+      .cardDesc ol {
+        margin: 0 0 var(--space-4);
+        padding-left: var(--space-7);
+      }
+
+      .cardDesc .structuredListBullet {
+        list-style: disc;
+      }
+
+      .cardDesc .structuredListOrdered {
+        list-style: decimal;
+      }
+
+      .cardDesc .structuredList li {
+        margin: 0 0 var(--space-2);
+      }
+
+      .cardDesc ul li,
+      .cardDesc ol li {
+        margin: 0 0 var(--space-2);
+      }
+
+      .cardDesc .structuredList li:last-child {
+        margin-bottom: 0;
       }
       
       /* ─── Image placeholder (OPTIONAL) ─── */

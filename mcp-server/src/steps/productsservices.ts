@@ -124,11 +124,6 @@ All fields are required. If not applicable, return an empty string "".
 
 4) ACTION CODES AND ROUTE TOKENS
 
-ACTION CODE INTERPRETATION:
-- When USER_MESSAGE contains an ActionCode (e.g., "ACTION_PRODUCTSSERVICES_CONFIRM"), interpret it as a deterministic route token.
-- Map ActionCodes to route tokens:
-  - ACTION_PRODUCTSSERVICES_CONFIRM → __ROUTE__PRODUCTSSERVICES_CONFIRM__
-
 ROUTE TOKEN INTERPRETATION:
 - When USER_MESSAGE contains a route token (e.g., "__ROUTE__PRODUCTSSERVICES_CONFIRM__"), follow the corresponding flow:
   - __ROUTE__PRODUCTSSERVICES_CONFIRM__: Save productsservices_final and proceed to rulesofthegame

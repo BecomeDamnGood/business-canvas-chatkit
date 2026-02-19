@@ -321,19 +321,6 @@ Output:
 Important:
 - Do NOT continue coaching in this step in this case.
 
-10.5) ACTION CODE INTERPRETATION (HARD, MANDATORY)
-
-
-- ACTION_ROLE_INTRO_GIVE_EXAMPLES → "__ROUTE__ROLE_GIVE_EXAMPLES__" (give 3 short Role examples)
-- ACTION_ROLE_INTRO_EXPLAIN_MORE → "__ROUTE__ROLE_EXPLAIN_MORE__" (explain again why Role matters)
-- ACTION_ROLE_ASK_GIVE_EXAMPLES → "__ROUTE__ROLE_GIVE_EXAMPLES__" (give 3 short Role examples)
-- ACTION_ROLE_REFINE_CONFIRM → "yes" (confirm Role and proceed to Entity)
-- ACTION_ROLE_REFINE_ADJUST → "__ROUTE__ROLE_ADJUST__" (adjust the Role)
-- ACTION_ROLE_ESCAPE_CONTINUE → "__ROUTE__ROLE_CONTINUE__" (continue Role flow)
-- ACTION_ROLE_ESCAPE_FINISH_LATER → "__ROUTE__ROLE_FINISH_LATER__" (finish later)
-- ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME → "__ROUTE__ROLE_CHOOSE_FOR_ME__" (choose a role for me)
-
-
 10.6) ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:

@@ -124,15 +124,6 @@ All fields are required. If not applicable, return an empty string "".
 
 4) ACTION CODES AND ROUTE TOKENS
 
-ACTION CODE INTERPRETATION:
-- When USER_MESSAGE contains an ActionCode (e.g., "ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE"), interpret it as a deterministic route token.
-- Map ActionCodes to route tokens:
-  - ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE → __ROUTE__TARGETGROUP_EXPLAIN_MORE__
-  - ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS → __ROUTE__TARGETGROUP_ASK_QUESTIONS__
-  - ACTION_TARGETGROUP_EXPLAIN_ASK_QUESTIONS → __ROUTE__TARGETGROUP_ASK_QUESTIONS__
-  - ACTION_TARGETGROUP_POSTREFINE_CONFIRM → yes (or next_step_action="true")
-  - ACTION_TARGETGROUP_POSTREFINE_ASK_QUESTIONS → __ROUTE__TARGETGROUP_ASK_QUESTIONS__
-
 ROUTE TOKEN INTERPRETATION:
 - When USER_MESSAGE contains a route token (e.g., "__ROUTE__TARGETGROUP_EXPLAIN_MORE__"), follow the corresponding flow:
   - __ROUTE__TARGETGROUP_EXPLAIN_MORE__: Show the explain-more screen (exact text from section 6.2)

@@ -26,6 +26,13 @@ This contract separates display text from routing/action semantics.
 - Button area:
 - `actions[]` (source of truth for click behavior)
 
+## Structural Rendering Policy
+
+- `cardDesc` body uses semantic structure rendering (paragraph / ordered list / bullet list / heading-like line).
+- The analysis baseline per step is maintained in:
+- `docs/contracts/text-structure-analysis-matrix.md`
+- `prompt` and `actions[]` are not reformatted by the body renderer.
+
 ## Recap Rendering
 
 - Recap is derived from canonical finals snapshot.

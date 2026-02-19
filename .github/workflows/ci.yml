@@ -101,6 +101,9 @@ jobs:
       - name: ActionCode diff + contract checks
         run: node mcp-server/scripts/actioncode-diff.mjs --check
 
+      - name: Step prompt contract purity check
+        run: node mcp-server/scripts/contract-purity-check.mjs
+
   mcp_server:
     name: MCP server typecheck + tests
     runs-on: ubuntu-latest

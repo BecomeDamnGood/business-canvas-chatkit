@@ -165,15 +165,6 @@ Tell me what to adjust or create your presentation
 - presentation_brief=""
 - next_step_action="false"
 
-5.5) ACTION CODE INTERPRETATION (HARD, MANDATORY)
-
-
-- ACTION_PRESENTATION_CHANGE → "__ROUTE__PRESENTATION_CHANGE__" (I want to change something in the summary)
-- ACTION_PRESENTATION_MAKE → "__ROUTE__PRESENTATION_MAKE__" (Create The Business Strategy Canvas Builder Presentation)
-- ACTION_PRESENTATION_ESCAPE_CONTINUE → "__ROUTE__PRESENTATION_CONTINUE__" (continue Presentation flow)
-- ACTION_PRESENTATION_ESCAPE_FINISH_LATER → "__ROUTE__PRESENTATION_FINISH_LATER__" (finish later)
-
-
 5.6) ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:
