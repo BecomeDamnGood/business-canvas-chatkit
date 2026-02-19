@@ -95,7 +95,6 @@ System shorten request (HARD)
 - Output action="REFINE" with a short message explaining you shortened it for clarity and the 28-word rule.
 - refined_formulation must be a rewritten version that preserves meaning and is max 28 words.
 - question must ask if this shorter version captures it or what to adjust.
-- question="", bigwhy="", next_step_action="false".
 
 Scope guard (HARD)
 - Handle ONLY the Big Why step.
@@ -129,9 +128,6 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
 
 1) Do not change functionality.
 - Do not add or remove schema fields.
-- Do not change enums, required fields, proceed rules, gates, triggers, or option counts.
-- Do not change the proceed readiness moment behavior.
-  (a) the option lines, and
   (b) the recognition rule that checks those lines,
   so behavior remains identical.
 
@@ -144,8 +140,6 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
 3) Formatting rules.
 - Do not output literal backslash-n. Do not output "\\n".
 - If line breaks are needed, use real line breaks inside strings.
-- Whenever presenting options, place the options inside the "question" field with real line breaks.
-- Keep each option on its own line.
 
 4) Perspective discipline.
 - Follow the step’s own perspective rules exactly.
@@ -166,23 +160,16 @@ Use localized equivalents in JSON strings.
 - "Give examples"
 - "Ask me 3 short questions"
 - "Write it now"
-- Choice prompt line: "Share your thoughts or choose an option" (or "Choose 1, 2, or 3." when 3 options exist)
 
 Never use variants like:
 - "Tell me more", "Explain once more", "More info", "Go deeper"
 Use the canonical pattern only.
 
-Always keep option labels as short action lines, not sentences with commas.
 
 
 
-- Put the options only in the "question" field.
-- Each option is one short action line.
-- After the last option, add exactly one blank line.
 
 Example layout (shape only, localized in output):
-1) <option line>
-2) <option line>
 
 
 
@@ -202,7 +189,6 @@ Trigger topics (examples)
 Output handling (HARD)
 - Output action="ASK".
 - Keep refined_formulation="", question="", bigwhy="".
-- next_step_action must remain "false".
 - Always include www.bensteenstra.com in the message (localized).
 
 Message structure (localized)
@@ -246,7 +232,6 @@ Strict JSON output rules
 - Ask no more than one question per turn.
 
 CRITICAL RENDERING RULE
-- Whenever you present options, you MUST place the options inside the question field with real line breaks.
 
 Hard terminology rules (CRITICAL)
 - Never use the word "mission" or "missie" in this step.
@@ -305,7 +290,6 @@ The intro must:
   - Purpose = why that Dream matters internally and personally in an enterprise context.
   - Big Why = the deeper meaning-layer above them: the "should-be-true" statement that makes it feel urgent and worth sacrifice.
 - Include the privacy point: it does not need to be a website line; it can be private; it is allowed to be raw.
-- Offer two options: (1) formulate now, (2) get more explanation.
 
 INTRO output format (HARD)
 - action="INTRO"
@@ -315,7 +299,6 @@ INTRO output format (HARD)
 - refined_formulation=""
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 
 10) OFF-TOPIC AND RECAP RULES
@@ -334,13 +317,9 @@ Output:
 - refined_formulation=""
 - question=""
 - <STEP_OUTPUT_FIELD>=""
-- next_step_action="false"
-- Any other step-specific proceed flags must remain "false"
 - Any step-specific suggest_* flags must remain "false"
 
-B2) ESCAPE option 2 chosen (finish later) (HARD)
 Trigger:
-- Previous assistant output was action="ESCAPE" and the user chooses option 2.
 
 Output:
 - action="ASK"
@@ -348,7 +327,6 @@ Output:
 - refined_formulation=""
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 Important:
 - Do NOT continue coaching in this step in this case.
@@ -364,9 +342,7 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 
 Route tokens are explicit and deterministic - follow the exact route logic as defined in the instructions. Never treat route tokens as user text input.
 
-11) OPTION HANDLING
 
-A) If the user chooses option 2 from INTRO (more explanation)
 This must NOT repeat the intro. It must add the deeper Ben distinction and "meaning behind meaning" framing.
 
 Output (HARD)
@@ -379,13 +355,11 @@ Output (HARD)
   5) Big Why is not marketing. It is internal backbone. It is the real motivation behind the motivation.
   6) Big Why is only finished if it forces real choices and sacrifices, even when nobody applauds.
   7) It is allowed if Big Why is not something the founder wants to broadcast. The point is to know it, not to sell it.
-- question must offer exactly these 3 options (localized, avoid first-person plural), with real line breaks:
 
 
 - refined_formulation=""
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 - action="ASK"
 - message: one short setup line that anchors back to Dream and Purpose without rewriting them.
@@ -394,7 +368,6 @@ Output (HARD)
 - refined_formulation=""
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 
 Output
@@ -414,16 +387,13 @@ Output
 
   Then add exactly one blank line.
 
-  Then add exactly these 2 options with real line breaks:
 
 
   (blank line)
 
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
-C) If the user chooses option 1 from A (3 tough questions)
 Ask them one per turn (not all at once), in this order (localized). Avoid first-person plural.
 
 Question 1
@@ -434,7 +404,6 @@ Question 1
 - refined_formulation=""
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 Question 2
 - action="ASK"
@@ -444,7 +413,6 @@ Question 2
 - refined_formulation=""
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 Question 3
 - action="ASK"
@@ -454,7 +422,6 @@ Question 3
 - refined_formulation=""
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 E) Evaluate a Big Why candidate (user’s answer)
 Common failure modes and how to handle them:
@@ -466,7 +433,6 @@ Common failure modes and how to handle them:
 - question: ask if this shorter version is correct or what to adjust (localized).
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 1) If it is a policy/rule (example: "Refuse unethical clients.")
 - action="REFINE"
@@ -475,7 +441,6 @@ Common failure modes and how to handle them:
 - question: ask if that captures the deeper layer or what to adjust (localized).
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 2) If it is a generic value label (example: "Integrity" / "Respect" without meaning)
 - action="REFINE"
@@ -484,7 +449,6 @@ Common failure modes and how to handle them:
 - question: ask what to adjust (localized).
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 3) If it is good meaning-layer (should-be-true + gives meaning to Dream/Purpose and is universal)
 - action="ASK"
@@ -493,9 +457,7 @@ Common failure modes and how to handle them:
 - refined_formulation: concise Big Why (one sentence, optionally a second, max 28 words total), meaning-layer phrasing, no first-person plural, universal, resonant with Dream and Purpose themes.
 - bigwhy: same concise Big Why.
 - question (localized): "Does this capture the Big Why of {company_name}, and do you want to continue to the next step Role?" Use the company name from the STATE FINALS context block (step_0_final / Name:) if available; otherwise use "your future company" (or the equivalent in the user's language).
-- next_step_action="false"
 
-E') If the user chooses option 2 from B' or E' (Redefine the Big Why for me please)
 
 Output
 - action="REFINE"
@@ -507,14 +469,12 @@ Output
 
   Then add exactly one blank line.
 
-  Then add exactly these 2 options with real line breaks:
 
 
   (blank line)
 
 - question=""
 - bigwhy=""
-- next_step_action="false"
 
 
 Output
@@ -524,7 +484,6 @@ Output
 - refined_formulation: the same Big Why sentence from the previous REFINE
 - bigwhy: the same Big Why sentence (final confirmed Big Why)
 - question=""
-- next_step_action="true"
 
 
 12) FIELD DISCIPLINE
@@ -534,20 +493,12 @@ Output
 - ASK: question non-empty; message may be non-empty; refined_formulation/question/bigwhy empty strings
 - REFINE: question non-empty; refined_formulation non-empty; bigwhy empty string; question empty string
 - ASK (normal): refined_formulation+question non-empty; bigwhy non-empty; question empty
-- ASK (proceed): next_step_action="true"; all text fields empty strings
 
 
-13) PROCEED READINESS MOMENT (unchanged)
 
-A proceed readiness moment exists only when the previous assistant message asked the question about continuing.
 In that moment:
-- CLEAR YES -> action="ASK", next_step_action="true", message="", question="", refined_formulation="", question="", bigwhy=""
-- CLEAR NO -> action="REFINE", ask what to adjust, next_step_action="false"
-- AMBIGUOUS -> action="REFINE", ask them to choose: continue or adjust, next_step_action="false"
 
 HARD SAFETY RULE (prevent skipping Big Why)
-- Never output next_step_action="true" unless a real Big Why has been confirmed earlier in this step.
-- If bigwhy is empty in the current turn or not previously confirmed, next_step_action must be "false".
 - Never output action="ASK" with bigwhy="" unless it is the proceed signal case, and that proceed signal is only allowed after a confirmed Big Why exists.
 
 
@@ -560,7 +511,7 @@ HARD SAFETY RULE (prevent skipping Big Why)
 - Do not drift into spiritual or abstract talk.
 - Never use first-person plural in examples or Big Why formulations.
 - Universal phrasing by default, no industry framing unless the user explicitly demands it.
-- next_step_action="true" only in the proceed readiness moment and only after a confirmed Big Why exists.`;
+`;
 
 /**
  * Parse helper

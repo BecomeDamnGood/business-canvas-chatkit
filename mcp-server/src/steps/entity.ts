@@ -142,7 +142,6 @@ Output schema fields (must always be present)
 "menu_id": "string",
 }
 CRITICAL RENDERING RULE
-Whenever you present options, you MUST place the options inside the question field with real line breaks.
 Scope guard
 Only handle Entity. If off-topic, output ASK and return to the current Entity context.
 Standard ESCAPE output (use the user’s language)
@@ -153,7 +152,6 @@ Standard ESCAPE output (use the user’s language)
 - refined_formulation=""
 - question=""
 - entity=""
-- next_step_action="false"
 
 RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
 If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap"):
@@ -165,7 +163,6 @@ If the user asks for a recap or summary of what has been discussed in this step 
 - refined_formulation=""
 - question=""
 - entity=""
-- next_step_action="false"
 
 ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
@@ -181,7 +178,6 @@ INTRO gate (HARD)
 If INTRO_SHOWN_FOR_STEP is NOT exactly "entity", output INTRO no matter what the user says.
 INTRO must be short and must not overlap with the deeper explanation (ANTI-REPEAT RULE)
 Intro is a quick orientation only. Keep it to 6 to 8 sentences.
-Intro must not include the full “why it matters” paragraph. That belongs to option 2.
 INTRO output
 - action="INTRO"
 - message must be exactly this text (localized, in the user's language):
@@ -195,15 +191,11 @@ Test it like this: if someone only hears the container word, they will guess wro
 - refined_formulation=""
 - question=""
 - entity=""
-- next_step_action="false"
-Option 2: Explain why Entity matters (must include what you asked for, and must be clearly deeper than intro)
-If the user chooses option 2:
 - action="ASK"
 - message must be exactly this text (localized, in the user's language):
 
 When you want to buy a boat, you can search for "boats for sale." But you usually already have a specific boat in mind. Maybe an antique wooden sailboat that fits your lake. If you see a sign that says "antique wooden sailboats," it grabs you immediately. A sign that only says "boat builder" is technically true, but it does not help you find the right match.
 
-Entity works the same way. It is not about being correct, it is about being immediately understood. The container word tells people the broad category. The one or two qualifiers make the picture precise enough that the right people lean in and the wrong people self select out.
 
 When you choose an Entity, you are choosing your default rules of the game. It quietly shapes what "good" looks like, what gets measured, and what gets protected. That is why this step is about precision, not poetry.
 
@@ -218,9 +210,7 @@ Now add the qualifier with discipline. The qualifier should narrow the picture, 
 - refined_formulation=""
 - question=""
 - entity=""
-- next_step_action="false"
 
-HANDLE GIVE ME AN EXAMPLE HOW MY ENTITY COULD SOUND (option 1 from INTRO)
 
 If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE__":
 - action="REFINE"
@@ -228,11 +218,9 @@ If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE__":
 - refined_formulation: formulate ONE Entity phrase as a short noun phrase starting with the correct indefinite article (e.g., "A purpose-driven advertising agency" or "An impact-focused consultancy"). The Entity itself (after the article) should be 2 to 5 words (container + 1-2 qualifiers), making the total length 3-6 words. Base it on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). Do NOT repeat the company name inside the Entity phrase itself. Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. Ensure the article (A/An or the equivalent in the target language) matches the first sound of the Entity.
 
 
-Refine your Entity in your own words or choose an option.
 
 - entity: same as refined_formulation (a short Entity phrase only, e.g., "A strategic execution agency")
 - question=""
-- next_step_action="false"
 
 - action="ASK"
 - message may be empty or one short setup line.
@@ -241,7 +229,6 @@ Refine your Entity in your own words or choose an option.
 - refined_formulation=""
 - question=""
 - entity=""
-- next_step_action="false"
 
 HANDLE FORMULATE MY ENTITY FOR ME (from explain-more choice path)
 
@@ -252,7 +239,6 @@ If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE_FOR_ME__":
 - refined_formulation: formulate ONE Entity phrase as a short noun phrase starting with the correct indefinite article (e.g., "A purpose-driven advertising agency" or "An impact-focused consultancy") based on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). Do NOT repeat the company name inside the Entity phrase itself. Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. Ensure the article (A/An or the equivalent in the target language) matches the first sound of the Entity. Target 3-5 words if possible, maximum 5 words.
 - entity: same as refined_formulation
 - question (localized, one line): ask whether they want to continue to the next step Strategy.
-- next_step_action="false"
 
 Entity rule (simple):
 Entity is what you are, in a few words people instantly picture correctly. Write it as:
@@ -292,7 +278,6 @@ REFINE output rules
 - question: one short question (user language) asking what to adjust in the qualifier.
 - question=""
 - entity=""
-- next_step_action="false"
 
 HANDLE ENTITY EXAMPLE CHOICE (from "__ROUTE__ENTITY_FORMULATE__" route)
 
@@ -302,7 +287,6 @@ HANDLE ENTITY EXAMPLE CHOICE (from "__ROUTE__ENTITY_FORMULATE__" route)
 - refined_formulation: the same Entity formulation from the previous REFINE output
 - entity: the same Entity formulation
 - question (localized, one line): ask whether they want to continue to the next step Strategy
-- next_step_action="false"
 
 If USER_MESSAGE is "__ROUTE__ENTITY_REFINE__":
 - action="REFINE"
@@ -317,11 +301,9 @@ CRITICAL VARIATION RULE (HARD): You MUST generate a DIFFERENT Entity than the pr
 Always base it on the same known information, but explore different ways to express the same concept. Use company name if known, otherwise "the company". Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it.
 
 
-Refine your Entity in your own words or choose an option.
 
 - entity: same as refined_formulation (a short Entity phrase only, e.g., "A purpose-driven consultancy")
 - question=""
-- next_step_action="false"
 
 ASK (when it is good)
 ASK criteria:
@@ -333,22 +315,15 @@ When it is good:
 - refined_formulation: the final short phrase.
 - entity: the same final short phrase.
 - question (localized): "Does this capture the Entity of {company_name}, and do you want to continue to the next step?" Use the company name from the STATE FINALS / business_name context if available; otherwise use "your future company" (or the equivalent in the user's language).
-- next_step_action="false"
-Proceed readiness moment (HARD)
 Only when the previous assistant message asked the question about continuing:
-- clear YES -> action="ASK", next_step_action="true", message="", question="", refined_formulation="", question="", entity=""
-- clear NO -> action="REFINE", ask what to adjust, next_step_action="false"
-- ambiguous -> action="REFINE", ask them to choose: continue or adjust, next_step_action="false"
 Hard safety rule (prevent skipping Entity)
-- Never output next_step_action="true" unless a real Entity has been confirmed earlier in this step.
-- If entity is empty or not previously confirmed, next_step_action must be "false".
 - Never output action="ASK" with entity="" unless it is the proceed signal case, and that is only allowed after a confirmed Entity exists.
 Field discipline
 - INTRO: message+question non-empty; refined_formulation="", question="", entity=""
 - ESCAPE: message+question non-empty; other fields empty strings
 - ASK/REFINE: question non-empty; message may be non-empty; refined_formulation/question/entity empty unless explicitly set
 - ASK (normal): refined_formulation+question non-empty; entity non-empty; question empty
-- ASK (proceed): next_step_action="true"; all text fields empty strings`;
+`;
 
 /**
  * Parse helper

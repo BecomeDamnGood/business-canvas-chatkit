@@ -159,7 +159,6 @@ Replace "we offer solutions" with the tailored phrase based on business type.
 - refined_formulation=""
 - question=""
 - productsservices=""
-- next_step_action="false"
 - wants_recap=false
 
 6) VALIDATION AND SUMMARIZATION (B)
@@ -185,7 +184,6 @@ Is this everything [Company name] offers or is there more? (localized; use busin
 - refined_formulation: "" (empty string to prevent duplication - the list is shown in message only)
 - question=""
 - productsservices="" (do not save yet)
-- next_step_action="false"
 - wants_recap=false
 
 7) CONFIRMATION SCREEN (C)
@@ -193,14 +191,12 @@ Is this everything [Company name] offers or is there more? (localized; use busin
 - action="ASK"
 - message: Show only the intro text (localized), do NOT include the productsservices summary:
   "The Products and Services of [Company name] are now formulated as follows:" (localized; use business_name if known, otherwise "<your future company>")
-- question: Show exactly one option (localized) with real line breaks, then one blank line, then this exact prompt (localized):
 
 
 Refine your Products and Services or go to next step Rules of the Game
 - refined_formulation: The final summary (single statement or short grouped list, 3-7 items max) - this will be displayed below the message
 - question: "Continue to next step Rules of the Game"
 - productsservices: The final summary (single statement or short grouped list, 3-7 items max)
-- next_step_action="true"
 - wants_recap=false
 
 8) FINAL OUTPUT FORMAT (D)

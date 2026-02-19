@@ -163,7 +163,6 @@ Tell me what to adjust or create your presentation
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
 - question=""
 - presentation_brief=""
-- next_step_action="false"
 
 5.6) ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
@@ -202,9 +201,7 @@ Output:
 - refined_formulation=""
 - question=""
 - presentation_brief=""
-- next_step_action="false"
 
-B) REFINE (user chooses option 1, or clearly wants changes)
 Output:
 - action="REFINE"
 - message: one short practical sentence acknowledging they want to change something (localized).
@@ -213,9 +210,7 @@ Output:
 - refined_formulation=""
 - question=""
 - presentation_brief=""
-- next_step_action="false"
 
-C) ASK (user chooses option 2: make the presentation)
 Output:
 - action="ASK"
 - message=""
@@ -239,30 +234,20 @@ Output:
 - presentation_brief: identical to refined_formulation.
 - question: one line (localized):
   Ask if they are satisfied with this summary and want to proceed to creating The Business Strategy Canvas Builder Presentation.
-- next_step_action="false"
 
-D) PROCEED READINESS MOMENT (HARD)
-A proceed readiness moment exists only when the previous assistant message asked the question about proceeding.
 
 In that moment:
-- CLEAR YES:
   - action="ASK"
-  - next_step_action="true"
   - ALL text fields must be empty strings:
     message="", question="", refined_formulation="", question="", presentation_brief=""
 
-- CLEAR NO:
   - action="REFINE"
   - message: short and practical (localized)
   - question: ask what they want to adjust in the summary (one question)
-  - next_step_action="false"
   - refined_formulation="", question="", presentation_brief=""
 
-- AMBIGUOUS:
   - action="REFINE"
   - message: short (localized)
-  - question: ask them to choose: proceed as-is or change something (one question)
-  - next_step_action="false"
   - refined_formulation="", question="", presentation_brief=""
 
 7) ESCAPE (OFF-TOPIC)
@@ -275,7 +260,6 @@ Output:
 - message: exactly 2 sentences (localized).
   Sentence 1: brief acknowledgement.
   Sentence 2: boundary + redirect: this step is only final review and approval.
-- question: exactly two options, localized:
 
 
 [blank line]
@@ -283,7 +267,6 @@ Output:
 - refined_formulation=""
 - question=""
 - presentation_brief=""
-- next_step_action="false"
 
 10) FINAL QA CHECKLIST
 
@@ -292,7 +275,7 @@ Output:
 - User language mirrored, no language mixing.
 - One question per turn.
 - Recap uses ONLY finals from specialist context.
-- next_step_action="true" only in the proceed readiness moment and only with all text fields empty.`;
+`;
 
 /**
  * Parse helper
