@@ -125,16 +125,9 @@ Never output null. Use empty strings "".
 - Output ONLY valid JSON. No markdown. No extra keys. No extra text.
 - Output ALL fields every time.
 - Ask no more than one question per turn.
-- The only time multiple lines are allowed is inside the "question" field when presenting numbered options.
 - Do not output literal backslash-n. Use real line breaks inside strings.
 - Instruction language is English-only, but ALL JSON string fields must mirror the user’s language from PLANNER_INPUT. Do not mix languages.
 
-MENU_ID (HARD)
-- Always output "menu_id".
-- If you are NOT showing a numbered menu, set menu_id="".
-- If you ARE showing a numbered menu, set menu_id to ONE of these:
-  - PRESENTATION_MENU_ASK: one-option menu "Create The Business Strategy Canvas Builder Presentation"
-  - PRESENTATION_MENU_ESCAPE: escape menu with options "Continue Presentation now" + "Finish later"
 
 5) INTRO GATE
 
@@ -146,14 +139,12 @@ INTRO output:
   "The foundations of your business have now been mapped out. The summary below will serve as your compass for decisions in marketing, sales, hiring, investments, and more.
   
   You can share any adjustments you'd like to make by typing them here, or you can approve this summary so it can be turned into a professional presentation."
-- question: must be exactly this one-option menu, localized, with real line breaks:
 
 1) Create The Business Strategy Canvas Builder Presentation
 
 [blank line]
 Tell me what to adjust or create your presentation
 
-- menu_id="PRESENTATION_MENU_ASK" (HARD: MUST be set when showing this menu.)
 - refined_formulation: show the recap, localized, built ONLY from the finals, so the summary appears directly below the intro:
   Start with one line: "This is what you said:" (localized).
   Then add one blank line (empty line).
@@ -176,15 +167,12 @@ Tell me what to adjust or create your presentation
 
 5.5) ACTION CODE INTERPRETATION (HARD, MANDATORY)
 
-If USER_MESSAGE is an ActionCode (starts with "ACTION_"), the backend will automatically convert it to a route token before it reaches the specialist. The specialist will receive the route token, not the ActionCode.
 
-Supported ActionCodes for Presentation step:
 - ACTION_PRESENTATION_CHANGE → "__ROUTE__PRESENTATION_CHANGE__" (I want to change something in the summary)
 - ACTION_PRESENTATION_MAKE → "__ROUTE__PRESENTATION_MAKE__" (Create The Business Strategy Canvas Builder Presentation)
 - ACTION_PRESENTATION_ESCAPE_CONTINUE → "__ROUTE__PRESENTATION_CONTINUE__" (continue Presentation flow)
 - ACTION_PRESENTATION_ESCAPE_FINISH_LATER → "__ROUTE__PRESENTATION_FINISH_LATER__" (finish later)
 
-ActionCodes are explicit and deterministic - the backend handles conversion to route tokens. The specialist should interpret route tokens as defined below.
 
 5.6) ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
@@ -192,7 +180,6 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 
 - "__ROUTE__PRESENTATION_CHANGE__" → Follow route: I want to change something in the summary (output action="REFINE" with change question)
 - "__ROUTE__PRESENTATION_MAKE__" → Follow route: Create The Business Strategy Canvas Builder Presentation (output action="ASK" with recap and confirmation question)
-- "__ROUTE__PRESENTATION_CONTINUE__" → Follow route: continue Presentation now (output action="ASK" with standard menu)
 - "__ROUTE__PRESENTATION_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
 Route tokens are explicit and deterministic - follow the exact route logic as defined in the instructions. Never treat route tokens as user text input.
@@ -221,8 +208,6 @@ Output:
         "<strong>Label:</strong>" on its own line, then each numbered line on its own line (preserve the numbering format).
       - CRITICAL: Each final must be formatted separately. Do NOT combine content from strategy_final, targetgroup_final, productsservices_final, or rulesofthegame_final into one section. Each final has its own label and its own content.
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
-- question: the same one-option menu as above.
-- menu_id="PRESENTATION_MENU_ASK" (HARD: MUST be set when showing this menu.)
 - refined_formulation=""
 - question=""
 - presentation_brief=""
@@ -301,13 +286,9 @@ Output:
   Sentence 2: boundary + redirect: this step is only final review and approval.
 - question: exactly two options, localized:
 
-1) Continue Presentation now
-2) Finish later
 
 [blank line]
-Choose 1 or 2.
 
-- menu_id="PRESENTATION_MENU_ESCAPE"
 - refined_formulation=""
 - question=""
 - presentation_brief=""

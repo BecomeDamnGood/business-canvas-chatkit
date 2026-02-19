@@ -7,6 +7,165 @@ export type UiContractStateDefinition = {
   status: TurnOutputStatus;
 };
 
+export type UiMenuTransition = {
+  step_id: string;
+  to_menu_id: string;
+  from_menu_ids?: string[];
+};
+
+export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
+  ACTION_DREAM_INTRO_EXPLAIN_MORE: {
+    step_id: "dream",
+    from_menu_ids: ["DREAM_MENU_INTRO"],
+    to_menu_id: "DREAM_MENU_WHY",
+  },
+  ACTION_DREAM_WHY_GIVE_SUGGESTIONS: {
+    step_id: "dream",
+    from_menu_ids: ["DREAM_MENU_WHY"],
+    to_menu_id: "DREAM_MENU_SUGGESTIONS",
+  },
+  ACTION_DREAM_INTRO_START_EXERCISE: {
+    step_id: "dream",
+    from_menu_ids: ["DREAM_MENU_INTRO"],
+    to_menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+  },
+  ACTION_DREAM_WHY_START_EXERCISE: {
+    step_id: "dream",
+    from_menu_ids: ["DREAM_MENU_WHY"],
+    to_menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+  },
+  ACTION_DREAM_SUGGESTIONS_PICK_ONE: {
+    step_id: "dream",
+    from_menu_ids: ["DREAM_MENU_SUGGESTIONS"],
+    to_menu_id: "DREAM_MENU_REFINE",
+  },
+  ACTION_DREAM_SUGGESTIONS_START_EXERCISE: {
+    step_id: "dream",
+    from_menu_ids: ["DREAM_MENU_SUGGESTIONS"],
+    to_menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+  },
+  ACTION_DREAM_REFINE_START_EXERCISE: {
+    step_id: "dream",
+    from_menu_ids: ["DREAM_MENU_REFINE"],
+    to_menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+  },
+  ACTION_DREAM_SWITCH_TO_SELF: {
+    step_id: "dream",
+    from_menu_ids: ["DREAM_EXPLAINER_MENU_SWITCH_SELF"],
+    to_menu_id: "DREAM_MENU_INTRO",
+  },
+  ACTION_PURPOSE_INTRO_EXPLAIN_MORE: {
+    step_id: "purpose",
+    from_menu_ids: ["PURPOSE_MENU_INTRO"],
+    to_menu_id: "PURPOSE_MENU_EXPLAIN",
+  },
+  ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES: {
+    step_id: "purpose",
+    from_menu_ids: ["PURPOSE_MENU_EXPLAIN"],
+    to_menu_id: "PURPOSE_MENU_EXAMPLES",
+  },
+  ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE: {
+    step_id: "bigwhy",
+    from_menu_ids: ["BIGWHY_MENU_INTRO"],
+    to_menu_id: "BIGWHY_MENU_A",
+  },
+  ACTION_BIGWHY_INTRO_GIVE_EXAMPLE: {
+    step_id: "bigwhy",
+    from_menu_ids: ["BIGWHY_MENU_INTRO"],
+    to_menu_id: "BIGWHY_MENU_A",
+  },
+  ACTION_ROLE_INTRO_EXPLAIN_MORE: {
+    step_id: "role",
+    from_menu_ids: ["ROLE_MENU_INTRO"],
+    to_menu_id: "ROLE_MENU_ASK",
+  },
+  ACTION_ROLE_INTRO_GIVE_EXAMPLES: {
+    step_id: "role",
+    from_menu_ids: ["ROLE_MENU_INTRO"],
+    to_menu_id: "ROLE_MENU_EXAMPLES",
+  },
+  ACTION_ROLE_ASK_GIVE_EXAMPLES: {
+    step_id: "role",
+    from_menu_ids: ["ROLE_MENU_ASK"],
+    to_menu_id: "ROLE_MENU_EXAMPLES",
+  },
+  ACTION_ENTITY_INTRO_EXPLAIN_MORE: {
+    step_id: "entity",
+    from_menu_ids: ["ENTITY_MENU_INTRO"],
+    to_menu_id: "ENTITY_MENU_FORMULATE",
+  },
+  ACTION_ENTITY_INTRO_FORMULATE: {
+    step_id: "entity",
+    from_menu_ids: ["ENTITY_MENU_INTRO"],
+    to_menu_id: "ENTITY_MENU_EXAMPLE",
+  },
+  ACTION_ENTITY_FORMULATE_FOR_ME: {
+    step_id: "entity",
+    from_menu_ids: ["ENTITY_MENU_FORMULATE"],
+    to_menu_id: "ENTITY_MENU_EXAMPLE",
+  },
+  ACTION_STRATEGY_INTRO_EXPLAIN_MORE: {
+    step_id: "strategy",
+    from_menu_ids: ["STRATEGY_MENU_INTRO"],
+    to_menu_id: "STRATEGY_MENU_ASK",
+  },
+  ACTION_STRATEGY_ASK_3_QUESTIONS: {
+    step_id: "strategy",
+    from_menu_ids: ["STRATEGY_MENU_ASK"],
+    to_menu_id: "STRATEGY_MENU_QUESTIONS",
+  },
+  ACTION_STRATEGY_ASK_GIVE_EXAMPLES: {
+    step_id: "strategy",
+    from_menu_ids: ["STRATEGY_MENU_ASK"],
+    to_menu_id: "STRATEGY_MENU_REFINE",
+  },
+  ACTION_STRATEGY_REFINE_EXPLAIN_MORE: {
+    step_id: "strategy",
+    from_menu_ids: ["STRATEGY_MENU_REFINE"],
+    to_menu_id: "STRATEGY_MENU_ASK",
+  },
+  ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE: {
+    step_id: "strategy",
+    from_menu_ids: ["STRATEGY_MENU_QUESTIONS"],
+    to_menu_id: "STRATEGY_MENU_ASK",
+  },
+  ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE: {
+    step_id: "targetgroup",
+    from_menu_ids: ["TARGETGROUP_MENU_INTRO"],
+    to_menu_id: "TARGETGROUP_MENU_EXPLAIN_MORE",
+  },
+  ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS: {
+    step_id: "targetgroup",
+    from_menu_ids: ["TARGETGROUP_MENU_INTRO"],
+    to_menu_id: "TARGETGROUP_MENU_POSTREFINE",
+  },
+  ACTION_TARGETGROUP_EXPLAIN_ASK_QUESTIONS: {
+    step_id: "targetgroup",
+    from_menu_ids: ["TARGETGROUP_MENU_EXPLAIN_MORE"],
+    to_menu_id: "TARGETGROUP_MENU_POSTREFINE",
+  },
+  ACTION_RULES_INTRO_EXPLAIN_MORE: {
+    step_id: "rulesofthegame",
+    from_menu_ids: ["RULES_MENU_INTRO"],
+    to_menu_id: "RULES_MENU_ASK_EXPLAIN",
+  },
+  ACTION_RULES_INTRO_GIVE_EXAMPLE: {
+    step_id: "rulesofthegame",
+    from_menu_ids: ["RULES_MENU_INTRO"],
+    to_menu_id: "RULES_MENU_EXAMPLE_ONLY",
+  },
+  ACTION_RULES_ASK_EXPLAIN_MORE: {
+    step_id: "rulesofthegame",
+    from_menu_ids: ["RULES_MENU_CONFIRM"],
+    to_menu_id: "RULES_MENU_ASK_EXPLAIN",
+  },
+  ACTION_RULES_ASK_GIVE_EXAMPLE: {
+    step_id: "rulesofthegame",
+    from_menu_ids: ["RULES_MENU_ASK_EXPLAIN", "RULES_MENU_CONFIRM"],
+    to_menu_id: "RULES_MENU_EXAMPLE_ONLY",
+  },
+};
+
 export const MENU_LABELS: Record<string, string[]> = {
   STEP0_MENU_META_RETURN: [
     "Continue with business verification now.",

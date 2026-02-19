@@ -491,15 +491,14 @@ export function render(overrideToolOutput?: unknown): void {
   }
 
   const activeSpecialist = String(state?.active_specialist || "");
-  const isDreamExplainerMode = current === "dream" && activeSpecialist === "DreamExplainer";
+  const dreamRuntimeMode = (() => {
+    const raw = String((state as Record<string, unknown> | undefined)?.__dream_runtime_mode || "").trim();
+    if (raw === "builder_collect" || raw === "builder_scoring" || raw === "builder_refine") return raw;
+    return "self";
+  })();
+  const isDreamExplainerMode = current === "dream" && dreamRuntimeMode !== "self";
   const lastSpecialist = (state?.last_specialist_result as Record<string, unknown>) || {};
-  const isDreamStepPreExercise =
-    current === "dream" &&
-    activeSpecialist === "Dream" &&
-    String(specialist.suggest_dreambuilder || "") === "true" &&
-    String(specialist.action || "") === "ASK";
-  const requireWordingPickByFlag =
-    String(((result as Record<string, unknown>)?.ui as any)?.flags?.require_wording_pick || "false") === "true";
+  const isDreamStepPreExercise = false;
   const isLoading = getIsLoading();
 
   if (showPreStart) {
@@ -635,7 +634,7 @@ export function render(overrideToolOutput?: unknown): void {
 
   const isScoringView =
     current === "dream" &&
-    activeSpecialist === "DreamExplainer" &&
+    isDreamExplainerMode &&
     String(specialist.scoring_phase || "") === "true" &&
     Array.isArray(specialist.clusters) &&
     (specialist.clusters as unknown[]).length > 0 &&
@@ -917,7 +916,7 @@ export function render(overrideToolOutput?: unknown): void {
     (Array.isArray(statementsArray) ? statementsArray.length : 0) || 0;
   if (
     current === "dream" &&
-    activeSpecialist === "DreamExplainer" &&
+    isDreamExplainerMode &&
     statementCount < 20 &&
     lastStatements.length >= 20
   ) {
@@ -931,7 +930,7 @@ export function render(overrideToolOutput?: unknown): void {
     0;
   const showGoToNextStep =
     current === "dream" &&
-    activeSpecialist === "DreamExplainer" &&
+    isDreamExplainerMode &&
     effectiveStatementsForButton >= 20 &&
     !requireWordingPick;
 

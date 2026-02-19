@@ -26,6 +26,13 @@ export function isCanonicalStepId(x: unknown): x is CanonicalStepId {
 
 export const BoolStringZod = z.enum(["true", "false"]);
 export type BoolString = z.infer<typeof BoolStringZod>;
+export const DreamRuntimeModeZod = z.enum([
+  "self",
+  "builder_collect",
+  "builder_scoring",
+  "builder_refine",
+]);
+export type DreamRuntimeMode = z.infer<typeof DreamRuntimeModeZod>;
 
 /**
  * CanvasState (canoniek)
@@ -70,6 +77,8 @@ export const CanvasStateZod = z.object({
 
   // staged per-step value (chosen wording before explicit next-step confirm)
   provisional_by_step: z.record(z.string(), z.string()),
+  __dream_runtime_mode: DreamRuntimeModeZod,
+  dream_builder_statements: z.array(z.string()),
 
   // shared convenience fields
   business_name: z.string(),
@@ -119,6 +128,8 @@ export function getDefaultState(): CanvasState {
     presentation_brief_final: "",
 
     provisional_by_step: {},
+    __dream_runtime_mode: "self",
+    dream_builder_statements: [],
 
     business_name: "TBD",
 
@@ -186,6 +197,19 @@ export function normalizeState(raw: unknown): CanvasState {
   const provisional_by_step = Object.fromEntries(
     Object.entries(provisional_raw).map(([k, v]) => [String(k), String(v ?? "").trim()])
   );
+  const dreamRuntimeModeRaw = String((r as any).__dream_runtime_mode ?? d.__dream_runtime_mode).trim();
+  const __dream_runtime_mode: DreamRuntimeMode =
+    dreamRuntimeModeRaw === "builder_collect" ||
+    dreamRuntimeModeRaw === "builder_scoring" ||
+    dreamRuntimeModeRaw === "builder_refine"
+      ? dreamRuntimeModeRaw
+      : "self";
+  const dreamBuilderStatementsRaw = Array.isArray((r as any).dream_builder_statements)
+    ? ((r as any).dream_builder_statements as unknown[])
+    : [];
+  const dream_builder_statements = dreamBuilderStatementsRaw
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
 
   const business_name = String(r.business_name ?? d.business_name) || "TBD";
   const summary_target = String(r.summary_target ?? d.summary_target) || "unknown";
@@ -218,6 +242,8 @@ export function normalizeState(raw: unknown): CanvasState {
     presentation_brief_final,
 
     provisional_by_step,
+    __dream_runtime_mode,
+    dream_builder_statements,
 
     business_name,
     summary_target,

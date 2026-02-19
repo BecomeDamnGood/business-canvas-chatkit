@@ -62,12 +62,25 @@ function makeMenuQuestion(actionCount: number): string {
   return Array.from({ length: actionCount }, (_, idx) => `${idx + 1}) Option ${idx + 1}`).join("\n");
 }
 
+function setPhaseContract(state: Record<string, unknown>, stepId: string, menuId: string): void {
+  if (!stepId || !menuId) return;
+  const existing =
+    state.__ui_phase_by_step && typeof state.__ui_phase_by_step === "object"
+      ? (state.__ui_phase_by_step as Record<string, unknown>)
+      : {};
+  state.__ui_phase_by_step = {
+    ...existing,
+    [stepId]: `${stepId}:phase:${menuId}`,
+  };
+}
+
 function applyBaselineState(state: Record<string, unknown>, stepId: string, menuId: string): void {
   state.current_step = stepId;
   state.business_name = "Mindd";
   if (stepId === "dream") {
     state.active_specialist = menuId.startsWith("DREAM_EXPLAINER_MENU_") ? "DreamExplainer" : "Dream";
   }
+  setPhaseContract(state, stepId, menuId);
 }
 
 function applyConfirmEligibleState(state: Record<string, unknown>, stepId: string, menuId: string): void {
@@ -96,7 +109,10 @@ test("step_0: no output => ASK without menu actions", () => {
   });
   assert.equal(rendered.status, "no_output");
   assert.equal(String(rendered.specialist.action), "ASK");
-  assert.equal(String(rendered.specialist.message || ""), "Answer");
+  assert.equal(
+    String(rendered.specialist.message || ""),
+    "Just to set the context, we'll start with the basics."
+  );
   assert.equal(
     String(rendered.specialist.question || ""),
     "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?"
@@ -122,6 +138,10 @@ test("step_0: valid output => ASK with contract menu and readiness prompt", () =
   assert.equal(rendered.status, "valid_output");
   assert.equal(String(rendered.specialist.action), "ASK");
   assert.equal(
+    String(rendered.specialist.message || ""),
+    "Just to set the context, we'll start with the basics."
+  );
+  assert.equal(
     String(rendered.specialist.confirmation_question || ""),
     ""
   );
@@ -135,6 +155,23 @@ test("step_0: valid output => ASK with contract menu and readiness prompt", () =
     String(rendered.specialist.message || "").includes("This is what we have established so far based on our dialogue:"),
     false
   );
+});
+
+test("step_0: canonical context line replaces specialist welcome/question drift", () => {
+  const state = getDefaultState();
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "step_0",
+    state,
+    specialist: {
+      action: "ASK",
+      message:
+        "Welcome! Let's get started. To begin, what type of business are you starting or running, and what is the name (or is it still TBD)?",
+      question: "",
+      menu_id: "",
+    },
+  });
+  assert.equal(String(rendered.specialist.message || ""), "Just to set the context, we'll start with the basics.");
+  assert.equal(String(rendered.specialist.message || "").includes("Welcome! Let's get started"), false);
 });
 
 test("dream: free-text render uses non-escape menu with parity", () => {
@@ -268,6 +305,7 @@ test("dream: explain-more flow keeps WHY menu and does not loop intro button", (
   (state as any).active_specialist = "Dream";
   (state as any).business_name = "Mindd";
   (state as any).dream_final = "";
+  setPhaseContract(state as any, "dream", "DREAM_MENU_WHY");
 
   const rendered = renderFreeTextTurnPolicy({
     stepId: "dream",
@@ -302,6 +340,7 @@ test("dream explainer intro keeps exercise question and avoids Dream intro fallb
   (state as any).active_specialist = "DreamExplainer";
   (state as any).business_name = "Mindd";
   (state as any).dream_final = "";
+  setPhaseContract(state as any, "dream", "DREAM_EXPLAINER_MENU_SWITCH_SELF");
 
   const rendered = renderFreeTextTurnPolicy({
     stepId: "dream",
@@ -332,6 +371,34 @@ test("dream explainer intro keeps exercise question and avoids Dream intro fallb
   );
 });
 
+test("dream explainer switch-self prompt is de-numbered before contract numbering", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "DreamExplainer";
+  (state as any).__dream_runtime_mode = "builder_collect";
+  setPhaseContract(state as any, "dream", "DREAM_EXPLAINER_MENU_SWITCH_SELF");
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Exercise prompt",
+      question:
+        "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
+      menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+    },
+  });
+
+  const question = String(rendered.specialist.question || "");
+  const occurrences = (question.match(/1\)\s+Switch back to self-formulate the dream/g) || []).length;
+  assert.equal(occurrences, 1);
+  assert.equal(
+    question.includes("What more do you see changing in the future, positive or negative? Let your imagination run free."),
+    true
+  );
+});
+
 test("strategy: incomplete output hides confirm action", () => {
   const state = getDefaultState();
   (state as any).current_step = "strategy";
@@ -356,6 +423,7 @@ test("bigwhy: when confirm is not eligible, filtered menu keeps matching label f
   const state = getDefaultState();
   (state as any).current_step = "bigwhy";
   (state as any).business_name = "Mindd";
+  setPhaseContract(state as any, "bigwhy", "BIGWHY_MENU_REFINE");
   const rendered = renderFreeTextTurnPolicy({
     stepId: "bigwhy",
     state,
@@ -395,6 +463,7 @@ test("confirm-filtered menus collapse to one non-confirm action with strict ques
     const state = getDefaultState();
     (state as any).current_step = risk.stepId;
     (state as any).business_name = "Mindd";
+    setPhaseContract(state as any, risk.stepId, risk.menuId);
 
     const specialist: Record<string, unknown> = {
       action: "ASK",
@@ -425,6 +494,7 @@ test("entity: no-output with leaked refine menu never exposes next-step confirm"
   const state = getDefaultState();
   (state as any).current_step = "entity";
   (state as any).business_name = "Mindd";
+  setPhaseContract(state as any, "entity", "ENTITY_MENU_EXAMPLE");
   const rendered = renderFreeTextTurnPolicy({
     stepId: "entity",
     state,
@@ -744,6 +814,7 @@ test("strategy valid-output from sidepath never renders buttonless screen", () =
 test("rules sidepath menu has label parity and keeps button visible", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
+  setPhaseContract(state as any, "rulesofthegame", "RULES_MENU_EXAMPLE_ONLY");
   const rendered = renderFreeTextTurnPolicy({
     stepId: "rulesofthegame",
     state,
@@ -765,6 +836,7 @@ test("purpose examples sidepath keeps both options (no silent drop)", () => {
   const state = getDefaultState();
   (state as any).current_step = "purpose";
   (state as any).business_name = "Mindd";
+  setPhaseContract(state as any, "purpose", "PURPOSE_MENU_EXAMPLES");
   const rendered = renderFreeTextTurnPolicy({
     stepId: "purpose",
     state,
@@ -812,6 +884,7 @@ test("role ask sidepath keeps its single option", () => {
   const state = getDefaultState();
   (state as any).current_step = "role";
   (state as any).business_name = "Mindd";
+  setPhaseContract(state as any, "role", "ROLE_MENU_ASK");
   const rendered = renderFreeTextTurnPolicy({
     stepId: "role",
     state,
@@ -887,12 +960,7 @@ test("all non-escape menus keep parity and confirm-filter contract in both eligi
       true,
       `${menuId} should be confirm-eligible when final value is present`
     );
-    const defaultValidMenu = String(DEFAULT_MENU_BY_STATUS[stepId]?.valid_output || "").trim();
-    const isDreamExplainerMenu = stepId === "dream" && menuId.startsWith("DREAM_EXPLAINER_MENU_");
-    const expectedMenuActions =
-      !isDreamExplainerMenu && defaultValidMenu
-        ? (ACTIONCODE_REGISTRY.menus[defaultValidMenu] || [])
-        : menuActions;
+    const expectedMenuActions = menuActions;
     assert.deepEqual(
       confirmRendered.uiActionCodes,
       expectedMenuActions,

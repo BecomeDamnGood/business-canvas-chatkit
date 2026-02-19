@@ -164,7 +164,6 @@ Replace "we offer solutions" with the tailored phrase based on business type.
 - refined_formulation=""
 - question=""
 - productsservices=""
-- menu_id="" (NO button under the introduction text)
 - next_step_action="false"
 - wants_recap=false
 
@@ -183,13 +182,10 @@ Output format:
   - A single clear statement, OR
   - A short grouped list with core categories only (recommend 3 to 7 items maximum)
 - message: Start with the sentence "This is what you offer your clients according to your input:" (localized), then add one empty line, then show the validated/summarized products and services as a bullet list (localized). Format the list as a bullet list with dashes: each item on a new line with "- [item text]". If it is a single statement, show it as one line after the intro sentence. If it is a list, show each item with a dash on a new line after the intro sentence and blank line.
-- Button display rule (HARD): When a list is shown in message (bullet list format with dashes), you MUST add a button to the question field. The question field must show exactly one numbered option (localized) with real line breaks, then one blank line, then the prompt text (localized):
 
-1) This is all what we offer, continue to step Rules of the Game
 
 Is this everything [Company name] offers or is there more? (localized; use business_name if known, otherwise "<your future company>")
 
-- menu_id: When a list is shown in message, set menu_id="PRODUCTSSERVICES_MENU_CONFIRM" (not empty). This ensures the button is rendered. If no list is shown (single statement only), you may set menu_id="" and use a plain question without numbered options.
 - CRITICAL FOR REFINE/ASK OUTPUTS: After showing the products and services list in the message field as a bullet list, you MUST set refined_formulation to an empty string (refined_formulation=""). The list is already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. The backend function buildTextForWidget() combines both message and refined_formulation, so if both contain the list, they will be shown twice.
 - refined_formulation: "" (empty string to prevent duplication - the list is shown in message only)
 - question=""
@@ -199,19 +195,16 @@ Is this everything [Company name] offers or is there more? (localized; use busin
 
 7) CONFIRMATION SCREEN (C)
 
-When user confirms (via button "This is all what we offer, continue to step Rules of the Game" or direct confirmation):
 - action="ASK"
 - message: Show only the intro text (localized), do NOT include the productsservices summary:
   "The Products and Services of [Company name] are now formulated as follows:" (localized; use business_name if known, otherwise "<your future company>")
 - question: Show exactly one option (localized) with real line breaks, then one blank line, then this exact prompt (localized):
 
-1) This is all what we offer, continue to step Rules of the Game
 
 Refine your Products and Services or go to next step Rules of the Game
 - refined_formulation: The final summary (single statement or short grouped list, 3-7 items max) - this will be displayed below the message
 - question: "Continue to next step Rules of the Game"
 - productsservices: The final summary (single statement or short grouped list, 3-7 items max)
-- menu_id="PRODUCTSSERVICES_MENU_CONFIRM"
 - next_step_action="true"
 - wants_recap=false
 

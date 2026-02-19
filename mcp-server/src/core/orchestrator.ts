@@ -96,30 +96,10 @@ function normalizeActiveSpecialist(x: unknown): string {
   return String(x ?? "").trim();
 }
 
-type TriggerFlags = {
-  suggest_dreambuilder: BoolString;
-};
-
-function readTriggersRobust(last: unknown): TriggerFlags {
-  // Object preferred
-  if (last && typeof last === "object" && !Array.isArray(last)) {
-    const obj = last as Record<string, any>;
-    return {
-      suggest_dreambuilder: boolStr(obj.suggest_dreambuilder),
-    };
-  }
-
-  // String fallback (tolerate spacing)
-  const s = String(last ?? "");
-  const has = (a: string, b: string) => s.includes(a) || s.includes(b);
-
-  const suggest_dreambuilder = has('"suggest_dreambuilder":"true"', '"suggest_dreambuilder": "true"')
-    ? "true"
-    : "false";
-
-  return {
-    suggest_dreambuilder,
-  };
+function normalizeDreamRuntimeMode(raw: unknown): "self" | "builder_collect" | "builder_scoring" | "builder_refine" {
+  const mode = String(raw || "").trim();
+  if (mode === "builder_collect" || mode === "builder_scoring" || mode === "builder_refine") return mode;
+  return "self";
 }
 
 const STEP_TO_SPECIALIST: Record<OrchestratorStepId, SpecialistName> = {
@@ -191,15 +171,15 @@ export function deriveTransitionEventFromLegacy(params: {
   const { state, userMessage } = params;
   const CURRENT_STEP = normalizeCurrentStep(state.current_step);
   const ACTIVE_SPECIALIST = normalizeActiveSpecialist(state.active_specialist);
-  const triggers = readTriggersRobust(state.last_specialist_result);
+  const dreamRuntimeMode = normalizeDreamRuntimeMode((state as any).__dream_runtime_mode);
 
   if (CURRENT_STEP !== "step_0" && wantsFullRestartCanvas(userMessage)) {
     return { type: "RESTART_STEP", step: "step_0", reason: "user_request" };
   }
-  if (ACTIVE_SPECIALIST === "DreamExplainer" && triggers.suggest_dreambuilder === "true") {
+  if (CURRENT_STEP === "dream" && dreamRuntimeMode !== "self") {
     return {
       type: "SPECIALIST_SWITCH",
-      fromSpecialist: "DreamExplainer",
+      fromSpecialist: (ACTIVE_SPECIALIST || "Dream") as SpecialistName,
       toSpecialist: "DreamExplainer",
       sameStep: true,
     };
@@ -239,6 +219,11 @@ export function orchestrateFromTransition(params: {
   } else {
     next_step = CURRENT_STEP;
     next_specialist = specialistForStep(next_step);
+  }
+
+  if (next_step === "dream") {
+    const dreamRuntimeMode = normalizeDreamRuntimeMode((state as any).__dream_runtime_mode);
+    next_specialist = dreamRuntimeMode === "self" ? "Dream" : "DreamExplainer";
   }
 
   const show_session_intro: BoolString = INTRO_SHOWN_SESSION !== "true" ? "true" : "false";

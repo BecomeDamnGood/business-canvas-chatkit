@@ -16,6 +16,7 @@ This contract defines behavior when a specialist marks a turn as off-topic.
 - Resolve menu only from current step contract-state (`step + status (+ context)`).
 - Never route via `confirmation_question`, `proceed_to_*`, or implicit continue logic.
 - Widget safety rules still apply for suppressed escape menus.
+- DreamBuilder context is sticky: while in DreamExplainer state, off-topic returns to DreamExplainer contract menu (not Dream intro).
 
 ## Message Behavior
 

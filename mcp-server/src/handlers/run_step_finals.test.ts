@@ -8,7 +8,6 @@ import {
   run_step,
   applyStateUpdate,
   buildTextForWidget,
-  enforceDreamMenuContract,
   isWordingChoiceEligibleStep,
   isWordingChoiceEligibleContext,
   informationalActionMutatesProgress,
@@ -26,11 +25,13 @@ import {
   UNIVERSAL_META_OFFTOPIC_POLICY,
   normalizeStep0AskDisplayContract,
   normalizeStep0OfftopicToAsk,
+  resolveActionCodeMenuTransition,
 } from "./run_step.js";
 import { BigWhyZodSchema } from "../steps/bigwhy.js";
 import { VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS } from "../steps/step_0_validation.js";
 import { PURPOSE_INSTRUCTIONS } from "../steps/purpose.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
+import { NEXT_MENU_BY_ACTIONCODE } from "../core/ui_contract_matrix.js";
 import { renderFreeTextTurnPolicy } from "../core/turn_policy_renderer.js";
 
 async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Promise<T> {
@@ -86,9 +87,106 @@ function countNumberedOptions(text: string): number {
   return count;
 }
 
+function setPhaseContract(state: Record<string, unknown>, stepId: string, menuId: string): void {
+  if (!stepId || !menuId) return;
+  const existing =
+    state.__ui_phase_by_step && typeof state.__ui_phase_by_step === "object"
+      ? (state.__ui_phase_by_step as Record<string, unknown>)
+      : {};
+  state.__ui_phase_by_step = {
+    ...existing,
+    [stepId]: `${stepId}:phase:${menuId}`,
+  };
+}
+
 const ESCAPE_ACTION_CODES = Object.entries(ACTIONCODE_REGISTRY.menus)
   .filter(([menuId]) => String(menuId || "").endsWith("_MENU_ESCAPE"))
   .flatMap(([, codes]) => codes);
+
+test("resolveActionCodeMenuTransition maps informational actions to deterministic next menus", () => {
+  const cases: Array<[string, string, string, string]> = [
+    ["ACTION_DREAM_INTRO_EXPLAIN_MORE", "dream", "DREAM_MENU_INTRO", "DREAM_MENU_WHY"],
+    ["ACTION_DREAM_WHY_GIVE_SUGGESTIONS", "dream", "DREAM_MENU_WHY", "DREAM_MENU_SUGGESTIONS"],
+    ["ACTION_DREAM_INTRO_START_EXERCISE", "dream", "DREAM_MENU_INTRO", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
+    ["ACTION_DREAM_WHY_START_EXERCISE", "dream", "DREAM_MENU_WHY", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
+    ["ACTION_DREAM_SUGGESTIONS_START_EXERCISE", "dream", "DREAM_MENU_SUGGESTIONS", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
+    ["ACTION_DREAM_REFINE_START_EXERCISE", "dream", "DREAM_MENU_REFINE", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
+    ["ACTION_PURPOSE_INTRO_EXPLAIN_MORE", "purpose", "PURPOSE_MENU_INTRO", "PURPOSE_MENU_EXPLAIN"],
+    ["ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES", "purpose", "PURPOSE_MENU_EXPLAIN", "PURPOSE_MENU_EXAMPLES"],
+    ["ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE", "bigwhy", "BIGWHY_MENU_INTRO", "BIGWHY_MENU_A"],
+    ["ACTION_ROLE_INTRO_EXPLAIN_MORE", "role", "ROLE_MENU_INTRO", "ROLE_MENU_ASK"],
+    ["ACTION_ENTITY_INTRO_EXPLAIN_MORE", "entity", "ENTITY_MENU_INTRO", "ENTITY_MENU_FORMULATE"],
+    ["ACTION_STRATEGY_INTRO_EXPLAIN_MORE", "strategy", "STRATEGY_MENU_INTRO", "STRATEGY_MENU_ASK"],
+    ["ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE", "targetgroup", "TARGETGROUP_MENU_INTRO", "TARGETGROUP_MENU_EXPLAIN_MORE"],
+    ["ACTION_RULES_INTRO_EXPLAIN_MORE", "rulesofthegame", "RULES_MENU_INTRO", "RULES_MENU_ASK_EXPLAIN"],
+  ];
+
+  for (const [actionCode, stepId, sourceMenu, expectedMenu] of cases) {
+    assert.equal(
+      resolveActionCodeMenuTransition(actionCode, stepId, sourceMenu),
+      expectedMenu,
+      `${actionCode} should transition ${stepId} from ${sourceMenu} to ${expectedMenu}`
+    );
+  }
+});
+
+test("resolveActionCodeMenuTransition enforces step and source-menu guards", () => {
+  assert.equal(
+    resolveActionCodeMenuTransition("ACTION_DREAM_INTRO_EXPLAIN_MORE", "dream", "DREAM_MENU_REFINE"),
+    "",
+    "transition must not fire from the wrong source menu"
+  );
+  assert.equal(
+    resolveActionCodeMenuTransition("ACTION_DREAM_INTRO_EXPLAIN_MORE", "purpose", "DREAM_MENU_INTRO"),
+    "",
+    "transition must not cross steps"
+  );
+  assert.equal(
+    resolveActionCodeMenuTransition("ACTION_UNKNOWN", "dream", "DREAM_MENU_INTRO"),
+    "",
+    "unknown action code must not produce a transition"
+  );
+});
+
+test("run_step hard-fails when an actioncode transition exists but source menu is invalid", async () => {
+  const result = await run_step({
+    input_mode: "widget",
+    user_message: "ACTION_DREAM_WHY_START_EXERCISE",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      started: "true",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "DREAM_MENU_INTRO",
+        question:
+          "1) Tell me more about why a dream matters\n2) Do a small exercise that helps to define your dream.",
+      },
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(String((result as any).error?.type || ""), "contract_violation");
+  assert.equal(String((result as any).error?.action_code || ""), "ACTION_DREAM_WHY_START_EXERCISE");
+});
+
+test("NEXT_MENU_BY_ACTIONCODE contract transitions reference valid actions and menus", () => {
+  for (const [actionCode, transition] of Object.entries(NEXT_MENU_BY_ACTIONCODE)) {
+    const actionEntry = ACTIONCODE_REGISTRY.actions[actionCode];
+    assert.ok(actionEntry, `missing action registry entry for ${actionCode}`);
+    assert.equal(
+      String(actionEntry?.step || ""),
+      String(transition.step_id || ""),
+      `step mismatch for ${actionCode}`
+    );
+    const menuActions = ACTIONCODE_REGISTRY.menus[String(transition.to_menu_id || "")];
+    assert.ok(Array.isArray(menuActions) && menuActions.length > 0, `missing target menu ${transition.to_menu_id}`);
+  }
+});
 
 test("applyStateUpdate stages step output without overwriting unrelated committed finals", () => {
   const prev = getDefaultState();
@@ -190,62 +288,6 @@ test("Dream specialist instructions must not append universal meta/off-topic pol
   );
 });
 
-test("Dream menu contract: ESCAPE menu is never rewritten by Dream contract", () => {
-  const specialist = {
-    action: "ASK",
-    menu_id: "DREAM_MENU_ESCAPE",
-    question: "Continue?",
-    confirmation_question: "old confirm prompt",
-  };
-  const corrected = enforceDreamMenuContract(
-    specialist,
-    {
-      ...getDefaultState(),
-      current_step: "dream",
-      business_name: "Acme",
-    } as any
-  );
-  assert.deepEqual(corrected, specialist);
-});
-
-test("Dream menu contract: INTRO menu rewrites leaked Refine prompt tail to Define", () => {
-  const corrected = enforceDreamMenuContract(
-    {
-      action: "ASK",
-      menu_id: "DREAM_MENU_INTRO",
-      question:
-        "1) Tell me more about why a dream matters\n2) Do a small exercise that helps to define your dream.\n\nRefine the Dream of Acme or choose an option.",
-      confirmation_question: "",
-    },
-    {
-      ...getDefaultState(),
-      current_step: "dream",
-      business_name: "Acme",
-    } as any
-  );
-  assert.equal(String(corrected.question).includes("Refine the Dream of"), false);
-  assert.ok(String(corrected.question).includes("Define the Dream of Acme or choose an option."));
-});
-
-test("Dream menu contract: valid REFINE menu question is preserved", () => {
-  const specialist = {
-    action: "REFINE",
-    menu_id: "DREAM_MENU_REFINE",
-    question:
-      "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
-    confirmation_question: "",
-  };
-  const corrected = enforceDreamMenuContract(
-    specialist,
-    {
-      ...getDefaultState(),
-      current_step: "dream",
-      business_name: "Acme",
-    } as any
-  );
-  assert.equal(corrected.question, specialist.question);
-});
-
 test("off-topic overlay applies only when specialist returns is_offtopic=true", async () => {
   const baseState = {
     ...getDefaultState(),
@@ -340,6 +382,7 @@ test("DreamExplainer off-topic keeps exercise context and only shows switch-back
       state: {
         ...getDefaultState(),
         current_step: "dream",
+        __dream_runtime_mode: "builder_collect",
         active_specialist: "DreamExplainer",
         intro_shown_session: "true",
         intro_shown_for_step: "dream",
@@ -347,6 +390,9 @@ test("DreamExplainer off-topic keeps exercise context and only shows switch-back
         business_name: "Mindd",
         dream_final:
           "Mindd dreams of a world in which people feel empowered to create meaningful value and experience greater freedom and possibility in their lives.",
+        __ui_phase_by_step: {
+          dream: "dream:phase:DREAM_EXPLAINER_MENU_SWITCH_SELF",
+        },
         last_specialist_result: {
           action: "ASK",
           menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
@@ -377,6 +423,7 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
   const initialState = {
     ...getDefaultState(),
     current_step: "dream",
+    __dream_runtime_mode: "builder_collect",
     active_specialist: "DreamExplainer",
     intro_shown_session: "true",
     intro_shown_for_step: "dream",
@@ -1095,7 +1142,7 @@ test("buildTextForWidget strips prompt/menu echo lines from DreamExplainer body 
       menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
       question: prompt,
       message:
-        "1) Switch back to self-formulate the dream\n\n1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.\n\nYour Dream statements",
+        "<strong>1) Switch back to self-formulate the dream</strong>\n\n1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.\n\nYour Dream statements",
       refined_formulation: "",
       suggest_dreambuilder: "true",
     },
@@ -1141,6 +1188,7 @@ test("buildTextForWidget strips choose-noise for all confirm-filtered single-act
     const state = getDefaultState();
     (state as any).current_step = risk.stepId;
     (state as any).business_name = "Mindd";
+    setPhaseContract(state as any, risk.stepId, risk.menuId);
 
     const specialist: Record<string, unknown> = {
       action: "ASK",
@@ -1531,8 +1579,8 @@ test("step transition commits staged value and clears provisional state", async 
 test("Dream readiness guard accepts explicit start-exercise route in widget mode", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
   assert.match(source, /const explicitDreamExerciseRoute\s*=\s*userMessage === "__ROUTE__DREAM_START_EXERCISE__";/);
-  assert.match(source, /const dreamStartRequested\s*=/);
-  assert.match(source, /const dreamReadinessYes =[\s\S]*explicitDreamExerciseRoute[\s\S]*String\(lastResult\.suggest_dreambuilder \?\? ""\) === "true"/);
+  assert.match(source, /const useDreamExplainerGuard =[\s\S]*state\.current_step === DREAM_STEP_ID && explicitDreamExerciseRoute/);
+  assert.doesNotMatch(source, /lastResult\.suggest_dreambuilder/);
 });
 
 test("single-path flags: only wording-choice runtime flag remains active", () => {
@@ -1558,9 +1606,11 @@ test("switch-to-self without existing dream candidate returns Dream intro menu (
       dream_final: "",
       last_specialist_result: {
         action: "ASK",
+        menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
         suggest_dreambuilder: "true",
         message: "We will start the exercise to help clarify the Dream now.",
-        question: "Are you ready to begin?",
+        question:
+          "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
       },
     },
   });
@@ -1568,8 +1618,8 @@ test("switch-to-self without existing dream candidate returns Dream intro menu (
   assert.equal(result.ok, true);
   assert.equal(String(result.active_specialist || ""), "Dream");
   assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_INTRO");
-  assert.equal(String(result.prompt || "").includes("Define the Dream of"), true);
-  assert.equal(String(result.prompt || "").includes("Refine the Dream of"), false);
+  assert.equal(String(result.prompt || "").includes("Define your Dream for"), true);
+  assert.equal(String(result.prompt || "").includes("Refine your Dream for"), false);
   assert.deepEqual(result.ui?.action_codes || [], [
     "ACTION_DREAM_INTRO_EXPLAIN_MORE",
     "ACTION_DREAM_INTRO_START_EXERCISE",
@@ -1592,6 +1642,7 @@ test("switch-to-self ignores long statement-like refined text as Dream candidate
       dream_final: "",
       last_specialist_result: {
         action: "ASK",
+        menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
         suggest_dreambuilder: "true",
         refined_formulation: longListLike,
         message: "So far we have these statements.",
@@ -1602,8 +1653,8 @@ test("switch-to-self ignores long statement-like refined text as Dream candidate
   assert.equal(result.ok, true);
   assert.equal(String(result.active_specialist || ""), "Dream");
   assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_INTRO");
-  assert.equal(String(result.prompt || "").includes("Define the Dream of"), true);
-  assert.equal(String(result.prompt || "").includes("Refine the Dream of"), false);
+  assert.equal(String(result.prompt || "").includes("Define your Dream for"), true);
+  assert.equal(String(result.prompt || "").includes("Refine your Dream for"), false);
 });
 
 test("bullet consistency helpers remain, but no runtime overlay gate exists", () => {
@@ -1847,9 +1898,9 @@ test("informational action: strategy explain-more remains on contract ask menu",
       business_name: "Mindd",
       last_specialist_result: {
         action: "ASK",
-        menu_id: "STRATEGY_MENU_ASK",
+        menu_id: "STRATEGY_MENU_REFINE",
         question:
-          "1) Ask me some questions to clarify my Strategy\n2) Show me an example of a Strategy for my business",
+          "1) Explain why a Strategy matters",
         message: "So far we have these 2 strategic focus points.",
         statements: [
           "Focus exclusively on clients in the Netherlands",
@@ -1884,15 +1935,12 @@ test("informational action: purpose explain-more remains on contract menu", asyn
       started: "true",
       business_name: "Mindd",
       last_specialist_result: {
-        action: "REFINE",
-        menu_id: "PURPOSE_MENU_REFINE",
-        question:
-          "1) I'm happy with this wording, please continue to next step Big Why.\n2) Refine the wording",
-        message: "Your current Purpose for Mindd is:",
-        purpose:
-          "Mindd exists to foster purpose-driven companies that act ethically toward employees, customers, and the environment.",
-        refined_formulation:
-          "Mindd exists to foster purpose-driven companies that act ethically toward employees, customers, and the environment.",
+        action: "ASK",
+        menu_id: "PURPOSE_MENU_INTRO",
+        question: "1) Explain more about why a purpose is needed.",
+        message: "Please define your purpose or ask for more explanation.",
+        purpose: "",
+        refined_formulation: "",
       },
     },
   });
@@ -1902,7 +1950,7 @@ test("informational action: purpose explain-more remains on contract menu", asyn
   assert.equal(String(result.specialist?.menu_id || "").endsWith("_MENU_ESCAPE"), false);
   assert.ok(Array.isArray(result.ui?.action_codes));
   assert.ok((result.ui?.action_codes || []).length >= 1);
-  assert.match(String(result.specialist?.message || ""), /Mindd exists to foster purpose-driven companies/);
+  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_EXPLAIN");
 });
 
 test("wording choice: generic Purpose acknowledgement is replaced with step-specific feedback", async () => {

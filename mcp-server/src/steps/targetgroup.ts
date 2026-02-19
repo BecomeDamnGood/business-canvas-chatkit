@@ -153,8 +153,6 @@ So this step is about choosing: who is your ideal target group, and why them? On
 
 - question: Show exactly two options (localized) with real line breaks, then one blank line, then this exact prompt (localized). Use the business_name from STATE FINALS when available; if business_name is missing or empty, use the exact fallback phrase "your future company". The resulting prompt must follow this pattern (localized):
 
-1) Explain me more about Target Groups
-2) Ask me some questions to define my specific Target Group
 
 Define the Target Group of <BUSINESS_NAME_OR_FALLBACK> or choose an option
 
@@ -165,7 +163,6 @@ Where:
 - refined_formulation=""
 - question=""
 - targetgroup=""
-- menu_id="TARGETGROUP_MENU_INTRO"
 - next_step_action="false"
 - wants_recap=false
 
@@ -189,7 +186,6 @@ If tomorrow you were only allowed to help one type of customer (because otherwis
 
 - question: Show exactly one option (localized) with real line breaks, then one blank line, then this exact prompt (localized). Use the business_name from STATE FINALS when available; if business_name is missing or empty, use the exact fallback phrase "your future company". The resulting prompt must follow this pattern (localized):
 
-1) Ask me some questions to define my specific Target Group
 
 Define the Target Group of <BUSINESS_NAME_OR_FALLBACK> or let me ask you some questions
 
@@ -200,7 +196,6 @@ Where:
 - refined_formulation=""
 - question=""
 - targetgroup=""
-- menu_id="TARGETGROUP_MENU_EXPLAIN_MORE"
 - next_step_action="false"
 - wants_recap=false
 
@@ -228,7 +223,6 @@ Output for B2C (ask exactly these five questions, no scripted lead-in):
 - refined_formulation=""
 - question=""
 - targetgroup=""
-- menu_id="" (no menu, user types answer)
 - next_step_action="false"
 - wants_recap=false
 
@@ -244,7 +238,6 @@ Output for B2B (ask exactly these five questions, no scripted lead-in):
 - refined_formulation=""
 - question=""
 - targetgroup=""
-- menu_id="" (no menu, user types answer)
 - next_step_action="false"
 - wants_recap=false
 
@@ -281,13 +274,10 @@ Required response behavior when invalid input happens:
 - refined_formulation: The proposed specific interpretation (exact one sentence, one primary target group, maximum 7 words). When the user has provided a clear and specific segment description (industries, company types, roles), refined_formulation must reflect that user-defined segment (possibly narrowed or cleaned up) and MUST NOT introduce a completely different segment. The refined_formulation must already obey the same global non-repetition rule and \"do not repeat Strategy terms\" rules that apply to the final targetgroup in section 9: never restate or repeat information that is already present in Strategy or other STATE FINALS, unless the user explicitly asks you to mention that specific information again.
 - question: Show exactly two options (localized) with real line breaks, then one blank line, then this exact prompt (localized):
 
-1) Yes, this is what I mean to say, continue to step 9 Products and Services
-2) Ask me some questions to define my specific Target Group
 
 Refine your Target Group or choose an option
 - question=""
 - targetgroup="" (do not save yet)
-- menu_id="TARGETGROUP_MENU_POSTREFINE"
 - next_step_action="false"
 - wants_recap=false
 
@@ -399,7 +389,6 @@ POST-PROCESSING RULES (REPLACE OLD ONES)
 
 10) ASK SCREEN (F)
 
-When user confirms (via button "Yes this is exactly what I mean to say......" or direct confirmation):
 - action="ASK"
 - message: Show the confirmed target group with intro text (localized):
   "The Target Group of [Company name] is now formulated as follows:
@@ -409,7 +398,6 @@ When user confirms (via button "Yes this is exactly what I mean to say......" or
 - refined_formulation=""
 - question: "Continue to next step Products and Services"
 - targetgroup: The final one-sentence target group (maximum 10 words)
-- menu_id="" (no menu, user can type or click confirmation button)
 - next_step_action="true"
 - wants_recap=false
 

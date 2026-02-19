@@ -41,6 +41,11 @@ This document is the contract-first source of truth for step behavior in the Bus
 - language state
 - Special flow:
 - Self mode / builder mode switch, and handoff to `dream_explainer`
+- Contract transition to DreamBuilder start is explicit:
+- `ACTION_DREAM_INTRO_START_EXERCISE -> DREAM_EXPLAINER_MENU_SWITCH_SELF`
+- `ACTION_DREAM_WHY_START_EXERCISE -> DREAM_EXPLAINER_MENU_SWITCH_SELF`
+- `ACTION_DREAM_SUGGESTIONS_START_EXERCISE -> DREAM_EXPLAINER_MENU_SWITCH_SELF`
+- `ACTION_DREAM_REFINE_START_EXERCISE -> DREAM_EXPLAINER_MENU_SWITCH_SELF`
 - Allowed transitions:
 - `dream -> dream`
 - `dream -> purpose` (only via contract actioncode)
@@ -58,6 +63,7 @@ This document is the contract-first source of truth for step behavior in the Bus
 - language state
 - Special flow:
 - statement accumulation -> clustering -> scoring -> final Dream wording
+- Entry state for DreamBuilder start is always `DREAM_EXPLAINER_MENU_SWITCH_SELF`.
 - Allowed transitions:
 - `dream_explainer -> dream_explainer`
 - `dream_explainer -> dream`

@@ -130,9 +130,7 @@ Schema (all fields required)
   "menu_id": "string"
 }
 
-MENU_ID (HARD)
 - Step 0 does not use numbered menus.
-- Always set menu_id="".
 
 Hard rules
 
@@ -233,7 +231,7 @@ step_0: ""
 
 ESCAPE RULES (STEP 0 STANDARD, SINGLE-QUESTION ONLY) (HARD)
 
-Step 0 does NOT use the 2-option ESCAPE menu used in later steps.
+Step 0 does NOT use the 2-option ESCAPE pattern used in later steps.
 
 In any ESCAPE in Step 0:
 - message must be short, friendly, empathetic, and non-judgmental.
@@ -253,7 +251,6 @@ Trigger topics (examples)
 - Why does the process ask this question
 
 Output handling (HARD)
-- Output action="ASK" so the UI can show a clear "Continue" button, while the text input remains available for follow-up questions.
 - Keep refined_formulation="", question="", and step_0="".
 - business_name must be "TBD".
 - next_step_action must remain "false".
@@ -275,7 +272,6 @@ Tone rules
 
 Confirmation question (HARD)
 - Use question (NOT question) to ask one short question in the target output language: whether they want to continue with verification now.
-- Do not present a numbered menu in Step 0.
 
 Priority (HARD)
 - This META handler overrides Off-topic. If the message matches a meta trigger topic, use this handler.

@@ -64,6 +64,18 @@ const FINAL_FIELD_BY_STEP: Record<string, string> = {
   presentation: "presentation_brief_final",
 };
 
+type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
+
+function normalizeDreamRuntimeMode(raw: unknown): DreamRuntimeMode {
+  const mode = String(raw || "").trim();
+  if (mode === "builder_collect" || mode === "builder_scoring" || mode === "builder_refine") return mode;
+  return "self";
+}
+
+function dreamRuntimeModeFromState(state: CanvasState): DreamRuntimeMode {
+  return normalizeDreamRuntimeMode((state as any).__dream_runtime_mode);
+}
+
 function provisionalForStep(state: CanvasState, stepId: string): string {
   const raw =
     (state as any).provisional_by_step && typeof (state as any).provisional_by_step === "object"
@@ -103,6 +115,23 @@ function buildNumberedPrompt(labels: string[], headline: string): string {
   return `${numbered.join("\n")}\n\n${headline}`.trim();
 }
 
+function stripStructuredChoiceLinesForPrompt(promptRaw: string): string {
+  const chooserNoise = [
+    /^(please\s+)?(choose|pick|select)\s+\d+(?:\s*(?:,|\/|or|and)\s*\d+)*\.?$/i,
+    /^(please\s+)?(choose|pick|select)\s+an?\s+option(\s+below)?\.?$/i,
+    /^(please\s+)?(choose|pick|select)\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
+    /^choose\s+an?\s+option\s+by\s+typing\s+.+$/i,
+  ];
+  const kept = String(promptRaw || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean)
+    .filter((line) => !/^[1-9][\)\.]\s*/.test(line))
+    .filter((line) => !chooserNoise.some((pattern) => pattern.test(line)));
+  return kept.join("\n").trim();
+}
+
 function buildRenderedActions(actionCodes: string[], labels: string[]): RenderedAction[] {
   return actionCodes.map((code, idx) => {
     const entry = ACTIONCODE_REGISTRY.actions[code];
@@ -124,13 +153,6 @@ function isConfirmActionCode(actionCode: string): boolean {
   if (entry.route === "yes") return true;
   const upper = actionCode.toUpperCase();
   return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
-}
-
-function menuHasConfirmAction(menuId: string): boolean {
-  const actionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
-    ? ACTIONCODE_REGISTRY.menus[menuId]
-    : [];
-  return actionCodes.some((code) => isConfirmActionCode(String(code || "").trim()));
 }
 
 function parseMenuFromContractId(contractIdRaw: unknown, stepId: string): string {
@@ -164,6 +186,16 @@ function step0ConfirmQuestion(venture: string, name: string): string {
     return `You have ${englishIndefiniteArticle(cleanVenture)} ${cleanVenture} called ${cleanName}. ${STEP0_CONFIRM_SUFFIX_EN}`;
   }
   return STEP0_CONFIRM_SUFFIX_EN;
+}
+
+function isStep0MetaMessage(message: string): boolean {
+  const lower = String(message || "").toLowerCase();
+  if (!lower) return false;
+  return (
+    lower.includes("bensteenstra.com") ||
+    lower.includes("ben steenstra") ||
+    lower.includes("now, back to the business strategy canvas builder")
+  );
 }
 
 function extractCandidate(stepId: string, specialist: Record<string, unknown>, prev: Record<string, unknown>): string {
@@ -228,21 +260,48 @@ function computeStatus(
     : "";
 
   if (stepId === "dream") {
-    const activeSpecialist = String((state as any).active_specialist ?? "").trim();
-    const menuId = String(specialist.menu_id ?? "").trim().toUpperCase();
-    const isDreamExplainerContext =
-      activeSpecialist === "DreamExplainer" || menuId.startsWith("DREAM_EXPLAINER_MENU_");
-    if (!isDreamExplainerContext) {
-      const dreamValue = finalValue || candidate;
-      if (dreamValue) {
+    const dreamMode = dreamRuntimeModeFromState(state);
+    if (dreamMode === "builder_collect") {
+      if (statementCount > 0 || candidate || finalValue) {
         return {
-          status: "valid_output",
-          confirmEligible: true,
-          recapBody: dreamValue,
+          status: "incomplete_output",
+          confirmEligible: false,
+          recapBody: statementBullets || candidate || finalValue,
         };
       }
       return { status: "no_output", confirmEligible: false, recapBody: "" };
     }
+    if (dreamMode === "builder_scoring") {
+      return {
+        status: "no_output",
+        confirmEligible: false,
+        recapBody: statementBullets || candidate || finalValue,
+      };
+    }
+    if (dreamMode === "builder_refine") {
+      if (candidate || finalValue) {
+        return {
+          status: "valid_output",
+          confirmEligible: true,
+          recapBody: candidate || finalValue,
+        };
+      }
+      return {
+        status: statementCount > 0 ? "incomplete_output" : "no_output",
+        confirmEligible: false,
+        recapBody: statementBullets || finalValue,
+      };
+    }
+
+    const dreamValue = finalValue || candidate;
+    if (dreamValue) {
+      return {
+        status: "valid_output",
+        confirmEligible: true,
+        recapBody: dreamValue,
+      };
+    }
+    return { status: "no_output", confirmEligible: false, recapBody: "" };
   }
 
   if (stepId === "strategy") {
@@ -356,16 +415,38 @@ function resolveMenuContract(params: {
   prev: Record<string, unknown>;
 }): { menuId: string; actionCodes: string[]; labels: string[] } {
   const { stepId, status, confirmEligible, state, specialist, prev } = params;
+  if (stepId === "dream") {
+    const dreamMode = dreamRuntimeModeFromState(state);
+    const forcedMenuId =
+      dreamMode === "builder_collect"
+        ? "DREAM_EXPLAINER_MENU_SWITCH_SELF"
+        : dreamMode === "builder_refine"
+          ? "DREAM_EXPLAINER_MENU_REFINE"
+          : "";
+    if (dreamMode === "builder_scoring") {
+      return { menuId: "", actionCodes: [], labels: [] };
+    }
+    if (forcedMenuId) {
+      const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[forcedMenuId])
+        ? ACTIONCODE_REGISTRY.menus[forcedMenuId]
+        : [];
+      if (allActions.length === 0) return { menuId: "", actionCodes: [], labels: [] };
+      const actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
+      if (actionCodes.length === 0) return { menuId: "", actionCodes: [], labels: [] };
+      const labels = labelsForMenu(forcedMenuId, actionCodes, specialist, prev);
+      if (labels.length !== actionCodes.length) return { menuId: "", actionCodes: [], labels: [] };
+      return { menuId: forcedMenuId, actionCodes, labels };
+    }
+  }
+
   const defaults = DEFAULT_MENU_BY_STATUS[stepId];
   const defaultMenu = defaults ? String(defaults[status] || "").trim() : "";
-  const activeSpecialist = String((state as any).active_specialist ?? "").trim();
   const isOfftopic = specialist.is_offtopic === true;
   const ignorePhaseForOfftopicNoOutput = isOfftopic && status === "no_output";
   const phaseMap = (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
     ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
     : {};
   const phaseMenu = ignorePhaseForOfftopicNoOutput ? "" : parseMenuFromContractId(phaseMap[stepId], stepId);
-  const specialistMenu = String(specialist.menu_id ?? "").trim();
   const menuIsValidForStep = (menuRaw: string): boolean => {
     const menu = String(menuRaw || "").trim();
     if (!menu || isEscapeMenu(menu)) return false;
@@ -373,73 +454,11 @@ function resolveMenuContract(params: {
     if (!menuBelongsToStep(menu, stepId)) return false;
     return true;
   };
-  const allowSpecialistContextMenus = new Set([
-    "DREAM_MENU_WHY",
-    "DREAM_MENU_SUGGESTIONS",
-    "PURPOSE_MENU_EXAMPLES",
-    "ROLE_MENU_ASK",
-    "RULES_MENU_EXAMPLE_ONLY",
-    "DREAM_EXPLAINER_MENU_SWITCH_SELF",
-    "DREAM_EXPLAINER_MENU_REFINE",
-  ]);
-  const specialistMenuAllowedByStatus =
-    menuIsValidForStep(specialistMenu) &&
-    (
-      allowSpecialistContextMenus.has(specialistMenu) ||
-      (
-        stepId === "dream" &&
-        activeSpecialist === "DreamExplainer" &&
-        specialistMenu.startsWith("DREAM_EXPLAINER_MENU_")
-      ) ||
-      (status === "no_output" && !confirmEligible && menuHasConfirmAction(specialistMenu))
-    );
   let menuId = menuIsValidForStep(phaseMenu)
     ? phaseMenu
-    : (specialistMenuAllowedByStatus ? specialistMenu : defaultMenu);
-  if (stepId === "dream" && activeSpecialist === "DreamExplainer") {
-    if (isOfftopic) {
-      menuId = "DREAM_EXPLAINER_MENU_SWITCH_SELF";
-    } else if (status === "valid_output" && !menuIsValidForStep(menuId)) {
-      menuId = "DREAM_EXPLAINER_MENU_REFINE";
-    } else if (status !== "valid_output" && !String(menuId || "").startsWith("DREAM_EXPLAINER_MENU_")) {
-      menuId = "DREAM_EXPLAINER_MENU_SWITCH_SELF";
-    }
-  }
+    : defaultMenu;
   if (!menuIsValidForStep(menuId)) {
     menuId = menuIsValidForStep(defaultMenu) ? defaultMenu : "";
-  }
-  if (
-    status === "valid_output" &&
-    confirmEligible &&
-    menuIsValidForStep(defaultMenu) &&
-    menuHasConfirmAction(defaultMenu) &&
-    !menuHasConfirmAction(menuId)
-  ) {
-    const finalField = String(FINAL_FIELD_BY_STEP[stepId] || "").trim();
-    const hasCommittedFinal = finalField
-      ? Boolean(String((state as any)[finalField] || "").trim())
-      : false;
-    const hasProvisionalFinal = Boolean(provisionalForStep(state, stepId));
-    const hasStoredFinalLikeValue = hasCommittedFinal || hasProvisionalFinal;
-    const isDreamExplainerMenu = stepId === "dream" && String(menuId || "").startsWith("DREAM_EXPLAINER_MENU_");
-    const keepNonConfirmValidMenus = new Set([
-      "PURPOSE_MENU_EXAMPLES",
-      "ROLE_MENU_ASK",
-      "RULES_MENU_EXAMPLE_ONLY",
-      "DREAM_EXPLAINER_MENU_SWITCH_SELF",
-    ]);
-    const lowStatusMenus = new Set(
-      [defaults?.no_output, defaults?.incomplete_output]
-        .map((menu) => String(menu || "").trim())
-        .filter(Boolean)
-    );
-    if (
-      lowStatusMenus.has(String(menuId || "").trim()) ||
-      !keepNonConfirmValidMenus.has(String(menuId || "").trim()) ||
-      (hasStoredFinalLikeValue && !isDreamExplainerMenu)
-    ) {
-      menuId = defaultMenu;
-    }
   }
 
   if (!menuId || isEscapeMenu(menuId)) return { menuId: "", actionCodes: [], labels: [] };
@@ -528,7 +547,14 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     const parsedStep0 = parseStep0Line(
       String((state as any).step_0_final ?? "").trim() || extractCandidate(stepId, statusSource, prev)
     );
-    const step0Message = answerText || STEP0_CARDDESC_EN;
+    const step0Message = (() => {
+      const preserveSpecialistMessage =
+        isOfftopic ||
+        isStep0MetaMessage(answerText) ||
+        String((specialistForDisplay as any).wants_recap || "").toLowerCase() === "true";
+      if (preserveSpecialistMessage && answerText) return answerText;
+      return STEP0_CARDDESC_EN;
+    })();
     const step0MenuId = effectiveStatus === "valid_output" ? "STEP0_MENU_READY_START" : "";
     const step0ActionCodes = step0MenuId
       ? ((ACTIONCODE_REGISTRY.menus[step0MenuId] || []).map((code) => String(code || "").trim()).filter(Boolean))
@@ -598,7 +624,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     activeSpecialist === "DreamExplainer" &&
     !isOfftopic &&
     menuId === "DREAM_EXPLAINER_MENU_SWITCH_SELF"
-      ? String((specialistForDisplay as any).question || "").trim()
+      ? stripStructuredChoiceLinesForPrompt(String((specialistForDisplay as any).question || "").trim())
       : "";
   const question = buildNumberedPrompt(safeLabels, dreamExplainerPrompt || headline);
   const contractId = buildContractId(stepId, effectiveStatus, menuId);

@@ -19,6 +19,7 @@ test("deriveTransitionEventFromLegacy ignores legacy proceed_to_purpose flags", 
 test("orchestrateFromTransition handles specialist switch in same step", () => {
   const state = getDefaultState();
   (state as any).current_step = "dream";
+  (state as any).__dream_runtime_mode = "builder_collect";
   const decision = orchestrateFromTransition({
     state,
     userMessage: "",

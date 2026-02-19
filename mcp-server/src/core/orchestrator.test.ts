@@ -83,15 +83,13 @@ test("orchestrate: ignores legacy proceed_to_purpose and stays on current step",
   assert.equal(d.specialist_to_call, "Dream");
 });
 
-test("orchestrate: when active_specialist is DreamExplainer and suggest_dreambuilder=true, keep DreamExplainer", () => {
+test("orchestrate: Dream runtime mode builder_collect keeps DreamExplainer", () => {
   const s = makeState({
     current_step: "dream",
-    active_specialist: "DreamExplainer",
+    active_specialist: "Dream",
     intro_shown_session: "true",
-    last_specialist_result: {
-      suggest_dreambuilder: "true",
-      action: "ASK",
-    },
+    __dream_runtime_mode: "builder_collect",
+    last_specialist_result: { action: "ASK" },
   });
 
   const d = orchestrate({ state: s, userMessage: "" });
@@ -100,15 +98,13 @@ test("orchestrate: when active_specialist is DreamExplainer and suggest_dreambui
   assert.equal(d.specialist_to_call, "DreamExplainer");
 });
 
-test("orchestrate: no Dream->DreamExplainer handshake on legacy CONFIRM", () => {
+test("orchestrate: Dream runtime mode self keeps Dream specialist", () => {
   const s = makeState({
     current_step: "dream",
-    active_specialist: "Dream",
+    active_specialist: "DreamExplainer",
     intro_shown_session: "true",
-    last_specialist_result: {
-      action: "CONFIRM",
-      suggest_dreambuilder: "true",
-    },
+    __dream_runtime_mode: "self",
+    last_specialist_result: { action: "ASK" },
   });
 
   const d = orchestrate({ state: s, userMessage: "" });

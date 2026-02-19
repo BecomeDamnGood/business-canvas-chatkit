@@ -19,6 +19,7 @@ This contract governs A/B wording selection when both user and suggestion varian
 - Accepted pick actions:
 - `ACTION_WORDING_PICK_USER`
 - `ACTION_WORDING_PICK_SUGGESTION`
+- Wording-choice UI never overrides menu routing; menu transitions stay actioncode + contract-state driven.
 
 ## State Update Rules
 
