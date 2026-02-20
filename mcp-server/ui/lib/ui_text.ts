@@ -25,6 +25,42 @@ export function renderInlineText(el: Element | null, raw: string | null | undefi
   let bold = false;
   let i = 0;
 
+  function appendLineWithLinks(line: string): void {
+    const value = String(line || "");
+    const urlPattern = /https?:\/\/[^\s<>"']+/g;
+    let cursor = 0;
+    let m: RegExpExecArray | null = null;
+    while ((m = urlPattern.exec(value)) !== null) {
+      const fullMatch = String(m[0] || "");
+      const start = Number(m.index || 0);
+      if (start > cursor) {
+        fragment.appendChild(document.createTextNode(value.slice(cursor, start)));
+      }
+      let url = fullMatch;
+      let trailing = "";
+      while (/[).,!?;:]$/.test(url)) {
+        trailing = url.slice(-1) + trailing;
+        url = url.slice(0, -1);
+      }
+      if (url) {
+        const a = document.createElement("a");
+        a.textContent = url;
+        (a as HTMLAnchorElement).href = url;
+        (a as HTMLAnchorElement).target = "_blank";
+        (a as HTMLAnchorElement).rel = "noopener noreferrer";
+        (a as HTMLElement).className = "inlineLink";
+        fragment.appendChild(a);
+      }
+      if (trailing) {
+        fragment.appendChild(document.createTextNode(trailing));
+      }
+      cursor = start + fullMatch.length;
+    }
+    if (cursor < value.length) {
+      fragment.appendChild(document.createTextNode(value.slice(cursor)));
+    }
+  }
+
   function appendTextPreservingLines(text: string, useBold: boolean): void {
     const normalized = String(text || "").replace(/\r\n?/g, "\n");
     const lines = normalized.split("\n");
@@ -35,7 +71,7 @@ export function renderInlineText(el: Element | null, raw: string | null | undefi
         strong.textContent = line;
         fragment.appendChild(strong);
       } else {
-        fragment.appendChild(document.createTextNode(line));
+        appendLineWithLinks(line);
       }
       if (idx < lines.length - 1) {
         fragment.appendChild(document.createElement("br"));
@@ -115,6 +151,25 @@ function extractBulletItem(line: string): string | null {
   return m ? m[1].trim() : null;
 }
 
+function extractMarkdownImage(line: string): { alt: string; url: string } | null {
+  const raw = String(line || "").trim();
+  if (!raw) return null;
+  const m = raw.match(/^!\[([^\]]*)\]\(([^)\s]+)\)$/);
+  if (!m) return null;
+  const alt = String(m[1] || "").trim() || "Image";
+  const url = String(m[2] || "").trim();
+  if (!url || !/^(https?:\/\/|\/)/i.test(url)) return null;
+  return { alt, url };
+}
+
+function appendImage(el: Element, image: { alt: string; url: string }): void {
+  const img = document.createElement("img");
+  img.className = "cardDesc-image";
+  (img as HTMLImageElement).src = image.url;
+  (img as HTMLImageElement).alt = image.alt;
+  el.appendChild(img);
+}
+
 function appendParagraph(el: Element, lines: string[]): void {
   const paragraph = lines.map((line) => String(line || "").trim()).filter(Boolean).join(" ");
   const paragraphCheck = normalizeLineText(paragraph);
@@ -174,6 +229,13 @@ export function renderStructuredText(el: Element | null, raw: string | null | un
     const currentRaw = String(lines[i] || "");
     const current = currentRaw.trim();
     if (!current) {
+      i += 1;
+      continue;
+    }
+
+    const imageLine = extractMarkdownImage(currentRaw);
+    if (imageLine) {
+      appendImage(el, imageLine);
       i += 1;
       continue;
     }

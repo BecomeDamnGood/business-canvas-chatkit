@@ -673,6 +673,7 @@ const httpServer = async (req: any, res: any) => {
         ext === ".css" ? "text/css" :
         ext === ".svg" ? "image/svg+xml" :
         ext === ".png" ? "image/png" :
+        ext === ".webp" ? "image/webp" :
         ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
         "application/octet-stream";
       if (path.basename(resolved) === "step-card.bundled.html") {

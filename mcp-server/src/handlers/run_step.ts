@@ -1622,6 +1622,7 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
   const hasStep0Final = String((state as any).step_0_final || "").trim().length > 0;
   const hasStep0Draft = String(next.step_0 || "").trim().length > 0;
   const normalizedInput = String(userInput || "").trim();
+  const isBenMeta = isBenMetaTopic(normalizedInput) || isBenMetaTopic(String(next.message || ""));
   const hasRawInput = normalizedInput.length > 0;
   const isLikelyStepContributing = hasRawInput && shouldTreatAsStepContributingInput(normalizedInput, STEP_0_ID);
   if (action === "INTRO") {
@@ -1631,6 +1632,35 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
   }
   const currentContractId = String(next.ui_contract_id || "").trim();
   const currentMenuId = parseMenuFromContractIdForStep(currentContractId, STEP_0_ID);
+  if (isBenMeta) {
+    if (hasStep0Final) {
+      const parsed = parseStep0Final(String((state as any).step_0_final || ""), String((state as any).business_name || "TBD"));
+      const statement =
+        String(parsed.status || "").toLowerCase() === "existing"
+          ? `You have a ${parsed.venture} called ${parsed.name}.`
+          : `You want to start a ${parsed.venture} called ${parsed.name}.`;
+      return {
+        ...next,
+        action: "ASK",
+        message: buildBenProfileMessage(),
+        question: `1) Yes, I'm ready. Let's start!\n\n${statement} Are you ready to start with the first step: the Dream?`,
+        business_name: parsed.name || "TBD",
+        step_0: String((state as any).step_0_final || ""),
+        wording_choice_pending: "false",
+        wording_choice_selected: "",
+        is_offtopic: true,
+      };
+    }
+    return normalizeStep0OfftopicToAsk(
+      {
+        ...next,
+        message: buildBenProfileMessage(),
+        is_offtopic: true,
+      },
+      state,
+      normalizedInput
+    );
+  }
   const isOfftopic = next.is_offtopic === true || String(next.is_offtopic || "").trim().toLowerCase() === "true";
   const mustForceAskWithoutFinal =
     !hasStep0Final &&
@@ -1920,12 +1950,8 @@ export function isMetaOfftopicFallbackTurn(params: {
   const message = String(specialist.message || "").trim().toLowerCase();
   if (!user && !message) return false;
 
-  const benSignals = [
-    "ben steenstra",
-    "bensteenstra.com",
-    "for more information visit",
-  ];
-  if (benSignals.some((token) => user.includes(token) || message.includes(token))) return true;
+  if (isBenMetaTopic(user) || isBenMetaTopic(message)) return true;
+  if (message.includes("for more information visit")) return true;
 
   if (/you are in the .+ step now/.test(message)) return true;
   if (/you are in the dream exercise step now/.test(message)) return true;
@@ -2822,6 +2848,29 @@ function offTopicRedirectLine(stepId: string, state: CanvasState): string {
   );
 }
 
+const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
+const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
+
+function isBenMetaTopic(textRaw: string): boolean {
+  const text = String(textRaw || "").toLowerCase();
+  if (!text) return false;
+  return (
+    text.includes("ben steenstra") ||
+    text.includes("bensteenstra.com") ||
+    text.includes("bensteenstra")
+  );
+}
+
+function buildBenProfileMessage(): string {
+  return [
+    `![Ben Steenstra](${BEN_PROFILE_IMAGE_URL})`,
+    "My name is Ben Steenstra (1973). I am a Dutch serial entrepreneur, executive coach, author, and public speaker, and I help people grow their businesses while staying grounded in what feels meaningful.",
+    "I combine practical strategy frameworks with coaching to turn big ideas into clear, actionable plans.",
+    "I have applied this model worldwide, including with organizations such as Samsung, HTC, LG, New Black, and Fresh and Rebel.",
+    `For more information and to book an appointment, visit my website: ${BEN_PROFILE_WEBSITE_URL}.`,
+  ].join("\n\n");
+}
+
 function stripOfftopicStructureSentences(raw: string): string {
   const text = String(raw || "").replace(/\r/g, "\n").trim();
   if (!text) return "";
@@ -2885,12 +2934,12 @@ function isLikelyMetaQuestionTurn(params: {
   }
   const user = String(params.userMessage || "").trim().toLowerCase();
   const message = String(specialist.message || "").trim().toLowerCase();
+  if (isBenMetaTopic(user) || isBenMetaTopic(message)) return true;
   if (message.includes("www.bensteenstra.com") || message.includes("bensteenstra.com")) return true;
   if (message.includes("now, back to")) return true;
   if (message.includes("for more information visit")) return true;
   if (!user) return false;
   const metaSignals = [
-    "ben steenstra",
     "what model",
     "which model",
     "why this step",
@@ -2921,6 +2970,18 @@ function normalizeNonStep0OfftopicSpecialist(params: {
     specialist.is_offtopic === true ||
     String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
   if (!isOfftopic) return specialist;
+  const isBenMeta = isBenMetaTopic(params.userMessage) || isBenMetaTopic(String(specialist.message || ""));
+  if (isBenMeta) {
+    return {
+      ...specialist,
+      action: "ASK",
+      is_offtopic: true,
+      message: buildBenProfileMessage(),
+      __offtopic_meta_passthrough: "true",
+      wording_choice_pending: "false",
+      wording_choice_selected: "",
+    };
+  }
   if (isLikelyMetaQuestionTurn({ userMessage: params.userMessage, specialistResult: specialist })) {
     return {
       ...specialist,
@@ -6916,6 +6977,14 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
     state,
   });
+  if (currentStepIdForOfftopic === STEP_0_ID) {
+    specialistResult = normalizeStep0AskDisplayContract(
+      STEP_0_ID,
+      specialistResult,
+      state,
+      userMessage
+    );
+  }
 
   let nextState = applyStateUpdate({
     prev: state,

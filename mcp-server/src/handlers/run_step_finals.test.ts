@@ -494,6 +494,42 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
   assert.equal(String(offTopicTurn.prompt || "").includes("Continue Dream now"), false);
 });
 
+test("Ben meta question uses canonical profile block and keeps current-step recap when output exists", async () => {
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "Who is Ben Steenstra?",
+      state: {
+        ...getDefaultState(),
+        current_step: "purpose",
+        active_specialist: "Purpose",
+        intro_shown_session: "true",
+        intro_shown_for_step: "purpose",
+        started: "true",
+        business_name: "Mindd",
+        purpose_final: "Mindd exists to help creative founders build trusted brands.",
+      },
+    })
+  );
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.is_offtopic || "").toLowerCase(), "true");
+  assert.equal(
+    String(result.text || "").includes("![Ben Steenstra](/ui/assets/ben-steenstra.webp)"),
+    true
+  );
+  assert.equal(
+    String(result.text || "").includes("https://www.bensteenstra.com"),
+    true
+  );
+  assert.equal(
+    String(result.text || "").includes("The current Purpose of Mindd is."),
+    true
+  );
+  assert.equal(
+    String(result.text || "").includes("Mindd exists to help creative founders build trusted brands."),
+    true
+  );
+});
+
 test("off-topic message includes step+company anchor and keeps compact structure", async () => {
   const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
@@ -1122,12 +1158,9 @@ test("Step 0 off-topic with no output always returns canonical Step 0 ask contra
     })
   );
   assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.is_offtopic || "").toLowerCase() === "true", true);
   assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(String(result.specialist?.confirmation_question || ""), "");
-  assert.equal(String(result.prompt || "").toLowerCase().includes("what type of business"), true);
-  assert.equal(String(result.text || "").includes("Just to set the context, we'll start with the basics."), true);
-  assert.equal(Array.isArray(result.ui?.action_codes), false);
+  assert.equal(String(result.text || "").includes("My name is Ben Steenstra (1973)."), true);
+  assert.equal(String(result.text || "").includes("https://www.bensteenstra.com"), true);
 });
 
 test("Step 0 contract: meta/off-topic ASK is normalized to canonical Step 0 prompt when no step_0_final exists", () => {

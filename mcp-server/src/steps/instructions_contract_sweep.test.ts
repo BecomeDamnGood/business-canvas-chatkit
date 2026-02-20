@@ -52,6 +52,18 @@ test("global instruction sweep removes legacy proceed-signal and contradictory f
       /- question=""\s*\n\s*-\s*question=""/i,
       "duplicate question=\"\" lines in one output block are forbidden",
     ],
+    [
+      /\bif off-topic,\s*output ask\b/i,
+      "off-topic handling must not instruct ASK; use ESCAPE contract",
+    ],
+    [
+      /\bstandard escape output[\s\S]{0,260}-\s*action="ask"/i,
+      "standard ESCAPE block must not use action=ASK",
+    ],
+    [
+      /\bquestion:\s*ask whether to continue to the next step\b/i,
+      "legacy keep-as-written continue-question rule must be removed",
+    ],
   ];
 
   for (const [stepId, text] of NON_STEP0_INSTRUCTIONS) {

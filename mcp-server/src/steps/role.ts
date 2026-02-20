@@ -269,7 +269,7 @@ Trigger:
 - After the INTRO gate, if the user message is off-topic for the current step (and not a META question).
 
 Output:
-- action="ASK"
+- action="ESCAPE"
 - message (localized): Step-0 tone structure.
   Sentence 1: short, friendly, empathetic, non-judgmental boundary. Light humor as a small wink is allowed.
   Sentence 2 (optional): include only for clearly off-topic/nonsense input; keep the same tone.
@@ -293,18 +293,6 @@ If the user asks for a recap or summary of what has been discussed in this step 
 - question=""
 - role=""
 
-
-Trigger:
-
-Output:
-- action="ASK"
-- message (localized): short pause acknowledgement, one sentence.
-- refined_formulation=""
-- question=""
-- role=""
-
-Important:
-- Do NOT continue coaching in this step in this case.
 
 10.6) ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 

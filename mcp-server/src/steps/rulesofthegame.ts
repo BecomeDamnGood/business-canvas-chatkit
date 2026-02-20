@@ -547,14 +547,6 @@ If the user explicitly asks to adjust a rule (e.g., "make it broader", "make it 
 - refined_formulation=""
 - rulesofthegame=""
 
-User says: "Keep it exactly as written" (HARD)
-If the user clearly says they want the rules exactly as provided:
-- action="ASK"
-- message=""
-- refined_formulation: bullet list exactly as provided
-- rulesofthegame: same bullet list
-- question: ask whether to continue to the next step
-
 ${RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT}
 `;
 
