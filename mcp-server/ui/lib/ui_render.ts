@@ -29,7 +29,7 @@ import {
   uiLang,
   hasToolOutput,
 } from "./ui_actions.js";
-import { getIsLoading, getSessionStarted, getSessionWelcomeShown, setSessionWelcomeShown } from "./ui_state.js";
+import { getIsLoading, getSessionStarted } from "./ui_state.js";
 
 function stepIndex(stepId: string): number {
   const idx = ORDER.indexOf(stepId);
@@ -42,53 +42,36 @@ export function extractStepTitle(stepId: string, lang: string | null | undefined
   return fullTitle.replace(/^Step \d+: /, "").replace(/^Stap \d+: /, "");
 }
 
-export function buildStepper(activeIdx: number, stepTitle: string | null | undefined): void {
+function stepLabelShort(stepId: string, lang: string | null | undefined): string {
+  const full = extractStepTitle(stepId, lang);
+  if (stepId === "step_0") return "Validation";
+  return full.length > 12 ? full.slice(0, 12) + "…" : full;
+}
+
+export function buildStepper(
+  activeIdx: number,
+  stepTitle: string | null | undefined,
+  lang?: string | null
+): void {
   const el = document.getElementById("stepper");
   if (!el) return;
   el.innerHTML = "";
   for (let i = 0; i < ORDER.length; i++) {
     const s = document.createElement("div");
-    let className = "step";
+    let className = "step-item step";
     if (i < activeIdx) className += " completed";
     if (i === activeIdx) className += " active";
     s.className = className;
-    s.style.position = "relative";
-    if (i === activeIdx && stepTitle) {
-      const title = document.createElement("div");
-      title.className = "stepperTitle";
-      title.id = "stepperTitle";
-      title.textContent = stepTitle;
-      if (i === 0) title.classList.add("align-left");
-      if (i === ORDER.length - 1) title.classList.add("align-right");
-      s.appendChild(title);
-    }
-    s.appendChild(document.createTextNode(String(i + 1).padStart(2, "0")));
+    const label = document.createElement("div");
+    label.className = "step-item-label";
+    /* Alleen huidige stap toont label (Validation, Dream, etc.) – zoals voorheen */
+    label.textContent = i === activeIdx ? stepLabelShort(ORDER[i], lang) : "";
+    s.appendChild(label);
+    const bar = document.createElement("div");
+    bar.className = "step-bar";
+    s.appendChild(bar);
     el.appendChild(s);
-    if (i < ORDER.length - 1) {
-      const line = document.createElement("div");
-      line.className = "stepLine";
-      el.appendChild(line);
-    }
   }
-}
-
-export function formatText(text: string | null | undefined): string {
-  if (!text) return "";
-  const htmlTagPlaceholders: string[] = [];
-  let placeholderIndex = 0;
-  let temp = text.replace(/<[^>]+>/g, (match) => {
-    htmlTagPlaceholders[placeholderIndex] = match;
-    return `__HTML_TAG_${placeholderIndex++}__`;
-  });
-  temp = temp.replace(/\n\n+/g, "<br><br>");
-  temp = temp.replace(/\n/g, "<br>");
-  temp = temp.replace(/__HTML_TAG_(\d+)__/g, (_match, index) => {
-    return htmlTagPlaceholders[parseInt(index, 10)] || "";
-  });
-  temp = temp.replace(/<\/li>\s*<br>\s*<li>/gi, "</li><li>");
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  temp = temp.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-  return temp;
 }
 
 export function dedupeBodyAgainstPrompt(bodyRaw: string, promptRaw: string): string {
@@ -128,11 +111,11 @@ export function stripStructuredChoiceLines(promptRaw: string): string {
 function setStaticStrings(lang: string): void {
   const uiSubtitle = document.getElementById("uiSubtitle");
   const byText = document.getElementById("byText");
-  const btnStart = document.getElementById("btnStart");
+  const btnStartText = document.getElementById("btnStartText");
   const send = document.getElementById("send");
   if (uiSubtitle) uiSubtitle.textContent = t(lang, "uiSubtitle");
   if (byText) byText.textContent = t(lang, "byText");
-  if (btnStart) btnStart.textContent = t(lang, "btnStart");
+  if (btnStartText) btnStartText.textContent = t(lang, "btnStart");
   if (send) send.setAttribute("title", t(lang, "sendTitle"));
 }
 
@@ -347,6 +330,10 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   };
   const userLabel = ensureLabelColon(t(lang, "wordingChoiceHeading"));
   const suggestionLabel = ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
+  const normalizeListItem = (value: unknown): string =>
+    String(value || "")
+      .replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "")
+      .trim();
 
   headingEl.textContent = "";
   (headingEl as HTMLElement).style.display = "none";
@@ -363,12 +350,12 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     suggestionListEl.innerHTML = "";
     for (const item of userItems as unknown[]) {
       const li = document.createElement("li");
-      li.textContent = String(item || "");
+      li.textContent = normalizeListItem(item);
       userListEl.appendChild(li);
     }
     for (const item of suggestionItems as unknown[]) {
       const li = document.createElement("li");
-      li.textContent = String(item || "");
+      li.textContent = normalizeListItem(item);
       suggestionListEl.appendChild(li);
     }
     userBtn.textContent = "Choose this version";
@@ -449,11 +436,11 @@ export function render(overrideToolOutput?: unknown): void {
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
   const idx = stepIndex(current);
-  const stepTitle = extractStepTitle(current, lang);
-  buildStepper(idx, stepTitle);
+  const stepTitle = current === "step_0" ? "Validation" : extractStepTitle(current, lang);
+  buildStepper(idx, stepTitle, lang);
 
   const badge = document.getElementById("badge");
-  if (badge) badge.textContent = String(idx + 1);
+  if (badge) badge.textContent = String(idx + 1).padStart(2, "0");
 
   const inputWrap = document.getElementById("inputWrap");
   const btnStart = document.getElementById("btnStart");
@@ -461,11 +448,25 @@ export function render(overrideToolOutput?: unknown): void {
   if (!inputWrap || !btnStart || !startHint) return;
 
   const specialist = (result?.specialist as Record<string, unknown>) || {};
+  const uiPayload =
+    result?.ui && typeof result.ui === "object"
+      ? (result.ui as Record<string, unknown>)
+      : {};
+  const uiFlags =
+    uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags
+      ? (uiPayload.flags as Record<string, unknown>)
+      : {};
   const sectionTitleEl = document.getElementById("sectionTitle");
-  const specialistAction = String(specialist.action || "").trim().toUpperCase();
+  const showStepIntroChrome = uiFlags.show_step_intro_chrome === true;
+  const showBadge = showPreStart || showStepIntroChrome;
+  if (badge) {
+    (badge as HTMLElement).style.display = showBadge ? "block" : "none";
+  }
 
   if (sectionTitleEl) {
-    if (!showPreStart && current !== "step_0" && specialistAction === "INTRO") {
+    if (showPreStart && current === "step_0") {
+      sectionTitleEl.textContent = "Validation & Business Name";
+    } else if (!showPreStart && current !== "step_0" && showStepIntroChrome) {
       const businessName = String((state?.business_name || "")).trim();
       sectionTitleEl.textContent = getSectionTitle(lang, current, businessName);
     } else {
@@ -493,7 +494,12 @@ export function render(overrideToolOutput?: unknown): void {
     (btnStart as HTMLElement).style.display = "inline-flex";
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
-    if (cardDesc) cardDesc.innerHTML = formatText(prestartWelcomeForLang(lang));
+    if (cardDesc) {
+      // Prestart is trusted UI-owned HTML from ui_constants; keep structure intact.
+      cardDesc.innerHTML = prestartWelcomeForLang(lang);
+      cardDesc.classList.remove("has-grid"); /* prestart: block flow voor margin collapse */
+      cardDesc.classList.remove("is-step0-ask-layout");
+    }
     if (prompt) prompt.textContent = "";
     startHint.textContent = "";
     (startHint as HTMLElement).style.display = "none";
@@ -502,6 +508,7 @@ export function render(overrideToolOutput?: unknown): void {
   }
 
   inputWrap.style.display = "flex";
+  inputWrap.classList.toggle("is-step0-ask-layout", current === "step_0");
   (btnStart as HTMLElement).style.display = "none";
   startHint.textContent = "";
   (startHint as HTMLElement).style.display = "none";
@@ -524,10 +531,6 @@ export function render(overrideToolOutput?: unknown): void {
     }
     return "";
   })();
-  const uiPayload =
-    result?.ui && typeof result.ui === "object"
-      ? (result.ui as Record<string, unknown>)
-      : {};
   const uiViewMode = String(uiPayload.view_mode || "").trim();
   const hasExplicitViewMode = uiViewMode.length > 0;
   const isViewModeWordingChoice = uiViewMode === "wording_choice";
@@ -542,12 +545,8 @@ export function render(overrideToolOutput?: unknown): void {
   const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") as string;
   const promptSource = uiQuestionText || promptRaw;
   let body: string;
-  const sessionWelcomeShown = getSessionWelcomeShown();
   if (isDreamDirectionView && promptSource) {
     body = promptSource;
-  } else if (!sessionWelcomeShown) {
-    body = `${prestartWelcomeForLang(lang)}\n\n${bodyRaw || ""}`.trim();
-    setSessionWelcomeShown(true);
   } else {
     body = bodyRaw || "";
   }
@@ -555,6 +554,9 @@ export function render(overrideToolOutput?: unknown): void {
   const cardDescEl = document.getElementById("cardDesc");
   if (cardDescEl) {
     cardDescEl.style.display = "block";
+    cardDescEl.classList.add("has-grid");
+    const isStep0AskLayout = current === "step_0";
+    cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     renderStructuredText(cardDescEl, body || "");
   }
 
@@ -579,10 +581,6 @@ export function render(overrideToolOutput?: unknown): void {
 
   const purposeInstructionHintEl = document.getElementById("purposeInstructionHint");
   if (purposeInstructionHintEl) {
-    const uiFlags =
-      result?.ui && typeof result.ui === "object" && (result.ui as Record<string, unknown>).flags
-        ? ((result.ui as Record<string, unknown>).flags as Record<string, unknown>)
-        : {};
     const payloadContractId = String(((result?.ui as Record<string, unknown>)?.contract_id || "")).trim();
     const menuId = parseMenuFromContractId(payloadContractId, current);
     const purposeHintAllowedMenus = new Set(["PURPOSE_MENU_EXPLAIN", "PURPOSE_MENU_EXAMPLES"]);
@@ -669,8 +667,10 @@ export function render(overrideToolOutput?: unknown): void {
     }
     const scoringIntro = document.getElementById("scoringIntro");
     if (scoringIntro) {
-      scoringIntro.textContent =
-        t(lang, "scoringIntro1") + "\n\n" + t(lang, "scoringIntro2") + "\n\n" + t(lang, "scoringIntro3");
+      const introLines = [t(lang, "scoringIntro1"), t(lang, "scoringIntro2"), t(lang, "scoringIntro3")]
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      scoringIntro.textContent = introLines.join("\n");
     }
 
     const win = globalThis as unknown as { __dreamScoringScores?: unknown[][] };
@@ -871,10 +871,31 @@ export function render(overrideToolOutput?: unknown): void {
         "N",
         String(statementsArray.length)
       );
-    if (statementsListEl)
-      statementsListEl.textContent = statementsArray
-        .map((s, i) => (i + 1) + ". " + String(s))
-        .join("\n");
+    if (statementsListEl) {
+      statementsListEl.innerHTML = "";
+      const ordered = document.createElement("ol");
+      ordered.className = "statementsListOrdered";
+      for (let i = 0; i < statementsArray.length; i += 1) {
+        const statementText = String(statementsArray[i] || "")
+          .replace(/^\s*\d+[\.\)]\s*/, "")
+          .trim();
+        const li = document.createElement("li");
+        li.className = "statementsListItem";
+
+        const num = document.createElement("span");
+        num.className = "statementsListNum";
+        num.textContent = `${i + 1}.`;
+
+        const text = document.createElement("span");
+        text.className = "statementsListText";
+        text.textContent = statementText;
+
+        li.appendChild(num);
+        li.appendChild(text);
+        ordered.appendChild(li);
+      }
+      statementsListEl.appendChild(ordered);
+    }
   } else {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   }
@@ -888,6 +909,7 @@ export function render(overrideToolOutput?: unknown): void {
     choicesArr = Array.isArray(parsed.choices) ? parsed.choices : [];
     promptText = isDreamDirectionView ? "" : parsed.promptShown;
   }
+
   let requireWordingPick = false;
   const suppressWordingChoice = isViewModeDreamBuilderScoring;
   if (!suppressWordingChoice) {
@@ -898,7 +920,14 @@ export function render(overrideToolOutput?: unknown): void {
   }
 
   const promptEl = document.getElementById("prompt");
-  if (promptEl) renderInlineText(promptEl, promptText || "");
+  if (promptEl) {
+    const hasPromptText = String(promptText || "").trim().length > 0;
+    const hasBodyText = stripInlineText(String(body || "")).trim().length > 0;
+    const showPromptDivider = current !== "step_0" && hasPromptText && hasBodyText;
+    promptEl.classList.toggle("with-divider", showPromptDivider);
+    promptEl.classList.toggle("choice-pending", requireWordingPick);
+    renderInlineText(promptEl, promptText || "");
+  }
   if (requireWordingPick) {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) {

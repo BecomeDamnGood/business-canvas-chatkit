@@ -165,6 +165,7 @@ test("resolveActionCodeMenuTransition maps informational actions to deterministi
     ["ACTION_DREAM_SUGGESTIONS_START_EXERCISE", "dream", "DREAM_MENU_SUGGESTIONS", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
     ["ACTION_DREAM_REFINE_START_EXERCISE", "dream", "DREAM_MENU_REFINE", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
     ["ACTION_DREAM_EXPLAINER_REFINE_ADJUST", "dream", "DREAM_EXPLAINER_MENU_REFINE", "DREAM_EXPLAINER_MENU_REFINE"],
+    ["ACTION_DREAM_SWITCH_TO_SELF", "dream", "NO_MENU", "DREAM_MENU_INTRO"],
     ["ACTION_PURPOSE_INTRO_EXPLAIN_MORE", "purpose", "PURPOSE_MENU_INTRO", "PURPOSE_MENU_EXPLAIN"],
     ["ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS", "purpose", "PURPOSE_MENU_INTRO", "PURPOSE_MENU_POST_ASK"],
     ["ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS", "purpose", "PURPOSE_MENU_EXAMPLES", "PURPOSE_MENU_POST_ASK"],
@@ -2037,6 +2038,23 @@ test("single-path flags: only wording-choice runtime flag remains active", () =>
   assert.doesNotMatch(source, /policyFlags\.timeoutGuardV2/);
 });
 
+test("DreamBuilder follow-up wording is contract-side (run_step), not ui-side overlay", () => {
+  const runStepSource = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  const uiRenderSource = fs.readFileSync(new URL("../../ui/lib/ui_render.ts", import.meta.url), "utf8");
+
+  assert.match(runStepSource, /function enforceDreamBuilderQuestionProgress\(/);
+  assert.match(runStepSource, /What more do you see changing in the future, positive or negative\?/);
+
+  assert.equal(
+    uiRenderSource.includes("What more do you see changing in the future, positive or negative?"),
+    false
+  );
+  assert.equal(
+    uiRenderSource.includes("What do you see changing in the future, positive or negative?"),
+    false
+  );
+});
+
 test("switch-to-self without existing dream candidate returns Dream intro menu (Define, not Refine)", async () => {
   const result = await run_step({
     user_message: "ACTION_DREAM_SWITCH_TO_SELF",
@@ -2106,6 +2124,49 @@ test("switch-to-self ignores long statement-like refined text as Dream candidate
   assert.equal(menuIdFromTurn(result), "DREAM_MENU_INTRO");
   assert.equal(String(result.prompt || "").includes("Define your Dream for"), true);
   assert.equal(String(result.prompt || "").includes("Refine your Dream for"), false);
+});
+
+test("switch-to-self from DreamBuilder scoring NO_MENU is contract-valid and returns Dream intro", async () => {
+  const result = await run_step({
+    user_message: "ACTION_DREAM_SWITCH_TO_SELF",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "DreamExplainer",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      dream_final: "",
+      __ui_phase_by_step: {
+        dream: "dream:phase:NO_MENU",
+      },
+      __ui_render_mode_by_step: {
+        dream: "no_buttons",
+      },
+      __dream_runtime_mode: "builder_scoring",
+      dream_builder_statements: [
+        "People seek more purpose-driven work.",
+        "Society values meaningful contribution.",
+      ],
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "",
+        suggest_dreambuilder: "true",
+        scoring_phase: "true",
+        clusters: [{ theme: "Purpose", statement_indices: [0, 1] }],
+        statements: [
+          "People seek more purpose-driven work.",
+          "Society values meaningful contribution.",
+        ],
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.active_specialist || ""), "Dream");
+  assert.equal(menuIdFromTurn(result), "DREAM_MENU_INTRO");
+  assert.equal(String(result.prompt || "").includes("Define your Dream for"), true);
 });
 
 test("bullet consistency helpers remain, but no runtime overlay gate exists", () => {

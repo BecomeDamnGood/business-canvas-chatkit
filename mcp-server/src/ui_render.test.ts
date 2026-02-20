@@ -441,7 +441,7 @@ test("render respects explicit empty result.text and does not fall back to speci
   (globalThis as any).openai = originalOpenai;
 });
 
-test("render shows section title only on INTRO action for a step", () => {
+test("render shows section title when step-intro chrome flag is present", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -476,6 +476,7 @@ test("render shows section title only on INTRO action for a step", () => {
       },
       prompt: "Please define your purpose.",
       ui: {
+        flags: { show_step_intro_chrome: true },
         action_codes: ["ACTION_PURPOSE_INTRO_EXPLAIN_MORE", "ACTION_PURPOSE_INTRO_DEFINE"],
         expected_choice_count: 2,
       },
@@ -508,6 +509,111 @@ test("render shows section title only on INTRO action for a step", () => {
     },
   });
 
+  assert.equal(String(sectionTitle.textContent || ""), "");
+
+  setSessionStarted(false);
+  setSessionWelcomeShown(false);
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
+test("badge and section title follow prestart or step-intro chrome flag", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const badge = (fakeDocument as any).getElementById("badge");
+  const sectionTitle = (fakeDocument as any).getElementById("sectionTitle");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: { ok: true }, widgetState: {}, setWidgetState() {} };
+
+  setSessionStarted(false);
+  setSessionWelcomeShown(false);
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "step_0",
+        active_specialist: "Step0Validation",
+        language: "en",
+      },
+      specialist: {
+        action: "ASK",
+      },
+    },
+  });
+  assert.equal(String(badge.style.display || ""), "block");
+
+  setSessionStarted(true);
+  setSessionWelcomeShown(true);
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "step_0",
+        active_specialist: "Step0Validation",
+        intro_shown_session: "true",
+        intro_shown_for_step: "step_0",
+        language: "en",
+      },
+      specialist: {
+        action: "ASK",
+        menu_id: "STEP_0_MENU_ASK_NAME",
+      },
+      prompt:
+        "Just to set the context, we'll start with the basics.",
+    },
+  });
+  assert.equal(String(badge.style.display || ""), "none");
+
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+        intro_shown_session: "true",
+        intro_shown_for_step: "dream",
+        language: "en",
+      },
+      specialist: {
+        action: "INTRO",
+        menu_id: "DREAM_MENU_INTRO",
+      },
+      text: "Dream intro body",
+      ui: {
+        flags: { show_step_intro_chrome: true },
+      },
+    },
+  });
+  assert.equal(String(badge.style.display || ""), "block");
+  assert.equal(String(sectionTitle.textContent || ""), "Your Dream");
+
+  render({
+    result: {
+      registry_version: "test",
+      state: {
+        current_step: "bigwhy",
+        active_specialist: "BigWhy",
+        intro_shown_session: "true",
+        intro_shown_for_step: "bigwhy",
+        language: "en",
+        business_name: "Mindd",
+      },
+      specialist: {
+        action: "ASK",
+        menu_id: "BIGWHY_MENU_INTRO",
+      },
+      text: "Big Why follow-up body",
+    },
+  });
+  assert.equal(String(badge.style.display || ""), "none");
   assert.equal(String(sectionTitle.textContent || ""), "");
 
   setSessionStarted(false);
@@ -880,4 +986,11 @@ test("btnStartDreamExercise sends Dream start-exercise actioncode", () => {
   assert.ok(blockMatch, "Expected btnStartDreamExercise handler block in ui/lib/main.ts");
   const block = blockMatch[0];
   assert.match(block, /callRunStep\("ACTION_DREAM_INTRO_START_EXERCISE"\)/);
+});
+
+test("prestart welcome preserves canonical HTML structure and is not newline-formatted", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
+  assert.match(source, /cardDesc\.innerHTML = prestartWelcomeForLang\(lang\);/);
+  assert.doesNotMatch(source, /formatText\(prestartWelcomeForLang\(lang\)\)/);
+  assert.doesNotMatch(source, /prestartWelcomeForLang\(lang\)\\n\\n/);
 });

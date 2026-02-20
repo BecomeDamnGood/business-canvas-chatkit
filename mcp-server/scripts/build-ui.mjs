@@ -12,6 +12,9 @@ const assetsDir = path.join(uiDir, "assets");
 const templatePath = path.join(uiDir, "step-card.template.html");
 const outputPath = path.join(uiDir, "step-card.bundled.html");
 const entryPath = path.join(uiLibDir, "main.js");
+const GENERATED_BANNER =
+  "<!-- AUTO-GENERATED FILE: edit ui/step-card.template.html and ui/lib/*.ts, then run npm run build:ui && node scripts/build-ui.mjs -->";
+const INLINE_BUNDLE_RE = /<!--\s*INLINE_BUNDLE(?:[\s\S]*?)?-->/;
 
 const ASSET_MAP = {
   "__ASSET_BG__": "background.jpg",
@@ -87,7 +90,7 @@ async function buildUi() {
   checkUiLibStaleness();
 
   const template = fs.readFileSync(templatePath, "utf8");
-  if (!template.includes("<!-- INLINE_BUNDLE -->")) {
+  if (!INLINE_BUNDLE_RE.test(template)) {
     throw new Error("Template is missing <!-- INLINE_BUNDLE --> placeholder.");
   }
 
@@ -114,8 +117,14 @@ async function buildUi() {
     assetReplacements[token] = readAssetAsDataUri(assetPath);
   }
 
-  let outputHtml = template.replace("<!-- INLINE_BUNDLE -->", inlineScript);
+  let outputHtml = template.replace(INLINE_BUNDLE_RE, inlineScript);
   outputHtml = replaceAll(outputHtml, assetReplacements);
+  if (!outputHtml.includes(GENERATED_BANNER)) {
+    outputHtml = outputHtml.replace(
+      "<!doctype html>",
+      `<!doctype html>\n${GENERATED_BANNER}`
+    );
+  }
 
   fs.writeFileSync(outputPath, outputHtml, "utf8");
   console.log(`[build-ui] Wrote ${outputPath}`);

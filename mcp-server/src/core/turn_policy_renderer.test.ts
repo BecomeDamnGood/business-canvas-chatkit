@@ -379,6 +379,38 @@ test("dream explainer intro keeps exercise question and avoids Dream intro fallb
   );
 });
 
+test("non-step0 intro source sets step-intro chrome UI hint on rendered specialist", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "bigwhy";
+  (state as any).business_name = "Mindd";
+
+  const introRendered = renderFreeTextTurnPolicy({
+    stepId: "bigwhy",
+    state,
+    specialist: {
+      action: "INTRO",
+      message: "Intro body",
+      question: "",
+      refined_formulation: "",
+      bigwhy: "",
+    },
+  });
+  assert.equal((introRendered.specialist as any).ui_show_step_intro_chrome, true);
+
+  const askRendered = renderFreeTextTurnPolicy({
+    stepId: "bigwhy",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Follow-up body",
+      question: "",
+      refined_formulation: "",
+      bigwhy: "",
+    },
+  });
+  assert.equal((askRendered.specialist as any).ui_show_step_intro_chrome, false);
+});
+
 test("dream explainer switch-self prompt is de-numbered before contract numbering", () => {
   const state = getDefaultState();
   (state as any).current_step = "dream";

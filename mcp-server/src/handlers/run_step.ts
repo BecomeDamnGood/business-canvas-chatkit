@@ -1688,6 +1688,60 @@ function buildDreamBuilderSwitchSelfQuestion(previousQuestion: string, fallbackQ
   return `1) Switch back to self-formulate the dream\n\n${headline}`.trim();
 }
 
+const DREAM_BUILDER_NEXT_QUESTION_BASE_EN =
+  "What do you see changing in the future, positive or negative? Let your imagination run free.";
+const DREAM_BUILDER_NEXT_QUESTION_MORE_EN =
+  "What more do you see changing in the future, positive or negative? Let your imagination run free.";
+
+function enforceDreamBuilderQuestionProgress(
+  specialistResult: any,
+  params: {
+    currentStepId: string;
+    activeSpecialist: string;
+    canonicalStatementCount: number;
+    wordingChoicePending: boolean;
+  }
+): any {
+  const currentStepId = String(params.currentStepId || "").trim();
+  const activeSpecialist = String(params.activeSpecialist || "").trim();
+  if (currentStepId !== DREAM_STEP_ID || activeSpecialist !== DREAM_EXPLAINER_SPECIALIST) {
+    return specialistResult;
+  }
+  const specialist = specialistResult && typeof specialistResult === "object" ? specialistResult : {};
+  const isOfftopic =
+    specialist.is_offtopic === true ||
+    String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
+  if (isOfftopic) return specialist;
+  const scoringPhase = String(specialist.scoring_phase || "").trim() === "true";
+  if (scoringPhase) return specialist;
+
+  const currentQuestion = String(specialist.question || "").trim();
+  if (!currentQuestion) return specialist;
+  const hasMoreAlready = /^What more do you see changing in the future,\s*positive or negative\?/i.test(currentQuestion);
+  if (hasMoreAlready) return specialist;
+  const isBaseQuestion = /^What do you see changing in the future,\s*positive or negative\?/i.test(currentQuestion);
+  if (!isBaseQuestion) return specialist;
+
+  const specialistStatementsCount = Array.isArray(specialist.statements)
+    ? (specialist.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
+    : 0;
+  const hasCollectedInput =
+    params.canonicalStatementCount > 0 ||
+    specialistStatementsCount > 0 ||
+    params.wordingChoicePending ||
+    String(specialist.wording_choice_pending || "").trim() === "true";
+  if (!hasCollectedInput) return specialist;
+
+  const nextQuestion = currentQuestion === DREAM_BUILDER_NEXT_QUESTION_BASE_EN
+    ? DREAM_BUILDER_NEXT_QUESTION_MORE_EN
+    : currentQuestion.replace(/^What do you see/i, "What more do you see");
+  if (!nextQuestion || nextQuestion === currentQuestion) return specialist;
+  return {
+    ...specialist,
+    question: nextQuestion,
+  };
+}
+
 function copyPendingWordingChoiceState(current: any, previous: Record<string, unknown>): any {
   const pending = String(previous.wording_choice_pending || "") === "true";
   if (!pending) return current;
@@ -3381,6 +3435,7 @@ function resolveActionCodeTransition(
   const safeActionCode = String(actionCode || "").trim().toUpperCase();
   const safeStepId = String(stepId || "").trim();
   const safeSourceMenu = String(sourceMenuId || "").trim();
+  const sourceMenuForMatch = safeSourceMenu || "NO_MENU";
   if (!safeActionCode || !safeStepId) return null;
   const transition = NEXT_MENU_BY_ACTIONCODE[safeActionCode];
   if (!transition) return null;
@@ -3388,7 +3443,7 @@ function resolveActionCodeTransition(
   const fromMenus = Array.isArray(transition.from_menu_ids)
     ? transition.from_menu_ids.map((menu) => String(menu || "").trim()).filter(Boolean)
     : [];
-  if (fromMenus.length > 0 && !fromMenus.includes(safeSourceMenu)) return null;
+  if (fromMenus.length > 0 && !fromMenus.includes(sourceMenuForMatch)) return null;
   const targetStepId = String(transition.to_step_id || safeStepId).trim();
   if (!targetStepId) return null;
   const renderMode: "menu" | "no_buttons" =
@@ -3401,7 +3456,7 @@ function resolveActionCodeTransition(
   return {
     actionCode: safeActionCode,
     stepId: safeStepId,
-    sourceMenuId: safeSourceMenu,
+    sourceMenuId: sourceMenuForMatch,
     targetStepId,
     targetMenuId: renderMode === "menu" ? targetMenuId : "",
     renderMode,
@@ -3446,6 +3501,10 @@ function buildUiPayload(
 } | undefined {
   const localDev = shouldLogLocalDevDiagnostics();
   const flags = { ...(flagsOverride || {}) };
+  const introChromeRaw = String((specialist as any)?.ui_show_step_intro_chrome || "").trim().toLowerCase();
+  if ((specialist as any)?.ui_show_step_intro_chrome === true || introChromeRaw === "true") {
+    flags.show_step_intro_chrome = true;
+  }
   const contractMeta = normalizeUiContractMeta(specialist, contractMetaOverride);
   const rawQuestionText = pickPrompt(specialist);
   void renderedActionsOverride;
@@ -6836,6 +6895,18 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       renderedActionsOverride = [];
     }
   }
+
+  const canonicalDreamBuilderStatementsCount =
+    Array.isArray((nextState as any).dream_builder_statements)
+      ? ((nextState as any).dream_builder_statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
+      : 0;
+  specialistResult = enforceDreamBuilderQuestionProgress(specialistResult, {
+    currentStepId: String((nextState as any).current_step || ""),
+    activeSpecialist: String((nextState as any).active_specialist || ""),
+    canonicalStatementCount: canonicalDreamBuilderStatementsCount,
+    wordingChoicePending: requireWordingPick || Boolean(wordingChoiceOverride?.enabled),
+  });
+  (nextState as any).last_specialist_result = specialistResult;
 
   const currentStepForContract = String((nextState as any).current_step ?? "");
   const specialistContractId = String((specialistResult as any)?.ui_contract_id || "").trim();

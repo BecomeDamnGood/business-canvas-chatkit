@@ -32,20 +32,36 @@ export const TITLES_DEFAULT: Record<string, string> = {
   presentation: "Step 11: Presentation",
 };
 
-export const PRESTART_WELCOME_DEFAULT = `Build a complete Business Model and Strategy Canvas step by step.
+export const PRESTART_WELCOME_DEFAULT = `<p class="card-headline">Build a complete Business Model and Strategy Canvas step by step.</p>
 
-<strong>The Proven Standard</strong>
-A globally implemented strategy canvas used by teams worldwide, built through Ben Steenstra's unique step-by-step method of questioning and structured development.
+<div class="section">
+<div class="section-title">The Proven Standard</div>
+<div class="section-body">A globally implemented strategy canvas used by teams worldwide, built through Ben Steenstra's unique step-by-step method of questioning and structured development.</div>
+</div>
 
-<strong>By the end you'll have</strong><ul>
-<li>A focused canvas that fits on one page</li>
-<li>A presentation you can use immediately (PPTX)</li>
-<li>A plan your team can align around</li>
-</ul><strong>How it works</strong>
-One question at a time. Clear input, structured output.
+<div class="divider"></div>
 
-<strong>Time</strong>
-Estimated time: 10–15 minutes.`;
+<div class="section">
+<div class="section-title">By the end you'll have</div>
+<div class="deliverables">
+<div class="deliverable"><div class="deliverable-dot"></div>A focused canvas that fits on one page</div>
+<div class="deliverable"><div class="deliverable-dot"></div>A presentation you can use immediately (PPTX)</div>
+<div class="deliverable"><div class="deliverable-dot"></div>A plan your team can align around</div>
+</div>
+</div>
+
+<div class="divider"></div>
+
+<div class="meta-row">
+<div class="meta-item">
+<div class="meta-label">How it works</div>
+<div class="meta-value">One question at a time</div>
+</div>
+<div class="meta-item">
+<div class="meta-label">Time</div>
+<div class="meta-value">10–15 minutes</div>
+</div>
+</div>`;
 
 export const UI_STRINGS: Record<string, Record<string, string>> = {
   default: {
@@ -67,7 +83,7 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     byText: "A business model by:",
     startHint: "Click Start to begin.",
     inputPlaceholder: "Type your answer here (use the widget, not the chat box)…",
-    btnStart: "Start the process with Validation & Business Name",
+    btnStart: "Start with Validation & Business Name",
     btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
     wordingChoiceHeading: "This is your input:",
     wordingChoiceSuggestionLabel: "This would be my suggestion:",

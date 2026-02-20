@@ -70,7 +70,7 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   },
   ACTION_DREAM_SWITCH_TO_SELF: {
     step_id: "dream",
-    from_menu_ids: ["DREAM_EXPLAINER_MENU_SWITCH_SELF"],
+    from_menu_ids: ["DREAM_EXPLAINER_MENU_SWITCH_SELF", "NO_MENU"],
     to_menu_id: "DREAM_MENU_INTRO",
   },
   ACTION_DREAM_EXPLAINER_REFINE_CONFIRM: {

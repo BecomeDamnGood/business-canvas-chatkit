@@ -566,6 +566,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const { stepId, state } = params;
   const specialist = params.specialist || {};
   const prev = params.previousSpecialist || {};
+  const sourceAction = String((specialist as any).action || "").trim().toUpperCase();
+  const showStepIntroChrome = stepId !== "step_0" && sourceAction === "INTRO";
   const activeSpecialist = String((state as any).active_specialist ?? "").trim();
   const stepLabel = STEP_LABELS[stepId] || "Current step";
   const companyName = companyNameForPrompt(state);
@@ -725,6 +727,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     action: "ASK",
     message,
     question,
+    ui_show_step_intro_chrome: showStepIntroChrome,
     ui_contract_id: contractId,
     ui_contract_version: UI_CONTRACT_VERSION,
     ui_text_keys: textKeys,
