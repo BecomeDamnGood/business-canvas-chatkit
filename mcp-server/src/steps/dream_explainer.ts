@@ -1,6 +1,6 @@
 // mcp-server/src/steps/dream_explainer.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const DREAM_EXPLAINER_STEP_ID = "dream" as const; // exercise runs within Dream step context
 export const DREAM_EXPLAINER_SPECIALIST = "DreamExplainer" as const;
@@ -28,6 +28,7 @@ export const DreamExplainerZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
   scoring_phase: z.enum(["true", "false"]),
   clusters: z.array(ClusterSchema),
 });
@@ -52,6 +53,7 @@ export const DreamExplainerJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
     "scoring_phase",
     "clusters",
   ],
@@ -67,6 +69,7 @@ export const DreamExplainerJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
     scoring_phase: { type: "string", enum: ["true", "false"] },
     clusters: {
       type: "array",
@@ -219,7 +222,7 @@ If USER_MESSAGE is exactly one of these tokens, follow the specified route:
 (Output in the target language only.)
 
 Scope guard (off-topic / ASK)
-The user is only allowed to do this Dream exercise now. If they ask something unrelated (e.g. "who is Ben", "what time is it"), output ASK and return to the current Dream exercise context.
+The user is only allowed to do this Dream exercise now. If they ask something unrelated, output ASK and return to the current Dream exercise context.
 
 Standard OFF-TOPIC output (localized)
 - action="ASK"
@@ -232,33 +235,20 @@ Standard OFF-TOPIC output (localized)
 - dream=""
 - suggest_dreambuilder="true"
 
-META QUESTIONS (ALLOWED, ANSWER THEN RETURN)
-Meta questions are allowed (model, Ben Steenstra, why this step, etc.).
-- Output action="ASK"
-  For other meta questions, use exactly 2 sentences, with step_0 tone:
-  Sentence 1: direct answer to the meta question (calm, confident, practical). Light humor is allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-  Sentence 2: redirect: "Now, back to Dream exercise."
-  Tone: calm, confident, practical. No hype. Light humor allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-- Topic-specific answers:
-  - Model: This is a multi-agent canvas workflow running on OpenAI language models, and model versions can change over time. It is not a school-style business plan nobody reads; it is a proven, practical model that creates clarity, direction, and usable trade-offs.
-  - Too vague: A first draft is allowed to be rough; this exercise helps discover the broader positive change you want to see.
-  - Why this step: Each step prevents common failure modes like slogans, tactics-as-strategy, and random priorities. This exercise helps you discover a real Dream connected to large opportunities or threats you see in the world.
+META QUESTIONS (ALLOWED, CLASSIFY, RUNTIME HANDLES COPY)
+Meta questions are allowed.
+- Output action="ASK".
+- For process/value doubt: set user_intent to WHY_NEEDED or RESISTANCE and meta_topic="MODEL_VALUE".
+- For model/method credibility or origin questions: set user_intent="META_QUESTION" and meta_topic="MODEL_CREDIBILITY".
+- For profile questions about Ben Steenstra: set user_intent="META_QUESTION" and meta_topic="BEN_PROFILE".
+- For recap requests: set wants_recap=true, user_intent="RECAP_REQUEST", and meta_topic="RECAP".
+- For non-recap meta turns: keep wants_recap=false and is_offtopic=false.
+- For pure meta turns: keep refined_formulation="", question="", dream="", suggest_dreambuilder="true".
+- Runtime owns the final meta wording and redirect behavior. Do not hardcode model/profile answers or step-specific redirect lines here.
 
-- refined_formulation="", question=""
-- dream=""
-- suggest_dreambuilder="true"
-
-RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
-If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap", "show me the statements"):
-- Output action="ASK"
-- message (localized): exactly 2 sentences.
-  Sentence 1: brief summary of what has been discussed so far in this step (based on PREVIOUS_STATEMENTS and context). If statements exist, mention the count and key themes briefly.
-  Sentence 2: redirect: "Now, back to Dream exercise."
-
-- refined_formulation="", question=""
-- dream=""
-- statements: unchanged (PREVIOUS_STATEMENTS)
-- suggest_dreambuilder="true"
+RECAP QUESTIONS (ALLOWED)
+If recap is requested, classify it via wants_recap=true, user_intent="RECAP_REQUEST", meta_topic="RECAP".
+Runtime renders recap content and continuation.
 
 - action="ASK"
 - message="", question="", refined_formulation="", question="", dream=""

@@ -2,7 +2,7 @@ export function buildSingleValueStepContractBlock(stepLabel: string, fieldName: 
   return `
 CANONICAL OUTPUT CONTRACT (HARD)
 - Output schema fields MUST always include:
-  "action", "message", "question", "refined_formulation", "${fieldName}", "wants_recap", "is_offtopic", "user_intent".
+  "action", "message", "question", "refined_formulation", "${fieldName}", "wants_recap", "is_offtopic", "user_intent", "meta_topic".
 - Menu/buttons are runtime contract-driven via contract_id + action_codes. Never emulate buttons in message/question.
 
 Field discipline by intent
@@ -42,7 +42,7 @@ export function buildListStepContractBlock(stepLabel: string, fieldName: string,
   return `
 CANONICAL OUTPUT CONTRACT (HARD)
 - Output schema fields MUST always include:
-  "action", "message", "question", "refined_formulation", "${fieldName}", "wants_recap", "is_offtopic", "user_intent", "statements".
+  "action", "message", "question", "refined_formulation", "${fieldName}", "wants_recap", "is_offtopic", "user_intent", "meta_topic", "statements".
 - Menu/buttons are runtime contract-driven via contract_id + action_codes. Never emulate buttons in message/question.
 
 Field discipline by intent

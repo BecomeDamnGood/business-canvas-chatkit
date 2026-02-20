@@ -64,6 +64,18 @@ test("global instruction sweep removes legacy proceed-signal and contradictory f
       /\bquestion:\s*ask whether to continue to the next step\b/i,
       "legacy keep-as-written continue-question rule must be removed",
     ],
+    [
+      /\bthis is a multi-agent canvas workflow running on openai language models\b/i,
+      "non-step0 instructions must not hardcode model meta answers",
+    ],
+    [
+      /\btopic-specific answers:\b/i,
+      "non-step0 instructions must not contain hardcoded meta topic answer blocks",
+    ],
+    [
+      /\bnow,\s*back to\s+(dream|dream exercise|purpose|big why|role|entity|strategy)\b/i,
+      "non-step0 instructions must not contain hardcoded step-specific meta redirects",
+    ],
   ];
 
   for (const [stepId, text] of NON_STEP0_INSTRUCTIONS) {
@@ -89,6 +101,24 @@ test("core steps explicitly declare runtime contract-driven menu/button routing"
     assert.ok(
       text.includes("Menu/buttons are runtime contract-driven via contract_id + action_codes."),
       `${stepId} must explicitly declare runtime contract-driven routing`
+    );
+  }
+});
+
+test("non-step0 meta sections declare runtime-owned meta rendering", () => {
+  const mustDeclareRuntimeOwnedMeta: Array<[string, string]> = [
+    ["dream", DREAM_INSTRUCTIONS],
+    ["dream_explainer", DREAM_EXPLAINER_INSTRUCTIONS],
+    ["purpose", PURPOSE_INSTRUCTIONS],
+    ["bigwhy", BIGWHY_INSTRUCTIONS],
+    ["role", ROLE_INSTRUCTIONS],
+    ["entity", ENTITY_INSTRUCTIONS],
+    ["strategy", STRATEGY_INSTRUCTIONS],
+  ];
+  for (const [stepId, text] of mustDeclareRuntimeOwnedMeta) {
+    assert.ok(
+      text.includes("Runtime owns the final meta wording and redirect behavior."),
+      `${stepId} must delegate meta copy rendering to runtime`
     );
   }
 });

@@ -1,6 +1,6 @@
 // mcp-server/src/steps/purpose.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const PURPOSE_STEP_ID = "purpose" as const;
 export const PURPOSE_SPECIALIST = "Purpose" as const;
@@ -17,6 +17,7 @@ export const PurposeZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
 });
 
 export type PurposeOutput = z.infer<typeof PurposeZodSchema>;
@@ -36,6 +37,7 @@ export const PurposeJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -46,6 +48,7 @@ export const PurposeJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
   },
 } as const;
 
@@ -147,44 +150,23 @@ Important:
 6) META QUESTIONS (ALLOWED, ANSWER THEN RETURN)
 
 Intent
-Meta questions are allowed. Answer briefly and calmly, then return to Purpose without changing the flow.
+Meta questions are allowed. Classify them; runtime renders the final meta copy.
 
-Trigger topics (examples)
-- what model is used
-- who Ben Steenstra is
-- whether this is too vague
-- whether this step is really needed
-- why the process asks this question
+Trigger categories (semantic, no keyword lists)
+- model/process credibility or value
+- whether this step is needed
+- whether this feels too vague
+- recap or process-navigation questions
 
 Output handling (HARD)
 - Output action="ASK".
-- Keep refined_formulation="", question="", purpose="".
-- Always include www.bensteenstra.com in the message (localized).
-
-Message structure (localized)
-- For other meta questions, use exactly 2 sentences total, with step_0 tone:
-  Sentence 1: direct answer to the meta question (calm, confident, practical). Light humor is allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-  Sentence 2: redirect: "Now, back to Purpose."
-  Tone: calm, confident, practical. No hype. Light humor allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-
-Topic rules (what to say)
-
-A) Model
-- Explain: this is a multi-agent canvas workflow running on OpenAI language models, and versions can change over time.
-- Add: the value is not a school-style business plan nobody reads; it is a proven model that creates clarity, direction, and practical trade-offs.
-
-B) Ben Steenstra
-
-C) Too vague
-- Say: first draft is allowed to be rough; this step creates the inner engine behind the Dream so later choices become concrete.
-- End with www.bensteenstra.com.
-
-D) Is this step needed / why ask this
-- Say: each step prevents common failure modes like slogans, tactics-as-strategy, and random priorities.
-- Add: Purpose makes the Dream credible and stable under pressure.
-- End with www.bensteenstra.com.
-
-Question (HARD)
+- For process/value doubt: set user_intent to WHY_NEEDED or RESISTANCE and meta_topic="MODEL_VALUE".
+- For model/method credibility or origin questions: set user_intent="META_QUESTION" and meta_topic="MODEL_CREDIBILITY".
+- For profile questions about Ben Steenstra: set user_intent="META_QUESTION" and meta_topic="BEN_PROFILE".
+- For recap requests: set wants_recap=true, user_intent="RECAP_REQUEST", and meta_topic="RECAP".
+- For non-recap meta turns: keep wants_recap=false and is_offtopic=false.
+- For pure meta turns: keep refined_formulation="", question="", purpose="".
+- Runtime owns the final meta wording and redirect behavior. Do not hardcode model/profile answers or step-specific redirect lines here.
 
 
 7) STEP-SPECIFIC HARD RULES
@@ -268,15 +250,8 @@ Output
 - purpose=""
 
 10) RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
-If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap"):
-- Output action="ASK"
-- message (localized): exactly 2 sentences.
-  Sentence 1: brief summary of what has been discussed so far in this step (based on state/context).
-  Sentence 2: redirect: "Now, back to Purpose."
-
-- refined_formulation=""
-- question=""
-- purpose=""
+If recap is requested, classify it via wants_recap=true, user_intent="RECAP_REQUEST", meta_topic="RECAP".
+Runtime renders recap content and continuation.
 
 
 Trigger

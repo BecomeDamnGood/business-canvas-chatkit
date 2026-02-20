@@ -22,6 +22,7 @@ import {
   stripUnsupportedReformulationClaims,
   pickPrompt,
   applyMotivationQuotesContractV11,
+  applyCentralMetaTopicRouter,
   RECAP_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
   normalizeStep0AskDisplayContract,
@@ -409,8 +410,14 @@ test("UNIVERSAL_META_OFFTOPIC_POLICY: non-step_0 prompt assembly includes policy
     "non-Step0 includes UNIVERSAL_META_OFFTOPIC_POLICY where applicable"
   );
   assert.ok(purposeInstructions.includes("wants_recap"), "recap behavior still present");
-  assert.ok(purposeInstructions.includes("Ben Steenstra"), "Ben factual reference present");
-  assert.ok(purposeInstructions.includes("www.bensteenstra.com"), "Ben reference URL present");
+  assert.ok(
+    purposeInstructions.includes("Profile/credibility questions about the method creator or model origin"),
+    "semantic profile/credibility meta category present"
+  );
+  assert.ok(
+    purposeInstructions.includes("Questions about process/model value"),
+    "semantic process/model-value meta category present"
+  );
   assert.ok(
     purposeInstructions.includes("Let's continue with the <step name> of <company name>."),
     "fixed step+company redirect for off-topic present"
@@ -427,6 +434,7 @@ test("motivation policy is intent-driven (user_intent), not phrase-driven", () =
     wants_recap: false,
     is_offtopic: false,
     user_intent: "WHY_NEEDED",
+    meta_topic: "MODEL_VALUE",
   } as Record<string, unknown>;
 
   const applied = applyMotivationQuotesContractV11({
@@ -447,7 +455,7 @@ test("motivation policy is intent-driven (user_intent), not phrase-driven", () =
     stepId: "dream",
     userMessage: "why is this needed",
     renderedStatus: "incomplete_output",
-    specialistResult: { ...specialist, user_intent: "STEP_INPUT" },
+    specialistResult: { ...specialist, user_intent: "STEP_INPUT", meta_topic: "NONE" },
     previousSpecialist: {},
     state: getDefaultState(),
     requireWordingPick: false,
@@ -470,6 +478,7 @@ test("motivation policy is intent-driven (user_intent), not phrase-driven", () =
       wants_recap: false,
       is_offtopic: false,
       user_intent: "STEP_INPUT",
+    meta_topic: "NONE",
     },
     previousSpecialist: {},
     state: getDefaultState(),
@@ -480,6 +489,81 @@ test("motivation policy is intent-driven (user_intent), not phrase-driven", () =
     String(noAutoQuoteOnStepStart.specialistResult.question || ""),
     "To get started, could you tell me what type of business..."
   );
+});
+
+test("motivation policy also applies for MODEL_VALUE meta_topic even with META_QUESTION intent", () => {
+  const specialist = {
+    action: "ASK",
+    message: "Placeholder from specialist.",
+    question: "Define your Dream for Mindd or choose an option.",
+    refined_formulation: "",
+    dream: "",
+    wants_recap: false,
+    is_offtopic: false,
+    user_intent: "META_QUESTION",
+    meta_topic: "MODEL_VALUE",
+  } as Record<string, unknown>;
+
+  const applied = applyMotivationQuotesContractV11({
+    enabled: true,
+    stepId: "dream",
+    userMessage: "why is this model useful for me",
+    renderedStatus: "incomplete_output",
+    specialistResult: specialist,
+    previousSpecialist: {},
+    state: getDefaultState(),
+    requireWordingPick: false,
+  });
+
+  assert.match(String(applied.specialistResult.message || ""), /I am not here to make you sound impressive/i);
+  assert.equal(String(applied.specialistResult.meta_topic || ""), "MODEL_VALUE");
+  assert.equal(String(applied.specialistResult.is_offtopic || "false"), "false");
+});
+
+test("central meta router handles MODEL_CREDIBILITY and BEN_PROFILE without forcing off-topic", () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "purpose",
+    business_name: "Mindd",
+    step_0_final: "Venture: agency | Name: Mindd | Status: existing",
+  };
+
+  const credibility = applyCentralMetaTopicRouter({
+    stepId: "purpose",
+    specialistResult: {
+      action: "ASK",
+      message: "Specialist placeholder",
+      question: "Refine your Purpose for Mindd or choose an option.",
+      refined_formulation: "",
+      purpose: "",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "META_QUESTION",
+      meta_topic: "MODEL_CREDIBILITY",
+    },
+    state,
+  });
+  assert.match(String(credibility.message || ""), /practical, step-by-step canvas model/i);
+  assert.match(String(credibility.message || ""), /Let's continue with the Purpose of Mindd\./i);
+  assert.equal(String(credibility.is_offtopic || "false"), "false");
+
+  const benProfile = applyCentralMetaTopicRouter({
+    stepId: "purpose",
+    specialistResult: {
+      action: "ASK",
+      message: "Specialist placeholder",
+      question: "Refine your Purpose for Mindd or choose an option.",
+      refined_formulation: "",
+      purpose: "",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "META_QUESTION",
+      meta_topic: "BEN_PROFILE",
+    },
+    state,
+  });
+  assert.match(String(benProfile.message || ""), /My name is Ben Steenstra \(1973\)\./i);
+  assert.equal(String(benProfile.is_offtopic || "false"), "false");
 });
 
 test("Dream menu prompt uses numbered question (not confirmation_question)", () => {
@@ -560,7 +644,7 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
   assert.equal(String(offTopicTurn.prompt || "").includes("Continue Dream now"), false);
 });
 
-test("Ben meta question uses canonical profile block and keeps current-step recap when output exists", async () => {
+test("meta question without explicit meta_topic stays contract-safe and keeps current-step recap when output exists", async () => {
   const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
       user_message: "Who is Ben Steenstra?",
@@ -580,11 +664,7 @@ test("Ben meta question uses canonical profile block and keeps current-step reca
   assert.equal(String(result.specialist?.is_offtopic || "").toLowerCase(), "true");
   assert.equal(
     String(result.text || "").includes("![Ben Steenstra](/ui/assets/ben-steenstra.webp)"),
-    true
-  );
-  assert.equal(
-    String(result.text || "").includes("https://www.bensteenstra.com"),
-    true
+    false
   );
   assert.equal(
     String(result.text || "").includes("The current Purpose of Mindd is."),
@@ -1225,8 +1305,8 @@ test("Step 0 off-topic with no output always returns canonical Step 0 ask contra
   );
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(String(result.text || "").includes("My name is Ben Steenstra (1973)."), true);
-  assert.equal(String(result.text || "").includes("https://www.bensteenstra.com"), true);
+  assert.equal(String(result.prompt || "").toLowerCase().includes("what type of business"), true);
+  assert.equal(String(result.text || "").includes("My name is Ben Steenstra (1973)."), false);
 });
 
 test("Step 0 contract: meta/off-topic ASK is normalized to canonical Step 0 prompt when no step_0_final exists", () => {
@@ -1243,6 +1323,8 @@ test("Step 0 contract: meta/off-topic ASK is normalized to canonical Step 0 prom
     business_name: "TBD",
     step_0: "",
     is_offtopic: true,
+    user_intent: "META_QUESTION",
+    meta_topic: "BEN_PROFILE",
   };
   const normalized = normalizeStep0AskDisplayContract(
     "step_0",
@@ -1979,15 +2061,15 @@ test("wording choice: suggestion fallback extracts rewritten content from messag
   );
 });
 
-test("meta off-topic fallback marks Ben/info step messages as off-topic outside step_0", () => {
+test("meta off-topic fallback is intent/topic-driven outside step_0", () => {
   assert.equal(
     isMetaOfftopicFallbackTurn({
       stepId: "dream",
       userMessage: "Who is Ben Steenstra?",
       specialistResult: {
         is_offtopic: false,
-        message:
-          "Ben Steenstra is a serial entrepreneur and executive coach.\n\nFor more information visit: https://www.bensteenstra.com\n\nYou are in the Dream step now. Choose an option below to continue.",
+        user_intent: "META_QUESTION",
+        meta_topic: "BEN_PROFILE",
       },
     }),
     true
@@ -1998,7 +2080,8 @@ test("meta off-topic fallback marks Ben/info step messages as off-topic outside 
       userMessage: "Who is Ben Steenstra?",
       specialistResult: {
         is_offtopic: false,
-        message: "Ben Steenstra is a Dutch entrepreneur.",
+        user_intent: "META_QUESTION",
+        meta_topic: "BEN_PROFILE",
       },
     }),
     false

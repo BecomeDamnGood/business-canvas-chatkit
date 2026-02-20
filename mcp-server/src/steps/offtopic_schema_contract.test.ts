@@ -64,3 +64,26 @@ test("all specialist schemas require user_intent enum field", () => {
     assert.ok(shape && shape.user_intent, `${item.name}: zod shape has user_intent`);
   }
 });
+
+test("all specialist schemas require meta_topic enum field", () => {
+  for (const item of CASES) {
+    const required = Array.isArray(item.jsonSchema?.required) ? item.jsonSchema.required : [];
+    assert.ok(required.includes("meta_topic"), `${item.name}: required includes meta_topic`);
+    assert.equal(item.jsonSchema?.properties?.meta_topic?.type, "string", `${item.name}: meta_topic type=string`);
+    assert.ok(
+      Array.isArray(item.jsonSchema?.properties?.meta_topic?.enum) &&
+        item.jsonSchema.properties.meta_topic.enum.length >= 2,
+      `${item.name}: meta_topic enum configured`
+    );
+    const enumValues = Array.isArray(item.jsonSchema?.properties?.meta_topic?.enum)
+      ? item.jsonSchema.properties.meta_topic.enum
+      : [];
+    assert.ok(enumValues.includes("MODEL_VALUE"), `${item.name}: meta_topic includes MODEL_VALUE`);
+    assert.ok(
+      enumValues.includes("MODEL_CREDIBILITY"),
+      `${item.name}: meta_topic includes MODEL_CREDIBILITY`
+    );
+    const shape = (item.zodSchema as any)?.shape;
+    assert.ok(shape && shape.meta_topic, `${item.name}: zod shape has meta_topic`);
+  }
+});

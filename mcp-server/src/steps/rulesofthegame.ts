@@ -1,6 +1,6 @@
 // mcp-server/src/steps/rulesofthegame.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT } from "./rulesofthegame_contract.js";
 
 export const RULESOFTHEGAME_STEP_ID = "rulesofthegame" as const;
@@ -18,6 +18,7 @@ export const RulesOfTheGameZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
   statements: z.array(z.string()),
 });
 
@@ -38,6 +39,7 @@ export const RulesOfTheGameJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
     "statements",
   ],
   properties: {
@@ -49,6 +51,7 @@ export const RulesOfTheGameJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
     statements: { type: "array", items: { type: "string" } },
   },
 } as const;
@@ -157,6 +160,7 @@ Output schema fields (must always be present)
   "rulesofthegame": "string",
   "wants_recap": "boolean",
   "is_offtopic": "boolean",
+  "meta_topic": "NONE" | "MODEL_VALUE" | "MODEL_CREDIBILITY" | "BEN_PROFILE" | "RECAP",
   "statements": ["array of strings"]
 }
 

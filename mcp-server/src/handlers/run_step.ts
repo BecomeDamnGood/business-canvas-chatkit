@@ -140,6 +140,7 @@ import {
   buildUserFeedbackForRulesProcessing,
 } from "../steps/rulesofthegame.js";
 import { normalizeRulesOfTheGameOutputContract } from "../steps/rulesofthegame_contract.js";
+import { SPECIALIST_META_TOPICS, type SpecialistMetaTopic } from "../steps/user_intent.js";
 
 import {
   PRESENTATION_STEP_ID,
@@ -559,6 +560,8 @@ function sanitizeEscapeInWidget(specialist: any): any {
 
   safe.is_offtopic = true;
   safe.action = "ASK";
+  safe.user_intent = "OFFTOPIC";
+  safe.meta_topic = "NONE";
   if (isWidgetSuppressedEscapeMenuId(menuId) || action === "ESCAPE" || hasEscapeLabelPhrase(question)) {
     safe.question = "";
   }
@@ -1485,6 +1488,8 @@ function buildDreamRefineFallbackSpecialist(base: any, userInput: string, state:
     suggest_dreambuilder: "false",
     wants_recap: false,
     is_offtopic: false,
+    user_intent: "STEP_INPUT",
+    meta_topic: "NONE",
   };
 }
 
@@ -1628,7 +1633,8 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
   const hasStep0Final = String((state as any).step_0_final || "").trim().length > 0;
   const hasStep0Draft = String(next.step_0 || "").trim().length > 0;
   const normalizedInput = String(userInput || "").trim();
-  const isBenMeta = isBenMetaTopic(normalizedInput) || isBenMetaTopic(String(next.message || ""));
+  const metaTopic = resolveSpecialistMetaTopic(next as Record<string, unknown>);
+  const isBenMeta = metaTopic === "BEN_PROFILE";
   const hasRawInput = normalizedInput.length > 0;
   const isLikelyStepContributing = hasRawInput && shouldTreatAsStepContributingInput(normalizedInput, STEP_0_ID);
   if (action === "INTRO") {
@@ -1944,6 +1950,7 @@ export function isMetaOfftopicFallbackTurn(params: {
   userMessage: string;
   specialistResult: any;
 }): boolean {
+  void params.userMessage;
   const stepId = String(params.stepId || "").trim();
   if (!stepId || stepId === STEP_0_ID) return false;
   const specialist = params.specialistResult && typeof params.specialistResult === "object"
@@ -1952,16 +1959,17 @@ export function isMetaOfftopicFallbackTurn(params: {
   const offTopicFlag = specialist.is_offtopic === true || String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
   if (offTopicFlag) return false;
 
-  const user = String(params.userMessage || "").trim().toLowerCase();
-  const message = String(specialist.message || "").trim().toLowerCase();
-  if (!user && !message) return false;
-
-  if (isBenMetaTopic(user) || isBenMetaTopic(message)) return true;
-  if (message.includes("for more information visit")) return true;
-
-  if (/you are in the .+ step now/.test(message)) return true;
-  if (/you are in the dream exercise step now/.test(message)) return true;
-  return false;
+  const userIntent = resolveMotivationUserIntent(specialist);
+  if (
+    userIntent === "META_QUESTION" ||
+    userIntent === "RECAP_REQUEST" ||
+    userIntent === "WHY_NEEDED" ||
+    userIntent === "RESISTANCE"
+  ) {
+    return true;
+  }
+  const metaTopic = resolveSpecialistMetaTopic(specialist);
+  return metaTopic !== "NONE";
 }
 
 function extractSuggestionFromMessage(message: string): string {
@@ -2856,16 +2864,7 @@ function offTopicRedirectLine(stepId: string, state: CanvasState): string {
 
 const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
 const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
-
-function isBenMetaTopic(textRaw: string): boolean {
-  const text = String(textRaw || "").toLowerCase();
-  if (!text) return false;
-  return (
-    text.includes("ben steenstra") ||
-    text.includes("bensteenstra.com") ||
-    text.includes("bensteenstra")
-  );
-}
+const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
 
 function buildBenProfileMessage(): string {
   return [
@@ -3002,6 +3001,24 @@ function resolveMotivationUserIntent(specialist: Record<string, unknown>): Motiv
   return "STEP_INPUT";
 }
 
+function resolveSpecialistMetaTopic(specialist: Record<string, unknown>): SpecialistMetaTopic {
+  const topicRaw = String((specialist as any).meta_topic || "").trim().toUpperCase();
+  const intent = resolveMotivationUserIntent(specialist);
+  const wantsRecap =
+    specialist.wants_recap === true ||
+    String((specialist as any).wants_recap || "").trim().toLowerCase() === "true";
+  if (topicRaw === "MODEL_PROCESS") {
+    return intent === "WHY_NEEDED" || intent === "RESISTANCE"
+      ? "MODEL_VALUE"
+      : "MODEL_CREDIBILITY";
+  }
+  if (SPECIALIST_META_TOPIC_SET.has(topicRaw)) return topicRaw as SpecialistMetaTopic;
+  if (wantsRecap || intent === "RECAP_REQUEST") return "RECAP";
+  if (intent === "WHY_NEEDED" || intent === "RESISTANCE") return "MODEL_VALUE";
+  if (intent === "META_QUESTION") return "MODEL_CREDIBILITY";
+  return "NONE";
+}
+
 function quoteLastByStepState(state: CanvasState): Record<string, string> {
   const raw = ((state as any).quote_last_by_step && typeof (state as any).quote_last_by_step === "object")
     ? ((state as any).quote_last_by_step as Record<string, unknown>)
@@ -3124,7 +3141,11 @@ export function applyMotivationQuotesContractV11(params: MotivationPolicyApplyPa
   }
 
   const userIntent = resolveMotivationUserIntent(specialist);
-  const whyTrigger = userIntent === "WHY_NEEDED" || userIntent === "RESISTANCE";
+  const metaTopic = resolveSpecialistMetaTopic(specialist);
+  const whyTrigger =
+    userIntent === "WHY_NEEDED" ||
+    userIntent === "RESISTANCE" ||
+    metaTopic === "MODEL_VALUE";
   const inspirationTrigger = userIntent === "INSPIRATION_REQUEST";
   const questionRaw = stripNumberedChoiceLines(String((specialist as any).question || "")).trim();
 
@@ -3148,6 +3169,7 @@ export function applyMotivationQuotesContractV11(params: MotivationPolicyApplyPa
         message: blocks.join("\n\n").trim(),
         question: essence ? MOTIVATION_FIXED_CONTINUE_PROMPT : (questionRaw || MOTIVATION_FIXED_CONTINUE_PROMPT),
         user_intent: userIntent,
+        meta_topic: "MODEL_VALUE",
         wants_recap: false,
         is_offtopic: false,
       },
@@ -3172,6 +3194,64 @@ export function applyMotivationQuotesContractV11(params: MotivationPolicyApplyPa
   }
 
   return { specialistResult: specialist, suppressChoices: false };
+}
+
+function buildModelCredibilityMessage(stepId: string, state: CanvasState): string {
+  return [
+    "This is a practical, step-by-step canvas model that turns ideas into clear choices and real trade-offs.",
+    MOTIVATION_PROVEN_LINE,
+    offTopicRedirectLine(stepId, state),
+  ].join(" ");
+}
+
+export function applyCentralMetaTopicRouter(params: {
+  stepId: string;
+  specialistResult: Record<string, unknown>;
+  previousSpecialist?: Record<string, unknown>;
+  state: CanvasState;
+}): Record<string, unknown> {
+  const stepId = String(params.stepId || "").trim();
+  const specialist = params.specialistResult && typeof params.specialistResult === "object"
+    ? { ...params.specialistResult }
+    : {};
+  if (!stepId || stepId === STEP_0_ID) return specialist;
+
+  const metaTopic = resolveSpecialistMetaTopic(specialist);
+  if (metaTopic === "NONE" || metaTopic === "RECAP") return specialist;
+
+  const base = {
+    ...specialist,
+    action: "ASK",
+    is_offtopic: false,
+    wants_recap: false,
+    meta_topic: metaTopic,
+  } as Record<string, unknown>;
+
+  if (metaTopic === "BEN_PROFILE") {
+    const essence = overviewEssenceSentence(
+      stepId,
+      params.state,
+      specialist,
+      params.previousSpecialist && typeof params.previousSpecialist === "object"
+        ? params.previousSpecialist
+        : {}
+    );
+    return {
+      ...base,
+      message: essence
+        ? `${buildBenProfileMessage()}\n\n${essence}`
+        : buildBenProfileMessage(),
+    };
+  }
+
+  if (metaTopic === "MODEL_CREDIBILITY") {
+    return {
+      ...base,
+      message: buildModelCredibilityMessage(stepId, params.state),
+    };
+  }
+
+  return base;
 }
 
 function stripOfftopicStructureSentences(raw: string): string {
@@ -3229,25 +3309,22 @@ function isLikelyMetaQuestionTurn(params: {
   userMessage: string;
   specialistResult: any;
 }): boolean {
+  void params.userMessage;
   const specialist = params.specialistResult && typeof params.specialistResult === "object"
     ? params.specialistResult
     : {};
   if (specialist.wants_recap === true || String(specialist.wants_recap || "").trim().toLowerCase() === "true") {
     return true;
   }
-  const user = String(params.userMessage || "").trim().toLowerCase();
-  const message = String(specialist.message || "").trim().toLowerCase();
-  if (isBenMetaTopic(user) || isBenMetaTopic(message)) return true;
-  if (message.includes("www.bensteenstra.com") || message.includes("bensteenstra.com")) return true;
-  if (message.includes("now, back to")) return true;
-  if (message.includes("for more information visit")) return true;
   const userIntent = resolveMotivationUserIntent(specialist);
-  return (
+  if (
     userIntent === "META_QUESTION" ||
     userIntent === "RECAP_REQUEST" ||
     userIntent === "WHY_NEEDED" ||
     userIntent === "RESISTANCE"
-  );
+  ) return true;
+  const metaTopic = resolveSpecialistMetaTopic(specialist);
+  return metaTopic !== "NONE";
 }
 
 function normalizeNonStep0OfftopicSpecialist(params: {
@@ -3267,8 +3344,8 @@ function normalizeNonStep0OfftopicSpecialist(params: {
     specialist.is_offtopic === true ||
     String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
   if (!isOfftopic) return specialist;
-  const isBenMeta = isBenMetaTopic(params.userMessage) || isBenMetaTopic(String(specialist.message || ""));
-  if (isBenMeta) {
+  const metaTopic = resolveSpecialistMetaTopic(specialist);
+  if (metaTopic === "BEN_PROFILE") {
     return {
       ...specialist,
       action: "ASK",
@@ -4610,16 +4687,10 @@ export const UNIVERSAL_META_OFFTOPIC_POLICY = `UNIVERSAL_META_OFFTOPIC_POLICY (a
 
 1) ALLOWED META (always answer briefly, then return to the step)
 Treat as allowed at any time; infer from intent (no language-specific keyword lists):
-- Who is Ben Steenstra / why is this method credible / why is it used by companies
-- What is the benefit of this step / what is the benefit of the full process
+- Profile/credibility questions about the method creator or model origin
+- Questions about process/model value ("why this is needed", "what is the point")
 - Requests to recap what we have established so far (use wants_recap above; do not replace that mechanism)
 After answering: put the short answer in message, then set question to your normal next question for this step.
-
-BEN STEENSTRA FACTUAL REFERENCE (use when answering Ben/method credibility questions; keep short and non-marketing):
-- Ben Steenstra is an entrepreneur, author, executive coach, and public speaker.
-- His approach uses a proven canvas connecting purpose, vision, mission, strategy, and values.
-- He has experience with large organizations (e.g., Samsung, HTC) and smaller businesses.
-- Always include in the answer: www.bensteenstra.com
 
 2) OFF-TOPIC OR NONSENSE (Step-0 tone + deterministic redirect)
 If the user asks something unrelated to The Business Strategy Canvas Builder or the current step:
@@ -4636,7 +4707,8 @@ export const OFF_TOPIC_POLICY = UNIVERSAL_META_OFFTOPIC_POLICY;
 const OFFTOPIC_FLAG_CONTRACT_INSTRUCTION = `OFFTOPIC CONTRACT (HARD)
 - Always return a boolean field "is_offtopic".
 - Set is_offtopic=false when the user's input can be incorporated into the current step output.
-- Set is_offtopic=true when the input is meta/off-topic/unrelated to this step.
+- Set is_offtopic=true only when the input is unrelated to this step.
+- Meta intents (process value, model credibility, profile, recap) are not off-topic: keep is_offtopic=false for those.
 - If is_offtopic=true: answer briefly in message, do not ask to proceed to the next step, and keep proceed flags false.`;
 
 const USER_INTENT_CONTRACT_INSTRUCTION = `USER_INTENT CONTRACT (HARD)
@@ -4647,6 +4719,16 @@ const USER_INTENT_CONTRACT_INSTRUCTION = `USER_INTENT CONTRACT (HARD)
 - If wants_recap=true, set user_intent="RECAP_REQUEST".
 - If is_offtopic=true for unrelated content, set user_intent="OFFTOPIC".
 - For process/step-benefit doubt ("what is the point / why this is needed"), set user_intent to WHY_NEEDED or RESISTANCE accordingly.`;
+
+const META_TOPIC_CONTRACT_INSTRUCTION = `META_TOPIC CONTRACT (HARD)
+- Always return a string field "meta_topic" with one of:
+  NONE, MODEL_VALUE, MODEL_CREDIBILITY, BEN_PROFILE, RECAP.
+- Infer meta_topic from meaning/context semantically, not from language-specific keyword lists.
+- Set meta_topic="MODEL_VALUE" for process/model-value questions.
+- Set meta_topic="MODEL_CREDIBILITY" for model/method credibility or origin questions.
+- Set meta_topic="BEN_PROFILE" for profile/credibility questions about the method creator.
+- Set meta_topic="RECAP" when wants_recap=true.
+- Set meta_topic="NONE" for normal step input, inspiration-only requests, or generic off-topic content.`;
 
 function composeSpecialistInstructions(
   baseInstructions: string,
@@ -4663,6 +4745,7 @@ function composeSpecialistInstructions(
     blocks.push(UNIVERSAL_META_OFFTOPIC_POLICY);
   }
   blocks.push(USER_INTENT_CONTRACT_INSTRUCTION);
+  blocks.push(META_TOPIC_CONTRACT_INSTRUCTION);
   blocks.push(OFFTOPIC_FLAG_CONTRACT_INSTRUCTION);
   return blocks.join("\n\n");
 }
@@ -4805,6 +4888,7 @@ async function callSpecialistStrict(params: {
       wants_recap: false,
       is_offtopic: forceOfftopic,
       user_intent: forceOfftopic ? "OFFTOPIC" : "STEP_INPUT",
+      meta_topic: "NONE",
     };
     const specialistResult =
       specialist === STEP_0_SPECIALIST
@@ -5216,6 +5300,8 @@ async function callSpecialistStrict(params: {
       step_0: "",
       wants_recap: false,
       is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
     },
     attempts: 0,
     usage: {
@@ -5267,6 +5353,8 @@ function buildTransientFallbackSpecialist(state: CanvasState): Record<string, un
       step_0: "",
       wants_recap: false,
       is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
     };
   }
 
@@ -5277,12 +5365,14 @@ function buildTransientFallbackSpecialist(state: CanvasState): Record<string, un
       action: "ASK",
       message: "",
       question: "",
-      refined_formulation: "",
-      wants_recap: false,
-      is_offtopic: false,
-    },
-    previousSpecialist: last,
-  });
+        refined_formulation: "",
+        wants_recap: false,
+        is_offtopic: false,
+        user_intent: "STEP_INPUT",
+        meta_topic: "NONE",
+      },
+      previousSpecialist: last,
+    });
   return rendered.specialist;
 }
 
@@ -5851,6 +5941,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       bigwhy: "",
       wants_recap: false,
       is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
     };
   }
 
@@ -6247,6 +6339,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         wants_recap: false,
         is_offtopic: false,
         user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
       };
       const forcedDecision: OrchestratorOutput = {
         specialist_to_call: DREAM_SPECIALIST,
@@ -6334,6 +6427,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         wants_recap: false,
         is_offtopic: false,
         user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
       };
       const forcedDecision: OrchestratorOutput = {
         specialist_to_call: ROLE_SPECIALIST,
@@ -6441,6 +6535,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         wants_recap: false,
         is_offtopic: false,
         user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
       };
 
       return finalizeResponse(attachRegistryPayload({
@@ -6478,6 +6573,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         wants_recap: false,
         is_offtopic: false,
         user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
       };
 
       return finalizeResponse(attachRegistryPayload({
@@ -6557,6 +6653,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           user_state: "ok",
           wants_recap: false,
           is_offtopic: false,
+          user_intent: "STEP_INPUT",
+          meta_topic: "NONE",
           scoring_phase: "false",
           clusters: [],
         },
@@ -6667,6 +6765,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         wants_recap: false,
         is_offtopic: false,
         user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
       };
       const nextStateSwitch: CanvasState = {
         ...state,
@@ -6831,6 +6930,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         wants_recap: false,
         is_offtopic: false,
         user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
       };
       return finalizeResponse(attachRegistryPayload({
         ok: true as const,
@@ -6899,6 +6999,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         wants_recap: false,
         is_offtopic: false,
         user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
       };
 
       const stateWithUi = await ensureUiStrings(state, userMessage);
@@ -6935,6 +7036,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       wants_recap: false,
       is_offtopic: false,
       user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
     };
 
     return finalizeResponse(attachRegistryPayload({
@@ -7266,18 +7368,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   // --------- UPDATE STATE (after first specialist) ----------
   specialistResult = normalizeEntitySpecialistResult(String(decision1.current_step || ""), specialistResult);
-  if (
-    isMetaOfftopicFallbackTurn({
-      stepId: String(decision1.current_step || ""),
-      userMessage,
-      specialistResult,
-    })
-  ) {
-    specialistResult = {
-      ...specialistResult,
-      is_offtopic: true,
-    };
-  }
+  specialistResult = applyCentralMetaTopicRouter({
+    stepId: String(decision1.current_step || ""),
+    specialistResult: (specialistResult || {}) as Record<string, unknown>,
+    previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+    state,
+  });
   const currentStepIdForOfftopic = String(decision1.current_step || "");
   const currentSpecialistId = String(decision1.specialist_to_call || "");
   const isOfftopicTurnAfterFallback =

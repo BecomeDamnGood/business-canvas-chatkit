@@ -1,6 +1,6 @@
 // mcp-server/src/steps/strategy.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { buildListStepContractBlock } from "./step_instruction_contracts.js";
 
 export const STRATEGY_STEP_ID = "strategy" as const;
@@ -18,6 +18,7 @@ export const StrategyZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
   statements: z.array(z.string()),
 });
 
@@ -38,6 +39,7 @@ export const StrategyJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
     "statements",
   ],
   properties: {
@@ -49,6 +51,7 @@ export const StrategyJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
     statements: { type: "array", items: { type: "string" } },
   },
 } as const;
@@ -176,27 +179,23 @@ Never use variants like:
 7) META QUESTIONS HANDLER (ALLOWED, ANSWER THEN RETURN) (DO NOT EDIT)
 
 Intent
-Meta questions are allowed. Answer them briefly and calmly, then return to Strategy via ESCAPE.
+Meta questions are allowed. Classify them; runtime renders the final meta copy.
 
-Trigger topics (examples)
-- What model is used
-- Who is Ben Steenstra
-- Whether this is too vague
-- Whether this step is really needed
-- Why the process asks this question
+Trigger categories (semantic, no keyword lists)
+- model/process credibility or value
+- whether this step is needed
+- whether this feels too vague
+- recap or process-navigation questions
 
 Output handling (HARD)
-- Output action="ESCAPE".
-- Keep refined_formulation="", question="", strategy="".
-- Always include www.bensteenstra.com in the message (localized).
-
-Message structure (localized)
-- 3 to 5 sentences total.
-1) Answer directly (1 to 3 sentences).
-2) Redirect sentence: "Now, back to Strategy."
-3) Include www.bensteenstra.com as the final sentence or inside the answer.
-
-Question (HARD)
+- Output action="ASK".
+- For process/value doubt: set user_intent to WHY_NEEDED or RESISTANCE and meta_topic="MODEL_VALUE".
+- For model/method credibility or origin questions: set user_intent="META_QUESTION" and meta_topic="MODEL_CREDIBILITY".
+- For profile questions about Ben Steenstra: set user_intent="META_QUESTION" and meta_topic="BEN_PROFILE".
+- For recap requests: set wants_recap=true, user_intent="RECAP_REQUEST", and meta_topic="RECAP".
+- For non-recap meta turns: keep wants_recap=false and is_offtopic=false.
+- For pure meta turns: keep refined_formulation="", question="", strategy="".
+- Runtime owns the final meta wording and redirect behavior. Do not hardcode model/profile answers or step-specific redirect lines here.
 
 8) STEP-SPECIFIC HARD RULES
 

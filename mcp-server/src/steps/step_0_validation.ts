@@ -1,6 +1,6 @@
 // src/steps/step_0_validation.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const STEP_0_ID = "step_0" as const;
 export const STEP_0_SPECIALIST = "ValidationAndBusinessName" as const;
@@ -18,6 +18,7 @@ export const ValidationAndBusinessNameZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
 });
 
 export type ValidationAndBusinessNameOutput = z.infer<typeof ValidationAndBusinessNameZodSchema>;
@@ -39,6 +40,7 @@ export const ValidationAndBusinessNameJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
   ],
   properties: {
     action: {
@@ -53,6 +55,7 @@ export const ValidationAndBusinessNameJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
   },
 } as const;
 
@@ -240,24 +243,18 @@ META QUESTIONS HANDLER (ALLOWED, ANSWER THEN RETURN) (STEP 0) (HARD)
 Intent
 Meta questions are allowed. Answer them briefly and calmly, then return to Step 0 without changing the flow.
 
-Trigger topics (examples)
-- What model is used
-- Who is Ben Steenstra
-- Is this too vague
-- Is this step really needed
-- Why does the process ask this question
+Trigger categories (semantic, no keyword lists)
+- model/process credibility or value
+- whether this step is needed
+- whether this feels too vague
+- recap or process-navigation questions
 
 Output handling (HARD)
 - Keep refined_formulation="", question="", and step_0="".
 - business_name must be "TBD".
-- Always include www.bensteenstra.com in the message.
 
 Message structure (consistent UX)
-- For Ben Steenstra questions, use 2 to 4 sentences total:
-1) Give a short factual answer in a calm, practical tone, without inventing details or using promotional language.
-2) Include this URL exactly once in the answer body: https://www.bensteenstra.com
-3) End with one short redirect sentence (equivalent of): "Now, back to The Business Strategy Canvas Builder."
-- For other meta questions, use 4 to 6 sentences total:
+- Use 4 to 6 sentences total:
 1) Answer the meta question directly (2 to 4 sentences), without inventing details.
 2) One short redirect sentence (equivalent of): "Now, back to The Business Strategy Canvas Builder."
 

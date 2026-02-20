@@ -1,6 +1,6 @@
 // mcp-server/src/steps/productsservices.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const PRODUCTSSERVICES_STEP_ID = "productsservices" as const;
 export const PRODUCTSSERVICES_SPECIALIST = "ProductsServices" as const;
@@ -17,6 +17,7 @@ export const ProductsServicesZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
 });
 
 export type ProductsServicesOutput = z.infer<typeof ProductsServicesZodSchema>;
@@ -36,6 +37,7 @@ export const ProductsServicesJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -46,6 +48,7 @@ export const ProductsServicesJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
   },
 } as const;
 

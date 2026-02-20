@@ -1,6 +1,6 @@
 // mcp-server/src/steps/bigwhy.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const BIGWHY_STEP_ID = "bigwhy" as const;
@@ -18,6 +18,7 @@ export const BigWhyZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
 });
 
 export type BigWhyOutput = z.infer<typeof BigWhyZodSchema>;
@@ -37,6 +38,7 @@ export const BigWhyJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -47,6 +49,7 @@ export const BigWhyJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
   },
 } as const;
 
@@ -178,44 +181,23 @@ Example layout (shape only, localized in output):
 7) META QUESTIONS (ALLOWED, ANSWER THEN RETURN) (DO NOT EDIT)
 
 Intent
-Meta questions are allowed. Answer them briefly and calmly, then return to Big Why without changing the flow.
+Meta questions are allowed. Classify them; runtime renders the final meta copy.
 
-Trigger topics (examples)
-- what model is used
-- who Ben Steenstra is
-- whether this is too vague
-- whether this step is really needed
-- why the process asks this question
+Trigger categories (semantic, no keyword lists)
+- model/process credibility or value
+- whether this step is needed
+- whether this feels too vague
+- recap or process-navigation questions
 
 Output handling (HARD)
 - Output action="ASK".
-- Keep refined_formulation="", question="", bigwhy="".
-- Always include www.bensteenstra.com in the message (localized).
-
-Message structure (localized)
-- For other meta questions, use exactly 2 sentences total, with step_0 tone:
-  Sentence 1: direct answer to the meta question (calm, confident, practical). Light humor is allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-  Sentence 2: redirect: "Now, back to Big Why."
-  Tone: calm, confident, practical. No hype. Light humor allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-
-Topic rules (what to say)
-
-A) Model
-- Explain: this is a multi-agent canvas workflow running on OpenAI language models, and model versions can change over time.
-- Add: it is not a school-style business plan nobody reads. It is a proven, practical model that creates clarity, direction, and usable trade-offs.
-
-B) Ben Steenstra
-
-C) Too vague
-- Say: a first draft is allowed to be rough; Big Why creates the meaning-layer that makes Dream and Purpose worth sacrifice when nobody applauds.
-- End with www.bensteenstra.com.
-
-D) Is this step needed / why ask this
-- Say: each step prevents common failure modes like slogans, tactics-as-strategy, and random priorities.
-- Add: Big Why is the roof that makes Dream and Purpose feel non-negotiable in real trade-offs.
-- End with www.bensteenstra.com.
-
-Question (HARD)
+- For process/value doubt: set user_intent to WHY_NEEDED or RESISTANCE and meta_topic="MODEL_VALUE".
+- For model/method credibility or origin questions: set user_intent="META_QUESTION" and meta_topic="MODEL_CREDIBILITY".
+- For profile questions about Ben Steenstra: set user_intent="META_QUESTION" and meta_topic="BEN_PROFILE".
+- For recap requests: set wants_recap=true, user_intent="RECAP_REQUEST", and meta_topic="RECAP".
+- For non-recap meta turns: keep wants_recap=false and is_offtopic=false.
+- For pure meta turns: keep refined_formulation="", question="", bigwhy="".
+- Runtime owns the final meta wording and redirect behavior. Do not hardcode model/profile answers or step-specific redirect lines here.
 
 
 

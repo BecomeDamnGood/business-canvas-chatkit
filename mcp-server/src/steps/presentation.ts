@@ -1,6 +1,6 @@
 // mcp-server/src/steps/presentation.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const PRESENTATION_STEP_ID = "presentation" as const;
@@ -18,6 +18,7 @@ export const PresentationZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
 });
 
 export type PresentationOutput = z.infer<typeof PresentationZodSchema>;
@@ -37,6 +38,7 @@ export const PresentationJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -47,6 +49,7 @@ export const PresentationJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
   },
 } as const;
 

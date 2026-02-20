@@ -1,6 +1,6 @@
 // mcp-server/src/steps/role.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const ROLE_STEP_ID = "role" as const;
@@ -18,6 +18,7 @@ export const RoleZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
 });
 
 export type RoleOutput = z.infer<typeof RoleZodSchema>;
@@ -37,6 +38,7 @@ export const RoleJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -47,6 +49,7 @@ export const RoleJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
   },
 } as const;
 
@@ -140,25 +143,17 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
 6) META QUESTIONS (ALLOWED, ANSWER THEN RETURN)
 
 Intent
-Meta questions are allowed. Answer them briefly and calmly, then return to Role without changing the flow.
+Meta questions are allowed. Classify them; runtime renders the final meta copy.
 
 Output handling (HARD)
 - Output action="ASK".
-- Keep refined_formulation="", question="", role="".
-- Always include www.bensteenstra.com in the message (localized).
-
-Message structure (localized)
-- For other meta questions, use exactly 2 sentences total, with step_0 tone:
-  Sentence 1: direct answer to the meta question (calm, confident, practical). Light humor is allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-  Sentence 2: redirect: "Now, back to Role."
-  Tone: calm, confident, practical. No hype. Light humor allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-
-Topic-specific answers:
-- Model: This is a multi-agent canvas workflow running on OpenAI language models, and model versions can change over time. It is not a school-style business plan nobody reads; it is a proven, practical model that creates clarity, direction, and usable trade-offs.
-- Too vague: A first draft is allowed to be rough; this step creates the chosen position that translates Dream, Purpose, Big Why into consistent contribution.
-- Why this step: Each step prevents common failure modes like slogans, tactics-as-strategy, and random priorities. Role creates consequences: clearer "no", less randomness, stronger backbone.
-
-Question (HARD)
+- For process/value doubt: set user_intent to WHY_NEEDED or RESISTANCE and meta_topic="MODEL_VALUE".
+- For model/method credibility or origin questions: set user_intent="META_QUESTION" and meta_topic="MODEL_CREDIBILITY".
+- For profile questions about Ben Steenstra: set user_intent="META_QUESTION" and meta_topic="BEN_PROFILE".
+- For recap requests: set wants_recap=true, user_intent="RECAP_REQUEST", and meta_topic="RECAP".
+- For non-recap meta turns: keep wants_recap=false and is_offtopic=false.
+- For pure meta turns: keep refined_formulation="", question="", role="".
+- Runtime owns the final meta wording and redirect behavior. Do not hardcode model/profile answers or step-specific redirect lines here.
 
 
 7) STEP-SPECIFIC HARD RULES
@@ -287,15 +282,8 @@ Output:
 - role=""
 
 RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
-If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap"):
-- Output action="ASK"
-- message (localized): exactly 2 sentences.
-  Sentence 1: brief summary of what has been discussed so far in this step (based on state/context).
-  Sentence 2: redirect: "Now, back to Role."
-
-- refined_formulation=""
-- question=""
-- role=""
+If recap is requested, classify it via wants_recap=true, user_intent="RECAP_REQUEST", meta_topic="RECAP".
+Runtime renders recap content and continuation.
 
 
 10.6) ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)

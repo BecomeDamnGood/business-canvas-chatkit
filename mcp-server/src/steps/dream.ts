@@ -1,6 +1,6 @@
 // mcp-server/src/steps/dream.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const DREAM_STEP_ID = "dream" as const;
 export const DREAM_STEP_LABEL = "Dream" as const;
@@ -19,6 +19,7 @@ export const DreamZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
 });
 
 export type DreamOutput = z.infer<typeof DreamZodSchema>;
@@ -39,6 +40,7 @@ export const DreamJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -50,6 +52,7 @@ export const DreamJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
   },
 } as const;
 
@@ -223,34 +226,20 @@ If the user message is clearly off-topic for Dream and not a META question:
 - dream=""
 - suggest_dreambuilder="false"
 
-11) META QUESTIONS (ALLOWED, ANSWER THEN RETURN)
-Meta questions are allowed (model, Ben Steenstra, why this step, etc.).
-- Output action="ASK"
-  For other meta questions, use exactly 2 sentences, with step_0 tone:
-  Sentence 1: direct answer to the meta question (calm, confident, practical). Light humor is allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-  Sentence 2: redirect: "Now, back to Dream."
-  Tone: calm, confident, practical. No hype. Light humor allowed as a small wink (one short phrase), but never sarcasm and never at the user's expense.
-- Topic-specific answers:
-  - Model: This is a multi-agent canvas workflow running on OpenAI language models, and model versions can change over time. It is not a school-style business plan nobody reads; it is a proven, practical model that creates clarity, direction, and usable trade-offs.
-  - Too vague: A first draft is allowed to be rough; this step creates the inner engine behind the Dream so later choices become concrete.
-  - Why this step: Each step prevents common failure modes like slogans, tactics-as-strategy, and random priorities. Dream connects a brand to people who believe in the same future image.
+11) META QUESTIONS (ALLOWED, CLASSIFY, RUNTIME HANDLES COPY)
+Meta questions are allowed.
+- Output action="ASK".
+- For process/value doubt: set user_intent to WHY_NEEDED or RESISTANCE and meta_topic="MODEL_VALUE".
+- For model/method credibility or origin questions: set user_intent="META_QUESTION" and meta_topic="MODEL_CREDIBILITY".
+- For profile questions about Ben Steenstra: set user_intent="META_QUESTION" and meta_topic="BEN_PROFILE".
+- For recap requests: set wants_recap=true, user_intent="RECAP_REQUEST", and meta_topic="RECAP".
+- For non-recap meta turns: keep wants_recap=false and is_offtopic=false.
+- For pure meta turns: keep refined_formulation="", question="", dream="", suggest_dreambuilder="false".
+- Runtime owns the final meta wording and redirect behavior. Do not hardcode model/profile answers or step-specific redirect lines here.
 
-- refined_formulation=""
-- question=""
-- dream=""
-- suggest_dreambuilder="false"
-
-12) RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
-If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap"):
-- Output action="ASK"
-- message (localized): exactly 2 sentences.
-  Sentence 1: brief summary of what has been discussed so far in this step (based on state/context).
-  Sentence 2: redirect: "Now, back to Dream."
-
-- refined_formulation=""
-- question=""
-- dream=""
-- suggest_dreambuilder="false"
+12) RECAP QUESTIONS (ALLOWED)
+If recap is requested, classify it via wants_recap=true, user_intent="RECAP_REQUEST", meta_topic="RECAP".
+Runtime renders recap content and continuation.
 
 13) WHY DREAM MATTERS (LEVEL 1)
 Trigger: user asks for explanation intent after INTRO (typed input or explain-more route token).

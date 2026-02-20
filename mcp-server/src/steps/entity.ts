@@ -1,6 +1,6 @@
 // mcp-server/src/steps/entity.ts
 import { z } from "zod";
-import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const ENTITY_STEP_ID = "entity" as const;
@@ -18,6 +18,7 @@ export const EntityZodSchema = z.object({
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
+  meta_topic: SpecialistMetaTopicZod,
 });
 
 export type EntityOutput = z.infer<typeof EntityZodSchema>;
@@ -37,6 +38,7 @@ export const EntityJsonSchema = {
     "wants_recap",
     "is_offtopic",
     "user_intent",
+    "meta_topic",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -47,6 +49,7 @@ export const EntityJsonSchema = {
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
+    meta_topic: SpecialistMetaTopicJsonSchema,
   },
 } as const;
 
@@ -156,16 +159,16 @@ Standard ESCAPE output (use the user’s language)
 - question=""
 - entity=""
 
-RECAP QUESTIONS (ALLOWED, ANSWER THEN RETURN)
-If the user asks for a recap or summary of what has been discussed in this step (e.g., "what have we discussed", "summary", "recap"):
-- Output action="ASK"
-- message (localized): exactly 2 sentences.
-  Sentence 1: brief summary of what has been discussed so far in this step (based on state/context).
-  Sentence 2: redirect: "Now, back to Entity."
-
-- refined_formulation=""
-- question=""
-- entity=""
+META QUESTIONS (ALLOWED, CLASSIFY, RUNTIME HANDLES COPY)
+Meta questions are allowed.
+- Output action="ASK".
+- For process/value doubt: set user_intent to WHY_NEEDED or RESISTANCE and meta_topic="MODEL_VALUE".
+- For model/method credibility or origin questions: set user_intent="META_QUESTION" and meta_topic="MODEL_CREDIBILITY".
+- For profile questions about Ben Steenstra: set user_intent="META_QUESTION" and meta_topic="BEN_PROFILE".
+- For recap requests: set wants_recap=true, user_intent="RECAP_REQUEST", and meta_topic="RECAP".
+- For non-recap meta turns: keep wants_recap=false and is_offtopic=false.
+- For pure meta turns: keep refined_formulation="", question="", entity="".
+- Runtime owns the final meta wording and redirect behavior. Do not hardcode model/profile answers or step-specific redirect lines here.
 
 ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
