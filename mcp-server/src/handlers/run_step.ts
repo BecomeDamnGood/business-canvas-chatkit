@@ -1073,11 +1073,24 @@ export function buildTextForWidget(params: {
       .replace(/[.!?]+$/g, "")
       .trim();
   const suggestionNorm = normalizeLine(wordingSuggestion);
+  const contractId = String((specialist as any)?.ui_contract_id || "").trim();
+  const contractStepId = contractId.split(":")[0] || "";
+  const menuId = parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
+  const statementLines = Array.isArray(specialist?.statements)
+    ? (specialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+  const dreamBuilderRenderContext =
+    statementLines.length > 0 &&
+    contractStepId === DREAM_STEP_ID &&
+    (
+      String(specialist?.suggest_dreambuilder || "").trim() === "true" ||
+      menuId.startsWith("DREAM_EXPLAINER_MENU_")
+    );
 
   let msg = String(specialist?.message ?? "").trim();
-  if (Array.isArray(specialist?.statements) && specialist.statements.length > 0 && msg) {
+  if (dreamBuilderRenderContext && msg) {
     const statementKeys = new Set(
-      (specialist.statements as string[])
+      statementLines
         .map((line) => canonicalizeComparableText(String(line || "")))
         .filter(Boolean)
     );
@@ -1136,24 +1149,12 @@ export function buildTextForWidget(params: {
   const promptOverride = String(params.questionTextOverride || "").trim();
   const prompt = promptOverride || promptFromSpecialist;
   let refined = String(specialist?.refined_formulation ?? "").trim();
-  const contractId = String((specialist as any)?.ui_contract_id || "").trim();
-  const contractStepId = contractId.split(":")[0] || "";
-  const menuId = parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
   if (msg) msg = stripChoiceInstructionNoise(msg);
   if (msg && prompt) msg = stripPromptEchoFromMessage(msg, prompt);
   if (refined) {
     refined = stripChoiceInstructionNoise(refined);
     if (prompt) refined = stripPromptEchoFromMessage(refined, prompt);
   }
-  const statementLines = Array.isArray(specialist?.statements)
-    ? (specialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-    : [];
-  const dreamBuilderRenderContext =
-    statementLines.length > 0 &&
-    (
-      String(specialist?.suggest_dreambuilder || "").trim() === "true" ||
-      menuId.startsWith("DREAM_EXPLAINER_MENU_")
-    );
   const normalizeForDedupe = (value: string): string =>
     String(value || "")
       .replace(/<[^>]+>/g, " ")

@@ -1575,6 +1575,7 @@ test("buildTextForWidget: DreamBuilder avoids duplicate plain list when statemen
   const text = buildTextForWidget({
     specialist: {
       menu_id: "DREAM_EXPLAINER_MENU_ASK",
+      ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_ASK",
       suggest_dreambuilder: "true",
       message: `Your current Dream for Mindd is:\n\n${line1}\n${line2}`,
       refined_formulation: `${line1}\n${line2}`,
@@ -1585,6 +1586,26 @@ test("buildTextForWidget: DreamBuilder avoids duplicate plain list when statemen
   assert.equal(text.includes(line1), false);
   assert.equal(text.includes(line2), false);
   assert.equal(text.includes("Your current Dream for Mindd is:"), false);
+});
+
+test("buildTextForWidget keeps Strategy recap bullets when statements are present", () => {
+  const line1 = "Focus exclusively on clients in the Netherlands";
+  const line2 = "Focus on clients with an annual budget above 40,000 euros";
+  const line3 = "Work only for clients who are healthy and profitable";
+  const text = buildTextForWidget({
+    specialist: {
+      ui_contract_id: "strategy:incomplete_output:STRATEGY_MENU_ASK",
+      message: `If you meant something different, tell me and I'll adjust.\n\nYou now have 3 focus points within your strategy. I advise you to formulate at least 4 but maximum 7 focus points.\nYour current Strategy for Mindd is:\n- ${line1}\n- ${line2}\n- ${line3}`,
+      refined_formulation: "",
+      statements: [line1, line2, line3],
+    },
+  });
+
+  assert.equal(text.includes("You now have 3 focus points within your strategy."), true);
+  assert.equal(text.includes("Your current Strategy for Mindd is:"), true);
+  assert.equal(text.includes(`- ${line1}`), true);
+  assert.equal(text.includes(`- ${line2}`), true);
+  assert.equal(text.includes(`- ${line3}`), true);
 });
 
 test("buildTextForWidget strips generic choose lines when menu is interactive", () => {
