@@ -19,6 +19,14 @@ function countNumberedOptions(text: string): number {
   return count;
 }
 
+function renderedMenuId(rendered: any): string {
+  const contractId = String(rendered?.contractId || rendered?.specialist?.ui_contract_id || "").trim();
+  if (!contractId) return "";
+  const parts = contractId.split(":");
+  if (parts.length < 3) return "";
+  return parts.slice(2).join(":").trim();
+}
+
 function isConfirmActionCode(actionCode: string): boolean {
   const entry = ACTIONCODE_REGISTRY.actions[actionCode];
   if (!entry) return false;
@@ -145,7 +153,7 @@ test("step_0: valid output => ASK with contract menu and readiness prompt", () =
     String(rendered.specialist.confirmation_question || ""),
     ""
   );
-  assert.equal(String(rendered.specialist.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.equal(renderedMenuId(rendered), "STEP0_MENU_READY_START");
   assert.deepEqual(rendered.uiActionCodes, ["ACTION_STEP0_READY_START"]);
   assert.equal(
     String(rendered.specialist.question || "").includes("Are you ready to start with the first step: the Dream?"),
@@ -196,7 +204,7 @@ test("dream: free-text render uses non-escape menu with parity", () => {
     },
   });
   assert.equal(rendered.status, "valid_output");
-  assert.equal(String(rendered.specialist.menu_id), "DREAM_MENU_REFINE");
+  assert.equal(renderedMenuId(rendered), "DREAM_MENU_REFINE");
   assert.equal(rendered.uiActionCodes.length, 2);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), rendered.uiActionCodes.length);
   assert.equal(String(rendered.specialist.question || "").includes("Continue Dream now"), false);
@@ -220,7 +228,7 @@ test("dream: valid output does not keep intro-only menu when confirm menu exists
   });
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(renderedMenuId(rendered), "DREAM_MENU_REFINE");
   assert.equal(
     rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"),
     true
@@ -291,7 +299,7 @@ test("dream: staged provisional value is treated as valid output before explicit
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(renderedMenuId(rendered), "DREAM_MENU_REFINE");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
   assert.equal(
     String(rendered.specialist.message || "").includes("Mindd dreams of a world where purpose-driven companies stay human under pressure."),
@@ -323,7 +331,7 @@ test("dream: explain-more flow keeps WHY menu and does not loop intro button", (
 
   assert.equal(rendered.status, "no_output");
   assert.equal(rendered.confirmEligible, false);
-  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_WHY");
+  assert.equal(renderedMenuId(rendered), "DREAM_MENU_WHY");
   assert.deepEqual(rendered.uiActionCodes, [
     "ACTION_DREAM_WHY_GIVE_SUGGESTIONS",
     "ACTION_DREAM_WHY_START_EXERCISE",
@@ -359,7 +367,7 @@ test("dream explainer intro keeps exercise question and avoids Dream intro fallb
 
   assert.equal(rendered.status, "no_output");
   assert.equal(rendered.confirmEligible, false);
-  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
+  assert.equal(renderedMenuId(rendered), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
   assert.deepEqual(rendered.uiActionCodes, ["ACTION_DREAM_SWITCH_TO_SELF"]);
   assert.equal(
     String(rendered.specialist.question || "").includes("Looking 5 to 10 years ahead"),
@@ -583,7 +591,7 @@ test("strategy: ignores previous menu fallback and uses deterministic status men
         "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
     },
   });
-  assert.equal(String(rendered.specialist.menu_id || ""), "STRATEGY_MENU_ASK");
+  assert.equal(renderedMenuId(rendered), "STRATEGY_MENU_ASK");
   assert.deepEqual(rendered.uiActionCodes, [
     "ACTION_STRATEGY_ASK_3_QUESTIONS",
     "ACTION_STRATEGY_ASK_GIVE_EXAMPLES",
@@ -607,7 +615,7 @@ test("rules: valid output keeps confirm-capable menu with parity", () => {
     },
   });
   assert.equal(rendered.status, "valid_output");
-  assert.equal(String(rendered.specialist.menu_id), "RULES_MENU_CONFIRM");
+  assert.equal(renderedMenuId(rendered), "RULES_MENU_CONFIRM");
   assert.ok(rendered.uiActionCodes.length >= 1);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), rendered.uiActionCodes.length);
 });
@@ -688,7 +696,7 @@ test("off-topic dream with candidate but no final keeps confirm-capable refine m
   });
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(renderedMenuId(rendered), "DREAM_MENU_REFINE");
   assert.equal(rendered.uiActionCodes.length, 2);
 });
 
@@ -724,7 +732,7 @@ test("off-topic dream carries previously selected temporary formulation in messa
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.confirmEligible, true);
-  assert.equal(String(rendered.specialist.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(renderedMenuId(rendered), "DREAM_MENU_REFINE");
   assert.deepEqual(rendered.uiActionCodes, [
     "ACTION_DREAM_REFINE_CONFIRM",
     "ACTION_DREAM_REFINE_START_EXERCISE",
@@ -767,7 +775,7 @@ test("off-topic keeps committed context and valid-output contract menu across st
 
     assert.equal(rendered.status, "valid_output", `${stepId} should stay valid on off-topic`);
     assert.equal(
-      String(rendered.specialist.menu_id || ""),
+      renderedMenuId(rendered),
       String(DEFAULT_MENU_BY_STATUS[stepId]?.valid_output || ""),
       `${stepId} should keep valid-output contract menu`
     );
@@ -803,7 +811,7 @@ test("strategy valid-output from sidepath never renders buttonless screen", () =
         "Focus exclusively on clients in the Netherlands\nFocus on clients with an annual budget above 40,000 euros\nWork only for clients who are healthy and profitable\nPrioritize collaborations with clients who seek to drive meaningful change\nLimit the number of concurrent projects to maintain high standards",
     },
   });
-  assert.equal(String(rendered.specialist.menu_id || ""), "STRATEGY_MENU_CONFIRM");
+  assert.equal(renderedMenuId(rendered), "STRATEGY_MENU_CONFIRM");
   assert.deepEqual(rendered.uiActionCodes, [
     "ACTION_STRATEGY_REFINE_EXPLAIN_MORE",
     "ACTION_STRATEGY_CONFIRM_SATISFIED",
@@ -827,7 +835,7 @@ test("rules sidepath menu has label parity and keeps button visible", () => {
       rulesofthegame: "We focus on quality",
     },
   });
-  assert.equal(String(rendered.specialist.menu_id || ""), "RULES_MENU_GIVE_EXAMPLE_ONLY");
+  assert.equal(renderedMenuId(rendered), "RULES_MENU_GIVE_EXAMPLE_ONLY");
   assert.deepEqual(rendered.uiActionCodes, ["ACTION_RULES_ASK_GIVE_EXAMPLE"]);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 1);
 });
@@ -849,7 +857,7 @@ test("purpose examples sidepath keeps both options (no silent drop)", () => {
       refined_formulation: "Mindd exists to foster purpose-driven companies.",
     },
   });
-  assert.equal(String(rendered.specialist.menu_id || ""), "PURPOSE_MENU_EXAMPLES");
+  assert.equal(renderedMenuId(rendered), "PURPOSE_MENU_EXAMPLES");
   assert.deepEqual(rendered.uiActionCodes, [
     "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS",
     "ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME",
@@ -873,7 +881,7 @@ test("purpose no-output intro shows explain-more and ask-3-questions actions", (
       refined_formulation: "",
     },
   });
-  assert.equal(String(rendered.specialist.menu_id || ""), "PURPOSE_MENU_INTRO");
+  assert.equal(renderedMenuId(rendered), "PURPOSE_MENU_INTRO");
   assert.deepEqual(rendered.uiActionCodes, [
     "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
     "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
@@ -897,7 +905,7 @@ test("role ask sidepath keeps its single option", () => {
       refined_formulation: "Mindd sets standards for purpose-driven business.",
     },
   });
-  assert.equal(String(rendered.specialist.menu_id || ""), "ROLE_MENU_ASK");
+  assert.equal(renderedMenuId(rendered), "ROLE_MENU_ASK");
   assert.deepEqual(rendered.uiActionCodes, ["ACTION_ROLE_ASK_GIVE_EXAMPLES"]);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 1);
 });

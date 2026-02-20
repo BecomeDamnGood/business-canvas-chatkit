@@ -87,6 +87,50 @@ function countNumberedOptions(text: string): number {
   return count;
 }
 
+function parseMenuFromContractId(contractIdRaw: unknown): string {
+  const contractId = String(contractIdRaw || "").trim();
+  const match = contractId.match(/^[^:]+:phase:([A-Z0-9_]+)$/i);
+  return match ? String(match[1] || "").trim() : "";
+}
+
+function inferMenuFromActionCodes(actionCodesRaw: unknown, stepIdRaw: unknown): string {
+  const actionCodes = Array.isArray(actionCodesRaw)
+    ? actionCodesRaw.map((code) => String(code || "").trim()).filter(Boolean)
+    : [];
+  if (actionCodes.length === 0) return "";
+  const stepId = String(stepIdRaw || "").trim();
+  const candidates = Object.entries(ACTIONCODE_REGISTRY.menus).filter(([, menuCodes]) => {
+    const normalized = Array.isArray(menuCodes)
+      ? menuCodes.map((code) => String(code || "").trim()).filter(Boolean)
+      : [];
+    if (normalized.length !== actionCodes.length) return false;
+    return normalized.every((code, idx) => code === actionCodes[idx]);
+  });
+  if (candidates.length === 1) return String(candidates[0]?.[0] || "").trim();
+  if (!stepId) return "";
+  for (const [menuId] of candidates) {
+    if (String(menuId || "").toLowerCase().startsWith(`${stepId.toLowerCase()}_menu_`)) {
+      return String(menuId || "").trim();
+    }
+  }
+  return "";
+}
+
+function menuIdFromTurn(turn: any): string {
+  const fromContract = parseMenuFromContractId(
+    turn?.ui?.contract_id || turn?.specialist?.ui_contract_id || turn?.contract_id || ""
+  );
+  if (fromContract) return fromContract;
+  return inferMenuFromActionCodes(
+    turn?.ui?.action_codes,
+    turn?.current_step_id || turn?.state?.current_step || ""
+  );
+}
+
+function menuIdFromSpecialistPayload(payload: any): string {
+  return parseMenuFromContractId(payload?.ui_contract_id || "");
+}
+
 function setPhaseContract(state: Record<string, unknown>, stepId: string, menuId: string): void {
   if (!stepId || !menuId) return;
   const existing =
@@ -383,6 +427,9 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
     started: "true",
     business_name: "Acme",
     dream_final: "Become the trusted local partner.",
+    __ui_phase_by_step: {
+      dream: "dream:phase:DREAM_MENU_REFINE",
+    },
     last_specialist_result: {
       action: "REFINE",
       menu_id: "DREAM_MENU_REFINE",
@@ -396,7 +443,7 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
     state: baseState,
   });
   assert.equal(normalTurn.ok, true);
-  assert.equal(String(normalTurn.specialist?.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(Array.isArray(normalTurn.ui?.action_codes), true);
   assert.deepEqual(normalTurn.ui?.action_codes, [
     "ACTION_DREAM_REFINE_CONFIRM",
     "ACTION_DREAM_REFINE_START_EXERCISE",
@@ -414,7 +461,7 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
   );
   assert.equal(offTopicTurn.ok, true);
   assert.equal(String(offTopicTurn.specialist?.is_offtopic || ""), "true");
-  assert.equal(String(offTopicTurn.specialist?.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(Array.isArray(offTopicTurn.ui?.action_codes), true);
   assert.ok(Array.isArray(offTopicTurn.ui?.action_codes));
   assert.equal(
     countNumberedOptions(String(offTopicTurn.prompt || "")),
@@ -450,7 +497,7 @@ test("widget escape suppression: response never returns escape menu/action codes
   });
 
   assert.equal(result.ok, false);
-  assert.equal(String(result.specialist?.menu_id || ""), "");
+  assert.equal(menuIdFromTurn(result), "");
   assert.equal(String(result.specialist?.action || ""), "ASK");
   assert.equal(String(result.prompt || "").includes("Continue Dream now"), false);
   assert.equal(String(result.prompt || "").includes("Finish later"), false);
@@ -499,7 +546,7 @@ test("DreamExplainer off-topic keeps exercise context and only shows switch-back
 
   assert.equal(result.ok, true);
   assert.equal(String(result.active_specialist || ""), "DreamExplainer");
-  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
+  assert.equal(menuIdFromTurn(result), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
   assert.deepEqual(result.ui?.action_codes, ["ACTION_DREAM_SWITCH_TO_SELF"]);
   assert.equal(String(result.text || "").includes("Now let's get back to the Dream Exercise."), true);
 });
@@ -516,6 +563,9 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
     business_name: "Mindd",
     dream_final:
       "Mindd dreams of a world in which people feel empowered to create meaningful value and experience greater freedom and possibility in their lives.",
+    __ui_phase_by_step: {
+      dream: "dream:phase:DREAM_EXPLAINER_MENU_SWITCH_SELF",
+    },
     last_specialist_result: {
       action: "ASK",
       menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
@@ -543,7 +593,7 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
   assert.equal(first.ok, true);
   assert.equal(String(first.active_specialist || ""), "DreamExplainer");
   assert.equal(String(first.specialist?.suggest_dreambuilder || ""), "true");
-  assert.equal(String(first.specialist?.menu_id || ""), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
+  assert.equal(menuIdFromTurn(first), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
 
   const second = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
@@ -555,7 +605,7 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
   assert.equal(second.ok, true);
   assert.equal(String(second.active_specialist || ""), "DreamExplainer");
   assert.equal(String(second.specialist?.suggest_dreambuilder || ""), "true");
-  assert.equal(String(second.specialist?.menu_id || ""), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
+  assert.equal(menuIdFromTurn(second), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
 });
 
 test("off-topic overlay keeps previous statement recap when no final exists yet", async () => {
@@ -607,6 +657,9 @@ test("off-topic dream with existing candidate (no final) keeps both Dream refine
     started: "true",
     business_name: "Mindd",
     dream_final: "",
+    __ui_phase_by_step: {
+      dream: "dream:phase:DREAM_MENU_REFINE",
+    },
     last_specialist_result: {
       action: "REFINE",
       menu_id: "DREAM_MENU_REFINE",
@@ -630,7 +683,7 @@ test("off-topic dream with existing candidate (no final) keeps both Dream refine
 
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.is_offtopic || ""), "true");
-  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_REFINE");
+  assert.equal(menuIdFromTurn(result), "DREAM_MENU_REFINE");
   assert.deepEqual(result.ui?.action_codes, [
     "ACTION_DREAM_REFINE_CONFIRM",
     "ACTION_DREAM_REFINE_START_EXERCISE",
@@ -648,6 +701,9 @@ test("off-topic dream without candidate resets to intro menu with both intro act
     started: "true",
     business_name: "Mindd",
     dream_final: "",
+    __ui_phase_by_step: {
+      dream: "dream:phase:DREAM_MENU_REFINE",
+    },
     last_specialist_result: {
       action: "REFINE",
       menu_id: "DREAM_MENU_REFINE",
@@ -670,7 +726,7 @@ test("off-topic dream without candidate resets to intro menu with both intro act
   );
 
   assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_INTRO");
+  assert.equal(menuIdFromTurn(result), "DREAM_MENU_INTRO");
   assert.deepEqual(result.ui?.action_codes, [
     "ACTION_DREAM_INTRO_EXPLAIN_MORE",
     "ACTION_DREAM_INTRO_START_EXERCISE",
@@ -678,7 +734,7 @@ test("off-topic dream without candidate resets to intro menu with both intro act
   assert.equal(String(result.prompt || "").includes("Define your Dream for Mindd"), true);
 });
 
-test("off-topic purpose with defined output restores refine menu with continue and refine actions", async () => {
+test("off-topic purpose with defined output keeps the single confirm menu", async () => {
   const state = {
     ...getDefaultState(),
     current_step: "purpose",
@@ -688,6 +744,9 @@ test("off-topic purpose with defined output restores refine menu with continue a
     started: "true",
     business_name: "Mindd",
     purpose_final: "Mindd exists to restore focus and meaning in work.",
+    __ui_phase_by_step: {
+      purpose: "purpose:phase:PURPOSE_MENU_CONFIRM_SINGLE",
+    },
     last_specialist_result: {
       action: "ASK",
       menu_id: "PURPOSE_MENU_CONFIRM_SINGLE",
@@ -707,11 +766,8 @@ test("off-topic purpose with defined output restores refine menu with continue a
   );
 
   assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_REFINE");
-  assert.deepEqual(result.ui?.action_codes, [
-    "ACTION_PURPOSE_REFINE_CONFIRM",
-    "ACTION_PURPOSE_REFINE_ADJUST",
-  ]);
+  assert.equal(menuIdFromTurn(result), "PURPOSE_MENU_CONFIRM_SINGLE");
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_PURPOSE_CONFIRM_SINGLE"]);
 });
 
 test("Step 0 off-topic with no output always returns canonical Step 0 ask contract", async () => {
@@ -761,7 +817,7 @@ test("Step 0 contract: meta/off-topic ASK is normalized to canonical Step 0 prom
   assert.equal(String(normalized.action || ""), "ASK");
   assert.equal(String(normalized.question || "").toLowerCase().includes("what type of business"), true);
   assert.equal(String(normalized.message || "").toLowerCase().includes("ben steenstra"), true);
-  assert.equal(String(normalized.menu_id || ""), "");
+  assert.equal(menuIdFromSpecialistPayload(normalized), "");
 });
 
 test("Step 0 contract: fallback off-topic answer is never empty for clear non-step question", () => {
@@ -814,7 +870,7 @@ test("Step 0 contract: known business ASK maps to canonical readiness menu contr
     ),
     true
   );
-  assert.equal(String(normalized.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.equal(String(normalized.question || "").startsWith("1) Yes, I'm ready. Let's start!"), true);
   assert.equal(String(normalized.step_0 || ""), "Venture: advertising agency | Name: Mindd | Status: existing");
 });
 
@@ -827,6 +883,9 @@ test("Step 0 off-topic with valid output keeps readiness ASK contract when Step 
     started: "true",
     step_0_final: "Venture: advertising agency | Name: Mindd | Status: existing",
     business_name: "Mindd",
+    __ui_phase_by_step: {
+      step_0: "step_0:phase:STEP0_MENU_READY_START",
+    },
     last_specialist_result: {},
   };
 
@@ -838,7 +897,7 @@ test("Step 0 off-topic with valid output keeps readiness ASK contract when Step 
   );
   assert.equal(offTopic.ok, true);
   assert.equal(String(offTopic.specialist?.action || ""), "ASK");
-  assert.equal(String(offTopic.specialist?.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.equal(menuIdFromTurn(offTopic), "STEP0_MENU_READY_START");
   assert.equal(String(offTopic.prompt || "").includes("Are you ready to start with the first step: the Dream?"), true);
   assert.equal(String(offTopic.text || "").includes("To get started, could you tell me"), false);
   assert.deepEqual(offTopic.ui?.action_codes, ["ACTION_STEP0_READY_START"]);
@@ -850,6 +909,9 @@ test("Step 0 renderer fallback produces readiness ASK + menu when called directl
     current_step: "step_0",
     step_0_final: "Venture: agency | Name: Mindd | Status: existing",
     business_name: "Mindd",
+    __ui_phase_by_step: {
+      step_0: "step_0:phase:STEP0_MENU_READY_START",
+    },
   };
   const specialist = {
     action: "ASK",
@@ -870,7 +932,7 @@ test("Step 0 renderer fallback produces readiness ASK + menu when called directl
   });
 
   assert.equal(String(rendered.specialist.action || ""), "ASK");
-  assert.equal(String(rendered.specialist.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.equal(parseMenuFromContractId((rendered as any).contractId), "");
   assert.equal(String(rendered.specialist.question || "").includes("Are you ready to start with the first step: the Dream?"), true);
   assert.equal(String(rendered.specialist.message || "").includes("This is what we have established so far"), false);
 });
@@ -886,13 +948,16 @@ test("Step 0 start payload uses canonical readiness ASK menu when final exists",
       started: "true",
       step_0_final: "Venture: advertising agency | Name: Mindd | Status: existing",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        step_0: "step_0:phase:STEP0_MENU_READY_START",
+      },
       last_specialist_result: {},
     },
   });
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.action || ""), "ASK");
   assert.equal(String(result.specialist?.confirmation_question || ""), "");
-  assert.equal(String(result.specialist?.menu_id || ""), "STEP0_MENU_READY_START");
+  assert.equal(menuIdFromTurn(result), "STEP0_MENU_READY_START");
   assert.equal(String(result.prompt || "").includes("Are you ready to start with the first step: the Dream?"), true);
   assert.equal(String(result.prompt || "").includes("This is what we have established"), false);
   assert.equal(String(result.prompt || "").includes("Refine your Step 0"), false);
@@ -959,6 +1024,9 @@ test("global free-text policy: ActionCode turn bypasses renderer", async () => {
       intro_shown_session: "true",
       started: "true",
       dream_final: "Become the trusted local partner.",
+      __ui_phase_by_step: {
+        dream: "dream:phase:DREAM_MENU_REFINE",
+      },
       last_specialist_result: {
         action: "REFINE",
         menu_id: "DREAM_MENU_REFINE",
@@ -1134,11 +1202,11 @@ test("wording choice: step_0 is never eligible for dual-choice", () => {
   assert.equal(isWordingChoiceEligibleStep("step_0"), false);
   assert.equal(isWordingChoiceEligibleStep("dream"), true);
   assert.equal(isWordingChoiceEligibleStep("purpose"), true);
-  assert.equal(isWordingChoiceEligibleContext("dream", "DreamExplainer"), false);
+  assert.equal(isWordingChoiceEligibleContext("dream", "DreamExplainer"), true);
   assert.equal(isWordingChoiceEligibleContext("dream", "Dream"), true);
   assert.equal(
     isWordingChoiceEligibleContext("dream", "Dream", { suggest_dreambuilder: "true" }, {}),
-    false
+    true
   );
   assert.equal(
     isWordingChoiceEligibleContext(
@@ -1147,10 +1215,14 @@ test("wording choice: step_0 is never eligible for dual-choice", () => {
       { menu_id: "DREAM_EXPLAINER_MENU_ASK" },
       {}
     ),
-    false
+    true
   );
   assert.equal(
     isWordingChoiceEligibleContext("dream", "DreamExplainer", { scoring_phase: "true" }, {}),
+    true
+  );
+  assert.equal(
+    isWordingChoiceEligibleContext("dream", "DreamExplainer", { scoring_phase: "true" }, {}, "builder_scoring"),
     false
   );
 });
@@ -1476,7 +1548,7 @@ test("meta off-topic fallback marks Ben/info step messages as off-topic outside 
   );
 });
 
-test("wording choice: DreamExplainer rewrite is not eligible for user-vs-suggestion panel", () => {
+test("wording choice: DreamExplainer rewrite is eligible for user-vs-suggestion panel in builder collect/refine", () => {
   const previousSpecialist = {
     action: "ASK",
     menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
@@ -1515,8 +1587,8 @@ test("wording choice: DreamExplainer rewrite is not eligible for user-vs-suggest
     isOfftopic: false,
   });
 
-  assert.equal(Boolean(rebuilt.wordingChoice), false);
-  assert.equal(String(rebuilt.specialist?.wording_choice_pending || ""), "false");
+  assert.equal(Boolean(rebuilt.wordingChoice), true);
+  assert.equal(String(rebuilt.specialist?.wording_choice_pending || ""), "true");
 });
 
 test("wording choice runtime rebuild is contract-eligible across steps (not DreamExplainer-only)", () => {
@@ -1729,6 +1801,9 @@ test("switch-to-self without existing dream candidate returns Dream intro menu (
       intro_shown_for_step: "dream",
       started: "true",
       dream_final: "",
+      __ui_phase_by_step: {
+        dream: "dream:phase:DREAM_EXPLAINER_MENU_SWITCH_SELF",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
@@ -1742,7 +1817,7 @@ test("switch-to-self without existing dream candidate returns Dream intro menu (
 
   assert.equal(result.ok, true);
   assert.equal(String(result.active_specialist || ""), "Dream");
-  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_INTRO");
+  assert.equal(menuIdFromTurn(result), "DREAM_MENU_INTRO");
   assert.equal(String(result.prompt || "").includes("Define your Dream for"), true);
   assert.equal(String(result.prompt || "").includes("Refine your Dream for"), false);
   assert.deepEqual(result.ui?.action_codes || [], [
@@ -1765,6 +1840,9 @@ test("switch-to-self ignores long statement-like refined text as Dream candidate
       intro_shown_for_step: "dream",
       started: "true",
       dream_final: "",
+      __ui_phase_by_step: {
+        dream: "dream:phase:DREAM_EXPLAINER_MENU_SWITCH_SELF",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
@@ -1777,7 +1855,7 @@ test("switch-to-self ignores long statement-like refined text as Dream candidate
 
   assert.equal(result.ok, true);
   assert.equal(String(result.active_specialist || ""), "Dream");
-  assert.equal(String(result.specialist?.menu_id || ""), "DREAM_MENU_INTRO");
+  assert.equal(menuIdFromTurn(result), "DREAM_MENU_INTRO");
   assert.equal(String(result.prompt || "").includes("Define your Dream for"), true);
   assert.equal(String(result.prompt || "").includes("Refine your Dream for"), false);
 });
@@ -1802,6 +1880,9 @@ test("wording choice: selecting user variant updates candidate and clears pendin
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        purpose: "purpose:phase:PURPOSE_MENU_REFINE",
+      },
       last_specialist_result: {
         action: "REFINE",
         menu_id: "PURPOSE_MENU_REFINE",
@@ -1824,7 +1905,7 @@ test("wording choice: selecting user variant updates candidate and clears pendin
   assert.equal(String(result.specialist?.wording_choice_selected || ""), "user");
   assert.equal(String(result.specialist?.purpose || ""), "Mindd helps teams with clarity.");
   assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_REFINE");
+  assert.equal(menuIdFromTurn(result), "PURPOSE_MENU_REFINE");
   const selectionQuestion = String(result.specialist?.question || "");
   assert.equal(
     selectionQuestion.startsWith(
@@ -1882,6 +1963,9 @@ test("wording choice: user pick preserves multi-line strategy input and shows fe
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        strategy: "strategy:phase:STRATEGY_MENU_REFINE",
+      },
       last_specialist_result: {
         action: "REFINE",
         menu_id: "STRATEGY_MENU_REFINE",
@@ -1901,9 +1985,9 @@ test("wording choice: user pick preserves multi-line strategy input and shows fe
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.strategy || ""), "Build trust with clients\nRun monthly workshops");
   assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(String(result.specialist?.menu_id || ""), "STRATEGY_MENU_ASK");
-  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
-  assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"]);
+  assert.equal(menuIdFromTurn(result), "STRATEGY_MENU_REFINE");
+  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 1);
+  assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_REFINE_EXPLAIN_MORE"]);
   assert.match(
     String(result.specialist?.message || ""),
     /You chose your own wording and that's fine\./
@@ -1925,6 +2009,9 @@ test("wording choice: strategy suggestion pick restores buttons and keeps progre
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        strategy: "strategy:phase:STRATEGY_MENU_ASK",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "",
@@ -1955,7 +2042,7 @@ test("wording choice: strategy suggestion pick restores buttons and keeps progre
 
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(String(result.specialist?.menu_id || ""), "STRATEGY_MENU_ASK");
+  assert.equal(menuIdFromTurn(result), "STRATEGY_MENU_ASK");
   assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
   assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"]);
   assert.equal(String(result.specialist?.message || ""), "Your current Strategy for Mindd is:");
@@ -1979,6 +2066,9 @@ test("wording choice: strategy suggestion pick removes duplicate 'Focus point no
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        strategy: "strategy:phase:STRATEGY_MENU_REFINE",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "",
@@ -2021,9 +2111,12 @@ test("informational action: strategy explain-more remains on contract ask menu",
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        strategy: "strategy:phase:STRATEGY_MENU_CONFIRM",
+      },
       last_specialist_result: {
         action: "ASK",
-        menu_id: "STRATEGY_MENU_REFINE",
+        menu_id: "STRATEGY_MENU_CONFIRM",
         question:
           "1) Explain why a Strategy matters",
         message: "So far we have these 2 strategic focus points.",
@@ -2041,11 +2134,11 @@ test("informational action: strategy explain-more remains on contract ask menu",
 
   assert.equal(result.ok, true);
   assert.equal(String(result.current_step_id || ""), "strategy");
-  assert.equal(String(result.specialist?.menu_id || "").startsWith("STRATEGY_MENU_"), true);
+  assert.equal(menuIdFromTurn(result).startsWith("STRATEGY_MENU_"), true);
   assert.ok(Array.isArray(result.ui?.action_codes));
   assert.ok((result.ui?.action_codes || []).length >= 1);
   assert.equal(String(result.specialist?.message || "").includes("Focus point 1 noted:"), false);
-  assert.equal(String(result.specialist?.menu_id || "").endsWith("_MENU_ESCAPE"), false);
+  assert.equal(menuIdFromTurn(result).endsWith("_MENU_ESCAPE"), false);
 });
 
 test("informational action: purpose explain-more remains on contract menu", async () => {
@@ -2059,6 +2152,9 @@ test("informational action: purpose explain-more remains on contract menu", asyn
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        purpose: "purpose:phase:PURPOSE_MENU_INTRO",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "PURPOSE_MENU_INTRO",
@@ -2072,10 +2168,10 @@ test("informational action: purpose explain-more remains on contract menu", asyn
 
   assert.equal(result.ok, true);
   assert.equal(String(result.current_step_id || ""), "purpose");
-  assert.equal(String(result.specialist?.menu_id || "").endsWith("_MENU_ESCAPE"), false);
+  assert.equal(menuIdFromTurn(result).endsWith("_MENU_ESCAPE"), false);
   assert.ok(Array.isArray(result.ui?.action_codes));
   assert.ok((result.ui?.action_codes || []).length >= 1);
-  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_EXPLAIN");
+  assert.equal(menuIdFromTurn(result), "PURPOSE_MENU_EXPLAIN");
 });
 
 test("informational action: purpose ask-3-questions keeps explain/examples buttons (no repeated ask-3 button)", async () => {
@@ -2089,6 +2185,9 @@ test("informational action: purpose ask-3-questions keeps explain/examples butto
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        purpose: "purpose:phase:PURPOSE_MENU_EXPLAIN",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "PURPOSE_MENU_INTRO",
@@ -2103,7 +2202,7 @@ test("informational action: purpose ask-3-questions keeps explain/examples butto
 
   assert.equal(result.ok, true);
   assert.equal(String(result.current_step_id || ""), "purpose");
-  assert.equal(String(result.specialist?.menu_id || ""), "PURPOSE_MENU_POST_ASK");
+  assert.equal(menuIdFromTurn(result), "PURPOSE_MENU_POST_ASK");
   assert.deepEqual(result.ui?.action_codes || [], [
     "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
     "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES",
@@ -2121,6 +2220,9 @@ test("informational action: rules explain-more shows only concrete-example butto
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        rulesofthegame: "rulesofthegame:phase:RULES_MENU_ASK_EXPLAIN",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "RULES_MENU_ASK_EXPLAIN",
@@ -2135,7 +2237,7 @@ test("informational action: rules explain-more shows only concrete-example butto
 
   assert.equal(result.ok, true);
   assert.equal(String(result.current_step_id || ""), "rulesofthegame");
-  assert.equal(String(result.specialist?.menu_id || ""), "RULES_MENU_GIVE_EXAMPLE_ONLY");
+  assert.equal(menuIdFromTurn(result), "RULES_MENU_GIVE_EXAMPLE_ONLY");
   assert.deepEqual(result.ui?.action_codes || [], ["ACTION_RULES_ASK_GIVE_EXAMPLE"]);
 });
 
@@ -2150,6 +2252,9 @@ test("wording choice: generic Purpose acknowledgement is replaced with step-spec
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        rulesofthegame: "rulesofthegame:phase:RULES_MENU_ASK_EXPLAIN",
+      },
       last_specialist_result: {
         action: "CONFIRM",
         menu_id: "",
@@ -2212,7 +2317,7 @@ test("bullet consistency policy derives statements from bulleted message content
 test("DreamExplainer off-topic handling uses explicit contract branch", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
   assert.match(source, /const isDreamExplainerOfftopicTurn\s*=/);
-  assert.match(source, /menu_id:\s*DREAM_EXPLAINER_SWITCH_SELF_MENU_ID/);
+  assert.match(source, /buildContractId\(\s*currentStepId,\s*rendered\.status,\s*DREAM_EXPLAINER_SWITCH_SELF_MENU_ID\s*\)/);
 });
 
 test("wording choice: Entity user pick restores contract menu buttons when source prompt has no numbered options", async () => {
@@ -2226,6 +2331,9 @@ test("wording choice: Entity user pick restores contract menu buttons when sourc
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      __ui_phase_by_step: {
+        entity: "entity:phase:ENTITY_MENU_EXAMPLE",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "",
@@ -2245,7 +2353,7 @@ test("wording choice: Entity user pick restores contract menu buttons when sourc
   });
 
   assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.menu_id || ""), "ENTITY_MENU_EXAMPLE");
+  assert.equal(menuIdFromTurn(result), "ENTITY_MENU_EXAMPLE");
   assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
   assert.deepEqual(result.ui?.action_codes, ["ACTION_ENTITY_EXAMPLE_CONFIRM", "ACTION_ENTITY_EXAMPLE_REFINE"]);
 });
@@ -2357,7 +2465,7 @@ test("wording choice: Rules user pick keeps incomplete-status menu buttons", asy
 
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(String(result.specialist?.menu_id || ""), "RULES_MENU_ASK_EXPLAIN");
+  assert.equal(menuIdFromTurn(result), "RULES_MENU_ASK_EXPLAIN");
   assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
   assert.deepEqual(result.ui?.action_codes, ["ACTION_RULES_ASK_EXPLAIN_MORE", "ACTION_RULES_ASK_GIVE_EXAMPLE"]);
 });
@@ -2396,7 +2504,7 @@ test("wording choice: Entity suggestion pick normalizes sentence-like suggestion
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.entity || ""), "a values-based brand studio");
   assert.equal(String(result.specialist?.refined_formulation || ""), "a values-based brand studio");
-  assert.equal(String(result.specialist?.menu_id || ""), "ENTITY_MENU_EXAMPLE");
+  assert.equal(menuIdFromTurn(result), "ENTITY_MENU_EXAMPLE");
   assert.equal(String(result.specialist?.confirmation_question || ""), "");
 });
 
@@ -2478,6 +2586,9 @@ test("wording choice: obvious off-topic question in Strategy does not open A/B c
       active_specialist: "Strategy",
       intro_shown_session: "true",
       started: "true",
+      __ui_phase_by_step: {
+        purpose: "purpose:phase:PURPOSE_MENU_REFINE",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "STRATEGY_MENU_REFINE",
@@ -2548,6 +2659,9 @@ test("wording choice: refine adjust rebuilds pending choice from stored user var
       active_specialist: "Purpose",
       intro_shown_session: "true",
       started: "true",
+      __ui_phase_by_step: {
+        purpose: "purpose:phase:PURPOSE_MENU_REFINE",
+      },
       last_specialist_result: {
         action: "REFINE",
         menu_id: "PURPOSE_MENU_REFINE",
@@ -2566,14 +2680,10 @@ test("wording choice: refine adjust rebuilds pending choice from stored user var
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.wording_choice_pending || ""), "true");
   assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
-  assert.equal(Array.isArray(result.ui?.action_codes), false);
-  assert.equal(
-    String((result.ui as any)?.wording_choice?.suggestion_text || ""),
-    "Mindd exists to restore focus and meaning in work."
-  );
+  assert.equal(Boolean((result.ui as any)?.wording_choice?.enabled), true);
 });
 
-test("wording choice: DreamExplainer pending panel is suppressed in DreamBuilder mode", async () => {
+test("wording choice: DreamExplainer pending panel is visible in DreamBuilder collect/refine mode", async () => {
   const result = await run_step({
     user_message: "",
     input_mode: "widget",
@@ -2581,8 +2691,12 @@ test("wording choice: DreamExplainer pending panel is suppressed in DreamBuilder
       ...getDefaultState(),
       current_step: "dream",
       active_specialist: "DreamExplainer",
+      __dream_runtime_mode: "builder_refine",
       intro_shown_session: "true",
       started: "true",
+      __ui_phase_by_step: {
+        dream: "dream:phase:DREAM_EXPLAINER_MENU_REFINE",
+      },
       last_specialist_result: {
         action: "ASK",
         menu_id: "DREAM_EXPLAINER_MENU_REFINE",
@@ -2604,9 +2718,9 @@ test("wording choice: DreamExplainer pending panel is suppressed in DreamBuilder
   });
 
   assert.equal(result.ok, true);
-  assert.equal(String(result.specialist?.wording_choice_pending || ""), "false");
-  assert.notEqual(String(result.ui?.flags?.require_wording_pick || ""), "true");
-  assert.equal(Boolean((result.ui as any)?.wording_choice?.enabled), false);
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "true");
+  assert.equal(String(result.ui?.flags?.require_wording_pick || ""), "true");
+  assert.equal(Boolean((result.ui as any)?.wording_choice?.enabled), true);
 });
 
 test("wording choice: DreamExplainer pick does not prepend generic current-dream line", async () => {

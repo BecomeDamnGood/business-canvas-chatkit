@@ -136,13 +136,24 @@ function setStaticStrings(lang: string): void {
   if (send) send.setAttribute("title", t(lang, "sendTitle"));
 }
 
+function parseMenuFromContractId(contractIdRaw: unknown, stepIdRaw: unknown): string {
+  const contractId = String(contractIdRaw || "").trim();
+  const stepId = String(stepIdRaw || "").trim();
+  if (!contractId || !stepId) return "";
+  const parts = contractId.split(":");
+  if (parts.length < 3) return "";
+  const [contractStep, , ...menuParts] = parts;
+  if (String(contractStep || "").trim() !== stepId) return "";
+  const menuId = menuParts.join(":").trim();
+  if (!menuId || menuId === "NO_MENU") return "";
+  return menuId;
+}
+
 export function renderChoiceButtons(choices: Choice[] | null | undefined, resultData: Record<string, unknown>): void {
   const wrap = document.getElementById("choiceWrap");
   if (!wrap) return;
   wrap.innerHTML = "";
 
-  const specialist = (resultData?.specialist as Record<string, unknown>) || {};
-  const menuId = String(specialist?.menu_id || "").trim();
   const state = (resultData?.state as Record<string, unknown>) || {};
   const currentStep = String(state?.current_step || "").trim();
   const uiPayload =
@@ -155,6 +166,8 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   const choicesArr = Array.isArray(choices) ? choices : [];
   const registryVersion = String(resultData?.registry_version || "").trim();
   const registryActionCodes = Array.isArray(uiPayload.action_codes) ? uiPayload.action_codes : [];
+  const contractId = String(uiPayload.contract_id || "").trim();
+  const menuId = parseMenuFromContractId(contractId, currentStep);
   const expectedChoiceCount =
     typeof uiPayload.expected_choice_count === "number"
       ? uiPayload.expected_choice_count
@@ -184,7 +197,7 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
       if (!label || !actionCode) {
         console.warn("[structured_actions_invalid]", {
           registry_version: registryVersion,
-          menu_id: menuId,
+          contract_id: contractId,
           current_step: currentStep,
         });
         continue;
@@ -199,7 +212,7 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
         if (registryVersion && menuId) {
           console.log("[actioncode_click]", {
             registryVersion,
-            menuId,
+            contractId,
             currentStep,
             action_code: actionCode,
             source: "structured_actions",
@@ -216,68 +229,34 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
     return;
   }
 
+  if (menuId || registryActionCodes.length > 0) {
+    console.warn("[actioncodes_labels_missing]", {
+      registry_version: registryVersion,
+      contract_id: contractId,
+      current_step: currentStep,
+      labels_count: labelsCount,
+      expected_choice_count: expectedChoiceCount,
+    });
+    showOptionsError();
+    return;
+  }
+
   if (choicesArr.length === 0) {
-    if (menuId || registryActionCodes.length > 0) {
-      console.warn("[actioncodes_labels_missing]", {
-        registry_version: registryVersion,
-        menu_id: menuId,
-        current_step: currentStep,
-        labels_count: labelsCount,
-        expected_choice_count: expectedChoiceCount,
-      });
-      showOptionsError();
-      return;
-    }
     wrap.style.display = "none";
-    return;
-  }
-
-  if (!menuId) {
-    console.warn("[menu_contract_missing]", {
-      registry_version: registryVersion,
-      current_step: currentStep,
-      labels_count: labelsCount,
-    });
-    showOptionsError();
-    return;
-  }
-
-  if (!registryActionCodes.length) {
-      console.warn("[actioncodes_missing]", {
-        registry_version: registryVersion,
-        menu_id: menuId,
-        current_step: currentStep,
-        labels_count: labelsCount,
-    });
-    showOptionsError();
-    return;
-  }
-
-  const expectedCount =
-    typeof expectedChoiceCount === "number" ? expectedChoiceCount : registryActionCodes.length;
-  if (expectedCount !== labelsCount) {
-    console.warn("[actioncodes_count_mismatch]", {
-      registry_version: registryVersion,
-      menu_id: menuId,
-      current_step: currentStep,
-      labels_count: labelsCount,
-      expected_choice_count: expectedCount,
-    });
-    showOptionsError();
     return;
   }
 
   for (const c of choicesCopy) {
     const label = stripInlineText(String(c.label || "")).trim();
     if (!label) {
-      console.error("Empty choice label", { menuId, currentStep, choiceIndex: c.value });
+      console.error("Empty choice label", { contractId, currentStep, choiceIndex: c.value });
       showOptionsError();
       return;
     }
   }
 
   if (registryVersion && menuId) {
-    console.log("[actioncode_render]", { registryVersion, menuId, currentStep });
+    console.log("[actioncode_render]", { registryVersion, contractId, currentStep });
   }
 
   wrap.style.display = "flex";
@@ -285,7 +264,11 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   let renderIndex = 0;
   for (const c of choicesCopy) {
     const label = stripInlineText(String(c.label || "")).trim();
-    const actionCode = registryActionCodes[renderIndex];
+    const actionCode = String(c.value || "").trim();
+    if (!actionCode) {
+      showOptionsError();
+      return;
+    }
     const btn = document.createElement("button");
     btn.className = "choiceBtn";
     btn.type = "button";
@@ -296,7 +279,7 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
       if (registryVersion && menuId) {
         console.log("[actioncode_click]", {
           registryVersion,
-          menuId,
+          contractId,
           currentStep,
           action_code: actionCode,
         });
@@ -403,7 +386,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   userBtn.disabled = getIsLoading();
   suggestionBtn.disabled = getIsLoading();
   (wrap as HTMLElement).style.display = "flex";
-  return requirePick;
+  return enabled;
 }
 
 export function render(overrideToolOutput?: unknown): void {
@@ -600,7 +583,8 @@ export function render(overrideToolOutput?: unknown): void {
       result?.ui && typeof result.ui === "object" && (result.ui as Record<string, unknown>).flags
         ? ((result.ui as Record<string, unknown>).flags as Record<string, unknown>)
         : {};
-    const menuId = String((result?.specialist as Record<string, unknown>)?.menu_id || "").trim();
+    const payloadContractId = String(((result?.ui as Record<string, unknown>)?.contract_id || "")).trim();
+    const menuId = parseMenuFromContractId(payloadContractId, current);
     const purposeHintAllowedMenus = new Set(["PURPOSE_MENU_EXPLAIN", "PURPOSE_MENU_EXAMPLES"]);
     const showPurposeHint =
       current === "purpose" &&
@@ -905,9 +889,7 @@ export function render(overrideToolOutput?: unknown): void {
     promptText = isDreamDirectionView ? "" : parsed.promptShown;
   }
   let requireWordingPick = false;
-  const suppressWordingChoice =
-    (hasExplicitViewMode && !isViewModeWordingChoice) ||
-    (current === "dream" && isDreamExplainerMode && !isViewModeWordingChoice);
+  const suppressWordingChoice = isViewModeDreamBuilderScoring;
   if (!suppressWordingChoice) {
     requireWordingPick = renderWordingChoicePanel(result, lang);
   } else {

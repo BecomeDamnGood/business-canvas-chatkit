@@ -457,7 +457,11 @@ function resolveMenuContract(params: {
   const phaseMap = (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
     ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
     : {};
-  const phaseMenu = ignorePhaseForOfftopicNoOutput ? "" : parseMenuFromContractId(phaseMap[stepId], stepId);
+  const specialistPhaseMenu = parseMenuFromContractId((specialist as any).ui_contract_id, stepId);
+  const previousPhaseMenu = parseMenuFromContractId((prev as any).ui_contract_id, stepId);
+  const phaseMenu = ignorePhaseForOfftopicNoOutput
+    ? ""
+    : parseMenuFromContractId(phaseMap[stepId], stepId) || specialistPhaseMenu || previousPhaseMenu;
   const menuIsValidForStep = (menuRaw: string): boolean => {
     const menu = String(menuRaw || "").trim();
     if (!menu || isEscapeMenu(menu)) return false;
@@ -586,7 +590,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       action: "ASK",
       message: step0Message,
       question: step0Question,
-      menu_id: step0MenuId,
       ui_contract_id: step0ContractId,
       ui_contract_version: UI_CONTRACT_VERSION,
       ui_text_keys: step0TextKeys,
@@ -603,14 +606,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     };
   }
 
-  const specialistForMenu =
-    isOfftopic && effectiveStatus === "no_output"
-      ? { ...specialistForDisplay, menu_id: "" }
-      : specialistForDisplay;
-  const prevForMenu =
-    isOfftopic && effectiveStatus === "no_output"
-      ? { ...prev, menu_id: "" }
-      : prev;
+  const specialistForMenu = specialistForDisplay;
+  const prevForMenu = prev;
 
   const resolved = resolveMenuContract({
     stepId,
@@ -646,7 +643,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     action: "ASK",
     message,
     question,
-    menu_id: safeActionCodes.length > 0 ? menuId : "",
     ui_contract_id: contractId,
     ui_contract_version: UI_CONTRACT_VERSION,
     ui_text_keys: textKeys,

@@ -13,7 +13,6 @@ export const PresentationZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   presentation_brief: z.string(),
-  menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -32,7 +31,6 @@ export const PresentationJsonSchema = {
     "question",
     "refined_formulation",
     "presentation_brief",
-    "menu_id",
     "wants_recap",
     "is_offtopic",
   ],
@@ -42,7 +40,6 @@ export const PresentationJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     presentation_brief: { type: "string" },
-    menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -115,7 +112,6 @@ Never output null. Use empty strings "".
   "question": "string",
   "refined_formulation": "string",
   "presentation_brief": "string",
-  "menu_id": "string",
 }
 
 4) GLOBAL NON-NEGOTIABLES (DO NOT EDIT)

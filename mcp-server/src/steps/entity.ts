@@ -13,7 +13,6 @@ export const EntityZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   entity: z.string(),
-  menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -32,7 +31,6 @@ export const EntityJsonSchema = {
     "question",
     "refined_formulation",
     "entity",
-    "menu_id",
     "wants_recap",
     "is_offtopic",
   ],
@@ -42,7 +40,6 @@ export const EntityJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     entity: { type: "string" },
-    menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -139,7 +136,6 @@ Output schema fields (must always be present)
 "question": "string",
 "refined_formulation": "string",
 "entity": "string",
-"menu_id": "string",
 }
 CRITICAL RENDERING RULE
 Scope guard

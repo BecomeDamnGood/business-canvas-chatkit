@@ -7,7 +7,7 @@ The step-card widget (Dream Builder and other steps) needs the **last tool outpu
 - On each user action (e.g. sending a message or clicking a choice), the widget calls `run_step` with the **current state** (from the previous response).
 - The server returns a new response that includes `state` and `specialist`. The widget stores this and uses it for the next call.
 - If the host (e.g. Cursor, ChatKit) passes the **full** `run_step` response to the widget after each call (via `toolOutput` or equivalent), the widget can keep `__BSC_LATEST__` in sync and send the correct state on the next request. Then "Total: N statements" and the statements list stay correct.
-- Interactive UI is contract-only: buttons are rendered from `ui.actions` / `ui.action_codes` tied to `menu_id`.
+- Interactive UI is contract-only: buttons are rendered from `ui.actions` / `ui.action_codes` tied to `ui.contract_id`.
 - Legacy prompt-driven confirm fields (`confirmation_question`, `proceed_to_*`) are not used by the widget flow.
 
 ## If something goes wrong

@@ -5,10 +5,10 @@ This is the complete audit matrix for menu/button parity and confirm-filter beha
 ## Runtime Sources (Canonical)
 
 - Button source: `mcp-server/src/core/actioncode_registry.ts` (`ACTIONCODE_REGISTRY.menus`)
-- Label source: `mcp-server/src/core/turn_policy_renderer.ts` (`labelsForMenu`, `MENU_LABELS`, parsed `question`)
+- Label source: `mcp-server/src/core/turn_policy_renderer.ts` (`labelsForMenu`, `MENU_LABELS`)
 - Confirm filter source: `mcp-server/src/core/turn_policy_renderer.ts` (`isConfirmActionCode`, `resolveMenuContract`)
 - Widget body text source + chooser-noise sanitizer: `mcp-server/src/handlers/run_step.ts` (`buildTextForWidget`, `stripChoiceInstructionNoise`)
-- UI render source: `mcp-server/ui/lib/ui_render.ts` (structured actions primary, safe fallback behavior)
+- UI render source: `mcp-server/ui/lib/ui_render.ts` (contract `ui.actions` is canonical when `action_codes` exist)
 
 ## Default Menu By Step/Status
 

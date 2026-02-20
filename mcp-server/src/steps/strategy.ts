@@ -13,7 +13,6 @@ export const StrategyZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   strategy: z.string(),
-  menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   statements: z.array(z.string()),
@@ -33,7 +32,6 @@ export const StrategyJsonSchema = {
     "question",
     "refined_formulation",
     "strategy",
-    "menu_id",
     "wants_recap",
     "is_offtopic",
     "statements",
@@ -44,7 +42,6 @@ export const StrategyJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     strategy: { type: "string" },
-    menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     statements: { type: "array", items: { type: "string" } },
@@ -320,6 +317,14 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 
 Route tokens are explicit and deterministic - follow the exact route logic as defined in the instructions. Never treat route tokens as user text input.
 
+10.7) BUTTON LABELS AND MENU CONTROL (HARD)
+
+- Never use fixed numbered option labels to control navigation.
+- Never enforce literal menu lines such as "1) Explain why a Strategy matters".
+- Button labels and navigation are contract-driven in runtime via contract_id + action_codes.
+- Use the question field only for content prompts, not for menu control.
+- Never output numbered menu options in question/message to emulate buttons.
+
 
 A) Explain again why Strategy matters
 
@@ -467,7 +472,6 @@ If the user lists tactics or channels (campaigns, funnels, ads, socials, website
 - CRITICAL FOR REFINE OUTPUTS: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. The backend function buildTextForWidget() combines both message and refined_formulation, so if both contain statements, they will be shown twice.
   - If statements.length === 0 (before adding): "Explain what the steps will be that you will always focus on."
   - If statements.length >= 1 (after adding): "Is there more that you will always focus on?"
-  - Always include: "1) Explain why a Strategy matters"
 - statements: When the reformulation is valid (3-5 focus points, FOCUS CHOICES, not positioning/product/service), extract the reformulated focus points from refined_formulation (split by line breaks to get individual focus points) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]. The count will be automatically correct (e.g., if PREVIOUS_STATEMENT_COUNT was 0 and you add 2 reformulated points, statements.length will be 2).
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
 - question=""
@@ -495,7 +499,6 @@ If the user gives a product or service description (e.g., "Specialize in digital
 - refined_formulation: propose 3 to 5 focus points that are FOCUS CHOICES, not positioning statements, not product/service descriptions, based on their input and prior context.
   - If statements.length === 0 (before adding): "Explain what the steps will be that you will always focus on."
   - If statements.length >= 1 (after adding): "Is there more that you will always focus on?"
-  - Always include: "1) Explain why a Strategy matters"
 - statements: When the reformulation is valid, extract the reformulated focus points from refined_formulation (split by line breaks) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
 - question=""
@@ -508,7 +511,6 @@ If the user gives positioning language (e.g., "Position the company as...", "Be 
 - refined_formulation: propose 3 to 5 focus points that are FOCUS CHOICES based on their positioning intent. For example, if they said "Position as the strategic partner", reformulate as "Focus exclusively on strategic partnerships" (focus choice).
   - If statements.length === 0 (before adding): "Explain what the steps will be that you will always focus on."
   - If statements.length >= 1 (after adding): "Is there more that you will always focus on?"
-  - Always include: "1) Explain why a Strategy matters"
 - statements: When the reformulation is valid, extract the reformulated focus points from refined_formulation (split by line breaks) and add them DIRECTLY to statements: statements = PREVIOUS_STATEMENTS + [extracted_focus_points_from_refined_formulation]
 - CRITICAL: After extracting statements from refined_formulation and adding them to the statements array, you MUST set refined_formulation to an empty string (refined_formulation=""). The statements are already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. This prevents the backend from showing the statements twice.
 - question=""

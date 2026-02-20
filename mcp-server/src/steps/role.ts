@@ -13,7 +13,6 @@ export const RoleZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   role: z.string(),
-  menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -32,7 +31,6 @@ export const RoleJsonSchema = {
     "question",
     "refined_formulation",
     "role",
-    "menu_id",
     "wants_recap",
     "is_offtopic",
   ],
@@ -42,7 +40,6 @@ export const RoleJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     role: { type: "string" },
-    menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -105,7 +102,6 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   "question": "string",
   "refined_formulation": "string",
   "role": "string",
-  "menu_id": "string",
 }
 
 4) GLOBAL NON-NEGOTIABLES

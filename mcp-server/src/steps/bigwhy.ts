@@ -13,7 +13,6 @@ export const BigWhyZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   bigwhy: z.string(),
-  menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -32,7 +31,6 @@ export const BigWhyJsonSchema = {
     "question",
     "refined_formulation",
     "bigwhy",
-    "menu_id",
     "wants_recap",
     "is_offtopic",
   ],
@@ -42,7 +40,6 @@ export const BigWhyJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     bigwhy: { type: "string" },
-    menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -120,7 +117,6 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   "question": "string",
   "refined_formulation": "string",
   "bigwhy": "string",
-  "menu_id": "string",
 }
 
 

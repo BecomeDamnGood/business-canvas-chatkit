@@ -13,7 +13,6 @@ export const PurposeZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   purpose: z.string(),
-  menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -32,7 +31,6 @@ export const PurposeJsonSchema = {
     "question",
     "refined_formulation",
     "purpose",
-    "menu_id",
     "wants_recap",
     "is_offtopic",
   ],
@@ -42,7 +40,6 @@ export const PurposeJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     purpose: { type: "string" },
-    menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -112,7 +109,6 @@ All fields are required. If not applicable, return an empty string "".
   "question": "string",
   "refined_formulation": "string",
   "purpose": "string",
-  "menu_id": "string",
 }
 
 4) GLOBAL NON-NEGOTIABLES (DO NOT EDIT)

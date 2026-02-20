@@ -16,6 +16,9 @@ This contract governs A/B wording selection when both user and suggestion varian
 
 - Show comparison panel (text mode or list mode).
 - Block standard confirm/proceed actions until a pick is made.
+- View priority is strict:
+- DreamBuilder scoring view overrides wording-choice.
+- Outside scoring, wording-choice overrides standard menu buttons.
 - Accepted pick actions:
 - `ACTION_WORDING_PICK_USER`
 - `ACTION_WORDING_PICK_SUGGESTION`
@@ -44,6 +47,7 @@ On pick:
 ## Guardrails
 
 - Step 0 never enters wording-choice mode.
+- DreamBuilder collect and refine contexts allow wording-choice panel.
 - DreamBuilder scoring context does not allow wording-choice panel.
 - Off-topic turns do not show wording-choice panel.
 - Reordered list items are treated as a meaningful difference (panel must be shown).

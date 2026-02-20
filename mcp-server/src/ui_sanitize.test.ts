@@ -131,7 +131,14 @@ test("extractChoicesFromPrompt keeps numbering with <strong> tags and renders bu
   renderChoiceButtons(choices, {
     specialist: { menu_id: "TEST_MENU" },
     state: { current_step: "step_0" },
-    ui: { action_codes: ["ACTION_ONE", "ACTION_TWO"], expected_choice_count: 2 },
+    ui: {
+      action_codes: ["ACTION_ONE", "ACTION_TWO"],
+      expected_choice_count: 2,
+      actions: [
+        { id: "a1", label: "Alpha", action_code: "ACTION_ONE", intent: { type: "ROUTE", route: "__ROUTE__ONE__" } },
+        { id: "a2", label: "Beta", action_code: "ACTION_TWO", intent: { type: "ROUTE", route: "__ROUTE__TWO__" } },
+      ],
+    },
     registry_version: "test",
   });
 

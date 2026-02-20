@@ -13,7 +13,6 @@ export const RulesOfTheGameZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   rulesofthegame: z.string(),
-  menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   statements: z.array(z.string()),
@@ -33,7 +32,6 @@ export const RulesOfTheGameJsonSchema = {
     "question",
     "refined_formulation",
     "rulesofthegame",
-    "menu_id",
     "wants_recap",
     "is_offtopic",
     "statements",
@@ -44,7 +42,6 @@ export const RulesOfTheGameJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     rulesofthegame: { type: "string" },
-    menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     statements: { type: "array", items: { type: "string" } },
@@ -153,7 +150,6 @@ Output schema fields (must always be present)
   "question": "string",
   "refined_formulation": "string",
   "rulesofthegame": "string",
-  "menu_id": "string",
   "statements": ["array of strings"]
 }
 
@@ -459,38 +455,8 @@ CRITICAL FIELD SEPARATION RULE:
   - If PREVIOUS_STATEMENT_COUNT >= 1: "Do you have more Rules of the Game to add?" (localized)
 - This prompt text is ALWAYS shown from the first statement onwards.
 - The LLM must automatically determine this based on PREVIOUS_STATEMENT_COUNT.
-- CRITICAL: At EVERY ASK output (when asking for more Rules), the question field must contain EXACTLY this structure:
-  - First, check statements.length AFTER processing the current turn
-  - If statements.length >= 3 AND all statements are valid Rules of the Game:
-    - Line 2: empty (blank line)
-    - Line 3: "Do you have more Rules of the Game to add?" (localized) - this is ONE line only, NO other text on this line
-    - Line 4: empty (blank line)
-    - Line 5: "2) Please explain more about Rules of the Game"
-    - Line 6: "3) Give one concrete example (Rule versus poster slogan)"
-    - Line 7: empty (blank line)
-  - If statements.length < 3 OR not all statements are valid:
-    - Line 1: "Do you have more Rules of the Game to add?" (localized) - this is ONE line only, NO other text on this line
-    - Line 2: empty (blank line)
-    - Line 3: "1) Please explain more about Rules of the Game"
-    - Line 4: "2) Give one concrete example (Rule versus poster slogan)"
-    - Line 5: empty (blank line)
-  
-  Example question field output when statements.length >= 3:
-  
-  
-  Do you have more Rules of the Game to add?
-  
-  
-  
-  
-  Example question field output when statements.length < 3:
-  
-  Do you have more Rules of the Game to add?
-  
-  
-  
-  
-  CRITICAL: "Do you have more Rules of the Game to add?" must be on its own line with NO other text.
+- Menu and button labels are runtime contract-driven via contract_id + action_codes.
+- Never output numbered option lines in message/question to emulate buttons.
 
 
 Step 3: Decide whether to confirm or refine
@@ -602,9 +568,7 @@ In that moment:
 
   - action="REFINE"
   - message=""
-  - question must ask one short clarifying choice:
-    1) continue to next step
-    2) adjust the rules
+  - question must ask one short clarifying choice about continue vs adjust, without numbered menu lines.
 
   - refined_formulation=""
   - question=""

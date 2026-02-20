@@ -100,7 +100,7 @@ test("renderChoiceButtons handles missing ui without throwing", () => {
   (globalThis as any).document = originalDocument;
 });
 
-test("renderChoiceButtons renders buttons when ui.action_codes exist", () => {
+test("renderChoiceButtons renders buttons when ui.actions exist for action_codes", () => {
   const originalDocument = (globalThis as any).document;
   const fakeDocument = makeDocument();
   const wrap = (fakeDocument as any).getElementById("choiceWrap");
@@ -115,7 +115,14 @@ test("renderChoiceButtons renders buttons when ui.action_codes exist", () => {
     specialist: { menu_id: "TEST_MENU" },
     state: { current_step: "step_0" },
     registry_version: "test",
-    ui: { action_codes: ["ACTION_ONE", "ACTION_TWO"], expected_choice_count: 2 },
+    ui: {
+      action_codes: ["ACTION_ONE", "ACTION_TWO"],
+      expected_choice_count: 2,
+      actions: [
+        { id: "a1", label: "Alpha", action_code: "ACTION_ONE", intent: { type: "ROUTE", route: "__ROUTE__ONE__" } },
+        { id: "a2", label: "Beta", action_code: "ACTION_TWO", intent: { type: "ROUTE", route: "__ROUTE__TWO__" } },
+      ],
+    },
   });
 
   const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
@@ -233,7 +240,14 @@ test("renderChoiceButtons keeps both ROLE_MENU_REFINE choices", () => {
     specialist: { menu_id: "ROLE_MENU_REFINE" },
     state: { current_step: "role" },
     registry_version: "test",
-    ui: { action_codes: ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"], expected_choice_count: 2 },
+    ui: {
+      action_codes: ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"],
+      expected_choice_count: 2,
+      actions: [
+        { id: "a1", label: "I'm happy with this wording, continue to step 6 Entity.", action_code: "ACTION_ROLE_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__ROLE_REFINE_CONFIRM__" } },
+        { id: "a2", label: "I want to adjust it.", action_code: "ACTION_ROLE_REFINE_ADJUST", intent: { type: "ROUTE", route: "__ROUTE__ROLE_REFINE_ADJUST__" } },
+      ],
+    },
   });
 
   const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
@@ -324,6 +338,10 @@ test("render shows both Dream REFINE contract buttons when prompt/menu/action_co
           "ACTION_DREAM_REFINE_START_EXERCISE",
         ],
         expected_choice_count: 2,
+        actions: [
+          { id: "a1", label: "I'm happy with this wording, please continue to step 3 Purpose", action_code: "ACTION_DREAM_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__DREAM_REFINE_CONFIRM__" } },
+          { id: "a2", label: "Do a small exercise that helps to define your dream.", action_code: "ACTION_DREAM_REFINE_START_EXERCISE", intent: { type: "ROUTE", route: "__ROUTE__DREAM_START_EXERCISE__" } },
+        ],
       },
     },
   });

@@ -14,7 +14,6 @@ export const ValidationAndBusinessNameZodSchema = z.object({
   refined_formulation: z.string(),
   business_name: z.string(),
   step_0: z.string(),
-  menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -34,7 +33,6 @@ export const ValidationAndBusinessNameJsonSchema = {
     "question",
     "refined_formulation",
     "business_name",
-    "menu_id",
     "step_0",
     "wants_recap",
     "is_offtopic",
@@ -49,7 +47,6 @@ export const ValidationAndBusinessNameJsonSchema = {
     refined_formulation: { type: "string" },
     business_name: { type: "string" },
     step_0: { type: "string" },
-    menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -126,8 +123,7 @@ Schema (all fields required)
   "question": "string",
   "refined_formulation": "string",
   "business_name": "string",
-  "step_0": "string",
-  "menu_id": "string"
+  "step_0": "string"
 }
 
 - Step 0 does not use numbered menus.

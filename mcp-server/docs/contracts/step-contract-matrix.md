@@ -11,7 +11,8 @@ This document is the contract-first source of truth for step behavior in the Bus
 - Wording-choice decision rule is strict: show `user vs suggestion` whenever wording/content/order differs; only suppress when difference is spelling/surface-only with otherwise identical content.
 - Language must be resolved before specialist call and must remain stable unless explicit override exists.
 - Runtime is contract-only:
-- interactive turns must be `ASK` with `menu_id + action_codes`.
+- interactive turns must be `ASK` with `contract_id + action_codes`.
+- button labels come from contract menus (`MENU_LABELS` via `ui.actions`), never from prompt/question numbered lines.
 - `CONFIRM`, `confirmation_question`, and `proceed_to_*` are not valid runtime drivers.
 - Step transitions are actioncode-driven only.
 - Legacy sessions with old markers are blocked with `session_upgrade_required` and must restart.

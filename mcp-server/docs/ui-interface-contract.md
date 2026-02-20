@@ -68,6 +68,6 @@ Error (`ok: false`):
 
 - Widget mode uses ActionCodes as the canonical routing input.
 - Structured actions are the canonical render source (`ui.actions`).
-- `menu_id` must be present whenever buttons are rendered.
+- `ui.contract_id` must be present whenever buttons are rendered.
 - No legacy fallback routing in widget mode.
 - `registry_version` should be logged with menu/button interactions.

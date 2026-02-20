@@ -398,7 +398,11 @@ function syncDreamRuntimeMode(state: CanvasState): void {
     setDreamRuntimeMode(state, "builder_scoring");
     return;
   }
-  const menuId = String((last as any).menu_id || "").trim();
+  const phaseMap =
+    (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
+      ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
+      : {};
+  const menuId = parseMenuFromContractIdForStep(phaseMap[DREAM_STEP_ID], DREAM_STEP_ID);
   if (menuId === DREAM_EXPLAINER_REFINE_MENU_ID) {
     setDreamRuntimeMode(state, "builder_refine");
     return;
@@ -510,7 +514,9 @@ function hasEscapeLabelPhrase(input: string): boolean {
 
 function sanitizeEscapeInWidget(specialist: any): any {
   const safe = specialist && typeof specialist === "object" ? { ...specialist } : {};
-  const menuId = String(safe.menu_id || "").trim();
+  const contractId = String((safe as any).ui_contract_id || "").trim();
+  const contractStepId = contractId.split(":")[0] || "";
+  const menuId = parseMenuFromContractIdForStep(contractId, contractStepId);
   if (menuId === DREAM_EXPLAINER_ESCAPE_MENU_ID) return safe;
   const action = String(safe.action || "").trim().toUpperCase();
   const question = String(safe.question || "");
@@ -524,7 +530,6 @@ function sanitizeEscapeInWidget(specialist: any): any {
 
   safe.is_offtopic = true;
   safe.action = "ASK";
-  safe.menu_id = "";
   if (isWidgetSuppressedEscapeMenuId(menuId) || action === "ESCAPE" || hasEscapeLabelPhrase(question)) {
     safe.question = "";
   }
@@ -573,7 +578,7 @@ function validateRenderedContractTurn(
   const specialist = (rendered.specialist || {}) as Record<string, unknown>;
   const action = String(specialist.action || "").trim().toUpperCase();
   const contractId = String(rendered.contractId || specialist.ui_contract_id || "").trim();
-  const menuId = String(specialist.menu_id || "").trim();
+  const menuId = parseMenuFromContractIdForStep(contractId, stepId);
   const actionCodes = Array.isArray(rendered.uiActionCodes)
     ? rendered.uiActionCodes.map((code) => String(code || "").trim()).filter(Boolean)
     : [];
@@ -1086,7 +1091,9 @@ export function buildTextForWidget(params: {
   const promptOverride = String(params.questionTextOverride || "").trim();
   const prompt = promptOverride || promptFromSpecialist;
   let refined = String(specialist?.refined_formulation ?? "").trim();
-  const menuId = String(specialist?.menu_id || "").trim().toUpperCase();
+  const contractId = String((specialist as any)?.ui_contract_id || "").trim();
+  const contractStepId = contractId.split(":")[0] || "";
+  const menuId = parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
   if (msg) msg = stripChoiceInstructionNoise(msg);
   if (msg && prompt) msg = stripPromptEchoFromMessage(msg, prompt);
   if (refined) {
@@ -1275,42 +1282,34 @@ function countNumberedOptions(prompt: string): number {
   return count;
 }
 
-function extractNumberedLabels(prompt: string): string[] {
-  const lines = String(prompt || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const out: string[] = [];
-  for (const line of lines) {
-    const match = line.match(/^([1-9])[\)\.]\s+(.+)$/);
-    if (!match) continue;
-    const idx = Number(match[1]);
-    if (idx !== out.length + 1) break;
-    out.push(String(match[2] || "").trim());
+function labelsForMenuActionCodes(menuId: string, actionCodes: string[]): string[] {
+  const safeMenuId = String(menuId || "").trim();
+  const safeActionCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
+  if (!safeMenuId || safeActionCodes.length === 0) return [];
+  const fullActionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[safeMenuId])
+    ? ACTIONCODE_REGISTRY.menus[safeMenuId].map((code) => String(code || "").trim()).filter(Boolean)
+    : [];
+  const fullLabels = Array.isArray(MENU_LABELS[safeMenuId])
+    ? MENU_LABELS[safeMenuId].map((label) => String(label || "").trim())
+    : [];
+  if (fullActionCodes.length === 0 || fullActionCodes.length !== fullLabels.length) return [];
+  const usedIndices = new Set<number>();
+  const filteredLabels: string[] = [];
+  for (const actionCode of safeActionCodes) {
+    let matchedIndex = -1;
+    for (let i = 0; i < fullActionCodes.length; i += 1) {
+      if (usedIndices.has(i)) continue;
+      if (fullActionCodes[i] !== actionCode) continue;
+      matchedIndex = i;
+      break;
+    }
+    if (matchedIndex < 0) return [];
+    usedIndices.add(matchedIndex);
+    const label = String(fullLabels[matchedIndex] || "").trim();
+    if (!label) return [];
+    filteredLabels.push(label);
   }
-  return out;
-}
-
-function buildRenderedActions(actionCodes: string[], labels: string[]): RenderedAction[] {
-  const safeCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
-  return safeCodes.map((actionCode, idx) => {
-    const entry = ACTIONCODE_REGISTRY.actions[actionCode];
-    const label = String(labels[idx] || actionCode).trim() || actionCode;
-    const route = String(entry?.route || actionCode).trim();
-    return {
-      id: `${actionCode}:${idx + 1}`,
-      label,
-      action_code: actionCode,
-      intent: actionCodeToIntent({ actionCode, route }),
-      primary: idx === 0,
-    };
-  });
-}
-
-function buildNumberedPrompt(labels: string[], headline: string): string {
-  const numbered = labels.map((label, idx) => `${idx + 1}) ${label}`);
-  if (!numbered.length) return headline;
-  return `${numbered.join("\n")}\n\n${headline}`.trim();
+  return filteredLabels;
 }
 
 function stripNumberedOptions(prompt: string): string {
@@ -1322,33 +1321,25 @@ function stripNumberedOptions(prompt: string): string {
   return kept.join("\n").trim();
 }
 
-function buildQuestionTextFromActions(prompt: string, actions: RenderedAction[]): string {
-  if (!Array.isArray(actions) || actions.length === 0) return String(prompt || "").trim();
-  const labels = actions
-    .map((action) => String(action?.label || "").trim())
-    .filter(Boolean);
-  if (labels.length !== actions.length) return String(prompt || "").trim();
-  const headline = stripNumberedOptions(prompt) || "Please choose an option.";
-  return buildNumberedPrompt(labels, headline);
+function buildRenderedActionsFromMenu(menuId: string, actionCodes: string[]): RenderedAction[] {
+  const safeCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
+  const labels = labelsForMenuActionCodes(menuId, safeCodes);
+  if (!safeCodes.length || labels.length !== safeCodes.length) return [];
+  return safeCodes.map((actionCode, idx) => {
+    const entry = ACTIONCODE_REGISTRY.actions[actionCode];
+    const route = String(entry?.route || actionCode).trim();
+    return {
+      id: `${actionCode}:${idx + 1}`,
+      label: labels[idx],
+      action_code: actionCode,
+      intent: actionCodeToIntent({ actionCode, route }),
+      primary: idx === 0,
+    };
+  });
 }
 
-function hasValidMenuContract(menuIdRaw: string, questionRaw: string): boolean {
-  const menuId = String(menuIdRaw || "").trim();
-  if (!menuId || isWidgetSuppressedEscapeMenuId(menuId)) return false;
-  const expected = ACTIONCODE_REGISTRY.menus[menuId]?.length ?? 0;
-  if (expected <= 0) return false;
-  return countNumberedOptions(String(questionRaw || "")) === expected;
-}
-
-function sanitizeMenuContractPayload(payload: any): any {
-  if (!payload || typeof payload !== "object") return payload;
-  const menuId = String(payload.menu_id || "").trim();
-  const question = String(payload.question || "").trim();
-  if (hasValidMenuContract(menuId, question)) return payload;
-  return {
-    ...payload,
-    menu_id: "",
-  };
+function buildQuestionTextFromActions(prompt: string): string {
+  return stripNumberedOptions(prompt) || String(prompt || "").trim();
 }
 
 function hasMeaningfulDreamCandidateText(rawValue: unknown): boolean {
@@ -1423,44 +1414,27 @@ export function isWordingChoiceEligibleStep(stepId: string): boolean {
   return String(stepId || "").trim() !== STEP_0_ID;
 }
 
-function isDreamBuilderContext(
-  stepId: string,
-  activeSpecialist: string,
-  specialist?: Record<string, unknown> | null,
-  previousSpecialist?: Record<string, unknown> | null
-): boolean {
+function isDreamBuilderContext(stepId: string, dreamRuntimeModeRaw?: unknown): boolean {
   const step = String(stepId || "").trim().toLowerCase();
   if (step !== DREAM_STEP_ID) return false;
-  const specialistName = String(activeSpecialist || "").trim().toLowerCase();
-  if (specialistName === "dreamexplainer") return true;
-
-  const current = specialist && typeof specialist === "object" ? specialist : {};
-  const previous = previousSpecialist && typeof previousSpecialist === "object" ? previousSpecialist : {};
-  const currentMenu = String((current as any).menu_id || "").trim().toUpperCase();
-  const previousMenu = String((previous as any).menu_id || "").trim().toUpperCase();
-  const scoringFlag = String((current as any).scoring_phase || (previous as any).scoring_phase || "").trim();
-  const suggestDreamBuilder =
-    String((current as any).suggest_dreambuilder || (previous as any).suggest_dreambuilder || "").trim() === "true";
-  const hasStatements =
-    (Array.isArray((current as any).statements) && (current as any).statements.length > 0) ||
-    (Array.isArray((previous as any).statements) && (previous as any).statements.length > 0);
-
-  if (scoringFlag === "true") return true;
-  if (suggestDreamBuilder) return true;
-  if (hasStatements) return true;
-  if (currentMenu.startsWith("DREAM_EXPLAINER_MENU_")) return true;
-  if (previousMenu.startsWith("DREAM_EXPLAINER_MENU_")) return true;
-  return false;
+  return normalizeDreamRuntimeMode(dreamRuntimeModeRaw) !== "self";
 }
 
 export function isWordingChoiceEligibleContext(
   stepId: string,
   activeSpecialist: string,
   specialist?: Record<string, unknown> | null,
-  previousSpecialist?: Record<string, unknown> | null
+  previousSpecialist?: Record<string, unknown> | null,
+  dreamRuntimeModeRaw?: unknown
 ): boolean {
+  void activeSpecialist;
   if (!isWordingChoiceEligibleStep(stepId)) return false;
-  if (isDreamBuilderContext(stepId, activeSpecialist, specialist, previousSpecialist)) return false;
+  if (!isDreamBuilderContext(stepId, dreamRuntimeModeRaw)) return true;
+  const current = specialist && typeof specialist === "object" ? specialist : {};
+  const previous = previousSpecialist && typeof previousSpecialist === "object" ? previousSpecialist : {};
+  if (normalizeDreamRuntimeMode(dreamRuntimeModeRaw) === "builder_scoring") return false;
+  const scoringFlag = String((current as any).scoring_phase || (previous as any).scoring_phase || "").trim();
+  if (scoringFlag === "true") return false;
   return true;
 }
 
@@ -1551,8 +1525,9 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
     next.action = "ASK";
     next.message = "";
     next.question = step0QuestionForLang(langFromState(state));
-    next.menu_id = "";
   }
+  const currentContractId = String(next.ui_contract_id || "").trim();
+  const currentMenuId = parseMenuFromContractIdForStep(currentContractId, STEP_0_ID);
   const isOfftopic = next.is_offtopic === true || String(next.is_offtopic || "").trim().toLowerCase() === "true";
   const mustForceAskWithoutFinal =
     !hasStep0Final &&
@@ -1563,7 +1538,7 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
   if (mustForceAskWithoutFinal) {
     return normalizeStep0OfftopicToAsk(next, state, normalizedInput);
   }
-  if (hasStep0Final && action === "ASK" && !String(next.menu_id || "").trim()) {
+  if (hasStep0Final && action === "ASK" && !currentMenuId) {
     const parsed = parseStep0Final(String((state as any).step_0_final || ""), String((state as any).business_name || "TBD"));
     const statement =
       String(parsed.status || "").toLowerCase() === "existing"
@@ -1573,7 +1548,6 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
     next.question = `1) Yes, I'm ready. Let's start!\n\n${statement} Are you ready to start with the first step: the Dream?`;
     next.business_name = parsed.name || "TBD";
     next.step_0 = String((state as any).step_0_final || "");
-    next.menu_id = "STEP0_MENU_READY_START";
     next.wording_choice_pending = "false";
     next.wording_choice_selected = "";
     return next;
@@ -1581,14 +1555,13 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
   if (
     hasStep0Final &&
     String(next.action || "").trim() === "ASK" &&
-    String(next.menu_id || "").trim() === "STEP0_MENU_READY_START"
+    currentMenuId === "STEP0_MENU_READY_START"
   ) {
     return next;
   }
   if (String(next.action || "").trim() !== "ASK") return next;
   next.message = STEP0_CARDDESC_EN;
   next.question = step0QuestionForLang(langFromState(state));
-  next.menu_id = "";
   return next;
 }
 
@@ -1603,7 +1576,6 @@ export function normalizeStep0OfftopicToAsk(specialist: any, state: CanvasState,
     action: "ASK",
     message: hasMessage ? cleanedMessage : STEP0_CARDDESC_EN,
     question: step0QuestionForLang(langFromState(state)),
-    menu_id: "",
     wording_choice_pending: "false",
     wording_choice_selected: "",
     step_0: "",
@@ -2269,7 +2241,6 @@ function sanitizeBulletStepPolicySpecialist(
 function sanitizePreviousForBulletPolicy(previous: Record<string, unknown>): Record<string, unknown> {
   return {
     ...previous,
-    menu_id: "",
     question: "",
   };
 }
@@ -2611,9 +2582,19 @@ export function buildWordingChoiceFromTurn(params: {
   userTextRaw: string;
   isOfftopic: boolean;
   forcePending?: boolean;
+  dreamRuntimeModeRaw?: unknown;
 }): { specialist: any; wordingChoice: WordingChoiceUiPayload | null } {
-  const { stepId, activeSpecialist, previousSpecialist, specialistResult, userTextRaw, isOfftopic, forcePending } = params;
-  if (!isWordingChoiceEligibleContext(stepId, activeSpecialist, specialistResult, previousSpecialist)) {
+  const {
+    stepId,
+    activeSpecialist,
+    previousSpecialist,
+    specialistResult,
+    userTextRaw,
+    isOfftopic,
+    forcePending,
+    dreamRuntimeModeRaw,
+  } = params;
+  if (!isWordingChoiceEligibleContext(stepId, activeSpecialist, specialistResult, previousSpecialist, dreamRuntimeModeRaw)) {
     return {
       specialist: {
         ...specialistResult,
@@ -2633,12 +2614,7 @@ export function buildWordingChoiceFromTurn(params: {
   }
   const suggestionRaw = pickDualChoiceSuggestion(stepId, specialistResult, previousSpecialist, userRaw);
   if (!userRaw || !suggestionRaw) return { specialist: specialistResult, wordingChoice: null };
-  const dreamBuilderContext = isDreamBuilderContext(
-    stepId,
-    activeSpecialist,
-    specialistResult,
-    previousSpecialist
-  );
+  const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
   const mode: WordingChoiceMode =
     isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
   const normalizedUser = mode === "list" ? normalizeListUserInput(userRaw) : normalizeLightUserInput(userRaw);
@@ -2802,7 +2778,6 @@ function applyWordingPickSelection(params: {
       String(renderedSpecialist?.message || "")
     ),
     question: String(renderedSpecialist?.question || ""),
-    menu_id: String(renderedSpecialist?.menu_id || ""),
     wording_choice_pending: "false",
     wording_choice_selected: pickedUser ? "user" : "suggestion",
     ui_contract_id: String((renderedSpecialist as any)?.ui_contract_id || rendered.contractId || ""),
@@ -2829,7 +2804,8 @@ function buildWordingChoiceFromPendingSpecialist(
   specialist: any,
   activeSpecialist: string,
   previousSpecialist?: any,
-  stepIdHint = ""
+  stepIdHint = "",
+  dreamRuntimeModeRaw?: unknown
 ): WordingChoiceUiPayload | null {
   if (String(specialist?.wording_choice_pending || "") !== "true") return null;
   const stepId = String(stepIdHint || specialist?.wording_choice_target_field || "").trim();
@@ -2839,7 +2815,8 @@ function buildWordingChoiceFromPendingSpecialist(
       stepId,
       activeSpecialist,
       specialist,
-      previousSpecialist || {}
+      previousSpecialist || {},
+      dreamRuntimeModeRaw
     )
   ) {
     return null;
@@ -2941,9 +2918,7 @@ function parseMenuFromContractIdForStep(contractIdRaw: unknown, stepId: string):
   return menuId;
 }
 
-function inferCurrentMenuForStep(state: CanvasState, stepId: string, specialist: Record<string, unknown>): string {
-  const specialistMenu = String((specialist as any)?.menu_id || "").trim();
-  if (specialistMenu) return specialistMenu;
+function inferCurrentMenuForStep(state: CanvasState, stepId: string): string {
   const phaseMap =
     (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
       ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
@@ -3056,17 +3031,14 @@ function buildUiPayload(
   const localDev = shouldLogLocalDevDiagnostics();
   const flags = { ...(flagsOverride || {}) };
   const contractMeta = normalizeUiContractMeta(specialist, contractMetaOverride);
-  const featureFlags = migrationFlags || resolveMigrationFlags();
   const rawQuestionText = pickPrompt(specialist);
-  const labels = extractNumberedLabels(rawQuestionText);
-  const overrideActions =
-    Array.isArray(renderedActionsOverride) && renderedActionsOverride.length > 0
-      ? renderedActionsOverride
-      : [];
+  void renderedActionsOverride;
+  void migrationFlags;
   const effectiveState = (stateOverride && typeof stateOverride === "object" ? stateOverride : null) as
     | CanvasState
     | null;
   const effectiveStepId = String(stepIdOverride || (effectiveState as any)?.current_step || "").trim();
+  const contractMenuId = parseMenuFromContractIdForStep(contractMeta.contractId, effectiveStepId);
   const dreamRuntimeMode = String((effectiveState as any)?.__dream_runtime_mode || "").trim();
   const statementsCount = Array.isArray((specialist as any)?.statements)
     ? ((specialist as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
@@ -3090,12 +3062,12 @@ function buildUiPayload(
       dreamRuntimeMode === "builder_scoring")
   ) {
     viewMode = "dream_builder_scoring";
+  } else if (wordingPickPending) {
+    viewMode = "wording_choice";
   } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_refine") {
     viewMode = "dream_builder_refine";
   } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_collect") {
     viewMode = "dream_builder_collect";
-  } else if (wordingPickPending) {
-    viewMode = "wording_choice";
   }
   if (Array.isArray(actionCodesOverride)) {
     const safeOverrideCodes = sanitizeWidgetActionCodes(
@@ -3105,13 +3077,8 @@ function buildUiPayload(
       flags.escape_actioncodes_suppressed = true;
     }
     if (safeOverrideCodes.length > 0) {
-      const renderedActions =
-        overrideActions.length > 0
-          ? overrideActions
-          : featureFlags.structuredActionsV1 || featureFlags.intentsV1
-          ? buildRenderedActions(safeOverrideCodes, labels)
-          : [];
-      const questionText = buildQuestionTextFromActions(rawQuestionText, renderedActions);
+      const renderedActions = buildRenderedActionsFromMenu(contractMenuId, safeOverrideCodes);
+      const questionText = buildQuestionTextFromActions(rawQuestionText);
       return {
         action_codes: safeOverrideCodes,
         expected_choice_count: safeOverrideCodes.length,
@@ -3137,7 +3104,7 @@ function buildUiPayload(
     }
     return undefined;
   }
-  const menuId = String(specialist?.menu_id || "").trim();
+  const menuId = contractMenuId;
   if (menuId) {
     if (isWidgetSuppressedEscapeMenuId(menuId)) {
       if (localDev) flags.escape_menu_suppressed = true;
@@ -3173,13 +3140,8 @@ function buildUiPayload(
         }
         return undefined;
       }
-      const renderedActions =
-        overrideActions.length > 0
-          ? overrideActions
-          : featureFlags.structuredActionsV1 || featureFlags.intentsV1
-          ? buildRenderedActions(safeCodes, labels)
-          : [];
-      const questionText = buildQuestionTextFromActions(rawQuestionText, renderedActions);
+      const renderedActions = buildRenderedActionsFromMenu(menuId, safeCodes);
+      const questionText = buildQuestionTextFromActions(rawQuestionText);
       return {
         action_codes: safeCodes,
         expected_choice_count: safeCodes.length,
@@ -3205,6 +3167,39 @@ function buildUiPayload(
     };
   }
   return undefined;
+}
+
+function validateUiPayloadContractParity(response: Record<string, unknown>): string | null {
+  const ui =
+    response && typeof response.ui === "object" && response.ui
+      ? (response.ui as Record<string, unknown>)
+      : null;
+  if (!ui) return null;
+  const actionCodes = Array.isArray(ui.action_codes)
+    ? (ui.action_codes as unknown[]).map((code) => String(code || "").trim()).filter(Boolean)
+    : [];
+  if (actionCodes.length === 0) return null;
+  const expectedChoiceCount = typeof ui.expected_choice_count === "number" ? ui.expected_choice_count : actionCodes.length;
+  if (expectedChoiceCount !== actionCodes.length) return "ui_expected_choice_count_mismatch";
+  const stepId =
+    String(response.current_step_id || "") ||
+    String(((response.state as Record<string, unknown> | undefined) || {}).current_step || "");
+  const contractId = String(ui.contract_id || "").trim();
+  if (!stepId || !contractId) return "ui_contract_missing_step_or_contract_id";
+  const menuId = parseMenuFromContractIdForStep(contractId, stepId);
+  if (!menuId) return "ui_contract_missing_menu_id";
+  const expectedLabels = labelsForMenuActionCodes(menuId, actionCodes);
+  if (expectedLabels.length !== actionCodes.length) return "ui_contract_labels_or_actioncodes_mismatch";
+  const actions = Array.isArray(ui.actions) ? (ui.actions as Array<Record<string, unknown>>) : [];
+  if (actions.length !== actionCodes.length) return "ui_actions_count_mismatch";
+  for (let i = 0; i < actionCodes.length; i += 1) {
+    const action = actions[i] || {};
+    const actionCode = String(action.action_code || "").trim();
+    const label = String(action.label || "").trim();
+    if (actionCode !== actionCodes[i]) return `ui_actions_actioncode_mismatch_at_${i + 1}`;
+    if (label !== expectedLabels[i]) return `ui_actions_label_mismatch_at_${i + 1}`;
+  }
+  return null;
 }
 
 function attachRegistryPayload<T extends Record<string, unknown>>(
@@ -3827,7 +3822,6 @@ async function callSpecialistStrict(params: {
       message: "",
       question: "Test question",
       refined_formulation: "",
-      menu_id: "",
       wants_recap: false,
       is_offtopic: forceOfftopic,
     };
@@ -4268,8 +4262,7 @@ function hasUsableSpecialistForRetry(specialist: any): boolean {
   const prompt = pickPrompt(specialist);
   const message = String(specialist.message || "").trim();
   const refined = String(specialist.refined_formulation || "").trim();
-  const menuId = String(specialist.menu_id || "").trim();
-  return Boolean(prompt || message || refined || menuId);
+  return Boolean(prompt || message || refined);
 }
 
 function buildTransientFallbackSpecialist(state: CanvasState): Record<string, unknown> {
@@ -4284,7 +4277,6 @@ function buildTransientFallbackSpecialist(state: CanvasState): Record<string, un
       question: step0QuestionForLang(langFromState(state)),
       refined_formulation: "",
       business_name: String((state as any).business_name || "TBD"),
-      menu_id: "",
       step_0: "",
       wants_recap: false,
       is_offtopic: false,
@@ -4299,7 +4291,6 @@ function buildTransientFallbackSpecialist(state: CanvasState): Record<string, un
       message: "",
       question: "",
       refined_formulation: "",
-      menu_id: "",
       wants_recap: false,
       is_offtopic: false,
     },
@@ -4539,6 +4530,20 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   const rawLegacyMarkers = detectLegacySessionMarkers((args.state ?? {}) as Record<string, unknown>);
   let state = normalizeState(args.state ?? {});
+  const incomingPhaseRaw =
+    rawState && typeof (rawState as any).__ui_phase_by_step === "object" && (rawState as any).__ui_phase_by_step !== null
+      ? ((rawState as any).__ui_phase_by_step as Record<string, unknown>)
+      : null;
+  if (incomingPhaseRaw) {
+    const phaseByStep = Object.fromEntries(
+      Object.entries(incomingPhaseRaw)
+        .map(([stepId, contractId]) => [String(stepId || "").trim(), String(contractId || "").trim()])
+        .filter(([stepId, contractId]) => stepId && contractId)
+    );
+    if (Object.keys(phaseByStep).length > 0) {
+      (state as any).__ui_phase_by_step = phaseByStep;
+    }
+  }
   const incomingSessionId = String((rawState as any).__session_id || "").trim();
   const incomingSessionStartedAt = String((rawState as any).__session_started_at || "").trim();
   const incomingSessionLogFile = String((rawState as any).__session_log_file || "").trim();
@@ -4674,6 +4679,23 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         delete (responseStateForCleanup as any).__last_clicked_action_for_contract;
       }
     }
+    if ((response as any)?.ok === true) {
+      const uiViolation = validateUiPayloadContractParity((response || {}) as Record<string, unknown>);
+      if (uiViolation) {
+        const failed = {
+          ...(response as unknown as Record<string, unknown>),
+          ok: false,
+          error: {
+            type: "contract_violation",
+            message: "UI payload violates actioncode/menu contract.",
+            reason: uiViolation,
+            step: String((response as any)?.current_step_id || ""),
+            contract_id: String(((response as any)?.ui || {}).contract_id || ""),
+          },
+        };
+        return failed as unknown as T;
+      }
+    }
     if (!tokenLoggingEnabled) return response;
     try {
       const responseState = (response as any)?.state as CanvasState | undefined;
@@ -4740,24 +4762,20 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
 
   if (actionCodeRaw) {
-    const menuId = String(lastSpecialistResult?.menu_id || "").trim();
+    const sourceStep = String(state.current_step || "").trim();
+    const menuId = inferCurrentMenuForStep(state, sourceStep);
     if (menuId) {
       const expectedCount = ACTIONCODE_REGISTRY.menus[menuId]?.length;
       console.log("[actioncode_click]", {
         registry_version: ACTIONCODE_REGISTRY.version,
-        menu_id: menuId,
-        step: String(state.current_step || ""),
+        contract_id: String(((state as any).__ui_phase_by_step || {})[sourceStep] || ""),
+        step: sourceStep,
         expected_count: expectedCount,
         action_code: actionCodeRaw,
         input_mode: inputMode,
       });
     }
-    const sourceStep = String(state.current_step || "").trim();
-    const sourceMenu = inferCurrentMenuForStep(
-      state,
-      sourceStep,
-      (lastSpecialistResult || {}) as Record<string, unknown>
-    );
+    const sourceMenu = inferCurrentMenuForStep(state, sourceStep);
     clickedActionCodeForNoRepeat = String(actionCodeRaw || "").trim().toUpperCase();
     clickedLabelForNoRepeat = labelForActionInMenu(sourceMenu, clickedActionCodeForNoRepeat);
     (state as any).__last_clicked_action_for_contract = clickedActionCodeForNoRepeat;
@@ -4843,7 +4861,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       question,
       refined_formulation: "",
       bigwhy: "",
-      menu_id: "",
       wants_recap: false,
       is_offtopic: false,
     };
@@ -4913,7 +4930,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         stepId,
         String((state as any).active_specialist || ""),
         prev,
-        prev
+        prev,
+        getDreamRuntimeMode(state)
       )
     ) {
       const pendingSpecialist = { ...prev };
@@ -4921,7 +4939,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         pendingSpecialist,
         String((state as any).active_specialist || ""),
         prev,
-        stepId
+        stepId,
+        getDreamRuntimeMode(state)
       );
       const stateWithUi = await ensureUiStrings(state, userMessage);
       return finalizeResponse(attachRegistryPayload({
@@ -4942,7 +4961,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         stepId,
         String((state as any).active_specialist || ""),
         prev,
-        prev
+        prev,
+        getDreamRuntimeMode(state)
       )
     ) {
       (state as any).last_specialist_result = {
@@ -4952,11 +4972,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       };
     }
     const finalInfo = requireFinalValue(stepId, prev, state);
-    const sourceMenuForTransition = inferCurrentMenuForStep(
-      state,
-      stepId,
-      (prev || {}) as Record<string, unknown>
-    );
+    const sourceMenuForTransition = inferCurrentMenuForStep(state, stepId);
     const resolvedTransition = resolveActionCodeTransition(
       actionCodeRaw,
       stepId,
@@ -5005,11 +5021,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const actionCodeInput = userMessage;
     const safeActionCodeInput = String(actionCodeInput || "").trim().toUpperCase();
     const currentStepForMenuTransition = String(state.current_step || "").trim();
-    const sourceMenuForTransition = inferCurrentMenuForStep(
-      state,
-      currentStepForMenuTransition,
-      (lastSpecialistResult || {}) as Record<string, unknown>
-    );
+    const sourceMenuForTransition = inferCurrentMenuForStep(state, currentStepForMenuTransition);
     const transitionSpec = NEXT_MENU_BY_ACTIONCODE[safeActionCodeInput];
     const resolvedTransition = resolveActionCodeTransition(
       safeActionCodeInput,
@@ -5098,7 +5110,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       String(state.current_step || ""),
       String((state as any).active_specialist || ""),
       pendingBeforeTurn,
-      pendingBeforeTurn
+      pendingBeforeTurn,
+      getDreamRuntimeMode(state)
     ) &&
     !isWordingPickRouteToken(userMessage) &&
     (!isGeneralOfftopicInput || shouldKeepPendingOnOfftopic)
@@ -5111,7 +5124,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       pendingSpecialist,
       String((state as any).active_specialist || ""),
       pendingBeforeTurn,
-      String(state.current_step || "")
+      String(state.current_step || ""),
+      getDreamRuntimeMode(state)
     );
     const stateWithUi = await ensureUiStrings(state, userMessage);
     console.log("[wording_choice_pending_blocked]", {
@@ -5247,7 +5261,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         question: "",
         refined_formulation: "",
         presentation_brief: "",
-        menu_id: "",
         wants_recap: false,
         is_offtopic: false,
       };
@@ -5284,7 +5297,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         question: "",
         refined_formulation: "",
         presentation_brief: "",
-        menu_id: "",
         wants_recap: false,
         is_offtopic: false,
       };
@@ -5472,7 +5484,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         question: "",
         refined_formulation: "",
         dream: "",
-        menu_id: "DREAM_MENU_INTRO",
         suggest_dreambuilder: "false",
         wants_recap: false,
         is_offtopic: false,
@@ -5636,7 +5647,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         question: startHint,
         refined_formulation: "",
         business_name: (state as any).business_name || "TBD",
-        menu_id: "",
         step_0: "",
         wants_recap: false,
         is_offtopic: false,
@@ -5704,7 +5714,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         question: `1) Yes, I'm ready. Let's start!\n\n${statement}${confirmReady}`,
         refined_formulation: "",
         business_name: name || "TBD",
-        menu_id: "STEP0_MENU_READY_START",
         step_0: step0Final,
         wants_recap: false,
         is_offtopic: false,
@@ -5740,7 +5749,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       question: step0QuestionForLang(langFromState(state)),
       refined_formulation: "",
       business_name: (state as any).business_name || "TBD",
-      menu_id: "",
       step_0: "",
       wants_recap: false,
       is_offtopic: false,
@@ -5803,7 +5811,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       (callDreamExplainer.value.specialistResult.clusters as unknown[]).length > 0;
     if (dreamScoringPhase && dreamHasClusters) {
       setDreamRuntimeMode(nextStateDream, "builder_scoring");
-    } else if (String(callDreamExplainer.value.specialistResult?.menu_id || "").trim() === DREAM_EXPLAINER_REFINE_MENU_ID) {
+    } else if (getDreamRuntimeMode(state) === "builder_scoring" && !dreamScoringPhase) {
       setDreamRuntimeMode(nextStateDream, "builder_refine");
     } else {
       setDreamRuntimeMode(nextStateDream, "builder_collect");
@@ -6031,7 +6039,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         (specialistResult.clusters as unknown[]).length > 0;
       if (scoringPhase && hasClusters) {
         setDreamRuntimeMode(nextState, "builder_scoring");
-      } else if (String(specialistResult?.menu_id || "").trim() === DREAM_EXPLAINER_REFINE_MENU_ID) {
+      } else if (getDreamRuntimeMode(state) === "builder_scoring" && !scoringPhase) {
         setDreamRuntimeMode(nextState, "builder_refine");
       } else {
         setDreamRuntimeMode(nextState, "builder_collect");
@@ -6123,7 +6131,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     specialistResult = {
       ...specialistResult,
       action: "ASK",
-      menu_id: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
       suggest_dreambuilder: "true",
       message: cleanMessage ? `${cleanMessage}\n\n${backToExerciseLine}` : backToExerciseLine,
       statements:
@@ -6180,20 +6187,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const currentStepForWordingChoice = String((nextState as any).current_step || "");
   const currentSpecialistForWordingChoice = String((nextState as any).active_specialist || "");
   const previousSpecialistForWordingChoice = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-  const dreamBuilderContextForWording = isDreamBuilderContext(
-    currentStepForWordingChoice,
-    currentSpecialistForWordingChoice,
-    (specialistResult || {}) as Record<string, unknown>,
-    previousSpecialistForWordingChoice
-  );
-  if (dreamBuilderContextForWording) {
-    specialistResult = {
-      ...specialistResult,
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-    };
-    (nextState as any).last_specialist_result = specialistResult;
-  }
+  const dreamRuntimeModeForWording = getDreamRuntimeMode(nextState);
   const isCurrentTurnOfftopic =
     specialistResult?.is_offtopic === true ||
     String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
@@ -6201,7 +6195,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     currentStepForWordingChoice,
     currentSpecialistForWordingChoice,
     (specialistResult || {}) as Record<string, unknown>,
-    ((state as any).last_specialist_result || {}) as Record<string, unknown>
+    ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+    dreamRuntimeModeForWording
   );
   const userTextForWordingChoice = (() => {
     const submitted = String(submittedUserText || "").trim();
@@ -6226,6 +6221,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       specialistResult,
       userTextRaw: userTextForWordingChoice,
       isOfftopic: false,
+      dreamRuntimeModeRaw: dreamRuntimeModeForWording,
     });
     specialistResult = rebuilt.specialist;
   }
@@ -6235,14 +6231,16 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       String((nextState as any).current_step || ""),
       String((nextState as any).active_specialist || ""),
       (specialistResult || {}) as Record<string, unknown>,
-      previousSpecialistForWordingChoice
+      previousSpecialistForWordingChoice,
+      dreamRuntimeModeForWording
     );
     const pendingChoice = pendingEligible
       ? buildWordingChoiceFromPendingSpecialist(
           specialistResult,
           String((nextState as any).active_specialist || ""),
           previousSpecialistForWordingChoice,
-          String((nextState as any).current_step || "")
+          String((nextState as any).current_step || ""),
+          dreamRuntimeModeForWording
         )
       : null;
     if (pendingChoice) {

@@ -21,7 +21,6 @@ export const DreamExplainerZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   dream: z.string(),
-  menu_id: z.string().optional().default(""),
   suggest_dreambuilder: z.enum(["true", "false"]),
   statements: z.array(z.string()),
   user_state: z.enum(["ok", "stuck"]),
@@ -46,7 +45,6 @@ export const DreamExplainerJsonSchema = {
     "refined_formulation",
     "dream",
     "suggest_dreambuilder",
-    "menu_id",
     "statements",
     "user_state",
     "wants_recap",
@@ -60,7 +58,6 @@ export const DreamExplainerJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     dream: { type: "string" },
-    menu_id: { type: "string" },
     suggest_dreambuilder: { type: "string", enum: ["true", "false"] },
     statements: { type: "array", items: { type: "string" } },
     user_state: { type: "string", enum: ["ok", "stuck"] },
@@ -190,6 +187,9 @@ Strict JSON output rules
 - suggest_dreambuilder controls routing:
   - While the exercise is running, suggest_dreambuilder MUST be "true".
   - When you intentionally exit the exercise, set suggest_dreambuilder to "false".
+- Menu and button control are runtime contract-driven.
+  - Never output fixed numbered option lines to steer navigation.
+  - Use message/question for content only.
 
 Output schema fields (must always be present)
 - action: "INTRO" | "ASK" | "REFINE"  | "ESCAPE"

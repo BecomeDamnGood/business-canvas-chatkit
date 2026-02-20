@@ -13,7 +13,6 @@ export const TargetGroupZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   targetgroup: z.string(),
-  menu_id: z.string().optional().default(""),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
 });
@@ -32,7 +31,6 @@ export const TargetGroupJsonSchema = {
     "question",
     "refined_formulation",
     "targetgroup",
-    "menu_id",
     "wants_recap",
     "is_offtopic",
   ],
@@ -42,7 +40,6 @@ export const TargetGroupJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     targetgroup: { type: "string" },
-    menu_id: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
   },
@@ -118,7 +115,6 @@ All fields are required. If not applicable, return an empty string "".
   "question": "string",
   "refined_formulation": "string",
   "targetgroup": "string",
-  "menu_id": "string",
   "wants_recap": boolean
 }
 
