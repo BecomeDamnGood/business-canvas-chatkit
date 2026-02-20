@@ -218,7 +218,10 @@ When saving productsservices_final (action="ASK"), enforce:
 
 11) OFF-TOPIC HANDLING
 
-- If the user asks something clearly unrelated to Products and Services, use action="ESCAPE" and ask one short question to continue with Products and Services.
+- If the user asks something clearly unrelated to Products and Services, use action="ESCAPE" and output message in Step-0 tone:
+  Sentence 1: short, friendly, empathetic, non-judgmental boundary.
+  Sentence 2 (optional): include only for clearly off-topic/nonsense input.
+  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "your future company".
 - Do not reset to another step. Stay in Products and Services.
 
 END OF INSTRUCTIONS`;

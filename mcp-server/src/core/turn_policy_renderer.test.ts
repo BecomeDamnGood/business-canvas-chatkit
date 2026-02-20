@@ -285,7 +285,7 @@ test("dream: staged provisional value is treated as valid output before explicit
     state,
     specialist: {
       action: "ASK",
-      message: "A quick detour answer.",
+      message: "A side note answer.",
       question: "What is the next question?",
       menu_id: "DREAM_MENU_WHY",
       is_offtopic: true,
@@ -767,7 +767,7 @@ test("off-topic keeps committed context and valid-output contract menu across st
       specialist: {
         action: "ASK",
         is_offtopic: true,
-        message: "A quick detour. Back to your business step now.",
+        message: "Side note taken. Returning to your business step.",
         question: "",
         menu_id: "",
       },
@@ -840,7 +840,7 @@ test("rules sidepath menu has label parity and keeps button visible", () => {
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 1);
 });
 
-test("purpose examples sidepath keeps both options (no silent drop)", () => {
+test("purpose valid-output sidepath ignores examples phase and uses refine contract menu", () => {
   const state = getDefaultState();
   (state as any).current_step = "purpose";
   (state as any).business_name = "Mindd";
@@ -857,10 +857,10 @@ test("purpose examples sidepath keeps both options (no silent drop)", () => {
       refined_formulation: "Mindd exists to foster purpose-driven companies.",
     },
   });
-  assert.equal(renderedMenuId(rendered), "PURPOSE_MENU_EXAMPLES");
+  assert.equal(renderedMenuId(rendered), "PURPOSE_MENU_REFINE");
   assert.deepEqual(rendered.uiActionCodes, [
-    "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS",
-    "ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME",
+    "ACTION_PURPOSE_REFINE_CONFIRM",
+    "ACTION_PURPOSE_REFINE_ADJUST",
   ]);
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 2);
 });
@@ -888,7 +888,7 @@ test("purpose no-output intro shows explain-more and ask-3-questions actions", (
   ]);
 });
 
-test("role ask sidepath keeps its single option", () => {
+test("role valid-output sidepath ignores ask phase and uses refine contract menu", () => {
   const state = getDefaultState();
   (state as any).current_step = "role";
   (state as any).business_name = "Mindd";
@@ -905,9 +905,12 @@ test("role ask sidepath keeps its single option", () => {
       refined_formulation: "Mindd sets standards for purpose-driven business.",
     },
   });
-  assert.equal(renderedMenuId(rendered), "ROLE_MENU_ASK");
-  assert.deepEqual(rendered.uiActionCodes, ["ACTION_ROLE_ASK_GIVE_EXAMPLES"]);
-  assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 1);
+  assert.equal(renderedMenuId(rendered), "ROLE_MENU_REFINE");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_ROLE_REFINE_CONFIRM",
+    "ACTION_ROLE_REFINE_ADJUST",
+  ]);
+  assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), 2);
 });
 
 test("all non-escape menus keep parity and confirm-filter contract in both eligibility states", () => {
@@ -968,7 +971,18 @@ test("all non-escape menus keep parity and confirm-filter contract in both eligi
       true,
       `${menuId} should be confirm-eligible when final value is present`
     );
-    const expectedMenuActions = menuActions;
+    const expectedMenuId =
+      stepId !== "step_0"
+        ? String(DEFAULT_MENU_BY_STATUS[stepId]?.valid_output || "")
+        : menuId;
+    const expectedMenuActions = Array.isArray(ACTIONCODE_REGISTRY.menus[expectedMenuId])
+      ? ACTIONCODE_REGISTRY.menus[expectedMenuId]
+      : menuActions;
+    assert.equal(
+      renderedMenuId(confirmRendered),
+      expectedMenuId,
+      `${menuId} confirm context must resolve to expected contract menu`
+    );
     assert.deepEqual(
       confirmRendered.uiActionCodes,
       expectedMenuActions,

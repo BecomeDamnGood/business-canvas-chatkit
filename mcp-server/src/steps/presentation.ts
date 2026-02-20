@@ -253,9 +253,10 @@ Trigger:
 
 Output:
 - action="ESCAPE"
-- message: exactly 2 sentences (localized).
-  Sentence 1: brief acknowledgement.
-  Sentence 2: boundary + redirect: this step is only final review and approval.
+- message (localized): Step-0 tone structure.
+  Sentence 1: short, friendly, empathetic, non-judgmental boundary.
+  Sentence 2 (optional): include only for clearly off-topic/nonsense input.
+  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "your future company".
 
 
 [blank line]

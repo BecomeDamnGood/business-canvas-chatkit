@@ -82,7 +82,7 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   ACTION_DREAM_EXPLAINER_REFINE_ADJUST: {
     step_id: "dream",
     from_menu_ids: ["DREAM_EXPLAINER_MENU_REFINE"],
-    to_menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+    to_menu_id: "DREAM_EXPLAINER_MENU_REFINE",
   },
   ACTION_PURPOSE_INTRO_EXPLAIN_MORE: {
     step_id: "purpose",

@@ -269,8 +269,10 @@ Trigger:
 
 Output:
 - action="ASK"
-- message (localized): exactly 2 sentences.
-  Sentence 1: brief acknowledgement of the request (no judgement).
+- message (localized): Step-0 tone structure.
+  Sentence 1: short, friendly, empathetic, non-judgmental boundary. Light humor as a small wink is allowed.
+  Sentence 2 (optional): include only for clearly off-topic/nonsense input; keep the same tone.
+  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "your future company".
 - question (localized, exact lines and layout):
 
 

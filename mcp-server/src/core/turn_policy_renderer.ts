@@ -45,6 +45,19 @@ const STEP_LABELS: Record<string, string> = {
   presentation: "Presentation",
 };
 
+const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
+  dream: "offtopic.step.dream",
+  purpose: "offtopic.step.purpose",
+  bigwhy: "offtopic.step.bigwhy",
+  role: "offtopic.step.role",
+  entity: "offtopic.step.entity",
+  strategy: "offtopic.step.strategy",
+  targetgroup: "offtopic.step.targetgroup",
+  productsservices: "offtopic.step.productsservices",
+  rulesofthegame: "offtopic.step.rulesofthegame",
+  presentation: "offtopic.step.presentation",
+};
+
 const STEP0_NO_OUTPUT_PROMPT_EN =
   "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?";
 const STEP0_CARDDESC_EN = "Just to set the context, we'll start with the basics.";
@@ -179,6 +192,64 @@ function companyNameForPrompt(state: CanvasState): string {
   const raw = String((state as any).business_name ?? "").trim();
   if (!raw || raw === "TBD") return "<your future company>";
   return raw;
+}
+
+function uiStringFromState(state: CanvasState, key: string, fallback: string): string {
+  const map = (state as any)?.ui_strings;
+  if (map && typeof map === "object") {
+    const candidate = String((map as Record<string, unknown>)[key] ?? "").trim();
+    if (candidate) return candidate;
+  }
+  return fallback;
+}
+
+function formatIndexedTemplate(templateRaw: string, values: string[]): string {
+  return String(templateRaw || "").replace(/\{(\d+)\}/g, (_match, rawIdx: string) => {
+    const idx = Number(rawIdx);
+    return Number.isInteger(idx) && idx >= 0 && idx < values.length ? String(values[idx] || "") : "";
+  });
+}
+
+function ensureSentenceEnd(raw: string): string {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+function offTopicStepLabel(stepId: string, state: CanvasState): string {
+  const key = OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP[stepId] || "";
+  if (!key) return STEP_LABELS[stepId] || "Current step";
+  return uiStringFromState(state, key, STEP_LABELS[stepId] || "Current step");
+}
+
+function offTopicCompanyName(state: CanvasState): string {
+  const fromState = String((state as any).business_name || "").trim();
+  if (fromState && fromState !== "TBD") return fromState;
+  const step0Final = String((state as any).step_0_final || "").trim();
+  if (step0Final) {
+    const parsed = parseStep0Line(step0Final);
+    const parsedName = String(parsed?.name || "").trim();
+    if (parsedName && parsedName !== "TBD") return parsedName;
+  }
+  return uiStringFromState(state, "offtopic.companyFallback", "your future company");
+}
+
+function offTopicCurrentContextHeading(stepId: string, state: CanvasState): string {
+  const template = uiStringFromState(state, "offtopic.current.template", "The current {0} of {1} is.");
+  return ensureSentenceEnd(
+    formatIndexedTemplate(template, [
+      offTopicStepLabel(stepId, state),
+      offTopicCompanyName(state),
+    ]).trim()
+  );
+}
+
+function comparableText(raw: string): string {
+  return String(raw || "")
+    .replace(/<[^>]*>/g, " ")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function englishIndefiniteArticle(nounPhrase: string): "a" | "an" {
@@ -454,12 +525,13 @@ function resolveMenuContract(params: {
   const defaultMenu = defaults ? String(defaults[status] || "").trim() : "";
   const isOfftopic = specialist.is_offtopic === true;
   const ignorePhaseForOfftopicNoOutput = isOfftopic && status === "no_output";
+  const forceDefaultMenuForValidOutput = stepId !== "step_0" && status === "valid_output";
   const phaseMap = (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
     ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
     : {};
   const specialistPhaseMenu = parseMenuFromContractId((specialist as any).ui_contract_id, stepId);
   const previousPhaseMenu = parseMenuFromContractId((prev as any).ui_contract_id, stepId);
-  const phaseMenu = ignorePhaseForOfftopicNoOutput
+  const phaseMenu = (ignorePhaseForOfftopicNoOutput || forceDefaultMenuForValidOutput)
     ? ""
     : parseMenuFromContractId(phaseMap[stepId], stepId) || specialistPhaseMenu || previousPhaseMenu;
   const menuIsValidForStep = (menuRaw: string): boolean => {
@@ -542,6 +614,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     String((specialistForDisplay as any).message ?? "").trim() ||
     String((specialistForDisplay as any).refined_formulation ?? "").trim();
   const recapText = String(recapBody || "").trim();
+  const offTopicContextHeading =
+    isOfftopic && stepId !== "step_0" ? offTopicCurrentContextHeading(stepId, state) : "";
+  const recapBlock =
+    offTopicContextHeading && recapText
+      ? `<strong>${offTopicContextHeading}</strong>\n${recapText}`
+      : recapText;
   const message = (() => {
     if (
       isOfftopic &&
@@ -549,13 +627,17 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       effectiveStatus !== "no_output" &&
       recapText
     ) {
-      if (!answerText) return recapText;
-      const answerKey = answerText.toLowerCase().replace(/\s+/g, " ").trim();
-      const recapKey = recapText.toLowerCase().replace(/\s+/g, " ").trim();
-      if (recapKey && answerKey.includes(recapKey)) return answerText;
-      return `${answerText}\n\n${recapText}`.trim();
+      if (!answerText) return recapBlock;
+      const answerKey = comparableText(answerText);
+      const recapKey = comparableText(recapText);
+      const headingKey = comparableText(offTopicContextHeading);
+      if (recapKey && answerKey.includes(recapKey)) {
+        if (!headingKey || answerKey.includes(headingKey)) return answerText;
+        return `${answerText}\n\n<strong>${offTopicContextHeading}</strong>`.trim();
+      }
+      return `${answerText}\n\n${recapBlock}`.trim();
     }
-    return answerText || (effectiveStatus === "valid_output" ? recapText : "");
+    return answerText || (effectiveStatus === "valid_output" ? recapBlock : "");
   })();
 
   if (stepId === "step_0") {

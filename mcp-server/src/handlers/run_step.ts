@@ -155,6 +155,7 @@ import { MENU_LABELS } from "../core/menu_contract.js";
 import { renderFreeTextTurnPolicy, type TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
 import {
   NEXT_MENU_BY_ACTIONCODE,
+  DEFAULT_MENU_BY_STATUS,
   UI_CONTRACT_VERSION,
   buildContractId,
 } from "../core/ui_contract_matrix.js";
@@ -245,6 +246,19 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   scoringFilled: "N/M",
   scoringAvg: "Average: X",
   purposeInstructionHint: "Answer the question, formulate your own Purpose, or choose an option",
+  "offtopic.redirect.template": "Let's continue with the {0} of {1}.",
+  "offtopic.current.template": "The current {0} of {1} is.",
+  "offtopic.companyFallback": "your future company",
+  "offtopic.step.dream": "Dream",
+  "offtopic.step.purpose": "Purpose",
+  "offtopic.step.bigwhy": "Big Why",
+  "offtopic.step.role": "Role",
+  "offtopic.step.entity": "Entity",
+  "offtopic.step.strategy": "Strategy",
+  "offtopic.step.targetgroup": "Target Group",
+  "offtopic.step.productsservices": "Products and Services",
+  "offtopic.step.rulesofthegame": "Rules of the game",
+  "offtopic.step.presentation": "Presentation",
   "sectionTitle.dream": "Your Dream",
   "sectionTitle.purposeOf": "The Purpose of {0}",
   "sectionTitle.purposeOfFuture": "The Purpose of your future company",
@@ -266,6 +280,7 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
 };
 
 const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_DEFAULT);
+const UI_STRINGS_SCHEMA_VERSION = "2026-02-20-offtopic-v6";
 const UiStringsZodSchema = z.object(
   UI_STRINGS_KEYS.reduce<Record<string, z.ZodString>>((acc, k) => {
     acc[k] = z.string();
@@ -344,6 +359,8 @@ const DREAM_START_EXERCISE_ACTION_CODES = new Set<string>([
   "ACTION_DREAM_SUGGESTIONS_START_EXERCISE",
   "ACTION_DREAM_REFINE_START_EXERCISE",
 ]);
+const DREAM_PICK_ONE_ROUTE_TOKEN = "__ROUTE__DREAM_PICK_ONE__";
+const DREAM_FORCE_REFINE_ROUTE_PREFIX = "__ROUTE__DREAM_FORCE_REFINE__";
 const WIDGET_ESCAPE_LABEL_PATTERNS: RegExp[] = [
   /\bfinish\s+later\b/i,
   /\bcontinue\b[^\n\r]{0,80}\bnow\b/i,
@@ -613,12 +630,15 @@ function validateRenderedContractTurn(
   }
   if (state) {
     const clickedLabel = String((state as any).__last_clicked_label_for_contract || "").trim();
+    const clickedActionCode = String((state as any).__last_clicked_action_for_contract || "").trim().toUpperCase();
     if (clickedLabel) {
       const clickedKey = clickedLabel.toLowerCase();
       const nextLabels = uiActions
         .map((action) => String((action as any)?.label || "").trim().toLowerCase())
         .filter(Boolean);
-      if (nextLabels.includes(clickedKey)) {
+      const allowRepeatedLabel =
+        clickedActionCode === "ACTION_DREAM_EXPLAINER_REFINE_ADJUST";
+      if (!allowRepeatedLabel && nextLabels.includes(clickedKey)) {
         return "repeated_clicked_label_after_transition";
       }
     }
@@ -628,6 +648,22 @@ function validateRenderedContractTurn(
     if (allowed.size === 0) return "menu_has_no_registry_actions";
     for (const code of actionCodes) {
       if (!allowed.has(code)) return `action_code_not_in_menu:${code}`;
+    }
+  }
+
+  if (stepId !== STEP_0_ID && rendered.status === "valid_output") {
+    if (state && inferUiRenderModeForStep(state, stepId) === "no_buttons") {
+      return null;
+    }
+    const inDreamBuilderMode =
+      stepId === DREAM_STEP_ID &&
+      state &&
+      getDreamRuntimeMode(state) !== "self";
+    if (!inDreamBuilderMode) {
+      const expectedMenuId = String(DEFAULT_MENU_BY_STATUS[stepId]?.valid_output || "").trim();
+      if (expectedMenuId && menuId !== expectedMenuId) {
+        return `invalid_valid_output_menu:${menuId || "NO_MENU"}_expected:${expectedMenuId}`;
+      }
     }
   }
 
@@ -651,6 +687,9 @@ function validateRenderedContractTurn(
     const hasConfirm = actionCodes.some((code) => isConfirmActionCode(code));
     if (!hasConfirm) return "missing_confirm_action_for_valid_output";
   }
+
+  const offTopicShapeViolation = validateNonStep0OfftopicMessageShape(stepId, specialist, state);
+  if (offTopicShapeViolation) return offTopicShapeViolation;
 
   return null;
 }
@@ -1179,27 +1218,39 @@ function stripChoiceInstructionNoise(value: string): string {
     /\s*choose\s+an?\s+option\s+by\s+typing\s+\d+(?:\s*(?:or|\/|,|and)\s*\d+)*(?:,\s*or\s*write\s+your\s+own\s+statement)?\.?/gi,
   ];
   const lines = String(value || "").replace(/\r/g, "\n").split("\n");
-  const kept = lines
-    .map((line) => {
-      const normalized = String(line || "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/[*_`~]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-      if (!normalized) return "";
-      if (fullLineChoicePatterns.some((pattern) => pattern.test(normalized))) return "";
-      if (/\bor\s+choose\s+an?\s+option(s)?(\s+below)?\.?$/i.test(normalized)) return "";
-      if (/\bor\s+choose\s+one\s+of\s+the\s+options(\s+below)?\.?$/i.test(normalized)) return "";
-      let candidate = String(line || "");
-      for (const pattern of inlineNoisePatterns) {
-        candidate = candidate.replace(pattern, "");
-      }
-      return candidate
-        .replace(/\s{2,}/g, " ")
-        .replace(/\s+([,.!?;:])/g, "$1")
-        .trim();
-    })
-    .filter(Boolean);
+  const transformed = lines.map((line) => {
+    const normalized = String(line || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[*_`~]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!normalized) return "";
+    if (fullLineChoicePatterns.some((pattern) => pattern.test(normalized))) return null;
+    if (/\bor\s+choose\s+an?\s+option(s)?(\s+below)?\.?$/i.test(normalized)) return null;
+    if (/\bor\s+choose\s+one\s+of\s+the\s+options(\s+below)?\.?$/i.test(normalized)) return null;
+    let candidate = String(line || "");
+    for (const pattern of inlineNoisePatterns) {
+      candidate = candidate.replace(pattern, "");
+    }
+    return candidate
+      .replace(/\s{2,}/g, " ")
+      .replace(/\s+([,.!?;:])/g, "$1")
+      .trim();
+  });
+  const kept: string[] = [];
+  for (const line of transformed) {
+    if (line === null) continue;
+    const trimmed = String(line || "").trim();
+    if (!trimmed) {
+      if (kept.length === 0) continue;
+      if (kept[kept.length - 1] === "") continue;
+      kept.push("");
+      continue;
+    }
+    kept.push(trimmed);
+  }
+  while (kept.length > 0 && kept[0] === "") kept.shift();
+  while (kept.length > 0 && kept[kept.length - 1] === "") kept.pop();
   return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -1377,6 +1428,40 @@ function pickDreamCandidateFromState(state: CanvasState): string {
     if (hasMeaningfulDreamCandidateText(candidate)) return candidate;
   }
   return "";
+}
+
+function hasDreamSpecialistCandidate(result: any): boolean {
+  const dreamValue = String(result?.dream || "").trim();
+  const refinedValue = String(result?.refined_formulation || "").trim();
+  return Boolean(dreamValue || refinedValue);
+}
+
+function fallbackDreamCandidateFromUserInput(userInput: string, state: CanvasState): string {
+  const raw = String(userInput || "").replace(/\r/g, " ").replace(/\s+/g, " ").trim();
+  const fallbackCompany = String((state as any)?.business_name || "").trim();
+  const company = fallbackCompany && fallbackCompany !== "TBD" ? fallbackCompany : "The business";
+  if (!raw) {
+    return `${company} dreams of a world in which people experience more meaning and long-term value.`;
+  }
+  const trimmed = raw.replace(/[.!?]+$/g, "").trim();
+  if (/dreams of a world in which/i.test(trimmed)) return ensureSentenceEnd(trimmed);
+  const normalizedRest = trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
+  return `${company} dreams of a world in which ${normalizedRest}.`;
+}
+
+function buildDreamRefineFallbackSpecialist(base: any, userInput: string, state: CanvasState): any {
+  const fallback = fallbackDreamCandidateFromUserInput(userInput, state);
+  return {
+    ...(base && typeof base === "object" ? base : {}),
+    action: "REFINE",
+    message: "",
+    question: "",
+    refined_formulation: fallback,
+    dream: "",
+    suggest_dreambuilder: "false",
+    wants_recap: false,
+    is_offtopic: false,
+  };
 }
 
 /**
@@ -1599,7 +1684,7 @@ function buildDreamBuilderSwitchSelfQuestion(previousQuestion: string, fallbackQ
     stripNumberedChoiceLines(previousQuestion) ||
       stripNumberedChoiceLines(fallbackQuestion)
   );
-  const headline = restoredPrompt || "Now let's get back to the Dream Exercise.";
+  const headline = restoredPrompt || "Continue with the Dream Exercise.";
   return `1) Switch back to self-formulate the dream\n\n${headline}`.trim();
 }
 
@@ -1772,9 +1857,6 @@ export function isMetaOfftopicFallbackTurn(params: {
 
   if (/you are in the .+ step now/.test(message)) return true;
   if (/you are in the dream exercise step now/.test(message)) return true;
-  if (message.includes("that's a bit off-topic for this step")) return true;
-  if (message.includes("a quick detour")) return true;
-
   return false;
 }
 
@@ -1826,6 +1908,83 @@ function extractSuggestionFromMessage(message: string): string {
     if (paragraph.length >= 18) return paragraph;
   }
   return "";
+}
+
+function extractDreamSuggestionSentences(params: {
+  message: string;
+  companyName: string;
+}): string[] {
+  const raw = String(params.message || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+  const companyName = String(params.companyName || "").trim();
+  const companyKey = companyName.toLowerCase();
+  const blocked = [
+    /\bi hope\b/i,
+    /\bthese suggestions\b/i,
+    /\binspire you\b/i,
+    /\bwrite your own dream\b/i,
+    /\bchoose an option\b/i,
+    /\bdefine your dream\b/i,
+  ];
+  const fragments = raw
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean)
+    .flatMap((line) =>
+      line
+        .split(/(?<=[.!?])\s+(?=\S)/)
+        .map((part) => String(part || "").trim())
+        .filter(Boolean)
+    );
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const fragment of fragments) {
+    const sentence = fragment.replace(/\s+/g, " ").trim();
+    if (!sentence || sentence.length < 30) continue;
+    if (sentence.endsWith("?")) continue;
+    if (blocked.some((re) => re.test(sentence))) continue;
+    const key = canonicalizeComparableText(sentence);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(sentence);
+  }
+  const scored = unique
+    .map((sentence, idx) => {
+      let score = 0;
+      const lower = sentence.toLowerCase();
+      if (companyKey && companyName !== "TBD" && lower.includes(companyKey)) score += 10;
+      if (/\bdreams?\b.{0,24}\bworld\b/i.test(sentence)) score += 6;
+      if (/^(the business|the company)\b/i.test(lower)) score += 3;
+      return { sentence, idx, score };
+    })
+    .sort((a, b) => (b.score - a.score) || (a.idx - b.idx));
+  return scored.map((item) => item.sentence);
+}
+
+function pickDreamSuggestionFromPreviousState(
+  state: CanvasState,
+  previousSpecialist: Record<string, unknown>
+): string {
+  const previous = previousSpecialist && typeof previousSpecialist === "object"
+    ? previousSpecialist
+    : {};
+  const businessName = String((state as any).business_name || "").trim();
+  const fromMessage = extractDreamSuggestionSentences({
+    message: String((previous as any).message || ""),
+    companyName: businessName,
+  });
+  if (fromMessage.length > 0) return String(fromMessage[0] || "").trim();
+  const statementLines = Array.isArray((previous as any).statements)
+    ? ((previous as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+  if (statementLines.length > 0) return statementLines[0];
+  const fromFields = [
+    String((previous as any).dream || "").trim(),
+    String((previous as any).refined_formulation || "").trim(),
+    String((((state as any).provisional_by_step || {})[DREAM_STEP_ID] || "")).trim(),
+    String((state as any).dream_final || "").trim(),
+  ].filter(Boolean);
+  return fromFields.length > 0 ? fromFields[0] : "";
 }
 
 export function pickDualChoiceSuggestion(stepId: string, specialistResult: any, previousSpecialist: any, userRaw = ""): string {
@@ -2414,6 +2573,128 @@ function wordingStepLabel(stepId: string): string {
   return "step";
 }
 
+const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
+  [DREAM_STEP_ID]: "offtopic.step.dream",
+  [PURPOSE_STEP_ID]: "offtopic.step.purpose",
+  [BIGWHY_STEP_ID]: "offtopic.step.bigwhy",
+  [ROLE_STEP_ID]: "offtopic.step.role",
+  [ENTITY_STEP_ID]: "offtopic.step.entity",
+  [STRATEGY_STEP_ID]: "offtopic.step.strategy",
+  [TARGETGROUP_STEP_ID]: "offtopic.step.targetgroup",
+  [PRODUCTSSERVICES_STEP_ID]: "offtopic.step.productsservices",
+  [RULESOFTHEGAME_STEP_ID]: "offtopic.step.rulesofthegame",
+  [PRESENTATION_STEP_ID]: "offtopic.step.presentation",
+};
+
+function uiStringFromState(state: CanvasState, key: string, fallback: string): string {
+  const uiStrings = ((state as any).ui_strings && typeof (state as any).ui_strings === "object")
+    ? ((state as any).ui_strings as Record<string, unknown>)
+    : {};
+  const value = typeof uiStrings[key] === "string" ? String(uiStrings[key] || "").trim() : "";
+  return value || fallback;
+}
+
+function formatIndexedTemplate(templateRaw: string, values: string[]): string {
+  let out = String(templateRaw || "");
+  for (let i = 0; i < values.length; i += 1) {
+    out = out.replace(new RegExp(`\\{${i}\\}`, "g"), String(values[i] || ""));
+  }
+  return out;
+}
+
+function ensureSentenceEnd(raw: string): string {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+function countSentenceUnits(raw: string): number {
+  return String(raw || "")
+    .replace(/\r/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .length;
+}
+
+function offTopicStepLabel(stepId: string, state: CanvasState): string {
+  const key = OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP[stepId] || "";
+  if (!key) return wordingStepLabel(stepId);
+  return uiStringFromState(state, key, wordingStepLabel(stepId));
+}
+
+function offTopicCompanyName(state: CanvasState): string {
+  const fromState = String((state as any)?.business_name || "").trim();
+  if (fromState && fromState !== "TBD") return fromState;
+
+  const step0Final = String((state as any)?.step_0_final || "").trim();
+  if (step0Final) {
+    const parsed = parseStep0Final(step0Final, "TBD");
+    const parsedName = String(parsed?.name || "").trim();
+    if (parsedName && parsedName !== "TBD") return parsedName;
+  }
+  return uiStringFromState(state, "offtopic.companyFallback", "your future company");
+}
+
+function offTopicCurrentContextLine(stepId: string, state: CanvasState): string {
+  const template = uiStringFromState(
+    state,
+    "offtopic.current.template",
+    "The current {0} of {1} is."
+  );
+  return ensureSentenceEnd(
+    formatIndexedTemplate(template, [
+      offTopicStepLabel(stepId, state),
+      offTopicCompanyName(state),
+    ]).trim()
+  );
+}
+
+function offTopicRedirectLine(stepId: string, state: CanvasState): string {
+  const template = uiStringFromState(
+    state,
+    "offtopic.redirect.template",
+    "Let's continue with the {0} of {1}."
+  );
+  return ensureSentenceEnd(
+    formatIndexedTemplate(template, [
+      offTopicStepLabel(stepId, state),
+      offTopicCompanyName(state),
+    ]).trim()
+  );
+}
+
+function stripOfftopicStructureSentences(raw: string): string {
+  const text = String(raw || "").replace(/\r/g, "\n").trim();
+  if (!text) return "";
+  const withoutStrongCurrent = text.replace(
+    /<strong>\s*the current\b[\s\S]{0,240}?<\/strong>/gi,
+    " "
+  );
+  const lines = withoutStrongCurrent
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^(?:[-*•]|\d+[.)])\s+/.test(line));
+  const compact = lines.join(" ").replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+  const parts = compact
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const structuralPatterns = [
+    /\bthe current\b.{0,120}\bof\b.{0,120}\bis[.!?]?$/i,
+    /\blet'?s continue with\b.{0,120}\bof\b.{0,120}[.!?]?$/i,
+    /\bnow,?\s+back\s+to\b/i,
+  ];
+  const kept = parts.filter((part) => !structuralPatterns.some((re) => re.test(part)));
+  let out = kept.join(" ").trim();
+  if (/(?:^|\s)•\s+/.test(out)) {
+    out = out.split(/(?:^|\s)•\s+/)[0]?.trim() || "";
+  }
+  return out;
+}
+
 function wordingCompanyName(state: CanvasState): string {
   const fromState = String((state as any)?.business_name || "").trim();
   if (fromState && fromState !== "TBD") return fromState;
@@ -2432,6 +2713,141 @@ function wordingSelectionMessage(stepId: string, state: CanvasState, activeSpeci
   const specialist = String(activeSpecialist || (state as any)?.active_specialist || "").trim();
   if (stepId === DREAM_STEP_ID && specialist === DREAM_EXPLAINER_SPECIALIST) return "";
   return `Your current ${wordingStepLabel(stepId)} for ${wordingCompanyName(state)} is:`;
+}
+
+function isLikelyMetaQuestionTurn(params: {
+  userMessage: string;
+  specialistResult: any;
+}): boolean {
+  const specialist = params.specialistResult && typeof params.specialistResult === "object"
+    ? params.specialistResult
+    : {};
+  if (specialist.wants_recap === true || String(specialist.wants_recap || "").trim().toLowerCase() === "true") {
+    return true;
+  }
+  const user = String(params.userMessage || "").trim().toLowerCase();
+  const message = String(specialist.message || "").trim().toLowerCase();
+  if (message.includes("www.bensteenstra.com") || message.includes("bensteenstra.com")) return true;
+  if (message.includes("now, back to")) return true;
+  if (message.includes("for more information visit")) return true;
+  if (!user) return false;
+  const metaSignals = [
+    "ben steenstra",
+    "what model",
+    "which model",
+    "why this step",
+    "why this process",
+    "why is this step",
+    "summary",
+    "recap",
+    "samenvatting",
+    "overzicht",
+  ];
+  return metaSignals.some((token) => user.includes(token));
+}
+
+function normalizeNonStep0OfftopicSpecialist(params: {
+  stepId: string;
+  activeSpecialist: string;
+  userMessage: string;
+  specialistResult: any;
+  previousSpecialist: Record<string, unknown>;
+  state: CanvasState;
+}): any {
+  const stepId = String(params.stepId || "").trim();
+  const specialist = params.specialistResult && typeof params.specialistResult === "object"
+    ? params.specialistResult
+    : {};
+  if (!stepId || stepId === STEP_0_ID) return specialist;
+  const isOfftopic =
+    specialist.is_offtopic === true ||
+    String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
+  if (!isOfftopic) return specialist;
+  if (isLikelyMetaQuestionTurn({ userMessage: params.userMessage, specialistResult: specialist })) {
+    return {
+      ...specialist,
+      __offtopic_meta_passthrough: "true",
+    };
+  }
+
+  const specialistMessage = stripOfftopicStructureSentences(
+    stripChoiceInstructionNoise(String(specialist.message || "").trim())
+  );
+  const redirectSentence = offTopicRedirectLine(stepId, params.state);
+  const message = specialistMessage
+    ? `${specialistMessage} ${redirectSentence}`.trim()
+    : redirectSentence;
+
+  const next = {
+    ...specialist,
+    action: "ASK",
+    message,
+    __offtopic_meta_passthrough: "false",
+    wording_choice_pending: "false",
+    wording_choice_selected: "",
+  } as Record<string, unknown>;
+
+  if (stepId === DREAM_STEP_ID && String(params.activeSpecialist || "").trim() === DREAM_EXPLAINER_SPECIALIST) {
+    next.suggest_dreambuilder = "true";
+    const currentStatements =
+      Array.isArray((next as any).statements) && (next as any).statements.length > 0
+        ? ((next as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+        : [];
+    if (currentStatements.length > 0) {
+      next.statements = currentStatements;
+    } else {
+      const previousStatements = Array.isArray((params.previousSpecialist as any)?.statements)
+        ? ((params.previousSpecialist as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+        : [];
+      next.statements = previousStatements;
+    }
+  }
+  return next;
+}
+
+function validateNonStep0OfftopicMessageShape(
+  stepId: string,
+  specialist: Record<string, unknown>,
+  state?: CanvasState
+): string | null {
+  if (!state || stepId === STEP_0_ID) return null;
+  const isOfftopic =
+    specialist.is_offtopic === true ||
+    String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
+  if (!isOfftopic) return null;
+  if (String(specialist.__offtopic_meta_passthrough || "").trim().toLowerCase() === "true") return null;
+  if (isLikelyMetaQuestionTurn({ userMessage: "", specialistResult: specialist })) return null;
+
+  const message = String(specialist.message || "").trim();
+  if (!message) return "offtopic_message_empty";
+
+  const bannedLegacyPatterns = [
+    /\bside\s+question\b/i,
+    /\bdetour\b/i,
+    /\boff-?topic\b.{0,24}\bstep\b/i,
+  ];
+  if (bannedLegacyPatterns.some((pattern) => pattern.test(message))) {
+    return "offtopic_contains_legacy_phrase";
+  }
+
+  const redirectSentence = offTopicRedirectLine(stepId, state);
+  const redirectIndex = message.indexOf(redirectSentence);
+  if (redirectIndex < 0) {
+    return "offtopic_missing_redirect_sentence";
+  }
+
+  const currentAnchorSentence = offTopicCurrentContextLine(stepId, state);
+  const structuredPrefix = message.slice(0, redirectIndex + redirectSentence.length).trim();
+  const hasCurrentAnchorExact = structuredPrefix.includes(currentAnchorSentence);
+  const hasCurrentAnchorGeneric = /\bthe current\b.{0,120}\bof\b.{0,120}\bis[.!?]?/i.test(structuredPrefix);
+  if (hasCurrentAnchorExact || hasCurrentAnchorGeneric) {
+    return "offtopic_current_context_must_be_recap_only";
+  }
+
+  const sentenceCount = countSentenceUnits(structuredPrefix);
+  if (sentenceCount < 1 || sentenceCount > 3) return "offtopic_invalid_sentence_count";
+
+  return null;
 }
 
 const STEP_FEEDBACK_FALLBACK: Record<string, string> = {
@@ -3403,7 +3819,7 @@ async function getUiStringsForLang(lang: string, model: string): Promise<Record<
     "Translate the VALUES to the target LANGUAGE.",
     "Keep KEYS exactly the same.",
     "Return valid JSON only. No markdown. No extra keys. No comments.",
-    "Preserve placeholders like N, M, and X exactly as-is.",
+    "Preserve placeholders like N, M, X, {0}, and {1} exactly as-is.",
     "Do not translate or alter the product name 'The Business Strategy Canvas Builder'; keep it exactly as-is.",
     "Use concise, natural UI wording in the target language.",
   ].join("\n");
@@ -3444,12 +3860,20 @@ async function ensureUiStringsForState(state: CanvasState, model: string): Promi
       language_override: "false",
       ui_strings: UI_STRINGS_DEFAULT,
       ui_strings_lang: "en",
+      ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
     } as CanvasState;
   }
   const lang = normalizeLangCode(String((state as any).language ?? "")) || "en";
   const existingLang = String((state as any).ui_strings_lang ?? "").trim().toLowerCase();
+  const existingVersion = String((state as any).ui_strings_version ?? "").trim();
   const existing = (state as any).ui_strings;
-  if (existing && typeof existing === "object" && existingLang === lang && Object.keys(existing).length) {
+  if (
+    existing &&
+    typeof existing === "object" &&
+    existingLang === lang &&
+    Object.keys(existing).length &&
+    existingVersion === UI_STRINGS_SCHEMA_VERSION
+  ) {
     return state;
   }
   const ui_strings = await getUiStringsForLang(lang, model);
@@ -3457,6 +3881,7 @@ async function ensureUiStringsForState(state: CanvasState, model: string): Promi
     ...(state as any),
     ui_strings,
     ui_strings_lang: lang,
+    ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
   } as CanvasState;
 }
 
@@ -3469,6 +3894,7 @@ async function ensureLanguageFromUserMessage(state: CanvasState, userMessage: st
       language_override: "false",
       ui_strings: UI_STRINGS_DEFAULT,
       ui_strings_lang: "en",
+      ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
     } as CanvasState;
   }
   const msg = String(userMessage ?? "");
@@ -3620,7 +4046,7 @@ export const RECAP_INSTRUCTION = `UNIVERSAL RECAP (every step)
       - If the value contains bullets (lines starting with "• " or "- "): format as:
         "<strong>Label:</strong>" on its own line, then each bullet on its own line prefixed with "• " (convert "- " bullets to "• ").
       - If the value contains numbered lines (lines starting with "1.", "2.", "3.", etc. or "1)", "2)", "3)", etc.): format as:
-        "<strong>Label:</strong>" on its own line, then each numbered line on its own line (preserve the numbering format).
+        "<strong>Label:</strong>" on its own line, then convert each numbered line to a bullet line prefixed with "• ".
       - CRITICAL: Each final must be formatted separately. Do NOT combine content from strategy_final, targetgroup_final, productsservices_final, or rulesofthegame_final into one section. Each final has its own label and its own content.
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
   Then set question to your normal next question for this step.
@@ -3653,12 +4079,14 @@ BEN STEENSTRA FACTUAL REFERENCE (use when answering Ben/method credibility quest
 - He has experience with large organizations (e.g., Samsung, HTC) and smaller businesses.
 - Always include in the answer: www.bensteenstra.com
 
-2) OFF-TOPIC OR NONSENSE (reject with light humor + redirect)
+2) OFF-TOPIC OR NONSENSE (Step-0 tone + deterministic redirect)
 If the user asks something unrelated to The Business Strategy Canvas Builder or the current step:
-- Reply in message with a short, light-humored boundary (never insulting, never sarcastic), then redirect.
-- Offer ONLY two plain-text outcomes. Do NOT format them as "1) … 2) …" in any prompt field (that may render as buttons). Put the two options in message as bullets, and keep question as a single open question (e.g. "Do you want to continue with the current step, or pause here?").
-- The two outcomes: (a) Continue with the current step now. (b) Stop politely—e.g. "No worries—maybe we're not the right fit right now."
-- Then set question to your normal next question for this step.`;
+- action must be ASK.
+- message must follow this structure (localized):
+  Sentence 1: short, friendly, empathetic, non-judgmental boundary. Light humor is allowed as a small wink (never sarcastic, never at the user's expense).
+  Sentence 2 (optional): include only for clearly off-topic/nonsense signals; keep the same tone.
+  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If company name is unknown, use the localized equivalent of "your future company".
+- Keep question for normal contract-driven next-step continuation; do not output numbered options in message.`;
 
 /** @deprecated Use UNIVERSAL_META_OFFTOPIC_POLICY. Kept for test backward compatibility. */
 export const OFF_TOPIC_POLICY = UNIVERSAL_META_OFFTOPIC_POLICY;
@@ -3921,7 +4349,8 @@ async function callSpecialistStrict(params: {
       langExplicitExplainer ? lang : "",
       previousStatements,
       topClusters,
-      businessContext
+      businessContext,
+      getDreamRuntimeMode(state)
     );
 
     const res = await callStrictJson<DreamExplainerOutput>({
@@ -5070,6 +5499,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     if (currentStepForMenuTransition === DREAM_STEP_ID) {
       if (DREAM_START_EXERCISE_ACTION_CODES.has(safeActionCodeInput)) {
         setDreamRuntimeMode(state, "builder_collect");
+      } else if (safeActionCodeInput === "ACTION_DREAM_EXPLAINER_REFINE_ADJUST") {
+        setDreamRuntimeMode(state, "builder_refine");
       } else if (safeActionCodeInput === "ACTION_DREAM_SWITCH_TO_SELF") {
         setDreamRuntimeMode(state, "self");
       } else if (safeActionCodeInput === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES") {
@@ -5116,10 +5547,24 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     !isWordingPickRouteToken(userMessage) &&
     (!isGeneralOfftopicInput || shouldKeepPendingOnOfftopic)
   ) {
-    const pendingSpecialist = {
+    const stateWithUi = await ensureUiStrings(state, userMessage);
+    let pendingSpecialist = {
       ...pendingBeforeTurn,
       ...(isGeneralOfftopicInput ? { is_offtopic: true } : {}),
     };
+    if (isGeneralOfftopicInput && String(state.current_step || "") !== STEP_0_ID) {
+      pendingSpecialist = normalizeNonStep0OfftopicSpecialist({
+        stepId: String(state.current_step || ""),
+        activeSpecialist: String((state as any).active_specialist || ""),
+        userMessage,
+        specialistResult: pendingSpecialist,
+        previousSpecialist: pendingBeforeTurn,
+        state: stateWithUi,
+      });
+      if (shouldKeepPendingOnOfftopic) {
+        pendingSpecialist = copyPendingWordingChoiceState(pendingSpecialist, pendingBeforeTurn);
+      }
+    }
     const pendingChoice = buildWordingChoiceFromPendingSpecialist(
       pendingSpecialist,
       String((state as any).active_specialist || ""),
@@ -5127,7 +5572,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       String(state.current_step || ""),
       getDreamRuntimeMode(state)
     );
-    const stateWithUi = await ensureUiStrings(state, userMessage);
     console.log("[wording_choice_pending_blocked]", {
       step: String(state.current_step || ""),
       request_id: String((state as any).__request_id ?? ""),
@@ -5226,6 +5670,93 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   // Lock language once we see a meaningful user message (prevents mid-flow flips).
   state = await ensureLanguage(state, userMessage);
   const lang = langFromState(state);
+
+  if (
+    String(state.current_step || "") === DREAM_STEP_ID &&
+    userMessage === DREAM_PICK_ONE_ROUTE_TOKEN
+  ) {
+    const previousSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+    const pickedSuggestion = pickDreamSuggestionFromPreviousState(state, previousSpecialist);
+    if (pickedSuggestion) {
+      const specialist: DreamOutput = {
+        action: "ASK",
+        message: wordingSelectionMessage(DREAM_STEP_ID, state, String((state as any).active_specialist || "")),
+        question: "",
+        refined_formulation: pickedSuggestion,
+        dream: pickedSuggestion,
+        suggest_dreambuilder: "false",
+        wants_recap: false,
+        is_offtopic: false,
+      };
+      const forcedDecision: OrchestratorOutput = {
+        specialist_to_call: DREAM_SPECIALIST,
+        specialist_input: `CURRENT_STEP_ID: ${DREAM_STEP_ID} | USER_MESSAGE: ${DREAM_PICK_ONE_ROUTE_TOKEN}`,
+        current_step: DREAM_STEP_ID,
+        intro_shown_for_step: String((state as any).intro_shown_for_step ?? ""),
+        intro_shown_session: String((state as any).intro_shown_session ?? "") === "true" ? "true" : "false",
+        show_step_intro: "false",
+        show_session_intro: "false",
+      };
+      const nextStatePicked = applyStateUpdate({
+        prev: state,
+        decision: forcedDecision,
+        specialistResult: specialist,
+        showSessionIntroUsed: "false",
+      });
+      setDreamRuntimeMode(nextStatePicked, "self");
+      const renderedPicked = renderFreeTextTurnPolicy({
+        stepId: String((nextStatePicked as any).current_step ?? ""),
+        state: nextStatePicked,
+        specialist: (nextStatePicked as any).last_specialist_result || {},
+        previousSpecialist,
+      });
+      const pickedViolation = validateRenderedContractTurn(
+        String((nextStatePicked as any).current_step ?? ""),
+        renderedPicked,
+        nextStatePicked
+      );
+      if (pickedViolation) {
+        return finalizeResponse(attachRegistryPayload({
+          ok: false as const,
+          tool: "run_step" as const,
+          current_step_id: String(nextStatePicked.current_step),
+          active_specialist: DREAM_SPECIALIST,
+          text: "",
+          prompt: "",
+          specialist: renderedPicked.specialist,
+          state: nextStatePicked,
+          error: {
+            type: "contract_violation",
+            message: "Rendered output violates the UI contract.",
+            reason: pickedViolation,
+            step: String((nextStatePicked as any).current_step ?? ""),
+            contract_id: renderedPicked.contractId,
+          },
+        }, renderedPicked.specialist));
+      }
+      (nextStatePicked as any).last_specialist_result = renderedPicked.specialist;
+      applyUiPhaseByStep(
+        nextStatePicked,
+        String((nextStatePicked as any).current_step ?? ""),
+        renderedPicked.contractId
+      );
+      const nextStatePickedUi = await ensureUiStrings(nextStatePicked, userMessage);
+      return finalizeResponse(attachRegistryPayload({
+        ok: true as const,
+        tool: "run_step" as const,
+        current_step_id: String(nextStatePicked.current_step),
+        active_specialist: DREAM_SPECIALIST,
+        text: buildTextForWidget({ specialist: renderedPicked.specialist }),
+        prompt: pickPrompt(renderedPicked.specialist),
+        specialist: renderedPicked.specialist,
+        state: nextStatePickedUi,
+      }, renderedPicked.specialist, responseUiFlags, renderedPicked.uiActionCodes, renderedPicked.uiActions, null, {
+        contractId: renderedPicked.contractId,
+        contractVersion: renderedPicked.contractVersion,
+        textKeys: renderedPicked.textKeys,
+      }));
+    }
+  }
 
   // Presentation: create PPTX on button click (no LLM)
   if (state.current_step === PRESENTATION_STEP_ID && userMessage === "__ROUTE__PRESENTATION_MAKE__") {
@@ -5963,6 +6494,49 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }
   }
 
+  // --------- DREAM CONTRACT REPAIR ----------
+  if (
+    String(decision1.current_step || "") === DREAM_STEP_ID &&
+    String(decision1.specialist_to_call || "") === DREAM_SPECIALIST
+  ) {
+    const isOfftopic =
+      specialistResult?.is_offtopic === true ||
+      String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
+    const isMetaFallback = isMetaOfftopicFallbackTurn({
+      stepId: DREAM_STEP_ID,
+      userMessage,
+      specialistResult,
+    });
+    const hasContributingInput = shouldTreatAsStepContributingInput(String(userMessage || ""), DREAM_STEP_ID);
+    const candidateMissing = !hasDreamSpecialistCandidate(specialistResult);
+    if (!isOfftopic && !isMetaFallback && hasContributingInput && candidateMissing) {
+      const repairSeed = String(userMessage || "").trim();
+      const repairInput = repairSeed
+        ? `${DREAM_FORCE_REFINE_ROUTE_PREFIX}\n${repairSeed}`
+        : DREAM_FORCE_REFINE_ROUTE_PREFIX;
+      const callRepair = await callSpecialistStrictSafe(
+        { model, state, decision: decision1, userMessage: repairInput },
+        buildRoutingContext(repairInput),
+        state
+      );
+      if (callRepair.ok) {
+        rememberLlmCall(callRepair.value);
+        attempts = Math.max(attempts, callRepair.value.attempts);
+        const repaired = callRepair.value.specialistResult;
+        const repairedOfftopic =
+          repaired?.is_offtopic === true ||
+          String(repaired?.is_offtopic || "").trim().toLowerCase() === "true";
+        if (!repairedOfftopic && hasDreamSpecialistCandidate(repaired)) {
+          specialistResult = repaired;
+        } else {
+          specialistResult = buildDreamRefineFallbackSpecialist(specialistResult, userMessage, state);
+        }
+      } else {
+        specialistResult = buildDreamRefineFallbackSpecialist(specialistResult, userMessage, state);
+      }
+    }
+  }
+
   // --------- BIGWHY SIZE GUARD ----------
   if (String(decision1.current_step || "") === BIGWHY_STEP_ID) {
     const candidate = pickBigWhyCandidate(specialistResult);
@@ -5999,6 +6573,22 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       is_offtopic: true,
     };
   }
+  const currentStepIdForOfftopic = String(decision1.current_step || "");
+  const currentSpecialistId = String(decision1.specialist_to_call || "");
+  const isOfftopicTurnAfterFallback =
+    specialistResult?.is_offtopic === true ||
+    String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
+  if (currentStepIdForOfftopic !== STEP_0_ID && isOfftopicTurnAfterFallback) {
+    state = await ensureUiStrings(state, userMessage);
+  }
+  specialistResult = normalizeNonStep0OfftopicSpecialist({
+    stepId: currentStepIdForOfftopic,
+    activeSpecialist: currentSpecialistId,
+    userMessage,
+    specialistResult,
+    previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+    state,
+  });
 
   let nextState = applyStateUpdate({
     prev: state,
@@ -6040,6 +6630,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       if (scoringPhase && hasClusters) {
         setDreamRuntimeMode(nextState, "builder_scoring");
       } else if (getDreamRuntimeMode(state) === "builder_scoring" && !scoringPhase) {
+        setDreamRuntimeMode(nextState, "builder_refine");
+      } else if (getDreamRuntimeMode(state) === "builder_refine" && !scoringPhase) {
         setDreamRuntimeMode(nextState, "builder_refine");
       } else {
         setDreamRuntimeMode(nextState, "builder_collect");
@@ -6126,20 +6718,14 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true");
   if (isDreamExplainerOfftopicTurn) {
     const previousSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-    const cleanMessage = stripChoiceInstructionNoise(String((specialistResult as any)?.message || "").trim());
-    const backToExerciseLine = "Now let's get back to the Dream Exercise.";
-    specialistResult = {
-      ...specialistResult,
-      action: "ASK",
-      suggest_dreambuilder: "true",
-      message: cleanMessage ? `${cleanMessage}\n\n${backToExerciseLine}` : backToExerciseLine,
-      statements:
-        Array.isArray((specialistResult as any)?.statements) && (specialistResult as any).statements.length > 0
-          ? (specialistResult as any).statements
-          : (Array.isArray((previousSpecialist as any)?.statements) ? (previousSpecialist as any).statements : []),
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-    };
+    specialistResult = normalizeNonStep0OfftopicSpecialist({
+      stepId: String((nextState as any).current_step || ""),
+      activeSpecialist: String((nextState as any).active_specialist || ""),
+      userMessage,
+      specialistResult,
+      previousSpecialist,
+      state: nextState,
+    });
     const currentStepId = String((nextState as any).current_step || "");
     const offTopicContractId = buildContractId(
       currentStepId,

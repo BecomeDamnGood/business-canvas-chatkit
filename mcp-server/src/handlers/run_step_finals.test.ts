@@ -87,6 +87,15 @@ function countNumberedOptions(text: string): number {
   return count;
 }
 
+function countSentences(text: string): number {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .split(/(?<=[.!?])\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .length;
+}
+
 function parseMenuFromContractId(contractIdRaw: unknown): string {
   const contractId = String(contractIdRaw || "").trim();
   const match = contractId.match(/^[^:]+:phase:([A-Z0-9_]+)$/i);
@@ -155,6 +164,7 @@ test("resolveActionCodeMenuTransition maps informational actions to deterministi
     ["ACTION_DREAM_WHY_START_EXERCISE", "dream", "DREAM_MENU_WHY", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
     ["ACTION_DREAM_SUGGESTIONS_START_EXERCISE", "dream", "DREAM_MENU_SUGGESTIONS", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
     ["ACTION_DREAM_REFINE_START_EXERCISE", "dream", "DREAM_MENU_REFINE", "DREAM_EXPLAINER_MENU_SWITCH_SELF"],
+    ["ACTION_DREAM_EXPLAINER_REFINE_ADJUST", "dream", "DREAM_EXPLAINER_MENU_REFINE", "DREAM_EXPLAINER_MENU_REFINE"],
     ["ACTION_PURPOSE_INTRO_EXPLAIN_MORE", "purpose", "PURPOSE_MENU_INTRO", "PURPOSE_MENU_EXPLAIN"],
     ["ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS", "purpose", "PURPOSE_MENU_INTRO", "PURPOSE_MENU_POST_ASK"],
     ["ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS", "purpose", "PURPOSE_MENU_EXAMPLES", "PURPOSE_MENU_POST_ASK"],
@@ -303,7 +313,8 @@ test("contract audit: route actions in non-escape menus never repeat the clicked
       const targetLabels = (MENU_LABELS[targetMenuId] || [])
         .map((label) => String(label || "").trim())
         .filter(Boolean);
-      if (sourceLabel && targetLabels.includes(sourceLabel)) {
+      const allowSameLabelLoop = actionCode === "ACTION_DREAM_EXPLAINER_REFINE_ADJUST";
+      if (!allowSameLabelLoop && sourceLabel && targetLabels.includes(sourceLabel)) {
         issues.push({
           type: "same_button_repeated_after_click",
           actionCode,
@@ -393,7 +404,10 @@ test("UNIVERSAL_META_OFFTOPIC_POLICY: non-step_0 prompt assembly includes policy
   assert.ok(purposeInstructions.includes("wants_recap"), "recap behavior still present");
   assert.ok(purposeInstructions.includes("Ben Steenstra"), "Ben factual reference present");
   assert.ok(purposeInstructions.includes("www.bensteenstra.com"), "Ben reference URL present");
-  assert.ok(purposeInstructions.includes("maybe we're not the right fit"), "polite stop option present");
+  assert.ok(
+    purposeInstructions.includes("Let's continue with the <step name> of <company name>."),
+    "fixed step+company redirect for off-topic present"
+  );
 });
 
 test("Dream menu prompt uses numbered question (not confirmation_question)", () => {
@@ -474,6 +488,194 @@ test("off-topic overlay applies only when specialist returns is_offtopic=true", 
   assert.equal(String(offTopicTurn.prompt || "").includes("Continue Dream now"), false);
 });
 
+test("off-topic message includes step+company anchor and keeps compact structure", async () => {
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "What is the weather in London?",
+      state: {
+        ...getDefaultState(),
+        current_step: "purpose",
+        active_specialist: "Purpose",
+        intro_shown_session: "true",
+        intro_shown_for_step: "purpose",
+        started: "true",
+        business_name: "Mindd",
+      },
+    })
+  );
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.is_offtopic || ""), "true");
+  const sentenceCount = countSentences(String(result.text || ""));
+  assert.equal(sentenceCount >= 1 && sentenceCount <= 3, true);
+  assert.equal(String(result.text || "").includes("Let's continue with the Purpose of Mindd."), true);
+});
+
+test("off-topic message stays anchor-driven when optional tone line is absent", async () => {
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "Side thought about football",
+      state: {
+        ...getDefaultState(),
+        current_step: "purpose",
+        active_specialist: "Purpose",
+        intro_shown_session: "true",
+        intro_shown_for_step: "purpose",
+        started: "true",
+        business_name: "Mindd",
+      },
+    })
+  );
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.is_offtopic || ""), "true");
+  const sentenceCount = countSentences(String(result.text || ""));
+  assert.equal(sentenceCount >= 1 && sentenceCount <= 3, true);
+  assert.equal(String(result.text || "").includes("Let's continue with the Purpose of Mindd."), true);
+});
+
+test("off-topic anchor uses fallback company name when none is known", async () => {
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "What is the weather in London?",
+      state: {
+        ...getDefaultState(),
+        current_step: "role",
+        active_specialist: "Role",
+        intro_shown_session: "true",
+        intro_shown_for_step: "role",
+        started: "true",
+        business_name: "",
+        step_0_final: "",
+      },
+    })
+  );
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.is_offtopic || ""), "true");
+  assert.equal(String(result.text || "").includes("Let's continue with the Role of your future company."), true);
+});
+
+test("off-topic refreshes stale ui_strings and prepends canonical context intro with stored output", async () => {
+  const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
+    run_step({
+      user_message: "What is the weather in London?",
+      state: {
+        ...getDefaultState(),
+        current_step: "dream",
+        active_specialist: "Dream",
+        intro_shown_session: "true",
+        intro_shown_for_step: "dream",
+        started: "true",
+        business_name: "Mindd",
+        ui_strings_lang: "en",
+        ui_strings_version: "legacy-v1",
+        ui_strings: {
+          "offtopic.tone.primary": "OLD_PRIMARY",
+          "offtopic.tone.secondary": "OLD_SECONDARY",
+          "offtopic.current.template": "LEGACY_CONTEXT {0} {1}",
+        },
+        last_specialist_result: {
+          action: "REFINE",
+          menu_id: "DREAM_MENU_REFINE",
+          question:
+            "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+          refined_formulation: "Mindd dreams of a world where meaningful brands build trust.",
+          dream: "Mindd dreams of a world where meaningful brands build trust.",
+          is_offtopic: false,
+        },
+      },
+    })
+  );
+  assert.equal(result.ok, true);
+  assert.equal(String((result.state as any)?.ui_strings_version || "") === "legacy-v1", false);
+  assert.equal(String(result.text || "").includes("OLD_PRIMARY"), false);
+  assert.equal(String(result.text || "").includes("OLD_SECONDARY"), false);
+  assert.equal(String(result.text || "").includes("No stress, side quests happen."), false);
+  assert.equal(String(result.text || "").includes("Brains do love a tiny scenic route sometimes."), false);
+  assert.equal(
+    String(result.text || "").includes("Let's continue with the Dream of Mindd."),
+    true
+  );
+  assert.equal(
+    String(result.text || "").includes("<strong>The current Dream of Mindd is.</strong>"),
+    true
+  );
+  assert.equal(
+    String(result.text || "").includes("Mindd dreams of a world where meaningful brands build trust."),
+    true
+  );
+});
+
+test("dream suggestions pick-one is deterministic and immediately stages a Dream candidate", async () => {
+  const suggestionA =
+    "Mindd dreams of a world in which creative professionals feel truly understood and empowered to express their full potential.";
+  const suggestionB =
+    "Mindd dreams of a world in which businesses and individuals connect through authentic, meaningful communication that inspires trust and growth.";
+  const result = await run_step({
+    input_mode: "widget",
+    user_message: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      business_name: "Mindd",
+      __ui_phase_by_step: {
+        dream: "dream:phase:DREAM_MENU_SUGGESTIONS",
+      },
+      last_specialist_result: {
+        action: "ASK",
+        ui_contract_id: "dream:phase:DREAM_MENU_SUGGESTIONS",
+        question:
+          "1) Pick one for me and continue\n2) Do a small exercise that helps to define your dream.",
+        message: `${suggestionA} ${suggestionB} I hope these suggestions inspire you to write your own Dream.`,
+        refined_formulation: "",
+        dream: "",
+        is_offtopic: false,
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "dream");
+  assert.equal(menuIdFromTurn(result), "DREAM_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_DREAM_REFINE_CONFIRM",
+    "ACTION_DREAM_REFINE_START_EXERCISE",
+  ]);
+  assert.equal(String(result.specialist?.dream || ""), suggestionA);
+  assert.equal(String(result.specialist?.refined_formulation || ""), suggestionA);
+  assert.equal(String(result.text || "").includes(suggestionA), true);
+});
+
+test("dream step-contributing sentence auto-repairs to REFINE valid-output contract", async () => {
+  const result = await run_step({
+    user_message:
+      "I believe that companies need to be purpose-driven in order to have a sustainable long-term right to exist.",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      business_name: "Mindd",
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "dream");
+  assert.equal(menuIdFromTurn(result), "DREAM_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_DREAM_REFINE_CONFIRM",
+    "ACTION_DREAM_REFINE_START_EXERCISE",
+  ]);
+  assert.equal(
+    Array.isArray(result.ui?.action_codes) && result.ui?.action_codes.includes("ACTION_DREAM_SUGGESTIONS_PICK_ONE"),
+    false
+  );
+});
+
 test("widget escape suppression: response never returns escape menu/action codes/labels", async () => {
   const result = await run_step({
     input_mode: "widget",
@@ -510,7 +712,7 @@ test("DreamExplainer off-topic keeps exercise context and only shows switch-back
   const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
       input_mode: "widget",
-      user_message: "Who is Ben Steenstra?",
+      user_message: "What is the weather in London?",
       state: {
         ...getDefaultState(),
         current_step: "dream",
@@ -548,7 +750,7 @@ test("DreamExplainer off-topic keeps exercise context and only shows switch-back
   assert.equal(String(result.active_specialist || ""), "DreamExplainer");
   assert.equal(menuIdFromTurn(result), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
   assert.deepEqual(result.ui?.action_codes, ["ACTION_DREAM_SWITCH_TO_SELF"]);
-  assert.equal(String(result.text || "").includes("Now let's get back to the Dream Exercise."), true);
+  assert.equal(String(result.text || "").includes("<strong>The current Dream of Mindd is.</strong>"), true);
 });
 
 test("DreamExplainer repeated off-topic does not fall back to Dream specialist", async () => {
@@ -598,7 +800,7 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
   const second = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
       input_mode: "widget",
-      user_message: "Who is Ben Steenstra?",
+      user_message: "What is the weather in Paris?",
       state: (first as any).state,
     })
   );
@@ -606,6 +808,49 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
   assert.equal(String(second.active_specialist || ""), "DreamExplainer");
   assert.equal(String(second.specialist?.suggest_dreambuilder || ""), "true");
   assert.equal(menuIdFromTurn(second), "DREAM_EXPLAINER_MENU_SWITCH_SELF");
+});
+
+test("DreamExplainer refine adjust stays in refine loop and keeps both refine actions", async () => {
+  const statements = Array.from({ length: 22 }, (_, idx) => `Statement ${idx + 1}`);
+  const result = await run_step({
+    input_mode: "widget",
+    user_message: "ACTION_DREAM_EXPLAINER_REFINE_ADJUST",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "DreamExplainer",
+      __dream_runtime_mode: "builder_refine",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      business_name: "Mindd",
+      dream_builder_statements: statements,
+      __ui_phase_by_step: {
+        dream: "dream:phase:DREAM_EXPLAINER_MENU_REFINE",
+      },
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "DREAM_EXPLAINER_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Refine this formulation",
+        suggest_dreambuilder: "true",
+        statements,
+        refined_formulation:
+          "Mindd dreams of a world in which creative minds feel empowered to shape meaningful brands.",
+        dream:
+          "Mindd dreams of a world in which creative minds feel empowered to shape meaningful brands.",
+        is_offtopic: false,
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String((result.state as any).__dream_runtime_mode || ""), "builder_refine");
+  assert.equal(menuIdFromTurn(result), "DREAM_EXPLAINER_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
+    "ACTION_DREAM_EXPLAINER_REFINE_ADJUST",
+  ]);
 });
 
 test("off-topic overlay keeps previous statement recap when no final exists yet", async () => {
@@ -634,7 +879,7 @@ test("off-topic overlay keeps previous statement recap when no final exists yet"
 
   const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
-      user_message: "Who is Ben Steenstra?",
+      user_message: "What is the weather in London?",
       state,
     })
   );
@@ -734,7 +979,7 @@ test("off-topic dream without candidate resets to intro menu with both intro act
   assert.equal(String(result.prompt || "").includes("Define your Dream for Mindd"), true);
 });
 
-test("off-topic purpose with defined output keeps the single confirm menu", async () => {
+test("off-topic purpose with defined output uses default valid-output refine menu", async () => {
   const state = {
     ...getDefaultState(),
     current_step: "purpose",
@@ -766,8 +1011,11 @@ test("off-topic purpose with defined output keeps the single confirm menu", asyn
   );
 
   assert.equal(result.ok, true);
-  assert.equal(menuIdFromTurn(result), "PURPOSE_MENU_CONFIRM_SINGLE");
-  assert.deepEqual(result.ui?.action_codes, ["ACTION_PURPOSE_CONFIRM_SINGLE"]);
+  assert.equal(menuIdFromTurn(result), "PURPOSE_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_PURPOSE_REFINE_CONFIRM",
+    "ACTION_PURPOSE_REFINE_ADJUST",
+  ]);
 });
 
 test("Step 0 off-topic with no output always returns canonical Step 0 ask contract", async () => {

@@ -100,7 +100,7 @@ function normalizeLineText(raw: string): string {
 function isHeadingLikeLine(line: string): boolean {
   if (!line) return false;
   if (line.endsWith(":")) return true;
-  return /^\s*<strong>.*<\/strong>\s*$/i.test(line);
+  return /^\s*<strong>\s*[^<][\s\S]{0,200}<\/strong>\s*$/i.test(line);
 }
 
 function extractOrderedItem(line: string): string | null {
@@ -116,30 +116,39 @@ function extractBulletItem(line: string): string | null {
 }
 
 function appendParagraph(el: Element, lines: string[]): void {
-  const paragraph = normalizeLineText(lines.join(" "));
+  const paragraph = lines.map((line) => String(line || "").trim()).filter(Boolean).join(" ");
+  const paragraphCheck = normalizeLineText(paragraph);
+  if (!paragraphCheck) return;
   if (!paragraph) return;
   const p = document.createElement("p");
-  p.textContent = paragraph;
+  renderInlineText(p, paragraph);
   el.appendChild(p);
 }
 
 function appendHeading(el: Element, line: string): void {
-  const text = normalizeLineText(line).replace(/:$/, "");
-  if (!text) return;
+  const textRaw = String(line || "")
+    .trim()
+    .replace(/^<strong>\s*/i, "")
+    .replace(/\s*<\/strong>$/i, "")
+    .replace(/:$/, "");
+  const textCheck = normalizeLineText(textRaw);
+  if (!textCheck) return;
   const p = document.createElement("p");
   p.className = "cardSubheading";
-  p.textContent = text;
+  renderInlineText(p, textRaw);
   el.appendChild(p);
 }
 
 function appendList(el: Element, tagName: "ol" | "ul", className: string, items: string[]): void {
-  const filtered = items.map((item) => normalizeLineText(item)).filter(Boolean);
+  const filtered = items
+    .map((item) => ({ raw: String(item || "").trim(), clean: normalizeLineText(item) }))
+    .filter((item) => item.clean.length > 0);
   if (!filtered.length) return;
   const list = document.createElement(tagName);
   list.className = className;
   for (const item of filtered) {
     const li = document.createElement("li");
-    li.textContent = item;
+    renderInlineText(li, item.raw);
     list.appendChild(li);
   }
   el.appendChild(list);
@@ -147,10 +156,10 @@ function appendList(el: Element, tagName: "ol" | "ul", className: string, items:
 
 /**
  * Render card body text with semantic structure:
- * - ordered lists for numbered steps/questions
+ * - bullet lists for all list-like enumerations (including numbered input lines)
  * - bullet lists for feature/example enumerations
  * - paragraphs for regular narrative text
- * - heading-like lines only for explicit heading markers (e.g. "<strong>...</strong>" or "...:")
+ * - heading-like lines only for explicit heading markers ("...:" or standalone "<strong>...</strong>")
  */
 export function renderStructuredText(el: Element | null, raw: string | null | undefined): void {
   if (!el) return;
@@ -179,7 +188,7 @@ export function renderStructuredText(el: Element | null, raw: string | null | un
         items.push(candidate);
         i += 1;
       }
-      appendList(el, "ol", "structuredList structuredListOrdered", items);
+      appendList(el, "ul", "structuredList structuredListBullet", items);
       continue;
     }
 

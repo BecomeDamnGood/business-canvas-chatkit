@@ -595,8 +595,8 @@ test("render structures only cardDesc body while prompt stays plain inline text"
 
   const cardNodes = cardDesc.childNodes || [];
   assert.ok(cardNodes.some((node: any) => node && node.tagName === "P"));
-  assert.ok(cardNodes.some((node: any) => node && node.tagName === "OL"));
   assert.ok(cardNodes.some((node: any) => node && node.tagName === "UL"));
+  assert.equal(cardNodes.some((node: any) => node && node.tagName === "OL"), false);
   assert.equal((promptEl.childNodes || []).length > 0, true);
   assert.equal((promptEl.childNodes || []).some((node: any) => node && node.tagName === "OL"), false);
   assert.equal((promptEl.childNodes || []).some((node: any) => node && node.tagName === "UL"), false);

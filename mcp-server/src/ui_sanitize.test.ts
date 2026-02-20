@@ -153,6 +153,19 @@ test("extractChoicesFromPrompt keeps numbering with <strong> tags and renders bu
 test("renderStructuredText groups paragraphs, ordered lists, and bullets", () => {
   const originalDocument = (globalThis as unknown as { document: unknown }).document;
   const fakeDocument = {
+    createDocumentFragment() {
+      return {
+        nodeType: 11,
+        childNodes: [] as unknown[],
+        appendChild(node: unknown) {
+          this.childNodes.push(node);
+          return node;
+        },
+      };
+    },
+    createTextNode(text: string) {
+      return { nodeType: 3, textContent: String(text) };
+    },
     createElement(tag: string) {
       return {
         nodeType: 1,
@@ -160,6 +173,12 @@ test("renderStructuredText groups paragraphs, ordered lists, and bullets", () =>
         className: "",
         textContent: "",
         childNodes: [] as unknown[],
+        get firstChild() {
+          return this.childNodes.length ? this.childNodes[0] : null;
+        },
+        removeChild() {
+          this.childNodes.shift();
+        },
         appendChild(node: unknown) {
           this.childNodes.push(node);
           return node;
@@ -192,11 +211,15 @@ test("renderStructuredText groups paragraphs, ordered lists, and bullets", () =>
     ].join("\n")
   );
 
-  assert.equal(container.childNodes.length, 4);
-  assert.equal((container.childNodes[0] as { className: string }).className, "cardSubheading");
-  assert.equal((container.childNodes[1] as { tagName: string }).tagName, "P");
-  assert.equal((container.childNodes[2] as { tagName: string }).tagName, "OL");
-  assert.equal((container.childNodes[3] as { tagName: string }).tagName, "UL");
+  assert.equal(container.childNodes.length, 3);
+  assert.equal((container.childNodes[0] as { tagName: string }).tagName, "P");
+  assert.equal((container.childNodes[1] as { tagName: string }).tagName, "OL");
+  assert.equal((container.childNodes[2] as { tagName: string }).tagName, "UL");
+  const firstParagraphFragment = (container.childNodes[0] as { childNodes: unknown[] }).childNodes[0] as {
+    childNodes: { tagName: string; textContent: string }[];
+  };
+  assert.equal(firstParagraphFragment.childNodes[0].tagName, "STRONG");
+  assert.equal(firstParagraphFragment.childNodes[0].textContent, "The Proven Standard");
 
   (globalThis as unknown as { document: unknown }).document = originalDocument;
 });

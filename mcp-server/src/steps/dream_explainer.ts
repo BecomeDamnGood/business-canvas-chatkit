@@ -102,7 +102,8 @@ export function buildDreamExplainerSpecialistInput(
   language: string = "",
   previousStatements: string[] = [],
   topClusters?: TopClusterInfo[],
-  businessContext?: BusinessContext
+  businessContext?: BusinessContext,
+  dreamRuntimeMode: "self" | "builder_collect" | "builder_scoring" | "builder_refine" = "self"
 ): string {
   const plannerInput = `CURRENT_STEP_ID: ${currentStep} | USER_MESSAGE: ${userMessage}`;
   const statements = Array.isArray(previousStatements) ? previousStatements : [];
@@ -111,7 +112,8 @@ export function buildDreamExplainerSpecialistInput(
   const userMsgTrim = typeof userMessage === "string" ? userMessage.trim() : "";
   const userSaidNextStep =
     /next\s*step|(?:ready\s*to\s*)?(?:go\s*to\s*)?(?:the\s*)?next\s*step|done|enough|ready\s*to\s*continue|finish|i'?\s*m\s*done/i.test(userMsgTrim);
-  const forceScoringView = statements.length >= 20;
+  // In builder_refine mode we are refining a Dream candidate, not re-entering scoring.
+  const forceScoringView = statements.length >= 20 && dreamRuntimeMode !== "builder_refine";
   const requestedNextStep = forceScoringView || userSaidNextStep;
   let block = `INTRO_SHOWN_FOR_STEP: ${introShownForStep}
 CURRENT_STEP: ${currentStep}
@@ -217,8 +219,10 @@ The user is only allowed to do this Dream exercise now. If they ask something un
 
 Standard OFF-TOPIC output (localized)
 - action="ASK"
-- message (localized): exactly 2 sentences.
-  Sentence 1: brief acknowledgement of the request (no judgement).
+- message (localized): Step-0 tone structure.
+  Sentence 1: short, friendly, empathetic, non-judgmental boundary. Light humor as a small wink is allowed.
+  Sentence 2 (optional): include only for clearly off-topic/nonsense input; keep the same tone.
+  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "your future company".
 
 - refined_formulation="", question=""
 - dream=""

@@ -57,6 +57,7 @@ export const CanvasStateZod = z.object({
   // UI strings (localized in backend; cached per language)
   ui_strings: z.record(z.string(), z.string()),
   ui_strings_lang: z.string(),
+  ui_strings_version: z.string(),
 
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
@@ -93,7 +94,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "4";
+export const CURRENT_STATE_VERSION = "5";
 
 /**
  * Hard defaults (no nulls)
@@ -112,6 +113,7 @@ export function getDefaultState(): CanvasState {
     language_override: "false",
     ui_strings: {},
     ui_strings_lang: "",
+    ui_strings_version: "",
 
     last_specialist_result: {},
 
@@ -173,6 +175,7 @@ export function normalizeState(raw: unknown): CanvasState {
     Object.entries(ui_strings_raw || {}).map(([k, v]) => [String(k), String(v ?? "")])
   );
   const ui_strings_lang = String((r as any).ui_strings_lang ?? d.ui_strings_lang).trim().toLowerCase();
+  const ui_strings_version = String((r as any).ui_strings_version ?? d.ui_strings_version).trim();
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
@@ -226,6 +229,7 @@ export function normalizeState(raw: unknown): CanvasState {
     language_override,
     ui_strings,
     ui_strings_lang,
+    ui_strings_version,
 
     last_specialist_result,
 
@@ -264,6 +268,16 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v4 -> v5: add ui string schema version marker to support deterministic text refresh.
+  if (s.state_version === "4") {
+    s = {
+      ...s,
+      state_version: "5",
+      ui_strings_version: String((s as any).ui_strings_version ?? "").trim(),
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v3 -> v4: hard reset legacy confirm/proceed sessions (no compatibility layer).
   if (s.state_version === "3") {
     const fresh = getDefaultState();
@@ -282,6 +296,7 @@ export function migrateState(raw: unknown): CanvasState {
             )
           : {},
       ui_strings_lang: String((s as any).ui_strings_lang ?? "").trim().toLowerCase(),
+      ui_strings_version: String((s as any).ui_strings_version ?? "").trim(),
       provisional_by_step: {},
     };
     return CanvasStateZod.parse(s);
