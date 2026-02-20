@@ -193,10 +193,11 @@ if (btnStart) {
     setSessionStarted(true);
     setSessionWelcomeShown(false);
     setWidgetStateSafe({ started: "true" });
-    render();
-    if (!hasToolOutput()) {
-      callRunStep("ACTION_START", { started: "true" });
+    if (hasToolOutput()) {
+      render();
+      return;
     }
+    callRunStep("ACTION_START", { started: "true" });
   });
 }
 

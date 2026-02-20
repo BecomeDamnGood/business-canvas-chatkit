@@ -248,6 +248,9 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   purposeInstructionHint: "Answer the question, formulate your own Purpose, or choose an option",
   "offtopic.redirect.template": "Let's continue with the {0} of {1}.",
   "offtopic.current.template": "The current {0} of {1} is.",
+  "strategy.focuspoints.count.template": "You now have {0} focus points within your strategy. I advise you to formulate at least 4 but maximum 7 focus points.",
+  "strategy.focuspoints.warning.template": "I strongly advice you to only add a maximum of 7 focus points. can I consolidate this for you?",
+  "strategy.current.template": "Your current Strategy for {0} is:",
   "offtopic.companyFallback": "your future company",
   "offtopic.step.dream": "Dream",
   "offtopic.step.purpose": "Purpose",
@@ -280,7 +283,7 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
 };
 
 const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_DEFAULT);
-const UI_STRINGS_SCHEMA_VERSION = "2026-02-20-offtopic-v6";
+const UI_STRINGS_SCHEMA_VERSION = "2026-02-20-strategy-focuspoints-v7";
 const UiStringsZodSchema = z.object(
   UI_STRINGS_KEYS.reduce<Record<string, z.ZodString>>((acc, k) => {
     acc[k] = z.string();
@@ -361,6 +364,7 @@ const DREAM_START_EXERCISE_ACTION_CODES = new Set<string>([
 ]);
 const DREAM_PICK_ONE_ROUTE_TOKEN = "__ROUTE__DREAM_PICK_ONE__";
 const DREAM_FORCE_REFINE_ROUTE_PREFIX = "__ROUTE__DREAM_FORCE_REFINE__";
+const STRATEGY_CONSOLIDATE_ROUTE_TOKEN = "__ROUTE__STRATEGY_CONSOLIDATE__";
 const WIDGET_ESCAPE_LABEL_PATTERNS: RegExp[] = [
   /\bfinish\s+later\b/i,
   /\bcontinue\b[^\n\r]{0,80}\bnow\b/i,
@@ -1434,6 +1438,17 @@ function hasDreamSpecialistCandidate(result: any): boolean {
   const dreamValue = String(result?.dream || "").trim();
   const refinedValue = String(result?.refined_formulation || "").trim();
   return Boolean(dreamValue || refinedValue);
+}
+
+function strategyStatementsForConsolidateGuard(result: any, state: CanvasState): string[] {
+  const direct = Array.isArray(result?.statements)
+    ? (result.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+  if (direct.length > 0) return direct;
+  const rawCombined = String(result?.strategy || result?.refined_formulation || "").trim();
+  if (rawCombined) return parseListItems(rawCombined).map((line) => String(line || "").trim()).filter(Boolean);
+  const fallback = String((state as any).strategy_final || provisionalValueForStep(state, STRATEGY_STEP_ID) || "").trim();
+  return parseListItems(fallback).map((line) => String(line || "").trim()).filter(Boolean);
 }
 
 function fallbackDreamCandidateFromUserInput(userInput: string, state: CanvasState): string {
@@ -2934,6 +2949,8 @@ function userChoiceFeedbackReason(stepId: string, prev: any): string {
     /^that'?s a strong\b/i,
     /^i appreciate\b/i,
     /^good point\b/i,
+    /^you chose your own wording\b/i,
+    /^please click what suits you best\b/i,
   ];
   if (message) {
     const paragraphs = message
@@ -2952,13 +2969,32 @@ function userChoiceFeedbackReason(stepId: string, prev: any): string {
   return STEP_FEEDBACK_FALLBACK[stepId] || "this wording may be less precise for this step.";
 }
 
+function normalizeUserChoiceFeedbackSentence(stepId: string, rawReason: string): string {
+  const fallback = STEP_FEEDBACK_FALLBACK[stepId] || "This wording may be less precise for this step.";
+  let text = String(rawReason || "").trim();
+  if (!text) text = fallback;
+  text = text
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  text = text
+    .replace(/^please note:\s*/i, "")
+    .replace(/^note:\s*/i, "")
+    .replace(/^that\s+/i, "This ")
+    .trim();
+  if (!text) text = fallback;
+  text = text.charAt(0).toUpperCase() + text.slice(1);
+  if (!/[.!?]$/.test(text)) text = `${text}.`;
+  return text;
+}
+
 function userChoiceFeedbackMessage(stepId: string, state: CanvasState, prev: any, activeSpecialist = ""): string {
-  const rawReason = userChoiceFeedbackReason(stepId, prev);
-  const reason = String(rawReason || "")
-    .trim()
-    .replace(/^(that|because)\s+/i, "");
-  const normalizedReason = /[.!?]$/.test(reason) ? reason : `${reason}.`;
-  const feedback = `You chose your own wording and that's fine. Please note: ${normalizedReason}`;
+  const reason = normalizeUserChoiceFeedbackSentence(stepId, userChoiceFeedbackReason(stepId, prev));
+  const feedback = `You chose your own wording, and that's okay. ${reason}`;
   const selection = wordingSelectionMessage(stepId, state, activeSpecialist);
   return selection ? `${feedback}\n\n${selection}` : feedback;
 }
@@ -6593,6 +6629,59 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       } else {
         specialistResult = buildDreamRefineFallbackSpecialist(specialistResult, userMessage, state);
       }
+    }
+  }
+
+  // --------- STRATEGY CONSOLIDATE CONTRACT GUARD ----------
+  if (
+    String(decision1.current_step || "") === STRATEGY_STEP_ID &&
+    String(decision1.specialist_to_call || "") === STRATEGY_SPECIALIST &&
+    String(userMessage || "").trim().startsWith(STRATEGY_CONSOLIDATE_ROUTE_TOKEN)
+  ) {
+    const initialOfftopic =
+      specialistResult?.is_offtopic === true ||
+      String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
+    const initialCount = strategyStatementsForConsolidateGuard(specialistResult, state).length;
+    if (!initialOfftopic && initialCount > 7) {
+      const seedStatements = strategyStatementsForConsolidateGuard(specialistResult, state);
+      const repairInput = seedStatements.length > 0
+        ? `${STRATEGY_CONSOLIDATE_ROUTE_TOKEN}\n${seedStatements.join("\n")}`
+        : STRATEGY_CONSOLIDATE_ROUTE_TOKEN;
+      const repairCall = await callSpecialistStrictSafe(
+        { model, state, decision: decision1, userMessage: repairInput },
+        buildRoutingContext(repairInput),
+        state
+      );
+      if (!repairCall.ok) return finalizeResponse(repairCall.payload);
+      rememberLlmCall(repairCall.value);
+      attempts = Math.max(attempts, repairCall.value.attempts);
+      specialistResult = repairCall.value.specialistResult;
+    }
+
+    const repairedOfftopic =
+      specialistResult?.is_offtopic === true ||
+      String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
+    const repairedCount = strategyStatementsForConsolidateGuard(specialistResult, state).length;
+    if (!repairedOfftopic && repairedCount > 7) {
+      const specialistSnapshot =
+        specialistResult && typeof specialistResult === "object" ? specialistResult : {};
+      return finalizeResponse(attachRegistryPayload({
+        ok: false as const,
+        tool: "run_step" as const,
+        current_step_id: String(state.current_step),
+        active_specialist: String((state as any).active_specialist || ""),
+        text: "",
+        prompt: "",
+        specialist: specialistSnapshot,
+        state,
+        error: {
+          type: "contract_violation",
+          message: "Strategy consolidate route returned more than 7 focus points.",
+          reason: "strategy_consolidate_overflow_after_repair",
+          step: String(state.current_step || ""),
+          statement_count: repairedCount,
+        },
+      }, specialistSnapshot));
     }
   }
 

@@ -233,7 +233,7 @@ test("renderChoiceButtons keeps both ROLE_MENU_REFINE choices", () => {
 
   const choices = [
     { value: "1", label: "I'm happy with this wording, continue to step 6 Entity." },
-    { value: "2", label: "I want to adjust it." },
+    { value: "2", label: "Refine this wording for me" },
   ];
 
   renderChoiceButtons(choices, {
@@ -245,7 +245,7 @@ test("renderChoiceButtons keeps both ROLE_MENU_REFINE choices", () => {
       expected_choice_count: 2,
       actions: [
         { id: "a1", label: "I'm happy with this wording, continue to step 6 Entity.", action_code: "ACTION_ROLE_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__ROLE_REFINE_CONFIRM__" } },
-        { id: "a2", label: "I want to adjust it.", action_code: "ACTION_ROLE_REFINE_ADJUST", intent: { type: "ROUTE", route: "__ROUTE__ROLE_REFINE_ADJUST__" } },
+        { id: "a2", label: "Refine this wording for me", action_code: "ACTION_ROLE_REFINE_ADJUST", intent: { type: "ROUTE", route: "__ROUTE__ROLE_REFINE_ADJUST__" } },
       ],
     },
   });
@@ -805,10 +805,10 @@ test("render hides regular choice buttons while wording choice is required", () 
       },
       specialist: {
         action: "REFINE",
-        question: "1) I'm happy with this wording, continue to step 6 Entity.\n2) I want to adjust it.",
+        question: "1) I'm happy with this wording, continue to step 6 Entity.\n2) Refine this wording for me",
         menu_id: "ROLE_MENU_REFINE",
       },
-      prompt: "1) I'm happy with this wording, continue to step 6 Entity.\n2) I want to adjust it.",
+      prompt: "1) I'm happy with this wording, continue to step 6 Entity.\n2) Refine this wording for me",
       ui: {
         action_codes: ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"],
         expected_choice_count: 2,

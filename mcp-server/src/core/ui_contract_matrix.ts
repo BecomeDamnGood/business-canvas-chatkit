@@ -180,7 +180,7 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   ACTION_ROLE_REFINE_ADJUST: {
     step_id: "role",
     from_menu_ids: ["ROLE_MENU_REFINE"],
-    to_menu_id: "ROLE_MENU_CONFIRM_SINGLE",
+    to_menu_id: "ROLE_MENU_REFINE",
   },
   ACTION_ROLE_REFINE_CONFIRM: {
     step_id: "role",
@@ -232,6 +232,11 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   ACTION_STRATEGY_REFINE_EXPLAIN_MORE: {
     step_id: "strategy",
     from_menu_ids: ["STRATEGY_MENU_REFINE", "STRATEGY_MENU_CONFIRM"],
+    to_menu_id: "STRATEGY_MENU_ASK",
+  },
+  ACTION_STRATEGY_CONSOLIDATE: {
+    step_id: "strategy",
+    from_menu_ids: ["STRATEGY_MENU_CONFIRM"],
     to_menu_id: "STRATEGY_MENU_ASK",
   },
   ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE: {
@@ -407,7 +412,7 @@ export const MENU_LABELS: Record<string, string[]> = {
   ROLE_MENU_ASK: ["Give 3 short Role examples"],
   ROLE_MENU_REFINE: [
     "I'm happy with this wording, continue to step 6 Entity.",
-    "I want to adjust it.",
+    "Refine this wording for me",
   ],
   ROLE_MENU_CONFIRM_SINGLE: [
     "I'm happy with this wording, continue to step 6 Entity.",
@@ -434,6 +439,7 @@ export const MENU_LABELS: Record<string, string[]> = {
   STRATEGY_MENU_QUESTIONS: ["Explain why a Strategy matters"],
   STRATEGY_MENU_CONFIRM: [
     "Explain why a Strategy matters",
+    "Consolidate my focus points for me please",
     "I'm satisfied with my strategy. Continue to Target Group.",
   ],
   STRATEGY_MENU_FINAL_CONFIRM: [
@@ -553,11 +559,16 @@ function headlinePrefixForStatus(status: TurnOutputStatus): "Define" | "Refine" 
 }
 
 export function buildHeadlineForContract(params: {
+  stepId?: string;
   stepLabel: string;
   companyName: string;
   status: TurnOutputStatus;
   hasOptions: boolean;
+  strategyStatementCount?: number;
 }): string {
+  if (params.stepId === "strategy" && Number(params.strategyStatementCount || 0) >= 1) {
+    return "What more do you focus on within your strategy?";
+  }
   const prefix = headlinePrefixForStatus(params.status);
   const base = `${prefix} your ${params.stepLabel} for ${params.companyName}`;
   return params.hasOptions ? `${base} or choose an option.` : `${base}.`;

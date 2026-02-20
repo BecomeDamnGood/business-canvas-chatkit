@@ -173,9 +173,11 @@ test("resolveActionCodeMenuTransition maps informational actions to deterministi
     ["ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE", "bigwhy", "BIGWHY_MENU_INTRO", "BIGWHY_MENU_FROM_EXPLAIN"],
     ["ACTION_BIGWHY_INTRO_GIVE_EXAMPLE", "bigwhy", "BIGWHY_MENU_INTRO", "BIGWHY_MENU_FROM_GIVE"],
     ["ACTION_ROLE_INTRO_EXPLAIN_MORE", "role", "ROLE_MENU_INTRO", "ROLE_MENU_ASK"],
+    ["ACTION_ROLE_REFINE_ADJUST", "role", "ROLE_MENU_REFINE", "ROLE_MENU_REFINE"],
     ["ACTION_ENTITY_INTRO_EXPLAIN_MORE", "entity", "ENTITY_MENU_INTRO", "ENTITY_MENU_FORMULATE"],
     ["ACTION_STRATEGY_INTRO_EXPLAIN_MORE", "strategy", "STRATEGY_MENU_INTRO", "STRATEGY_MENU_ASK"],
     ["ACTION_STRATEGY_REFINE_EXPLAIN_MORE", "strategy", "STRATEGY_MENU_CONFIRM", "STRATEGY_MENU_ASK"],
+    ["ACTION_STRATEGY_CONSOLIDATE", "strategy", "STRATEGY_MENU_CONFIRM", "STRATEGY_MENU_ASK"],
     ["ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE", "targetgroup", "TARGETGROUP_MENU_INTRO", "TARGETGROUP_MENU_EXPLAIN_MORE"],
     ["ACTION_RULES_INTRO_EXPLAIN_MORE", "rulesofthegame", "RULES_MENU_INTRO", "RULES_MENU_GIVE_EXAMPLE_ONLY"],
     ["ACTION_RULES_ASK_EXPLAIN_MORE", "rulesofthegame", "RULES_MENU_ASK_EXPLAIN", "RULES_MENU_GIVE_EXAMPLE_ONLY"],
@@ -314,7 +316,9 @@ test("contract audit: route actions in non-escape menus never repeat the clicked
       const targetLabels = (MENU_LABELS[targetMenuId] || [])
         .map((label) => String(label || "").trim())
         .filter(Boolean);
-      const allowSameLabelLoop = actionCode === "ACTION_DREAM_EXPLAINER_REFINE_ADJUST";
+      const allowSameLabelLoop =
+        actionCode === "ACTION_DREAM_EXPLAINER_REFINE_ADJUST" ||
+        actionCode === "ACTION_ROLE_REFINE_ADJUST";
       if (!allowSameLabelLoop && sourceLabel && targetLabels.includes(sourceLabel)) {
         issues.push({
           type: "same_button_repeated_after_click",
@@ -2224,7 +2228,7 @@ test("wording choice: selecting user variant updates candidate and clears pendin
   );
   assert.equal(
     String(result.specialist?.message || ""),
-    "You chose your own wording and that's fine. Please note: A Purpose should capture deeper meaning, not just operational wording.\n\nYour current Purpose for Mindd is:"
+    "You chose your own wording, and that's okay. A Purpose should capture deeper meaning, not just operational wording.\n\nYour current Purpose for Mindd is:"
   );
   assert.equal(String(result.specialist?.confirmation_question || ""), "");
 });
@@ -2299,7 +2303,7 @@ test("wording choice: user pick preserves multi-line strategy input and shows fe
   assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_REFINE_EXPLAIN_MORE"]);
   assert.match(
     String(result.specialist?.message || ""),
-    /You chose your own wording and that's fine\./
+    /You chose your own wording, and that's okay\./
   );
   assert.match(
     String(result.specialist?.message || ""),
@@ -2354,14 +2358,13 @@ test("wording choice: strategy suggestion pick restores buttons and keeps progre
   assert.equal(menuIdFromTurn(result), "STRATEGY_MENU_ASK");
   assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
   assert.deepEqual(result.ui?.action_codes, ["ACTION_STRATEGY_ASK_3_QUESTIONS", "ACTION_STRATEGY_ASK_GIVE_EXAMPLES"]);
-  assert.equal(String(result.specialist?.message || ""), "Your current Strategy for Mindd is:");
-  assert.equal(String(result.specialist?.message || "").includes("Focus point 1 noted:"), false);
+  assert.equal(String(result.specialist?.message || "").includes("Your current Strategy for Mindd is:"), true);
   assert.equal(
-    /Your current Strategy for Mindd is:\n\nFocus exclusively on clients in the Netherlands/i.test(
-      String(result.specialist?.message || "")
-    ),
-    false
+    String(result.specialist?.message || "").includes("You now have 2 focus points within your strategy."),
+    true
   );
+  assert.equal(String(result.specialist?.message || "").includes("Focus point 1 noted:"), false);
+  assert.equal(String(result.specialist?.message || "").includes("- Focus exclusively on clients in the Netherlands"), true);
 });
 
 test("wording choice: strategy suggestion pick removes duplicate 'Focus point noted' lines even without statements array", async () => {
@@ -2406,7 +2409,58 @@ test("wording choice: strategy suggestion pick removes duplicate 'Focus point no
   const message = String(result.specialist?.message || "");
   assert.equal(message.includes("Focus point 1 noted:"), false);
   assert.equal(message.includes("Focus point 2 noted:"), false);
-  assert.equal(message, "Your current Strategy for Mindd is:");
+  assert.equal(message.includes("Your current Strategy for Mindd is:"), true);
+  assert.equal(message.includes("You now have 2 focus points within your strategy."), true);
+});
+
+test("strategy overflow shows consolidate button and warning instead of explain", async () => {
+  const result = await run_step({
+    user_message: "ACTION_STRATEGY_REFINE_EXPLAIN_MORE",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "strategy",
+      active_specialist: "Strategy",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      __ui_phase_by_step: {
+        strategy: "strategy:phase:STRATEGY_MENU_CONFIRM",
+      },
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "STRATEGY_MENU_CONFIRM",
+        question: "1) Explain why a Strategy matters",
+        statements: [
+          "Focus point 1",
+          "Focus point 2",
+          "Focus point 3",
+          "Focus point 4",
+          "Focus point 5",
+          "Focus point 6",
+          "Focus point 7",
+          "Focus point 8",
+        ],
+        strategy:
+          "Focus point 1\nFocus point 2\nFocus point 3\nFocus point 4\nFocus point 5\nFocus point 6\nFocus point 7\nFocus point 8",
+        refined_formulation:
+          "Focus point 1\nFocus point 2\nFocus point 3\nFocus point 4\nFocus point 5\nFocus point 6\nFocus point 7\nFocus point 8",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "strategy");
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_STRATEGY_CONSOLIDATE",
+    "ACTION_STRATEGY_CONFIRM_SATISFIED",
+  ]);
+  assert.equal(
+    String(result.specialist?.message || "").includes(
+      "I strongly advice you to only add a maximum of 7 focus points. can I consolidate this for you?"
+    ),
+    true
+  );
 });
 
 test("informational action: strategy explain-more remains on contract ask menu", async () => {

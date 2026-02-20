@@ -98,7 +98,9 @@ function applyConfirmEligibleState(state: Record<string, unknown>, stepId: strin
     state[finalField] =
       stepId === "step_0"
         ? "Venture: agency | Name: Mindd | Status: existing"
-        : `Committed ${stepId} value`;
+        : stepId === "strategy"
+          ? "Focus point 1\nFocus point 2\nFocus point 3\nFocus point 4"
+          : `Committed ${stepId} value`;
   }
 }
 
@@ -442,6 +444,7 @@ test("dream explainer switch-self prompt is de-numbered before contract numberin
 test("strategy: incomplete output hides confirm action", () => {
   const state = getDefaultState();
   (state as any).current_step = "strategy";
+  (state as any).business_name = "Mindd";
   const rendered = renderFreeTextTurnPolicy({
     stepId: "strategy",
     state,
@@ -456,7 +459,91 @@ test("strategy: incomplete output hides confirm action", () => {
   assert.equal(rendered.status, "incomplete_output");
   assert.equal(rendered.confirmEligible, false);
   assert.equal(rendered.uiActionCodes.some((code) => code.includes("CONFIRM")), false);
+  assert.equal(
+    String(rendered.specialist.question || "").includes("What more do you focus on within your strategy?"),
+    true
+  );
+  assert.equal(
+    String(rendered.specialist.message || "").includes("You now have 2 focus points within your strategy."),
+    true
+  );
+  assert.equal(
+    String(rendered.specialist.message || "").includes("Your current Strategy for Mindd is:"),
+    true
+  );
+  assert.equal(
+    String(rendered.specialist.message || "").includes("- Focus on premium clients"),
+    true
+  );
   assert.equal(countNumberedOptions(String(rendered.specialist.question || "")), rendered.uiActionCodes.length);
+});
+
+test("strategy: valid output starts at 4 focus points and keeps confirm action", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "strategy";
+  (state as any).business_name = "Mindd";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "strategy",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "",
+      statements: [
+        "Focus on long-term partnerships",
+        "Prioritize measurable customer outcomes",
+        "Protect quality over speed",
+        "Invest in repeatable delivery standards",
+      ],
+      strategy:
+        "Focus on long-term partnerships\nPrioritize measurable customer outcomes\nProtect quality over speed\nInvest in repeatable delivery standards",
+      question: "",
+      menu_id: "",
+    },
+  });
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(renderedMenuId(rendered), "STRATEGY_MENU_CONFIRM");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_STRATEGY_REFINE_EXPLAIN_MORE",
+    "ACTION_STRATEGY_CONFIRM_SATISFIED",
+  ]);
+});
+
+test("strategy: overflow above 7 shows consolidate and hides explain action", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "strategy";
+  (state as any).business_name = "Mindd";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "strategy",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "",
+      statements: [
+        "Focus point 1",
+        "Focus point 2",
+        "Focus point 3",
+        "Focus point 4",
+        "Focus point 5",
+        "Focus point 6",
+        "Focus point 7",
+        "Focus point 8",
+      ],
+      question: "",
+      menu_id: "",
+    },
+  });
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(renderedMenuId(rendered), "STRATEGY_MENU_CONFIRM");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_STRATEGY_CONSOLIDATE",
+    "ACTION_STRATEGY_CONFIRM_SATISFIED",
+  ]);
+  assert.equal(
+    String(rendered.specialist.message || "").includes(
+      "I strongly advice you to only add a maximum of 7 focus points. can I consolidate this for you?"
+    ),
+    true
+  );
 });
 
 test("bigwhy: when confirm is not eligible, filtered menu keeps matching label for remaining action", () => {
@@ -788,7 +875,9 @@ test("off-topic keeps committed context and valid-output contract menu across st
       (state as any).active_specialist = "Dream";
     }
     const finalField = finalFieldForStep(stepId);
-    const committedValue = `Committed ${stepId} value.`;
+    const committedValue = stepId === "strategy"
+      ? "Focus point 1\nFocus point 2\nFocus point 3\nFocus point 4"
+      : `Committed ${stepId} value.`;
     if (finalField) {
       (state as any)[finalField] = committedValue;
     }
@@ -812,8 +901,12 @@ test("off-topic keeps committed context and valid-output contract menu across st
       `${stepId} should keep valid-output contract menu`
     );
     assert.ok((rendered.uiActionCodes || []).length > 0, `${stepId} should keep at least one action button`);
+    const expectedRecapSnippet =
+      stepId === "strategy"
+        ? "Focus point 1"
+        : committedValue;
     assert.equal(
-      String(rendered.specialist.message || "").includes(committedValue),
+      String(rendered.specialist.message || "").includes(expectedRecapSnippet),
       true,
       `${stepId} should include committed context in off-topic response`
     );
@@ -1010,6 +1103,10 @@ test("all non-escape menus keep parity and confirm-filter contract in both eligi
     const expectedMenuActions = Array.isArray(ACTIONCODE_REGISTRY.menus[expectedMenuId])
       ? ACTIONCODE_REGISTRY.menus[expectedMenuId]
       : menuActions;
+    const filteredExpectedMenuActions =
+      expectedMenuId === "STRATEGY_MENU_CONFIRM"
+        ? expectedMenuActions.filter((code) => code !== "ACTION_STRATEGY_CONSOLIDATE")
+        : expectedMenuActions;
     assert.equal(
       renderedMenuId(confirmRendered),
       expectedMenuId,
@@ -1017,7 +1114,7 @@ test("all non-escape menus keep parity and confirm-filter contract in both eligi
     );
     assert.deepEqual(
       confirmRendered.uiActionCodes,
-      expectedMenuActions,
+      filteredExpectedMenuActions,
       `${menuId} confirm context must keep full menu action set`
     );
     assert.equal(

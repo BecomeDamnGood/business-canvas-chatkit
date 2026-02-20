@@ -244,6 +244,45 @@ function offTopicCurrentContextHeading(stepId: string, state: CanvasState): stri
   );
 }
 
+function strategySummaryLine(state: CanvasState, count: number): string {
+  const template = uiStringFromState(
+    state,
+    "strategy.focuspoints.count.template",
+    "You now have {0} focus points within your strategy. I advise you to formulate at least 4 but maximum 7 focus points."
+  );
+  return ensureSentenceEnd(formatIndexedTemplate(template, [String(count)]).trim());
+}
+
+function strategyOverflowWarningLine(state: CanvasState): string {
+  const template = uiStringFromState(
+    state,
+    "strategy.focuspoints.warning.template",
+    "I strongly advice you to only add a maximum of 7 focus points. can I consolidate this for you?"
+  );
+  return ensureSentenceEnd(template.trim());
+}
+
+function strategyCurrentHeading(state: CanvasState): string {
+  const template = uiStringFromState(
+    state,
+    "strategy.current.template",
+    "Your current Strategy for {0} is:"
+  );
+  return ensureSentenceEnd(formatIndexedTemplate(template, [companyNameForPrompt(state)]).trim());
+}
+
+function buildStrategyContextBlock(state: CanvasState, statements: string[]): string {
+  const deduped = dedupeStatements(statements);
+  if (deduped.length === 0) return "";
+  const parts: string[] = [strategySummaryLine(state, deduped.length)];
+  if (deduped.length > 7) {
+    parts.push(strategyOverflowWarningLine(state));
+  }
+  parts.push(strategyCurrentHeading(state));
+  parts.push(...deduped.map((line) => `- ${line}`));
+  return parts.join("\n");
+}
+
 function comparableText(raw: string): string {
   return String(raw || "")
     .replace(/<[^>]*>/g, " ")
@@ -297,12 +336,97 @@ function extractStatementCount(
   return prevStatements.length;
 }
 
+function dedupeStatements(lines: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const rawLine of lines) {
+    const line = String(rawLine || "").trim();
+    if (!line) continue;
+    const key = comparableText(line);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(line);
+  }
+  return out;
+}
+
+function parseStrategyStatementsFromText(raw: string): string[] {
+  const text = String(raw || "")
+    .replace(/\r/g, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .trim();
+  if (!text) return [];
+  const normalizedLines = text
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => !/^your current strategy for\b/i.test(line))
+    .filter((line) => !/^the current strategy of\b/i.test(line))
+    .filter((line) => !/^you now have \d+\s+focus points?/i.test(line))
+    .filter((line) => !/^i strongly advice you/i.test(line));
+  if (normalizedLines.length >= 2) return dedupeStatements(normalizedLines);
+
+  const compact = normalizedLines.join(" ").replace(/\s+/g, " ").trim();
+  if (!compact) return [];
+  const bulletLike = compact
+    .split(/\s*[•]\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (bulletLike.length >= 2) return dedupeStatements(bulletLike);
+
+  const semicolonParts = compact
+    .split(/\s*;\s+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (semicolonParts.length >= 2) return dedupeStatements(semicolonParts);
+
+  const sentenceParts = compact
+    .split(/(?<=[.!?])\s+(?=\S)/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (sentenceParts.length >= 2) return dedupeStatements(sentenceParts);
+
+  return dedupeStatements([compact]);
+}
+
+function strategyStatementsFromSources(
+  state: CanvasState,
+  specialist: Record<string, unknown>,
+  prev: Record<string, unknown>,
+): string[] {
+  const specialistStatements = Array.isArray(specialist.statements)
+    ? (specialist.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+  if (specialistStatements.length > 0) return dedupeStatements(specialistStatements);
+
+  const prevStatements = Array.isArray(prev.statements)
+    ? (prev.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+    : [];
+  if (prevStatements.length > 0) return dedupeStatements(prevStatements);
+
+  const candidates = [
+    String((specialist as any).strategy || "").trim(),
+    String((specialist as any).refined_formulation || "").trim(),
+    String((prev as any).strategy || "").trim(),
+    String((prev as any).refined_formulation || "").trim(),
+    provisionalForStep(state, "strategy"),
+    String((state as any).strategy_final || "").trim(),
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseStrategyStatementsFromText(candidate);
+    if (parsed.length > 0) return parsed;
+  }
+  return [];
+}
+
 function computeStatus(
   stepId: string,
   state: CanvasState,
   specialist: Record<string, unknown>,
   prev: Record<string, unknown>
-): { status: TurnOutputStatus; confirmEligible: boolean; recapBody: string } {
+): { status: TurnOutputStatus; confirmEligible: boolean; recapBody: string; statementCount: number } {
   if (stepId === "step_0") {
     const finalLine = String((state as any).step_0_final ?? "").trim() || extractCandidate(stepId, specialist, prev);
     const parsed = parseStep0Line(finalLine);
@@ -311,14 +435,14 @@ function computeStatus(
       Boolean(parsed.venture) &&
       Boolean(parsed.name) &&
       (parsed.status === "existing" || parsed.status === "starting");
-    if (!hasAny) return { status: "no_output", confirmEligible: false, recapBody: "" };
+    if (!hasAny) return { status: "no_output", confirmEligible: false, recapBody: "", statementCount: 0 };
     const recap = [
       `Venture: ${parsed.venture || "-"}`,
       `Name: ${parsed.name || "-"}`,
       `Status: ${parsed.status || "-"}`,
     ].join("\n");
-    if (valid) return { status: "valid_output", confirmEligible: true, recapBody: recap };
-    return { status: "incomplete_output", confirmEligible: false, recapBody: recap };
+    if (valid) return { status: "valid_output", confirmEligible: true, recapBody: recap, statementCount: 0 };
+    return { status: "incomplete_output", confirmEligible: false, recapBody: recap, statementCount: 0 };
   }
 
   const finalField = FINAL_FIELD_BY_STEP[stepId] || "";
@@ -346,15 +470,17 @@ function computeStatus(
           status: "incomplete_output",
           confirmEligible: false,
           recapBody: statementBullets || candidate || finalValue,
+          statementCount,
         };
       }
-      return { status: "no_output", confirmEligible: false, recapBody: "" };
+      return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
     }
     if (dreamMode === "builder_scoring") {
       return {
         status: "no_output",
         confirmEligible: false,
         recapBody: statementBullets || candidate || finalValue,
+        statementCount,
       };
     }
     if (dreamMode === "builder_refine") {
@@ -363,12 +489,14 @@ function computeStatus(
           status: "valid_output",
           confirmEligible: true,
           recapBody: candidate || finalValue,
+          statementCount,
         };
       }
       return {
         status: statementCount > 0 ? "incomplete_output" : "no_output",
         confirmEligible: false,
         recapBody: statementBullets || finalValue,
+        statementCount,
       };
     }
 
@@ -378,27 +506,33 @@ function computeStatus(
         status: "valid_output",
         confirmEligible: true,
         recapBody: dreamValue,
+        statementCount,
       };
     }
-    return { status: "no_output", confirmEligible: false, recapBody: "" };
+    return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
   }
 
   if (stepId === "strategy") {
-    if (finalValue || statementCount >= 5) {
+    const strategyStatements = strategyStatementsFromSources(state, specialist, prev);
+    const strategyCount = strategyStatements.length;
+    const strategyBullets = strategyStatements.map((line) => `• ${line}`).join("\n");
+    if (strategyCount >= 4) {
       return {
         status: "valid_output",
         confirmEligible: true,
-        recapBody: finalValue || statementBullets || candidate,
+        recapBody: strategyBullets || finalValue || candidate,
+        statementCount: strategyCount,
       };
     }
-    if (statementCount > 0 || candidate) {
+    if (strategyCount > 0 || candidate) {
       return {
         status: "incomplete_output",
         confirmEligible: false,
-        recapBody: statementBullets || candidate,
+        recapBody: strategyBullets || candidate,
+        statementCount: strategyCount,
       };
     }
-    return { status: "no_output", confirmEligible: false, recapBody: "" };
+    return { status: "no_output", confirmEligible: false, recapBody: "", statementCount: 0 };
   }
 
   if (stepId === "rulesofthegame") {
@@ -407,6 +541,7 @@ function computeStatus(
         status: "valid_output",
         confirmEligible: true,
         recapBody: finalValue || statementBullets || candidate,
+        statementCount,
       };
     }
     if (statementCount > 0 || candidate) {
@@ -414,9 +549,10 @@ function computeStatus(
         status: "incomplete_output",
         confirmEligible: false,
         recapBody: statementBullets || candidate,
+        statementCount,
       };
     }
-    return { status: "no_output", confirmEligible: false, recapBody: "" };
+    return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
   }
 
   if (stepId === "productsservices") {
@@ -425,9 +561,10 @@ function computeStatus(
         status: "valid_output",
         confirmEligible: true,
         recapBody: finalValue || statementBullets || candidate,
+        statementCount,
       };
     }
-    return { status: "no_output", confirmEligible: false, recapBody: "" };
+    return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
   }
 
   const candidateDrivenValidSteps = new Set([
@@ -439,16 +576,16 @@ function computeStatus(
     "presentation",
   ]);
   if (candidate && candidateDrivenValidSteps.has(stepId)) {
-    return { status: "valid_output", confirmEligible: true, recapBody: candidate };
+    return { status: "valid_output", confirmEligible: true, recapBody: candidate, statementCount };
   }
 
   if (finalValue) {
-    return { status: "valid_output", confirmEligible: true, recapBody: finalValue };
+    return { status: "valid_output", confirmEligible: true, recapBody: finalValue, statementCount };
   }
   if (candidate) {
-    return { status: "incomplete_output", confirmEligible: false, recapBody: candidate };
+    return { status: "incomplete_output", confirmEligible: false, recapBody: candidate, statementCount };
   }
-  return { status: "no_output", confirmEligible: false, recapBody: "" };
+  return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
 }
 
 function labelsForMenu(
@@ -553,7 +690,17 @@ function resolveMenuContract(params: {
   if (!menuBelongsToStep(menuId, stepId)) return { menuId: "", actionCodes: [], labels: [] };
 
   const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
-  const actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
+  let actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
+  if (stepId === "strategy" && menuId === "STRATEGY_MENU_CONFIRM") {
+    const strategyCount = strategyStatementsFromSources(state, specialist, prev).length;
+    const overflow = strategyCount > 7;
+    actionCodes = actionCodes.filter((code) => {
+      const normalized = String(code || "").trim();
+      if (normalized === "ACTION_STRATEGY_REFINE_EXPLAIN_MORE") return !overflow;
+      if (normalized === "ACTION_STRATEGY_CONSOLIDATE") return overflow;
+      return true;
+    });
+  }
   if (actionCodes.length === 0) return { menuId: "", actionCodes: [], labels: [] };
 
   const labels = labelsForMenu(menuId, actionCodes, specialist, prev);
@@ -574,7 +721,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
 
   const isOfftopic = specialist.is_offtopic === true;
   const statusSource = isOfftopic ? prev : specialist;
-  const { status, confirmEligible, recapBody } = computeStatus(stepId, state, statusSource, prev);
+  const { status, confirmEligible, recapBody, statementCount } = computeStatus(stepId, state, statusSource, prev);
   const candidateText = extractCandidate(stepId, statusSource, prev);
   const statementOfftopicSteps = new Set(["dream", "purpose", "bigwhy", "role", "entity", "targetgroup", "presentation"]);
   const promoteIncompleteToValidForOfftopic =
@@ -622,6 +769,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     offTopicContextHeading && recapText
       ? `<strong>${offTopicContextHeading}</strong>\n${recapText}`
       : recapText;
+  const strategyStatements =
+    stepId === "strategy" ? strategyStatementsFromSources(state, statusSource, prev) : [];
+  const strategyContextBlock =
+    !isOfftopic && stepId === "strategy" && strategyStatements.length > 0
+      ? buildStrategyContextBlock(state, strategyStatements)
+      : "";
   const message = (() => {
     if (
       isOfftopic &&
@@ -638,6 +791,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         return `${answerText}\n\n<strong>${offTopicContextHeading}</strong>`.trim();
       }
       return `${answerText}\n\n${recapBlock}`.trim();
+    }
+    if (strategyContextBlock) {
+      if (!answerText) return strategyContextBlock;
+      const answerKey = comparableText(answerText);
+      const recapKey = comparableText(strategyContextBlock);
+      if (recapKey && answerKey.includes(recapKey)) return answerText;
+      return `${answerText}\n\n${strategyContextBlock}`.trim();
     }
     return answerText || (effectiveStatus === "valid_output" ? recapBlock : "");
   })();
@@ -705,10 +865,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const safeActionCodes = resolved.actionCodes;
   const safeLabels = resolved.labels;
   const headline = buildHeadlineForContract({
+    stepId,
     stepLabel,
     companyName,
     status: effectiveStatus,
     hasOptions: safeActionCodes.length > 0,
+    strategyStatementCount: stepId === "strategy" ? statementCount : 0,
   });
 
   const dreamExplainerPrompt =
