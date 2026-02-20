@@ -1,5 +1,6 @@
 // mcp-server/src/steps/rulesofthegame.ts
 import { z } from "zod";
+import { RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT } from "./rulesofthegame_contract.js";
 
 export const RULESOFTHEGAME_STEP_ID = "rulesofthegame" as const;
 export const RULESOFTHEGAME_SPECIALIST = "RulesOfTheGame" as const;
@@ -150,6 +151,8 @@ Output schema fields (must always be present)
   "question": "string",
   "refined_formulation": "string",
   "rulesofthegame": "string",
+  "wants_recap": "boolean",
+  "is_offtopic": "boolean",
   "statements": ["array of strings"]
 }
 
@@ -260,7 +263,7 @@ CONTAINER-WORD REWRITE RULE (HARD)
 Scope guard (HARD)
 
 Standard ESCAPE output (use the user’s language)
-- action="ASK"
+- action="ESCAPE"
 - message (localized): Step-0 tone structure.
   Sentence 1: short, friendly, empathetic, non-judgmental boundary.
   Sentence 2 (optional): include only for clearly off-topic/nonsense input.
@@ -316,7 +319,6 @@ What Rules of the Game really do is remove friction and make decisions repeatabl
 - question must be one line prompting the user to paste 3 to 5 Rules of the Game.
 - Example content direction (not fixed text): Show a strict operational rule like "Every client deliverable is reviewed by a second person before it goes out" paired with the broader Rule of the Game "We protect quality under pressure." Or "If something can impact a client, we proactively inform them within one business day" paired with "We take ownership before problems grow." Or "We always start at 9:00" paired with "We are punctual" (applies to meetings, deadlines, commitments, not just start times). Or "We greet every client warmly" paired with "We are always warm and friendly" (applies to all interactions-calls, emails, meetings, visits, not just greetings). Strict operational rule: "We double-check all important work before it goes out" → Rule of the Game: "We focus on quality" (applies to all work, not just double-checking). Or "Perfection lies in the detail" or "We strive to be excellent in all we do". Explain that operational rules demonstrate what the Rule of the Game means in practice.
 - refined_formulation=""
-- question=""
 - rulesofthegame=""
 
 ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
@@ -336,7 +338,6 @@ When user chooses "These are all my rules of the game, continue to Presentation"
 - refined_formulation: show all statements as bullet list (each statement on its own line with "• ")
 - rulesofthegame: same as refined_formulation
 - question: "" (empty)
-- question: "" (empty)
 - statements: unchanged (all collected statements)
 
 Collect rules (core)
@@ -348,7 +349,6 @@ If the user has not provided a list yet:
   - If no valid business name is known: "What are your Rules of the Game for your future company?"
   This question text must be localized into the user’s language while preserving the meaning and the business name or fallback phrase.
 - refined_formulation=""
-- question=""
 - rulesofthegame=""
 
 When the user provides rules (one line or multiple lines)
@@ -488,7 +488,6 @@ REFINE TRIGGER: COMPETITIVE CLAIMS (HARD)
 ASK output (when acceptable)
 - action="ASK"
 - message=""
-- question=""
 - refined_formulation: bullet list of the rules
 - rulesofthegame: contains the final 3 to 5 Rules of the Game phrased at principle level. If the user provided operational rules, do not store them as final rules. Instead store the translated Rules of the Game. Same bullet list as refined_formulation.
 - question: ask whether this fully captures the Rules of the Game and whether to continue
@@ -537,7 +536,6 @@ If the user wants to adjust the refined rule (e.g., says "adjust", "change", pro
   • We focus on quality
 - question: one line asking what the adjusted version should be
 - refined_formulation=""
-- question=""
 - rulesofthegame=""
 - statements: PREVIOUS_STATEMENTS (keep existing statements, user will provide adjusted version)
 
@@ -547,44 +545,17 @@ If the user explicitly asks to adjust a rule (e.g., "make it broader", "make it 
 - question: ask what the adjusted version should be
 - Then abstract/adjust as needed and add the adjusted version to statements, replacing the old version if it was already in statements.
 - refined_formulation=""
-- question=""
 - rulesofthegame=""
 
 User says: "Keep it exactly as written" (HARD)
 If the user clearly says they want the rules exactly as provided:
 - action="ASK"
 - message=""
-- question=""
 - refined_formulation: bullet list exactly as provided
 - rulesofthegame: same bullet list
 - question: ask whether to continue to the next step
 
-
-In that moment:
-- If USER_MESSAGE is a clean yes/proceed without extra unrelated content:
-  - action="ASK"
-  - message=""
-  - question=""
-  - refined_formulation=""
-  - question=""
-  - rulesofthegame=""
-
-  - action="REFINE"
-  - message=""
-  - question must ask one short clarifying choice about continue vs adjust, without numbered menu lines.
-
-  - refined_formulation=""
-  - question=""
-  - rulesofthegame=""
-
-Hard safety rule (prevent skipping)
-- Never output action="ASK" with rulesofthegame="" unless it is the proceed signal case.
-
-Field discipline
-- INTRO: message+question non-empty; refined_formulation=""; question=""; rulesofthegame=""; statements=[]
-- ESCAPE: message+question non-empty; other fields empty strings; statements=unchanged (PREVIOUS_STATEMENTS)
-- ASK: question non-empty; message may be non-empty; refined_formulation=""; question=""; rulesofthegame=""; statements=full list (PREVIOUS_STATEMENTS + new if accepted)
-- ASK (normal): refined_formulation and rulesofthegame contain bullets; question non-empty; question empty; statements=unchanged (all collected statements)
+${RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT}
 `;
 
 /**

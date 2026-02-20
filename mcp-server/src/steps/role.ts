@@ -1,5 +1,6 @@
 // mcp-server/src/steps/role.ts
 import { z } from "zod";
+import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const ROLE_STEP_ID = "role" as const;
 export const ROLE_SPECIALIST = "Role" as const;
@@ -311,13 +312,16 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 
 - "__ROUTE__ROLE_FORMULATE__" → Follow route: formulate the Role now (output action="ASK" with formulation question)
 - "__ROUTE__ROLE_GIVE_EXAMPLES__" → Follow route: give 3 short Role examples (output action="ASK" with 3 examples)
+- "__ROUTE__ROLE_EXPLAIN_MORE__" → Follow route: explain why Role matters (output action="ASK" with Role explanation text)
 - "__ROUTE__ROLE_ADJUST__" → Follow route: adjust the Role (output action="ASK" with adjustment question)
+- "__ROUTE__ROLE_CHOOSE_FOR_ME__" → Follow route: choose one example and set it as current Role (output action="ASK" with non-empty refined_formulation + role)
 - "__ROUTE__ROLE_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
 Route tokens are explicit and deterministic - follow the exact route logic as defined in the instructions. Never treat route tokens as user text input.
 
 
 
+A) Explain why a Role matters (from "__ROUTE__ROLE_EXPLAIN_MORE__")
 - action="ASK"
 - message must be exactly this text (localized, in the user's language):
 
@@ -377,6 +381,13 @@ After the third answer, propose a refined Role sentence via REFINE (section 12).
 - question=""
 - role=""
 
+D) Choose one for me (from "__ROUTE__ROLE_CHOOSE_FOR_ME__")
+- action="ASK"
+- message: one short localized acknowledgement that one option was selected.
+- refined_formulation: exactly one selected Role sentence from the shown examples (non-empty).
+- role: same sentence (non-empty).
+- question=""
+
 
 
 12) EVALUATION LOGIC (USER ANSWERS A ROLE)
@@ -398,7 +409,6 @@ B) If the user gives a valid Role direction but it is missing effect or boundary
 C) If the user gives a strong Role sentence already
 - action="ASK"
 - message=""
-- question=""
 - refined_formulation: final Role sentence (one sentence only), company language only, never first-person plural.
 - role: same final Role sentence.
 - question (localized, one line): ask whether they want to continue to the next step Entity.
@@ -406,7 +416,6 @@ C) If the user gives a strong Role sentence already
 
 - action="ASK"
 - message=""
-- question=""
 - refined_formulation: the same sentence from the previous refined_formulation
 - role: the same sentence
 - question (localized): ask whether they want to continue to the next step Entity
@@ -415,13 +424,9 @@ C) If the user gives a strong Role sentence already
 - message=""
 - question (localized, one line): "What would you like to change in the sentence: the first part (position), the 'so that' effect, or the boundary?"
 - refined_formulation=""
-- question=""
 - role=""
 
-In that moment:
-
-Hard safety rule (prevent skipping Role)
-- Never output action="ASK" with role="" unless it is the proceed signal case, and that is only allowed after a confirmed Role exists.
+${buildSingleValueStepContractBlock("Role", "role")}
 
 15) FINAL QA CHECKLIST
 

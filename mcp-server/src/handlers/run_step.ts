@@ -139,6 +139,7 @@ import {
   buildRulesOfTheGameBullets,
   buildUserFeedbackForRulesProcessing,
 } from "../steps/rulesofthegame.js";
+import { normalizeRulesOfTheGameOutputContract } from "../steps/rulesofthegame_contract.js";
 
 import {
   PRESENTATION_STEP_ID,
@@ -363,6 +364,7 @@ const DREAM_START_EXERCISE_ACTION_CODES = new Set<string>([
   "ACTION_DREAM_REFINE_START_EXERCISE",
 ]);
 const DREAM_PICK_ONE_ROUTE_TOKEN = "__ROUTE__DREAM_PICK_ONE__";
+const ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN = "__ROUTE__ROLE_CHOOSE_FOR_ME__";
 const DREAM_FORCE_REFINE_ROUTE_PREFIX = "__ROUTE__DREAM_FORCE_REFINE__";
 const STRATEGY_CONSOLIDATE_ROUTE_TOKEN = "__ROUTE__STRATEGY_CONSOLIDATE__";
 const WIDGET_ESCAPE_LABEL_PATTERNS: RegExp[] = [
@@ -2054,6 +2056,92 @@ function pickDreamSuggestionFromPreviousState(
     String((state as any).dream_final || "").trim(),
   ].filter(Boolean);
   return fromFields.length > 0 ? fromFields[0] : "";
+}
+
+function extractRoleSuggestionSentences(params: {
+  message: string;
+  companyName: string;
+}): string[] {
+  const raw = String(params.message || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+  const companyName = String(params.companyName || "").trim();
+  const companyKey = companyName.toLowerCase();
+  const blocked = [
+    /\bhere are\b.{0,32}\brole\b.{0,32}\bexamples?\b/i,
+    /\bdo any of these roles resonate\b/i,
+    /\bchoose one for me\b/i,
+    /\bdefine your role\b/i,
+    /\bor choose an option\b/i,
+    /\bplease click\b/i,
+  ];
+  const lines = raw
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const fragments: string[] = [];
+  for (const line of lines) {
+    const bulletMatch = line.match(/^\s*(?:[-*•]|\d+[\).])\s*(.+)\s*$/);
+    if (bulletMatch) {
+      fragments.push(String(bulletMatch[1] || "").trim());
+      continue;
+    }
+    const parts = line
+      .split(/(?<=[.!?])\s+(?=\S)/)
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+    fragments.push(...parts);
+  }
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const fragment of fragments) {
+    const sentence = fragment.replace(/\s+/g, " ").trim();
+    if (!sentence || sentence.length < 24) continue;
+    if (sentence.endsWith("?")) continue;
+    if (blocked.some((re) => re.test(sentence))) continue;
+    const key = canonicalizeComparableText(sentence);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(sentence);
+  }
+  const scored = unique
+    .map((sentence, idx) => {
+      let score = 0;
+      const lower = sentence.toLowerCase();
+      if (companyKey && companyName !== "TBD" && lower.includes(companyKey)) score += 10;
+      if (/\bso that\b/i.test(sentence)) score += 4;
+      if (/^(the company|the business)\b/i.test(lower)) score += 2;
+      return { sentence, idx, score };
+    })
+    .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))
+    .map((item) => ensureSentenceEnd(item.sentence));
+  return scored;
+}
+
+function pickRoleSuggestionFromPreviousState(
+  state: CanvasState,
+  previousSpecialist: Record<string, unknown>
+): string {
+  const previous = previousSpecialist && typeof previousSpecialist === "object"
+    ? previousSpecialist
+    : {};
+  const businessName = String((state as any).business_name || "").trim();
+  const fromMessage = extractRoleSuggestionSentences({
+    message: String((previous as any).message || ""),
+    companyName: businessName,
+  });
+  if (fromMessage.length > 0) return String(fromMessage[0] || "").trim();
+  const fromFields = [
+    String((previous as any).role || "").trim(),
+    String((previous as any).refined_formulation || "").trim(),
+    String((((state as any).provisional_by_step || {})[ROLE_STEP_ID] || "")).trim(),
+    String((state as any).role_final || "").trim(),
+  ].filter(Boolean);
+  for (const candidate of fromFields) {
+    const cleaned = ensureSentenceEnd(candidate);
+    const words = tokenizeWords(cleaned);
+    if (words.length >= 5 && !cleaned.endsWith("?")) return cleaned;
+  }
+  return "";
 }
 
 export function pickDualChoiceSuggestion(stepId: string, specialistResult: any, previousSpecialist: any, userRaw = ""): string {
@@ -4680,6 +4768,11 @@ async function callSpecialistStrict(params: {
     });
 
     let data = res.data;
+    const normalizedRules = normalizeRulesOfTheGameOutputContract({
+      specialist: data as unknown as Record<string, unknown>,
+      previousStatements: statementsFromLast,
+    });
+    data = normalizedRules.specialist as any;
 
     // Apply post-processing when a Rules of the Game candidate is present.
     if (
@@ -5841,6 +5934,91 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         tool: "run_step" as const,
         current_step_id: String(nextStatePicked.current_step),
         active_specialist: DREAM_SPECIALIST,
+        text: buildTextForWidget({ specialist: renderedPicked.specialist }),
+        prompt: pickPrompt(renderedPicked.specialist),
+        specialist: renderedPicked.specialist,
+        state: nextStatePickedUi,
+      }, renderedPicked.specialist, responseUiFlags, renderedPicked.uiActionCodes, renderedPicked.uiActions, null, {
+        contractId: renderedPicked.contractId,
+        contractVersion: renderedPicked.contractVersion,
+        textKeys: renderedPicked.textKeys,
+      }));
+    }
+  }
+
+  if (
+    String(state.current_step || "") === ROLE_STEP_ID &&
+    userMessage === ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN
+  ) {
+    const previousSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+    const pickedSuggestion = pickRoleSuggestionFromPreviousState(state, previousSpecialist);
+    if (pickedSuggestion) {
+      const specialist: RoleOutput = {
+        action: "ASK",
+        message: wordingSelectionMessage(ROLE_STEP_ID, state, String((state as any).active_specialist || "")),
+        question: "",
+        refined_formulation: pickedSuggestion,
+        role: pickedSuggestion,
+        wants_recap: false,
+        is_offtopic: false,
+      };
+      const forcedDecision: OrchestratorOutput = {
+        specialist_to_call: ROLE_SPECIALIST,
+        specialist_input: `CURRENT_STEP_ID: ${ROLE_STEP_ID} | USER_MESSAGE: ${ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN}`,
+        current_step: ROLE_STEP_ID,
+        intro_shown_for_step: String((state as any).intro_shown_for_step ?? ""),
+        intro_shown_session: String((state as any).intro_shown_session ?? "") === "true" ? "true" : "false",
+        show_step_intro: "false",
+        show_session_intro: "false",
+      };
+      const nextStatePicked = applyStateUpdate({
+        prev: state,
+        decision: forcedDecision,
+        specialistResult: specialist,
+        showSessionIntroUsed: "false",
+      });
+      const renderedPicked = renderFreeTextTurnPolicy({
+        stepId: String((nextStatePicked as any).current_step ?? ""),
+        state: nextStatePicked,
+        specialist: (nextStatePicked as any).last_specialist_result || {},
+        previousSpecialist,
+      });
+      const pickedViolation = validateRenderedContractTurn(
+        String((nextStatePicked as any).current_step ?? ""),
+        renderedPicked,
+        nextStatePicked
+      );
+      if (pickedViolation) {
+        return finalizeResponse(attachRegistryPayload({
+          ok: false as const,
+          tool: "run_step" as const,
+          current_step_id: String(nextStatePicked.current_step),
+          active_specialist: ROLE_SPECIALIST,
+          text: "",
+          prompt: "",
+          specialist: renderedPicked.specialist,
+          state: nextStatePicked,
+          error: {
+            type: "contract_violation",
+            message: "Rendered output violates the UI contract.",
+            reason: pickedViolation,
+            step: String((nextStatePicked as any).current_step ?? ""),
+            contract_id: renderedPicked.contractId,
+          },
+        }, renderedPicked.specialist));
+      }
+      (nextStatePicked as any).last_specialist_result = renderedPicked.specialist;
+      applyUiPhaseByStep(
+        nextStatePicked,
+        String((nextStatePicked as any).current_step ?? ""),
+        renderedPicked.contractId
+      );
+      const nextStatePickedUi = await ensureUiStrings(nextStatePicked, userMessage);
+      return finalizeResponse(attachRegistryPayload({
+        ok: true as const,
+        tool: "run_step" as const,
+        current_step_id: String(nextStatePicked.current_step),
+        active_specialist: ROLE_SPECIALIST,
         text: buildTextForWidget({ specialist: renderedPicked.specialist }),
         prompt: pickPrompt(renderedPicked.specialist),
         specialist: renderedPicked.specialist,

@@ -1,5 +1,6 @@
 // mcp-server/src/steps/presentation.ts
 import { z } from "zod";
+import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const PRESENTATION_STEP_ID = "presentation" as const;
 export const PRESENTATION_SPECIALIST = "Presentation" as const;
@@ -232,19 +233,7 @@ Output:
   Ask if they are satisfied with this summary and want to proceed to creating The Business Strategy Canvas Builder Presentation.
 
 
-In that moment:
-  - action="ASK"
-  - ALL text fields must be empty strings:
-    message="", question="", refined_formulation="", question="", presentation_brief=""
-
-  - action="REFINE"
-  - message: short and practical (localized)
-  - question: ask what they want to adjust in the summary (one question)
-  - refined_formulation="", question="", presentation_brief=""
-
-  - action="REFINE"
-  - message: short (localized)
-  - refined_formulation="", question="", presentation_brief=""
+${buildSingleValueStepContractBlock("Presentation", "presentation_brief")}
 
 7) ESCAPE (OFF-TOPIC)
 

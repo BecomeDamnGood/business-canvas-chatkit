@@ -1,5 +1,6 @@
 // mcp-server/src/steps/bigwhy.ts
 import { z } from "zod";
+import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const BIGWHY_STEP_ID = "bigwhy" as const;
 export const BIGWHY_SPECIALIST = "BigWhy" as const;
@@ -481,23 +482,8 @@ Output
 - question=""
 - refined_formulation: the same Big Why sentence from the previous REFINE
 - bigwhy: the same Big Why sentence (final confirmed Big Why)
-- question=""
 
-
-12) FIELD DISCIPLINE
-
-- INTRO: message+question non-empty; refined_formulation="", question="", bigwhy=""
-- ESCAPE: message+question non-empty; other fields empty strings
-- ASK: question non-empty; message may be non-empty; refined_formulation/question/bigwhy empty strings
-- REFINE: question non-empty; refined_formulation non-empty; bigwhy empty string; question empty string
-- ASK (normal): refined_formulation+question non-empty; bigwhy non-empty; question empty
-
-
-
-In that moment:
-
-HARD SAFETY RULE (prevent skipping Big Why)
-- Never output action="ASK" with bigwhy="" unless it is the proceed signal case, and that proceed signal is only allowed after a confirmed Big Why exists.
+${buildSingleValueStepContractBlock("Big Why", "bigwhy")}
 
 
 14) FINAL QA CHECKLIST

@@ -451,10 +451,58 @@
         border-radius: 2px;
         background: rgba(0,0,0,0.12);
         transition: background 0.2s;
+        position: relative;
+        overflow: hidden;
       }
       .step-item.active .step-bar { background: var(--orange); }
       .step-item:hover .step-bar { background: var(--orange-light); }
       .step-item.completed .step-bar { background: rgba(232, 116, 42, 0.38); }
+
+      /* Stepper thinking animation: one left-to-right sweep across all segments */
+      .stepper.loading-stepper .step-item .step-bar::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        transform: translateX(-140%);
+        opacity: 0;
+        animation: stepperKnightSweep 1100ms linear infinite;
+      }
+      .stepper.loading-stepper .step-item.active .step-bar::after,
+      .stepper.loading-stepper .step-item.completed .step-bar::after {
+        background: linear-gradient(
+          90deg,
+          rgba(232, 116, 42, 0) 0%,
+          rgba(255, 206, 176, 0.95) 50%,
+          rgba(232, 116, 42, 0) 100%
+        );
+      }
+      .stepper.loading-stepper .step-item:not(.active):not(.completed) .step-bar::after {
+        background: linear-gradient(
+          90deg,
+          rgba(0, 0, 0, 0) 0%,
+          rgba(255, 255, 255, 0.76) 50%,
+          rgba(0, 0, 0, 0) 100%
+        );
+      }
+      .stepper.loading-stepper .step-item:nth-child(1) .step-bar::after { animation-delay: 0ms; }
+      .stepper.loading-stepper .step-item:nth-child(2) .step-bar::after { animation-delay: 100ms; }
+      .stepper.loading-stepper .step-item:nth-child(3) .step-bar::after { animation-delay: 200ms; }
+      .stepper.loading-stepper .step-item:nth-child(4) .step-bar::after { animation-delay: 300ms; }
+      .stepper.loading-stepper .step-item:nth-child(5) .step-bar::after { animation-delay: 400ms; }
+      .stepper.loading-stepper .step-item:nth-child(6) .step-bar::after { animation-delay: 500ms; }
+      .stepper.loading-stepper .step-item:nth-child(7) .step-bar::after { animation-delay: 600ms; }
+      .stepper.loading-stepper .step-item:nth-child(8) .step-bar::after { animation-delay: 700ms; }
+      .stepper.loading-stepper .step-item:nth-child(9) .step-bar::after { animation-delay: 800ms; }
+      .stepper.loading-stepper .step-item:nth-child(10) .step-bar::after { animation-delay: 900ms; }
+      .stepper.loading-stepper .step-item:nth-child(11) .step-bar::after { animation-delay: 1000ms; }
+
+      @keyframes stepperKnightSweep {
+        0% { transform: translateX(-140%); opacity: 0; }
+        20% { opacity: 1; }
+        80% { opacity: 0.55; }
+        100% { transform: translateX(140%); opacity: 0; }
+      }
       
       /* ─── Section title (inside card, next to badge) ─── */
       /* Visible when a main step starts. Hidden during substeps so cardDesc moves up. */
@@ -538,33 +586,11 @@
         display: none; /* Voorbeeld: geen streepje onder 01 */
       }
       
-      .badge.loading::before {
-        content: "";
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 36px;
-        height: 3px;
-        border-radius: 2px;
-        overflow: hidden;
-        pointer-events: none;
-        background: linear-gradient(90deg, transparent, var(--orange), transparent);
-        background-size: 36px 3px;
-        background-position: -18px 0;
-        background-repeat: no-repeat;
-        animation: badgeKnightRider 1.6s ease-in-out infinite;
-      }
-      
-      @keyframes badgeKnightRider {
-        0% { background-position: -18px 0; }
-        50% { background-position: 18px 0; }
-        100% { background-position: -18px 0; }
-      }
-      
       @media (prefers-reduced-motion: reduce) {
-        .badge.loading::before {
+        .stepper.loading-stepper .step-item .step-bar::after {
           animation: none;
-          background-position: 0 0;
+          opacity: 0;
+          transform: translateX(0);
         }
       }
       

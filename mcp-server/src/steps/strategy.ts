@@ -1,5 +1,6 @@
 // mcp-server/src/steps/strategy.ts
 import { z } from "zod";
+import { buildListStepContractBlock } from "./step_instruction_contracts.js";
 
 export const STRATEGY_STEP_ID = "strategy" as const;
 export const STRATEGY_SPECIALIST = "Strategy" as const;
@@ -576,17 +577,13 @@ Confirmation screen (when 4+ correct statements)
   - refined_formulation: show all statements as a bullet list (each statement on its own line prefixed with "- ")
   - strategy: same as refined_formulation
   - question: "" (empty)
-  - question: "" (empty)
   - statements: unchanged (all collected statements)
 
-12) FIELD DISCIPLINE
-
-
-
-In that moment:
-
-Hard safety rule (prevent skipping Strategy)
-- Never output action="ASK" with strategy="" unless it is the proceed signal case, and that proceed signal is only allowed after a confirmed Strategy exists.
+${buildListStepContractBlock(
+  "Strategy",
+  "strategy",
+  "For Strategy validity: keep 4-7 focus points."
+)}
 
 14) FINAL QA CHECKLIST
 

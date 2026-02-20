@@ -30,6 +30,7 @@ import {
 import { BigWhyZodSchema } from "../steps/bigwhy.js";
 import { VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS } from "../steps/step_0_validation.js";
 import { PURPOSE_INSTRUCTIONS } from "../steps/purpose.js";
+import { normalizeRulesOfTheGameOutputContract } from "../steps/rulesofthegame_contract.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { MENU_LABELS, NEXT_MENU_BY_ACTIONCODE } from "../core/ui_contract_matrix.js";
 import { renderFreeTextTurnPolicy } from "../core/turn_policy_renderer.js";
@@ -537,6 +538,43 @@ test("off-topic message stays anchor-driven when optional tone line is absent", 
   assert.equal(String(result.text || "").includes("Let's continue with the Purpose of Mindd."), true);
 });
 
+test("rules contract guard normalizes contradictory ASK payload to valid bullet shape", () => {
+  const normalized = normalizeRulesOfTheGameOutputContract({
+    specialist: {
+      action: "ASK",
+      message: "Thanks, this is good.",
+      question: "Do you want to continue?",
+      refined_formulation: "",
+      rulesofthegame: "",
+      statements: ["We are punctual", "We protect quality", "We communicate proactively"],
+      wants_recap: false,
+      is_offtopic: false,
+    },
+    previousStatements: [],
+  });
+
+  assert.equal(normalized.intent, "ASK_VALID");
+  assert.ok(normalized.violations.includes("ask_valid_missing_bullets"));
+  assert.equal(
+    String((normalized.specialist as any).rulesofthegame || "").includes("• We are punctual"),
+    true
+  );
+  assert.equal(
+    String((normalized.specialist as any).refined_formulation || "").includes("• We protect quality"),
+    true
+  );
+  assert.equal(String((normalized.specialist as any).question || ""), "");
+});
+
+test("run_step applies rules contract normalization before rules post-processing", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /normalizeRulesOfTheGameOutputContract/);
+  assert.match(
+    source,
+    /let data = res\.data;[\s\S]*normalizeRulesOfTheGameOutputContract\([\s\S]*\);[\s\S]*data = normalizedRules\.specialist as any;[\s\S]*post-processing when a Rules of the Game candidate is present\./
+  );
+});
+
 test("off-topic anchor uses fallback company name when none is known", async () => {
   const result = await withEnv("TEST_FORCE_OFFTOPIC", "1", () =>
     run_step({
@@ -651,6 +689,52 @@ test("dream suggestions pick-one is deterministic and immediately stages a Dream
   assert.equal(String(result.specialist?.dream || ""), suggestionA);
   assert.equal(String(result.specialist?.refined_formulation || ""), suggestionA);
   assert.equal(String(result.text || "").includes(suggestionA), true);
+});
+
+test("role examples choose-for-me is deterministic and immediately stages a Role candidate", async () => {
+  const roleA =
+    "Mindd clarifies deeper purpose for businesses so that trust and long-term value become the standard.";
+  const roleB =
+    "Mindd aligns commercial ambition with ethical standards so that businesses contribute beyond profit.";
+  const roleC =
+    "Mindd enables companies to act with integrity so that their impact benefits people and society.";
+
+  const result = await run_step({
+    input_mode: "widget",
+    user_message: "ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME",
+    state: {
+      ...getDefaultState(),
+      current_step: "role",
+      active_specialist: "Role",
+      intro_shown_session: "true",
+      intro_shown_for_step: "role",
+      started: "true",
+      business_name: "Mindd",
+      __ui_phase_by_step: {
+        role: "role:phase:ROLE_MENU_EXAMPLES",
+      },
+      last_specialist_result: {
+        action: "ASK",
+        ui_contract_id: "role:phase:ROLE_MENU_EXAMPLES",
+        question: "1) Choose one for me",
+        message: `Here are three examples of Role sentences\n• ${roleA}\n• ${roleB}\n• ${roleC}\n\nDo any of these roles resonate with you?`,
+        refined_formulation: "",
+        role: "",
+        is_offtopic: false,
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "role");
+  assert.equal(menuIdFromTurn(result), "ROLE_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_ROLE_REFINE_CONFIRM",
+    "ACTION_ROLE_REFINE_ADJUST",
+  ]);
+  assert.equal(String(result.specialist?.role || ""), roleA);
+  assert.equal(String(result.specialist?.refined_formulation || ""), roleA);
+  assert.equal(String(result.text || "").includes(roleA), true);
 });
 
 test("dream step-contributing sentence auto-repairs to REFINE valid-output contract", async () => {

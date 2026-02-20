@@ -378,8 +378,10 @@ export function setLoading(next: boolean): void {
   const loading = isRateLimited() ? true : Boolean(next);
   setIsLoading(loading);
 
-  const badge = document.getElementById("badge");
-  if (badge) badge.classList.toggle("loading", loading);
+  const stepper = document.getElementById("stepper");
+  if (stepper) {
+    stepper.classList.toggle("loading-stepper", loading);
+  }
 
   const inputEl = document.getElementById("input");
   const sendEl = document.getElementById("send");

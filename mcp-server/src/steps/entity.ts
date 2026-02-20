@@ -1,5 +1,6 @@
 // mcp-server/src/steps/entity.ts
 import { z } from "zod";
+import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const ENTITY_STEP_ID = "entity" as const;
 export const ENTITY_SPECIALIST = "Entity" as const;
@@ -309,18 +310,11 @@ ASK criteria:
 When it is good:
 - action="ASK"
 - message=""
-- question=""
 - refined_formulation: the final short phrase.
 - entity: the same final short phrase.
 - question (localized): "Does this capture the Entity of {company_name}, and do you want to continue to the next step?" Use the company name from the STATE FINALS / business_name context if available; otherwise use "your future company" (or the equivalent in the user's language).
-Only when the previous assistant message asked the question about continuing:
-Hard safety rule (prevent skipping Entity)
-- Never output action="ASK" with entity="" unless it is the proceed signal case, and that is only allowed after a confirmed Entity exists.
-Field discipline
-- INTRO: message+question non-empty; refined_formulation="", question="", entity=""
-- ESCAPE: message+question non-empty; other fields empty strings
-- ASK/REFINE: question non-empty; message may be non-empty; refined_formulation/question/entity empty unless explicitly set
-- ASK (normal): refined_formulation+question non-empty; entity non-empty; question empty
+
+${buildSingleValueStepContractBlock("Entity", "entity")}
 `;
 
 /**
