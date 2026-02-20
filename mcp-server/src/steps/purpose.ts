@@ -1,5 +1,6 @@
 // mcp-server/src/steps/purpose.ts
 import { z } from "zod";
+import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const PURPOSE_STEP_ID = "purpose" as const;
 export const PURPOSE_SPECIALIST = "Purpose" as const;
@@ -15,6 +16,7 @@ export const PurposeZodSchema = z.object({
   purpose: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
+  user_intent: SpecialistUserIntentZod,
 });
 
 export type PurposeOutput = z.infer<typeof PurposeZodSchema>;
@@ -33,6 +35,7 @@ export const PurposeJsonSchema = {
     "purpose",
     "wants_recap",
     "is_offtopic",
+    "user_intent",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -42,6 +45,7 @@ export const PurposeJsonSchema = {
     purpose: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
+    user_intent: SpecialistUserIntentJsonSchema,
   },
 } as const;
 

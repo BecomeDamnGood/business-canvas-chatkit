@@ -1,5 +1,6 @@
 // mcp-server/src/steps/targetgroup.ts
 import { z } from "zod";
+import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const TARGETGROUP_STEP_ID = "targetgroup" as const;
 export const TARGETGROUP_SPECIALIST = "TargetGroup" as const;
@@ -15,6 +16,7 @@ export const TargetGroupZodSchema = z.object({
   targetgroup: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
+  user_intent: SpecialistUserIntentZod,
 });
 
 export type TargetGroupOutput = z.infer<typeof TargetGroupZodSchema>;
@@ -33,6 +35,7 @@ export const TargetGroupJsonSchema = {
     "targetgroup",
     "wants_recap",
     "is_offtopic",
+    "user_intent",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -42,6 +45,7 @@ export const TargetGroupJsonSchema = {
     targetgroup: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
+    user_intent: SpecialistUserIntentJsonSchema,
   },
 } as const;
 

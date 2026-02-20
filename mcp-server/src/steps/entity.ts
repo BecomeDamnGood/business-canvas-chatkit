@@ -1,5 +1,6 @@
 // mcp-server/src/steps/entity.ts
 import { z } from "zod";
+import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const ENTITY_STEP_ID = "entity" as const;
@@ -16,6 +17,7 @@ export const EntityZodSchema = z.object({
   entity: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
+  user_intent: SpecialistUserIntentZod,
 });
 
 export type EntityOutput = z.infer<typeof EntityZodSchema>;
@@ -34,6 +36,7 @@ export const EntityJsonSchema = {
     "entity",
     "wants_recap",
     "is_offtopic",
+    "user_intent",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -43,6 +46,7 @@ export const EntityJsonSchema = {
     entity: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
+    user_intent: SpecialistUserIntentJsonSchema,
   },
 } as const;
 

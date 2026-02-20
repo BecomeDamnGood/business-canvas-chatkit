@@ -69,7 +69,7 @@ export const RULESOFTHEGAME_CONTRACT_MATRIX: Record<RulesContractIntent, RulesCo
 export const RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT = `
 CANONICAL OUTPUT CONTRACT (HARD)
 - Output schema fields MUST always include:
-  "action", "message", "question", "refined_formulation", "rulesofthegame", "wants_recap", "is_offtopic", "statements".
+  "action", "message", "question", "refined_formulation", "rulesofthegame", "wants_recap", "is_offtopic", "user_intent", "statements".
 - Menu/buttons are runtime contract-driven via contract_id + action_codes. Never emulate buttons in message/question.
 
 Field discipline by intent

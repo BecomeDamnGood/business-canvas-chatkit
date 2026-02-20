@@ -1,5 +1,6 @@
 // src/steps/step_0_validation.ts
 import { z } from "zod";
+import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const STEP_0_ID = "step_0" as const;
 export const STEP_0_SPECIALIST = "ValidationAndBusinessName" as const;
@@ -16,6 +17,7 @@ export const ValidationAndBusinessNameZodSchema = z.object({
   step_0: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
+  user_intent: SpecialistUserIntentZod,
 });
 
 export type ValidationAndBusinessNameOutput = z.infer<typeof ValidationAndBusinessNameZodSchema>;
@@ -36,6 +38,7 @@ export const ValidationAndBusinessNameJsonSchema = {
     "step_0",
     "wants_recap",
     "is_offtopic",
+    "user_intent",
   ],
   properties: {
     action: {
@@ -49,6 +52,7 @@ export const ValidationAndBusinessNameJsonSchema = {
     step_0: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
+    user_intent: SpecialistUserIntentJsonSchema,
   },
 } as const;
 

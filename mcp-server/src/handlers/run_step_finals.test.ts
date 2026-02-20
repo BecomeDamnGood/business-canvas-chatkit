@@ -21,6 +21,7 @@ import {
   buildWordingChoiceFromTurn,
   stripUnsupportedReformulationClaims,
   pickPrompt,
+  applyMotivationQuotesContractV11,
   RECAP_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
   normalizeStep0AskDisplayContract,
@@ -413,6 +414,71 @@ test("UNIVERSAL_META_OFFTOPIC_POLICY: non-step_0 prompt assembly includes policy
   assert.ok(
     purposeInstructions.includes("Let's continue with the <step name> of <company name>."),
     "fixed step+company redirect for off-topic present"
+  );
+});
+
+test("motivation policy is intent-driven (user_intent), not phrase-driven", () => {
+  const specialist = {
+    action: "ASK",
+    message: "Normal step response.",
+    question: "Define your Dream for Mindd or choose an option.",
+    refined_formulation: "",
+    dream: "",
+    wants_recap: false,
+    is_offtopic: false,
+    user_intent: "WHY_NEEDED",
+  } as Record<string, unknown>;
+
+  const applied = applyMotivationQuotesContractV11({
+    enabled: true,
+    stepId: "dream",
+    userMessage: "plain text without fixed trigger phrases",
+    renderedStatus: "incomplete_output",
+    specialistResult: specialist,
+    previousSpecialist: {},
+    state: getDefaultState(),
+    requireWordingPick: false,
+  });
+  assert.match(String(applied.specialistResult.message || ""), /I am not here to make you sound impressive/i);
+  assert.equal(applied.suppressChoices, false);
+
+  const notTriggered = applyMotivationQuotesContractV11({
+    enabled: true,
+    stepId: "dream",
+    userMessage: "why is this needed",
+    renderedStatus: "incomplete_output",
+    specialistResult: { ...specialist, user_intent: "STEP_INPUT" },
+    previousSpecialist: {},
+    state: getDefaultState(),
+    requireWordingPick: false,
+  });
+  assert.equal(String(notTriggered.specialistResult.message || ""), "Normal step response.");
+  assert.equal(notTriggered.suppressChoices, false);
+
+  const noAutoQuoteOnStepStart = applyMotivationQuotesContractV11({
+    enabled: true,
+    stepId: "step_0",
+    userMessage: "",
+    renderedStatus: "no_output",
+    specialistResult: {
+      action: "ASK",
+      message: "",
+      question: "To get started, could you tell me what type of business...",
+      refined_formulation: "",
+      business_name: "TBD",
+      step_0: "",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+    },
+    previousSpecialist: {},
+    state: getDefaultState(),
+    requireWordingPick: false,
+  });
+  assert.equal(String(noAutoQuoteOnStepStart.specialistResult.message || ""), "");
+  assert.equal(
+    String(noAutoQuoteOnStepStart.specialistResult.question || ""),
+    "To get started, could you tell me what type of business..."
   );
 });
 

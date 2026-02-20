@@ -153,7 +153,11 @@ import {
 import { loadModule as loadCld3 } from "cld3-asm";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { MENU_LABELS } from "../core/menu_contract.js";
-import { renderFreeTextTurnPolicy, type TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
+import {
+  renderFreeTextTurnPolicy,
+  type TurnPolicyRenderResult,
+  type TurnOutputStatus,
+} from "../core/turn_policy_renderer.js";
 import {
   NEXT_MENU_BY_ACTIONCODE,
   DEFAULT_MENU_BY_STATUS,
@@ -319,6 +323,7 @@ type HolisticPolicyFlags = {
   bulletRenderV2: boolean;
   wordingChoiceV2: boolean;
   timeoutGuardV2: boolean;
+  motivationQuotesV11: boolean;
 };
 
 type MigrationFlags = {
@@ -450,6 +455,7 @@ function resolveHolisticPolicyFlags(): HolisticPolicyFlags {
     bulletRenderV2: holisticPolicyV2 && envFlagEnabled("BSC_BULLET_RENDER_V2", localDevDefaults),
     wordingChoiceV2: holisticPolicyV2 && envFlagEnabled("BSC_WORDING_CHOICE_V2", localDevDefaults),
     timeoutGuardV2: holisticPolicyV2 && envFlagEnabled("BSC_TIMEOUT_GUARD_V2", localDevDefaults),
+    motivationQuotesV11: holisticPolicyV2 && envFlagEnabled("BSC_MOTIVATION_QUOTES_V11", localDevDefaults),
   };
 }
 
@@ -2871,6 +2877,303 @@ function buildBenProfileMessage(): string {
   ].join("\n\n");
 }
 
+const MOTIVATION_HIGHER_PURPOSE_OPENER = [
+  "I am not here to make you sound impressive. I am here to help you say what is true.",
+  "Because when you lead, there are days you carry everything. Pressure, pace, expectations. And in that noise, even a strong founder can lose the thread.",
+  "This canvas brings you back to the thread. The part that matters. The reason you can stand behind. The words that feel real. Real words create real momentum.",
+].join("\n");
+
+const MOTIVATION_PROVEN_LINE =
+  "This is a proven model used worldwide, including by Samsung, HTC, LG, New Black, and Fresh 'n Rebel.";
+
+const MOTIVATION_FIXED_CONTINUE_PROMPT =
+  "Give me one honest sentence. Not perfect. Just true.";
+
+const MOTIVATION_MISSING_PIECE_BY_STEP: Record<string, string> = {
+  [STEP_0_ID]: "the concrete starting point of your business",
+  [DREAM_STEP_ID]: "the future change your company truly wants to create",
+  [PURPOSE_STEP_ID]: "the deeper reason your work matters beyond output",
+  [BIGWHY_STEP_ID]: "the deeper meaning that keeps your direction alive under pressure",
+  [ROLE_STEP_ID]: "the stable contribution your company chooses to make",
+  [ENTITY_STEP_ID]: "the clear identity people can immediately understand",
+  [STRATEGY_STEP_ID]: "the focus choices that protect execution and consistency",
+  [TARGETGROUP_STEP_ID]: "the specific audience this is really for",
+  [PRODUCTSSERVICES_STEP_ID]: "the concrete value you will actually deliver",
+  [RULESOFTHEGAME_STEP_ID]: "the non-negotiable rules that protect quality and trust",
+  [PRESENTATION_STEP_ID]: "the story that makes your choices clear and usable for others",
+};
+
+const MOTIVATION_QUOTES_BY_STEP: Record<string, string[]> = {
+  [STEP_0_ID]: [
+    `Weet je wat Dwight D. Eisenhower zei: "Plans are worthless, but planning is everything."`,
+    `Weet je wat Arthur Ashe zei: "Start where you are. Use what you have. Do what you can."`,
+    `Weet je wat James Clear zei: "You do not rise to the level of your goals. You fall to the level of your systems."`,
+  ],
+  [DREAM_STEP_ID]: [
+    `Weet je wat Eleanor Roosevelt zei: "The future belongs to those who believe in the beauty of their dreams."`,
+    `Weet je wat Nelson Mandela zei: "It always seems impossible until it’s done."`,
+    `Weet je wat Walt Disney zei: "All our dreams can come true, if we have the courage to pursue them."`,
+  ],
+  [PURPOSE_STEP_ID]: [
+    `Weet je wat Simon Sinek zei: "People don’t buy what you do; they buy why you do it."`,
+    `Weet je wat John F. Kennedy zei: "Efforts and courage are not enough without purpose and direction."`,
+    `Weet je wat Friedrich Nietzsche zei: "He who has a why to live can bear almost any how."`,
+  ],
+  [BIGWHY_STEP_ID]: [
+    `Weet je wat Viktor E. Frankl zei: "When we are no longer able to change a situation, we are challenged to change ourselves."`,
+    `Weet je wat Howard Thurman zei: "Don’t ask what the world needs. Ask what makes you come alive."`,
+    `Weet je wat Rumi zei: "Let yourself be silently drawn by the strange pull of what you really love."`,
+  ],
+  [ROLE_STEP_ID]: [
+    `Weet je wat Lao Tzu zei: "To lead people, walk behind them."`,
+    `Weet je wat Ralph Nader zei: "The function of leadership is to produce more leaders, not more followers."`,
+    `Weet je wat Simon Sinek zei: "Leadership is not about being in charge. It is about taking care of those in your charge."`,
+  ],
+  [ENTITY_STEP_ID]: [
+    `Weet je wat Jeff Bezos zei: "Your brand is what people say about you when you’re not in the room."`,
+    `Weet je wat Marty Neumeier zei: "A brand is a person’s gut feeling about a product, service, or company."`,
+    `Weet je wat Scott Cook zei: "A brand is no longer what we tell the consumer it is. It is what consumers tell each other it is."`,
+  ],
+  [STRATEGY_STEP_ID]: [
+    `Weet je wat Michael E. Porter zei: "The essence of strategy is choosing what not to do."`,
+    `Weet je wat Henry Mintzberg zei: "Strategy is a pattern in a stream of decisions."`,
+    `Weet je wat Dwight D. Eisenhower zei: "Plans are worthless, but planning is everything."`,
+  ],
+  [TARGETGROUP_STEP_ID]: [
+    `Weet je wat Peter Drucker zei: "The purpose of business is to create a customer."`,
+    `Weet je wat Steve Jobs zei: "Start with the customer experience and work backward."`,
+    `Weet je wat Seth Godin zei: "If you try to reach everyone, you’ll reach no one."`,
+  ],
+  [PRODUCTSSERVICES_STEP_ID]: [
+    `Weet je wat Theodore Levitt zei: "People don’t want to buy a quarter-inch drill. They want a quarter-inch hole."`,
+    `Weet je wat Paul Graham zei: "Make something people want."`,
+    `Weet je wat Jeff Bezos zei: "We’re customer obsessed, not competitor obsessed."`,
+  ],
+  [RULESOFTHEGAME_STEP_ID]: [
+    `Weet je wat Ray Dalio zei: "Principles are ways of successfully dealing with reality."`,
+    `Weet je wat Warren Buffett zei: "It takes 20 years to build a reputation and five minutes to ruin it."`,
+    `Weet je wat James Clear zei: "You do not rise to the level of your goals. You fall to the level of your systems."`,
+  ],
+  [PRESENTATION_STEP_ID]: [
+    `Weet je wat Maya Angelou zei: "People will never forget how you made them feel."`,
+    `Weet je wat George Bernard Shaw zei: "The single biggest problem in communication is the illusion that it has taken place."`,
+    `Weet je wat Edsger W. Dijkstra zei: "Simplicity is a prerequisite for reliability."`,
+  ],
+};
+
+function isActionLikeUserMessage(raw: string): boolean {
+  const text = String(raw || "").trim();
+  if (!text) return false;
+  return text.startsWith("ACTION_") || text.startsWith("__ROUTE__");
+}
+
+const MOTIVATION_USER_INTENTS = new Set([
+  "STEP_INPUT",
+  "WHY_NEEDED",
+  "RESISTANCE",
+  "INSPIRATION_REQUEST",
+  "META_QUESTION",
+  "RECAP_REQUEST",
+  "OFFTOPIC",
+] as const);
+
+type MotivationUserIntent =
+  | "STEP_INPUT"
+  | "WHY_NEEDED"
+  | "RESISTANCE"
+  | "INSPIRATION_REQUEST"
+  | "META_QUESTION"
+  | "RECAP_REQUEST"
+  | "OFFTOPIC";
+
+function resolveMotivationUserIntent(specialist: Record<string, unknown>): MotivationUserIntent {
+  const intentRaw = String((specialist as any).user_intent || "").trim().toUpperCase();
+  if (MOTIVATION_USER_INTENTS.has(intentRaw as MotivationUserIntent)) {
+    return intentRaw as MotivationUserIntent;
+  }
+  const wantsRecap =
+    specialist.wants_recap === true ||
+    String((specialist as any).wants_recap || "").trim().toLowerCase() === "true";
+  if (wantsRecap) return "RECAP_REQUEST";
+  const isOfftopic =
+    specialist.is_offtopic === true ||
+    String((specialist as any).is_offtopic || "").trim().toLowerCase() === "true";
+  if (isOfftopic) return "OFFTOPIC";
+  return "STEP_INPUT";
+}
+
+function quoteLastByStepState(state: CanvasState): Record<string, string> {
+  const raw = ((state as any).quote_last_by_step && typeof (state as any).quote_last_by_step === "object")
+    ? ((state as any).quote_last_by_step as Record<string, unknown>)
+    : {};
+  return Object.fromEntries(
+    Object.entries(raw).map(([k, v]) => [String(k), String(v || "")])
+  );
+}
+
+function pickQuoteForStep(stepId: string, state: CanvasState): string {
+  const pool = Array.isArray(MOTIVATION_QUOTES_BY_STEP[stepId]) ? MOTIVATION_QUOTES_BY_STEP[stepId] : [];
+  if (pool.length === 0) return "";
+  const quoteState = quoteLastByStepState(state);
+  const last = String(quoteState[stepId] || "").trim();
+  const candidates = pool.length > 1 ? pool.filter((quote) => quote !== last) : pool.slice();
+  const index = Math.max(0, Math.min(candidates.length - 1, Math.floor(Math.random() * candidates.length)));
+  const selected = String(candidates[index] || candidates[0] || "").trim();
+  if (!selected) return "";
+  quoteState[stepId] = selected;
+  (state as any).quote_last_by_step = quoteState;
+  return selected;
+}
+
+function normalizeEssenceValueToSingleSentence(raw: string): string {
+  const compact = String(raw || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim())
+    .filter(Boolean)
+    .join("; ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!compact) return "";
+  const firstSentence = compact.split(/(?<=[.!?])\s+/)[0]?.trim() || compact;
+  return firstSentence.replace(/[.!?]+$/, "").trim();
+}
+
+function overviewEssenceSentence(
+  stepId: string,
+  state: CanvasState,
+  specialist: Record<string, unknown>,
+  previousSpecialist: Record<string, unknown>
+): string {
+  if (!stepId) return "";
+  if (stepId === STEP_0_ID) {
+    const step0Final = String((state as any).step_0_final || "").trim() || String((specialist as any).step_0 || "").trim();
+    if (!step0Final) return "";
+    const parsed = parseStep0Final(step0Final, String((state as any).business_name || "TBD"));
+    if (!parsed.venture || !parsed.name) return "";
+    const statement =
+      String(parsed.status || "").toLowerCase() === "existing"
+        ? `You have a ${parsed.venture} called ${parsed.name}`
+        : `You want to start a ${parsed.venture} called ${parsed.name}`;
+    return statement;
+  }
+
+  const field = fieldForStep(stepId);
+  const finalField = FINAL_FIELD_BY_STEP_ID[stepId] || "";
+  const provisional = provisionalValueForStep(state, stepId);
+  const finalValue = finalField ? String((state as any)[finalField] || "").trim() : "";
+  const fieldValue = field ? String((specialist as any)[field] || "").trim() : "";
+  const previousFieldValue = field ? String((previousSpecialist as any)[field] || "").trim() : "";
+  const refined = String((specialist as any).refined_formulation || "").trim();
+  const previousRefined = String((previousSpecialist as any).refined_formulation || "").trim();
+
+  let base = fieldValue || refined || provisional || finalValue || previousFieldValue || previousRefined;
+  if (!base) {
+    const statements = Array.isArray((specialist as any).statements)
+      ? ((specialist as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+      : Array.isArray((previousSpecialist as any).statements)
+        ? ((previousSpecialist as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+        : [];
+    if (statements.length > 0) base = statements.join("; ");
+  }
+
+  const normalized = normalizeEssenceValueToSingleSentence(base);
+  if (!normalized) return "";
+  return `The current ${offTopicStepLabel(stepId, state)} of ${offTopicCompanyName(state)} is ${normalized}`;
+}
+
+function buildMotivationContinueLine(stepId: string, status: TurnOutputStatus): string {
+  const basePiece = MOTIVATION_MISSING_PIECE_BY_STEP[stepId] || "the missing piece that matters most right now";
+  const piece =
+    status === "valid_output"
+      ? `the next sharpening of ${basePiece}`
+      : basePiece;
+  return `What we are doing now is protecting your motivation by making "${piece}" clear in words you can actually carry into real decisions.`;
+}
+
+type MotivationPolicyApplyParams = {
+  enabled: boolean;
+  stepId: string;
+  userMessage: string;
+  renderedStatus: TurnOutputStatus;
+  specialistResult: Record<string, unknown>;
+  previousSpecialist: Record<string, unknown>;
+  state: CanvasState;
+  requireWordingPick: boolean;
+};
+
+type MotivationPolicyApplyResult = {
+  specialistResult: Record<string, unknown>;
+  suppressChoices: boolean;
+};
+
+export function applyMotivationQuotesContractV11(params: MotivationPolicyApplyParams): MotivationPolicyApplyResult {
+  const specialist = params.specialistResult && typeof params.specialistResult === "object"
+    ? { ...params.specialistResult }
+    : {};
+  if (!params.enabled) return { specialistResult: specialist, suppressChoices: false };
+  if (!MOTIVATION_QUOTES_BY_STEP[params.stepId]) return { specialistResult: specialist, suppressChoices: false };
+  if (String((specialist as any).action || "").trim().toUpperCase() !== "ASK") {
+    return { specialistResult: specialist, suppressChoices: false };
+  }
+  const isOfftopic =
+    specialist.is_offtopic === true ||
+    String((specialist as any).is_offtopic || "").trim().toLowerCase() === "true";
+  if (isOfftopic || params.requireWordingPick) {
+    return { specialistResult: specialist, suppressChoices: false };
+  }
+
+  const userIntent = resolveMotivationUserIntent(specialist);
+  const whyTrigger = userIntent === "WHY_NEEDED" || userIntent === "RESISTANCE";
+  const inspirationTrigger = userIntent === "INSPIRATION_REQUEST";
+  const questionRaw = stripNumberedChoiceLines(String((specialist as any).question || "")).trim();
+
+  if (whyTrigger) {
+    const essence = overviewEssenceSentence(params.stepId, params.state, specialist, params.previousSpecialist);
+    const quote = pickQuoteForStep(params.stepId, params.state);
+    const blocks: string[] = [
+      MOTIVATION_HIGHER_PURPOSE_OPENER,
+      MOTIVATION_PROVEN_LINE,
+    ];
+    if (essence) {
+      blocks.push(`Essence so far: "${essence}"`);
+    }
+    blocks.push(buildMotivationContinueLine(params.stepId, params.renderedStatus));
+    if (quote) blocks.push(quote);
+
+    return {
+      specialistResult: {
+        ...specialist,
+        action: "ASK",
+        message: blocks.join("\n\n").trim(),
+        question: essence ? MOTIVATION_FIXED_CONTINUE_PROMPT : (questionRaw || MOTIVATION_FIXED_CONTINUE_PROMPT),
+        user_intent: userIntent,
+        wants_recap: false,
+        is_offtopic: false,
+      },
+      suppressChoices: false,
+    };
+  }
+
+  if (inspirationTrigger) {
+    const quote = pickQuoteForStep(params.stepId, params.state);
+    if (!quote) return { specialistResult: specialist, suppressChoices: false };
+    const currentMessage = String((specialist as any).message || "").trim();
+    const nextMessage = currentMessage
+      ? `${currentMessage}\n\n${quote}`
+      : quote;
+    return {
+      specialistResult: {
+        ...specialist,
+        message: nextMessage,
+      },
+      suppressChoices: false,
+    };
+  }
+
+  return { specialistResult: specialist, suppressChoices: false };
+}
+
 function stripOfftopicStructureSentences(raw: string): string {
   const text = String(raw || "").replace(/\r/g, "\n").trim();
   if (!text) return "";
@@ -2938,19 +3241,13 @@ function isLikelyMetaQuestionTurn(params: {
   if (message.includes("www.bensteenstra.com") || message.includes("bensteenstra.com")) return true;
   if (message.includes("now, back to")) return true;
   if (message.includes("for more information visit")) return true;
-  if (!user) return false;
-  const metaSignals = [
-    "what model",
-    "which model",
-    "why this step",
-    "why this process",
-    "why is this step",
-    "summary",
-    "recap",
-    "samenvatting",
-    "overzicht",
-  ];
-  return metaSignals.some((token) => user.includes(token));
+  const userIntent = resolveMotivationUserIntent(specialist);
+  return (
+    userIntent === "META_QUESTION" ||
+    userIntent === "RECAP_REQUEST" ||
+    userIntent === "WHY_NEEDED" ||
+    userIntent === "RESISTANCE"
+  );
 }
 
 function normalizeNonStep0OfftopicSpecialist(params: {
@@ -4342,6 +4639,15 @@ const OFFTOPIC_FLAG_CONTRACT_INSTRUCTION = `OFFTOPIC CONTRACT (HARD)
 - Set is_offtopic=true when the input is meta/off-topic/unrelated to this step.
 - If is_offtopic=true: answer briefly in message, do not ask to proceed to the next step, and keep proceed flags false.`;
 
+const USER_INTENT_CONTRACT_INSTRUCTION = `USER_INTENT CONTRACT (HARD)
+- Always return a string field "user_intent" with one of:
+  STEP_INPUT, WHY_NEEDED, RESISTANCE, INSPIRATION_REQUEST, META_QUESTION, RECAP_REQUEST, OFFTOPIC.
+- Infer user_intent from meaning and context (semantic intent), not from language-specific keyword lists.
+- If unsure, set user_intent="STEP_INPUT".
+- If wants_recap=true, set user_intent="RECAP_REQUEST".
+- If is_offtopic=true for unrelated content, set user_intent="OFFTOPIC".
+- For process/step-benefit doubt ("what is the point / why this is needed"), set user_intent to WHY_NEEDED or RESISTANCE accordingly.`;
+
 function composeSpecialistInstructions(
   baseInstructions: string,
   contextBlock: string,
@@ -4356,6 +4662,7 @@ function composeSpecialistInstructions(
   if (options?.includeUniversalMeta) {
     blocks.push(UNIVERSAL_META_OFFTOPIC_POLICY);
   }
+  blocks.push(USER_INTENT_CONTRACT_INSTRUCTION);
   blocks.push(OFFTOPIC_FLAG_CONTRACT_INSTRUCTION);
   return blocks.join("\n\n");
 }
@@ -4497,6 +4804,7 @@ async function callSpecialistStrict(params: {
       refined_formulation: "",
       wants_recap: false,
       is_offtopic: forceOfftopic,
+      user_intent: forceOfftopic ? "OFFTOPIC" : "STEP_INPUT",
     };
     const specialistResult =
       specialist === STEP_0_SPECIALIST
@@ -5167,6 +5475,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const inputMode = args.input_mode || "chat";
   const policyFlags = resolveHolisticPolicyFlags();
   const wordingChoiceEnabled = policyFlags.wordingChoiceV2;
+  const motivationQuotesEnabled = policyFlags.motivationQuotesV11;
   const migrationFlags = resolveMigrationFlags();
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
     console.log("[run_step] input_mode", { inputMode });
@@ -5937,6 +6246,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         suggest_dreambuilder: "false",
         wants_recap: false,
         is_offtopic: false,
+        user_intent: "STEP_INPUT",
       };
       const forcedDecision: OrchestratorOutput = {
         specialist_to_call: DREAM_SPECIALIST,
@@ -6023,6 +6333,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         role: pickedSuggestion,
         wants_recap: false,
         is_offtopic: false,
+        user_intent: "STEP_INPUT",
       };
       const forcedDecision: OrchestratorOutput = {
         specialist_to_call: ROLE_SPECIALIST,
@@ -6129,6 +6440,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         presentation_brief: "",
         wants_recap: false,
         is_offtopic: false,
+        user_intent: "STEP_INPUT",
       };
 
       return finalizeResponse(attachRegistryPayload({
@@ -6165,6 +6477,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         presentation_brief: "",
         wants_recap: false,
         is_offtopic: false,
+        user_intent: "STEP_INPUT",
       };
 
       return finalizeResponse(attachRegistryPayload({
@@ -6353,6 +6666,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         suggest_dreambuilder: "false",
         wants_recap: false,
         is_offtopic: false,
+        user_intent: "STEP_INPUT",
       };
       const nextStateSwitch: CanvasState = {
         ...state,
@@ -6516,6 +6830,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         step_0: "",
         wants_recap: false,
         is_offtopic: false,
+        user_intent: "STEP_INPUT",
       };
       return finalizeResponse(attachRegistryPayload({
         ok: true as const,
@@ -6583,6 +6898,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         step_0: step0Final,
         wants_recap: false,
         is_offtopic: false,
+        user_intent: "STEP_INPUT",
       };
 
       const stateWithUi = await ensureUiStrings(state, userMessage);
@@ -6618,6 +6934,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       step_0: "",
       wants_recap: false,
       is_offtopic: false,
+      user_intent: "STEP_INPUT",
     };
 
     return finalizeResponse(attachRegistryPayload({
@@ -7074,6 +7391,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }, rendered.specialist));
   }
   specialistResult = rendered.specialist;
+  let renderedStatusForPolicy: TurnOutputStatus = rendered.status;
   actionCodesOverride = rendered.uiActionCodes;
   renderedActionsOverride = rendered.uiActions;
   contractMetaOverride = {
@@ -7156,6 +7474,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       }, rerendered.specialist));
     }
     specialistResult = rerendered.specialist;
+    renderedStatusForPolicy = rerendered.status;
     actionCodesOverride = rerendered.uiActionCodes;
     renderedActionsOverride = rerendered.uiActions;
     contractMetaOverride = {
@@ -7243,6 +7562,23 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     canonicalStatementCount: canonicalDreamBuilderStatementsCount,
     wordingChoicePending: requireWordingPick || Boolean(wordingChoiceOverride?.enabled),
   });
+  if (!requireWordingPick && !wordingChoiceOverride?.enabled) {
+    const motivationApplied = applyMotivationQuotesContractV11({
+      enabled: motivationQuotesEnabled,
+      stepId: String((nextState as any).current_step || ""),
+      userMessage,
+      renderedStatus: renderedStatusForPolicy,
+      specialistResult: (specialistResult || {}) as Record<string, unknown>,
+      previousSpecialist: previousSpecialistForWordingChoice,
+      state: nextState,
+      requireWordingPick,
+    });
+    specialistResult = motivationApplied.specialistResult;
+    if (motivationApplied.suppressChoices) {
+      actionCodesOverride = [];
+      renderedActionsOverride = [];
+    }
+  }
   (nextState as any).last_specialist_result = specialistResult;
 
   const currentStepForContract = String((nextState as any).current_step ?? "");

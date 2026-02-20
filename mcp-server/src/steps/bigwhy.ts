@@ -1,5 +1,6 @@
 // mcp-server/src/steps/bigwhy.ts
 import { z } from "zod";
+import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const BIGWHY_STEP_ID = "bigwhy" as const;
@@ -16,6 +17,7 @@ export const BigWhyZodSchema = z.object({
   bigwhy: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
+  user_intent: SpecialistUserIntentZod,
 });
 
 export type BigWhyOutput = z.infer<typeof BigWhyZodSchema>;
@@ -34,6 +36,7 @@ export const BigWhyJsonSchema = {
     "bigwhy",
     "wants_recap",
     "is_offtopic",
+    "user_intent",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -43,6 +46,7 @@ export const BigWhyJsonSchema = {
     bigwhy: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
+    user_intent: SpecialistUserIntentJsonSchema,
   },
 } as const;
 

@@ -49,3 +49,18 @@ test("all specialist zod schemas expose is_offtopic field", () => {
     assert.ok(shape && shape.is_offtopic, `${item.name}: zod shape has is_offtopic`);
   }
 });
+
+test("all specialist schemas require user_intent enum field", () => {
+  for (const item of CASES) {
+    const required = Array.isArray(item.jsonSchema?.required) ? item.jsonSchema.required : [];
+    assert.ok(required.includes("user_intent"), `${item.name}: required includes user_intent`);
+    assert.equal(item.jsonSchema?.properties?.user_intent?.type, "string", `${item.name}: user_intent type=string`);
+    assert.ok(
+      Array.isArray(item.jsonSchema?.properties?.user_intent?.enum) &&
+        item.jsonSchema.properties.user_intent.enum.length >= 3,
+      `${item.name}: user_intent enum configured`
+    );
+    const shape = (item.zodSchema as any)?.shape;
+    assert.ok(shape && shape.user_intent, `${item.name}: zod shape has user_intent`);
+  }
+});

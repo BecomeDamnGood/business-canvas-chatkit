@@ -83,6 +83,7 @@ export const CanvasStateZod = z.object({
 
   // shared convenience fields
   business_name: z.string(),
+  quote_last_by_step: z.record(z.string(), z.string()),
 
   // reserved
   summary_target: z.string(),
@@ -134,6 +135,7 @@ export function getDefaultState(): CanvasState {
     dream_builder_statements: [],
 
     business_name: "TBD",
+    quote_last_by_step: {},
 
     summary_target: "unknown",
   };
@@ -215,6 +217,13 @@ export function normalizeState(raw: unknown): CanvasState {
     .filter(Boolean);
 
   const business_name = String(r.business_name ?? d.business_name) || "TBD";
+  const quote_last_by_step_raw =
+    typeof (r as any).quote_last_by_step === "object" && (r as any).quote_last_by_step !== null
+      ? ((r as any).quote_last_by_step as Record<string, unknown>)
+      : {};
+  const quote_last_by_step = Object.fromEntries(
+    Object.entries(quote_last_by_step_raw).map(([k, v]) => [String(k), String(v ?? "")])
+  );
   const summary_target = String(r.summary_target ?? d.summary_target) || "unknown";
 
   const normalized: CanvasState = {
@@ -250,6 +259,7 @@ export function normalizeState(raw: unknown): CanvasState {
     dream_builder_statements,
 
     business_name,
+    quote_last_by_step,
     summary_target,
   };
 
@@ -286,6 +296,15 @@ export function migrateState(raw: unknown): CanvasState {
       language: String((s as any).language ?? "").trim().toLowerCase(),
       language_locked: String((s as any).language_locked ?? "false") === "true" ? "true" : "false",
       language_override: String((s as any).language_override ?? "false") === "true" ? "true" : "false",
+      quote_last_by_step:
+        typeof (s as any).quote_last_by_step === "object" && (s as any).quote_last_by_step !== null
+          ? Object.fromEntries(
+              Object.entries((s as any).quote_last_by_step as Record<string, unknown>).map(([k, v]) => [
+                String(k),
+                String(v ?? ""),
+              ])
+            )
+          : {},
       ui_strings:
         typeof (s as any).ui_strings === "object" && (s as any).ui_strings !== null
           ? Object.fromEntries(
@@ -326,6 +345,15 @@ export function migrateState(raw: unknown): CanvasState {
     role_final: String((s as any).role_final ?? ""),
     entity_final: String((s as any).entity_final ?? ""),
     strategy_final: String((s as any).strategy_final ?? ""),
+    quote_last_by_step:
+      typeof (s as any).quote_last_by_step === "object" && (s as any).quote_last_by_step !== null
+        ? Object.fromEntries(
+            Object.entries((s as any).quote_last_by_step as Record<string, unknown>).map(([k, v]) => [
+              String(k),
+              String(v ?? ""),
+            ])
+          )
+        : {},
     rulesofthegame_final: String((s as any).rulesofthegame_final ?? ""),
     presentation_brief_final: String((s as any).presentation_brief_final ?? ""),
     targetgroup_final: "",

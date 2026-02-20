@@ -1,5 +1,6 @@
 // mcp-server/src/steps/dream.ts
 import { z } from "zod";
+import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const DREAM_STEP_ID = "dream" as const;
 export const DREAM_STEP_LABEL = "Dream" as const;
@@ -17,6 +18,7 @@ export const DreamZodSchema = z.object({
   suggest_dreambuilder: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
+  user_intent: SpecialistUserIntentZod,
 });
 
 export type DreamOutput = z.infer<typeof DreamZodSchema>;
@@ -36,6 +38,7 @@ export const DreamJsonSchema = {
     "suggest_dreambuilder",
     "wants_recap",
     "is_offtopic",
+    "user_intent",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -46,6 +49,7 @@ export const DreamJsonSchema = {
     suggest_dreambuilder: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
+    user_intent: SpecialistUserIntentJsonSchema,
   },
 } as const;
 

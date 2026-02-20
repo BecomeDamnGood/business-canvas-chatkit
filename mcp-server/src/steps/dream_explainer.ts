@@ -1,5 +1,6 @@
 // mcp-server/src/steps/dream_explainer.ts
 import { z } from "zod";
+import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 
 export const DREAM_EXPLAINER_STEP_ID = "dream" as const; // exercise runs within Dream step context
 export const DREAM_EXPLAINER_SPECIALIST = "DreamExplainer" as const;
@@ -26,6 +27,7 @@ export const DreamExplainerZodSchema = z.object({
   user_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
+  user_intent: SpecialistUserIntentZod,
   scoring_phase: z.enum(["true", "false"]),
   clusters: z.array(ClusterSchema),
 });
@@ -49,6 +51,7 @@ export const DreamExplainerJsonSchema = {
     "user_state",
     "wants_recap",
     "is_offtopic",
+    "user_intent",
     "scoring_phase",
     "clusters",
   ],
@@ -63,6 +66,7 @@ export const DreamExplainerJsonSchema = {
     user_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
+    user_intent: SpecialistUserIntentJsonSchema,
     scoring_phase: { type: "string", enum: ["true", "false"] },
     clusters: {
       type: "array",

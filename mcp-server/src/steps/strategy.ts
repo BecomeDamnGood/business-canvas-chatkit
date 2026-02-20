@@ -1,5 +1,6 @@
 // mcp-server/src/steps/strategy.ts
 import { z } from "zod";
+import { SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { buildListStepContractBlock } from "./step_instruction_contracts.js";
 
 export const STRATEGY_STEP_ID = "strategy" as const;
@@ -16,6 +17,7 @@ export const StrategyZodSchema = z.object({
   strategy: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
+  user_intent: SpecialistUserIntentZod,
   statements: z.array(z.string()),
 });
 
@@ -35,6 +37,7 @@ export const StrategyJsonSchema = {
     "strategy",
     "wants_recap",
     "is_offtopic",
+    "user_intent",
     "statements",
   ],
   properties: {
@@ -45,6 +48,7 @@ export const StrategyJsonSchema = {
     strategy: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
+    user_intent: SpecialistUserIntentJsonSchema,
     statements: { type: "array", items: { type: "string" } },
   },
 } as const;
