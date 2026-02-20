@@ -2864,10 +2864,10 @@ function isBenMetaTopic(textRaw: string): boolean {
 function buildBenProfileMessage(): string {
   return [
     `![Ben Steenstra](${BEN_PROFILE_IMAGE_URL})`,
-    "My name is Ben Steenstra (1973). I am a Dutch serial entrepreneur, executive coach, author, and public speaker, and I help people grow their businesses while staying grounded in what feels meaningful.",
+    "My name is Ben Steenstra (1973). I am a Dutch serial entrepreneur, executive coach, author, and public speaker, and I help people grow their businesses while staying grounded in what feels truly meaningful for them.",
     "I combine practical strategy frameworks with coaching to turn big ideas into clear, actionable plans.",
-    "I have applied this model worldwide, including with organizations such as Samsung, HTC, LG, New Black, and Fresh and Rebel.",
-    `For more information and to book an appointment, visit my website: ${BEN_PROFILE_WEBSITE_URL}.`,
+    "I have applied this model worldwide in many countries, including with organizations such as Samsung, HTC, LG, New Black, and Fresh and Rebel and many more.",
+    `For more information, to read my articles, view my movies, or to instantly book an appointment, visit my website: ${BEN_PROFILE_WEBSITE_URL}.`,
   ].join("\n\n");
 }
 

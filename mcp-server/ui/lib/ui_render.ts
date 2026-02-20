@@ -544,6 +544,10 @@ export function render(overrideToolOutput?: unknown): void {
   const hasStructuredActions = structuredActions.length > 0;
   const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") as string;
   const promptSource = uiQuestionText || promptRaw;
+  const isBenProfileBody =
+    /!\[\s*ben steenstra\s*\]\(/i.test(bodyRaw) ||
+    /bensteenstra\.com/i.test(bodyRaw) ||
+    /my name is ben steenstra/i.test(bodyRaw);
   let body: string;
   if (isDreamDirectionView && promptSource) {
     body = promptSource;
@@ -555,9 +559,12 @@ export function render(overrideToolOutput?: unknown): void {
   if (cardDescEl) {
     cardDescEl.style.display = "block";
     cardDescEl.classList.add("has-grid");
-    const isStep0AskLayout = current === "step_0";
+    const isStep0AskLayout = current === "step_0" && !isBenProfileBody;
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     renderStructuredText(cardDescEl, body || "");
+    const hasBenProfileImage =
+      cardDescEl.querySelector('img.cardDesc-image[src*="ben-steenstra.webp"]') !== null;
+    cardDescEl.classList.toggle("is-ben-profile", isBenProfileBody || hasBenProfileImage);
   }
 
   const previewWrap = document.getElementById("presentationPreview");
@@ -923,7 +930,7 @@ export function render(overrideToolOutput?: unknown): void {
   if (promptEl) {
     const hasPromptText = String(promptText || "").trim().length > 0;
     const hasBodyText = stripInlineText(String(body || "")).trim().length > 0;
-    const showPromptDivider = current !== "step_0" && hasPromptText && hasBodyText;
+    const showPromptDivider = hasPromptText && hasBodyText;
     promptEl.classList.toggle("with-divider", showPromptDivider);
     promptEl.classList.toggle("choice-pending", requireWordingPick);
     renderInlineText(promptEl, promptText || "");
