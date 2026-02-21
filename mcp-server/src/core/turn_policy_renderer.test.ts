@@ -131,6 +131,30 @@ test("step_0: no output => ASK without menu actions", () => {
   assert.equal(rendered.uiActionCodes.length, 0);
 });
 
+test("step_0: ESCAPE keeps specialist boundary message and question", () => {
+  const state = getDefaultState();
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "step_0",
+    state,
+    specialist: {
+      action: "ESCAPE",
+      message: "I can help with legal and realistic ventures only.",
+      question: "What legal, realistic venture could you build today, and what is its name (or TBD)?",
+      confirmation_question: "",
+      menu_id: "",
+      is_offtopic: false,
+    },
+  });
+  assert.equal(rendered.status, "no_output");
+  assert.equal(String(rendered.specialist.action), "ASK");
+  assert.equal(String(rendered.specialist.message || ""), "I can help with legal and realistic ventures only.");
+  assert.equal(
+    String(rendered.specialist.question || ""),
+    "What legal, realistic venture could you build today, and what is its name (or TBD)?"
+  );
+  assert.equal(rendered.uiActionCodes.length, 0);
+});
+
 test("step_0: valid output => ASK with contract menu and readiness prompt", () => {
   const state = getDefaultState();
   (state as any).step_0_final = "Venture: agency | Name: TBD | Status: starting";

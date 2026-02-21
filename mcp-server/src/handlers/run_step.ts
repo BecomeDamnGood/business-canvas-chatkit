@@ -1631,12 +1631,9 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
   const action = String(specialist.action || "").trim().toUpperCase();
   const next = { ...specialist };
   const hasStep0Final = String((state as any).step_0_final || "").trim().length > 0;
-  const hasStep0Draft = String(next.step_0 || "").trim().length > 0;
   const normalizedInput = String(userInput || "").trim();
   const metaTopic = resolveSpecialistMetaTopic(next as Record<string, unknown>);
   const isBenMeta = metaTopic === "BEN_PROFILE";
-  const hasRawInput = normalizedInput.length > 0;
-  const isLikelyStepContributing = hasRawInput && shouldTreatAsStepContributingInput(normalizedInput, STEP_0_ID);
   if (action === "INTRO") {
     next.action = "ASK";
     next.message = "";
@@ -1672,16 +1669,6 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
       state,
       normalizedInput
     );
-  }
-  const isOfftopic = next.is_offtopic === true || String(next.is_offtopic || "").trim().toLowerCase() === "true";
-  const mustForceAskWithoutFinal =
-    !hasStep0Final &&
-    !hasStep0Draft &&
-    hasRawInput &&
-    !isLikelyStepContributing &&
-    (action === "ESCAPE" || isOfftopic || isClearlyGeneralOfftopicInput(normalizedInput));
-  if (mustForceAskWithoutFinal) {
-    return normalizeStep0OfftopicToAsk(next, state, normalizedInput);
   }
   if (hasStep0Final && action === "ASK" && !currentMenuId) {
     const parsed = parseStep0Final(String((state as any).step_0_final || ""), String((state as any).business_name || "TBD"));

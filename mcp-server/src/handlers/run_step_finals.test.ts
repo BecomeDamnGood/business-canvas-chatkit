@@ -1338,6 +1338,31 @@ test("Step 0 contract: meta/off-topic ASK is normalized to canonical Step 0 prom
   assert.equal(menuIdFromSpecialistPayload(normalized), "");
 });
 
+test("Step 0 contract: ESCAPE without step_0_final is no longer forced to canonical ask", () => {
+  const state = {
+    ...getDefaultState(),
+    current_step: "step_0",
+    step_0_final: "",
+    business_name: "",
+  };
+  const specialist = {
+    action: "ESCAPE",
+    message: "I can only help with a legal and realistic venture here.",
+    question: "What legal, realistic venture could you build today, and what is the name (or TBD)?",
+    refined_formulation: "",
+    business_name: "TBD",
+    step_0: "",
+    is_offtopic: false,
+    wants_recap: false,
+    user_intent: "STEP_INPUT",
+    meta_topic: "NONE",
+  };
+  const normalized = normalizeStep0AskDisplayContract("step_0", specialist, state, "I want to sell ice cream on the moon");
+  assert.equal(String(normalized.action || ""), "ESCAPE");
+  assert.equal(String(normalized.message || "").includes("legal and realistic"), true);
+  assert.equal(String(normalized.question || "").toLowerCase().includes("legal, realistic venture"), true);
+});
+
 test("Step 0 contract: fallback off-topic answer is never empty for clear non-step question", () => {
   const state = {
     ...getDefaultState(),

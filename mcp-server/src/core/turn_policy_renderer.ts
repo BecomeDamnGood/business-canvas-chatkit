@@ -806,24 +806,32 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     const parsedStep0 = parseStep0Line(
       String((state as any).step_0_final ?? "").trim() || extractCandidate(stepId, statusSource, prev)
     );
+    const specialistQuestion = String((specialistForDisplay as any).question ?? "").trim();
     const step0Message = (() => {
       const preserveSpecialistMessage =
+        sourceAction === "ESCAPE" ||
         isOfftopic ||
         isStep0MetaMessage(answerText) ||
         String((specialistForDisplay as any).wants_recap || "").toLowerCase() === "true";
       if (preserveSpecialistMessage && answerText) return answerText;
       return STEP0_CARDDESC_EN;
     })();
-    const step0MenuId = effectiveStatus === "valid_output" ? "STEP0_MENU_READY_START" : "";
+    const step0MenuId = sourceAction === "ESCAPE"
+      ? ""
+      : effectiveStatus === "valid_output"
+        ? "STEP0_MENU_READY_START"
+        : "";
     const step0ActionCodes = step0MenuId
       ? ((ACTIONCODE_REGISTRY.menus[step0MenuId] || []).map((code) => String(code || "").trim()).filter(Boolean))
       : [];
     const step0Labels = step0MenuId
       ? labelsForMenu(step0MenuId, step0ActionCodes, specialist, prev)
       : [];
-    const step0Headline = effectiveStatus === "valid_output"
-      ? step0ConfirmQuestion(parsedStep0.venture, parsedStep0.name)
-      : STEP0_NO_OUTPUT_PROMPT_EN;
+    const step0Headline = sourceAction === "ESCAPE" && specialistQuestion
+      ? specialistQuestion
+      : effectiveStatus === "valid_output"
+        ? step0ConfirmQuestion(parsedStep0.venture, parsedStep0.name)
+        : STEP0_NO_OUTPUT_PROMPT_EN;
     const step0Question = step0ActionCodes.length > 0
       ? buildNumberedPrompt(step0Labels, step0Headline)
       : step0Headline;
