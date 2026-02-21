@@ -81,6 +81,93 @@ test("language policy: explicit override wins", async () => {
   assert.equal(result?.state?.language_override, "true");
 });
 
+test("language policy: locale hint wins over paraphrased English chat input", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "nl-NL",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(result?.state?.language, "nl");
+  assert.equal(result?.state?.language_source, "locale_hint");
+  assert.equal(result?.state?.ui_strings_requested_lang, "nl");
+  assert.equal(result?.state?.ui_strings_status, "pending");
+});
+
+test("language policy: action-only follow-up keeps locale-hinted language", async () => {
+  const first = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "nl-NL",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      started: "true",
+      step_0_final: "Venture: advertising agency | Name: Mindd | Status: starting",
+      business_name: "Mindd",
+      last_specialist_result: {},
+    },
+  });
+  assert.equal(first?.state?.language, "nl");
+
+  const second = await run_step({
+    user_message: "ACTION_STEP0_READY_START",
+    input_mode: "widget",
+    locale_hint: "nl-NL",
+    locale_hint_source: "openai_locale",
+    state: first.state,
+  });
+  assert.equal(second?.ok, true);
+  assert.equal(second?.state?.language, "nl");
+  assert.equal(second?.state?.language_source, "locale_hint");
+});
+
+test("language policy: explicit override remains stronger than locale hint", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "nl-NL",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "language: en",
+    },
+  });
+  assert.equal(result?.state?.language, "en");
+  assert.equal(result?.state?.language_source, "explicit_override");
+  assert.equal(result?.state?.language_override, "true");
+});
+
+test("language policy: invalid locale hint falls back to text detection", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "invalid-locale",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "Tengo una panadería llamada Sol.",
+    },
+  });
+  assert.equal(result?.state?.language, "es");
+  assert.equal(result?.state?.language_source, "message_detect");
+});
+
 test("language mode force_en: keeps language en and never triggers ui string translation call", async () => {
   const prevMode = process.env.LANGUAGE_MODE;
   process.env.LANGUAGE_MODE = "force_en";

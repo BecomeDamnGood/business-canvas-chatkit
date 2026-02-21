@@ -16,6 +16,7 @@ import {
   CanvasStateZod,
   type CanvasState,
   type BoolString,
+  type LanguageSource,
   type ProvisionalSource,
 } from "../core/state.js";
 import {
@@ -177,6 +178,8 @@ const RunStepArgsSchema = z.object({
   current_step_id: z.string().optional().default("step_0"),
   user_message: z.string().default(""),
   input_mode: z.enum(["widget", "chat"]).optional().default("chat"),
+  locale_hint: z.string().optional().default(""),
+  locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional().default("none"),
   // Use CanvasStateZod schema for type safety and validation
   // .partial() makes all fields optional (for empty/partial state)
   // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
@@ -1019,6 +1022,22 @@ function isMenuLabelKeysV1Enabled(): boolean {
 
 function isUiI18nV3LangBootstrapEnabled(): boolean {
   return envFlagEnabled("UI_I18N_V3_LANG_BOOTSTRAP", true);
+}
+
+function isUiLocaleMetaV1Enabled(): boolean {
+  return envFlagEnabled("UI_LOCALE_META_V1", true);
+}
+
+function isUiLangSourceResolverV1Enabled(): boolean {
+  return envFlagEnabled("UI_LANG_SOURCE_RESOLVER_V1", true);
+}
+
+function isUiStrictNonEnPendingV1Enabled(): boolean {
+  return envFlagEnabled("UI_STRICT_NON_EN_PENDING_V1", true);
+}
+
+function isUiStep0LangResetGuardV1Enabled(): boolean {
+  return envFlagEnabled("UI_STEP0_LANG_RESET_GUARD_V1", true);
 }
 
 function isWordingPanelCleanBodyV1Enabled(): boolean {
@@ -4777,6 +4796,18 @@ function buildUiPayload(
   if (String(process.env.UI_I18N_V3_LANG_BOOTSTRAP || "").trim()) {
     flags.ui_i18n_v3_lang_bootstrap = isUiI18nV3LangBootstrapEnabled();
   }
+  if (String(process.env.UI_LOCALE_META_V1 || "").trim()) {
+    flags.ui_locale_meta_v1 = isUiLocaleMetaV1Enabled();
+  }
+  if (String(process.env.UI_LANG_SOURCE_RESOLVER_V1 || "").trim()) {
+    flags.ui_lang_source_resolver_v1 = isUiLangSourceResolverV1Enabled();
+  }
+  if (String(process.env.UI_STRICT_NON_EN_PENDING_V1 || "").trim()) {
+    flags.ui_strict_non_en_pending_v1 = isUiStrictNonEnPendingV1Enabled();
+  }
+  if (String(process.env.UI_STEP0_LANG_RESET_GUARD_V1 || "").trim()) {
+    flags.ui_step0_lang_reset_guard_v1 = isUiStep0LangResetGuardV1Enabled();
+  }
   const introChromeRaw = String((specialist as any)?.ui_show_step_intro_chrome || "").trim().toLowerCase();
   if ((specialist as any)?.ui_show_step_intro_chrome === true || introChromeRaw === "true") {
     flags.show_step_intro_chrome = true;
@@ -5168,6 +5199,25 @@ function normalizeLangCode(raw: string): string {
   return s.split(/[-_]/)[0] || "";
 }
 
+function normalizeLocaleHint(raw: string): string {
+  const normalized = normalizeLangCode(String(raw || ""));
+  if (!/^[a-z]{2,3}$/.test(normalized)) return "";
+  return normalized;
+}
+
+function normalizeLanguageSource(raw: unknown): LanguageSource {
+  const source = String(raw || "").trim();
+  if (
+    source === "explicit_override" ||
+    source === "locale_hint" ||
+    source === "message_detect" ||
+    source === "persisted"
+  ) {
+    return source;
+  }
+  return "";
+}
+
 function countAlphaChars(input: string): number {
   const s = String(input || "");
   const matches = s.match(/\p{L}/gu);
@@ -5180,6 +5230,10 @@ type UiI18nTelemetryCounters = {
   translation_fallbacks: number;
   translation_missing_keys: number;
   translation_html_violations: number;
+  locale_hint_used_count: number;
+  locale_hint_missing_count: number;
+  language_source_overridden_count: number;
+  ui_strings_pending_count: number;
   parity_errors: number;
   parity_recovered: number;
   confirm_gate_blocked_count: number;
@@ -5293,21 +5347,49 @@ async function getUiStringsForLang(
   lang: string,
   model: string,
   telemetry?: UiI18nTelemetryCounters | null
-): Promise<Record<string, string>> {
-  if (isForceEnglishLanguageMode()) return UI_STRINGS_WITH_MENU_KEYS;
+): Promise<{
+  ui_strings: Record<string, string>;
+  status: "ready" | "pending" | "error";
+  requested_lang: string;
+}> {
+  if (isForceEnglishLanguageMode()) {
+    return {
+      ui_strings: UI_STRINGS_WITH_MENU_KEYS,
+      status: "ready",
+      requested_lang: "en",
+    };
+  }
   const normalized = normalizeLangCode(lang) || "en";
-  if (normalized === "en") return UI_STRINGS_WITH_MENU_KEYS;
+  if (normalized === "en") {
+    return {
+      ui_strings: UI_STRINGS_WITH_MENU_KEYS,
+      status: "ready",
+      requested_lang: "en",
+    };
+  }
   const cached = UI_STRINGS_CACHE.get(normalized);
-  if (cached) return cached;
+  if (cached) {
+    return {
+      ui_strings: cached,
+      status: "ready",
+      requested_lang: normalized,
+    };
+  }
 
   if (process.env.TS_NODE_TRANSPILE_ONLY === "true" && process.env.RUN_INTEGRATION_TESTS !== "1") {
     bumpUiI18nCounter(telemetry, "translation_fallbacks");
-    return UI_STRINGS_WITH_MENU_KEYS;
+    if (isUiStrictNonEnPendingV1Enabled()) {
+      return { ui_strings: {}, status: "pending", requested_lang: normalized };
+    }
+    return { ui_strings: UI_STRINGS_WITH_MENU_KEYS, status: "ready", requested_lang: "en" };
   }
 
   if (!process.env.OPENAI_API_KEY) {
     bumpUiI18nCounter(telemetry, "translation_fallbacks");
-    return UI_STRINGS_WITH_MENU_KEYS;
+    if (isUiStrictNonEnPendingV1Enabled()) {
+      return { ui_strings: {}, status: "pending", requested_lang: normalized };
+    }
+    return { ui_strings: UI_STRINGS_WITH_MENU_KEYS, status: "ready", requested_lang: "en" };
   }
 
   const instructions = [
@@ -5345,10 +5427,25 @@ async function getUiStringsForLang(
     });
     const sanitized = sanitizeTranslatedUiStrings(res.data, telemetry);
     UI_STRINGS_CACHE.set(normalized, sanitized);
-    return sanitized;
+    return {
+      ui_strings: sanitized,
+      status: "ready",
+      requested_lang: normalized,
+    };
   } catch {
     bumpUiI18nCounter(telemetry, "translation_fallbacks");
-    return UI_STRINGS_WITH_MENU_KEYS;
+    if (isUiStrictNonEnPendingV1Enabled()) {
+      return {
+        ui_strings: {},
+        status: "pending",
+        requested_lang: normalized,
+      };
+    }
+    return {
+      ui_strings: UI_STRINGS_WITH_MENU_KEYS,
+      status: "ready",
+      requested_lang: "en",
+    };
   }
 }
 
@@ -5363,36 +5460,73 @@ async function ensureUiStringsForState(
       language: "en",
       language_locked: "true",
       language_override: "false",
+      language_source: "persisted",
       ui_strings: UI_STRINGS_WITH_MENU_KEYS,
       ui_strings_lang: "en",
       ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
+      ui_strings_status: "ready",
+      ui_strings_requested_lang: "en",
     } as CanvasState;
   }
   const lang = normalizeLangCode(String((state as any).language ?? "")) || "en";
   const existingLang = String((state as any).ui_strings_lang ?? "").trim().toLowerCase();
   const existingVersion = String((state as any).ui_strings_version ?? "").trim();
+  const existingStatusRaw = String((state as any).ui_strings_status ?? "ready").trim();
+  const existingStatus = existingStatusRaw === "pending" || existingStatusRaw === "error"
+    ? existingStatusRaw
+    : "ready";
   const existing = (state as any).ui_strings;
   if (
     existing &&
     typeof existing === "object" &&
     existingLang === lang &&
     Object.keys(existing).length &&
-    existingVersion === UI_STRINGS_SCHEMA_VERSION
+    existingVersion === UI_STRINGS_SCHEMA_VERSION &&
+    existingStatus === "ready"
   ) {
     return state;
   }
-  const ui_strings = await getUiStringsForLang(lang, model, telemetry);
+  const resolved = await getUiStringsForLang(lang, model, telemetry);
+  if (resolved.status === "pending") {
+    bumpUiI18nCounter(telemetry, "ui_strings_pending_count");
+  }
+  const hasExistingForLang =
+    existing &&
+    typeof existing === "object" &&
+    existingLang === lang &&
+    Object.keys(existing).length > 0;
+  const ui_strings = resolved.status === "ready"
+    ? resolved.ui_strings
+    : (hasExistingForLang ? (existing as Record<string, string>) : {});
   return {
     ...(state as any),
     ui_strings,
     ui_strings_lang: lang,
     ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
+    ui_strings_status: resolved.status,
+    ui_strings_requested_lang: resolved.requested_lang || lang,
   } as CanvasState;
 }
 
-async function ensureLanguageFromUserMessage(
+function withLanguageDecision(
+  state: CanvasState,
+  language: string,
+  source: LanguageSource,
+  options: { locked: BoolString; override: BoolString }
+): CanvasState {
+  return {
+    ...(state as any),
+    language,
+    language_locked: options.locked,
+    language_override: options.override,
+    language_source: source,
+  } as CanvasState;
+}
+
+async function resolveLanguageForTurn(
   state: CanvasState,
   userMessage: string,
+  localeHintRaw: string,
   model: string,
   telemetry?: UiI18nTelemetryCounters | null
 ): Promise<CanvasState> {
@@ -5402,9 +5536,12 @@ async function ensureLanguageFromUserMessage(
       language: "en",
       language_locked: "true",
       language_override: "false",
+      language_source: "persisted",
       ui_strings: UI_STRINGS_WITH_MENU_KEYS,
       ui_strings_lang: "en",
       ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
+      ui_strings_status: "ready",
+      ui_strings_requested_lang: "en",
     } as CanvasState;
   }
   const msg = String(userMessage ?? "");
@@ -5412,38 +5549,82 @@ async function ensureLanguageFromUserMessage(
   // Explicit user request overrides everything.
   const explicit = msg.trim() ? parseExplicitLanguageOverride(msg) : "";
   if (explicit) {
-    const next = {
-      ...(state as any),
-      language: explicit,
-      language_locked: "true",
-      language_override: "true",
-    } as CanvasState;
+    const next = withLanguageDecision(state, explicit, "explicit_override", {
+      locked: "true",
+      override: "true",
+    });
     return ensureUiStringsForState(next, model, telemetry);
   }
 
   const current = String((state as any).language ?? "").trim().toLowerCase();
+  const currentSource = normalizeLanguageSource((state as any).language_source);
   const locked = String((state as any).language_locked ?? "false") === "true";
   const override = String((state as any).language_override ?? "false") === "true";
-  if ((override || locked) && current) {
-    return ensureUiStringsForState(state, model, telemetry);
+  if (override && current) {
+    const persisted = currentSource
+      ? state
+      : withLanguageDecision(state, current, "explicit_override", {
+          locked: "true",
+          override: "true",
+        });
+    return ensureUiStringsForState(persisted, model, telemetry);
+  }
+
+  const localeHint = isUiLocaleMetaV1Enabled() ? normalizeLocaleHint(localeHintRaw) : "";
+  if (isUiLocaleMetaV1Enabled()) {
+    if (localeHint) {
+      bumpUiI18nCounter(telemetry, "locale_hint_used_count");
+    } else {
+      bumpUiI18nCounter(telemetry, "locale_hint_missing_count");
+    }
+  }
+  if (isUiLangSourceResolverV1Enabled() && localeHint) {
+    if (current && current !== localeHint) {
+      bumpUiI18nCounter(telemetry, "language_source_overridden_count");
+    }
+    const next = withLanguageDecision(state, localeHint, "locale_hint", {
+      locked: "true",
+      override: "false",
+    });
+    return ensureUiStringsForState(next, model, telemetry);
+  }
+
+  if (locked && current) {
+    const persisted = currentSource
+      ? state
+      : withLanguageDecision(state, current, "persisted", {
+          locked: "true",
+          override: "false",
+        });
+    return ensureUiStringsForState(persisted, model, telemetry);
   }
 
   const alphaCount = countAlphaChars(msg);
   if (alphaCount < LANGUAGE_MIN_ALPHA) {
-    return ensureUiStringsForState(state, model, telemetry);
+    const persisted = current && !currentSource
+      ? withLanguageDecision(state, current, "persisted", {
+          locked: locked ? "true" : "false",
+          override: override ? "true" : "false",
+        })
+      : state;
+    return ensureUiStringsForState(persisted, model, telemetry);
   }
 
   const detected = await detectLanguageHeuristic(msg);
   if (!detected.lang) {
-    return ensureUiStringsForState(state, model, telemetry);
+    const persisted = current && !currentSource
+      ? withLanguageDecision(state, current, "persisted", {
+          locked: locked ? "true" : "false",
+          override: override ? "true" : "false",
+        })
+      : state;
+    return ensureUiStringsForState(persisted, model, telemetry);
   }
 
-  const next = {
-    ...(state as any),
-    language: detected.lang,
-    language_locked: "true",
-    language_override: "false",
-  } as CanvasState;
+  const next = withLanguageDecision(state, detected.lang, "message_detect", {
+    locked: "true",
+    override: "false",
+  });
 
   return ensureUiStringsForState(next, model, telemetry);
 }
@@ -6464,12 +6645,24 @@ type RunStepError = RunStepBase & { ok: false; error: Record<string, unknown> };
 export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunStepError> {
   const args: RunStepArgs = RunStepArgsSchema.parse(rawArgs);
   const inputMode = args.input_mode || "chat";
+  const localeHint = normalizeLocaleHint(String(args.locale_hint ?? ""));
+  const localeHintSourceRaw = String(args.locale_hint_source ?? "none").trim();
+  const localeHintSource =
+    localeHintSourceRaw === "openai_locale" ||
+    localeHintSourceRaw === "webplus_i18n" ||
+    localeHintSourceRaw === "request_header"
+      ? localeHintSourceRaw
+      : "none";
   const policyFlags = resolveHolisticPolicyFlags();
   const wordingChoiceEnabled = policyFlags.wordingChoiceV2;
   const motivationQuotesEnabled = policyFlags.motivationQuotesV11;
   const migrationFlags = resolveMigrationFlags();
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
-    console.log("[run_step] input_mode", { inputMode });
+    console.log("[run_step] input_mode", {
+      inputMode,
+      locale_hint: localeHint,
+      locale_hint_source: localeHintSource,
+    });
   }
   const decideOrchestration = (routeState: CanvasState, routeUserMessage: string): OrchestratorOutput => {
     const event = deriveTransitionEventFromLegacy({ state: routeState, userMessage: routeUserMessage });
@@ -6492,6 +6685,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     translation_fallbacks: 0,
     translation_missing_keys: 0,
     translation_html_violations: 0,
+    locale_hint_used_count: 0,
+    locale_hint_missing_count: 0,
+    language_source_overridden_count: 0,
+    ui_strings_pending_count: 0,
     parity_errors: 0,
     parity_recovered: 0,
     confirm_gate_blocked_count: 0,
@@ -6769,7 +6966,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     if (!isUiI18nV3LangBootstrapEnabled()) {
       return ensureUiStringsForState(targetState, translationModel, uiI18nTelemetry);
     }
-    return ensureLanguageFromUserMessage(targetState, routeOrText, translationModel, uiI18nTelemetry);
+    return resolveLanguageForTurn(
+      targetState,
+      routeOrText,
+      localeHint,
+      translationModel,
+      uiI18nTelemetry
+    );
   };
 
   const legacyMarkers = rawLegacyMarkers.length > 0 ? rawLegacyMarkers : detectLegacySessionMarkers(state);
@@ -6848,10 +7051,18 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     isUserTextForLang
   ) {
     const hasOverride = String((state as any).language_override ?? "false") === "true";
-    if (!hasOverride) {
+    const stateLanguage = normalizeLangCode(String((state as any).language ?? ""));
+    const stateLanguageSource = normalizeLanguageSource((state as any).language_source);
+    const skipResetForChatLocaleHint =
+      isUiStep0LangResetGuardV1Enabled() &&
+      inputMode === "chat" &&
+      Boolean(localeHint) &&
+      (stateLanguageSource === "locale_hint" || stateLanguage === localeHint);
+    if (!hasOverride && !skipResetForChatLocaleHint) {
       (state as any).language = "";
       (state as any).language_locked = "false";
       (state as any).language_override = "false";
+      (state as any).language_source = "";
     }
   }
 

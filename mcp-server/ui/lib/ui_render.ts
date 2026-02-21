@@ -474,6 +474,13 @@ export function render(overrideToolOutput?: unknown): void {
   const stateLang = languageFromState(state);
   const widgetLang = String((ws?.language || "") as string).trim().toLowerCase();
   const lang = stateLang || widgetLang || uiLang(state);
+  const uiStringsStatusRaw = String((state?.ui_strings_status || "ready") as string).trim().toLowerCase();
+  const uiStringsStatus =
+    uiStringsStatusRaw === "pending" || uiStringsStatusRaw === "error" ? uiStringsStatusRaw : "ready";
+  const uiStringsRequestedLang = String((state?.ui_strings_requested_lang || "") as string).trim().toLowerCase();
+  const pendingNonEnglishByState =
+    uiStringsStatus !== "ready" &&
+    baseLang(stateLang || uiStringsRequestedLang || lang) !== "en";
   if (overrideStrings) {
     const bucket = overrideLang || baseLang(lang);
     UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...(overrideStrings as Record<string, string>) };
@@ -515,9 +522,11 @@ export function render(overrideToolOutput?: unknown): void {
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
   const idx = stepIndex(current);
-  const stepTitle = current === "step_0"
-    ? uiText(lang, "stepLabel.validation", "Validation")
-    : extractStepTitle(current, lang);
+  const stepTitle = pendingNonEnglishByState
+    ? ""
+    : current === "step_0"
+      ? uiText(lang, "stepLabel.validation", "Validation")
+      : extractStepTitle(current, lang);
   buildStepper(idx, stepTitle, lang);
 
   const badge = document.getElementById("badge");
@@ -527,6 +536,29 @@ export function render(overrideToolOutput?: unknown): void {
   const btnStart = document.getElementById("btnStart");
   const startHint = document.getElementById("startHint");
   if (!inputWrap || !btnStart || !startHint) return;
+  const isLoading = getIsLoading();
+
+  if (pendingNonEnglishByState) {
+    inputWrap.style.display = "none";
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (choiceWrap) choiceWrap.style.display = "none";
+    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    const cardDesc = document.getElementById("cardDesc");
+    const prompt = document.getElementById("prompt");
+    if (cardDesc) {
+      const prestartEl = cardDesc as HTMLElement;
+      prestartEl.classList.remove("has-grid");
+      prestartEl.classList.remove("is-step0-ask-layout");
+      renderPrestartSkeleton(prestartEl, lang);
+    }
+    if (prompt) prompt.textContent = "";
+    startHint.textContent = "";
+    (startHint as HTMLElement).style.display = "none";
+    (btnStart as HTMLElement).style.display = "none";
+    if (isLoading) setLoading(false);
+    return;
+  }
 
   const specialist = (result?.specialist as Record<string, unknown>) || {};
   const uiPayload =
@@ -564,7 +596,6 @@ export function render(overrideToolOutput?: unknown): void {
   const isDreamExplainerMode = current === "dream" && dreamRuntimeMode !== "self";
   const lastSpecialist = (state?.last_specialist_result as Record<string, unknown>) || {};
   const isDreamStepPreExercise = false;
-  const isLoading = getIsLoading();
 
   if (showPreStart) {
     inputWrap.style.display = "none";

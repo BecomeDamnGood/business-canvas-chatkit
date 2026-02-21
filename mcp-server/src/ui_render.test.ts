@@ -1012,3 +1012,11 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
   assert.match(source, /appendTextNode\("div", "deliverables", ""\)/);
   assert.match(source, /appendTextNode\(\s*"p",\s*"card-headline",\s*content\.skeleton \|\| uiText\(lang,\s*"prestart\.loading",\s*"Loading translation…"\)\s*\)/);
 });
+
+test("render source blocks non-English pending ui_strings from showing fallback body", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
+  assert.match(source, /const pendingNonEnglishByState =[\s\S]*uiStringsStatus !== "ready"/);
+  assert.match(source, /if \(pendingNonEnglishByState\) \{/);
+  assert.match(source, /renderPrestartSkeleton\(prestartEl, lang\)/);
+  assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
+});

@@ -41,6 +41,18 @@ export const PROVISIONAL_SOURCES = [
 ] as const;
 export const ProvisionalSourceZod = z.enum(PROVISIONAL_SOURCES);
 export type ProvisionalSource = z.infer<typeof ProvisionalSourceZod>;
+export const LANGUAGE_SOURCES = [
+  "",
+  "explicit_override",
+  "locale_hint",
+  "message_detect",
+  "persisted",
+] as const;
+export const LanguageSourceZod = z.enum(LANGUAGE_SOURCES);
+export type LanguageSource = z.infer<typeof LanguageSourceZod>;
+export const UI_STRINGS_STATUSES = ["ready", "pending", "error"] as const;
+export const UiStringsStatusZod = z.enum(UI_STRINGS_STATUSES);
+export type UiStringsStatus = z.infer<typeof UiStringsStatusZod>;
 
 /**
  * CanvasState (canoniek)
@@ -62,10 +74,13 @@ export const CanvasStateZod = z.object({
   language: z.string(),
   language_locked: BoolStringZod, // once set from a meaningful user message, we don't auto-flip
   language_override: BoolStringZod, // true only when user explicitly requested a language
+  language_source: LanguageSourceZod,
   // UI strings (localized in backend; cached per language)
   ui_strings: z.record(z.string(), z.string()),
   ui_strings_lang: z.string(),
   ui_strings_version: z.string(),
+  ui_strings_status: UiStringsStatusZod,
+  ui_strings_requested_lang: z.string(),
 
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
@@ -104,7 +119,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "6";
+export const CURRENT_STATE_VERSION = "7";
 
 /**
  * Hard defaults (no nulls)
@@ -121,9 +136,12 @@ export function getDefaultState(): CanvasState {
     language: "",
     language_locked: "false",
     language_override: "false",
+    language_source: "",
     ui_strings: {},
     ui_strings_lang: "",
     ui_strings_version: "",
+    ui_strings_status: "ready",
+    ui_strings_requested_lang: "",
 
     last_specialist_result: {},
 
@@ -179,6 +197,14 @@ export function normalizeState(raw: unknown): CanvasState {
   const language_locked: BoolString = language_locked_raw === "true" ? "true" : "false";
   const language_override_raw = String(r.language_override ?? d.language_override).trim();
   const language_override: BoolString = language_override_raw === "true" ? "true" : "false";
+  const language_source_raw = String((r as any).language_source ?? d.language_source).trim();
+  const language_source: LanguageSource =
+    language_source_raw === "explicit_override" ||
+    language_source_raw === "locale_hint" ||
+    language_source_raw === "message_detect" ||
+    language_source_raw === "persisted"
+      ? language_source_raw
+      : "";
   const ui_strings_raw =
     typeof (r as any).ui_strings === "object" && (r as any).ui_strings !== null
       ? (r as any).ui_strings
@@ -188,6 +214,12 @@ export function normalizeState(raw: unknown): CanvasState {
   );
   const ui_strings_lang = String((r as any).ui_strings_lang ?? d.ui_strings_lang).trim().toLowerCase();
   const ui_strings_version = String((r as any).ui_strings_version ?? d.ui_strings_version).trim();
+  const ui_strings_status_raw = String((r as any).ui_strings_status ?? d.ui_strings_status).trim();
+  const ui_strings_status: UiStringsStatus =
+    ui_strings_status_raw === "pending" || ui_strings_status_raw === "error" ? ui_strings_status_raw : "ready";
+  const ui_strings_requested_lang = String((r as any).ui_strings_requested_lang ?? d.ui_strings_requested_lang)
+    .trim()
+    .toLowerCase();
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
@@ -266,9 +298,12 @@ export function normalizeState(raw: unknown): CanvasState {
     language,
     language_locked,
     language_override,
+    language_source,
     ui_strings,
     ui_strings_lang,
     ui_strings_version,
+    ui_strings_status,
+    ui_strings_requested_lang,
 
     last_specialist_result,
 
@@ -309,6 +344,31 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v6 -> v7: add language source + ui_strings status metadata.
+  if (s.state_version === "6") {
+    const languageSourceRaw = String((s as any).language_source ?? "").trim();
+    const language_source =
+      languageSourceRaw === "explicit_override" ||
+      languageSourceRaw === "locale_hint" ||
+      languageSourceRaw === "message_detect" ||
+      languageSourceRaw === "persisted"
+        ? languageSourceRaw
+        : "";
+    const statusRaw = String((s as any).ui_strings_status ?? "ready").trim();
+    const ui_strings_status =
+      statusRaw === "pending" || statusRaw === "error"
+        ? statusRaw
+        : "ready";
+    s = {
+      ...s,
+      state_version: "7",
+      language_source,
+      ui_strings_status,
+      ui_strings_requested_lang: String((s as any).ui_strings_requested_lang ?? "").trim().toLowerCase(),
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v5 -> v6: add source map for staged values (legacy staged values default to system_generated).
   if (s.state_version === "5") {
     const staged = typeof (s as any).provisional_by_step === "object" && (s as any).provisional_by_step !== null
@@ -340,7 +400,7 @@ export function migrateState(raw: unknown): CanvasState {
       state_version: "6",
       provisional_source_by_step: nextSources,
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v4 -> v5: add ui string schema version marker to support deterministic text refresh.

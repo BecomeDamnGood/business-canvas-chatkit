@@ -190,6 +190,68 @@ function normalizeStepId(rawStepId: string): string {
   return trimmed;
 }
 
+function normalizeLocaleHint(raw: unknown): string {
+  const text = safeString(raw ?? "").trim().toLowerCase();
+  if (!text) return "";
+  const firstPart = text.split(",")[0]?.trim() || "";
+  const firstToken = firstPart.split(";")[0]?.trim() || "";
+  if (!firstToken) return "";
+  const code = firstToken.split(/[-_]/)[0]?.trim() || "";
+  if (!/^[a-z]{2,3}$/.test(code)) return "";
+  return code;
+}
+
+function localeFromMetaValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const normalized = normalizeLocaleHint(item);
+      if (normalized) return normalized;
+    }
+    return "";
+  }
+  return normalizeLocaleHint(value);
+}
+
+function localeFromRequestHeaders(requestInfo: unknown): string {
+  const headersRaw =
+    requestInfo && typeof requestInfo === "object" && typeof (requestInfo as any).headers === "object"
+      ? ((requestInfo as any).headers as Record<string, unknown>)
+      : null;
+  if (!headersRaw) return "";
+  const direct = localeFromMetaValue(headersRaw["accept-language"]);
+  if (direct) return direct;
+  const canonical = Object.keys(headersRaw).find((key) => String(key || "").toLowerCase() === "accept-language");
+  if (!canonical) return "";
+  return localeFromMetaValue(headersRaw[canonical]);
+}
+
+function resolveLocaleHintFromExtra(extra: unknown): {
+  locale_hint: string;
+  locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "none";
+} {
+  const meta =
+    extra && typeof extra === "object" && (extra as any)._meta && typeof (extra as any)._meta === "object"
+      ? ((extra as any)._meta as Record<string, unknown>)
+      : null;
+  if (meta) {
+    const openaiLocale = localeFromMetaValue(meta["openai/locale"]);
+    if (openaiLocale) {
+      return { locale_hint: openaiLocale, locale_hint_source: "openai_locale" };
+    }
+    const webplusLocale = localeFromMetaValue(meta["webplus/i18n"]);
+    if (webplusLocale) {
+      return { locale_hint: webplusLocale, locale_hint_source: "webplus_i18n" };
+    }
+  }
+  const headerLocale = localeFromRequestHeaders(
+    extra && typeof extra === "object" ? (extra as any).requestInfo : null
+  );
+  if (headerLocale) {
+    return { locale_hint: headerLocale, locale_hint_source: "request_header" };
+  }
+  return { locale_hint: "", locale_hint_source: "none" };
+}
+
 function hasNonBusinessFinals(state: Record<string, unknown> | null | undefined): boolean {
   const snapshot = getFinalsSnapshot((state ?? {}) as any);
   for (const [key, value] of Object.entries(snapshot)) {
@@ -218,11 +280,20 @@ async function runStepHandler(args: {
   current_step_id: string;
   user_message: string;
   input_mode?: "widget" | "chat";
+  locale_hint?: string;
+  locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "none";
   state?: Record<string, unknown>;
 }): Promise<{ structuredContent: Record<string, unknown> }> {
   const current_step_id = normalizeStepId(args.current_step_id ?? "");
   const state = (args.state ?? {}) as Record<string, unknown>;
   const user_message_raw = safeString(args.user_message ?? "");
+  const localeHintSourceRaw = safeString(args.locale_hint_source ?? "none");
+  const localeHintSource =
+    localeHintSourceRaw === "openai_locale" ||
+    localeHintSourceRaw === "webplus_i18n" ||
+    localeHintSourceRaw === "request_header"
+      ? localeHintSourceRaw
+      : "none";
   const isStart = current_step_id === "step_0";
   const user_message =
     isStart && !user_message_raw.trim() ? "" : user_message_raw;
@@ -250,6 +321,8 @@ async function runStepHandler(args: {
     const result = await runStepTool({
       user_message,
       input_mode: args.input_mode,
+      locale_hint: safeString(args.locale_hint ?? ""),
+      locale_hint_source: localeHintSource,
       state: stateForTool,
     });
     const { debug: _omit, ...resultForClient } = result as {
@@ -433,6 +506,8 @@ function createAppServer(baseUrl: string): McpServer {
     current_step_id: z.string().optional().default("step_0"),
     user_message: z.string().optional().default(""),
     input_mode: z.enum(["widget", "chat"]).optional(),
+    locale_hint: z.string().optional(),
+    locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional(),
     // Use CanvasStateZod schema for type safety and validation
     // .partial() makes all fields optional (for empty/partial state)
     // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
@@ -466,16 +541,27 @@ function createAppServer(baseUrl: string): McpServer {
         "openai/toolInvocation/invoked": "Updated",
       },
     },
-    async (args) => {
+    async (args, extra) => {
       const normalizedStepId = normalizeStepId(args.current_step_id ?? "");
       const isFirstStart = isFirstStartStep(
         normalizedStepId,
         (args.state ?? {}) as Record<string, unknown>
       );
+      const localeFromExtra = resolveLocaleHintFromExtra(extra);
+      const localeHint = safeString(args.locale_hint ?? localeFromExtra.locale_hint);
+      const localeHintSourceRaw = safeString(args.locale_hint_source ?? localeFromExtra.locale_hint_source);
+      const localeHintSource =
+        localeHintSourceRaw === "openai_locale" ||
+        localeHintSourceRaw === "webplus_i18n" ||
+        localeHintSourceRaw === "request_header"
+          ? localeHintSourceRaw
+          : "none";
       const { structuredContent } = await runStepHandler({
         current_step_id: safeString(args.current_step_id ?? ""),
         user_message: safeString(args.user_message ?? ""),
         input_mode: args.input_mode,
+        locale_hint: localeHint,
+        locale_hint_source: localeHintSource,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
       const contentText = buildContentFromResult(
@@ -595,12 +681,16 @@ const httpServer = async (req: any, res: any) => {
           current_step_id?: string;
           user_message?: string;
           input_mode?: "widget" | "chat";
+          locale_hint?: string;
+          locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "none";
           state?: Record<string, unknown>;
         };
         const { structuredContent } = await runStepHandler({
           current_step_id: safeString(args.current_step_id ?? "step_0") || "step_0",
           user_message: safeString(args.user_message ?? ""),
           input_mode: args.input_mode,
+          locale_hint: safeString(args.locale_hint ?? ""),
+          locale_hint_source: args.locale_hint_source ?? "none",
           state: args.state,
         });
         res.writeHead(200, { "content-type": "application/json" });
