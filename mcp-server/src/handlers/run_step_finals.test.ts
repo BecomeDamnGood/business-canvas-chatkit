@@ -2513,6 +2513,47 @@ test("switch-to-self from DreamBuilder scoring NO_MENU is contract-valid and ret
   assert.equal(String(result.prompt || "").includes("Define your Dream for"), true);
 });
 
+test("switch-to-self intro route clears stale dream provisional and wording pending state", async () => {
+  const result = await run_step({
+    user_message: "__SWITCH_TO_SELF_DREAM__",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "DreamExplainer",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      dream_final: "",
+      provisional_by_step: {
+        dream: "Old staged dream that should be cleared",
+      },
+      provisional_source_by_step: {
+        dream: "system_generated",
+      },
+      __ui_phase_by_step: {
+        dream: "dream:phase:DREAM_EXPLAINER_MENU_SWITCH_SELF",
+      },
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+        refined_formulation: "",
+        dream: "",
+        wording_choice_pending: "true",
+        wording_choice_target_field: "dream",
+        wording_choice_user_raw: "A user draft",
+        wording_choice_user_normalized: "A user draft.",
+        wording_choice_agent_current: "A suggestion draft.",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(menuIdFromTurn(result), "DREAM_MENU_INTRO");
+  assert.equal(String(result.specialist?.wording_choice_pending || "") === "true", false);
+  assert.equal(String((result.state as any)?.provisional_by_step?.dream || ""), "");
+  assert.equal(String((result.state as any)?.provisional_source_by_step?.dream || ""), "");
+});
+
 test("bullet consistency helpers remain, but no runtime overlay gate exists", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
   assert.match(source, /function isBulletConsistencyStep\(stepId: string\): boolean/);
@@ -2648,6 +2689,54 @@ test("wording choice: user pick preserves multi-line strategy input and shows fe
   assert.match(
     String(result.specialist?.message || ""),
     /This wording is still broad and could be sharpened with clearer focus points\./
+  );
+  assert.match(
+    String(result.specialist?.message || ""),
+    /Your current Strategy for Mindd is:/
+  );
+});
+
+test("wording choice: user pick without explicit reason falls back to deterministic default reason", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "role",
+      active_specialist: "Role",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "REFINE",
+        menu_id: "ROLE_MENU_REFINE",
+        question:
+          "1) I'm happy with this wording, please continue to next step Entity.\n2) Refine the wording",
+        message: "",
+        refined_formulation: "Mindd exists to equip founders with courageous clarity.",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "Mindd exists to equip founders with courageous clarity.",
+        wording_choice_user_normalized: "Mindd exists to equip founders with courageous clarity.",
+        wording_choice_agent_current: "Mindd helps founders choose with confidence.",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "role",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.specialist?.wording_choice_selected || ""), "user");
+  assert.match(
+    String(result.specialist?.message || ""),
+    /You chose your own wording, and that's okay\./
+  );
+  assert.match(
+    String(result.specialist?.message || ""),
+    /This keeps your original meaning while staying aligned with this step\./
+  );
+  assert.match(
+    String(result.specialist?.message || ""),
+    /Your current Role for Mindd is:/
   );
 });
 

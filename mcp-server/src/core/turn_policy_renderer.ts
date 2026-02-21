@@ -92,6 +92,10 @@ function isStep0EscapeReadyGuardV1Enabled(): boolean {
   return envFlagEnabled("UI_STEP0_ESCAPE_READY_GUARD_V1", true);
 }
 
+function isSemanticInvariantsV1Enabled(): boolean {
+  return envFlagEnabled("UI_SEMANTIC_INVARIANTS_V1", true);
+}
+
 function normalizeDreamRuntimeMode(raw: unknown): DreamRuntimeMode {
   const mode = String(raw || "").trim();
   if (mode === "builder_collect" || mode === "builder_scoring" || mode === "builder_refine") return mode;
@@ -297,6 +301,21 @@ function contractHeadlineForState(params: {
   );
   const template = params.hasOptions ? templateWithOptions : templateWithoutOptions;
   return formatIndexedTemplate(template, [prefix, params.stepLabel, params.companyName]).trim();
+}
+
+function interactiveAskPromptFallback(state: CanvasState, stepId: string): string {
+  if (stepId === "step_0") {
+    return uiStringFromState(
+      state,
+      "step0.question.initial",
+      STEP0_NO_OUTPUT_PROMPT_EN
+    );
+  }
+  return uiStringFromState(
+    state,
+    "invariant.prompt.ask.default",
+    "Share your thoughts or choose an option."
+  );
 }
 
 function offTopicStepLabel(stepId: string, state: CanvasState): string {
@@ -880,7 +899,10 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     statementOfftopicSteps.has(stepId) &&
     Boolean(candidateText);
   const effectiveStatus: TurnOutputStatus = promoteIncompleteToValidForOfftopic ? "valid_output" : status;
-  const effectiveConfirmEligible = promoteIncompleteToValidForOfftopic ? true : confirmEligible;
+  let effectiveConfirmEligible = promoteIncompleteToValidForOfftopic ? true : confirmEligible;
+  if (isSemanticInvariantsV1Enabled() && effectiveStatus === "no_output") {
+    effectiveConfirmEligible = false;
+  }
 
   const specialistForDisplay: Record<string, unknown> = { ...specialist };
   if (isOfftopic && stepId !== "step_0") {
@@ -1001,9 +1023,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       : effectiveStatus === "valid_output"
         ? step0ConfirmQuestion(state, parsedStep0.venture, parsedStep0.name, parsedStep0.status)
         : step0InitialQuestion;
+    const step0HeadlineSafe =
+      isSemanticInvariantsV1Enabled() &&
+      (effectiveStatus === "no_output" || effectiveStatus === "incomplete_output") &&
+      !String(step0Headline || "").trim()
+        ? interactiveAskPromptFallback(state, stepId)
+        : step0Headline;
     const step0Question = step0ActionCodes.length > 0
-      ? buildNumberedPrompt(step0Labels, step0Headline)
-      : step0Headline;
+      ? buildNumberedPrompt(step0Labels, step0HeadlineSafe)
+      : step0HeadlineSafe;
     const step0ContractId = buildContractId(stepId, effectiveStatus, step0MenuId);
     const step0TextKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId: step0MenuId });
     const step0Specialist: Record<string, unknown> = {
@@ -1059,14 +1087,29 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     menuId === "DREAM_EXPLAINER_MENU_SWITCH_SELF"
       ? stripStructuredChoiceLinesForPrompt(String((specialistForDisplay as any).question || "").trim())
       : "";
-  const question = buildNumberedPrompt(safeLabels, dreamExplainerPrompt || headline);
+  const fallbackPrompt =
+    isSemanticInvariantsV1Enabled() &&
+    (effectiveStatus === "no_output" || effectiveStatus === "incomplete_output") &&
+    !String(headline || "").trim()
+      ? interactiveAskPromptFallback(state, stepId)
+      : "";
+  const question = buildNumberedPrompt(safeLabels, dreamExplainerPrompt || headline || fallbackPrompt);
   const contractId = buildContractId(stepId, effectiveStatus, menuId);
   const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
+  const wordingPending = String((specialistForDisplay as any).wording_choice_pending || "").trim() === "true";
+  const messageForDisplay =
+    isSemanticInvariantsV1Enabled() && wordingPending && !String(message || "").trim()
+      ? uiStringFromState(
+          state,
+          "wording.choice.context.default",
+          "Please choose the wording that fits best."
+        )
+      : message;
 
   const nextSpecialist: Record<string, unknown> = {
     ...specialistForDisplay,
     action: "ASK",
-    message,
+    message: messageForDisplay,
     question,
     ui_show_step_intro_chrome: showStepIntroChrome,
     ui_contract_id: contractId,

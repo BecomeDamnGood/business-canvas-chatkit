@@ -108,6 +108,11 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     wordingChoiceHeading: "This is your input:",
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
+    "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wording.feedback.user_pick.ack.default": "You chose your own wording, and that's okay.",
+    "wording.feedback.user_pick.reason.default":
+      "This keeps your original meaning while staying aligned with this step.",
+    "invariant.prompt.ask.default": "Share your thoughts or choose an option.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
     "dreamBuilder.startExercise": "Start the exercise",

@@ -266,7 +266,11 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   wordingChoiceHeading: "This is your input:",
   wordingChoiceSuggestionLabel: "This would be my suggestion:",
   wordingChoiceInstruction: "Please click what suits you best.",
+  "wording.choice.context.default": "Please choose the wording that fits best.",
+  "wording.feedback.user_pick.ack.default": "You chose your own wording, and that's okay.",
+  "wording.feedback.user_pick.reason.default": "This keeps your original meaning while staying aligned with this step.",
   "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",
+  "invariant.prompt.ask.default": "Share your thoughts or choose an option.",
   "dreamBuilder.startExercise": "Start the exercise",
   "dreamBuilder.question.base":
     "What do you see changing in the future, positive or negative? Let your imagination run free.",
@@ -396,7 +400,7 @@ const UI_STRINGS_WITH_MENU_KEYS: Record<string, string> = {
 };
 
 const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_WITH_MENU_KEYS);
-const UI_STRINGS_SCHEMA_VERSION = "2026-02-21-ui-i18n-v3";
+const UI_STRINGS_SCHEMA_VERSION = "2026-02-21-ui-i18n-v3_2";
 const UiStringsZodSchema = z.object(
   UI_STRINGS_KEYS.reduce<Record<string, z.ZodString>>((acc, k) => {
     acc[k] = z.string();
@@ -677,8 +681,15 @@ function sanitizeEscapeInWidget(specialist: any): any {
   safe.action = "ASK";
   safe.user_intent = "OFFTOPIC";
   safe.meta_topic = "NONE";
-  if (isWidgetSuppressedEscapeMenuId(menuId) || action === "ESCAPE" || hasEscapeLabelPhrase(question)) {
-    safe.question = "";
+  const shouldCleanQuestion =
+    isWidgetSuppressedEscapeMenuId(menuId) || hasEscapeLabelPhrase(question);
+  if (shouldCleanQuestion) {
+    const cleanedQuestion = String(question || "")
+      .split(/\r?\n/)
+      .filter((line) => !hasEscapeLabelPhrase(line))
+      .join("\n")
+      .trim();
+    safe.question = cleanedQuestion;
   }
   if (hasEscapeLabelPhrase(message)) {
     safe.message = String(message || "")
@@ -689,6 +700,8 @@ function sanitizeEscapeInWidget(specialist: any): any {
   }
   safe.wording_choice_pending = "false";
   safe.wording_choice_selected = "";
+  safe.feedback_reason_key = "";
+  safe.feedback_reason_text = "";
   return safe;
 }
 
@@ -715,6 +728,34 @@ function detectLegacySessionMarkers(state: Record<string, unknown> | CanvasState
     reasons.push("legacy_ui_phase_marker");
   }
   return reasons;
+}
+
+type SemanticViolationReason =
+  | "missing_prompt_for_interactive_ask"
+  | "confirm_present_without_accepted_evidence"
+  | "intro_mode_must_not_expose_confirm"
+  | "wording_choice_mode_requires_instruction_or_context";
+
+const SEMANTIC_VIOLATION_REASONS = new Set<SemanticViolationReason>([
+  "missing_prompt_for_interactive_ask",
+  "confirm_present_without_accepted_evidence",
+  "intro_mode_must_not_expose_confirm",
+  "wording_choice_mode_requires_instruction_or_context",
+]);
+
+function isSemanticViolationReason(reason: string | null | undefined): reason is SemanticViolationReason {
+  if (!reason) return false;
+  return SEMANTIC_VIOLATION_REASONS.has(reason as SemanticViolationReason);
+}
+
+function hasAcceptedOutputEvidence(state: CanvasState, stepId: string): boolean {
+  const finalField = String(FINAL_FIELD_BY_STEP_ID[stepId] || "").trim();
+  const committedFinal = finalField ? String((state as any)?.[finalField] || "").trim() : "";
+  if (committedFinal) return true;
+  const provisional = provisionalValueForStep(state as any, stepId);
+  if (!provisional) return false;
+  const source = provisionalSourceForStep(state as any, stepId);
+  return source === "user_input" || source === "wording_pick" || source === "action_route";
 }
 
 function validateRenderedContractTurn(
@@ -781,6 +822,38 @@ function validateRenderedContractTurn(
     }
   }
 
+  const hasConfirmAction = actionCodes.some((code) => isConfirmActionCode(code));
+  if (rendered.status === "no_output" && hasConfirmAction) {
+    return "intro_mode_must_not_expose_confirm";
+  }
+  if (state && hasConfirmAction && !hasAcceptedOutputEvidence(state, stepId)) {
+    return "confirm_present_without_accepted_evidence";
+  }
+  if (
+    action === "ASK" &&
+    (rendered.status === "no_output" || rendered.status === "incomplete_output")
+  ) {
+    const renderMode = state ? inferUiRenderModeForStep(state, stepId) : "menu";
+    const dreamMode = state && stepId === DREAM_STEP_ID ? getDreamRuntimeMode(state) : "self";
+    const promptRequired = !(renderMode === "no_buttons" || (stepId === DREAM_STEP_ID && dreamMode === "builder_scoring"));
+    if (promptRequired && !question) {
+      return "missing_prompt_for_interactive_ask";
+    }
+  }
+  if (String((specialist as any).wording_choice_pending || "").trim() === "true") {
+    const hasWordingContext =
+      Boolean(String((specialist as any).message || "").trim()) ||
+      Boolean(question) ||
+      Boolean(String((specialist as any).wording_choice_user_raw || "").trim()) ||
+      Boolean(String((specialist as any).wording_choice_user_normalized || "").trim()) ||
+      Boolean(String((specialist as any).wording_choice_agent_current || "").trim()) ||
+      (Array.isArray((specialist as any).wording_choice_user_items) &&
+        ((specialist as any).wording_choice_user_items as unknown[]).length > 0) ||
+      (Array.isArray((specialist as any).wording_choice_suggestion_items) &&
+        ((specialist as any).wording_choice_suggestion_items as unknown[]).length > 0);
+    if (!hasWordingContext) return "wording_choice_mode_requires_instruction_or_context";
+  }
+
   if (stepId !== STEP_0_ID && rendered.status === "valid_output") {
     if (state && inferUiRenderModeForStep(state, stepId) === "no_buttons") {
       return null;
@@ -824,6 +897,103 @@ function validateRenderedContractTurn(
   return null;
 }
 
+function semanticFallbackSpecialistForStep(
+  stepId: string,
+  specialist: Record<string, unknown>,
+  reason: SemanticViolationReason,
+  state: CanvasState
+): Record<string, unknown> {
+  const next = { ...specialist };
+  if (reason === "missing_prompt_for_interactive_ask") {
+    (next as any).question = promptFallbackForInteractiveAsk(state, stepId);
+  }
+  if (reason === "wording_choice_mode_requires_instruction_or_context") {
+    const existingMessage = String((next as any).message || "").trim();
+    if (!existingMessage) {
+      (next as any).message = uiStringFromStateMap(
+        state,
+        "wording.choice.context.default",
+        uiDefaultString("wording.choice.context.default", "Please choose the wording that fits best.")
+      );
+    }
+  }
+  if (reason === "confirm_present_without_accepted_evidence" || reason === "intro_mode_must_not_expose_confirm") {
+    const field = fieldForStep(stepId);
+    if (field) (next as any)[field] = "";
+    (next as any).refined_formulation = "";
+    if (Array.isArray((next as any).statements)) {
+      (next as any).statements = [];
+    }
+  }
+  return next;
+}
+
+function validateRenderedContractOrRecover(params: {
+  stepId: string;
+  rendered: TurnPolicyRenderResult;
+  state: CanvasState;
+  previousSpecialist: Record<string, unknown>;
+  telemetry?: UiI18nTelemetryCounters | null;
+}): { rendered: TurnPolicyRenderResult; state: CanvasState; violation: string | null; recovered: boolean } {
+  let rendered = params.rendered;
+  let state = params.state;
+  const stepId = String(params.stepId || "").trim();
+  const specialistWithInvariants = enforcePromptInvariants({
+    stepId,
+    status: rendered.status,
+    specialist: (rendered.specialist || {}) as Record<string, unknown>,
+    state,
+  });
+  rendered = {
+    ...rendered,
+    specialist: specialistWithInvariants,
+  };
+  const violation = validateRenderedContractTurn(stepId, rendered, state);
+  if (!violation) {
+    return { rendered, state, violation: null, recovered: false };
+  }
+  if (!isUiSemanticInvariantsV1Enabled() || !isSemanticViolationReason(violation)) {
+    return { rendered, state, violation, recovered: false };
+  }
+  if (violation === "missing_prompt_for_interactive_ask") {
+    bumpUiI18nCounter(params.telemetry, "semantic_prompt_missing_count");
+  }
+  if (violation === "confirm_present_without_accepted_evidence" || violation === "intro_mode_must_not_expose_confirm") {
+    bumpUiI18nCounter(params.telemetry, "semantic_confirm_blocked_count");
+  }
+  let fallbackState = state;
+  if (violation === "confirm_present_without_accepted_evidence" || violation === "intro_mode_must_not_expose_confirm") {
+    fallbackState = clearStepInteractiveState(fallbackState, stepId);
+    bumpUiI18nCounter(params.telemetry, "state_hygiene_resets_count");
+  }
+  const fallbackSpecialist = semanticFallbackSpecialistForStep(
+    stepId,
+    (rendered.specialist || {}) as Record<string, unknown>,
+    violation,
+    fallbackState
+  );
+  let rerendered = renderFreeTextTurnPolicy({
+    stepId,
+    state: fallbackState,
+    specialist: fallbackSpecialist,
+    previousSpecialist: params.previousSpecialist || {},
+  });
+  rerendered = {
+    ...rerendered,
+    specialist: enforcePromptInvariants({
+      stepId,
+      status: rerendered.status,
+      specialist: (rerendered.specialist || {}) as Record<string, unknown>,
+      state: fallbackState,
+    }),
+  };
+  const rerenderViolation = validateRenderedContractTurn(stepId, rerendered, fallbackState);
+  if (!rerenderViolation) {
+    return { rendered: rerendered, state: fallbackState, violation: null, recovered: true };
+  }
+  return { rendered, state, violation, recovered: false };
+}
+
 function sanitizeWidgetActionCodes(actionCodes: string[]): string[] {
   return actionCodes.filter((code) => !WIDGET_ESCAPE_ACTION_CODE_BAN.has(String(code || "").trim()));
 }
@@ -853,6 +1023,18 @@ function isUiI18nV3LangBootstrapEnabled(): boolean {
 
 function isWordingPanelCleanBodyV1Enabled(): boolean {
   return envFlagEnabled("UI_WORDING_PANEL_CLEAN_BODY_V1", true);
+}
+
+function isUiSemanticInvariantsV1Enabled(): boolean {
+  return envFlagEnabled("UI_SEMANTIC_INVARIANTS_V1", true);
+}
+
+function isUiWordingFeedbackKeyedV1Enabled(): boolean {
+  return envFlagEnabled("UI_WORDING_FEEDBACK_KEYED_V1", true);
+}
+
+function isUiStateHygieneSwitchV1Enabled(): boolean {
+  return envFlagEnabled("UI_STATE_HYGIENE_SWITCH_V1", true);
 }
 
 function baseUrlFromEnv(): string {
@@ -1333,6 +1515,13 @@ export function buildTextForWidget(params: {
   const promptOverride = String(params.questionTextOverride || "").trim();
   const prompt = promptOverride || promptFromSpecialist;
   let refined = String(specialist?.refined_formulation ?? "").trim();
+  if (!wordingPending) {
+    const field = fieldForStep(contractStepId);
+    const fieldValue = field ? String((specialist as any)?.[field] || "").trim() : "";
+    if (!fieldValue && !refined && statementLines.length === 0) {
+      msg = stripUnsupportedReformulationClaims(msg);
+    }
+  }
   if (msg) msg = stripChoiceInstructionNoise(msg);
   if (msg && prompt) msg = stripPromptEchoFromMessage(msg, prompt);
   if (refined) {
@@ -1637,6 +1826,51 @@ function buildQuestionTextFromActions(prompt: string): string {
   return stripNumberedOptions(prompt) || String(prompt || "").trim();
 }
 
+type PromptInvariantContext = {
+  stepId: string;
+  status: TurnOutputStatus;
+  specialist: Record<string, unknown>;
+  state: CanvasState;
+};
+
+function promptFallbackForInteractiveAsk(state: CanvasState, stepId: string): string {
+  if (stepId === STEP_0_ID) {
+    return step0QuestionForState(state);
+  }
+  return uiStringFromStateMap(
+    state,
+    "invariant.prompt.ask.default",
+    uiDefaultString("invariant.prompt.ask.default", "Share your thoughts or choose an option.")
+  );
+}
+
+function enforcePromptInvariants(context: PromptInvariantContext): Record<string, unknown> {
+  if (!isUiSemanticInvariantsV1Enabled()) return context.specialist;
+  const stepId = String(context.stepId || "").trim();
+  const status = context.status;
+  const specialist = context.specialist || {};
+  const action = String((specialist as any).action || "").trim().toUpperCase();
+  if (action !== "ASK") return specialist;
+  const interactiveAsk = status === "no_output" || status === "incomplete_output";
+  if (!interactiveAsk) return specialist;
+
+  const currentQuestion = String((specialist as any).question || "").trim();
+  const currentMessage = String((specialist as any).message || "").trim();
+  const wordingPending = String((specialist as any).wording_choice_pending || "").trim() === "true";
+  const next = { ...specialist };
+  if (!currentQuestion) {
+    (next as any).question = promptFallbackForInteractiveAsk(context.state, stepId);
+  }
+  if (wordingPending && !currentMessage) {
+    (next as any).message = uiStringFromStateMap(
+      context.state,
+      "wording.choice.context.default",
+      uiDefaultString("wording.choice.context.default", "Please choose the wording that fits best.")
+    );
+  }
+  return next;
+}
+
 function hasMeaningfulDreamCandidateText(rawValue: unknown): boolean {
   const value = String(rawValue || "").replace(/\r/g, "\n").trim();
   if (!value) return false;
@@ -1882,6 +2116,8 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
         step_0: step0FinalRaw,
         wording_choice_pending: "false",
         wording_choice_selected: "",
+        feedback_reason_key: "",
+        feedback_reason_text: "",
         is_offtopic: true,
       };
     }
@@ -1905,6 +2141,8 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
     next.step_0 = step0FinalRaw;
     next.wording_choice_pending = "false";
     next.wording_choice_selected = "";
+    next.feedback_reason_key = "";
+    next.feedback_reason_text = "";
     return next;
   }
   if (String(next.action || "").trim() !== "ASK") return next;
@@ -1926,6 +2164,8 @@ export function normalizeStep0OfftopicToAsk(specialist: any, state: CanvasState,
     question: step0QuestionForState(state),
     wording_choice_pending: "false",
     wording_choice_selected: "",
+    feedback_reason_key: "",
+    feedback_reason_text: "",
     step_0: "",
     is_offtopic: true,
   };
@@ -2017,6 +2257,8 @@ function copyPendingWordingChoiceState(current: any, previous: Record<string, un
     wording_choice_agent_current: String(previous.wording_choice_agent_current || ""),
     wording_choice_mode: String(previous.wording_choice_mode || ""),
     wording_choice_target_field: String(previous.wording_choice_target_field || ""),
+    feedback_reason_key: String(previous.feedback_reason_key || ""),
+    feedback_reason_text: String(previous.feedback_reason_text || ""),
   };
 }
 
@@ -2672,6 +2914,74 @@ function sanitizePendingTextMessage(messageRaw: string, suggestionRaw: string): 
   return kept.join("\n\n").trim();
 }
 
+function extractFeedbackReasonSentenceFromSpecialistMessage(params: {
+  messageRaw: string;
+  suggestionRaw: string;
+  userRaw: string;
+  knownItems: string[];
+}): string {
+  const source = String(params.messageRaw || "").replace(/\r/g, "\n").trim();
+  if (!source) return "";
+  const suggestionComparable = canonicalizeComparableText(String(params.suggestionRaw || ""));
+  const userComparable = canonicalizeComparableText(String(params.userRaw || ""));
+  const knownComparables = new Set(
+    params.knownItems
+      .map((line) => canonicalizeComparableText(line))
+      .filter(Boolean)
+  );
+  const lines = source
+    .split(/\n+/)
+    .map((line) => stripChoiceInstructionNoise(String(line || "").replace(/<[^>]+>/g, " ").trim()))
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
+    .filter(Boolean);
+  const blockedLinePatterns = [
+    /^this is your input:?$/i,
+    /^this would be my suggestion:?$/i,
+    /^please click what suits you best\.?$/i,
+    /^choose this version$/i,
+    /^if you meant something different/i,
+    /^statement\s*\d+\s*:/i,
+    /^so far\b/i,
+    /^your current\b/i,
+  ];
+  const candidates: string[] = [];
+  for (const line of lines) {
+    if (blockedLinePatterns.some((pattern) => pattern.test(line))) continue;
+    const lineComparable = canonicalizeComparableText(line);
+    if (!lineComparable) continue;
+    if (knownComparables.has(lineComparable)) continue;
+    if (
+      (suggestionComparable && (lineComparable === suggestionComparable || lineComparable.includes(suggestionComparable))) ||
+      (userComparable && (lineComparable === userComparable || lineComparable.includes(userComparable)))
+    ) {
+      continue;
+    }
+    const sentences = line
+      .split(/(?<=[.!?])\s+/)
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+    for (const sentence of sentences) {
+      const normalized = sentence.replace(/\s+/g, " ").trim();
+      if (!normalized) continue;
+      if (blockedLinePatterns.some((pattern) => pattern.test(normalized))) continue;
+      const sentenceComparable = canonicalizeComparableText(normalized);
+      if (!sentenceComparable) continue;
+      if (
+        (suggestionComparable &&
+          (sentenceComparable === suggestionComparable || sentenceComparable.includes(suggestionComparable))) ||
+        (userComparable && (sentenceComparable === userComparable || sentenceComparable.includes(userComparable))) ||
+        knownComparables.has(sentenceComparable)
+      ) {
+        continue;
+      }
+      if (tokenizeWords(normalized).length < 5) continue;
+      candidates.push(normalized);
+    }
+  }
+  if (candidates.length === 0) return "";
+  return normalizeCompactFeedbackSentence(candidates[0], "");
+}
+
 export function isListChoiceScope(stepId: string, activeSpecialist: string): boolean {
   if (
     stepId === DREAM_STEP_ID &&
@@ -2927,6 +3237,40 @@ function withProvisionalValue(
 
 function clearProvisionalValue(state: CanvasState, stepId: string): CanvasState {
   return withProvisionalValue(state, stepId, "", "system_generated");
+}
+
+function clearStepInteractiveState(state: CanvasState, stepId: string): CanvasState {
+  if (!stepId) return state;
+  let next = clearProvisionalValue(state, stepId);
+  const last =
+    (next as any).last_specialist_result && typeof (next as any).last_specialist_result === "object"
+      ? { ...((next as any).last_specialist_result as Record<string, unknown>) }
+      : null;
+  if (!last) return next;
+  const targetField = String((last as any).wording_choice_target_field || "").trim();
+  const currentStep = String((next as any).current_step || "").trim();
+  const shouldResetWordingState =
+    targetField === stepId ||
+    (targetField === "" && currentStep === stepId) ||
+    String((last as any).wording_choice_pending || "").trim() === "true";
+  if (!shouldResetWordingState) return next;
+  const resetLast = {
+    ...last,
+    wording_choice_pending: "false",
+    wording_choice_selected: "",
+    wording_choice_user_raw: "",
+    wording_choice_user_normalized: "",
+    wording_choice_user_items: [],
+    wording_choice_suggestion_items: [],
+    wording_choice_base_items: [],
+    wording_choice_agent_current: "",
+    wording_choice_mode: "",
+    wording_choice_target_field: "",
+    feedback_reason_key: "",
+    feedback_reason_text: "",
+  };
+  (next as any).last_specialist_result = resetLast;
+  return next;
 }
 
 function preserveProgressForInformationalAction(
@@ -3680,6 +4024,8 @@ export function normalizeNonStep0OfftopicSpecialist(params: {
       __offtopic_meta_passthrough: "true",
       wording_choice_pending: "false",
       wording_choice_selected: "",
+      feedback_reason_key: "",
+      feedback_reason_text: "",
     };
   }
   if (isLikelyMetaQuestionTurn({ userMessage: params.userMessage, specialistResult: specialist })) {
@@ -3702,9 +4048,11 @@ export function normalizeNonStep0OfftopicSpecialist(params: {
     action: "ASK",
     message,
     __offtopic_meta_passthrough: "false",
-    wording_choice_pending: "false",
-    wording_choice_selected: "",
-  } as Record<string, unknown>;
+      wording_choice_pending: "false",
+      wording_choice_selected: "",
+      feedback_reason_key: "",
+      feedback_reason_text: "",
+    } as Record<string, unknown>;
 
   if (stepId === DREAM_STEP_ID && String(params.activeSpecialist || "").trim() === DREAM_EXPLAINER_SPECIALIST) {
     next.suggest_dreambuilder = "true";
@@ -3769,61 +4117,8 @@ function validateNonStep0OfftopicMessageShape(
   return null;
 }
 
-const STEP_FEEDBACK_FALLBACK: Record<string, string> = {
-  [PURPOSE_STEP_ID]: "Purpose should express deeper meaning and contribution, not personal outcomes like money or status.",
-  [BIGWHY_STEP_ID]: "Big Why should capture the deeper societal reason your company exists, not only ambition.",
-  [ROLE_STEP_ID]: "Role should describe the stable contribution your company brings, beyond services or positioning.",
-  [ENTITY_STEP_ID]: "Entity should be specific enough that outsiders instantly understand what kind of company this is.",
-  [STRATEGY_STEP_ID]: "Strategy should stay concrete and focused so choices remain clear in practice.",
-  [TARGETGROUP_STEP_ID]: "Target Group should be specific enough that decisions can be made for a clear audience.",
-  [PRODUCTSSERVICES_STEP_ID]: "Products and Services should stay concrete and distinguish what you actually offer.",
-  [RULESOFTHEGAME_STEP_ID]: "Rules of the game should be concrete behavior rules, not broad slogans.",
-  [DREAM_STEP_ID]: "Dream should describe the future world your company wants to help create, beyond general beliefs.",
-  [PRESENTATION_STEP_ID]: "Presentation brief should stay concrete so the output presentation remains actionable.",
-};
-
-function userChoiceFeedbackReason(stepId: string, prev: any): string {
-  const normalize = (value: string): string =>
-    String(value || "")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .replace(/[.!?]+$/g, "")
-      .trim();
-
-  const suggestionNorm = normalize(String(prev?.wording_choice_agent_current || prev?.refined_formulation || ""));
-  const message = String(prev?.message || "").trim();
-  const genericAcknowledgements = [
-    /^i think i understand\b/i,
-    /^i understand\b/i,
-    /^thank you for sharing\b/i,
-    /^that'?s a strong\b/i,
-    /^i appreciate\b/i,
-    /^good point\b/i,
-    /^you chose your own wording\b/i,
-    /^please click what suits you best\b/i,
-  ];
-  if (message) {
-    const paragraphs = message
-      .split(/\n{2,}/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-    for (const paragraph of paragraphs) {
-      const pNorm = normalize(paragraph);
-      if (!pNorm) continue;
-      if (suggestionNorm && (pNorm === suggestionNorm || pNorm.includes(suggestionNorm))) continue;
-      if (/^your current\b/i.test(paragraph)) continue;
-      if (genericAcknowledgements.some((re) => re.test(paragraph))) continue;
-      if (paragraph.length >= 20) return paragraph;
-    }
-  }
-  return STEP_FEEDBACK_FALLBACK[stepId] || "this wording may be less precise for this step.";
-}
-
-function normalizeUserChoiceFeedbackSentence(stepId: string, rawReason: string): string {
-  const fallback = STEP_FEEDBACK_FALLBACK[stepId] || "This wording may be less precise for this step.";
-  let text = String(rawReason || "").trim();
-  if (!text) text = fallback;
-  text = text
+function normalizeCompactFeedbackSentence(raw: string, fallback: string): string {
+  const cleaned = String(raw || "")
     .replace(/\r/g, "\n")
     .split("\n")
     .map((line) => String(line || "").trim())
@@ -3831,20 +4126,76 @@ function normalizeUserChoiceFeedbackSentence(stepId: string, rawReason: string):
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
-  text = text
-    .replace(/^please note:\s*/i, "")
-    .replace(/^note:\s*/i, "")
-    .replace(/^that\s+/i, "This ")
-    .trim();
-  if (!text) text = fallback;
-  text = text.charAt(0).toUpperCase() + text.slice(1);
-  if (!/[.!?]$/.test(text)) text = `${text}.`;
-  return text;
+  const source = cleaned || fallback;
+  const firstSentence = source
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)[0] || source;
+  const normalized = firstSentence.charAt(0).toUpperCase() + firstSentence.slice(1);
+  return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
 }
 
-function userChoiceFeedbackMessage(stepId: string, state: CanvasState, prev: any, activeSpecialist = ""): string {
-  const reason = normalizeUserChoiceFeedbackSentence(stepId, userChoiceFeedbackReason(stepId, prev));
-  const feedback = `You chose your own wording, and that's okay. ${reason}`;
+function resolveFeedbackReasonFromSpecialist(state: CanvasState, prev: any): string {
+  const reasonKey = String(prev?.feedback_reason_key || "").trim();
+  const reasonText = String(prev?.feedback_reason_text || "").trim();
+  if (reasonKey) {
+    const reasonUiKey = `wording.feedback.reason.${reasonKey}`;
+    const fallback = uiDefaultString(reasonUiKey, "");
+    const fromMap = uiStringFromStateMap(state, reasonUiKey, fallback);
+    if (fromMap) return normalizeCompactFeedbackSentence(fromMap, "");
+  }
+  if (reasonText) {
+    return normalizeCompactFeedbackSentence(reasonText, "");
+  }
+  const fallbackFromMessage = extractFeedbackReasonSentenceFromSpecialistMessage({
+    messageRaw: String(prev?.message || ""),
+    suggestionRaw: String(prev?.wording_choice_agent_current || prev?.refined_formulation || ""),
+    userRaw: String(prev?.wording_choice_user_normalized || prev?.wording_choice_user_raw || ""),
+    knownItems: mergeListItems(
+      Array.isArray(prev?.wording_choice_base_items) ? (prev.wording_choice_base_items as string[]) : [],
+      Array.isArray(prev?.wording_choice_suggestion_items) ? (prev.wording_choice_suggestion_items as string[]) : []
+    ),
+  });
+  if (fallbackFromMessage) return fallbackFromMessage;
+  return "";
+}
+
+function userChoiceFeedbackMessage(
+  stepId: string,
+  state: CanvasState,
+  prev: any,
+  activeSpecialist = "",
+  telemetry?: UiI18nTelemetryCounters | null
+): string {
+  const acknowledgment = normalizeCompactFeedbackSentence(
+    uiStringFromStateMap(
+      state,
+      "wording.feedback.user_pick.ack.default",
+      uiDefaultString("wording.feedback.user_pick.ack.default", "You chose your own wording, and that's okay.")
+    ),
+    "You chose your own wording, and that's okay."
+  );
+  const fallbackReason = normalizeCompactFeedbackSentence(
+    uiStringFromStateMap(
+      state,
+      "wording.feedback.user_pick.reason.default",
+      uiDefaultString(
+        "wording.feedback.user_pick.reason.default",
+        "This keeps your original meaning while staying aligned with this step."
+      )
+    ),
+    "This keeps your original meaning while staying aligned with this step."
+  );
+  let reason = fallbackReason;
+  if (isUiWordingFeedbackKeyedV1Enabled()) {
+    const explicitReason = resolveFeedbackReasonFromSpecialist(state, prev);
+    if (explicitReason) {
+      reason = explicitReason;
+    } else {
+      bumpUiI18nCounter(telemetry, "wording_feedback_fallback_count");
+    }
+  }
+  const feedback = `${acknowledgment} ${reason}`.trim();
   const selection = wordingSelectionMessage(stepId, state, activeSpecialist);
   return selection ? `${feedback}\n\n${selection}` : feedback;
 }
@@ -3956,6 +4307,8 @@ export function buildWordingChoiceFromTurn(params: {
         ...specialistResult,
         wording_choice_pending: "false",
         wording_choice_selected: "",
+        feedback_reason_key: "",
+        feedback_reason_text: "",
       },
       wordingChoice: null,
     };
@@ -4002,6 +4355,8 @@ export function buildWordingChoiceFromTurn(params: {
       ...specialistResult,
       wording_choice_pending: "false",
       wording_choice_selected: "suggestion",
+      feedback_reason_key: "",
+      feedback_reason_text: "",
       refined_formulation: chosen,
       ...(mode === "list" ? { statements: chosenItems } : {}),
     };
@@ -4020,6 +4375,12 @@ export function buildWordingChoiceFromTurn(params: {
       String(specialistResult?.message || ""),
       String(suggestionRaw || "")
     );
+  const feedbackReasonText = extractFeedbackReasonSentenceFromSpecialistMessage({
+    messageRaw: String(specialistResult?.message || ""),
+    suggestionRaw,
+    userRaw,
+    knownItems: mergeListItems(baseItems, suggestionFullItems),
+  });
   const targetField = fieldForStep(stepId);
   const committedTextFromPrev = targetField ? String(previousSpecialist?.[targetField] || "").trim() : "";
   const committedText = mode === "list" ? baseItems.join("\n") : committedTextFromPrev;
@@ -4036,6 +4397,8 @@ export function buildWordingChoiceFromTurn(params: {
     wording_choice_suggestion_items: suggestionItems,
     wording_choice_mode: mode,
     wording_choice_target_field: targetField,
+    feedback_reason_key: "",
+    feedback_reason_text: feedbackReasonText,
   };
   if (targetField) {
     (enriched as any)[targetField] = committedText;
@@ -4052,7 +4415,7 @@ export function buildWordingChoiceFromTurn(params: {
     suggestion_text: suggestionRaw,
     user_items: userItems,
     suggestion_items: suggestionItems,
-    instruction: "Please click what suits you best.",
+    instruction: uiDefaultString("wordingChoiceInstruction", "Please click what suits you best."),
   };
   return { specialist: enriched, wordingChoice };
 }
@@ -4061,6 +4424,7 @@ function applyWordingPickSelection(params: {
   stepId: string;
   routeToken: string;
   state: CanvasState;
+  telemetry?: UiI18nTelemetryCounters | null;
 }): { handled: boolean; specialist: any; nextState: CanvasState } {
   const { stepId, routeToken, state } = params;
   if (!isWordingPickRouteToken(routeToken)) {
@@ -4095,7 +4459,7 @@ function applyWordingPickSelection(params: {
   const chosen = stepId === ENTITY_STEP_ID ? normalizeEntityPhrase(rawChosen) || rawChosen : rawChosen;
   if (!chosen) return { handled: false, specialist: prev, nextState: state };
   const activeSpecialist = String((state as any)?.active_specialist || "").trim();
-  const userFeedback = userChoiceFeedbackMessage(stepId, state, prev, activeSpecialist);
+  const userFeedback = userChoiceFeedbackMessage(stepId, state, prev, activeSpecialist, params.telemetry);
   const selectedMessage = pickedUser
     ? userFeedback
     : wordingSelectionMessage(stepId, state, activeSpecialist);
@@ -4112,6 +4476,8 @@ function applyWordingPickSelection(params: {
       wording_choice_base_items: mode === "list" ? parseListItems(chosen) : [],
       refined_formulation: chosen,
       wording_choice_agent_current: chosen,
+      feedback_reason_key: "",
+      feedback_reason_text: "",
       ...(mode === "list" ? { statements: parseListItems(chosen) } : {}),
     },
     stepId,
@@ -4191,7 +4557,7 @@ function buildWordingChoiceFromPendingSpecialist(
     suggestion_text: String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim(),
     user_items: userItems,
     suggestion_items: suggestionItems,
-    instruction: "Please click what suits you best.",
+    instruction: uiDefaultString("wordingChoiceInstruction", "Please click what suits you best."),
   };
 }
 
@@ -4272,6 +4638,21 @@ function parseMenuFromContractIdForStep(contractIdRaw: unknown, stepId: string):
   const menuId = menuParts.join(":").trim();
   if (!menuId || menuId === "NO_MENU") return "";
   return menuId;
+}
+
+function parseStatusFromContractIdForStep(contractIdRaw: unknown, stepId: string): TurnOutputStatus | null {
+  const contractId = String(contractIdRaw || "").trim();
+  const safeStepId = String(stepId || "").trim();
+  if (!contractId || !safeStepId) return null;
+  const parts = contractId.split(":");
+  if (parts.length < 3) return null;
+  const contractStep = String(parts[0] || "").trim();
+  const status = String(parts[1] || "").trim();
+  if (contractStep !== safeStepId) return null;
+  if (status === "no_output" || status === "incomplete_output" || status === "valid_output") {
+    return status;
+  }
+  return null;
 }
 
 function inferCurrentMenuForStep(state: CanvasState, stepId: string): string {
@@ -4625,7 +5006,7 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
     wordingChoiceOverride?: WordingChoiceUiPayload | null,
   contractMetaOverride?: UiContractMeta | null
 ): T & { registry_version: string; ui?: ReturnType<typeof buildUiPayload> } {
-  const safeSpecialist = sanitizeEscapeInWidget(specialist);
+  let safeSpecialist = sanitizeEscapeInWidget(specialist);
   const payloadState = (payload as any)?.state as CanvasState | undefined;
   const payloadStepId = String((payload as any)?.current_step_id || payloadState?.current_step || "").trim();
   const phaseMap = payloadState && typeof (payloadState as any).__ui_phase_by_step === "object"
@@ -4637,6 +5018,21 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
     ...(contractMetaOverride?.contractId ? {} : (phaseContractId ? { contractId: phaseContractId } : {})),
     ...(contractMetaOverride?.contractVersion ? {} : { contractVersion: UI_CONTRACT_VERSION }),
   };
+  const contractIdForStatus = String(
+    effectiveContractOverride.contractId || (safeSpecialist as any)?.ui_contract_id || ""
+  ).trim();
+  const statusForInvariants =
+    payloadState && payloadStepId
+      ? parseStatusFromContractIdForStep(contractIdForStatus, payloadStepId)
+      : null;
+  if (payloadState && payloadStepId && statusForInvariants) {
+    safeSpecialist = enforcePromptInvariants({
+      stepId: payloadStepId,
+      status: statusForInvariants,
+      specialist: safeSpecialist as Record<string, unknown>,
+      state: payloadState,
+    });
+  }
   const ui = buildUiPayload(
     safeSpecialist,
     flagsOverride,
@@ -4789,6 +5185,10 @@ type UiI18nTelemetryCounters = {
   confirm_gate_blocked_count: number;
   step0_escape_ready_recovered_count: number;
   wording_body_sanitized_count: number;
+  semantic_prompt_missing_count: number;
+  semantic_confirm_blocked_count: number;
+  state_hygiene_resets_count: number;
+  wording_feedback_fallback_count: number;
 };
 
 function bumpUiI18nCounter(
@@ -6097,6 +6497,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     confirm_gate_blocked_count: 0,
     step0_escape_ready_recovered_count: 0,
     wording_body_sanitized_count: 0,
+    semantic_prompt_missing_count: 0,
+    semantic_confirm_blocked_count: 0,
+    state_hygiene_resets_count: 0,
+    wording_feedback_fallback_count: 0,
   };
 
   const rememberLlmCall = (value: { attempts: number; usage: LLMUsage; model: string }) => {
@@ -6601,11 +7005,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         getDreamRuntimeMode(state)
       )
     ) {
-      (state as any).last_specialist_result = {
-        ...prev,
-        wording_choice_pending: "false",
-        wording_choice_selected: "",
-      };
+      state = clearStepInteractiveState(state, stepId);
+      bumpUiI18nCounter(uiI18nTelemetry, "state_hygiene_resets_count");
     }
     const finalInfo = requireFinalValue(stepId, prev, state);
     const sourceMenuForTransition = inferCurrentMenuForStep(state, stepId);
@@ -6619,7 +7020,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     } else {
       if (finalInfo.field && finalInfo.value) {
         (state as any)[finalInfo.field] = finalInfo.value;
-        state = clearProvisionalValue(state, stepId);
+        state = isUiStateHygieneSwitchV1Enabled()
+          ? clearStepInteractiveState(state, stepId)
+          : clearProvisionalValue(state, stepId);
       }
       const nextStepForProceed = resolvedTransition?.targetStepId || String(ACTIONCODE_STEP_TRANSITIONS[actionCodeRaw] || stepId);
       (state as any).current_step = String(nextStepForProceed || stepId);
@@ -6805,6 +7208,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       stepId: String(state.current_step ?? ""),
       routeToken: userMessage,
       state,
+      telemetry: uiI18nTelemetry,
     })
     : ({ handled: false, specialist: (state as any).last_specialist_result || {}, nextState: state } as const);
   if (wordingSelection.handled) {
@@ -6910,7 +7314,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         show_step_intro: "false",
         show_session_intro: "false",
       };
-      const nextStatePicked = applyStateUpdate({
+      let nextStatePicked = applyStateUpdate({
         prev: state,
         decision: forcedDecision,
         specialistResult: specialist,
@@ -6918,17 +7322,22 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         provisionalSource: "action_route",
       });
       setDreamRuntimeMode(nextStatePicked, "self");
-      const renderedPicked = renderFreeTextTurnPolicy({
+      const renderedPickedRaw = renderFreeTextTurnPolicy({
         stepId: String((nextStatePicked as any).current_step ?? ""),
         state: nextStatePicked,
         specialist: (nextStatePicked as any).last_specialist_result || {},
         previousSpecialist,
       });
-      const pickedViolation = validateRenderedContractTurn(
-        String((nextStatePicked as any).current_step ?? ""),
-        renderedPicked,
-        nextStatePicked
-      );
+      const validatedPicked = validateRenderedContractOrRecover({
+        stepId: String((nextStatePicked as any).current_step ?? ""),
+        rendered: renderedPickedRaw,
+        state: nextStatePicked,
+        previousSpecialist,
+        telemetry: uiI18nTelemetry,
+      });
+      nextStatePicked = validatedPicked.state;
+      const renderedPicked = validatedPicked.rendered;
+      const pickedViolation = validatedPicked.violation;
       if (pickedViolation) {
         return finalizeResponse(attachRegistryPayload({
           ok: false as const,
@@ -6999,24 +7408,29 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         show_step_intro: "false",
         show_session_intro: "false",
       };
-      const nextStatePicked = applyStateUpdate({
+      let nextStatePicked = applyStateUpdate({
         prev: state,
         decision: forcedDecision,
         specialistResult: specialist,
         showSessionIntroUsed: "false",
         provisionalSource: "action_route",
       });
-      const renderedPicked = renderFreeTextTurnPolicy({
+      const renderedPickedRaw = renderFreeTextTurnPolicy({
         stepId: String((nextStatePicked as any).current_step ?? ""),
         state: nextStatePicked,
         specialist: (nextStatePicked as any).last_specialist_result || {},
         previousSpecialist,
       });
-      const pickedViolation = validateRenderedContractTurn(
-        String((nextStatePicked as any).current_step ?? ""),
-        renderedPicked,
-        nextStatePicked
-      );
+      const validatedPicked = validateRenderedContractOrRecover({
+        stepId: String((nextStatePicked as any).current_step ?? ""),
+        rendered: renderedPickedRaw,
+        state: nextStatePicked,
+        previousSpecialist,
+        telemetry: uiI18nTelemetry,
+      });
+      nextStatePicked = validatedPicked.state;
+      const renderedPicked = validatedPicked.rendered;
+      const pickedViolation = validatedPicked.violation;
       if (pickedViolation) {
         return finalizeResponse(attachRegistryPayload({
           ok: false as const,
@@ -7261,17 +7675,21 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       (nextStateFormulation as any).dream_builder_statements = statements;
       setDreamRuntimeMode(nextStateFormulation, "builder_refine");
       (nextStateFormulation as any).dream_awaiting_direction = "false";
-      const renderedFormulation = renderFreeTextTurnPolicy({
+      const renderedFormulationRaw = renderFreeTextTurnPolicy({
         stepId: String((nextStateFormulation as any).current_step ?? ""),
         state: nextStateFormulation,
         specialist: (formulationResult || {}) as Record<string, unknown>,
         previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
       });
-      const formulationViolation = validateRenderedContractTurn(
-        String((nextStateFormulation as any).current_step ?? ""),
-        renderedFormulation,
-        nextStateFormulation
-      );
+      const validatedFormulation = validateRenderedContractOrRecover({
+        stepId: String((nextStateFormulation as any).current_step ?? ""),
+        rendered: renderedFormulationRaw,
+        state: nextStateFormulation,
+        previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+        telemetry: uiI18nTelemetry,
+      });
+      const renderedFormulation = validatedFormulation.rendered;
+      const formulationViolation = validatedFormulation.violation;
       if (formulationViolation) {
         return finalizeResponse(attachRegistryPayload({
           ok: false as const,
@@ -7322,6 +7740,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     setDreamRuntimeMode(state, "self");
     const existingDreamCandidate = pickDreamCandidateFromState(state);
     if (!existingDreamCandidate) {
+      const switchBaseState = isUiStateHygieneSwitchV1Enabled()
+        ? clearStepInteractiveState(state, DREAM_STEP_ID)
+        : state;
+      if (switchBaseState !== state) {
+        bumpUiI18nCounter(uiI18nTelemetry, "state_hygiene_resets_count");
+      }
       const specialist: DreamOutput = {
         action: "ASK",
         message:
@@ -7335,8 +7759,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         user_intent: "STEP_INPUT",
       meta_topic: "NONE",
       };
-      const nextStateSwitch: CanvasState = {
-        ...state,
+      let nextStateSwitch: CanvasState = {
+        ...switchBaseState,
         active_specialist: DREAM_SPECIALIST,
         last_specialist_result: specialist,
       } as CanvasState;
@@ -7347,17 +7771,22 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         DREAM_STEP_ID,
         buildContractId(DREAM_STEP_ID, "no_output", "DREAM_MENU_INTRO")
       );
-      const renderedSwitch = renderFreeTextTurnPolicy({
+      const renderedSwitchRaw = renderFreeTextTurnPolicy({
         stepId: String((nextStateSwitch as any).current_step ?? ""),
         state: nextStateSwitch,
         specialist: (nextStateSwitch as any).last_specialist_result || {},
         previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
       });
-      const switchViolation = validateRenderedContractTurn(
-        String((nextStateSwitch as any).current_step ?? ""),
-        renderedSwitch,
-        nextStateSwitch
-      );
+      const validatedSwitch = validateRenderedContractOrRecover({
+        stepId: String((nextStateSwitch as any).current_step ?? ""),
+        rendered: renderedSwitchRaw,
+        state: nextStateSwitch,
+        previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+        telemetry: uiI18nTelemetry,
+      });
+      nextStateSwitch = validatedSwitch.state;
+      const renderedSwitch = validatedSwitch.rendered;
+      const switchViolation = validatedSwitch.violation;
       if (switchViolation) {
         return finalizeResponse(attachRegistryPayload({
           ok: false as const,
@@ -7415,7 +7844,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }, buildRoutingContext(userMessage), state);
     if (!callDream.ok) return finalizeResponse(callDream.payload);
     rememberLlmCall(callDream.value);
-    const nextStateSwitch = applyStateUpdate({
+    let nextStateSwitch = applyStateUpdate({
       prev: state,
       decision: forcedDecision,
       specialistResult: callDream.value.specialistResult,
@@ -7423,17 +7852,22 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       provisionalSource: "system_generated",
     });
     setDreamRuntimeMode(nextStateSwitch, "self");
-    const renderedSwitch = renderFreeTextTurnPolicy({
+    const renderedSwitchRaw = renderFreeTextTurnPolicy({
       stepId: String((nextStateSwitch as any).current_step ?? ""),
       state: nextStateSwitch,
       specialist: (nextStateSwitch as any).last_specialist_result || {},
       previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
     });
-    const switchViolation = validateRenderedContractTurn(
-      String((nextStateSwitch as any).current_step ?? ""),
-      renderedSwitch,
-      nextStateSwitch
-    );
+    const validatedSwitch = validateRenderedContractOrRecover({
+      stepId: String((nextStateSwitch as any).current_step ?? ""),
+      rendered: renderedSwitchRaw,
+      state: nextStateSwitch,
+      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+      telemetry: uiI18nTelemetry,
+    });
+    nextStateSwitch = validatedSwitch.state;
+    const renderedSwitch = validatedSwitch.rendered;
+    const switchViolation = validatedSwitch.violation;
     if (switchViolation) {
       return finalizeResponse(attachRegistryPayload({
         ok: false as const,
@@ -7661,17 +8095,21 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     } else {
       setDreamRuntimeMode(nextStateDream, "builder_collect");
     }
-    const renderedDream = renderFreeTextTurnPolicy({
+    let renderedDream = renderFreeTextTurnPolicy({
       stepId: String((nextStateDream as any).current_step ?? ""),
       state: nextStateDream,
       specialist: (nextStateDream as any).last_specialist_result || {},
       previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
     });
-    const dreamViolation = validateRenderedContractTurn(
-      String((nextStateDream as any).current_step ?? ""),
-      renderedDream,
-      nextStateDream
-    );
+    const validatedDream = validateRenderedContractOrRecover({
+      stepId: String((nextStateDream as any).current_step ?? ""),
+      rendered: renderedDream,
+      state: nextStateDream,
+      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+      telemetry: uiI18nTelemetry,
+    });
+    renderedDream = validatedDream.rendered;
+    const dreamViolation = validatedDream.violation;
     if (dreamViolation) {
       return finalizeResponse(attachRegistryPayload({
         ok: false as const,
@@ -8026,17 +8464,22 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   let renderedActionsOverride: RenderedAction[] | null = null;
   let wordingChoiceOverride: WordingChoiceUiPayload | null = null;
   let contractMetaOverride: UiContractMeta | null = null;
-  const rendered = renderFreeTextTurnPolicy({
+  const renderedRaw = renderFreeTextTurnPolicy({
     stepId: String((nextState as any).current_step ?? ""),
     state: nextState,
     specialist: (specialistResult || {}) as Record<string, unknown>,
     previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
   });
-  const contractViolation = validateRenderedContractTurn(
-    String((nextState as any).current_step ?? ""),
-    rendered,
-    nextState
-  );
+  const validatedRendered = validateRenderedContractOrRecover({
+    stepId: String((nextState as any).current_step ?? ""),
+    rendered: renderedRaw,
+    state: nextState,
+    previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+    telemetry: uiI18nTelemetry,
+  });
+  nextState = validatedRendered.state;
+  const rendered = validatedRendered.rendered;
+  const contractViolation = validatedRendered.violation;
   if (contractViolation) {
     return finalizeResponse(attachRegistryPayload({
       ok: false as const,
@@ -8069,57 +8512,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   (nextState as any).last_specialist_result = specialistResult;
   let requireWordingPick = false;
 
-  const stepForClaimSanitizer = String((nextState as any).current_step ?? "");
-  const hasWordingChoicePanel = String((specialistResult as any)?.wording_choice_pending || "") === "true";
-  if (hasWordingChoicePanel && isWordingPanelCleanBodyV1Enabled()) {
-    const currentMessage = String((specialistResult as any)?.message || "");
-    const wordingMode = String((specialistResult as any)?.wording_choice_mode || "text") === "list" ? "list" : "text";
-    const suggestionText = String(
-      (specialistResult as any)?.wording_choice_agent_current ||
-      (specialistResult as any)?.refined_formulation ||
-      ""
-    ).trim();
-    const knownItems = mergeListItems(
-      Array.isArray((specialistResult as any)?.wording_choice_user_items)
-        ? ((specialistResult as any).wording_choice_user_items as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
-        : [],
-      Array.isArray((specialistResult as any)?.wording_choice_suggestion_items)
-        ? ((specialistResult as any).wording_choice_suggestion_items as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
-        : []
-    );
-    const pendingSanitized = compactWordingPanelBody(
-      wordingMode === "list"
-        ? sanitizePendingListMessage(currentMessage, knownItems.length > 0 ? knownItems : splitSentenceItems(suggestionText))
-        : sanitizePendingTextMessage(currentMessage, suggestionText)
-    );
-    if (pendingSanitized !== currentMessage) {
-      specialistResult = {
-        ...specialistResult,
-        message: pendingSanitized,
-      };
-      (nextState as any).last_specialist_result = specialistResult;
-      bumpUiI18nCounter(uiI18nTelemetry, "wording_body_sanitized_count");
-    }
-  } else if (!hasWordingChoicePanel) {
-    const field = fieldForStep(stepForClaimSanitizer);
-    const fieldValue = field ? String((specialistResult as any)?.[field] || "").trim() : "";
-    const refinedValue = String((specialistResult as any)?.refined_formulation || "").trim();
-    const statementCount = Array.isArray((specialistResult as any)?.statements)
-      ? ((specialistResult as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
-      : 0;
-    if (!fieldValue && !refinedValue && statementCount === 0) {
-      const currentMessage = String((specialistResult as any)?.message || "");
-      const sanitizedMessage = stripUnsupportedReformulationClaims(currentMessage);
-      if (sanitizedMessage !== currentMessage) {
-        specialistResult = {
-          ...specialistResult,
-          message: sanitizedMessage,
-        };
-        (nextState as any).last_specialist_result = specialistResult;
-      }
-    }
-  }
-
   const isDreamExplainerOfftopicTurn =
     String((nextState as any).current_step || "") === DREAM_STEP_ID &&
     String((nextState as any).active_specialist || "") === DREAM_EXPLAINER_SPECIALIST &&
@@ -8142,13 +8534,22 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       DREAM_EXPLAINER_SWITCH_SELF_MENU_ID
     );
     applyUiPhaseByStep(nextState, currentStepId, offTopicContractId);
-    const rerendered = renderFreeTextTurnPolicy({
+    const rerenderedRaw = renderFreeTextTurnPolicy({
       stepId: currentStepId,
       state: nextState,
       specialist: (specialistResult || {}) as Record<string, unknown>,
       previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
     });
-    const rerenderViolation = validateRenderedContractTurn(currentStepId, rerendered, nextState);
+    const validatedRerendered = validateRenderedContractOrRecover({
+      stepId: currentStepId,
+      rendered: rerenderedRaw,
+      state: nextState,
+      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+      telemetry: uiI18nTelemetry,
+    });
+    nextState = validatedRerendered.state;
+    const rerendered = validatedRerendered.rendered;
+    const rerenderViolation = validatedRerendered.violation;
     if (rerenderViolation) {
       return finalizeResponse(attachRegistryPayload({
         ok: false as const,

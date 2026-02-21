@@ -638,17 +638,6 @@ export function render(overrideToolOutput?: unknown): void {
   } else {
     body = bodyRaw || "";
   }
-  if (isViewModeWordingChoice) {
-    const compact = String(body || "")
-      .replace(/\r/g, "\n")
-      .split("\n")
-      .map((line) => String(line || "").trim())
-      .filter(Boolean)
-      .filter((line) => !/^\s*(?:[-*•]|\d+[\).])\s+/.test(line))
-      .slice(0, 1)
-      .join(" ");
-    body = compact;
-  }
 
   const cardDescEl = document.getElementById("cardDesc");
   if (cardDescEl) {
