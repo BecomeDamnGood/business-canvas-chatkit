@@ -32,36 +32,36 @@ export const TITLES_DEFAULT: Record<string, string> = {
   presentation: "Step 11: Presentation",
 };
 
-export const PRESTART_WELCOME_DEFAULT = `<p class="card-headline">Build a complete Business Model and Strategy Canvas step by step.</p>
+const PRESTART_TEXT_DEFAULT = {
+  headline: "Build a complete Business Model and Strategy Canvas step by step.",
+  provenTitle: "The Proven Standard",
+  provenBody:
+    "A globally implemented strategy canvas used by teams worldwide, built through Ben Steenstra's unique step-by-step method of questioning and structured development.",
+  outcomesTitle: "By the end you'll have",
+  outcome1: "A focused canvas that fits on one page",
+  outcome2: "A presentation you can use immediately (PPTX)",
+  outcome3: "A plan your team can align around",
+  howLabel: "How it works",
+  howValue: "One question at a time",
+  timeLabel: "Time",
+  timeValue: "10–15 minutes",
+  skeleton: "Loading translation…",
+} as const;
 
-<div class="section">
-<div class="section-title">The Proven Standard</div>
-<div class="section-body">A globally implemented strategy canvas used by teams worldwide, built through Ben Steenstra's unique step-by-step method of questioning and structured development.</div>
-</div>
-
-<div class="divider"></div>
-
-<div class="section">
-<div class="section-title">By the end you'll have</div>
-<div class="deliverables">
-<div class="deliverable"><div class="deliverable-dot"></div>A focused canvas that fits on one page</div>
-<div class="deliverable"><div class="deliverable-dot"></div>A presentation you can use immediately (PPTX)</div>
-<div class="deliverable"><div class="deliverable-dot"></div>A plan your team can align around</div>
-</div>
-</div>
-
-<div class="divider"></div>
-
-<div class="meta-row">
-<div class="meta-item">
-<div class="meta-label">How it works</div>
-<div class="meta-value">One question at a time</div>
-</div>
-<div class="meta-item">
-<div class="meta-label">Time</div>
-<div class="meta-value">10–15 minutes</div>
-</div>
-</div>`;
+export type PrestartContent = {
+  headline: string;
+  provenTitle: string;
+  provenBody: string;
+  outcomesTitle: string;
+  outcome1: string;
+  outcome2: string;
+  outcome3: string;
+  howLabel: string;
+  howValue: string;
+  timeLabel: string;
+  timeValue: string;
+  skeleton: string;
+};
 
 export const UI_STRINGS: Record<string, Record<string, string>> = {
   default: {
@@ -76,7 +76,21 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     "title.productsservices": TITLES_DEFAULT.productsservices,
     "title.rulesofthegame": TITLES_DEFAULT.rulesofthegame,
     "title.presentation": TITLES_DEFAULT.presentation,
-    prestartWelcome: PRESTART_WELCOME_DEFAULT,
+    prestartWelcome: PRESTART_TEXT_DEFAULT.headline,
+    "prestart.headline": PRESTART_TEXT_DEFAULT.headline,
+    "prestart.proven.title": PRESTART_TEXT_DEFAULT.provenTitle,
+    "prestart.proven.body": PRESTART_TEXT_DEFAULT.provenBody,
+    "prestart.outcomes.title": PRESTART_TEXT_DEFAULT.outcomesTitle,
+    "prestart.outcomes.item1": PRESTART_TEXT_DEFAULT.outcome1,
+    "prestart.outcomes.item2": PRESTART_TEXT_DEFAULT.outcome2,
+    "prestart.outcomes.item3": PRESTART_TEXT_DEFAULT.outcome3,
+    "prestart.meta.how.label": PRESTART_TEXT_DEFAULT.howLabel,
+    "prestart.meta.how.value": PRESTART_TEXT_DEFAULT.howValue,
+    "prestart.meta.time.label": PRESTART_TEXT_DEFAULT.timeLabel,
+    "prestart.meta.time.value": PRESTART_TEXT_DEFAULT.timeValue,
+    "prestart.loading": PRESTART_TEXT_DEFAULT.skeleton,
+    "stepLabel.validation": "Validation",
+    "sectionTitle.step_0": "Validation & Business Name",
     uiSubtitle: "Use the app widget to continue (not the chat box)",
     uiUseWidgetToContinue: "Use the app widget to continue (not the chat box).",
     btnGoToNextStep: "Go to next step",
@@ -153,7 +167,49 @@ export function titlesForLang(lang: string | null | undefined): Record<string, s
 export function prestartWelcomeForLang(lang: string | null | undefined): string {
   const b = baseLang(lang);
   const table = UI_STRINGS[b] || UI_STRINGS.default;
-  return (table && table.prestartWelcome) ? table.prestartWelcome : PRESTART_WELCOME_DEFAULT;
+  return (table && table.prestartWelcome) ? table.prestartWelcome : PRESTART_TEXT_DEFAULT.headline;
+}
+
+function requiredPrestartKeysPresent(table: Record<string, string> | null | undefined): boolean {
+  if (!table) return false;
+  const keys = [
+    "prestart.headline",
+    "prestart.proven.title",
+    "prestart.proven.body",
+    "prestart.outcomes.title",
+    "prestart.outcomes.item1",
+    "prestart.outcomes.item2",
+    "prestart.outcomes.item3",
+    "prestart.meta.how.label",
+    "prestart.meta.how.value",
+    "prestart.meta.time.label",
+    "prestart.meta.time.value",
+  ];
+  return keys.every((key) => String(table[key] || "").trim().length > 0);
+}
+
+export function hasPrestartContentForLang(lang: string | null | undefined): boolean {
+  const b = baseLang(lang);
+  const table = UI_STRINGS[b] || null;
+  if (!table) return false;
+  return requiredPrestartKeysPresent(table);
+}
+
+export function prestartContentForLang(lang: string | null | undefined): PrestartContent {
+  return {
+    headline: t(lang, "prestart.headline"),
+    provenTitle: t(lang, "prestart.proven.title"),
+    provenBody: t(lang, "prestart.proven.body"),
+    outcomesTitle: t(lang, "prestart.outcomes.title"),
+    outcome1: t(lang, "prestart.outcomes.item1"),
+    outcome2: t(lang, "prestart.outcomes.item2"),
+    outcome3: t(lang, "prestart.outcomes.item3"),
+    howLabel: t(lang, "prestart.meta.how.label"),
+    howValue: t(lang, "prestart.meta.how.value"),
+    timeLabel: t(lang, "prestart.meta.time.label"),
+    timeValue: t(lang, "prestart.meta.time.value"),
+    skeleton: t(lang, "prestart.loading") || PRESTART_TEXT_DEFAULT.skeleton,
+  };
 }
 
 export function getSectionTitle(

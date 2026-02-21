@@ -4,6 +4,7 @@ import { StepIntentZod } from "./intents.js";
 export const RenderedActionZod = z.object({
   id: z.string(),
   label: z.string(),
+  label_key: z.string(),
   action_code: z.string(),
   intent: StepIntentZod,
   primary: z.boolean().optional().default(false),
@@ -26,4 +27,3 @@ export const StructuredTurnPayloadZod = z.object({
 });
 
 export type StructuredTurnPayload = z.infer<typeof StructuredTurnPayloadZod>;
-

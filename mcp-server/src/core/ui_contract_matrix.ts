@@ -1,6 +1,8 @@
+import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
+
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
-export const UI_CONTRACT_VERSION = "2026-02-18-ux-contract-v1";
+export const UI_CONTRACT_VERSION = "2026-02-21-ux-contract-v2-label-keys";
 
 export type UiContractStateDefinition = {
   menu_id: string;
@@ -484,6 +486,40 @@ export const MENU_LABELS: Record<string, string[]> = {
   ],
   PRESENTATION_MENU_ASK: ["Create my presentation now"],
 };
+
+function buildMenuLabelKey(menuId: string, actionCode: string, index: number): string {
+  const safeMenu = String(menuId || "").trim();
+  const safeAction = String(actionCode || "").trim().toUpperCase();
+  if (safeMenu && safeAction) return `menuLabel.${safeMenu}.${safeAction}`;
+  return `menuLabel.${safeMenu || "UNKNOWN_MENU"}.OPTION_${index + 1}`;
+}
+
+export const MENU_LABEL_KEYS: Record<string, string[]> = (() => {
+  const next: Record<string, string[]> = {};
+  for (const [menuId, labels] of Object.entries(MENU_LABELS)) {
+    const actionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
+      ? ACTIONCODE_REGISTRY.menus[menuId]
+      : [];
+    if (actionCodes.length === labels.length && actionCodes.length > 0) {
+      next[menuId] = actionCodes.map((actionCode, idx) => buildMenuLabelKey(menuId, actionCode, idx));
+      continue;
+    }
+    next[menuId] = labels.map((_label, idx) => buildMenuLabelKey(menuId, "", idx));
+  }
+  return next;
+})();
+
+export function labelKeyForMenuAction(menuId: string, actionCode: string, indexHint?: number): string {
+  const safeMenuId = String(menuId || "").trim();
+  const safeActionCode = String(actionCode || "").trim().toUpperCase();
+  const actionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[safeMenuId])
+    ? ACTIONCODE_REGISTRY.menus[safeMenuId].map((code) => String(code || "").trim().toUpperCase())
+    : [];
+  const idx = actionCodes.findIndex((code) => code === safeActionCode);
+  if (idx >= 0) return buildMenuLabelKey(safeMenuId, safeActionCode, idx);
+  const fallbackIdx = Number.isInteger(indexHint) && Number(indexHint) >= 0 ? Number(indexHint) : 0;
+  return buildMenuLabelKey(safeMenuId, safeActionCode, fallbackIdx);
+}
 
 export const DEFAULT_MENU_BY_STATUS: Record<string, Record<TurnOutputStatus, string>> = {
   step_0: {

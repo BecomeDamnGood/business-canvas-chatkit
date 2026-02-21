@@ -153,7 +153,7 @@ import {
 } from "../steps/presentation.js";
 import { loadModule as loadCld3 } from "cld3-asm";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { MENU_LABELS } from "../core/menu_contract.js";
+import { MENU_LABELS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "../core/menu_contract.js";
 import {
   renderFreeTextTurnPolicy,
   type TurnPolicyRenderResult,
@@ -195,21 +195,22 @@ function yesTokenForLang(_lang: string): string {
   return "yes";
 }
 
-const PRESTART_WELCOME_DEFAULT =
-  `Build a complete Business Model and Strategy Canvas step by step.
-
-<strong>The Proven Standard</strong>
-A globally implemented strategy canvas used by teams worldwide, built through Ben Steenstra's unique step-by-step method of questioning and structured development.
-
-<strong>By the end you'll have</strong><ul>
-<li>A focused canvas that fits on one page</li>
-<li>A presentation you can use immediately (PPTX)</li>
-<li>A plan your team can align around</li>
-</ul><strong>How it works</strong>
-One question at a time. Clear input, structured output.
-
-<strong>Time</strong>
-Estimated time: 10–15 minutes.`;
+const PRESTART_TEXT_DEFAULT = {
+  headline: "Build a complete Business Model and Strategy Canvas step by step.",
+  provenTitle: "The Proven Standard",
+  provenBody:
+    "A globally implemented strategy canvas used by teams worldwide, built through Ben Steenstra's unique step-by-step method of questioning and structured development.",
+  outcomesTitle: "By the end you'll have",
+  outcome1: "A focused canvas that fits on one page",
+  outcome2: "A presentation you can use immediately (PPTX)",
+  outcome3: "A plan your team can align around",
+  howLabel: "How it works",
+  howValue: "One question at a time",
+  timeLabel: "Time",
+  timeValue: "10–15 minutes",
+  skeleton: "Loading translation…",
+} as const;
+const PRESTART_WELCOME_DEFAULT = PRESTART_TEXT_DEFAULT.headline;
 
 
 const UI_STRINGS_DEFAULT: Record<string, string> = {
@@ -225,6 +226,20 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   "title.rulesofthegame": "Step 10: Rules of the game",
   "title.presentation": "Step 11: Presentation",
   prestartWelcome: PRESTART_WELCOME_DEFAULT,
+  "prestart.headline": PRESTART_TEXT_DEFAULT.headline,
+  "prestart.proven.title": PRESTART_TEXT_DEFAULT.provenTitle,
+  "prestart.proven.body": PRESTART_TEXT_DEFAULT.provenBody,
+  "prestart.outcomes.title": PRESTART_TEXT_DEFAULT.outcomesTitle,
+  "prestart.outcomes.item1": PRESTART_TEXT_DEFAULT.outcome1,
+  "prestart.outcomes.item2": PRESTART_TEXT_DEFAULT.outcome2,
+  "prestart.outcomes.item3": PRESTART_TEXT_DEFAULT.outcome3,
+  "prestart.meta.how.label": PRESTART_TEXT_DEFAULT.howLabel,
+  "prestart.meta.how.value": PRESTART_TEXT_DEFAULT.howValue,
+  "prestart.meta.time.label": PRESTART_TEXT_DEFAULT.timeLabel,
+  "prestart.meta.time.value": PRESTART_TEXT_DEFAULT.timeValue,
+  "prestart.loading": PRESTART_TEXT_DEFAULT.skeleton,
+  "stepLabel.validation": "Validation",
+  "sectionTitle.step_0": "Validation & Business Name",
   uiSubtitle: "Use The Business Strategy Canvas Builder widget to continue (not the chat box)",
   uiUseWidgetToContinue: "Use The Business Strategy Canvas Builder widget to continue (not the chat box).",
   btnGoToNextStep: "Go to next step",
@@ -237,6 +252,7 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   wordingChoiceHeading: "This is your input:",
   wordingChoiceSuggestionLabel: "This would be my suggestion:",
   wordingChoiceInstruction: "Please click what suits you best.",
+  "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",
   "dreamBuilder.startExercise": "Start the exercise",
   "dreamBuilder.statements.title": "Your Dream statements",
   "dreamBuilder.statements.count": "N statements out of a minimum of 20 so far",
@@ -244,6 +260,7 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   btnSwitchToSelfDream: "Switch back to self-formulate the dream",
   sendTitle: "Send",
   errorMessage: "Something went wrong while processing your message. Please try again.",
+  optionsDisplayError: "We can't safely display these options right now. Please try again.",
   scoringIntro1: "You now have more than 20 statements, so I've clustered them for you. You can still edit and add statements, but please give them a score.",
   scoringIntro2: "",
   scoringIntro3: "The average per cluster updates immediately while you type.",
@@ -288,8 +305,34 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   "sectionTitle.presentation": "Create your Presentation",
 };
 
-const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_DEFAULT);
-const UI_STRINGS_SCHEMA_VERSION = "2026-02-20-strategy-focuspoints-v7";
+function buildMenuLabelUiDefaults(): Record<string, string> {
+  if (!isMenuLabelKeysV1Enabled()) return {};
+  const next: Record<string, string> = {};
+  for (const [menuId, labels] of Object.entries(MENU_LABELS)) {
+    const actionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
+      ? ACTIONCODE_REGISTRY.menus[menuId]
+      : [];
+    const labelKeys = Array.isArray(MENU_LABEL_KEYS[menuId])
+      ? MENU_LABEL_KEYS[menuId]
+      : [];
+    if (actionCodes.length !== labels.length || labelKeys.length !== labels.length) continue;
+    for (let i = 0; i < labels.length; i += 1) {
+      const key = String(labelKeys[i] || "").trim() || labelKeyForMenuAction(menuId, String(actionCodes[i] || ""), i);
+      const label = String(labels[i] || "").trim();
+      if (!key || !label) continue;
+      next[key] = label;
+    }
+  }
+  return next;
+}
+
+const UI_STRINGS_WITH_MENU_KEYS: Record<string, string> = {
+  ...UI_STRINGS_DEFAULT,
+  ...buildMenuLabelUiDefaults(),
+};
+
+const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_WITH_MENU_KEYS);
+const UI_STRINGS_SCHEMA_VERSION = "2026-02-21-ui-i18n-v2";
 const UiStringsZodSchema = z.object(
   UI_STRINGS_KEYS.reduce<Record<string, z.ZodString>>((acc, k) => {
     acc[k] = z.string();
@@ -722,6 +765,14 @@ function isForceEnglishLanguageMode(): boolean {
   if (mode === "force_en") return true;
   if (mode === "detect_once") return false;
   return process.env.LOCAL_DEV === "1";
+}
+
+function isUiI18nV2Enabled(): boolean {
+  return envFlagEnabled("UI_I18N_V2", true);
+}
+
+function isMenuLabelKeysV1Enabled(): boolean {
+  return envFlagEnabled("MENU_LABEL_KEYS_V1", true);
 }
 
 function baseUrlFromEnv(): string {
@@ -1379,6 +1430,54 @@ function labelsForMenuActionCodes(menuId: string, actionCodes: string[]): string
   return filteredLabels;
 }
 
+function uiStringFromStateMap(
+  state: CanvasState | null | undefined,
+  key: string,
+  fallback: string
+): string {
+  const map = state && typeof (state as any).ui_strings === "object"
+    ? ((state as any).ui_strings as Record<string, unknown>)
+    : null;
+  if (map) {
+    const candidate = String(map[key] || "").trim();
+    if (candidate) return candidate;
+  }
+  return String(fallback || "").trim();
+}
+
+function labelKeysForMenuActionCodes(menuId: string, actionCodes: string[]): string[] {
+  const safeMenuId = String(menuId || "").trim();
+  const safeActionCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
+  if (!safeMenuId || safeActionCodes.length === 0) return [];
+  const fullActionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[safeMenuId])
+    ? ACTIONCODE_REGISTRY.menus[safeMenuId].map((code) => String(code || "").trim()).filter(Boolean)
+    : [];
+  const fullLabelKeys = Array.isArray(MENU_LABEL_KEYS[safeMenuId])
+    ? MENU_LABEL_KEYS[safeMenuId].map((labelKey) => String(labelKey || "").trim())
+    : [];
+  if (fullActionCodes.length === 0) return [];
+  if (fullActionCodes.length !== fullLabelKeys.length) {
+    return safeActionCodes.map((actionCode, idx) => labelKeyForMenuAction(safeMenuId, actionCode, idx));
+  }
+  const usedIndices = new Set<number>();
+  const filteredLabelKeys: string[] = [];
+  for (const actionCode of safeActionCodes) {
+    let matchedIndex = -1;
+    for (let i = 0; i < fullActionCodes.length; i += 1) {
+      if (usedIndices.has(i)) continue;
+      if (fullActionCodes[i] !== actionCode) continue;
+      matchedIndex = i;
+      break;
+    }
+    if (matchedIndex < 0) return [];
+    usedIndices.add(matchedIndex);
+    const labelKey = String(fullLabelKeys[matchedIndex] || "").trim();
+    if (!labelKey) return [];
+    filteredLabelKeys.push(labelKey);
+  }
+  return filteredLabelKeys;
+}
+
 function stripNumberedOptions(prompt: string): string {
   const kept = String(prompt || "")
     .split(/\r?\n/)
@@ -1388,16 +1487,24 @@ function stripNumberedOptions(prompt: string): string {
   return kept.join("\n").trim();
 }
 
-function buildRenderedActionsFromMenu(menuId: string, actionCodes: string[]): RenderedAction[] {
+function buildRenderedActionsFromMenu(
+  menuId: string,
+  actionCodes: string[],
+  stateForLabels?: CanvasState | null
+): RenderedAction[] {
   const safeCodes = actionCodes.map((code) => String(code || "").trim()).filter(Boolean);
   const labels = labelsForMenuActionCodes(menuId, safeCodes);
-  if (!safeCodes.length || labels.length !== safeCodes.length) return [];
+  const labelKeys = labelKeysForMenuActionCodes(menuId, safeCodes);
+  if (!safeCodes.length || labels.length !== safeCodes.length || labelKeys.length !== safeCodes.length) return [];
   return safeCodes.map((actionCode, idx) => {
     const entry = ACTIONCODE_REGISTRY.actions[actionCode];
     const route = String(entry?.route || actionCode).trim();
+    const labelKey = labelKeys[idx] || labelKeyForMenuAction(menuId, actionCode, idx);
+    const label = uiStringFromStateMap(stateForLabels || null, labelKey, labels[idx]);
     return {
       id: `${actionCode}:${idx + 1}`,
-      label: labels[idx],
+      label,
+      label_key: labelKey,
       action_code: actionCode,
       intent: actionCodeToIntent({ actionCode, route }),
       primary: idx === 0,
@@ -4049,6 +4156,8 @@ function buildUiPayload(
 } | undefined {
   const localDev = shouldLogLocalDevDiagnostics();
   const flags = { ...(flagsOverride || {}) };
+  if (String(process.env.UI_I18N_V2 || "").trim()) flags.ui_i18n_v2 = isUiI18nV2Enabled();
+  if (String(process.env.MENU_LABEL_KEYS_V1 || "").trim()) flags.menu_label_keys_v1 = isMenuLabelKeysV1Enabled();
   const introChromeRaw = String((specialist as any)?.ui_show_step_intro_chrome || "").trim().toLowerCase();
   if ((specialist as any)?.ui_show_step_intro_chrome === true || introChromeRaw === "true") {
     flags.show_step_intro_chrome = true;
@@ -4100,7 +4209,7 @@ function buildUiPayload(
       flags.escape_actioncodes_suppressed = true;
     }
     if (safeOverrideCodes.length > 0) {
-      const renderedActions = buildRenderedActionsFromMenu(contractMenuId, safeOverrideCodes);
+      const renderedActions = buildRenderedActionsFromMenu(contractMenuId, safeOverrideCodes, effectiveState);
       const questionText = buildQuestionTextFromActions(rawQuestionText);
       return {
         action_codes: safeOverrideCodes,
@@ -4163,7 +4272,7 @@ function buildUiPayload(
         }
         return undefined;
       }
-      const renderedActions = buildRenderedActionsFromMenu(menuId, safeCodes);
+      const renderedActions = buildRenderedActionsFromMenu(menuId, safeCodes, effectiveState);
       const questionText = buildQuestionTextFromActions(rawQuestionText);
       return {
         action_codes: safeCodes,
@@ -4211,10 +4320,25 @@ function validateUiPayloadContractParity(response: Record<string, unknown>): str
   if (!stepId || !contractId) return "ui_contract_missing_step_or_contract_id";
   const menuId = parseMenuFromContractIdForStep(contractId, stepId);
   if (!menuId) return "ui_contract_missing_menu_id";
-  const expectedLabels = labelsForMenuActionCodes(menuId, actionCodes);
-  if (expectedLabels.length !== actionCodes.length) return "ui_contract_labels_or_actioncodes_mismatch";
   const actions = Array.isArray(ui.actions) ? (ui.actions as Array<Record<string, unknown>>) : [];
   if (actions.length !== actionCodes.length) return "ui_actions_count_mismatch";
+  if (isMenuLabelKeysV1Enabled()) {
+    const expectedLabelKeys = labelKeysForMenuActionCodes(menuId, actionCodes);
+    if (expectedLabelKeys.length !== actionCodes.length) return "ui_contract_labelkeys_or_actioncodes_mismatch";
+    for (let i = 0; i < actionCodes.length; i += 1) {
+      const action = actions[i] || {};
+      const actionCode = String(action.action_code || "").trim();
+      const label = String(action.label || "").trim();
+      const labelKeyRaw = String(action.label_key || "").trim();
+      const labelKey = labelKeyRaw || labelKeyForMenuAction(menuId, actionCode, i);
+      if (actionCode !== actionCodes[i]) return `ui_actions_actioncode_mismatch_at_${i + 1}`;
+      if (labelKey !== expectedLabelKeys[i]) return `ui_actions_label_key_mismatch_at_${i + 1}`;
+      if (!label) return `ui_actions_label_missing_at_${i + 1}`;
+    }
+    return null;
+  }
+  const expectedLabels = labelsForMenuActionCodes(menuId, actionCodes);
+  if (expectedLabels.length !== actionCodes.length) return "ui_contract_labels_or_actioncodes_mismatch";
   for (let i = 0; i < actionCodes.length; i += 1) {
     const action = actions[i] || {};
     const actionCode = String(action.action_code || "").trim();
@@ -4223,6 +4347,47 @@ function validateUiPayloadContractParity(response: Record<string, unknown>): str
     if (label !== expectedLabels[i]) return `ui_actions_label_mismatch_at_${i + 1}`;
   }
   return null;
+}
+
+function tryRepairUiParityWithEnglishLabels(response: Record<string, unknown>): boolean {
+  const ui =
+    response && typeof response.ui === "object" && response.ui
+      ? (response.ui as Record<string, unknown>)
+      : null;
+  if (!ui) return false;
+  const actionCodes = Array.isArray(ui.action_codes)
+    ? (ui.action_codes as unknown[]).map((code) => String(code || "").trim()).filter(Boolean)
+    : [];
+  if (actionCodes.length === 0) return false;
+  const stepId =
+    String(response.current_step_id || "") ||
+    String(((response.state as Record<string, unknown> | undefined) || {}).current_step || "");
+  const contractId = String(ui.contract_id || "").trim();
+  const menuId = parseMenuFromContractIdForStep(contractId, stepId);
+  if (!menuId) return false;
+  const actions = Array.isArray(ui.actions) ? (ui.actions as Array<Record<string, unknown>>) : [];
+  if (actions.length !== actionCodes.length) return false;
+
+  const repairedActions = actions.map((action, index) => {
+    const actionCode = String(action.action_code || actionCodes[index] || "").trim();
+    if (!actionCode || actionCode !== actionCodes[index]) return null;
+    const englishLabel = labelForActionInMenu(menuId, actionCode);
+    const labelKey =
+      String(action.label_key || "").trim() ||
+      labelKeyForMenuAction(menuId, actionCode, index);
+    return {
+      ...action,
+      action_code: actionCode,
+      label_key: labelKey,
+      label: englishLabel || String(action.label || "").trim(),
+    };
+  });
+  if (repairedActions.some((entry) => !entry || !String((entry as Record<string, unknown>).label || "").trim())) {
+    return false;
+  }
+  ui.actions = repairedActions as Array<Record<string, unknown>>;
+  (response as any).ui = ui;
+  return true;
 }
 
 function attachRegistryPayload<T extends Record<string, unknown>>(
@@ -4387,6 +4552,62 @@ function countAlphaChars(input: string): number {
   return matches ? matches.length : 0;
 }
 
+type UiI18nTelemetryCounters = {
+  translation_fallbacks: number;
+  translation_missing_keys: number;
+  translation_html_violations: number;
+  parity_errors: number;
+  parity_recovered: number;
+};
+
+function bumpUiI18nCounter(
+  telemetry: UiI18nTelemetryCounters | null | undefined,
+  key: keyof UiI18nTelemetryCounters,
+  amount = 1
+): void {
+  if (!telemetry) return;
+  telemetry[key] = Number(telemetry[key] || 0) + Math.max(0, Math.trunc(amount));
+}
+
+function looksLikeHtml(input: string): boolean {
+  return /<\s*\/?\s*[a-z][^>]*>/i.test(String(input || ""));
+}
+
+function sanitizeTranslatedUiStrings(
+  translated: Record<string, string>,
+  telemetry?: UiI18nTelemetryCounters | null
+): Record<string, string> {
+  const next: Record<string, string> = { ...UI_STRINGS_WITH_MENU_KEYS };
+  let missingKeys = 0;
+  let htmlViolations = 0;
+  for (const key of UI_STRINGS_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(translated, key)) {
+      missingKeys += 1;
+      continue;
+    }
+    const rawValue = translated[key];
+    if (typeof rawValue !== "string") {
+      missingKeys += 1;
+      continue;
+    }
+    const fallback = String(UI_STRINGS_WITH_MENU_KEYS[key] || "");
+    const candidate = String(rawValue);
+    if (looksLikeHtml(candidate)) {
+      htmlViolations += 1;
+      continue;
+    }
+    // Allow empty output only when the English source is intentionally empty.
+    if (!candidate.trim() && fallback.trim()) {
+      missingKeys += 1;
+      continue;
+    }
+    next[key] = candidate;
+  }
+  if (missingKeys > 0) bumpUiI18nCounter(telemetry, "translation_missing_keys", missingKeys);
+  if (htmlViolations > 0) bumpUiI18nCounter(telemetry, "translation_html_violations", htmlViolations);
+  return next;
+}
+
 async function detectLanguageHeuristic(text: string): Promise<{ lang: string; confident: boolean }> {
   const raw = String(text ?? "").trim();
   if (!raw) return { lang: "", confident: false };
@@ -4408,18 +4629,26 @@ async function detectLanguageHeuristic(text: string): Promise<{ lang: string; co
   }
 }
 
-async function getUiStringsForLang(lang: string, model: string): Promise<Record<string, string>> {
-  if (isForceEnglishLanguageMode()) return UI_STRINGS_DEFAULT;
+async function getUiStringsForLang(
+  lang: string,
+  model: string,
+  telemetry?: UiI18nTelemetryCounters | null
+): Promise<Record<string, string>> {
+  if (isForceEnglishLanguageMode()) return UI_STRINGS_WITH_MENU_KEYS;
   const normalized = normalizeLangCode(lang) || "en";
-  if (normalized === "en") return UI_STRINGS_DEFAULT;
+  if (normalized === "en") return UI_STRINGS_WITH_MENU_KEYS;
   const cached = UI_STRINGS_CACHE.get(normalized);
   if (cached) return cached;
 
   if (process.env.TS_NODE_TRANSPILE_ONLY === "true" && process.env.RUN_INTEGRATION_TESTS !== "1") {
-    return UI_STRINGS_DEFAULT;
+    bumpUiI18nCounter(telemetry, "translation_fallbacks");
+    return UI_STRINGS_WITH_MENU_KEYS;
   }
 
-  if (!process.env.OPENAI_API_KEY) return UI_STRINGS_DEFAULT;
+  if (!process.env.OPENAI_API_KEY) {
+    bumpUiI18nCounter(telemetry, "translation_fallbacks");
+    return UI_STRINGS_WITH_MENU_KEYS;
+  }
 
   const instructions = [
     "You are a UI translation engine for The Business Strategy Canvas Builder app.",
@@ -4429,9 +4658,12 @@ async function getUiStringsForLang(lang: string, model: string): Promise<Record<
     "Preserve placeholders like N, M, X, {0}, and {1} exactly as-is.",
     "Do not translate or alter the product name 'The Business Strategy Canvas Builder'; keep it exactly as-is.",
     "Use concise, natural UI wording in the target language.",
+    "Do not use HTML or Markdown tags in values.",
+    "For menu labels, keep wording short and button-safe.",
+    "Do not add extra sentences not present in the source value.",
   ].join("\n");
 
-  const plannerInput = `LANGUAGE: ${normalized}\nINPUT_JSON:\n${JSON.stringify(UI_STRINGS_DEFAULT)}`;
+  const plannerInput = `LANGUAGE: ${normalized}\nINPUT_JSON:\n${JSON.stringify(UI_STRINGS_WITH_MENU_KEYS)}`;
 
   try {
     if (shouldLogLocalDevDiagnostics()) {
@@ -4448,24 +4680,30 @@ async function getUiStringsForLang(lang: string, model: string): Promise<Record<
       zodSchema: UiStringsZodSchema,
       temperature: 0.2,
       topP: 1,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 8192,
       debugLabel: "UiStrings",
     });
-    UI_STRINGS_CACHE.set(normalized, res.data);
-    return res.data;
+    const sanitized = sanitizeTranslatedUiStrings(res.data, telemetry);
+    UI_STRINGS_CACHE.set(normalized, sanitized);
+    return sanitized;
   } catch {
-    return UI_STRINGS_DEFAULT;
+    bumpUiI18nCounter(telemetry, "translation_fallbacks");
+    return UI_STRINGS_WITH_MENU_KEYS;
   }
 }
 
-async function ensureUiStringsForState(state: CanvasState, model: string): Promise<CanvasState> {
+async function ensureUiStringsForState(
+  state: CanvasState,
+  model: string,
+  telemetry?: UiI18nTelemetryCounters | null
+): Promise<CanvasState> {
   if (isForceEnglishLanguageMode()) {
     return {
       ...(state as any),
       language: "en",
       language_locked: "true",
       language_override: "false",
-      ui_strings: UI_STRINGS_DEFAULT,
+      ui_strings: UI_STRINGS_WITH_MENU_KEYS,
       ui_strings_lang: "en",
       ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
     } as CanvasState;
@@ -4483,7 +4721,7 @@ async function ensureUiStringsForState(state: CanvasState, model: string): Promi
   ) {
     return state;
   }
-  const ui_strings = await getUiStringsForLang(lang, model);
+  const ui_strings = await getUiStringsForLang(lang, model, telemetry);
   return {
     ...(state as any),
     ui_strings,
@@ -4492,14 +4730,19 @@ async function ensureUiStringsForState(state: CanvasState, model: string): Promi
   } as CanvasState;
 }
 
-async function ensureLanguageFromUserMessage(state: CanvasState, userMessage: string, model: string): Promise<CanvasState> {
+async function ensureLanguageFromUserMessage(
+  state: CanvasState,
+  userMessage: string,
+  model: string,
+  telemetry?: UiI18nTelemetryCounters | null
+): Promise<CanvasState> {
   if (isForceEnglishLanguageMode()) {
     return {
       ...(state as any),
       language: "en",
       language_locked: "true",
       language_override: "false",
-      ui_strings: UI_STRINGS_DEFAULT,
+      ui_strings: UI_STRINGS_WITH_MENU_KEYS,
       ui_strings_lang: "en",
       ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
     } as CanvasState;
@@ -4515,24 +4758,24 @@ async function ensureLanguageFromUserMessage(state: CanvasState, userMessage: st
       language_locked: "true",
       language_override: "true",
     } as CanvasState;
-    return ensureUiStringsForState(next, model);
+    return ensureUiStringsForState(next, model, telemetry);
   }
 
   const current = String((state as any).language ?? "").trim().toLowerCase();
   const locked = String((state as any).language_locked ?? "false") === "true";
   const override = String((state as any).language_override ?? "false") === "true";
   if ((override || locked) && current) {
-    return ensureUiStringsForState(state, model);
+    return ensureUiStringsForState(state, model, telemetry);
   }
 
   const alphaCount = countAlphaChars(msg);
   if (alphaCount < LANGUAGE_MIN_ALPHA) {
-    return ensureUiStringsForState(state, model);
+    return ensureUiStringsForState(state, model, telemetry);
   }
 
   const detected = await detectLanguageHeuristic(msg);
   if (!detected.lang) {
-    return ensureUiStringsForState(state, model);
+    return ensureUiStringsForState(state, model, telemetry);
   }
 
   const next = {
@@ -4542,7 +4785,7 @@ async function ensureLanguageFromUserMessage(state: CanvasState, userMessage: st
     language_override: "false",
   } as CanvasState;
 
-  return ensureUiStringsForState(next, model);
+  return ensureUiStringsForState(next, model, telemetry);
 }
 
 function parseExplicitLanguageOverride(message: string): string {
@@ -5573,6 +5816,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const modelRoutingShadow = envFlagEnabled("BSC_MODEL_ROUTING_SHADOW", true);
   const tokenLoggingEnabled = envFlagEnabled("BSC_TOKEN_LOGGING_V1", process.env.LOCAL_DEV === "1");
   const llmTurnAccumulator = createTurnLlmAccumulator();
+  const uiI18nTelemetry: UiI18nTelemetryCounters = {
+    translation_fallbacks: 0,
+    translation_missing_keys: 0,
+    translation_html_violations: 0,
+    parity_errors: 0,
+    parity_recovered: 0,
+  };
 
   const rememberLlmCall = (value: { attempts: number; usage: LLMUsage; model: string }) => {
     registerTurnLlmCall(llmTurnAccumulator, {
@@ -5748,19 +5998,52 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     if ((response as any)?.ok === true) {
       const uiViolation = validateUiPayloadContractParity((response || {}) as Record<string, unknown>);
       if (uiViolation) {
-        const failed = {
-          ...(response as unknown as Record<string, unknown>),
-          ok: false,
-          error: {
-            type: "contract_violation",
-            message: "UI payload violates actioncode/menu contract.",
-            reason: uiViolation,
-            step: String((response as any)?.current_step_id || ""),
-            contract_id: String(((response as any)?.ui || {}).contract_id || ""),
-          },
-        };
-        return failed as unknown as T;
+        bumpUiI18nCounter(uiI18nTelemetry, "parity_errors");
+        const mutableResponse = response as unknown as Record<string, unknown>;
+        const repaired = tryRepairUiParityWithEnglishLabels(mutableResponse);
+        if (repaired) {
+          const postRepairViolation = validateUiPayloadContractParity(mutableResponse);
+          if (!postRepairViolation) {
+            bumpUiI18nCounter(uiI18nTelemetry, "parity_recovered");
+          } else {
+            const failed = {
+              ...mutableResponse,
+              ok: false,
+              error: {
+                type: "contract_violation",
+                message: "UI payload violates actioncode/menu contract.",
+                reason: postRepairViolation,
+                step: String((response as any)?.current_step_id || ""),
+                contract_id: String(((response as any)?.ui || {}).contract_id || ""),
+              },
+            };
+            return failed as unknown as T;
+          }
+        } else {
+          const failed = {
+            ...(response as unknown as Record<string, unknown>),
+            ok: false,
+            error: {
+              type: "contract_violation",
+              message: "UI payload violates actioncode/menu contract.",
+              reason: uiViolation,
+              step: String((response as any)?.current_step_id || ""),
+              contract_id: String(((response as any)?.ui || {}).contract_id || ""),
+            },
+          };
+          return failed as unknown as T;
+        }
       }
+    }
+    const telemetryTotal = Object.values(uiI18nTelemetry).reduce((sum, value) => sum + Number(value || 0), 0);
+    const responseStateForTelemetry = (response as any)?.state as CanvasState | undefined;
+    if (responseStateForTelemetry && telemetryTotal > 0) {
+      (responseStateForTelemetry as any).__ui_telemetry = {
+        ...(typeof (responseStateForTelemetry as any).__ui_telemetry === "object"
+          ? ((responseStateForTelemetry as any).__ui_telemetry as Record<string, unknown>)
+          : {}),
+        ...uiI18nTelemetry,
+      };
     }
     if (!tokenLoggingEnabled) return response;
     try {
@@ -5798,12 +6081,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   const ensureUiStrings = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
     const translationModel = resolveTranslationModel(routeOrText);
-    return ensureUiStringsForState(targetState, translationModel);
+    return ensureUiStringsForState(targetState, translationModel, uiI18nTelemetry);
   };
 
   const ensureLanguage = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
     const translationModel = resolveTranslationModel(routeOrText);
-    return ensureLanguageFromUserMessage(targetState, routeOrText, translationModel);
+    return ensureLanguageFromUserMessage(targetState, routeOrText, translationModel, uiI18nTelemetry);
   };
 
   const legacyMarkers = rawLegacyMarkers.length > 0 ? rawLegacyMarkers : detectLegacySessionMarkers(state);

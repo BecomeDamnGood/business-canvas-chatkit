@@ -105,6 +105,19 @@ test("language mode force_en: keeps language en and never triggers ui string tra
     assert.equal(result?.ok, true);
     assert.equal(result?.state?.language, "en");
     assert.equal(result?.state?.ui_strings_lang, "en");
+    const uiStrings = (result?.state?.ui_strings || {}) as Record<string, string>;
+    assert.equal(
+      String(uiStrings["prestart.meta.how.value"] || ""),
+      "One question at a time"
+    );
+    assert.equal(
+      String(uiStrings["menuLabel.STEP0_MENU_READY_START.ACTION_STEP0_READY_START"] || "").length > 0,
+      true
+    );
+    assert.equal(
+      Object.values(uiStrings).some((value) => /<\s*\/?\s*[a-z][^>]*>/i.test(String(value || ""))),
+      false
+    );
     const translateLogs = logs.filter((line) => line.includes("[ui_strings_translate_call]"));
     assert.equal(translateLogs.length, 0);
   } finally {
@@ -144,6 +157,11 @@ test("language mode LOCAL_DEV=1 defaults to English lock and never triggers ui s
     assert.equal(result?.ok, true);
     assert.equal(result?.state?.language, "en");
     assert.equal(result?.state?.ui_strings_lang, "en");
+    const uiStrings = (result?.state?.ui_strings || {}) as Record<string, string>;
+    assert.equal(
+      String(uiStrings["menuLabel.STEP0_MENU_READY_START.ACTION_STEP0_READY_START"] || "").length > 0,
+      true
+    );
     const translateLogs = logs.filter((line) => line.includes("[ui_strings_translate_call]"));
     assert.equal(translateLogs.length, 0);
   } finally {

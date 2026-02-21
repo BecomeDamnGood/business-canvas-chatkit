@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getDefaultState } from "./state.js";
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
-import { MENU_LABELS } from "./menu_contract.js";
+import { MENU_LABELS, MENU_LABEL_KEYS } from "./menu_contract.js";
 import { renderFreeTextTurnPolicy } from "./turn_policy_renderer.js";
 import { DEFAULT_MENU_BY_STATUS } from "./ui_contract_matrix.js";
 
@@ -1227,11 +1227,45 @@ test("non-escape menu labels stay in parity with action registry", () => {
   for (const [menuId, actionCodes] of Object.entries(ACTIONCODE_REGISTRY.menus)) {
     if (menuId.endsWith("_MENU_ESCAPE")) continue;
     const labels = MENU_LABELS[menuId];
+    const labelKeys = MENU_LABEL_KEYS[menuId];
     assert.ok(Array.isArray(labels), `MENU_LABELS missing for ${menuId}`);
+    assert.ok(Array.isArray(labelKeys), `MENU_LABEL_KEYS missing for ${menuId}`);
     assert.equal(
       labels.length,
       actionCodes.length,
       `menu parity mismatch for ${menuId}`
     );
+    assert.equal(
+      labelKeys.length,
+      actionCodes.length,
+      `menu label-key parity mismatch for ${menuId}`
+    );
   }
+});
+
+test("rendered ui actions include stable label_key values", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).purpose_final = "Committed purpose";
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      menu_id: "PURPOSE_MENU_REFINE",
+      message: "Current message",
+      question: "Please answer freely.",
+      purpose: "Committed purpose",
+    },
+    previousSpecialist: {
+      menu_id: "PURPOSE_MENU_REFINE",
+      question: "1) Previous label one\n2) Previous label two",
+    },
+  });
+  const expectedKeys = MENU_LABEL_KEYS.PURPOSE_MENU_REFINE;
+  assert.deepEqual(
+    rendered.uiActions.map((action) => String(action.label_key || "")),
+    expectedKeys
+  );
 });

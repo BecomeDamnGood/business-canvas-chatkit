@@ -9,7 +9,8 @@ import {
   baseLang,
   t,
   titlesForLang,
-  prestartWelcomeForLang,
+  prestartContentForLang,
+  hasPrestartContentForLang,
   getSectionTitle,
 } from "./ui_constants.js";
 import { escapeHtml, renderInlineText, renderStructuredText, stripInlineText } from "./ui_text.js";
@@ -44,7 +45,7 @@ export function extractStepTitle(stepId: string, lang: string | null | undefined
 
 function stepLabelShort(stepId: string, lang: string | null | undefined): string {
   const full = extractStepTitle(stepId, lang);
-  if (stepId === "step_0") return "Validation";
+  if (stepId === "step_0") return t(lang, "stepLabel.validation") || "Validation";
   return full.length > 12 ? full.slice(0, 12) + "…" : full;
 }
 
@@ -119,6 +120,62 @@ function setStaticStrings(lang: string): void {
   if (send) send.setAttribute("title", t(lang, "sendTitle"));
 }
 
+function clearElement(el: HTMLElement): void {
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function appendTextNode(tag: string, className: string, text: string): HTMLElement {
+  const el = document.createElement(tag) as HTMLElement;
+  if (className) el.className = className;
+  el.textContent = String(text || "");
+  return el;
+}
+
+function renderPrestartContent(cardDesc: HTMLElement, lang: string): void {
+  const content = prestartContentForLang(lang);
+  clearElement(cardDesc);
+  cardDesc.appendChild(appendTextNode("p", "card-headline", content.headline));
+
+  const sectionProven = appendTextNode("div", "section", "");
+  sectionProven.appendChild(appendTextNode("div", "section-title", content.provenTitle));
+  sectionProven.appendChild(appendTextNode("div", "section-body", content.provenBody));
+  cardDesc.appendChild(sectionProven);
+
+  cardDesc.appendChild(appendTextNode("div", "divider", ""));
+
+  const sectionOutcomes = appendTextNode("div", "section", "");
+  sectionOutcomes.appendChild(appendTextNode("div", "section-title", content.outcomesTitle));
+  const deliverables = appendTextNode("div", "deliverables", "");
+  for (const item of [content.outcome1, content.outcome2, content.outcome3]) {
+    const deliverable = appendTextNode("div", "deliverable", "");
+    deliverable.appendChild(appendTextNode("div", "deliverable-dot", ""));
+    deliverable.appendChild(document.createTextNode(item));
+    deliverables.appendChild(deliverable);
+  }
+  sectionOutcomes.appendChild(deliverables);
+  cardDesc.appendChild(sectionOutcomes);
+
+  cardDesc.appendChild(appendTextNode("div", "divider", ""));
+
+  const metaRow = appendTextNode("div", "meta-row", "");
+  const metaHow = appendTextNode("div", "meta-item", "");
+  metaHow.appendChild(appendTextNode("div", "meta-label", content.howLabel));
+  metaHow.appendChild(appendTextNode("div", "meta-value", content.howValue));
+  metaRow.appendChild(metaHow);
+  const metaTime = appendTextNode("div", "meta-item", "");
+  metaTime.appendChild(appendTextNode("div", "meta-label", content.timeLabel));
+  metaTime.appendChild(appendTextNode("div", "meta-value", content.timeValue));
+  metaRow.appendChild(metaTime);
+  cardDesc.appendChild(metaRow);
+}
+
+function renderPrestartSkeleton(cardDesc: HTMLElement, lang: string): void {
+  const content = prestartContentForLang(lang);
+  clearElement(cardDesc);
+  const headline = appendTextNode("p", "card-headline", content.skeleton || "Loading translation…");
+  cardDesc.appendChild(headline);
+}
+
 function parseMenuFromContractId(contractIdRaw: unknown, stepIdRaw: unknown): string {
   const contractId = String(contractIdRaw || "").trim();
   const stepId = String(stepIdRaw || "").trim();
@@ -175,7 +232,9 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
     const langForStructured = uiLang(state);
     wrap.style.display = "flex";
     for (const action of structuredActions) {
-      const label = stripInlineText(String(action?.label || "")).trim();
+      const labelKey = String(action?.label_key || "").trim();
+      const labelFromPayload = stripInlineText(String(action?.label || "")).trim();
+      const label = labelFromPayload || (labelKey ? String(t(langForStructured, labelKey) || "").trim() : "");
       const actionCode = String(action?.action_code || "").trim();
       if (!label || !actionCode) {
         console.warn("[structured_actions_invalid]", {
@@ -411,14 +470,16 @@ export function render(overrideToolOutput?: unknown): void {
     (state?.ui_strings && typeof state.ui_strings === "object" ? state.ui_strings : null) ||
     (result?.ui_strings && typeof result.ui_strings === "object" ? result.ui_strings : null);
   const overrideLang = String((state?.ui_strings_lang || "") as string).trim().toLowerCase();
-  const lang = uiLang(state);
+  const ws = widgetState();
+  const stateLang = languageFromState(state);
+  const widgetLang = String((ws?.language || "") as string).trim().toLowerCase();
+  const lang = stateLang || widgetLang || uiLang(state);
   if (overrideStrings) {
     const bucket = overrideLang || baseLang(lang);
     UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...(overrideStrings as Record<string, string>) };
   }
   setStaticStrings(lang);
 
-  const ws = widgetState();
   const langPersist = languageFromState(state);
   if (
     langPersist &&
@@ -436,7 +497,7 @@ export function render(overrideToolOutput?: unknown): void {
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
   const idx = stepIndex(current);
-  const stepTitle = current === "step_0" ? "Validation" : extractStepTitle(current, lang);
+  const stepTitle = current === "step_0" ? (t(lang, "stepLabel.validation") || "Validation") : extractStepTitle(current, lang);
   buildStepper(idx, stepTitle, lang);
 
   const badge = document.getElementById("badge");
@@ -465,7 +526,7 @@ export function render(overrideToolOutput?: unknown): void {
 
   if (sectionTitleEl) {
     if (showPreStart && current === "step_0") {
-      sectionTitleEl.textContent = "Validation & Business Name";
+      sectionTitleEl.textContent = t(lang, "sectionTitle.step_0") || "Validation & Business Name";
     } else if (!showPreStart && current !== "step_0" && showStepIntroChrome) {
       const businessName = String((state?.business_name || "")).trim();
       sectionTitleEl.textContent = getSectionTitle(lang, current, businessName);
@@ -495,10 +556,13 @@ export function render(overrideToolOutput?: unknown): void {
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
     if (cardDesc) {
-      // Prestart is trusted UI-owned HTML from ui_constants; keep structure intact.
-      cardDesc.innerHTML = prestartWelcomeForLang(lang);
-      cardDesc.classList.remove("has-grid"); /* prestart: block flow voor margin collapse */
-      cardDesc.classList.remove("is-step0-ask-layout");
+      const prestartEl = cardDesc as HTMLElement;
+      const isNonEnglish = baseLang(lang) !== "en" && baseLang(lang) !== "default";
+      const showSkeleton = isNonEnglish && !hasPrestartContentForLang(lang);
+      prestartEl.classList.remove("has-grid");
+      prestartEl.classList.remove("is-step0-ask-layout");
+      if (showSkeleton) renderPrestartSkeleton(prestartEl, lang);
+      else renderPrestartContent(prestartEl, lang);
     }
     if (prompt) prompt.textContent = "";
     startHint.textContent = "";

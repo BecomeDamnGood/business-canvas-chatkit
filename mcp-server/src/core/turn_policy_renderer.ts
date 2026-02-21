@@ -1,5 +1,5 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
-import { MENU_LABELS } from "./menu_contract.js";
+import { MENU_LABELS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "./menu_contract.js";
 import type { CanvasState } from "./state.js";
 import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
@@ -145,13 +145,19 @@ function stripStructuredChoiceLinesForPrompt(promptRaw: string): string {
   return kept.join("\n").trim();
 }
 
-function buildRenderedActions(actionCodes: string[], labels: string[]): RenderedAction[] {
+function buildRenderedActions(
+  menuId: string,
+  actionCodes: string[],
+  labels: string[],
+  labelKeys: string[]
+): RenderedAction[] {
   return actionCodes.map((code, idx) => {
     const entry = ACTIONCODE_REGISTRY.actions[code];
     const route = String(entry?.route || code).trim();
     return {
       id: `${code}:${idx + 1}`,
       label: String(labels[idx] || code).trim() || code,
+      label_key: String(labelKeys[idx] || labelKeyForMenuAction(menuId, code, idx)).trim(),
       action_code: code,
       intent: actionCodeToIntent({ actionCode: code, route }),
       primary: idx === 0,
@@ -591,8 +597,7 @@ function computeStatus(
 function labelsForMenu(
   menuId: string,
   actionCodes: string[],
-  _specialist: Record<string, unknown>,
-  _prev: Record<string, unknown>
+  state: CanvasState
 ): string[] {
   if (!menuId || actionCodes.length <= 0) return [];
 
@@ -606,6 +611,8 @@ function labelsForMenu(
 
   const usedIndices = new Set<number>();
   const filteredLabels: string[] = [];
+  const labelKeys = labelKeysForMenu(menuId, actionCodes);
+  if (labelKeys.length !== actionCodes.length) return [];
   for (const actionCode of actionCodes) {
     let matchedIndex = -1;
     for (let i = 0; i < fullActionCodes.length; i += 1) {
@@ -616,10 +623,43 @@ function labelsForMenu(
     }
     if (matchedIndex < 0) return [];
     usedIndices.add(matchedIndex);
-    filteredLabels.push(String(allLabels[matchedIndex] || "").trim());
+    const fallback = String(allLabels[matchedIndex] || "").trim();
+    if (!fallback) return [];
+    const key = String(labelKeys[filteredLabels.length] || "").trim();
+    filteredLabels.push(uiStringFromState(state, key, fallback));
   }
   if (filteredLabels.some((label) => !label)) return [];
   return filteredLabels;
+}
+
+function labelKeysForMenu(menuId: string, actionCodes: string[]): string[] {
+  if (!menuId || actionCodes.length <= 0) return [];
+  const fullActionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
+    ? ACTIONCODE_REGISTRY.menus[menuId]
+    : [];
+  if (fullActionCodes.length === 0) return [];
+
+  const allLabelKeys = (MENU_LABEL_KEYS[menuId] || []).slice(0, fullActionCodes.length);
+  if (allLabelKeys.length !== fullActionCodes.length) {
+    return actionCodes.map((actionCode, idx) => labelKeyForMenuAction(menuId, actionCode, idx));
+  }
+
+  const usedIndices = new Set<number>();
+  const filteredLabelKeys: string[] = [];
+  for (const actionCode of actionCodes) {
+    let matchedIndex = -1;
+    for (let i = 0; i < fullActionCodes.length; i += 1) {
+      if (usedIndices.has(i)) continue;
+      if (String(fullActionCodes[i] || "").trim() !== String(actionCode || "").trim()) continue;
+      matchedIndex = i;
+      break;
+    }
+    if (matchedIndex < 0) return [];
+    usedIndices.add(matchedIndex);
+    filteredLabelKeys.push(String(allLabelKeys[matchedIndex] || "").trim());
+  }
+  if (filteredLabelKeys.some((labelKey) => !labelKey)) return [];
+  return filteredLabelKeys;
 }
 
 function resolveMenuContract(params: {
@@ -629,10 +669,10 @@ function resolveMenuContract(params: {
   state: CanvasState;
   specialist: Record<string, unknown>;
   prev: Record<string, unknown>;
-}): { menuId: string; actionCodes: string[]; labels: string[] } {
+}): { menuId: string; actionCodes: string[]; labels: string[]; labelKeys: string[] } {
   const { stepId, status, confirmEligible, state, specialist, prev } = params;
   if (renderModeForStep(state, stepId) === "no_buttons") {
-    return { menuId: "", actionCodes: [], labels: [] };
+    return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
   }
   if (stepId === "dream") {
     const dreamMode = dreamRuntimeModeFromState(state);
@@ -643,18 +683,21 @@ function resolveMenuContract(params: {
           ? "DREAM_EXPLAINER_MENU_REFINE"
           : "";
     if (dreamMode === "builder_scoring") {
-      return { menuId: "", actionCodes: [], labels: [] };
+      return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
     }
     if (forcedMenuId) {
       const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[forcedMenuId])
         ? ACTIONCODE_REGISTRY.menus[forcedMenuId]
         : [];
-      if (allActions.length === 0) return { menuId: "", actionCodes: [], labels: [] };
+      if (allActions.length === 0) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
       const actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
-      if (actionCodes.length === 0) return { menuId: "", actionCodes: [], labels: [] };
-      const labels = labelsForMenu(forcedMenuId, actionCodes, specialist, prev);
-      if (labels.length !== actionCodes.length) return { menuId: "", actionCodes: [], labels: [] };
-      return { menuId: forcedMenuId, actionCodes, labels };
+      if (actionCodes.length === 0) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+      const labels = labelsForMenu(forcedMenuId, actionCodes, state);
+      const labelKeys = labelKeysForMenu(forcedMenuId, actionCodes);
+      if (labels.length !== actionCodes.length || labelKeys.length !== actionCodes.length) {
+        return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+      }
+      return { menuId: forcedMenuId, actionCodes, labels, labelKeys };
     }
   }
 
@@ -685,9 +728,9 @@ function resolveMenuContract(params: {
     menuId = menuIsValidForStep(defaultMenu) ? defaultMenu : "";
   }
 
-  if (!menuId || isEscapeMenu(menuId)) return { menuId: "", actionCodes: [], labels: [] };
-  if (!ACTIONCODE_REGISTRY.menus[menuId]) return { menuId: "", actionCodes: [], labels: [] };
-  if (!menuBelongsToStep(menuId, stepId)) return { menuId: "", actionCodes: [], labels: [] };
+  if (!menuId || isEscapeMenu(menuId)) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+  if (!ACTIONCODE_REGISTRY.menus[menuId]) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+  if (!menuBelongsToStep(menuId, stepId)) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
 
   const allActions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
   let actionCodes = allActions.filter((code) => (confirmEligible ? true : !isConfirmActionCode(code)));
@@ -701,12 +744,15 @@ function resolveMenuContract(params: {
       return true;
     });
   }
-  if (actionCodes.length === 0) return { menuId: "", actionCodes: [], labels: [] };
+  if (actionCodes.length === 0) return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
 
-  const labels = labelsForMenu(menuId, actionCodes, specialist, prev);
-  if (labels.length !== actionCodes.length) return { menuId: "", actionCodes: [], labels: [] };
+  const labels = labelsForMenu(menuId, actionCodes, state);
+  const labelKeys = labelKeysForMenu(menuId, actionCodes);
+  if (labels.length !== actionCodes.length || labelKeys.length !== actionCodes.length) {
+    return { menuId: "", actionCodes: [], labels: [], labelKeys: [] };
+  }
 
-  return { menuId, actionCodes, labels };
+  return { menuId, actionCodes, labels, labelKeys };
 }
 
 export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPolicyRenderResult {
@@ -825,7 +871,10 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       ? ((ACTIONCODE_REGISTRY.menus[step0MenuId] || []).map((code) => String(code || "").trim()).filter(Boolean))
       : [];
     const step0Labels = step0MenuId
-      ? labelsForMenu(step0MenuId, step0ActionCodes, specialist, prev)
+      ? labelsForMenu(step0MenuId, step0ActionCodes, state)
+      : [];
+    const step0LabelKeys = step0MenuId
+      ? labelKeysForMenu(step0MenuId, step0ActionCodes)
       : [];
     const step0Headline = sourceAction === "ESCAPE" && specialistQuestion
       ? specialistQuestion
@@ -851,7 +900,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       confirmEligible: effectiveConfirmEligible,
       specialist: step0Specialist,
       uiActionCodes: step0ActionCodes,
-      uiActions: buildRenderedActions(step0ActionCodes, step0Labels),
+      uiActions: buildRenderedActions(step0MenuId, step0ActionCodes, step0Labels, step0LabelKeys),
       contractId: step0ContractId,
       contractVersion: UI_CONTRACT_VERSION,
       textKeys: step0TextKeys,
@@ -872,6 +921,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const menuId = resolved.menuId;
   const safeActionCodes = resolved.actionCodes;
   const safeLabels = resolved.labels;
+  const safeLabelKeys = resolved.labelKeys;
   const headline = buildHeadlineForContract({
     stepId,
     stepLabel,
@@ -908,7 +958,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     confirmEligible: effectiveConfirmEligible,
     specialist: nextSpecialist,
     uiActionCodes: safeActionCodes,
-    uiActions: buildRenderedActions(safeActionCodes, safeLabels),
+    uiActions: buildRenderedActions(menuId, safeActionCodes, safeLabels, safeLabelKeys),
     contractId,
     contractVersion: UI_CONTRACT_VERSION,
     textKeys,

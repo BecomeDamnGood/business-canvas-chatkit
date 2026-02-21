@@ -18,9 +18,17 @@ function makeElement(tag: string) {
     textContent: "",
     style: {} as Record<string, string>,
     childNodes: [] as any[],
+    get firstChild() {
+      return this.childNodes.length > 0 ? this.childNodes[0] : null;
+    },
     disabled: false,
     appendChild(child: any) {
       this.childNodes.push(child);
+      return child;
+    },
+    removeChild(child: any) {
+      const idx = this.childNodes.indexOf(child);
+      if (idx >= 0) this.childNodes.splice(idx, 1);
       return child;
     },
     addEventListener() {},
@@ -988,9 +996,19 @@ test("btnStartDreamExercise sends Dream start-exercise actioncode", () => {
   assert.match(block, /callRunStep\("ACTION_DREAM_INTRO_START_EXERCISE"\)/);
 });
 
-test("prestart welcome preserves canonical HTML structure and is not newline-formatted", () => {
+test("prestart render uses deterministic DOM builders and no HTML injection", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /cardDesc\.innerHTML = prestartWelcomeForLang\(lang\);/);
-  assert.doesNotMatch(source, /formatText\(prestartWelcomeForLang\(lang\)\)/);
-  assert.doesNotMatch(source, /prestartWelcomeForLang\(lang\)\\n\\n/);
+  assert.match(source, /renderPrestartContent\(prestartEl, lang\)/);
+  assert.match(source, /renderPrestartSkeleton\(prestartEl, lang\)/);
+  assert.match(source, /hasPrestartContentForLang\(lang\)/);
+  assert.doesNotMatch(source, /cardDesc\.innerHTML = prestartWelcomeForLang\(lang\);/);
+});
+
+test("prestart source keeps stable structure and explicit skeleton gate", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
+  assert.match(source, /const showSkeleton = isNonEnglish && !hasPrestartContentForLang\(lang\);/);
+  assert.match(source, /appendTextNode\("p", "card-headline", content\.headline\)/);
+  assert.match(source, /appendTextNode\("div", "meta-row", ""\)/);
+  assert.match(source, /appendTextNode\("div", "deliverables", ""\)/);
+  assert.match(source, /appendTextNode\("p", "card-headline", content\.skeleton \|\| "Loading translation…"\)/);
 });
