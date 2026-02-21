@@ -1010,5 +1010,5 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
   assert.match(source, /appendTextNode\("p", "card-headline", content\.headline\)/);
   assert.match(source, /appendTextNode\("div", "meta-row", ""\)/);
   assert.match(source, /appendTextNode\("div", "deliverables", ""\)/);
-  assert.match(source, /appendTextNode\("p", "card-headline", content\.skeleton \|\| "Loading translation…"\)/);
+  assert.match(source, /appendTextNode\(\s*"p",\s*"card-headline",\s*content\.skeleton \|\| uiText\(lang,\s*"prestart\.loading",\s*"Loading translation…"\)\s*\)/);
 });

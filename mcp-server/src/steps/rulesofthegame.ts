@@ -482,7 +482,7 @@ Do NOT call it “posterleus” unless it is truly empty of behavioral meaning.
 REFINE triggers (only when necessary)
 Only trigger REFINE if one or more rules are:
 - purely vague without any implied decision meaning (example: “Wees beter”),
-- purely moral fundamentals (example: “We liegen niet”),
+- purely moral fundamentals (example: "We do not lie"),
 - conflicting with each other in a way that will cause daily confusion,
 - too operational and scenario specific (includes exact times, thresholds, step by step procedures, exception clauses, internal ticket routing details) - refine by translating them into broader Rules of the Game
 

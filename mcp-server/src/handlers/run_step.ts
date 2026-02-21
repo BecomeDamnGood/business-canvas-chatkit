@@ -16,6 +16,7 @@ import {
   CanvasStateZod,
   type CanvasState,
   type BoolString,
+  type ProvisionalSource,
 } from "../core/state.js";
 import {
   deriveTransitionEventFromLegacy,
@@ -153,7 +154,7 @@ import {
 } from "../steps/presentation.js";
 import { loadModule as loadCld3 } from "cld3-asm";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { MENU_LABELS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "../core/menu_contract.js";
+import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "../core/menu_contract.js";
 import {
   renderFreeTextTurnPolicy,
   type TurnPolicyRenderResult,
@@ -184,15 +185,22 @@ const RunStepArgsSchema = z.object({
 
 type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
 
-const STEP0_CARDDESC_EN = "Just to set the context, we'll start with the basics.";
-const STEP0_QUESTION_EN =
-  "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?";
-function step0QuestionForLang(_lang: string): string {
-  return STEP0_QUESTION_EN;
+function uiDefaultString(key: string, fallback = ""): string {
+  const candidate = String(UI_STRINGS_WITH_MENU_KEYS[key] || "").trim();
+  if (candidate) return candidate;
+  return String(fallback || "").trim();
 }
 
-function yesTokenForLang(_lang: string): string {
-  return "yes";
+function step0CardDescForState(state: CanvasState | null | undefined): string {
+  return uiStringFromStateMap(state, "step0.carddesc", uiDefaultString("step0.carddesc"));
+}
+
+function step0QuestionForState(state: CanvasState | null | undefined): string {
+  return uiStringFromStateMap(
+    state,
+    "step0.question.initial",
+    uiDefaultString("step0.question.initial")
+  );
 }
 
 const PRESTART_TEXT_DEFAULT = {
@@ -238,6 +246,12 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   "prestart.meta.time.label": PRESTART_TEXT_DEFAULT.timeLabel,
   "prestart.meta.time.value": PRESTART_TEXT_DEFAULT.timeValue,
   "prestart.loading": PRESTART_TEXT_DEFAULT.skeleton,
+  "step0.carddesc": "Just to set the context, we'll start with the basics.",
+  "step0.question.initial":
+    "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?",
+  "step0.readiness.statement.existing": "You have a {0} called {1}.",
+  "step0.readiness.statement.starting": "You want to start a {0} called {1}.",
+  "step0.readiness.suffix": "Are you ready to start with the first step: the Dream?",
   "stepLabel.validation": "Validation",
   "sectionTitle.step_0": "Validation & Business Name",
   uiSubtitle: "Use The Business Strategy Canvas Builder widget to continue (not the chat box)",
@@ -254,12 +268,18 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   wordingChoiceInstruction: "Please click what suits you best.",
   "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",
   "dreamBuilder.startExercise": "Start the exercise",
+  "dreamBuilder.question.base":
+    "What do you see changing in the future, positive or negative? Let your imagination run free.",
+  "dreamBuilder.question.more":
+    "What more do you see changing in the future, positive or negative? Let your imagination run free.",
+  "dreamBuilder.switchSelf.headline": "Continue with the Dream Exercise.",
   "dreamBuilder.statements.title": "Your Dream statements",
   "dreamBuilder.statements.count": "N statements out of a minimum of 20 so far",
   "dreamBuilder.statements.empty": "No statements yet.",
   btnSwitchToSelfDream: "Switch back to self-formulate the dream",
   sendTitle: "Send",
   errorMessage: "Something went wrong while processing your message. Please try again.",
+  "error.unknownAction": "We could not process this choice. Please refresh and try again.",
   optionsDisplayError: "We can't safely display these options right now. Please try again.",
   scoringIntro1: "You now have more than 20 statements, so I've clustered them for you. You can still edit and add statements, but please give them a score.",
   scoringIntro2: "",
@@ -274,6 +294,49 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   "strategy.focuspoints.count.template": "You now have {0} focus points within your strategy. I advise you to formulate at least 4 but maximum 7 focus points.",
   "strategy.focuspoints.warning.template": "I strongly advice you to only add a maximum of 7 focus points. can I consolidate this for you?",
   "strategy.current.template": "Your current Strategy for {0} is:",
+  "contract.headline.strategy.moreFocus": "What more do you focus on within your strategy?",
+  "contract.headline.define": "Define",
+  "contract.headline.refine": "Refine",
+  "contract.headline.withOptions": "{0} your {1} for {2} or choose an option.",
+  "contract.headline.withoutOptions": "{0} your {1} for {2}.",
+  "contract.recap.noOutput": "We have not yet defined the {0}.",
+  "transient.rate_limited": "Please wait a moment and try again.",
+  "transient.timeout": "This is taking longer than usual. Please try again.",
+  "wordingChoice.chooseVersion": "Choose this version",
+  "wordingChoice.useInputFallback": "Use this input",
+  "bigwhy.tooLong.message":
+    "Your formulation is longer than 28 words. Short and clear is better, so please provide a compact version.",
+  "bigwhy.tooLong.question": "Can you rewrite it in 28 words or fewer?",
+  "scoring.categoryFallback": "Category {0}",
+  "scoring.aria.scoreInput": "Score 1 to 10",
+  "presentation.ready": "Your presentation is ready.",
+  "presentation.error": "Presentation generation failed. Please check that the template exists and try again.",
+  "meta.benProfile.paragraph1":
+    "My name is Ben Steenstra (1973). I am a Dutch serial entrepreneur, executive coach, author, and public speaker, and I help people grow their businesses while staying grounded in what feels truly meaningful for them.",
+  "meta.benProfile.paragraph2":
+    "I combine practical strategy frameworks with coaching to turn big ideas into clear, actionable plans.",
+  "meta.benProfile.paragraph3":
+    "I have applied this model worldwide in many countries, including with organizations such as Samsung, HTC, LG, New Black, and Fresh and Rebel and many more.",
+  "meta.benProfile.paragraph4":
+    "For more information, to read my articles, view my movies, or to instantly book an appointment, visit my website: {0}.",
+  "motivation.opener":
+    "I am not here to make you sound impressive. I am here to help you say what is true.\nBecause when you lead, there are days you carry everything. Pressure, pace, expectations. And in that noise, even a strong founder can lose the thread.\nThis canvas brings you back to the thread. The part that matters. The reason you can stand behind. The words that feel real. Real words create real momentum.",
+  "motivation.provenLine":
+    "This is a proven model used worldwide, including by Samsung, HTC, LG, New Black, and Fresh 'n Rebel.",
+  "motivation.continuePrompt": "Give me one honest sentence. Not perfect. Just true.",
+  "motivation.continueTemplate":
+    "What we are doing now is protecting your motivation by making \"{0}\" clear in words you can actually carry into real decisions.",
+  "motivation.essencePrefix": "Essence so far: \"{0}\"",
+  "meta.modelCredibility.body":
+    "This is a practical, step-by-step canvas model that turns ideas into clear choices and real trade-offs.",
+  "ppt.heading.purpose": "Purpose",
+  "ppt.heading.role": "Role",
+  "ppt.heading.strategy": "Strategy",
+  "ppt.heading.entity": "Entity",
+  "ppt.heading.dream": "Dream",
+  "ppt.heading.targetgroup": "Target Group",
+  "ppt.heading.productsservices": "Products and Services",
+  "ppt.heading.rulesofthegame": "Rules of the Game",
   "offtopic.companyFallback": "your future company",
   "offtopic.step.dream": "Dream",
   "offtopic.step.purpose": "Purpose",
@@ -308,17 +371,18 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
 function buildMenuLabelUiDefaults(): Record<string, string> {
   if (!isMenuLabelKeysV1Enabled()) return {};
   const next: Record<string, string> = {};
-  for (const [menuId, labels] of Object.entries(MENU_LABELS)) {
-    const actionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId])
-      ? ACTIONCODE_REGISTRY.menus[menuId]
+  for (const [menuId, codesRaw] of Object.entries(ACTIONCODE_REGISTRY.menus)) {
+    const safeActionCodes = Array.isArray(codesRaw)
+      ? codesRaw.map((code) => String(code || "").trim()).filter(Boolean)
       : [];
     const labelKeys = Array.isArray(MENU_LABEL_KEYS[menuId])
       ? MENU_LABEL_KEYS[menuId]
       : [];
-    if (actionCodes.length !== labels.length || labelKeys.length !== labels.length) continue;
-    for (let i = 0; i < labels.length; i += 1) {
-      const key = String(labelKeys[i] || "").trim() || labelKeyForMenuAction(menuId, String(actionCodes[i] || ""), i);
-      const label = String(labels[i] || "").trim();
+    if (safeActionCodes.length === 0) continue;
+    for (let i = 0; i < safeActionCodes.length; i += 1) {
+      const actionCode = safeActionCodes[i];
+      const key = String(labelKeys[i] || "").trim() || labelKeyForMenuAction(menuId, actionCode, i);
+      const label = String(MENU_LABEL_DEFAULTS[key] || "").trim();
       if (!key || !label) continue;
       next[key] = label;
     }
@@ -332,7 +396,7 @@ const UI_STRINGS_WITH_MENU_KEYS: Record<string, string> = {
 };
 
 const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_WITH_MENU_KEYS);
-const UI_STRINGS_SCHEMA_VERSION = "2026-02-21-ui-i18n-v2";
+const UI_STRINGS_SCHEMA_VERSION = "2026-02-21-ui-i18n-v3";
 const UiStringsZodSchema = z.object(
   UI_STRINGS_KEYS.reduce<Record<string, z.ZodString>>((acc, k) => {
     acc[k] = z.string();
@@ -442,6 +506,14 @@ function normalizeDreamRuntimeMode(raw: unknown): DreamRuntimeMode {
 
 function setDreamRuntimeMode(state: CanvasState, mode: DreamRuntimeMode): void {
   (state as any).__dream_runtime_mode = mode;
+  if (mode === "builder_collect") {
+    const existingStage = String((state as any).__dream_builder_prompt_stage || "").trim();
+    if (!existingStage) {
+      (state as any).__dream_builder_prompt_stage = "base";
+    }
+    return;
+  }
+  (state as any).__dream_builder_prompt_stage = "";
 }
 
 function getDreamRuntimeMode(state: CanvasState): DreamRuntimeMode {
@@ -768,11 +840,19 @@ function isForceEnglishLanguageMode(): boolean {
 }
 
 function isUiI18nV2Enabled(): boolean {
-  return envFlagEnabled("UI_I18N_V2", true);
+  return envFlagEnabled("UI_I18N_V3_TEXT_KEYS", envFlagEnabled("UI_I18N_V2", true));
 }
 
 function isMenuLabelKeysV1Enabled(): boolean {
-  return envFlagEnabled("MENU_LABEL_KEYS_V1", true);
+  return envFlagEnabled("UI_I18N_V3_MENU_KEY_ONLY", envFlagEnabled("MENU_LABEL_KEYS_V1", true));
+}
+
+function isUiI18nV3LangBootstrapEnabled(): boolean {
+  return envFlagEnabled("UI_I18N_V3_LANG_BOOTSTRAP", true);
+}
+
+function isWordingPanelCleanBodyV1Enabled(): boolean {
+  return envFlagEnabled("UI_WORDING_PANEL_CLEAN_BODY_V1", true);
 }
 
 function baseUrlFromEnv(): string {
@@ -810,10 +890,10 @@ function escapeRegExp(input: string): string {
 type SectionKey = "strategy" | "targetgroup" | "productsservices" | "rulesofthegame";
 
 const SECTION_LABELS: Record<SectionKey, string[]> = {
-  strategy: ["strategy", "strategie"],
-  targetgroup: ["target group", "doelgroep"],
-  productsservices: ["products and services", "products & services", "producten en diensten"],
-  rulesofthegame: ["rules of the game", "spelregels"],
+  strategy: ["strategy"],
+  targetgroup: ["target group"],
+  productsservices: ["products and services", "products & services"],
+  rulesofthegame: ["rules of the game"],
 };
 
 function detectSectionLabel(line: string): { section: SectionKey; rest: string } | null {
@@ -935,6 +1015,52 @@ function parseStep0Final(step0Final: string, fallbackName: string): { venture: s
   return { venture, name, status };
 }
 
+function hasValidStep0Final(step0FinalRaw: string): boolean {
+  const step0Final = String(step0FinalRaw || "").trim();
+  if (!step0Final) return false;
+  const nameMatch = step0Final.match(/Name:\s*([^|]+)\s*(\||$)/i);
+  const ventureMatch = step0Final.match(/Venture:\s*([^|]+)\s*(\||$)/i);
+  const statusMatch = step0Final.match(/Status:\s*(existing|starting)\s*(\||$)/i);
+  const venture = String(ventureMatch?.[1] || "").trim();
+  const name = String(nameMatch?.[1] || "").trim();
+  const status = String(statusMatch?.[1] || "").trim().toLowerCase();
+  return Boolean(venture) && Boolean(name) && (status === "existing" || status === "starting");
+}
+
+function step0ReadyActionLabel(state: CanvasState | null | undefined): string {
+  const key = labelKeyForMenuAction("STEP0_MENU_READY_START", "ACTION_STEP0_READY_START", 0);
+  const fallback = String(MENU_LABEL_DEFAULTS[key] || "Yes, I'm ready. Let's start!").trim();
+  return uiStringFromStateMap(state, key, fallback);
+}
+
+function step0ReadinessStatement(state: CanvasState | null | undefined, parsed: { venture: string; name: string; status: string }): string {
+  const venture = String(parsed.venture || "venture").trim();
+  const name = String(parsed.name || "TBD").trim();
+  const existingTemplate = uiStringFromStateMap(
+    state,
+    "step0.readiness.statement.existing",
+    uiDefaultString("step0.readiness.statement.existing", "You have a {0} called {1}.")
+  );
+  const startingTemplate = uiStringFromStateMap(
+    state,
+    "step0.readiness.statement.starting",
+    uiDefaultString("step0.readiness.statement.starting", "You want to start a {0} called {1}.")
+  );
+  const template = String(parsed.status || "").toLowerCase() === "existing" ? existingTemplate : startingTemplate;
+  return formatIndexedTemplate(template, [venture, name]).trim();
+}
+
+function step0ReadinessQuestion(state: CanvasState | null | undefined, parsed: { venture: string; name: string; status: string }): string {
+  const readyLabel = step0ReadyActionLabel(state);
+  const suffix = uiStringFromStateMap(
+    state,
+    "step0.readiness.suffix",
+    uiDefaultString("step0.readiness.suffix", "Are you ready to start with the first step: the Dream?")
+  );
+  const statement = step0ReadinessStatement(state, parsed);
+  return `1) ${readyLabel}\n\n${statement} ${suffix}`.trim();
+}
+
 function collectXmlFiles(rootDir: string): string[] {
   if (!fs.existsSync(rootDir)) return [];
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
@@ -975,33 +1101,28 @@ function replacePlaceholdersInDir(
   }
 }
 
-function headingLabelsForLang(lang: string): Record<string, string> {
-  const isNl = String(lang || "").toLowerCase().startsWith("nl");
-  if (isNl) {
-    return {
-      PURPOSEH: "Doel",
-      ROLEH: "Rol",
-      STRATEGYH: "Strategie",
-      ENTITYH: "Entiteit",
-      DREAMH: "Droom",
-      TARGET_GROUPH: "Doelgroep",
-      PRODUCTS_SERVICESH: "Producten en Diensten",
-      RULES_OF_THE_GAMEH: "Spelregels",
-    };
-  }
+function headingLabelsForState(state: CanvasState): Record<string, string> {
   return {
-    PURPOSEH: "Purpose",
-    ROLEH: "Role",
-    STRATEGYH: "Strategy",
-    ENTITYH: "Entity",
-    DREAMH: "Dream",
-    TARGET_GROUPH: "Target Group",
-    PRODUCTS_SERVICESH: "Products and Services",
-    RULES_OF_THE_GAMEH: "Rules of the Game",
+    PURPOSEH: uiStringFromStateMap(state, "ppt.heading.purpose", uiDefaultString("ppt.heading.purpose", "Purpose")),
+    ROLEH: uiStringFromStateMap(state, "ppt.heading.role", uiDefaultString("ppt.heading.role", "Role")),
+    STRATEGYH: uiStringFromStateMap(state, "ppt.heading.strategy", uiDefaultString("ppt.heading.strategy", "Strategy")),
+    ENTITYH: uiStringFromStateMap(state, "ppt.heading.entity", uiDefaultString("ppt.heading.entity", "Entity")),
+    DREAMH: uiStringFromStateMap(state, "ppt.heading.dream", uiDefaultString("ppt.heading.dream", "Dream")),
+    TARGET_GROUPH: uiStringFromStateMap(state, "ppt.heading.targetgroup", uiDefaultString("ppt.heading.targetgroup", "Target Group")),
+    PRODUCTS_SERVICESH: uiStringFromStateMap(
+      state,
+      "ppt.heading.productsservices",
+      uiDefaultString("ppt.heading.productsservices", "Products and Services")
+    ),
+    RULES_OF_THE_GAMEH: uiStringFromStateMap(
+      state,
+      "ppt.heading.rulesofthegame",
+      uiDefaultString("ppt.heading.rulesofthegame", "Rules of the Game")
+    ),
   };
 }
 
-function generatePresentationPptx(state: CanvasState, lang: string): { fileName: string; filePath: string } {
+function generatePresentationPptx(state: CanvasState): { fileName: string; filePath: string } {
   const templatePath = getPresentationTemplatePath();
   if (!fs.existsSync(templatePath)) {
     throw new Error("Presentation template not found");
@@ -1011,7 +1132,7 @@ function generatePresentationPptx(state: CanvasState, lang: string): { fileName:
   const fallbackName = String((state as any).business_name ?? "").trim();
   const { name } = parseStep0Final(step0Final, fallbackName);
 
-  const labels = headingLabelsForLang(lang);
+  const labels = headingLabelsForState(state);
 
   const strategyLines = sanitizeLinesForSection(
     presentationLines(String((state as any).strategy_final ?? "")),
@@ -1205,6 +1326,9 @@ export function buildTextForWidget(params: {
     const fallbackItems = knownItems.length > 0 ? knownItems : splitSentenceItems(wordingSuggestion);
     msg = sanitizePendingListMessage(msg, fallbackItems);
   }
+  if (wordingPending && isWordingPanelCleanBodyV1Enabled()) {
+    msg = compactWordingPanelBody(msg);
+  }
   const promptFromSpecialist = String(specialist?.question ?? "").trim();
   const promptOverride = String(params.questionTextOverride || "").trim();
   const prompt = promptOverride || promptFromSpecialist;
@@ -1271,8 +1395,6 @@ function stripChoiceInstructionNoise(value: string): string {
     /^(please\s+)?(choose|pick|select)\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
     /^(please\s+)?(choose|pick|select)\s+an?\s+option(\s+below)?(\s+by\s+typing\s+\d+(?:\s*(?:or|\/|,|and)\s*\d+)*)?\.?$/i,
     /^choose\s+an?\s+option\s+by\s+typing\s+.+$/i,
-    /^(kies|selecteer)\s+\d+(?:\s*(?:,|\/|of|en)\s*\d+)*\.?$/i,
-    /^(kies|selecteer)\s+een\s+optie(\s+hieronder)?\.?$/i,
     /^.+\s+or\s+choose\s+an?\s+option(s)?(\s+below)?\.?$/i,
     /^.+\s+or\s+choose\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
   ];
@@ -1407,10 +1529,8 @@ function labelsForMenuActionCodes(menuId: string, actionCodes: string[]): string
   const fullActionCodes = Array.isArray(ACTIONCODE_REGISTRY.menus[safeMenuId])
     ? ACTIONCODE_REGISTRY.menus[safeMenuId].map((code) => String(code || "").trim()).filter(Boolean)
     : [];
-  const fullLabels = Array.isArray(MENU_LABELS[safeMenuId])
-    ? MENU_LABELS[safeMenuId].map((label) => String(label || "").trim())
-    : [];
-  if (fullActionCodes.length === 0 || fullActionCodes.length !== fullLabels.length) return [];
+  const fullLabelKeys = labelKeysForMenuActionCodes(safeMenuId, fullActionCodes);
+  if (fullActionCodes.length === 0 || fullLabelKeys.length !== fullActionCodes.length) return [];
   const usedIndices = new Set<number>();
   const filteredLabels: string[] = [];
   for (const actionCode of safeActionCodes) {
@@ -1423,7 +1543,8 @@ function labelsForMenuActionCodes(menuId: string, actionCodes: string[]): string
     }
     if (matchedIndex < 0) return [];
     usedIndices.add(matchedIndex);
-    const label = String(fullLabels[matchedIndex] || "").trim();
+    const labelKey = String(fullLabelKeys[matchedIndex] || "").trim();
+    const label = String(MENU_LABEL_DEFAULTS[labelKey] || "").trim();
     if (!label) return [];
     filteredLabels.push(label);
   }
@@ -1737,31 +1858,28 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
   if (stepId !== STEP_0_ID || !specialist || typeof specialist !== "object") return specialist;
   const action = String(specialist.action || "").trim().toUpperCase();
   const next = { ...specialist };
-  const hasStep0Final = String((state as any).step_0_final || "").trim().length > 0;
+  const step0FinalRaw = String((state as any).step_0_final || "").trim();
+  const hasStep0Final = hasValidStep0Final(step0FinalRaw);
   const normalizedInput = String(userInput || "").trim();
   const metaTopic = resolveSpecialistMetaTopic(next as Record<string, unknown>);
   const isBenMeta = metaTopic === "BEN_PROFILE";
   if (action === "INTRO") {
     next.action = "ASK";
     next.message = "";
-    next.question = step0QuestionForLang(langFromState(state));
+    next.question = step0QuestionForState(state);
   }
   const currentContractId = String(next.ui_contract_id || "").trim();
   const currentMenuId = parseMenuFromContractIdForStep(currentContractId, STEP_0_ID);
   if (isBenMeta) {
     if (hasStep0Final) {
-      const parsed = parseStep0Final(String((state as any).step_0_final || ""), String((state as any).business_name || "TBD"));
-      const statement =
-        String(parsed.status || "").toLowerCase() === "existing"
-          ? `You have a ${parsed.venture} called ${parsed.name}.`
-          : `You want to start a ${parsed.venture} called ${parsed.name}.`;
+      const parsed = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
       return {
         ...next,
         action: "ASK",
-        message: buildBenProfileMessage(),
-        question: `1) Yes, I'm ready. Let's start!\n\n${statement} Are you ready to start with the first step: the Dream?`,
+        message: buildBenProfileMessage(state),
+        question: step0ReadinessQuestion(state, parsed),
         business_name: parsed.name || "TBD",
-        step_0: String((state as any).step_0_final || ""),
+        step_0: step0FinalRaw,
         wording_choice_pending: "false",
         wording_choice_selected: "",
         is_offtopic: true,
@@ -1770,37 +1888,28 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
     return normalizeStep0OfftopicToAsk(
       {
         ...next,
-        message: buildBenProfileMessage(),
+        message: buildBenProfileMessage(state),
         is_offtopic: true,
       },
       state,
       normalizedInput
     );
   }
-  if (hasStep0Final && action === "ASK" && !currentMenuId) {
-    const parsed = parseStep0Final(String((state as any).step_0_final || ""), String((state as any).business_name || "TBD"));
-    const statement =
-      String(parsed.status || "").toLowerCase() === "existing"
-        ? `You have a ${parsed.venture} called ${parsed.name}.`
-        : `You want to start a ${parsed.venture} called ${parsed.name}.`;
+  if (hasStep0Final && (action === "ASK" || action === "ESCAPE")) {
+    const parsed = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
     next.action = "ASK";
-    next.question = `1) Yes, I'm ready. Let's start!\n\n${statement} Are you ready to start with the first step: the Dream?`;
+    if (action === "ESCAPE" || !String(next.question || "").trim() || !currentMenuId) {
+      next.question = step0ReadinessQuestion(state, parsed);
+    }
     next.business_name = parsed.name || "TBD";
-    next.step_0 = String((state as any).step_0_final || "");
+    next.step_0 = step0FinalRaw;
     next.wording_choice_pending = "false";
     next.wording_choice_selected = "";
     return next;
   }
-  if (
-    hasStep0Final &&
-    String(next.action || "").trim() === "ASK" &&
-    currentMenuId === "STEP0_MENU_READY_START"
-  ) {
-    return next;
-  }
   if (String(next.action || "").trim() !== "ASK") return next;
-  next.message = STEP0_CARDDESC_EN;
-  next.question = step0QuestionForLang(langFromState(state));
+  next.message = step0CardDescForState(state);
+  next.question = step0QuestionForState(state);
   return next;
 }
 
@@ -1813,8 +1922,8 @@ export function normalizeStep0OfftopicToAsk(specialist: any, state: CanvasState,
   return {
     ...next,
     action: "ASK",
-    message: hasMessage ? cleanedMessage : STEP0_CARDDESC_EN,
-    question: step0QuestionForLang(langFromState(state)),
+    message: hasMessage ? cleanedMessage : step0CardDescForState(state),
+    question: step0QuestionForState(state),
     wording_choice_pending: "false",
     wording_choice_selected: "",
     step_0: "",
@@ -1833,20 +1942,6 @@ function stripNumberedChoiceLines(prompt: string): string {
     .trim();
 }
 
-function buildDreamBuilderSwitchSelfQuestion(previousQuestion: string, fallbackQuestion: string): string {
-  const restoredPrompt = stripChoiceInstructionNoise(
-    stripNumberedChoiceLines(previousQuestion) ||
-      stripNumberedChoiceLines(fallbackQuestion)
-  );
-  const headline = restoredPrompt || "Continue with the Dream Exercise.";
-  return `1) Switch back to self-formulate the dream\n\n${headline}`.trim();
-}
-
-const DREAM_BUILDER_NEXT_QUESTION_BASE_EN =
-  "What do you see changing in the future, positive or negative? Let your imagination run free.";
-const DREAM_BUILDER_NEXT_QUESTION_MORE_EN =
-  "What more do you see changing in the future, positive or negative? Let your imagination run free.";
-
 function enforceDreamBuilderQuestionProgress(
   specialistResult: any,
   params: {
@@ -1854,6 +1949,7 @@ function enforceDreamBuilderQuestionProgress(
     activeSpecialist: string;
     canonicalStatementCount: number;
     wordingChoicePending: boolean;
+    state: CanvasState;
   }
 ): any {
   const currentStepId = String(params.currentStepId || "").trim();
@@ -1871,10 +1967,6 @@ function enforceDreamBuilderQuestionProgress(
 
   const currentQuestion = String(specialist.question || "").trim();
   if (!currentQuestion) return specialist;
-  const hasMoreAlready = /^What more do you see changing in the future,\s*positive or negative\?/i.test(currentQuestion);
-  if (hasMoreAlready) return specialist;
-  const isBaseQuestion = /^What do you see changing in the future,\s*positive or negative\?/i.test(currentQuestion);
-  if (!isBaseQuestion) return specialist;
 
   const specialistStatementsCount = Array.isArray(specialist.statements)
     ? (specialist.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
@@ -1886,10 +1978,18 @@ function enforceDreamBuilderQuestionProgress(
     String(specialist.wording_choice_pending || "").trim() === "true";
   if (!hasCollectedInput) return specialist;
 
-  const nextQuestion = currentQuestion === DREAM_BUILDER_NEXT_QUESTION_BASE_EN
-    ? DREAM_BUILDER_NEXT_QUESTION_MORE_EN
-    : currentQuestion.replace(/^What do you see/i, "What more do you see");
+  const stage = String((params.state as any).__dream_builder_prompt_stage || "").trim();
+  if (stage === "more") return specialist;
+  const nextQuestion = uiStringFromStateMap(
+    params.state,
+    "dreamBuilder.question.more",
+    uiDefaultString(
+      "dreamBuilder.question.more",
+      "What more do you see changing in the future, positive or negative? Let your imagination run free."
+    )
+  );
   if (!nextQuestion || nextQuestion === currentQuestion) return specialist;
+  (params.state as any).__dream_builder_prompt_stage = "more";
   return {
     ...specialist,
     question: nextQuestion,
@@ -2495,6 +2595,15 @@ function sanitizePendingListMessage(messageRaw: string, knownItems: string[]): s
       kept.push("");
       continue;
     }
+    const normalized = trimmed.replace(/<[^>]+>/g, "").trim();
+    if (
+      /\b(i['’]?ve|i have)\s+(reformulat\w*|rewritten|broadened|converted)\b/i.test(normalized) ||
+      /^statement\s*\d+\s*:/i.test(normalized) ||
+      /^statements?\s+\d+\s*(?:to|-)\s*\d+/i.test(normalized) ||
+      /\bif you meant something different\b/i.test(normalized)
+    ) {
+      continue;
+    }
     if (/^<\/?strong>/i.test(trimmed) && /so far/i.test(trimmed)) continue;
     if (/^so far\b/i.test(trimmed)) continue;
     if (/^<\/?strong>/i.test(trimmed) && /established so far/i.test(trimmed)) continue;
@@ -2515,6 +2624,35 @@ function sanitizePendingListMessage(messageRaw: string, knownItems: string[]): s
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function compactWordingPanelBody(messageRaw: string): string {
+  const message = String(messageRaw || "").replace(/\r/g, "\n").trim();
+  if (!message) return "";
+  const lines = message
+    .split("\n")
+    .map((line) => String(line || "").replace(/<[^>]+>/g, " ").trim())
+    .filter(Boolean)
+    .filter((line) => !/^\s*(?:[-*•]|\d+[\).])\s+/.test(line))
+    .filter((line) => {
+      const normalized = line.toLowerCase();
+      if (!normalized) return false;
+      if (normalized.includes("this is your input")) return false;
+      if (normalized.includes("this would be my suggestion")) return false;
+      if (normalized.includes("if you meant something different")) return false;
+      if (/\b(i['’]?ve|i have)\s+(reformulat\w*|rewritten|broadened|converted)\b/i.test(normalized)) return false;
+      if (/^statement\s*\d+\s*:/i.test(normalized)) return false;
+      if (/^statements?\s+\d+\s*(?:to|-)\s*\d+/i.test(normalized)) return false;
+      return true;
+    });
+  if (lines.length === 0) return "";
+  const firstLine = String(lines[0] || "").trim();
+  if (!firstLine) return "";
+  const firstSentence = firstLine
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)[0] || "";
+  return ensureSentenceEnd(firstSentence || firstLine);
 }
 
 function sanitizePendingTextMessage(messageRaw: string, suggestionRaw: string): string {
@@ -2726,19 +2864,69 @@ function provisionalValueForStep(state: any, stepId: string): string {
   return String(map[stepId] || "").trim();
 }
 
-function withProvisionalValue(state: CanvasState, stepId: string, value: string): CanvasState {
+function normalizedProvisionalSourceByStep(state: any): Record<string, ProvisionalSource> {
+  const raw =
+    state && typeof state.provisional_source_by_step === "object" && state.provisional_source_by_step !== null
+      ? (state.provisional_source_by_step as Record<string, unknown>)
+      : {};
+  const next: Record<string, ProvisionalSource> = {};
+  for (const [stepIdRaw, sourceRaw] of Object.entries(raw)) {
+    const stepId = String(stepIdRaw || "").trim();
+    if (!stepId) continue;
+    const source = String(sourceRaw || "").trim();
+    if (
+      source === "user_input" ||
+      source === "wording_pick" ||
+      source === "action_route" ||
+      source === "system_generated"
+    ) {
+      next[stepId] = source;
+    }
+  }
+  return next;
+}
+
+function provisionalSourceForStep(state: any, stepId: string): ProvisionalSource {
+  if (!stepId) return "system_generated";
+  const map = normalizedProvisionalSourceByStep(state);
+  const source = String(map[stepId] || "").trim();
+  if (
+    source === "user_input" ||
+    source === "wording_pick" ||
+    source === "action_route" ||
+    source === "system_generated"
+  ) {
+    return source;
+  }
+  return "system_generated";
+}
+
+function withProvisionalValue(
+  state: CanvasState,
+  stepId: string,
+  value: string,
+  source: ProvisionalSource
+): CanvasState {
   if (!stepId) return state;
   const map = normalizedProvisionalByStep(state);
+  const sourceMap = normalizedProvisionalSourceByStep(state);
   const trimmed = String(value || "").trim();
   if (!trimmed) {
     delete map[stepId];
+    delete sourceMap[stepId];
   } else {
     map[stepId] = trimmed;
+    sourceMap[stepId] = source;
   }
   return {
     ...state,
     provisional_by_step: map,
+    provisional_source_by_step: sourceMap,
   };
+}
+
+function clearProvisionalValue(state: CanvasState, stepId: string): CanvasState {
+  return withProvisionalValue(state, stepId, "", "system_generated");
 }
 
 function preserveProgressForInformationalAction(
@@ -2960,27 +3148,30 @@ const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
 const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
 const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
 
-function buildBenProfileMessage(): string {
+function buildBenProfileMessage(state?: CanvasState | null): string {
+  const paragraph1 = uiStringFromStateMap(state || null, "meta.benProfile.paragraph1", uiDefaultString("meta.benProfile.paragraph1"));
+  const paragraph2 = uiStringFromStateMap(state || null, "meta.benProfile.paragraph2", uiDefaultString("meta.benProfile.paragraph2"));
+  const paragraph3 = uiStringFromStateMap(state || null, "meta.benProfile.paragraph3", uiDefaultString("meta.benProfile.paragraph3"));
+  const paragraph4Template = uiStringFromStateMap(state || null, "meta.benProfile.paragraph4", uiDefaultString("meta.benProfile.paragraph4"));
+  const paragraph4 = formatIndexedTemplate(paragraph4Template, [BEN_PROFILE_WEBSITE_URL]);
   return [
     `![Ben Steenstra](${BEN_PROFILE_IMAGE_URL})`,
-    "My name is Ben Steenstra (1973). I am a Dutch serial entrepreneur, executive coach, author, and public speaker, and I help people grow their businesses while staying grounded in what feels truly meaningful for them.",
-    "I combine practical strategy frameworks with coaching to turn big ideas into clear, actionable plans.",
-    "I have applied this model worldwide in many countries, including with organizations such as Samsung, HTC, LG, New Black, and Fresh and Rebel and many more.",
-    `For more information, to read my articles, view my movies, or to instantly book an appointment, visit my website: ${BEN_PROFILE_WEBSITE_URL}.`,
+    paragraph1,
+    paragraph2,
+    paragraph3,
+    paragraph4,
   ].join("\n\n");
 }
 
-const MOTIVATION_HIGHER_PURPOSE_OPENER = [
-  "I am not here to make you sound impressive. I am here to help you say what is true.",
-  "Because when you lead, there are days you carry everything. Pressure, pace, expectations. And in that noise, even a strong founder can lose the thread.",
-  "This canvas brings you back to the thread. The part that matters. The reason you can stand behind. The words that feel real. Real words create real momentum.",
-].join("\n");
-
-const MOTIVATION_PROVEN_LINE =
-  "This is a proven model used worldwide, including by Samsung, HTC, LG, New Black, and Fresh 'n Rebel.";
-
-const MOTIVATION_FIXED_CONTINUE_PROMPT =
-  "Give me one honest sentence. Not perfect. Just true.";
+const MOTIVATION_HIGHER_PURPOSE_OPENER = uiDefaultString("motivation.opener");
+const MOTIVATION_PROVEN_LINE = uiDefaultString(
+  "motivation.provenLine",
+  "This is a proven model used worldwide, including by Samsung, HTC, LG, New Black, and Fresh 'n Rebel."
+);
+const MOTIVATION_FIXED_CONTINUE_PROMPT = uiDefaultString(
+  "motivation.continuePrompt",
+  "Give me one honest sentence. Not perfect. Just true."
+);
 
 const MOTIVATION_MISSING_PIECE_BY_STEP: Record<string, string> = {
   [STEP_0_ID]: "the concrete starting point of your business",
@@ -3193,13 +3384,21 @@ function overviewEssenceSentence(
   return `The current ${offTopicStepLabel(stepId, state)} of ${offTopicCompanyName(state)} is ${normalized}`;
 }
 
-function buildMotivationContinueLine(stepId: string, status: TurnOutputStatus): string {
+function buildMotivationContinueLine(state: CanvasState, stepId: string, status: TurnOutputStatus): string {
   const basePiece = MOTIVATION_MISSING_PIECE_BY_STEP[stepId] || "the missing piece that matters most right now";
   const piece =
     status === "valid_output"
       ? `the next sharpening of ${basePiece}`
       : basePiece;
-  return `What we are doing now is protecting your motivation by making "${piece}" clear in words you can actually carry into real decisions.`;
+  const template = uiStringFromStateMap(
+    state,
+    "motivation.continueTemplate",
+    uiDefaultString(
+      "motivation.continueTemplate",
+      "What we are doing now is protecting your motivation by making \"{0}\" clear in words you can actually carry into real decisions."
+    )
+  );
+  return formatIndexedTemplate(template, [piece]).trim();
 }
 
 type MotivationPolicyApplyParams = {
@@ -3246,14 +3445,34 @@ export function applyMotivationQuotesContractV11(params: MotivationPolicyApplyPa
   if (whyTrigger) {
     const essence = overviewEssenceSentence(params.stepId, params.state, specialist, params.previousSpecialist);
     const quote = pickQuoteForStep(params.stepId, params.state);
+    const opener = uiStringFromStateMap(
+      params.state,
+      "motivation.opener",
+      MOTIVATION_HIGHER_PURPOSE_OPENER
+    );
+    const provenLine = uiStringFromStateMap(
+      params.state,
+      "motivation.provenLine",
+      MOTIVATION_PROVEN_LINE
+    );
+    const continuePrompt = uiStringFromStateMap(
+      params.state,
+      "motivation.continuePrompt",
+      MOTIVATION_FIXED_CONTINUE_PROMPT
+    );
     const blocks: string[] = [
-      MOTIVATION_HIGHER_PURPOSE_OPENER,
-      MOTIVATION_PROVEN_LINE,
+      opener,
+      provenLine,
     ];
     if (essence) {
-      blocks.push(`Essence so far: "${essence}"`);
+      const essenceTemplate = uiStringFromStateMap(
+        params.state,
+        "motivation.essencePrefix",
+        uiDefaultString("motivation.essencePrefix", "Essence so far: \"{0}\"")
+      );
+      blocks.push(formatIndexedTemplate(essenceTemplate, [essence]).trim());
     }
-    blocks.push(buildMotivationContinueLine(params.stepId, params.renderedStatus));
+    blocks.push(buildMotivationContinueLine(params.state, params.stepId, params.renderedStatus));
     if (quote) blocks.push(quote);
 
     return {
@@ -3261,7 +3480,7 @@ export function applyMotivationQuotesContractV11(params: MotivationPolicyApplyPa
         ...specialist,
         action: "ASK",
         message: blocks.join("\n\n").trim(),
-        question: essence ? MOTIVATION_FIXED_CONTINUE_PROMPT : (questionRaw || MOTIVATION_FIXED_CONTINUE_PROMPT),
+        question: essence ? continuePrompt : (questionRaw || continuePrompt),
         user_intent: userIntent,
         meta_topic: "MODEL_VALUE",
         wants_recap: false,
@@ -3291,9 +3510,21 @@ export function applyMotivationQuotesContractV11(params: MotivationPolicyApplyPa
 }
 
 function buildModelCredibilityMessage(stepId: string, state: CanvasState): string {
+  const provenLine = uiStringFromStateMap(
+    state,
+    "motivation.provenLine",
+    MOTIVATION_PROVEN_LINE
+  );
   return [
-    "This is a practical, step-by-step canvas model that turns ideas into clear choices and real trade-offs.",
-    MOTIVATION_PROVEN_LINE,
+    uiStringFromStateMap(
+      state,
+      "meta.modelCredibility.body",
+      uiDefaultString(
+        "meta.modelCredibility.body",
+        "This is a practical, step-by-step canvas model that turns ideas into clear choices and real trade-offs."
+      )
+    ),
+    provenLine,
     offTopicRedirectLine(stepId, state),
   ].join(" ");
 }
@@ -3333,8 +3564,8 @@ export function applyCentralMetaTopicRouter(params: {
     return {
       ...base,
       message: essence
-        ? `${buildBenProfileMessage()}\n\n${essence}`
-        : buildBenProfileMessage(),
+        ? `${buildBenProfileMessage(params.state)}\n\n${essence}`
+        : buildBenProfileMessage(params.state),
     };
   }
 
@@ -3445,7 +3676,7 @@ export function normalizeNonStep0OfftopicSpecialist(params: {
       ...specialist,
       action: "ASK",
       is_offtopic: true,
-      message: buildBenProfileMessage(),
+      message: buildBenProfileMessage(params.state),
       __offtopic_meta_passthrough: "true",
       wording_choice_pending: "false",
       wording_choice_selected: "",
@@ -3886,11 +4117,16 @@ function applyWordingPickSelection(params: {
     stepId,
     chosen
   );
+  const targetField = fieldForStep(stepId);
+  const provisionalValue = targetField ? String((selected as any)?.[targetField] || "").trim() : "";
+  const stateForRender = provisionalValue
+    ? withProvisionalValue(state, stepId, provisionalValue, "wording_pick")
+    : state;
   let selectedWithContract = selected;
   let selectedContractId = String((selected as any)?.ui_contract_id || "");
   const rendered = renderFreeTextTurnPolicy({
     stepId,
-    state,
+    state: stateForRender,
     specialist: selected as Record<string, unknown>,
     previousSpecialist: prev as Record<string, unknown>,
   });
@@ -3913,16 +4149,11 @@ function applyWordingPickSelection(params: {
   };
   selectedContractId = String(rendered.contractId || (selectedWithContract as any)?.ui_contract_id || "");
   const nextState: CanvasState = {
-    ...state,
+    ...stateForRender,
     last_specialist_result: selectedWithContract,
   };
-  const targetField = fieldForStep(stepId);
-  const provisionalValue = targetField ? String((selectedWithContract as any)?.[targetField] || "").trim() : "";
-  const nextStateWithProvisional = provisionalValue
-    ? withProvisionalValue(nextState, stepId, provisionalValue)
-    : nextState;
-  applyUiPhaseByStep(nextStateWithProvisional, stepId, selectedContractId);
-  return { handled: true, specialist: selectedWithContract, nextState: nextStateWithProvisional };
+  applyUiPhaseByStep(nextState, stepId, selectedContractId);
+  return { handled: true, specialist: selectedWithContract, nextState };
 }
 
 function buildWordingChoiceFromPendingSpecialist(
@@ -4128,8 +4359,8 @@ function labelForActionInMenu(menuId: string, actionCode: string): string {
   if (actionCodes.length === 0) return "";
   const idx = actionCodes.findIndex((code) => code === safeActionCode);
   if (idx < 0) return "";
-  const labels = Array.isArray(MENU_LABELS[safeMenuId]) ? MENU_LABELS[safeMenuId] : [];
-  return String(labels[idx] || "").trim();
+  const labelKey = labelKeyForMenuAction(safeMenuId, safeActionCode, idx);
+  return String(MENU_LABEL_DEFAULTS[labelKey] || "").trim();
 }
 
 function buildUiPayload(
@@ -4156,8 +4387,15 @@ function buildUiPayload(
 } | undefined {
   const localDev = shouldLogLocalDevDiagnostics();
   const flags = { ...(flagsOverride || {}) };
-  if (String(process.env.UI_I18N_V2 || "").trim()) flags.ui_i18n_v2 = isUiI18nV2Enabled();
-  if (String(process.env.MENU_LABEL_KEYS_V1 || "").trim()) flags.menu_label_keys_v1 = isMenuLabelKeysV1Enabled();
+  if (String(process.env.UI_I18N_V2 || process.env.UI_I18N_V3_TEXT_KEYS || "").trim()) {
+    flags.ui_i18n_v2 = isUiI18nV2Enabled();
+  }
+  if (String(process.env.MENU_LABEL_KEYS_V1 || process.env.UI_I18N_V3_MENU_KEY_ONLY || "").trim()) {
+    flags.menu_label_keys_v1 = isMenuLabelKeysV1Enabled();
+  }
+  if (String(process.env.UI_I18N_V3_LANG_BOOTSTRAP || "").trim()) {
+    flags.ui_i18n_v3_lang_bootstrap = isUiI18nV3LangBootstrapEnabled();
+  }
   const introChromeRaw = String((specialist as any)?.ui_show_step_intro_chrome || "").trim().toLowerCase();
   if ((specialist as any)?.ui_show_step_intro_chrome === true || introChromeRaw === "true") {
     flags.show_step_intro_chrome = true;
@@ -4322,29 +4560,17 @@ function validateUiPayloadContractParity(response: Record<string, unknown>): str
   if (!menuId) return "ui_contract_missing_menu_id";
   const actions = Array.isArray(ui.actions) ? (ui.actions as Array<Record<string, unknown>>) : [];
   if (actions.length !== actionCodes.length) return "ui_actions_count_mismatch";
-  if (isMenuLabelKeysV1Enabled()) {
-    const expectedLabelKeys = labelKeysForMenuActionCodes(menuId, actionCodes);
-    if (expectedLabelKeys.length !== actionCodes.length) return "ui_contract_labelkeys_or_actioncodes_mismatch";
-    for (let i = 0; i < actionCodes.length; i += 1) {
-      const action = actions[i] || {};
-      const actionCode = String(action.action_code || "").trim();
-      const label = String(action.label || "").trim();
-      const labelKeyRaw = String(action.label_key || "").trim();
-      const labelKey = labelKeyRaw || labelKeyForMenuAction(menuId, actionCode, i);
-      if (actionCode !== actionCodes[i]) return `ui_actions_actioncode_mismatch_at_${i + 1}`;
-      if (labelKey !== expectedLabelKeys[i]) return `ui_actions_label_key_mismatch_at_${i + 1}`;
-      if (!label) return `ui_actions_label_missing_at_${i + 1}`;
-    }
-    return null;
-  }
-  const expectedLabels = labelsForMenuActionCodes(menuId, actionCodes);
-  if (expectedLabels.length !== actionCodes.length) return "ui_contract_labels_or_actioncodes_mismatch";
+  const expectedLabelKeys = labelKeysForMenuActionCodes(menuId, actionCodes);
+  if (expectedLabelKeys.length !== actionCodes.length) return "ui_contract_labelkeys_or_actioncodes_mismatch";
   for (let i = 0; i < actionCodes.length; i += 1) {
     const action = actions[i] || {};
     const actionCode = String(action.action_code || "").trim();
+    const labelKeyRaw = String(action.label_key || "").trim();
+    const labelKey = labelKeyRaw || labelKeyForMenuAction(menuId, actionCode, i);
     const label = String(action.label || "").trim();
     if (actionCode !== actionCodes[i]) return `ui_actions_actioncode_mismatch_at_${i + 1}`;
-    if (label !== expectedLabels[i]) return `ui_actions_label_mismatch_at_${i + 1}`;
+    if (labelKey !== expectedLabelKeys[i]) return `ui_actions_label_key_mismatch_at_${i + 1}`;
+    if (!label) return `ui_actions_label_missing_at_${i + 1}`;
   }
   return null;
 }
@@ -4553,11 +4779,16 @@ function countAlphaChars(input: string): number {
 }
 
 type UiI18nTelemetryCounters = {
+  legacy_i18n_migration_count: number;
+  ui_strings_missing_keys: number;
   translation_fallbacks: number;
   translation_missing_keys: number;
   translation_html_violations: number;
   parity_errors: number;
   parity_recovered: number;
+  confirm_gate_blocked_count: number;
+  step0_escape_ready_recovered_count: number;
+  wording_body_sanitized_count: number;
 };
 
 function bumpUiI18nCounter(
@@ -4606,6 +4837,35 @@ function sanitizeTranslatedUiStrings(
   if (missingKeys > 0) bumpUiI18nCounter(telemetry, "translation_missing_keys", missingKeys);
   if (htmlViolations > 0) bumpUiI18nCounter(telemetry, "translation_html_violations", htmlViolations);
   return next;
+}
+
+function migrateLegacyI18nState(
+  state: CanvasState,
+  telemetry?: UiI18nTelemetryCounters | null
+): CanvasState {
+  const existingRaw = (state as any).ui_strings;
+  const existing = existingRaw && typeof existingRaw === "object"
+    ? (existingRaw as Record<string, unknown>)
+    : null;
+  if (!existing) return state;
+  const nextUi: Record<string, string> = {};
+  let missingKeys = 0;
+  for (const key of UI_STRINGS_KEYS) {
+    const candidate = String(existing[key] || "");
+    if (candidate.trim() || !String(UI_STRINGS_WITH_MENU_KEYS[key] || "").trim()) {
+      nextUi[key] = candidate;
+      continue;
+    }
+    nextUi[key] = String(UI_STRINGS_WITH_MENU_KEYS[key] || "");
+    missingKeys += 1;
+  }
+  if (missingKeys <= 0) return state;
+  bumpUiI18nCounter(telemetry, "legacy_i18n_migration_count");
+  bumpUiI18nCounter(telemetry, "ui_strings_missing_keys", missingKeys);
+  return {
+    ...(state as any),
+    ui_strings: nextUi,
+  } as CanvasState;
 }
 
 async function detectLanguageHeuristic(text: string): Promise<{ lang: string; confident: boolean }> {
@@ -4991,6 +5251,7 @@ export function applyStateUpdate(params: {
   decision: OrchestratorOutput;
   specialistResult: any;
   showSessionIntroUsed: BoolString;
+  provisionalSource?: ProvisionalSource;
 }): CanvasState {
   const { prev, decision, specialistResult, showSessionIntroUsed } = params;
 
@@ -4998,6 +5259,7 @@ export function applyStateUpdate(params: {
   const isOfftopic = specialistResult?.is_offtopic === true;
   const next_step = String(decision.current_step ?? "");
   const active_specialist = String(decision.specialist_to_call ?? "");
+  const provisionalSource: ProvisionalSource = params.provisionalSource || "system_generated";
 
   let nextState: CanvasState = {
     ...prev,
@@ -5021,7 +5283,7 @@ export function applyStateUpdate(params: {
   if (next_step === STEP_0_ID) {
     if (typeof specialistResult?.step_0 === "string" && specialistResult.step_0.trim()) {
       (nextState as any).step_0_final = specialistResult.step_0.trim();
-      nextState = withProvisionalValue(nextState, STEP_0_ID, specialistResult.step_0.trim());
+      nextState = withProvisionalValue(nextState, STEP_0_ID, specialistResult.step_0.trim(), provisionalSource);
     }
     if (typeof specialistResult?.business_name === "string" && specialistResult.business_name.trim()) {
       (nextState as any).business_name = specialistResult.business_name.trim();
@@ -5033,7 +5295,7 @@ export function applyStateUpdate(params: {
     const fallback = typeof fallbackRaw === "string" ? fallbackRaw.trim() : "";
     const value = primary || fallback;
     if (!value) return;
-    nextState = withProvisionalValue(nextState, stepId, value);
+    nextState = withProvisionalValue(nextState, stepId, value, provisionalSource);
   };
 
   // ---- Stage per-step value (temporary final until explicit next-step confirm) ----
@@ -5061,7 +5323,7 @@ export function applyStateUpdate(params: {
     if (firstSentence) {
       const words = firstSentence.split(/\s+/).filter(Boolean);
       const trimmed = words.length > 10 ? words.slice(0, 10).join(" ") : firstSentence;
-      nextState = withProvisionalValue(nextState, TARGETGROUP_STEP_ID, trimmed);
+      nextState = withProvisionalValue(nextState, TARGETGROUP_STEP_ID, trimmed, provisionalSource);
     }
   }
   if (next_step === PRODUCTSSERVICES_STEP_ID) {
@@ -5577,8 +5839,8 @@ function buildTransientFallbackSpecialist(state: CanvasState): Record<string, un
   if (stepId === STEP_0_ID) {
     return {
       action: "ASK",
-      message: STEP0_CARDDESC_EN,
-      question: step0QuestionForLang(langFromState(state)),
+      message: step0CardDescForState(state),
+      question: step0QuestionForState(state),
       refined_formulation: "",
       business_name: String((state as any).business_name || "TBD"),
       step_0: "",
@@ -5634,7 +5896,11 @@ function buildRateLimitErrorPayload(state: CanvasState, err: any): RunStepError 
     error: {
       type: "rate_limited",
       retry_after_ms: retryAfterMs,
-      user_message: "Please wait a moment and try again.",
+      user_message: uiStringFromStateMap(
+        state,
+        "transient.rate_limited",
+        uiDefaultString("transient.rate_limited", "Please wait a moment and try again.")
+      ),
       retry_action: "retry_same_action",
     },
   }, last);
@@ -5664,7 +5930,11 @@ function buildTimeoutErrorPayload(state: CanvasState, err: any): RunStepError {
     state,
     error: {
       type: "timeout",
-      user_message: "This is taking longer than usual. Please try again.",
+      user_message: uiStringFromStateMap(
+        state,
+        "transient.timeout",
+        uiDefaultString("transient.timeout", "This is taking longer than usual. Please try again.")
+      ),
       retry_action: "retry_same_action",
     },
   }, last);
@@ -5817,11 +6087,16 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const tokenLoggingEnabled = envFlagEnabled("BSC_TOKEN_LOGGING_V1", process.env.LOCAL_DEV === "1");
   const llmTurnAccumulator = createTurnLlmAccumulator();
   const uiI18nTelemetry: UiI18nTelemetryCounters = {
+    legacy_i18n_migration_count: 0,
+    ui_strings_missing_keys: 0,
     translation_fallbacks: 0,
     translation_missing_keys: 0,
     translation_html_violations: 0,
     parity_errors: 0,
     parity_recovered: 0,
+    confirm_gate_blocked_count: 0,
+    step0_escape_ready_recovered_count: 0,
+    wording_body_sanitized_count: 0,
   };
 
   const rememberLlmCall = (value: { attempts: number; usage: LLMUsage; model: string }) => {
@@ -5846,6 +6121,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   const rawLegacyMarkers = detectLegacySessionMarkers((args.state ?? {}) as Record<string, unknown>);
   let state = normalizeState(args.state ?? {});
+  state = migrateLegacyI18nState(state, uiI18nTelemetry);
   const incomingPhaseRaw =
     rawState && typeof (rawState as any).__ui_phase_by_step === "object" && (rawState as any).__ui_phase_by_step !== null
       ? ((rawState as any).__ui_phase_by_step as Record<string, unknown>)
@@ -6086,6 +6362,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   const ensureLanguage = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
     const translationModel = resolveTranslationModel(routeOrText);
+    if (!isUiI18nV3LangBootstrapEnabled()) {
+      return ensureUiStringsForState(targetState, translationModel, uiI18nTelemetry);
+    }
     return ensureLanguageFromUserMessage(targetState, routeOrText, translationModel, uiI18nTelemetry);
   };
 
@@ -6196,14 +6475,20 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     return fromRefine;
   }
 
-  function buildBigWhyTooLongFeedback(lang: string): any {
-    const isNl = String(lang || "").toLowerCase().startsWith("nl");
-    const message = isNl
-      ? "Je formulering is langer dan 28 woorden. Kort en bondig is duidelijker, dus graag een compacte versie."
-      : "Your formulation is longer than 28 words. Short and clear is better, so please provide a compact version.";
-    const question = isNl
-      ? "Wil je het herschrijven tot maximaal 28 woorden?"
-      : "Can you rewrite it in 28 words or fewer?";
+  function buildBigWhyTooLongFeedback(stateForText: CanvasState): any {
+    const message = uiStringFromStateMap(
+      stateForText,
+      "bigwhy.tooLong.message",
+      uiDefaultString(
+        "bigwhy.tooLong.message",
+        "Your formulation is longer than 28 words. Short and clear is better, so please provide a compact version."
+      )
+    );
+    const question = uiStringFromStateMap(
+      stateForText,
+      "bigwhy.tooLong.question",
+      uiDefaultString("bigwhy.tooLong.question", "Can you rewrite it in 28 words or fewer?")
+    );
     return {
       action: "REFINE",
       message,
@@ -6334,7 +6619,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     } else {
       if (finalInfo.field && finalInfo.value) {
         (state as any)[finalInfo.field] = finalInfo.value;
-        state = withProvisionalValue(state, stepId, "");
+        state = clearProvisionalValue(state, stepId);
       }
       const nextStepForProceed = resolvedTransition?.targetStepId || String(ACTIONCODE_STEP_TRANSITIONS[actionCodeRaw] || stepId);
       (state as any).current_step = String(nextStepForProceed || stepId);
@@ -6436,7 +6721,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: String((state as any).active_specialist || ""),
-        text: "We could not process this choice. Please refresh and try again.",
+        text: uiStringFromStateMap(
+          state,
+          "error.unknownAction",
+          uiDefaultString("error.unknownAction", "We could not process this choice. Please refresh and try again.")
+        ),
         prompt: "",
         specialist: lastSpecialistResult || {},
         state,
@@ -6626,6 +6915,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         decision: forcedDecision,
         specialistResult: specialist,
         showSessionIntroUsed: "false",
+        provisionalSource: "action_route",
       });
       setDreamRuntimeMode(nextStatePicked, "self");
       const renderedPicked = renderFreeTextTurnPolicy({
@@ -6714,6 +7004,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         decision: forcedDecision,
         specialistResult: specialist,
         showSessionIntroUsed: "false",
+        provisionalSource: "action_route",
       });
       const renderedPicked = renderFreeTextTurnPolicy({
         stepId: String((nextStatePicked as any).current_step ?? ""),
@@ -6776,7 +7067,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         cwd: process.cwd(),
         hasTemplate: hasPresentationTemplate(),
       });
-      const { fileName, filePath } = generatePresentationPptx(state, lang);
+      const { fileName, filePath } = generatePresentationPptx(state);
       console.log("[presentation] PPTX generated", { fileName, filePath });
       const outDir = path.join(os.tmpdir(), "business-canvas-presentations");
       const pdfPath = convertPptxToPdf(filePath, outDir);
@@ -6792,10 +7083,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       const pdfUrl = baseUrl ? `${baseUrl}/presentations/${pdfFile}` : `/presentations/${pdfFile}`;
       const pngUrl = baseUrl ? `${baseUrl}/presentations/${pngFile}` : `/presentations/${pngFile}`;
 
-      const message =
-        lang.startsWith("nl")
-          ? `Je presentatie is klaar.`
-          : `Your presentation is ready.`;
+      const message = uiStringFromStateMap(
+        state,
+        "presentation.ready",
+        uiDefaultString("presentation.ready", "Your presentation is ready.")
+      );
 
       const specialist: PresentationOutput = {
         action: "ASK",
@@ -6830,10 +7122,14 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       }, specialist, responseUiFlags));
     } catch (err) {
       console.error("[presentation] Generation failed", err);
-      const message =
-        lang.startsWith("nl")
-          ? "Het maken van de presentatie is mislukt. Controleer of de template bestaat en probeer het opnieuw."
-          : "Presentation generation failed. Please check that the template exists and try again.";
+      const message = uiStringFromStateMap(
+        state,
+        "presentation.error",
+        uiDefaultString(
+          "presentation.error",
+          "Presentation generation failed. Please check that the template exists and try again."
+        )
+      );
 
       const specialist: PresentationOutput = {
         action: "ASK",
@@ -6960,6 +7256,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         decision: forcedDecision,
         specialistResult: formulationResult,
         showSessionIntroUsed: "false",
+        provisionalSource: "system_generated",
       });
       (nextStateFormulation as any).dream_builder_statements = statements;
       setDreamRuntimeMode(nextStateFormulation, "builder_refine");
@@ -7123,6 +7420,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       decision: forcedDecision,
       specialistResult: callDream.value.specialistResult,
       showSessionIntroUsed: "false",
+      provisionalSource: "system_generated",
     });
     setDreamRuntimeMode(nextStateSwitch, "self");
     const renderedSwitch = renderFreeTextTurnPolicy({
@@ -7190,7 +7488,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       const startHint =
         typeof (stateWithUi as any).ui_strings?.startHint === "string"
           ? String((stateWithUi as any).ui_strings.startHint)
-          : "Click Start in the widget to begin.";
+          : uiDefaultString("startHint", "Click Start in the widget to begin.");
       const specialist: ValidationAndBusinessNameOutput = {
         action: "ASK",
         message: "",
@@ -7222,11 +7520,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     if (isReuseFirst) {
       const stateWithUi = await ensureUiStrings(state, userMessage);
       (state as any).intro_shown_session = "true";
-      const prompt = String(existingFirst.question || "").trim() || step0QuestionForLang(langFromState(state));
+      const prompt = String(existingFirst.question || "").trim() || step0QuestionForState(state);
       const specialistForReuse = {
         ...existingFirst,
         action: "ASK",
-        message: STEP0_CARDDESC_EN,
+        message: step0CardDescForState(state),
         question: prompt,
       };
       return finalizeResponse(attachRegistryPayload({
@@ -7234,7 +7532,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
-        text: STEP0_CARDDESC_EN,
+        text: step0CardDescForState(state),
         prompt,
         specialist: specialistForReuse,
         state: { ...stateWithUi, active_specialist: STEP_0_SPECIALIST, last_specialist_result: specialistForReuse },
@@ -7247,23 +7545,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
     // If Step 0 is already known, show readiness as a one-action menu.
     if (step0Final) {
-      const nameMatch = step0Final.match(/Name:\s*([^|]+)\s*(\||$)/i);
-      const ventureMatch = step0Final.match(/Venture:\s*([^|]+)\s*(\||$)/i);
-      const statusMatch = step0Final.match(/Status:\s*(existing|starting)\s*(\||$)/i);
-
-      const venture = (ventureMatch?.[1] || "venture").trim();
-      const name = (nameMatch?.[1] || (state as any).business_name || "TBD").trim();
-      const status = (statusMatch?.[1] || "starting").toLowerCase();
-      const statement =
-        status === "existing"
-          ? `You have a ${venture} called ${name}.`
-          : `You want to start a ${venture} called ${name}.`;
-      const confirmReady = " Are you ready to start with the first step: the Dream?";
+      const parsed = parseStep0Final(step0Final, String((state as any).business_name || "TBD"));
+      const name = String(parsed.name || "TBD").trim();
 
       const specialist: ValidationAndBusinessNameOutput = {
         action: "ASK",
         message: "",
-        question: `1) Yes, I'm ready. Let's start!\n\n${statement}${confirmReady}`,
+        question: step0ReadinessQuestion(state, parsed),
         refined_formulation: "",
         business_name: name || "TBD",
         step_0: step0Final,
@@ -7299,8 +7587,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const stateWithUi = await ensureUiStrings(state, userMessage);
     const specialist: ValidationAndBusinessNameOutput = {
       action: "ASK",
-      message: STEP0_CARDDESC_EN,
-      question: step0QuestionForLang(langFromState(state)),
+      message: step0CardDescForState(state),
+      question: step0QuestionForState(state),
       refined_formulation: "",
       business_name: (state as any).business_name || "TBD",
       step_0: "",
@@ -7355,6 +7643,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       decision: forcedDecision,
       specialistResult: callDreamExplainer.value.specialistResult,
       showSessionIntroUsed: "false",
+      provisionalSource: "action_route",
     });
     if (Array.isArray(callDreamExplainer.value.specialistResult?.statements)) {
       (nextStateDream as any).dream_builder_statements = (callDreamExplainer.value.specialistResult.statements as unknown[])
@@ -7632,7 +7921,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       specialistResult = callShorten.value.specialistResult;
       const shortened = pickBigWhyCandidate(specialistResult);
       if (!shortened || countWords(shortened) > BIGWHY_MAX_WORDS) {
-        specialistResult = buildBigWhyTooLongFeedback(lang);
+        specialistResult = buildBigWhyTooLongFeedback(state);
       }
     }
   }
@@ -7662,12 +7951,21 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     state,
   });
   if (currentStepIdForOfftopic === STEP_0_ID) {
+    const sourceActionStep0 = String((specialistResult as any)?.action || "").trim().toUpperCase();
     specialistResult = normalizeStep0AskDisplayContract(
       STEP_0_ID,
       specialistResult,
       state,
       userMessage
     );
+    const normalizedActionStep0 = String((specialistResult as any)?.action || "").trim().toUpperCase();
+    if (
+      sourceActionStep0 === "ESCAPE" &&
+      normalizedActionStep0 === "ASK" &&
+      hasValidStep0Final(String((state as any).step_0_final || ""))
+    ) {
+      bumpUiI18nCounter(uiI18nTelemetry, "step0_escape_ready_recovered_count");
+    }
   }
 
   let nextState = applyStateUpdate({
@@ -7675,6 +7973,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     decision: decision1,
     specialistResult,
     showSessionIntroUsed: "false",
+    provisionalSource: actionCodeRaw ? "action_route" : "user_input",
   });
   if (
     decision1.specialist_to_call === DREAM_EXPLAINER_SPECIALIST &&
@@ -7772,7 +8071,36 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   const stepForClaimSanitizer = String((nextState as any).current_step ?? "");
   const hasWordingChoicePanel = String((specialistResult as any)?.wording_choice_pending || "") === "true";
-  if (!hasWordingChoicePanel) {
+  if (hasWordingChoicePanel && isWordingPanelCleanBodyV1Enabled()) {
+    const currentMessage = String((specialistResult as any)?.message || "");
+    const wordingMode = String((specialistResult as any)?.wording_choice_mode || "text") === "list" ? "list" : "text";
+    const suggestionText = String(
+      (specialistResult as any)?.wording_choice_agent_current ||
+      (specialistResult as any)?.refined_formulation ||
+      ""
+    ).trim();
+    const knownItems = mergeListItems(
+      Array.isArray((specialistResult as any)?.wording_choice_user_items)
+        ? ((specialistResult as any).wording_choice_user_items as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+        : [],
+      Array.isArray((specialistResult as any)?.wording_choice_suggestion_items)
+        ? ((specialistResult as any).wording_choice_suggestion_items as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+        : []
+    );
+    const pendingSanitized = compactWordingPanelBody(
+      wordingMode === "list"
+        ? sanitizePendingListMessage(currentMessage, knownItems.length > 0 ? knownItems : splitSentenceItems(suggestionText))
+        : sanitizePendingTextMessage(currentMessage, suggestionText)
+    );
+    if (pendingSanitized !== currentMessage) {
+      specialistResult = {
+        ...specialistResult,
+        message: pendingSanitized,
+      };
+      (nextState as any).last_specialist_result = specialistResult;
+      bumpUiI18nCounter(uiI18nTelemetry, "wording_body_sanitized_count");
+    }
+  } else if (!hasWordingChoicePanel) {
     const field = fieldForStep(stepForClaimSanitizer);
     const fieldValue = field ? String((specialistResult as any)?.[field] || "").trim() : "";
     const refinedValue = String((specialistResult as any)?.refined_formulation || "").trim();
@@ -7928,6 +8256,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     activeSpecialist: String((nextState as any).active_specialist || ""),
     canonicalStatementCount: canonicalDreamBuilderStatementsCount,
     wordingChoicePending: requireWordingPick || Boolean(wordingChoiceOverride?.enabled),
+    state: nextState,
   });
   if (!requireWordingPick && !wordingChoiceOverride?.enabled) {
     const motivationApplied = applyMotivationQuotesContractV11({

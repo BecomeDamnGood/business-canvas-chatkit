@@ -1,5 +1,5 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
-import { MENU_LABELS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "./menu_contract.js";
+import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "./menu_contract.js";
 import type { CanvasState } from "./state.js";
 import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
@@ -8,7 +8,6 @@ import {
   UI_CONTRACT_VERSION,
   buildContractId,
   buildContractTextKeys,
-  buildHeadlineForContract,
 } from "./ui_contract_matrix.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
@@ -79,6 +78,20 @@ const FINAL_FIELD_BY_STEP: Record<string, string> = {
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
 
+function envFlagEnabled(name: string, fallback: boolean): boolean {
+  const raw = String(process.env[name] ?? "").trim().toLowerCase();
+  if (!raw) return fallback;
+  return !["0", "false", "off", "no"].includes(raw);
+}
+
+function isConfirmGateAcceptedOnlyV1Enabled(): boolean {
+  return envFlagEnabled("UI_CONFIRM_GATE_ACCEPTED_ONLY_V1", true);
+}
+
+function isStep0EscapeReadyGuardV1Enabled(): boolean {
+  return envFlagEnabled("UI_STEP0_ESCAPE_READY_GUARD_V1", true);
+}
+
 function normalizeDreamRuntimeMode(raw: unknown): DreamRuntimeMode {
   const mode = String(raw || "").trim();
   if (mode === "builder_collect" || mode === "builder_scoring" || mode === "builder_refine") return mode;
@@ -95,6 +108,37 @@ function provisionalForStep(state: CanvasState, stepId: string): string {
       ? ((state as any).provisional_by_step as Record<string, unknown>)
       : {};
   return String(raw[stepId] || "").trim();
+}
+
+function provisionalSourceForStep(state: CanvasState, stepId: string): string {
+  const raw =
+    (state as any).provisional_source_by_step && typeof (state as any).provisional_source_by_step === "object"
+      ? ((state as any).provisional_source_by_step as Record<string, unknown>)
+      : {};
+  const source = String(raw[stepId] || "").trim();
+  if (
+    source === "user_input" ||
+    source === "wording_pick" ||
+    source === "action_route" ||
+    source === "system_generated"
+  ) {
+    return source;
+  }
+  return "system_generated";
+}
+
+function isAcceptedProvisional(state: CanvasState, stepId: string): boolean {
+  const provisional = provisionalForStep(state, stepId);
+  if (!provisional) return false;
+  const source = provisionalSourceForStep(state, stepId);
+  return source === "user_input" || source === "wording_pick" || source === "action_route";
+}
+
+function isAcceptedOutput(stepId: string, state: CanvasState): boolean {
+  const finalField = FINAL_FIELD_BY_STEP[stepId] || "";
+  const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
+  if (committedFinal) return true;
+  return isAcceptedProvisional(state, stepId);
 }
 
 function parseStep0Line(step0Line: string): { venture: string; name: string; status: string } {
@@ -222,6 +266,39 @@ function ensureSentenceEnd(raw: string): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
+function contractHeadlineForState(params: {
+  state: CanvasState;
+  stepId: string;
+  status: TurnOutputStatus;
+  stepLabel: string;
+  companyName: string;
+  hasOptions: boolean;
+  strategyStatementCount?: number;
+}): string {
+  if (params.stepId === "strategy" && Number(params.strategyStatementCount || 0) >= 1) {
+    return uiStringFromState(
+      params.state,
+      "contract.headline.strategy.moreFocus",
+      "What more do you focus on within your strategy?"
+    );
+  }
+  const prefix = params.status === "no_output"
+    ? uiStringFromState(params.state, "contract.headline.define", "Define")
+    : uiStringFromState(params.state, "contract.headline.refine", "Refine");
+  const templateWithOptions = uiStringFromState(
+    params.state,
+    "contract.headline.withOptions",
+    "{0} your {1} for {2} or choose an option."
+  );
+  const templateWithoutOptions = uiStringFromState(
+    params.state,
+    "contract.headline.withoutOptions",
+    "{0} your {1} for {2}."
+  );
+  const template = params.hasOptions ? templateWithOptions : templateWithoutOptions;
+  return formatIndexedTemplate(template, [prefix, params.stepLabel, params.companyName]).trim();
+}
+
 function offTopicStepLabel(stepId: string, state: CanvasState): string {
   const key = OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP[stepId] || "";
   if (!key) return STEP_LABELS[stepId] || "Current step";
@@ -297,19 +374,30 @@ function comparableText(raw: string): string {
     .trim();
 }
 
-function englishIndefiniteArticle(nounPhrase: string): "a" | "an" {
-  const lower = String(nounPhrase || "").trim().toLowerCase();
-  if (!lower) return "a";
-  return /^[aeiou]/.test(lower) ? "an" : "a";
-}
-
-function step0ConfirmQuestion(venture: string, name: string): string {
+function step0ConfirmQuestion(state: CanvasState, venture: string, name: string, status: string): string {
   const cleanVenture = String(venture || "").trim();
   const cleanName = String(name || "").trim();
+  const suffix = uiStringFromState(
+    state,
+    "step0.readiness.suffix",
+    STEP0_CONFIRM_SUFFIX_EN
+  );
+  const existingTemplate = uiStringFromState(
+    state,
+    "step0.readiness.statement.existing",
+    "You have a {0} called {1}."
+  );
+  const startingTemplate = uiStringFromState(
+    state,
+    "step0.readiness.statement.starting",
+    "You want to start a {0} called {1}."
+  );
+  const statementTemplate = String(status || "").toLowerCase() === "starting" ? startingTemplate : existingTemplate;
   if (cleanVenture && cleanName) {
-    return `You have ${englishIndefiniteArticle(cleanVenture)} ${cleanVenture} called ${cleanName}. ${STEP0_CONFIRM_SUFFIX_EN}`;
+    const statement = formatIndexedTemplate(statementTemplate, [cleanVenture, cleanName]).trim();
+    return `${statement} ${suffix}`.trim();
   }
-  return STEP0_CONFIRM_SUFFIX_EN;
+  return suffix;
 }
 
 function isStep0MetaMessage(message: string): boolean {
@@ -454,8 +542,11 @@ function computeStatus(
   const finalField = FINAL_FIELD_BY_STEP[stepId] || "";
   const committedFinalValue = finalField ? String((state as any)[finalField] ?? "").trim() : "";
   const provisionalValue = provisionalForStep(state, stepId);
-  const finalValue = provisionalValue || committedFinalValue;
+  const acceptedOutput = isAcceptedOutput(stepId, state);
+  const acceptedValue = committedFinalValue || (isAcceptedProvisional(state, stepId) ? provisionalValue : "");
+  const finalValue = acceptedValue;
   const candidate = extractCandidate(stepId, specialist, prev);
+  const visibleValue = acceptedValue || provisionalValue || candidate;
   const statementCount = extractStatementCount(specialist, prev);
   const statementBullets = statementCount > 0
     ? Array.from({ length: statementCount }, (_, idx) => {
@@ -471,11 +562,11 @@ function computeStatus(
   if (stepId === "dream") {
     const dreamMode = dreamRuntimeModeFromState(state);
     if (dreamMode === "builder_collect") {
-      if (statementCount > 0 || candidate || finalValue) {
+      if (statementCount > 0 || visibleValue) {
         return {
           status: "incomplete_output",
           confirmEligible: false,
-          recapBody: statementBullets || candidate || finalValue,
+          recapBody: statementBullets || visibleValue,
           statementCount,
         };
       }
@@ -485,35 +576,37 @@ function computeStatus(
       return {
         status: "no_output",
         confirmEligible: false,
-        recapBody: statementBullets || candidate || finalValue,
+        recapBody: statementBullets || visibleValue,
         statementCount,
       };
     }
     if (dreamMode === "builder_refine") {
-      if (candidate || finalValue) {
+      if (acceptedOutput && acceptedValue) {
         return {
           status: "valid_output",
           confirmEligible: true,
-          recapBody: candidate || finalValue,
+          recapBody: acceptedValue,
           statementCount,
         };
       }
       return {
-        status: statementCount > 0 ? "incomplete_output" : "no_output",
+        status: statementCount > 0 || Boolean(visibleValue) ? "incomplete_output" : "no_output",
         confirmEligible: false,
-        recapBody: statementBullets || finalValue,
+        recapBody: statementBullets || visibleValue,
         statementCount,
       };
     }
 
-    const dreamValue = finalValue || candidate;
-    if (dreamValue) {
+    if (acceptedOutput && acceptedValue) {
       return {
         status: "valid_output",
         confirmEligible: true,
-        recapBody: dreamValue,
+        recapBody: acceptedValue,
         statementCount,
       };
+    }
+    if (visibleValue) {
+      return { status: "incomplete_output", confirmEligible: false, recapBody: visibleValue, statementCount };
     }
     return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
   }
@@ -522,19 +615,19 @@ function computeStatus(
     const strategyStatements = strategyStatementsFromSources(state, specialist, prev);
     const strategyCount = strategyStatements.length;
     const strategyBullets = strategyStatements.map((line) => `• ${line}`).join("\n");
-    if (strategyCount >= 4) {
+    if (strategyCount >= 4 && acceptedOutput) {
       return {
         status: "valid_output",
         confirmEligible: true,
-        recapBody: strategyBullets || finalValue || candidate,
+        recapBody: strategyBullets || acceptedValue || visibleValue,
         statementCount: strategyCount,
       };
     }
-    if (strategyCount > 0 || candidate) {
+    if (strategyCount > 0 || visibleValue) {
       return {
         status: "incomplete_output",
         confirmEligible: false,
-        recapBody: strategyBullets || candidate,
+        recapBody: strategyBullets || visibleValue,
         statementCount: strategyCount,
       };
     }
@@ -542,19 +635,19 @@ function computeStatus(
   }
 
   if (stepId === "rulesofthegame") {
-    if (finalValue || statementCount >= 3) {
+    if (acceptedOutput && (acceptedValue || statementCount >= 3)) {
       return {
         status: "valid_output",
         confirmEligible: true,
-        recapBody: finalValue || statementBullets || candidate,
+        recapBody: acceptedValue || statementBullets || visibleValue,
         statementCount,
       };
     }
-    if (statementCount > 0 || candidate) {
+    if (statementCount > 0 || visibleValue) {
       return {
         status: "incomplete_output",
         confirmEligible: false,
-        recapBody: statementBullets || candidate,
+        recapBody: statementBullets || visibleValue,
         statementCount,
       };
     }
@@ -562,18 +655,26 @@ function computeStatus(
   }
 
   if (stepId === "productsservices") {
-    if (finalValue || statementCount > 0 || candidate) {
+    if (acceptedOutput && (acceptedValue || statementCount > 0 || visibleValue)) {
       return {
         status: "valid_output",
         confirmEligible: true,
-        recapBody: finalValue || statementBullets || candidate,
+        recapBody: acceptedValue || statementBullets || visibleValue,
+        statementCount,
+      };
+    }
+    if (statementCount > 0 || visibleValue) {
+      return {
+        status: "incomplete_output",
+        confirmEligible: false,
+        recapBody: statementBullets || visibleValue,
         statementCount,
       };
     }
     return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
   }
 
-  const candidateDrivenValidSteps = new Set([
+  const acceptedDrivenValidSteps = new Set([
     "purpose",
     "bigwhy",
     "role",
@@ -581,15 +682,15 @@ function computeStatus(
     "targetgroup",
     "presentation",
   ]);
-  if (candidate && candidateDrivenValidSteps.has(stepId)) {
-    return { status: "valid_output", confirmEligible: true, recapBody: candidate, statementCount };
+  if (acceptedValue && acceptedDrivenValidSteps.has(stepId)) {
+    return { status: "valid_output", confirmEligible: true, recapBody: acceptedValue, statementCount };
   }
 
-  if (finalValue) {
-    return { status: "valid_output", confirmEligible: true, recapBody: finalValue, statementCount };
+  if (acceptedValue) {
+    return { status: "valid_output", confirmEligible: true, recapBody: acceptedValue, statementCount };
   }
-  if (candidate) {
-    return { status: "incomplete_output", confirmEligible: false, recapBody: candidate, statementCount };
+  if (visibleValue) {
+    return { status: "incomplete_output", confirmEligible: false, recapBody: visibleValue, statementCount };
   }
   return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
 }
@@ -606,13 +707,12 @@ function labelsForMenu(
     : [];
   if (fullActionCodes.length === 0) return [];
 
-  const allLabels = (MENU_LABELS[menuId] || []).slice(0, fullActionCodes.length);
-  if (allLabels.length !== fullActionCodes.length) return [];
-
   const usedIndices = new Set<number>();
   const filteredLabels: string[] = [];
   const labelKeys = labelKeysForMenu(menuId, actionCodes);
   if (labelKeys.length !== actionCodes.length) return [];
+  const fullLabelKeys = labelKeysForMenu(menuId, fullActionCodes);
+  if (fullLabelKeys.length !== fullActionCodes.length) return [];
   for (const actionCode of actionCodes) {
     let matchedIndex = -1;
     for (let i = 0; i < fullActionCodes.length; i += 1) {
@@ -623,7 +723,8 @@ function labelsForMenu(
     }
     if (matchedIndex < 0) return [];
     usedIndices.add(matchedIndex);
-    const fallback = String(allLabels[matchedIndex] || "").trim();
+    const fallbackKey = String(fullLabelKeys[matchedIndex] || "").trim();
+    const fallback = String(MENU_LABEL_DEFAULTS[fallbackKey] || "").trim();
     if (!fallback) return [];
     const key = String(labelKeys[filteredLabels.length] || "").trim();
     filteredLabels.push(uiStringFromState(state, key, fallback));
@@ -762,7 +863,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const sourceAction = String((specialist as any).action || "").trim().toUpperCase();
   const showStepIntroChrome = stepId !== "step_0" && sourceAction === "INTRO";
   const activeSpecialist = String((state as any).active_specialist ?? "").trim();
-  const stepLabel = STEP_LABELS[stepId] || "Current step";
+  const stepLabel = offTopicStepLabel(stepId, state);
   const companyName = companyNameForPrompt(state);
 
   const isOfftopic = specialist.is_offtopic === true;
@@ -770,7 +871,9 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const { status, confirmEligible, recapBody, statementCount } = computeStatus(stepId, state, statusSource, prev);
   const candidateText = extractCandidate(stepId, statusSource, prev);
   const statementOfftopicSteps = new Set(["dream", "purpose", "bigwhy", "role", "entity", "targetgroup", "presentation"]);
+  const allowOfftopicPromotion = !isConfirmGateAcceptedOnlyV1Enabled();
   const promoteIncompleteToValidForOfftopic =
+    allowOfftopicPromotion &&
     isOfftopic &&
     status === "incomplete_output" &&
     !confirmEligible &&
@@ -852,6 +955,16 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     const parsedStep0 = parseStep0Line(
       String((state as any).step_0_final ?? "").trim() || extractCandidate(stepId, statusSource, prev)
     );
+    const hasKnownStep0Output =
+      Boolean(parsedStep0.venture) &&
+      Boolean(parsedStep0.name) &&
+      (parsedStep0.status === "existing" || parsedStep0.status === "starting");
+    const step0CardDesc = uiStringFromState(state, "step0.carddesc", STEP0_CARDDESC_EN);
+    const step0InitialQuestion = uiStringFromState(
+      state,
+      "step0.question.initial",
+      STEP0_NO_OUTPUT_PROMPT_EN
+    );
     const specialistQuestion = String((specialistForDisplay as any).question ?? "").trim();
     const step0Message = (() => {
       const preserveSpecialistMessage =
@@ -860,9 +973,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         isStep0MetaMessage(answerText) ||
         String((specialistForDisplay as any).wants_recap || "").toLowerCase() === "true";
       if (preserveSpecialistMessage && answerText) return answerText;
-      return STEP0_CARDDESC_EN;
+      return step0CardDesc;
     })();
-    const step0MenuId = sourceAction === "ESCAPE"
+    const suppressEscapeMenu =
+      sourceAction === "ESCAPE" &&
+      !(isStep0EscapeReadyGuardV1Enabled() && hasKnownStep0Output);
+    const step0MenuId = suppressEscapeMenu
       ? ""
       : effectiveStatus === "valid_output"
         ? "STEP0_MENU_READY_START"
@@ -876,11 +992,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     const step0LabelKeys = step0MenuId
       ? labelKeysForMenu(step0MenuId, step0ActionCodes)
       : [];
-    const step0Headline = sourceAction === "ESCAPE" && specialistQuestion
+    const preserveEscapeHeadline =
+      sourceAction === "ESCAPE" &&
+      specialistQuestion &&
+      !(isStep0EscapeReadyGuardV1Enabled() && hasKnownStep0Output);
+    const step0Headline = preserveEscapeHeadline
       ? specialistQuestion
       : effectiveStatus === "valid_output"
-        ? step0ConfirmQuestion(parsedStep0.venture, parsedStep0.name)
-        : STEP0_NO_OUTPUT_PROMPT_EN;
+        ? step0ConfirmQuestion(state, parsedStep0.venture, parsedStep0.name, parsedStep0.status)
+        : step0InitialQuestion;
     const step0Question = step0ActionCodes.length > 0
       ? buildNumberedPrompt(step0Labels, step0Headline)
       : step0Headline;
@@ -922,7 +1042,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const safeActionCodes = resolved.actionCodes;
   const safeLabels = resolved.labels;
   const safeLabelKeys = resolved.labelKeys;
-  const headline = buildHeadlineForContract({
+  const headline = contractHeadlineForState({
+    state,
     stepId,
     stepLabel,
     companyName,

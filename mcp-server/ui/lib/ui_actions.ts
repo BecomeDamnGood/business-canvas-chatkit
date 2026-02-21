@@ -121,7 +121,22 @@ export function languageFromState(resultState: Record<string, unknown> | null | 
 }
 
 export function uiLang(resultState: Record<string, unknown> | null | undefined): string {
-  return languageFromState(resultState) || "en";
+  return languageFromState(resultState);
+}
+
+function uiText(
+  state: Record<string, unknown> | null | undefined,
+  key: string,
+  fallback: string
+): string {
+  const map = state?.ui_strings && typeof state.ui_strings === "object"
+    ? (state.ui_strings as Record<string, unknown>)
+    : null;
+  const fromState = map ? String(map[key] || "").trim() : "";
+  if (fromState) return fromState;
+  const lang = uiLang(state) || "en";
+  const translated = _t ? String(_t(lang, key) || "").trim() : "";
+  return translated || fallback;
 }
 
 export function ensureLanguageInState(
@@ -444,8 +459,9 @@ export async function callRunStep(
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
   const state = latest.state || { current_step: "step_0" };
 
-  const lang =
-    uiLang(state) || (typeof navigator !== "undefined" ? (navigator.language || "en").slice(0, 2).toLowerCase() : "en");
+  const widgetLang = String((widgetState().language || "")).trim().toLowerCase();
+  const navLang = typeof navigator !== "undefined" ? (navigator.language || "en").slice(0, 2).toLowerCase() : "en";
+  const lang = uiLang(state) || widgetLang || navLang || "en";
   let nextState = ensureLanguageInState(state, lang);
   if (extraState && typeof extraState === "object") {
     nextState = Object.assign({}, nextState, extraState);
@@ -489,7 +505,7 @@ export async function callRunStep(
         timeout_ms: timeoutMs,
       });
     }
-    setInlineNotice("This is taking longer than usual. Please try again.");
+    setInlineNotice(uiText(nextState, "transient.timeout", "This is taking longer than usual. Please try again."));
     setLoading(false);
   }, timeoutMs);
 
@@ -529,10 +545,16 @@ export async function callRunStep(
       (errorObj.retry_action === "retry_same_action" || errorObj.type === "rate_limited");
     if (transientRetryError) {
       if (errorObj.type === "rate_limited") {
-        setInlineNotice(errorObj.user_message || "Please wait a moment and try again.");
+        setInlineNotice(
+          errorObj.user_message ||
+            uiText(nextState, "transient.rate_limited", "Please wait a moment and try again.")
+        );
         lockRateLimit(errorObj.retry_after_ms ?? 1500);
       } else {
-        setInlineNotice(errorObj.user_message || "This is taking longer than usual. Please try again.");
+        setInlineNotice(
+          errorObj.user_message ||
+            uiText(nextState, "transient.timeout", "This is taking longer than usual. Please try again.")
+        );
       }
       return;
     }
@@ -555,7 +577,7 @@ export async function callRunStep(
           elapsed_ms: Date.now() - startedAt,
         });
       }
-      setInlineNotice("This is taking longer than usual. Please try again.");
+      setInlineNotice(uiText(nextState, "transient.timeout", "This is taking longer than usual. Please try again."));
       return;
     }
     console.error("run_step failed", e);

@@ -145,7 +145,7 @@ function wantsFullRestartCanvas(userMessage: string): boolean {
   if (canvasHit) return true;
 
   // If extremely short, allow "restart/reset" without needing "canvas".
-  if (words.length <= 3 && (t === "restart" || t === "reset" || t === "opnieuw" || t === "herstart")) {
+  if (words.length <= 3 && (t === "restart" || t === "reset")) {
     return true;
   }
 

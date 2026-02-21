@@ -102,7 +102,7 @@ function countSentences(text: string): number {
 
 function parseMenuFromContractId(contractIdRaw: unknown): string {
   const contractId = String(contractIdRaw || "").trim();
-  const match = contractId.match(/^[^:]+:phase:([A-Z0-9_]+)$/i);
+  const match = contractId.match(/^[^:]+:[^:]+:([A-Z0-9_]+)$/i);
   return match ? String(match[1] || "").trim() : "";
 }
 
@@ -1108,6 +1108,8 @@ test("DreamExplainer repeated off-topic does not fall back to Dream specialist",
 
 test("DreamExplainer refine adjust stays in refine loop and keeps both refine actions", async () => {
   const statements = Array.from({ length: 22 }, (_, idx) => `Statement ${idx + 1}`);
+  const acceptedDream =
+    "Mindd dreams of a world in which creative minds feel empowered to shape meaningful brands.";
   const result = await run_step({
     input_mode: "widget",
     user_message: "ACTION_DREAM_EXPLAINER_REFINE_ADJUST",
@@ -1121,6 +1123,12 @@ test("DreamExplainer refine adjust stays in refine loop and keeps both refine ac
       started: "true",
       business_name: "Mindd",
       dream_builder_statements: statements,
+      provisional_by_step: {
+        dream: acceptedDream,
+      },
+      provisional_source_by_step: {
+        dream: "wording_pick",
+      },
       __ui_phase_by_step: {
         dream: "dream:phase:DREAM_EXPLAINER_MENU_REFINE",
       },
@@ -1131,10 +1139,8 @@ test("DreamExplainer refine adjust stays in refine loop and keeps both refine ac
           "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Refine this formulation",
         suggest_dreambuilder: "true",
         statements,
-        refined_formulation:
-          "Mindd dreams of a world in which creative minds feel empowered to shape meaningful brands.",
-        dream:
-          "Mindd dreams of a world in which creative minds feel empowered to shape meaningful brands.",
+        refined_formulation: acceptedDream,
+        dream: acceptedDream,
         is_offtopic: false,
       },
     },
@@ -1188,7 +1194,7 @@ test("off-topic overlay keeps previous statement recap when no final exists yet"
   );
 });
 
-test("off-topic dream with existing candidate (no final) keeps both Dream refine actions", async () => {
+test("off-topic dream with existing candidate (no final, no accepted source) hides confirm action", async () => {
   const state = {
     ...getDefaultState(),
     current_step: "dream",
@@ -1224,12 +1230,9 @@ test("off-topic dream with existing candidate (no final) keeps both Dream refine
 
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.is_offtopic || ""), "true");
-  assert.equal(menuIdFromTurn(result), "DREAM_MENU_REFINE");
-  assert.deepEqual(result.ui?.action_codes, [
-    "ACTION_DREAM_REFINE_CONFIRM",
-    "ACTION_DREAM_REFINE_START_EXERCISE",
-  ]);
-  assert.equal(countNumberedOptions(String(result.prompt || "")), 2);
+  assert.equal(Array.isArray(result.ui?.action_codes), true);
+  assert.equal(Boolean((result.ui?.action_codes || []).includes("ACTION_DREAM_REFINE_CONFIRM")), false);
+  assert.equal(countNumberedOptions(String(result.prompt || "")), 1);
 });
 
 test("off-topic dream without candidate resets to intro menu with both intro actions", async () => {
@@ -1500,7 +1503,7 @@ test("Step 0 renderer fallback produces readiness ASK + menu when called directl
   });
 
   assert.equal(String(rendered.specialist.action || ""), "ASK");
-  assert.equal(parseMenuFromContractId((rendered as any).contractId), "");
+  assert.equal(parseMenuFromContractId((rendered as any).contractId), "STEP0_MENU_READY_START");
   assert.equal(String(rendered.specialist.question || "").includes("Are you ready to start with the first step: the Dream?"), true);
   assert.equal(String(rendered.specialist.message || "").includes("This is what we have established so far"), false);
 });
@@ -2320,8 +2323,8 @@ test("wording choice: pending list mode does not repeat suggestion paragraph in 
   });
 
   assert.equal(text.includes(s2), false);
-  assert.equal(text.includes("I've rewritten your wishes as future-facing statements and added them:"), true);
-  assert.equal(text.includes("Statements 1 to 3 noted."), true);
+  assert.equal(text.includes("I've rewritten your wishes as future-facing statements and added them:"), false);
+  assert.equal(text.includes("Statements 1 to 3 noted."), false);
 });
 
 test("step transition fast-path is actioncode-driven (no legacy confirm gate)", () => {
@@ -2751,6 +2754,8 @@ test("wording choice: strategy suggestion pick removes duplicate 'Focus point no
 });
 
 test("strategy overflow shows consolidate button and warning instead of explain", async () => {
+  const strategyText =
+    "Focus point 1\nFocus point 2\nFocus point 3\nFocus point 4\nFocus point 5\nFocus point 6\nFocus point 7\nFocus point 8";
   const result = await run_step({
     user_message: "ACTION_STRATEGY_REFINE_EXPLAIN_MORE",
     input_mode: "widget",
@@ -2761,6 +2766,12 @@ test("strategy overflow shows consolidate button and warning instead of explain"
       intro_shown_session: "true",
       started: "true",
       business_name: "Mindd",
+      provisional_by_step: {
+        strategy: strategyText,
+      },
+      provisional_source_by_step: {
+        strategy: "user_input",
+      },
       __ui_phase_by_step: {
         strategy: "strategy:phase:STRATEGY_MENU_CONFIRM",
       },
@@ -2778,10 +2789,8 @@ test("strategy overflow shows consolidate button and warning instead of explain"
           "Focus point 7",
           "Focus point 8",
         ],
-        strategy:
-          "Focus point 1\nFocus point 2\nFocus point 3\nFocus point 4\nFocus point 5\nFocus point 6\nFocus point 7\nFocus point 8",
-        refined_formulation:
-          "Focus point 1\nFocus point 2\nFocus point 3\nFocus point 4\nFocus point 5\nFocus point 6\nFocus point 7\nFocus point 8",
+        strategy: strategyText,
+        refined_formulation: strategyText,
       },
     },
   });
@@ -3133,7 +3142,7 @@ test("wording choice: Role user pick restores contract refine menu instead of ge
   assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
 });
 
-test("wording choice: Rules user pick keeps incomplete-status menu buttons", async () => {
+test("wording choice: Rules user pick restores confirm-capable menu buttons", async () => {
   const result = await run_step({
     user_message: "ACTION_WORDING_PICK_USER",
     input_mode: "widget",
@@ -3165,9 +3174,13 @@ test("wording choice: Rules user pick keeps incomplete-status menu buttons", asy
 
   assert.equal(result.ok, true);
   assert.equal(String(result.specialist?.action || ""), "ASK");
-  assert.equal(menuIdFromTurn(result), "RULES_MENU_ASK_EXPLAIN");
-  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 2);
-  assert.deepEqual(result.ui?.action_codes, ["ACTION_RULES_ASK_EXPLAIN_MORE", "ACTION_RULES_ASK_GIVE_EXAMPLE"]);
+  assert.equal(menuIdFromTurn(result), "RULES_MENU_CONFIRM");
+  assert.equal(countNumberedOptions(String(result.specialist?.question || "")), 3);
+  assert.deepEqual(result.ui?.action_codes, [
+    "ACTION_RULES_CONFIRM_ALL",
+    "ACTION_RULES_ASK_EXPLAIN_MORE",
+    "ACTION_RULES_ASK_GIVE_EXAMPLE",
+  ]);
 });
 
 test("wording choice: Entity suggestion pick normalizes sentence-like suggestion to short phrase", async () => {

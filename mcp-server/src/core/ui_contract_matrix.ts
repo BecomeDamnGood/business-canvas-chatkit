@@ -2,7 +2,7 @@ import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
-export const UI_CONTRACT_VERSION = "2026-02-21-ux-contract-v2-label-keys";
+export const UI_CONTRACT_VERSION = "2026-02-21-ux-contract-v3-key-first";
 
 export type UiContractStateDefinition = {
   menu_id: string;
@@ -505,6 +505,30 @@ export const MENU_LABEL_KEYS: Record<string, string[]> = (() => {
       continue;
     }
     next[menuId] = labels.map((_label, idx) => buildMenuLabelKey(menuId, "", idx));
+  }
+  return next;
+})();
+
+export const MENU_LABEL_DEFAULTS: Record<string, string> = (() => {
+  const next: Record<string, string> = {};
+  for (const [menuId, actionCodes] of Object.entries(ACTIONCODE_REGISTRY.menus)) {
+    const safeActionCodes = Array.isArray(actionCodes)
+      ? actionCodes.map((code) => String(code || "").trim()).filter(Boolean)
+      : [];
+    if (safeActionCodes.length === 0) continue;
+    const labelKeys = Array.isArray(MENU_LABEL_KEYS[menuId])
+      ? MENU_LABEL_KEYS[menuId].map((key) => String(key || "").trim())
+      : [];
+    const labels = Array.isArray(MENU_LABELS[menuId])
+      ? MENU_LABELS[menuId].map((label) => String(label || "").trim())
+      : [];
+    for (let idx = 0; idx < safeActionCodes.length; idx += 1) {
+      const actionCode = safeActionCodes[idx];
+      const labelKey = String(labelKeys[idx] || "").trim() || buildMenuLabelKey(menuId, actionCode, idx);
+      const fallback = String(labels[idx] || "").trim();
+      if (!labelKey || !fallback) continue;
+      next[labelKey] = fallback;
+    }
   }
   return next;
 })();

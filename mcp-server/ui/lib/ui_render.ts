@@ -40,12 +40,20 @@ function stepIndex(stepId: string): number {
 export function extractStepTitle(stepId: string, lang: string | null | undefined): string {
   const titles = titlesForLang(lang);
   const fullTitle = titles[stepId] || "";
-  return fullTitle.replace(/^Step \d+: /, "").replace(/^Stap \d+: /, "");
+  return fullTitle.replace(/^[^\d]*\d+:\s*/, "");
+}
+
+function uiText(lang: string | null | undefined, key: string, fallback: string): string {
+  const translated = String(t(lang, key) || "").trim();
+  if (translated) return translated;
+  const fallbackFromDefault = String(t("default", key) || "").trim();
+  if (fallbackFromDefault) return fallbackFromDefault;
+  return fallback;
 }
 
 function stepLabelShort(stepId: string, lang: string | null | undefined): string {
   const full = extractStepTitle(stepId, lang);
-  if (stepId === "step_0") return t(lang, "stepLabel.validation") || "Validation";
+  if (stepId === "step_0") return uiText(lang, "stepLabel.validation", "Validation");
   return full.length > 12 ? full.slice(0, 12) + "…" : full;
 }
 
@@ -65,7 +73,7 @@ export function buildStepper(
     s.className = className;
     const label = document.createElement("div");
     label.className = "step-item-label";
-    /* Alleen huidige stap toont label (Validation, Dream, etc.) – zoals voorheen */
+    /* Keep behavior: only the active step shows a short label. */
     label.textContent = i === activeIdx ? stepLabelShort(ORDER[i], lang) : "";
     s.appendChild(label);
     const bar = document.createElement("div");
@@ -172,7 +180,11 @@ function renderPrestartContent(cardDesc: HTMLElement, lang: string): void {
 function renderPrestartSkeleton(cardDesc: HTMLElement, lang: string): void {
   const content = prestartContentForLang(lang);
   clearElement(cardDesc);
-  const headline = appendTextNode("p", "card-headline", content.skeleton || "Loading translation…");
+  const headline = appendTextNode(
+    "p",
+    "card-headline",
+    content.skeleton || uiText(lang, "prestart.loading", "Loading translation…")
+  );
   cardDesc.appendChild(headline);
 }
 
@@ -397,8 +409,9 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   headingEl.textContent = "";
   (headingEl as HTMLElement).style.display = "none";
   instructionEl.textContent = instruction;
-  userTextEl.textContent = userLabel || "This is your input:";
-  suggestionTextEl.textContent = suggestionLabel || "This would be my suggestion:";
+  userTextEl.textContent = userLabel || uiText(lang, "wordingChoiceHeading", "This is your input:");
+  suggestionTextEl.textContent =
+    suggestionLabel || uiText(lang, "wordingChoiceSuggestionLabel", "This would be my suggestion:");
 
   if (mode === "list") {
     (userTextEl as HTMLElement).style.display = "block";
@@ -417,8 +430,8 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
       li.textContent = normalizeListItem(item);
       suggestionListEl.appendChild(li);
     }
-    userBtn.textContent = "Choose this version";
-    suggestionBtn.textContent = "Choose this version";
+    userBtn.textContent = uiText(lang, "wordingChoice.chooseVersion", "Choose this version");
+    suggestionBtn.textContent = uiText(lang, "wordingChoice.chooseVersion", "Choose this version");
   } else {
     (userTextEl as HTMLElement).style.display = "block";
     (suggestionTextEl as HTMLElement).style.display = "block";
@@ -426,7 +439,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     (suggestionListEl as HTMLElement).style.display = "none";
     userListEl.innerHTML = "";
     suggestionListEl.innerHTML = "";
-    userBtn.textContent = userText || "Use this input";
+    userBtn.textContent = userText || uiText(lang, "wordingChoice.useInputFallback", "Use this input");
     suggestionBtn.textContent = suggestionText || suggestionLabel;
   }
   userBtn.disabled = getIsLoading();
@@ -451,20 +464,7 @@ export function render(overrideToolOutput?: unknown): void {
 
   const state = (result?.state as Record<string, unknown>) || {};
   const errorObj = result?.error as { type?: string; user_message?: string; retry_after_ms?: number } | null;
-  const transientError =
-    errorObj &&
-    (errorObj.type === "rate_limited" || errorObj.type === "timeout");
-  if (transientError) {
-    if (errorObj.type === "rate_limited") {
-      setInlineNotice(errorObj.user_message || "Please wait a moment and try again.");
-      lockRateLimit(errorObj.retry_after_ms ?? 1500);
-    } else {
-      setInlineNotice(errorObj.user_message || "This is taking longer than usual. Please try again.");
-    }
-    if (result?.ok === false) return;
-  } else {
-    clearInlineNotice();
-  }
+  const transientError = errorObj && (errorObj.type === "rate_limited" || errorObj.type === "timeout");
 
   const overrideStrings =
     (state?.ui_strings && typeof state.ui_strings === "object" ? state.ui_strings : null) ||
@@ -479,6 +479,24 @@ export function render(overrideToolOutput?: unknown): void {
     UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...(overrideStrings as Record<string, string>) };
   }
   setStaticStrings(lang);
+
+  if (transientError) {
+    if (errorObj.type === "rate_limited") {
+      setInlineNotice(
+        errorObj.user_message ||
+          uiText(lang, "transient.rate_limited", "Please wait a moment and try again.")
+      );
+      lockRateLimit(errorObj.retry_after_ms ?? 1500);
+    } else {
+      setInlineNotice(
+        errorObj.user_message ||
+          uiText(lang, "transient.timeout", "This is taking longer than usual. Please try again.")
+      );
+    }
+    if (result?.ok === false) return;
+  } else {
+    clearInlineNotice();
+  }
 
   const langPersist = languageFromState(state);
   if (
@@ -497,7 +515,9 @@ export function render(overrideToolOutput?: unknown): void {
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
   const idx = stepIndex(current);
-  const stepTitle = current === "step_0" ? (t(lang, "stepLabel.validation") || "Validation") : extractStepTitle(current, lang);
+  const stepTitle = current === "step_0"
+    ? uiText(lang, "stepLabel.validation", "Validation")
+    : extractStepTitle(current, lang);
   buildStepper(idx, stepTitle, lang);
 
   const badge = document.getElementById("badge");
@@ -526,7 +546,7 @@ export function render(overrideToolOutput?: unknown): void {
 
   if (sectionTitleEl) {
     if (showPreStart && current === "step_0") {
-      sectionTitleEl.textContent = t(lang, "sectionTitle.step_0") || "Validation & Business Name";
+      sectionTitleEl.textContent = uiText(lang, "sectionTitle.step_0", "Validation & Business Name");
     } else if (!showPreStart && current !== "step_0" && showStepIntroChrome) {
       const businessName = String((state?.business_name || "")).trim();
       sectionTitleEl.textContent = getSectionTitle(lang, current, businessName);
@@ -618,6 +638,17 @@ export function render(overrideToolOutput?: unknown): void {
   } else {
     body = bodyRaw || "";
   }
+  if (isViewModeWordingChoice) {
+    const compact = String(body || "")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => String(line || "").trim())
+      .filter(Boolean)
+      .filter((line) => !/^\s*(?:[-*•]|\d+[\).])\s+/.test(line))
+      .slice(0, 1)
+      .join(" ");
+    body = compact;
+  }
 
   const cardDescEl = document.getElementById("cardDesc");
   if (cardDescEl) {
@@ -661,8 +692,11 @@ export function render(overrideToolOutput?: unknown): void {
       purposeHintAllowedMenus.has(menuId);
     if (showPurposeHint) {
       purposeInstructionHintEl.style.display = "block";
-      purposeInstructionHintEl.textContent =
-        t(lang, "purposeInstructionHint") || "Answer the question, formulate your own Purpose, or choose an option";
+      purposeInstructionHintEl.textContent = uiText(
+        lang,
+        "purposeInstructionHint",
+        "Answer the question, formulate your own Purpose, or choose an option"
+      );
     } else {
       purposeInstructionHintEl.style.display = "none";
     }
@@ -763,7 +797,8 @@ export function render(overrideToolOutput?: unknown): void {
     for (let cii = 0; cii < clusters.length; cii++) {
       const cluster = clusters[cii];
       const indices = cluster.statement_indices || [];
-      const themeName = String(cluster.theme || "").trim() || "Category " + (cii + 1);
+      const themeName = String(cluster.theme || "").trim() ||
+        uiText(lang, "scoring.categoryFallback", "Category {0}").replace("{0}", String(cii + 1));
       const clusterDiv = document.createElement("div");
       clusterDiv.className = "scoringCluster";
       clusterDiv.setAttribute("data-cluster-index", String(cii));
@@ -811,7 +846,7 @@ export function render(overrideToolOutput?: unknown): void {
         input.value =
           !isNaN(numVal) && numVal >= 1 && numVal <= 10 ? String(Math.round(numVal)) : "";
         input.placeholder = "0";
-        input.setAttribute("aria-label", "Score 1 to 10");
+        input.setAttribute("aria-label", uiText(lang, "scoring.aria.scoreInput", "Score 1 to 10"));
         row.appendChild(stSpan);
         row.appendChild(input);
         if (rowsEl) rowsEl.appendChild(row);
@@ -836,7 +871,8 @@ export function render(overrideToolOutput?: unknown): void {
         }
       }
       const avgText = filled === 0 ? "—" : (sum / filled).toFixed(1);
-      const themeName = String(clusters[ci].theme || "").trim() || "Category " + (ci + 1);
+      const themeName = String(clusters[ci].theme || "").trim() ||
+        uiText(lang, "scoring.categoryFallback", "Category {0}").replace("{0}", String(ci + 1));
       const showStats = filled > 0;
       const avgHtml = showStats
         ? '<span class="avgScore">' + t(lang, "scoringAvg").replace("X", avgText) + "</span>"
@@ -925,7 +961,9 @@ export function render(overrideToolOutput?: unknown): void {
   const promptPost = document.getElementById("prompt");
   if (promptPost) promptPost.style.display = "block";
 
-  if (isDreamDirectionView) {
+  if (isViewModeWordingChoice) {
+    if (statementsPanelEl) statementsPanelEl.style.display = "none";
+  } else if (isDreamDirectionView) {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   } else if (
     current === "dream" &&

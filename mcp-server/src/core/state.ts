@@ -33,6 +33,14 @@ export const DreamRuntimeModeZod = z.enum([
   "builder_refine",
 ]);
 export type DreamRuntimeMode = z.infer<typeof DreamRuntimeModeZod>;
+export const PROVISIONAL_SOURCES = [
+  "user_input",
+  "wording_pick",
+  "action_route",
+  "system_generated",
+] as const;
+export const ProvisionalSourceZod = z.enum(PROVISIONAL_SOURCES);
+export type ProvisionalSource = z.infer<typeof ProvisionalSourceZod>;
 
 /**
  * CanvasState (canoniek)
@@ -78,6 +86,7 @@ export const CanvasStateZod = z.object({
 
   // staged per-step value (chosen wording before explicit next-step confirm)
   provisional_by_step: z.record(z.string(), z.string()),
+  provisional_source_by_step: z.record(z.string(), ProvisionalSourceZod),
   __dream_runtime_mode: DreamRuntimeModeZod,
   dream_builder_statements: z.array(z.string()),
 
@@ -95,7 +104,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "5";
+export const CURRENT_STATE_VERSION = "6";
 
 /**
  * Hard defaults (no nulls)
@@ -131,6 +140,7 @@ export function getDefaultState(): CanvasState {
     presentation_brief_final: "",
 
     provisional_by_step: {},
+    provisional_source_by_step: {},
     __dream_runtime_mode: "self",
     dream_builder_statements: [],
 
@@ -202,6 +212,26 @@ export function normalizeState(raw: unknown): CanvasState {
   const provisional_by_step = Object.fromEntries(
     Object.entries(provisional_raw).map(([k, v]) => [String(k), String(v ?? "").trim()])
   );
+  const provisional_source_raw =
+    typeof r.provisional_source_by_step === "object" && r.provisional_source_by_step !== null
+      ? (r.provisional_source_by_step as Record<string, unknown>)
+      : {};
+  const provisional_source_by_step = Object.fromEntries(
+    Object.entries(provisional_source_raw)
+      .map(([k, v]) => {
+        const source = String(v || "").trim();
+        if (
+          source !== "user_input" &&
+          source !== "wording_pick" &&
+          source !== "action_route" &&
+          source !== "system_generated"
+        ) {
+          return null;
+        }
+        return [String(k), source] as const;
+      })
+      .filter((entry): entry is readonly [string, "user_input" | "wording_pick" | "action_route" | "system_generated"] => Boolean(entry))
+  );
   const dreamRuntimeModeRaw = String((r as any).__dream_runtime_mode ?? d.__dream_runtime_mode).trim();
   const __dream_runtime_mode: DreamRuntimeMode =
     dreamRuntimeModeRaw === "builder_collect" ||
@@ -255,6 +285,7 @@ export function normalizeState(raw: unknown): CanvasState {
     presentation_brief_final,
 
     provisional_by_step,
+    provisional_source_by_step,
     __dream_runtime_mode,
     dream_builder_statements,
 
@@ -278,6 +309,40 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v5 -> v6: add source map for staged values (legacy staged values default to system_generated).
+  if (s.state_version === "5") {
+    const staged = typeof (s as any).provisional_by_step === "object" && (s as any).provisional_by_step !== null
+      ? ((s as any).provisional_by_step as Record<string, unknown>)
+      : {};
+    const existingSources =
+      typeof (s as any).provisional_source_by_step === "object" && (s as any).provisional_source_by_step !== null
+        ? ((s as any).provisional_source_by_step as Record<string, unknown>)
+        : {};
+    const nextSources: Record<string, ProvisionalSource> = {};
+    for (const [stepIdRaw, valueRaw] of Object.entries(staged)) {
+      const stepId = String(stepIdRaw || "").trim();
+      const value = String(valueRaw || "").trim();
+      if (!stepId || !value) continue;
+      const existing = String(existingSources[stepId] || "").trim();
+      if (
+        existing === "user_input" ||
+        existing === "wording_pick" ||
+        existing === "action_route" ||
+        existing === "system_generated"
+      ) {
+        nextSources[stepId] = existing;
+      } else {
+        nextSources[stepId] = "system_generated";
+      }
+    }
+    s = {
+      ...s,
+      state_version: "6",
+      provisional_source_by_step: nextSources,
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v4 -> v5: add ui string schema version marker to support deterministic text refresh.
   if (s.state_version === "4") {
     s = {
@@ -285,7 +350,7 @@ export function migrateState(raw: unknown): CanvasState {
       state_version: "5",
       ui_strings_version: String((s as any).ui_strings_version ?? "").trim(),
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v3 -> v4: hard reset legacy confirm/proceed sessions (no compatibility layer).

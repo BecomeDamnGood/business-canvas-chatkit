@@ -49,7 +49,7 @@ test("finals persistence: normalizeState preserves existing finals", () => {
   assert.equal(snapshot.purpose_final, "Purpose text");
 });
 
-test("state migration v5: legacy sessions are hard-reset and clear legacy finals", () => {
+test("state migration v6: legacy sessions are hard-reset and clear legacy finals", () => {
   const raw = {
     state_version: "1",
     current_step: "step_0",
@@ -68,5 +68,21 @@ test("state migration v5: legacy sessions are hard-reset and clear legacy finals
   const snapshot = getFinalsSnapshot(migrated);
   assert.equal(snapshot.dream_final, undefined);
   assert.equal(snapshot.business_name, undefined);
-  assert.equal(String((migrated as any).state_version), "5");
+  assert.equal(String((migrated as any).state_version), "6");
+});
+
+test("state migration v6: staged provisional values backfill source as system_generated", () => {
+  const migrated = migrateState({
+    ...getDefaultState(),
+    state_version: "5",
+    provisional_by_step: {
+      dream: "Mindd dreams of a better future.",
+      purpose: "To build meaningful work.",
+    },
+  });
+  assert.equal(String((migrated as any).state_version), "6");
+  assert.deepEqual((migrated as any).provisional_source_by_step, {
+    dream: "system_generated",
+    purpose: "system_generated",
+  });
 });

@@ -89,6 +89,12 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     "prestart.meta.time.label": PRESTART_TEXT_DEFAULT.timeLabel,
     "prestart.meta.time.value": PRESTART_TEXT_DEFAULT.timeValue,
     "prestart.loading": PRESTART_TEXT_DEFAULT.skeleton,
+    "step0.carddesc": "Just to set the context, we'll start with the basics.",
+    "step0.question.initial":
+      "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?",
+    "step0.readiness.statement.existing": "You have a {0} called {1}.",
+    "step0.readiness.statement.starting": "You want to start a {0} called {1}.",
+    "step0.readiness.suffix": "Are you ready to start with the first step: the Dream?",
     "stepLabel.validation": "Validation",
     "sectionTitle.step_0": "Validation & Business Name",
     uiSubtitle: "Use the app widget to continue (not the chat box)",
@@ -102,7 +108,14 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     wordingChoiceHeading: "This is your input:",
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
+    "wordingChoice.chooseVersion": "Choose this version",
+    "wordingChoice.useInputFallback": "Use this input",
     "dreamBuilder.startExercise": "Start the exercise",
+    "dreamBuilder.question.base":
+      "What do you see changing in the future, positive or negative? Let your imagination run free.",
+    "dreamBuilder.question.more":
+      "What more do you see changing in the future, positive or negative? Let your imagination run free.",
+    "dreamBuilder.switchSelf.headline": "Continue with the Dream Exercise.",
     "dreamBuilder.statements.title": "Your Dream statements",
     "dreamBuilder.statements.count": "N statements out of a minimum of 20 so far",
     "dreamBuilder.statements.empty": "No statements yet.",
@@ -110,7 +123,13 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     btnSwitchToSelfDream: "Switch back to self-formulate the dream",
     sendTitle: "Send",
     errorMessage: "Something went wrong while processing your message. Please try again.",
+    "error.unknownAction": "We could not process this choice. Please refresh and try again.",
     optionsDisplayError: "We can't safely display these options right now. Please try again.",
+    "transient.rate_limited": "Please wait a moment and try again.",
+    "transient.timeout": "This is taking longer than usual. Please try again.",
+    "bigwhy.tooLong.message":
+      "Your formulation is longer than 28 words. Short and clear is better, so please provide a compact version.",
+    "bigwhy.tooLong.question": "Can you rewrite it in 28 words or fewer?",
     scoringIntro1:
       "You now have more than 20 statements, so I've clustered them for you. You can still edit and add statements, but please give them a score.",
     scoringIntro2: "",
@@ -120,7 +139,43 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
     btnScoringContinue: "Formulate my dream for me based on what I find important.",
     scoringFilled: "N/M",
     scoringAvg: "Average: X",
+    "scoring.categoryFallback": "Category {0}",
+    "scoring.aria.scoreInput": "Score 1 to 10",
     purposeInstructionHint: "Answer the question, formulate your own Purpose, or choose an option",
+    "contract.headline.strategy.moreFocus": "What more do you focus on within your strategy?",
+    "contract.headline.define": "Define",
+    "contract.headline.refine": "Refine",
+    "contract.headline.withOptions": "{0} your {1} for {2} or choose an option.",
+    "contract.headline.withoutOptions": "{0} your {1} for {2}.",
+    "contract.recap.noOutput": "We have not yet defined the {0}.",
+    "presentation.ready": "Your presentation is ready.",
+    "presentation.error": "Presentation generation failed. Please check that the template exists and try again.",
+    "meta.benProfile.paragraph1":
+      "My name is Ben Steenstra (1973). I am a Dutch serial entrepreneur, executive coach, author, and public speaker, and I help people grow their businesses while staying grounded in what feels truly meaningful for them.",
+    "meta.benProfile.paragraph2":
+      "I combine practical strategy frameworks with coaching to turn big ideas into clear, actionable plans.",
+    "meta.benProfile.paragraph3":
+      "I have applied this model worldwide in many countries, including with organizations such as Samsung, HTC, LG, New Black, and Fresh and Rebel and many more.",
+    "meta.benProfile.paragraph4":
+      "For more information, to read my articles, view my movies, or to instantly book an appointment, visit my website: {0}.",
+    "motivation.opener":
+      "I am not here to make you sound impressive. I am here to help you say what is true.\nBecause when you lead, there are days you carry everything. Pressure, pace, expectations. And in that noise, even a strong founder can lose the thread.\nThis canvas brings you back to the thread. The part that matters. The reason you can stand behind. The words that feel real. Real words create real momentum.",
+    "motivation.provenLine":
+      "This is a proven model used worldwide, including by Samsung, HTC, LG, New Black, and Fresh 'n Rebel.",
+    "motivation.continuePrompt": "Give me one honest sentence. Not perfect. Just true.",
+    "motivation.continueTemplate":
+      "What we are doing now is protecting your motivation by making \"{0}\" clear in words you can actually carry into real decisions.",
+    "motivation.essencePrefix": "Essence so far: \"{0}\"",
+    "meta.modelCredibility.body":
+      "This is a practical, step-by-step canvas model that turns ideas into clear choices and real trade-offs.",
+    "ppt.heading.purpose": "Purpose",
+    "ppt.heading.role": "Role",
+    "ppt.heading.strategy": "Strategy",
+    "ppt.heading.entity": "Entity",
+    "ppt.heading.dream": "Dream",
+    "ppt.heading.targetgroup": "Target Group",
+    "ppt.heading.productsservices": "Products and Services",
+    "ppt.heading.rulesofthegame": "Rules of the Game",
     "sectionTitle.dream": "Your Dream",
     "sectionTitle.purposeOf": "The Purpose of {0}",
     "sectionTitle.purposeOfFuture": "The Purpose of your future company",

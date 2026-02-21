@@ -104,6 +104,9 @@ jobs:
       - name: Step prompt contract purity check
         run: node mcp-server/scripts/contract-purity-check.mjs
 
+      - name: I18n literal guard
+        run: node mcp-server/scripts/i18n_literal_guard.mjs
+
   mcp_server:
     name: MCP server typecheck + tests
     runs-on: ubuntu-latest
