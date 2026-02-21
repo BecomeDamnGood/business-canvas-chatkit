@@ -25,6 +25,7 @@ import {
   applyCentralMetaTopicRouter,
   RECAP_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
+  normalizeNonStep0OfftopicSpecialist,
   normalizeStep0AskDisplayContract,
   normalizeStep0OfftopicToAsk,
   resolveActionCodeMenuTransition,
@@ -718,6 +719,30 @@ test("off-topic message stays anchor-driven when optional tone line is absent", 
   const sentenceCount = countSentences(String(result.text || ""));
   assert.equal(sentenceCount >= 1 && sentenceCount <= 3, true);
   assert.equal(String(result.text || "").includes("Let's continue with the Purpose of Mindd."), true);
+});
+
+test("off-topic normalizer strips specialist redirect variants and keeps one canonical redirect", () => {
+  const normalized = normalizeNonStep0OfftopicSpecialist({
+    stepId: "dream",
+    activeSpecialist: "Dream",
+    userMessage: "What is the weather in London?",
+    specialistResult: {
+      action: "ASK",
+      is_offtopic: true,
+      message:
+        "That’s an interesting question, but it is not related to defining the Dream for your business. Let’s continue with the Dream step for Mindd.",
+    },
+    previousSpecialist: {},
+    state: {
+      ...getDefaultState(),
+      business_name: "Mindd",
+    },
+  });
+
+  const message = String(normalized.message || "");
+  assert.equal(message.includes("Dream step for Mindd"), false);
+  assert.equal(message.includes("Let's continue with the Dream of Mindd."), true);
+  assert.equal(message.match(/Let's continue with the Dream of Mindd\./g)?.length || 0, 1);
 });
 
 test("rules contract guard normalizes contradictory ASK payload to valid bullet shape", () => {

@@ -3261,7 +3261,8 @@ function stripOfftopicStructureSentences(raw: string): string {
     .filter(Boolean);
   const structuralPatterns = [
     /\bthe current\b.{0,120}\bof\b.{0,120}\bis[.!?]?$/i,
-    /\blet'?s continue with\b.{0,120}\bof\b.{0,120}[.!?]?$/i,
+    /\blet(?:'|’)?s continue with\b.{0,120}\bof\b.{0,120}[.!?]?$/i,
+    /\blet(?:'|’)?s continue with\b.{0,120}\bstep\b.{0,40}\b(?:for|of)\b.{0,120}[.!?]?$/i,
     /\bnow,?\s+back\s+to\b/i,
   ];
   const kept = parts.filter((part) => !structuralPatterns.some((re) => re.test(part)));
@@ -3314,7 +3315,7 @@ function isLikelyMetaQuestionTurn(params: {
   return metaTopic !== "NONE";
 }
 
-function normalizeNonStep0OfftopicSpecialist(params: {
+export function normalizeNonStep0OfftopicSpecialist(params: {
   stepId: string;
   activeSpecialist: string;
   userMessage: string;
