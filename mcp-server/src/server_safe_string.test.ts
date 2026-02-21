@@ -47,4 +47,16 @@ test("run_step handler logs locale + language readiness in request/response line
     /\[run_step\] response[\s\S]*resolved_language[\s\S]*language_source[\s\S]*ui_strings_status[\s\S]*ui_bootstrap_status/,
     "response log should include resolved language and UI readiness fields"
   );
+  assert.match(
+    source,
+    /\[run_step\] response[\s\S]*bootstrap_waiting_locale[\s\S]*bootstrap_retry_scheduled/,
+    "response log should include bootstrap locale wait diagnostics"
+  );
+});
+
+test("buildUiStructured suppresses prompt/options while bootstrap locale is waiting", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /const waitingLocale = flags\.bootstrap_waiting_locale === true;/);
+  assert.match(source, /const promptBody = waitingLocale \? "" : \(prompt \|\| text \|\| ""\);/);
+  assert.match(source, /const actionCodes = waitingLocale \? \[\] :/);
 });

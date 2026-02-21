@@ -152,8 +152,9 @@ let rateLimitTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCallAt = 0;
 const CLICK_DEBOUNCE_MS = 250;
 const RUN_STEP_TIMEOUT_MS = 25000;
-const LOCALE_WAIT_RETRY_MIN_MS = 700;
-const LOCALE_WAIT_RETRY_MAX_MS = 8000;
+const LOCALE_WAIT_RETRY_MIN_MS = 800;
+const LOCALE_WAIT_RETRY_MAX_MS = 5000;
+const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
 let localeWaitRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
 
@@ -193,6 +194,77 @@ function isBootstrapWaitingLocale(result: Record<string, unknown>): boolean {
   const uiGateStatus = String(state.ui_gate_status || "").trim().toLowerCase();
   const uiStringsStatus = String(state.ui_strings_status || "ready").trim().toLowerCase();
   return uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready";
+}
+
+function extractRunStepResultPayload(normalizedRaw: Record<string, unknown>): Record<string, unknown> {
+  if (normalizedRaw && typeof (normalizedRaw as any).result === "object" && (normalizedRaw as any).result) {
+    return (normalizedRaw as any).result as Record<string, unknown>;
+  }
+  if (
+    normalizedRaw &&
+    typeof (normalizedRaw as any).ui === "object" &&
+    (normalizedRaw as any).ui &&
+    typeof ((normalizedRaw as any).ui as any).result === "object" &&
+    ((normalizedRaw as any).ui as any).result
+  ) {
+    return ((normalizedRaw as any).ui as any).result as Record<string, unknown>;
+  }
+  if (normalizedRaw && typeof (normalizedRaw as any).ui === "object" && (normalizedRaw as any).ui) {
+    return (normalizedRaw as any).ui as Record<string, unknown>;
+  }
+  return {};
+}
+
+function maybeScheduleBootstrapRetry(result: Record<string, unknown>, source: string): boolean {
+  if (!isBootstrapWaitingLocale(result) || !isUiBootstrapWaitRetryEnabled(result)) {
+    clearLocaleWaitRetry();
+    return false;
+  }
+
+  if (!localeWaitRetryTimer) {
+    const retryState =
+      result?.state && typeof result.state === "object"
+        ? (result.state as Record<string, unknown>)
+        : {};
+    const delay = localeWaitRetryDelayMs;
+    localeWaitRetryTimer = setTimeout(() => {
+      localeWaitRetryTimer = null;
+      void callRunStep(ACTION_BOOTSTRAP_POLL, { ...retryState, __bootstrap_poll: "true" });
+    }, delay);
+    localeWaitRetryDelayMs = Math.min(
+      LOCALE_WAIT_RETRY_MAX_MS,
+      Math.round(localeWaitRetryDelayMs * 1.8)
+    );
+    if (isDevEnv()) {
+      console.log("[ui_bootstrap_retry_scheduled]", {
+        source,
+        delay_ms: delay,
+        next_delay_ms: localeWaitRetryDelayMs,
+      });
+    }
+  }
+
+  return true;
+}
+
+export function handleToolResultAndMaybeScheduleBootstrapRetry(
+  raw: unknown,
+  opts?: { source?: "call_run_step" | "host_notification" | "unknown" }
+): Record<string, unknown> {
+  const normalized = applyToolResult(raw);
+  if (_render) _render(normalized);
+  const result = extractRunStepResultPayload(normalized);
+  const source = String(opts?.source || "unknown");
+  const waiting = maybeScheduleBootstrapRetry(result, source);
+  if (isDevEnv()) {
+    console.log("[ui_bootstrap_state]", {
+      source,
+      waiting_locale: waiting,
+      gate_status: String(((result?.state as Record<string, unknown>) || {}).ui_gate_status || ""),
+      ui_strings_status: String(((result?.state as Record<string, unknown>) || {}).ui_strings_status || ""),
+    });
+  }
+  return result;
 }
 
 export function handleBridgeResponse(msg: any): boolean {
@@ -493,12 +565,18 @@ export async function callRunStep(
     Boolean((o as { toolOutput?: unknown }).toolOutput) ||
     Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
   const persistedStarted = String((widgetState().started || "")).toLowerCase() === "true";
-  const isLocaleWaitRetryCall = String((extraState as any)?.__locale_wait_retry || "").trim().toLowerCase() === "true";
+  const messageText = String(message || "").trim();
+  const isLegacyLocaleWaitRetryCall =
+    String((extraState as any)?.__locale_wait_retry || "").trim().toLowerCase() === "true";
+  const isBootstrapPollCall =
+    messageText === ACTION_BOOTSTRAP_POLL ||
+    String((extraState as any)?.__bootstrap_poll || "").trim().toLowerCase() === "true" ||
+    isLegacyLocaleWaitRetryCall;
   if (String(message || "").trim() === "") {
-    if (hasToolOutput && !isLocaleWaitRetryCall) return;
-    if (!persistedStarted && !isLocaleWaitRetryCall) return;
+    if (hasToolOutput && !isBootstrapPollCall) return;
+    if (!persistedStarted && !isBootstrapPollCall) return;
   }
-  if (!isLocaleWaitRetryCall) {
+  if (!isBootstrapPollCall) {
     clearLocaleWaitRetry();
   }
 
@@ -526,14 +604,14 @@ export async function callRunStep(
   const clientActionId = String((nextState as any).__client_action_id || "");
   const startedAt = Date.now();
   const debugCalls = isDevEnv();
-  if (debugCalls) {
-    console.log("[ui_run_step_request]", {
-      request_id: requestId,
-      client_action_id: clientActionId,
-      current_step: String(nextState.current_step || ""),
-      user_message: String(message || ""),
-    });
-  }
+    if (debugCalls) {
+      console.log("[ui_run_step_request]", {
+        request_id: requestId,
+        client_action_id: clientActionId,
+        current_step: String(nextState.current_step || ""),
+        user_message: messageText,
+      });
+    }
 
   setLoading(true);
 
@@ -573,14 +651,7 @@ export async function callRunStep(
       });
     }
     const normalizedRaw = normalizeToolOutput(resp);
-    const result =
-      (normalizedRaw && (normalizedRaw as any).result)
-        ? ((normalizedRaw as any).result as Record<string, unknown>)
-        : (normalizedRaw && (normalizedRaw as any).ui && ((normalizedRaw as any).ui as any).result)
-          ? (((normalizedRaw as any).ui as any).result as Record<string, unknown>)
-          : (normalizedRaw && (normalizedRaw as any).ui)
-            ? ((normalizedRaw as any).ui as Record<string, unknown>)
-            : {};
+    const result = extractRunStepResultPayload(normalizedRaw);
     const errorObj = result?.error as
       | { type?: string; user_message?: string; retry_after_ms?: number; retry_action?: string }
       | null;
@@ -606,27 +677,7 @@ export async function callRunStep(
       return;
     }
 
-    const normalized = applyToolResult(resp);
-    if (_render) _render(normalized);
-    if (isBootstrapWaitingLocale(result) && isUiBootstrapWaitRetryEnabled(result)) {
-      if (!localeWaitRetryTimer) {
-        const retryState =
-          result?.state && typeof result.state === "object"
-            ? (result.state as Record<string, unknown>)
-            : {};
-        const delay = localeWaitRetryDelayMs;
-        localeWaitRetryTimer = setTimeout(() => {
-          localeWaitRetryTimer = null;
-          void callRunStep("", { ...retryState, __locale_wait_retry: "true" });
-        }, delay);
-        localeWaitRetryDelayMs = Math.min(
-          LOCALE_WAIT_RETRY_MAX_MS,
-          Math.round(localeWaitRetryDelayMs * 1.6)
-        );
-      }
-    } else {
-      clearLocaleWaitRetry();
-    }
+    handleToolResultAndMaybeScheduleBootstrapRetry(resp, { source: "call_run_step" });
   } catch (e) {
     clearLocaleWaitRetry();
     if (didTimeout) return;

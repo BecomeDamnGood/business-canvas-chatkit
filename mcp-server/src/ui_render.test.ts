@@ -1019,15 +1019,29 @@ test("render source blocks locale-gated turns from showing interactive body", ()
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /const bootstrapWaitingLocale =[\s\S]*uiGateStatus === "waiting_locale"/);
   assert.match(source, /if \(bootstrapWaitingLocale\) \{/);
-  assert.match(source, /renderPrestartSkeleton\(prestartEl, lang\)/);
+  assert.match(source, /renderBootstrapWaitShell\(prestartEl\)/);
   assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
   assert.match(source, /setSessionStarted\(false\);/);
+  assert.match(source, /\(badge as HTMLElement\)\.style\.display = "none";/);
 });
 
 test("render source waits for server bootstrap and derives prestart visibility from server started state", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /const bootstrapAwaitingServer = !hasToolOutputVal && !hasResultPayload;/);
   assert.match(source, /if \(bootstrapAwaitingServer\) \{/);
-  assert.match(source, /renderPrestartSkeleton\(prestartEl, lang\)/);
+  assert.match(source, /renderBootstrapWaitShell\(prestartEl\)/);
   assert.match(source, /const showPreStart = hasToolOutputVal \? !serverStarted : !sessionStarted;/);
+});
+
+test("main source handles host tool-result via shared bootstrap scheduler", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
+  assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
+  assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "host_notification" \}\)/);
+});
+
+test("ui actions source uses explicit bootstrap poll action and shared result handler", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
+  assert.match(source, /const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";/);
+  assert.match(source, /__bootstrap_poll: "true"/);
+  assert.match(source, /export function handleToolResultAndMaybeScheduleBootstrapRetry/);
 });

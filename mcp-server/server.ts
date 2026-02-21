@@ -348,6 +348,17 @@ async function runStepHandler(args: {
       (resultForClient && typeof resultForClient.state === "object" && resultForClient.state)
         ? (resultForClient.state as Record<string, unknown>)
         : {};
+    const resultUi =
+      (resultForClient && typeof resultForClient.ui === "object" && resultForClient.ui)
+        ? (resultForClient.ui as Record<string, unknown>)
+        : {};
+    const resultUiFlags =
+      resultUi.flags && typeof resultUi.flags === "object"
+        ? (resultUi.flags as Record<string, unknown>)
+        : {};
+    const bootstrapWaitingLocale = resultUiFlags.bootstrap_waiting_locale === true;
+    const bootstrapRetryHint = safeString(resultUiFlags.bootstrap_retry_hint ?? "");
+    const bootstrapRetryScheduled = bootstrapWaitingLocale && bootstrapRetryHint === "poll";
     console.log("[run_step] response", {
       input_mode: inputMode || "chat",
       resolved_language: safeString(resultState.language ?? ""),
@@ -357,6 +368,8 @@ async function runStepHandler(args: {
       ui_gate_status: safeString(resultState.ui_gate_status ?? ""),
       ui_gate_reason: safeString(resultState.ui_gate_reason ?? ""),
       ui_gate_since_ms: Number(resultState.ui_gate_since_ms ?? 0) || 0,
+      bootstrap_waiting_locale: bootstrapWaitingLocale,
+      bootstrap_retry_scheduled: bootstrapRetryScheduled,
       current_step: safeString(resultState.current_step ?? stepMeta),
       active_specialist: specialistMeta,
     });
@@ -436,8 +449,15 @@ function buildContentFromResult(
 ): string {
   // App-only contract: keep chat silent on success.
   if (!result || typeof result !== "object") return "";
+  const uiObj = (result as any).ui && typeof (result as any).ui === "object" ? (result as any).ui : {};
+  const flags =
+    uiObj.flags && typeof uiObj.flags === "object"
+      ? (uiObj.flags as Record<string, unknown>)
+      : {};
+  const waitingLocale = flags.bootstrap_waiting_locale === true;
   const hasError = Boolean((result as any).error);
   if (hasError) return "Open de app om verder te gaan.";
+  if (waitingLocale) return "";
   if (options?.isFirstStart) return "Canvas Builder geopend in de app.";
   return "";
 }
@@ -445,16 +465,19 @@ function buildContentFromResult(
 function buildUiStructured(result: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
   if (!result || typeof result !== "object") return null;
   const uiObj = (result as any).ui && typeof (result as any).ui === "object" ? (result as any).ui : {};
+  const flags =
+    uiObj.flags && typeof uiObj.flags === "object"
+      ? (uiObj.flags as Record<string, unknown>)
+      : {};
+  const waitingLocale = flags.bootstrap_waiting_locale === true;
   const prompt = safeString((result as any).prompt ?? "");
   const text = safeString((result as any).text ?? "");
-  const promptBody = prompt || text || "";
-  const actionCodes = Array.isArray(uiObj.action_codes) ? uiObj.action_codes : [];
+  const promptBody = waitingLocale ? "" : (prompt || text || "");
+  const actionCodes = waitingLocale ? [] : (Array.isArray(uiObj.action_codes) ? uiObj.action_codes : []);
   const options = actionCodes.map((code: unknown, idx: number) => ({
     id: safeString(idx + 1),
     actionCode: safeString(code),
   }));
-  const flags =
-    uiObj.flags && typeof uiObj.flags === "object" ? (uiObj.flags as Record<string, boolean>) : {};
   const expectedChoiceCount =
     typeof uiObj.expected_choice_count === "number"
       ? uiObj.expected_choice_count

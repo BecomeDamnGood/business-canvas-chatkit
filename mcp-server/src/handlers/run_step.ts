@@ -489,6 +489,7 @@ const DREAM_PICK_ONE_ROUTE_TOKEN = "__ROUTE__DREAM_PICK_ONE__";
 const ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN = "__ROUTE__ROLE_CHOOSE_FOR_ME__";
 const DREAM_FORCE_REFINE_ROUTE_PREFIX = "__ROUTE__DREAM_FORCE_REFINE__";
 const STRATEGY_CONSOLIDATE_ROUTE_TOKEN = "__ROUTE__STRATEGY_CONSOLIDATE__";
+const ACTION_BOOTSTRAP_POLL_TOKEN = "ACTION_BOOTSTRAP_POLL";
 const WIDGET_ESCAPE_LABEL_PATTERNS: RegExp[] = [
   /\bfinish\s+later\b/i,
   /\bcontinue\b[^\n\r]{0,80}\bnow\b/i,
@@ -1064,6 +1065,18 @@ function isUiNoPendingTextSuppressV1Enabled(): boolean {
 
 function isUiBootstrapWaitRetryV1Enabled(): boolean {
   return envFlagEnabled("UI_BOOTSTRAP_WAIT_RETRY_V1", true);
+}
+
+function isUiBootstrapEventParityV1Enabled(): boolean {
+  return envFlagEnabled("UI_BOOTSTRAP_EVENT_PARITY_V1", true);
+}
+
+function isUiBootstrapPollActionV1Enabled(): boolean {
+  return envFlagEnabled("UI_BOOTSTRAP_POLL_ACTION_V1", true);
+}
+
+function isUiWaitShellV2Enabled(): boolean {
+  return envFlagEnabled("UI_WAIT_SHELL_V2", true);
 }
 
 function isWordingPanelCleanBodyV1Enabled(): boolean {
@@ -4796,7 +4809,7 @@ function labelForActionInMenu(menuId: string, actionCode: string): string {
 
 function buildUiPayload(
   specialist: any,
-  flagsOverride?: Record<string, boolean> | null,
+  flagsOverride?: Record<string, boolean | string> | null,
   actionCodesOverride?: string[] | null,
   renderedActionsOverride?: RenderedAction[] | null,
   wordingChoiceOverride?: WordingChoiceUiPayload | null,
@@ -4813,11 +4826,11 @@ function buildUiPayload(
   contract_version?: string;
   text_keys?: string[];
   view_mode?: UiViewMode;
-  flags: Record<string, boolean>;
+  flags: Record<string, boolean | string>;
   wording_choice?: WordingChoiceUiPayload;
 } | undefined {
   const localDev = shouldLogLocalDevDiagnostics();
-  const flags = { ...(flagsOverride || {}) };
+  const flags: Record<string, boolean | string> = { ...(flagsOverride || {}) };
   if (String(process.env.UI_I18N_V2 || process.env.UI_I18N_V3_TEXT_KEYS || "").trim()) {
     flags.ui_i18n_v2 = isUiI18nV2Enabled();
   }
@@ -4857,6 +4870,15 @@ function buildUiPayload(
   if (String(process.env.UI_BOOTSTRAP_WAIT_RETRY_V1 || "").trim()) {
     flags.ui_bootstrap_wait_retry_v1 = isUiBootstrapWaitRetryV1Enabled();
   }
+  if (String(process.env.UI_BOOTSTRAP_EVENT_PARITY_V1 || "").trim()) {
+    flags.ui_bootstrap_event_parity_v1 = isUiBootstrapEventParityV1Enabled();
+  }
+  if (String(process.env.UI_BOOTSTRAP_POLL_ACTION_V1 || "").trim()) {
+    flags.ui_bootstrap_poll_action_v1 = isUiBootstrapPollActionV1Enabled();
+  }
+  if (String(process.env.UI_WAIT_SHELL_V2 || "").trim()) {
+    flags.ui_wait_shell_v2 = isUiWaitShellV2Enabled();
+  }
   const introChromeRaw = String((specialist as any)?.ui_show_step_intro_chrome || "").trim().toLowerCase();
   if ((specialist as any)?.ui_show_step_intro_chrome === true || introChromeRaw === "true") {
     flags.show_step_intro_chrome = true;
@@ -4869,9 +4891,10 @@ function buildUiPayload(
     | CanvasState
     | null;
   if (effectiveState && isUiLocaleReadyGateV1Enabled()) {
-    const interactiveReady = isInteractiveLocaleReady(effectiveState);
-    flags.bootstrap_waiting_locale = !interactiveReady;
-    flags.bootstrap_interactive_ready = interactiveReady;
+    const bootstrap = deriveBootstrapContract(effectiveState);
+    flags.bootstrap_waiting_locale = bootstrap.waiting;
+    flags.bootstrap_interactive_ready = bootstrap.ready;
+    flags.bootstrap_retry_hint = bootstrap.retry_hint;
   }
   const effectiveStepId = String(stepIdOverride || (effectiveState as any)?.current_step || "").trim();
   const contractMenuId = parseMenuFromContractIdForStep(contractMeta.contractId, effectiveStepId);
@@ -5085,7 +5108,7 @@ function tryRepairUiParityWithEnglishLabels(response: Record<string, unknown>): 
 function attachRegistryPayload<T extends Record<string, unknown>>(
   payload: T,
   specialist: any,
-  flagsOverride?: Record<string, boolean> | null,
+  flagsOverride?: Record<string, boolean | string> | null,
   actionCodesOverride?: string[] | null,
   renderedActionsOverride?: RenderedAction[] | null,
     wordingChoiceOverride?: WordingChoiceUiPayload | null,
@@ -5275,6 +5298,35 @@ function isInteractiveLocaleReady(state: CanvasState | null | undefined): boolea
   const uiStatusRaw = String((state as any)?.ui_strings_status ?? "ready").trim().toLowerCase();
   const uiStatus = uiStatusRaw === "pending" || uiStatusRaw === "error" ? uiStatusRaw : "ready";
   return uiStatus === "ready";
+}
+
+type BootstrapContractState = {
+  waiting: boolean;
+  ready: boolean;
+  reason: "translation_pending" | "translation_retry" | "";
+  since_ms: number;
+  retry_hint: "poll" | "";
+};
+
+function deriveBootstrapContract(state: CanvasState | null | undefined): BootstrapContractState {
+  if (!state || !isUiLocaleReadyGateV1Enabled()) {
+    return { waiting: false, ready: true, reason: "", since_ms: 0, retry_hint: "" };
+  }
+  if (isInteractiveLocaleReady(state)) {
+    return { waiting: false, ready: true, reason: "", since_ms: 0, retry_hint: "" };
+  }
+  const uiStatusRaw = String((state as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
+  const reason: "translation_pending" | "translation_retry" =
+    uiStatusRaw === "error" ? "translation_retry" : "translation_pending";
+  const rawSince = Number((state as any)?.ui_gate_since_ms ?? 0);
+  const sinceMs = Number.isFinite(rawSince) && rawSince > 0 ? Math.trunc(rawSince) : Date.now();
+  return {
+    waiting: true,
+    ready: false,
+    reason,
+    since_ms: sinceMs,
+    retry_hint: isUiBootstrapPollActionV1Enabled() ? "poll" : "",
+  };
 }
 
 function shouldSuppressFallbackText(state: CanvasState | null | undefined): boolean {
@@ -6767,7 +6819,7 @@ type RunStepBase = {
     contract_id?: string;
     contract_version?: string;
     text_keys?: string[];
-    flags: Record<string, boolean>;
+    flags: Record<string, boolean | string>;
     wording_choice?: WordingChoiceUiPayload;
   };
   presentation_assets?: {
@@ -6858,7 +6910,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const transientPendingScores = Array.isArray((rawState as any).__pending_scores)
     ? (rawState as any).__pending_scores
     : null;
-  const isLocaleWaitRetryCall = String((rawState as any).__locale_wait_retry || "").trim().toLowerCase() === "true";
+  const isLegacyLocaleWaitRetryCall =
+    String((rawState as any).__locale_wait_retry || "").trim().toLowerCase() === "true";
+  const isBootstrapPollMarker =
+    String((rawState as any).__bootstrap_poll || "").trim().toLowerCase() === "true";
+  const isBootstrapPollAction =
+    String(args.user_message ?? "").trim().toUpperCase() === ACTION_BOOTSTRAP_POLL_TOKEN;
+  const isBootstrapPollCall = isLegacyLocaleWaitRetryCall || isBootstrapPollMarker || isBootstrapPollAction;
 
   const rawLegacyMarkers = detectLegacySessionMarkers((args.state ?? {}) as Record<string, unknown>);
   let state = normalizeState(args.state ?? {});
@@ -6902,6 +6960,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   (state as any).__session_turn_id = requestScopedTurnId || crypto.randomUUID();
   if ((state as any).__ui_telemetry) {
     delete (state as any).__ui_telemetry;
+  }
+  if ((state as any).__locale_wait_retry) {
+    delete (state as any).__locale_wait_retry;
+  }
+  if ((state as any).__bootstrap_poll) {
+    delete (state as any).__bootstrap_poll;
   }
   const fromArgs = String(rawState?.initial_user_message ?? "").trim();
   if (fromArgs && !String((state as any).initial_user_message ?? "").trim()) {
@@ -7126,11 +7190,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     };
   };
 
-  if (isLocaleWaitRetryCall && isUiLocaleReadyGateV1Enabled()) {
+  if (isBootstrapPollCall && isUiLocaleReadyGateV1Enabled()) {
     const languageSeed = String((state as any).initial_user_message || "").trim();
     const localeResolution = await resolveLocaleAndUiStringsReady(state, languageSeed);
     state = localeResolution.state;
     const retrySpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+    const bootstrapContract = deriveBootstrapContract(state);
     if (!localeResolution.interactiveReady) {
       return finalizeResponse(
         attachRegistryPayload(
@@ -7146,12 +7211,23 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           },
           retrySpecialist,
           {
-            bootstrap_waiting_locale: true,
-            bootstrap_interactive_ready: false,
+            bootstrap_waiting_locale: bootstrapContract.waiting,
+            bootstrap_interactive_ready: bootstrapContract.ready,
+            bootstrap_retry_hint: bootstrapContract.retry_hint,
           }
         )
       );
     }
+    actionCodeRaw = "";
+    userMessage = "";
+    clickedActionCodeForNoRepeat = "";
+    clickedLabelForNoRepeat = "";
+  }
+  if (isBootstrapPollCall && !isUiLocaleReadyGateV1Enabled()) {
+    actionCodeRaw = "";
+    userMessage = "";
+    clickedActionCodeForNoRepeat = "";
+    clickedLabelForNoRepeat = "";
   }
 
   const legacyMarkers = rawLegacyMarkers.length > 0 ? rawLegacyMarkers : detectLegacySessionMarkers(state);

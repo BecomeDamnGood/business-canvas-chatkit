@@ -120,6 +120,38 @@ test("language policy: locale hint wins over paraphrased English chat input", as
   assert.equal(String(result?.state?.ui_gate_status || ""), "waiting_locale");
   assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, true);
   assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, false);
+  assert.equal(String(result?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
+});
+
+test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps waiting contract stable", async () => {
+  const first = await withEnv("UI_LOCALE_READY_GATE_V1", "1", () =>
+    run_step({
+      user_message: "ACTION_START",
+      input_mode: "chat",
+      locale_hint: "nl-NL",
+      locale_hint_source: "openai_locale",
+      state: {
+        current_step: "step_0",
+        intro_shown_session: "false",
+        last_specialist_result: {},
+        started: "true",
+        initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
+      },
+    })
+  );
+  assert.equal(String(first?.state?.ui_gate_status || ""), "waiting_locale");
+
+  const polled = await withEnv("UI_LOCALE_READY_GATE_V1", "1", () =>
+    run_step({
+      user_message: "ACTION_BOOTSTRAP_POLL",
+      input_mode: "widget",
+      state: { ...(first?.state || {}), __bootstrap_poll: "true" } as Record<string, unknown>,
+    })
+  );
+  assert.equal(polled?.ok, true);
+  assert.equal(String(polled?.state?.ui_gate_status || ""), "waiting_locale");
+  assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, true);
+  assert.equal(String(polled?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
 });
 
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {

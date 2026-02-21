@@ -186,6 +186,24 @@ function renderPrestartSkeleton(cardDesc: HTMLElement, lang: string): void {
   cardDesc.appendChild(skeleton);
 }
 
+function renderBootstrapWaitShell(cardDesc: HTMLElement): void {
+  clearElement(cardDesc);
+  const shell = appendTextNode("div", "bootstrap-wait-shell", "");
+  (shell as HTMLElement).style.display = "grid";
+  (shell as HTMLElement).style.gap = "14px";
+
+  for (const width of ["68%", "92%", "84%", "56%"]) {
+    const line = appendTextNode("div", "skeleton-line", "");
+    (line as HTMLElement).style.width = width;
+    (line as HTMLElement).style.height = "12px";
+    (line as HTMLElement).style.borderRadius = "999px";
+    (line as HTMLElement).style.opacity = "0.9";
+    shell.appendChild(line);
+  }
+
+  cardDesc.appendChild(shell);
+}
+
 function parseMenuFromContractId(contractIdRaw: unknown, stepIdRaw: unknown): string {
   const contractId = String(contractIdRaw || "").trim();
   const stepId = String(stepIdRaw || "").trim();
@@ -518,14 +536,18 @@ export function render(overrideToolOutput?: unknown): void {
       (startHint as HTMLElement).style.display = "none";
     }
     if (prompt) prompt.textContent = "";
-    if (sectionTitleEl) sectionTitleEl.textContent = "";
-    if (badge) badge.textContent = "01";
+    const waitingSectionTitle = document.getElementById("sectionTitle");
+    if (waitingSectionTitle) waitingSectionTitle.textContent = "";
+    if (badge) {
+      badge.textContent = "";
+      (badge as HTMLElement).style.display = "none";
+    }
     buildStepper(0, "", lang);
     if (cardDesc) {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      renderPrestartSkeleton(prestartEl, lang);
+      renderBootstrapWaitShell(prestartEl);
     }
     if (getIsLoading()) setLoading(false);
     return;
@@ -590,11 +612,17 @@ export function render(overrideToolOutput?: unknown): void {
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
+    if (badge) {
+      badge.textContent = "";
+      (badge as HTMLElement).style.display = "none";
+    }
+    const waitingSectionTitle = document.getElementById("sectionTitle");
+    if (waitingSectionTitle) waitingSectionTitle.textContent = "";
     if (cardDesc) {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      renderPrestartSkeleton(prestartEl, lang);
+      renderBootstrapWaitShell(prestartEl);
     }
     if (prompt) prompt.textContent = "";
     startHint.textContent = "";

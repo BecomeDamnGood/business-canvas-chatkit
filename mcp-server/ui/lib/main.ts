@@ -6,8 +6,8 @@ import { t } from "./ui_constants.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 import {
   initActionsConfig,
-  applyToolResult,
   callRunStep,
+  handleToolResultAndMaybeScheduleBootstrapRetry,
   handleBridgeResponse,
   setBridgeEnabled,
   setSendEnabled,
@@ -80,9 +80,8 @@ if (typeof window !== "undefined") {
     }
     if (method === "ui/notifications/tool-result") {
       const payload = extractToolResult(data.params);
-      const normalized = applyToolResult(payload);
       try {
-        render(normalized);
+        handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
       } catch (err) {
         console.error(err);
       } finally {
