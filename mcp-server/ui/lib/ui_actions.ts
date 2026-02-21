@@ -459,15 +459,15 @@ export async function callRunStep(
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
   const state = latest.state || { current_step: "step_0" };
 
-  const widgetLang = String((widgetState().language || "")).trim().toLowerCase();
-  const navLang = typeof navigator !== "undefined" ? (navigator.language || "en").slice(0, 2).toLowerCase() : "en";
-  const lang = uiLang(state) || widgetLang || navLang || "en";
-  let nextState = ensureLanguageInState(state, lang);
+  const stateLanguage = uiLang(state);
+  let nextState = Object.assign({}, state);
   if (extraState && typeof extraState === "object") {
     nextState = Object.assign({}, nextState, extraState);
   }
 
-  setWidgetStateSafe({ language: nextState.language, started: "true" });
+  const widgetPatch: Record<string, unknown> = { started: "true" };
+  if (stateLanguage) widgetPatch.language = stateLanguage;
+  setWidgetStateSafe(widgetPatch);
 
   const payload = {
     current_step_id: nextState.current_step || "step_0",

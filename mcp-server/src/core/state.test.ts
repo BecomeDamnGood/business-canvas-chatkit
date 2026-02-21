@@ -2,6 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CURRENT_STATE_VERSION,
   FINALS_KEYS,
   getDefaultState,
   getFinalsSnapshot,
@@ -49,7 +50,7 @@ test("finals persistence: normalizeState preserves existing finals", () => {
   assert.equal(snapshot.purpose_final, "Purpose text");
 });
 
-test("state migration v6: legacy sessions are hard-reset and clear legacy finals", () => {
+test("state migration: legacy sessions are hard-reset and clear legacy finals", () => {
   const raw = {
     state_version: "1",
     current_step: "step_0",
@@ -68,10 +69,10 @@ test("state migration v6: legacy sessions are hard-reset and clear legacy finals
   const snapshot = getFinalsSnapshot(migrated);
   assert.equal(snapshot.dream_final, undefined);
   assert.equal(snapshot.business_name, undefined);
-  assert.equal(String((migrated as any).state_version), "6");
+  assert.equal(String((migrated as any).state_version), CURRENT_STATE_VERSION);
 });
 
-test("state migration v6: staged provisional values backfill source as system_generated", () => {
+test("state migration: staged provisional values backfill source as system_generated", () => {
   const migrated = migrateState({
     ...getDefaultState(),
     state_version: "5",
@@ -80,7 +81,7 @@ test("state migration v6: staged provisional values backfill source as system_ge
       purpose: "To build meaningful work.",
     },
   });
-  assert.equal(String((migrated as any).state_version), "6");
+  assert.equal(String((migrated as any).state_version), CURRENT_STATE_VERSION);
   assert.deepEqual((migrated as any).provisional_source_by_step, {
     dream: "system_generated",
     purpose: "system_generated",

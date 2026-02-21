@@ -53,6 +53,9 @@ export type LanguageSource = z.infer<typeof LanguageSourceZod>;
 export const UI_STRINGS_STATUSES = ["ready", "pending", "error"] as const;
 export const UiStringsStatusZod = z.enum(UI_STRINGS_STATUSES);
 export type UiStringsStatus = z.infer<typeof UiStringsStatusZod>;
+export const UI_BOOTSTRAP_STATUSES = ["init", "awaiting_locale", "ready"] as const;
+export const UiBootstrapStatusZod = z.enum(UI_BOOTSTRAP_STATUSES);
+export type UiBootstrapStatus = z.infer<typeof UiBootstrapStatusZod>;
 
 /**
  * CanvasState (canoniek)
@@ -81,6 +84,7 @@ export const CanvasStateZod = z.object({
   ui_strings_version: z.string(),
   ui_strings_status: UiStringsStatusZod,
   ui_strings_requested_lang: z.string(),
+  ui_bootstrap_status: UiBootstrapStatusZod,
 
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
@@ -119,7 +123,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "7";
+export const CURRENT_STATE_VERSION = "8";
 
 /**
  * Hard defaults (no nulls)
@@ -142,6 +146,7 @@ export function getDefaultState(): CanvasState {
     ui_strings_version: "",
     ui_strings_status: "ready",
     ui_strings_requested_lang: "",
+    ui_bootstrap_status: "init",
 
     last_specialist_result: {},
 
@@ -220,6 +225,11 @@ export function normalizeState(raw: unknown): CanvasState {
   const ui_strings_requested_lang = String((r as any).ui_strings_requested_lang ?? d.ui_strings_requested_lang)
     .trim()
     .toLowerCase();
+  const ui_bootstrap_status_raw = String((r as any).ui_bootstrap_status ?? d.ui_bootstrap_status).trim();
+  const ui_bootstrap_status: UiBootstrapStatus =
+    ui_bootstrap_status_raw === "awaiting_locale" || ui_bootstrap_status_raw === "ready"
+      ? ui_bootstrap_status_raw
+      : "init";
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
@@ -304,6 +314,7 @@ export function normalizeState(raw: unknown): CanvasState {
     ui_strings_version,
     ui_strings_status,
     ui_strings_requested_lang,
+    ui_bootstrap_status,
 
     last_specialist_result,
 
@@ -344,6 +355,24 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v7 -> v8: add UI bootstrap status metadata.
+  if (s.state_version === "7") {
+    const bootstrapRaw = String((s as any).ui_bootstrap_status ?? "").trim();
+    const bootstrapFromStatus = String((s as any).ui_strings_status ?? "ready").trim();
+    const ui_bootstrap_status =
+      bootstrapRaw === "init" || bootstrapRaw === "awaiting_locale" || bootstrapRaw === "ready"
+        ? bootstrapRaw
+        : bootstrapFromStatus === "ready"
+          ? "ready"
+          : "awaiting_locale";
+    s = {
+      ...s,
+      state_version: "8",
+      ui_bootstrap_status,
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v6 -> v7: add language source + ui_strings status metadata.
   if (s.state_version === "6") {
     const languageSourceRaw = String((s as any).language_source ?? "").trim();
@@ -366,7 +395,7 @@ export function migrateState(raw: unknown): CanvasState {
       ui_strings_status,
       ui_strings_requested_lang: String((s as any).ui_strings_requested_lang ?? "").trim().toLowerCase(),
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v5 -> v6: add source map for staged values (legacy staged values default to system_generated).

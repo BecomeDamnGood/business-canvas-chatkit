@@ -30,7 +30,7 @@ import {
   uiLang,
   hasToolOutput,
 } from "./ui_actions.js";
-import { getIsLoading, getSessionStarted } from "./ui_state.js";
+import { getIsLoading, getSessionStarted, setSessionStarted } from "./ui_state.js";
 
 function stepIndex(stepId: string): number {
   const idx = ORDER.indexOf(stepId);
@@ -178,14 +178,12 @@ function renderPrestartContent(cardDesc: HTMLElement, lang: string): void {
 }
 
 function renderPrestartSkeleton(cardDesc: HTMLElement, lang: string): void {
-  const content = prestartContentForLang(lang);
   clearElement(cardDesc);
-  const headline = appendTextNode(
-    "p",
-    "card-headline",
-    content.skeleton || uiText(lang, "prestart.loading", "Loading translation…")
-  );
-  cardDesc.appendChild(headline);
+  const skeleton = appendTextNode("div", "skeleton-stack", "");
+  skeleton.appendChild(appendTextNode("div", "skeleton-line", ""));
+  skeleton.appendChild(appendTextNode("div", "skeleton-line", ""));
+  skeleton.appendChild(appendTextNode("div", "skeleton-line", ""));
+  cardDesc.appendChild(skeleton);
 }
 
 function parseMenuFromContractId(contractIdRaw: unknown, stepIdRaw: unknown): string {
@@ -485,6 +483,46 @@ export function render(overrideToolOutput?: unknown): void {
     const bucket = overrideLang || baseLang(lang);
     UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...(overrideStrings as Record<string, string>) };
   }
+  const hasToolOutputVal = hasToolOutput();
+  const hasResultPayload = Object.keys(result || {}).length > 0;
+  const serverStarted = String((state?.started || "")).toLowerCase() === "true";
+  const sessionStarted = getSessionStarted();
+  if (hasToolOutputVal && serverStarted && !sessionStarted) {
+    setSessionStarted(true);
+  }
+  const bootstrapAwaitingServer = !hasToolOutputVal && !hasResultPayload;
+  if (bootstrapAwaitingServer) {
+    const inputWrap = document.getElementById("inputWrap");
+    const btnStart = document.getElementById("btnStart");
+    const startHint = document.getElementById("startHint");
+    const choiceWrap = document.getElementById("choiceWrap");
+    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    const cardDesc = document.getElementById("cardDesc");
+    const prompt = document.getElementById("prompt");
+    const sectionTitleEl = document.getElementById("sectionTitle");
+    const badge = document.getElementById("badge");
+    if (inputWrap) (inputWrap as HTMLElement).style.display = "none";
+    if (choiceWrap) (choiceWrap as HTMLElement).style.display = "none";
+    if (wordingChoiceWrap) (wordingChoiceWrap as HTMLElement).style.display = "none";
+    if (btnStart) (btnStart as HTMLElement).style.display = "none";
+    if (startHint) {
+      startHint.textContent = "";
+      (startHint as HTMLElement).style.display = "none";
+    }
+    if (prompt) prompt.textContent = "";
+    if (sectionTitleEl) sectionTitleEl.textContent = "";
+    if (badge) badge.textContent = "01";
+    buildStepper(0, "", lang);
+    if (cardDesc) {
+      const prestartEl = cardDesc as HTMLElement;
+      prestartEl.classList.remove("has-grid");
+      prestartEl.classList.remove("is-step0-ask-layout");
+      renderPrestartSkeleton(prestartEl, lang);
+    }
+    if (getIsLoading()) setLoading(false);
+    return;
+  }
+
   setStaticStrings(lang);
 
   if (transientError) {
@@ -514,10 +552,8 @@ export function render(overrideToolOutput?: unknown): void {
     setWidgetStateSafe({ language: langPersist });
   }
 
-  const hasToolOutputVal = hasToolOutput();
   const persistedStarted = String((ws?.started || "")).toLowerCase() === "true";
-  const sessionStarted = getSessionStarted();
-  const showPreStart = !sessionStarted;
+  const showPreStart = hasToolOutputVal ? !serverStarted : !sessionStarted;
 
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";

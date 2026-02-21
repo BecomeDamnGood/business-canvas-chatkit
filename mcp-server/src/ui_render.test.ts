@@ -1010,7 +1010,9 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
   assert.match(source, /appendTextNode\("p", "card-headline", content\.headline\)/);
   assert.match(source, /appendTextNode\("div", "meta-row", ""\)/);
   assert.match(source, /appendTextNode\("div", "deliverables", ""\)/);
-  assert.match(source, /appendTextNode\(\s*"p",\s*"card-headline",\s*content\.skeleton \|\| uiText\(lang,\s*"prestart\.loading",\s*"Loading translation…"\)\s*\)/);
+  assert.match(source, /const skeleton = appendTextNode\("div", "skeleton-stack", ""\);/);
+  assert.match(source, /skeleton\.appendChild\(appendTextNode\("div", "skeleton-line", ""\)\);/);
+  assert.doesNotMatch(source, /Loading translation/);
 });
 
 test("render source blocks non-English pending ui_strings from showing fallback body", () => {
@@ -1019,4 +1021,12 @@ test("render source blocks non-English pending ui_strings from showing fallback 
   assert.match(source, /if \(pendingNonEnglishByState\) \{/);
   assert.match(source, /renderPrestartSkeleton\(prestartEl, lang\)/);
   assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
+});
+
+test("render source waits for server bootstrap and derives prestart visibility from server started state", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
+  assert.match(source, /const bootstrapAwaitingServer = !hasToolOutputVal && !hasResultPayload;/);
+  assert.match(source, /if \(bootstrapAwaitingServer\) \{/);
+  assert.match(source, /renderPrestartSkeleton\(prestartEl, lang\)/);
+  assert.match(source, /const showPreStart = hasToolOutputVal \? !serverStarted : !sessionStarted;/);
 });

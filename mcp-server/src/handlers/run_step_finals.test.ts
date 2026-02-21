@@ -1584,6 +1584,38 @@ test("Step 0 ASK fallback keeps context line and canonical question", async () =
   );
 });
 
+test("Step 0 start-trigger with locale_hint pending suppresses English body and prompt", async () => {
+  const result = await withEnv("UI_PENDING_NO_FALLBACK_TEXT_V1", "1", () =>
+    withEnv("UI_START_TRIGGER_LANG_RESOLVE_V1", "1", () =>
+      withEnv("UI_STRICT_NON_EN_PENDING_V1", "1", () =>
+        run_step({
+          user_message: "ACTION_START",
+          input_mode: "chat",
+          locale_hint: "nl-NL",
+          locale_hint_source: "openai_locale",
+          state: {
+            ...getDefaultState(),
+            current_step: "step_0",
+            active_specialist: "ValidationAndBusinessName",
+            intro_shown_session: "false",
+            started: "true",
+            initial_user_message: "I need help with my business plan for my advertising agency called Mindd.",
+            last_specialist_result: {},
+          },
+        })
+      )
+    )
+  );
+  assert.equal(result.ok, true);
+  assert.equal(String(result.state?.language || ""), "nl");
+  assert.equal(String(result.state?.ui_strings_status || ""), "pending");
+  assert.equal(String(result.state?.ui_bootstrap_status || ""), "awaiting_locale");
+  assert.equal(String(result.text || ""), "");
+  assert.equal(String(result.prompt || ""), "");
+  assert.equal(String(result.specialist?.message || ""), "");
+  assert.equal(String(result.specialist?.question || ""), "");
+});
+
 test("global free-text policy: ActionCode turn bypasses renderer", async () => {
   const result = await run_step({
     user_message: "ACTION_DREAM_REFINE_START_EXERCISE",

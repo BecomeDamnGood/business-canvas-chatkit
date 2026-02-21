@@ -6,6 +6,17 @@ import os from "node:os";
 import path from "node:path";
 import { run_step } from "./run_step.js";
 
+async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Promise<T> {
+  const previous = process.env[key];
+  process.env[key] = value;
+  try {
+    return await fn();
+  } finally {
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  }
+}
+
 test("Start gating: when state.started is not true, start trigger returns Click Start prompt", async () => {
   const result = await run_step({
     user_message: "",
@@ -82,24 +93,34 @@ test("language policy: explicit override wins", async () => {
 });
 
 test("language policy: locale hint wins over paraphrased English chat input", async () => {
-  const result = await run_step({
-    user_message: "",
-    input_mode: "chat",
-    locale_hint: "nl-NL",
-    locale_hint_source: "openai_locale",
-    state: {
-      current_step: "step_0",
-      intro_shown_session: "false",
-      last_specialist_result: {},
-      started: "true",
-      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
-    },
-  });
+  const result = await withEnv("UI_PENDING_NO_FALLBACK_TEXT_V1", "1", () =>
+    withEnv("UI_START_TRIGGER_LANG_RESOLVE_V1", "1", () =>
+      withEnv("UI_STRICT_NON_EN_PENDING_V1", "1", () =>
+        run_step({
+          user_message: "",
+          input_mode: "chat",
+          locale_hint: "nl-NL",
+          locale_hint_source: "openai_locale",
+          state: {
+            current_step: "step_0",
+            intro_shown_session: "false",
+            last_specialist_result: {},
+            started: "true",
+            initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
+          },
+        })
+      )
+    )
+  );
   assert.equal(result?.ok, true);
   assert.equal(result?.state?.language, "nl");
   assert.equal(result?.state?.language_source, "locale_hint");
   assert.equal(result?.state?.ui_strings_requested_lang, "nl");
   assert.equal(result?.state?.ui_strings_status, "pending");
+  assert.equal(String(result?.text || ""), "");
+  assert.equal(String(result?.prompt || ""), "");
+  assert.equal(String(result?.specialist?.message || ""), "");
+  assert.equal(String(result?.specialist?.question || ""), "");
 });
 
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {

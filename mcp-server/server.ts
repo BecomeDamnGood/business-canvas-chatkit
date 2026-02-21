@@ -220,7 +220,9 @@ function localeFromRequestHeaders(requestInfo: unknown): string {
   if (!headersRaw) return "";
   const direct = localeFromMetaValue(headersRaw["accept-language"]);
   if (direct) return direct;
-  const canonical = Object.keys(headersRaw).find((key) => String(key || "").toLowerCase() === "accept-language");
+  const canonical = Object.keys(headersRaw).find(
+    (key) => safeString(key || "").toLowerCase() === "accept-language"
+  );
   if (!canonical) return "";
   return localeFromMetaValue(headersRaw[canonical]);
 }
@@ -314,14 +316,23 @@ async function runStepHandler(args: {
   const stepIdStr = safeString(current_step_id ?? "");
   const msgLen = typeof user_message_raw === "string" ? user_message_raw.length : 0;
   const stateKeysCount = stateForTool && typeof stateForTool === "object" && stateForTool !== null ? Object.keys(stateForTool).length : 0;
-  console.log(`[run_step] step_id=${stepIdStr} user_message_len=${msgLen} state_keys=${stateKeysCount}`);
+  const localeHint = safeString(args.locale_hint ?? "");
+  const inputMode = safeString(args.input_mode ?? "chat");
+  console.log("[run_step] request", {
+    input_mode: inputMode || "chat",
+    step_id: stepIdStr,
+    user_message_len: msgLen,
+    state_keys: stateKeysCount,
+    locale_hint: localeHint,
+    locale_hint_source: localeHintSource,
+  });
 
   try {
     const runStepTool = await getRunStep();
     const result = await runStepTool({
       user_message,
       input_mode: args.input_mode,
-      locale_hint: safeString(args.locale_hint ?? ""),
+      locale_hint: localeHint,
       locale_hint_source: localeHintSource,
       state: stateForTool,
     });
@@ -333,6 +344,19 @@ async function runStepHandler(args: {
       safeString((result as { state?: { current_step?: string } }).state?.current_step ?? "unknown") || "unknown";
     const specialistMeta =
       safeString((result as { active_specialist?: string }).active_specialist ?? "unknown") || "unknown";
+    const resultState =
+      (resultForClient && typeof resultForClient.state === "object" && resultForClient.state)
+        ? (resultForClient.state as Record<string, unknown>)
+        : {};
+    console.log("[run_step] response", {
+      input_mode: inputMode || "chat",
+      resolved_language: safeString(resultState.language ?? ""),
+      language_source: safeString(resultState.language_source ?? ""),
+      ui_strings_status: safeString(resultState.ui_strings_status ?? ""),
+      ui_bootstrap_status: safeString(resultState.ui_bootstrap_status ?? ""),
+      current_step: safeString(resultState.current_step ?? stepMeta),
+      active_specialist: specialistMeta,
+    });
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
       meta: `step: ${stepMeta} | specialist: ${specialistMeta}`,

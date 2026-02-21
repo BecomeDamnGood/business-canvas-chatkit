@@ -195,10 +195,12 @@ function uiDefaultString(key: string, fallback = ""): string {
 }
 
 function step0CardDescForState(state: CanvasState | null | undefined): string {
+  if (shouldSuppressFallbackText(state)) return "";
   return uiStringFromStateMap(state, "step0.carddesc", uiDefaultString("step0.carddesc"));
 }
 
 function step0QuestionForState(state: CanvasState | null | undefined): string {
+  if (shouldSuppressFallbackText(state)) return "";
   return uiStringFromStateMap(
     state,
     "step0.question.initial",
@@ -1040,6 +1042,18 @@ function isUiStep0LangResetGuardV1Enabled(): boolean {
   return envFlagEnabled("UI_STEP0_LANG_RESET_GUARD_V1", true);
 }
 
+function isUiBootstrapStateV1Enabled(): boolean {
+  return envFlagEnabled("UI_BOOTSTRAP_STATE_V1", true);
+}
+
+function isUiPendingNoFallbackTextV1Enabled(): boolean {
+  return envFlagEnabled("UI_PENDING_NO_FALLBACK_TEXT_V1", true);
+}
+
+function isUiStartTriggerLangResolveV1Enabled(): boolean {
+  return envFlagEnabled("UI_START_TRIGGER_LANG_RESOLVE_V1", true);
+}
+
 function isWordingPanelCleanBodyV1Enabled(): boolean {
   return envFlagEnabled("UI_WORDING_PANEL_CLEAN_BODY_V1", true);
 }
@@ -1229,12 +1243,14 @@ function hasValidStep0Final(step0FinalRaw: string): boolean {
 }
 
 function step0ReadyActionLabel(state: CanvasState | null | undefined): string {
+  if (shouldSuppressFallbackText(state)) return "";
   const key = labelKeyForMenuAction("STEP0_MENU_READY_START", "ACTION_STEP0_READY_START", 0);
   const fallback = String(MENU_LABEL_DEFAULTS[key] || "Yes, I'm ready. Let's start!").trim();
   return uiStringFromStateMap(state, key, fallback);
 }
 
 function step0ReadinessStatement(state: CanvasState | null | undefined, parsed: { venture: string; name: string; status: string }): string {
+  if (shouldSuppressFallbackText(state)) return "";
   const venture = String(parsed.venture || "venture").trim();
   const name = String(parsed.name || "TBD").trim();
   const existingTemplate = uiStringFromStateMap(
@@ -1252,6 +1268,7 @@ function step0ReadinessStatement(state: CanvasState | null | undefined, parsed: 
 }
 
 function step0ReadinessQuestion(state: CanvasState | null | undefined, parsed: { venture: string; name: string; status: string }): string {
+  if (shouldSuppressFallbackText(state)) return "";
   const readyLabel = step0ReadyActionLabel(state);
   const suffix = uiStringFromStateMap(
     state,
@@ -1259,6 +1276,7 @@ function step0ReadinessQuestion(state: CanvasState | null | undefined, parsed: {
     uiDefaultString("step0.readiness.suffix", "Are you ready to start with the first step: the Dream?")
   );
   const statement = step0ReadinessStatement(state, parsed);
+  if (!readyLabel || !statement || !suffix) return "";
   return `1) ${readyLabel}\n\n${statement} ${suffix}`.trim();
 }
 
@@ -1771,6 +1789,7 @@ function uiStringFromStateMap(
     const candidate = String(map[key] || "").trim();
     if (candidate) return candidate;
   }
+  if (shouldSuppressFallbackText(state)) return "";
   return String(fallback || "").trim();
 }
 
@@ -4808,6 +4827,15 @@ function buildUiPayload(
   if (String(process.env.UI_STEP0_LANG_RESET_GUARD_V1 || "").trim()) {
     flags.ui_step0_lang_reset_guard_v1 = isUiStep0LangResetGuardV1Enabled();
   }
+  if (String(process.env.UI_BOOTSTRAP_STATE_V1 || "").trim()) {
+    flags.ui_bootstrap_state_v1 = isUiBootstrapStateV1Enabled();
+  }
+  if (String(process.env.UI_PENDING_NO_FALLBACK_TEXT_V1 || "").trim()) {
+    flags.ui_pending_no_fallback_text_v1 = isUiPendingNoFallbackTextV1Enabled();
+  }
+  if (String(process.env.UI_START_TRIGGER_LANG_RESOLVE_V1 || "").trim()) {
+    flags.ui_start_trigger_lang_resolve_v1 = isUiStartTriggerLangResolveV1Enabled();
+  }
   const introChromeRaw = String((specialist as any)?.ui_show_step_intro_chrome || "").trim().toLowerCase();
   if ((specialist as any)?.ui_show_step_intro_chrome === true || introChromeRaw === "true") {
     flags.show_step_intro_chrome = true;
@@ -5094,10 +5122,30 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
       ? { prompt: pickPrompt(safeSpecialist) }
       : {}),
   } as T;
+  const suppressPendingNonEnglishCopy =
+    payloadState ? shouldSuppressFallbackText(payloadState) : false;
+  const payloadForOutput = suppressPendingNonEnglishCopy
+    ? ({
+        ...safePayload,
+        specialist: {
+          ...((safePayload as any).specialist || {}),
+          message: "",
+          question: "",
+        },
+        ...(Object.prototype.hasOwnProperty.call(safePayload, "text") ? { text: "" } : {}),
+        ...(Object.prototype.hasOwnProperty.call(safePayload, "prompt") ? { prompt: "" } : {}),
+      } as T)
+    : safePayload;
+  const uiForOutput = suppressPendingNonEnglishCopy && ui
+    ? {
+        ...ui,
+        ...(Object.prototype.hasOwnProperty.call(ui, "questionText") ? { questionText: "" } : {}),
+      }
+    : ui;
   return {
-    ...safePayload,
+    ...payloadForOutput,
     registry_version: ACTIONCODE_REGISTRY.version,
-    ...(ui ? { ui } : {}),
+    ...(uiForOutput ? { ui: uiForOutput } : {}),
   };
 }
 
@@ -5203,6 +5251,34 @@ function normalizeLocaleHint(raw: string): string {
   const normalized = normalizeLangCode(String(raw || ""));
   if (!/^[a-z]{2,3}$/.test(normalized)) return "";
   return normalized;
+}
+
+function isNonEnglishPendingUiStringsState(state: CanvasState | null | undefined): boolean {
+  const lang = normalizeLangCode(String((state as any)?.language ?? ""));
+  const uiStatusRaw = String((state as any)?.ui_strings_status ?? "ready").trim().toLowerCase();
+  const uiStatus = uiStatusRaw === "pending" || uiStatusRaw === "error" ? uiStatusRaw : "ready";
+  return Boolean(lang) && lang !== "en" && uiStatus !== "ready";
+}
+
+function shouldSuppressFallbackText(state: CanvasState | null | undefined): boolean {
+  if (!isUiPendingNoFallbackTextV1Enabled()) return false;
+  if (!isNonEnglishPendingUiStringsState(state)) return false;
+  const source = normalizeLanguageSource((state as any)?.language_source);
+  if (source === "locale_hint" || source === "explicit_override") return true;
+  const explicitOverride = String((state as any)?.language_override ?? "").trim().toLowerCase() === "true";
+  return explicitOverride;
+}
+
+function computeUiBootstrapStatus(
+  state: CanvasState | null | undefined,
+  uiStatusRaw: string
+): "init" | "awaiting_locale" | "ready" {
+  if (!isUiBootstrapStateV1Enabled()) return "ready";
+  const status = uiStatusRaw === "pending" || uiStatusRaw === "error" ? uiStatusRaw : "ready";
+  if (status === "ready") return "ready";
+  if (isNonEnglishPendingUiStringsState(state)) return "awaiting_locale";
+  const lang = normalizeLangCode(String((state as any)?.language ?? ""));
+  return lang ? "awaiting_locale" : "init";
 }
 
 function normalizeLanguageSource(raw: unknown): LanguageSource {
@@ -5466,6 +5542,7 @@ async function ensureUiStringsForState(
       ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
       ui_strings_status: "ready",
       ui_strings_requested_lang: "en",
+      ui_bootstrap_status: "ready",
     } as CanvasState;
   }
   const lang = normalizeLangCode(String((state as any).language ?? "")) || "en";
@@ -5484,7 +5561,10 @@ async function ensureUiStringsForState(
     existingVersion === UI_STRINGS_SCHEMA_VERSION &&
     existingStatus === "ready"
   ) {
-    return state;
+    return {
+      ...(state as any),
+      ui_bootstrap_status: "ready",
+    } as CanvasState;
   }
   const resolved = await getUiStringsForLang(lang, model, telemetry);
   if (resolved.status === "pending") {
@@ -5505,6 +5585,7 @@ async function ensureUiStringsForState(
     ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
     ui_strings_status: resolved.status,
     ui_strings_requested_lang: resolved.requested_lang || lang,
+    ui_bootstrap_status: computeUiBootstrapStatus(state, resolved.status),
   } as CanvasState;
 }
 
@@ -5542,6 +5623,7 @@ async function resolveLanguageForTurn(
       ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
       ui_strings_status: "ready",
       ui_strings_requested_lang: "en",
+      ui_bootstrap_status: "ready",
     } as CanvasState;
   }
   const msg = String(userMessage ?? "");
@@ -8127,9 +8209,34 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     Object.keys((state as any).last_specialist_result ?? {}).length === 0;
 
   if (isStartTrigger) {
+    const ensureStartState = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
+      if (!isUiStartTriggerLangResolveV1Enabled()) {
+        return ensureUiStrings(targetState, routeOrText);
+      }
+      return ensureLanguage(targetState, routeOrText);
+    };
+    const maskForPending = <T extends Record<string, unknown>>(
+      targetState: CanvasState,
+      specialist: T,
+      text: string,
+      prompt: string
+    ): { specialist: T; text: string; prompt: string } => {
+      if (!isNonEnglishPendingUiStringsState(targetState)) {
+        return { specialist, text, prompt };
+      }
+      return {
+        specialist: {
+          ...specialist,
+          message: "",
+          question: "",
+        } as T,
+        text: "",
+        prompt: "",
+      };
+    };
     const started = String((state as any).started ?? "").trim().toLowerCase() === "true";
     if (!started) {
-      const stateWithUi = await ensureUiStrings(state, userMessage);
+      const stateWithUi = await ensureStartState(state, userMessage);
       const startHint =
         typeof (stateWithUi as any).ui_strings?.startHint === "string"
           ? String((stateWithUi as any).ui_strings.startHint)
@@ -8146,16 +8253,21 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         user_intent: "STEP_INPUT",
       meta_topic: "NONE",
       };
+      const pendingSafe = maskForPending(stateWithUi, specialist, "", specialist.question);
       return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
-        text: "",
-        prompt: specialist.question,
-        specialist,
-        state: { ...stateWithUi, active_specialist: STEP_0_SPECIALIST, last_specialist_result: specialist },
-      }, specialist, responseUiFlags));
+        text: pendingSafe.text,
+        prompt: pendingSafe.prompt,
+        specialist: pendingSafe.specialist,
+        state: {
+          ...stateWithUi,
+          active_specialist: STEP_0_SPECIALIST,
+          last_specialist_result: pendingSafe.specialist,
+        },
+      }, pendingSafe.specialist, responseUiFlags));
     }
     const existingFirst = (state as any).last_specialist_result;
     const isReuseFirst =
@@ -8163,7 +8275,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       String(existingFirst.action) === "ASK" &&
       String(existingFirst.question ?? "").trim() !== "";
     if (isReuseFirst) {
-      const stateWithUi = await ensureUiStrings(state, userMessage);
+      const stateWithUi = await ensureStartState(state, userMessage);
       (state as any).intro_shown_session = "true";
       const prompt = String(existingFirst.question || "").trim() || step0QuestionForState(state);
       const specialistForReuse = {
@@ -8172,16 +8284,21 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         message: step0CardDescForState(state),
         question: prompt,
       };
+      const pendingSafe = maskForPending(stateWithUi, specialistForReuse, step0CardDescForState(state), prompt);
       return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
-        text: step0CardDescForState(state),
-        prompt,
-        specialist: specialistForReuse,
-        state: { ...stateWithUi, active_specialist: STEP_0_SPECIALIST, last_specialist_result: specialistForReuse },
-      }, specialistForReuse, responseUiFlags));
+        text: pendingSafe.text,
+        prompt: pendingSafe.prompt,
+        specialist: pendingSafe.specialist,
+        state: {
+          ...stateWithUi,
+          active_specialist: STEP_0_SPECIALIST,
+          last_specialist_result: pendingSafe.specialist,
+        },
+      }, pendingSafe.specialist, responseUiFlags));
     }
 
     (state as any).intro_shown_session = "true";
@@ -8206,30 +8323,30 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       meta_topic: "NONE",
       };
 
-      const stateWithUi = await ensureUiStrings(state, userMessage);
+      const stateWithUi = await ensureStartState(state, userMessage);
+      const pendingSafe = maskForPending(stateWithUi, specialist, "", specialist.question);
       return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,
         current_step_id: String(state.current_step),
         active_specialist: STEP_0_SPECIALIST,
-        text: "",
-        prompt: specialist.question,
-        specialist,
+        text: pendingSafe.text,
+        prompt: pendingSafe.prompt,
+        specialist: pendingSafe.specialist,
         state: {
           ...stateWithUi,
           ...((state as any).started !== "true" ? { started: "true" as const } : {}),
           active_specialist: STEP_0_SPECIALIST,
-          last_specialist_result: specialist,
+          last_specialist_result: pendingSafe.specialist,
         },
-      }, specialist, responseUiFlags));
+      }, pendingSafe.specialist, responseUiFlags));
     }
 
     // Otherwise: first-time Step 0 setup question.
     const initialMsg = String((state as any).initial_user_message ?? "").trim();
-    if (!String((state as any).language ?? "").trim() && initialMsg) {
-      state = await ensureLanguage(state, initialMsg);
-    }
-    const stateWithUi = await ensureUiStrings(state, userMessage);
+    const langSeed = initialMsg || userMessage;
+    state = await ensureStartState(state, langSeed);
+    const stateWithUi = state;
     const specialist: ValidationAndBusinessNameOutput = {
       action: "ASK",
       message: step0CardDescForState(state),
@@ -8242,22 +8359,23 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       user_intent: "STEP_INPUT",
       meta_topic: "NONE",
     };
+    const pendingSafe = maskForPending(stateWithUi, specialist, specialist.message, specialist.question);
 
     return finalizeResponse(attachRegistryPayload({
       ok: true as const,
       tool: "run_step" as const,
       current_step_id: String(state.current_step),
       active_specialist: STEP_0_SPECIALIST,
-      text: specialist.message,
-      prompt: specialist.question,
-      specialist,
+      text: pendingSafe.text,
+      prompt: pendingSafe.prompt,
+      specialist: pendingSafe.specialist,
       state: {
         ...stateWithUi,
         ...((state as any).started !== "true" ? { started: "true" as const } : {}),
         active_specialist: STEP_0_SPECIALIST,
-        last_specialist_result: specialist,
+        last_specialist_result: pendingSafe.specialist,
       },
-    }, specialist, responseUiFlags));
+    }, pendingSafe.specialist, responseUiFlags));
   }
 
   // --------- DREAM READINESS → DREAM EXPLAINER (guard) ----------

@@ -34,3 +34,17 @@ test("run_step MCP handler derives locale hint from request metadata and forward
     "tool callback must forward resolved locale hint to runStepHandler"
   );
 });
+
+test("run_step handler logs locale + language readiness in request/response lines", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(
+    source,
+    /\[run_step\] request[\s\S]*locale_hint[\s\S]*locale_hint_source/,
+    "request log should include locale hint metadata for CloudWatch diagnostics"
+  );
+  assert.match(
+    source,
+    /\[run_step\] response[\s\S]*resolved_language[\s\S]*language_source[\s\S]*ui_strings_status[\s\S]*ui_bootstrap_status/,
+    "response log should include resolved language and UI readiness fields"
+  );
+});
