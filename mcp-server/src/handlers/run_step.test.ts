@@ -93,9 +93,9 @@ test("language policy: explicit override wins", async () => {
 });
 
 test("language policy: locale hint wins over paraphrased English chat input", async () => {
-  const result = await withEnv("UI_PENDING_NO_FALLBACK_TEXT_V1", "1", () =>
-    withEnv("UI_START_TRIGGER_LANG_RESOLVE_V1", "1", () =>
-      withEnv("UI_STRICT_NON_EN_PENDING_V1", "1", () =>
+  const result = await withEnv("UI_START_TRIGGER_LANG_RESOLVE_V1", "1", () =>
+    withEnv("UI_STRICT_NON_EN_PENDING_V1", "1", () =>
+      withEnv("UI_LOCALE_READY_GATE_V1", "1", () =>
         run_step({
           user_message: "",
           input_mode: "chat",
@@ -117,10 +117,9 @@ test("language policy: locale hint wins over paraphrased English chat input", as
   assert.equal(result?.state?.language_source, "locale_hint");
   assert.equal(result?.state?.ui_strings_requested_lang, "nl");
   assert.equal(result?.state?.ui_strings_status, "pending");
-  assert.equal(String(result?.text || ""), "");
-  assert.equal(String(result?.prompt || ""), "");
-  assert.equal(String(result?.specialist?.message || ""), "");
-  assert.equal(String(result?.specialist?.question || ""), "");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "waiting_locale");
+  assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, true);
+  assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, false);
 });
 
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {

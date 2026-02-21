@@ -1015,12 +1015,13 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
   assert.doesNotMatch(source, /Loading translation/);
 });
 
-test("render source blocks non-English pending ui_strings from showing fallback body", () => {
+test("render source blocks locale-gated turns from showing interactive body", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const pendingNonEnglishByState =[\s\S]*uiStringsStatus !== "ready"/);
-  assert.match(source, /if \(pendingNonEnglishByState\) \{/);
+  assert.match(source, /const bootstrapWaitingLocale =[\s\S]*uiGateStatus === "waiting_locale"/);
+  assert.match(source, /if \(bootstrapWaitingLocale\) \{/);
   assert.match(source, /renderPrestartSkeleton\(prestartEl, lang\)/);
   assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
+  assert.match(source, /setSessionStarted\(false\);/);
 });
 
 test("render source waits for server bootstrap and derives prestart visibility from server started state", () => {

@@ -152,6 +152,48 @@ let rateLimitTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCallAt = 0;
 const CLICK_DEBOUNCE_MS = 250;
 const RUN_STEP_TIMEOUT_MS = 25000;
+const LOCALE_WAIT_RETRY_MIN_MS = 700;
+const LOCALE_WAIT_RETRY_MAX_MS = 8000;
+let localeWaitRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
+
+function clearLocaleWaitRetry(): void {
+  if (localeWaitRetryTimer) clearTimeout(localeWaitRetryTimer);
+  localeWaitRetryTimer = null;
+  localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
+}
+
+function isUiBootstrapWaitRetryEnabled(result: Record<string, unknown>): boolean {
+  const uiPayload =
+    result?.ui && typeof result.ui === "object"
+      ? (result.ui as Record<string, unknown>)
+      : {};
+  const uiFlags =
+    uiPayload.flags && typeof uiPayload.flags === "object"
+      ? (uiPayload.flags as Record<string, unknown>)
+      : {};
+  if (uiFlags.ui_bootstrap_wait_retry_v1 === false) return false;
+  if (uiFlags.ui_bootstrap_wait_retry_v1 === true) return true;
+  return true;
+}
+
+function isBootstrapWaitingLocale(result: Record<string, unknown>): boolean {
+  const uiPayload =
+    result?.ui && typeof result.ui === "object"
+      ? (result.ui as Record<string, unknown>)
+      : {};
+  const uiFlags =
+    uiPayload.flags && typeof uiPayload.flags === "object"
+      ? (uiPayload.flags as Record<string, unknown>)
+      : {};
+  if (uiFlags.bootstrap_waiting_locale === true) return true;
+  const state = result?.state && typeof result.state === "object"
+    ? (result.state as Record<string, unknown>)
+    : {};
+  const uiGateStatus = String(state.ui_gate_status || "").trim().toLowerCase();
+  const uiStringsStatus = String(state.ui_strings_status || "ready").trim().toLowerCase();
+  return uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready";
+}
 
 export function handleBridgeResponse(msg: any): boolean {
   if (!msg || typeof msg !== "object") return false;
@@ -451,9 +493,13 @@ export async function callRunStep(
     Boolean((o as { toolOutput?: unknown }).toolOutput) ||
     Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
   const persistedStarted = String((widgetState().started || "")).toLowerCase() === "true";
+  const isLocaleWaitRetryCall = String((extraState as any)?.__locale_wait_retry || "").trim().toLowerCase() === "true";
   if (String(message || "").trim() === "") {
-    if (hasToolOutput) return;
-    if (!persistedStarted) return;
+    if (hasToolOutput && !isLocaleWaitRetryCall) return;
+    if (!persistedStarted && !isLocaleWaitRetryCall) return;
+  }
+  if (!isLocaleWaitRetryCall) {
+    clearLocaleWaitRetry();
   }
 
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
@@ -544,6 +590,7 @@ export async function callRunStep(
       (errorObj.type === "timeout" || errorObj.type === "rate_limited") &&
       (errorObj.retry_action === "retry_same_action" || errorObj.type === "rate_limited");
     if (transientRetryError) {
+      clearLocaleWaitRetry();
       if (errorObj.type === "rate_limited") {
         setInlineNotice(
           errorObj.user_message ||
@@ -561,7 +608,27 @@ export async function callRunStep(
 
     const normalized = applyToolResult(resp);
     if (_render) _render(normalized);
+    if (isBootstrapWaitingLocale(result) && isUiBootstrapWaitRetryEnabled(result)) {
+      if (!localeWaitRetryTimer) {
+        const retryState =
+          result?.state && typeof result.state === "object"
+            ? (result.state as Record<string, unknown>)
+            : {};
+        const delay = localeWaitRetryDelayMs;
+        localeWaitRetryTimer = setTimeout(() => {
+          localeWaitRetryTimer = null;
+          void callRunStep("", { ...retryState, __locale_wait_retry: "true" });
+        }, delay);
+        localeWaitRetryDelayMs = Math.min(
+          LOCALE_WAIT_RETRY_MAX_MS,
+          Math.round(localeWaitRetryDelayMs * 1.6)
+        );
+      }
+    } else {
+      clearLocaleWaitRetry();
+    }
   } catch (e) {
+    clearLocaleWaitRetry();
     if (didTimeout) return;
     const msg = (e && (e as Error).message) ? String((e as Error).message) : "";
     const isTimeout =

@@ -56,6 +56,12 @@ export type UiStringsStatus = z.infer<typeof UiStringsStatusZod>;
 export const UI_BOOTSTRAP_STATUSES = ["init", "awaiting_locale", "ready"] as const;
 export const UiBootstrapStatusZod = z.enum(UI_BOOTSTRAP_STATUSES);
 export type UiBootstrapStatus = z.infer<typeof UiBootstrapStatusZod>;
+export const UI_GATE_STATUSES = ["waiting_locale", "ready"] as const;
+export const UiGateStatusZod = z.enum(UI_GATE_STATUSES);
+export type UiGateStatus = z.infer<typeof UiGateStatusZod>;
+export const UI_GATE_REASONS = ["", "translation_pending", "translation_retry"] as const;
+export const UiGateReasonZod = z.enum(UI_GATE_REASONS);
+export type UiGateReason = z.infer<typeof UiGateReasonZod>;
 
 /**
  * CanvasState (canoniek)
@@ -85,6 +91,9 @@ export const CanvasStateZod = z.object({
   ui_strings_status: UiStringsStatusZod,
   ui_strings_requested_lang: z.string(),
   ui_bootstrap_status: UiBootstrapStatusZod,
+  ui_gate_status: UiGateStatusZod,
+  ui_gate_reason: UiGateReasonZod,
+  ui_gate_since_ms: z.number().int().nonnegative(),
 
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
@@ -123,7 +132,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "8";
+export const CURRENT_STATE_VERSION = "9";
 
 /**
  * Hard defaults (no nulls)
@@ -147,6 +156,9 @@ export function getDefaultState(): CanvasState {
     ui_strings_status: "ready",
     ui_strings_requested_lang: "",
     ui_bootstrap_status: "init",
+    ui_gate_status: "ready",
+    ui_gate_reason: "",
+    ui_gate_since_ms: 0,
 
     last_specialist_result: {},
 
@@ -230,6 +242,20 @@ export function normalizeState(raw: unknown): CanvasState {
     ui_bootstrap_status_raw === "awaiting_locale" || ui_bootstrap_status_raw === "ready"
       ? ui_bootstrap_status_raw
       : "init";
+  const ui_gate_status_raw = String((r as any).ui_gate_status ?? d.ui_gate_status).trim();
+  const ui_gate_status: UiGateStatus =
+    ui_gate_status_raw === "waiting_locale" || ui_gate_status_raw === "ready"
+      ? ui_gate_status_raw
+      : "ready";
+  const ui_gate_reason_raw = String((r as any).ui_gate_reason ?? d.ui_gate_reason).trim();
+  const ui_gate_reason: UiGateReason =
+    ui_gate_reason_raw === "translation_pending" || ui_gate_reason_raw === "translation_retry"
+      ? ui_gate_reason_raw
+      : "";
+  const ui_gate_since_raw = Number((r as any).ui_gate_since_ms ?? d.ui_gate_since_ms);
+  const ui_gate_since_ms = Number.isFinite(ui_gate_since_raw) && ui_gate_since_raw >= 0
+    ? Math.trunc(ui_gate_since_raw)
+    : 0;
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
@@ -315,6 +341,9 @@ export function normalizeState(raw: unknown): CanvasState {
     ui_strings_status,
     ui_strings_requested_lang,
     ui_bootstrap_status,
+    ui_gate_status,
+    ui_gate_reason,
+    ui_gate_since_ms,
 
     last_specialist_result,
 
@@ -355,6 +384,34 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v8 -> v9: add locale-ready UI gate metadata.
+  if (s.state_version === "8") {
+    const statusRaw = String((s as any).ui_strings_status ?? "ready").trim();
+    const uiStatus = statusRaw === "pending" || statusRaw === "error" ? statusRaw : "ready";
+    const gateStatus: UiGateStatus = uiStatus === "ready" ? "ready" : "waiting_locale";
+    const gateReason: UiGateReason =
+      gateStatus === "ready"
+        ? ""
+        : uiStatus === "error"
+          ? "translation_retry"
+          : "translation_pending";
+    const sinceRaw = Number((s as any).ui_gate_since_ms ?? 0);
+    const ui_gate_since_ms =
+      gateStatus === "ready"
+        ? 0
+        : Number.isFinite(sinceRaw) && sinceRaw > 0
+          ? Math.trunc(sinceRaw)
+          : 0;
+    s = {
+      ...s,
+      state_version: "9",
+      ui_gate_status: gateStatus,
+      ui_gate_reason: gateReason,
+      ui_gate_since_ms,
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v7 -> v8: add UI bootstrap status metadata.
   if (s.state_version === "7") {
     const bootstrapRaw = String((s as any).ui_bootstrap_status ?? "").trim();
@@ -370,7 +427,7 @@ export function migrateState(raw: unknown): CanvasState {
       state_version: "8",
       ui_bootstrap_status,
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v6 -> v7: add language source + ui_strings status metadata.

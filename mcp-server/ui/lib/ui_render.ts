@@ -30,7 +30,7 @@ import {
   uiLang,
   hasToolOutput,
 } from "./ui_actions.js";
-import { getIsLoading, getSessionStarted, setSessionStarted } from "./ui_state.js";
+import { getIsLoading, getSessionStarted, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 
 function stepIndex(stepId: string): number {
   const idx = ORDER.indexOf(stepId);
@@ -463,6 +463,14 @@ export function render(overrideToolOutput?: unknown): void {
   const state = (result?.state as Record<string, unknown>) || {};
   const errorObj = result?.error as { type?: string; user_message?: string; retry_after_ms?: number } | null;
   const transientError = errorObj && (errorObj.type === "rate_limited" || errorObj.type === "timeout");
+  const uiPayload =
+    result?.ui && typeof result.ui === "object"
+      ? (result.ui as Record<string, unknown>)
+      : {};
+  const uiFlags =
+    uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags
+      ? (uiPayload.flags as Record<string, unknown>)
+      : {};
 
   const overrideStrings =
     (state?.ui_strings && typeof state.ui_strings === "object" ? state.ui_strings : null) ||
@@ -475,10 +483,10 @@ export function render(overrideToolOutput?: unknown): void {
   const uiStringsStatusRaw = String((state?.ui_strings_status || "ready") as string).trim().toLowerCase();
   const uiStringsStatus =
     uiStringsStatusRaw === "pending" || uiStringsStatusRaw === "error" ? uiStringsStatusRaw : "ready";
-  const uiStringsRequestedLang = String((state?.ui_strings_requested_lang || "") as string).trim().toLowerCase();
-  const pendingNonEnglishByState =
-    uiStringsStatus !== "ready" &&
-    baseLang(stateLang || uiStringsRequestedLang || lang) !== "en";
+  const uiGateStatus = String((state?.ui_gate_status || "") as string).trim().toLowerCase();
+  const bootstrapWaitingLocale =
+    uiFlags.bootstrap_waiting_locale === true ||
+    (uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready");
   if (overrideStrings) {
     const bucket = overrideLang || baseLang(lang);
     UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...(overrideStrings as Record<string, string>) };
@@ -558,7 +566,7 @@ export function render(overrideToolOutput?: unknown): void {
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
   const idx = stepIndex(current);
-  const stepTitle = pendingNonEnglishByState
+  const stepTitle = bootstrapWaitingLocale
     ? ""
     : current === "step_0"
       ? uiText(lang, "stepLabel.validation", "Validation")
@@ -574,7 +582,7 @@ export function render(overrideToolOutput?: unknown): void {
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
 
-  if (pendingNonEnglishByState) {
+  if (bootstrapWaitingLocale) {
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
@@ -592,19 +600,13 @@ export function render(overrideToolOutput?: unknown): void {
     startHint.textContent = "";
     (startHint as HTMLElement).style.display = "none";
     (btnStart as HTMLElement).style.display = "none";
+    setSessionStarted(false);
+    setSessionWelcomeShown(false);
     if (isLoading) setLoading(false);
     return;
   }
 
   const specialist = (result?.specialist as Record<string, unknown>) || {};
-  const uiPayload =
-    result?.ui && typeof result.ui === "object"
-      ? (result.ui as Record<string, unknown>)
-      : {};
-  const uiFlags =
-    uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags
-      ? (uiPayload.flags as Record<string, unknown>)
-      : {};
   const sectionTitleEl = document.getElementById("sectionTitle");
   const showStepIntroChrome = uiFlags.show_step_intro_chrome === true;
   const showBadge = showPreStart || showStepIntroChrome;

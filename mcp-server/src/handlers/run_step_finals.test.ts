@@ -1584,10 +1584,10 @@ test("Step 0 ASK fallback keeps context line and canonical question", async () =
   );
 });
 
-test("Step 0 start-trigger with locale_hint pending suppresses English body and prompt", async () => {
-  const result = await withEnv("UI_PENDING_NO_FALLBACK_TEXT_V1", "1", () =>
-    withEnv("UI_START_TRIGGER_LANG_RESOLVE_V1", "1", () =>
-      withEnv("UI_STRICT_NON_EN_PENDING_V1", "1", () =>
+test("Step 0 start-trigger with locale_hint pending sets locale gate waiting flags", async () => {
+  const result = await withEnv("UI_START_TRIGGER_LANG_RESOLVE_V1", "1", () =>
+    withEnv("UI_STRICT_NON_EN_PENDING_V1", "1", () =>
+      withEnv("UI_LOCALE_READY_GATE_V1", "1", () =>
         run_step({
           user_message: "ACTION_START",
           input_mode: "chat",
@@ -1610,10 +1610,9 @@ test("Step 0 start-trigger with locale_hint pending suppresses English body and 
   assert.equal(String(result.state?.language || ""), "nl");
   assert.equal(String(result.state?.ui_strings_status || ""), "pending");
   assert.equal(String(result.state?.ui_bootstrap_status || ""), "awaiting_locale");
-  assert.equal(String(result.text || ""), "");
-  assert.equal(String(result.prompt || ""), "");
-  assert.equal(String(result.specialist?.message || ""), "");
-  assert.equal(String(result.specialist?.question || ""), "");
+  assert.equal(String(result.state?.ui_gate_status || ""), "waiting_locale");
+  assert.equal(result.ui?.flags?.bootstrap_waiting_locale, true);
+  assert.equal(result.ui?.flags?.bootstrap_interactive_ready, false);
 });
 
 test("global free-text policy: ActionCode turn bypasses renderer", async () => {

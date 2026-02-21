@@ -354,6 +354,9 @@ async function runStepHandler(args: {
       language_source: safeString(resultState.language_source ?? ""),
       ui_strings_status: safeString(resultState.ui_strings_status ?? ""),
       ui_bootstrap_status: safeString(resultState.ui_bootstrap_status ?? ""),
+      ui_gate_status: safeString(resultState.ui_gate_status ?? ""),
+      ui_gate_reason: safeString(resultState.ui_gate_reason ?? ""),
+      ui_gate_since_ms: Number(resultState.ui_gate_since_ms ?? 0) || 0,
       current_step: safeString(resultState.current_step ?? stepMeta),
       active_specialist: specialistMeta,
     });

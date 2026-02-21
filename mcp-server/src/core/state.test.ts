@@ -87,3 +87,16 @@ test("state migration: staged provisional values backfill source as system_gener
     purpose: "system_generated",
   });
 });
+
+test("state migration: v8 adds locale gate metadata", () => {
+  const migrated = migrateState({
+    ...getDefaultState(),
+    state_version: "8",
+    language: "nl",
+    ui_strings_status: "pending",
+  });
+  assert.equal(String((migrated as any).state_version), CURRENT_STATE_VERSION);
+  assert.equal(String((migrated as any).ui_gate_status), "waiting_locale");
+  assert.equal(String((migrated as any).ui_gate_reason), "translation_pending");
+  assert.equal(typeof (migrated as any).ui_gate_since_ms, "number");
+});
