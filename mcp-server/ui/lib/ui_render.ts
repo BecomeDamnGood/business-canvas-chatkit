@@ -506,6 +506,9 @@ export function render(overrideToolOutput?: unknown): void {
   const bootstrapWaitingLocale =
     uiFlags.bootstrap_waiting_locale === true ||
     (uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready");
+  const interactiveFallbackActive =
+    uiFlags.interactive_fallback_active === true ||
+    (bootstrapWaitingLocale && uiFlags.bootstrap_interactive_ready === true);
   ensureBootstrapRetryForResult(result, { source: "render" });
   if (overrideStrings) {
     const bucket = overrideLang || baseLang(lang);
@@ -556,6 +559,10 @@ export function render(overrideToolOutput?: unknown): void {
   }
 
   setStaticStrings(lang);
+  if (bootstrapWaitingLocale && interactiveFallbackActive) {
+    const uiSubtitle = document.getElementById("uiSubtitle");
+    if (uiSubtitle) uiSubtitle.textContent = "";
+  }
 
   if (transientError) {
     if (errorObj.type === "rate_limited") {
@@ -589,7 +596,7 @@ export function render(overrideToolOutput?: unknown): void {
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
   const idx = stepIndex(current);
-  const stepTitle = bootstrapWaitingLocale
+  const stepTitle = bootstrapWaitingLocale && !interactiveFallbackActive
     ? ""
     : current === "step_0"
       ? uiText(lang, "stepLabel.validation", "Validation")
@@ -605,7 +612,7 @@ export function render(overrideToolOutput?: unknown): void {
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
 
-  if (bootstrapWaitingLocale) {
+  if (bootstrapWaitingLocale && !interactiveFallbackActive) {
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";

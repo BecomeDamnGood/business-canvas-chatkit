@@ -1037,8 +1037,9 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
 test("render source blocks locale-gated turns from showing interactive body", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /const bootstrapWaitingLocale =[\s\S]*uiGateStatus === "waiting_locale"/);
+  assert.match(source, /const interactiveFallbackActive =/);
   assert.match(source, /ensureBootstrapRetryForResult\(result, \{ source: "render" \}\);/);
-  assert.match(source, /if \(bootstrapWaitingLocale\) \{/);
+  assert.match(source, /if \(bootstrapWaitingLocale && !interactiveFallbackActive\) \{/);
   assert.match(source, /renderBootstrapWaitShell\(prestartEl\)/);
   assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
   assert.match(source, /setSessionStarted\(false\);/);

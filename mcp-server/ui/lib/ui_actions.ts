@@ -45,9 +45,20 @@ function canUseBridge(): boolean {
 
 function normalizeToolOutput(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object") return {};
-  const r = raw as { structuredContent?: unknown };
+  const r = raw as { structuredContent?: unknown; _meta?: unknown };
+  const metaWidgetResult =
+    r._meta && typeof r._meta === "object" && (r._meta as Record<string, unknown>).widget_result
+      ? ((r._meta as Record<string, unknown>).widget_result as unknown)
+      : null;
   if (r.structuredContent && typeof r.structuredContent === "object") {
-    return r.structuredContent as Record<string, unknown>;
+    const structured = { ...(r.structuredContent as Record<string, unknown>) };
+    if (metaWidgetResult && typeof metaWidgetResult === "object") {
+      structured.result = metaWidgetResult as Record<string, unknown>;
+    }
+    return structured;
+  }
+  if (metaWidgetResult && typeof metaWidgetResult === "object") {
+    return { result: metaWidgetResult as Record<string, unknown> };
   }
   return raw as Record<string, unknown>;
 }

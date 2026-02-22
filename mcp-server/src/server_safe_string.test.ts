@@ -60,3 +60,17 @@ test("buildUiStructured suppresses prompt/options while bootstrap locale is wait
   assert.match(source, /const promptBody = waitingLocale \? "" : \(prompt \|\| text \|\| ""\);/);
   assert.match(source, /const actionCodes = waitingLocale \? \[\] :/);
 });
+
+test("run_step handler emits widget-only full payload in _meta while model-safe pending result is active", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /const shouldUseModelSafeResult = isUiModelSafePendingResultV1Enabled\(\) && bootstrapWaitingLocale;/);
+  assert.match(source, /result: modelResult,/);
+  assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient,\s*\}/);
+});
+
+test("app-first tool split is present: open_canvas tool plus run_step visibility switch", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /server\.registerTool\(\s*"open_canvas"/);
+  assert.match(source, /const runStepVisibility = isMcpAppFirstToolsV1Enabled\(\) \? \["app"\] : \["model", "app"\];/);
+  assert.match(source, /visibility: runStepVisibility,/);
+});

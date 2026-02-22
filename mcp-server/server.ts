@@ -81,6 +81,20 @@ const UI_RESOURCE_NAME = "business-canvas-widget";
 const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
 
+function envFlagEnabled(name: string, defaultValue: boolean): boolean {
+  const raw = safeString(process.env[name] ?? "").trim().toLowerCase();
+  if (!raw) return defaultValue;
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+function isMcpAppFirstToolsV1Enabled(): boolean {
+  return envFlagEnabled("MCP_APP_FIRST_TOOLS_V1", true);
+}
+
+function isUiModelSafePendingResultV1Enabled(): boolean {
+  return envFlagEnabled("UI_MODEL_SAFE_PENDING_RESULT_V1", true);
+}
+
 function getHeader(req: any, name: string): string {
   return safeString(req?.headers?.[name.toLowerCase()] || "");
 }
@@ -285,7 +299,7 @@ async function runStepHandler(args: {
   locale_hint?: string;
   locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "none";
   state?: Record<string, unknown>;
-}): Promise<{ structuredContent: Record<string, unknown> }> {
+}): Promise<{ structuredContent: Record<string, unknown>; meta?: Record<string, unknown> }> {
   const current_step_id = normalizeStepId(args.current_step_id ?? "");
   const state = (args.state ?? {}) as Record<string, unknown>;
   const user_message_raw = safeString(args.user_message ?? "");
@@ -364,24 +378,37 @@ async function runStepHandler(args: {
       resolved_language: safeString(resultState.language ?? ""),
       language_source: safeString(resultState.language_source ?? ""),
       ui_strings_status: safeString(resultState.ui_strings_status ?? ""),
+      ui_translation_mode: safeString(resultState.ui_translation_mode ?? ""),
+      ui_strings_critical_ready: safeString(resultState.ui_strings_critical_ready ?? ""),
+      ui_strings_full_ready: safeString(resultState.ui_strings_full_ready ?? ""),
       ui_bootstrap_status: safeString(resultState.ui_bootstrap_status ?? ""),
       ui_gate_status: safeString(resultState.ui_gate_status ?? ""),
       ui_gate_reason: safeString(resultState.ui_gate_reason ?? ""),
       ui_gate_since_ms: Number(resultState.ui_gate_since_ms ?? 0) || 0,
       bootstrap_waiting_locale: bootstrapWaitingLocale,
+      interactive_fallback_active: resultUiFlags.interactive_fallback_active === true,
       bootstrap_retry_scheduled: bootstrapRetryScheduled,
       current_step: safeString(resultState.current_step ?? stepMeta),
       active_specialist: specialistMeta,
     });
+    const shouldUseModelSafeResult = isUiModelSafePendingResultV1Enabled() && bootstrapWaitingLocale;
+    const modelResult = shouldUseModelSafeResult
+      ? buildModelSafeResult(resultForClient)
+      : resultForClient;
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
       meta: `step: ${stepMeta} | specialist: ${specialistMeta}`,
-      result: resultForClient,
+      result: modelResult,
     };
     const uiPayload = buildUiStructured(resultForClient);
     if (uiPayload) structuredContent.ui = uiPayload;
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
-    return { structuredContent };
+    return {
+      structuredContent,
+      meta: {
+        widget_result: resultForClient,
+      },
+    };
   } catch (error: unknown) {
     const err = error as any;
     const debugEnabled =
@@ -439,8 +466,56 @@ async function runStepHandler(args: {
     const uiPayload = buildUiStructured(fallbackResult as Record<string, unknown>);
     if (uiPayload) structuredContent.ui = uiPayload;
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
-    return { structuredContent };
+    return {
+      structuredContent,
+      meta: {
+        widget_result: fallbackResult,
+      },
+    };
   }
+}
+
+function buildModelSafeResult(result: Record<string, unknown>): Record<string, unknown> {
+  const state =
+    result && typeof result.state === "object" && result.state
+      ? (result.state as Record<string, unknown>)
+      : {};
+  const ui =
+    result && typeof result.ui === "object" && result.ui
+      ? (result.ui as Record<string, unknown>)
+      : {};
+  const flags =
+    ui.flags && typeof ui.flags === "object"
+      ? (ui.flags as Record<string, unknown>)
+      : {};
+  return {
+    ok: result.ok === true,
+    tool: safeString(result.tool || "run_step"),
+    current_step_id: safeString(result.current_step_id || state.current_step || "step_0"),
+    state: {
+      current_step: safeString(state.current_step || ""),
+      language: safeString(state.language || ""),
+      language_source: safeString(state.language_source || ""),
+      ui_strings_status: safeString(state.ui_strings_status || ""),
+      ui_strings_requested_lang: safeString(state.ui_strings_requested_lang || ""),
+      ui_bootstrap_status: safeString(state.ui_bootstrap_status || ""),
+      ui_gate_status: safeString(state.ui_gate_status || ""),
+      ui_gate_reason: safeString(state.ui_gate_reason || ""),
+      ui_translation_mode: safeString(state.ui_translation_mode || ""),
+      ui_strings_critical_ready: safeString(state.ui_strings_critical_ready || ""),
+      ui_strings_full_ready: safeString(state.ui_strings_full_ready || ""),
+      ui_strings_background_inflight: safeString(state.ui_strings_background_inflight || ""),
+    },
+    ui: {
+      flags: {
+        bootstrap_waiting_locale: flags.bootstrap_waiting_locale === true,
+        bootstrap_interactive_ready: flags.bootstrap_interactive_ready === true,
+        bootstrap_retry_hint: safeString(flags.bootstrap_retry_hint || ""),
+        locale_pending_background: flags.locale_pending_background === true,
+        interactive_fallback_active: flags.interactive_fallback_active === true,
+      },
+    },
+  };
 }
 
 function buildContentFromResult(
@@ -563,6 +638,63 @@ function createAppServer(baseUrl: string): McpServer {
     // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
     state: CanvasStateZod.partial().passthrough().optional(),
   });
+  const OpenCanvasInputSchema = z.object({
+    user_message: z.string().optional().default(""),
+    locale_hint: z.string().optional(),
+    locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional(),
+    state: CanvasStateZod.partial().passthrough().optional(),
+  });
+  const runStepVisibility = isMcpAppFirstToolsV1Enabled() ? ["app"] : ["model", "app"];
+
+  server.registerTool(
+    "open_canvas",
+    {
+      title: "Open Business Strategy Canvas Builder",
+      description:
+        "Open the Business Strategy Canvas Builder app so the user can continue in the UI.",
+      inputSchema: OpenCanvasInputSchema,
+      annotations: {
+        readOnlyHint: false,
+        openWorldHint: false,
+        destructiveHint: false,
+      },
+      _meta: {
+        securitySchemes: [{ type: "noauth" }],
+        ui: {
+          resourceUri: uiResourceUri,
+          visibility: ["model", "app"],
+        },
+        "openai/outputTemplate": uiResourceUri,
+        "openai/widgetAccessible": true,
+        "openai/toolInvocation/invoking": "Opening app...",
+        "openai/toolInvocation/invoked": "App opened",
+      },
+    },
+    async (args, extra) => {
+      const localeFromExtra = resolveLocaleHintFromExtra(extra);
+      const localeHint = safeString(args.locale_hint ?? localeFromExtra.locale_hint);
+      const localeHintSourceRaw = safeString(args.locale_hint_source ?? localeFromExtra.locale_hint_source);
+      const localeHintSource =
+        localeHintSourceRaw === "openai_locale" ||
+        localeHintSourceRaw === "webplus_i18n" ||
+        localeHintSourceRaw === "request_header"
+          ? localeHintSourceRaw
+          : "none";
+      const { structuredContent, meta } = await runStepHandler({
+        current_step_id: "step_0",
+        user_message: safeString(args.user_message ?? ""),
+        input_mode: "chat",
+        locale_hint: localeHint,
+        locale_hint_source: localeHintSource,
+        state: (args.state ?? {}) as Record<string, unknown>,
+      });
+      return {
+        content: [{ type: "text", text: "" }],
+        structuredContent,
+        ...(meta ? { _meta: meta } : {}),
+      };
+    }
+  );
 
   server.registerTool(
     "run_step",
@@ -583,7 +715,7 @@ function createAppServer(baseUrl: string): McpServer {
         securitySchemes: [{ type: "noauth" }],
         ui: {
           resourceUri: uiResourceUri,
-          visibility: ["model","app"],
+          visibility: runStepVisibility,
         },
         "openai/outputTemplate": uiResourceUri,
         "openai/widgetAccessible": true,
@@ -606,7 +738,7 @@ function createAppServer(baseUrl: string): McpServer {
         localeHintSourceRaw === "request_header"
           ? localeHintSourceRaw
           : "none";
-      const { structuredContent } = await runStepHandler({
+      const { structuredContent, meta } = await runStepHandler({
         current_step_id: safeString(args.current_step_id ?? ""),
         user_message: safeString(args.user_message ?? ""),
         input_mode: args.input_mode,
@@ -621,6 +753,7 @@ function createAppServer(baseUrl: string): McpServer {
       return {
         content: [{ type: "text", text: contentText }],
         structuredContent,
+        ...(meta ? { _meta: meta } : {}),
       };
     }
   );
@@ -735,7 +868,7 @@ const httpServer = async (req: any, res: any) => {
           locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "none";
           state?: Record<string, unknown>;
         };
-        const { structuredContent } = await runStepHandler({
+        const { structuredContent, meta } = await runStepHandler({
           current_step_id: safeString(args.current_step_id ?? "step_0") || "step_0",
           user_message: safeString(args.user_message ?? ""),
           input_mode: args.input_mode,
@@ -744,7 +877,7 @@ const httpServer = async (req: any, res: any) => {
           state: args.state,
         });
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ structuredContent }));
+        res.end(JSON.stringify({ structuredContent, ...(meta ? { _meta: meta } : {}) }));
       } catch (e) {
         console.error("[POST /run_step]", e);
         res.writeHead(500, { "content-type": "application/json" });
@@ -768,7 +901,7 @@ const httpServer = async (req: any, res: any) => {
             body: JSON.stringify(args),
           });
           const data = await resp.json();
-          return data.structuredContent || data;
+          return data;
         },
         toolOutput: null,
       };

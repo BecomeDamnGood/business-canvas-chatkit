@@ -62,6 +62,9 @@ export type UiGateStatus = z.infer<typeof UiGateStatusZod>;
 export const UI_GATE_REASONS = ["", "translation_pending", "translation_retry"] as const;
 export const UiGateReasonZod = z.enum(UI_GATE_REASONS);
 export type UiGateReason = z.infer<typeof UiGateReasonZod>;
+export const UI_TRANSLATION_MODES = ["critical_first", "full"] as const;
+export const UiTranslationModeZod = z.enum(UI_TRANSLATION_MODES);
+export type UiTranslationMode = z.infer<typeof UiTranslationModeZod>;
 
 /**
  * CanvasState (canoniek)
@@ -94,6 +97,10 @@ export const CanvasStateZod = z.object({
   ui_gate_status: UiGateStatusZod,
   ui_gate_reason: UiGateReasonZod,
   ui_gate_since_ms: z.number().int().nonnegative(),
+  ui_translation_mode: UiTranslationModeZod,
+  ui_strings_critical_ready: BoolStringZod,
+  ui_strings_full_ready: BoolStringZod,
+  ui_strings_background_inflight: BoolStringZod,
 
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
@@ -132,7 +139,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "9";
+export const CURRENT_STATE_VERSION = "10";
 
 /**
  * Hard defaults (no nulls)
@@ -159,6 +166,10 @@ export function getDefaultState(): CanvasState {
     ui_gate_status: "ready",
     ui_gate_reason: "",
     ui_gate_since_ms: 0,
+    ui_translation_mode: "full",
+    ui_strings_critical_ready: "false",
+    ui_strings_full_ready: "false",
+    ui_strings_background_inflight: "false",
 
     last_specialist_result: {},
 
@@ -256,6 +267,22 @@ export function normalizeState(raw: unknown): CanvasState {
   const ui_gate_since_ms = Number.isFinite(ui_gate_since_raw) && ui_gate_since_raw >= 0
     ? Math.trunc(ui_gate_since_raw)
     : 0;
+  const ui_translation_mode_raw = String((r as any).ui_translation_mode ?? d.ui_translation_mode).trim();
+  const ui_translation_mode: UiTranslationMode =
+    ui_translation_mode_raw === "critical_first" || ui_translation_mode_raw === "full"
+      ? ui_translation_mode_raw
+      : "full";
+  const ui_strings_critical_ready_raw = String(
+    (r as any).ui_strings_critical_ready ?? d.ui_strings_critical_ready
+  ).trim();
+  const ui_strings_critical_ready: BoolString = ui_strings_critical_ready_raw === "true" ? "true" : "false";
+  const ui_strings_full_ready_raw = String((r as any).ui_strings_full_ready ?? d.ui_strings_full_ready).trim();
+  const ui_strings_full_ready: BoolString = ui_strings_full_ready_raw === "true" ? "true" : "false";
+  const ui_strings_background_inflight_raw = String(
+    (r as any).ui_strings_background_inflight ?? d.ui_strings_background_inflight
+  ).trim();
+  const ui_strings_background_inflight: BoolString =
+    ui_strings_background_inflight_raw === "true" ? "true" : "false";
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
@@ -344,6 +371,10 @@ export function normalizeState(raw: unknown): CanvasState {
     ui_gate_status,
     ui_gate_reason,
     ui_gate_since_ms,
+    ui_translation_mode,
+    ui_strings_critical_ready,
+    ui_strings_full_ready,
+    ui_strings_background_inflight,
 
     last_specialist_result,
 
@@ -384,6 +415,21 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v9 -> v10: add critical-first translation metadata.
+  if (s.state_version === "9") {
+    const statusRaw = String((s as any).ui_strings_status ?? "ready").trim();
+    const uiStatus = statusRaw === "pending" || statusRaw === "error" ? statusRaw : "ready";
+    s = {
+      ...s,
+      state_version: "10",
+      ui_translation_mode: uiStatus === "ready" ? "full" : "critical_first",
+      ui_strings_critical_ready: uiStatus === "ready" ? "true" : "false",
+      ui_strings_full_ready: uiStatus === "ready" ? "true" : "false",
+      ui_strings_background_inflight: uiStatus === "ready" ? "false" : "true",
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v8 -> v9: add locale-ready UI gate metadata.
   if (s.state_version === "8") {
     const statusRaw = String((s as any).ui_strings_status ?? "ready").trim();
@@ -408,8 +454,12 @@ export function migrateState(raw: unknown): CanvasState {
       ui_gate_status: gateStatus,
       ui_gate_reason: gateReason,
       ui_gate_since_ms,
+      ui_translation_mode: uiStatus === "ready" ? "full" : "critical_first",
+      ui_strings_critical_ready: uiStatus === "ready" ? "true" : "false",
+      ui_strings_full_ready: uiStatus === "ready" ? "true" : "false",
+      ui_strings_background_inflight: uiStatus === "ready" ? "false" : "true",
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v7 -> v8: add UI bootstrap status metadata.
@@ -426,6 +476,10 @@ export function migrateState(raw: unknown): CanvasState {
       ...s,
       state_version: "8",
       ui_bootstrap_status,
+      ui_translation_mode: ui_bootstrap_status === "ready" ? "full" : "critical_first",
+      ui_strings_critical_ready: ui_bootstrap_status === "ready" ? "true" : "false",
+      ui_strings_full_ready: ui_bootstrap_status === "ready" ? "true" : "false",
+      ui_strings_background_inflight: ui_bootstrap_status === "ready" ? "false" : "true",
     };
     return migrateState(s);
   }
@@ -451,6 +505,10 @@ export function migrateState(raw: unknown): CanvasState {
       language_source,
       ui_strings_status,
       ui_strings_requested_lang: String((s as any).ui_strings_requested_lang ?? "").trim().toLowerCase(),
+      ui_translation_mode: ui_strings_status === "ready" ? "full" : "critical_first",
+      ui_strings_critical_ready: ui_strings_status === "ready" ? "true" : "false",
+      ui_strings_full_ready: ui_strings_status === "ready" ? "true" : "false",
+      ui_strings_background_inflight: ui_strings_status === "ready" ? "false" : "true",
     };
     return migrateState(s);
   }
@@ -485,6 +543,10 @@ export function migrateState(raw: unknown): CanvasState {
       ...s,
       state_version: "6",
       provisional_source_by_step: nextSources,
+      ui_translation_mode: "full",
+      ui_strings_critical_ready: "false",
+      ui_strings_full_ready: "false",
+      ui_strings_background_inflight: "false",
     };
     return migrateState(s);
   }
@@ -495,6 +557,10 @@ export function migrateState(raw: unknown): CanvasState {
       ...s,
       state_version: "5",
       ui_strings_version: String((s as any).ui_strings_version ?? "").trim(),
+      ui_translation_mode: "full",
+      ui_strings_critical_ready: "false",
+      ui_strings_full_ready: "false",
+      ui_strings_background_inflight: "false",
     };
     return migrateState(s);
   }
@@ -528,6 +594,10 @@ export function migrateState(raw: unknown): CanvasState {
       ui_strings_lang: String((s as any).ui_strings_lang ?? "").trim().toLowerCase(),
       ui_strings_version: String((s as any).ui_strings_version ?? "").trim(),
       provisional_by_step: {},
+      ui_translation_mode: "full",
+      ui_strings_critical_ready: "false",
+      ui_strings_full_ready: "false",
+      ui_strings_background_inflight: "false",
     };
     return CanvasStateZod.parse(s);
   }
@@ -569,6 +639,10 @@ export function migrateState(raw: unknown): CanvasState {
     presentation_brief_final: String((s as any).presentation_brief_final ?? ""),
     targetgroup_final: "",
     productsservices_final: "",
+    ui_translation_mode: "full",
+    ui_strings_critical_ready: "false",
+    ui_strings_full_ready: "false",
+    ui_strings_background_inflight: "false",
   };
 
   // Recursively migrate to current version if needed

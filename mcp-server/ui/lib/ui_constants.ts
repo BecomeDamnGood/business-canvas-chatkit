@@ -202,6 +202,38 @@ export const UI_STRINGS: Record<string, Record<string, string>> = {
   },
 };
 
+export const CRITICAL_UI_KEYS_STEP0: string[] = [
+  "title.step_0",
+  "stepLabel.validation",
+  "sectionTitle.step_0",
+  "uiSubtitle",
+  "uiUseWidgetToContinue",
+  "startHint",
+  "inputPlaceholder",
+  "btnStart",
+  "btnGoToNextStep",
+  "prestartWelcome",
+  "prestart.headline",
+  "prestart.proven.title",
+  "prestart.proven.body",
+  "prestart.outcomes.title",
+  "prestart.outcomes.item1",
+  "prestart.outcomes.item2",
+  "prestart.outcomes.item3",
+  "prestart.meta.how.label",
+  "prestart.meta.how.value",
+  "prestart.meta.time.label",
+  "prestart.meta.time.value",
+  "prestart.loading",
+  "step0.carddesc",
+  "step0.question.initial",
+  "step0.readiness.statement.existing",
+  "step0.readiness.statement.starting",
+  "step0.readiness.suffix",
+  "transient.rate_limited",
+  "transient.timeout",
+];
+
 export function baseLang(lang: string | null | undefined): string {
   const l = String(lang || "").toLowerCase();
   return l.split(/[-_]/)[0] || "default";

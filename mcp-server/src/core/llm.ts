@@ -43,6 +43,7 @@ export type StrictJsonCallArgs<T> = {
   temperature?: number;
   topP?: number;
   maxOutputTokens?: number;
+  timeoutMs?: number;
 
   /**
    * Debug label that you can log upstream (e.g., specialist name)
@@ -179,7 +180,10 @@ function parseRetryAfterMs(value: unknown, msg: string): number | null {
   return null;
 }
 
-function getTimeoutMs(): number {
+function getTimeoutMs(overrideMs?: number): number {
+  if (typeof overrideMs === "number" && Number.isFinite(overrideMs) && overrideMs > 0) {
+    return Math.round(overrideMs);
+  }
   const raw = Number(process.env.LLM_TIMEOUT_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_TIMEOUT_MS;
 }
@@ -252,9 +256,10 @@ function getRetryAfterMs(err: any, msg: string): number {
 async function createResponseWithTimeout(
   client: OpenAIClient,
   body: Record<string, unknown>,
-  debugLabel?: string
+  debugLabel?: string,
+  timeoutMsOverride?: number
 ): Promise<any> {
-  const timeoutMs = getTimeoutMs();
+  const timeoutMs = getTimeoutMs(timeoutMsOverride);
   const controller = new AbortController();
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -283,12 +288,13 @@ async function createResponseWithTimeout(
 async function createResponseWithRetries(
   client: OpenAIClient,
   body: Record<string, unknown>,
-  debugLabel?: string
+  debugLabel?: string,
+  timeoutMsOverride?: number
 ): Promise<any> {
   let attempt = 0;
   while (true) {
     try {
-      return await createResponseWithTimeout(client, body, debugLabel);
+      return await createResponseWithTimeout(client, body, debugLabel, timeoutMsOverride);
     } catch (err: any) {
       if (isTimeoutError(err)) throw err;
       const msg = getErrorMessage(err);
@@ -340,7 +346,7 @@ async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema
       temperature: args.temperature ?? 0.2,
       top_p: args.topP ?? 1,
       max_output_tokens: args.maxOutputTokens ?? 2048,
-    }, args.debugLabel);
+    }, args.debugLabel, args.timeoutMs);
 
     const text = extractOutputText(resp);
     const parsed = safeJsonParse(text);
@@ -396,6 +402,7 @@ export async function callStrictJson<T>(
     temperature: args.temperature,
     topP: args.topP,
     maxOutputTokens: args.maxOutputTokens,
+    timeoutMs: args.timeoutMs,
     debugLabel,
   });
 
@@ -439,6 +446,7 @@ Now return a corrected JSON output that matches the schema exactly.`;
     temperature: args.temperature ?? 0.0, // make repair deterministic
     topP: args.topP ?? 1,
     maxOutputTokens: args.maxOutputTokens ?? 2048,
+    timeoutMs: args.timeoutMs,
     debugLabel: `${debugLabel}:repair`,
   });
 
