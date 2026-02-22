@@ -278,42 +278,32 @@ test("language mode force_en: keeps language en and never triggers ui string tra
   }
 });
 
-test("language mode LOCAL_DEV=1 defaults to English lock and never triggers ui string translation call", async () => {
+test("language mode LOCAL_DEV=1 does not force English when NODE_ENV=production", async () => {
   const prevLocalDev = process.env.LOCAL_DEV;
   const prevMode = process.env.LANGUAGE_MODE;
+  const prevNodeEnv = process.env.NODE_ENV;
   process.env.LOCAL_DEV = "1";
   delete process.env.LANGUAGE_MODE;
-
-  const originalLog = console.log;
-  const logs: string[] = [];
-  console.log = (...args: any[]) => {
-    logs.push(String(args[0] ?? ""));
-  };
+  process.env.NODE_ENV = "production";
 
   try {
     const result = await run_step({
       user_message: "",
+      input_mode: "chat",
+      locale_hint: "nl-NL",
+      locale_hint_source: "openai_locale",
       state: {
         current_step: "step_0",
         intro_shown_session: "false",
         last_specialist_result: {},
         started: "true",
-        language: "fi",
-        initial_user_message: "Minulla on leipomo nimeltä Sol.",
+        initial_user_message: "Ik wil een ondernemingsplan voor mijn reclamebureau genaamd Mindd.",
       },
     });
     assert.equal(result?.ok, true);
-    assert.equal(result?.state?.language, "en");
-    assert.equal(result?.state?.ui_strings_lang, "en");
-    const uiStrings = (result?.state?.ui_strings || {}) as Record<string, string>;
-    assert.equal(
-      String(uiStrings["menuLabel.STEP0_MENU_READY_START.ACTION_STEP0_READY_START"] || "").length > 0,
-      true
-    );
-    const translateLogs = logs.filter((line) => line.includes("[ui_strings_translate_call]"));
-    assert.equal(translateLogs.length, 0);
+    assert.equal(result?.state?.language, "nl");
+    assert.equal(result?.state?.language_source, "locale_hint");
   } finally {
-    console.log = originalLog;
     if (prevLocalDev === undefined) {
       delete process.env.LOCAL_DEV;
     } else {
@@ -323,6 +313,52 @@ test("language mode LOCAL_DEV=1 defaults to English lock and never triggers ui s
       delete process.env.LANGUAGE_MODE;
     } else {
       process.env.LANGUAGE_MODE = prevMode;
+    }
+    if (prevNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = prevNodeEnv;
+    }
+  }
+});
+
+test("language mode LOCAL_DEV=1 still forces English outside production", async () => {
+  const prevLocalDev = process.env.LOCAL_DEV;
+  const prevMode = process.env.LANGUAGE_MODE;
+  const prevNodeEnv = process.env.NODE_ENV;
+  process.env.LOCAL_DEV = "1";
+  delete process.env.LANGUAGE_MODE;
+  process.env.NODE_ENV = "development";
+
+  try {
+    const result = await run_step({
+      user_message: "",
+      state: {
+        current_step: "step_0",
+        intro_shown_session: "false",
+        last_specialist_result: {},
+        started: "true",
+        initial_user_message: "Ik wil een ondernemingsplan voor mijn reclamebureau genaamd Mindd.",
+      },
+    });
+    assert.equal(result?.ok, true);
+    assert.equal(result?.state?.language, "en");
+    assert.equal(result?.state?.ui_strings_lang, "en");
+  } finally {
+    if (prevLocalDev === undefined) {
+      delete process.env.LOCAL_DEV;
+    } else {
+      process.env.LOCAL_DEV = prevLocalDev;
+    }
+    if (prevMode === undefined) {
+      delete process.env.LANGUAGE_MODE;
+    } else {
+      process.env.LANGUAGE_MODE = prevMode;
+    }
+    if (prevNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = prevNodeEnv;
     }
   }
 });

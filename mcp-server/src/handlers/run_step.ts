@@ -1081,6 +1081,7 @@ function isForceEnglishLanguageMode(): boolean {
   const mode = languageModeFromEnv();
   if (mode === "force_en") return true;
   if (mode === "detect_once") return false;
+  if (String(process.env.NODE_ENV || "").trim().toLowerCase() === "production") return false;
   return process.env.LOCAL_DEV === "1";
 }
 

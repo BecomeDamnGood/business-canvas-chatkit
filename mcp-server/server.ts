@@ -91,10 +91,6 @@ function isMcpAppFirstToolsV1Enabled(): boolean {
   return envFlagEnabled("MCP_APP_FIRST_TOOLS_V1", true);
 }
 
-function isUiModelSafePendingResultV1Enabled(): boolean {
-  return envFlagEnabled("UI_MODEL_SAFE_PENDING_RESULT_V1", true);
-}
-
 function getHeader(req: any, name: string): string {
   return safeString(req?.headers?.[name.toLowerCase()] || "");
 }
@@ -391,16 +387,13 @@ async function runStepHandler(args: {
       current_step: safeString(resultState.current_step ?? stepMeta),
       active_specialist: specialistMeta,
     });
-    const shouldUseModelSafeResult = isUiModelSafePendingResultV1Enabled() && bootstrapWaitingLocale;
-    const modelResult = shouldUseModelSafeResult
-      ? buildModelSafeResult(resultForClient)
-      : resultForClient;
+    const modelResult = buildModelSafeResult(resultForClient);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
       meta: `step: ${stepMeta} | specialist: ${specialistMeta}`,
       result: modelResult,
     };
-    const uiPayload = buildUiStructured(resultForClient);
+    const uiPayload = buildUiStructured(modelResult);
     if (uiPayload) structuredContent.ui = uiPayload;
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
     return {
@@ -458,12 +451,13 @@ async function runStepHandler(args: {
         retry_action: "reload"
       },
     };
+    const modelResult = buildModelSafeResult(fallbackResult as Record<string, unknown>);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
       meta: "error",
-      result: fallbackResult,
+      result: modelResult,
     };
-    const uiPayload = buildUiStructured(fallbackResult as Record<string, unknown>);
+    const uiPayload = buildUiStructured(modelResult);
     if (uiPayload) structuredContent.ui = uiPayload;
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
     return {
@@ -492,29 +486,9 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     ok: result.ok === true,
     tool: safeString(result.tool || "run_step"),
     current_step_id: safeString(result.current_step_id || state.current_step || "step_0"),
-    state: {
-      current_step: safeString(state.current_step || ""),
-      language: safeString(state.language || ""),
-      language_source: safeString(state.language_source || ""),
-      ui_strings_status: safeString(state.ui_strings_status || ""),
-      ui_strings_requested_lang: safeString(state.ui_strings_requested_lang || ""),
-      ui_bootstrap_status: safeString(state.ui_bootstrap_status || ""),
-      ui_gate_status: safeString(state.ui_gate_status || ""),
-      ui_gate_reason: safeString(state.ui_gate_reason || ""),
-      ui_translation_mode: safeString(state.ui_translation_mode || ""),
-      ui_strings_critical_ready: safeString(state.ui_strings_critical_ready || ""),
-      ui_strings_full_ready: safeString(state.ui_strings_full_ready || ""),
-      ui_strings_background_inflight: safeString(state.ui_strings_background_inflight || ""),
-    },
-    ui: {
-      flags: {
-        bootstrap_waiting_locale: flags.bootstrap_waiting_locale === true,
-        bootstrap_interactive_ready: flags.bootstrap_interactive_ready === true,
-        bootstrap_retry_hint: safeString(flags.bootstrap_retry_hint || ""),
-        locale_pending_background: flags.locale_pending_background === true,
-        interactive_fallback_active: flags.interactive_fallback_active === true,
-      },
-    },
+    ui_gate_status: safeString((result as any).ui_gate_status || state.ui_gate_status || ""),
+    language: safeString((result as any).language || state.language || ""),
+    interactive_fallback_active: flags.interactive_fallback_active === true,
   };
 }
 
@@ -701,7 +675,7 @@ function createAppServer(baseUrl: string): McpServer {
     {
       title: "Business Strategy Canvas Builder",
       description:
-        "Use this tool whenever the user asks for a business plan, strategy, canvas, or growing an agency/business. This tool drives the primary UI experience (Business Strategy Canvas Builder). Start by calling run_step with current_step_id: \"step_0\" and the user's message. Keep chat output minimal; the UI should ask questions and capture answers via structuredContent.",
+        "Use this tool to open or progress the Business Strategy Canvas Builder UI. Do not generate business content in chat. Do not summarize or explain what the app shows. After calling this tool, output nothing or at most one short neutral sentence confirming the app is open. All questions and interaction happen inside the app UI.",
       inputSchema: RunStepInputSchema,
       annotations: {
         readOnlyHint: false, // Tool generates files and modifies state
@@ -746,10 +720,13 @@ function createAppServer(baseUrl: string): McpServer {
         locale_hint_source: localeHintSource,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
-      const contentText = buildContentFromResult(
-        (structuredContent && (structuredContent as any).result) ? (structuredContent as any).result : null,
-        { isFirstStart }
-      );
+      const contentSource =
+        meta && typeof meta === "object" && (meta as any).widget_result && typeof (meta as any).widget_result === "object"
+          ? ((meta as any).widget_result as Record<string, unknown>)
+          : ((structuredContent && (structuredContent as any).result)
+            ? ((structuredContent as any).result as Record<string, unknown>)
+            : null);
+      const contentText = buildContentFromResult(contentSource, { isFirstStart });
       return {
         content: [{ type: "text", text: contentText }],
         structuredContent,
