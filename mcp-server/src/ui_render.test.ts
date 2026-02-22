@@ -9,6 +9,12 @@ import {
 } from "../ui/lib/ui_render.js";
 import { setSessionStarted, setSessionWelcomeShown } from "../ui/lib/ui_state.js";
 
+test.beforeEach(() => {
+  setSessionStarted(false);
+  setSessionWelcomeShown(false);
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = {};
+});
+
 function makeElement(tag: string) {
   const node: any = {
     nodeType: 1,
@@ -206,6 +212,7 @@ test("render keeps structured actions visible even when prompt has no numbered o
         active_specialist: "Purpose",
         intro_shown_session: "true",
         intro_shown_for_step: "purpose",
+        started: "true",
         language: "en",
       },
       specialist: {
@@ -328,6 +335,7 @@ test("render shows both Dream REFINE contract buttons when prompt/menu/action_co
         active_specialist: "Dream",
         intro_shown_session: "true",
         intro_shown_for_step: "dream",
+        started: "true",
         language: "en",
         business_name: "Acme",
       },
@@ -475,6 +483,7 @@ test("render shows section title when step-intro chrome flag is present", () => 
         active_specialist: "Purpose",
         intro_shown_session: "true",
         intro_shown_for_step: "purpose",
+        started: "true",
         language: "en",
         business_name: "Mindd",
       },
@@ -502,6 +511,7 @@ test("render shows section title when step-intro chrome flag is present", () => 
         active_specialist: "Purpose",
         intro_shown_session: "true",
         intro_shown_for_step: "purpose",
+        started: "true",
         language: "en",
         business_name: "Mindd",
       },
@@ -568,6 +578,7 @@ test("badge and section title follow prestart or step-intro chrome flag", () => 
         active_specialist: "Step0Validation",
         intro_shown_session: "true",
         intro_shown_for_step: "step_0",
+        started: "true",
         language: "en",
       },
       specialist: {
@@ -588,6 +599,7 @@ test("badge and section title follow prestart or step-intro chrome flag", () => 
         active_specialist: "Dream",
         intro_shown_session: "true",
         intro_shown_for_step: "dream",
+        started: "true",
         language: "en",
       },
       specialist: {
@@ -611,6 +623,7 @@ test("badge and section title follow prestart or step-intro chrome flag", () => 
         active_specialist: "BigWhy",
         intro_shown_session: "true",
         intro_shown_for_step: "bigwhy",
+        started: "true",
         language: "en",
         business_name: "Mindd",
       },
@@ -696,6 +709,7 @@ test("render structures only cardDesc body while prompt stays plain inline text"
         active_specialist: "Dream",
         intro_shown_session: "true",
         intro_shown_for_step: "dream",
+        started: "true",
         language: "en",
       },
       specialist: {
@@ -744,6 +758,7 @@ test("render shows wording choice panel in text mode and keeps confirm hidden un
         active_specialist: "Purpose",
         intro_shown_session: "true",
         intro_shown_for_step: "purpose",
+        started: "true",
         language: "en",
       },
       specialist: {
@@ -809,6 +824,7 @@ test("render hides regular choice buttons while wording choice is required", () 
         active_specialist: "Role",
         intro_shown_session: "true",
         intro_shown_for_step: "role",
+        started: "true",
         language: "en",
       },
       specialist: {
@@ -866,6 +882,7 @@ test("render shows wording choice panel in list mode with full items", () => {
         active_specialist: "Strategy",
         intro_shown_session: "true",
         intro_shown_for_step: "strategy",
+        started: "true",
         language: "en",
       },
       specialist: {
@@ -933,6 +950,7 @@ test("render ignores transient timeout payload and keeps previous visible view",
         active_specialist: "Dream",
         intro_shown_session: "true",
         intro_shown_for_step: "dream",
+        started: "true",
         language: "en",
       },
       specialist: {
@@ -962,6 +980,7 @@ test("render ignores transient timeout payload and keeps previous visible view",
         active_specialist: "Dream",
         intro_shown_session: "true",
         intro_shown_for_step: "dream",
+        started: "true",
         language: "en",
       },
       specialist: {
@@ -1018,6 +1037,7 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
 test("render source blocks locale-gated turns from showing interactive body", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /const bootstrapWaitingLocale =[\s\S]*uiGateStatus === "waiting_locale"/);
+  assert.match(source, /ensureBootstrapRetryForResult\(result, \{ source: "render" \}\);/);
   assert.match(source, /if \(bootstrapWaitingLocale\) \{/);
   assert.match(source, /renderBootstrapWaitShell\(prestartEl\)/);
   assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
@@ -1037,11 +1057,16 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
   assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "host_notification" \}\)/);
+  assert.match(source, /openai:set_globals[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "set_globals" \}\)/);
+  assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*callRunStep\("ACTION_START", \{ started: "true" \}\)/);
+  assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
 });
 
 test("ui actions source uses explicit bootstrap poll action and shared result handler", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
   assert.match(source, /const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";/);
   assert.match(source, /__bootstrap_poll: "true"/);
+  assert.match(source, /export function ensureBootstrapRetryForResult/);
   assert.match(source, /export function handleToolResultAndMaybeScheduleBootstrapRetry/);
+  assert.doesNotMatch(source, /__locale_wait_retry/);
 });

@@ -6910,13 +6910,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const transientPendingScores = Array.isArray((rawState as any).__pending_scores)
     ? (rawState as any).__pending_scores
     : null;
-  const isLegacyLocaleWaitRetryCall =
-    String((rawState as any).__locale_wait_retry || "").trim().toLowerCase() === "true";
   const isBootstrapPollMarker =
     String((rawState as any).__bootstrap_poll || "").trim().toLowerCase() === "true";
   const isBootstrapPollAction =
     String(args.user_message ?? "").trim().toUpperCase() === ACTION_BOOTSTRAP_POLL_TOKEN;
-  const isBootstrapPollCall = isLegacyLocaleWaitRetryCall || isBootstrapPollMarker || isBootstrapPollAction;
+  const isBootstrapPollCall = isBootstrapPollMarker || isBootstrapPollAction;
 
   const rawLegacyMarkers = detectLegacySessionMarkers((args.state ?? {}) as Record<string, unknown>);
   let state = normalizeState(args.state ?? {});
@@ -6960,9 +6958,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   (state as any).__session_turn_id = requestScopedTurnId || crypto.randomUUID();
   if ((state as any).__ui_telemetry) {
     delete (state as any).__ui_telemetry;
-  }
-  if ((state as any).__locale_wait_retry) {
-    delete (state as any).__locale_wait_retry;
   }
   if ((state as any).__bootstrap_poll) {
     delete (state as any).__bootstrap_poll;

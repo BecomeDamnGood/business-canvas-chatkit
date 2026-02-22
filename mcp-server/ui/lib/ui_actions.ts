@@ -139,15 +139,6 @@ function uiText(
   return translated || fallback;
 }
 
-export function ensureLanguageInState(
-  state: Record<string, unknown> | null | undefined,
-  lang: string
-): Record<string, unknown> {
-  const current = state?.language ? String(state.language).trim() : "";
-  if (current) return state || {};
-  return Object.assign({}, state || {}, { language: lang });
-}
-
 let rateLimitTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCallAt = 0;
 const CLICK_DEBOUNCE_MS = 250;
@@ -247,9 +238,18 @@ function maybeScheduleBootstrapRetry(result: Record<string, unknown>, source: st
   return true;
 }
 
+export function ensureBootstrapRetryForResult(
+  result: Record<string, unknown> | null | undefined,
+  opts?: { source?: string }
+): boolean {
+  const safeResult = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+  const source = String(opts?.source || "render");
+  return maybeScheduleBootstrapRetry(safeResult, source);
+}
+
 export function handleToolResultAndMaybeScheduleBootstrapRetry(
   raw: unknown,
-  opts?: { source?: "call_run_step" | "host_notification" | "unknown" }
+  opts?: { source?: "call_run_step" | "host_notification" | "set_globals" | "unknown" }
 ): Record<string, unknown> {
   const normalized = applyToolResult(raw);
   if (_render) _render(normalized);
@@ -566,12 +566,9 @@ export async function callRunStep(
     Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
   const persistedStarted = String((widgetState().started || "")).toLowerCase() === "true";
   const messageText = String(message || "").trim();
-  const isLegacyLocaleWaitRetryCall =
-    String((extraState as any)?.__locale_wait_retry || "").trim().toLowerCase() === "true";
   const isBootstrapPollCall =
     messageText === ACTION_BOOTSTRAP_POLL ||
-    String((extraState as any)?.__bootstrap_poll || "").trim().toLowerCase() === "true" ||
-    isLegacyLocaleWaitRetryCall;
+    String((extraState as any)?.__bootstrap_poll || "").trim().toLowerCase() === "true";
   if (String(message || "").trim() === "") {
     if (hasToolOutput && !isBootstrapPollCall) return;
     if (!persistedStarted && !isBootstrapPollCall) return;

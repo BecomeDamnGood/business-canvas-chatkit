@@ -694,6 +694,53 @@
         border-radius: var(--r-md);
         display: none;
       }
+
+      .skeleton-stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .skeleton-line {
+        width: 100%;
+        height: 14px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        position: relative;
+      }
+
+      .skeleton-line::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        transform: translateX(-100%);
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.55),
+          transparent
+        );
+        animation: skeletonShimmer 1.2s var(--ease) infinite;
+      }
+
+      .bootstrap-wait-shell {
+        align-content: start;
+      }
+
+      @keyframes skeletonShimmer {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(100%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .skeleton-line::after {
+          animation: none;
+        }
+      }
       
       .cardDesc p,
       .cardDesc .section-body {

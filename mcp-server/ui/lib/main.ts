@@ -12,7 +12,6 @@ import {
   setBridgeEnabled,
   setSendEnabled,
   setLoading,
-  hasToolOutput,
   setWidgetStateSafe,
 } from "./ui_actions.js";
 import { render } from "./ui_render.js";
@@ -192,10 +191,6 @@ if (btnStart) {
     setSessionStarted(true);
     setSessionWelcomeShown(false);
     setWidgetStateSafe({ started: "true" });
-    if (hasToolOutput()) {
-      render();
-      return;
-    }
     callRunStep("ACTION_START", { started: "true" });
   });
 }
@@ -219,7 +214,15 @@ if (btnSwitchToSelfDream) {
 if (typeof window !== "undefined") {
   window.addEventListener("openai:set_globals", () => {
     try {
-      render();
+      const host = (globalThis as Record<string, unknown>).openai as
+        | { toolOutput?: unknown }
+        | undefined;
+      const payload = host?.toolOutput;
+      if (payload && typeof payload === "object") {
+        handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
+      } else {
+        render();
+      }
     } catch (e) {
       console.error(e);
     } finally {

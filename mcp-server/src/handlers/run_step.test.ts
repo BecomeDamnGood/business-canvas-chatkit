@@ -154,6 +154,11 @@ test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps waiting contr
   assert.equal(String(polled?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
 });
 
+test("language policy source: legacy __locale_wait_retry alias is removed", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /__locale_wait_retry/);
+});
+
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {
   const first = await run_step({
     user_message: "",

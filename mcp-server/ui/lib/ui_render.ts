@@ -29,6 +29,7 @@ import {
   languageFromState,
   uiLang,
   hasToolOutput,
+  ensureBootstrapRetryForResult,
 } from "./ui_actions.js";
 import { getIsLoading, getSessionStarted, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 
@@ -505,6 +506,7 @@ export function render(overrideToolOutput?: unknown): void {
   const bootstrapWaitingLocale =
     uiFlags.bootstrap_waiting_locale === true ||
     (uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready");
+  ensureBootstrapRetryForResult(result, { source: "render" });
   if (overrideStrings) {
     const bucket = overrideLang || baseLang(lang);
     UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...(overrideStrings as Record<string, string>) };
@@ -582,7 +584,6 @@ export function render(overrideToolOutput?: unknown): void {
     setWidgetStateSafe({ language: langPersist });
   }
 
-  const persistedStarted = String((ws?.started || "")).toLowerCase() === "true";
   const showPreStart = hasToolOutputVal ? !serverStarted : !sessionStarted;
 
   const current =
