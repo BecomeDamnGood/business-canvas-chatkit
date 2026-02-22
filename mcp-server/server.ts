@@ -525,7 +525,7 @@ async function runStepHandler(args: {
       meta: `step: ${stepMeta} | specialist: ${specialistMeta}`,
       result: modelResult,
     };
-    const uiPayload = buildUiStructured(modelResult);
+    const uiPayload = buildUiStructured(resultForClient);
     if (uiPayload) structuredContent.ui = uiPayload;
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
     return {
