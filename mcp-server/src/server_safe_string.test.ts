@@ -47,9 +47,14 @@ test("open_canvas and run_step merge args locale with extra metadata source", ()
   assert.match(source, /const mergedLocale = mergeLocaleHintInputs\(\s*args\.locale_hint,\s*args\.locale_hint_source,\s*localeFromExtra\s*\);/);
   assert.match(
     source,
-    /server\.registerTool\(\s*"open_canvas"[\s\S]*runStepHandler\(\{[\s\S]*input_mode: "chat",[\s\S]*locale_hint: mergedLocale\.locale_hint,[\s\S]*locale_hint_source: mergedLocale\.locale_hint_source,/,
-    "open_canvas should route locale metadata into runStepHandler on chat bootstrap path"
+    /server\.registerTool\(\s*"open_canvas"[\s\S]*buildOpenCanvasBootstrapResponse\(\{[\s\S]*locale_hint: mergedLocale\.locale_hint,[\s\S]*locale_hint_source: mergedLocale\.locale_hint_source,/,
+    "open_canvas should route locale metadata into bootstrap response builder"
   );
+  const openCanvasStart = source.indexOf('server.registerTool(\n    "open_canvas"');
+  const runStepStart = source.indexOf('server.registerTool(\n    "run_step"');
+  assert.ok(openCanvasStart >= 0 && runStepStart > openCanvasStart, "open_canvas block should appear before run_step block");
+  const openCanvasBlock = source.slice(openCanvasStart, runStepStart);
+  assert.doesNotMatch(openCanvasBlock, /runStepHandler\(/, "open_canvas must not execute run_step business logic");
 });
 
 test("open_canvas has idempotent dedupe cache guard", () => {
@@ -92,15 +97,20 @@ test("run_step handler always emits model-safe result and keeps full payload wid
   assert.doesNotMatch(source, /const shouldUseModelSafeResult =/);
   assert.match(source, /const modelResult = buildModelSafeResult\(resultForClient\);/);
   assert.match(source, /result: modelResult,/);
-  assert.match(source, /const uiPayload = buildUiStructured\(modelResult\);/);
+  assert.match(source, /const uiPayload = buildUiStructured\(resultForClient\);/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient,\s*\}/);
 });
 
-test("app-first tool split is present: open_canvas tool plus run_step visibility switch", () => {
+test("two-tool contract: open_canvas owns template and run_step is app-only without template", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /server\.registerTool\(\s*"open_canvas"/);
-  assert.match(source, /const runStepVisibility = isMcpAppFirstToolsV1Enabled\(\) \? \["app"\] : \["model", "app"\];/);
-  assert.match(source, /visibility: runStepVisibility,/);
+  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*"openai\/outputTemplate": uiResourceUri,/);
+  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*visibility:\s*\["app"\],/);
+  assert.doesNotMatch(
+    source,
+    /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/outputTemplate": uiResourceUri,/,
+    "run_step must not own openai/outputTemplate in two-tool architecture"
+  );
 });
 
 test("buildModelSafeResult returns minimal v2 model-visible fields", () => {

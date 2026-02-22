@@ -96,10 +96,6 @@ function envFlagEnabled(name: string, defaultValue: boolean): boolean {
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
-function isMcpAppFirstToolsV1Enabled(): boolean {
-  return envFlagEnabled("MCP_APP_FIRST_TOOLS_V1", false);
-}
-
 function stableStringify(value: unknown): string {
   const walk = (input: unknown): unknown => {
     if (input === null || input === undefined) return null;
@@ -417,6 +413,70 @@ function loadUiHtml(): string {
     console.error("[loadUiHtml] Failed:", e);
     return "<html><body>UI not available</body></html>";
   }
+}
+
+function buildOpenCanvasBootstrapResponse(args: {
+  locale_hint: string;
+  locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "none";
+  state?: Record<string, unknown>;
+  seed_user_message?: string;
+}): { structuredContent: Record<string, unknown>; meta: Record<string, unknown> } {
+  const sourceState = args.state && typeof args.state === "object" ? args.state : {};
+  const resolvedLanguage = normalizeLocaleHint(args.locale_hint);
+  const resolvedLanguageSource = normalizeLocaleHintSource(args.locale_hint_source);
+  const persistedLanguage = safeString(sourceState.language ?? "").trim().toLowerCase();
+  const finalLanguage = resolvedLanguage || persistedLanguage;
+  const finalLanguageSource = resolvedLanguage
+    ? (resolvedLanguageSource !== "none" ? resolvedLanguageSource : "locale_hint")
+    : safeString(sourceState.language_source ?? "").trim();
+  const bootstrapState: Record<string, unknown> = {
+    ...sourceState,
+    current_step: "step_0",
+    started: "false",
+    active_specialist: "ValidationAndBusinessName",
+    ui_gate_status: "ready",
+    ui_gate_reason: "",
+    ui_bootstrap_status: "ready",
+    ui_strings_status: safeString(sourceState.ui_strings_status ?? "ready") || "ready",
+  };
+  if (finalLanguage) bootstrapState.language = finalLanguage;
+  if (finalLanguageSource) bootstrapState.language_source = finalLanguageSource;
+
+  const resultForClient: Record<string, unknown> = {
+    ok: true,
+    tool: "open_canvas",
+    current_step_id: "step_0",
+    active_specialist: "ValidationAndBusinessName",
+    text: "",
+    prompt: "",
+    specialist: {},
+    state: bootstrapState,
+    ui: {
+      action_codes: [],
+      flags: {
+        bootstrap_waiting_locale: false,
+        bootstrap_interactive_ready: true,
+        interactive_fallback_active: false,
+        bootstrap_retry_hint: "",
+      },
+    },
+  };
+  const modelResult = buildModelSafeResult(resultForClient);
+  const structuredContent: Record<string, unknown> = {
+    title: `The Business Strategy Canvas Builder (${VERSION})`,
+    meta: "step: step_0 | specialist: ValidationAndBusinessName",
+    result: modelResult,
+  };
+  const uiPayload = buildUiStructured(resultForClient);
+  if (uiPayload) structuredContent.ui = uiPayload;
+  const seedMessage = safeString(args.seed_user_message ?? "").trim();
+  if (seedMessage) structuredContent.seed_user_message = seedMessage;
+  return {
+    structuredContent,
+    meta: {
+      widget_result: resultForClient,
+    },
+  };
 }
 
 /** Shared run_step logic for MCP tool and POST /run_step (local testing). */
@@ -751,7 +811,6 @@ function createAppServer(baseUrl: string): McpServer {
     locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional(),
     state: CanvasStateZod.partial().passthrough().optional(),
   });
-  const runStepVisibility = isMcpAppFirstToolsV1Enabled() ? ["app"] : ["model", "app"];
 
   server.registerTool(
     "open_canvas",
@@ -803,12 +862,10 @@ function createAppServer(baseUrl: string): McpServer {
           return cloneOpenCanvasResponse(cached.response);
         }
       }
-      const { structuredContent, meta } = await runStepHandler({
-        current_step_id: "step_0",
-        user_message: safeString(args.user_message ?? ""),
-        input_mode: "chat",
+      const { structuredContent, meta } = buildOpenCanvasBootstrapResponse({
         locale_hint: mergedLocale.locale_hint,
         locale_hint_source: mergedLocale.locale_hint_source,
+        seed_user_message: safeString(args.user_message ?? ""),
         state: (args.state ?? {}) as Record<string, unknown>,
       });
       const response = stampOpenCanvasDedupeMetadata(
@@ -829,6 +886,21 @@ function createAppServer(baseUrl: string): McpServer {
       console.log("[open_canvas] dedupe", {
         open_canvas_deduped: false,
         open_canvas_dedupe_key_hash: dedupeToken.slice(0, 16),
+      });
+      const bootstrapResult =
+        meta && typeof meta === "object" && (meta as any).widget_result && typeof (meta as any).widget_result === "object"
+          ? ((meta as any).widget_result as Record<string, unknown>)
+          : {};
+      const bootstrapState =
+        bootstrapResult.state && typeof bootstrapResult.state === "object"
+          ? (bootstrapResult.state as Record<string, unknown>)
+          : {};
+      console.log("[open_canvas] bootstrap response", {
+        resolved_language: safeString(bootstrapState.language ?? ""),
+        language_source: safeString(bootstrapState.language_source ?? ""),
+        ui_gate_status: safeString(bootstrapState.ui_gate_status ?? ""),
+        ui_bootstrap_status: safeString(bootstrapState.ui_bootstrap_status ?? ""),
+        current_step: safeString(bootstrapState.current_step ?? ""),
       });
       return response;
     }
@@ -853,9 +925,8 @@ function createAppServer(baseUrl: string): McpServer {
         securitySchemes: [{ type: "noauth" }],
         ui: {
           resourceUri: uiResourceUri,
-          visibility: runStepVisibility,
+          visibility: ["app"],
         },
-        "openai/outputTemplate": uiResourceUri,
         "openai/widgetAccessible": true,
         "openai/toolInvocation/invoking": "Thinking...",
         "openai/toolInvocation/invoked": "Updated",
