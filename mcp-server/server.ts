@@ -97,7 +97,7 @@ function envFlagEnabled(name: string, defaultValue: boolean): boolean {
 }
 
 function isMcpAppFirstToolsV1Enabled(): boolean {
-  return envFlagEnabled("MCP_APP_FIRST_TOOLS_V1", true);
+  return envFlagEnabled("MCP_APP_FIRST_TOOLS_V1", false);
 }
 
 function stableStringify(value: unknown): string {
@@ -589,7 +589,7 @@ async function runStepHandler(args: {
       meta: "error",
       result: modelResult,
     };
-    const uiPayload = buildUiStructured(modelResult);
+    const uiPayload = buildUiStructured(fallbackResult as Record<string, unknown>);
     if (uiPayload) structuredContent.ui = uiPayload;
     if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
     return {
