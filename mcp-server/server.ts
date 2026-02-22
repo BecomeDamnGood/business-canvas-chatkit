@@ -925,7 +925,7 @@ function createAppServer(baseUrl: string): McpServer {
         securitySchemes: [{ type: "noauth" }],
         ui: {
           resourceUri: uiResourceUri,
-          visibility: ["app"],
+          visibility: ["model", "app"],
         },
         "openai/widgetAccessible": true,
         "openai/toolInvocation/invoking": "Thinking...",
@@ -966,6 +966,14 @@ function createAppServer(baseUrl: string): McpServer {
       };
     }
   );
+
+  console.log("[mcp_tool_contract]", {
+    open_canvas_visibility: ["model", "app"],
+    open_canvas_output_template: true,
+    run_step_visibility: ["model", "app"],
+    run_step_output_template: false,
+    ui_resource_uri: uiResourceUri,
+  });
 
   return server;
 }

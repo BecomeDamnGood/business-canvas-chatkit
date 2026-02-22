@@ -8,6 +8,8 @@ const repoRoot = path.resolve(__dirname, "..");
 const uiLibDir = path.join(repoRoot, "ui", "lib");
 const uiBundlePath = path.join(repoRoot, "ui", "step-card.bundled.html");
 const distBundlePath = path.join(repoRoot, "dist", "ui", "step-card.bundled.html");
+const serverTsPath = path.join(repoRoot, "server.ts");
+const distServerJsPath = path.join(repoRoot, "dist", "server.js");
 
 const issues = [];
 
@@ -36,6 +38,12 @@ function assertExcludes(haystack, needle, context) {
   }
 }
 
+function assertMatchesRegex(haystack, regex, context, message) {
+  if (!regex.test(haystack)) {
+    pushIssue(`${context} ${message}`);
+  }
+}
+
 const tsFiles = fs
   .readdirSync(uiLibDir, { withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
@@ -58,16 +66,18 @@ const srcMainTs = readUtf8(path.join(uiLibDir, "main.ts"));
 const srcMainJs = readUtf8(path.join(uiLibDir, "main.js"));
 const uiBundle = readUtf8(uiBundlePath);
 const distBundle = readUtf8(distBundlePath);
+const serverTs = readUtf8(serverTsPath);
+const distServerJs = readUtf8(distServerJsPath);
 
 assertIncludes(
   srcRenderTs,
-  'ensureBootstrapRetryForResult(result, { source: "render" });',
+  'ensureBootstrapRetryForResult(data, { source: "render" });',
   "ui/lib/ui_render.ts"
 );
 assertIncludes(srcRenderTs, "const bootstrapWaitingLocale =", "ui/lib/ui_render.ts");
 assertExcludes(srcRenderTs, "pendingNonEnglishByState", "ui/lib/ui_render.ts");
 
-assertIncludes(srcRenderJs, "ensureBootstrapRetryForResult(result, { source: \"render\" });", "ui/lib/ui_render.js");
+assertIncludes(srcRenderJs, "ensureBootstrapRetryForResult(data, { source: \"render\" });", "ui/lib/ui_render.js");
 assertIncludes(srcRenderJs, "const bootstrapWaitingLocale =", "ui/lib/ui_render.js");
 assertExcludes(srcRenderJs, "pendingNonEnglishByState", "ui/lib/ui_render.js");
 
@@ -92,10 +102,37 @@ assertIncludes(srcMainJs, 'callRunStep("ACTION_START", { started: "true" });', "
 assertExcludes(srcMainJs, "if (hasToolOutput())", "ui/lib/main.js");
 
 for (const [label, content] of [
+  ["server.ts", serverTs],
+  ["dist/server.js", distServerJs],
+]) {
+  assertMatchesRegex(
+    content,
+    /registerTool\(\s*"open_canvas"[\s\S]*visibility:\s*\["model",\s*"app"\],[\s\S]*"openai\/outputTemplate":\s*uiResourceUri/,
+    label,
+    "must keep open_canvas as template owner with model+app visibility"
+  );
+  assertMatchesRegex(
+    content,
+    /registerTool\(\s*"run_step"[\s\S]*visibility:\s*\["model",\s*"app"\],/,
+    label,
+    "must keep run_step visibility as [\"model\",\"app\"] in compat-first mode"
+  );
+  assertMatchesRegex(
+    content,
+    /registerTool\(\s*"run_step"(?![\s\S]*"openai\/outputTemplate":\s*uiResourceUri)/,
+    label,
+    "must not attach openai/outputTemplate to run_step"
+  );
+}
+
+assertExcludes(serverTs, "isMcpAppFirstToolsV1Enabled", "server.ts");
+assertExcludes(distServerJs, "isMcpAppFirstToolsV1Enabled", "dist/server.js");
+
+for (const [label, content] of [
   ["ui/step-card.bundled.html", uiBundle],
   ["dist/ui/step-card.bundled.html", distBundle],
 ]) {
-  assertIncludes(content, "ensureBootstrapRetryForResult(result, { source: \"render\" });", label);
+  assertIncludes(content, "ensureBootstrapRetryForResult(data, { source: \"render\" });", label);
   assertIncludes(content, 'handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });', label);
   assertIncludes(content, ".skeleton-line", label);
   assertIncludes(content, "@keyframes skeletonShimmer", label);

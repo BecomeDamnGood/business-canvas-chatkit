@@ -101,15 +101,20 @@ test("run_step handler always emits model-safe result and keeps full payload wid
   assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient,\s*\}/);
 });
 
-test("two-tool contract: open_canvas owns template and run_step is app-only without template", () => {
+test("compat-first contract: open_canvas owns template and run_step stays model+app without template", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /server\.registerTool\(\s*"open_canvas"/);
   assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*"openai\/outputTemplate": uiResourceUri,/);
-  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*visibility:\s*\["app"\],/);
+  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*visibility:\s*\["model",\s*"app"\],/);
   assert.doesNotMatch(
     source,
     /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/outputTemplate": uiResourceUri,/,
-    "run_step must not own openai/outputTemplate in two-tool architecture"
+    "run_step must not own openai/outputTemplate in compat-first architecture"
+  );
+  assert.match(
+    source,
+    /console\.log\("\[mcp_tool_contract\]",[\s\S]*run_step_visibility:\s*\["model",\s*"app"\][\s\S]*run_step_output_template:\s*false/,
+    "startup log must expose effective tool descriptor contract for production diagnostics"
   );
 });
 
