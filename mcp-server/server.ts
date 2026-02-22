@@ -429,6 +429,7 @@ function buildOpenCanvasBootstrapResponse(args: {
   const finalLanguageSource = resolvedLanguage
     ? (resolvedLanguageSource !== "none" ? resolvedLanguageSource : "locale_hint")
     : safeString(sourceState.language_source ?? "").trim();
+  const seedMessage = safeString(args.seed_user_message ?? "").trim();
   const bootstrapState: Record<string, unknown> = {
     ...sourceState,
     current_step: "step_0",
@@ -439,6 +440,9 @@ function buildOpenCanvasBootstrapResponse(args: {
     ui_bootstrap_status: "ready",
     ui_strings_status: safeString(sourceState.ui_strings_status ?? "ready") || "ready",
   };
+  if (seedMessage && !safeString(bootstrapState.initial_user_message ?? "").trim()) {
+    bootstrapState.initial_user_message = seedMessage;
+  }
   if (finalLanguage) bootstrapState.language = finalLanguage;
   if (finalLanguageSource) bootstrapState.language_source = finalLanguageSource;
 
@@ -469,8 +473,6 @@ function buildOpenCanvasBootstrapResponse(args: {
   };
   const uiPayload = buildUiStructured(resultForClient);
   if (uiPayload) structuredContent.ui = uiPayload;
-  const seedMessage = safeString(args.seed_user_message ?? "").trim();
-  if (seedMessage) structuredContent.seed_user_message = seedMessage;
   return {
     structuredContent,
     meta: {
@@ -501,10 +503,6 @@ async function runStepHandler(args: {
   const isStart = current_step_id === "step_0";
   const user_message =
     isStart && !user_message_raw.trim() ? "" : user_message_raw;
-  const seed_user_message =
-    isStart && user_message_raw.trim()
-      ? user_message_raw.trim()
-      : "";
   const hasInitiator = safeString(state?.initial_user_message ?? "").trim() !== "";
   const stateForTool =
     isStart && user_message_raw.trim()
@@ -587,7 +585,6 @@ async function runStepHandler(args: {
     };
     const uiPayload = buildUiStructured(resultForClient);
     if (uiPayload) structuredContent.ui = uiPayload;
-    if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
     return {
       structuredContent,
       meta: {
@@ -651,7 +648,6 @@ async function runStepHandler(args: {
     };
     const uiPayload = buildUiStructured(fallbackResult as Record<string, unknown>);
     if (uiPayload) structuredContent.ui = uiPayload;
-    if (seed_user_message) structuredContent.seed_user_message = seed_user_message;
     return {
       structuredContent,
       meta: {
@@ -817,7 +813,7 @@ function createAppServer(baseUrl: string): McpServer {
     {
       title: "Open Business Strategy Canvas Builder",
       description:
-        "Open the Business Strategy Canvas Builder app so the user can continue in the UI. Call this once per user turn unless the user explicitly asks to reopen the app.",
+        "Open the Business Strategy Canvas Builder app so the user can continue in the UI. Call this once per user turn unless the user explicitly asks to reopen the app. Do not generate business content in chat after this call. Do not summarize app content. Output nothing or at most one short neutral sentence that the app is open.",
       inputSchema: OpenCanvasInputSchema,
       annotations: {
         readOnlyHint: false,

@@ -132,3 +132,16 @@ test("run_step description enforces no business content in chat output", () => {
   assert.match(source, /Do not summarize or explain what the app shows\./);
   assert.match(source, /All questions and interaction happen inside the app UI\./);
 });
+
+test("open_canvas description enforces no business content in chat output", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*Do not generate business content in chat after this call\./);
+  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*Do not summarize app content\./);
+  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*Output nothing or at most one short neutral sentence that the app is open\./);
+});
+
+test("model-visible structuredContent no longer includes seed_user_message", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /structuredContent\.seed_user_message\s*=/);
+  assert.match(source, /bootstrapState\.initial_user_message\s*=\s*seedMessage;/);
+});
