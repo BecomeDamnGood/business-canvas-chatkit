@@ -80,6 +80,15 @@ const UI_RESOURCE_QUERY = `?v=${encodeURIComponent(VERSION)}`;
 const UI_RESOURCE_NAME = "business-canvas-widget";
 const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
+const OPEN_CANVAS_DEDUPE_TTL_MS = Number(process.env.OPEN_CANVAS_DEDUPE_TTL_MS || 5000);
+
+type OpenCanvasToolResponse = {
+  content: Array<{ type: "text"; text: string }>;
+  structuredContent: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
+};
+
+const openCanvasDedupeCache = new Map<string, { expiresAt: number; response: OpenCanvasToolResponse }>();
 
 function envFlagEnabled(name: string, defaultValue: boolean): boolean {
   const raw = safeString(process.env[name] ?? "").trim().toLowerCase();
@@ -89,6 +98,91 @@ function envFlagEnabled(name: string, defaultValue: boolean): boolean {
 
 function isMcpAppFirstToolsV1Enabled(): boolean {
   return envFlagEnabled("MCP_APP_FIRST_TOOLS_V1", true);
+}
+
+function stableStringify(value: unknown): string {
+  const walk = (input: unknown): unknown => {
+    if (input === null || input === undefined) return null;
+    if (Array.isArray(input)) return input.map((item) => walk(item));
+    if (typeof input === "object") {
+      const entries = Object.entries(input as Record<string, unknown>)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([key, val]) => [key, walk(val)]);
+      return Object.fromEntries(entries);
+    }
+    if (typeof input === "number") {
+      return Number.isFinite(input) ? input : null;
+    }
+    if (typeof input === "boolean" || typeof input === "string") return input;
+    return safeString(input);
+  };
+  try {
+    return JSON.stringify(walk(value));
+  } catch {
+    return "";
+  }
+}
+
+function compactOpenCanvasState(state: unknown): Record<string, unknown> {
+  const source = state && typeof state === "object" ? (state as Record<string, unknown>) : {};
+  return {
+    current_step: safeString(source.current_step ?? ""),
+    started: safeString(source.started ?? ""),
+    language: safeString(source.language ?? ""),
+    language_source: safeString(source.language_source ?? ""),
+    ui_strings_status: safeString(source.ui_strings_status ?? ""),
+    ui_bootstrap_status: safeString(source.ui_bootstrap_status ?? ""),
+    step_0_final: safeString(source.step_0_final ?? ""),
+    business_name: safeString(source.business_name ?? ""),
+    initial_user_message: safeString(source.initial_user_message ?? ""),
+  };
+}
+
+function openCanvasDedupeToken(args: {
+  user_message?: unknown;
+  locale_hint?: unknown;
+  locale_hint_source?: unknown;
+  state?: unknown;
+}): string {
+  const payload = {
+    tool: "open_canvas",
+    user_message: safeString(args.user_message ?? "").trim(),
+    locale_hint: normalizeLocaleHint(args.locale_hint),
+    locale_hint_source: normalizeLocaleHintSource(args.locale_hint_source),
+    state: compactOpenCanvasState(args.state),
+  };
+  return createHash("sha256").update(stableStringify(payload)).digest("hex");
+}
+
+function purgeExpiredOpenCanvasDedupeEntries(nowMs: number): void {
+  for (const [key, value] of openCanvasDedupeCache.entries()) {
+    if (value.expiresAt <= nowMs) openCanvasDedupeCache.delete(key);
+  }
+}
+
+function cloneOpenCanvasResponse<T extends OpenCanvasToolResponse>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function stampOpenCanvasDedupeMetadata(
+  response: OpenCanvasToolResponse,
+  dedupeToken: string,
+  dedupeAtMs: number
+): OpenCanvasToolResponse {
+  const meta = response._meta && typeof response._meta === "object" ? (response._meta as Record<string, unknown>) : null;
+  const widgetResult =
+    meta && meta.widget_result && typeof meta.widget_result === "object"
+      ? (meta.widget_result as Record<string, unknown>)
+      : null;
+  const widgetState =
+    widgetResult && widgetResult.state && typeof widgetResult.state === "object"
+      ? (widgetResult.state as Record<string, unknown>)
+      : null;
+  if (widgetState) {
+    widgetState.open_canvas_dedupe_token = dedupeToken;
+    widgetState.open_canvas_dedupe_at_ms = dedupeAtMs;
+  }
+  return response;
 }
 
 function getHeader(req: any, name: string): string {
@@ -224,17 +318,55 @@ function localeFromMetaValue(value: unknown): string {
 
 function localeFromRequestHeaders(requestInfo: unknown): string {
   const headersRaw =
-    requestInfo && typeof requestInfo === "object" && typeof (requestInfo as any).headers === "object"
-      ? ((requestInfo as any).headers as Record<string, unknown>)
+    requestInfo && typeof requestInfo === "object" && (requestInfo as any).headers
+      ? ((requestInfo as any).headers as unknown)
       : null;
   if (!headersRaw) return "";
-  const direct = localeFromMetaValue(headersRaw["accept-language"]);
+  if (typeof (headersRaw as any).get === "function") {
+    const fromGet = localeFromMetaValue((headersRaw as any).get("accept-language"));
+    if (fromGet) return fromGet;
+  }
+  if (Array.isArray(headersRaw)) {
+    for (const entry of headersRaw) {
+      if (!Array.isArray(entry) || entry.length < 2) continue;
+      const key = safeString(entry[0] ?? "").toLowerCase();
+      if (key !== "accept-language") continue;
+      const fromTuple = localeFromMetaValue(entry[1]);
+      if (fromTuple) return fromTuple;
+    }
+  }
+  if (typeof headersRaw !== "object") return "";
+  const record = headersRaw as Record<string, unknown>;
+  const direct = localeFromMetaValue(record["accept-language"]);
   if (direct) return direct;
-  const canonical = Object.keys(headersRaw).find(
+  const canonical = Object.keys(record).find(
     (key) => safeString(key || "").toLowerCase() === "accept-language"
   );
   if (!canonical) return "";
-  return localeFromMetaValue(headersRaw[canonical]);
+  return localeFromMetaValue(record[canonical]);
+}
+
+function normalizeLocaleHintSource(raw: unknown): "openai_locale" | "webplus_i18n" | "request_header" | "none" {
+  const value = safeString(raw).trim();
+  return value === "openai_locale" || value === "webplus_i18n" || value === "request_header"
+    ? value
+    : "none";
+}
+
+function mergeLocaleHintInputs(
+  argsLocaleHint: unknown,
+  argsLocaleSource: unknown,
+  extraLocale: { locale_hint: string; locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "none" }
+): { locale_hint: string; locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "none" } {
+  const argHint = normalizeLocaleHint(safeString(argsLocaleHint));
+  const argSource = normalizeLocaleHintSource(argsLocaleSource);
+  const extraHint = normalizeLocaleHint(safeString(extraLocale.locale_hint));
+  const extraSource = normalizeLocaleHintSource(extraLocale.locale_hint_source);
+  const mergedHint = argHint || extraHint;
+  if (!mergedHint) return { locale_hint: "", locale_hint_source: "none" };
+  if (argSource !== "none") return { locale_hint: mergedHint, locale_hint_source: argSource };
+  if (extraSource !== "none") return { locale_hint: mergedHint, locale_hint_source: extraSource };
+  return { locale_hint: mergedHint, locale_hint_source: "none" };
 }
 
 function resolveLocaleHintFromExtra(extra: unknown): {
@@ -483,6 +615,7 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
       ? (ui.flags as Record<string, unknown>)
       : {};
   return {
+    model_result_shape_version: "v2_minimal",
     ok: result.ok === true,
     tool: safeString(result.tool || "run_step"),
     current_step_id: safeString(result.current_step_id || state.current_step || "step_0"),
@@ -625,7 +758,7 @@ function createAppServer(baseUrl: string): McpServer {
     {
       title: "Open Business Strategy Canvas Builder",
       description:
-        "Open the Business Strategy Canvas Builder app so the user can continue in the UI.",
+        "Open the Business Strategy Canvas Builder app so the user can continue in the UI. Call this once per user turn unless the user explicitly asks to reopen the app.",
       inputSchema: OpenCanvasInputSchema,
       annotations: {
         readOnlyHint: false,
@@ -646,27 +779,58 @@ function createAppServer(baseUrl: string): McpServer {
     },
     async (args, extra) => {
       const localeFromExtra = resolveLocaleHintFromExtra(extra);
-      const localeHint = safeString(args.locale_hint ?? localeFromExtra.locale_hint);
-      const localeHintSourceRaw = safeString(args.locale_hint_source ?? localeFromExtra.locale_hint_source);
-      const localeHintSource =
-        localeHintSourceRaw === "openai_locale" ||
-        localeHintSourceRaw === "webplus_i18n" ||
-        localeHintSourceRaw === "request_header"
-          ? localeHintSourceRaw
-          : "none";
+      const mergedLocale = mergeLocaleHintInputs(
+        args.locale_hint,
+        args.locale_hint_source,
+        localeFromExtra
+      );
+      const dedupeEnabled = envFlagEnabled("OPEN_CANVAS_DEDUPE_V1", true);
+      const dedupeToken = openCanvasDedupeToken({
+        user_message: args.user_message,
+        locale_hint: mergedLocale.locale_hint,
+        locale_hint_source: mergedLocale.locale_hint_source,
+        state: args.state ?? {},
+      });
+      const nowMs = Date.now();
+      if (dedupeEnabled) {
+        purgeExpiredOpenCanvasDedupeEntries(nowMs);
+        const cached = openCanvasDedupeCache.get(dedupeToken);
+        if (cached && cached.expiresAt > nowMs) {
+          console.log("[open_canvas] dedupe", {
+            open_canvas_deduped: true,
+            open_canvas_dedupe_key_hash: dedupeToken.slice(0, 16),
+          });
+          return cloneOpenCanvasResponse(cached.response);
+        }
+      }
       const { structuredContent, meta } = await runStepHandler({
         current_step_id: "step_0",
         user_message: safeString(args.user_message ?? ""),
         input_mode: "chat",
-        locale_hint: localeHint,
-        locale_hint_source: localeHintSource,
+        locale_hint: mergedLocale.locale_hint,
+        locale_hint_source: mergedLocale.locale_hint_source,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
-      return {
+      const response = stampOpenCanvasDedupeMetadata(
+        {
         content: [{ type: "text", text: "" }],
         structuredContent,
         ...(meta ? { _meta: meta } : {}),
-      };
+        },
+        dedupeToken,
+        nowMs
+      );
+      if (dedupeEnabled) {
+        openCanvasDedupeCache.set(dedupeToken, {
+          expiresAt: nowMs + OPEN_CANVAS_DEDUPE_TTL_MS,
+          response: cloneOpenCanvasResponse(response),
+        });
+      }
+      console.log("[open_canvas] dedupe", {
+        open_canvas_deduped: false,
+        open_canvas_dedupe_key_hash: dedupeToken.slice(0, 16),
+      });
+      return response;
     }
   );
 
@@ -704,20 +868,17 @@ function createAppServer(baseUrl: string): McpServer {
         (args.state ?? {}) as Record<string, unknown>
       );
       const localeFromExtra = resolveLocaleHintFromExtra(extra);
-      const localeHint = safeString(args.locale_hint ?? localeFromExtra.locale_hint);
-      const localeHintSourceRaw = safeString(args.locale_hint_source ?? localeFromExtra.locale_hint_source);
-      const localeHintSource =
-        localeHintSourceRaw === "openai_locale" ||
-        localeHintSourceRaw === "webplus_i18n" ||
-        localeHintSourceRaw === "request_header"
-          ? localeHintSourceRaw
-          : "none";
+      const mergedLocale = mergeLocaleHintInputs(
+        args.locale_hint,
+        args.locale_hint_source,
+        localeFromExtra
+      );
       const { structuredContent, meta } = await runStepHandler({
         current_step_id: safeString(args.current_step_id ?? ""),
         user_message: safeString(args.user_message ?? ""),
         input_mode: args.input_mode,
-        locale_hint: localeHint,
-        locale_hint_source: localeHintSource,
+        locale_hint: mergedLocale.locale_hint,
+        locale_hint_source: mergedLocale.locale_hint_source,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
       const contentSource =

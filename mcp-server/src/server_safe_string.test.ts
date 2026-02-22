@@ -30,9 +30,35 @@ test("run_step MCP handler derives locale hint from request metadata and forward
   );
   assert.match(
     source,
-    /runStepHandler\(\{[\s\S]*locale_hint: localeHint,[\s\S]*locale_hint_source: localeHintSource,/,
+    /runStepHandler\(\{[\s\S]*locale_hint: mergedLocale\.locale_hint,[\s\S]*locale_hint_source: mergedLocale\.locale_hint_source,/,
     "tool callback must forward resolved locale hint to runStepHandler"
   );
+});
+
+test("locale header resolver supports Headers.get and returns request_header source", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(typeof \(headersRaw as any\)\.get === "function"\)/);
+  assert.match(source, /return \{ locale_hint: headerLocale, locale_hint_source: "request_header" \};/);
+});
+
+test("open_canvas and run_step merge args locale with extra metadata source", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /function mergeLocaleHintInputs\(/);
+  assert.match(source, /const mergedLocale = mergeLocaleHintInputs\(\s*args\.locale_hint,\s*args\.locale_hint_source,\s*localeFromExtra\s*\);/);
+  assert.match(
+    source,
+    /server\.registerTool\(\s*"open_canvas"[\s\S]*runStepHandler\(\{[\s\S]*input_mode: "chat",[\s\S]*locale_hint: mergedLocale\.locale_hint,[\s\S]*locale_hint_source: mergedLocale\.locale_hint_source,/,
+    "open_canvas should route locale metadata into runStepHandler on chat bootstrap path"
+  );
+});
+
+test("open_canvas has idempotent dedupe cache guard", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /const openCanvasDedupeCache = new Map/);
+  assert.match(source, /const dedupeToken = openCanvasDedupeToken\(/);
+  assert.match(source, /open_canvas_deduped: true/);
+  assert.match(source, /open_canvas_deduped: false/);
+  assert.match(source, /open_canvas_dedupe_key_hash/);
 });
 
 test("run_step handler logs locale + language readiness in request/response lines", () => {
@@ -77,11 +103,11 @@ test("app-first tool split is present: open_canvas tool plus run_step visibility
   assert.match(source, /visibility: runStepVisibility,/);
 });
 
-test("buildModelSafeResult returns only the minimal six model-visible fields", () => {
+test("buildModelSafeResult returns minimal v2 model-visible fields", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(
     source,
-    /return \{\s*ok: result\.ok === true,\s*tool: safeString\(result\.tool \|\| "run_step"\),\s*current_step_id: safeString\(result\.current_step_id \|\| state\.current_step \|\| "step_0"\),\s*ui_gate_status: safeString\(\(result as any\)\.ui_gate_status \|\| state\.ui_gate_status \|\| ""\),\s*language: safeString\(\(result as any\)\.language \|\| state\.language \|\| ""\),\s*interactive_fallback_active: flags\.interactive_fallback_active === true,\s*\};/
+    /return \{\s*model_result_shape_version: "v2_minimal",\s*ok: result\.ok === true,\s*tool: safeString\(result\.tool \|\| "run_step"\),\s*current_step_id: safeString\(result\.current_step_id \|\| state\.current_step \|\| "step_0"\),\s*ui_gate_status: safeString\(\(result as any\)\.ui_gate_status \|\| state\.ui_gate_status \|\| ""\),\s*language: safeString\(\(result as any\)\.language \|\| state\.language \|\| ""\),\s*interactive_fallback_active: flags\.interactive_fallback_active === true,\s*\};/
   );
 });
 

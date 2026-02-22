@@ -1067,7 +1067,30 @@ test("ui actions source uses explicit bootstrap poll action and shared result ha
   const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
   assert.match(source, /const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";/);
   assert.match(source, /__bootstrap_poll: "true"/);
+  assert.match(source, /__hydrate_poll: "true"/);
   assert.match(source, /export function ensureBootstrapRetryForResult/);
   assert.match(source, /export function handleToolResultAndMaybeScheduleBootstrapRetry/);
+  assert.match(source, /function isModelSafeOnlyResult/);
+  assert.match(source, /reason: "model_safe_hydration"/);
   assert.doesNotMatch(source, /__locale_wait_retry/);
+});
+
+test("ui actions source prefers openai.callTool and uses bridge only after handshake", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
+  assert.match(source, /function canUseBridge\(\): boolean \{[\s\S]*return bridgeEnabled;/);
+  assert.match(source, /const transportPrimary = hasCallTool \? "callTool" : "bridge";/);
+  assert.match(source, /transport_used: transportPrimary/);
+  assert.match(source, /transport_used: transportUsed/);
+});
+
+test("ui actions source has bridge timeout guard", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
+  assert.match(source, /const BRIDGE_RESPONSE_TIMEOUT_MS = 6000;/);
+  assert.match(source, /setTimeout\(\(\) => \{[\s\S]*reject\(new Error\("bridge timeout"\)\);[\s\S]*\}, BRIDGE_RESPONSE_TIMEOUT_MS\);/);
+});
+
+test("render source keeps wait-shell when only model-safe payload is present", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
+  assert.match(source, /const modelSafeOnlyResult =[\s\S]*model_result_shape_version[\s\S]*"v2_minimal"/);
+  assert.match(source, /if \(modelSafeOnlyResult\) \{[\s\S]*renderBootstrapWaitShell\(prestartEl\)/);
 });

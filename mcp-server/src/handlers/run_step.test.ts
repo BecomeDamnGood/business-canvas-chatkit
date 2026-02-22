@@ -163,6 +163,15 @@ test("language policy source: legacy __locale_wait_retry alias is removed", () =
   assert.doesNotMatch(source, /__locale_wait_retry/);
 });
 
+test("language reset guard skips reset when trusted locale hint source is present", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(
+    source,
+    /const localeHintTrustedSource =[\s\S]*localeHintSource === "openai_locale"[\s\S]*localeHintSource === "webplus_i18n"[\s\S]*localeHintSource === "request_header"/
+  );
+  assert.match(source, /localeHintTrustedSource \|\| stateLanguageSource === "locale_hint" \|\| stateLanguage === localeHint/);
+});
+
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {
   const first = await run_step({
     user_message: "",
@@ -209,6 +218,48 @@ test("language policy: explicit override remains stronger than locale hint", asy
   assert.equal(result?.state?.language, "en");
   assert.equal(result?.state?.language_source, "explicit_override");
   assert.equal(result?.state?.language_override, "true");
+});
+
+test("language policy: locale_hint_source none still seeds language on first turn", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "nl-NL",
+    locale_hint_source: "none",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "Ik wil een ondernemingsplan voor mijn reclamebureau genaamd Mindd.",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(result?.state?.language, "nl");
+  assert.equal(result?.state?.language_source, "locale_hint");
+});
+
+test("language policy: locale_hint_source none does not override existing persisted language", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "nl-NL",
+    locale_hint_source: "none",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      language: "en",
+      language_source: "persisted",
+      language_locked: "true",
+      language_override: "false",
+      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(result?.state?.language, "en");
+  assert.equal(result?.state?.language_source, "persisted");
 });
 
 test("language policy: invalid locale hint falls back to text detection", async () => {

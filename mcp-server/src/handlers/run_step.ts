@@ -6016,6 +6016,7 @@ async function resolveLanguageForTurn(
   state: CanvasState,
   userMessage: string,
   localeHintRaw: string,
+  localeHintSourceRaw: string,
   model: string,
   telemetry?: UiI18nTelemetryCounters | null
 ): Promise<CanvasState> {
@@ -6065,6 +6066,13 @@ async function resolveLanguageForTurn(
   }
 
   const localeHint = isUiLocaleMetaV1Enabled() ? normalizeLocaleHint(localeHintRaw) : "";
+  const localeHintSource =
+    localeHintSourceRaw === "openai_locale" ||
+    localeHintSourceRaw === "webplus_i18n" ||
+    localeHintSourceRaw === "request_header"
+      ? localeHintSourceRaw
+      : "none";
+  const trustedLocaleHintSource = localeHintSource !== "none";
   if (isUiLocaleMetaV1Enabled()) {
     if (localeHint) {
       bumpUiI18nCounter(telemetry, "locale_hint_used_count");
@@ -6073,6 +6081,16 @@ async function resolveLanguageForTurn(
     }
   }
   if (isUiLangSourceResolverV1Enabled() && localeHint) {
+    const canUseLocaleHint = trustedLocaleHintSource || !current;
+    if (!canUseLocaleHint) {
+      const persisted = current && !currentSource
+        ? withLanguageDecision(state, current, "persisted", {
+            locked: locked ? "true" : "false",
+            override: override ? "true" : "false",
+          })
+        : state;
+      return ensureUiStringsForState(persisted, model, telemetry);
+    }
     if (current && current !== localeHint) {
       bumpUiI18nCounter(telemetry, "language_source_overridden_count");
     }
@@ -7484,6 +7502,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       targetState,
       routeOrText,
       localeHint,
+      localeHintSource,
       translationModel,
       uiI18nTelemetry
     );
@@ -7614,11 +7633,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const hasOverride = String((state as any).language_override ?? "false") === "true";
     const stateLanguage = normalizeLangCode(String((state as any).language ?? ""));
     const stateLanguageSource = normalizeLanguageSource((state as any).language_source);
+    const localeHintTrustedSource =
+      localeHintSource === "openai_locale" ||
+      localeHintSource === "webplus_i18n" ||
+      localeHintSource === "request_header";
     const skipResetForChatLocaleHint =
       isUiStep0LangResetGuardV1Enabled() &&
       inputMode === "chat" &&
       Boolean(localeHint) &&
-      (stateLanguageSource === "locale_hint" || stateLanguage === localeHint);
+      (localeHintTrustedSource || stateLanguageSource === "locale_hint" || stateLanguage === localeHint);
     if (!hasOverride && !skipResetForChatLocaleHint) {
       (state as any).language = "";
       (state as any).language_locked = "false";

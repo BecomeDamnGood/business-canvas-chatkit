@@ -522,6 +522,9 @@ export function render(overrideToolOutput?: unknown): void {
     setSessionStarted(true);
   }
   const bootstrapAwaitingServer = !hasToolOutputVal && !hasResultPayload;
+  const modelSafeOnlyResult =
+    String((result?.model_result_shape_version || "") as string).trim() === "v2_minimal" &&
+    !(result?.state && typeof result.state === "object");
   if (bootstrapAwaitingServer) {
     const inputWrap = document.getElementById("inputWrap");
     const btnStart = document.getElementById("btnStart");
@@ -543,6 +546,40 @@ export function render(overrideToolOutput?: unknown): void {
     if (prompt) prompt.textContent = "";
     const waitingSectionTitle = document.getElementById("sectionTitle");
     if (waitingSectionTitle) waitingSectionTitle.textContent = "";
+    if (badge) {
+      badge.textContent = "";
+      (badge as HTMLElement).style.display = "none";
+    }
+    buildStepper(0, "", lang);
+    if (cardDesc) {
+      const prestartEl = cardDesc as HTMLElement;
+      prestartEl.classList.remove("has-grid");
+      prestartEl.classList.remove("is-step0-ask-layout");
+      renderBootstrapWaitShell(prestartEl);
+    }
+    if (getIsLoading()) setLoading(false);
+    return;
+  }
+  if (modelSafeOnlyResult) {
+    const inputWrap = document.getElementById("inputWrap");
+    const btnStart = document.getElementById("btnStart");
+    const startHint = document.getElementById("startHint");
+    const choiceWrap = document.getElementById("choiceWrap");
+    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    const cardDesc = document.getElementById("cardDesc");
+    const prompt = document.getElementById("prompt");
+    const sectionTitleEl = document.getElementById("sectionTitle");
+    const badge = document.getElementById("badge");
+    if (inputWrap) (inputWrap as HTMLElement).style.display = "none";
+    if (choiceWrap) (choiceWrap as HTMLElement).style.display = "none";
+    if (wordingChoiceWrap) (wordingChoiceWrap as HTMLElement).style.display = "none";
+    if (btnStart) (btnStart as HTMLElement).style.display = "none";
+    if (startHint) {
+      startHint.textContent = "";
+      (startHint as HTMLElement).style.display = "none";
+    }
+    if (prompt) prompt.textContent = "";
+    if (sectionTitleEl) sectionTitleEl.textContent = "";
     if (badge) {
       badge.textContent = "";
       (badge as HTMLElement).style.display = "none";

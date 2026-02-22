@@ -37,10 +37,7 @@ function oa(): unknown {
 function canUseBridge(): boolean {
   if (typeof window === "undefined") return false;
   if (!window.parent || window.parent === window) return false;
-  if (bridgeEnabled) return true;
-  // Some hosts do not emit the legacy ui/* handshake but still support JSON-RPC tool calls.
-  const host = oa();
-  return Boolean(host && typeof host === "object");
+  return bridgeEnabled;
 }
 
 function normalizeToolOutput(raw: unknown): Record<string, unknown> {
@@ -154,6 +151,7 @@ let rateLimitTimer: ReturnType<typeof setTimeout> | null = null;
 let lastCallAt = 0;
 const CLICK_DEBOUNCE_MS = 250;
 const RUN_STEP_TIMEOUT_MS = 25000;
+const BRIDGE_RESPONSE_TIMEOUT_MS = 6000;
 const LOCALE_WAIT_RETRY_MIN_MS = 800;
 const LOCALE_WAIT_RETRY_MAX_MS = 5000;
 const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
@@ -196,6 +194,27 @@ function isBootstrapWaitingLocale(result: Record<string, unknown>): boolean {
   const uiGateStatus = String(state.ui_gate_status || "").trim().toLowerCase();
   const uiStringsStatus = String(state.ui_strings_status || "ready").trim().toLowerCase();
   return uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready";
+}
+
+function isModelSafeOnlyResult(result: Record<string, unknown>): boolean {
+  if (!result || typeof result !== "object") return false;
+  const hasState = Boolean(result.state && typeof result.state === "object");
+  const hasUi = Boolean(result.ui && typeof result.ui === "object");
+  if (hasState || hasUi) return false;
+  const shapeVersion = String((result as Record<string, unknown>).model_result_shape_version || "").trim();
+  if (shapeVersion === "v2_minimal") return true;
+  const keys = Object.keys(result);
+  if (!keys.length) return false;
+  const allowed = new Set([
+    "ok",
+    "tool",
+    "current_step_id",
+    "ui_gate_status",
+    "language",
+    "interactive_fallback_active",
+    "model_result_shape_version",
+  ]);
+  return keys.every((key) => allowed.has(key));
 }
 
 function extractRunStepResultPayload(normalizedRaw: Record<string, unknown>): Record<string, unknown> {
@@ -249,13 +268,47 @@ function maybeScheduleBootstrapRetry(result: Record<string, unknown>, source: st
   return true;
 }
 
+function maybeScheduleModelSafeHydrationRetry(result: Record<string, unknown>, source: string): boolean {
+  if (!isModelSafeOnlyResult(result)) return false;
+  if (localeWaitRetryTimer) return true;
+  const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
+  const latestState =
+    latest.state && typeof latest.state === "object" ? (latest.state as Record<string, unknown>) : {};
+  const stateFromWidget = widgetState();
+  const retryState = {
+    ...(stateFromWidget && typeof stateFromWidget === "object" ? stateFromWidget : {}),
+    ...latestState,
+    started: "true",
+  } as Record<string, unknown>;
+  const delay = localeWaitRetryDelayMs;
+  localeWaitRetryTimer = setTimeout(() => {
+    localeWaitRetryTimer = null;
+    void callRunStep(ACTION_BOOTSTRAP_POLL, { ...retryState, __bootstrap_poll: "true", __hydrate_poll: "true" });
+  }, delay);
+  localeWaitRetryDelayMs = Math.min(
+    LOCALE_WAIT_RETRY_MAX_MS,
+    Math.round(localeWaitRetryDelayMs * 1.8)
+  );
+  if (isDevEnv()) {
+    console.log("[ui_bootstrap_retry_scheduled]", {
+      source,
+      reason: "model_safe_hydration",
+      delay_ms: delay,
+      next_delay_ms: localeWaitRetryDelayMs,
+    });
+  }
+  return true;
+}
+
 export function ensureBootstrapRetryForResult(
   result: Record<string, unknown> | null | undefined,
   opts?: { source?: string }
 ): boolean {
   const safeResult = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
   const source = String(opts?.source || "render");
-  return maybeScheduleBootstrapRetry(safeResult, source);
+  const waiting = maybeScheduleBootstrapRetry(safeResult, source);
+  if (waiting) return true;
+  return maybeScheduleModelSafeHydrationRetry(safeResult, source);
 }
 
 export function handleToolResultAndMaybeScheduleBootstrapRetry(
@@ -267,10 +320,12 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   const result = extractRunStepResultPayload(normalized);
   const source = String(opts?.source || "unknown");
   const waiting = maybeScheduleBootstrapRetry(result, source);
+  const hydration = waiting ? false : maybeScheduleModelSafeHydrationRetry(result, source);
   if (isDevEnv()) {
     console.log("[ui_bootstrap_state]", {
       source,
       waiting_locale: waiting,
+      waiting_hydration: hydration,
       gate_status: String(((result?.state as Record<string, unknown>) || {}).ui_gate_status || ""),
       ui_strings_status: String(((result?.state as Record<string, unknown>) || {}).ui_strings_status || ""),
     });
@@ -467,10 +522,24 @@ async function callToolViaBridge(name: string, args: unknown): Promise<unknown> 
     params: { name, arguments: safeArgs },
   };
   return new Promise((resolve, reject) => {
-    pendingBridgeCalls.set(id, { resolve, reject });
+    const timeoutId = setTimeout(() => {
+      pendingBridgeCalls.delete(id);
+      reject(new Error("bridge timeout"));
+    }, BRIDGE_RESPONSE_TIMEOUT_MS);
+    pendingBridgeCalls.set(id, {
+      resolve: (value: unknown) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      reject: (error: unknown) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+    });
     try {
       safePostMessage(message, removedPaths);
     } catch (e) {
+      clearTimeout(timeoutId);
       pendingBridgeCalls.delete(id);
       reject(e);
     }
@@ -558,7 +627,8 @@ export async function callRunStep(
 ): Promise<void> {
   const o = oa();
   const hasCallTool = Boolean(o && typeof (o as { callTool?: (name: string, args: unknown) => Promise<unknown> }).callTool === "function");
-  if (!hasCallTool && !canUseBridge()) {
+  const hasBridge = canUseBridge();
+  if (!hasCallTool && !hasBridge) {
     console.warn("run_step: host did not provide callTool or MCP bridge");
     const errEl = document.getElementById("cardDesc");
     const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
@@ -642,19 +712,34 @@ export async function callRunStep(
   }, timeoutMs);
 
   try {
-    const callPromise = canUseBridge()
-      ? callToolViaBridge("run_step", payload)
-      : (o as { callTool: (name: string, args: unknown) => Promise<unknown> }).callTool(
-          "run_step",
-          payload
-        );
-    const resp = await callPromise;
+    const transportPrimary = hasCallTool ? "callTool" : "bridge";
+    if (isDevEnv()) {
+      console.log("[ui_action_dispatched]", {
+        action_code: messageText,
+        transport_used: transportPrimary,
+      });
+    }
+    let resp: unknown;
+    let transportUsed: "callTool" | "bridge" | "bridge_fallback_callTool" = transportPrimary;
+    try {
+      resp = transportPrimary === "callTool"
+        ? await (o as { callTool: (name: string, args: unknown) => Promise<unknown> }).callTool("run_step", payload)
+        : await callToolViaBridge("run_step", payload);
+    } catch (primaryError) {
+      if (transportPrimary === "bridge" && hasCallTool) {
+        transportUsed = "bridge_fallback_callTool";
+        resp = await (o as { callTool: (name: string, args: unknown) => Promise<unknown> }).callTool("run_step", payload);
+      } else {
+        throw primaryError;
+      }
+    }
     if (didTimeout) return;
     if (debugCalls) {
       console.log("[ui_run_step_response]", {
         request_id: requestId,
         client_action_id: clientActionId,
         current_step: String(nextState.current_step || ""),
+        transport_used: transportUsed,
         elapsed_ms: Date.now() - startedAt,
       });
     }
