@@ -40,24 +40,262 @@ function canUseBridge(): boolean {
   return bridgeEnabled;
 }
 
-function normalizeToolOutput(raw: unknown): Record<string, unknown> {
-  if (!raw || typeof raw !== "object") return {};
-  const r = raw as { structuredContent?: unknown; _meta?: unknown };
-  const metaWidgetResult =
-    r._meta && typeof r._meta === "object" && (r._meta as Record<string, unknown>).widget_result
-      ? ((r._meta as Record<string, unknown>).widget_result as unknown)
-      : null;
-  if (r.structuredContent && typeof r.structuredContent === "object") {
-    const structured = { ...(r.structuredContent as Record<string, unknown>) };
-    if (metaWidgetResult && typeof metaWidgetResult === "object") {
-      structured.result = metaWidgetResult as Record<string, unknown>;
+type PayloadSource =
+  | "meta.widget_result"
+  | "structured.result"
+  | "structured.ui.result"
+  | "structured.ui"
+  | "raw.result"
+  | "raw.ui.result"
+  | "raw.ui"
+  | "raw"
+  | "none";
+
+export type WaitingReason = "missing_state" | "i18n_pending" | "both" | "none";
+
+export type ResolvedWidgetPayload = {
+  result: Record<string, unknown>;
+  source: PayloadSource;
+  has_state: boolean;
+  resolved_language: string;
+  resolved_language_source: "state.language" | "state.ui_strings_lang" | "result.ui_strings_lang" | "result.language" | "locale_hint" | "none";
+  ui_strings_status: "ready" | "pending" | "error" | "unknown";
+  shape_version: string;
+  needs_hydration: boolean;
+  waiting_reason: WaitingReason;
+};
+
+export type HydrationStatus = {
+  needs_hydration: boolean;
+  retry_count: number;
+  retry_exhausted: boolean;
+  waiting_reason: WaitingReason;
+};
+
+type PayloadCandidate = {
+  source: PayloadSource;
+  value: Record<string, unknown>;
+  richness: number;
+  freshness: number | null;
+  order: number;
+};
+
+const WIDGET_RESULT_KEYS = new Set([
+  "state",
+  "ui",
+  "prompt",
+  "text",
+  "specialist",
+  "current_step_id",
+  "model_result_shape_version",
+  "ui_strings",
+  "ui_strings_lang",
+  "language",
+]);
+
+const HYDRATION_MAX_RETRIES = 8;
+
+let localeWaitRetryCount = 0;
+let localeWaitRetryExhausted = false;
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function toLower(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+export function isWidgetResultLike(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const rec = value as Record<string, unknown>;
+  const keys = Object.keys(rec);
+  if (!keys.length) return false;
+  if (typeof (rec as { html?: unknown }).html === "string" && keys.length <= 2) return false;
+  const state = rec.state;
+  if (state !== undefined && (typeof state !== "object" || state === null || Array.isArray(state))) {
+    return false;
+  }
+  for (const key of keys) {
+    if (WIDGET_RESULT_KEYS.has(key)) return true;
+  }
+  return false;
+}
+
+function parseFreshness(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function freshnessForResult(result: Record<string, unknown>): number | null {
+  const direct = parseFreshness(result.updated_at_ms ?? result.result_version ?? result.turn_index);
+  if (direct !== null) return direct;
+  const state = toRecord(result.state);
+  return parseFreshness(state.updated_at_ms ?? state.result_version ?? state.turn_index);
+}
+
+function computePayloadRichness(result: Record<string, unknown>): number {
+  const state = toRecord(result.state);
+  const ui = toRecord(result.ui);
+  let score = 0;
+  if (Object.keys(state).length) score += 40;
+  if (String(state.current_step || "").trim()) score += 40;
+  if (Object.keys(ui).length) score += 30;
+  if (String(result.prompt || "").trim()) score += 20;
+  if (String(result.text || "").trim()) score += 20;
+  if (toRecord(result.specialist) && Object.keys(toRecord(result.specialist)).length) score += 15;
+  if (String(result.current_step_id || "").trim()) score += 10;
+  if (String(result.model_result_shape_version || "").trim()) score += 5;
+  return score;
+}
+
+function candidateValue(root: Record<string, unknown>, path: string): unknown {
+  const segs = path.split(".");
+  let cur: unknown = root;
+  for (const seg of segs) {
+    if (!cur || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[seg];
+  }
+  return cur;
+}
+
+function collectPayloadCandidates(raw: unknown): PayloadCandidate[] {
+  const root = toRecord(raw);
+  const structured = toRecord(root.structuredContent);
+  const meta = toRecord(root._meta);
+  const candidates: PayloadCandidate[] = [];
+  const add = (source: PayloadSource, value: unknown, order: number): void => {
+    if (!isWidgetResultLike(value)) return;
+    const rec = value as Record<string, unknown>;
+    candidates.push({
+      source,
+      value: rec,
+      richness: computePayloadRichness(rec),
+      freshness: freshnessForResult(rec),
+      order,
+    });
+  };
+  add("meta.widget_result", meta.widget_result, 0);
+  add("structured.result", structured.result, 1);
+  add("structured.ui.result", candidateValue(structured, "ui.result"), 2);
+  add("structured.ui", structured.ui, 3);
+  add("raw.result", root.result, 4);
+  add("raw.ui.result", candidateValue(root, "ui.result"), 5);
+  add("raw.ui", root.ui, 6);
+  add("raw", root, 7);
+  return candidates;
+}
+
+function pickBestCandidate(candidates: PayloadCandidate[]): PayloadCandidate | null {
+  if (!candidates.length) return null;
+  let best = candidates[0];
+  for (let i = 1; i < candidates.length; i += 1) {
+    const cur = candidates[i];
+    const bestHasFreshness = best.freshness !== null;
+    const curHasFreshness = cur.freshness !== null;
+    if (bestHasFreshness && curHasFreshness && cur.freshness !== best.freshness) {
+      if ((cur.freshness as number) > (best.freshness as number)) best = cur;
+      continue;
     }
-    return structured;
+    if (cur.richness !== best.richness) {
+      if (cur.richness > best.richness) best = cur;
+      continue;
+    }
+    if (cur.order < best.order) best = cur;
   }
-  if (metaWidgetResult && typeof metaWidgetResult === "object") {
-    return { result: metaWidgetResult as Record<string, unknown> };
+  return best;
+}
+
+function resolveLanguageForPayload(result: Record<string, unknown>): {
+  language: string;
+  source: ResolvedWidgetPayload["resolved_language_source"];
+} {
+  const state = toRecord(result.state);
+  const fromStateLanguage = toLower(state.language);
+  if (fromStateLanguage) return { language: fromStateLanguage, source: "state.language" };
+  const fromStateUiLang = toLower(state.ui_strings_lang);
+  if (fromStateUiLang) return { language: fromStateUiLang, source: "state.ui_strings_lang" };
+  const fromResultUiLang = toLower(result.ui_strings_lang);
+  if (fromResultUiLang) return { language: fromResultUiLang, source: "result.ui_strings_lang" };
+  const fromResultLanguage = toLower(result.language);
+  if (fromResultLanguage) return { language: fromResultLanguage, source: "result.language" };
+  const fromLocaleHint = toLower(result.locale_hint);
+  if (fromLocaleHint) return { language: fromLocaleHint, source: "locale_hint" };
+  return { language: "", source: "none" };
+}
+
+function normalizeUiStringsStatus(result: Record<string, unknown>): ResolvedWidgetPayload["ui_strings_status"] {
+  const state = toRecord(result.state);
+  const raw = toLower(state.ui_strings_status || result.ui_strings_status);
+  if (raw === "ready" || raw === "pending" || raw === "error") return raw;
+  return "unknown";
+}
+
+export function computeHydrationState(resolved: ResolvedWidgetPayload): HydrationStatus {
+  const state = toRecord(resolved.result.state);
+  const hasState = Object.keys(state).length > 0;
+  const currentStep = hasState ? String(state.current_step || "").trim() : "";
+  const needsHydration =
+    !hasState ||
+    !currentStep ||
+    (resolved.shape_version === "v2_minimal" && !hasState);
+  const i18nPending = resolved.ui_strings_status === "pending";
+  let waitingReason: WaitingReason = "none";
+  if (needsHydration && i18nPending) waitingReason = "both";
+  else if (needsHydration) waitingReason = "missing_state";
+  else if (i18nPending) waitingReason = "i18n_pending";
+  return {
+    needs_hydration: needsHydration,
+    retry_count: localeWaitRetryCount,
+    retry_exhausted: localeWaitRetryExhausted,
+    waiting_reason: waitingReason,
+  };
+}
+
+export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
+  const best = pickBestCandidate(collectPayloadCandidates(raw));
+  const result = best ? best.value : {};
+  const state = toRecord(result.state);
+  const hasState = Object.keys(state).length > 0;
+  const { language, source } = resolveLanguageForPayload(result);
+  const shapeVersion = String(result.model_result_shape_version || "").trim();
+  const temp: ResolvedWidgetPayload = {
+    result,
+    source: best ? best.source : "none",
+    has_state: hasState,
+    resolved_language: language,
+    resolved_language_source: source,
+    ui_strings_status: normalizeUiStringsStatus(result),
+    shape_version: shapeVersion,
+    needs_hydration: false,
+    waiting_reason: "none",
+  };
+  const hydration = computeHydrationState(temp);
+  temp.needs_hydration = hydration.needs_hydration;
+  temp.waiting_reason = hydration.waiting_reason;
+  return temp;
+}
+
+function normalizeToolOutput(raw: unknown): Record<string, unknown> {
+  const root = toRecord(raw);
+  const structured = toRecord(root.structuredContent);
+  const resolved = resolveWidgetPayload(raw);
+  if (Object.keys(resolved.result).length) {
+    structured.result = resolved.result;
+    const uiFromResult = toRecord(resolved.result.ui);
+    if (Object.keys(uiFromResult).length && Object.keys(toRecord(structured.ui)).length === 0) {
+      structured.ui = uiFromResult;
+    }
   }
-  return raw as Record<string, unknown>;
+  if (Object.keys(structured).length) return structured;
+  if (Object.keys(resolved.result).length) return { result: resolved.result };
+  return {};
 }
 
 export function applyToolResult(raw: unknown): Record<string, unknown> {
@@ -158,10 +396,14 @@ const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
 let localeWaitRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
 
-function clearLocaleWaitRetry(): void {
+function clearLocaleWaitRetry(opts?: { resetCounters?: boolean }): void {
   if (localeWaitRetryTimer) clearTimeout(localeWaitRetryTimer);
   localeWaitRetryTimer = null;
   localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
+  if (opts?.resetCounters !== false) {
+    localeWaitRetryCount = 0;
+    localeWaitRetryExhausted = false;
+  }
 }
 
 function isUiBootstrapWaitRetryEnabled(result: Record<string, unknown>): boolean {
@@ -177,80 +419,48 @@ function isUiBootstrapWaitRetryEnabled(result: Record<string, unknown>): boolean
   if (uiFlags.ui_bootstrap_wait_retry_v1 === true) return true;
   return true;
 }
-
-function isBootstrapWaitingLocale(result: Record<string, unknown>): boolean {
-  const uiPayload =
-    result?.ui && typeof result.ui === "object"
-      ? (result.ui as Record<string, unknown>)
-      : {};
-  const uiFlags =
-    uiPayload.flags && typeof uiPayload.flags === "object"
-      ? (uiPayload.flags as Record<string, unknown>)
-      : {};
-  if (uiFlags.bootstrap_waiting_locale === true) return true;
-  const state = result?.state && typeof result.state === "object"
-    ? (result.state as Record<string, unknown>)
-    : {};
-  const uiGateStatus = String(state.ui_gate_status || "").trim().toLowerCase();
-  const uiStringsStatus = String(state.ui_strings_status || "ready").trim().toLowerCase();
-  return uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready";
+function buildRetryState(result: Record<string, unknown>): Record<string, unknown> {
+  const stateFromResult = toRecord(result.state);
+  const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
+  const latestState = toRecord(latest.state);
+  const stateFromWidget = toRecord(widgetState());
+  return {
+    ...stateFromWidget,
+    ...latestState,
+    ...stateFromResult,
+    started: "true",
+  };
 }
 
-function isModelSafeOnlyResult(result: Record<string, unknown>): boolean {
-  if (!result || typeof result !== "object") return false;
-  const hasState = Boolean(result.state && typeof result.state === "object");
-  const hasUi = Boolean(result.ui && typeof result.ui === "object");
-  if (hasState || hasUi) return false;
-  const shapeVersion = String((result as Record<string, unknown>).model_result_shape_version || "").trim();
-  if (shapeVersion === "v2_minimal") return true;
-  const keys = Object.keys(result);
-  if (!keys.length) return false;
-  const allowed = new Set([
-    "ok",
-    "tool",
-    "current_step_id",
-    "ui_gate_status",
-    "language",
-    "interactive_fallback_active",
-    "model_result_shape_version",
-  ]);
-  return keys.every((key) => allowed.has(key));
-}
-
-function extractRunStepResultPayload(normalizedRaw: Record<string, unknown>): Record<string, unknown> {
-  if (normalizedRaw && typeof (normalizedRaw as any).result === "object" && (normalizedRaw as any).result) {
-    return (normalizedRaw as any).result as Record<string, unknown>;
-  }
-  if (
-    normalizedRaw &&
-    typeof (normalizedRaw as any).ui === "object" &&
-    (normalizedRaw as any).ui &&
-    typeof ((normalizedRaw as any).ui as any).result === "object" &&
-    ((normalizedRaw as any).ui as any).result
-  ) {
-    return ((normalizedRaw as any).ui as any).result as Record<string, unknown>;
-  }
-  if (normalizedRaw && typeof (normalizedRaw as any).ui === "object" && (normalizedRaw as any).ui) {
-    return (normalizedRaw as any).ui as Record<string, unknown>;
-  }
-  return {};
-}
-
-function maybeScheduleBootstrapRetry(result: Record<string, unknown>, source: string): boolean {
-  if (!isBootstrapWaitingLocale(result) || !isUiBootstrapWaitRetryEnabled(result)) {
+function maybeScheduleBootstrapRetry(resolved: ResolvedWidgetPayload, source: string): HydrationStatus {
+  const hydration = computeHydrationState(resolved);
+  const waiting = hydration.waiting_reason !== "none";
+  if (!waiting || !isUiBootstrapWaitRetryEnabled(resolved.result)) {
     clearLocaleWaitRetry();
-    return false;
+    return computeHydrationState(resolved);
   }
-
+  if (hydration.retry_exhausted || localeWaitRetryExhausted || localeWaitRetryCount >= HYDRATION_MAX_RETRIES) {
+    localeWaitRetryExhausted = true;
+    if (isDevEnv()) {
+      console.log("[hydration_failed_max_retries]", {
+        source,
+        retry_count: localeWaitRetryCount,
+        waiting_reason: hydration.waiting_reason,
+      });
+    }
+    return computeHydrationState(resolved);
+  }
   if (!localeWaitRetryTimer) {
-    const retryState =
-      result?.state && typeof result.state === "object"
-        ? (result.state as Record<string, unknown>)
-        : {};
+    const retryState = buildRetryState(resolved.result);
     const delay = localeWaitRetryDelayMs;
     localeWaitRetryTimer = setTimeout(() => {
       localeWaitRetryTimer = null;
-      void callRunStep(ACTION_BOOTSTRAP_POLL, { ...retryState, __bootstrap_poll: "true" });
+      localeWaitRetryCount += 1;
+      void callRunStep(ACTION_BOOTSTRAP_POLL, {
+        ...retryState,
+        __bootstrap_poll: "true",
+        __hydrate_poll: "true",
+      });
     }, delay);
     localeWaitRetryDelayMs = Math.min(
       LOCALE_WAIT_RETRY_MAX_MS,
@@ -261,54 +471,42 @@ function maybeScheduleBootstrapRetry(result: Record<string, unknown>, source: st
         source,
         delay_ms: delay,
         next_delay_ms: localeWaitRetryDelayMs,
+        waiting_reason: hydration.waiting_reason,
+        retry_count: localeWaitRetryCount,
       });
     }
   }
-
-  return true;
+  return computeHydrationState(resolved);
 }
 
-function maybeScheduleModelSafeHydrationRetry(result: Record<string, unknown>, source: string): boolean {
-  if (!isModelSafeOnlyResult(result)) return false;
-  if (localeWaitRetryTimer) return true;
+export function resetHydrationRetryCycle(opts?: { trigger_poll?: boolean; source?: string }): void {
+  clearLocaleWaitRetry();
+  if (opts?.trigger_poll !== true) return;
+  const source = String(opts?.source || "manual");
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
-  const latestState =
-    latest.state && typeof latest.state === "object" ? (latest.state as Record<string, unknown>) : {};
-  const stateFromWidget = widgetState();
-  const retryState = {
-    ...(stateFromWidget && typeof stateFromWidget === "object" ? stateFromWidget : {}),
-    ...latestState,
-    started: "true",
-  } as Record<string, unknown>;
-  const delay = localeWaitRetryDelayMs;
-  localeWaitRetryTimer = setTimeout(() => {
-    localeWaitRetryTimer = null;
-    void callRunStep(ACTION_BOOTSTRAP_POLL, { ...retryState, __bootstrap_poll: "true", __hydrate_poll: "true" });
-  }, delay);
-  localeWaitRetryDelayMs = Math.min(
-    LOCALE_WAIT_RETRY_MAX_MS,
-    Math.round(localeWaitRetryDelayMs * 1.8)
-  );
+  const latestState = toRecord(latest.state);
   if (isDevEnv()) {
-    console.log("[ui_bootstrap_retry_scheduled]", {
+    console.log("[recovery_retry_clicked]", {
       source,
-      reason: "model_safe_hydration",
-      delay_ms: delay,
-      next_delay_ms: localeWaitRetryDelayMs,
+      has_state: Object.keys(latestState).length > 0,
     });
   }
-  return true;
+  void callRunStep(ACTION_BOOTSTRAP_POLL, {
+    ...latestState,
+    __bootstrap_poll: "true",
+    __hydrate_poll: "true",
+    __manual_retry: "true",
+  });
 }
 
 export function ensureBootstrapRetryForResult(
-  result: Record<string, unknown> | null | undefined,
+  rawOrResult: Record<string, unknown> | null | undefined,
   opts?: { source?: string }
 ): boolean {
-  const safeResult = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
   const source = String(opts?.source || "render");
-  const waiting = maybeScheduleBootstrapRetry(safeResult, source);
-  if (waiting) return true;
-  return maybeScheduleModelSafeHydrationRetry(safeResult, source);
+  const resolved = resolveWidgetPayload(rawOrResult || {});
+  const hydration = maybeScheduleBootstrapRetry(resolved, source);
+  return hydration.waiting_reason !== "none";
 }
 
 export function handleToolResultAndMaybeScheduleBootstrapRetry(
@@ -317,17 +515,24 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
 ): Record<string, unknown> {
   const normalized = applyToolResult(raw);
   if (_render) _render(normalized);
-  const result = extractRunStepResultPayload(normalized);
+  const resolved = resolveWidgetPayload(normalized);
+  const result = resolved.result;
   const source = String(opts?.source || "unknown");
-  const waiting = maybeScheduleBootstrapRetry(result, source);
-  const hydration = waiting ? false : maybeScheduleModelSafeHydrationRetry(result, source);
+  const hydration = maybeScheduleBootstrapRetry(resolved, source);
   if (isDevEnv()) {
     console.log("[ui_bootstrap_state]", {
       source,
-      waiting_locale: waiting,
-      waiting_hydration: hydration,
+      payload_source: resolved.source,
+      has_state: resolved.has_state,
+      waiting_hydration: hydration.waiting_reason !== "none",
+      waiting_reason: hydration.waiting_reason,
+      needs_hydration: hydration.needs_hydration,
+      retry_count: hydration.retry_count,
+      retry_exhausted: hydration.retry_exhausted,
+      resolved_language: resolved.resolved_language,
+      resolved_language_source: resolved.resolved_language_source,
+      ui_strings_status: resolved.ui_strings_status,
       gate_status: String(((result?.state as Record<string, unknown>) || {}).ui_gate_status || ""),
-      ui_strings_status: String(((result?.state as Record<string, unknown>) || {}).ui_strings_status || ""),
     });
   }
   return result;
@@ -744,7 +949,7 @@ export async function callRunStep(
       });
     }
     const normalizedRaw = normalizeToolOutput(resp);
-    const result = extractRunStepResultPayload(normalizedRaw);
+    const result = resolveWidgetPayload(normalizedRaw).result;
     const errorObj = result?.error as
       | { type?: string; user_message?: string; retry_after_ms?: number; retry_action?: string }
       | null;

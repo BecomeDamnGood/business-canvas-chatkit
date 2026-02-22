@@ -7,6 +7,7 @@ import {
   renderChoiceButtons,
   stripStructuredChoiceLines,
 } from "../ui/lib/ui_render.js";
+import { computeHydrationState, resolveWidgetPayload } from "../ui/lib/ui_actions.js";
 import { setSessionStarted, setSessionWelcomeShown } from "../ui/lib/ui_state.js";
 
 test.beforeEach(() => {
@@ -1036,22 +1037,27 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
 
 test("render source blocks locale-gated turns from showing interactive body", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const bootstrapWaitingLocale =[\s\S]*uiGateStatus === "waiting_locale"/);
+  assert.match(source, /const bootstrapWaitingLocale =[\s\S]*waitingForI18n/);
   assert.match(source, /const interactiveFallbackActive =/);
-  assert.match(source, /ensureBootstrapRetryForResult\(result, \{ source: "render" \}\);/);
+  assert.match(source, /ensureBootstrapRetryForResult\(data, \{ source: "render" \}\);/);
+  assert.match(source, /const hydration = computeHydrationState\(resolved\);/);
   assert.match(source, /if \(bootstrapWaitingLocale && !interactiveFallbackActive\) \{/);
   assert.match(source, /renderBootstrapWaitShell\(prestartEl\)/);
+  assert.match(source, /renderHydrationRecovery\(prestartEl, lang\)/);
+  assert.match(source, /resetHydrationRetryCycle\(\{ trigger_poll: true, source: "render_retry_button" \}\)/);
   assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
   assert.match(source, /setSessionStarted\(false\);/);
   assert.match(source, /\(badge as HTMLElement\)\.style\.display = "none";/);
 });
 
-test("render source waits for server bootstrap and derives prestart visibility from server started state", () => {
+test("render source uses unified hydration gate and keeps prestart based on server started state", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const bootstrapAwaitingServer = !hasToolOutputVal && !hasResultPayload;/);
-  assert.match(source, /if \(bootstrapAwaitingServer\) \{/);
+  assert.match(source, /const waitingForMissingState =/);
+  assert.match(source, /if \(waitingForMissingState\) \{/);
   assert.match(source, /renderBootstrapWaitShell\(prestartEl\)/);
+  assert.match(source, /const resolved = resolveWidgetPayload\(data\);/);
   assert.match(source, /const showPreStart = hasToolOutputVal \? !serverStarted : !sessionStarted;/);
+  assert.match(source, /__BSC_LATEST__ = \{/);
 });
 
 test("main source handles host tool-result via shared bootstrap scheduler", () => {
@@ -1066,12 +1072,16 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
 test("ui actions source uses explicit bootstrap poll action and shared result handler", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
   assert.match(source, /const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";/);
+  assert.match(source, /const HYDRATION_MAX_RETRIES = 8;/);
   assert.match(source, /__bootstrap_poll: "true"/);
   assert.match(source, /__hydrate_poll: "true"/);
+  assert.match(source, /export function resolveWidgetPayload/);
+  assert.match(source, /export function computeHydrationState/);
+  assert.match(source, /export function resetHydrationRetryCycle/);
   assert.match(source, /export function ensureBootstrapRetryForResult/);
   assert.match(source, /export function handleToolResultAndMaybeScheduleBootstrapRetry/);
-  assert.match(source, /function isModelSafeOnlyResult/);
-  assert.match(source, /reason: "model_safe_hydration"/);
+  assert.match(source, /hydration_failed_max_retries/);
+  assert.match(source, /recovery_retry_clicked/);
   assert.doesNotMatch(source, /__locale_wait_retry/);
 });
 
@@ -1089,8 +1099,73 @@ test("ui actions source has bridge timeout guard", () => {
   assert.match(source, /setTimeout\(\(\) => \{[\s\S]*reject\(new Error\("bridge timeout"\)\);[\s\S]*\}, BRIDGE_RESPONSE_TIMEOUT_MS\);/);
 });
 
-test("render source keeps wait-shell when only model-safe payload is present", () => {
+test("render source uses missing-state hydration gate for wait-shell", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const modelSafeOnlyResult =[\s\S]*model_result_shape_version[\s\S]*"v2_minimal"/);
-  assert.match(source, /if \(modelSafeOnlyResult\) \{[\s\S]*renderBootstrapWaitShell\(prestartEl\)/);
+  assert.match(source, /const waitingForMissingState =/);
+  assert.match(source, /if \(waitingForMissingState\) \{[\s\S]*renderBootstrapWaitShell\(prestartEl\)/);
+});
+
+test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result", () => {
+  const resolved = resolveWidgetPayload({
+    structuredContent: {
+      result: {
+        model_result_shape_version: "v2_minimal",
+        current_step_id: "step_0",
+      },
+    },
+    _meta: {
+      widget_result: {
+        state: { current_step: "step_0", started: "true", language: "nl" },
+        ui: { questionText: "Vraag" },
+      },
+    },
+  });
+
+  assert.equal(resolved.source, "meta.widget_result");
+  assert.equal(String((resolved.result.state as Record<string, unknown>).current_step || ""), "step_0");
+  assert.equal(resolved.needs_hydration, false);
+});
+
+test("resolveWidgetPayload applies freshness override when metadata is available", () => {
+  const resolved = resolveWidgetPayload({
+    structuredContent: {
+      result: {
+        state: { current_step: "step_0", updated_at_ms: 100 },
+        ui: { questionText: "Older" },
+      },
+      ui: {
+        result: {
+          state: { current_step: "step_0", updated_at_ms: 200 },
+          ui: { questionText: "Newer" },
+        },
+      },
+    },
+    _meta: {
+      widget_result: {
+        state: { current_step: "step_0", updated_at_ms: 150 },
+        ui: { questionText: "Middle" },
+      },
+    },
+  });
+
+  assert.equal(resolved.source, "structured.ui.result");
+  assert.equal(
+    String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""),
+    "Newer"
+  );
+});
+
+test("computeHydrationState uses shared v2_minimal missing-state rule", () => {
+  const resolved = resolveWidgetPayload({
+    structuredContent: {
+      result: {
+        model_result_shape_version: "v2_minimal",
+        current_step_id: "step_0",
+        ui_strings_status: "pending",
+      },
+    },
+  });
+  const hydration = computeHydrationState(resolved);
+  assert.equal(hydration.needs_hydration, true);
+  assert.equal(hydration.waiting_reason, "both");
 });

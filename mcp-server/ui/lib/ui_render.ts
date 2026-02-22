@@ -30,6 +30,9 @@ import {
   uiLang,
   hasToolOutput,
   ensureBootstrapRetryForResult,
+  resolveWidgetPayload,
+  computeHydrationState,
+  resetHydrationRetryCycle,
 } from "./ui_actions.js";
 import { getIsLoading, getSessionStarted, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 
@@ -202,6 +205,36 @@ function renderBootstrapWaitShell(cardDesc: HTMLElement): void {
     shell.appendChild(line);
   }
 
+  cardDesc.appendChild(shell);
+}
+
+function renderHydrationRecovery(cardDesc: HTMLElement, lang: string): void {
+  clearElement(cardDesc);
+  const shell = appendTextNode("div", "bootstrap-wait-shell", "");
+  (shell as HTMLElement).style.display = "grid";
+  (shell as HTMLElement).style.gap = "12px";
+  shell.appendChild(
+    appendTextNode(
+      "div",
+      "bootstrap-recovery-title",
+      uiText(lang, "hydration.retry.title", "We could not load the app state.")
+    )
+  );
+  shell.appendChild(
+    appendTextNode(
+      "div",
+      "bootstrap-recovery-copy",
+      uiText(lang, "hydration.retry.body", "Please retry to continue.")
+    )
+  );
+  const btn = appendTextNode(
+    "button",
+    "choiceBtn",
+    uiText(lang, "hydration.retry.action", "Retry")
+  ) as HTMLButtonElement;
+  btn.id = "btnHydrationRetry";
+  btn.type = "button";
+  shell.appendChild(btn);
   cardDesc.appendChild(shell);
 }
 
@@ -470,15 +503,8 @@ export function render(overrideToolOutput?: unknown): void {
 
   if (data && Object.keys(data).length) setLastToolOutput(data);
 
-  const result =
-    (data && data.result)
-      ? (data.result as Record<string, unknown>)
-      : (data && data.ui && (data.ui as Record<string, unknown>).result)
-        ? ((data.ui as Record<string, unknown>).result as Record<string, unknown>)
-        : (data && data.ui)
-          ? (data.ui as Record<string, unknown>)
-          : {};
-
+  const resolved = resolveWidgetPayload(data);
+  const result = resolved.result;
   const state = (result?.state as Record<string, unknown>) || {};
   const errorObj = result?.error as { type?: string; user_message?: string; retry_after_ms?: number } | null;
   const transientError = errorObj && (errorObj.type === "rate_limited" || errorObj.type === "timeout");
@@ -498,69 +524,44 @@ export function render(overrideToolOutput?: unknown): void {
   const ws = widgetState();
   const stateLang = languageFromState(state);
   const widgetLang = String((ws?.language || "") as string).trim().toLowerCase();
-  const lang = stateLang || widgetLang || uiLang(state);
-  const uiStringsStatusRaw = String((state?.ui_strings_status || "ready") as string).trim().toLowerCase();
-  const uiStringsStatus =
-    uiStringsStatusRaw === "pending" || uiStringsStatusRaw === "error" ? uiStringsStatusRaw : "ready";
+  const lang = resolved.resolved_language || stateLang || widgetLang || uiLang(state) || "en";
+
+  const latestRoot = (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__;
+  const latestState = latestRoot?.state && typeof latestRoot.state === "object"
+    ? (latestRoot.state as Record<string, unknown>)
+    : {};
+  const stateForLatest = Object.keys(state).length > 0 ? state : latestState;
+  (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__ = {
+    state: stateForLatest,
+    lang,
+  };
+
+  ensureBootstrapRetryForResult(data, { source: "render" });
+  const hydration = computeHydrationState(resolved);
+  const waitingForMissingState =
+    hydration.waiting_reason === "missing_state" || hydration.waiting_reason === "both";
+  const waitingForI18n =
+    hydration.waiting_reason === "i18n_pending" || hydration.waiting_reason === "both";
+  const uiStringsStatus = resolved.ui_strings_status === "unknown" ? "ready" : resolved.ui_strings_status;
   const uiGateStatus = String((state?.ui_gate_status || "") as string).trim().toLowerCase();
   const bootstrapWaitingLocale =
+    waitingForI18n ||
     uiFlags.bootstrap_waiting_locale === true ||
     (uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready");
   const interactiveFallbackActive =
     uiFlags.interactive_fallback_active === true ||
     (bootstrapWaitingLocale && uiFlags.bootstrap_interactive_ready === true);
-  ensureBootstrapRetryForResult(result, { source: "render" });
   if (overrideStrings) {
     const bucket = overrideLang || baseLang(lang);
     UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...(overrideStrings as Record<string, string>) };
   }
   const hasToolOutputVal = hasToolOutput();
-  const hasResultPayload = Object.keys(result || {}).length > 0;
   const serverStarted = String((state?.started || "")).toLowerCase() === "true";
   const sessionStarted = getSessionStarted();
   if (hasToolOutputVal && serverStarted && !sessionStarted) {
     setSessionStarted(true);
   }
-  const bootstrapAwaitingServer = !hasToolOutputVal && !hasResultPayload;
-  const modelSafeOnlyResult =
-    String((result?.model_result_shape_version || "") as string).trim() === "v2_minimal" &&
-    !(result?.state && typeof result.state === "object");
-  if (bootstrapAwaitingServer) {
-    const inputWrap = document.getElementById("inputWrap");
-    const btnStart = document.getElementById("btnStart");
-    const startHint = document.getElementById("startHint");
-    const choiceWrap = document.getElementById("choiceWrap");
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    const cardDesc = document.getElementById("cardDesc");
-    const prompt = document.getElementById("prompt");
-    const sectionTitleEl = document.getElementById("sectionTitle");
-    const badge = document.getElementById("badge");
-    if (inputWrap) (inputWrap as HTMLElement).style.display = "none";
-    if (choiceWrap) (choiceWrap as HTMLElement).style.display = "none";
-    if (wordingChoiceWrap) (wordingChoiceWrap as HTMLElement).style.display = "none";
-    if (btnStart) (btnStart as HTMLElement).style.display = "none";
-    if (startHint) {
-      startHint.textContent = "";
-      (startHint as HTMLElement).style.display = "none";
-    }
-    if (prompt) prompt.textContent = "";
-    const waitingSectionTitle = document.getElementById("sectionTitle");
-    if (waitingSectionTitle) waitingSectionTitle.textContent = "";
-    if (badge) {
-      badge.textContent = "";
-      (badge as HTMLElement).style.display = "none";
-    }
-    buildStepper(0, "", lang);
-    if (cardDesc) {
-      const prestartEl = cardDesc as HTMLElement;
-      prestartEl.classList.remove("has-grid");
-      prestartEl.classList.remove("is-step0-ask-layout");
-      renderBootstrapWaitShell(prestartEl);
-    }
-    if (getIsLoading()) setLoading(false);
-    return;
-  }
-  if (modelSafeOnlyResult) {
+  if (waitingForMissingState) {
     const inputWrap = document.getElementById("inputWrap");
     const btnStart = document.getElementById("btnStart");
     const startHint = document.getElementById("startHint");
@@ -589,7 +590,20 @@ export function render(overrideToolOutput?: unknown): void {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      renderBootstrapWaitShell(prestartEl);
+      if (hydration.retry_exhausted) {
+        renderHydrationRecovery(prestartEl, lang);
+        const retryBtn = document.getElementById("btnHydrationRetry") as HTMLButtonElement | null;
+        if (retryBtn) {
+          retryBtn.disabled = getIsLoading();
+          retryBtn.onclick = () => {
+            if (getIsLoading()) return;
+            setLoading(true);
+            resetHydrationRetryCycle({ trigger_poll: true, source: "render_retry_button" });
+          };
+        }
+      } else {
+        renderBootstrapWaitShell(prestartEl);
+      }
     }
     if (getIsLoading()) setLoading(false);
     return;
@@ -667,7 +681,20 @@ export function render(overrideToolOutput?: unknown): void {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      renderBootstrapWaitShell(prestartEl);
+      if (hydration.retry_exhausted) {
+        renderHydrationRecovery(prestartEl, lang);
+        const retryBtn = document.getElementById("btnHydrationRetry") as HTMLButtonElement | null;
+        if (retryBtn) {
+          retryBtn.disabled = getIsLoading();
+          retryBtn.onclick = () => {
+            if (getIsLoading()) return;
+            setLoading(true);
+            resetHydrationRetryCycle({ trigger_poll: true, source: "render_retry_button" });
+          };
+        }
+      } else {
+        renderBootstrapWaitShell(prestartEl);
+      }
     }
     if (prompt) prompt.textContent = "";
     startHint.textContent = "";
