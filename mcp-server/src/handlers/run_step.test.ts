@@ -121,6 +121,7 @@ test("language policy: locale hint wins over paraphrased English chat input", as
   assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, true);
   assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, true);
   assert.equal(result?.ui?.flags?.interactive_fallback_active, true);
+  assert.equal(String(result?.ui?.flags?.bootstrap_phase || ""), "interactive_fallback");
   assert.equal(result?.ui?.flags?.locale_pending_background, true);
   assert.equal(String(result?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
 });
@@ -152,9 +153,11 @@ test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps waiting contr
   );
   assert.equal(polled?.ok, true);
   assert.equal(String(polled?.state?.ui_gate_status || ""), "waiting_locale");
+  assert.equal(String(polled?.state?.bootstrap_phase || ""), "interactive_fallback");
   assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, true);
   assert.equal(polled?.ui?.flags?.bootstrap_interactive_ready, true);
   assert.equal(polled?.ui?.flags?.interactive_fallback_active, true);
+  assert.equal(String(polled?.ui?.flags?.bootstrap_phase || ""), "interactive_fallback");
   assert.equal(String(polled?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
 });
 
@@ -163,20 +166,23 @@ test("language policy source: legacy __locale_wait_retry alias is removed", () =
   assert.doesNotMatch(source, /__locale_wait_retry/);
 });
 
-test("language reset guard skips reset when trusted locale hint source is present", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(
-    source,
-    /const localeHintTrustedSource =[\s\S]*localeHintSource === "openai_locale"[\s\S]*localeHintSource === "webplus_i18n"[\s\S]*localeHintSource === "request_header"/
-  );
-  assert.match(source, /localeHintTrustedSource \|\| stateLanguageSource === "locale_hint" \|\| stateLanguage === localeHint/);
-});
-
-test("run_step args schema canonicalizes legacy state.language_source before validation", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(source, /function canonicalizeStateForRunStepArgs\(/);
-  assert.match(source, /next\.language_source = normalizeStateLanguageSource\(next\.language_source\);/);
-  assert.match(source, /state:\s*z\.preprocess\(canonicalizeStateForRunStepArgs,\s*CanvasStateZod\.partial\(\)\.passthrough\(\)\.optional\(\)\)/);
+test("run_step canonicalizes legacy state.language_source transport values", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      started: "true",
+      language: "nl",
+      language_locked: "true",
+      language_source: "openai_locale",
+      last_specialist_result: {},
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(String(result?.state?.language || ""), "nl");
+  assert.equal(String(result?.state?.language_source || ""), "locale_hint");
 });
 
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {

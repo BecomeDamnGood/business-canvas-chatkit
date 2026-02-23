@@ -7,7 +7,12 @@ import {
   renderChoiceButtons,
   stripStructuredChoiceLines,
 } from "../ui/lib/ui_render.js";
-import { computeHydrationState, resolveWidgetPayload, resetHydrationRetryCycle } from "../ui/lib/ui_actions.js";
+import {
+  computeBootstrapRenderState,
+  computeHydrationState,
+  resolveWidgetPayload,
+  resetHydrationRetryCycle,
+} from "../ui/lib/ui_actions.js";
 import { setSessionStarted, setSessionWelcomeShown } from "../ui/lib/ui_state.js";
 
 test.beforeEach(() => {
@@ -1035,22 +1040,30 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
   assert.match(source, /const waitTitle = baseLang\(lang\) === "en" \? uiText\(lang, "prestart\.loading", "Loading translation…"\) : "";/);
 });
 
-test("render source blocks locale-gated turns from showing interactive body", () => {
-  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const uiStringsStatus = resolved\.ui_strings_status;/);
-  assert.match(source, /const serverExplicitWaiting =/);
-  assert.match(source, /const forceLocaleWait = localeKnownNonEn && uiStringsStatus !== "ready";/);
-  assert.match(source, /const bootstrapWaitingLocale =[\s\S]*waitingForI18n/);
-  assert.match(source, /const interactiveFallbackActive =/);
-  assert.match(source, /ensureBootstrapRetryForResult\(data, \{ source: "render" \}\);/);
-  assert.match(source, /const hydration = computeHydrationState\(resolved\);/);
-  assert.match(source, /if \(bootstrapWaitingLocale && !interactiveFallbackActive\) \{/);
-  assert.match(source, /renderBootstrapWaitShell\(prestartEl, lang\)/);
-  assert.match(source, /renderHydrationRecovery\(prestartEl, lang\)/);
-  assert.match(source, /resetHydrationRetryCycle\(\{ trigger_poll: true, source: "render_retry_button" \}\)/);
-  assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
-  assert.match(source, /setSessionStarted\(false\);/);
-  assert.match(source, /\(badge as HTMLElement\)\.style\.display = "none";/);
+test("computeBootstrapRenderState returns waiting_locale phase for non-EN pending locale", () => {
+  const state = computeBootstrapRenderState({
+    hydration: {
+      needs_hydration: false,
+      retry_count: 0,
+      retry_exhausted: false,
+      waiting_reason: "i18n_pending",
+    },
+    uiGateStatus: "waiting_locale",
+    uiStringsStatus: "pending",
+    uiFlags: {
+      bootstrap_waiting_locale: true,
+      bootstrap_interactive_ready: false,
+      interactive_fallback_active: false,
+    },
+    uiView: { mode: "waiting_locale", waiting_locale: true },
+    localeKnownNonEn: true,
+    hasState: true,
+    hasCurrentStep: true,
+  });
+  assert.equal(state.phase, "waiting_locale");
+  assert.equal(state.bootstrapWaitingLocale, true);
+  assert.equal(state.interactiveFallbackActive, false);
+  assert.equal(state.waitingForMissingState, false);
 });
 
 test("render source ignores empty or mismatched locale override maps", () => {
@@ -1060,14 +1073,57 @@ test("render source ignores empty or mismatched locale override maps", () => {
   assert.match(source, /if \(shouldApplyOverride\) \{[\s\S]*UI_STRINGS\[overrideBucket\] = \{ \.\.\.UI_STRINGS\.default, \.\.\.\(overrideStringsMap as Record<string, string>\) \};/);
 });
 
-test("render source uses unified hydration gate and keeps prestart based on server started state", () => {
-  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const waitingForMissingState =/);
-  assert.match(source, /if \(waitingForMissingState\) \{/);
-  assert.match(source, /renderBootstrapWaitShell\(prestartEl, lang\)/);
-  assert.match(source, /const resolved = resolveWidgetPayload\(data\);/);
-  assert.match(source, /const showPreStart = hasToolOutputVal \? !serverStarted : !sessionStarted;/);
-  assert.match(source, /__BSC_LATEST__ = \{/);
+test("computeBootstrapRenderState returns interactive_fallback phase when fallback is active", () => {
+  const state = computeBootstrapRenderState({
+    hydration: {
+      needs_hydration: false,
+      retry_count: 0,
+      retry_exhausted: false,
+      waiting_reason: "i18n_pending",
+    },
+    uiGateStatus: "waiting_locale",
+    uiStringsStatus: "pending",
+    uiFlags: {
+      bootstrap_waiting_locale: true,
+      bootstrap_interactive_ready: true,
+      interactive_fallback_active: true,
+      bootstrap_phase: "interactive_fallback",
+    },
+    uiView: { mode: "waiting_locale", waiting_locale: true, bootstrap_phase: "interactive_fallback" },
+    localeKnownNonEn: true,
+    hasState: true,
+    hasCurrentStep: true,
+  });
+  assert.equal(state.phase, "interactive_fallback");
+  assert.equal(state.bootstrapWaitingLocale, true);
+  assert.equal(state.interactiveFallbackActive, true);
+  assert.equal(state.waitingForI18n, true);
+});
+
+test("computeBootstrapRenderState keeps recovery routing deterministic when retries are exhausted", () => {
+  const state = computeBootstrapRenderState({
+    hydration: {
+      needs_hydration: true,
+      retry_count: 3,
+      retry_exhausted: true,
+      waiting_reason: "missing_state",
+    },
+    uiGateStatus: "waiting_locale",
+    uiStringsStatus: "pending",
+    uiFlags: {
+      bootstrap_waiting_locale: true,
+      bootstrap_interactive_ready: false,
+      interactive_fallback_active: false,
+    },
+    uiView: { mode: "waiting_locale", waiting_locale: true },
+    localeKnownNonEn: true,
+    hasState: false,
+    hasCurrentStep: false,
+  });
+  assert.equal(state.phase, "recovery");
+  assert.equal(state.render_mode, "recovery");
+  assert.equal(state.waitingForMissingState, true);
+  assert.equal(state.bootstrapWaitingLocale, false);
 });
 
 test("main source handles host tool-result via shared bootstrap scheduler", () => {
@@ -1164,10 +1220,30 @@ test("ui actions source has bridge timeout guard", () => {
   assert.match(source, /setTimeout\(\(\) => \{[\s\S]*reject\(new Error\("bridge timeout"\)\);[\s\S]*\}, BRIDGE_RESPONSE_TIMEOUT_MS\);/);
 });
 
-test("render source uses missing-state hydration gate for wait-shell", () => {
-  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const waitingForMissingState =/);
-  assert.match(source, /if \(waitingForMissingState\) \{[\s\S]*renderBootstrapWaitShell\(prestartEl, lang\)/);
+test("computeBootstrapRenderState classifies missing state + pending locale as waiting_both", () => {
+  const state = computeBootstrapRenderState({
+    hydration: {
+      needs_hydration: true,
+      retry_count: 0,
+      retry_exhausted: false,
+      waiting_reason: "both",
+    },
+    uiGateStatus: "waiting_locale",
+    uiStringsStatus: "pending",
+    uiFlags: {
+      bootstrap_waiting_locale: true,
+      bootstrap_interactive_ready: false,
+      interactive_fallback_active: false,
+    },
+    uiView: { mode: "waiting_locale", waiting_locale: true },
+    localeKnownNonEn: true,
+    hasState: false,
+    hasCurrentStep: false,
+  });
+  assert.equal(state.phase, "waiting_both");
+  assert.equal(state.waitingForMissingState, true);
+  assert.equal(state.waitingForI18n, true);
+  assert.equal(state.bootstrapWaitingLocale, true);
 });
 
 test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result", () => {

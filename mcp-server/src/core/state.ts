@@ -82,6 +82,42 @@ export type UiGateReason = z.infer<typeof UiGateReasonZod>;
 export const UI_TRANSLATION_MODES = ["critical_first", "full"] as const;
 export const UiTranslationModeZod = z.enum(UI_TRANSLATION_MODES);
 export type UiTranslationMode = z.infer<typeof UiTranslationModeZod>;
+export const BOOTSTRAP_PHASES = [
+  "init",
+  "waiting_state",
+  "waiting_locale",
+  "waiting_both",
+  "interactive_fallback",
+  "ready",
+  "recovery",
+] as const;
+export const BootstrapPhaseZod = z.enum(BOOTSTRAP_PHASES);
+export type BootstrapPhase = z.infer<typeof BootstrapPhaseZod>;
+export type BootstrapRetryHint = "poll" | "none";
+export type BootstrapRenderMode = "wait_shell" | "interactive" | "recovery";
+export type BootstrapDecision = {
+  phase: BootstrapPhase;
+  retry_hint: BootstrapRetryHint;
+  interactive_allowed: boolean;
+  render_mode: BootstrapRenderMode;
+};
+
+export function deriveBootstrapPhaseFromLegacy(params: {
+  ui_bootstrap_status: unknown;
+  ui_gate_status: unknown;
+  ui_strings_status: unknown;
+}): BootstrapPhase {
+  const bootstrap = String(params.ui_bootstrap_status ?? "").trim();
+  const gate = String(params.ui_gate_status ?? "").trim();
+  const strings = String(params.ui_strings_status ?? "").trim();
+  if (bootstrap === "init") return "init";
+  if (gate === "waiting_locale") {
+    if (strings === "pending" || strings === "error") return "waiting_locale";
+    return "interactive_fallback";
+  }
+  if (bootstrap === "awaiting_locale") return "waiting_locale";
+  return "ready";
+}
 
 /**
  * CanvasState (canoniek)
@@ -118,6 +154,7 @@ export const CanvasStateZod = z.object({
   ui_strings_critical_ready: BoolStringZod,
   ui_strings_full_ready: BoolStringZod,
   ui_strings_background_inflight: BoolStringZod,
+  bootstrap_phase: BootstrapPhaseZod.optional(),
 
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
@@ -293,6 +330,21 @@ export function normalizeState(raw: unknown): CanvasState {
   ).trim();
   const ui_strings_background_inflight: BoolString =
     ui_strings_background_inflight_raw === "true" ? "true" : "false";
+  const bootstrap_phase_raw = String((r as any).bootstrap_phase ?? "").trim();
+  const bootstrap_phase: BootstrapPhase =
+    bootstrap_phase_raw === "init" ||
+    bootstrap_phase_raw === "waiting_state" ||
+    bootstrap_phase_raw === "waiting_locale" ||
+    bootstrap_phase_raw === "waiting_both" ||
+    bootstrap_phase_raw === "interactive_fallback" ||
+    bootstrap_phase_raw === "ready" ||
+    bootstrap_phase_raw === "recovery"
+      ? bootstrap_phase_raw
+      : deriveBootstrapPhaseFromLegacy({
+          ui_bootstrap_status,
+          ui_gate_status,
+          ui_strings_status,
+        });
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
@@ -385,6 +437,7 @@ export function normalizeState(raw: unknown): CanvasState {
     ui_strings_critical_ready,
     ui_strings_full_ready,
     ui_strings_background_inflight,
+    bootstrap_phase,
 
     last_specialist_result,
 

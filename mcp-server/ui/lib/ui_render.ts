@@ -32,6 +32,7 @@ import {
   ensureBootstrapRetryForResult,
   resolveWidgetPayload,
   computeHydrationState,
+  computeBootstrapRenderState,
   resetHydrationRetryCycle,
 } from "./ui_actions.js";
 import { getIsLoading, getSessionStarted, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
@@ -561,33 +562,37 @@ export function render(overrideToolOutput?: unknown): void {
 
   ensureBootstrapRetryForResult(data, { source: "render" });
   const hydration = computeHydrationState(resolved);
-  const waitingForMissingState =
-    hydration.waiting_reason === "missing_state" || hydration.waiting_reason === "both";
-  const waitingForI18n =
-    hydration.waiting_reason === "i18n_pending" || hydration.waiting_reason === "both";
   const uiStringsStatus = resolved.ui_strings_status;
   const uiGateStatus = String((state?.ui_gate_status || "") as string).trim().toLowerCase();
   const uiView =
     uiPayload && typeof uiPayload.view === "object" && uiPayload.view
       ? (uiPayload.view as Record<string, unknown>)
       : {};
-  const serverExplicitWaiting =
-    String(uiView.mode || "").trim().toLowerCase() === "waiting_locale" ||
-    uiView.waiting_locale === true;
   const localeBucket = baseLang(localeCandidate);
   const localeKnownNonEn =
     Boolean(localeBucket) && localeBucket !== "en" && localeBucket !== "default";
+  const serverExplicitWaiting =
+    String(uiView.mode || "").trim().toLowerCase() === "waiting_locale" ||
+    uiView.waiting_locale === true;
   const forceLocaleWait = localeKnownNonEn && uiStringsStatus !== "ready";
+  const bootstrapState = computeBootstrapRenderState({
+    hydration,
+    uiGateStatus,
+    uiStringsStatus,
+    uiFlags,
+    uiView,
+    localeKnownNonEn,
+    hasState: resolved.has_state,
+    hasCurrentStep: String((state?.current_step || "") as string).trim().length > 0,
+  });
+  const waitingForMissingState = bootstrapState.waitingForMissingState;
+  const waitingForI18n = bootstrapState.waitingForI18n;
   const bootstrapWaitingLocale =
     waitingForI18n ||
+    bootstrapState.bootstrapWaitingLocale ||
     serverExplicitWaiting ||
-    forceLocaleWait ||
-    uiFlags.bootstrap_waiting_locale === true ||
-    (uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready");
-  const interactiveFallbackActive =
-    !forceLocaleWait &&
-    uiFlags.interactive_fallback_active === true ||
-    (!forceLocaleWait && bootstrapWaitingLocale && uiFlags.bootstrap_interactive_ready === true);
+    forceLocaleWait;
+  const interactiveFallbackActive = bootstrapState.interactiveFallbackActive;
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings =
     Boolean(overrideStringsMap) &&

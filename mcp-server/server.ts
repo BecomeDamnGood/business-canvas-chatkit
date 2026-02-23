@@ -480,6 +480,9 @@ function buildOpenCanvasBootstrapResponse(args: {
   const interactiveFallbackActive = waitingLocale && interactiveFallbackEnabled;
   const bootstrapInteractiveReady = gateReady || interactiveFallbackActive;
   const uiStringsStatus = gateReady ? "ready" : "pending";
+  const bootstrapPhase = waitingLocale
+    ? (interactiveFallbackActive ? "interactive_fallback" : "waiting_locale")
+    : "ready";
   const bootstrapState: Record<string, unknown> = {
     state_version: safeString(sourceState.state_version || defaults.state_version) || defaults.state_version,
     current_step: "step_0",
@@ -504,6 +507,7 @@ function buildOpenCanvasBootstrapResponse(args: {
     ui_strings_critical_ready: gateReady ? "true" : "false",
     ui_strings_full_ready: gateReady ? "true" : "false",
     ui_strings_background_inflight: gateReady ? "false" : "true",
+    bootstrap_phase: bootstrapPhase,
     last_specialist_result: {},
     step_0_final: safeString(sourceState.step_0_final || ""),
     dream_final: "",
@@ -544,6 +548,7 @@ function buildOpenCanvasBootstrapResponse(args: {
         bootstrap_interactive_ready: bootstrapInteractiveReady,
         interactive_fallback_active: interactiveFallbackActive,
         bootstrap_retry_hint: waitingLocale ? "poll" : "",
+        bootstrap_phase: bootstrapPhase,
       },
     },
   };
@@ -669,6 +674,7 @@ async function runStepHandler(args: {
       ui_translation_mode: safeString(resultState.ui_translation_mode ?? ""),
       ui_strings_critical_ready: safeString(resultState.ui_strings_critical_ready ?? ""),
       ui_strings_full_ready: safeString(resultState.ui_strings_full_ready ?? ""),
+      bootstrap_phase: safeString(resultState.bootstrap_phase ?? resultUiFlags.bootstrap_phase ?? ""),
       ui_bootstrap_status: safeString(resultState.ui_bootstrap_status ?? ""),
       ui_gate_status: safeString(resultState.ui_gate_status ?? ""),
       ui_gate_reason: safeString(resultState.ui_gate_reason ?? ""),
@@ -784,12 +790,14 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const started = safeString(state.started || "");
   const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");
   const uiGateStatus = safeString((result as any).ui_gate_status || state.ui_gate_status || "");
+  const bootstrapPhase = safeString((result as any).bootstrap_phase || state.bootstrap_phase || "");
   const safeState: Record<string, unknown> = {
     current_step: currentStep || "step_0",
   };
   if (started) safeState.started = started;
   if (uiStringsStatus) safeState.ui_strings_status = uiStringsStatus;
   if (uiGateStatus) safeState.ui_gate_status = uiGateStatus;
+  if (bootstrapPhase) safeState.bootstrap_phase = bootstrapPhase;
   return {
     model_result_shape_version: "v2_minimal",
     ok: result.ok === true,
@@ -798,6 +806,7 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     ui_gate_status: uiGateStatus,
     language: safeString((result as any).language || state.language || ""),
     interactive_fallback_active: flags.interactive_fallback_active === true,
+    bootstrap_phase: bootstrapPhase,
     state: safeState,
   };
 }
@@ -828,7 +837,12 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
     uiObj.flags && typeof uiObj.flags === "object"
       ? (uiObj.flags as Record<string, unknown>)
       : {};
+  const state =
+    result && typeof (result as any).state === "object" && (result as any).state
+      ? ((result as any).state as Record<string, unknown>)
+      : {};
   const waitingLocale = flags.bootstrap_waiting_locale === true;
+  const bootstrapPhase = safeString(flags.bootstrap_phase || state.bootstrap_phase || "");
   const prompt = safeString((result as any).prompt ?? "");
   const text = safeString((result as any).text ?? "");
   const promptBody = waitingLocale ? "" : (prompt || text || "");
@@ -855,6 +869,7 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       mode: waitingLocale ? "waiting_locale" : "interactive",
       waiting_locale: waitingLocale,
       recovery_action: waitingLocale && retryHint === "poll" ? "retry_poll" : "",
+      bootstrap_phase: bootstrapPhase,
     },
   };
 }
@@ -1024,6 +1039,7 @@ function createAppServer(baseUrl: string): McpServer {
         locale_hint_source: mergedLocale.locale_hint_source,
         resolved_language: safeString(bootstrapState.language ?? ""),
         bootstrap_state_language_source: safeString(bootstrapState.language_source ?? ""),
+        bootstrap_phase: safeString(bootstrapState.bootstrap_phase ?? ""),
         ui_gate_status: safeString(bootstrapState.ui_gate_status ?? ""),
         ui_bootstrap_status: safeString(bootstrapState.ui_bootstrap_status ?? ""),
         current_step: safeString(bootstrapState.current_step ?? ""),

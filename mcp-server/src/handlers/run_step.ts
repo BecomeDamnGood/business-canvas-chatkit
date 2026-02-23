@@ -170,6 +170,21 @@ import {
 } from "../core/ui_contract_matrix.js";
 import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
+import {
+  normalizeLangCode as localeStartNormalizeLangCode,
+  normalizeLocaleHint as localeStartNormalizeLocaleHint,
+  hasRenderableUiStringsForState as localeStartHasRenderableUiStringsForState,
+  enforceUiStringsReadinessInvariant as localeStartEnforceUiStringsReadinessInvariant,
+  isNonEnglishPendingUiStringsState as localeStartIsNonEnglishPendingUiStringsState,
+  isInteractiveFallbackState as localeStartIsInteractiveFallbackState,
+  isInteractiveLocaleReady as localeStartIsInteractiveLocaleReady,
+  deriveBootstrapContract as localeStartDeriveBootstrapContract,
+  applyUiGateState as localeStartApplyUiGateState,
+  computeUiBootstrapStatus as localeStartComputeUiBootstrapStatus,
+  uiStringsRequestedStatusFromRaw as localeStartUiStringsRequestedStatusFromRaw,
+  parseExplicitLanguageOverride as localeStartParseExplicitLanguageOverride,
+  resolveLanguageForTurn as localeStartResolveLanguageForTurn,
+} from "./run_step_locale_start.js";
 
 /**
  * Incoming tool args
@@ -4994,6 +5009,7 @@ function buildUiPayload(
     flags.bootstrap_waiting_locale = bootstrap.waiting;
     flags.bootstrap_interactive_ready = bootstrap.ready;
     flags.bootstrap_retry_hint = bootstrap.retry_hint;
+    flags.bootstrap_phase = String(bootstrap.phase || "");
     flags.locale_pending_background = bootstrap.waiting;
     flags.interactive_fallback_active = bootstrap.waiting && bootstrap.ready;
   }
@@ -5372,75 +5388,46 @@ async function getCld3Identifier(): Promise<any> {
 }
 
 function normalizeLangCode(raw: string): string {
-  const s = String(raw || "").trim().toLowerCase();
-  if (!s || s === "und") return "";
-  return s.split(/[-_]/)[0] || "";
+  return localeStartNormalizeLangCode(raw);
 }
 
 function normalizeLocaleHint(raw: string): string {
-  const normalized = normalizeLangCode(String(raw || ""));
-  if (!/^[a-z]{2,3}$/.test(normalized)) return "";
-  return normalized;
+  return localeStartNormalizeLocaleHint(raw);
 }
 
 function hasRenderableUiStringsForState(state: CanvasState | null | undefined): boolean {
-  if (!state || typeof state !== "object") return false;
-  const uiStrings =
-    (state as any).ui_strings && typeof (state as any).ui_strings === "object"
-      ? ((state as any).ui_strings as Record<string, unknown>)
-      : null;
-  if (!uiStrings) return false;
-  return CRITICAL_UI_KEYS_STEP0.every((key) => String(uiStrings[key] || "").trim().length > 0);
+  return localeStartHasRenderableUiStringsForState(state, CRITICAL_UI_KEYS_STEP0);
 }
 
 function enforceUiStringsReadinessInvariant(state: CanvasState): CanvasState {
-  const lang = normalizeLangCode(
-    String((state as any)?.language || (state as any)?.ui_strings_requested_lang || (state as any)?.ui_strings_lang || "")
-  );
-  if (!lang || lang === "en") return state;
-  const uiStatusRaw = String((state as any)?.ui_strings_status ?? "ready").trim().toLowerCase();
-  const uiStatus = uiStatusRaw === "pending" || uiStatusRaw === "error" ? uiStatusRaw : "ready";
-  if (uiStatus !== "ready") return state;
-  if (hasRenderableUiStringsForState(state)) return state;
-  return {
-    ...(state as any),
-    ui_strings_status: "pending",
-    ui_bootstrap_status: "awaiting_locale",
-    ui_translation_mode: "critical_first",
-    ui_strings_critical_ready: "false",
-    ui_strings_full_ready: "false",
-    ui_strings_background_inflight: "true",
-  } as CanvasState;
+  return localeStartEnforceUiStringsReadinessInvariant({
+    state,
+    criticalKeys: CRITICAL_UI_KEYS_STEP0,
+  });
 }
 
 function isNonEnglishPendingUiStringsState(state: CanvasState | null | undefined): boolean {
-  const lang = normalizeLangCode(String((state as any)?.language ?? ""));
-  const uiStatusRaw = String((state as any)?.ui_strings_status ?? "ready").trim().toLowerCase();
-  const uiStatus = uiStatusRaw === "pending" || uiStatusRaw === "error" ? uiStatusRaw : "ready";
-  return Boolean(lang) && lang !== "en" && uiStatus !== "ready";
+  return localeStartIsNonEnglishPendingUiStringsState(state);
 }
 
 function isInteractiveFallbackState(state: CanvasState | null | undefined): boolean {
-  if (!isUiInteractiveFallbackV1Enabled()) return false;
-  if (!isNonEnglishPendingUiStringsState(state)) return false;
-  const mode = String((state as any)?.ui_translation_mode || "").trim().toLowerCase();
-  return mode === "critical_first";
+  return localeStartIsInteractiveFallbackState({
+    state,
+    uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),
+  });
 }
 
 function isInteractiveLocaleReady(state: CanvasState | null | undefined): boolean {
-  if (!isUiLocaleReadyGateV1Enabled()) return true;
-  if (isInteractiveFallbackState(state)) return true;
-  const lang = normalizeLangCode(
-    String((state as any)?.language || (state as any)?.ui_strings_requested_lang || (state as any)?.ui_strings_lang || "")
-  );
-  if (!lang || lang === "en") return true;
-  const uiStatusRaw = String((state as any)?.ui_strings_status ?? "ready").trim().toLowerCase();
-  const uiStatus = uiStatusRaw === "pending" || uiStatusRaw === "error" ? uiStatusRaw : "ready";
-  if (uiStatus !== "ready") return false;
-  return hasRenderableUiStringsForState(state);
+  return localeStartIsInteractiveLocaleReady({
+    state,
+    uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
+    uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),
+    criticalKeys: CRITICAL_UI_KEYS_STEP0,
+  });
 }
 
 type BootstrapContractState = {
+  phase?: "init" | "waiting_state" | "waiting_locale" | "waiting_both" | "interactive_fallback" | "ready" | "recovery";
   waiting: boolean;
   ready: boolean;
   reason: "translation_pending" | "translation_retry" | "";
@@ -5450,35 +5437,16 @@ type BootstrapContractState = {
 const UI_GATE_WAITING_LOCALE_FORCE_RECOVER_MS = 30_000;
 
 function deriveBootstrapContract(state: CanvasState | null | undefined): BootstrapContractState {
-  if (!state || !isUiLocaleReadyGateV1Enabled()) {
-    return { waiting: false, ready: true, reason: "", since_ms: 0, retry_hint: "" };
-  }
-  const pendingUiStrings = isNonEnglishPendingUiStringsState(state);
-  if (!pendingUiStrings && isInteractiveLocaleReady(state)) {
-    return { waiting: false, ready: true, reason: "", since_ms: 0, retry_hint: "" };
-  }
-  const uiStatusRaw = String((state as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
-  const reason: "translation_pending" | "translation_retry" = uiStatusRaw === "error"
-    ? "translation_retry"
-    : "translation_pending";
-  const rawSince = Number((state as any)?.ui_gate_since_ms ?? 0);
-  const sinceMs = Number.isFinite(rawSince) && rawSince > 0 ? Math.trunc(rawSince) : Date.now();
-  if (pendingUiStrings && isInteractiveFallbackState(state)) {
-    return {
-      waiting: true,
-      ready: true,
-      reason,
-      since_ms: sinceMs,
-      retry_hint: isUiBootstrapPollActionV1Enabled() ? "poll" : "",
-    };
-  }
-  return {
-    waiting: true,
-    ready: false,
-    reason,
-    since_ms: sinceMs,
-    retry_hint: isUiBootstrapPollActionV1Enabled() ? "poll" : "",
-  };
+  return localeStartDeriveBootstrapContract({
+    state,
+    flags: {
+      uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
+      uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),
+      uiBootstrapPollActionV1: isUiBootstrapPollActionV1Enabled(),
+    },
+    criticalKeys: CRITICAL_UI_KEYS_STEP0,
+    nowMs: Date.now(),
+  });
 }
 
 function shouldSuppressFallbackText(state: CanvasState | null | undefined): boolean {
@@ -5496,92 +5464,33 @@ function applyUiGateState(
   previousState: CanvasState | null | undefined,
   nextState: CanvasState
 ): CanvasState {
-  const normalizedNextState = enforceUiStringsReadinessInvariant(nextState);
-  const prevStatus = String((previousState as any)?.ui_gate_status ?? "").trim();
-  const prevSinceRaw = Number((previousState as any)?.ui_gate_since_ms ?? 0);
-  const waitingLocaleExpired =
-    prevStatus === "waiting_locale" &&
-    Number.isFinite(prevSinceRaw) &&
-    prevSinceRaw > 0 &&
-    Date.now() - prevSinceRaw > UI_GATE_WAITING_LOCALE_FORCE_RECOVER_MS;
-  if (waitingLocaleExpired) {
-    return {
-      ...(normalizedNextState as any),
-      ui_strings_status: "ready",
-      ui_bootstrap_status: "ready",
-      ui_strings_critical_ready: "true",
-      ui_strings_full_ready: "true",
-      ui_strings_background_inflight: "false",
-      ui_gate_status: "ready",
-      ui_gate_reason: "",
-      ui_gate_since_ms: 0,
-    } as CanvasState;
-  }
-  if (!isUiLocaleReadyGateV1Enabled()) {
-    return {
-      ...(normalizedNextState as any),
-      ui_gate_status: "ready",
-      ui_gate_reason: "",
-      ui_gate_since_ms: 0,
-    } as CanvasState;
-  }
-  const pendingUiStrings = isNonEnglishPendingUiStringsState(normalizedNextState);
-  if (pendingUiStrings && isInteractiveFallbackState(normalizedNextState)) {
-    const nextUiStatusRaw = String((normalizedNextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
-    const reason = nextUiStatusRaw === "error" ? "translation_retry" : "translation_pending";
-    const sinceMs =
-      prevStatus === "waiting_locale" && Number.isFinite(prevSinceRaw) && prevSinceRaw > 0
-        ? Math.trunc(prevSinceRaw)
-        : Date.now();
-    return {
-      ...(normalizedNextState as any),
-      ui_gate_status: "waiting_locale",
-      ui_gate_reason: reason,
-      ui_gate_since_ms: sinceMs,
-    } as CanvasState;
-  }
-  if (isInteractiveLocaleReady(normalizedNextState)) {
-    return {
-      ...(normalizedNextState as any),
-      ui_gate_status: "ready",
-      ui_gate_reason: "",
-      ui_gate_since_ms: 0,
-    } as CanvasState;
-  }
-  const nextUiStatusRaw = String((normalizedNextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
-  const reason = nextUiStatusRaw === "error" ? "translation_retry" : "translation_pending";
-  const sinceMs =
-    prevStatus === "waiting_locale" && Number.isFinite(prevSinceRaw) && prevSinceRaw > 0
-      ? Math.trunc(prevSinceRaw)
-      : Date.now();
-  return {
-    ...(normalizedNextState as any),
-    ui_gate_status: "waiting_locale",
-    ui_gate_reason: reason,
-    ui_gate_since_ms: sinceMs,
-  } as CanvasState;
+  return localeStartApplyUiGateState({
+    previousState,
+    nextState,
+    forceRecoverMs: UI_GATE_WAITING_LOCALE_FORCE_RECOVER_MS,
+    flags: {
+      uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
+      uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),
+      uiBootstrapPollActionV1: isUiBootstrapPollActionV1Enabled(),
+    },
+    criticalKeys: CRITICAL_UI_KEYS_STEP0,
+    nowMs: Date.now(),
+  });
 }
 
 function computeUiBootstrapStatus(
   state: CanvasState | null | undefined,
   uiStatusRaw: string
 ): "init" | "awaiting_locale" | "ready" {
-  if (!isUiBootstrapStateV1Enabled()) return "ready";
-  const status = uiStatusRaw === "pending" || uiStatusRaw === "error" ? uiStatusRaw : "ready";
-  if (status === "ready") return "ready";
-  if (isNonEnglishPendingUiStringsState(state)) return "awaiting_locale";
-  const lang = normalizeLangCode(String((state as any)?.language ?? ""));
-  return lang ? "awaiting_locale" : "init";
+  return localeStartComputeUiBootstrapStatus({
+    state,
+    uiStatusRaw,
+    uiBootstrapStateV1: isUiBootstrapStateV1Enabled(),
+  });
 }
 
 function normalizeLanguageSource(raw: unknown): LanguageSource {
   return normalizeStateLanguageSource(raw);
-}
-
-function countAlphaChars(input: string): number {
-  const s = String(input || "");
-  const matches = s.match(/\p{L}/gu);
-  return matches ? matches.length : 0;
 }
 
 type UiI18nTelemetryCounters = {
@@ -5708,9 +5617,7 @@ async function detectLanguageHeuristic(text: string): Promise<{ lang: string; co
 }
 
 function uiStringsRequestedStatusFromRaw(raw: unknown): "ready" | "pending" | "error" {
-  const normalized = String(raw ?? "ready").trim().toLowerCase();
-  if (normalized === "pending" || normalized === "error") return normalized;
-  return "ready";
+  return localeStartUiStringsRequestedStatusFromRaw(raw);
 }
 
 function uiCriticalTranslationTimeoutMs(): number {
@@ -6069,169 +5976,32 @@ async function resolveLanguageForTurn(
   model: string,
   telemetry?: UiI18nTelemetryCounters | null
 ): Promise<CanvasState> {
-  if (isForceEnglishLanguageMode()) {
-    return {
-      ...(state as any),
-      language: "en",
-      language_locked: "true",
-      language_override: "false",
-      language_source: "persisted",
-      ui_strings: UI_STRINGS_WITH_MENU_KEYS,
-      ui_strings_lang: "en",
-      ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
-      ui_strings_status: "ready",
-      ui_strings_requested_lang: "en",
-      ui_bootstrap_status: "ready",
-      ui_translation_mode: "full",
-      ui_strings_critical_ready: "true",
-      ui_strings_full_ready: "true",
-      ui_strings_background_inflight: "false",
-    } as CanvasState;
-  }
-  const msg = String(userMessage ?? "");
-
-  // Explicit user request overrides everything.
-  const explicit = msg.trim() ? parseExplicitLanguageOverride(msg) : "";
-  if (explicit) {
-    const next = withLanguageDecision(state, explicit, "explicit_override", {
-      locked: "true",
-      override: "true",
-    });
-    return ensureUiStringsForState(next, model, telemetry);
-  }
-
-  const current = String((state as any).language ?? "").trim().toLowerCase();
-  const currentSource = normalizeLanguageSource((state as any).language_source);
-  const locked = String((state as any).language_locked ?? "false") === "true";
-  const override = String((state as any).language_override ?? "false") === "true";
-  if (override && current) {
-    const persisted = currentSource
-      ? state
-      : withLanguageDecision(state, current, "explicit_override", {
-          locked: "true",
-          override: "true",
-        });
-    return ensureUiStringsForState(persisted, model, telemetry);
-  }
-
-  const localeHint = isUiLocaleMetaV1Enabled() ? normalizeLocaleHint(localeHintRaw) : "";
-  const localeHintSource =
-    localeHintSourceRaw === "openai_locale" ||
-    localeHintSourceRaw === "webplus_i18n" ||
-    localeHintSourceRaw === "request_header"
-      ? localeHintSourceRaw
-      : "none";
-  const trustedLocaleHintSource = localeHintSource !== "none";
-  if (isUiLocaleMetaV1Enabled()) {
-    if (localeHint) {
-      bumpUiI18nCounter(telemetry, "locale_hint_used_count");
-    } else {
-      bumpUiI18nCounter(telemetry, "locale_hint_missing_count");
-    }
-  }
-  if (isUiLangSourceResolverV1Enabled() && localeHint) {
-    const isWidgetTurn = inputMode === "widget";
-    const canUseLocaleHint = isWidgetTurn ? !current : (trustedLocaleHintSource || !current);
-    // Bug #8 fix: never overwrite a locked language via locale hint,
-    // regardless of input mode or hint source.
-    if (!canUseLocaleHint || locked) {
-      const persisted = current && !currentSource
-        ? withLanguageDecision(state, current, "persisted", {
-            locked: locked ? "true" : "false",
-            override: override ? "true" : "false",
-          })
-        : state;
-      return ensureUiStringsForState(persisted, model, telemetry);
-    }
-    if (current && current !== localeHint) {
-      bumpUiI18nCounter(telemetry, "language_source_overridden_count");
-    }
-    const next = withLanguageDecision(state, localeHint, "locale_hint", {
-      locked: "true",
-      override: "false",
-    });
-    return ensureUiStringsForState(next, model, telemetry);
-  }
-
-  if (locked && current) {
-    const persisted = currentSource
-      ? state
-      : withLanguageDecision(state, current, "persisted", {
-          locked: "true",
-          override: "false",
-        });
-    return ensureUiStringsForState(persisted, model, telemetry);
-  }
-
-  const alphaCount = countAlphaChars(msg);
-  if (alphaCount < LANGUAGE_MIN_ALPHA) {
-    const persisted = current && !currentSource
-      ? withLanguageDecision(state, current, "persisted", {
-          locked: locked ? "true" : "false",
-          override: override ? "true" : "false",
-        })
-      : state;
-    return ensureUiStringsForState(persisted, model, telemetry);
-  }
-
-  const detected = await detectLanguageHeuristic(msg);
-  if (!detected.lang) {
-    const persisted = current && !currentSource
-      ? withLanguageDecision(state, current, "persisted", {
-          locked: locked ? "true" : "false",
-          override: override ? "true" : "false",
-        })
-      : state;
-    return ensureUiStringsForState(persisted, model, telemetry);
-  }
-
-  const next = withLanguageDecision(state, detected.lang, "message_detect", {
-    locked: "true",
-    override: "false",
+  return localeStartResolveLanguageForTurn({
+    state,
+    userMessage,
+    localeHintRaw,
+    localeHintSourceRaw,
+    inputMode,
+    model,
+    languageMinAlpha: LANGUAGE_MIN_ALPHA,
+    deps: {
+      isForceEnglishLanguageMode,
+      isUiLocaleMetaV1Enabled,
+      isUiLangSourceResolverV1Enabled,
+      normalizeLanguageSource,
+      ensureUiStringsForState: (stateForUi, modelForUi, telemetryForUi) =>
+        ensureUiStringsForState(stateForUi, modelForUi, telemetryForUi as UiI18nTelemetryCounters | null | undefined),
+      detectLanguageHeuristic,
+      bumpUiI18nCounter: (telemetryRaw, key, amount) =>
+        bumpUiI18nCounter(telemetryRaw as UiI18nTelemetryCounters | null | undefined, key as keyof UiI18nTelemetryCounters, amount),
+      withLanguageDecision,
+    },
+    telemetry,
   });
-
-  return ensureUiStringsForState(next, model, telemetry);
 }
 
 function parseExplicitLanguageOverride(message: string): string {
-  const raw = String(message ?? "").trim().toLowerCase();
-  if (!raw) return "";
-
-  // Explicit code form: "language: en" or "lang=de"
-  const codeMatch = raw.match(/\b(lang|language)\s*[:=]\s*([a-z]{2,3})\b/);
-  if (codeMatch && codeMatch[2]) {
-    const code = codeMatch[2].slice(0, 2);
-    return code;
-  }
-
-  const keywords = [
-    "switch", "change", "use", "speak", "language", "lang",
-  ];
-  const hasKeyword = keywords.some((k) => raw.includes(k));
-  if (!hasKeyword) return "";
-
-  const nameMap: Record<string, string> = {
-    english: "en",
-    german: "de",
-    deutsch: "de",
-    french: "fr",
-    spanish: "es",
-    italian: "it",
-    portuguese: "pt",
-    chinese: "zh",
-    japanese: "ja",
-    korean: "ko",
-    arabic: "ar",
-    hindi: "hi",
-    turkish: "tr",
-    russian: "ru",
-  };
-
-  for (const [name, code] of Object.entries(nameMap)) {
-    if (raw.includes(name)) return code;
-  }
-
-  return "";
+  return localeStartParseExplicitLanguageOverride(message);
 }
 
 function isPristineStateForStart(s: CanvasState): boolean {
@@ -7605,6 +7375,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
             bootstrap_retry_hint: bootstrapContract.retry_hint,
             locale_pending_background: bootstrapContract.waiting,
             interactive_fallback_active: bootstrapContract.waiting && bootstrapContract.ready,
+            bootstrap_phase: String(bootstrapContract.phase || ""),
           }
         )
       );
