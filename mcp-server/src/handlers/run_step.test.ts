@@ -172,6 +172,13 @@ test("language reset guard skips reset when trusted locale hint source is presen
   assert.match(source, /localeHintTrustedSource \|\| stateLanguageSource === "locale_hint" \|\| stateLanguage === localeHint/);
 });
 
+test("run_step args schema canonicalizes legacy state.language_source before validation", () => {
+  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /function canonicalizeStateForRunStepArgs\(/);
+  assert.match(source, /next\.language_source = normalizeStateLanguageSource\(next\.language_source\);/);
+  assert.match(source, /state:\s*z\.preprocess\(canonicalizeStateForRunStepArgs,\s*CanvasStateZod\.partial\(\)\.passthrough\(\)\.optional\(\)\)/);
+});
+
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {
   const first = await run_step({
     user_message: "",
@@ -278,6 +285,29 @@ test("language policy: invalid locale hint falls back to text detection", async 
   });
   assert.equal(result?.state?.language, "es");
   assert.equal(result?.state?.language_source, "message_detect");
+});
+
+test("language policy: legacy transport language_source in state is canonicalized before parse", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "nl-NL",
+    locale_hint_source: "request_header",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      language: "nl",
+      language_source: "request_header",
+      language_locked: "true",
+      language_override: "false",
+      initial_user_message: "Ik wil een ondernemingsplan voor mijn reclamebureau genaamd Mindd.",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(result?.state?.language, "nl");
+  assert.equal(result?.state?.language_source, "locale_hint");
 });
 
 test("language mode force_en: keeps language en and never triggers ui string translation call", async () => {

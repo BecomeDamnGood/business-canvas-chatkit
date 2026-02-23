@@ -57,6 +57,20 @@ test("open_canvas and run_step merge args locale with extra metadata source", ()
   assert.doesNotMatch(openCanvasBlock, /runStepHandler\(/, "open_canvas must not execute run_step business logic");
 });
 
+test("tool input schemas canonicalize legacy state.language_source before zod enum validation", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /function canonicalizeStateForToolInput\(/);
+  assert.match(source, /next\.language_source = normalizeStateLanguageSource\(next\.language_source\);/);
+  assert.match(source, /state:\s*z\.preprocess\(canonicalizeStateForToolInput,\s*CanvasStateZod\.partial\(\)\.passthrough\(\)\.optional\(\)\)/);
+});
+
+test("open_canvas bootstrap writes canonical state.language_source (never transport source)", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /const persistedLanguageSource = normalizeStateLanguageSource\(sourceState\.language_source\);/);
+  assert.match(source, /const finalLanguageSource = resolvedLanguage \? "locale_hint" : persistedLanguageSource;/);
+  assert.match(source, /bootstrap_state_language_source/);
+});
+
 test("open_canvas has idempotent dedupe cache guard", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /const openCanvasDedupeCache = new Map/);

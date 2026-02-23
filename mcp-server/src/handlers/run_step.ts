@@ -13,6 +13,7 @@ import {
   CURRENT_STATE_VERSION,
   getFinalsSnapshot,
   normalizeState,
+  normalizeStateLanguageSource,
   CanvasStateZod,
   type CanvasState,
   type BoolString,
@@ -174,6 +175,13 @@ import type { RenderedAction } from "../contracts/ui_actions.js";
  * Incoming tool args
  * NOTE: Some tool callers include current_step_id ("start") — accepted but not relied on.
  */
+function canonicalizeStateForRunStepArgs(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const next = { ...(raw as Record<string, unknown>) };
+  next.language_source = normalizeStateLanguageSource(next.language_source);
+  return next;
+}
+
 const RunStepArgsSchema = z.object({
   current_step_id: z.string().optional().default("step_0"),
   user_message: z.string().default(""),
@@ -183,7 +191,7 @@ const RunStepArgsSchema = z.object({
   // Use CanvasStateZod schema for type safety and validation
   // .partial() makes all fields optional (for empty/partial state)
   // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
-  state: CanvasStateZod.partial().passthrough().optional(),
+  state: z.preprocess(canonicalizeStateForRunStepArgs, CanvasStateZod.partial().passthrough().optional()),
 });
 
 type RunStepArgs = z.infer<typeof RunStepArgsSchema>;
@@ -5518,16 +5526,7 @@ function computeUiBootstrapStatus(
 }
 
 function normalizeLanguageSource(raw: unknown): LanguageSource {
-  const source = String(raw || "").trim();
-  if (
-    source === "explicit_override" ||
-    source === "locale_hint" ||
-    source === "message_detect" ||
-    source === "persisted"
-  ) {
-    return source;
-  }
-  return "";
+  return normalizeStateLanguageSource(raw);
 }
 
 function countAlphaChars(input: string): number {
@@ -7155,6 +7154,10 @@ type RunStepSuccess = RunStepBase & { ok: true };
 type RunStepError = RunStepBase & { ok: false; error: Record<string, unknown> };
 
 export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunStepError> {
+  const incomingLanguageSourceRaw =
+    rawArgs && typeof rawArgs === "object" && (rawArgs as any).state && typeof (rawArgs as any).state === "object"
+      ? String(((rawArgs as any).state as Record<string, unknown>).language_source ?? "").trim()
+      : "";
   const args: RunStepArgs = RunStepArgsSchema.parse(rawArgs);
   const inputMode = args.input_mode || "chat";
   const localeHint = normalizeLocaleHint(String(args.locale_hint ?? ""));
@@ -7170,10 +7173,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const motivationQuotesEnabled = policyFlags.motivationQuotesV11;
   const migrationFlags = resolveMigrationFlags();
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
+    const incomingLanguageSourceNormalized = normalizeStateLanguageSource((args.state as any)?.language_source);
     console.log("[run_step] input_mode", {
       inputMode,
       locale_hint: localeHint,
       locale_hint_source: localeHintSource,
+      incoming_language_source_raw: incomingLanguageSourceRaw,
+      incoming_language_source_normalized: incomingLanguageSourceNormalized,
     });
   }
   const decideOrchestration = (routeState: CanvasState, routeUserMessage: string): OrchestratorOutput => {

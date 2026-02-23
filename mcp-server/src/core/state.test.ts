@@ -100,3 +100,22 @@ test("state migration: v8 adds locale gate metadata", () => {
   assert.equal(String((migrated as any).ui_gate_reason), "translation_pending");
   assert.equal(typeof (migrated as any).ui_gate_since_ms, "number");
 });
+
+test("normalizeState: maps legacy transport language_source to locale_hint", () => {
+  const normalized = normalizeState({
+    ...getDefaultState(),
+    language: "nl",
+    language_source: "request_header",
+  });
+  assert.equal(normalized.language_source, "locale_hint");
+});
+
+test("migrateState: v6 language_source maps legacy transport source to locale_hint", () => {
+  const migrated = migrateState({
+    ...getDefaultState(),
+    state_version: "6",
+    language: "nl",
+    language_source: "webplus_i18n",
+  });
+  assert.equal(migrated.language_source, "locale_hint");
+});

@@ -13,7 +13,12 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { createRateLimitMiddleware } from "./src/middleware/rateLimit.js";
 import { applySecurityHeaders } from "./src/middleware/security.js";
-import { CanvasStateZod, getDefaultState, getFinalsSnapshot } from "./src/core/state.js";
+import {
+  CanvasStateZod,
+  getDefaultState,
+  getFinalsSnapshot,
+  normalizeStateLanguageSource,
+} from "./src/core/state.js";
 import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
 import { safeString } from "./src/server_safe_string.js";
 
@@ -349,6 +354,13 @@ function normalizeLocaleHintSource(raw: unknown): "openai_locale" | "webplus_i18
     : "none";
 }
 
+function canonicalizeStateForToolInput(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const next = { ...(raw as Record<string, unknown>) };
+  next.language_source = normalizeStateLanguageSource(next.language_source);
+  return next;
+}
+
 function mergeLocaleHintInputs(
   argsLocaleHint: unknown,
   argsLocaleSource: unknown,
@@ -423,12 +435,10 @@ function buildOpenCanvasBootstrapResponse(args: {
 }): { structuredContent: Record<string, unknown>; meta: Record<string, unknown> } {
   const sourceState = args.state && typeof args.state === "object" ? args.state : {};
   const resolvedLanguage = normalizeLocaleHint(args.locale_hint);
-  const resolvedLanguageSource = normalizeLocaleHintSource(args.locale_hint_source);
   const persistedLanguage = safeString(sourceState.language ?? "").trim().toLowerCase();
+  const persistedLanguageSource = normalizeStateLanguageSource(sourceState.language_source);
   const finalLanguage = resolvedLanguage || persistedLanguage;
-  const finalLanguageSource = resolvedLanguage
-    ? (resolvedLanguageSource !== "none" ? resolvedLanguageSource : "locale_hint")
-    : safeString(sourceState.language_source ?? "").trim();
+  const finalLanguageSource = resolvedLanguage ? "locale_hint" : persistedLanguageSource;
   const seedMessage = safeString(args.seed_user_message ?? "").trim();
   const bootstrapState: Record<string, unknown> = {
     ...sourceState,
@@ -810,13 +820,13 @@ function createAppServer(baseUrl: string): McpServer {
     // Use CanvasStateZod schema for type safety and validation
     // .partial() makes all fields optional (for empty/partial state)
     // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
-    state: CanvasStateZod.partial().passthrough().optional(),
+    state: z.preprocess(canonicalizeStateForToolInput, CanvasStateZod.partial().passthrough().optional()),
   });
   const OpenCanvasInputSchema = z.object({
     user_message: z.string().optional().default(""),
     locale_hint: z.string().optional(),
     locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional(),
-    state: CanvasStateZod.partial().passthrough().optional(),
+    state: z.preprocess(canonicalizeStateForToolInput, CanvasStateZod.partial().passthrough().optional()),
   });
 
   server.registerTool(
@@ -903,8 +913,9 @@ function createAppServer(baseUrl: string): McpServer {
           ? (bootstrapResult.state as Record<string, unknown>)
           : {};
       console.log("[open_canvas] bootstrap response", {
+        locale_hint_source: mergedLocale.locale_hint_source,
         resolved_language: safeString(bootstrapState.language ?? ""),
-        language_source: safeString(bootstrapState.language_source ?? ""),
+        bootstrap_state_language_source: safeString(bootstrapState.language_source ?? ""),
         ui_gate_status: safeString(bootstrapState.ui_gate_status ?? ""),
         ui_bootstrap_status: safeString(bootstrapState.ui_bootstrap_status ?? ""),
         current_step: safeString(bootstrapState.current_step ?? ""),

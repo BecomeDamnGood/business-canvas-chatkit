@@ -50,6 +50,23 @@ export const LANGUAGE_SOURCES = [
 ] as const;
 export const LanguageSourceZod = z.enum(LANGUAGE_SOURCES);
 export type LanguageSource = z.infer<typeof LanguageSourceZod>;
+
+export function normalizeStateLanguageSource(raw: unknown): LanguageSource {
+  const source = String(raw ?? "").trim();
+  if (
+    source === "explicit_override" ||
+    source === "locale_hint" ||
+    source === "message_detect" ||
+    source === "persisted"
+  ) {
+    return source;
+  }
+  // Legacy transport sources were mistakenly persisted into state.language_source.
+  if (source === "openai_locale" || source === "webplus_i18n" || source === "request_header") {
+    return "locale_hint";
+  }
+  return "";
+}
 export const UI_STRINGS_STATUSES = ["ready", "pending", "error"] as const;
 export const UiStringsStatusZod = z.enum(UI_STRINGS_STATUSES);
 export type UiStringsStatus = z.infer<typeof UiStringsStatusZod>;
@@ -225,14 +242,7 @@ export function normalizeState(raw: unknown): CanvasState {
   const language_locked: BoolString = language_locked_raw === "true" ? "true" : "false";
   const language_override_raw = String(r.language_override ?? d.language_override).trim();
   const language_override: BoolString = language_override_raw === "true" ? "true" : "false";
-  const language_source_raw = String((r as any).language_source ?? d.language_source).trim();
-  const language_source: LanguageSource =
-    language_source_raw === "explicit_override" ||
-    language_source_raw === "locale_hint" ||
-    language_source_raw === "message_detect" ||
-    language_source_raw === "persisted"
-      ? language_source_raw
-      : "";
+  const language_source = normalizeStateLanguageSource((r as any).language_source ?? d.language_source);
   const ui_strings_raw =
     typeof (r as any).ui_strings === "object" && (r as any).ui_strings !== null
       ? (r as any).ui_strings
@@ -486,14 +496,7 @@ export function migrateState(raw: unknown): CanvasState {
 
   // v6 -> v7: add language source + ui_strings status metadata.
   if (s.state_version === "6") {
-    const languageSourceRaw = String((s as any).language_source ?? "").trim();
-    const language_source =
-      languageSourceRaw === "explicit_override" ||
-      languageSourceRaw === "locale_hint" ||
-      languageSourceRaw === "message_detect" ||
-      languageSourceRaw === "persisted"
-        ? languageSourceRaw
-        : "";
+    const language_source = normalizeStateLanguageSource((s as any).language_source ?? "");
     const statusRaw = String((s as any).ui_strings_status ?? "ready").trim();
     const ui_strings_status =
       statusRaw === "pending" || statusRaw === "error"
