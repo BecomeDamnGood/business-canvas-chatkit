@@ -27,6 +27,17 @@ let _t: (lang: string, key: string) => string;
 let bridgeEnabled = false;
 let bridgeSeq = 0;
 const pendingBridgeCalls = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
+type TransportStatus = "unknown" | "ready_callTool" | "ready_bridge" | "unavailable";
+type QueuedStartAction = {
+  message: string;
+  extraState: Record<string, unknown>;
+  queuedAtMs: number;
+};
+const START_HANDSHAKE_MAX_RETRIES = 5;
+const START_HANDSHAKE_RETRY_MS = 450;
+let queuedStartAction: QueuedStartAction | null = null;
+let startHandshakeRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let startHandshakeRetryCount = 0;
 
 export function initActionsConfig(config: {
   render: (overrideRaw?: unknown) => void;
@@ -38,16 +49,128 @@ export function initActionsConfig(config: {
 
 export function setBridgeEnabled(enabled: boolean): void {
   bridgeEnabled = enabled;
+  if (enabled) {
+    void flushQueuedStartAction("bridge_enabled");
+  }
 }
 
 function oa(): unknown {
   return (globalThis as Record<string, unknown>).openai;
 }
 
-function canUseBridge(): boolean {
+function hasBridgeParent(): boolean {
   if (typeof window === "undefined") return false;
-  if (!window.parent || window.parent === window) return false;
+  return Boolean(window.parent && window.parent !== window);
+}
+
+function canUseBridge(): boolean {
+  if (!hasBridgeParent()) return false;
   return bridgeEnabled;
+}
+
+function resolveTransportStatus(): TransportStatus {
+  const o = oa();
+  const hasCallTool = Boolean(
+    o && typeof (o as { callTool?: (name: string, args: unknown) => Promise<unknown> }).callTool === "function"
+  );
+  if (hasCallTool) return "ready_callTool";
+  if (canUseBridge()) return "ready_bridge";
+  if (hasBridgeParent()) return "unknown";
+  return "unavailable";
+}
+
+function clearStartHandshakeRetryTimer(): void {
+  if (startHandshakeRetryTimer) clearTimeout(startHandshakeRetryTimer);
+  startHandshakeRetryTimer = null;
+}
+
+function resetQueuedStartAction(): void {
+  queuedStartAction = null;
+  startHandshakeRetryCount = 0;
+  clearStartHandshakeRetryTimer();
+}
+
+function scheduleQueuedStartHandshakeRetry(reason: string): void {
+  if (!queuedStartAction) return;
+  if (startHandshakeRetryTimer) return;
+  if (startHandshakeRetryCount >= START_HANDSHAKE_MAX_RETRIES) {
+    console.log("[ui_start_dispatch_failed]", {
+      reason: "transport_retry_exhausted",
+      last_reason: reason,
+      retry_count: startHandshakeRetryCount,
+    });
+    setInlineNotice(
+      uiText(
+        (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__?.state || {},
+        "transient.connection_failed",
+        "Connection to the app host failed. Please try again."
+      )
+    );
+    return;
+  }
+  const retryDelay = START_HANDSHAKE_RETRY_MS * (startHandshakeRetryCount + 1);
+  startHandshakeRetryTimer = setTimeout(() => {
+    startHandshakeRetryTimer = null;
+    startHandshakeRetryCount += 1;
+    void flushQueuedStartAction("retry_timer");
+  }, retryDelay);
+}
+
+function queueStartAction(params: {
+  message: string;
+  extraState?: Record<string, unknown>;
+  reason: string;
+}): void {
+  queuedStartAction = {
+    message: String(params.message || "ACTION_START"),
+    extraState: params.extraState && typeof params.extraState === "object" ? { ...params.extraState } : {},
+    queuedAtMs: Date.now(),
+  };
+  console.log("[ui_start_action_queued]", {
+    reason: params.reason,
+    retry_count: startHandshakeRetryCount,
+  });
+  setWidgetStateSafe({
+    start_dispatch_state: "queued",
+    transport_ready: "false",
+  });
+  setInlineNotice(
+    uiText(
+      (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__?.state || {},
+      "transient.connecting",
+      "Connecting to the app host..."
+    )
+  );
+  scheduleQueuedStartHandshakeRetry(params.reason);
+}
+
+async function flushQueuedStartAction(source: string): Promise<void> {
+  if (!queuedStartAction) return;
+  const transportStatus = resolveTransportStatus();
+  if (transportStatus === "unavailable") {
+    scheduleQueuedStartHandshakeRetry(source);
+    return;
+  }
+  const queued = queuedStartAction;
+  resetQueuedStartAction();
+  setWidgetStateSafe({
+    start_dispatch_state: "dispatching",
+    transport_ready: transportStatus === "ready_callTool" || transportStatus === "ready_bridge" ? "true" : "probing",
+  });
+  console.log("[ui_start_action_flushed]", {
+    source,
+    queued_for_ms: Math.max(0, Date.now() - queued.queuedAtMs),
+    transport_status: transportStatus,
+  });
+  await callRunStep(queued.message, {
+    ...queued.extraState,
+    __skip_start_queue: "true",
+    __queue_flush_source: source,
+  });
+}
+
+export function notifyHostTransportSignal(source: "set_globals" | "host_notification" | "bridge_message" | "manual"): void {
+  void flushQueuedStartAction(source);
 }
 
 const HYDRATION_MAX_RETRIES = 3;
@@ -229,6 +352,14 @@ const LOCALE_WAIT_RETRY_MAX_MS = 2000;
 const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
 let localeWaitRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
+
+function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
+  const raw = (globalThis as Record<string, unknown>)[name];
+  if (typeof raw === "boolean") return raw;
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  if (!normalized) return defaultValue;
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
 
 function clearLocaleWaitRetry(opts?: { resetCounters?: boolean }): void {
   if (localeWaitRetryTimer) clearTimeout(localeWaitRetryTimer);
@@ -574,10 +705,16 @@ function safePostMessage(message: unknown, removedPaths?: string[]): void {
   window.parent.postMessage(message, "*");
 }
 
-async function callToolViaBridge(name: string, args: unknown): Promise<unknown> {
-  if (!canUseBridge() || typeof window === "undefined") {
+async function callToolViaBridge(
+  name: string,
+  args: unknown,
+  opts?: { allowUnconfirmedBridge?: boolean }
+): Promise<unknown> {
+  if (typeof window === "undefined" || !hasBridgeParent()) {
     throw new Error("bridge unavailable");
   }
+  const allowProbe = opts?.allowUnconfirmedBridge === true;
+  if (!canUseBridge() && !allowProbe) throw new Error("bridge unavailable");
   const id = `bsc_${Date.now()}_${++bridgeSeq}`;
   const { clean: argsClean, removedPaths } = sanitizeForPostMessage(args, {
     basePath: "params.arguments",
@@ -694,9 +831,38 @@ export async function callRunStep(
   extraState?: Record<string, unknown>
 ): Promise<void> {
   const o = oa();
-  const hasCallTool = Boolean(o && typeof (o as { callTool?: (name: string, args: unknown) => Promise<unknown> }).callTool === "function");
-  const hasBridge = canUseBridge();
-  if (!hasCallTool && !hasBridge) {
+  const messageText = String(message || "").trim();
+  const isStartAction = messageText === "ACTION_START";
+  const startTransportSelfHealEnabled = uiFlagEnabled("UI_START_TRANSPORT_SELF_HEAL_V1", true);
+  const internalSkipStartQueue =
+    String((extraState as Record<string, unknown> | undefined)?.__skip_start_queue || "")
+      .trim()
+      .toLowerCase() === "true";
+  const cleanExtraState =
+    extraState && typeof extraState === "object"
+      ? Object.fromEntries(
+          Object.entries(extraState).filter(
+            ([key]) => key !== "__skip_start_queue" && key !== "__queue_flush_source"
+          )
+        )
+      : undefined;
+  const transportStatus = resolveTransportStatus();
+  const hasCallTool = transportStatus === "ready_callTool";
+  const hasBridgePath =
+    transportStatus === "ready_bridge" ||
+    (startTransportSelfHealEnabled && transportStatus === "unknown");
+  if (!hasCallTool && !hasBridgePath) {
+    if (isStartAction && !internalSkipStartQueue && startTransportSelfHealEnabled) {
+      console.log("[ui_start_transport_unavailable]", {
+        transport_status: transportStatus,
+      });
+      queueStartAction({
+        message: messageText || "ACTION_START",
+        extraState: cleanExtraState,
+        reason: "transport_unavailable",
+      });
+      return;
+    }
     console.warn("run_step: host did not provide callTool or MCP bridge");
     const errEl = document.getElementById("cardDesc");
     const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
@@ -714,10 +880,9 @@ export async function callRunStep(
     Boolean((o as { toolOutput?: unknown }).toolOutput) ||
     Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
   const persistedStarted = String((widgetState().started || "")).toLowerCase() === "true";
-  const messageText = String(message || "").trim();
   const isBootstrapPollCall =
     messageText === ACTION_BOOTSTRAP_POLL ||
-    String((extraState as any)?.__bootstrap_poll || "").trim().toLowerCase() === "true";
+    String((cleanExtraState as any)?.__bootstrap_poll || "").trim().toLowerCase() === "true";
   if (String(message || "").trim() === "") {
     if (hasToolOutput && !isBootstrapPollCall) return;
     if (!persistedStarted && !isBootstrapPollCall) return;
@@ -735,8 +900,8 @@ export async function callRunStep(
   const locationLanguage = localeHintFromLocation();
   const localeHint = stateLanguage || widgetLanguage || locationLanguage;
   let nextState = Object.assign({}, state);
-  if (extraState && typeof extraState === "object") {
-    nextState = Object.assign({}, nextState, extraState);
+  if (cleanExtraState && typeof cleanExtraState === "object") {
+    nextState = Object.assign({}, nextState, cleanExtraState);
   }
   if (!String((nextState as Record<string, unknown>).language || "").trim() && localeHint) {
     (nextState as Record<string, unknown>).language = localeHint;
@@ -801,6 +966,13 @@ export async function callRunStep(
 
   try {
     const transportPrimary = hasCallTool ? "callTool" : "bridge";
+    if (isStartAction) clearInlineNotice();
+    if (isStartAction) {
+      setWidgetStateSafe({
+        start_dispatch_state: "dispatching",
+        transport_ready: transportPrimary === "callTool" || canUseBridge() ? "true" : "probing",
+      });
+    }
     if (isDevEnv()) {
       console.log("[ui_action_dispatched]", {
         action_code: messageText,
@@ -812,7 +984,13 @@ export async function callRunStep(
     try {
       resp = transportPrimary === "callTool"
         ? await (o as { callTool: (name: string, args: unknown) => Promise<unknown> }).callTool("run_step", payload)
-        : await callToolViaBridge("run_step", payload);
+        : await callToolViaBridge("run_step", payload, { allowUnconfirmedBridge: startTransportSelfHealEnabled });
+      if (transportPrimary === "bridge" && !bridgeEnabled) {
+        bridgeEnabled = true;
+        console.log("[ui_bridge_first_success_without_prior_flag]", {
+          action_code: messageText,
+        });
+      }
     } catch (primaryError) {
       if (transportPrimary === "bridge" && hasCallTool) {
         transportUsed = "bridge_fallback_callTool";
@@ -862,10 +1040,37 @@ export async function callRunStep(
       source: "call_run_step",
       is_poll_response: isBootstrapPollCall,
     });
+    if (isStartAction) {
+      setWidgetStateSafe({
+        start_dispatch_state: "ready",
+        transport_ready: "true",
+      });
+    }
   } catch (e) {
     clearLocaleWaitRetry();
     if (didTimeout) return;
     const msg = (e && (e as Error).message) ? String((e as Error).message) : "";
+    const lowerMsg = msg.toLowerCase();
+    const transportError =
+      lowerMsg.includes("bridge unavailable") ||
+      lowerMsg.includes("bridge timeout") ||
+      lowerMsg.includes("transport");
+    if (isStartAction && !internalSkipStartQueue && transportError && startTransportSelfHealEnabled) {
+      console.log("[ui_start_dispatch_failed]", {
+        reason: "transport_error",
+        message: msg,
+      });
+      setWidgetStateSafe({
+        start_dispatch_state: "failed",
+        transport_ready: "false",
+      });
+      queueStartAction({
+        message: messageText || "ACTION_START",
+        extraState: cleanExtraState,
+        reason: "transport_error",
+      });
+      return;
+    }
     const isTimeout =
       msg.toLowerCase().includes("timeout") ||
       (e && (e as Error).name === "AbortError") ||

@@ -22,6 +22,7 @@ import {
 } from "./src/core/state.js";
 import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
 import { safeString } from "./src/server_safe_string.js";
+import { applyUiGateState } from "./src/handlers/run_step_locale_start.js";
 
 function loadDotEnv() {
   try {
@@ -474,15 +475,22 @@ function buildOpenCanvasBootstrapResponse(args: {
     safeString(sourceState.ui_strings_status) === "ready" &&
     safeString(sourceState.ui_strings_critical_ready) === "true" &&
     persistedLanguage === finalLanguage;
-  const gateReady = clientClaimsReady || stringsRenderable || finalLanguage === "en";
-  const interactiveFallbackEnabled = envFlagEnabled("UI_INTERACTIVE_FALLBACK_V1", true);
-  const waitingLocale = !gateReady;
-  const interactiveFallbackActive = waitingLocale && interactiveFallbackEnabled;
-  const bootstrapInteractiveReady = gateReady || interactiveFallbackActive;
-  const uiStringsStatus = gateReady ? "ready" : "pending";
-  const bootstrapPhase = waitingLocale
-    ? (interactiveFallbackActive ? "interactive_fallback" : "waiting_locale")
-    : "ready";
+  const baseReady = stringsRenderable || finalLanguage === "en";
+  if (clientClaimsReady && !stringsRenderable && finalLanguage !== "en") {
+    console.warn("[open_canvas_ready_claim_inconsistent]", {
+      final_language: finalLanguage,
+      claimed_status: safeString(sourceState.ui_strings_status ?? ""),
+      critical_ready: safeString(sourceState.ui_strings_critical_ready ?? ""),
+      ui_strings_keys: Object.keys(incomingUiStrings).length,
+    });
+  }
+  const localeFlags = {
+    uiLocaleReadyGateV1: envFlagEnabled("UI_LOCALE_READY_GATE_V1", true),
+    uiInteractiveFallbackV1: envFlagEnabled("UI_INTERACTIVE_FALLBACK_V1", true),
+    uiBootstrapPollActionV1: envFlagEnabled("UI_BOOTSTRAP_POLL_ACTION_V1", true),
+  };
+  const strictReadinessV1 = envFlagEnabled("UI_OPEN_CANVAS_STRICT_READINESS_V1", true);
+  const forceRecoverMs = Number(process.env.UI_GATE_FORCE_RECOVER_MS || 4000);
   const bootstrapState: Record<string, unknown> = {
     state_version: safeString(sourceState.state_version || defaults.state_version) || defaults.state_version,
     current_step: "step_0",
@@ -497,17 +505,17 @@ function buildOpenCanvasBootstrapResponse(args: {
     ui_strings: stringsRenderable ? incomingUiStrings : {},
     ui_strings_lang: finalLanguage,
     ui_strings_version: safeString(sourceState.ui_strings_version || ""),
-    ui_strings_status: uiStringsStatus,
+    ui_strings_status: baseReady ? "ready" : "pending",
     ui_strings_requested_lang: finalLanguage,
-    ui_bootstrap_status: gateReady ? "ready" : "awaiting_locale",
-    ui_gate_status: gateReady ? "ready" : "waiting_locale",
-    ui_gate_reason: gateReady ? "" : "translation_pending",
-    ui_gate_since_ms: gateReady ? 0 : Date.now(),
-    ui_translation_mode: gateReady ? "full" : "critical_first",
-    ui_strings_critical_ready: gateReady ? "true" : "false",
-    ui_strings_full_ready: gateReady ? "true" : "false",
-    ui_strings_background_inflight: gateReady ? "false" : "true",
-    bootstrap_phase: bootstrapPhase,
+    ui_bootstrap_status: baseReady ? "ready" : "awaiting_locale",
+    ui_gate_status: baseReady ? "ready" : "waiting_locale",
+    ui_gate_reason: baseReady ? "" : "translation_pending",
+    ui_gate_since_ms: baseReady ? 0 : Date.now(),
+    ui_translation_mode: baseReady ? "full" : "critical_first",
+    ui_strings_critical_ready: baseReady ? "true" : "false",
+    ui_strings_full_ready: baseReady ? "true" : "false",
+    ui_strings_background_inflight: baseReady ? "false" : "true",
+    bootstrap_phase: baseReady ? "ready" : "waiting_locale",
     last_specialist_result: {},
     step_0_final: safeString(sourceState.step_0_final || ""),
     dream_final: "",
@@ -531,6 +539,19 @@ function buildOpenCanvasBootstrapResponse(args: {
   if (seedMessage && !safeString(bootstrapState.initial_user_message ?? "").trim()) {
     bootstrapState.initial_user_message = seedMessage;
   }
+  const gatedBootstrapState = strictReadinessV1
+    ? (applyUiGateState({
+        previousState: sourceState,
+        nextState: normalizeState(bootstrapState),
+        forceRecoverMs: Number.isFinite(forceRecoverMs) && forceRecoverMs > 0 ? Math.trunc(forceRecoverMs) : 4000,
+        flags: localeFlags,
+        criticalKeys: [...OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0],
+        nowMs: Date.now(),
+      }) as Record<string, unknown>)
+    : (normalizeState(bootstrapState) as Record<string, unknown>);
+  const waitingLocale = safeString(gatedBootstrapState.ui_gate_status ?? "") === "waiting_locale";
+  const interactiveFallbackActive = safeString(gatedBootstrapState.bootstrap_phase ?? "") === "interactive_fallback";
+  const bootstrapInteractiveReady = !waitingLocale || interactiveFallbackActive;
 
   const resultForClient: Record<string, unknown> = {
     ok: true,
@@ -540,7 +561,7 @@ function buildOpenCanvasBootstrapResponse(args: {
     text: "",
     prompt: "",
     specialist: {},
-    state: bootstrapState,
+    state: gatedBootstrapState,
     ui: {
       action_codes: [],
       flags: {
@@ -548,7 +569,9 @@ function buildOpenCanvasBootstrapResponse(args: {
         bootstrap_interactive_ready: bootstrapInteractiveReady,
         interactive_fallback_active: interactiveFallbackActive,
         bootstrap_retry_hint: waitingLocale ? "poll" : "",
-        bootstrap_phase: bootstrapPhase,
+        bootstrap_phase: safeString(gatedBootstrapState.bootstrap_phase || ""),
+        transport_ready: safeString(gatedBootstrapState.transport_ready || "unknown"),
+        start_dispatch_state: safeString(gatedBootstrapState.start_dispatch_state || "idle"),
       },
     },
   };
@@ -832,6 +855,7 @@ function buildContentFromResult(
 
 function buildUiStructured(result: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
   if (!result || typeof result !== "object") return null;
+  const prestartModeV1 = envFlagEnabled("UI_PRESTART_VIEW_MODE_V1", true);
   const uiObj = (result as any).ui && typeof (result as any).ui === "object" ? (result as any).ui : {};
   const flags =
     uiObj.flags && typeof uiObj.flags === "object"
@@ -843,32 +867,55 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       : {};
   const waitingLocale = flags.bootstrap_waiting_locale === true;
   const bootstrapPhase = safeString(flags.bootstrap_phase || state.bootstrap_phase || "");
+  const started = safeString(state.started || "").toLowerCase() === "true";
   const prompt = safeString((result as any).prompt ?? "");
   const text = safeString((result as any).text ?? "");
-  const promptBody = waitingLocale ? "" : (prompt || text || "");
-  const actionCodes = waitingLocale ? [] : (Array.isArray(uiObj.action_codes) ? uiObj.action_codes : []);
+  const promptBodyRaw = prompt || text || "";
+  const actionCodesRaw = Array.isArray(uiObj.action_codes) ? uiObj.action_codes : [];
   const retryHint = safeString(flags.bootstrap_retry_hint ?? "");
-  const options = actionCodes.map((code: unknown, idx: number) => ({
+  const optionsRaw = actionCodesRaw.map((code: unknown, idx: number) => ({
     id: safeString(idx + 1),
     actionCode: safeString(code),
   }));
+  const hasInteractivePayload = safeString(promptBodyRaw).length > 0 || optionsRaw.length > 0;
+  let mode: "waiting_locale" | "prestart" | "interactive" | "recovery" = "interactive";
+  if (waitingLocale) mode = "waiting_locale";
+  else if (prestartModeV1 && !started) mode = "prestart";
+  else if (!hasInteractivePayload) mode = "recovery";
+  const promptBody = mode === "interactive" ? promptBodyRaw : "";
+  const options = mode === "interactive" ? optionsRaw : [];
+  if (mode !== "interactive" && !waitingLocale && started && !hasInteractivePayload) {
+    console.warn("[ui_interactive_empty_payload_blocked]", {
+      current_step: safeString(state.current_step ?? ""),
+      bootstrap_phase: bootstrapPhase,
+      result_ok: result.ok === true,
+    });
+  }
   const expectedChoiceCount =
     typeof uiObj.expected_choice_count === "number"
       ? uiObj.expected_choice_count
-      : (actionCodes.length ? actionCodes.length : undefined);
+      : (options.length ? options.length : undefined);
+  const nextFlags: Record<string, unknown> = { ...flags };
+  const transportReady = safeString(state.transport_ready ?? "");
+  const startDispatchState = safeString(state.start_dispatch_state ?? "");
+  if (transportReady) nextFlags.transport_ready = transportReady;
+  if (startDispatchState) nextFlags.start_dispatch_state = startDispatchState;
   return {
     prompt: { body: promptBody },
     options,
     state: {
       menu_id: safeString((result as any)?.specialist?.menu_id ?? ""),
       expected_choice_count: expectedChoiceCount,
-      flags,
+      flags: nextFlags,
     },
     view: {
       version: VERSION,
-      mode: waitingLocale ? "waiting_locale" : "interactive",
+      mode,
       waiting_locale: waitingLocale,
-      recovery_action: waitingLocale && retryHint === "poll" ? "retry_poll" : "",
+      recovery_action:
+        waitingLocale && retryHint === "poll"
+          ? "retry_poll"
+          : (mode === "recovery" ? "retry_poll" : ""),
       bootstrap_phase: bootstrapPhase,
     },
   };

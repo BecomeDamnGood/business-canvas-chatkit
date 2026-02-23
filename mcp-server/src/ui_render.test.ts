@@ -1132,6 +1132,9 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(toolOutputCandidate, metadata\)/);
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
+  assert.match(source, /notifyHostTransportSignal\("bridge_message"\)/);
+  assert.match(source, /notifyHostTransportSignal\("host_notification"\)/);
+  assert.match(source, /notifyHostTransportSignal\("set_globals"\)/);
   assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "host_notification" \}\)/);
   assert.match(source, /openai:set_globals[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "set_globals" \}\)/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(\s*host\?\.toolOutput,\s*host\?\.toolResponseMetadata\s*\)/);
@@ -1206,12 +1209,24 @@ test("ui actions source uses explicit bootstrap poll action and shared result ha
   assert.doesNotMatch(source, /__locale_wait_retry/);
 });
 
-test("ui actions source prefers openai.callTool and uses bridge only after handshake", () => {
+test("ui actions source supports self-heal transport and queued ACTION_START fallback", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
+  assert.match(source, /type TransportStatus = "unknown" \| "ready_callTool" \| "ready_bridge" \| "unavailable";/);
+  assert.match(source, /function resolveTransportStatus\(\): TransportStatus/);
+  assert.match(source, /function queueStartAction\(/);
+  assert.match(source, /async function flushQueuedStartAction\(/);
+  assert.match(source, /ui_start_transport_unavailable/);
+  assert.match(source, /ui_start_action_queued/);
+  assert.match(source, /ui_start_action_flushed/);
+  assert.match(source, /ui_start_dispatch_failed/);
+  assert.match(source, /notifyHostTransportSignal/);
   assert.match(source, /function canUseBridge\(\): boolean \{[\s\S]*return bridgeEnabled;/);
   assert.match(source, /const transportPrimary = hasCallTool \? "callTool" : "bridge";/);
   assert.match(source, /transport_used: transportPrimary/);
   assert.match(source, /transport_used: transportUsed/);
+  assert.match(source, /const startTransportSelfHealEnabled = uiFlagEnabled\("UI_START_TRANSPORT_SELF_HEAL_V1", true\);/);
+  assert.match(source, /allowUnconfirmedBridge: startTransportSelfHealEnabled/);
+  assert.match(source, /ui_bridge_first_success_without_prior_flag/);
 });
 
 test("ui actions source has bridge timeout guard", () => {

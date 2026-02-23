@@ -73,13 +73,16 @@ test("open_canvas bootstrap writes canonical state.language_source (never transp
     "final language source must canonicalize transport locale into locale_hint and otherwise use persisted canonical source"
   );
   assert.match(source, /function uiStringsRenderableForLang\(/);
-  assert.match(source, /const uiStringsStatus = gateReady \? "ready" : "pending";/);
+  assert.match(source, /const baseReady = stringsRenderable \|\| finalLanguage === "en";/);
+  assert.match(source, /\[open_canvas_ready_claim_inconsistent\]/);
+  assert.match(source, /const strictReadinessV1 = envFlagEnabled\("UI_OPEN_CANVAS_STRICT_READINESS_V1", true\);/);
+  assert.match(source, /const gatedBootstrapState = strictReadinessV1[\s\S]*applyUiGateState\(/);
   assert.doesNotMatch(source, /const bootstrapState: Record<string, unknown> = \{\s*\.\.\.sourceState,/);
   assert.match(source, /intro_shown_session: "false"/);
   assert.match(source, /last_specialist_result: \{\}/);
   assert.match(source, /bootstrap_state_language_source/);
-  assert.match(source, /const waitingLocale = !gateReady;/);
-  assert.match(source, /const interactiveFallbackActive = waitingLocale && interactiveFallbackEnabled;/);
+  assert.match(source, /const waitingLocale = safeString\(gatedBootstrapState\.ui_gate_status \?\? ""\) === "waiting_locale";/);
+  assert.match(source, /const interactiveFallbackActive = safeString\(gatedBootstrapState\.bootstrap_phase \?\? ""\) === "interactive_fallback";/);
   assert.match(source, /bootstrap_waiting_locale: waitingLocale,/);
   assert.match(source, /bootstrap_interactive_ready: bootstrapInteractiveReady,/);
   assert.match(source, /interactive_fallback_active: interactiveFallbackActive,/);
@@ -125,11 +128,16 @@ test("run_step handler logs locale + language readiness in request/response line
 test("buildUiStructured suppresses prompt/options while bootstrap locale is waiting", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /const waitingLocale = flags\.bootstrap_waiting_locale === true;/);
-  assert.match(source, /const promptBody = waitingLocale \? "" : \(prompt \|\| text \|\| ""\);/);
-  assert.match(source, /const actionCodes = waitingLocale \? \[\] :/);
-  assert.match(source, /mode: waitingLocale \? "waiting_locale" : "interactive",/);
+  assert.match(source, /const started = safeString\(state\.started \|\| ""\)\.toLowerCase\(\) === "true";/);
+  assert.match(source, /let mode: "waiting_locale" \| "prestart" \| "interactive" \| "recovery" = "interactive";/);
+  assert.match(source, /const prestartModeV1 = envFlagEnabled\("UI_PRESTART_VIEW_MODE_V1", true\);/);
+  assert.match(source, /else if \(prestartModeV1 && !started\) mode = "prestart";/);
+  assert.match(source, /else if \(!hasInteractivePayload\) mode = "recovery";/);
+  assert.match(source, /const promptBody = mode === "interactive" \? promptBodyRaw : "";/);
+  assert.match(source, /const options = mode === "interactive" \? optionsRaw : \[\];/);
   assert.match(source, /waiting_locale: waitingLocale,/);
-  assert.match(source, /recovery_action: waitingLocale && retryHint === "poll" \? "retry_poll" : "",/);
+  assert.match(source, /mode,/);
+  assert.match(source, /recovery_action:[\s\S]*mode === "recovery" \? "retry_poll" : ""/);
 });
 
 test("run_step handler always emits model-safe result and keeps full payload widget-only", () => {

@@ -568,12 +568,15 @@ export function render(overrideToolOutput?: unknown): void {
     uiPayload && typeof uiPayload.view === "object" && uiPayload.view
       ? (uiPayload.view as Record<string, unknown>)
       : {};
+  const viewMode = String(uiView.mode || "").trim().toLowerCase();
   const localeBucket = baseLang(localeCandidate);
   const localeKnownNonEn =
     Boolean(localeBucket) && localeBucket !== "en" && localeBucket !== "default";
   const serverExplicitWaiting =
-    String(uiView.mode || "").trim().toLowerCase() === "waiting_locale" ||
+    viewMode === "waiting_locale" ||
     uiView.waiting_locale === true;
+  const serverExplicitPrestart = viewMode === "prestart";
+  const serverExplicitRecovery = viewMode === "recovery";
   const forceLocaleWait = localeKnownNonEn && uiStringsStatus !== "ready";
   const bootstrapState = computeBootstrapRenderState({
     hydration,
@@ -700,7 +703,7 @@ export function render(overrideToolOutput?: unknown): void {
     setWidgetStateSafe({ language: langPersist });
   }
 
-  const showPreStart = hasToolOutputVal ? !serverStarted : !sessionStarted;
+  const showPreStart = serverExplicitPrestart || (hasToolOutputVal ? !serverStarted : !sessionStarted);
 
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
@@ -721,7 +724,14 @@ export function render(overrideToolOutput?: unknown): void {
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
 
-  if (bootstrapWaitingLocale && !interactiveFallbackActive) {
+  if ((bootstrapWaitingLocale && !interactiveFallbackActive) || serverExplicitRecovery) {
+    if (localeKnownNonEn && bootstrapWaitingLocale && !interactiveFallbackActive) {
+      console.log("[ui_non_en_wait_shell_rendered]", {
+        resolved_language: resolved.resolved_language,
+        ui_strings_status: uiStringsStatus,
+        bootstrap_phase: String(uiFlags.bootstrap_phase || uiView.bootstrap_phase || ""),
+      });
+    }
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
@@ -740,7 +750,7 @@ export function render(overrideToolOutput?: unknown): void {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      if (hydration.retry_exhausted) {
+      if (serverExplicitRecovery || hydration.retry_exhausted) {
         renderHydrationRecovery(prestartEl, lang);
         const retryBtn = document.getElementById("btnHydrationRetry") as HTMLButtonElement | null;
         if (retryBtn) {

@@ -10,6 +10,7 @@ import {
   handleToolResultAndMaybeScheduleBootstrapRetry,
   handleBridgeResponse,
   mergeToolOutputWithResponseMetadata,
+  notifyHostTransportSignal,
   setBridgeEnabled,
   setSendEnabled,
   setLoading,
@@ -103,11 +104,13 @@ if (typeof window !== "undefined") {
     const method = typeof data.method === "string" ? data.method : "";
     if (method.startsWith("ui/")) {
       setBridgeEnabled(true);
+      notifyHostTransportSignal("bridge_message");
     }
     if (method === "ui/notifications/tool-result") {
       const payload = normalizeHostToolResultNotification(data.params);
       try {
         handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
+        notifyHostTransportSignal("host_notification");
       } catch (err) {
         console.error(err);
       } finally {
@@ -250,6 +253,7 @@ if (typeof window !== "undefined") {
       );
       if (payload && typeof payload === "object" && Object.keys(payload).length > 0) {
         handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
+        notifyHostTransportSignal("set_globals");
       } else {
         render();
       }
