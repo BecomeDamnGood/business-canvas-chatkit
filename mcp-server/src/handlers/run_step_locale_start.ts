@@ -20,6 +20,8 @@ export type BootstrapContractState = {
   retry_hint: "poll" | "";
 };
 
+export const VIEW_CONTRACT_VERSION = "v1";
+
 export type BootstrapFsmInput = {
   hasState: boolean;
   hasCurrentStep: boolean;
@@ -440,6 +442,42 @@ export function applyUiGateState(params: {
     ui_gate_since_ms: contract.since_ms,
     bootstrap_phase: contract.phase,
   } as CanvasState;
+}
+
+export function sanitizeBootstrapIngressState(params: {
+  previousState: CanvasState | null | undefined;
+  candidateState: CanvasState;
+  forceRecoverMs: number;
+  flags: LocaleUiFlags;
+  criticalKeys: string[];
+  nowMs: number;
+}): { state: CanvasState; readyClaimRejected: boolean } {
+  const { previousState, candidateState, forceRecoverMs, flags, criticalKeys, nowMs } = params;
+  const lang = normalizeLangCode(
+    String(
+      (candidateState as any)?.language ||
+      (candidateState as any)?.ui_strings_requested_lang ||
+      (candidateState as any)?.ui_strings_lang ||
+      ""
+    )
+  );
+  const claimsReady =
+    String((candidateState as any)?.ui_strings_status ?? "").trim().toLowerCase() === "ready" &&
+    String((candidateState as any)?.ui_strings_critical_ready ?? "").trim().toLowerCase() === "true";
+  const criticalRenderable = lang === "en" || hasRenderableUiStringsForState(candidateState, criticalKeys);
+  const gated = applyUiGateState({
+    previousState,
+    nextState: candidateState,
+    forceRecoverMs,
+    flags,
+    criticalKeys,
+    nowMs,
+  });
+  const readyClaimRejected =
+    claimsReady &&
+    !criticalRenderable &&
+    String((gated as any)?.ui_strings_status ?? "").trim().toLowerCase() !== "ready";
+  return { state: gated, readyClaimRejected };
 }
 
 export function computeUiBootstrapStatus(params: {

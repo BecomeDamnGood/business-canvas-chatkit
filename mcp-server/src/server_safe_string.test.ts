@@ -76,7 +76,9 @@ test("open_canvas bootstrap writes canonical state.language_source (never transp
   assert.match(source, /const baseReady = stringsRenderable \|\| finalLanguage === "en";/);
   assert.match(source, /\[open_canvas_ready_claim_inconsistent\]/);
   assert.match(source, /const strictReadinessV1 = envFlagEnabled\("UI_OPEN_CANVAS_STRICT_READINESS_V1", true\);/);
-  assert.match(source, /const gatedBootstrapState = strictReadinessV1[\s\S]*applyUiGateState\(/);
+  assert.match(source, /const gatedBootstrapState = sanitized\.state as Record<string, unknown>;/);
+  assert.match(source, /sanitizeBootstrapIngressState\(/);
+  assert.match(source, /\[ingress_ready_claim_rejected\]/);
   assert.doesNotMatch(source, /const bootstrapState: Record<string, unknown> = \{\s*\.\.\.sourceState,/);
   assert.match(source, /intro_shown_session: "false"/);
   assert.match(source, /last_specialist_result: \{\}/);
@@ -95,6 +97,19 @@ test("run_step wrapper never treats bootstrap poll or technical actions as start
   assert.match(source, /const shouldSeedInitialUserMessage =[\s\S]*!isActionMessage[\s\S]*!isBootstrapPollAction[\s\S]*!isTechnicalRouteMessage/);
   assert.match(source, /\.\.\.\(hasInitiator \|\| !shouldSeedInitialUserMessage \? \{\} : \{ initial_user_message: normalizedMessage \}\)/);
   assert.match(source, /const shouldMarkStarted =[\s\S]*!isBootstrapPollAction[\s\S]*\(isStartAction \|\| !isActionMessage\)/);
+});
+
+test("bootstrap session\/epoch guards drop stale payloads and keep monotone sequencing", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /const bootstrapSessionRegistry = new Map/);
+  assert.match(source, /function isStaleBootstrapPayload\(/);
+  assert.match(source, /function registerBootstrapSnapshot\(/);
+  assert.match(source, /function attachBootstrapDiagnostics\(/);
+  assert.match(source, /const responseSeq = nextBootstrapResponseSeq\(\);/);
+  assert.match(source, /\[stale_bootstrap_payload_dropped\]/);
+  assert.match(source, /bootstrap_session_id/);
+  assert.match(source, /bootstrap_epoch/);
+  assert.match(source, /response_seq/);
 });
 
 test("open_canvas has idempotent dedupe cache guard", () => {

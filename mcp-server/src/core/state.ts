@@ -155,6 +155,12 @@ export const CanvasStateZod = z.object({
   ui_strings_full_ready: BoolStringZod,
   ui_strings_background_inflight: BoolStringZod,
   bootstrap_phase: BootstrapPhaseZod.optional(),
+  bootstrap_session_id: z.string().optional(),
+  bootstrap_epoch: z.number().int().positive().optional(),
+  open_canvas_invocation_id: z.string().optional(),
+  view_contract_version: z.string().optional(),
+  response_seq: z.number().int().nonnegative().optional(),
+  response_kind: z.enum(["open_canvas", "run_step"]).optional(),
 
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
@@ -345,6 +351,24 @@ export function normalizeState(raw: unknown): CanvasState {
           ui_gate_status,
           ui_strings_status,
         });
+  const bootstrap_session_id = String((r as any).bootstrap_session_id ?? "").trim();
+  const bootstrap_epoch_raw = Number((r as any).bootstrap_epoch ?? 0);
+  const bootstrap_epoch =
+    Number.isFinite(bootstrap_epoch_raw) && bootstrap_epoch_raw > 0
+      ? Math.trunc(bootstrap_epoch_raw)
+      : 0;
+  const open_canvas_invocation_id = String((r as any).open_canvas_invocation_id ?? "").trim();
+  const view_contract_version = String((r as any).view_contract_version ?? "").trim();
+  const response_seq_raw = Number((r as any).response_seq ?? 0);
+  const response_seq =
+    Number.isFinite(response_seq_raw) && response_seq_raw >= 0
+      ? Math.trunc(response_seq_raw)
+      : 0;
+  const response_kind_raw = String((r as any).response_kind ?? "").trim();
+  const response_kind =
+    response_kind_raw === "open_canvas" || response_kind_raw === "run_step"
+      ? (response_kind_raw as "open_canvas" | "run_step")
+      : "";
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
@@ -438,6 +462,12 @@ export function normalizeState(raw: unknown): CanvasState {
     ui_strings_full_ready,
     ui_strings_background_inflight,
     bootstrap_phase,
+    ...(bootstrap_session_id ? { bootstrap_session_id } : {}),
+    ...(bootstrap_epoch > 0 ? { bootstrap_epoch } : {}),
+    ...(open_canvas_invocation_id ? { open_canvas_invocation_id } : {}),
+    ...(view_contract_version ? { view_contract_version } : {}),
+    ...(response_seq > 0 ? { response_seq } : {}),
+    ...(response_kind ? { response_kind } : {}),
 
     last_specialist_result,
 

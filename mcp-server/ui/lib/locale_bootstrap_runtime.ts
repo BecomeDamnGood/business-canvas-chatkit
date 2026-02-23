@@ -38,6 +38,10 @@ export type ResolvedWidgetPayload = {
   needs_hydration: boolean;
   waiting_reason: WaitingReason;
   bootstrap_phase: BootstrapPhase | "";
+  bootstrap_session_id: string;
+  bootstrap_epoch: number;
+  response_seq: number;
+  response_kind: "open_canvas" | "run_step" | "";
 };
 
 export type HydrationStatus = {
@@ -64,6 +68,9 @@ type PayloadCandidate = {
   richness: number;
   freshness: number | null;
   order: number;
+  bootstrap_session_id: string;
+  bootstrap_epoch: number;
+  response_seq: number;
 };
 
 const WIDGET_RESULT_KEYS = new Set([
@@ -210,6 +217,28 @@ function parseFreshness(value: unknown): number | null {
   return null;
 }
 
+function parsePositiveInt(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
+  if (typeof value === "string") {
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+  }
+  return 0;
+}
+
+function sessionInfoForResult(result: Record<string, unknown>): {
+  bootstrap_session_id: string;
+  bootstrap_epoch: number;
+  response_seq: number;
+} {
+  const state = toRecord(result.state);
+  return {
+    bootstrap_session_id: String(state.bootstrap_session_id || result.bootstrap_session_id || "").trim(),
+    bootstrap_epoch: parsePositiveInt(state.bootstrap_epoch || result.bootstrap_epoch),
+    response_seq: parsePositiveInt(state.response_seq || result.response_seq),
+  };
+}
+
 function freshnessForResult(result: Record<string, unknown>): number | null {
   const direct = parseFreshness(result.updated_at_ms ?? result.result_version ?? result.turn_index);
   if (direct !== null) return direct;
@@ -274,12 +303,16 @@ function collectPayloadCandidates(raw: unknown, orderOffset = 0): PayloadCandida
   const add = (source: PayloadSource, value: unknown, order: number): void => {
     if (!isWidgetResultLike(value)) return;
     const rec = value as Record<string, unknown>;
+    const sessionInfo = sessionInfoForResult(rec);
     candidates.push({
       source,
       value: rec,
       richness: computePayloadRichness(rec),
       freshness: freshnessForResult(rec),
       order: order + orderOffset,
+      bootstrap_session_id: sessionInfo.bootstrap_session_id,
+      bootstrap_epoch: sessionInfo.bootstrap_epoch,
+      response_seq: sessionInfo.response_seq,
     });
   };
   add("meta.widget_result", meta.widget_result, 0);
@@ -297,9 +330,35 @@ function collectPayloadCandidates(raw: unknown, orderOffset = 0): PayloadCandida
 
 function pickBestCandidate(candidates: PayloadCandidate[]): PayloadCandidate | null {
   if (!candidates.length) return null;
-  let best = candidates[0];
-  for (let i = 1; i < candidates.length; i += 1) {
-    const cur = candidates[i];
+  let scoped = candidates;
+  const candidatesWithSession = candidates.filter(
+    (candidate) => candidate.bootstrap_session_id && candidate.bootstrap_epoch > 0
+  );
+  if (candidatesWithSession.length > 0) {
+    let anchor = candidatesWithSession[0];
+    for (let i = 1; i < candidatesWithSession.length; i += 1) {
+      const cur = candidatesWithSession[i];
+      if (cur.bootstrap_epoch !== anchor.bootstrap_epoch) {
+        if (cur.bootstrap_epoch > anchor.bootstrap_epoch) anchor = cur;
+        continue;
+      }
+      if (cur.response_seq !== anchor.response_seq) {
+        if (cur.response_seq > anchor.response_seq) anchor = cur;
+        continue;
+      }
+      if (cur.order < anchor.order) anchor = cur;
+    }
+    scoped = candidates.filter(
+      (candidate) =>
+        candidate.bootstrap_session_id === anchor.bootstrap_session_id &&
+        candidate.bootstrap_epoch === anchor.bootstrap_epoch
+    );
+    if (!scoped.length) scoped = [anchor];
+  }
+
+  let best = scoped[0];
+  for (let i = 1; i < scoped.length; i += 1) {
+    const cur = scoped[i];
     if (cur.richness !== best.richness) {
       if (cur.richness > best.richness) best = cur;
       continue;
@@ -390,11 +449,37 @@ export function resolveWidgetPayload(
     needs_hydration: false,
     waiting_reason: "none",
     bootstrap_phase: bootstrapPhase,
+    bootstrap_session_id: best?.bootstrap_session_id || "",
+    bootstrap_epoch: best?.bootstrap_epoch || 0,
+    response_seq: best?.response_seq || 0,
+    response_kind: (() => {
+      const state = toRecord(result.state);
+      const kind = String(state.response_kind || result.response_kind || "").trim();
+      if (kind === "open_canvas" || kind === "run_step") return kind;
+      return "";
+    })(),
   };
   const hydration = computeHydrationState(temp, options?.retryState);
   temp.needs_hydration = hydration.needs_hydration;
   temp.waiting_reason = hydration.waiting_reason;
   return temp;
+}
+
+export type BootstrapOrdering = {
+  bootstrap_session_id: string;
+  bootstrap_epoch: number;
+  response_seq: number;
+  response_kind: "open_canvas" | "run_step" | "";
+};
+
+export function extractBootstrapOrdering(raw: unknown, options?: { fallbackRaw?: unknown }): BootstrapOrdering {
+  const resolved = resolveWidgetPayload(raw, options);
+  return {
+    bootstrap_session_id: resolved.bootstrap_session_id,
+    bootstrap_epoch: resolved.bootstrap_epoch,
+    response_seq: resolved.response_seq,
+    response_kind: resolved.response_kind,
+  };
 }
 
 export function normalizeToolOutput(

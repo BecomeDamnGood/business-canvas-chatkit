@@ -12,11 +12,18 @@ import {
 import {
   computeBootstrapRenderState as computeBootstrapRenderStateCore,
   computeHydrationState as computeHydrationStateCore,
+  extractBootstrapOrdering as extractBootstrapOrderingCore,
   mergeToolOutputWithResponseMetadata,
   normalizeToolOutput as normalizeToolOutputCore,
   resolveWidgetPayload as resolveWidgetPayloadCore,
 } from "./locale_bootstrap_runtime.js";
-export type { BootstrapRenderState, HydrationStatus, ResolvedWidgetPayload, WaitingReason } from "./locale_bootstrap_runtime.js";
+export type {
+  BootstrapOrdering,
+  BootstrapRenderState,
+  HydrationStatus,
+  ResolvedWidgetPayload,
+  WaitingReason,
+} from "./locale_bootstrap_runtime.js";
 import type { HydrationStatus, ResolvedWidgetPayload } from "./locale_bootstrap_runtime.js";
 export { mergeToolOutputWithResponseMetadata };
 
@@ -32,6 +39,8 @@ type QueuedStartAction = {
   message: string;
   extraState: Record<string, unknown>;
   queuedAtMs: number;
+  expectedBootstrapSessionId: string;
+  expectedBootstrapEpoch: number;
 };
 const START_HANDSHAKE_MAX_RETRIES = 5;
 const START_HANDSHAKE_RETRY_MS = 450;
@@ -121,14 +130,19 @@ function queueStartAction(params: {
   extraState?: Record<string, unknown>;
   reason: string;
 }): void {
+  const ordering = latestBootstrapOrderingFromState();
   queuedStartAction = {
     message: String(params.message || "ACTION_START"),
     extraState: params.extraState && typeof params.extraState === "object" ? { ...params.extraState } : {},
     queuedAtMs: Date.now(),
+    expectedBootstrapSessionId: ordering.sessionId,
+    expectedBootstrapEpoch: ordering.epoch,
   };
   console.log("[ui_start_action_queued]", {
     reason: params.reason,
     retry_count: startHandshakeRetryCount,
+    bootstrap_session_id: ordering.sessionId,
+    bootstrap_epoch: ordering.epoch,
   });
   setWidgetStateSafe({
     start_dispatch_state: "queued",
@@ -148,6 +162,29 @@ async function flushQueuedStartAction(source: string): Promise<void> {
   if (!queuedStartAction) return;
   const transportStatus = resolveTransportStatus();
   if (transportStatus === "unavailable") {
+    scheduleQueuedStartHandshakeRetry(source);
+    return;
+  }
+  const latestOrdering = latestBootstrapOrderingFromState();
+  const expectedSessionId = queuedStartAction.expectedBootstrapSessionId;
+  const expectedEpoch = queuedStartAction.expectedBootstrapEpoch;
+  const sessionCompatible =
+    !expectedSessionId ||
+    !latestOrdering.sessionId ||
+    latestOrdering.sessionId === expectedSessionId;
+  const epochCompatible =
+    expectedEpoch <= 0 ||
+    latestOrdering.epoch <= 0 ||
+    latestOrdering.epoch >= expectedEpoch;
+  const sessionGuardEnabled = uiFlagEnabled("UI_BOOTSTRAP_SESSION_GUARD_V1", true);
+  if (sessionGuardEnabled && (!sessionCompatible || !epochCompatible)) {
+    console.log("[bootstrap_session_epoch_mismatch]", {
+      source,
+      expected_session_id: expectedSessionId,
+      latest_session_id: latestOrdering.sessionId,
+      expected_epoch: expectedEpoch,
+      latest_epoch: latestOrdering.epoch,
+    });
     scheduleQueuedStartHandshakeRetry(source);
     return;
   }
@@ -189,6 +226,23 @@ function toLower(value: unknown): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function parsePositiveInt(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.trunc(n);
+}
+
+function latestBootstrapOrderingFromState(): { sessionId: string; epoch: number } {
+  const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
+  const state = latest?.state && typeof latest.state === "object"
+    ? (latest.state as Record<string, unknown>)
+    : {};
+  return {
+    sessionId: String(state.bootstrap_session_id || "").trim(),
+    epoch: parsePositiveInt(state.bootstrap_epoch),
+  };
+}
+
 function normalizeToolOutput(
   raw: unknown,
   options?: { fallbackRaw?: unknown }
@@ -219,6 +273,15 @@ export function resolveWidgetPayload(
       retry_count: localeWaitRetryCount,
       retry_exhausted: localeWaitRetryExhausted,
     },
+  });
+}
+
+export function extractBootstrapOrdering(
+  raw: unknown,
+  options?: { fallbackRaw?: unknown }
+): import("./locale_bootstrap_runtime.js").BootstrapOrdering {
+  return extractBootstrapOrderingCore(raw, {
+    fallbackRaw: options?.fallbackRaw,
   });
 }
 

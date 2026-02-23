@@ -1129,14 +1129,17 @@ test("computeBootstrapRenderState keeps recovery routing deterministic when retr
 test("main source handles host tool-result via shared bootstrap scheduler", () => {
   const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
   assert.match(source, /function normalizeHostToolResultNotification\(/);
+  assert.match(source, /function shouldAcceptBootstrapPayload\(/);
+  assert.match(source, /function ingestHostPayload\(/);
+  assert.match(source, /stale_bootstrap_payload_dropped/);
   assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(toolOutputCandidate, metadata\)/);
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
   assert.match(source, /notifyHostTransportSignal\("bridge_message"\)/);
   assert.match(source, /notifyHostTransportSignal\("host_notification"\)/);
   assert.match(source, /notifyHostTransportSignal\("set_globals"\)/);
-  assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "host_notification" \}\)/);
-  assert.match(source, /openai:set_globals[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "set_globals" \}\)/);
+  assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*ingestHostPayload\(payload, "host_notification"\)/);
+  assert.match(source, /openai:set_globals[\s\S]*ingestHostPayload\(payload, "set_globals"\)/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(\s*host\?\.toolOutput,\s*host\?\.toolResponseMetadata\s*\)/);
   assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*callRunStep\("ACTION_START", \{ started: "true" \}\)/);
   assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
@@ -1219,6 +1222,7 @@ test("ui actions source supports self-heal transport and queued ACTION_START fal
   assert.match(source, /ui_start_action_queued/);
   assert.match(source, /ui_start_action_flushed/);
   assert.match(source, /ui_start_dispatch_failed/);
+  assert.match(source, /bootstrap_session_epoch_mismatch/);
   assert.match(source, /notifyHostTransportSignal/);
   assert.match(source, /function canUseBridge\(\): boolean \{[\s\S]*return bridgeEnabled;/);
   assert.match(source, /const transportPrimary = hasCallTool \? "callTool" : "bridge";/);
@@ -1330,6 +1334,47 @@ test("resolveWidgetPayload applies freshness override when metadata is available
     String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""),
     "Newer"
   );
+});
+
+test("resolveWidgetPayload ignores stale cross-session fallback payloads", () => {
+  const resolved = resolveWidgetPayload(
+    {
+      structuredContent: {
+        result: {
+          state: {
+            current_step: "step_0",
+            bootstrap_session_id: "session_new",
+            bootstrap_epoch: 2,
+            response_seq: 20,
+          },
+          ui: { questionText: "NewSession" },
+        },
+      },
+    },
+    {
+      fallbackRaw: {
+        _meta: {
+          widget_result: {
+            state: {
+              current_step: "step_0",
+              bootstrap_session_id: "session_old",
+              bootstrap_epoch: 1,
+              response_seq: 999,
+            },
+            ui: {
+              questionText: "OldSessionShouldNotWin",
+              big_blob: "x".repeat(200),
+            },
+          },
+        },
+      },
+    } as any
+  );
+
+  assert.equal(resolved.bootstrap_session_id, "session_new");
+  assert.equal(resolved.bootstrap_epoch, 2);
+  assert.equal(resolved.response_seq, 20);
+  assert.equal(String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""), "NewSession");
 });
 
 test("computeHydrationState uses shared v2_minimal missing-state rule", () => {

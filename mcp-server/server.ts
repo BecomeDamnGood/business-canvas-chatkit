@@ -22,7 +22,10 @@ import {
 } from "./src/core/state.js";
 import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
 import { safeString } from "./src/server_safe_string.js";
-import { applyUiGateState } from "./src/handlers/run_step_locale_start.js";
+import {
+  sanitizeBootstrapIngressState,
+  VIEW_CONTRACT_VERSION,
+} from "./src/handlers/run_step_locale_start.js";
 
 function loadDotEnv() {
   try {
@@ -88,6 +91,7 @@ const UI_RESOURCE_NAME = "business-canvas-widget";
 const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
 const OPEN_CANVAS_DEDUPE_TTL_MS = Number(process.env.OPEN_CANVAS_DEDUPE_TTL_MS || 5000);
+const BOOTSTRAP_SESSION_REGISTRY_TTL_MS = Number(process.env.BOOTSTRAP_SESSION_REGISTRY_TTL_MS || 30 * 60 * 1000);
 const OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0 = [
   "prestart.headline",
   "prestart.proven.title",
@@ -109,6 +113,15 @@ type OpenCanvasToolResponse = {
 };
 
 const openCanvasDedupeCache = new Map<string, { expiresAt: number; response: OpenCanvasToolResponse }>();
+type BootstrapSessionSnapshot = {
+  sessionId: string;
+  epoch: number;
+  lastResponseSeq: number;
+  updatedAtMs: number;
+  lastWidgetResult: Record<string, unknown>;
+};
+const bootstrapSessionRegistry = new Map<string, BootstrapSessionSnapshot>();
+let bootstrapResponseSeqCounter = 0;
 
 function envFlagEnabled(name: string, defaultValue: boolean): boolean {
   const raw = safeString(process.env[name] ?? "").trim().toLowerCase();
@@ -148,6 +161,9 @@ function compactOpenCanvasState(state: unknown): Record<string, unknown> {
     language_source: safeString(source.language_source ?? ""),
     ui_strings_status: safeString(source.ui_strings_status ?? ""),
     ui_bootstrap_status: safeString(source.ui_bootstrap_status ?? ""),
+    bootstrap_session_id: safeString(source.bootstrap_session_id ?? ""),
+    bootstrap_epoch: parsePositiveInt(source.bootstrap_epoch),
+    response_seq: parsePositiveInt(source.response_seq),
     step_0_final: safeString(source.step_0_final ?? ""),
     business_name: safeString(source.business_name ?? ""),
     initial_user_message: safeString(source.initial_user_message ?? ""),
@@ -199,6 +215,175 @@ function stampOpenCanvasDedupeMetadata(
     widgetState.open_canvas_dedupe_at_ms = dedupeAtMs;
   }
   return response;
+}
+
+function parsePositiveInt(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.trunc(n);
+}
+
+function nextBootstrapResponseSeq(): number {
+  bootstrapResponseSeqCounter += 1;
+  return bootstrapResponseSeqCounter;
+}
+
+function purgeExpiredBootstrapSessions(nowMs: number): void {
+  for (const [sessionId, snapshot] of bootstrapSessionRegistry.entries()) {
+    if (snapshot.updatedAtMs + BOOTSTRAP_SESSION_REGISTRY_TTL_MS <= nowMs) {
+      bootstrapSessionRegistry.delete(sessionId);
+    }
+  }
+}
+
+function resolveBootstrapIdentity(args: {
+  sourceState: Record<string, unknown>;
+  isOpenCanvas: boolean;
+}): {
+  bootstrap_session_id: string;
+  bootstrap_epoch: number;
+  open_canvas_invocation_id: string;
+} {
+  const sourceState = args.sourceState || {};
+  const persistedSessionId = safeString(sourceState.bootstrap_session_id ?? "").trim();
+  const persistedEpoch = parsePositiveInt(sourceState.bootstrap_epoch) || 1;
+  const currentStep = safeString(sourceState.current_step ?? "").trim();
+  const started = safeString(sourceState.started ?? "").trim().toLowerCase() === "true";
+  const shouldResetEpoch = args.isOpenCanvas && Boolean(persistedSessionId) && (started || (currentStep && currentStep !== "step_0"));
+  const bootstrap_session_id = persistedSessionId || randomUUID();
+  const bootstrap_epoch = shouldResetEpoch ? persistedEpoch + 1 : persistedEpoch;
+  const open_canvas_invocation_id = args.isOpenCanvas ? randomUUID() : safeString(sourceState.open_canvas_invocation_id ?? "");
+  return { bootstrap_session_id, bootstrap_epoch, open_canvas_invocation_id };
+}
+
+function attachBootstrapDiagnostics(args: {
+  responseKind: "open_canvas" | "run_step";
+  resultForClient: Record<string, unknown>;
+  bootstrapSessionId: string;
+  bootstrapEpoch: number;
+  responseSeq: number;
+  openCanvasInvocationId?: string;
+}): Record<string, unknown> {
+  const {
+    responseKind,
+    resultForClient,
+    bootstrapSessionId,
+    bootstrapEpoch,
+    responseSeq,
+    openCanvasInvocationId,
+  } = args;
+  const stateRaw =
+    resultForClient.state && typeof resultForClient.state === "object"
+      ? (resultForClient.state as Record<string, unknown>)
+      : {};
+  const stateWithDiagnostics: Record<string, unknown> = {
+    ...stateRaw,
+    view_contract_version: VIEW_CONTRACT_VERSION,
+    response_seq: responseSeq,
+    response_kind: responseKind,
+  };
+  if (bootstrapSessionId) stateWithDiagnostics.bootstrap_session_id = bootstrapSessionId;
+  if (bootstrapEpoch > 0) stateWithDiagnostics.bootstrap_epoch = bootstrapEpoch;
+  if (responseKind === "open_canvas" && openCanvasInvocationId) {
+    stateWithDiagnostics.open_canvas_invocation_id = openCanvasInvocationId;
+  }
+  const uiRaw =
+    resultForClient.ui && typeof resultForClient.ui === "object"
+      ? (resultForClient.ui as Record<string, unknown>)
+      : {};
+  const flagsRaw =
+    uiRaw.flags && typeof uiRaw.flags === "object"
+      ? (uiRaw.flags as Record<string, unknown>)
+      : {};
+  const uiWithDiagnostics: Record<string, unknown> = {
+    ...uiRaw,
+    flags: {
+      ...flagsRaw,
+      view_contract_version: VIEW_CONTRACT_VERSION,
+      response_seq: responseSeq,
+      response_kind: responseKind,
+      ...(responseKind === "open_canvas" && openCanvasInvocationId ? { open_canvas_invocation_id: openCanvasInvocationId } : {}),
+    },
+  };
+  if (bootstrapSessionId) {
+    (uiWithDiagnostics.flags as Record<string, unknown>).bootstrap_session_id = bootstrapSessionId;
+  }
+  if (bootstrapEpoch > 0) {
+    (uiWithDiagnostics.flags as Record<string, unknown>).bootstrap_epoch = bootstrapEpoch;
+  }
+  return {
+    ...resultForClient,
+    state: stateWithDiagnostics,
+    ui: uiWithDiagnostics,
+    response_seq: responseSeq,
+    response_kind: responseKind,
+    ...(bootstrapSessionId ? { bootstrap_session_id: bootstrapSessionId } : {}),
+    ...(bootstrapEpoch > 0 ? { bootstrap_epoch: bootstrapEpoch } : {}),
+    ...(responseKind === "open_canvas" && openCanvasInvocationId ? { open_canvas_invocation_id: openCanvasInvocationId } : {}),
+  };
+}
+
+function readBootstrapOrdering(result: Record<string, unknown> | null | undefined): {
+  sessionId: string;
+  epoch: number;
+  responseSeq: number;
+} {
+  const root = result && typeof result === "object" ? result : {};
+  const state =
+    root && typeof (root as any).state === "object"
+      ? ((root as any).state as Record<string, unknown>)
+      : {};
+  const sessionId = safeString(
+    state.bootstrap_session_id ?? (root as any).bootstrap_session_id ?? ""
+  ).trim();
+  const epoch = parsePositiveInt(state.bootstrap_epoch ?? (root as any).bootstrap_epoch);
+  const responseSeq = parsePositiveInt(state.response_seq ?? (root as any).response_seq);
+  return { sessionId, epoch, responseSeq };
+}
+
+function registerBootstrapSnapshot(params: {
+  result: Record<string, unknown>;
+  nowMs: number;
+}): void {
+  purgeExpiredBootstrapSessions(params.nowMs);
+  const ordering = readBootstrapOrdering(params.result);
+  if (!ordering.sessionId || ordering.epoch <= 0 || ordering.responseSeq <= 0) return;
+  const existing = bootstrapSessionRegistry.get(ordering.sessionId);
+  if (
+    existing &&
+    (ordering.epoch < existing.epoch ||
+      (ordering.epoch === existing.epoch && ordering.responseSeq < existing.lastResponseSeq))
+  ) {
+    return;
+  }
+  bootstrapSessionRegistry.set(ordering.sessionId, {
+    sessionId: ordering.sessionId,
+    epoch: ordering.epoch,
+    lastResponseSeq: ordering.responseSeq,
+    updatedAtMs: params.nowMs,
+    lastWidgetResult: JSON.parse(JSON.stringify(params.result)) as Record<string, unknown>,
+  });
+}
+
+function isStaleBootstrapPayload(params: {
+  sessionId: string;
+  epoch: number;
+  responseSeq: number;
+  nowMs: number;
+}): { stale: boolean; latest: BootstrapSessionSnapshot | null } {
+  purgeExpiredBootstrapSessions(params.nowMs);
+  const latest = bootstrapSessionRegistry.get(params.sessionId) || null;
+  if (!latest) return { stale: false, latest: null };
+  if (params.epoch > 0 && params.epoch < latest.epoch) return { stale: true, latest };
+  if (
+    params.epoch > 0 &&
+    params.epoch === latest.epoch &&
+    params.responseSeq > 0 &&
+    params.responseSeq < latest.lastResponseSeq
+  ) {
+    return { stale: true, latest };
+  }
+  return { stale: false, latest };
 }
 
 function getHeader(req: any, name: string): string {
@@ -490,7 +675,12 @@ function buildOpenCanvasBootstrapResponse(args: {
     uiBootstrapPollActionV1: envFlagEnabled("UI_BOOTSTRAP_POLL_ACTION_V1", true),
   };
   const strictReadinessV1 = envFlagEnabled("UI_OPEN_CANVAS_STRICT_READINESS_V1", true);
+  const ingressSanitizerV1 = envFlagEnabled("UI_INGRESS_STATE_SANITIZER_V1", true);
   const forceRecoverMs = Number(process.env.UI_GATE_FORCE_RECOVER_MS || 4000);
+  const bootstrapIdentity = resolveBootstrapIdentity({
+    sourceState,
+    isOpenCanvas: true,
+  });
   const bootstrapState: Record<string, unknown> = {
     state_version: safeString(sourceState.state_version || defaults.state_version) || defaults.state_version,
     current_step: "step_0",
@@ -516,6 +706,10 @@ function buildOpenCanvasBootstrapResponse(args: {
     ui_strings_full_ready: baseReady ? "true" : "false",
     ui_strings_background_inflight: baseReady ? "false" : "true",
     bootstrap_phase: baseReady ? "ready" : "waiting_locale",
+    bootstrap_session_id: bootstrapIdentity.bootstrap_session_id,
+    bootstrap_epoch: bootstrapIdentity.bootstrap_epoch,
+    open_canvas_invocation_id: bootstrapIdentity.open_canvas_invocation_id,
+    view_contract_version: VIEW_CONTRACT_VERSION,
     last_specialist_result: {},
     step_0_final: safeString(sourceState.step_0_final || ""),
     dream_final: "",
@@ -539,21 +733,32 @@ function buildOpenCanvasBootstrapResponse(args: {
   if (seedMessage && !safeString(bootstrapState.initial_user_message ?? "").trim()) {
     bootstrapState.initial_user_message = seedMessage;
   }
-  const gatedBootstrapState = strictReadinessV1
-    ? (applyUiGateState({
+  const nowMs = Date.now();
+  const candidateState = normalizeState(bootstrapState);
+  const sanitized = strictReadinessV1 && ingressSanitizerV1
+    ? sanitizeBootstrapIngressState({
         previousState: sourceState,
-        nextState: normalizeState(bootstrapState),
+        candidateState,
         forceRecoverMs: Number.isFinite(forceRecoverMs) && forceRecoverMs > 0 ? Math.trunc(forceRecoverMs) : 4000,
         flags: localeFlags,
         criticalKeys: [...OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0],
-        nowMs: Date.now(),
-      }) as Record<string, unknown>)
-    : (normalizeState(bootstrapState) as Record<string, unknown>);
+        nowMs,
+      })
+    : { state: candidateState, readyClaimRejected: false };
+  if (sanitized.readyClaimRejected) {
+    console.warn("[ingress_ready_claim_rejected]", {
+      final_language: finalLanguage,
+      locale_hint_source: args.locale_hint_source,
+      source_state_keys: Object.keys(sourceState).length,
+    });
+  }
+  const gatedBootstrapState = sanitized.state as Record<string, unknown>;
   const waitingLocale = safeString(gatedBootstrapState.ui_gate_status ?? "") === "waiting_locale";
   const interactiveFallbackActive = safeString(gatedBootstrapState.bootstrap_phase ?? "") === "interactive_fallback";
   const bootstrapInteractiveReady = !waitingLocale || interactiveFallbackActive;
+  const responseSeq = nextBootstrapResponseSeq();
 
-  const resultForClient: Record<string, unknown> = {
+  const resultForClientBase: Record<string, unknown> = {
     ok: true,
     tool: "open_canvas",
     current_step_id: "step_0",
@@ -575,6 +780,14 @@ function buildOpenCanvasBootstrapResponse(args: {
       },
     },
   };
+  const resultForClient = attachBootstrapDiagnostics({
+    responseKind: "open_canvas",
+    resultForClient: resultForClientBase,
+    bootstrapSessionId: bootstrapIdentity.bootstrap_session_id,
+    bootstrapEpoch: bootstrapIdentity.bootstrap_epoch,
+    responseSeq,
+    openCanvasInvocationId: bootstrapIdentity.open_canvas_invocation_id,
+  });
   const modelResult = buildModelSafeResult(resultForClient);
   const structuredContent: Record<string, unknown> = {
     title: `The Business Strategy Canvas Builder (${VERSION})`,
@@ -656,6 +869,68 @@ async function runStepHandler(args: {
     locale_hint: localeHint,
     locale_hint_source: localeHintSource,
   });
+  const nowMs = Date.now();
+  const incomingOrdering = readBootstrapOrdering({ state: stateForTool });
+  const bootstrapSessionGuardV1 = envFlagEnabled("UI_BOOTSTRAP_SESSION_GUARD_V1", true);
+  if (bootstrapSessionGuardV1 && incomingOrdering.sessionId && incomingOrdering.epoch > 0) {
+    const staleCheck = isStaleBootstrapPayload({
+      sessionId: incomingOrdering.sessionId,
+      epoch: incomingOrdering.epoch,
+      responseSeq: incomingOrdering.responseSeq,
+      nowMs,
+    });
+    if (staleCheck.stale) {
+      const staleSource =
+        staleCheck.latest && staleCheck.latest.lastWidgetResult && Object.keys(staleCheck.latest.lastWidgetResult).length
+          ? (JSON.parse(JSON.stringify(staleCheck.latest.lastWidgetResult)) as Record<string, unknown>)
+          : {
+              ok: true,
+              tool: "run_step",
+              current_step_id: safeString((stateForTool as any).current_step ?? "step_0") || "step_0",
+              active_specialist: safeString((stateForTool as any).active_specialist ?? ""),
+              text: "",
+              prompt: "",
+              specialist: {},
+              state: normalizeState(stateForTool),
+            };
+      const responseSeq = nextBootstrapResponseSeq();
+      const staleResult = attachBootstrapDiagnostics({
+        responseKind: "run_step",
+        resultForClient: staleSource,
+        bootstrapSessionId: staleCheck.latest?.sessionId || incomingOrdering.sessionId,
+        bootstrapEpoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
+        responseSeq,
+      });
+      registerBootstrapSnapshot({
+        result: staleResult,
+        nowMs,
+      });
+      const staleStepMeta =
+        safeString((staleResult.state as Record<string, unknown> | undefined)?.current_step ?? "unknown") || "unknown";
+      const staleSpecialistMeta = safeString(staleResult.active_specialist ?? "unknown") || "unknown";
+      console.warn("[stale_bootstrap_payload_dropped]", {
+        input_mode: inputMode || "chat",
+        action,
+        session_id: incomingOrdering.sessionId,
+        payload_epoch: incomingOrdering.epoch,
+        payload_response_seq: incomingOrdering.responseSeq,
+        latest_epoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
+        latest_response_seq: staleCheck.latest?.lastResponseSeq || 0,
+      });
+      const modelResult = buildModelSafeResult(staleResult);
+      const structuredContent: Record<string, unknown> = {
+        title: `The Business Strategy Canvas Builder (${VERSION})`,
+        meta: `step: ${staleStepMeta} | specialist: ${staleSpecialistMeta}`,
+        result: modelResult,
+      };
+      const uiPayload = buildUiStructured(staleResult);
+      if (uiPayload) structuredContent.ui = uiPayload;
+      return {
+        structuredContent,
+        meta: { widget_result: staleResult },
+      };
+    }
+  }
 
   try {
     const runStepTool = await getRunStep();
@@ -666,10 +941,24 @@ async function runStepHandler(args: {
       locale_hint_source: localeHintSource,
       state: stateForTool,
     });
-    const { debug: _omit, ...resultForClient } = result as {
+    const { debug: _omit, ...resultForClientRaw } = result as {
       debug?: unknown;
       [key: string]: unknown;
     };
+    const resultStateRaw =
+      resultForClientRaw && typeof resultForClientRaw.state === "object" && resultForClientRaw.state
+        ? (resultForClientRaw.state as Record<string, unknown>)
+        : {};
+    const responseSeq = nextBootstrapResponseSeq();
+    const sessionId = safeString(resultStateRaw.bootstrap_session_id ?? incomingOrdering.sessionId).trim();
+    const epoch = parsePositiveInt(resultStateRaw.bootstrap_epoch ?? incomingOrdering.epoch);
+    const resultForClient = attachBootstrapDiagnostics({
+      responseKind: "run_step",
+      resultForClient: resultForClientRaw,
+      bootstrapSessionId: sessionId,
+      bootstrapEpoch: epoch,
+      responseSeq,
+    });
     const stepMeta =
       safeString((result as { state?: { current_step?: string } }).state?.current_step ?? "unknown") || "unknown";
     const specialistMeta =
@@ -716,6 +1005,10 @@ async function runStepHandler(args: {
     };
     const uiPayload = buildUiStructured(resultForClient);
     if (uiPayload) structuredContent.ui = uiPayload;
+    registerBootstrapSnapshot({
+      result: resultForClient,
+      nowMs: Date.now(),
+    });
     return {
       structuredContent,
       meta: {
@@ -764,7 +1057,8 @@ async function runStepHandler(args: {
     })();
     const currentStep = safeString((currentState as any).current_step ?? "step_0") || "step_0";
     
-    const fallbackResult = {
+    const responseSeq = nextBootstrapResponseSeq();
+    const fallbackResultBase = {
       ok: false as const,
       tool: "run_step",
       current_step_id: currentStep,
@@ -779,6 +1073,17 @@ async function runStepHandler(args: {
         retry_action: "reload"
       },
     };
+    const fallbackResult = attachBootstrapDiagnostics({
+      responseKind: "run_step",
+      resultForClient: fallbackResultBase as Record<string, unknown>,
+      bootstrapSessionId: incomingOrdering.sessionId,
+      bootstrapEpoch: incomingOrdering.epoch,
+      responseSeq,
+    });
+    registerBootstrapSnapshot({
+      result: fallbackResult,
+      nowMs: Date.now(),
+    });
     const modelResult = buildModelSafeResult(fallbackResult as Record<string, unknown>);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
@@ -814,6 +1119,10 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");
   const uiGateStatus = safeString((result as any).ui_gate_status || state.ui_gate_status || "");
   const bootstrapPhase = safeString((result as any).bootstrap_phase || state.bootstrap_phase || "");
+  const bootstrapSessionId = safeString((result as any).bootstrap_session_id || state.bootstrap_session_id || "");
+  const bootstrapEpoch = parsePositiveInt((result as any).bootstrap_epoch ?? state.bootstrap_epoch);
+  const responseSeq = parsePositiveInt((result as any).response_seq ?? state.response_seq);
+  const responseKind = safeString((result as any).response_kind || state.response_kind || "");
   const safeState: Record<string, unknown> = {
     current_step: currentStep || "step_0",
   };
@@ -821,6 +1130,10 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (uiStringsStatus) safeState.ui_strings_status = uiStringsStatus;
   if (uiGateStatus) safeState.ui_gate_status = uiGateStatus;
   if (bootstrapPhase) safeState.bootstrap_phase = bootstrapPhase;
+  if (bootstrapSessionId) safeState.bootstrap_session_id = bootstrapSessionId;
+  if (bootstrapEpoch > 0) safeState.bootstrap_epoch = bootstrapEpoch;
+  if (responseSeq > 0) safeState.response_seq = responseSeq;
+  if (responseKind) safeState.response_kind = responseKind;
   return {
     model_result_shape_version: "v2_minimal",
     ok: result.ok === true,
@@ -830,6 +1143,10 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     language: safeString((result as any).language || state.language || ""),
     interactive_fallback_active: flags.interactive_fallback_active === true,
     bootstrap_phase: bootstrapPhase,
+    ...(bootstrapSessionId ? { bootstrap_session_id: bootstrapSessionId } : {}),
+    ...(bootstrapEpoch > 0 ? { bootstrap_epoch: bootstrapEpoch } : {}),
+    ...(responseSeq > 0 ? { response_seq: responseSeq } : {}),
+    ...(responseKind ? { response_kind: responseKind } : {}),
     state: safeState,
   };
 }
@@ -856,6 +1173,7 @@ function buildContentFromResult(
 function buildUiStructured(result: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
   if (!result || typeof result !== "object") return null;
   const prestartModeV1 = envFlagEnabled("UI_PRESTART_VIEW_MODE_V1", true);
+  const viewContractHardenV1 = envFlagEnabled("UI_VIEW_CONTRACT_HARDEN_V1", true);
   const uiObj = (result as any).ui && typeof (result as any).ui === "object" ? (result as any).ui : {};
   const flags =
     uiObj.flags && typeof uiObj.flags === "object"
@@ -867,6 +1185,9 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       : {};
   const waitingLocale = flags.bootstrap_waiting_locale === true;
   const bootstrapPhase = safeString(flags.bootstrap_phase || state.bootstrap_phase || "");
+  const viewContractVersion =
+    safeString(flags.view_contract_version || state.view_contract_version || (result as any).view_contract_version || "") ||
+    VIEW_CONTRACT_VERSION;
   const started = safeString(state.started || "").toLowerCase() === "true";
   const prompt = safeString((result as any).prompt ?? "");
   const text = safeString((result as any).text ?? "");
@@ -879,9 +1200,13 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
   }));
   const hasInteractivePayload = safeString(promptBodyRaw).length > 0 || optionsRaw.length > 0;
   let mode: "waiting_locale" | "prestart" | "interactive" | "recovery" = "interactive";
-  if (waitingLocale) mode = "waiting_locale";
-  else if (prestartModeV1 && !started) mode = "prestart";
-  else if (!hasInteractivePayload) mode = "recovery";
+  if (viewContractHardenV1) {
+    if (waitingLocale) mode = "waiting_locale";
+    else if (prestartModeV1 && !started) mode = "prestart";
+    else if (!hasInteractivePayload) mode = "recovery";
+  } else if (waitingLocale) {
+    mode = "waiting_locale";
+  }
   const promptBody = mode === "interactive" ? promptBodyRaw : "";
   const options = mode === "interactive" ? optionsRaw : [];
   if (mode !== "interactive" && !waitingLocale && started && !hasInteractivePayload) {
@@ -900,6 +1225,7 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
   const startDispatchState = safeString(state.start_dispatch_state ?? "");
   if (transportReady) nextFlags.transport_ready = transportReady;
   if (startDispatchState) nextFlags.start_dispatch_state = startDispatchState;
+  if (viewContractVersion) nextFlags.view_contract_version = viewContractVersion;
   return {
     prompt: { body: promptBody },
     options,
@@ -912,6 +1238,7 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       version: VERSION,
       mode,
       waiting_locale: waitingLocale,
+      view_contract_version: viewContractVersion,
       recovery_action:
         waitingLocale && retryHint === "poll"
           ? "retry_poll"
@@ -1072,6 +1399,10 @@ function createAppServer(baseUrl: string): McpServer {
           : {};
       const shouldCacheOpenCanvasResponse =
         safeString(bootstrapState.ui_gate_status ?? "") !== "waiting_locale";
+      registerBootstrapSnapshot({
+        result: bootstrapResult,
+        nowMs,
+      });
       if (dedupeEnabled && shouldCacheOpenCanvasResponse) {
         openCanvasDedupeCache.set(dedupeToken, {
           expiresAt: nowMs + OPEN_CANVAS_DEDUPE_TTL_MS,

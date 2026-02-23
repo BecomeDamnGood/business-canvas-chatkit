@@ -5,6 +5,7 @@
 import { t } from "./ui_constants.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 import {
+  extractBootstrapOrdering,
   initActionsConfig,
   callRunStep,
   handleToolResultAndMaybeScheduleBootstrapRetry,
@@ -53,6 +54,82 @@ function normalizeHostToolResultNotification(paramsRaw: unknown): Record<string,
   }
 
   return mergeToolOutputWithResponseMetadata(toolOutputCandidate, metadata);
+}
+
+type BootstrapOrderingCursor = {
+  sessionId: string;
+  epoch: number;
+  responseSeq: number;
+};
+
+let latestBootstrapOrderingCursor: BootstrapOrderingCursor = {
+  sessionId: "",
+  epoch: 0,
+  responseSeq: 0,
+};
+
+function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
+  const raw = (globalThis as Record<string, unknown>)[name];
+  if (typeof raw === "boolean") return raw;
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  if (!normalized) return defaultValue;
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function shouldAcceptBootstrapPayload(
+  payload: unknown,
+  source: "set_globals" | "host_notification"
+): boolean {
+  if (!uiFlagEnabled("UI_BOOTSTRAP_SESSION_GUARD_V1", true)) return true;
+  const ordering = extractBootstrapOrdering(payload);
+  if (
+    ordering.response_seq > 0 &&
+    latestBootstrapOrderingCursor.responseSeq > 0 &&
+    ordering.response_seq < latestBootstrapOrderingCursor.responseSeq
+  ) {
+    console.warn("[stale_bootstrap_payload_dropped]", {
+      source,
+      reason: "response_seq",
+      incoming_response_seq: ordering.response_seq,
+      latest_response_seq: latestBootstrapOrderingCursor.responseSeq,
+      incoming_session_id: ordering.bootstrap_session_id,
+      latest_session_id: latestBootstrapOrderingCursor.sessionId,
+    });
+    return false;
+  }
+  if (
+    ordering.bootstrap_session_id &&
+    latestBootstrapOrderingCursor.sessionId &&
+    ordering.bootstrap_session_id === latestBootstrapOrderingCursor.sessionId &&
+    ordering.bootstrap_epoch > 0 &&
+    latestBootstrapOrderingCursor.epoch > 0 &&
+    ordering.bootstrap_epoch < latestBootstrapOrderingCursor.epoch
+  ) {
+    console.warn("[stale_bootstrap_payload_dropped]", {
+      source,
+      reason: "bootstrap_epoch",
+      incoming_epoch: ordering.bootstrap_epoch,
+      latest_epoch: latestBootstrapOrderingCursor.epoch,
+      session_id: ordering.bootstrap_session_id,
+    });
+    return false;
+  }
+  if (ordering.bootstrap_session_id) latestBootstrapOrderingCursor.sessionId = ordering.bootstrap_session_id;
+  if (ordering.bootstrap_epoch > 0) latestBootstrapOrderingCursor.epoch = ordering.bootstrap_epoch;
+  if (ordering.response_seq > 0) latestBootstrapOrderingCursor.responseSeq = ordering.response_seq;
+  return true;
+}
+
+function ingestHostPayload(
+  payload: unknown,
+  source: "set_globals" | "host_notification"
+): void {
+  if (!shouldAcceptBootstrapPayload(payload, source)) return;
+  if (source === "set_globals") {
+    handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
+    return;
+  }
+  handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
 }
 
 if (isLocalDev && typeof window !== "undefined") {
@@ -109,7 +186,7 @@ if (typeof window !== "undefined") {
     if (method === "ui/notifications/tool-result") {
       const payload = normalizeHostToolResultNotification(data.params);
       try {
-        handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
+        ingestHostPayload(payload, "host_notification");
         notifyHostTransportSignal("host_notification");
       } catch (err) {
         console.error(err);
@@ -252,7 +329,7 @@ if (typeof window !== "undefined") {
         host?.toolResponseMetadata
       );
       if (payload && typeof payload === "object" && Object.keys(payload).length > 0) {
-        handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
+        ingestHostPayload(payload, "set_globals");
         notifyHostTransportSignal("set_globals");
       } else {
         render();
