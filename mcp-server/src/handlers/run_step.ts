@@ -1137,7 +1137,7 @@ function isUiStep0LangResetGuardV1Enabled(): boolean {
 }
 
 function isUiBootstrapStateV1Enabled(): boolean {
-  return envFlagEnabled("UI_BOOTSTRAP_STATE_V1", true);
+  return true;
 }
 
 function isUiPendingNoFallbackTextV1Enabled(): boolean {
@@ -1149,7 +1149,7 @@ function isUiStartTriggerLangResolveV1Enabled(): boolean {
 }
 
 function isUiLocaleReadyGateV1Enabled(): boolean {
-  return envFlagEnabled("UI_LOCALE_READY_GATE_V1", true);
+  return true;
 }
 
 function isUiNoPendingTextSuppressV1Enabled(): boolean {
@@ -1165,7 +1165,7 @@ function isUiBootstrapEventParityV1Enabled(): boolean {
 }
 
 function isUiBootstrapPollActionV1Enabled(): boolean {
-  return envFlagEnabled("UI_BOOTSTRAP_POLL_ACTION_V1", true);
+  return true;
 }
 
 function isUiWaitShellV2Enabled(): boolean {
@@ -1181,7 +1181,7 @@ function isUiI18nCriticalKeysV1Enabled(): boolean {
 }
 
 function isUiInteractiveFallbackV1Enabled(): boolean {
-  return envFlagEnabled("UI_INTERACTIVE_FALLBACK_V1", true);
+  return true;
 }
 
 function isWordingPanelCleanBodyV1Enabled(): boolean {

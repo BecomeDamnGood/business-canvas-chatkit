@@ -35,10 +35,19 @@ This contract defines language detection, lock timing, override behavior, and pr
 - resolve UI strings for language
 - persist in `ui_strings`
 - set `ui_strings_lang`
+3. State claims are validated server-side:
+- `ui_strings_status="ready"` is only accepted when critical render keys are present (or language is `en`).
+- invalid ready-claims are forced to `pending + waiting_locale`.
+
+## Bootstrap/Waiting Contract
+
+1. Bootstrap/locale decisions are server-authoritative and emitted via canonical state + `ui.view.mode`.
+2. For non-EN pending locale on `step_0`, interactive fallback is disabled:
+- phase remains `waiting_locale` (or `recovery` on retry exhaustion).
+3. `ACTION_BOOTSTRAP_POLL` may refresh locale readiness but may not mutate `started` or escalate to interactive fallback.
 
 ## Affected Components
 
 - specialist prompts (`LANGUAGE` input)
 - render labels/titles/buttons
 - menu and wording-choice UI content
-

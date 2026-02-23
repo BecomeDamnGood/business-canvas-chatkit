@@ -11,9 +11,9 @@ const assetsDir = path.join(uiDir, "assets");
 
 const templatePath = path.join(uiDir, "step-card.template.html");
 const outputPath = path.join(uiDir, "step-card.bundled.html");
-const entryPath = path.join(uiLibDir, "main.js");
+const entryPath = path.join(uiLibDir, "main.ts");
 const GENERATED_BANNER =
-  "<!-- AUTO-GENERATED FILE: edit ui/step-card.template.html and ui/lib/*.ts, then run npm run build:ui && node scripts/build-ui.mjs -->";
+  "<!-- AUTO-GENERATED FILE: edit ui/step-card.template.html and ui/lib/*.ts, then run node scripts/build-ui.mjs -->";
 const INLINE_BUNDLE_RE = /<!--\s*INLINE_BUNDLE(?:[\s\S]*?)?-->/;
 
 const ASSET_MAP = {
@@ -29,25 +29,20 @@ function ensureFile(filePath, label) {
   }
 }
 
-function checkUiLibStaleness() {
-  ensureFile(uiLibDir, "ui/lib directory");
-  const entries = fs.readdirSync(uiLibDir, { withFileTypes: true });
-  const tsFiles = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
-    .map((entry) => entry.name);
-
-  for (const tsFile of tsFiles) {
-    const tsPath = path.join(uiLibDir, tsFile);
-    const jsPath = path.join(uiLibDir, tsFile.replace(/\.ts$/, ".js"));
-    if (!fs.existsSync(jsPath)) {
-      throw new Error(`UI JS is missing for ${tsFile}. Run \"npm run build:ui\" first.`);
-    }
-    const tsStat = fs.statSync(tsPath);
-    const jsStat = fs.statSync(jsPath);
-    if (jsStat.mtimeMs < tsStat.mtimeMs) {
-      throw new Error(`UI JS is stale for ${tsFile}. Run \"npm run build:ui\" first.`);
-    }
-  }
+function preferTypeScriptSources() {
+  return {
+    name: "prefer-typescript-sources",
+    setup(build) {
+      build.onResolve({ filter: /^\.\.?\/.*\.js$/ }, (args) => {
+        if (!args.resolveDir) return null;
+        const jsPath = path.resolve(args.resolveDir, args.path);
+        if (!jsPath.startsWith(uiLibDir + path.sep)) return null;
+        const tsPath = jsPath.replace(/\.js$/, ".ts");
+        if (!fs.existsSync(tsPath)) return null;
+        return { path: tsPath };
+      });
+    },
+  };
 }
 
 function mimeForExt(ext) {
@@ -87,8 +82,6 @@ async function buildUi() {
   ensureFile(templatePath, "UI template");
   ensureFile(entryPath, "UI entrypoint");
 
-  checkUiLibStaleness();
-
   const template = fs.readFileSync(templatePath, "utf8");
   if (!INLINE_BUNDLE_RE.test(template)) {
     throw new Error("Template is missing <!-- INLINE_BUNDLE --> placeholder.");
@@ -100,6 +93,7 @@ async function buildUi() {
     platform: "browser",
     format: "iife",
     write: false,
+    plugins: [preferTypeScriptSources()],
   });
 
   const outputFile = buildResult.outputFiles?.[0];

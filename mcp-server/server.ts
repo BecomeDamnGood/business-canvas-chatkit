@@ -23,7 +23,7 @@ import {
 import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
 import { safeString } from "./src/server_safe_string.js";
 import {
-  sanitizeBootstrapIngressState,
+  deriveCanonicalBootstrapState,
   VIEW_CONTRACT_VERSION,
 } from "./src/handlers/run_step_locale_start.js";
 
@@ -113,6 +113,7 @@ type OpenCanvasToolResponse = {
 };
 
 const openCanvasDedupeCache = new Map<string, { expiresAt: number; response: OpenCanvasToolResponse }>();
+const BOOTSTRAP_SESSION_ID_PREFIX = "bs_";
 type BootstrapSessionSnapshot = {
   sessionId: string;
   hostWidgetSessionId: string;
@@ -224,6 +225,25 @@ function parsePositiveInt(value: unknown): number {
   return Math.trunc(n);
 }
 
+function isUuidV4(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function normalizeBootstrapSessionId(raw: unknown): string {
+  const value = safeString(raw ?? "").trim().toLowerCase();
+  if (!value) return "";
+  if (value.startsWith(BOOTSTRAP_SESSION_ID_PREFIX)) {
+    const uuid = value.slice(BOOTSTRAP_SESSION_ID_PREFIX.length);
+    return isUuidV4(uuid) ? `${BOOTSTRAP_SESSION_ID_PREFIX}${uuid}` : "";
+  }
+  if (isUuidV4(value)) return `${BOOTSTRAP_SESSION_ID_PREFIX}${value}`;
+  return "";
+}
+
+function createBootstrapSessionId(): string {
+  return `${BOOTSTRAP_SESSION_ID_PREFIX}${randomUUID().toLowerCase()}`;
+}
+
 function nextBootstrapResponseSeq(): number {
   bootstrapResponseSeqCounter += 1;
   return bootstrapResponseSeqCounter;
@@ -246,12 +266,19 @@ function resolveBootstrapIdentity(args: {
   open_canvas_invocation_id: string;
 } {
   const sourceState = args.sourceState || {};
-  const persistedSessionId = safeString(sourceState.bootstrap_session_id ?? "").trim();
-  const persistedEpoch = parsePositiveInt(sourceState.bootstrap_epoch) || 1;
+  const persistedSessionIdRaw = safeString(sourceState.bootstrap_session_id ?? "").trim();
+  const persistedSessionId = normalizeBootstrapSessionId(persistedSessionIdRaw);
+  const persistedEpoch = persistedSessionId ? (parsePositiveInt(sourceState.bootstrap_epoch) || 1) : 1;
   const currentStep = safeString(sourceState.current_step ?? "").trim();
   const started = safeString(sourceState.started ?? "").trim().toLowerCase() === "true";
   const shouldResetEpoch = args.isOpenCanvas && Boolean(persistedSessionId) && (started || (currentStep && currentStep !== "step_0"));
-  const bootstrap_session_id = persistedSessionId || randomUUID();
+  if (persistedSessionIdRaw && !persistedSessionId) {
+    console.warn("[bootstrap_session_id_rejected]", {
+      source: "open_canvas_state",
+      provided: persistedSessionIdRaw,
+    });
+  }
+  const bootstrap_session_id = persistedSessionId || createBootstrapSessionId();
   const bootstrap_epoch = shouldResetEpoch ? persistedEpoch + 1 : persistedEpoch;
   const open_canvas_invocation_id = args.isOpenCanvas ? randomUUID() : safeString(sourceState.open_canvas_invocation_id ?? "");
   return { bootstrap_session_id, bootstrap_epoch, open_canvas_invocation_id };
@@ -342,9 +369,7 @@ function readBootstrapOrdering(result: Record<string, unknown> | null | undefine
     root && typeof (root as any).state === "object"
       ? ((root as any).state as Record<string, unknown>)
       : {};
-  const sessionId = safeString(
-    state.bootstrap_session_id ?? (root as any).bootstrap_session_id ?? ""
-  ).trim();
+  const sessionId = normalizeBootstrapSessionId(state.bootstrap_session_id ?? (root as any).bootstrap_session_id ?? "");
   const hostWidgetSessionId = safeString(
     state.host_widget_session_id ??
       (root as any).host_widget_session_id ??
@@ -654,6 +679,26 @@ function resolveHostWidgetSessionIdFromExtra(extra: unknown): string {
   return fallback;
 }
 
+function buildInternalHostWidgetSessionId(seed: unknown): string {
+  const normalizedSeed = normalizeBootstrapSessionId(seed) || createBootstrapSessionId();
+  return `internal:${normalizedSeed}`;
+}
+
+function resolveEffectiveHostWidgetSessionId(params: {
+  provided?: unknown;
+  state?: Record<string, unknown> | null | undefined;
+  bootstrapSessionId?: unknown;
+}): string {
+  const provided = normalizeHostWidgetSessionId(params.provided);
+  if (provided) return provided;
+  const state = params.state && typeof params.state === "object" ? params.state : {};
+  const fromState = normalizeHostWidgetSessionId((state as any).host_widget_session_id);
+  if (fromState) return fromState;
+  return buildInternalHostWidgetSessionId(
+    normalizeBootstrapSessionId(params.bootstrapSessionId ?? (state as any).bootstrap_session_id ?? "")
+  );
+}
+
 function hasNonBusinessFinals(state: Record<string, unknown> | null | undefined): boolean {
   const snapshot = getFinalsSnapshot((state ?? {}) as any);
   for (const [key, value] of Object.entries(snapshot)) {
@@ -715,19 +760,21 @@ function buildOpenCanvasBootstrapResponse(args: {
     });
   }
   const localeFlags = {
-    uiLocaleReadyGateV1: envFlagEnabled("UI_LOCALE_READY_GATE_V1", true),
-    uiInteractiveFallbackV1: envFlagEnabled("UI_INTERACTIVE_FALLBACK_V1", true),
-    uiBootstrapPollActionV1: envFlagEnabled("UI_BOOTSTRAP_POLL_ACTION_V1", true),
+    uiLocaleReadyGateV1: true,
+    uiInteractiveFallbackV1: true,
+    uiBootstrapPollActionV1: true,
   };
-  const strictReadinessV1 = envFlagEnabled("UI_OPEN_CANVAS_STRICT_READINESS_V1", true);
-  const ingressSanitizerV1 = envFlagEnabled("UI_INGRESS_STATE_SANITIZER_V1", true);
-  const hostWidgetSessionId = normalizeHostWidgetSessionId(
-    args.host_widget_session_id ?? sourceState.host_widget_session_id ?? ""
-  );
+  const strictReadinessV1 = true;
+  const ingressSanitizerV1 = true;
   const forceRecoverMs = Number(process.env.UI_GATE_FORCE_RECOVER_MS || 4000);
   const bootstrapIdentity = resolveBootstrapIdentity({
     sourceState,
     isOpenCanvas: true,
+  });
+  const hostWidgetSessionId = resolveEffectiveHostWidgetSessionId({
+    provided: args.host_widget_session_id,
+    state: sourceState,
+    bootstrapSessionId: bootstrapIdentity.bootstrap_session_id,
   });
   const bootstrapState: Record<string, unknown> = {
     state_version: safeString(sourceState.state_version || defaults.state_version) || defaults.state_version,
@@ -756,7 +803,7 @@ function buildOpenCanvasBootstrapResponse(args: {
     bootstrap_phase: baseReady ? "ready" : "waiting_locale",
     bootstrap_session_id: bootstrapIdentity.bootstrap_session_id,
     bootstrap_epoch: bootstrapIdentity.bootstrap_epoch,
-    ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
+    host_widget_session_id: hostWidgetSessionId,
     open_canvas_invocation_id: bootstrapIdentity.open_canvas_invocation_id,
     view_contract_version: VIEW_CONTRACT_VERSION,
     last_specialist_result: {},
@@ -784,8 +831,8 @@ function buildOpenCanvasBootstrapResponse(args: {
   }
   const nowMs = Date.now();
   const candidateState = normalizeState(bootstrapState);
-  const sanitized = strictReadinessV1 && ingressSanitizerV1
-    ? sanitizeBootstrapIngressState({
+  const canonicalBootstrap = strictReadinessV1 && ingressSanitizerV1
+    ? deriveCanonicalBootstrapState({
         previousState: sourceState,
         candidateState,
         forceRecoverMs: Number.isFinite(forceRecoverMs) && forceRecoverMs > 0 ? Math.trunc(forceRecoverMs) : 4000,
@@ -793,18 +840,32 @@ function buildOpenCanvasBootstrapResponse(args: {
         criticalKeys: [...OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0],
         nowMs,
       })
-    : { state: candidateState, readyClaimRejected: false };
-  if (sanitized.readyClaimRejected) {
+    : {
+        state: candidateState,
+        contract: {
+          phase: "ready",
+          waiting: false,
+          ready: true,
+          reason: "",
+          since_ms: 0,
+          retry_hint: "",
+        },
+        readyClaimRejected: false,
+        waitingLocale: false,
+        interactiveFallbackActive: false,
+        interactiveReady: true,
+      };
+  if (canonicalBootstrap.readyClaimRejected) {
     console.warn("[ingress_ready_claim_rejected]", {
       final_language: finalLanguage,
       locale_hint_source: args.locale_hint_source,
       source_state_keys: Object.keys(sourceState).length,
     });
   }
-  const gatedBootstrapState = sanitized.state as Record<string, unknown>;
-  const waitingLocale = safeString(gatedBootstrapState.ui_gate_status ?? "") === "waiting_locale";
-  const interactiveFallbackActive = safeString(gatedBootstrapState.bootstrap_phase ?? "") === "interactive_fallback";
-  const bootstrapInteractiveReady = !waitingLocale || interactiveFallbackActive;
+  const gatedBootstrapState = canonicalBootstrap.state as Record<string, unknown>;
+  const waitingLocale = canonicalBootstrap.waitingLocale;
+  const interactiveFallbackActive = canonicalBootstrap.interactiveFallbackActive;
+  const bootstrapInteractiveReady = canonicalBootstrap.interactiveReady;
   const responseSeq = nextBootstrapResponseSeq();
 
   const resultForClientBase: Record<string, unknown> = {
@@ -826,7 +887,7 @@ function buildOpenCanvasBootstrapResponse(args: {
         bootstrap_phase: safeString(gatedBootstrapState.bootstrap_phase || ""),
         transport_ready: safeString(gatedBootstrapState.transport_ready || "unknown"),
         start_dispatch_state: safeString(gatedBootstrapState.start_dispatch_state || "idle"),
-        ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
+        host_widget_session_id: hostWidgetSessionId,
       },
     },
   };
@@ -897,20 +958,16 @@ async function runStepHandler(args: {
     !isBootstrapPollAction &&
     !isTechnicalRouteMessage;
   const hasInitiator = safeString(state?.initial_user_message ?? "").trim() !== "";
-  const hostWidgetSessionId = normalizeHostWidgetSessionId(
-    args.host_widget_session_id ?? state.host_widget_session_id ?? ""
-  );
-  if (hostWidgetSessionId) {
-    console.log("[host_session_id_seen]", {
-      source: "run_step_args",
-      host_widget_session_id: hostWidgetSessionId,
-    });
-  } else {
-    console.log("[host_session_missing_fallback_internal]", {
-      source: "run_step_args",
-    });
-  }
-  const hostSessionGuardV1 = envFlagEnabled("UI_HOST_WIDGET_SESSION_GUARD_V1", true);
+  const hostWidgetSessionId = resolveEffectiveHostWidgetSessionId({
+    provided: args.host_widget_session_id,
+    state,
+    bootstrapSessionId: (state as any).bootstrap_session_id,
+  });
+  console.log("[host_session_id_seen]", {
+    source: hostWidgetSessionId.startsWith("internal:") ? "run_step_internal" : "run_step_args",
+    host_widget_session_id: hostWidgetSessionId,
+  });
+  const hostSessionGuardV1 = true;
   let stateForTool =
     shouldMarkStarted
       ? {
@@ -919,9 +976,24 @@ async function runStepHandler(args: {
           started: "true",
         }
       : state;
-  if (hostWidgetSessionId) {
-    stateForTool = { ...stateForTool, host_widget_session_id: hostWidgetSessionId };
+  const incomingBootstrapSessionRaw = safeString((stateForTool as any).bootstrap_session_id ?? "").trim();
+  const incomingBootstrapSession = normalizeBootstrapSessionId(incomingBootstrapSessionRaw);
+  if (incomingBootstrapSessionRaw && !incomingBootstrapSession) {
+    console.warn("[bootstrap_session_id_rejected]", {
+      source: "run_step_state",
+      provided: incomingBootstrapSessionRaw,
+    });
   }
+  const normalizedBootstrapSessionId = incomingBootstrapSession || createBootstrapSessionId();
+  const normalizedBootstrapEpoch = incomingBootstrapSession
+    ? (parsePositiveInt((stateForTool as any).bootstrap_epoch) || 1)
+    : 1;
+  stateForTool = {
+    ...stateForTool,
+    bootstrap_session_id: normalizedBootstrapSessionId,
+    bootstrap_epoch: normalizedBootstrapEpoch,
+  };
+  stateForTool = { ...stateForTool, host_widget_session_id: hostWidgetSessionId };
 
   const stepIdStr = safeString(current_step_id ?? "");
   const msgLen = typeof user_message_raw === "string" ? user_message_raw.length : 0;
@@ -941,7 +1013,7 @@ async function runStepHandler(args: {
   });
   const nowMs = Date.now();
   let incomingOrdering = readBootstrapOrdering({ state: stateForTool });
-  const bootstrapSessionGuardV1 = envFlagEnabled("UI_BOOTSTRAP_SESSION_GUARD_V1", true);
+  const bootstrapSessionGuardV1 = true;
   if (bootstrapSessionGuardV1 && incomingOrdering.sessionId && incomingOrdering.epoch > 0) {
     const staleCheck = isStaleBootstrapPayload({
       sessionId: incomingOrdering.sessionId,
@@ -963,35 +1035,7 @@ async function runStepHandler(args: {
         latest_host_widget_session_id: staleCheck.latest.hostWidgetSessionId,
       });
     }
-    const shouldReplayStaleBootstrapPoll =
-      isBootstrapPollAction &&
-      staleCheck.reason === "response_seq" &&
-      staleCheck.latest?.sessionId === incomingOrdering.sessionId &&
-      staleCheck.latest?.epoch === incomingOrdering.epoch;
-    if (staleCheck.stale && shouldReplayStaleBootstrapPoll) {
-      const latestStateRaw = staleCheck.latest?.lastWidgetResult?.state;
-      if (latestStateRaw && typeof latestStateRaw === "object" && latestStateRaw !== null) {
-        const replayedState = normalizeState(latestStateRaw as Record<string, unknown>);
-        stateForTool = hostWidgetSessionId
-          ? {
-              ...replayedState,
-              host_widget_session_id: safeString(replayedState.host_widget_session_id ?? hostWidgetSessionId).trim() || hostWidgetSessionId,
-            }
-          : replayedState;
-        incomingOrdering = readBootstrapOrdering({ state: stateForTool });
-        console.warn("[stale_bootstrap_payload_replayed]", {
-          input_mode: inputMode || "chat",
-          action,
-          session_id: incomingOrdering.sessionId || staleCheck.latest?.sessionId || "",
-          host_widget_session_id: incomingOrdering.hostWidgetSessionId || hostWidgetSessionId || "",
-          stale_reason: staleCheck.reason || "unknown",
-          payload_epoch: incomingOrdering.epoch || staleCheck.latest?.epoch || 0,
-          payload_response_seq: incomingOrdering.responseSeq,
-          latest_epoch: staleCheck.latest?.epoch || 0,
-          latest_response_seq: staleCheck.latest?.lastResponseSeq || 0,
-        });
-      }
-    } else if (staleCheck.stale) {
+    if (staleCheck.stale) {
       const staleSource =
         staleCheck.latest && staleCheck.latest.lastWidgetResult && Object.keys(staleCheck.latest.lastWidgetResult).length
           ? (JSON.parse(JSON.stringify(staleCheck.latest.lastWidgetResult)) as Record<string, unknown>)
@@ -1066,7 +1110,7 @@ async function runStepHandler(args: {
         ? (resultForClientRaw.state as Record<string, unknown>)
         : {};
     const responseSeq = nextBootstrapResponseSeq();
-    const sessionId = safeString(resultStateRaw.bootstrap_session_id ?? incomingOrdering.sessionId).trim();
+    const sessionId = normalizeBootstrapSessionId(resultStateRaw.bootstrap_session_id ?? incomingOrdering.sessionId);
     const epoch = parsePositiveInt(resultStateRaw.bootstrap_epoch ?? incomingOrdering.epoch);
     const resultForClient = attachBootstrapDiagnostics({
       responseKind: "run_step",
@@ -1238,7 +1282,9 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");
   const uiGateStatus = safeString((result as any).ui_gate_status || state.ui_gate_status || "");
   const bootstrapPhase = safeString((result as any).bootstrap_phase || state.bootstrap_phase || "");
-  const bootstrapSessionId = safeString((result as any).bootstrap_session_id || state.bootstrap_session_id || "");
+  const bootstrapSessionId = normalizeBootstrapSessionId(
+    (result as any).bootstrap_session_id || state.bootstrap_session_id || ""
+  );
   const bootstrapEpoch = parsePositiveInt((result as any).bootstrap_epoch ?? state.bootstrap_epoch);
   const responseSeq = parsePositiveInt((result as any).response_seq ?? state.response_seq);
   const responseKind = safeString((result as any).response_kind || state.response_kind || "");
@@ -1299,8 +1345,8 @@ function buildContentFromResult(
 
 function buildUiStructured(result: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
   if (!result || typeof result !== "object") return null;
-  const prestartModeV1 = envFlagEnabled("UI_PRESTART_VIEW_MODE_V1", true);
-  const viewContractHardenV1 = envFlagEnabled("UI_VIEW_CONTRACT_HARDEN_V1", true);
+  const prestartModeV1 = true;
+  const viewContractHardenV1 = true;
   const uiObj = (result as any).ui && typeof (result as any).ui === "object" ? (result as any).ui : {};
   const flags =
     uiObj.flags && typeof uiObj.flags === "object"
@@ -1310,8 +1356,14 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
     result && typeof (result as any).state === "object" && (result as any).state
       ? ((result as any).state as Record<string, unknown>)
       : {};
-  const waitingLocale = flags.bootstrap_waiting_locale === true;
-  const bootstrapPhase = safeString(flags.bootstrap_phase || state.bootstrap_phase || "");
+  const bootstrapPhaseRaw = safeString(flags.bootstrap_phase || state.bootstrap_phase || "");
+  const bootstrapPhase =
+    bootstrapPhaseRaw === "interactive_fallback" ? "waiting_locale" : bootstrapPhaseRaw;
+  const waitingLocaleByPhase =
+    bootstrapPhase === "waiting_locale" ||
+    bootstrapPhase === "waiting_both" ||
+    bootstrapPhase === "waiting_state";
+  const waitingLocale = flags.bootstrap_waiting_locale === true || waitingLocaleByPhase;
   const viewContractVersion =
     safeString(flags.view_contract_version || state.view_contract_version || (result as any).view_contract_version || "") ||
     VIEW_CONTRACT_VERSION;

@@ -1612,8 +1612,8 @@ test("Step 0 start-trigger with locale_hint pending sets locale gate waiting fla
   assert.equal(String(result.state?.ui_bootstrap_status || ""), "awaiting_locale");
   assert.equal(String(result.state?.ui_gate_status || ""), "waiting_locale");
   assert.equal(result.ui?.flags?.bootstrap_waiting_locale, true);
-  assert.equal(result.ui?.flags?.bootstrap_interactive_ready, true);
-  assert.equal(result.ui?.flags?.interactive_fallback_active, true);
+  assert.equal(result.ui?.flags?.bootstrap_interactive_ready, false);
+  assert.equal(result.ui?.flags?.interactive_fallback_active, false);
   assert.equal(result.ui?.flags?.locale_pending_background, true);
   assert.equal(String(result.ui?.flags?.bootstrap_retry_hint || ""), "poll");
 });

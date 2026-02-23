@@ -45,11 +45,9 @@ test("open_canvas and run_step merge args locale with extra metadata source", ()
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /function mergeLocaleHintInputs\(/);
   assert.match(source, /const mergedLocale = mergeLocaleHintInputs\(\s*args\.locale_hint,\s*args\.locale_hint_source,\s*localeFromExtra\s*\);/);
-  assert.match(
-    source,
-    /server\.registerTool\(\s*"open_canvas"[\s\S]*buildOpenCanvasBootstrapResponse\(\{[\s\S]*locale_hint: mergedLocale\.locale_hint,[\s\S]*locale_hint_source: mergedLocale\.locale_hint_source,/,
-    "open_canvas should route locale metadata into bootstrap response builder"
-  );
+  assert.match(source, /buildOpenCanvasBootstrapResponse\(\{/);
+  assert.match(source, /locale_hint: mergedLocale\.locale_hint,/);
+  assert.match(source, /locale_hint_source: mergedLocale\.locale_hint_source,/);
   const openCanvasStart = source.indexOf('server.registerTool(\n    "open_canvas"');
   const runStepStart = source.indexOf('server.registerTool(\n    "run_step"');
   assert.ok(openCanvasStart >= 0 && runStepStart > openCanvasStart, "open_canvas block should appear before run_step block");
@@ -75,16 +73,16 @@ test("open_canvas bootstrap writes canonical state.language_source (never transp
   assert.match(source, /function uiStringsRenderableForLang\(/);
   assert.match(source, /const baseReady = stringsRenderable \|\| finalLanguage === "en";/);
   assert.match(source, /\[open_canvas_ready_claim_inconsistent\]/);
-  assert.match(source, /const strictReadinessV1 = envFlagEnabled\("UI_OPEN_CANVAS_STRICT_READINESS_V1", true\);/);
-  assert.match(source, /const gatedBootstrapState = sanitized\.state as Record<string, unknown>;/);
-  assert.match(source, /sanitizeBootstrapIngressState\(/);
+  assert.match(source, /const strictReadinessV1 = true;/);
+  assert.match(source, /const gatedBootstrapState = canonicalBootstrap\.state as Record<string, unknown>;/);
+  assert.match(source, /deriveCanonicalBootstrapState\(/);
   assert.match(source, /\[ingress_ready_claim_rejected\]/);
   assert.doesNotMatch(source, /const bootstrapState: Record<string, unknown> = \{\s*\.\.\.sourceState,/);
   assert.match(source, /intro_shown_session: "false"/);
   assert.match(source, /last_specialist_result: \{\}/);
   assert.match(source, /bootstrap_state_language_source/);
-  assert.match(source, /const waitingLocale = safeString\(gatedBootstrapState\.ui_gate_status \?\? ""\) === "waiting_locale";/);
-  assert.match(source, /const interactiveFallbackActive = safeString\(gatedBootstrapState\.bootstrap_phase \?\? ""\) === "interactive_fallback";/);
+  assert.match(source, /const waitingLocale = canonicalBootstrap\.waitingLocale;/);
+  assert.match(source, /const interactiveFallbackActive = canonicalBootstrap\.interactiveFallbackActive;/);
   assert.match(source, /bootstrap_waiting_locale: waitingLocale,/);
   assert.match(source, /bootstrap_interactive_ready: bootstrapInteractiveReady,/);
   assert.match(source, /interactive_fallback_active: interactiveFallbackActive,/);
@@ -107,8 +105,7 @@ test("bootstrap session\/epoch guards drop stale payloads and keep monotone sequ
   assert.match(source, /function attachBootstrapDiagnostics\(/);
   assert.match(source, /const responseSeq = nextBootstrapResponseSeq\(\);/);
   assert.match(source, /\[stale_bootstrap_payload_dropped\]/);
-  assert.match(source, /\[stale_bootstrap_payload_replayed\]/);
-  assert.match(source, /isBootstrapPollAction[\s\S]*staleCheck\.reason === "response_seq"/);
+  assert.doesNotMatch(source, /\[stale_bootstrap_payload_replayed\]/);
   assert.match(source, /bootstrap_session_id/);
   assert.match(source, /bootstrap_epoch/);
   assert.match(source, /response_seq/);
@@ -144,10 +141,10 @@ test("run_step handler logs locale + language readiness in request/response line
 
 test("buildUiStructured suppresses prompt/options while bootstrap locale is waiting", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
-  assert.match(source, /const waitingLocale = flags\.bootstrap_waiting_locale === true;/);
+  assert.match(source, /const waitingLocale = flags\.bootstrap_waiting_locale === true \|\| waitingLocaleByPhase;/);
   assert.match(source, /const started = safeString\(state\.started \|\| ""\)\.toLowerCase\(\) === "true";/);
   assert.match(source, /let mode: "waiting_locale" \| "prestart" \| "interactive" \| "recovery" = "interactive";/);
-  assert.match(source, /const prestartModeV1 = envFlagEnabled\("UI_PRESTART_VIEW_MODE_V1", true\);/);
+  assert.match(source, /const prestartModeV1 = true;/);
   assert.match(source, /else if \(prestartModeV1 && !started\) mode = "prestart";/);
   assert.match(source, /else if \(!hasInteractivePayload\) mode = "recovery";/);
   assert.match(source, /const promptBody = mode === "interactive" \? promptBodyRaw : "";/);

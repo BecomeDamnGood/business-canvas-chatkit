@@ -20,6 +20,15 @@ export type BootstrapContractState = {
   retry_hint: "poll" | "";
 };
 
+export type CanonicalBootstrapState = {
+  state: CanvasState;
+  contract: BootstrapContractState;
+  readyClaimRejected: boolean;
+  waitingLocale: boolean;
+  interactiveFallbackActive: boolean;
+  interactiveReady: boolean;
+};
+
 export const VIEW_CONTRACT_VERSION = "v1";
 
 export type BootstrapFsmInput = {
@@ -68,18 +77,17 @@ export function computeBootstrapDecision(input: BootstrapFsmInput): BootstrapDec
   let phase: BootstrapPhase = "ready";
   if (missingState && localePending) phase = "waiting_both";
   else if (missingState) phase = "waiting_state";
-  else if (localePending) phase = input.interactiveFallbackEnabled ? "interactive_fallback" : "waiting_locale";
+  else if (localePending) phase = "waiting_locale";
 
   const waiting =
     phase === "waiting_state" ||
     phase === "waiting_locale" ||
-    phase === "waiting_both" ||
-    phase === "interactive_fallback";
+    phase === "waiting_both";
 
   return {
     phase,
     retry_hint: waiting ? "poll" : "none",
-    interactive_allowed: phase === "ready" || phase === "interactive_fallback",
+    interactive_allowed: phase === "ready",
     render_mode: waiting ? "wait_shell" : "interactive",
   };
 }
@@ -201,21 +209,10 @@ export function isInteractiveFallbackState(params: {
   uiInteractiveFallbackV1: boolean;
   criticalKeys?: string[];
 }): boolean {
-  const { state, uiInteractiveFallbackV1, criticalKeys } = params;
+  const { state, uiInteractiveFallbackV1 } = params;
   if (!uiInteractiveFallbackV1) return false;
   if (!isNonEnglishPendingUiStringsState(state)) return false;
-  const mode = String((state as any)?.ui_translation_mode || "").trim().toLowerCase();
-  if (mode !== "critical_first") return false;
-  const requiredCriticalKeys = Array.isArray(criticalKeys) ? criticalKeys : [];
-  if (requiredCriticalKeys.length > 0) {
-    return hasRenderableUiStringsForState(state, requiredCriticalKeys);
-  }
-  const uiStrings =
-    (state as any)?.ui_strings && typeof (state as any).ui_strings === "object"
-      ? ((state as any).ui_strings as Record<string, unknown>)
-      : null;
-  if (!uiStrings) return false;
-  return Object.values(uiStrings).some((value) => String(value ?? "").trim().length > 0);
+  return false;
 }
 
 export function isInteractiveLocaleReady(params: {
@@ -301,10 +298,7 @@ export function deriveBootstrapContract(params: {
     fsmDecision.phase === "waiting_locale" ||
     fsmDecision.phase === "waiting_both" ||
     fsmDecision.phase === "interactive_fallback";
-  const ready =
-    fsmDecision.phase === "ready" ||
-    fsmDecision.phase === "interactive_fallback" ||
-    fsmDecision.phase === "recovery";
+  const ready = fsmDecision.phase === "ready" || fsmDecision.phase === "recovery";
   const contract: BootstrapContractState = {
     phase: fsmDecision.phase,
     waiting,
@@ -323,7 +317,6 @@ function mapPhaseToUiBootstrapStatus(params: {
 }): "init" | "awaiting_locale" | "ready" {
   const { phase, lang } = params;
   if (phase === "ready" || phase === "recovery") return "ready";
-  if (phase === "interactive_fallback") return "awaiting_locale";
   if (phase === "waiting_locale" || phase === "waiting_both") return "awaiting_locale";
   if (phase === "waiting_state") return lang ? "awaiting_locale" : "init";
   return "init";
@@ -411,10 +404,7 @@ export function applyUiGateState(params: {
     fsmDecision.phase === "waiting_locale" ||
     fsmDecision.phase === "waiting_both" ||
     fsmDecision.phase === "interactive_fallback";
-  const ready =
-    fsmDecision.phase === "ready" ||
-    fsmDecision.phase === "interactive_fallback" ||
-    fsmDecision.phase === "recovery";
+  const ready = fsmDecision.phase === "ready" || fsmDecision.phase === "recovery";
   const contract: BootstrapContractState = {
     phase: fsmDecision.phase,
     waiting,
@@ -491,6 +481,41 @@ export function sanitizeBootstrapIngressState(params: {
     !criticalRenderable &&
     String((gated as any)?.ui_strings_status ?? "").trim().toLowerCase() !== "ready";
   return { state: gated, readyClaimRejected };
+}
+
+export function deriveCanonicalBootstrapState(params: {
+  previousState: CanvasState | null | undefined;
+  candidateState: CanvasState;
+  forceRecoverMs: number;
+  flags: LocaleUiFlags;
+  criticalKeys: string[];
+  nowMs: number;
+}): CanonicalBootstrapState {
+  const { previousState, candidateState, forceRecoverMs, flags, criticalKeys, nowMs } = params;
+  const sanitized = sanitizeBootstrapIngressState({
+    previousState,
+    candidateState,
+    forceRecoverMs,
+    flags,
+    criticalKeys,
+    nowMs,
+  });
+  const contract = deriveBootstrapContract({
+    state: sanitized.state,
+    flags,
+    criticalKeys,
+    nowMs,
+  });
+  const interactiveFallbackActive = contract.phase === "interactive_fallback";
+  const waitingLocale = contract.waiting;
+  return {
+    state: sanitized.state,
+    contract,
+    readyClaimRejected: sanitized.readyClaimRejected,
+    waitingLocale,
+    interactiveFallbackActive,
+    interactiveReady: !waitingLocale || interactiveFallbackActive,
+  };
 }
 
 export function computeUiBootstrapStatus(params: {

@@ -112,8 +112,7 @@ export function deriveBootstrapPhaseFromLegacy(params: {
   const strings = String(params.ui_strings_status ?? "").trim();
   if (bootstrap === "init") return "init";
   if (gate === "waiting_locale") {
-    if (strings === "pending" || strings === "error") return "waiting_locale";
-    return "interactive_fallback";
+    return "waiting_locale";
   }
   if (bootstrap === "awaiting_locale") return "waiting_locale";
   return "ready";
@@ -352,6 +351,8 @@ export function normalizeState(raw: unknown): CanvasState {
           ui_gate_status,
           ui_strings_status,
         });
+  const bootstrap_phase_canonical: BootstrapPhase =
+    bootstrap_phase === "interactive_fallback" ? "waiting_locale" : bootstrap_phase;
   const bootstrap_session_id = String((r as any).bootstrap_session_id ?? "").trim();
   const bootstrap_epoch_raw = Number((r as any).bootstrap_epoch ?? 0);
   const bootstrap_epoch =
@@ -463,7 +464,7 @@ export function normalizeState(raw: unknown): CanvasState {
     ui_strings_critical_ready,
     ui_strings_full_ready,
     ui_strings_background_inflight,
-    bootstrap_phase,
+    bootstrap_phase: bootstrap_phase_canonical,
     ...(bootstrap_session_id ? { bootstrap_session_id } : {}),
     ...(bootstrap_epoch > 0 ? { bootstrap_epoch } : {}),
     ...(open_canvas_invocation_id ? { open_canvas_invocation_id } : {}),

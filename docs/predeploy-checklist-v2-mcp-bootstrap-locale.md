@@ -6,7 +6,7 @@ Alle items zijn `pass/fail`.
 ## 0) Golden Invariants (moet altijd groen zijn)
 
 - [x] Geen lege interactieve kaart: nooit `prompt.body=""` + `options=[]` zonder expliciete waiting/recovery view.
-- [x] `ui_gate_status` en `ui.flags` zijn consistent (geen `waiting_locale` met `bootstrap_interactive_ready=true` tenzij expliciet interactive fallback).
+- [x] `ui_gate_status` en `ui.flags` zijn consistent (geen `waiting_locale` met `bootstrap_interactive_ready=true`).
 - [x] `ACTION_BOOTSTRAP_POLL` zet nooit `state.started="true"`.
 - [x] Eenmaal gekozen taal in widget-flow blijft stabiel (geen flip door latere host locale hint).
 - [x] `language_locked="true"` wordt nooit overschreven door een locale hint, op geen enkele input mode.
@@ -66,6 +66,7 @@ Alle items zijn `pass/fail`.
 - [x] Na max retries verschijnt recovery panel met werkende retry-actie.
 - [x] Retry-loop stopt deterministisch na limiet.
 - [x] Waiting pad toont geen misleidende interactie-CTA als interactie nog niet mogelijk is.
+- [x] Pending non-EN op `step_0` gebruikt geen `interactive_fallback`; alleen `waiting_locale` of `recovery`.
 - [x] Poll-loop stopt direct bij 2 opeenvolgende identieke `ui_gate_status + ui_strings_status` signatures (same-response circuit breaker) en hanteert `max retries <= 3`.
 - [x] `ui_gate_since_ms` ouder dan 30s in combinatie met `waiting_locale` triggert server-side force-recover.
 

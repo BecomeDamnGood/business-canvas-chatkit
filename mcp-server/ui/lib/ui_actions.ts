@@ -297,8 +297,8 @@ async function flushQueuedStartAction(source: string): Promise<void> {
     !expectedHostWidgetSessionId ||
     !latestOrdering.hostWidgetSessionId ||
     latestOrdering.hostWidgetSessionId === expectedHostWidgetSessionId;
-  const sessionGuardEnabled = uiFlagEnabled("UI_BOOTSTRAP_SESSION_GUARD_V1", true);
-  const hostGuardEnabled = uiFlagEnabled("UI_HOST_WIDGET_SESSION_GUARD_V1", true);
+  const sessionGuardEnabled = true;
+  const hostGuardEnabled = true;
   if ((sessionGuardEnabled && (!sessionCompatible || !epochCompatible)) || (hostGuardEnabled && !hostSessionCompatible)) {
     console.log("[bootstrap_session_epoch_mismatch]", {
       source,
@@ -368,6 +368,17 @@ function latestBootstrapOrderingFromState(): { sessionId: string; epoch: number;
   };
 }
 
+function bootstrapPollSignatureFromState(state: Record<string, unknown> | null | undefined): string {
+  const s = state && typeof state === "object" ? state : {};
+  return [
+    String(s.bootstrap_session_id || "").trim(),
+    String(parsePositiveInt(s.bootstrap_epoch)),
+    String(parsePositiveInt(s.response_seq)),
+    String(s.host_widget_session_id || "").trim(),
+    String(s.current_step || "").trim(),
+  ].join("|");
+}
+
 function normalizeToolOutput(
   raw: unknown,
   options?: { fallbackRaw?: unknown }
@@ -412,7 +423,6 @@ export function extractBootstrapOrdering(
 
 export function computeBootstrapRenderState(params: {
   hydration: import("./locale_bootstrap_runtime.js").HydrationStatus;
-  uiGateStatus: string;
   uiStringsStatus: import("./locale_bootstrap_runtime.js").ResolvedWidgetPayload["ui_strings_status"];
   uiFlags: Record<string, unknown>;
   uiView: Record<string, unknown>;
@@ -540,6 +550,8 @@ const LOCALE_WAIT_RETRY_MAX_MS = 2000;
 const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
 let localeWaitRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
+let bootstrapPollInFlight = false;
+let bootstrapPollInFlightSignature = "";
 
 function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   const raw = (globalThis as Record<string, unknown>)[name];
@@ -624,6 +636,9 @@ function maybeScheduleBootstrapRetry(
         waiting_reason: hydration.waiting_reason,
       });
     }
+    return computeHydrationState(resolved);
+  }
+  if (bootstrapPollInFlight) {
     return computeHydrationState(resolved);
   }
   if (!localeWaitRetryTimer) {
@@ -1122,6 +1137,25 @@ export async function callRunStep(
     locale_hint_source: localeHint ? "webplus_i18n" : "none",
     state: nextState,
   };
+  const bootstrapPollSignature = isBootstrapPollCall
+    ? bootstrapPollSignatureFromState(nextState as Record<string, unknown>)
+    : "";
+  if (isBootstrapPollCall) {
+    if (
+      bootstrapPollInFlight &&
+      bootstrapPollSignature &&
+      bootstrapPollSignature === bootstrapPollInFlightSignature
+    ) {
+      if (isDevEnv()) {
+        console.log("[ui_bootstrap_poll_deduped]", {
+          poll_signature: bootstrapPollSignature,
+        });
+      }
+      return;
+    }
+    bootstrapPollInFlight = true;
+    bootstrapPollInFlightSignature = bootstrapPollSignature;
+  }
 
   const requestId = String((nextState as any).__request_id || "");
   const clientActionId = String((nextState as any).__client_action_id || "");
@@ -1287,6 +1321,10 @@ export async function callRunStep(
     const errEl = document.getElementById("cardDesc");
     if (errEl) errEl.textContent = errMsg;
   } finally {
+    if (isBootstrapPollCall) {
+      bootstrapPollInFlight = false;
+      bootstrapPollInFlightSignature = "";
+    }
     if (timeoutId) clearTimeout(timeoutId);
     if (!didTimeout) setLoading(false);
   }

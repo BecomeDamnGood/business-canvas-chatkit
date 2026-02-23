@@ -1051,7 +1051,6 @@ test("computeBootstrapRenderState returns waiting_locale phase for non-EN pendin
       retry_exhausted: false,
       waiting_reason: "i18n_pending",
     },
-    uiGateStatus: "waiting_locale",
     uiStringsStatus: "pending",
     uiFlags: {
       bootstrap_waiting_locale: true,
@@ -1076,7 +1075,7 @@ test("render source ignores empty or mismatched locale override maps", () => {
   assert.match(source, /if \(shouldApplyOverride\) \{[\s\S]*UI_STRINGS\[overrideBucket\] = \{ \.\.\.UI_STRINGS\.default, \.\.\.\(overrideStringsMap as Record<string, string>\) \};/);
 });
 
-test("computeBootstrapRenderState returns interactive_fallback phase when fallback is active", () => {
+test("computeBootstrapRenderState maps interactive_fallback payloads to waiting_locale", () => {
   const state = computeBootstrapRenderState({
     hydration: {
       needs_hydration: false,
@@ -1084,7 +1083,6 @@ test("computeBootstrapRenderState returns interactive_fallback phase when fallba
       retry_exhausted: false,
       waiting_reason: "i18n_pending",
     },
-    uiGateStatus: "waiting_locale",
     uiStringsStatus: "pending",
     uiFlags: {
       bootstrap_waiting_locale: true,
@@ -1097,9 +1095,9 @@ test("computeBootstrapRenderState returns interactive_fallback phase when fallba
     hasState: true,
     hasCurrentStep: true,
   });
-  assert.equal(state.phase, "interactive_fallback");
+  assert.equal(state.phase, "waiting_locale");
   assert.equal(state.bootstrapWaitingLocale, true);
-  assert.equal(state.interactiveFallbackActive, true);
+  assert.equal(state.interactiveFallbackActive, false);
   assert.equal(state.waitingForI18n, true);
 });
 
@@ -1111,7 +1109,6 @@ test("computeBootstrapRenderState keeps recovery routing deterministic when retr
       retry_exhausted: true,
       waiting_reason: "missing_state",
     },
-    uiGateStatus: "waiting_locale",
     uiStringsStatus: "pending",
     uiFlags: {
       bootstrap_waiting_locale: true,
@@ -1322,6 +1319,8 @@ test("ui actions source uses explicit bootstrap poll action and shared result ha
   const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
   assert.match(source, /const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";/);
   assert.match(source, /const HYDRATION_MAX_RETRIES = 3;/);
+  assert.match(source, /let bootstrapPollInFlight = false;/);
+  assert.match(source, /ui_bootstrap_poll_deduped/);
   assert.match(source, /__bootstrap_poll: "true"/);
   assert.match(source, /__hydrate_poll: "true"/);
   assert.match(source, /export function resolveWidgetPayload/);
@@ -1369,14 +1368,13 @@ test("computeBootstrapRenderState classifies missing state + pending locale as w
       retry_exhausted: false,
       waiting_reason: "both",
     },
-    uiGateStatus: "waiting_locale",
     uiStringsStatus: "pending",
     uiFlags: {
       bootstrap_waiting_locale: true,
       bootstrap_interactive_ready: false,
       interactive_fallback_active: false,
     },
-    uiView: { mode: "waiting_locale", waiting_locale: true },
+    uiView: {},
     localeKnownNonEn: true,
     hasState: false,
     hasCurrentStep: false,
@@ -1497,6 +1495,51 @@ test("resolveWidgetPayload ignores stale cross-session fallback payloads", () =>
   assert.equal(resolved.bootstrap_epoch, 2);
   assert.equal(resolved.response_seq, 20);
   assert.equal(String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""), "NewSession");
+});
+
+test("resolveWidgetPayload keeps newest response_seq within same session/epoch", () => {
+  const resolved = resolveWidgetPayload(
+    {
+      structuredContent: {
+        result: {
+          state: {
+            current_step: "step_0",
+            bootstrap_session_id: "session_same",
+            bootstrap_epoch: 3,
+            response_seq: 12,
+            host_widget_session_id: "host_same",
+          },
+          ui: {
+            questionText: "Newest",
+          },
+        },
+      },
+    },
+    {
+      fallbackRaw: {
+        _meta: {
+          widget_result: {
+            state: {
+              current_step: "step_0",
+              bootstrap_session_id: "session_same",
+              bootstrap_epoch: 3,
+              response_seq: 11,
+              host_widget_session_id: "host_same",
+            },
+            ui: {
+              questionText: "OlderButRicher",
+              big_blob: "x".repeat(400),
+            },
+          },
+        },
+      },
+    } as any
+  );
+
+  assert.equal(resolved.bootstrap_session_id, "session_same");
+  assert.equal(resolved.bootstrap_epoch, 3);
+  assert.equal(resolved.response_seq, 12);
+  assert.equal(String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""), "Newest");
 });
 
 test("computeHydrationState uses shared v2_minimal missing-state rule", () => {

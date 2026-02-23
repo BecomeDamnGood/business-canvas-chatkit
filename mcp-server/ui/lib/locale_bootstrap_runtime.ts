@@ -20,12 +20,7 @@ export type BootstrapPhase =
   | "interactive_fallback"
   | "ready"
   | "recovery";
-export type BootstrapDecision = {
-  phase: BootstrapPhase;
-  retry_hint: "poll" | "none";
-  interactive_allowed: boolean;
-  render_mode: "wait_shell" | "interactive" | "recovery";
-};
+export type BootstrapRenderMode = "wait_shell" | "interactive" | "recovery";
 
 export type ResolvedWidgetPayload = {
   result: Record<string, unknown>;
@@ -54,7 +49,7 @@ export type HydrationStatus = {
 
 export type BootstrapRenderState = {
   phase: BootstrapPhase;
-  render_mode: BootstrapDecision["render_mode"];
+  render_mode: BootstrapRenderMode;
   waitingForMissingState: boolean;
   waitingForI18n: boolean;
   serverExplicitWaiting: boolean;
@@ -122,76 +117,25 @@ function normalizeUiStringsStatus(raw: unknown): "ready" | "pending" | "error" |
   return "unknown";
 }
 
-function normalizeUiGateStatus(raw: unknown): "waiting_locale" | "ready" | "unknown" {
-  const status = toLower(raw);
-  if (status === "waiting_locale" || status === "ready") return status;
-  return "unknown";
+function phaseFromViewMode(raw: unknown): BootstrapPhase | "" {
+  const mode = toLower(raw);
+  if (mode === "waiting_locale") return "waiting_locale";
+  if (mode === "recovery") return "recovery";
+  if (mode === "interactive" || mode === "prestart") return "ready";
+  return "";
 }
 
-export function computeBootstrapDecision(params: {
-  has_state: boolean;
-  has_current_step: boolean;
-  ui_strings_status: "ready" | "pending" | "error" | "unknown";
-  ui_gate_status: "waiting_locale" | "ready" | "unknown";
-  locale_known_non_en: boolean;
-  interactive_fallback_enabled: boolean;
-  retry_count: number;
-  retry_exhausted: boolean;
-  waiting_ttl_expired: boolean;
-}): BootstrapDecision {
-  const {
-    has_state,
-    has_current_step,
-    ui_strings_status,
-    ui_gate_status,
-    locale_known_non_en,
-    interactive_fallback_enabled,
-    retry_exhausted,
-    waiting_ttl_expired,
-  } = params;
-  if (retry_exhausted || waiting_ttl_expired) {
-    return {
-      phase: "recovery",
-      retry_hint: "none",
-      interactive_allowed: false,
-      render_mode: "recovery",
-    };
+function renderModeFromPhase(phase: BootstrapPhase): BootstrapRenderMode {
+  if (phase === "recovery") return "recovery";
+  if (
+    phase === "waiting_state" ||
+    phase === "waiting_locale" ||
+    phase === "waiting_both" ||
+    phase === "interactive_fallback"
+  ) {
+    return "wait_shell";
   }
-  const missing_state = !has_state || !has_current_step;
-  const locale_pending =
-    ui_strings_status === "pending" ||
-    ui_strings_status === "error" ||
-    (ui_strings_status === "unknown" && (ui_gate_status === "waiting_locale" || locale_known_non_en)) ||
-    (locale_known_non_en && ui_strings_status !== "ready");
-  let phase: BootstrapPhase = "ready";
-  if (missing_state && locale_pending) phase = "waiting_both";
-  else if (missing_state) phase = "waiting_state";
-  else if (locale_pending) phase = interactive_fallback_enabled ? "interactive_fallback" : "waiting_locale";
-  const waiting =
-    phase === "waiting_state" ||
-    phase === "waiting_locale" ||
-    phase === "waiting_both" ||
-    phase === "interactive_fallback";
-  return {
-    phase,
-    retry_hint: waiting ? "poll" : "none",
-    interactive_allowed: phase === "ready" || phase === "interactive_fallback",
-    render_mode: waiting ? "wait_shell" : "interactive",
-  };
-}
-
-function decisionFromPhase(phase: BootstrapPhase): BootstrapDecision {
-  const waiting =
-    phase === "waiting_state" ||
-    phase === "waiting_locale" ||
-    phase === "waiting_both" ||
-    phase === "interactive_fallback";
-  return {
-    phase,
-    retry_hint: waiting ? "poll" : "none",
-    interactive_allowed: phase === "ready" || phase === "interactive_fallback",
-    render_mode: phase === "recovery" ? "recovery" : waiting ? "wait_shell" : "interactive",
-  };
+  return "interactive";
 }
 
 export function isWidgetResultLike(value: unknown): value is Record<string, unknown> {
@@ -356,9 +300,12 @@ function pickBestCandidate(candidates: PayloadCandidate[]): PayloadCandidate | n
       }
       if (cur.order < hostAnchor.order) hostAnchor = cur;
     }
-    const hostScoped = candidates.filter(
-      (candidate) => candidate.host_widget_session_id === hostAnchor.host_widget_session_id
-    );
+    const hostScoped = candidates.filter((candidate) => {
+      if (candidate.host_widget_session_id !== hostAnchor.host_widget_session_id) return false;
+      if (hostAnchor.bootstrap_epoch > 0 && candidate.bootstrap_epoch !== hostAnchor.bootstrap_epoch) return false;
+      if (hostAnchor.response_seq > 0 && candidate.response_seq !== hostAnchor.response_seq) return false;
+      return true;
+    });
     if (hostScoped.length > 0) {
       if (hostScoped.length < candidates.length) {
         console.warn("[host_session_mismatch_dropped]", {
@@ -369,15 +316,12 @@ function pickBestCandidate(candidates: PayloadCandidate[]): PayloadCandidate | n
       scoped = hostScoped;
     }
   }
-  const candidatesWithSession = candidates.filter(
+  const candidatesWithSession = scoped.filter(
     (candidate) => candidate.bootstrap_session_id && candidate.bootstrap_epoch > 0
   );
   if (candidatesWithSession.length > 0) {
-    const scopedCandidatesWithSession = scoped.filter(
-      (candidate) => candidate.bootstrap_session_id && candidate.bootstrap_epoch > 0
-    );
-    let anchor = scopedCandidatesWithSession.length > 0 ? scopedCandidatesWithSession[0] : candidatesWithSession[0];
-    const anchorPool = scopedCandidatesWithSession.length > 0 ? scopedCandidatesWithSession : candidatesWithSession;
+    let anchor = candidatesWithSession[0];
+    const anchorPool = candidatesWithSession;
     for (let i = 1; i < anchorPool.length; i += 1) {
       const cur = anchorPool[i];
       if (cur.bootstrap_epoch !== anchor.bootstrap_epoch) {
@@ -390,12 +334,15 @@ function pickBestCandidate(candidates: PayloadCandidate[]): PayloadCandidate | n
       }
       if (cur.order < anchor.order) anchor = cur;
     }
-    scoped = candidates.filter(
-      (candidate) =>
-        candidate.bootstrap_session_id === anchor.bootstrap_session_id &&
-        candidate.bootstrap_epoch === anchor.bootstrap_epoch &&
-        (!anchor.host_widget_session_id || candidate.host_widget_session_id === anchor.host_widget_session_id)
-    );
+    scoped = scoped.filter((candidate) => {
+      if (candidate.bootstrap_session_id !== anchor.bootstrap_session_id) return false;
+      if (candidate.bootstrap_epoch !== anchor.bootstrap_epoch) return false;
+      if (anchor.host_widget_session_id && candidate.host_widget_session_id !== anchor.host_widget_session_id) {
+        return false;
+      }
+      if (anchor.response_seq > 0 && candidate.response_seq !== anchor.response_seq) return false;
+      return true;
+    });
     if (!scoped.length) scoped = [anchor];
   }
 
@@ -549,7 +496,6 @@ export function normalizeToolOutput(
 
 export function computeBootstrapRenderState(params: {
   hydration: HydrationStatus;
-  uiGateStatus: string;
   uiStringsStatus: ResolvedWidgetPayload["ui_strings_status"];
   uiFlags: Record<string, unknown>;
   uiView: Record<string, unknown>;
@@ -557,80 +503,62 @@ export function computeBootstrapRenderState(params: {
   hasState?: boolean;
   hasCurrentStep?: boolean;
 }): BootstrapRenderState {
-  const { hydration, uiGateStatus, uiStringsStatus, uiFlags, uiView, localeKnownNonEn } = params;
-  const legacyWaitingForMissingState =
+  const { hydration, uiStringsStatus, uiFlags, uiView, localeKnownNonEn } = params;
+  const waitingForMissingStateByHydration =
     hydration.waiting_reason === "missing_state" || hydration.waiting_reason === "both";
-  const legacyWaitingForI18n =
+  const waitingForI18nByHydration =
     hydration.waiting_reason === "i18n_pending" || hydration.waiting_reason === "both";
-  const serverExplicitWaiting =
-    String(uiView.mode || "").trim().toLowerCase() === "waiting_locale" ||
-    uiView.waiting_locale === true;
+  const serverExplicitWaiting = toLower(uiView.mode) === "waiting_locale" || uiView.waiting_locale === true;
   const forceLocaleWait = localeKnownNonEn && uiStringsStatus !== "ready";
-  const legacyBootstrapWaitingLocale =
-    legacyWaitingForI18n ||
-    serverExplicitWaiting ||
-    forceLocaleWait ||
-    uiFlags.bootstrap_waiting_locale === true ||
-    (String(uiGateStatus || "").trim().toLowerCase() === "waiting_locale" && uiStringsStatus !== "ready");
-  const legacyInteractiveFallbackActive =
-    (!forceLocaleWait && uiFlags.interactive_fallback_active === true) ||
-    (!forceLocaleWait && legacyBootstrapWaitingLocale && uiFlags.bootstrap_interactive_ready === true);
-  let legacyPhase: BootstrapPhase = "ready";
-  if (hydration.retry_exhausted) legacyPhase = "recovery";
-  else if (legacyWaitingForMissingState && legacyWaitingForI18n) legacyPhase = "waiting_both";
-  else if (legacyWaitingForMissingState) legacyPhase = "waiting_state";
-  else if (legacyBootstrapWaitingLocale) legacyPhase = legacyInteractiveFallbackActive ? "interactive_fallback" : "waiting_locale";
+  const phaseFromMode = phaseFromViewMode(uiView.mode);
+  const phaseFromPayloadRaw = normalizeBootstrapPhase(uiView.bootstrap_phase || uiFlags.bootstrap_phase);
+  const phaseFromPayload =
+    phaseFromPayloadRaw === "interactive_fallback" ? "waiting_locale" : phaseFromPayloadRaw;
 
-  const hasState = params.hasState ?? !legacyWaitingForMissingState;
-  const hasCurrentStep = params.hasCurrentStep ?? !legacyWaitingForMissingState;
-  const fsmInputDecision = computeBootstrapDecision({
-    has_state: hasState,
-    has_current_step: hasCurrentStep,
-    ui_strings_status: normalizeUiStringsStatus(uiStringsStatus),
-    ui_gate_status: normalizeUiGateStatus(uiGateStatus),
-    locale_known_non_en: localeKnownNonEn,
-    interactive_fallback_enabled:
-      uiFlags.interactive_fallback_active === true ||
-      uiFlags.bootstrap_interactive_ready === true,
-    retry_count: hydration.retry_count,
-    retry_exhausted: hydration.retry_exhausted,
-    waiting_ttl_expired: false,
-  });
-  const phaseFromPayload = normalizeBootstrapPhase(uiView.bootstrap_phase || uiFlags.bootstrap_phase);
-  const finalDecision = hydration.retry_exhausted
-    ? decisionFromPhase("recovery")
-    : phaseFromPayload
-      ? decisionFromPhase(phaseFromPayload)
-      : fsmInputDecision;
-  if (legacyPhase !== finalDecision.phase) {
+  let finalPhase: BootstrapPhase;
+  if (hydration.retry_exhausted) {
+    finalPhase = "recovery";
+  } else if (phaseFromMode) {
+    finalPhase = phaseFromMode;
+  } else if (phaseFromPayload) {
+    finalPhase = phaseFromPayload;
+  } else if (waitingForMissingStateByHydration && waitingForI18nByHydration) {
+    finalPhase = "waiting_both";
+  } else if (waitingForMissingStateByHydration) {
+    finalPhase = "waiting_state";
+  } else if (waitingForI18nByHydration || forceLocaleWait) {
+    finalPhase = "waiting_locale";
+  } else {
+    finalPhase = "ready";
+  }
+
+  const hydrationPhase: BootstrapPhase = waitingForMissingStateByHydration
+    ? (waitingForI18nByHydration ? "waiting_both" : "waiting_state")
+    : (waitingForI18nByHydration ? "waiting_locale" : "ready");
+  if (hydrationPhase !== finalPhase && !phaseFromPayload && !phaseFromMode) {
     bootstrapPhaseMismatchCount += 1;
     console.log("[bootstrap_phase_mismatch_ui]", {
       bootstrap_phase_mismatch_count: bootstrapPhaseMismatchCount,
-      legacy_phase: legacyPhase,
-      fsm_phase: finalDecision.phase,
+      hydration_phase: hydrationPhase,
+      resolved_phase: finalPhase,
     });
   }
-  const waitingForMissingState = finalDecision.phase === "recovery"
-    ? legacyWaitingForMissingState
-    : (finalDecision.phase === "waiting_state" || finalDecision.phase === "waiting_both");
-  const waitingForI18n = finalDecision.phase === "recovery"
-    ? !legacyWaitingForMissingState
-    : (
-      finalDecision.phase === "waiting_locale" ||
-      finalDecision.phase === "waiting_both" ||
-      finalDecision.phase === "interactive_fallback"
-    );
-  const bootstrapWaitingLocale = finalDecision.phase === "recovery"
-    ? !legacyWaitingForMissingState
-    : (
-      finalDecision.phase === "waiting_locale" ||
-      finalDecision.phase === "waiting_both" ||
-      finalDecision.phase === "interactive_fallback"
-    );
-  const interactiveFallbackActive = finalDecision.phase === "interactive_fallback";
+  const waitingForMissingState = finalPhase === "recovery"
+    ? waitingForMissingStateByHydration
+    : (finalPhase === "waiting_state" || finalPhase === "waiting_both");
+  const waitingForI18n = finalPhase === "recovery"
+    ? (!waitingForMissingStateByHydration && waitingForI18nByHydration)
+    : (finalPhase === "waiting_locale" || finalPhase === "waiting_both");
+  const bootstrapWaitingLocale =
+    finalPhase === "recovery"
+      ? false
+      : (waitingForI18n || serverExplicitWaiting || forceLocaleWait);
+  const effectivePhase: BootstrapPhase =
+    bootstrapWaitingLocale && finalPhase === "ready" ? "waiting_locale" : finalPhase;
+  const interactiveFallbackActive = false;
   return {
-    phase: finalDecision.phase,
-    render_mode: finalDecision.render_mode,
+    phase: effectivePhase,
+    render_mode: renderModeFromPhase(effectivePhase),
     waitingForMissingState,
     waitingForI18n,
     serverExplicitWaiting,

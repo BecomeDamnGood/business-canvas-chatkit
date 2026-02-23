@@ -10,6 +10,7 @@ const uiBundlePath = path.join(repoRoot, "ui", "step-card.bundled.html");
 const distBundlePath = path.join(repoRoot, "dist", "ui", "step-card.bundled.html");
 const serverTsPath = path.join(repoRoot, "server.ts");
 const distServerJsPath = path.join(repoRoot, "dist", "server.js");
+const buildUiScriptPath = path.join(repoRoot, "scripts", "build-ui.mjs");
 
 const issues = [];
 
@@ -44,30 +45,14 @@ function assertMatchesRegex(haystack, regex, context, message) {
   }
 }
 
-const tsFiles = fs
-  .readdirSync(uiLibDir, { withFileTypes: true })
-  .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
-  .map((entry) => entry.name)
-  .sort();
-
-for (const tsName of tsFiles) {
-  const jsName = tsName.replace(/\.ts$/, ".js");
-  const jsPath = path.join(uiLibDir, jsName);
-  if (!fs.existsSync(jsPath)) {
-    pushIssue(`missing JS counterpart for ${path.join("ui", "lib", tsName)}`);
-  }
-}
-
 const srcRenderTs = readUtf8(path.join(uiLibDir, "ui_render.ts"));
-const srcRenderJs = readUtf8(path.join(uiLibDir, "ui_render.js"));
 const srcActionsTs = readUtf8(path.join(uiLibDir, "ui_actions.ts"));
-const srcActionsJs = readUtf8(path.join(uiLibDir, "ui_actions.js"));
 const srcMainTs = readUtf8(path.join(uiLibDir, "main.ts"));
-const srcMainJs = readUtf8(path.join(uiLibDir, "main.js"));
 const uiBundle = readUtf8(uiBundlePath);
 const distBundle = readUtf8(distBundlePath);
 const serverTs = readUtf8(serverTsPath);
 const distServerJs = readUtf8(distServerJsPath);
+const buildUiScript = readUtf8(buildUiScriptPath);
 
 assertIncludes(
   srcRenderTs,
@@ -77,14 +62,8 @@ assertIncludes(
 assertIncludes(srcRenderTs, "const bootstrapWaitingLocale =", "ui/lib/ui_render.ts");
 assertExcludes(srcRenderTs, "pendingNonEnglishByState", "ui/lib/ui_render.ts");
 
-assertIncludes(srcRenderJs, "ensureBootstrapRetryForResult(data, { source: \"render\" });", "ui/lib/ui_render.js");
-assertIncludes(srcRenderJs, "const bootstrapWaitingLocale =", "ui/lib/ui_render.js");
-assertExcludes(srcRenderJs, "pendingNonEnglishByState", "ui/lib/ui_render.js");
-
 assertIncludes(srcActionsTs, "export function ensureBootstrapRetryForResult(", "ui/lib/ui_actions.ts");
-assertIncludes(srcActionsJs, "export function ensureBootstrapRetryForResult(", "ui/lib/ui_actions.js");
 assertExcludes(srcActionsTs, "__locale_wait_retry", "ui/lib/ui_actions.ts");
-assertExcludes(srcActionsJs, "__locale_wait_retry", "ui/lib/ui_actions.js");
 
 assertIncludes(
   srcMainTs,
@@ -98,19 +77,9 @@ assertIncludes(
 );
 assertIncludes(srcMainTs, 'callRunStep("ACTION_START", { started: "true" });', "ui/lib/main.ts");
 assertExcludes(srcMainTs, "if (hasToolOutput())", "ui/lib/main.ts");
-assertIncludes(
-  srcMainJs,
-  "mergeToolOutputWithResponseMetadata(",
-  "ui/lib/main.js"
-);
-assertIncludes(
-  srcMainJs,
-  'handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });',
-  "ui/lib/main.js"
-);
-assertIncludes(srcMainJs, 'callRunStep("ACTION_START", { started: "true" });', "ui/lib/main.js");
-assertExcludes(srcMainJs, "if (hasToolOutput())", "ui/lib/main.js");
 
+assertIncludes(buildUiScript, 'path.join(uiLibDir, "main.ts")', "scripts/build-ui.mjs");
+assertExcludes(buildUiScript, 'path.join(uiLibDir, "main.js")', "scripts/build-ui.mjs");
 for (const [label, content] of [
   ["server.ts", serverTs],
   ["dist/server.js", distServerJs],

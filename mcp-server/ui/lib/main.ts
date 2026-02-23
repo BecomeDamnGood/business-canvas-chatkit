@@ -84,11 +84,21 @@ function shouldAcceptBootstrapPayload(
   payload: unknown,
   source: "set_globals" | "host_notification"
 ): boolean {
-  if (!uiFlagEnabled("UI_BOOTSTRAP_SESSION_GUARD_V1", true)) return true;
   const ordering = extractBootstrapOrdering(payload);
-  const hostSessionGuardEnabled = uiFlagEnabled("UI_HOST_WIDGET_SESSION_GUARD_V1", true);
+  const sameHostScope =
+    Boolean(ordering.host_widget_session_id) &&
+    Boolean(latestBootstrapOrderingCursor.hostWidgetSessionId) &&
+    ordering.host_widget_session_id === latestBootstrapOrderingCursor.hostWidgetSessionId;
+  const sameSessionScope =
+    Boolean(ordering.bootstrap_session_id) &&
+    Boolean(latestBootstrapOrderingCursor.sessionId) &&
+    ordering.bootstrap_session_id === latestBootstrapOrderingCursor.sessionId;
+  const sameSessionEpochScope =
+    sameSessionScope &&
+    ordering.bootstrap_epoch > 0 &&
+    latestBootstrapOrderingCursor.epoch > 0 &&
+    ordering.bootstrap_epoch === latestBootstrapOrderingCursor.epoch;
   if (
-    hostSessionGuardEnabled &&
     ordering.host_widget_session_id &&
     latestBootstrapOrderingCursor.hostWidgetSessionId &&
     ordering.host_widget_session_id !== latestBootstrapOrderingCursor.hostWidgetSessionId
@@ -108,6 +118,7 @@ function shouldAcceptBootstrapPayload(
   if (
     ordering.response_seq > 0 &&
     latestBootstrapOrderingCursor.responseSeq > 0 &&
+    (sameHostScope || sameSessionEpochScope) &&
     ordering.response_seq < latestBootstrapOrderingCursor.responseSeq
   ) {
     console.warn("[stale_bootstrap_payload_dropped]", {
@@ -123,9 +134,7 @@ function shouldAcceptBootstrapPayload(
     return false;
   }
   if (
-    ordering.bootstrap_session_id &&
-    latestBootstrapOrderingCursor.sessionId &&
-    ordering.bootstrap_session_id === latestBootstrapOrderingCursor.sessionId &&
+    sameSessionScope &&
     ordering.bootstrap_epoch > 0 &&
     latestBootstrapOrderingCursor.epoch > 0 &&
     ordering.bootstrap_epoch < latestBootstrapOrderingCursor.epoch
@@ -140,10 +149,30 @@ function shouldAcceptBootstrapPayload(
     });
     return false;
   }
+  if (
+    ordering.bootstrap_session_id &&
+    latestBootstrapOrderingCursor.sessionId &&
+    ordering.bootstrap_session_id !== latestBootstrapOrderingCursor.sessionId
+  ) {
+    latestBootstrapOrderingCursor.epoch = 0;
+    latestBootstrapOrderingCursor.responseSeq = 0;
+  }
   if (ordering.bootstrap_session_id) latestBootstrapOrderingCursor.sessionId = ordering.bootstrap_session_id;
   if (ordering.host_widget_session_id) latestBootstrapOrderingCursor.hostWidgetSessionId = ordering.host_widget_session_id;
-  if (ordering.bootstrap_epoch > 0) latestBootstrapOrderingCursor.epoch = ordering.bootstrap_epoch;
-  if (ordering.response_seq > 0) latestBootstrapOrderingCursor.responseSeq = ordering.response_seq;
+  if (ordering.bootstrap_epoch > 0) {
+    if (ordering.bootstrap_epoch > latestBootstrapOrderingCursor.epoch) {
+      latestBootstrapOrderingCursor.epoch = ordering.bootstrap_epoch;
+      latestBootstrapOrderingCursor.responseSeq = 0;
+    } else if (latestBootstrapOrderingCursor.epoch <= 0) {
+      latestBootstrapOrderingCursor.epoch = ordering.bootstrap_epoch;
+    }
+  }
+  if (ordering.response_seq > 0) {
+    latestBootstrapOrderingCursor.responseSeq = Math.max(
+      latestBootstrapOrderingCursor.responseSeq,
+      ordering.response_seq
+    );
+  }
   return true;
 }
 

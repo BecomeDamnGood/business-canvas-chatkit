@@ -61,8 +61,9 @@ Error (`ok: false`):
 
 ## 6) Static Serving & Dev Workflow
 
-- UI assets served from `/ui/step-card` and `/ui/lib/*.js`.
-- Dev workflow: `npm run build:ui` (optionally `--watch`) + `npm run dev`.
+- UI assets served from `/ui/step-card` (single bundled artifact) and static `/ui/*`.
+- Bundle generation is TS-first from `ui/lib/*.ts` via `scripts/build-ui.mjs`.
+- Dev workflow: `npm run dev` (and run `npm run typecheck` when needed).
 
 ## 7) Invariants
 
@@ -71,3 +72,11 @@ Error (`ok: false`):
 - `ui.contract_id` must be present whenever buttons are rendered.
 - No legacy fallback routing in widget mode.
 - `registry_version` should be logged with menu/button interactions.
+
+## 8) Bootstrap/Locale Authority (Single Source of Truth)
+
+- Server-side bootstrap policy is authoritative for `bootstrap_phase`, `ui_gate_status`, `ui_strings_status`, and `ui.view.mode`.
+- The widget must treat incoming state claims as untrusted hints and only render server-emitted intent.
+- Rich UI state is carried through `_meta.widget_result`; `structuredContent.result` remains minimal/model-safe.
+- `interactive_fallback` is not used for non-EN pending locale on `step_0`; server must emit `waiting_locale` or `recovery`.
+- Widget render priority is: `ui.view.mode` first, then recovery fallback for corrupt/missing payload.

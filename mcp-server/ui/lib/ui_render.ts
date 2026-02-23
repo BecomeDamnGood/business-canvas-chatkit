@@ -568,7 +568,6 @@ export function render(overrideToolOutput?: unknown): void {
   ensureBootstrapRetryForResult(data, { source: "render" });
   const hydration = computeHydrationState(resolved);
   const uiStringsStatus = resolved.ui_strings_status;
-  const uiGateStatus = String((state?.ui_gate_status || "") as string).trim().toLowerCase();
   const uiView =
     uiPayload && typeof uiPayload.view === "object" && uiPayload.view
       ? (uiPayload.view as Record<string, unknown>)
@@ -579,13 +578,18 @@ export function render(overrideToolOutput?: unknown): void {
     Boolean(localeBucket) && localeBucket !== "en" && localeBucket !== "default";
   const serverExplicitWaiting =
     viewMode === "waiting_locale" ||
-    uiView.waiting_locale === true;
+    (uiView.waiting_locale === true && !viewMode);
   const serverExplicitPrestart = viewMode === "prestart";
+  const serverExplicitInteractive = viewMode === "interactive";
   const serverExplicitRecovery = viewMode === "recovery";
+  const hasServerExplicitMode =
+    serverExplicitWaiting ||
+    serverExplicitPrestart ||
+    serverExplicitInteractive ||
+    serverExplicitRecovery;
   const forceLocaleWait = localeKnownNonEn && uiStringsStatus !== "ready";
   const bootstrapState = computeBootstrapRenderState({
     hydration,
-    uiGateStatus,
     uiStringsStatus,
     uiFlags,
     uiView,
@@ -597,11 +601,14 @@ export function render(overrideToolOutput?: unknown): void {
   const waitingForI18n = bootstrapState.waitingForI18n;
   const startupGraceActive = isStartupGraceActive();
   const startupPrestartBlocked = startupGraceActive && localeKnownNonEn && uiStringsStatus !== "ready";
-  const bootstrapWaitingLocale =
-    waitingForI18n ||
-    bootstrapState.bootstrapWaitingLocale ||
-    serverExplicitWaiting ||
-    forceLocaleWait;
+  const bootstrapWaitingLocale = serverExplicitWaiting || (
+    !hasServerExplicitMode &&
+    (
+      waitingForI18n ||
+      bootstrapState.bootstrapWaitingLocale ||
+      forceLocaleWait
+    )
+  );
   const interactiveFallbackActive = bootstrapState.interactiveFallbackActive;
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings =
@@ -751,7 +758,11 @@ export function render(overrideToolOutput?: unknown): void {
     setWidgetStateSafe({ language: langPersist });
   }
 
-  const showPreStart = serverExplicitPrestart || (hasToolOutputVal ? !serverStarted : !sessionStarted);
+  const showPreStart = serverExplicitPrestart
+    ? true
+    : serverExplicitInteractive
+      ? false
+      : (hasToolOutputVal ? !serverStarted : !sessionStarted);
 
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
