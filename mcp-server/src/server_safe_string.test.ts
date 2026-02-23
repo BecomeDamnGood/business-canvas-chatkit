@@ -67,7 +67,16 @@ test("tool input schemas canonicalize legacy state.language_source before zod en
 test("open_canvas bootstrap writes canonical state.language_source (never transport source)", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /const persistedLanguageSource = normalizeStateLanguageSource\(sourceState\.language_source\);/);
-  assert.match(source, /const finalLanguageSource = resolvedLanguage \? "locale_hint" : persistedLanguageSource;/);
+  assert.match(
+    source,
+    /const finalLanguageSource =[\s\S]*resolvedLanguage[\s\S]*"locale_hint"[\s\S]*persistedLanguageSource/,
+    "final language source must canonicalize transport locale into locale_hint and otherwise use persisted canonical source"
+  );
+  assert.match(source, /function uiStringsRenderableForLang\(/);
+  assert.match(source, /const uiStringsStatus = gateReady \? "ready" : "pending";/);
+  assert.doesNotMatch(source, /const bootstrapState: Record<string, unknown> = \{\s*\.\.\.sourceState,/);
+  assert.match(source, /intro_shown_session: "false"/);
+  assert.match(source, /last_specialist_result: \{\}/);
   assert.match(source, /bootstrap_state_language_source/);
 });
 

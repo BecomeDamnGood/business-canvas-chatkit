@@ -17,6 +17,7 @@ import {
   CanvasStateZod,
   getDefaultState,
   getFinalsSnapshot,
+  normalizeState,
   normalizeStateLanguageSource,
 } from "./src/core/state.js";
 import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
@@ -86,6 +87,19 @@ const UI_RESOURCE_NAME = "business-canvas-widget";
 const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
 const OPEN_CANVAS_DEDUPE_TTL_MS = Number(process.env.OPEN_CANVAS_DEDUPE_TTL_MS || 5000);
+const OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0 = [
+  "prestart.headline",
+  "prestart.proven.title",
+  "prestart.proven.body",
+  "prestart.outcomes.title",
+  "prestart.outcomes.item1",
+  "prestart.outcomes.item2",
+  "prestart.outcomes.item3",
+  "prestart.meta.how.label",
+  "prestart.meta.how.value",
+  "prestart.meta.time.label",
+  "prestart.meta.time.value",
+] as const;
 
 type OpenCanvasToolResponse = {
   content: Array<{ type: "text"; text: string }>;
@@ -361,6 +375,12 @@ function canonicalizeStateForToolInput(raw: unknown): unknown {
   return next;
 }
 
+function uiStringsRenderableForLang(uiStringsRaw: unknown): boolean {
+  if (!uiStringsRaw || typeof uiStringsRaw !== "object" || Array.isArray(uiStringsRaw)) return false;
+  const uiStrings = uiStringsRaw as Record<string, unknown>;
+  return OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0.every((key) => String(uiStrings[key] || "").trim().length > 0);
+}
+
 function mergeLocaleHintInputs(
   argsLocaleHint: unknown,
   argsLocaleSource: unknown,
@@ -433,28 +453,72 @@ function buildOpenCanvasBootstrapResponse(args: {
   state?: Record<string, unknown>;
   seed_user_message?: string;
 }): { structuredContent: Record<string, unknown>; meta: Record<string, unknown> } {
-  const sourceState = args.state && typeof args.state === "object" ? args.state : {};
+  const sourceStateRaw = args.state && typeof args.state === "object" ? args.state : {};
+  const sourceState = normalizeState(sourceStateRaw);
+  const defaults = getDefaultState();
   const resolvedLanguage = normalizeLocaleHint(args.locale_hint);
-  const persistedLanguage = safeString(sourceState.language ?? "").trim().toLowerCase();
+  const persistedLanguage = safeString(sourceState.language || "").trim().toLowerCase();
   const persistedLanguageSource = normalizeStateLanguageSource(sourceState.language_source);
-  const finalLanguage = resolvedLanguage || persistedLanguage;
-  const finalLanguageSource = resolvedLanguage ? "locale_hint" : persistedLanguageSource;
+  const finalLanguage = resolvedLanguage || persistedLanguage || "en";
+  const finalLanguageSource =
+    resolvedLanguage
+      ? "locale_hint"
+      : (persistedLanguageSource || (persistedLanguage ? "persisted" : ""));
   const seedMessage = safeString(args.seed_user_message ?? "").trim();
+  const incomingUiStrings =
+    sourceState.ui_strings && typeof sourceState.ui_strings === "object"
+      ? (sourceState.ui_strings as Record<string, string>)
+      : {};
+  const stringsRenderable = uiStringsRenderableForLang(incomingUiStrings);
+  const gateReady = stringsRenderable || finalLanguage === "en";
+  const uiStringsStatus = gateReady ? "ready" : "pending";
   const bootstrapState: Record<string, unknown> = {
-    ...sourceState,
+    state_version: safeString(sourceState.state_version || defaults.state_version) || defaults.state_version,
     current_step: "step_0",
     started: "false",
     active_specialist: "ValidationAndBusinessName",
-    ui_gate_status: "ready",
-    ui_gate_reason: "",
-    ui_bootstrap_status: "ready",
-    ui_strings_status: safeString(sourceState.ui_strings_status ?? "ready") || "ready",
+    intro_shown_for_step: "",
+    intro_shown_session: "false",
+    language: finalLanguage,
+    language_locked: finalLanguage ? "true" : "false",
+    language_override: "false",
+    language_source: finalLanguageSource,
+    ui_strings: stringsRenderable ? incomingUiStrings : {},
+    ui_strings_lang: finalLanguage,
+    ui_strings_version: safeString(sourceState.ui_strings_version || ""),
+    ui_strings_status: uiStringsStatus,
+    ui_strings_requested_lang: finalLanguage,
+    ui_bootstrap_status: gateReady ? "ready" : "awaiting_locale",
+    ui_gate_status: gateReady ? "ready" : "waiting_locale",
+    ui_gate_reason: gateReady ? "" : "translation_pending",
+    ui_gate_since_ms: gateReady ? 0 : Date.now(),
+    ui_translation_mode: gateReady ? "full" : "critical_first",
+    ui_strings_critical_ready: gateReady ? "true" : "false",
+    ui_strings_full_ready: gateReady ? "true" : "false",
+    ui_strings_background_inflight: gateReady ? "false" : "true",
+    last_specialist_result: {},
+    step_0_final: safeString(sourceState.step_0_final || ""),
+    dream_final: "",
+    purpose_final: "",
+    bigwhy_final: "",
+    role_final: "",
+    entity_final: "",
+    strategy_final: "",
+    targetgroup_final: "",
+    productsservices_final: "",
+    rulesofthegame_final: "",
+    presentation_brief_final: "",
+    provisional_by_step: {},
+    provisional_source_by_step: {},
+    __dream_runtime_mode: "self",
+    dream_builder_statements: [],
+    business_name: safeString(sourceState.business_name || "TBD") || "TBD",
+    quote_last_by_step: {},
+    summary_target: safeString(sourceState.summary_target || "unknown") || "unknown",
   };
   if (seedMessage && !safeString(bootstrapState.initial_user_message ?? "").trim()) {
     bootstrapState.initial_user_message = seedMessage;
   }
-  if (finalLanguage) bootstrapState.language = finalLanguage;
-  if (finalLanguageSource) bootstrapState.language_source = finalLanguageSource;
 
   const resultForClient: Record<string, unknown> = {
     ok: true,

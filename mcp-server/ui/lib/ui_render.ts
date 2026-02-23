@@ -542,7 +542,7 @@ export function render(overrideToolOutput?: unknown): void {
     hydration.waiting_reason === "missing_state" || hydration.waiting_reason === "both";
   const waitingForI18n =
     hydration.waiting_reason === "i18n_pending" || hydration.waiting_reason === "both";
-  const uiStringsStatus = resolved.ui_strings_status === "unknown" ? "ready" : resolved.ui_strings_status;
+  const uiStringsStatus = resolved.ui_strings_status === "unknown" ? "pending" : resolved.ui_strings_status;
   const uiGateStatus = String((state?.ui_gate_status || "") as string).trim().toLowerCase();
   const bootstrapWaitingLocale =
     waitingForI18n ||
@@ -551,9 +551,29 @@ export function render(overrideToolOutput?: unknown): void {
   const interactiveFallbackActive =
     uiFlags.interactive_fallback_active === true ||
     (bootstrapWaitingLocale && uiFlags.bootstrap_interactive_ready === true);
-  if (overrideStrings) {
-    const bucket = overrideLang || baseLang(lang);
-    UI_STRINGS[bucket] = { ...UI_STRINGS.default, ...(overrideStrings as Record<string, string>) };
+  const overrideStringsMap = overrideStrings as Record<string, string> | null;
+  const hasOverrideStrings =
+    Boolean(overrideStringsMap) &&
+    Object.keys(overrideStringsMap || {}).some((key) => String(overrideStringsMap?.[key] || "").trim().length > 0);
+  const langBucket = baseLang(lang);
+  const overrideBucket = baseLang(overrideLang || lang);
+  const shouldApplyOverride =
+    hasOverrideStrings &&
+    uiStringsStatus === "ready" &&
+    overrideBucket === langBucket;
+  if (!shouldApplyOverride && overrideStringsMap && Object.keys(overrideStringsMap).length > 0) {
+    const dev = typeof location !== "undefined" && location.hostname === "localhost";
+    if (dev) {
+      console.log("[ui_override_ignored]", {
+        has_override_strings: hasOverrideStrings,
+        ui_strings_status: uiStringsStatus,
+        override_bucket: overrideBucket,
+        lang_bucket: langBucket,
+      });
+    }
+  }
+  if (shouldApplyOverride) {
+    UI_STRINGS[overrideBucket] = { ...UI_STRINGS.default, ...(overrideStringsMap as Record<string, string>) };
   }
   const hasToolOutputVal = hasToolOutput();
   const serverStarted = String((state?.started || "")).toLowerCase() === "true";

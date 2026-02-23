@@ -5383,6 +5383,36 @@ function normalizeLocaleHint(raw: string): string {
   return normalized;
 }
 
+function hasRenderableUiStringsForState(state: CanvasState | null | undefined): boolean {
+  if (!state || typeof state !== "object") return false;
+  const uiStrings =
+    (state as any).ui_strings && typeof (state as any).ui_strings === "object"
+      ? ((state as any).ui_strings as Record<string, unknown>)
+      : null;
+  if (!uiStrings) return false;
+  return CRITICAL_UI_KEYS_STEP0.every((key) => String(uiStrings[key] || "").trim().length > 0);
+}
+
+function enforceUiStringsReadinessInvariant(state: CanvasState): CanvasState {
+  const lang = normalizeLangCode(
+    String((state as any)?.language || (state as any)?.ui_strings_requested_lang || (state as any)?.ui_strings_lang || "")
+  );
+  if (!lang || lang === "en") return state;
+  const uiStatusRaw = String((state as any)?.ui_strings_status ?? "ready").trim().toLowerCase();
+  const uiStatus = uiStatusRaw === "pending" || uiStatusRaw === "error" ? uiStatusRaw : "ready";
+  if (uiStatus !== "ready") return state;
+  if (hasRenderableUiStringsForState(state)) return state;
+  return {
+    ...(state as any),
+    ui_strings_status: "pending",
+    ui_bootstrap_status: "awaiting_locale",
+    ui_translation_mode: "critical_first",
+    ui_strings_critical_ready: "false",
+    ui_strings_full_ready: "false",
+    ui_strings_background_inflight: "true",
+  } as CanvasState;
+}
+
 function isNonEnglishPendingUiStringsState(state: CanvasState | null | undefined): boolean {
   const lang = normalizeLangCode(String((state as any)?.language ?? ""));
   const uiStatusRaw = String((state as any)?.ui_strings_status ?? "ready").trim().toLowerCase();
@@ -5406,7 +5436,8 @@ function isInteractiveLocaleReady(state: CanvasState | null | undefined): boolea
   if (!lang || lang === "en") return true;
   const uiStatusRaw = String((state as any)?.ui_strings_status ?? "ready").trim().toLowerCase();
   const uiStatus = uiStatusRaw === "pending" || uiStatusRaw === "error" ? uiStatusRaw : "ready";
-  return uiStatus === "ready";
+  if (uiStatus !== "ready") return false;
+  return hasRenderableUiStringsForState(state);
 }
 
 type BootstrapContractState = {
@@ -5464,17 +5495,18 @@ function applyUiGateState(
   previousState: CanvasState | null | undefined,
   nextState: CanvasState
 ): CanvasState {
+  const normalizedNextState = enforceUiStringsReadinessInvariant(nextState);
   if (!isUiLocaleReadyGateV1Enabled()) {
     return {
-      ...(nextState as any),
+      ...(normalizedNextState as any),
       ui_gate_status: "ready",
       ui_gate_reason: "",
       ui_gate_since_ms: 0,
     } as CanvasState;
   }
-  const pendingUiStrings = isNonEnglishPendingUiStringsState(nextState);
-  if (pendingUiStrings && isInteractiveFallbackState(nextState)) {
-    const nextUiStatusRaw = String((nextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
+  const pendingUiStrings = isNonEnglishPendingUiStringsState(normalizedNextState);
+  if (pendingUiStrings && isInteractiveFallbackState(normalizedNextState)) {
+    const nextUiStatusRaw = String((normalizedNextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
     const reason = nextUiStatusRaw === "error" ? "translation_retry" : "translation_pending";
     const prevStatus = String((previousState as any)?.ui_gate_status ?? "").trim();
     const prevSinceRaw = Number((previousState as any)?.ui_gate_since_ms ?? 0);
@@ -5483,21 +5515,21 @@ function applyUiGateState(
         ? Math.trunc(prevSinceRaw)
         : Date.now();
     return {
-      ...(nextState as any),
+      ...(normalizedNextState as any),
       ui_gate_status: "waiting_locale",
       ui_gate_reason: reason,
       ui_gate_since_ms: sinceMs,
     } as CanvasState;
   }
-  if (isInteractiveLocaleReady(nextState)) {
+  if (isInteractiveLocaleReady(normalizedNextState)) {
     return {
-      ...(nextState as any),
+      ...(normalizedNextState as any),
       ui_gate_status: "ready",
       ui_gate_reason: "",
       ui_gate_since_ms: 0,
     } as CanvasState;
   }
-  const nextUiStatusRaw = String((nextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
+  const nextUiStatusRaw = String((normalizedNextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
   const reason = nextUiStatusRaw === "error" ? "translation_retry" : "translation_pending";
   const prevStatus = String((previousState as any)?.ui_gate_status ?? "").trim();
   const prevSinceRaw = Number((previousState as any)?.ui_gate_since_ms ?? 0);
@@ -5506,7 +5538,7 @@ function applyUiGateState(
       ? Math.trunc(prevSinceRaw)
       : Date.now();
   return {
-    ...(nextState as any),
+    ...(normalizedNextState as any),
     ui_gate_status: "waiting_locale",
     ui_gate_reason: reason,
     ui_gate_since_ms: sinceMs,
@@ -8711,7 +8743,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   // START trigger (widget start screen)
   const isStartTrigger =
-    userMessage.trim() === "" &&
+    (userMessage.trim() === "" || actionCodeRaw === "ACTION_START") &&
     state.current_step === STEP_0_ID &&
     String((state as any).intro_shown_session) !== "true" &&
     Object.keys((state as any).last_specialist_result ?? {}).length === 0;

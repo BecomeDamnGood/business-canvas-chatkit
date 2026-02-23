@@ -1037,6 +1037,7 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
 
 test("render source blocks locale-gated turns from showing interactive body", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
+  assert.match(source, /const uiStringsStatus = resolved\.ui_strings_status === "unknown" \? "pending" : resolved\.ui_strings_status;/);
   assert.match(source, /const bootstrapWaitingLocale =[\s\S]*waitingForI18n/);
   assert.match(source, /const interactiveFallbackActive =/);
   assert.match(source, /ensureBootstrapRetryForResult\(data, \{ source: "render" \}\);/);
@@ -1048,6 +1049,13 @@ test("render source blocks locale-gated turns from showing interactive body", ()
   assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
   assert.match(source, /setSessionStarted\(false\);/);
   assert.match(source, /\(badge as HTMLElement\)\.style\.display = "none";/);
+});
+
+test("render source ignores empty or mismatched locale override maps", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
+  assert.match(source, /const hasOverrideStrings =[\s\S]*Object\.keys\(overrideStringsMap \|\| \{\}\)\.some/);
+  assert.match(source, /const shouldApplyOverride =[\s\S]*uiStringsStatus === "ready"[\s\S]*overrideBucket === langBucket/);
+  assert.match(source, /if \(shouldApplyOverride\) \{[\s\S]*UI_STRINGS\[overrideBucket\] = \{ \.\.\.UI_STRINGS\.default, \.\.\.\(overrideStringsMap as Record<string, string>\) \};/);
 });
 
 test("render source uses unified hydration gate and keeps prestart based on server started state", () => {

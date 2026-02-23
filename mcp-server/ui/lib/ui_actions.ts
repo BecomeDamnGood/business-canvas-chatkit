@@ -273,7 +273,7 @@ export function computeHydrationState(resolved: ResolvedWidgetPayload): Hydratio
     !hasState ||
     !currentStep ||
     (resolved.shape_version === "v2_minimal" && !hasState);
-  const i18nPending = resolved.ui_strings_status === "pending";
+  const i18nPending = resolved.ui_strings_status !== "ready";
   let waitingReason: WaitingReason = "none";
   if (needsHydration && i18nPending) waitingReason = "both";
   else if (needsHydration) waitingReason = "missing_state";
