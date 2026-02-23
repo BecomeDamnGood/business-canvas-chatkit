@@ -20,6 +20,40 @@ import { render } from "./ui_render.js";
 initActionsConfig({ render, t });
 
 const isLocalDev = (globalThis as Record<string, unknown>).LOCAL_DEV === "1";
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function normalizeHostToolResultNotification(paramsRaw: unknown): Record<string, unknown> {
+  const params = toRecord(paramsRaw);
+  const toolOutputCandidate =
+    params.result !== undefined
+      ? params.result
+      : (params.toolResult !== undefined ? params.toolResult : (params.output !== undefined ? params.output : paramsRaw));
+  const metadataRaw =
+    params.toolResponseMetadata !== undefined
+      ? params.toolResponseMetadata
+      : (params.responseMetadata !== undefined ? params.responseMetadata : params.metadata);
+  const metadata = toRecord(metadataRaw);
+
+  const siblingMeta = toRecord(params._meta);
+  const hasSiblingMeta = Object.keys(siblingMeta).length > 0;
+  const hasSiblingWidgetResult = params.widget_result !== undefined;
+  if (hasSiblingMeta || hasSiblingWidgetResult) {
+    const nextMeta = toRecord(metadata._meta);
+    if (hasSiblingMeta) Object.assign(nextMeta, siblingMeta);
+    if (hasSiblingWidgetResult && nextMeta.widget_result === undefined) {
+      nextMeta.widget_result = params.widget_result;
+    }
+    metadata._meta = nextMeta;
+  }
+
+  return mergeToolOutputWithResponseMetadata(toolOutputCandidate, metadata);
+}
+
 if (isLocalDev && typeof window !== "undefined") {
   const reportDevError = (message: string, file?: string, line?: number, col?: number) => {
     const target =
@@ -62,14 +96,6 @@ if (isLocalDev && typeof window !== "undefined") {
 }
 
 if (typeof window !== "undefined") {
-  const extractToolResult = (params: any): unknown => {
-    if (!params || typeof params !== "object") return params;
-    if ("result" in params) return params.result;
-    if ("toolResult" in params) return params.toolResult;
-    if ("output" in params) return params.output;
-    return params;
-  };
-
   window.addEventListener("message", (e: MessageEvent) => {
     const data: any = e?.data;
     if (!data || typeof data !== "object") return;
@@ -79,7 +105,7 @@ if (typeof window !== "undefined") {
       setBridgeEnabled(true);
     }
     if (method === "ui/notifications/tool-result") {
-      const payload = extractToolResult(data.params);
+      const payload = normalizeHostToolResultNotification(data.params);
       try {
         handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
       } catch (err) {

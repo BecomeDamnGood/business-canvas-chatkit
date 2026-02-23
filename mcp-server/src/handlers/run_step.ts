@@ -8779,6 +8779,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     Object.keys((state as any).last_specialist_result ?? {}).length === 0;
 
   if (isStartTrigger) {
+    const startLocaleSeedText = actionCodeRaw === "ACTION_START" ? "" : userMessage;
     const ensureStartState = async (
       targetState: CanvasState,
       routeOrText: string
@@ -8794,7 +8795,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     };
     const started = String((state as any).started ?? "").trim().toLowerCase() === "true";
     if (!started) {
-      const startResolution = await ensureStartState(state, userMessage);
+      const startResolution = await ensureStartState(state, startLocaleSeedText);
       const stateWithUi = startResolution.state;
       const startHint =
         typeof (stateWithUi as any).ui_strings?.startHint === "string"
@@ -8834,7 +8835,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       String(existingFirst.action) === "ASK" &&
       String(existingFirst.question ?? "").trim() !== "";
     if (isReuseFirst) {
-      const startResolution = await ensureStartState(state, userMessage);
+      const startResolution = await ensureStartState(state, startLocaleSeedText);
       const stateWithUi = startResolution.state;
       (state as any).intro_shown_session = "true";
       const prompt = String(existingFirst.question || "").trim() || step0QuestionForState(state);

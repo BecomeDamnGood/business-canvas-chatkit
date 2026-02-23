@@ -89,6 +89,8 @@ test("run_step wrapper never treats bootstrap poll or technical actions as start
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /const isBootstrapPollAction = upperMessage === "ACTION_BOOTSTRAP_POLL";/);
   assert.match(source, /const isStartAction = upperMessage === "ACTION_START";/);
+  assert.match(source, /const shouldSeedInitialUserMessage =[\s\S]*!isActionMessage[\s\S]*!isBootstrapPollAction[\s\S]*!isTechnicalRouteMessage/);
+  assert.match(source, /\.\.\.\(hasInitiator \|\| !shouldSeedInitialUserMessage \? \{\} : \{ initial_user_message: normalizedMessage \}\)/);
   assert.match(source, /const shouldMarkStarted =[\s\S]*!isBootstrapPollAction[\s\S]*\(isStartAction \|\| !isActionMessage\)/);
 });
 
@@ -125,6 +127,9 @@ test("buildUiStructured suppresses prompt/options while bootstrap locale is wait
   assert.match(source, /const waitingLocale = flags\.bootstrap_waiting_locale === true;/);
   assert.match(source, /const promptBody = waitingLocale \? "" : \(prompt \|\| text \|\| ""\);/);
   assert.match(source, /const actionCodes = waitingLocale \? \[\] :/);
+  assert.match(source, /mode: waitingLocale \? "waiting_locale" : "interactive",/);
+  assert.match(source, /waiting_locale: waitingLocale,/);
+  assert.match(source, /recovery_action: waitingLocale && retryHint === "poll" \? "retry_poll" : "",/);
 });
 
 test("run_step handler always emits model-safe result and keeps full payload widget-only", () => {

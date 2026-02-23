@@ -7,7 +7,7 @@ import {
   renderChoiceButtons,
   stripStructuredChoiceLines,
 } from "../ui/lib/ui_render.js";
-import { computeHydrationState, resolveWidgetPayload } from "../ui/lib/ui_actions.js";
+import { computeHydrationState, resolveWidgetPayload, resetHydrationRetryCycle } from "../ui/lib/ui_actions.js";
 import { setSessionStarted, setSessionWelcomeShown } from "../ui/lib/ui_state.js";
 
 test.beforeEach(() => {
@@ -1032,18 +1032,20 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
   assert.match(source, /appendTextNode\("div", "deliverables", ""\)/);
   assert.match(source, /const skeleton = appendTextNode\("div", "skeleton-stack", ""\);/);
   assert.match(source, /skeleton\.appendChild\(appendTextNode\("div", "skeleton-line", ""\)\);/);
-  assert.doesNotMatch(source, /Loading translation/);
+  assert.match(source, /const waitTitle = baseLang\(lang\) === "en" \? uiText\(lang, "prestart\.loading", "Loading translation…"\) : "";/);
 });
 
 test("render source blocks locale-gated turns from showing interactive body", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /const uiStringsStatus = resolved\.ui_strings_status;/);
+  assert.match(source, /const serverExplicitWaiting =/);
+  assert.match(source, /const forceLocaleWait = localeKnownNonEn && uiStringsStatus !== "ready";/);
   assert.match(source, /const bootstrapWaitingLocale =[\s\S]*waitingForI18n/);
   assert.match(source, /const interactiveFallbackActive =/);
   assert.match(source, /ensureBootstrapRetryForResult\(data, \{ source: "render" \}\);/);
   assert.match(source, /const hydration = computeHydrationState\(resolved\);/);
   assert.match(source, /if \(bootstrapWaitingLocale && !interactiveFallbackActive\) \{/);
-  assert.match(source, /renderBootstrapWaitShell\(prestartEl\)/);
+  assert.match(source, /renderBootstrapWaitShell\(prestartEl, lang\)/);
   assert.match(source, /renderHydrationRecovery\(prestartEl, lang\)/);
   assert.match(source, /resetHydrationRetryCycle\(\{ trigger_poll: true, source: "render_retry_button" \}\)/);
   assert.match(source, /\(btnStart as HTMLElement\)\.style\.display = "none";/);
@@ -1062,7 +1064,7 @@ test("render source uses unified hydration gate and keeps prestart based on serv
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /const waitingForMissingState =/);
   assert.match(source, /if \(waitingForMissingState\) \{/);
-  assert.match(source, /renderBootstrapWaitShell\(prestartEl\)/);
+  assert.match(source, /renderBootstrapWaitShell\(prestartEl, lang\)/);
   assert.match(source, /const resolved = resolveWidgetPayload\(data\);/);
   assert.match(source, /const showPreStart = hasToolOutputVal \? !serverStarted : !sessionStarted;/);
   assert.match(source, /__BSC_LATEST__ = \{/);
@@ -1070,12 +1072,66 @@ test("render source uses unified hydration gate and keeps prestart based on serv
 
 test("main source handles host tool-result via shared bootstrap scheduler", () => {
   const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
+  assert.match(source, /function normalizeHostToolResultNotification\(/);
+  assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
+  assert.match(source, /mergeToolOutputWithResponseMetadata\(toolOutputCandidate, metadata\)/);
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
   assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "host_notification" \}\)/);
   assert.match(source, /openai:set_globals[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "set_globals" \}\)/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(\s*host\?\.toolOutput,\s*host\?\.toolResponseMetadata\s*\)/);
   assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*callRunStep\("ACTION_START", \{ started: "true" \}\)/);
   assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
+});
+
+test("render keeps non-EN pending locale in explicit wait view without EN prestart content", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const btnStart = (fakeDocument as any).getElementById("btnStart");
+  const cardDesc = (fakeDocument as any).getElementById("cardDesc");
+  const uiSubtitle = (fakeDocument as any).getElementById("uiSubtitle");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "?lang=nl" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: { language: "nl" }, setWidgetState() {} };
+
+  setSessionStarted(false);
+  setSessionWelcomeShown(false);
+  render({
+    result: {
+      state: {
+        current_step: "step_0",
+        started: "false",
+        language: "nl",
+        ui_strings_status: "pending",
+        ui_gate_status: "waiting_locale",
+      },
+      ui: {
+        flags: {
+          bootstrap_waiting_locale: true,
+          bootstrap_interactive_ready: false,
+          interactive_fallback_active: false,
+        },
+        view: {
+          mode: "waiting_locale",
+          waiting_locale: true,
+        },
+      },
+    },
+  });
+
+  assert.equal(String(btnStart.style.display || ""), "none");
+  assert.equal(String(uiSubtitle.textContent || ""), "");
+  assert.ok((cardDesc.childNodes || []).length > 0);
+  resetHydrationRetryCycle();
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
 });
 
 test("ui actions source uses explicit bootstrap poll action and shared result handler", () => {
@@ -1111,7 +1167,7 @@ test("ui actions source has bridge timeout guard", () => {
 test("render source uses missing-state hydration gate for wait-shell", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /const waitingForMissingState =/);
-  assert.match(source, /if \(waitingForMissingState\) \{[\s\S]*renderBootstrapWaitShell\(prestartEl\)/);
+  assert.match(source, /if \(waitingForMissingState\) \{[\s\S]*renderBootstrapWaitShell\(prestartEl, lang\)/);
 });
 
 test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result", () => {

@@ -598,12 +598,17 @@ async function runStepHandler(args: {
     !isBootstrapPollAction &&
     !isTechnicalRouteMessage &&
     (isStartAction || !isActionMessage);
+  const shouldSeedInitialUserMessage =
+    Boolean(normalizedMessage) &&
+    !isActionMessage &&
+    !isBootstrapPollAction &&
+    !isTechnicalRouteMessage;
   const hasInitiator = safeString(state?.initial_user_message ?? "").trim() !== "";
   const stateForTool =
     shouldMarkStarted
       ? {
           ...state,
-          ...(hasInitiator ? {} : { initial_user_message: normalizedMessage }),
+          ...(hasInitiator || !shouldSeedInitialUserMessage ? {} : { initial_user_message: normalizedMessage }),
           started: "true",
         }
       : state;
@@ -828,6 +833,7 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
   const text = safeString((result as any).text ?? "");
   const promptBody = waitingLocale ? "" : (prompt || text || "");
   const actionCodes = waitingLocale ? [] : (Array.isArray(uiObj.action_codes) ? uiObj.action_codes : []);
+  const retryHint = safeString(flags.bootstrap_retry_hint ?? "");
   const options = actionCodes.map((code: unknown, idx: number) => ({
     id: safeString(idx + 1),
     actionCode: safeString(code),
@@ -844,7 +850,12 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       expected_choice_count: expectedChoiceCount,
       flags,
     },
-    view: { version: VERSION },
+    view: {
+      version: VERSION,
+      mode: waitingLocale ? "waiting_locale" : "interactive",
+      waiting_locale: waitingLocale,
+      recovery_action: waitingLocale && retryHint === "poll" ? "retry_poll" : "",
+    },
   };
 }
 

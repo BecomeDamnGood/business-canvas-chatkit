@@ -190,7 +190,7 @@ export function mergeToolOutputWithResponseMetadata(
   return merged;
 }
 
-function collectPayloadCandidates(raw: unknown): PayloadCandidate[] {
+function collectPayloadCandidates(raw: unknown, orderOffset = 0): PayloadCandidate[] {
   const root = toRecord(raw);
   const structured = toRecord(root.structuredContent);
   const meta = toRecord(root._meta);
@@ -205,7 +205,7 @@ function collectPayloadCandidates(raw: unknown): PayloadCandidate[] {
       value: rec,
       richness: computePayloadRichness(rec),
       freshness: freshnessForResult(rec),
-      order,
+      order: order + orderOffset,
     });
   };
   add("meta.widget_result", meta.widget_result, 0);
@@ -226,14 +226,14 @@ function pickBestCandidate(candidates: PayloadCandidate[]): PayloadCandidate | n
   let best = candidates[0];
   for (let i = 1; i < candidates.length; i += 1) {
     const cur = candidates[i];
+    if (cur.richness !== best.richness) {
+      if (cur.richness > best.richness) best = cur;
+      continue;
+    }
     const bestHasFreshness = best.freshness !== null;
     const curHasFreshness = cur.freshness !== null;
     if (bestHasFreshness && curHasFreshness && cur.freshness !== best.freshness) {
       if ((cur.freshness as number) > (best.freshness as number)) best = cur;
-      continue;
-    }
-    if (cur.richness !== best.richness) {
-      if (cur.richness > best.richness) best = cur;
       continue;
     }
     if (cur.order < best.order) best = cur;
@@ -288,8 +288,16 @@ export function computeHydrationState(resolved: ResolvedWidgetPayload): Hydratio
   };
 }
 
-export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
-  const best = pickBestCandidate(collectPayloadCandidates(raw));
+export function resolveWidgetPayload(
+  raw: unknown,
+  options?: { fallbackRaw?: unknown }
+): ResolvedWidgetPayload {
+  const candidates = collectPayloadCandidates(raw);
+  if (options?.fallbackRaw !== undefined) {
+    const fallbackCandidates = collectPayloadCandidates(options.fallbackRaw, 100);
+    if (fallbackCandidates.length) candidates.push(...fallbackCandidates);
+  }
+  const best = pickBestCandidate(candidates);
   const result = best ? best.value : {};
   const state = toRecord(result.state);
   const hasState = Object.keys(state).length > 0;
@@ -312,10 +320,10 @@ export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
   return temp;
 }
 
-function normalizeToolOutput(raw: unknown): Record<string, unknown> {
+function normalizeToolOutput(raw: unknown, options?: { fallbackRaw?: unknown }): Record<string, unknown> {
   const root = toRecord(raw);
   const structured = toRecord(root.structuredContent);
-  const resolved = resolveWidgetPayload(raw);
+  const resolved = resolveWidgetPayload(raw, options);
   if (Object.keys(resolved.result).length) {
     structured.result = resolved.result;
     const uiFromResult = toRecord(resolved.result.ui);
@@ -329,14 +337,18 @@ function normalizeToolOutput(raw: unknown): Record<string, unknown> {
 }
 
 export function applyToolResult(raw: unknown): Record<string, unknown> {
-  const normalized = normalizeToolOutput(raw);
-  setLastToolOutput(normalized);
+  const previous = getLastToolOutput();
+  const normalized = normalizeToolOutput(raw, { fallbackRaw: previous });
+  try {
+    (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = normalized;
+  } catch {}
   return normalized;
 }
 
 export function setLastToolOutput(raw: unknown): void {
   try {
-    (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = normalizeToolOutput(raw);
+    const previous = getLastToolOutput();
+    (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = normalizeToolOutput(raw, { fallbackRaw: previous });
   } catch {}
 }
 
@@ -356,15 +368,16 @@ export function hasToolOutput(): boolean {
 
 /** Allow render() to use callTool return value, otherwise fall back to host toolOutput / cache. */
 export function toolData(overrideRaw?: unknown): Record<string, unknown> {
+  const cached = getLastToolOutput();
   if (overrideRaw) return normalizeToolOutput(overrideRaw);
   const o = oa();
   const oo = o as { toolOutput?: unknown; toolResponseMetadata?: unknown };
   if (o && (oo.toolOutput || oo.toolResponseMetadata)) {
     return normalizeToolOutput(
-      mergeToolOutputWithResponseMetadata(oo.toolOutput, oo.toolResponseMetadata)
+      mergeToolOutputWithResponseMetadata(oo.toolOutput, oo.toolResponseMetadata),
+      { fallbackRaw: cached }
     );
   }
-  const cached = getLastToolOutput();
   if (cached && Object.keys(cached).length) return cached;
   return {};
 }
@@ -402,6 +415,17 @@ export function languageFromState(resultState: Record<string, unknown> | null | 
 
 export function uiLang(resultState: Record<string, unknown> | null | undefined): string {
   return languageFromState(resultState);
+}
+
+function localeHintFromLocation(): string {
+  if (typeof window === "undefined" || !window.location) return "";
+  try {
+    const params = new URLSearchParams(String(window.location.search || ""));
+    const raw = params.get("locale_hint") || params.get("locale") || params.get("lang") || "";
+    return String(raw || "").trim().toLowerCase().replace(/_/g, "-");
+  } catch {
+    return "";
+  }
 }
 
 function uiText(
@@ -929,9 +953,16 @@ export async function callRunStep(
   const state = latest.state || { current_step: "step_0" };
 
   const stateLanguage = uiLang(state);
+  const ws = widgetState();
+  const widgetLanguage = String((ws.language || ws.locale_hint || "") as string).trim().toLowerCase();
+  const locationLanguage = localeHintFromLocation();
+  const localeHint = stateLanguage || widgetLanguage || locationLanguage;
   let nextState = Object.assign({}, state);
   if (extraState && typeof extraState === "object") {
     nextState = Object.assign({}, nextState, extraState);
+  }
+  if (!String((nextState as Record<string, unknown>).language || "").trim() && localeHint) {
+    (nextState as Record<string, unknown>).language = localeHint;
   }
 
   const isActionMessage = messageText.startsWith("ACTION_");
@@ -953,6 +984,8 @@ export async function callRunStep(
     current_step_id: nextState.current_step || "step_0",
     user_message: String(message || ""),
     input_mode: "widget",
+    locale_hint: localeHint,
+    locale_hint_source: localeHint ? "webplus_i18n" : "none",
     state: nextState,
   };
 

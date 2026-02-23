@@ -201,11 +201,21 @@ function renderPrestartSkeleton(cardDesc: HTMLElement, lang: string): void {
   cardDesc.appendChild(skeleton);
 }
 
-function renderBootstrapWaitShell(cardDesc: HTMLElement): void {
+function renderBootstrapWaitShell(cardDesc: HTMLElement, lang: string): void {
   clearElement(cardDesc);
   const shell = appendTextNode("div", "bootstrap-wait-shell", "");
   (shell as HTMLElement).style.display = "grid";
   (shell as HTMLElement).style.gap = "14px";
+  const waitTitle = baseLang(lang) === "en" ? uiText(lang, "prestart.loading", "Loading translation…") : "";
+  if (waitTitle) {
+    shell.appendChild(
+      appendTextNode(
+        "div",
+        "bootstrap-wait-title",
+        waitTitle
+      )
+    );
+  }
 
   for (const width of ["68%", "92%", "84%", "56%"]) {
     const line = appendTextNode("div", "skeleton-line", "");
@@ -536,7 +546,8 @@ export function render(overrideToolOutput?: unknown): void {
   const stateLang = languageFromState(state);
   const widgetLang = String((ws?.language || "") as string).trim().toLowerCase();
   const locationLang = initialLangFromLocation();
-  const lang = resolved.resolved_language || stateLang || widgetLang || locationLang || uiLang(state) || "en";
+  const localeCandidate = resolved.resolved_language || stateLang || widgetLang || locationLang || uiLang(state);
+  const lang = localeCandidate || "en";
 
   const latestRoot = (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__;
   const latestState = latestRoot?.state && typeof latestRoot.state === "object"
@@ -556,13 +567,27 @@ export function render(overrideToolOutput?: unknown): void {
     hydration.waiting_reason === "i18n_pending" || hydration.waiting_reason === "both";
   const uiStringsStatus = resolved.ui_strings_status;
   const uiGateStatus = String((state?.ui_gate_status || "") as string).trim().toLowerCase();
+  const uiView =
+    uiPayload && typeof uiPayload.view === "object" && uiPayload.view
+      ? (uiPayload.view as Record<string, unknown>)
+      : {};
+  const serverExplicitWaiting =
+    String(uiView.mode || "").trim().toLowerCase() === "waiting_locale" ||
+    uiView.waiting_locale === true;
+  const localeBucket = baseLang(localeCandidate);
+  const localeKnownNonEn =
+    Boolean(localeBucket) && localeBucket !== "en" && localeBucket !== "default";
+  const forceLocaleWait = localeKnownNonEn && uiStringsStatus !== "ready";
   const bootstrapWaitingLocale =
     waitingForI18n ||
+    serverExplicitWaiting ||
+    forceLocaleWait ||
     uiFlags.bootstrap_waiting_locale === true ||
     (uiGateStatus === "waiting_locale" && uiStringsStatus !== "ready");
   const interactiveFallbackActive =
+    !forceLocaleWait &&
     uiFlags.interactive_fallback_active === true ||
-    (bootstrapWaitingLocale && uiFlags.bootstrap_interactive_ready === true);
+    (!forceLocaleWait && bootstrapWaitingLocale && uiFlags.bootstrap_interactive_ready === true);
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings =
     Boolean(overrideStringsMap) &&
@@ -602,6 +627,7 @@ export function render(overrideToolOutput?: unknown): void {
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
     const sectionTitleEl = document.getElementById("sectionTitle");
+    const uiSubtitle = document.getElementById("uiSubtitle");
     const badge = document.getElementById("badge");
     if (inputWrap) (inputWrap as HTMLElement).style.display = "none";
     if (choiceWrap) (choiceWrap as HTMLElement).style.display = "none";
@@ -613,6 +639,7 @@ export function render(overrideToolOutput?: unknown): void {
     }
     if (prompt) prompt.textContent = "";
     if (sectionTitleEl) sectionTitleEl.textContent = "";
+    if (uiSubtitle) uiSubtitle.textContent = "";
     if (badge) {
       badge.textContent = "";
       (badge as HTMLElement).style.display = "none";
@@ -634,17 +661,11 @@ export function render(overrideToolOutput?: unknown): void {
           };
         }
       } else {
-        renderBootstrapWaitShell(prestartEl);
+        renderBootstrapWaitShell(prestartEl, lang);
       }
     }
     if (getIsLoading()) setLoading(false);
     return;
-  }
-
-  setStaticStrings(lang);
-  if (bootstrapWaitingLocale && interactiveFallbackActive) {
-    const uiSubtitle = document.getElementById("uiSubtitle");
-    if (uiSubtitle) uiSubtitle.textContent = "";
   }
 
   if (transientError) {
@@ -703,6 +724,7 @@ export function render(overrideToolOutput?: unknown): void {
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
+    const uiSubtitle = document.getElementById("uiSubtitle");
     if (badge) {
       badge.textContent = "";
       (badge as HTMLElement).style.display = "none";
@@ -725,10 +747,11 @@ export function render(overrideToolOutput?: unknown): void {
           };
         }
       } else {
-        renderBootstrapWaitShell(prestartEl);
+        renderBootstrapWaitShell(prestartEl, lang);
       }
     }
     if (prompt) prompt.textContent = "";
+    if (uiSubtitle) uiSubtitle.textContent = "";
     startHint.textContent = "";
     (startHint as HTMLElement).style.display = "none";
     (btnStart as HTMLElement).style.display = "none";
@@ -736,6 +759,17 @@ export function render(overrideToolOutput?: unknown): void {
     setSessionWelcomeShown(false);
     if (isLoading) setLoading(false);
     return;
+  }
+
+  if (!forceLocaleWait) {
+    setStaticStrings(lang);
+  } else {
+    const uiSubtitle = document.getElementById("uiSubtitle");
+    if (uiSubtitle) uiSubtitle.textContent = "";
+  }
+  if (bootstrapWaitingLocale && interactiveFallbackActive) {
+    const uiSubtitle = document.getElementById("uiSubtitle");
+    if (uiSubtitle) uiSubtitle.textContent = "";
   }
 
   const specialist = (result?.specialist as Record<string, unknown>) || {};
