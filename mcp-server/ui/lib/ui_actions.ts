@@ -95,10 +95,11 @@ const WIDGET_RESULT_KEYS = new Set([
   "language",
 ]);
 
-const HYDRATION_MAX_RETRIES = 8;
+const HYDRATION_MAX_RETRIES = 3;
 
 let localeWaitRetryCount = 0;
 let localeWaitRetryExhausted = false;
+let lastPollSignature = "";
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -269,11 +270,12 @@ export function computeHydrationState(resolved: ResolvedWidgetPayload): Hydratio
   const state = toRecord(resolved.result.state);
   const hasState = Object.keys(state).length > 0;
   const currentStep = hasState ? String(state.current_step || "").trim() : "";
-  const needsHydration =
-    !hasState ||
-    !currentStep ||
-    (resolved.shape_version === "v2_minimal" && !hasState);
-  const i18nPending = resolved.ui_strings_status !== "ready";
+  const needsHydration = !hasState || !currentStep;
+  const uiGateStatus = toLower(state.ui_gate_status || resolved.result.ui_gate_status);
+  const i18nPending =
+    resolved.ui_strings_status === "pending" ||
+    resolved.ui_strings_status === "error" ||
+    (resolved.ui_strings_status === "unknown" && uiGateStatus === "waiting_locale");
   let waitingReason: WaitingReason = "none";
   if (needsHydration && i18nPending) waitingReason = "both";
   else if (needsHydration) waitingReason = "missing_state";
@@ -423,7 +425,7 @@ const CLICK_DEBOUNCE_MS = 250;
 const RUN_STEP_TIMEOUT_MS = 25000;
 const BRIDGE_RESPONSE_TIMEOUT_MS = 6000;
 const LOCALE_WAIT_RETRY_MIN_MS = 800;
-const LOCALE_WAIT_RETRY_MAX_MS = 5000;
+const LOCALE_WAIT_RETRY_MAX_MS = 2000;
 const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
 let localeWaitRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
@@ -435,6 +437,7 @@ function clearLocaleWaitRetry(opts?: { resetCounters?: boolean }): void {
   if (opts?.resetCounters !== false) {
     localeWaitRetryCount = 0;
     localeWaitRetryExhausted = false;
+    lastPollSignature = "";
   }
 }
 
@@ -460,16 +463,38 @@ function buildRetryState(result: Record<string, unknown>): Record<string, unknow
     ...stateFromWidget,
     ...latestState,
     ...stateFromResult,
-    started: "true",
   };
 }
 
-function maybeScheduleBootstrapRetry(resolved: ResolvedWidgetPayload, source: string): HydrationStatus {
+function maybeScheduleBootstrapRetry(
+  resolved: ResolvedWidgetPayload,
+  source: string,
+  opts?: { is_poll_response?: boolean }
+): HydrationStatus {
   const hydration = computeHydrationState(resolved);
   const waiting = hydration.waiting_reason !== "none";
   if (!waiting || !isUiBootstrapWaitRetryEnabled(resolved.result)) {
     clearLocaleWaitRetry();
     return computeHydrationState(resolved);
+  }
+  if (opts?.is_poll_response === true) {
+    const state = toRecord(resolved.result.state);
+    const gateStatus = toLower(state.ui_gate_status || resolved.result.ui_gate_status);
+    const signature = `${gateStatus}|${resolved.ui_strings_status}`;
+    if (signature === lastPollSignature) {
+      localeWaitRetryExhausted = true;
+      clearLocaleWaitRetry({ resetCounters: false });
+      if (isDevEnv()) {
+        console.log("[hydration_same_response_circuit_breaker]", {
+          source,
+          signature,
+          retry_count: localeWaitRetryCount,
+          waiting_reason: hydration.waiting_reason,
+        });
+      }
+      return computeHydrationState(resolved);
+    }
+    lastPollSignature = signature;
   }
   if (hydration.retry_exhausted || localeWaitRetryExhausted || localeWaitRetryCount >= HYDRATION_MAX_RETRIES) {
     localeWaitRetryExhausted = true;
@@ -537,20 +562,25 @@ export function ensureBootstrapRetryForResult(
 ): boolean {
   const source = String(opts?.source || "render");
   const resolved = resolveWidgetPayload(rawOrResult || {});
-  const hydration = maybeScheduleBootstrapRetry(resolved, source);
+  const hydration = maybeScheduleBootstrapRetry(resolved, source, { is_poll_response: false });
   return hydration.waiting_reason !== "none";
 }
 
 export function handleToolResultAndMaybeScheduleBootstrapRetry(
   raw: unknown,
-  opts?: { source?: "call_run_step" | "host_notification" | "set_globals" | "unknown" }
+  opts?: {
+    source?: "call_run_step" | "host_notification" | "set_globals" | "unknown";
+    is_poll_response?: boolean;
+  }
 ): Record<string, unknown> {
   const normalized = applyToolResult(raw);
   if (_render) _render(normalized);
   const resolved = resolveWidgetPayload(normalized);
   const result = resolved.result;
   const source = String(opts?.source || "unknown");
-  const hydration = maybeScheduleBootstrapRetry(resolved, source);
+  const hydration = maybeScheduleBootstrapRetry(resolved, source, {
+    is_poll_response: opts?.is_poll_response === true,
+  });
   if (isDevEnv()) {
     console.log("[ui_bootstrap_state]", {
       source,
@@ -904,9 +934,20 @@ export async function callRunStep(
     nextState = Object.assign({}, nextState, extraState);
   }
 
-  const widgetPatch: Record<string, unknown> = { started: "true" };
+  const isActionMessage = messageText.startsWith("ACTION_");
+  const shouldSetStarted =
+    messageText === "ACTION_START" ||
+    (Boolean(messageText) &&
+      !isBootstrapPollCall &&
+      !isActionMessage &&
+      !messageText.startsWith("__ROUTE__") &&
+      !messageText.startsWith("choice:"));
+  const widgetPatch: Record<string, unknown> = {};
+  if (shouldSetStarted) widgetPatch.started = "true";
   if (stateLanguage) widgetPatch.language = stateLanguage;
-  setWidgetStateSafe(widgetPatch);
+  if (Object.keys(widgetPatch).length > 0) {
+    setWidgetStateSafe(widgetPatch);
+  }
 
   const payload = {
     current_step_id: nextState.current_step || "step_0",
@@ -1007,7 +1048,10 @@ export async function callRunStep(
       return;
     }
 
-    handleToolResultAndMaybeScheduleBootstrapRetry(resp, { source: "call_run_step" });
+    handleToolResultAndMaybeScheduleBootstrapRetry(resp, {
+      source: "call_run_step",
+      is_poll_response: isBootstrapPollCall,
+    });
   } catch (e) {
     clearLocaleWaitRetry();
     if (didTimeout) return;

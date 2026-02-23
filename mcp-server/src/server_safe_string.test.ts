@@ -78,6 +78,18 @@ test("open_canvas bootstrap writes canonical state.language_source (never transp
   assert.match(source, /intro_shown_session: "false"/);
   assert.match(source, /last_specialist_result: \{\}/);
   assert.match(source, /bootstrap_state_language_source/);
+  assert.match(source, /const waitingLocale = !gateReady;/);
+  assert.match(source, /const interactiveFallbackActive = waitingLocale && interactiveFallbackEnabled;/);
+  assert.match(source, /bootstrap_waiting_locale: waitingLocale,/);
+  assert.match(source, /bootstrap_interactive_ready: bootstrapInteractiveReady,/);
+  assert.match(source, /interactive_fallback_active: interactiveFallbackActive,/);
+});
+
+test("run_step wrapper never treats bootstrap poll or technical actions as start intent", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /const isBootstrapPollAction = upperMessage === "ACTION_BOOTSTRAP_POLL";/);
+  assert.match(source, /const isStartAction = upperMessage === "ACTION_START";/);
+  assert.match(source, /const shouldMarkStarted =[\s\S]*!isBootstrapPollAction[\s\S]*\(isStartAction \|\| !isActionMessage\)/);
 });
 
 test("open_canvas has idempotent dedupe cache guard", () => {

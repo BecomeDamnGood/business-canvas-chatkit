@@ -133,6 +133,10 @@ jobs:
         working-directory: mcp-server
         run: node scripts/ui_artifact_parity_check.mjs
 
+      - name: Predeploy checklist gate
+        working-directory: mcp-server
+        run: node scripts/predeploy_checklist_gate.mjs
+
       - name: Test
         working-directory: mcp-server
         run: npm test

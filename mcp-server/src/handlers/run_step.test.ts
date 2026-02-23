@@ -208,6 +208,39 @@ test("language policy: action-only follow-up keeps locale-hinted language", asyn
   assert.equal(second?.state?.language_source, "locale_hint");
 });
 
+test("language policy: widget-turn locale hint does not override existing chosen language", async () => {
+  const seeded = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "nl-NL",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      started: "true",
+      initial_user_message: "Ik wil een ondernemingsplan voor mijn reclamebureau genaamd Mindd.",
+      last_specialist_result: {},
+    },
+  });
+  assert.equal(seeded?.state?.language, "nl");
+  assert.equal(seeded?.state?.language_source, "locale_hint");
+
+  const widgetTurn = await run_step({
+    user_message: "ACTION_BOOTSTRAP_POLL",
+    input_mode: "widget",
+    locale_hint: "en-US",
+    locale_hint_source: "openai_locale",
+    state: {
+      ...(seeded?.state || {}),
+      __bootstrap_poll: "true",
+      started: "false",
+    } as Record<string, unknown>,
+  });
+  assert.equal(widgetTurn?.ok, true);
+  assert.equal(widgetTurn?.state?.language, "nl");
+  assert.equal(widgetTurn?.state?.language_source, "locale_hint");
+});
+
 test("language policy: explicit override remains stronger than locale hint", async () => {
   const result = await run_step({
     user_message: "",

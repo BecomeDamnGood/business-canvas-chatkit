@@ -55,6 +55,17 @@ function uiText(lang: string | null | undefined, key: string, fallback: string):
   return fallback;
 }
 
+function initialLangFromLocation(): string {
+  if (typeof window === "undefined" || !window.location) return "";
+  try {
+    const params = new URLSearchParams(String(window.location.search || ""));
+    const raw = params.get("locale_hint") || params.get("locale") || params.get("lang") || "";
+    return String(raw || "").trim().toLowerCase().replace(/_/g, "-");
+  } catch {
+    return "";
+  }
+}
+
 function stepLabelShort(stepId: string, lang: string | null | undefined): string {
   const full = extractStepTitle(stepId, lang);
   if (stepId === "step_0") return uiText(lang, "stepLabel.validation", "Validation");
@@ -524,7 +535,8 @@ export function render(overrideToolOutput?: unknown): void {
   const ws = widgetState();
   const stateLang = languageFromState(state);
   const widgetLang = String((ws?.language || "") as string).trim().toLowerCase();
-  const lang = resolved.resolved_language || stateLang || widgetLang || uiLang(state) || "en";
+  const locationLang = initialLangFromLocation();
+  const lang = resolved.resolved_language || stateLang || widgetLang || locationLang || uiLang(state) || "en";
 
   const latestRoot = (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__;
   const latestState = latestRoot?.state && typeof latestRoot.state === "object"
@@ -542,7 +554,7 @@ export function render(overrideToolOutput?: unknown): void {
     hydration.waiting_reason === "missing_state" || hydration.waiting_reason === "both";
   const waitingForI18n =
     hydration.waiting_reason === "i18n_pending" || hydration.waiting_reason === "both";
-  const uiStringsStatus = resolved.ui_strings_status === "unknown" ? "pending" : resolved.ui_strings_status;
+  const uiStringsStatus = resolved.ui_strings_status;
   const uiGateStatus = String((state?.ui_gate_status || "") as string).trim().toLowerCase();
   const bootstrapWaitingLocale =
     waitingForI18n ||

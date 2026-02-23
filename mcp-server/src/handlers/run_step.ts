@@ -5447,6 +5447,7 @@ type BootstrapContractState = {
   since_ms: number;
   retry_hint: "poll" | "";
 };
+const UI_GATE_WAITING_LOCALE_FORCE_RECOVER_MS = 30_000;
 
 function deriveBootstrapContract(state: CanvasState | null | undefined): BootstrapContractState {
   if (!state || !isUiLocaleReadyGateV1Enabled()) {
@@ -5496,6 +5497,26 @@ function applyUiGateState(
   nextState: CanvasState
 ): CanvasState {
   const normalizedNextState = enforceUiStringsReadinessInvariant(nextState);
+  const prevStatus = String((previousState as any)?.ui_gate_status ?? "").trim();
+  const prevSinceRaw = Number((previousState as any)?.ui_gate_since_ms ?? 0);
+  const waitingLocaleExpired =
+    prevStatus === "waiting_locale" &&
+    Number.isFinite(prevSinceRaw) &&
+    prevSinceRaw > 0 &&
+    Date.now() - prevSinceRaw > UI_GATE_WAITING_LOCALE_FORCE_RECOVER_MS;
+  if (waitingLocaleExpired) {
+    return {
+      ...(normalizedNextState as any),
+      ui_strings_status: "ready",
+      ui_bootstrap_status: "ready",
+      ui_strings_critical_ready: "true",
+      ui_strings_full_ready: "true",
+      ui_strings_background_inflight: "false",
+      ui_gate_status: "ready",
+      ui_gate_reason: "",
+      ui_gate_since_ms: 0,
+    } as CanvasState;
+  }
   if (!isUiLocaleReadyGateV1Enabled()) {
     return {
       ...(normalizedNextState as any),
@@ -5508,8 +5529,6 @@ function applyUiGateState(
   if (pendingUiStrings && isInteractiveFallbackState(normalizedNextState)) {
     const nextUiStatusRaw = String((normalizedNextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
     const reason = nextUiStatusRaw === "error" ? "translation_retry" : "translation_pending";
-    const prevStatus = String((previousState as any)?.ui_gate_status ?? "").trim();
-    const prevSinceRaw = Number((previousState as any)?.ui_gate_since_ms ?? 0);
     const sinceMs =
       prevStatus === "waiting_locale" && Number.isFinite(prevSinceRaw) && prevSinceRaw > 0
         ? Math.trunc(prevSinceRaw)
@@ -5531,8 +5550,6 @@ function applyUiGateState(
   }
   const nextUiStatusRaw = String((normalizedNextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
   const reason = nextUiStatusRaw === "error" ? "translation_retry" : "translation_pending";
-  const prevStatus = String((previousState as any)?.ui_gate_status ?? "").trim();
-  const prevSinceRaw = Number((previousState as any)?.ui_gate_since_ms ?? 0);
   const sinceMs =
     prevStatus === "waiting_locale" && Number.isFinite(prevSinceRaw) && prevSinceRaw > 0
       ? Math.trunc(prevSinceRaw)
@@ -6048,6 +6065,7 @@ async function resolveLanguageForTurn(
   userMessage: string,
   localeHintRaw: string,
   localeHintSourceRaw: string,
+  inputMode: "widget" | "chat",
   model: string,
   telemetry?: UiI18nTelemetryCounters | null
 ): Promise<CanvasState> {
@@ -6112,8 +6130,11 @@ async function resolveLanguageForTurn(
     }
   }
   if (isUiLangSourceResolverV1Enabled() && localeHint) {
-    const canUseLocaleHint = trustedLocaleHintSource || !current;
-    if (!canUseLocaleHint) {
+    const isWidgetTurn = inputMode === "widget";
+    const canUseLocaleHint = isWidgetTurn ? !current : (trustedLocaleHintSource || !current);
+    // Bug #8 fix: never overwrite a locked language via locale hint,
+    // regardless of input mode or hint source.
+    if (!canUseLocaleHint || locked) {
       const persisted = current && !currentSource
         ? withLanguageDecision(state, current, "persisted", {
             locked: locked ? "true" : "false",
@@ -7541,6 +7562,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       routeOrText,
       localeHint,
       localeHintSource,
+      inputMode,
       translationModel,
       uiI18nTelemetry
     );
@@ -7563,28 +7585,36 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     state = localeResolution.state;
     const retrySpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
     const bootstrapContract = deriveBootstrapContract(state);
-    return finalizeResponse(
-      attachRegistryPayload(
-        {
-          ok: true as const,
-          tool: "run_step" as const,
-          current_step_id: String((state as any).current_step || STEP_0_ID),
-          active_specialist: String((state as any).active_specialist || ""),
-          text: buildTextForWidget({ specialist: retrySpecialist }),
-          prompt: pickPrompt(retrySpecialist),
-          specialist: retrySpecialist,
-          state,
-        },
-        retrySpecialist,
-        {
-          bootstrap_waiting_locale: bootstrapContract.waiting,
-          bootstrap_interactive_ready: bootstrapContract.ready,
-          bootstrap_retry_hint: bootstrapContract.retry_hint,
-          locale_pending_background: bootstrapContract.waiting,
-          interactive_fallback_active: bootstrapContract.waiting && bootstrapContract.ready,
-        }
-      )
-    );
+    if (bootstrapContract.waiting) {
+      return finalizeResponse(
+        attachRegistryPayload(
+          {
+            ok: true as const,
+            tool: "run_step" as const,
+            current_step_id: String((state as any).current_step || STEP_0_ID),
+            active_specialist: String((state as any).active_specialist || ""),
+            text: buildTextForWidget({ specialist: retrySpecialist }),
+            prompt: pickPrompt(retrySpecialist),
+            specialist: retrySpecialist,
+            state,
+          },
+          retrySpecialist,
+          {
+            bootstrap_waiting_locale: bootstrapContract.waiting,
+            bootstrap_interactive_ready: bootstrapContract.ready,
+            bootstrap_retry_hint: bootstrapContract.retry_hint,
+            locale_pending_background: bootstrapContract.waiting,
+            interactive_fallback_active: bootstrapContract.waiting && bootstrapContract.ready,
+          }
+        )
+      );
+    }
+    actionCodeRaw = "";
+    userMessage = "";
+    clickedActionCodeForNoRepeat = "";
+    clickedLabelForNoRepeat = "";
+    (state as any).__last_clicked_action_for_contract = "";
+    (state as any).__last_clicked_label_for_contract = "";
   }
   if (isBootstrapPollCall && !isUiLocaleReadyGateV1Enabled()) {
     actionCodeRaw = "";

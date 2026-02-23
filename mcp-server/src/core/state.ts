@@ -177,7 +177,7 @@ export function getDefaultState(): CanvasState {
     ui_strings: {},
     ui_strings_lang: "",
     ui_strings_version: "",
-    ui_strings_status: "ready",
+    ui_strings_status: "pending",
     ui_strings_requested_lang: "",
     ui_bootstrap_status: "init",
     ui_gate_status: "ready",

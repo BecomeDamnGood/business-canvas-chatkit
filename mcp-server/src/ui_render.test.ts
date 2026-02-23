@@ -1037,7 +1037,7 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
 
 test("render source blocks locale-gated turns from showing interactive body", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const uiStringsStatus = resolved\.ui_strings_status === "unknown" \? "pending" : resolved\.ui_strings_status;/);
+  assert.match(source, /const uiStringsStatus = resolved\.ui_strings_status;/);
   assert.match(source, /const bootstrapWaitingLocale =[\s\S]*waitingForI18n/);
   assert.match(source, /const interactiveFallbackActive =/);
   assert.match(source, /ensureBootstrapRetryForResult\(data, \{ source: "render" \}\);/);
@@ -1081,7 +1081,7 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
 test("ui actions source uses explicit bootstrap poll action and shared result handler", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
   assert.match(source, /const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";/);
-  assert.match(source, /const HYDRATION_MAX_RETRIES = 8;/);
+  assert.match(source, /const HYDRATION_MAX_RETRIES = 3;/);
   assert.match(source, /__bootstrap_poll: "true"/);
   assert.match(source, /__hydrate_poll: "true"/);
   assert.match(source, /export function resolveWidgetPayload/);

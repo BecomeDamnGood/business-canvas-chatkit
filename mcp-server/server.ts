@@ -378,7 +378,7 @@ function canonicalizeStateForToolInput(raw: unknown): unknown {
 function uiStringsRenderableForLang(uiStringsRaw: unknown): boolean {
   if (!uiStringsRaw || typeof uiStringsRaw !== "object" || Array.isArray(uiStringsRaw)) return false;
   const uiStrings = uiStringsRaw as Record<string, unknown>;
-  return OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0.every((key) => String(uiStrings[key] || "").trim().length > 0);
+  return OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0.every((key) => safeString(uiStrings[key] || "").trim().length > 0);
 }
 
 function mergeLocaleHintInputs(
@@ -470,7 +470,15 @@ function buildOpenCanvasBootstrapResponse(args: {
       ? (sourceState.ui_strings as Record<string, string>)
       : {};
   const stringsRenderable = uiStringsRenderableForLang(incomingUiStrings);
-  const gateReady = stringsRenderable || finalLanguage === "en";
+  const clientClaimsReady =
+    safeString(sourceState.ui_strings_status) === "ready" &&
+    safeString(sourceState.ui_strings_critical_ready) === "true" &&
+    persistedLanguage === finalLanguage;
+  const gateReady = clientClaimsReady || stringsRenderable || finalLanguage === "en";
+  const interactiveFallbackEnabled = envFlagEnabled("UI_INTERACTIVE_FALLBACK_V1", true);
+  const waitingLocale = !gateReady;
+  const interactiveFallbackActive = waitingLocale && interactiveFallbackEnabled;
+  const bootstrapInteractiveReady = gateReady || interactiveFallbackActive;
   const uiStringsStatus = gateReady ? "ready" : "pending";
   const bootstrapState: Record<string, unknown> = {
     state_version: safeString(sourceState.state_version || defaults.state_version) || defaults.state_version,
@@ -532,10 +540,10 @@ function buildOpenCanvasBootstrapResponse(args: {
     ui: {
       action_codes: [],
       flags: {
-        bootstrap_waiting_locale: false,
-        bootstrap_interactive_ready: true,
-        interactive_fallback_active: false,
-        bootstrap_retry_hint: "",
+        bootstrap_waiting_locale: waitingLocale,
+        bootstrap_interactive_ready: bootstrapInteractiveReady,
+        interactive_fallback_active: interactiveFallbackActive,
+        bootstrap_retry_hint: waitingLocale ? "poll" : "",
       },
     },
   };
@@ -577,12 +585,25 @@ async function runStepHandler(args: {
   const isStart = current_step_id === "step_0";
   const user_message =
     isStart && !user_message_raw.trim() ? "" : user_message_raw;
+  const normalizedMessage = user_message_raw.trim();
+  const upperMessage = normalizedMessage.toUpperCase();
+  const isActionMessage = upperMessage.startsWith("ACTION_");
+  const isBootstrapPollAction = upperMessage === "ACTION_BOOTSTRAP_POLL";
+  const isStartAction = upperMessage === "ACTION_START";
+  const isTechnicalRouteMessage =
+    normalizedMessage.startsWith("__ROUTE__") || normalizedMessage.startsWith("choice:");
+  const shouldMarkStarted =
+    isStart &&
+    Boolean(normalizedMessage) &&
+    !isBootstrapPollAction &&
+    !isTechnicalRouteMessage &&
+    (isStartAction || !isActionMessage);
   const hasInitiator = safeString(state?.initial_user_message ?? "").trim() !== "";
   const stateForTool =
-    isStart && user_message_raw.trim()
+    shouldMarkStarted
       ? {
           ...state,
-          ...(hasInitiator ? {} : { initial_user_message: user_message_raw.trim() }),
+          ...(hasInitiator ? {} : { initial_user_message: normalizedMessage }),
           started: "true",
         }
       : state;
@@ -592,8 +613,10 @@ async function runStepHandler(args: {
   const stateKeysCount = stateForTool && typeof stateForTool === "object" && stateForTool !== null ? Object.keys(stateForTool).length : 0;
   const localeHint = safeString(args.locale_hint ?? "");
   const inputMode = safeString(args.input_mode ?? "chat");
+  const action = upperMessage.startsWith("ACTION_") ? upperMessage : "text_input";
   console.log("[run_step] request", {
     input_mode: inputMode || "chat",
+    action,
     step_id: stepIdStr,
     user_message_len: msgLen,
     state_keys: stateKeysCount,
@@ -693,10 +716,18 @@ async function runStepHandler(args: {
       console.error("[run_step] DEV: OPENAI_API_KEY present:", Boolean(process.env.OPENAI_API_KEY));
     }
     
-    // Use current state if available, otherwise use default state
-    const currentState = (stateForTool && typeof stateForTool === "object" && stateForTool !== null) 
-      ? stateForTool 
-      : getDefaultState();
+    // Canonicalize fallback state so widget payload never leaks non-CanvasState fields.
+    const currentState = (() => {
+      try {
+        return normalizeState(
+          (stateForTool && typeof stateForTool === "object" && stateForTool !== null)
+            ? stateForTool
+            : getDefaultState()
+        );
+      } catch {
+        return getDefaultState();
+      }
+    })();
     const currentStep = safeString((currentState as any).current_step ?? "step_0") || "step_0";
     
     const fallbackResult = {
@@ -958,7 +989,17 @@ function createAppServer(baseUrl: string): McpServer {
         dedupeToken,
         nowMs
       );
-      if (dedupeEnabled) {
+      const bootstrapResult =
+        meta && typeof meta === "object" && (meta as any).widget_result && typeof (meta as any).widget_result === "object"
+          ? ((meta as any).widget_result as Record<string, unknown>)
+          : {};
+      const bootstrapState =
+        bootstrapResult.state && typeof bootstrapResult.state === "object"
+          ? (bootstrapResult.state as Record<string, unknown>)
+          : {};
+      const shouldCacheOpenCanvasResponse =
+        safeString(bootstrapState.ui_gate_status ?? "") !== "waiting_locale";
+      if (dedupeEnabled && shouldCacheOpenCanvasResponse) {
         openCanvasDedupeCache.set(dedupeToken, {
           expiresAt: nowMs + OPEN_CANVAS_DEDUPE_TTL_MS,
           response: cloneOpenCanvasResponse(response),
@@ -968,14 +1009,6 @@ function createAppServer(baseUrl: string): McpServer {
         open_canvas_deduped: false,
         open_canvas_dedupe_key_hash: dedupeToken.slice(0, 16),
       });
-      const bootstrapResult =
-        meta && typeof meta === "object" && (meta as any).widget_result && typeof (meta as any).widget_result === "object"
-          ? ((meta as any).widget_result as Record<string, unknown>)
-          : {};
-      const bootstrapState =
-        bootstrapResult.state && typeof bootstrapResult.state === "object"
-          ? (bootstrapResult.state as Record<string, unknown>)
-          : {};
       console.log("[open_canvas] bootstrap response", {
         locale_hint_source: mergedLocale.locale_hint_source,
         resolved_language: safeString(bootstrapState.language ?? ""),
