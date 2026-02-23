@@ -5414,6 +5414,7 @@ function isInteractiveFallbackState(state: CanvasState | null | undefined): bool
   return localeStartIsInteractiveFallbackState({
     state,
     uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),
+    criticalKeys: CRITICAL_UI_KEYS_STEP0,
   });
 }
 

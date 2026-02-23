@@ -199,12 +199,23 @@ export function isNonEnglishPendingUiStringsState(state: CanvasState | null | un
 export function isInteractiveFallbackState(params: {
   state: CanvasState | null | undefined;
   uiInteractiveFallbackV1: boolean;
+  criticalKeys?: string[];
 }): boolean {
-  const { state, uiInteractiveFallbackV1 } = params;
+  const { state, uiInteractiveFallbackV1, criticalKeys } = params;
   if (!uiInteractiveFallbackV1) return false;
   if (!isNonEnglishPendingUiStringsState(state)) return false;
   const mode = String((state as any)?.ui_translation_mode || "").trim().toLowerCase();
-  return mode === "critical_first";
+  if (mode !== "critical_first") return false;
+  const requiredCriticalKeys = Array.isArray(criticalKeys) ? criticalKeys : [];
+  if (requiredCriticalKeys.length > 0) {
+    return hasRenderableUiStringsForState(state, requiredCriticalKeys);
+  }
+  const uiStrings =
+    (state as any)?.ui_strings && typeof (state as any).ui_strings === "object"
+      ? ((state as any).ui_strings as Record<string, unknown>)
+      : null;
+  if (!uiStrings) return false;
+  return Object.values(uiStrings).some((value) => String(value ?? "").trim().length > 0);
 }
 
 export function isInteractiveLocaleReady(params: {
@@ -215,7 +226,7 @@ export function isInteractiveLocaleReady(params: {
 }): boolean {
   const { state, uiLocaleReadyGateV1, uiInteractiveFallbackV1, criticalKeys } = params;
   if (!uiLocaleReadyGateV1) return true;
-  if (isInteractiveFallbackState({ state, uiInteractiveFallbackV1 })) return true;
+  if (isInteractiveFallbackState({ state, uiInteractiveFallbackV1, criticalKeys })) return true;
   const lang = normalizeLangCode(
     String((state as any)?.language || (state as any)?.ui_strings_requested_lang || (state as any)?.ui_strings_lang || "")
   );
@@ -241,6 +252,7 @@ export function deriveBootstrapContract(params: {
   const fallbackState = isInteractiveFallbackState({
     state,
     uiInteractiveFallbackV1: flags.uiInteractiveFallbackV1,
+    criticalKeys,
   });
   const uiStatusRaw = String((state as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
   const reason: "translation_pending" | "translation_retry" = uiStatusRaw === "error"
@@ -349,6 +361,7 @@ export function applyUiGateState(params: {
   const fallbackState = isInteractiveFallbackState({
     state: normalizedNextState,
     uiInteractiveFallbackV1: flags.uiInteractiveFallbackV1,
+    criticalKeys,
   });
   const nextUiStatusRaw = String((normalizedNextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
   const reason: UiGateReason = nextUiStatusRaw === "error" ? "translation_retry" : "translation_pending";
