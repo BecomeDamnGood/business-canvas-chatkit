@@ -88,11 +88,21 @@ assertExcludes(srcActionsJs, "__locale_wait_retry", "ui/lib/ui_actions.js");
 
 assertIncludes(
   srcMainTs,
+  "mergeToolOutputWithResponseMetadata(",
+  "ui/lib/main.ts"
+);
+assertIncludes(
+  srcMainTs,
   'handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });',
   "ui/lib/main.ts"
 );
 assertIncludes(srcMainTs, 'callRunStep("ACTION_START", { started: "true" });', "ui/lib/main.ts");
 assertExcludes(srcMainTs, "if (hasToolOutput())", "ui/lib/main.ts");
+assertIncludes(
+  srcMainJs,
+  "mergeToolOutputWithResponseMetadata(",
+  "ui/lib/main.js"
+);
 assertIncludes(
   srcMainJs,
   'handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });',
@@ -123,6 +133,9 @@ for (const [label, content] of [
     label,
     "must not attach openai/outputTemplate to run_step"
   );
+  assertIncludes(content, 'model_result_shape_version: "v2_minimal"', label);
+  assertIncludes(content, "state: safeState,", label);
+  assertExcludes(content, "structuredContent.seed_user_message =", label);
 }
 
 assertExcludes(serverTs, "isMcpAppFirstToolsV1Enabled", "server.ts");
@@ -133,6 +146,7 @@ for (const [label, content] of [
   ["dist/ui/step-card.bundled.html", distBundle],
 ]) {
   assertIncludes(content, "ensureBootstrapRetryForResult(data, { source: \"render\" });", label);
+  assertIncludes(content, "mergeToolOutputWithResponseMetadata(", label);
   assertIncludes(content, 'handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });', label);
   assertIncludes(content, ".skeleton-line", label);
   assertIncludes(content, "@keyframes skeletonShimmer", label);

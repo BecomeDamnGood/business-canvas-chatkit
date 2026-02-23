@@ -1065,6 +1065,7 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
   assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "host_notification" \}\)/);
   assert.match(source, /openai:set_globals[\s\S]*handleToolResultAndMaybeScheduleBootstrapRetry\(payload, \{ source: "set_globals" \}\)/);
+  assert.match(source, /mergeToolOutputWithResponseMetadata\(\s*host\?\.toolOutput,\s*host\?\.toolResponseMetadata\s*\)/);
   assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*callRunStep\("ACTION_START", \{ started: "true" \}\)/);
   assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
 });
@@ -1122,6 +1123,27 @@ test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result
   });
 
   assert.equal(resolved.source, "meta.widget_result");
+  assert.equal(String((resolved.result.state as Record<string, unknown>).current_step || ""), "step_0");
+  assert.equal(resolved.needs_hydration, false);
+});
+
+test("resolveWidgetPayload can hydrate from toolResponseMetadata widget_result when _meta is absent", () => {
+  const resolved = resolveWidgetPayload({
+    structuredContent: {
+      result: {
+        model_result_shape_version: "v2_minimal",
+        current_step_id: "step_0",
+      },
+    },
+    toolResponseMetadata: {
+      widget_result: {
+        state: { current_step: "step_0", started: "true", language: "nl", ui_strings_status: "ready" },
+        ui: { questionText: "Vraag" },
+      },
+    },
+  });
+
+  assert.equal(resolved.source, "toolResponseMetadata.widget_result");
   assert.equal(String((resolved.result.state as Record<string, unknown>).current_step || ""), "step_0");
   assert.equal(resolved.needs_hydration, false);
 });

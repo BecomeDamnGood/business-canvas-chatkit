@@ -670,14 +670,25 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     ui.flags && typeof ui.flags === "object"
       ? (ui.flags as Record<string, unknown>)
       : {};
+  const currentStep = safeString(result.current_step_id || state.current_step || "step_0");
+  const started = safeString(state.started || "");
+  const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");
+  const uiGateStatus = safeString((result as any).ui_gate_status || state.ui_gate_status || "");
+  const safeState: Record<string, unknown> = {
+    current_step: currentStep || "step_0",
+  };
+  if (started) safeState.started = started;
+  if (uiStringsStatus) safeState.ui_strings_status = uiStringsStatus;
+  if (uiGateStatus) safeState.ui_gate_status = uiGateStatus;
   return {
     model_result_shape_version: "v2_minimal",
     ok: result.ok === true,
     tool: safeString(result.tool || "run_step"),
-    current_step_id: safeString(result.current_step_id || state.current_step || "step_0"),
-    ui_gate_status: safeString((result as any).ui_gate_status || state.ui_gate_status || ""),
+    current_step_id: currentStep,
+    ui_gate_status: uiGateStatus,
     language: safeString((result as any).language || state.language || ""),
     interactive_fallback_active: flags.interactive_fallback_active === true,
+    state: safeState,
   };
 }
 

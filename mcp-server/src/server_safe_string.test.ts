@@ -120,10 +120,12 @@ test("compat-first contract: open_canvas owns template and run_step stays model+
 
 test("buildModelSafeResult returns minimal v2 model-visible fields", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
-  assert.match(
-    source,
-    /return \{\s*model_result_shape_version: "v2_minimal",\s*ok: result\.ok === true,\s*tool: safeString\(result\.tool \|\| "run_step"\),\s*current_step_id: safeString\(result\.current_step_id \|\| state\.current_step \|\| "step_0"\),\s*ui_gate_status: safeString\(\(result as any\)\.ui_gate_status \|\| state\.ui_gate_status \|\| ""\),\s*language: safeString\(\(result as any\)\.language \|\| state\.language \|\| ""\),\s*interactive_fallback_active: flags\.interactive_fallback_active === true,\s*\};/
-  );
+  assert.match(source, /model_result_shape_version: "v2_minimal"/);
+  assert.match(source, /current_step_id: currentStep/);
+  assert.match(source, /state: safeState,/);
+  assert.match(source, /safeState: Record<string, unknown> = \{\s*current_step: currentStep \|\| "step_0",/);
+  assert.match(source, /if \(started\) safeState\.started = started;/);
+  assert.match(source, /if \(uiStringsStatus\) safeState\.ui_strings_status = uiStringsStatus;/);
 });
 
 test("run_step description enforces no business content in chat output", () => {

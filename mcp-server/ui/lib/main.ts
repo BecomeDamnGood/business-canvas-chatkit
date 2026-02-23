@@ -9,6 +9,7 @@ import {
   callRunStep,
   handleToolResultAndMaybeScheduleBootstrapRetry,
   handleBridgeResponse,
+  mergeToolOutputWithResponseMetadata,
   setBridgeEnabled,
   setSendEnabled,
   setLoading,
@@ -215,10 +216,13 @@ if (typeof window !== "undefined") {
   window.addEventListener("openai:set_globals", () => {
     try {
       const host = (globalThis as Record<string, unknown>).openai as
-        | { toolOutput?: unknown }
+        | { toolOutput?: unknown; toolResponseMetadata?: unknown }
         | undefined;
-      const payload = host?.toolOutput;
-      if (payload && typeof payload === "object") {
+      const payload = mergeToolOutputWithResponseMetadata(
+        host?.toolOutput,
+        host?.toolResponseMetadata
+      );
+      if (payload && typeof payload === "object" && Object.keys(payload).length > 0) {
         handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
       } else {
         render();

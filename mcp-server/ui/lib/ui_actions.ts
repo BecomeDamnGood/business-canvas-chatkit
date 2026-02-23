@@ -42,6 +42,8 @@ function canUseBridge(): boolean {
 
 type PayloadSource =
   | "meta.widget_result"
+  | "toolResponseMetadata.widget_result"
+  | "toolResponseMetadata._meta.widget_result"
   | "structured.result"
   | "structured.ui.result"
   | "structured.ui"
@@ -165,10 +167,34 @@ function candidateValue(root: Record<string, unknown>, path: string): unknown {
   return cur;
 }
 
+export function mergeToolOutputWithResponseMetadata(
+  toolOutputRaw: unknown,
+  toolResponseMetadataRaw: unknown
+): Record<string, unknown> {
+  const toolOutput = toRecord(toolOutputRaw);
+  const metadata = toRecord(toolResponseMetadataRaw);
+  const merged: Record<string, unknown> = Object.keys(toolOutput).length ? { ...toolOutput } : {};
+  if (!Object.keys(metadata).length) return merged;
+
+  const mergedMeta = toRecord(merged._meta);
+  const metadataMeta = toRecord(metadata._meta);
+  const mergedMetaNext: Record<string, unknown> = { ...mergedMeta, ...metadataMeta };
+  if (metadata.widget_result !== undefined) {
+    mergedMetaNext.widget_result = metadata.widget_result;
+  } else if (metadataMeta.widget_result !== undefined && mergedMetaNext.widget_result === undefined) {
+    mergedMetaNext.widget_result = metadataMeta.widget_result;
+  }
+  merged._meta = mergedMetaNext;
+  merged.toolResponseMetadata = metadata;
+  return merged;
+}
+
 function collectPayloadCandidates(raw: unknown): PayloadCandidate[] {
   const root = toRecord(raw);
   const structured = toRecord(root.structuredContent);
   const meta = toRecord(root._meta);
+  const toolResponseMetadata = toRecord(root.toolResponseMetadata);
+  const toolResponseMetadataMeta = toRecord(toolResponseMetadata._meta);
   const candidates: PayloadCandidate[] = [];
   const add = (source: PayloadSource, value: unknown, order: number): void => {
     if (!isWidgetResultLike(value)) return;
@@ -182,13 +208,15 @@ function collectPayloadCandidates(raw: unknown): PayloadCandidate[] {
     });
   };
   add("meta.widget_result", meta.widget_result, 0);
-  add("structured.result", structured.result, 1);
-  add("structured.ui.result", candidateValue(structured, "ui.result"), 2);
-  add("structured.ui", structured.ui, 3);
-  add("raw.result", root.result, 4);
-  add("raw.ui.result", candidateValue(root, "ui.result"), 5);
-  add("raw.ui", root.ui, 6);
-  add("raw", root, 7);
+  add("toolResponseMetadata.widget_result", toolResponseMetadata.widget_result, 1);
+  add("toolResponseMetadata._meta.widget_result", toolResponseMetadataMeta.widget_result, 2);
+  add("structured.result", structured.result, 3);
+  add("structured.ui.result", candidateValue(structured, "ui.result"), 4);
+  add("structured.ui", structured.ui, 5);
+  add("raw.result", root.result, 6);
+  add("raw.ui.result", candidateValue(root, "ui.result"), 7);
+  add("raw.ui", root.ui, 8);
+  add("raw", root, 9);
   return candidates;
 }
 
@@ -317,9 +345,9 @@ function getLastToolOutput(): Record<string, unknown> {
 
 export function hasToolOutput(): boolean {
   const o = oa();
-  const oo = o as { toolOutput?: unknown };
+  const oo = o as { toolOutput?: unknown; toolResponseMetadata?: unknown };
   return (
-    Boolean(o && oo.toolOutput) ||
+    Boolean(o && (oo.toolOutput || oo.toolResponseMetadata)) ||
     Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length)
   );
 }
@@ -328,8 +356,12 @@ export function hasToolOutput(): boolean {
 export function toolData(overrideRaw?: unknown): Record<string, unknown> {
   if (overrideRaw) return normalizeToolOutput(overrideRaw);
   const o = oa();
-  const oo = o as { toolOutput?: unknown };
-  if (o && oo.toolOutput) return normalizeToolOutput(oo.toolOutput);
+  const oo = o as { toolOutput?: unknown; toolResponseMetadata?: unknown };
+  if (o && (oo.toolOutput || oo.toolResponseMetadata)) {
+    return normalizeToolOutput(
+      mergeToolOutputWithResponseMetadata(oo.toolOutput, oo.toolResponseMetadata)
+    );
+  }
   const cached = getLastToolOutput();
   if (cached && Object.keys(cached).length) return cached;
   return {};
