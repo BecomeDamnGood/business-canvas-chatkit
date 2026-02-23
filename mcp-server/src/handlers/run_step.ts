@@ -182,6 +182,7 @@ import {
   applyUiGateState as localeStartApplyUiGateState,
   computeUiBootstrapStatus as localeStartComputeUiBootstrapStatus,
   uiStringsRequestedStatusFromRaw as localeStartUiStringsRequestedStatusFromRaw,
+  resolveUiGateForceRecoverMs as localeStartResolveUiGateForceRecoverMs,
   parseExplicitLanguageOverride as localeStartParseExplicitLanguageOverride,
   resolveLanguageForTurn as localeStartResolveLanguageForTurn,
 } from "./run_step_locale_start.js";
@@ -5435,8 +5436,6 @@ type BootstrapContractState = {
   since_ms: number;
   retry_hint: "poll" | "";
 };
-const UI_GATE_WAITING_LOCALE_FORCE_RECOVER_MS = 30_000;
-
 function deriveBootstrapContract(state: CanvasState | null | undefined): BootstrapContractState {
   return localeStartDeriveBootstrapContract({
     state,
@@ -5468,7 +5467,7 @@ function applyUiGateState(
   return localeStartApplyUiGateState({
     previousState,
     nextState,
-    forceRecoverMs: UI_GATE_WAITING_LOCALE_FORCE_RECOVER_MS,
+    forceRecoverMs: localeStartResolveUiGateForceRecoverMs(process.env.UI_GATE_FORCE_RECOVER_MS),
     flags: {
       uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
       uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),

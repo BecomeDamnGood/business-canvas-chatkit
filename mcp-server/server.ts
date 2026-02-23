@@ -24,6 +24,7 @@ import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
 import { safeString } from "./src/server_safe_string.js";
 import {
   deriveCanonicalBootstrapState,
+  resolveUiGateForceRecoverMs,
   VIEW_CONTRACT_VERSION,
 } from "./src/handlers/run_step_locale_start.js";
 
@@ -766,7 +767,7 @@ function buildOpenCanvasBootstrapResponse(args: {
   };
   const strictReadinessV1 = true;
   const ingressSanitizerV1 = true;
-  const forceRecoverMs = Number(process.env.UI_GATE_FORCE_RECOVER_MS || 4000);
+  const forceRecoverMs = resolveUiGateForceRecoverMs(process.env.UI_GATE_FORCE_RECOVER_MS);
   const bootstrapIdentity = resolveBootstrapIdentity({
     sourceState,
     isOpenCanvas: true,
@@ -835,7 +836,7 @@ function buildOpenCanvasBootstrapResponse(args: {
     ? deriveCanonicalBootstrapState({
         previousState: sourceState,
         candidateState,
-        forceRecoverMs: Number.isFinite(forceRecoverMs) && forceRecoverMs > 0 ? Math.trunc(forceRecoverMs) : 4000,
+        forceRecoverMs,
         flags: localeFlags,
         criticalKeys: [...OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0],
         nowMs,

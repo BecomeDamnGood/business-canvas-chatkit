@@ -1141,14 +1141,12 @@ export async function callRunStep(
     ? bootstrapPollSignatureFromState(nextState as Record<string, unknown>)
     : "";
   if (isBootstrapPollCall) {
-    if (
-      bootstrapPollInFlight &&
-      bootstrapPollSignature &&
-      bootstrapPollSignature === bootstrapPollInFlightSignature
-    ) {
+    if (bootstrapPollInFlight) {
       if (isDevEnv()) {
         console.log("[ui_bootstrap_poll_deduped]", {
           poll_signature: bootstrapPollSignature,
+          in_flight_signature: bootstrapPollInFlightSignature,
+          reason: "single_flight_in_flight",
         });
       }
       return;

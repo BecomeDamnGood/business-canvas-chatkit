@@ -1321,6 +1321,8 @@ test("ui actions source uses explicit bootstrap poll action and shared result ha
   assert.match(source, /const HYDRATION_MAX_RETRIES = 3;/);
   assert.match(source, /let bootstrapPollInFlight = false;/);
   assert.match(source, /ui_bootstrap_poll_deduped/);
+  assert.match(source, /if \(bootstrapPollInFlight\) \{/);
+  assert.match(source, /single_flight_in_flight/);
   assert.match(source, /__bootstrap_poll: "true"/);
   assert.match(source, /__hydrate_poll: "true"/);
   assert.match(source, /export function resolveWidgetPayload/);

@@ -30,6 +30,17 @@ export type CanonicalBootstrapState = {
 };
 
 export const VIEW_CONTRACT_VERSION = "v1";
+export const DEFAULT_UI_GATE_FORCE_RECOVER_MS = 4000;
+
+export function resolveUiGateForceRecoverMs(raw: unknown, fallbackMs = DEFAULT_UI_GATE_FORCE_RECOVER_MS): number {
+  const fallback =
+    Number.isFinite(fallbackMs) && fallbackMs > 0
+      ? Math.trunc(fallbackMs)
+      : DEFAULT_UI_GATE_FORCE_RECOVER_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.trunc(parsed);
+}
 
 export type BootstrapFsmInput = {
   hasState: boolean;
@@ -244,6 +255,9 @@ export function deriveBootstrapContract(params: {
   if (!state || !flags.uiLocaleReadyGateV1) {
     return { phase: "ready", waiting: false, ready: true, reason: "", since_ms: 0, retry_hint: "" };
   }
+  if (String((state as any)?.bootstrap_phase ?? "").trim() === "recovery") {
+    return { phase: "recovery", waiting: false, ready: true, reason: "", since_ms: 0, retry_hint: "" };
+  }
   const lang = normalizeLangCode(String((state as any)?.language ?? ""));
   const pendingUiStrings = isNonEnglishPendingUiStringsState(state);
   const fallbackState = isInteractiveFallbackState({
@@ -316,7 +330,8 @@ function mapPhaseToUiBootstrapStatus(params: {
   lang: string;
 }): "init" | "awaiting_locale" | "ready" {
   const { phase, lang } = params;
-  if (phase === "ready" || phase === "recovery") return "ready";
+  if (phase === "ready") return "ready";
+  if (phase === "recovery") return "awaiting_locale";
   if (phase === "waiting_locale" || phase === "waiting_both") return "awaiting_locale";
   if (phase === "waiting_state") return lang ? "awaiting_locale" : "init";
   return "init";
@@ -416,13 +431,26 @@ export function applyUiGateState(params: {
   maybeLogBootstrapMismatch({ source: "apply", legacy, fsm: contract });
 
   if (contract.phase === "recovery") {
+    const currentStatusRaw = String((normalizedNextState as any)?.ui_strings_status ?? "pending").trim().toLowerCase();
+    const currentStatus: UiStringsStatus =
+      currentStatusRaw === "error" || currentStatusRaw === "pending" || currentStatusRaw === "ready"
+        ? currentStatusRaw
+        : "pending";
+    const criticalRenderable = lang === "en" || hasRenderableUiStringsForState(normalizedNextState, criticalKeys);
+    const nextStatus: UiStringsStatus =
+      criticalRenderable
+        ? currentStatus
+        : (currentStatus === "error" ? "error" : "pending");
+    const fullReadyClaimed = String((normalizedNextState as any)?.ui_strings_full_ready ?? "").trim().toLowerCase() === "true";
+    const criticalReady = nextStatus === "ready" && criticalRenderable;
+    const fullReady = criticalReady && fullReadyClaimed;
     return {
       ...(normalizedNextState as any),
-      ui_strings_status: "ready",
-      ui_bootstrap_status: "ready",
-      ui_strings_critical_ready: "true",
-      ui_strings_full_ready: "true",
-      ui_strings_background_inflight: "false",
+      ui_strings_status: nextStatus,
+      ui_bootstrap_status: nextStatus === "ready" ? "ready" : "awaiting_locale",
+      ui_strings_critical_ready: criticalReady ? "true" : "false",
+      ui_strings_full_ready: fullReady ? "true" : "false",
+      ui_strings_background_inflight: nextStatus === "ready" ? "false" : "true",
       ui_gate_status: "ready",
       ui_gate_reason: "",
       ui_gate_since_ms: 0,

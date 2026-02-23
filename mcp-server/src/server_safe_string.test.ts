@@ -111,6 +111,17 @@ test("bootstrap session\/epoch guards drop stale payloads and keep monotone sequ
   assert.match(source, /response_seq/);
 });
 
+test("open_canvas and run_step share one UI gate force-recovery resolver", () => {
+  const serverSource = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const runStepSource = fs.readFileSync(new URL("./handlers/run_step.ts", import.meta.url), "utf8");
+  assert.match(serverSource, /resolveUiGateForceRecoverMs\(process\.env\.UI_GATE_FORCE_RECOVER_MS\)/);
+  assert.match(
+    runStepSource,
+    /forceRecoverMs:\s*localeStartResolveUiGateForceRecoverMs\(process\.env\.UI_GATE_FORCE_RECOVER_MS\)/,
+  );
+  assert.doesNotMatch(runStepSource, /UI_GATE_WAITING_LOCALE_FORCE_RECOVER_MS/);
+});
+
 test("open_canvas has idempotent dedupe cache guard", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /const openCanvasDedupeCache = new Map/);
