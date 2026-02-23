@@ -107,6 +107,8 @@ test("bootstrap session\/epoch guards drop stale payloads and keep monotone sequ
   assert.match(source, /function attachBootstrapDiagnostics\(/);
   assert.match(source, /const responseSeq = nextBootstrapResponseSeq\(\);/);
   assert.match(source, /\[stale_bootstrap_payload_dropped\]/);
+  assert.match(source, /\[stale_bootstrap_payload_replayed\]/);
+  assert.match(source, /isBootstrapPollAction[\s\S]*staleCheck\.reason === "response_seq"/);
   assert.match(source, /bootstrap_session_id/);
   assert.match(source, /bootstrap_epoch/);
   assert.match(source, /response_seq/);

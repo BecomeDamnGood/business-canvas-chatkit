@@ -940,7 +940,7 @@ async function runStepHandler(args: {
     host_widget_session_id: hostWidgetSessionId || "",
   });
   const nowMs = Date.now();
-  const incomingOrdering = readBootstrapOrdering({ state: stateForTool });
+  let incomingOrdering = readBootstrapOrdering({ state: stateForTool });
   const bootstrapSessionGuardV1 = envFlagEnabled("UI_BOOTSTRAP_SESSION_GUARD_V1", true);
   if (bootstrapSessionGuardV1 && incomingOrdering.sessionId && incomingOrdering.epoch > 0) {
     const staleCheck = isStaleBootstrapPayload({
@@ -963,7 +963,35 @@ async function runStepHandler(args: {
         latest_host_widget_session_id: staleCheck.latest.hostWidgetSessionId,
       });
     }
-    if (staleCheck.stale) {
+    const shouldReplayStaleBootstrapPoll =
+      isBootstrapPollAction &&
+      staleCheck.reason === "response_seq" &&
+      staleCheck.latest?.sessionId === incomingOrdering.sessionId &&
+      staleCheck.latest?.epoch === incomingOrdering.epoch;
+    if (staleCheck.stale && shouldReplayStaleBootstrapPoll) {
+      const latestStateRaw = staleCheck.latest?.lastWidgetResult?.state;
+      if (latestStateRaw && typeof latestStateRaw === "object" && latestStateRaw !== null) {
+        const replayedState = normalizeState(latestStateRaw as Record<string, unknown>);
+        stateForTool = hostWidgetSessionId
+          ? {
+              ...replayedState,
+              host_widget_session_id: safeString(replayedState.host_widget_session_id ?? hostWidgetSessionId).trim() || hostWidgetSessionId,
+            }
+          : replayedState;
+        incomingOrdering = readBootstrapOrdering({ state: stateForTool });
+        console.warn("[stale_bootstrap_payload_replayed]", {
+          input_mode: inputMode || "chat",
+          action,
+          session_id: incomingOrdering.sessionId || staleCheck.latest?.sessionId || "",
+          host_widget_session_id: incomingOrdering.hostWidgetSessionId || hostWidgetSessionId || "",
+          stale_reason: staleCheck.reason || "unknown",
+          payload_epoch: incomingOrdering.epoch || staleCheck.latest?.epoch || 0,
+          payload_response_seq: incomingOrdering.responseSeq,
+          latest_epoch: staleCheck.latest?.epoch || 0,
+          latest_response_seq: staleCheck.latest?.lastResponseSeq || 0,
+        });
+      }
+    } else if (staleCheck.stale) {
       const staleSource =
         staleCheck.latest && staleCheck.latest.lastWidgetResult && Object.keys(staleCheck.latest.lastWidgetResult).length
           ? (JSON.parse(JSON.stringify(staleCheck.latest.lastWidgetResult)) as Record<string, unknown>)
