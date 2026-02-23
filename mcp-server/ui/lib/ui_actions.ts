@@ -34,6 +34,8 @@ let _t: (lang: string, key: string) => string;
 let bridgeEnabled = false;
 let bridgeSeq = 0;
 const pendingBridgeCalls = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
+let bridgeTargetOriginCache: string | null = null;
+let bridgeTargetOriginSource = "";
 type TransportStatus = "unknown" | "ready_callTool" | "ready_bridge" | "unavailable";
 type QueuedStartAction = {
   message: string;
@@ -41,6 +43,7 @@ type QueuedStartAction = {
   queuedAtMs: number;
   expectedBootstrapSessionId: string;
   expectedBootstrapEpoch: number;
+  expectedHostWidgetSessionId: string;
 };
 const START_HANDSHAKE_MAX_RETRIES = 5;
 const START_HANDSHAKE_RETRY_MS = 450;
@@ -70,6 +73,117 @@ function oa(): unknown {
 function hasBridgeParent(): boolean {
   if (typeof window === "undefined") return false;
   return Boolean(window.parent && window.parent !== window);
+}
+
+function normalizeOrigin(raw: unknown): string {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  try {
+    const parsed = new URL(text);
+    const origin = String(parsed.origin || "").trim();
+    if (!origin || origin === "null") return "";
+    return origin;
+  } catch {
+    return "";
+  }
+}
+
+function originFromMetaValue(raw: unknown): string {
+  if (typeof raw === "string") return normalizeOrigin(raw);
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const rec = raw as Record<string, unknown>;
+    const fromOrigin = normalizeOrigin(rec.origin);
+    if (fromOrigin) return fromOrigin;
+    const fromHref = normalizeOrigin(rec.href);
+    if (fromHref) return fromHref;
+    const fromUrl = normalizeOrigin(rec.url);
+    if (fromUrl) return fromUrl;
+  }
+  return "";
+}
+
+function resolveAllowedHostOriginUncached(): { origin: string; source: string } {
+  const rawGlobal = (globalThis as Record<string, unknown>).__BSC_HOST_ORIGIN;
+  const fromGlobal = originFromMetaValue(rawGlobal);
+  if (fromGlobal) return { origin: fromGlobal, source: "__BSC_HOST_ORIGIN" };
+
+  const host = oa() as { hostOrigin?: unknown; parentOrigin?: unknown } | null | undefined;
+  const fromOpenAiHost = originFromMetaValue(host?.hostOrigin);
+  if (fromOpenAiHost) return { origin: fromOpenAiHost, source: "openai.hostOrigin" };
+  const fromOpenAiParent = originFromMetaValue(host?.parentOrigin);
+  if (fromOpenAiParent) return { origin: fromOpenAiParent, source: "openai.parentOrigin" };
+
+  if (typeof document !== "undefined") {
+    const fromReferrer = normalizeOrigin(document.referrer);
+    if (fromReferrer) return { origin: fromReferrer, source: "document.referrer" };
+  }
+  if (typeof window !== "undefined") {
+    const ancestorOrigins = (window.location as Location & { ancestorOrigins?: { length: number; [index: number]: string } }).ancestorOrigins;
+    if (ancestorOrigins && ancestorOrigins.length > 0) {
+      const fromAncestor = normalizeOrigin(ancestorOrigins[0]);
+      if (fromAncestor) return { origin: fromAncestor, source: "window.location.ancestorOrigins[0]" };
+    }
+  }
+  return { origin: "", source: "none" };
+}
+
+export function resolveAllowedHostOrigin(): string {
+  if (bridgeTargetOriginCache !== null) return bridgeTargetOriginCache;
+  const resolved = resolveAllowedHostOriginUncached();
+  if (resolved.origin) {
+    bridgeTargetOriginCache = resolved.origin;
+    bridgeTargetOriginSource = resolved.source;
+    console.log("[bridge_target_origin_resolved]", {
+      target_origin: bridgeTargetOriginCache,
+      source: bridgeTargetOriginSource,
+      fallback_used: false,
+    });
+    return bridgeTargetOriginCache;
+  }
+  const fallbackEnabled = uiFlagEnabled("UI_BRIDGE_ORIGIN_FALLBACK_V1", isDevEnv());
+  bridgeTargetOriginCache = fallbackEnabled ? "*" : "";
+  bridgeTargetOriginSource = fallbackEnabled ? "fallback_wildcard" : "unresolved";
+  console.log("[bridge_target_origin_resolved]", {
+    target_origin: bridgeTargetOriginCache,
+    source: bridgeTargetOriginSource,
+    fallback_used: fallbackEnabled,
+  });
+  return bridgeTargetOriginCache;
+}
+
+export function resetBridgeOriginCacheForTests(): void {
+  bridgeTargetOriginCache = null;
+  bridgeTargetOriginSource = "";
+}
+
+export function isTrustedBridgeMessageEvent(event: MessageEvent): boolean {
+  if (typeof window === "undefined") return false;
+  if (!hasBridgeParent()) return false;
+  if (event.source !== window.parent) {
+    console.warn("[bridge_event_rejected_source]", {
+      event_origin: String(event.origin || ""),
+      expected_parent: true,
+    });
+    return false;
+  }
+  const allowedOrigin = resolveAllowedHostOrigin();
+  if (!allowedOrigin) {
+    console.warn("[bridge_event_rejected_origin]", {
+      event_origin: String(event.origin || ""),
+      allowed_origin: "",
+      reason: "allowed_origin_unresolved",
+    });
+    return false;
+  }
+  if (allowedOrigin !== "*" && String(event.origin || "") !== allowedOrigin) {
+    console.warn("[bridge_event_rejected_origin]", {
+      event_origin: String(event.origin || ""),
+      allowed_origin: allowedOrigin,
+      reason: "origin_mismatch",
+    });
+    return false;
+  }
+  return true;
 }
 
 function canUseBridge(): boolean {
@@ -137,12 +251,14 @@ function queueStartAction(params: {
     queuedAtMs: Date.now(),
     expectedBootstrapSessionId: ordering.sessionId,
     expectedBootstrapEpoch: ordering.epoch,
+    expectedHostWidgetSessionId: ordering.hostWidgetSessionId,
   };
   console.log("[ui_start_action_queued]", {
     reason: params.reason,
     retry_count: startHandshakeRetryCount,
     bootstrap_session_id: ordering.sessionId,
     bootstrap_epoch: ordering.epoch,
+    host_widget_session_id: ordering.hostWidgetSessionId,
   });
   setWidgetStateSafe({
     start_dispatch_state: "queued",
@@ -168,6 +284,7 @@ async function flushQueuedStartAction(source: string): Promise<void> {
   const latestOrdering = latestBootstrapOrderingFromState();
   const expectedSessionId = queuedStartAction.expectedBootstrapSessionId;
   const expectedEpoch = queuedStartAction.expectedBootstrapEpoch;
+  const expectedHostWidgetSessionId = queuedStartAction.expectedHostWidgetSessionId;
   const sessionCompatible =
     !expectedSessionId ||
     !latestOrdering.sessionId ||
@@ -176,14 +293,21 @@ async function flushQueuedStartAction(source: string): Promise<void> {
     expectedEpoch <= 0 ||
     latestOrdering.epoch <= 0 ||
     latestOrdering.epoch >= expectedEpoch;
+  const hostSessionCompatible =
+    !expectedHostWidgetSessionId ||
+    !latestOrdering.hostWidgetSessionId ||
+    latestOrdering.hostWidgetSessionId === expectedHostWidgetSessionId;
   const sessionGuardEnabled = uiFlagEnabled("UI_BOOTSTRAP_SESSION_GUARD_V1", true);
-  if (sessionGuardEnabled && (!sessionCompatible || !epochCompatible)) {
+  const hostGuardEnabled = uiFlagEnabled("UI_HOST_WIDGET_SESSION_GUARD_V1", true);
+  if ((sessionGuardEnabled && (!sessionCompatible || !epochCompatible)) || (hostGuardEnabled && !hostSessionCompatible)) {
     console.log("[bootstrap_session_epoch_mismatch]", {
       source,
       expected_session_id: expectedSessionId,
       latest_session_id: latestOrdering.sessionId,
       expected_epoch: expectedEpoch,
       latest_epoch: latestOrdering.epoch,
+      expected_host_widget_session_id: expectedHostWidgetSessionId,
+      latest_host_widget_session_id: latestOrdering.hostWidgetSessionId,
     });
     scheduleQueuedStartHandshakeRetry(source);
     return;
@@ -232,7 +356,7 @@ function parsePositiveInt(value: unknown): number {
   return Math.trunc(n);
 }
 
-function latestBootstrapOrderingFromState(): { sessionId: string; epoch: number } {
+function latestBootstrapOrderingFromState(): { sessionId: string; epoch: number; hostWidgetSessionId: string } {
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
   const state = latest?.state && typeof latest.state === "object"
     ? (latest.state as Record<string, unknown>)
@@ -240,6 +364,7 @@ function latestBootstrapOrderingFromState(): { sessionId: string; epoch: number 
   return {
     sessionId: String(state.bootstrap_session_id || "").trim(),
     epoch: parsePositiveInt(state.bootstrap_epoch),
+    hostWidgetSessionId: String(state.host_widget_session_id || "").trim(),
   };
 }
 
@@ -765,7 +890,11 @@ function safePostMessage(message: unknown, removedPaths?: string[]): void {
       console.warn(`[postMessage] structuredClone failed: ${name}${lastPath ? ` @ ${lastPath}` : ""} ${msg}`);
     }
   }
-  window.parent.postMessage(message, "*");
+  const targetOrigin = resolveAllowedHostOrigin();
+  if (!targetOrigin) {
+    throw new Error("bridge target origin unavailable");
+  }
+  window.parent.postMessage(message, targetOrigin);
 }
 
 async function callToolViaBridge(

@@ -10,8 +10,10 @@ import {
   callRunStep,
   handleToolResultAndMaybeScheduleBootstrapRetry,
   handleBridgeResponse,
+  isTrustedBridgeMessageEvent,
   mergeToolOutputWithResponseMetadata,
   notifyHostTransportSignal,
+  resolveAllowedHostOrigin,
   setBridgeEnabled,
   setSendEnabled,
   setLoading,
@@ -58,12 +60,14 @@ function normalizeHostToolResultNotification(paramsRaw: unknown): Record<string,
 
 type BootstrapOrderingCursor = {
   sessionId: string;
+  hostWidgetSessionId: string;
   epoch: number;
   responseSeq: number;
 };
 
 let latestBootstrapOrderingCursor: BootstrapOrderingCursor = {
   sessionId: "",
+  hostWidgetSessionId: "",
   epoch: 0,
   responseSeq: 0,
 };
@@ -82,6 +86,25 @@ function shouldAcceptBootstrapPayload(
 ): boolean {
   if (!uiFlagEnabled("UI_BOOTSTRAP_SESSION_GUARD_V1", true)) return true;
   const ordering = extractBootstrapOrdering(payload);
+  const hostSessionGuardEnabled = uiFlagEnabled("UI_HOST_WIDGET_SESSION_GUARD_V1", true);
+  if (
+    hostSessionGuardEnabled &&
+    ordering.host_widget_session_id &&
+    latestBootstrapOrderingCursor.hostWidgetSessionId &&
+    ordering.host_widget_session_id !== latestBootstrapOrderingCursor.hostWidgetSessionId
+  ) {
+    console.warn("[host_session_mismatch_dropped]", {
+      source,
+      incoming_host_widget_session_id: ordering.host_widget_session_id,
+      latest_host_widget_session_id: latestBootstrapOrderingCursor.hostWidgetSessionId,
+    });
+    return false;
+  }
+  if (!ordering.host_widget_session_id) {
+    console.log("[host_session_missing_fallback_internal]", {
+      source,
+    });
+  }
   if (
     ordering.response_seq > 0 &&
     latestBootstrapOrderingCursor.responseSeq > 0 &&
@@ -94,6 +117,8 @@ function shouldAcceptBootstrapPayload(
       latest_response_seq: latestBootstrapOrderingCursor.responseSeq,
       incoming_session_id: ordering.bootstrap_session_id,
       latest_session_id: latestBootstrapOrderingCursor.sessionId,
+      incoming_host_widget_session_id: ordering.host_widget_session_id,
+      latest_host_widget_session_id: latestBootstrapOrderingCursor.hostWidgetSessionId,
     });
     return false;
   }
@@ -111,10 +136,12 @@ function shouldAcceptBootstrapPayload(
       incoming_epoch: ordering.bootstrap_epoch,
       latest_epoch: latestBootstrapOrderingCursor.epoch,
       session_id: ordering.bootstrap_session_id,
+      host_widget_session_id: ordering.host_widget_session_id,
     });
     return false;
   }
   if (ordering.bootstrap_session_id) latestBootstrapOrderingCursor.sessionId = ordering.bootstrap_session_id;
+  if (ordering.host_widget_session_id) latestBootstrapOrderingCursor.hostWidgetSessionId = ordering.host_widget_session_id;
   if (ordering.bootstrap_epoch > 0) latestBootstrapOrderingCursor.epoch = ordering.bootstrap_epoch;
   if (ordering.response_seq > 0) latestBootstrapOrderingCursor.responseSeq = ordering.response_seq;
   return true;
@@ -124,12 +151,70 @@ function ingestHostPayload(
   payload: unknown,
   source: "set_globals" | "host_notification"
 ): void {
+  clearStartupGrace();
   if (!shouldAcceptBootstrapPayload(payload, source)) return;
   if (source === "set_globals") {
     handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
     return;
   }
   handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
+}
+
+const STARTUP_GRACE_MS_DEFAULT = 320;
+
+function startupGraceMs(): number {
+  if (!uiFlagEnabled("UI_STARTUP_GRACE_V1", true)) return 0;
+  const raw = Number((globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_MS ?? STARTUP_GRACE_MS_DEFAULT);
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  return Math.max(100, Math.min(1500, Math.trunc(raw)));
+}
+
+function setStartupGraceUntil(untilMs: number): void {
+  (globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_UNTIL_MS = untilMs;
+}
+
+function clearStartupGrace(): void {
+  (globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_UNTIL_MS = 0;
+}
+
+function readSetGlobalsPayloadFromHost(): Record<string, unknown> {
+  const host = (globalThis as Record<string, unknown>).openai as
+    | { toolOutput?: unknown; toolResponseMetadata?: unknown }
+    | undefined;
+  return mergeToolOutputWithResponseMetadata(host?.toolOutput, host?.toolResponseMetadata);
+}
+
+function tryInitialIngestFromHost(source: "set_globals" | "host_notification"): boolean {
+  const payload = readSetGlobalsPayloadFromHost();
+  if (!payload || typeof payload !== "object" || Object.keys(payload).length === 0) return false;
+  ingestHostPayload(payload, source);
+  notifyHostTransportSignal("set_globals");
+  return true;
+}
+
+function renderStartupWaitShell(reason: string): void {
+  const graceMs = startupGraceMs();
+  if (graceMs <= 0) {
+    render();
+    return;
+  }
+  const untilMs = Date.now() + graceMs;
+  setStartupGraceUntil(untilMs);
+  console.log("[startup_first_render_wait_shell]", {
+    reason,
+    grace_ms: graceMs,
+  });
+  render();
+  setTimeout(() => {
+    if (Date.now() < untilMs) return;
+    clearStartupGrace();
+    if (!tryInitialIngestFromHost("set_globals")) {
+      console.log("[startup_payload_missing_after_grace]", {
+        grace_ms: graceMs,
+      });
+      render();
+    }
+  }, graceMs);
 }
 
 if (isLocalDev && typeof window !== "undefined") {
@@ -174,7 +259,9 @@ if (isLocalDev && typeof window !== "undefined") {
 }
 
 if (typeof window !== "undefined") {
+  resolveAllowedHostOrigin();
   window.addEventListener("message", (e: MessageEvent) => {
+    if (!isTrustedBridgeMessageEvent(e)) return;
     const data: any = e?.data;
     if (!data || typeof data !== "object") return;
     if (data.jsonrpc !== "2.0") return;
@@ -321,13 +408,7 @@ if (btnSwitchToSelfDream) {
 if (typeof window !== "undefined") {
   window.addEventListener("openai:set_globals", () => {
     try {
-      const host = (globalThis as Record<string, unknown>).openai as
-        | { toolOutput?: unknown; toolResponseMetadata?: unknown }
-        | undefined;
-      const payload = mergeToolOutputWithResponseMetadata(
-        host?.toolOutput,
-        host?.toolResponseMetadata
-      );
+      const payload = readSetGlobalsPayloadFromHost();
       if (payload && typeof payload === "object" && Object.keys(payload).length > 0) {
         ingestHostPayload(payload, "set_globals");
         notifyHostTransportSignal("set_globals");
@@ -342,4 +423,6 @@ if (typeof window !== "undefined") {
   });
 }
 
-render();
+if (!tryInitialIngestFromHost("set_globals")) {
+  renderStartupWaitShell("initial_bootstrap_probe");
+}

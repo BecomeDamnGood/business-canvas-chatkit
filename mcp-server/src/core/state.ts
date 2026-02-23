@@ -161,6 +161,7 @@ export const CanvasStateZod = z.object({
   view_contract_version: z.string().optional(),
   response_seq: z.number().int().nonnegative().optional(),
   response_kind: z.enum(["open_canvas", "run_step"]).optional(),
+  host_widget_session_id: z.string().optional(),
 
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
@@ -369,6 +370,7 @@ export function normalizeState(raw: unknown): CanvasState {
     response_kind_raw === "open_canvas" || response_kind_raw === "run_step"
       ? (response_kind_raw as "open_canvas" | "run_step")
       : "";
+  const host_widget_session_id = String((r as any).host_widget_session_id ?? "").trim();
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
@@ -468,6 +470,7 @@ export function normalizeState(raw: unknown): CanvasState {
     ...(view_contract_version ? { view_contract_version } : {}),
     ...(response_seq > 0 ? { response_seq } : {}),
     ...(response_kind ? { response_kind } : {}),
+    ...(host_widget_session_id ? { host_widget_session_id } : {}),
 
     last_specialist_result,
 

@@ -20,6 +20,17 @@ test("MCP app contract: open_canvas and run_step are registered with title\/desc
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*title:[\s\S]*description:[\s\S]*inputSchema:/);
 });
 
+test("MCP app contract: open_canvas and run_step expose explicit outputSchema", () => {
+  assert.match(source, /const ToolStructuredContentOutputSchema = z\.object\(/);
+  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*outputSchema:\s*ToolStructuredContentOutputSchema/);
+  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*outputSchema:\s*ToolStructuredContentOutputSchema/);
+});
+
+test("MCP app contract: open_canvas is idempotent-hinted and run_step is not", () => {
+  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*idempotentHint:\s*true/);
+  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*idempotentHint:\s*false/);
+});
+
 test("MCP app contract: open_canvas owns outputTemplate and run_step does not", () => {
   assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*"openai\/outputTemplate": uiResourceUri/);
   assert.doesNotMatch(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/outputTemplate": uiResourceUri/);

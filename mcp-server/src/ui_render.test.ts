@@ -10,7 +10,10 @@ import {
 import {
   computeBootstrapRenderState,
   computeHydrationState,
+  isTrustedBridgeMessageEvent,
+  resetBridgeOriginCacheForTests,
   resolveWidgetPayload,
+  resolveAllowedHostOrigin,
   resetHydrationRetryCycle,
 } from "../ui/lib/ui_actions.js";
 import { setSessionStarted, setSessionWelcomeShown } from "../ui/lib/ui_state.js";
@@ -1194,6 +1197,125 @@ test("render keeps non-EN pending locale in explicit wait view without EN presta
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
   (globalThis as any).openai = originalOpenai;
+});
+
+test("render blocks prestart during startup grace for non-EN pending locale", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalGraceUntil = (globalThis as any).__BSC_STARTUP_GRACE_UNTIL_MS;
+  const fakeDocument = makeDocument();
+  const btnStart = (fakeDocument as any).getElementById("btnStart");
+  const cardDesc = (fakeDocument as any).getElementById("cardDesc");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "?lang=nl" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: { language: "nl" }, setWidgetState() {} };
+  (globalThis as any).__BSC_STARTUP_GRACE_UNTIL_MS = Date.now() + 500;
+
+  render({
+    result: {
+      state: {
+        current_step: "step_0",
+        started: "false",
+        language: "nl",
+        ui_strings_status: "pending",
+        ui_gate_status: "waiting_locale",
+      },
+      ui: {
+        flags: {
+          bootstrap_waiting_locale: true,
+          bootstrap_interactive_ready: true,
+          interactive_fallback_active: true,
+        },
+        view: {
+          mode: "prestart",
+          waiting_locale: false,
+        },
+      },
+    },
+  });
+
+  assert.equal(String(btnStart.style.display || ""), "none");
+  assert.ok((cardDesc.childNodes || []).length > 0);
+  resetHydrationRetryCycle();
+  (globalThis as any).__BSC_STARTUP_GRACE_UNTIL_MS = originalGraceUntil;
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
+test("resolveWidgetPayload drops cross-host candidates and keeps same host chain", () => {
+  const resolved = resolveWidgetPayload({
+    _meta: {
+      widget_result: {
+        current_step_id: "step_0",
+        state: {
+          current_step: "step_0",
+          bootstrap_session_id: "session_a",
+          bootstrap_epoch: 1,
+          response_seq: 1,
+          host_widget_session_id: "host_a",
+        },
+      },
+    },
+    structuredContent: {
+      result: {
+        current_step_id: "step_0",
+        state: {
+          current_step: "step_0",
+          bootstrap_session_id: "session_b",
+          bootstrap_epoch: 2,
+          response_seq: 2,
+          host_widget_session_id: "host_b",
+        },
+      },
+    },
+  });
+  assert.equal(resolved.host_widget_session_id, "host_b");
+  assert.equal(resolved.bootstrap_session_id, "session_b");
+  assert.equal(resolved.bootstrap_epoch, 2);
+});
+
+test("bridge event trust checks source and origin", () => {
+  const originalWindow = (globalThis as any).window;
+  const originalDocument = (globalThis as any).document;
+  const originalHostOrigin = (globalThis as any).__BSC_HOST_ORIGIN;
+  const parentRef = {};
+  (globalThis as any).__BSC_HOST_ORIGIN = "https://chatgpt.com";
+  resetBridgeOriginCacheForTests();
+  (globalThis as any).window = {
+    parent: parentRef,
+    location: {},
+  };
+  (globalThis as any).document = { referrer: "https://chatgpt.com/chat" };
+  assert.equal(resolveAllowedHostOrigin(), "https://chatgpt.com");
+  assert.equal(
+    isTrustedBridgeMessageEvent({
+      source: parentRef,
+      origin: "https://chatgpt.com",
+    } as any),
+    true
+  );
+  assert.equal(
+    isTrustedBridgeMessageEvent({
+      source: parentRef,
+      origin: "https://evil.example",
+    } as any),
+    false
+  );
+  assert.equal(
+    isTrustedBridgeMessageEvent({
+      source: {},
+      origin: "https://chatgpt.com",
+    } as any),
+    false
+  );
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).__BSC_HOST_ORIGIN = originalHostOrigin;
 });
 
 test("ui actions source uses explicit bootstrap poll action and shared result handler", () => {

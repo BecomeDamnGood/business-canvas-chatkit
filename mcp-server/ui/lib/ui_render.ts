@@ -67,6 +67,11 @@ function initialLangFromLocation(): string {
   }
 }
 
+function isStartupGraceActive(): boolean {
+  const raw = Number((globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_UNTIL_MS ?? 0);
+  return Number.isFinite(raw) && raw > Date.now();
+}
+
 function stepLabelShort(stepId: string, lang: string | null | undefined): string {
   const full = extractStepTitle(stepId, lang);
   if (stepId === "step_0") return uiText(lang, "stepLabel.validation", "Validation");
@@ -590,6 +595,8 @@ export function render(overrideToolOutput?: unknown): void {
   });
   const waitingForMissingState = bootstrapState.waitingForMissingState;
   const waitingForI18n = bootstrapState.waitingForI18n;
+  const startupGraceActive = isStartupGraceActive();
+  const startupPrestartBlocked = startupGraceActive && localeKnownNonEn && uiStringsStatus !== "ready";
   const bootstrapWaitingLocale =
     waitingForI18n ||
     bootstrapState.bootstrapWaitingLocale ||
@@ -625,6 +632,47 @@ export function render(overrideToolOutput?: unknown): void {
   const sessionStarted = getSessionStarted();
   if (hasToolOutputVal && serverStarted && !sessionStarted) {
     setSessionStarted(true);
+  }
+  if (startupPrestartBlocked) {
+    console.log("[startup_prestart_blocked_pending_locale]", {
+      resolved_language: resolved.resolved_language,
+      ui_strings_status: uiStringsStatus,
+      bootstrap_phase: String(uiFlags.bootstrap_phase || uiView.bootstrap_phase || ""),
+    });
+    const inputWrap = document.getElementById("inputWrap");
+    const btnStart = document.getElementById("btnStart");
+    const startHint = document.getElementById("startHint");
+    const choiceWrap = document.getElementById("choiceWrap");
+    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    const cardDesc = document.getElementById("cardDesc");
+    const prompt = document.getElementById("prompt");
+    const sectionTitleEl = document.getElementById("sectionTitle");
+    const uiSubtitle = document.getElementById("uiSubtitle");
+    const badge = document.getElementById("badge");
+    if (inputWrap) (inputWrap as HTMLElement).style.display = "none";
+    if (choiceWrap) (choiceWrap as HTMLElement).style.display = "none";
+    if (wordingChoiceWrap) (wordingChoiceWrap as HTMLElement).style.display = "none";
+    if (btnStart) (btnStart as HTMLElement).style.display = "none";
+    if (startHint) {
+      startHint.textContent = "";
+      (startHint as HTMLElement).style.display = "none";
+    }
+    if (prompt) prompt.textContent = "";
+    if (sectionTitleEl) sectionTitleEl.textContent = "";
+    if (uiSubtitle) uiSubtitle.textContent = "";
+    if (badge) {
+      badge.textContent = "";
+      (badge as HTMLElement).style.display = "none";
+    }
+    buildStepper(0, "", lang);
+    if (cardDesc) {
+      const prestartEl = cardDesc as HTMLElement;
+      prestartEl.classList.remove("has-grid");
+      prestartEl.classList.remove("is-step0-ask-layout");
+      renderBootstrapWaitShell(prestartEl, lang);
+    }
+    if (getIsLoading()) setLoading(false);
+    return;
   }
   if (waitingForMissingState) {
     const inputWrap = document.getElementById("inputWrap");

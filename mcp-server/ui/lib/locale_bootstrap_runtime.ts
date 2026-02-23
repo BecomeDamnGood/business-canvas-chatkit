@@ -42,6 +42,7 @@ export type ResolvedWidgetPayload = {
   bootstrap_epoch: number;
   response_seq: number;
   response_kind: "open_canvas" | "run_step" | "";
+  host_widget_session_id: string;
 };
 
 export type HydrationStatus = {
@@ -71,6 +72,7 @@ type PayloadCandidate = {
   bootstrap_session_id: string;
   bootstrap_epoch: number;
   response_seq: number;
+  host_widget_session_id: string;
 };
 
 const WIDGET_RESULT_KEYS = new Set([
@@ -230,12 +232,19 @@ function sessionInfoForResult(result: Record<string, unknown>): {
   bootstrap_session_id: string;
   bootstrap_epoch: number;
   response_seq: number;
+  host_widget_session_id: string;
 } {
   const state = toRecord(result.state);
   return {
     bootstrap_session_id: String(state.bootstrap_session_id || result.bootstrap_session_id || "").trim(),
     bootstrap_epoch: parsePositiveInt(state.bootstrap_epoch || result.bootstrap_epoch),
     response_seq: parsePositiveInt(state.response_seq || result.response_seq),
+    host_widget_session_id: String(
+      state.host_widget_session_id ||
+      result.host_widget_session_id ||
+      (toRecord(result.ui).flags && toRecord(toRecord(result.ui).flags).host_widget_session_id) ||
+      ""
+    ).trim(),
   };
 }
 
@@ -313,6 +322,7 @@ function collectPayloadCandidates(raw: unknown, orderOffset = 0): PayloadCandida
       bootstrap_session_id: sessionInfo.bootstrap_session_id,
       bootstrap_epoch: sessionInfo.bootstrap_epoch,
       response_seq: sessionInfo.response_seq,
+      host_widget_session_id: sessionInfo.host_widget_session_id,
     });
   };
   add("meta.widget_result", meta.widget_result, 0);
@@ -331,13 +341,45 @@ function collectPayloadCandidates(raw: unknown, orderOffset = 0): PayloadCandida
 function pickBestCandidate(candidates: PayloadCandidate[]): PayloadCandidate | null {
   if (!candidates.length) return null;
   let scoped = candidates;
+  const hostScopedCandidates = candidates.filter((candidate) => candidate.host_widget_session_id);
+  if (hostScopedCandidates.length > 0) {
+    let hostAnchor = hostScopedCandidates[0];
+    for (let i = 1; i < hostScopedCandidates.length; i += 1) {
+      const cur = hostScopedCandidates[i];
+      if (cur.response_seq !== hostAnchor.response_seq) {
+        if (cur.response_seq > hostAnchor.response_seq) hostAnchor = cur;
+        continue;
+      }
+      if (cur.bootstrap_epoch !== hostAnchor.bootstrap_epoch) {
+        if (cur.bootstrap_epoch > hostAnchor.bootstrap_epoch) hostAnchor = cur;
+        continue;
+      }
+      if (cur.order < hostAnchor.order) hostAnchor = cur;
+    }
+    const hostScoped = candidates.filter(
+      (candidate) => candidate.host_widget_session_id === hostAnchor.host_widget_session_id
+    );
+    if (hostScoped.length > 0) {
+      if (hostScoped.length < candidates.length) {
+        console.warn("[host_session_mismatch_dropped]", {
+          kept_host_widget_session_id: hostAnchor.host_widget_session_id,
+          dropped_candidate_count: candidates.length - hostScoped.length,
+        });
+      }
+      scoped = hostScoped;
+    }
+  }
   const candidatesWithSession = candidates.filter(
     (candidate) => candidate.bootstrap_session_id && candidate.bootstrap_epoch > 0
   );
   if (candidatesWithSession.length > 0) {
-    let anchor = candidatesWithSession[0];
-    for (let i = 1; i < candidatesWithSession.length; i += 1) {
-      const cur = candidatesWithSession[i];
+    const scopedCandidatesWithSession = scoped.filter(
+      (candidate) => candidate.bootstrap_session_id && candidate.bootstrap_epoch > 0
+    );
+    let anchor = scopedCandidatesWithSession.length > 0 ? scopedCandidatesWithSession[0] : candidatesWithSession[0];
+    const anchorPool = scopedCandidatesWithSession.length > 0 ? scopedCandidatesWithSession : candidatesWithSession;
+    for (let i = 1; i < anchorPool.length; i += 1) {
+      const cur = anchorPool[i];
       if (cur.bootstrap_epoch !== anchor.bootstrap_epoch) {
         if (cur.bootstrap_epoch > anchor.bootstrap_epoch) anchor = cur;
         continue;
@@ -351,7 +393,8 @@ function pickBestCandidate(candidates: PayloadCandidate[]): PayloadCandidate | n
     scoped = candidates.filter(
       (candidate) =>
         candidate.bootstrap_session_id === anchor.bootstrap_session_id &&
-        candidate.bootstrap_epoch === anchor.bootstrap_epoch
+        candidate.bootstrap_epoch === anchor.bootstrap_epoch &&
+        (!anchor.host_widget_session_id || candidate.host_widget_session_id === anchor.host_widget_session_id)
     );
     if (!scoped.length) scoped = [anchor];
   }
@@ -458,6 +501,7 @@ export function resolveWidgetPayload(
       if (kind === "open_canvas" || kind === "run_step") return kind;
       return "";
     })(),
+    host_widget_session_id: best?.host_widget_session_id || "",
   };
   const hydration = computeHydrationState(temp, options?.retryState);
   temp.needs_hydration = hydration.needs_hydration;
@@ -470,6 +514,7 @@ export type BootstrapOrdering = {
   bootstrap_epoch: number;
   response_seq: number;
   response_kind: "open_canvas" | "run_step" | "";
+  host_widget_session_id: string;
 };
 
 export function extractBootstrapOrdering(raw: unknown, options?: { fallbackRaw?: unknown }): BootstrapOrdering {
@@ -479,6 +524,7 @@ export function extractBootstrapOrdering(raw: unknown, options?: { fallbackRaw?:
     bootstrap_epoch: resolved.bootstrap_epoch,
     response_seq: resolved.response_seq,
     response_kind: resolved.response_kind,
+    host_widget_session_id: resolved.host_widget_session_id,
   };
 }
 

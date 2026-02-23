@@ -115,6 +115,7 @@ type OpenCanvasToolResponse = {
 const openCanvasDedupeCache = new Map<string, { expiresAt: number; response: OpenCanvasToolResponse }>();
 type BootstrapSessionSnapshot = {
   sessionId: string;
+  hostWidgetSessionId: string;
   epoch: number;
   lastResponseSeq: number;
   updatedAtMs: number;
@@ -263,6 +264,7 @@ function attachBootstrapDiagnostics(args: {
   bootstrapEpoch: number;
   responseSeq: number;
   openCanvasInvocationId?: string;
+  hostWidgetSessionId?: string;
 }): Record<string, unknown> {
   const {
     responseKind,
@@ -271,6 +273,7 @@ function attachBootstrapDiagnostics(args: {
     bootstrapEpoch,
     responseSeq,
     openCanvasInvocationId,
+    hostWidgetSessionId,
   } = args;
   const stateRaw =
     resultForClient.state && typeof resultForClient.state === "object"
@@ -287,6 +290,9 @@ function attachBootstrapDiagnostics(args: {
   if (responseKind === "open_canvas" && openCanvasInvocationId) {
     stateWithDiagnostics.open_canvas_invocation_id = openCanvasInvocationId;
   }
+  if (hostWidgetSessionId) {
+    stateWithDiagnostics.host_widget_session_id = hostWidgetSessionId;
+  }
   const uiRaw =
     resultForClient.ui && typeof resultForClient.ui === "object"
       ? (resultForClient.ui as Record<string, unknown>)
@@ -302,6 +308,7 @@ function attachBootstrapDiagnostics(args: {
       view_contract_version: VIEW_CONTRACT_VERSION,
       response_seq: responseSeq,
       response_kind: responseKind,
+      ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
       ...(responseKind === "open_canvas" && openCanvasInvocationId ? { open_canvas_invocation_id: openCanvasInvocationId } : {}),
     },
   };
@@ -319,12 +326,14 @@ function attachBootstrapDiagnostics(args: {
     response_kind: responseKind,
     ...(bootstrapSessionId ? { bootstrap_session_id: bootstrapSessionId } : {}),
     ...(bootstrapEpoch > 0 ? { bootstrap_epoch: bootstrapEpoch } : {}),
+    ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
     ...(responseKind === "open_canvas" && openCanvasInvocationId ? { open_canvas_invocation_id: openCanvasInvocationId } : {}),
   };
 }
 
 function readBootstrapOrdering(result: Record<string, unknown> | null | undefined): {
   sessionId: string;
+  hostWidgetSessionId: string;
   epoch: number;
   responseSeq: number;
 } {
@@ -336,9 +345,16 @@ function readBootstrapOrdering(result: Record<string, unknown> | null | undefine
   const sessionId = safeString(
     state.bootstrap_session_id ?? (root as any).bootstrap_session_id ?? ""
   ).trim();
+  const hostWidgetSessionId = safeString(
+    state.host_widget_session_id ??
+      (root as any).host_widget_session_id ??
+      ((root as any).ui && typeof (root as any).ui === "object" && (root as any).ui
+        ? ((root as any).ui as any)?.flags?.host_widget_session_id
+        : "")
+  ).trim();
   const epoch = parsePositiveInt(state.bootstrap_epoch ?? (root as any).bootstrap_epoch);
   const responseSeq = parsePositiveInt(state.response_seq ?? (root as any).response_seq);
-  return { sessionId, epoch, responseSeq };
+  return { sessionId, hostWidgetSessionId, epoch, responseSeq };
 }
 
 function registerBootstrapSnapshot(params: {
@@ -358,6 +374,7 @@ function registerBootstrapSnapshot(params: {
   }
   bootstrapSessionRegistry.set(ordering.sessionId, {
     sessionId: ordering.sessionId,
+    hostWidgetSessionId: ordering.hostWidgetSessionId,
     epoch: ordering.epoch,
     lastResponseSeq: ordering.responseSeq,
     updatedAtMs: params.nowMs,
@@ -367,21 +384,29 @@ function registerBootstrapSnapshot(params: {
 
 function isStaleBootstrapPayload(params: {
   sessionId: string;
+  hostWidgetSessionId?: string;
   epoch: number;
   responseSeq: number;
   nowMs: number;
-}): { stale: boolean; latest: BootstrapSessionSnapshot | null } {
+}): { stale: boolean; latest: BootstrapSessionSnapshot | null; reason?: "host_session" | "epoch" | "response_seq" } {
   purgeExpiredBootstrapSessions(params.nowMs);
   const latest = bootstrapSessionRegistry.get(params.sessionId) || null;
   if (!latest) return { stale: false, latest: null };
-  if (params.epoch > 0 && params.epoch < latest.epoch) return { stale: true, latest };
+  if (
+    params.hostWidgetSessionId &&
+    latest.hostWidgetSessionId &&
+    params.hostWidgetSessionId !== latest.hostWidgetSessionId
+  ) {
+    return { stale: true, latest, reason: "host_session" };
+  }
+  if (params.epoch > 0 && params.epoch < latest.epoch) return { stale: true, latest, reason: "epoch" };
   if (
     params.epoch > 0 &&
     params.epoch === latest.epoch &&
     params.responseSeq > 0 &&
     params.responseSeq < latest.lastResponseSeq
   ) {
-    return { stale: true, latest };
+    return { stale: true, latest, reason: "response_seq" };
   }
   return { stale: false, latest };
 }
@@ -554,6 +579,13 @@ function normalizeLocaleHintSource(raw: unknown): "openai_locale" | "webplus_i18
     : "none";
 }
 
+function normalizeHostWidgetSessionId(raw: unknown): string {
+  const value = safeString(raw ?? "").trim();
+  if (!value) return "";
+  if (value.length > 256) return value.slice(0, 256);
+  return value;
+}
+
 function canonicalizeStateForToolInput(raw: unknown): unknown {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
   const next = { ...(raw as Record<string, unknown>) };
@@ -610,6 +642,18 @@ function resolveLocaleHintFromExtra(extra: unknown): {
   return { locale_hint: "", locale_hint_source: "none" };
 }
 
+function resolveHostWidgetSessionIdFromExtra(extra: unknown): string {
+  const meta =
+    extra && typeof extra === "object" && (extra as any)._meta && typeof (extra as any)._meta === "object"
+      ? ((extra as any)._meta as Record<string, unknown>)
+      : null;
+  if (!meta) return "";
+  const direct = normalizeHostWidgetSessionId(meta["openai/widgetSessionId"]);
+  if (direct) return direct;
+  const fallback = normalizeHostWidgetSessionId(meta["openai/widget_session_id"]);
+  return fallback;
+}
+
 function hasNonBusinessFinals(state: Record<string, unknown> | null | undefined): boolean {
   const snapshot = getFinalsSnapshot((state ?? {}) as any);
   for (const [key, value] of Object.entries(snapshot)) {
@@ -636,6 +680,7 @@ function loadUiHtml(): string {
 function buildOpenCanvasBootstrapResponse(args: {
   locale_hint: string;
   locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "none";
+  host_widget_session_id?: string;
   state?: Record<string, unknown>;
   seed_user_message?: string;
 }): { structuredContent: Record<string, unknown>; meta: Record<string, unknown> } {
@@ -676,6 +721,9 @@ function buildOpenCanvasBootstrapResponse(args: {
   };
   const strictReadinessV1 = envFlagEnabled("UI_OPEN_CANVAS_STRICT_READINESS_V1", true);
   const ingressSanitizerV1 = envFlagEnabled("UI_INGRESS_STATE_SANITIZER_V1", true);
+  const hostWidgetSessionId = normalizeHostWidgetSessionId(
+    args.host_widget_session_id ?? sourceState.host_widget_session_id ?? ""
+  );
   const forceRecoverMs = Number(process.env.UI_GATE_FORCE_RECOVER_MS || 4000);
   const bootstrapIdentity = resolveBootstrapIdentity({
     sourceState,
@@ -708,6 +756,7 @@ function buildOpenCanvasBootstrapResponse(args: {
     bootstrap_phase: baseReady ? "ready" : "waiting_locale",
     bootstrap_session_id: bootstrapIdentity.bootstrap_session_id,
     bootstrap_epoch: bootstrapIdentity.bootstrap_epoch,
+    ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
     open_canvas_invocation_id: bootstrapIdentity.open_canvas_invocation_id,
     view_contract_version: VIEW_CONTRACT_VERSION,
     last_specialist_result: {},
@@ -777,6 +826,7 @@ function buildOpenCanvasBootstrapResponse(args: {
         bootstrap_phase: safeString(gatedBootstrapState.bootstrap_phase || ""),
         transport_ready: safeString(gatedBootstrapState.transport_ready || "unknown"),
         start_dispatch_state: safeString(gatedBootstrapState.start_dispatch_state || "idle"),
+        ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
       },
     },
   };
@@ -787,6 +837,7 @@ function buildOpenCanvasBootstrapResponse(args: {
     bootstrapEpoch: bootstrapIdentity.bootstrap_epoch,
     responseSeq,
     openCanvasInvocationId: bootstrapIdentity.open_canvas_invocation_id,
+    hostWidgetSessionId,
   });
   const modelResult = buildModelSafeResult(resultForClient);
   const structuredContent: Record<string, unknown> = {
@@ -811,6 +862,7 @@ async function runStepHandler(args: {
   input_mode?: "widget" | "chat";
   locale_hint?: string;
   locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "none";
+  host_widget_session_id?: string;
   state?: Record<string, unknown>;
 }): Promise<{ structuredContent: Record<string, unknown>; meta?: Record<string, unknown> }> {
   const current_step_id = normalizeStepId(args.current_step_id ?? "");
@@ -845,7 +897,21 @@ async function runStepHandler(args: {
     !isBootstrapPollAction &&
     !isTechnicalRouteMessage;
   const hasInitiator = safeString(state?.initial_user_message ?? "").trim() !== "";
-  const stateForTool =
+  const hostWidgetSessionId = normalizeHostWidgetSessionId(
+    args.host_widget_session_id ?? state.host_widget_session_id ?? ""
+  );
+  if (hostWidgetSessionId) {
+    console.log("[host_session_id_seen]", {
+      source: "run_step_args",
+      host_widget_session_id: hostWidgetSessionId,
+    });
+  } else {
+    console.log("[host_session_missing_fallback_internal]", {
+      source: "run_step_args",
+    });
+  }
+  const hostSessionGuardV1 = envFlagEnabled("UI_HOST_WIDGET_SESSION_GUARD_V1", true);
+  let stateForTool =
     shouldMarkStarted
       ? {
           ...state,
@@ -853,6 +919,9 @@ async function runStepHandler(args: {
           started: "true",
         }
       : state;
+  if (hostWidgetSessionId) {
+    stateForTool = { ...stateForTool, host_widget_session_id: hostWidgetSessionId };
+  }
 
   const stepIdStr = safeString(current_step_id ?? "");
   const msgLen = typeof user_message_raw === "string" ? user_message_raw.length : 0;
@@ -868,6 +937,7 @@ async function runStepHandler(args: {
     state_keys: stateKeysCount,
     locale_hint: localeHint,
     locale_hint_source: localeHintSource,
+    host_widget_session_id: hostWidgetSessionId || "",
   });
   const nowMs = Date.now();
   const incomingOrdering = readBootstrapOrdering({ state: stateForTool });
@@ -875,10 +945,24 @@ async function runStepHandler(args: {
   if (bootstrapSessionGuardV1 && incomingOrdering.sessionId && incomingOrdering.epoch > 0) {
     const staleCheck = isStaleBootstrapPayload({
       sessionId: incomingOrdering.sessionId,
+      hostWidgetSessionId: incomingOrdering.hostWidgetSessionId,
       epoch: incomingOrdering.epoch,
       responseSeq: incomingOrdering.responseSeq,
       nowMs,
     });
+    if (
+      hostSessionGuardV1 &&
+      incomingOrdering.hostWidgetSessionId &&
+      staleCheck.latest?.hostWidgetSessionId &&
+      incomingOrdering.hostWidgetSessionId !== staleCheck.latest.hostWidgetSessionId
+    ) {
+      console.warn("[host_session_mismatch_dropped]", {
+        input_mode: inputMode || "chat",
+        action,
+        incoming_host_widget_session_id: incomingOrdering.hostWidgetSessionId,
+        latest_host_widget_session_id: staleCheck.latest.hostWidgetSessionId,
+      });
+    }
     if (staleCheck.stale) {
       const staleSource =
         staleCheck.latest && staleCheck.latest.lastWidgetResult && Object.keys(staleCheck.latest.lastWidgetResult).length
@@ -900,6 +984,8 @@ async function runStepHandler(args: {
         bootstrapSessionId: staleCheck.latest?.sessionId || incomingOrdering.sessionId,
         bootstrapEpoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
         responseSeq,
+        hostWidgetSessionId:
+          staleCheck.latest?.hostWidgetSessionId || incomingOrdering.hostWidgetSessionId || hostWidgetSessionId,
       });
       registerBootstrapSnapshot({
         result: staleResult,
@@ -912,6 +998,8 @@ async function runStepHandler(args: {
         input_mode: inputMode || "chat",
         action,
         session_id: incomingOrdering.sessionId,
+        host_widget_session_id: incomingOrdering.hostWidgetSessionId || "",
+        stale_reason: staleCheck.reason || "unknown",
         payload_epoch: incomingOrdering.epoch,
         payload_response_seq: incomingOrdering.responseSeq,
         latest_epoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
@@ -958,6 +1046,7 @@ async function runStepHandler(args: {
       bootstrapSessionId: sessionId,
       bootstrapEpoch: epoch,
       responseSeq,
+      hostWidgetSessionId,
     });
     const stepMeta =
       safeString((result as { state?: { current_step?: string } }).state?.current_step ?? "unknown") || "unknown";
@@ -994,6 +1083,7 @@ async function runStepHandler(args: {
       bootstrap_waiting_locale: bootstrapWaitingLocale,
       interactive_fallback_active: resultUiFlags.interactive_fallback_active === true,
       bootstrap_retry_scheduled: bootstrapRetryScheduled,
+      host_widget_session_id: hostWidgetSessionId || "",
       current_step: safeString(resultState.current_step ?? stepMeta),
       active_specialist: specialistMeta,
     });
@@ -1079,6 +1169,7 @@ async function runStepHandler(args: {
       bootstrapSessionId: incomingOrdering.sessionId,
       bootstrapEpoch: incomingOrdering.epoch,
       responseSeq,
+      hostWidgetSessionId: hostWidgetSessionId || incomingOrdering.hostWidgetSessionId,
     });
     registerBootstrapSnapshot({
       result: fallbackResult,
@@ -1123,6 +1214,12 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const bootstrapEpoch = parsePositiveInt((result as any).bootstrap_epoch ?? state.bootstrap_epoch);
   const responseSeq = parsePositiveInt((result as any).response_seq ?? state.response_seq);
   const responseKind = safeString((result as any).response_kind || state.response_kind || "");
+  const hostWidgetSessionId = safeString(
+    (result as any).host_widget_session_id ||
+      state.host_widget_session_id ||
+      flags.host_widget_session_id ||
+      ""
+  );
   const safeState: Record<string, unknown> = {
     current_step: currentStep || "step_0",
   };
@@ -1134,6 +1231,7 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (bootstrapEpoch > 0) safeState.bootstrap_epoch = bootstrapEpoch;
   if (responseSeq > 0) safeState.response_seq = responseSeq;
   if (responseKind) safeState.response_kind = responseKind;
+  if (hostWidgetSessionId) safeState.host_widget_session_id = hostWidgetSessionId;
   return {
     model_result_shape_version: "v2_minimal",
     ok: result.ok === true,
@@ -1147,6 +1245,7 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     ...(bootstrapEpoch > 0 ? { bootstrap_epoch: bootstrapEpoch } : {}),
     ...(responseSeq > 0 ? { response_seq: responseSeq } : {}),
     ...(responseKind ? { response_kind: responseKind } : {}),
+    ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
     state: safeState,
   };
 }
@@ -1223,8 +1322,12 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
   const nextFlags: Record<string, unknown> = { ...flags };
   const transportReady = safeString(state.transport_ready ?? "");
   const startDispatchState = safeString(state.start_dispatch_state ?? "");
+  const hostWidgetSessionId = safeString(
+    state.host_widget_session_id || flags.host_widget_session_id || (result as any).host_widget_session_id || ""
+  );
   if (transportReady) nextFlags.transport_ready = transportReady;
   if (startDispatchState) nextFlags.start_dispatch_state = startDispatchState;
+  if (hostWidgetSessionId) nextFlags.host_widget_session_id = hostWidgetSessionId;
   if (viewContractVersion) nextFlags.view_contract_version = viewContractVersion;
   return {
     prompt: { body: promptBody },
@@ -1312,6 +1415,7 @@ function createAppServer(baseUrl: string): McpServer {
     input_mode: z.enum(["widget", "chat"]).optional(),
     locale_hint: z.string().optional(),
     locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional(),
+    host_widget_session_id: z.string().optional(),
     // Use CanvasStateZod schema for type safety and validation
     // .partial() makes all fields optional (for empty/partial state)
     // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
@@ -1321,8 +1425,21 @@ function createAppServer(baseUrl: string): McpServer {
     user_message: z.string().optional().default(""),
     locale_hint: z.string().optional(),
     locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional(),
+    host_widget_session_id: z.string().optional(),
     state: z.preprocess(canonicalizeStateForToolInput, CanvasStateZod.partial().passthrough().optional()),
   });
+  const ModelSafeResultOutputSchema = z.object({
+    model_result_shape_version: z.literal("v2_minimal"),
+    ok: z.boolean(),
+    tool: z.string(),
+    current_step_id: z.string(),
+    state: z.record(z.string(), z.unknown()),
+  }).passthrough();
+  const ToolStructuredContentOutputSchema = z.object({
+    title: z.string().optional(),
+    meta: z.string().optional(),
+    result: ModelSafeResultOutputSchema,
+  }).passthrough();
 
   server.registerTool(
     "open_canvas",
@@ -1335,7 +1452,9 @@ function createAppServer(baseUrl: string): McpServer {
         readOnlyHint: false,
         openWorldHint: false,
         destructiveHint: false,
+        idempotentHint: true,
       },
+      outputSchema: ToolStructuredContentOutputSchema,
       _meta: {
         securitySchemes: [{ type: "noauth" }],
         ui: {
@@ -1350,6 +1469,19 @@ function createAppServer(baseUrl: string): McpServer {
     },
     async (args, extra) => {
       const localeFromExtra = resolveLocaleHintFromExtra(extra);
+      const hostWidgetSessionId = normalizeHostWidgetSessionId(
+        args.host_widget_session_id ?? resolveHostWidgetSessionIdFromExtra(extra)
+      );
+      if (hostWidgetSessionId) {
+        console.log("[host_session_id_seen]", {
+          source: "open_canvas_extra",
+          host_widget_session_id: hostWidgetSessionId,
+        });
+      } else {
+        console.log("[host_session_missing_fallback_internal]", {
+          source: "open_canvas_extra",
+        });
+      }
       const mergedLocale = mergeLocaleHintInputs(
         args.locale_hint,
         args.locale_hint_source,
@@ -1377,6 +1509,7 @@ function createAppServer(baseUrl: string): McpServer {
       const { structuredContent, meta } = buildOpenCanvasBootstrapResponse({
         locale_hint: mergedLocale.locale_hint,
         locale_hint_source: mergedLocale.locale_hint_source,
+        host_widget_session_id: hostWidgetSessionId,
         seed_user_message: safeString(args.user_message ?? ""),
         state: (args.state ?? {}) as Record<string, unknown>,
       });
@@ -1415,6 +1548,7 @@ function createAppServer(baseUrl: string): McpServer {
       });
       console.log("[open_canvas] bootstrap response", {
         locale_hint_source: mergedLocale.locale_hint_source,
+        host_widget_session_id: hostWidgetSessionId || "",
         resolved_language: safeString(bootstrapState.language ?? ""),
         bootstrap_state_language_source: safeString(bootstrapState.language_source ?? ""),
         bootstrap_phase: safeString(bootstrapState.bootstrap_phase ?? ""),
@@ -1437,7 +1571,9 @@ function createAppServer(baseUrl: string): McpServer {
         readOnlyHint: false, // Tool generates files and modifies state
         openWorldHint: false, // No external posts
         destructiveHint: false, // No destructive actions
+        idempotentHint: false,
       },
+      outputSchema: ToolStructuredContentOutputSchema,
       // Note: securitySchemes is in _meta per MCP SDK implementation requirements.
       // The MCP SDK does not support top-level securitySchemes in the current version.
       // This is included in the MCP response JSON that ChatGPT/OpenAI receives.
@@ -1459,6 +1595,9 @@ function createAppServer(baseUrl: string): McpServer {
         (args.state ?? {}) as Record<string, unknown>
       );
       const localeFromExtra = resolveLocaleHintFromExtra(extra);
+      const hostWidgetSessionId = normalizeHostWidgetSessionId(
+        args.host_widget_session_id ?? resolveHostWidgetSessionIdFromExtra(extra)
+      );
       const mergedLocale = mergeLocaleHintInputs(
         args.locale_hint,
         args.locale_hint_source,
@@ -1470,6 +1609,7 @@ function createAppServer(baseUrl: string): McpServer {
         input_mode: args.input_mode,
         locale_hint: mergedLocale.locale_hint,
         locale_hint_source: mergedLocale.locale_hint_source,
+        host_widget_session_id: hostWidgetSessionId,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
       const contentSource =
@@ -1603,6 +1743,7 @@ const httpServer = async (req: any, res: any) => {
           input_mode?: "widget" | "chat";
           locale_hint?: string;
           locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "none";
+          host_widget_session_id?: string;
           state?: Record<string, unknown>;
         };
         const { structuredContent, meta } = await runStepHandler({
@@ -1611,6 +1752,7 @@ const httpServer = async (req: any, res: any) => {
           input_mode: args.input_mode,
           locale_hint: safeString(args.locale_hint ?? ""),
           locale_hint_source: args.locale_hint_source ?? "none",
+          host_widget_session_id: normalizeHostWidgetSessionId(args.host_widget_session_id),
           state: args.state,
         });
         res.writeHead(200, { "content-type": "application/json" });
