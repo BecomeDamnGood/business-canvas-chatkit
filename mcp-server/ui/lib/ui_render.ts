@@ -891,7 +891,11 @@ export function render(overrideToolOutput?: unknown): void {
     if (cardDesc) {
       const prestartEl = cardDesc as HTMLElement;
       const isNonEnglish = baseLang(lang) !== "en" && baseLang(lang) !== "default";
-      const showSkeleton = isNonEnglish && !hasPrestartContentForLang(lang);
+      const hasLocalizedPrestart = hasPrestartContentForLang(lang);
+      const startupUnhydrated = !hasToolOutputVal || !resolved.has_state;
+      const waitingLocalizedPrestart = isNonEnglish && (uiStringsStatus !== "ready" || !hasLocalizedPrestart);
+      const allowEnglishFallback = serverExplicitRecovery || hydration.retry_exhausted;
+      const showSkeleton = startupUnhydrated || (waitingLocalizedPrestart && !allowEnglishFallback);
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
       if (showSkeleton) renderPrestartSkeleton(prestartEl, lang);

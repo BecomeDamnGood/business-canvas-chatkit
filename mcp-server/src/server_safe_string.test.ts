@@ -27,6 +27,14 @@ test("run_step MCP handler derives locale hint from request metadata and forward
   );
 });
 
+test("run_step handler enforces explicit ACTION_START before step_0 can mark started", () => {
+  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  assert.match(source, /const shouldMarkStarted = isStart && isStartAction;/);
+  assert.match(source, /const holdForExplicitStart = requiresExplicitStart && !isStartAction && !isBootstrapPollAction;/);
+  assert.match(source, /if \(holdForExplicitStart\) user_message = "";/);
+  assert.match(source, /if \(requiresExplicitStart && !shouldMarkStarted\) \{[\s\S]*started: "false"/);
+});
+
 test("tool input schema canonicalizes legacy state.language_source before zod enum validation", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /function canonicalizeStateForToolInput\(/);

@@ -8548,8 +8548,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   }
 
   // START trigger (widget start screen)
+  const startedAtTrigger = String((state as any).started ?? "").trim().toLowerCase() === "true";
+  const forceStartGateTurn =
+    !startedAtTrigger &&
+    state.current_step === STEP_0_ID &&
+    String((state as any).intro_shown_session) !== "true" &&
+    actionCodeRaw !== "ACTION_START" &&
+    !isBootstrapPollCall;
   const isStartTrigger =
-    (userMessage.trim() === "" || actionCodeRaw === "ACTION_START") &&
+    (userMessage.trim() === "" || actionCodeRaw === "ACTION_START" || forceStartGateTurn) &&
     state.current_step === STEP_0_ID &&
     String((state as any).intro_shown_session) !== "true" &&
     Object.keys((state as any).last_specialist_result ?? {}).length === 0;
@@ -8569,8 +8576,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       }
       return resolveLocaleAndUiStringsReady(targetState, routeOrText);
     };
-    const started = String((state as any).started ?? "").trim().toLowerCase() === "true";
-    if (!started) {
+    if (!startedAtTrigger) {
       const startResolution = await ensureStartState(state, startLocaleSeedText);
       const stateWithUi = startResolution.state;
       const startHint =

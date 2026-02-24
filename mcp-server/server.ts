@@ -599,7 +599,9 @@ async function runStepHandler(args: {
       ? localeHintSourceRaw
       : "none";
   const isStart = current_step_id === "step_0";
-  const user_message =
+  const stateStarted = safeString((state as any).started ?? "").trim().toLowerCase() === "true";
+  const requiresExplicitStart = isStart && !stateStarted;
+  let user_message =
     isStart && !user_message_raw.trim() ? "" : user_message_raw;
   const normalizedMessage = user_message_raw.trim();
   const upperMessage = normalizedMessage.toUpperCase();
@@ -608,17 +610,14 @@ async function runStepHandler(args: {
   const isStartAction = upperMessage === "ACTION_START";
   const isTechnicalRouteMessage =
     normalizedMessage.startsWith("__ROUTE__") || normalizedMessage.startsWith("choice:");
-  const shouldMarkStarted =
-    isStart &&
-    Boolean(normalizedMessage) &&
-    !isBootstrapPollAction &&
-    !isTechnicalRouteMessage &&
-    (isStartAction || !isActionMessage);
+  const shouldMarkStarted = isStart && isStartAction;
   const shouldSeedInitialUserMessage =
     Boolean(normalizedMessage) &&
     !isActionMessage &&
     !isBootstrapPollAction &&
     !isTechnicalRouteMessage;
+  const holdForExplicitStart = requiresExplicitStart && !isStartAction && !isBootstrapPollAction;
+  if (holdForExplicitStart) user_message = "";
   const hasInitiator = safeString(state?.initial_user_message ?? "").trim() !== "";
   const hostWidgetSessionId = resolveEffectiveHostWidgetSessionId({
     provided: args.host_widget_session_id,
@@ -630,14 +629,14 @@ async function runStepHandler(args: {
     host_widget_session_id: hostWidgetSessionId,
   });
   const hostSessionGuardV1 = true;
-  let stateForTool =
-    shouldMarkStarted
-      ? {
-          ...state,
-          ...(hasInitiator || !shouldSeedInitialUserMessage ? {} : { initial_user_message: normalizedMessage }),
-          started: "true",
-        }
-      : state;
+  let stateForTool: Record<string, unknown> = {
+    ...state,
+    ...(hasInitiator || !shouldSeedInitialUserMessage ? {} : { initial_user_message: normalizedMessage }),
+    ...(shouldMarkStarted ? { started: "true" } : {}),
+  };
+  if (requiresExplicitStart && !shouldMarkStarted) {
+    stateForTool = { ...stateForTool, started: "false" };
+  }
   const incomingBootstrapSessionRaw = safeString((stateForTool as any).bootstrap_session_id ?? "").trim();
   const incomingBootstrapSession = normalizeBootstrapSessionId(incomingBootstrapSessionRaw);
   if (incomingBootstrapSessionRaw && !incomingBootstrapSession) {

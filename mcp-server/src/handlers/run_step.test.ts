@@ -38,6 +38,28 @@ test("Start gating: empty state without started yields Click Start (no advance)"
   assert.ok(result?.prompt?.includes("Click Start"), "prompt tells user to click Start");
 });
 
+test("Start gating: non-empty first message stays blocked until ACTION_START for multiple locales", async () => {
+  const localeHints = ["nl-NL", "fr-FR", "zh-CN", "ja-JP"];
+  for (const localeHint of localeHints) {
+    const result = await run_step({
+      user_message: "Help me with my business plan for Mindd",
+      input_mode: "chat",
+      locale_hint: localeHint,
+      locale_hint_source: "message_detect",
+      state: {
+        current_step: "step_0",
+        intro_shown_session: "false",
+        last_specialist_result: {},
+        started: "false",
+      },
+    });
+    assert.equal(result?.ok, true);
+    assert.equal(result?.current_step_id, "step_0");
+    assert.equal(String(result?.state?.started || "").toLowerCase(), "false");
+    assert.ok(String(result?.prompt || "").includes("Click Start"));
+  }
+});
+
 test("ACTION_START smoke: widget start returns first Step 0 question", async () => {
   const result = await run_step({
     user_message: "ACTION_START",

@@ -1034,7 +1034,10 @@ test("prestart render uses deterministic DOM builders and no HTML injection", ()
 
 test("prestart source keeps stable structure and explicit skeleton gate", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const showSkeleton = isNonEnglish && !hasPrestartContentForLang\(lang\);/);
+  assert.match(source, /const startupUnhydrated = !hasToolOutputVal \|\| !resolved\.has_state;/);
+  assert.match(source, /const waitingLocalizedPrestart = isNonEnglish && \(uiStringsStatus !== "ready" \|\| !hasLocalizedPrestart\);/);
+  assert.match(source, /const allowEnglishFallback = serverExplicitRecovery \|\| hydration\.retry_exhausted;/);
+  assert.match(source, /const showSkeleton = startupUnhydrated \|\| \(waitingLocalizedPrestart && !allowEnglishFallback\);/);
   assert.match(source, /appendTextNode\("p", "card-headline", content\.headline\)/);
   assert.match(source, /appendTextNode\("div", "meta-row", ""\)/);
   assert.match(source, /appendTextNode\("div", "deliverables", ""\)/);
