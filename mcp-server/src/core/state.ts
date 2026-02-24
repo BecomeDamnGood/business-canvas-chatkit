@@ -67,7 +67,7 @@ export function normalizeStateLanguageSource(raw: unknown): LanguageSource {
   }
   return "";
 }
-export const UI_STRINGS_STATUSES = ["pending", "critical_ready", "full_ready", "ready"] as const;
+export const UI_STRINGS_STATUSES = ["pending", "critical_ready", "ready"] as const;
 export const UiStringsStatusZod = z.enum(UI_STRINGS_STATUSES);
 export type UiStringsStatus = z.infer<typeof UiStringsStatusZod>;
 export const UI_BOOTSTRAP_STATUSES = ["init", "awaiting_locale", "ready"] as const;
@@ -137,20 +137,21 @@ function normalizeUiStringsStatus(raw: unknown): UiStringsStatus {
   if (
     status === "pending" ||
     status === "critical_ready" ||
-    status === "full_ready" ||
     status === "ready"
   ) {
     return status as UiStringsStatus;
   }
+  // Legacy alias: treat previous "full_ready" as critical-ready until full ready is explicit "ready".
+  if (status === "full_ready") return "critical_ready";
   return "pending";
 }
 
 function uiStatusAllowsCritical(status: UiStringsStatus): boolean {
-  return status === "critical_ready" || status === "full_ready" || status === "ready";
+  return status === "critical_ready" || status === "ready";
 }
 
 function uiStatusAllowsFull(status: UiStringsStatus): boolean {
-  return status === "full_ready" || status === "ready";
+  return status === "ready";
 }
 
 function uiStatusIsReady(status: UiStringsStatus): boolean {
@@ -240,6 +241,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Bump when you change defaults/fields in a way that needs migration.
  */
 export const CURRENT_STATE_VERSION = "11";
+export const DEFAULT_VIEW_CONTRACT_VERSION = "v3_ssot_rigid";
 
 /**
  * Hard defaults (no nulls)
@@ -272,6 +274,7 @@ export function getDefaultState(): CanvasState {
     ui_strings_critical_ready: "false",
     ui_strings_full_ready: "false",
     ui_strings_background_inflight: "true",
+    view_contract_version: DEFAULT_VIEW_CONTRACT_VERSION,
 
     last_specialist_result: {},
 
@@ -423,7 +426,8 @@ export function normalizeState(raw: unknown): CanvasState {
     Number.isFinite(bootstrap_epoch_raw) && bootstrap_epoch_raw > 0
       ? Math.trunc(bootstrap_epoch_raw)
       : 0;
-  const view_contract_version = String((r as any).view_contract_version ?? "").trim();
+  const view_contract_version =
+    String((r as any).view_contract_version ?? "").trim() || DEFAULT_VIEW_CONTRACT_VERSION;
   const response_seq_raw = Number((r as any).response_seq ?? 0);
   const response_seq =
     Number.isFinite(response_seq_raw) && response_seq_raw >= 0
@@ -530,7 +534,7 @@ export function normalizeState(raw: unknown): CanvasState {
     bootstrap_phase: bootstrap_phase_canonical,
     ...(bootstrap_session_id ? { bootstrap_session_id } : {}),
     ...(bootstrap_epoch > 0 ? { bootstrap_epoch } : {}),
-    ...(view_contract_version ? { view_contract_version } : {}),
+    view_contract_version,
     ...(response_seq > 0 ? { response_seq } : {}),
     ...(response_kind ? { response_kind } : {}),
     ...(host_widget_session_id ? { host_widget_session_id } : {}),

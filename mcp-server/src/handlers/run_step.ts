@@ -187,6 +187,7 @@ import {
   resolveUiGateForceRecoverMs as localeStartResolveUiGateForceRecoverMs,
   parseExplicitLanguageOverride as localeStartParseExplicitLanguageOverride,
   resolveLanguageForTurn as localeStartResolveLanguageForTurn,
+  VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION,
 } from "../core/bootstrap_runtime.js";
 
 /**
@@ -845,7 +846,7 @@ const CONTRACT_UI_GATE_REASONS = new Set([
   "contract_violation",
   "invalid_state",
 ]);
-const CONTRACT_UI_STRINGS_STATUSES = new Set(["pending", "critical_ready", "full_ready", "ready"]);
+const CONTRACT_UI_STRINGS_STATUSES = new Set(["pending", "critical_ready", "ready"]);
 const CONTRACT_UI_FALLBACK_REASONS = new Set([
   "",
   "requested_lang_unavailable",
@@ -2493,7 +2494,7 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
     next.question = step0QuestionForState(state);
   }
   const currentContractId = String(next.ui_contract_id || "").trim();
-  const currentMenuId = parseMenuFromContractIdForStep(currentContractId, STEP_0_ID);
+  void currentContractId;
   if (isBenMeta) {
     if (hasStep0Final) {
       const parsed = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
@@ -2524,9 +2525,7 @@ export function normalizeStep0AskDisplayContract(stepId: string, specialist: any
   if (hasStep0Final && (action === "ASK" || action === "ESCAPE")) {
     const parsed = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
     next.action = "ASK";
-    if (action === "ESCAPE" || !String(next.question || "").trim() || !currentMenuId) {
-      next.question = step0ReadinessQuestion(state, parsed);
-    }
+    next.question = step0ReadinessQuestion(state, parsed);
     next.business_name = parsed.name || "TBD";
     next.step_0 = step0FinalRaw;
     next.wording_choice_pending = "false";
@@ -5403,47 +5402,6 @@ function validateUiPayloadContractParity(response: Record<string, unknown>): str
   return null;
 }
 
-function tryRepairUiParityWithEnglishLabels(response: Record<string, unknown>): boolean {
-  const ui =
-    response && typeof response.ui === "object" && response.ui
-      ? (response.ui as Record<string, unknown>)
-      : null;
-  if (!ui) return false;
-  const actionCodes = Array.isArray(ui.action_codes)
-    ? (ui.action_codes as unknown[]).map((code) => String(code || "").trim()).filter(Boolean)
-    : [];
-  if (actionCodes.length === 0) return false;
-  const stepId =
-    String(response.current_step_id || "") ||
-    String(((response.state as Record<string, unknown> | undefined) || {}).current_step || "");
-  const contractId = String(ui.contract_id || "").trim();
-  const menuId = parseMenuFromContractIdForStep(contractId, stepId);
-  if (!menuId) return false;
-  const actions = Array.isArray(ui.actions) ? (ui.actions as Array<Record<string, unknown>>) : [];
-  if (actions.length !== actionCodes.length) return false;
-
-  const repairedActions = actions.map((action, index) => {
-    const actionCode = String(action.action_code || actionCodes[index] || "").trim();
-    if (!actionCode || actionCode !== actionCodes[index]) return null;
-    const englishLabel = labelForActionInMenu(menuId, actionCode);
-    const labelKey =
-      String(action.label_key || "").trim() ||
-      labelKeyForMenuAction(menuId, actionCode, index);
-    return {
-      ...action,
-      action_code: actionCode,
-      label_key: labelKey,
-      label: englishLabel || String(action.label || "").trim(),
-    };
-  });
-  if (repairedActions.some((entry) => !entry || !String((entry as Record<string, unknown>).label || "").trim())) {
-    return false;
-  }
-  ui.actions = repairedActions as Array<Record<string, unknown>>;
-  (response as any).ui = ui;
-  return true;
-}
-
 function attachRegistryPayload<T extends Record<string, unknown>>(
   payload: T,
   specialist: any,
@@ -5845,7 +5803,7 @@ async function detectLanguageHeuristic(text: string): Promise<{ lang: string; co
 
 function uiStringsRequestedStatusFromRaw(
   raw: unknown
-): "ready" | "pending" | "critical_ready" | "full_ready" {
+): "ready" | "pending" | "critical_ready" {
   return localeStartUiStringsRequestedStatusFromRaw(raw);
 }
 
@@ -6045,7 +6003,7 @@ function deriveUiFallbackMeta(params: {
   targetLang: string;
   requestedLang: string;
   effectiveLang: string;
-  uiStatus: "ready" | "pending" | "critical_ready" | "full_ready";
+  uiStatus: "ready" | "pending" | "critical_ready";
   defaultReason?: "" | "requested_lang_unavailable" | "timeout" | "invalid_requested_lang";
 }): {
   applied: BoolString;
@@ -6202,7 +6160,7 @@ async function ensureUiStringsForState(
   let requestedLang = lang;
   let criticalReady = existingCriticalReady && hasExistingForLang;
   let fullReady = existingFullReady && hasExistingForLang && existingStatus === "ready";
-  let nextStatus: "ready" | "pending" | "critical_ready" | "full_ready" =
+  let nextStatus: "ready" | "pending" | "critical_ready" =
     fullReady ? "ready" : (criticalReady ? "critical_ready" : "pending");
 
   if (!criticalReady) {
@@ -7323,6 +7281,7 @@ function assertRunStepContractOrThrow(response: RunStepSuccess | RunStepError): 
   const uiStringsRequestedLang = normalizeContractLang(state.ui_strings_requested_lang || "");
   const fallbackApplied = String(state.ui_strings_fallback_applied || "false").trim() === "true";
   const fallbackReason = String(state.ui_strings_fallback_reason || "").trim();
+  const viewContractVersion = String(state.view_contract_version || "").trim();
 
   if (!CONTRACT_BOOTSTRAP_PHASES.has(bootstrapPhase)) {
     throw new Error("invalid_bootstrap_phase");
@@ -7335,6 +7294,12 @@ function assertRunStepContractOrThrow(response: RunStepSuccess | RunStepError): 
   }
   if (!CONTRACT_UI_STRINGS_STATUSES.has(uiStringsStatus)) {
     throw new Error("invalid_ui_strings_status");
+  }
+  if (!viewContractVersion) {
+    throw new Error("missing_view_contract_version");
+  }
+  if (viewContractVersion !== LOCALE_START_VIEW_CONTRACT_VERSION) {
+    throw new Error("invalid_view_contract_version");
   }
   if (!uiStringsRequestedLang) {
     throw new Error("missing_ui_strings_requested_lang");
@@ -7806,38 +7771,17 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       const uiViolation = validateUiPayloadContractParity((finalResponse || {}) as Record<string, unknown>);
       if (uiViolation) {
         bumpUiI18nCounter(uiI18nTelemetry, "parity_errors");
-        const mutableResponse = finalResponse as unknown as Record<string, unknown>;
-        const repaired = tryRepairUiParityWithEnglishLabels(mutableResponse);
-        if (repaired) {
-          const postRepairViolation = validateUiPayloadContractParity(mutableResponse);
-          if (!postRepairViolation) {
-            bumpUiI18nCounter(uiI18nTelemetry, "parity_recovered");
-          } else {
-            finalResponse = {
-              ...mutableResponse,
-              ok: false,
-              error: {
-                type: "contract_violation",
-                message: "UI payload violates actioncode/menu contract.",
-                reason: postRepairViolation,
-                step: String((finalResponse as any)?.current_step_id || ""),
-                contract_id: String(((finalResponse as any)?.ui || {}).contract_id || ""),
-              },
-            } as unknown as RunStepError;
-          }
-        } else {
-          finalResponse = {
-            ...(finalResponse as unknown as Record<string, unknown>),
-            ok: false,
-            error: {
-              type: "contract_violation",
-              message: "UI payload violates actioncode/menu contract.",
-              reason: uiViolation,
-              step: String((finalResponse as any)?.current_step_id || ""),
-              contract_id: String(((finalResponse as any)?.ui || {}).contract_id || ""),
-            },
-          } as unknown as RunStepError;
-        }
+        finalResponse = {
+          ...(finalResponse as unknown as Record<string, unknown>),
+          ok: false,
+          error: {
+            type: "contract_violation",
+            message: "UI payload violates actioncode/menu contract.",
+            reason: uiViolation,
+            step: String((finalResponse as any)?.current_step_id || ""),
+            contract_id: String(((finalResponse as any)?.ui || {}).contract_id || ""),
+          },
+        } as unknown as RunStepError;
       }
     }
     try {
@@ -9251,7 +9195,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       }
       return resolveLocaleAndUiStringsReady(targetState, routeOrText);
     };
-    if (!startedAtTrigger && actionCodeRaw !== "ACTION_START") {
+    const step0FinalKnown = hasValidStep0Final(String((state as any).step_0_final ?? "").trim());
+    if (!startedAtTrigger && actionCodeRaw !== "ACTION_START" && !step0FinalKnown) {
       const startResolution = await ensureStartState(state, startLocaleSeedText);
       const stateWithUi = startResolution.state;
       const startHint =
@@ -9285,39 +9230,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           last_specialist_result: specialist,
         },
       }, specialist, responseUiFlags));
-    }
-    const existingFirst = (state as any).last_specialist_result;
-    const isReuseFirst =
-      existingFirst &&
-      String(existingFirst.action) === "ASK" &&
-      String(existingFirst.question ?? "").trim() !== "" &&
-      actionCodeRaw !== "ACTION_START";
-    if (isReuseFirst) {
-      const startResolution = await ensureStartState(state, startLocaleSeedText);
-      const stateWithUi = startResolution.state;
-      (state as any).intro_shown_session = "true";
-      const prompt = String(existingFirst.question || "").trim() || step0QuestionForState(state);
-      const specialistForReuse = {
-        ...existingFirst,
-        action: "ASK",
-        message: step0CardDescForState(state),
-        question: prompt,
-      };
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: STEP_0_SPECIALIST,
-        text: step0CardDescForState(state),
-        prompt,
-        specialist: specialistForReuse,
-        state: {
-          ...stateWithUi,
-          started: startResolution.interactiveReady ? "true" : "false",
-          active_specialist: STEP_0_SPECIALIST,
-          last_specialist_result: specialistForReuse,
-        },
-      }, specialistForReuse, responseUiFlags));
     }
 
     (state as any).intro_shown_session = "true";

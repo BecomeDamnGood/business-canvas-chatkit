@@ -19,7 +19,7 @@ export type BootstrapContractState = {
   retry_hint: "poll" | "";
 };
 
-export const VIEW_CONTRACT_VERSION = "v2";
+export const VIEW_CONTRACT_VERSION = "v3_ssot_rigid";
 export const DEFAULT_UI_GATE_FORCE_RECOVER_MS = 4000;
 
 export type LocaleUiFlags = {
@@ -72,8 +72,8 @@ export function hasRenderableUiStringsForState(
 export function uiStringsRequestedStatusFromRaw(raw: unknown): UiStringsStatus {
   const normalized = String(raw ?? "pending").trim().toLowerCase();
   if (normalized === "ready") return "ready";
-  if (normalized === "full_ready") return "full_ready";
   if (normalized === "critical_ready") return "critical_ready";
+  if (normalized === "full_ready") return "critical_ready";
   return "pending";
 }
 

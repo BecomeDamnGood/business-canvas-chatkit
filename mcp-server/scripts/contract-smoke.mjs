@@ -17,6 +17,7 @@ function assertContractInvariants(label, result) {
   const state = stateOf(result);
   assert.equal(Boolean(result && typeof result === "object"), true, `${label}: result must be object`);
   assert.equal(String(state.ui_strings_requested_lang || "").trim().length > 0, true, `${label}: requested lang required`);
+  assert.equal(String(state.view_contract_version || ""), "v3_ssot_rigid", `${label}: view contract version mismatch`);
   const gate = String(state.ui_gate_status || "");
   const gateReason = String(state.ui_gate_reason || "");
   const phase = String(state.bootstrap_phase || "");
@@ -175,6 +176,23 @@ async function main() {
     },
   });
   cases.push(["fresh_nl", freshNl]);
+
+  const seededNoClickStart = await run_step({
+    current_step_id: "step_0",
+    user_message: "Help mij met mijn businessplan voor mijn reclamebureau genaamd Mindd",
+    input_mode: "chat",
+    locale_hint: "nl",
+    locale_hint_source: "message_detect",
+    state: {
+      ...getDefaultState(),
+      started: "false",
+      intro_shown_session: "false",
+      response_seq: 0,
+    },
+  });
+  cases.push(["seeded_no_click_start", seededNoClickStart]);
+  assert.equal(String(stateOf(seededNoClickStart).step_0_final || "").includes("Name: Mindd"), true, "seeded_no_click_start: step_0 should be seeded");
+  assert.equal(String(seededNoClickStart.prompt || "").includes("Click Start"), false, "seeded_no_click_start: click-start prompt must be bypassed");
 
   const poll1 = await run_step({
     current_step_id: "step_0",

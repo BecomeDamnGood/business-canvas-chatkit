@@ -38,11 +38,11 @@ test("Start gating: empty state without started yields Click Start (no advance)"
   assert.ok(result?.prompt?.includes("Click Start"), "prompt tells user to click Start");
 });
 
-test("Start gating: non-empty first message stays blocked until ACTION_START for multiple locales", async () => {
+test("Start gating: seedable non-empty first message bypasses Click Start and returns Step 0 readiness", async () => {
   const localeHints = ["nl-NL", "fr-FR", "zh-CN", "ja-JP"];
   for (const localeHint of localeHints) {
     const result = await run_step({
-      user_message: "Help me with my business plan for Mindd",
+      user_message: "Help me with my business plan for my advertising agency called Mindd",
       input_mode: "chat",
       locale_hint: localeHint,
       locale_hint_source: "message_detect",
@@ -55,8 +55,9 @@ test("Start gating: non-empty first message stays blocked until ACTION_START for
     });
     assert.equal(result?.ok, true);
     assert.equal(result?.current_step_id, "step_0");
-    assert.equal(String(result?.state?.started || "").toLowerCase(), "false");
-    assert.ok(String(result?.prompt || "").includes("Click Start"));
+    assert.equal(String(result?.state?.step_0_final || "").includes("Name: Mindd"), true);
+    assert.equal(String(result?.prompt || "").includes("Click Start"), false);
+    assert.equal(String(result?.prompt || "").includes("Mindd"), true);
   }
 });
 

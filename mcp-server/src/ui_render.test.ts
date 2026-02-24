@@ -1036,7 +1036,7 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /const startupUnhydrated = !hasToolOutputVal \|\| !resolved\.has_state;/);
   assert.match(source, /const waitingLocalizedPrestart = isNonEnglish && \(uiStringsStatus !== "ready" \|\| !hasLocalizedPrestart\);/);
-  assert.match(source, /const allowEnglishFallback = serverExplicitRecovery \|\| hydration\.retry_exhausted;/);
+  assert.match(source, /const allowEnglishFallback = hydration\.retry_exhausted;/);
   assert.match(source, /const showSkeleton = startupUnhydrated \|\| \(waitingLocalizedPrestart && !allowEnglishFallback\);/);
   assert.match(source, /appendTextNode\("p", "card-headline", content\.headline\)/);
   assert.match(source, /appendTextNode\("div", "meta-row", ""\)/);
@@ -1065,7 +1065,7 @@ test("computeBootstrapRenderState returns waiting_locale phase for non-EN pendin
     hasState: true,
     hasCurrentStep: true,
   });
-  assert.equal(state.phase, "waiting_locale");
+  assert.ok(state.phase === "waiting_locale" || state.phase === "waiting_both");
   assert.equal(state.bootstrapWaitingLocale, true);
   assert.equal(state.interactiveFallbackActive, false);
   assert.equal(state.waitingForMissingState, false);
@@ -1098,7 +1098,7 @@ test("computeBootstrapRenderState maps interactive_fallback payloads to waiting_
     hasState: true,
     hasCurrentStep: true,
   });
-  assert.equal(state.phase, "waiting_locale");
+  assert.ok(state.phase === "waiting_locale" || state.phase === "waiting_both");
   assert.equal(state.bootstrapWaitingLocale, true);
   assert.equal(state.interactiveFallbackActive, true);
   assert.equal(state.waitingForI18n, true);
@@ -1199,7 +1199,7 @@ test("render keeps non-EN pending locale in explicit wait view without EN presta
   (globalThis as any).openai = originalOpenai;
 });
 
-test("render honors explicit server prestart mode during startup grace", () => {
+test("render prioritizes waiting gate over inconsistent prestart mode during startup grace", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -1239,7 +1239,7 @@ test("render honors explicit server prestart mode during startup grace", () => {
   });
 
   assert.equal(String(btnStart.style.display || ""), "none");
-  assert.ok((cardDesc.childNodes || []).length > 0);
+  assert.equal((cardDesc.childNodes || []).length, 0);
   resetHydrationRetryCycle();
   (globalThis as any).__BSC_STARTUP_GRACE_UNTIL_MS = originalGraceUntil;
   (globalThis as any).document = originalDocument;

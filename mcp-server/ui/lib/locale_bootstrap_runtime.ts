@@ -29,13 +29,12 @@ export type ResolvedWidgetPayload = {
   resolved_language: string;
   resolved_language_source:
     | "state.language"
+    | "state.ui_strings_requested_lang"
     | "state.ui_strings_lang"
-    | "result.ui_strings_lang"
-    | "result.language"
+    | "result.i18n.requested_lang"
     | "result.i18n.lang"
-    | "locale_hint"
     | "none";
-  ui_strings_status: "ready" | "pending" | "critical_ready" | "full_ready" | "unknown";
+  ui_strings_status: "ready" | "pending" | "critical_ready" | "unknown";
   shape_version: string;
   needs_hydration: boolean;
   waiting_reason: WaitingReason;
@@ -119,14 +118,14 @@ function normalizeBootstrapPhase(raw: unknown): BootstrapPhase | "" {
 
 function normalizeUiStringsStatus(
   raw: unknown
-): "ready" | "pending" | "critical_ready" | "full_ready" | "unknown" {
+): "ready" | "pending" | "critical_ready" | "unknown" {
   const status = toLower(raw);
   if (
     status === "ready" ||
     status === "pending" ||
-    status === "critical_ready" ||
-    status === "full_ready"
-  ) return status as "ready" | "pending" | "critical_ready" | "full_ready";
+    status === "critical_ready"
+  ) return status as "ready" | "pending" | "critical_ready";
+  if (status === "full_ready") return "critical_ready";
   if (status === "error") return "pending";
   return "unknown";
 }
@@ -134,7 +133,7 @@ function normalizeUiStringsStatus(
 function phaseFromViewMode(raw: unknown): BootstrapPhase | "" {
   const mode = toLower(raw);
   if (mode === "waiting_locale") return "waiting_locale";
-  if (mode === "recovery") return "recovery";
+  if (mode === "recovery") return "waiting_locale";
   if (mode === "blocked" || mode === "failed") return "failed";
   if (mode === "interactive" || mode === "prestart") return "ready";
   return "";
@@ -475,16 +474,15 @@ function resolveLanguageForPayload(result: Record<string, unknown>): {
   const state = toRecord(result.state);
   const fromStateLanguage = toLower(state.language);
   if (fromStateLanguage) return { language: fromStateLanguage, source: "state.language" };
+  const fromStateRequestedLang = toLower(state.ui_strings_requested_lang);
+  if (fromStateRequestedLang) return { language: fromStateRequestedLang, source: "state.ui_strings_requested_lang" };
   const fromStateUiLang = toLower(state.ui_strings_lang);
   if (fromStateUiLang) return { language: fromStateUiLang, source: "state.ui_strings_lang" };
-  const fromResultUiLang = toLower(result.ui_strings_lang);
-  if (fromResultUiLang) return { language: fromResultUiLang, source: "result.ui_strings_lang" };
-  const fromResultLanguage = toLower(result.language);
-  if (fromResultLanguage) return { language: fromResultLanguage, source: "result.language" };
-  const fromI18nLang = toLower(toRecord(result.i18n).lang);
+  const i18n = toRecord(result.i18n);
+  const fromI18nRequestedLang = toLower(i18n.requested_lang);
+  if (fromI18nRequestedLang) return { language: fromI18nRequestedLang, source: "result.i18n.requested_lang" };
+  const fromI18nLang = toLower(i18n.lang);
   if (fromI18nLang) return { language: fromI18nLang, source: "result.i18n.lang" };
-  const fromLocaleHint = toLower(result.locale_hint);
-  if (fromLocaleHint) return { language: fromLocaleHint, source: "locale_hint" };
   return { language: "", source: "none" };
 }
 
@@ -504,10 +502,10 @@ function hasNonEnglishUiLanguageMismatch(result: Record<string, unknown>): boole
   const state = toRecord(result.state);
   const fallbackApplied = toLower(state.ui_strings_fallback_applied) === "true";
   if (fallbackApplied) return false;
-  const targetLang = baseLang(state.language || result.language);
+  const targetLang = baseLang(state.language || state.ui_strings_requested_lang);
   if (!targetLang || targetLang === "en") return false;
   const i18n = toRecord(result.i18n);
-  const uiStringsLang = baseLang(state.ui_strings_lang || result.ui_strings_lang || i18n.lang);
+  const uiStringsLang = baseLang(state.ui_strings_lang || i18n.lang);
   if (!uiStringsLang) return false;
   return uiStringsLang !== targetLang;
 }
@@ -528,7 +526,6 @@ export function computeHydrationState(
     (
       resolved.ui_strings_status === "pending" ||
       resolved.ui_strings_status === "critical_ready" ||
-      resolved.ui_strings_status === "full_ready" ||
       (resolved.ui_strings_status === "unknown" && uiGateStatus === "waiting_locale") ||
       (resolved.ui_strings_status === "ready" && languageMismatch)
     );

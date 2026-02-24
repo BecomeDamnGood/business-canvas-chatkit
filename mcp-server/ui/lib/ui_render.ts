@@ -56,22 +56,6 @@ function uiText(lang: string | null | undefined, key: string, fallback: string):
   return fallback;
 }
 
-function initialLangFromLocation(): string {
-  if (typeof window === "undefined" || !window.location) return "";
-  try {
-    const params = new URLSearchParams(String(window.location.search || ""));
-    const raw = params.get("locale_hint") || params.get("locale") || params.get("lang") || "";
-    return String(raw || "").trim().toLowerCase().replace(/_/g, "-");
-  } catch {
-    return "";
-  }
-}
-
-function isStartupGraceActive(): boolean {
-  const raw = Number((globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_UNTIL_MS ?? 0);
-  return Number.isFinite(raw) && raw > Date.now();
-}
-
 function stepLabelShort(stepId: string, lang: string | null | undefined): string {
   const full = extractStepTitle(stepId, lang);
   if (stepId === "step_0") return uiText(lang, "stepLabel.validation", "Validation");
@@ -614,9 +598,7 @@ export function render(overrideToolOutput?: unknown): void {
       .toLowerCase() === "true";
   const ws = widgetState();
   const stateLang = languageFromState(state);
-  const widgetLang = String((ws?.language || "") as string).trim().toLowerCase();
-  const locationLang = initialLangFromLocation();
-  const localeCandidate = resolved.resolved_language || stateLang || widgetLang || locationLang || uiLang(state);
+  const localeCandidate = resolved.resolved_language || stateLang || uiLang(state);
   const lang = (fallbackApplied && overrideLang) ? overrideLang : (localeCandidate || "en");
 
   const latestRoot = (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__;
@@ -639,51 +621,35 @@ export function render(overrideToolOutput?: unknown): void {
   const viewMode = String(uiView.mode || "").trim().toLowerCase();
   const uiGateStatus = String((state?.ui_gate_status || "")).trim().toLowerCase();
   const uiGateReason = String((state?.ui_gate_reason || "")).trim().toLowerCase();
-  const localeBucket = baseLang(localeCandidate);
-  const localeKnownNonEn =
-    Boolean(localeBucket) && localeBucket !== "en" && localeBucket !== "default";
   const serverExplicitWaiting =
-    viewMode === "waiting_locale" ||
-    (uiView.waiting_locale === true && !viewMode) ||
-    uiGateStatus === "waiting_locale";
+    viewMode === "waiting_locale" || uiGateStatus === "waiting_locale";
   const serverExplicitPrestart = viewMode === "prestart";
   const serverExplicitInteractive = viewMode === "interactive";
-  const serverExplicitRecovery = viewMode === "recovery";
-  const serverExplicitBlocked =
-    viewMode === "blocked" || uiGateStatus === "blocked" || uiGateStatus === "failed";
-  const hasServerExplicitMode =
-    serverExplicitWaiting ||
-    serverExplicitPrestart ||
-    serverExplicitInteractive ||
-    serverExplicitRecovery ||
-    serverExplicitBlocked;
-  const forceLocaleWait = !hasServerExplicitMode && localeKnownNonEn && uiStringsStatus !== "ready";
+  const serverExplicitBlocked = viewMode === "blocked" || uiGateStatus === "blocked";
+  const serverExplicitFailed = viewMode === "failed" || uiGateStatus === "failed";
+  const hasServerExplicitMode = Boolean(viewMode);
   const bootstrapState = computeBootstrapRenderState({
     hydration,
     uiStringsStatus,
     uiFlags,
     uiView,
-    localeKnownNonEn,
+    localeKnownNonEn: false,
     hasState: resolved.has_state,
     hasCurrentStep: String((state?.current_step || "") as string).trim().length > 0,
   });
-  const waitingForMissingState = bootstrapState.waitingForMissingState;
-  const waitingForI18n = bootstrapState.waitingForI18n;
-  const startupGraceActive = isStartupGraceActive();
-  const startupPrestartBlocked =
-    startupGraceActive &&
-    !hasServerExplicitMode &&
-    localeKnownNonEn &&
-    uiStringsStatus !== "ready";
+  const waitingForMissingState = hasServerExplicitMode ? false : bootstrapState.waitingForMissingState;
+  const waitingForI18n = hasServerExplicitMode ? false : bootstrapState.waitingForI18n;
   const bootstrapWaitingLocale = serverExplicitWaiting || (
     !hasServerExplicitMode &&
     (
       waitingForI18n ||
-      bootstrapState.bootstrapWaitingLocale ||
-      forceLocaleWait
+      bootstrapState.bootstrapWaitingLocale
     )
   );
-  const interactiveFallbackActive = bootstrapState.interactiveFallbackActive;
+  const interactiveFallbackActive =
+    hasServerExplicitMode
+      ? (serverExplicitWaiting && uiFlags.interactive_fallback_active === true)
+      : bootstrapState.interactiveFallbackActive;
   const waitingGateActive = bootstrapWaitingLocale || uiGateStatus === "waiting_locale";
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings =
@@ -714,47 +680,6 @@ export function render(overrideToolOutput?: unknown): void {
   const sessionStarted = getSessionStarted();
   if (hasToolOutputVal && serverStarted && !sessionStarted) {
     setSessionStarted(true);
-  }
-  if (startupPrestartBlocked) {
-    console.log("[startup_prestart_blocked_pending_locale]", {
-      resolved_language: resolved.resolved_language,
-      ui_strings_status: uiStringsStatus,
-      bootstrap_phase: String(uiFlags.bootstrap_phase || uiView.bootstrap_phase || ""),
-    });
-    const inputWrap = document.getElementById("inputWrap");
-    const btnStart = document.getElementById("btnStart");
-    const startHint = document.getElementById("startHint");
-    const choiceWrap = document.getElementById("choiceWrap");
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    const cardDesc = document.getElementById("cardDesc");
-    const prompt = document.getElementById("prompt");
-    const sectionTitleEl = document.getElementById("sectionTitle");
-    const uiSubtitle = document.getElementById("uiSubtitle");
-    const badge = document.getElementById("badge");
-    if (inputWrap) (inputWrap as HTMLElement).style.display = "none";
-    if (choiceWrap) (choiceWrap as HTMLElement).style.display = "none";
-    if (wordingChoiceWrap) (wordingChoiceWrap as HTMLElement).style.display = "none";
-    if (btnStart) (btnStart as HTMLElement).style.display = "none";
-    if (startHint) {
-      startHint.textContent = "";
-      (startHint as HTMLElement).style.display = "none";
-    }
-    if (prompt) prompt.textContent = "";
-    if (sectionTitleEl) sectionTitleEl.textContent = "";
-    if (uiSubtitle) uiSubtitle.textContent = "";
-    if (badge) {
-      badge.textContent = "";
-      (badge as HTMLElement).style.display = "none";
-    }
-    buildStepper(0, "", lang);
-    if (cardDesc) {
-      const prestartEl = cardDesc as HTMLElement;
-      prestartEl.classList.remove("has-grid");
-      prestartEl.classList.remove("is-step0-ask-layout");
-      renderBootstrapWaitShell(prestartEl, lang);
-    }
-    if (getIsLoading()) setLoading(false);
-    return;
   }
   if (waitingForMissingState) {
     const inputWrap = document.getElementById("inputWrap");
@@ -838,7 +763,7 @@ export function render(overrideToolOutput?: unknown): void {
     : serverExplicitInteractive
       ? false
       : (hasToolOutputVal ? !serverStarted : !sessionStarted);
-  const showPreStart = waitingGateActive || serverExplicitRecovery || serverExplicitBlocked ? false : showPreStartBase;
+  const showPreStart = waitingGateActive || serverExplicitBlocked || serverExplicitFailed ? false : showPreStartBase;
 
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
@@ -859,14 +784,7 @@ export function render(overrideToolOutput?: unknown): void {
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
 
-  if ((waitingGateActive && !interactiveFallbackActive) || serverExplicitRecovery || serverExplicitBlocked) {
-    if (localeKnownNonEn && waitingGateActive && !interactiveFallbackActive) {
-      console.log("[ui_non_en_wait_shell_rendered]", {
-        resolved_language: resolved.resolved_language,
-        ui_strings_status: uiStringsStatus,
-        bootstrap_phase: String(uiFlags.bootstrap_phase || uiView.bootstrap_phase || ""),
-      });
-    }
+  if ((waitingGateActive && !interactiveFallbackActive) || serverExplicitBlocked || serverExplicitFailed) {
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
@@ -885,13 +803,13 @@ export function render(overrideToolOutput?: unknown): void {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      if (serverExplicitBlocked) {
+      if (serverExplicitBlocked || serverExplicitFailed) {
         const errorMessage =
           String((result?.error as Record<string, unknown> | undefined)?.message || "").trim() ||
           String((result?.error as Record<string, unknown> | undefined)?.user_message || "").trim();
         const blockedCopy = blockedMessageForReason(lang, uiGateReason, errorMessage);
         renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
-      } else if (serverExplicitRecovery || hydration.retry_exhausted) {
+      } else if (hydration.retry_exhausted) {
         renderHydrationRecovery(prestartEl, lang);
         const retryBtn = document.getElementById("btnHydrationRetry") as HTMLButtonElement | null;
         if (retryBtn) {
@@ -917,12 +835,7 @@ export function render(overrideToolOutput?: unknown): void {
     return;
   }
 
-  if (!forceLocaleWait) {
-    setStaticStrings(lang);
-  } else {
-    const uiSubtitle = document.getElementById("uiSubtitle");
-    if (uiSubtitle) uiSubtitle.textContent = "";
-  }
+  setStaticStrings(lang);
   if (bootstrapWaitingLocale && interactiveFallbackActive) {
     const uiSubtitle = document.getElementById("uiSubtitle");
     if (uiSubtitle) uiSubtitle.textContent = "";
@@ -972,7 +885,7 @@ export function render(overrideToolOutput?: unknown): void {
       const hasLocalizedPrestart = hasPrestartContentForLang(lang);
       const startupUnhydrated = !hasToolOutputVal || !resolved.has_state;
       const waitingLocalizedPrestart = isNonEnglish && (uiStringsStatus !== "ready" || !hasLocalizedPrestart);
-      const allowEnglishFallback = serverExplicitRecovery || hydration.retry_exhausted;
+      const allowEnglishFallback = hydration.retry_exhausted;
       const showSkeleton = startupUnhydrated || (waitingLocalizedPrestart && !allowEnglishFallback);
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");

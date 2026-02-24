@@ -33,6 +33,8 @@ This document is the contract-first source of truth for step behavior in the Bus
 - `step_0 -> dream`
 - Exceptions:
 - Start trigger with empty user message returns canonical Step 0 question without specialist roundtrip.
+- If `step_0_final` is already known (seeded or persisted), startup must render readiness immediately and may not show `Click Start`.
+- Startup prompt reuse from stale `last_specialist_result.question` is forbidden.
 
 ## dream
 

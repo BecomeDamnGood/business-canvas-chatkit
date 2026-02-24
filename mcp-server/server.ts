@@ -1126,12 +1126,13 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
     actionCode: safeString(code),
   }));
   const hasInteractivePayload = safeString(promptBodyRaw).length > 0 || optionsRaw.length > 0;
-  let mode: "waiting_locale" | "prestart" | "interactive" | "recovery" | "blocked" = "interactive";
+  let mode: "waiting_locale" | "prestart" | "interactive" | "blocked" | "failed" = "interactive";
   if (viewContractHardenV1) {
-    if (blockedOrFailedGate) mode = "blocked";
+    if (uiGateStatus === "failed") mode = "failed";
+    else if (uiGateStatus === "blocked") mode = "blocked";
     else if (uiGateStatus === "waiting_locale" || waitingLocale) mode = "waiting_locale";
     else if (prestartModeV1 && !started) mode = "prestart";
-    else if (!hasInteractivePayload) mode = "recovery";
+    else if (!hasInteractivePayload) mode = "failed";
   } else if (waitingLocaleEffective) {
     mode = "waiting_locale";
   }
@@ -1181,7 +1182,7 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       recovery_action:
         waitingLocaleEffective && retryHint === "poll"
           ? "retry_poll"
-          : (mode === "recovery" ? "retry_poll" : ""),
+          : "",
       bootstrap_phase: bootstrapPhase,
     },
   };

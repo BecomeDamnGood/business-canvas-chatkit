@@ -553,13 +553,13 @@ function isSessionUpgradeRequiredResult(result: Record<string, unknown> | null |
 }
 
 export function languageFromState(resultState: Record<string, unknown> | null | undefined): string {
-  const fromRequested =
-    resultState?.ui_strings_requested_lang ? String(resultState.ui_strings_requested_lang).toLowerCase().trim() : "";
   const fromResult =
     resultState?.language ? String(resultState.language).toLowerCase().trim() : "";
+  const fromRequested =
+    resultState?.ui_strings_requested_lang ? String(resultState.ui_strings_requested_lang).toLowerCase().trim() : "";
   const fromUiLang =
     resultState?.ui_strings_lang ? String(resultState.ui_strings_lang).toLowerCase().trim() : "";
-  return fromRequested || fromResult || fromUiLang || "";
+  return fromResult || fromRequested || fromUiLang || "";
 }
 
 export function uiLang(resultState: Record<string, unknown> | null | undefined): string {
@@ -1202,30 +1202,27 @@ export async function callRunStep(
 
   const baseState = internalForceEmptyState ? {} : state;
   const stateRequestedLanguage = normalizeLocaleHintForPayload(
-    String(
-      (baseState as Record<string, unknown>).ui_strings_requested_lang ||
-      (baseState as Record<string, unknown>).ui_strings_lang ||
-      ""
-    )
+    String((baseState as Record<string, unknown>).ui_strings_requested_lang || "")
   );
-  const stateLanguage = normalizeLocaleHintForPayload(uiLang(baseState));
+  const stateLanguage = normalizeLocaleHintForPayload(String((baseState as Record<string, unknown>).language || ""));
   const ws = widgetState();
   const widgetLanguage = normalizeLocaleHintForPayload(
     String((ws.language || ws.locale_hint || "") as string).trim().toLowerCase()
   );
   const locationLanguage = localeHintFromLocation();
+  const hasServerState = Object.keys(baseState).length > 0;
+  const clientFallbackLocale = hasServerState ? "" : (widgetLanguage || locationLanguage);
   const localeHint =
     internalForceLocaleHint ||
     stateRequestedLanguage ||
     stateLanguage ||
-    widgetLanguage ||
-    locationLanguage;
+    clientFallbackLocale;
   const localeHintSource =
     localeHint && internalForceLocaleHint
       ? (internalForceLocaleHintSource !== "none" ? internalForceLocaleHintSource : "message_detect")
       : (
         localeHint
-          ? ((stateRequestedLanguage || stateLanguage || widgetLanguage) ? "message_detect" : "webplus_i18n")
+          ? ((stateRequestedLanguage || stateLanguage) ? "message_detect" : "webplus_i18n")
           : "none"
       );
   let nextState = Object.assign({}, baseState);
