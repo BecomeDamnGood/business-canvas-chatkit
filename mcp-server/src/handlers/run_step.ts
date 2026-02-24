@@ -6266,8 +6266,12 @@ async function resolveLanguageForTurn(
   localeHintSourceRaw: string,
   inputMode: "widget" | "chat",
   model: string,
-  telemetry?: UiI18nTelemetryCounters | null
+  telemetry?: UiI18nTelemetryCounters | null,
+  options?: {
+    allowBackgroundFull?: boolean;
+  }
 ): Promise<CanvasState> {
+  const allowBackgroundFull = options?.allowBackgroundFull === true;
   return localeStartResolveLanguageForTurn({
     state,
     userMessage,
@@ -6282,7 +6286,9 @@ async function resolveLanguageForTurn(
       isUiLangSourceResolverV1Enabled,
       normalizeLanguageSource,
       ensureUiStringsForState: (stateForUi, modelForUi, telemetryForUi) =>
-        ensureUiStringsForState(stateForUi, modelForUi, telemetryForUi as UiI18nTelemetryCounters | null | undefined),
+        ensureUiStringsForState(stateForUi, modelForUi, telemetryForUi as UiI18nTelemetryCounters | null | undefined, {
+          allowBackgroundFull,
+        }),
       detectLanguageHeuristic,
       bumpUiI18nCounter: (telemetryRaw, key, amount) =>
         bumpUiI18nCounter(telemetryRaw as UiI18nTelemetryCounters | null | undefined, key as keyof UiI18nTelemetryCounters, amount),
@@ -7668,6 +7674,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   let submittedUserText = "";
   let clickedLabelForNoRepeat = "";
   let clickedActionCodeForNoRepeat = "";
+  let languageResolvedThisTurn = false;
 
   const deriveIntentTypeForRouting = (actionCode: string, routeOrText: string): string => {
     const normalizedActionCode = String(actionCode || "").trim();
@@ -7884,9 +7891,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   const ensureLanguage = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
     const translationModel = resolveTranslationModel(routeOrText);
+    const allowBackgroundFull = isBootstrapPollCall || inputMode === "chat";
     if (!isUiI18nV3LangBootstrapEnabled()) {
       return ensureUiStringsForState(targetState, translationModel, uiI18nTelemetry, {
-        allowBackgroundFull: isBootstrapPollCall,
+        allowBackgroundFull,
       });
     }
     return resolveLanguageForTurn(
@@ -7896,7 +7904,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       localeHintSource,
       inputMode,
       translationModel,
-      uiI18nTelemetry
+      uiI18nTelemetry,
+      { allowBackgroundFull }
     );
   };
 
@@ -8535,6 +8544,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   // Lock language once we see a meaningful user message (prevents mid-flow flips).
   state = await ensureLanguage(state, userMessage);
+  languageResolvedThisTurn = true;
   const lang = langFromState(state);
 
   if (
@@ -9183,6 +9193,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       targetState: CanvasState,
       routeOrText: string
     ): Promise<{ state: CanvasState; interactiveReady: boolean }> => {
+      const hasResolvedLanguage = Boolean(normalizeLangCode(String((targetState as any).language || "")));
+      if (languageResolvedThisTurn && hasResolvedLanguage) {
+        return {
+          state: targetState,
+          interactiveReady: isInteractiveLocaleReady(targetState),
+        };
+      }
       if (!isUiStartTriggerLangResolveV1Enabled()) {
         const stateWithUi = await ensureUiStrings(targetState, routeOrText);
         return {
