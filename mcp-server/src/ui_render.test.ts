@@ -1411,6 +1411,69 @@ test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result
   assert.equal(resolved.needs_hydration, false);
 });
 
+test("resolveWidgetPayload prefers structured.ui.result over minimal structured.result", () => {
+  const resolved = resolveWidgetPayload({
+    structuredContent: {
+      result: {
+        model_result_shape_version: "v2_minimal",
+        current_step_id: "step_0",
+        state: {
+          current_step: "step_0",
+          bootstrap_session_id: "session_x",
+          bootstrap_epoch: 1,
+          response_seq: 2,
+          host_widget_session_id: "host_x",
+        },
+      },
+      ui: {
+        result: {
+          current_step_id: "step_0",
+          prompt: "Vraag",
+          state: {
+            current_step: "step_0",
+            language: "nl",
+            initial_user_message: "Help met Mindd",
+            ui_strings_status: "pending",
+            bootstrap_session_id: "session_x",
+            bootstrap_epoch: 1,
+            response_seq: 2,
+            host_widget_session_id: "host_x",
+          },
+          ui: { questionText: "Vraag" },
+        },
+      },
+    },
+  });
+
+  assert.equal(resolved.source, "structured.ui.result");
+  assert.equal(String((resolved.result.state as Record<string, unknown>).language || ""), "nl");
+  assert.equal(String(resolved.result.prompt || ""), "Vraag");
+});
+
+test("resolveWidgetPayload ignores structured.ui envelope as a widget result candidate", () => {
+  const resolved = resolveWidgetPayload({
+    structuredContent: {
+      result: {
+        model_result_shape_version: "v2_minimal",
+        current_step_id: "step_0",
+        state: {
+          current_step: "step_0",
+          language: "nl",
+        },
+      },
+      ui: {
+        prompt: { body: "Should not become root result" },
+        state: { menu_id: "STEP0_MENU_READY_START" },
+        i18n: { lang: "nl", status: "pending" },
+      },
+    },
+  });
+
+  assert.equal(resolved.source, "structured.result");
+  assert.equal(String((resolved.result.state as Record<string, unknown>).current_step || ""), "step_0");
+  assert.equal(resolved.resolved_language, "nl");
+});
+
 test("resolveWidgetPayload can hydrate from toolResponseMetadata widget_result when _meta is absent", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {

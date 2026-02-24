@@ -959,7 +959,12 @@ export function render(overrideToolOutput?: unknown): void {
     ? (uiPayload.actions as Array<Record<string, unknown>>)
     : [];
   const hasStructuredActions = structuredActions.length > 0;
-  const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") as string;
+  const promptRaw = (
+    (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") ||
+    (uiPayload.prompt && typeof (uiPayload.prompt as Record<string, unknown>).body === "string"
+      ? String((uiPayload.prompt as Record<string, unknown>).body || "")
+      : "")
+  ) as string;
   const promptSource = uiQuestionText || promptRaw;
   const isBenProfileBody =
     /!\[\s*ben steenstra\s*\]\(/i.test(bodyRaw) ||

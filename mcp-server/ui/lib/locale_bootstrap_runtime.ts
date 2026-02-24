@@ -4,7 +4,6 @@ export type PayloadSource =
   | "toolResponseMetadata._meta.widget_result"
   | "structured.result"
   | "structured.ui.result"
-  | "structured.ui"
   | "raw.result"
   | "raw.ui.result"
   | "raw.ui"
@@ -27,7 +26,14 @@ export type ResolvedWidgetPayload = {
   source: PayloadSource;
   has_state: boolean;
   resolved_language: string;
-  resolved_language_source: "state.language" | "state.ui_strings_lang" | "result.ui_strings_lang" | "result.language" | "locale_hint" | "none";
+  resolved_language_source:
+    | "state.language"
+    | "state.ui_strings_lang"
+    | "result.ui_strings_lang"
+    | "result.language"
+    | "result.i18n.lang"
+    | "locale_hint"
+    | "none";
   ui_strings_status: "ready" | "pending" | "critical_ready" | "full_ready" | "unknown";
   shape_version: string;
   needs_hydration: boolean;
@@ -370,11 +376,10 @@ function collectPayloadCandidates(raw: unknown, orderOffset = 0): PayloadCandida
   add("toolResponseMetadata._meta.widget_result", toolResponseMetadataMeta.widget_result, 2);
   add("structured.result", structured.result, 3);
   add("structured.ui.result", candidateValue(structured, "ui.result"), 4);
-  add("structured.ui", structured.ui, 5);
-  add("raw.result", root.result, 6);
-  add("raw.ui.result", candidateValue(root, "ui.result"), 7);
-  add("raw.ui", root.ui, 8);
-  add("raw", root, 9);
+  add("raw.result", root.result, 5);
+  add("raw.ui.result", candidateValue(root, "ui.result"), 6);
+  add("raw.ui", root.ui, 7);
+  add("raw", root, 8);
   return candidates;
 }
 
@@ -473,6 +478,8 @@ function resolveLanguageForPayload(result: Record<string, unknown>): {
   if (fromResultUiLang) return { language: fromResultUiLang, source: "result.ui_strings_lang" };
   const fromResultLanguage = toLower(result.language);
   if (fromResultLanguage) return { language: fromResultLanguage, source: "result.language" };
+  const fromI18nLang = toLower(toRecord(result.i18n).lang);
+  if (fromI18nLang) return { language: fromI18nLang, source: "result.i18n.lang" };
   const fromLocaleHint = toLower(result.locale_hint);
   if (fromLocaleHint) return { language: fromLocaleHint, source: "locale_hint" };
   return { language: "", source: "none" };
@@ -480,7 +487,8 @@ function resolveLanguageForPayload(result: Record<string, unknown>): {
 
 function normalizeUiStringsStatusFromResult(result: Record<string, unknown>): ResolvedWidgetPayload["ui_strings_status"] {
   const state = toRecord(result.state);
-  return normalizeUiStringsStatus(state.ui_strings_status || result.ui_strings_status);
+  const i18n = toRecord(result.i18n);
+  return normalizeUiStringsStatus(state.ui_strings_status || result.ui_strings_status || i18n.status);
 }
 
 export function computeHydrationState(

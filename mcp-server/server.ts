@@ -940,9 +940,15 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
       : {};
   const currentStep = safeString(result.current_step_id || state.current_step || "step_0");
   const started = safeString(state.started || "");
+  const initialUserMessage = safeString(state.initial_user_message || "");
   const language = safeString((result as any).language || state.language || "");
   const languageSource = safeString((result as any).language_source || state.language_source || "");
+  const uiStringsLang = safeString(state.ui_strings_lang || (result as any).ui_strings_lang || "");
   const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");
+  const uiStringsRequestedLang = safeString(
+    state.ui_strings_requested_lang || (result as any).ui_strings_requested_lang || ""
+  );
+  const uiBootstrapStatus = safeString(state.ui_bootstrap_status || (result as any).ui_bootstrap_status || "");
   const uiGateStatus = safeString((result as any).ui_gate_status || state.ui_gate_status || "");
   const uiGateReason = safeString((result as any).ui_gate_reason || state.ui_gate_reason || "");
   const uiGateSinceMs = Number((result as any).ui_gate_since_ms ?? state.ui_gate_since_ms ?? 0) || 0;
@@ -964,9 +970,13 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     current_step: currentStep || "step_0",
   };
   if (started) safeState.started = started;
+  if (initialUserMessage) safeState.initial_user_message = initialUserMessage;
   if (language) safeState.language = language;
   if (languageSource) safeState.language_source = languageSource;
+  if (uiStringsLang) safeState.ui_strings_lang = uiStringsLang;
   if (uiStringsStatus) safeState.ui_strings_status = uiStringsStatus;
+  if (uiStringsRequestedLang) safeState.ui_strings_requested_lang = uiStringsRequestedLang;
+  if (uiBootstrapStatus) safeState.ui_bootstrap_status = uiBootstrapStatus;
   if (uiGateStatus) safeState.ui_gate_status = uiGateStatus;
   if (uiGateReason) safeState.ui_gate_reason = uiGateReason;
   if (uiGateSinceMs > 0) safeState.ui_gate_since_ms = uiGateSinceMs;
@@ -1147,6 +1157,13 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       bootstrap_phase: bootstrapPhase,
     },
   };
+  // Carry full app result under ui.result so the widget can hydrate from a single
+  // structuredContent payload without relying on metadata mirrors.
+  try {
+    uiStructured.result = JSON.parse(JSON.stringify(result));
+  } catch {
+    uiStructured.result = { ...(result || {}) };
+  }
   if (Object.keys(uiStringsForPayload).length > 0) {
     uiStructured.i18n = {
       lang: uiStringsLang,
