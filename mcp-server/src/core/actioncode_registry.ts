@@ -85,13 +85,13 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_ENTITY_ESCAPE_FINISH_LATER: { route: "__ROUTE__ENTITY_FINISH_LATER__", step: "entity" },
 
     // Strategy
-    ACTION_STRATEGY_INTRO_FORMULATE: { route: "__ROUTE__STRATEGY_FORMULATE__", step: "strategy", status: "legacy" },
+    ACTION_STRATEGY_INTRO_FORMULATE: { route: "__ROUTE__STRATEGY_FORMULATE__", step: "strategy", status: "active" },
     ACTION_STRATEGY_INTRO_EXPLAIN_MORE: { route: "__ROUTE__STRATEGY_EXPLAIN_MORE__", step: "strategy" },
     ACTION_STRATEGY_REFINE_EXPLAIN_MORE: { route: "__ROUTE__STRATEGY_EXPLAIN_MORE__", step: "strategy" },
     ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE: { route: "__ROUTE__STRATEGY_EXPLAIN_MORE__", step: "strategy" },
     ACTION_STRATEGY_ASK_3_QUESTIONS: { route: "__ROUTE__STRATEGY_ASK_3_QUESTIONS__", step: "strategy" },
     ACTION_STRATEGY_ASK_GIVE_EXAMPLES: { route: "__ROUTE__STRATEGY_GIVE_EXAMPLES__", step: "strategy" },
-    ACTION_STRATEGY_ASK_WRITE: { route: "__ROUTE__STRATEGY_FORMULATE__", step: "strategy", status: "legacy" },
+    ACTION_STRATEGY_ASK_WRITE: { route: "__ROUTE__STRATEGY_FORMULATE__", step: "strategy", status: "active" },
     ACTION_STRATEGY_CONSOLIDATE: { route: "__ROUTE__STRATEGY_CONSOLIDATE__", step: "strategy" },
     ACTION_STRATEGY_CONFIRM_SATISFIED: { route: "__ROUTE__STRATEGY_CONFIRM_SATISFIED__", step: "strategy" },
     ACTION_STRATEGY_FINAL_CONTINUE: { route: "__ROUTE__STRATEGY_FINAL_CONTINUE__", step: "strategy" },
@@ -109,10 +109,10 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_PRODUCTSSERVICES_CONFIRM: { route: "__ROUTE__PRODUCTSSERVICES_CONFIRM__", step: "productsservices", flags: ["confirm"] },
 
     // Rules of the Game
-    ACTION_RULES_INTRO_WRITE: { route: "__ROUTE__RULES_WRITE__", step: "rulesofthegame", status: "legacy" },
+    ACTION_RULES_INTRO_WRITE: { route: "__ROUTE__RULES_WRITE__", step: "rulesofthegame", status: "active" },
     ACTION_RULES_INTRO_EXPLAIN_MORE: { route: "__ROUTE__RULES_EXPLAIN_MORE__", step: "rulesofthegame" },
     ACTION_RULES_INTRO_GIVE_EXAMPLE: { route: "__ROUTE__RULES_GIVE_EXAMPLE__", step: "rulesofthegame" },
-    ACTION_RULES_ASK_WRITE: { route: "__ROUTE__RULES_WRITE__", step: "rulesofthegame", status: "legacy" },
+    ACTION_RULES_ASK_WRITE: { route: "__ROUTE__RULES_WRITE__", step: "rulesofthegame", status: "active" },
     ACTION_RULES_ASK_EXPLAIN_MORE: { route: "__ROUTE__RULES_EXPLAIN_MORE__", step: "rulesofthegame" },
     ACTION_RULES_ASK_GIVE_EXAMPLE: { route: "__ROUTE__RULES_GIVE_EXAMPLE__", step: "rulesofthegame" },
     ACTION_RULES_CONFIRM_ALL: { route: "__ROUTE__RULES_CONFIRM_ALL__", step: "rulesofthegame" },
@@ -122,7 +122,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_RULES_ESCAPE_FINISH_LATER: { route: "__ROUTE__RULES_FINISH_LATER__", step: "rulesofthegame" },
 
     // Presentation
-    ACTION_PRESENTATION_CHANGE: { route: "__ROUTE__PRESENTATION_CHANGE__", step: "presentation", status: "legacy" },
+    ACTION_PRESENTATION_CHANGE: { route: "__ROUTE__PRESENTATION_CHANGE__", step: "presentation", status: "active" },
     ACTION_PRESENTATION_MAKE: { route: "__ROUTE__PRESENTATION_MAKE__", step: "presentation" },
     ACTION_PRESENTATION_ESCAPE_CONTINUE: { route: "__ROUTE__PRESENTATION_CONTINUE__", step: "presentation" },
     ACTION_PRESENTATION_ESCAPE_FINISH_LATER: { route: "__ROUTE__PRESENTATION_FINISH_LATER__", step: "presentation" },

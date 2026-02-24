@@ -11,6 +11,7 @@ import { resolveModelForCall } from "../core/model_routing.js";
 import { appendSessionTokenLog } from "../core/session_token_log.js";
 import {
   CURRENT_STATE_VERSION,
+  getDefaultState,
   getFinalsSnapshot,
   normalizeState,
   normalizeStateLanguageSource,
@@ -827,6 +828,77 @@ function detectLegacySessionMarkers(state: Record<string, unknown> | CanvasState
     reasons.push("legacy_ui_phase_marker");
   }
   return reasons;
+}
+
+const CONTRACT_BOOTSTRAP_PHASES = new Set(["waiting_locale", "ready", "recovery", "failed"]);
+const CONTRACT_UI_GATE_STATUSES = new Set(["waiting_locale", "ready", "blocked", "failed"]);
+const CONTRACT_UI_GATE_REASONS = new Set([
+  "",
+  "translation_pending",
+  "translation_retry",
+  "session_upgrade_required",
+  "contract_violation",
+  "invalid_state",
+]);
+const CONTRACT_UI_STRINGS_STATUSES = new Set(["pending", "critical_ready", "full_ready", "ready"]);
+const CONTRACT_UI_FALLBACK_REASONS = new Set([
+  "",
+  "requested_lang_unavailable",
+  "timeout",
+  "invalid_requested_lang",
+]);
+
+function detectInvalidContractStateMarkers(stateRaw: Record<string, unknown> | null | undefined): string[] {
+  const state = stateRaw && typeof stateRaw === "object" ? stateRaw : {};
+  const markers: string[] = [];
+  const uiGateStatus = String((state as any).ui_gate_status ?? "").trim();
+  if (uiGateStatus && !CONTRACT_UI_GATE_STATUSES.has(uiGateStatus)) {
+    markers.push("invalid_ui_gate_status");
+  }
+  const uiGateReason = String((state as any).ui_gate_reason ?? "").trim();
+  if (uiGateReason && !CONTRACT_UI_GATE_REASONS.has(uiGateReason)) {
+    markers.push("invalid_ui_gate_reason");
+  }
+  const uiStringsStatus = String((state as any).ui_strings_status ?? "").trim().toLowerCase();
+  if (uiStringsStatus && !CONTRACT_UI_STRINGS_STATUSES.has(uiStringsStatus)) {
+    markers.push("invalid_ui_strings_status");
+  }
+  const bootstrapPhase = String((state as any).bootstrap_phase ?? "").trim().toLowerCase();
+  if (bootstrapPhase && !CONTRACT_BOOTSTRAP_PHASES.has(bootstrapPhase)) {
+    markers.push("invalid_bootstrap_phase");
+  }
+  return markers;
+}
+
+function normalizeContractLang(raw: unknown): string {
+  return localeStartNormalizeLangCode(String(raw ?? "")) || "";
+}
+
+function buildFailClosedState(
+  stateRaw: CanvasState | null | undefined,
+  reason: "session_upgrade_required" | "contract_violation" | "invalid_state",
+  options?: {
+    requestedLang?: string;
+  }
+): CanvasState {
+  const normalized = stateRaw ? normalizeState(stateRaw) : getDefaultState();
+  const language = normalizeContractLang((normalized as any).language);
+  const requestedLang =
+    normalizeContractLang(options?.requestedLang || (normalized as any).ui_strings_requested_lang || language) || "en";
+  const uiStringsLang = normalizeContractLang((normalized as any).ui_strings_lang || "");
+  return {
+    ...(normalized as any),
+    ui_gate_status: reason === "invalid_state" ? "failed" : "blocked",
+    ui_gate_reason: reason,
+    ui_gate_since_ms: 0,
+    ui_bootstrap_status: "ready",
+    bootstrap_phase: "failed",
+    bootstrap_retry_hint: "",
+    ui_strings_requested_lang: requestedLang,
+    ui_strings_lang: uiStringsLang || (requestedLang === "en" ? "en" : ""),
+    ui_strings_fallback_applied: "false",
+    ui_strings_fallback_reason: "",
+  } as CanvasState;
 }
 
 type SemanticViolationReason =
@@ -5012,7 +5084,7 @@ function buildUiPayload(
     flags.bootstrap_retry_hint = bootstrap.retry_hint;
     flags.bootstrap_phase = String(bootstrap.phase || "");
     flags.locale_pending_background = bootstrap.waiting;
-    flags.interactive_fallback_active = bootstrap.waiting && bootstrap.ready;
+    flags.interactive_fallback_active = isInteractiveFallbackState(effectiveState);
   }
   const effectiveStepId = String(stepIdOverride || (effectiveState as any)?.current_step || "").trim();
   const contractMenuId = parseMenuFromContractIdForStep(contractMeta.contractId, effectiveStepId);
@@ -5432,7 +5504,13 @@ type BootstrapContractState = {
   phase?: "waiting_locale" | "ready" | "recovery" | "failed";
   waiting: boolean;
   ready: boolean;
-  reason: "translation_pending" | "translation_retry" | "";
+  reason:
+    | "translation_pending"
+    | "translation_retry"
+    | "session_upgrade_required"
+    | "contract_violation"
+    | "invalid_state"
+    | "";
   since_ms: number;
   retry_hint: "poll" | "";
 };
@@ -5814,6 +5892,34 @@ function resolveEffectiveUiStringsLang(params: {
   return targetLang;
 }
 
+function deriveUiFallbackMeta(params: {
+  targetLang: string;
+  requestedLang: string;
+  effectiveLang: string;
+  uiStatus: "ready" | "pending" | "critical_ready" | "full_ready";
+  defaultReason?: "" | "requested_lang_unavailable" | "timeout" | "invalid_requested_lang";
+}): {
+  applied: BoolString;
+  reason: "" | "requested_lang_unavailable" | "timeout" | "invalid_requested_lang";
+} {
+  const target = normalizeLangCode(params.targetLang);
+  const requested = normalizeLangCode(params.requestedLang);
+  const effective = normalizeLangCode(params.effectiveLang);
+  if (params.uiStatus !== "ready") return { applied: "false", reason: "" };
+  if (!target || target === "en") return { applied: "false", reason: "" };
+  if (!requested) {
+    return { applied: "true", reason: "invalid_requested_lang" };
+  }
+  if (!effective || effective === target) return { applied: "false", reason: "" };
+  if (effective === "en") {
+    return {
+      applied: "true",
+      reason: params.defaultReason || "requested_lang_unavailable",
+    };
+  }
+  return { applied: "false", reason: "" };
+}
+
 async function ensureUiStringsForState(
   state: CanvasState,
   model: string,
@@ -5840,6 +5946,8 @@ async function ensureUiStringsForState(
       ui_strings_critical_ready: "true",
       ui_strings_full_ready: "true",
       ui_strings_background_inflight: "false",
+      ui_strings_fallback_applied: "false",
+      ui_strings_fallback_reason: "",
     } as CanvasState;
     return applyUiGateState(state, forced);
   }
@@ -5879,6 +5987,8 @@ async function ensureUiStringsForState(
       ui_strings_background_inflight: "false",
       ui_strings_lang: existingEffectiveUiLang || lang,
       ui_strings_requested_lang: normalizeLangCode(existingRequestedLang || lang) || lang,
+      ui_strings_fallback_applied: "false",
+      ui_strings_fallback_reason: "",
     } as CanvasState;
     return applyUiGateState(state, cached);
   }
@@ -5903,7 +6013,7 @@ async function ensureUiStringsForState(
     }
     const ui_strings = resolved.status === "ready"
       ? resolved.ui_strings
-      : (hasExistingForLang ? existingUiForLang : {});
+      : (hasExistingForLang ? existingUiForLang : UI_STRINGS_WITH_MENU_KEYS);
     const effectiveUiStringsLang = resolveEffectiveUiStringsLang({
       targetLang: lang,
       requestedLangRaw: resolved.requested_lang || lang,
@@ -5911,6 +6021,13 @@ async function ensureUiStringsForState(
     });
     const requestedUiStringsLang = normalizeLangCode(resolved.requested_lang || lang) || lang;
     const nextStatus: "ready" | "pending" = resolved.status === "ready" ? "ready" : "pending";
+    const fallbackMeta = deriveUiFallbackMeta({
+      targetLang: lang,
+      requestedLang: requestedUiStringsLang,
+      effectiveLang: effectiveUiStringsLang,
+      uiStatus: nextStatus,
+      defaultReason: "requested_lang_unavailable",
+    });
     const next = {
       ...(state as any),
       ui_strings,
@@ -5923,6 +6040,8 @@ async function ensureUiStringsForState(
       ui_strings_critical_ready: nextStatus === "ready" ? "true" : "false",
       ui_strings_full_ready: nextStatus === "ready" ? "true" : "false",
       ui_strings_background_inflight: "false",
+      ui_strings_fallback_applied: fallbackMeta.applied,
+      ui_strings_fallback_reason: fallbackMeta.reason,
     } as CanvasState;
     return applyUiGateState(state, next);
   }
@@ -5992,18 +6111,28 @@ async function ensureUiStringsForState(
     uiStrings: mergedUiStrings,
   });
   const requestedUiStringsLang = normalizeLangCode(requestedLang || lang) || lang;
+  const statusForFallback = fullReady ? "ready" : nextStatus;
+  const fallbackMeta = deriveUiFallbackMeta({
+    targetLang: lang,
+    requestedLang: requestedUiStringsLang,
+    effectiveLang: effectiveUiStringsLang,
+    uiStatus: statusForFallback,
+    defaultReason: "requested_lang_unavailable",
+  });
   const next = {
     ...(state as any),
     ui_strings: mergedUiStrings,
     ui_strings_lang: effectiveUiStringsLang,
     ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
-    ui_strings_status: fullReady ? "ready" : nextStatus,
+    ui_strings_status: statusForFallback,
     ui_strings_requested_lang: requestedUiStringsLang,
-    ui_bootstrap_status: computeUiBootstrapStatus(state, fullReady ? "ready" : nextStatus),
+    ui_bootstrap_status: computeUiBootstrapStatus(state, statusForFallback),
     ui_translation_mode: "critical_first",
     ui_strings_critical_ready: criticalReady ? "true" : "false",
     ui_strings_full_ready: fullReady ? "true" : "false",
     ui_strings_background_inflight: fullReady ? "false" : "true",
+    ui_strings_fallback_applied: fallbackMeta.applied,
+    ui_strings_fallback_reason: fallbackMeta.reason,
   } as CanvasState;
   return applyUiGateState(state, next);
 }
@@ -7032,12 +7161,147 @@ type RunStepBase = {
 type RunStepSuccess = RunStepBase & { ok: true };
 type RunStepError = RunStepBase & { ok: false; error: Record<string, unknown> };
 
+function assertRunStepContractOrThrow(response: RunStepSuccess | RunStepError): void {
+  const state = (response as any)?.state as Record<string, unknown> | undefined;
+  if (!state || typeof state !== "object") {
+    throw new Error("missing_state");
+  }
+  const bootstrapPhase = String(state.bootstrap_phase || "").trim().toLowerCase();
+  const uiGateStatus = String(state.ui_gate_status || "").trim();
+  const uiGateReason = String(state.ui_gate_reason || "").trim();
+  const uiStringsStatus = String(state.ui_strings_status || "").trim().toLowerCase();
+  const uiStringsLang = normalizeContractLang(state.ui_strings_lang || "");
+  const uiStringsRequestedLang = normalizeContractLang(state.ui_strings_requested_lang || "");
+  const fallbackApplied = String(state.ui_strings_fallback_applied || "false").trim() === "true";
+  const fallbackReason = String(state.ui_strings_fallback_reason || "").trim();
+
+  if (!CONTRACT_BOOTSTRAP_PHASES.has(bootstrapPhase)) {
+    throw new Error("invalid_bootstrap_phase");
+  }
+  if (!CONTRACT_UI_GATE_STATUSES.has(uiGateStatus)) {
+    throw new Error("invalid_ui_gate_status");
+  }
+  if (!CONTRACT_UI_GATE_REASONS.has(uiGateReason)) {
+    throw new Error("invalid_ui_gate_reason");
+  }
+  if (!CONTRACT_UI_STRINGS_STATUSES.has(uiStringsStatus)) {
+    throw new Error("invalid_ui_strings_status");
+  }
+  if (!uiStringsRequestedLang) {
+    throw new Error("missing_ui_strings_requested_lang");
+  }
+  if (!CONTRACT_UI_FALLBACK_REASONS.has(fallbackReason)) {
+    throw new Error("invalid_ui_strings_fallback_reason");
+  }
+  if (fallbackApplied && !fallbackReason) {
+    throw new Error("fallback_applied_without_reason");
+  }
+  if (!fallbackApplied && fallbackReason) {
+    throw new Error("fallback_reason_without_applied");
+  }
+  if (uiGateStatus === "blocked" || uiGateStatus === "failed") {
+    if (bootstrapPhase !== "failed") {
+      throw new Error("blocked_gate_requires_failed_phase");
+    }
+    if (!uiGateReason || uiGateReason === "translation_pending" || uiGateReason === "translation_retry") {
+      throw new Error("blocked_gate_requires_terminal_reason");
+    }
+  }
+  if (uiGateStatus === "ready") {
+    if (uiGateReason) {
+      throw new Error("ready_gate_must_have_empty_reason");
+    }
+    if (uiStringsStatus !== "ready") {
+      throw new Error("ready_gate_requires_ready_ui_strings");
+    }
+    if (!uiStringsLang) {
+      throw new Error("ready_ui_strings_requires_lang");
+    }
+    if (uiStringsLang !== uiStringsRequestedLang && !fallbackApplied) {
+      throw new Error("lang_mismatch_requires_fallback_metadata");
+    }
+  }
+  const responseErrorType = String(((response as any)?.error || {}).type || "").trim();
+  if (responseErrorType === "session_upgrade_required") {
+    if (uiGateStatus !== "blocked" || bootstrapPhase !== "failed" || uiGateReason !== "session_upgrade_required") {
+      throw new Error("session_upgrade_requires_blocked_failed_state");
+    }
+  }
+}
+
+function buildContractFailurePayload(
+  response: RunStepSuccess | RunStepError,
+  reason: string
+): RunStepError {
+  const currentStep = String((response as any)?.current_step_id || (response as any)?.state?.current_step || "step_0");
+  const specialist = ((response as any)?.specialist || {}) as Record<string, unknown>;
+  const state = buildFailClosedState(
+    ((response as any)?.state as CanvasState | undefined) || null,
+    "contract_violation"
+  );
+  return {
+    ok: false,
+    tool: "run_step",
+    current_step_id: currentStep,
+    active_specialist: String((response as any)?.active_specialist || ""),
+    text: "",
+    prompt: "",
+    specialist,
+    registry_version: ACTIONCODE_REGISTRY.version,
+    state,
+    error: {
+      type: "contract_violation",
+      message: "RunStep response violated the strict startup/i18n contract.",
+      reason: String(reason || "unknown_contract_violation"),
+      required_action: "restart_session",
+    },
+  };
+}
+
 export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunStepError> {
   const incomingLanguageSourceRaw =
     rawArgs && typeof rawArgs === "object" && (rawArgs as any).state && typeof (rawArgs as any).state === "object"
       ? String(((rawArgs as any).state as Record<string, unknown>).language_source ?? "").trim()
       : "";
-  const args: RunStepArgs = RunStepArgsSchema.parse(rawArgs);
+  const parsedArgs = RunStepArgsSchema.safeParse(rawArgs);
+  if (!parsedArgs.success) {
+    const rawObject =
+      rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
+        ? (rawArgs as Record<string, unknown>)
+        : {};
+    const rawStateObject =
+      rawObject.state && typeof rawObject.state === "object" && !Array.isArray(rawObject.state)
+        ? (rawObject.state as Record<string, unknown>)
+        : {};
+    const currentStep = String(rawObject.current_step_id ?? rawStateObject.current_step ?? STEP_0_ID).trim() || STEP_0_ID;
+    const requestedLang =
+      normalizeContractLang(
+        String(rawObject.locale_hint ?? rawStateObject.ui_strings_requested_lang ?? rawStateObject.language ?? "")
+      ) || "en";
+    const blockedState = buildFailClosedState(
+      normalizeState(rawStateObject),
+      "invalid_state",
+      { requestedLang }
+    );
+    return {
+      ok: false,
+      tool: "run_step",
+      current_step_id: currentStep,
+      active_specialist: String((blockedState as any).active_specialist || ""),
+      text: "",
+      prompt: "",
+      specialist: {},
+      registry_version: ACTIONCODE_REGISTRY.version,
+      state: blockedState,
+      error: {
+        type: "invalid_state",
+        message: "Input validation error for run_step.",
+        required_action: "restart_session",
+        details: parsedArgs.error.issues,
+      },
+    };
+  }
+  const args: RunStepArgs = parsedArgs.data;
   const inputMode = args.input_mode || "chat";
   const localeHint = normalizeLocaleHint(String(args.locale_hint ?? ""));
   const localeHintSourceRaw = String(args.locale_hint_source ?? "none").trim();
@@ -7123,7 +7387,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     String(args.user_message ?? "").trim().toUpperCase() === ACTION_BOOTSTRAP_POLL_TOKEN;
   const isBootstrapPollCall = isBootstrapPollMarker || isBootstrapPollAction;
 
-  const rawLegacyMarkers = detectLegacySessionMarkers((args.state ?? {}) as Record<string, unknown>);
+  const rawStateContractMarkers = detectInvalidContractStateMarkers((args.state ?? {}) as Record<string, unknown>);
+  const rawLegacyMarkers = [
+    ...detectLegacySessionMarkers((args.state ?? {}) as Record<string, unknown>),
+    ...rawStateContractMarkers,
+  ];
   let state = normalizeState(args.state ?? {});
   state = migrateLegacyI18nState(state, uiI18nTelemetry);
   const incomingPhaseRaw =
@@ -7277,7 +7545,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   };
 
   const finalizeResponse = <T extends RunStepSuccess | RunStepError>(response: T): T => {
-    const responseStateForCleanup = (response as any)?.state as CanvasState | undefined;
+    let finalResponse = response as unknown as RunStepSuccess | RunStepError;
+    const responseStateForCleanup = (finalResponse as any)?.state as CanvasState | undefined;
     if (responseStateForCleanup) {
       if (Object.prototype.hasOwnProperty.call(responseStateForCleanup as any, "__last_clicked_label_for_contract")) {
         delete (responseStateForCleanup as any).__last_clicked_label_for_contract;
@@ -7285,49 +7554,90 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       if (Object.prototype.hasOwnProperty.call(responseStateForCleanup as any, "__last_clicked_action_for_contract")) {
         delete (responseStateForCleanup as any).__last_clicked_action_for_contract;
       }
+      const requestedLang =
+        normalizeContractLang(
+          (responseStateForCleanup as any).ui_strings_requested_lang ||
+            (responseStateForCleanup as any).language ||
+            (responseStateForCleanup as any).ui_strings_lang ||
+            "en"
+        ) || "en";
+      (responseStateForCleanup as any).ui_strings_requested_lang = requestedLang;
+      (responseStateForCleanup as any).ui_strings_fallback_applied =
+        String((responseStateForCleanup as any).ui_strings_fallback_applied || "false").trim() === "true"
+          ? "true"
+          : "false";
+      const fallbackReasonRaw = String((responseStateForCleanup as any).ui_strings_fallback_reason || "").trim();
+      (responseStateForCleanup as any).ui_strings_fallback_reason =
+        CONTRACT_UI_FALLBACK_REASONS.has(fallbackReasonRaw) ? fallbackReasonRaw : "";
+      const uiStatus = String((responseStateForCleanup as any).ui_strings_status || "").trim().toLowerCase();
+      const uiLang = normalizeContractLang((responseStateForCleanup as any).ui_strings_lang || "");
+      if (uiStatus === "ready" && !uiLang) {
+        (responseStateForCleanup as any).ui_strings_lang = "en";
+        (responseStateForCleanup as any).ui_strings_fallback_applied = "true";
+        if (!String((responseStateForCleanup as any).ui_strings_fallback_reason || "").trim()) {
+          (responseStateForCleanup as any).ui_strings_fallback_reason = "invalid_requested_lang";
+        }
+      }
     }
-    if ((response as any)?.ok === true) {
-      const uiViolation = validateUiPayloadContractParity((response || {}) as Record<string, unknown>);
+    if ((finalResponse as any)?.ok === true) {
+      const uiViolation = validateUiPayloadContractParity((finalResponse || {}) as Record<string, unknown>);
       if (uiViolation) {
         bumpUiI18nCounter(uiI18nTelemetry, "parity_errors");
-        const mutableResponse = response as unknown as Record<string, unknown>;
+        const mutableResponse = finalResponse as unknown as Record<string, unknown>;
         const repaired = tryRepairUiParityWithEnglishLabels(mutableResponse);
         if (repaired) {
           const postRepairViolation = validateUiPayloadContractParity(mutableResponse);
           if (!postRepairViolation) {
             bumpUiI18nCounter(uiI18nTelemetry, "parity_recovered");
           } else {
-            const failed = {
+            finalResponse = {
               ...mutableResponse,
               ok: false,
               error: {
                 type: "contract_violation",
                 message: "UI payload violates actioncode/menu contract.",
                 reason: postRepairViolation,
-                step: String((response as any)?.current_step_id || ""),
-                contract_id: String(((response as any)?.ui || {}).contract_id || ""),
+                step: String((finalResponse as any)?.current_step_id || ""),
+                contract_id: String(((finalResponse as any)?.ui || {}).contract_id || ""),
               },
-            };
-            return failed as unknown as T;
+            } as unknown as RunStepError;
           }
         } else {
-          const failed = {
-            ...(response as unknown as Record<string, unknown>),
+          finalResponse = {
+            ...(finalResponse as unknown as Record<string, unknown>),
             ok: false,
             error: {
               type: "contract_violation",
               message: "UI payload violates actioncode/menu contract.",
               reason: uiViolation,
-              step: String((response as any)?.current_step_id || ""),
-              contract_id: String(((response as any)?.ui || {}).contract_id || ""),
+              step: String((finalResponse as any)?.current_step_id || ""),
+              contract_id: String(((finalResponse as any)?.ui || {}).contract_id || ""),
             },
-          };
-          return failed as unknown as T;
+          } as unknown as RunStepError;
         }
       }
     }
+    try {
+      assertRunStepContractOrThrow(finalResponse);
+    } catch (error: any) {
+      const reason = String(error?.message || "contract_violation");
+      const specialistForFailure = ((finalResponse as any)?.specialist || {}) as Record<string, unknown>;
+      finalResponse = attachRegistryPayload(
+        buildContractFailurePayload(finalResponse, reason),
+        specialistForFailure,
+        {
+          bootstrap_waiting_locale: false,
+          bootstrap_interactive_ready: false,
+          bootstrap_retry_hint: "",
+          locale_pending_background: false,
+          interactive_fallback_active: false,
+          bootstrap_phase: "failed",
+        }
+      );
+    }
+
     const telemetryTotal = Object.values(uiI18nTelemetry).reduce((sum, value) => sum + Number(value || 0), 0);
-    const responseStateForTelemetry = (response as any)?.state as CanvasState | undefined;
+    const responseStateForTelemetry = (finalResponse as any)?.state as CanvasState | undefined;
     if (responseStateForTelemetry && telemetryTotal > 0) {
       (responseStateForTelemetry as any).__ui_telemetry = {
         ...(typeof (responseStateForTelemetry as any).__ui_telemetry === "object"
@@ -7336,14 +7646,29 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         ...uiI18nTelemetry,
       };
     }
-    if (!tokenLoggingEnabled) return response;
+
+    const stateForDecision = ((finalResponse as any)?.state || {}) as Record<string, unknown>;
+    console.log("[contract_decision]", {
+      session_id: String((stateForDecision as any).bootstrap_session_id || ""),
+      host_widget_session_id: String((stateForDecision as any).host_widget_session_id || ""),
+      epoch: Number((stateForDecision as any).bootstrap_epoch || 0),
+      seq: Number((stateForDecision as any).response_seq || 0),
+      phase: String((stateForDecision as any).bootstrap_phase || ""),
+      gate_status: String((stateForDecision as any).ui_gate_status || ""),
+      gate_reason: String((stateForDecision as any).ui_gate_reason || ""),
+      lang: String((stateForDecision as any).ui_strings_lang || (stateForDecision as any).language || ""),
+      requested_lang: String((stateForDecision as any).ui_strings_requested_lang || ""),
+      fallback_applied: String((stateForDecision as any).ui_strings_fallback_applied || "false"),
+    });
+
+    if (!tokenLoggingEnabled) return finalResponse as unknown as T;
     try {
-      const responseState = (response as any)?.state as CanvasState | undefined;
-      if (!responseState) return response;
+      const responseState = (finalResponse as any)?.state as CanvasState | undefined;
+      if (!responseState) return finalResponse as unknown as T;
       const sessionId = String((responseState as any).__session_id || "").trim();
       const sessionStartedAt = String((responseState as any).__session_started_at || "").trim();
       const turnId = String((responseState as any).__session_turn_id || "").trim();
-      if (!sessionId || !sessionStartedAt || !turnId) return response;
+      if (!sessionId || !sessionStartedAt || !turnId) return finalResponse as unknown as T;
       const usage = turnUsageFromAccumulator(llmTurnAccumulator);
       const modelList = [...llmTurnAccumulator.models.values()];
       const model = modelList.length > 0 ? modelList.join(",") : baselineModel;
@@ -7354,8 +7679,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         turn: {
           turn_id: turnId,
           timestamp: new Date().toISOString(),
-          step_id: String((response as any).current_step_id || (responseState as any).current_step || ""),
-          specialist: String((response as any).active_specialist || (responseState as any).active_specialist || ""),
+          step_id: String((finalResponse as any).current_step_id || (responseState as any).current_step || ""),
+          specialist: String((finalResponse as any).active_specialist || (responseState as any).active_specialist || ""),
           model,
           attempts: llmTurnAccumulator.attempts,
           usage,
@@ -7367,7 +7692,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         message: String(err?.message || err || "unknown"),
       });
     }
-    return response;
+    return finalResponse as unknown as T;
   };
 
   const ensureUiStrings = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
@@ -7442,7 +7767,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
             bootstrap_interactive_ready: bootstrapContract.ready,
             bootstrap_retry_hint: bootstrapContract.retry_hint,
             locale_pending_background: bootstrapContract.waiting,
-            interactive_fallback_active: bootstrapContract.waiting && bootstrapContract.ready,
+            interactive_fallback_active: isInteractiveFallbackState(state),
             bootstrap_phase: String(bootstrapContract.phase || ""),
           }
         )
@@ -7462,25 +7787,57 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     clickedLabelForNoRepeat = "";
   }
 
-  const legacyMarkers = rawLegacyMarkers.length > 0 ? rawLegacyMarkers : detectLegacySessionMarkers(state);
+  const legacyMarkers = Array.from(
+    new Set([
+      ...rawLegacyMarkers,
+      ...detectLegacySessionMarkers(state),
+      ...detectInvalidContractStateMarkers(state as unknown as Record<string, unknown>),
+    ])
+  );
   if (legacyMarkers.length > 0) {
     const legacySpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-    return finalizeResponse(attachRegistryPayload({
-      ok: false as const,
-      tool: "run_step" as const,
-      current_step_id: String(state.current_step),
-      active_specialist: String((state as any).active_specialist || ""),
-      text: "This session uses an old runtime format and must be restarted.",
-      prompt: "Please start a new session and retry your last action.",
-      specialist: legacySpecialist,
+    const requiresRestart = legacyMarkers.some((marker) =>
+      marker === "state_version_mismatch" || marker.startsWith("legacy_")
+    );
+    const errorType = requiresRestart ? "session_upgrade_required" : "invalid_state";
+    const blockedState = buildFailClosedState(
       state,
-      error: {
-        type: "session_upgrade_required",
-        message: "Legacy session state is blocked in strict contract mode.",
-        markers: legacyMarkers,
-        required_action: "restart_session",
-      },
-    }, legacySpecialist));
+      requiresRestart ? "session_upgrade_required" : "invalid_state",
+      {
+        requestedLang: localeHint || String((state as any).language || ""),
+      }
+    );
+    return finalizeResponse(
+      attachRegistryPayload(
+        {
+          ok: false as const,
+          tool: "run_step" as const,
+          current_step_id: String(blockedState.current_step),
+          active_specialist: String((blockedState as any).active_specialist || ""),
+          text: "",
+          prompt: "",
+          specialist: legacySpecialist,
+          state: blockedState,
+          error: {
+            type: errorType,
+            message: requiresRestart
+              ? "Legacy session state is blocked in strict contract mode."
+              : "Incoming state violates the strict startup/i18n contract.",
+            markers: legacyMarkers,
+            required_action: "restart_session",
+          },
+        },
+        legacySpecialist,
+        {
+          bootstrap_waiting_locale: false,
+          bootstrap_interactive_ready: false,
+          bootstrap_retry_hint: "",
+          locale_pending_background: false,
+          interactive_fallback_active: false,
+          bootstrap_phase: "failed",
+        }
+      )
+    );
   }
 
   if (actionCodeRaw) {

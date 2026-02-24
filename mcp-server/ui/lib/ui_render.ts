@@ -265,6 +265,47 @@ function renderHydrationRecovery(cardDesc: HTMLElement, lang: string): void {
   cardDesc.appendChild(shell);
 }
 
+function blockedMessageForReason(
+  lang: string,
+  reason: string,
+  fallbackMessage: string
+): { title: string; body: string } {
+  if (reason === "session_upgrade_required") {
+    return {
+      title: uiText(lang, "error.session_upgrade.title", "This session needs to be restarted."),
+      body: uiText(
+        lang,
+        "error.session_upgrade.body",
+        fallbackMessage || "Please start a new session to continue."
+      ),
+    };
+  }
+  if (reason === "contract_violation") {
+    return {
+      title: uiText(lang, "error.contract.title", "The app state is invalid."),
+      body: uiText(
+        lang,
+        "error.contract.body",
+        fallbackMessage || "Please refresh or start a new session."
+      ),
+    };
+  }
+  return {
+    title: uiText(lang, "error.generic.title", "Something went wrong."),
+    body: uiText(lang, "error.generic.body", fallbackMessage || "Please refresh and try again."),
+  };
+}
+
+function renderBlockedState(cardDesc: HTMLElement, lang: string, title: string, body: string): void {
+  clearElement(cardDesc);
+  const shell = appendTextNode("div", "bootstrap-wait-shell", "");
+  (shell as HTMLElement).style.display = "grid";
+  (shell as HTMLElement).style.gap = "12px";
+  shell.appendChild(appendTextNode("div", "bootstrap-recovery-title", title));
+  shell.appendChild(appendTextNode("div", "bootstrap-recovery-copy", body));
+  cardDesc.appendChild(shell);
+}
+
 function parseMenuFromContractId(contractIdRaw: unknown, stepIdRaw: unknown): string {
   const contractId = String(contractIdRaw || "").trim();
   const stepId = String(stepIdRaw || "").trim();
@@ -560,12 +601,23 @@ export function render(overrideToolOutput?: unknown): void {
   const overrideLang = String((state?.ui_strings_lang || result?.ui_strings_lang || payloadLang || "") as string)
     .trim()
     .toLowerCase();
+  const fallbackApplied =
+    String(
+      (
+        state?.ui_strings_fallback_applied ||
+        result?.ui_strings_fallback_applied ||
+        uiI18n?.fallback_applied ||
+        "false"
+      ) as string
+    )
+      .trim()
+      .toLowerCase() === "true";
   const ws = widgetState();
   const stateLang = languageFromState(state);
   const widgetLang = String((ws?.language || "") as string).trim().toLowerCase();
   const locationLang = initialLangFromLocation();
   const localeCandidate = resolved.resolved_language || stateLang || widgetLang || locationLang || uiLang(state);
-  const lang = localeCandidate || "en";
+  const lang = (fallbackApplied && overrideLang) ? overrideLang : (localeCandidate || "en");
 
   const latestRoot = (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__;
   const latestState = latestRoot?.state && typeof latestRoot.state === "object"
@@ -586,6 +638,7 @@ export function render(overrideToolOutput?: unknown): void {
       : {};
   const viewMode = String(uiView.mode || "").trim().toLowerCase();
   const uiGateStatus = String((state?.ui_gate_status || "")).trim().toLowerCase();
+  const uiGateReason = String((state?.ui_gate_reason || "")).trim().toLowerCase();
   const localeBucket = baseLang(localeCandidate);
   const localeKnownNonEn =
     Boolean(localeBucket) && localeBucket !== "en" && localeBucket !== "default";
@@ -596,11 +649,14 @@ export function render(overrideToolOutput?: unknown): void {
   const serverExplicitPrestart = viewMode === "prestart";
   const serverExplicitInteractive = viewMode === "interactive";
   const serverExplicitRecovery = viewMode === "recovery";
+  const serverExplicitBlocked =
+    viewMode === "blocked" || uiGateStatus === "blocked" || uiGateStatus === "failed";
   const hasServerExplicitMode =
     serverExplicitWaiting ||
     serverExplicitPrestart ||
     serverExplicitInteractive ||
-    serverExplicitRecovery;
+    serverExplicitRecovery ||
+    serverExplicitBlocked;
   const forceLocaleWait = !hasServerExplicitMode && localeKnownNonEn && uiStringsStatus !== "ready";
   const bootstrapState = computeBootstrapRenderState({
     hydration,
@@ -638,7 +694,7 @@ export function render(overrideToolOutput?: unknown): void {
   const shouldApplyOverride =
     hasOverrideStrings &&
     uiStringsStatus === "ready" &&
-    overrideBucket === langBucket;
+    (overrideBucket === langBucket || fallbackApplied);
   if (!shouldApplyOverride && overrideStringsMap && Object.keys(overrideStringsMap).length > 0) {
     const dev = typeof location !== "undefined" && location.hostname === "localhost";
     if (dev) {
@@ -782,7 +838,7 @@ export function render(overrideToolOutput?: unknown): void {
     : serverExplicitInteractive
       ? false
       : (hasToolOutputVal ? !serverStarted : !sessionStarted);
-  const showPreStart = waitingGateActive || serverExplicitRecovery ? false : showPreStartBase;
+  const showPreStart = waitingGateActive || serverExplicitRecovery || serverExplicitBlocked ? false : showPreStartBase;
 
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
@@ -803,7 +859,7 @@ export function render(overrideToolOutput?: unknown): void {
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
 
-  if ((waitingGateActive && !interactiveFallbackActive) || serverExplicitRecovery) {
+  if ((waitingGateActive && !interactiveFallbackActive) || serverExplicitRecovery || serverExplicitBlocked) {
     if (localeKnownNonEn && waitingGateActive && !interactiveFallbackActive) {
       console.log("[ui_non_en_wait_shell_rendered]", {
         resolved_language: resolved.resolved_language,
@@ -829,7 +885,13 @@ export function render(overrideToolOutput?: unknown): void {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      if (serverExplicitRecovery || hydration.retry_exhausted) {
+      if (serverExplicitBlocked) {
+        const errorMessage =
+          String((result?.error as Record<string, unknown> | undefined)?.message || "").trim() ||
+          String((result?.error as Record<string, unknown> | undefined)?.user_message || "").trim();
+        const blockedCopy = blockedMessageForReason(lang, uiGateReason, errorMessage);
+        renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
+      } else if (serverExplicitRecovery || hydration.retry_exhausted) {
         renderHydrationRecovery(prestartEl, lang);
         const retryBtn = document.getElementById("btnHydrationRetry") as HTMLButtonElement | null;
         if (retryBtn) {

@@ -1613,7 +1613,7 @@ test("Step 0 start-trigger with locale_hint pending sets locale gate waiting fla
   assert.equal(String(result.state?.ui_gate_status || ""), "waiting_locale");
   assert.equal(result.ui?.flags?.bootstrap_waiting_locale, true);
   assert.equal(result.ui?.flags?.bootstrap_interactive_ready, false);
-  assert.equal(result.ui?.flags?.interactive_fallback_active, false);
+  assert.equal(result.ui?.flags?.interactive_fallback_active, true);
   assert.equal(result.ui?.flags?.locale_pending_background, true);
   assert.equal(String(result.ui?.flags?.bootstrap_retry_hint || ""), "poll");
 });
@@ -3111,6 +3111,9 @@ test("wording choice: generic Purpose acknowledgement is replaced with step-spec
 
   assert.equal(result.ok, false);
   assert.equal(String(result.error?.type || ""), "session_upgrade_required");
+  assert.equal(String((result.state as any)?.ui_gate_status || ""), "blocked");
+  assert.equal(String((result.state as any)?.ui_gate_reason || ""), "session_upgrade_required");
+  assert.equal(String((result.state as any)?.bootstrap_phase || ""), "failed");
   assert.ok(Array.isArray((result.error as any)?.markers));
   assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
 });
@@ -3226,6 +3229,9 @@ test("wording choice: Big Why user pick downgrades generic confirm to contract r
 
   assert.equal(result.ok, false);
   assert.equal(String(result.error?.type || ""), "session_upgrade_required");
+  assert.equal(String((result.state as any)?.ui_gate_status || ""), "blocked");
+  assert.equal(String((result.state as any)?.ui_gate_reason || ""), "session_upgrade_required");
+  assert.equal(String((result.state as any)?.bootstrap_phase || ""), "failed");
   assert.ok(Array.isArray((result.error as any)?.markers));
   assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
 });
@@ -3261,6 +3267,9 @@ test("wording choice: Role user pick restores contract refine menu instead of ge
 
   assert.equal(result.ok, false);
   assert.equal(String(result.error?.type || ""), "session_upgrade_required");
+  assert.equal(String((result.state as any)?.ui_gate_status || ""), "blocked");
+  assert.equal(String((result.state as any)?.ui_gate_reason || ""), "session_upgrade_required");
+  assert.equal(String((result.state as any)?.bootstrap_phase || ""), "failed");
   assert.ok(Array.isArray((result.error as any)?.markers));
   assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
 });

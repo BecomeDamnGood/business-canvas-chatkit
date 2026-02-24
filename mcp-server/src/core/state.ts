@@ -73,12 +73,27 @@ export type UiStringsStatus = z.infer<typeof UiStringsStatusZod>;
 export const UI_BOOTSTRAP_STATUSES = ["init", "awaiting_locale", "ready"] as const;
 export const UiBootstrapStatusZod = z.enum(UI_BOOTSTRAP_STATUSES);
 export type UiBootstrapStatus = z.infer<typeof UiBootstrapStatusZod>;
-export const UI_GATE_STATUSES = ["waiting_locale", "ready"] as const;
+export const UI_GATE_STATUSES = ["waiting_locale", "ready", "blocked", "failed"] as const;
 export const UiGateStatusZod = z.enum(UI_GATE_STATUSES);
 export type UiGateStatus = z.infer<typeof UiGateStatusZod>;
-export const UI_GATE_REASONS = ["", "translation_pending", "translation_retry"] as const;
+export const UI_GATE_REASONS = [
+  "",
+  "translation_pending",
+  "translation_retry",
+  "session_upgrade_required",
+  "contract_violation",
+  "invalid_state",
+] as const;
 export const UiGateReasonZod = z.enum(UI_GATE_REASONS);
 export type UiGateReason = z.infer<typeof UiGateReasonZod>;
+export const UI_STRINGS_FALLBACK_REASONS = [
+  "",
+  "requested_lang_unavailable",
+  "timeout",
+  "invalid_requested_lang",
+] as const;
+export const UiStringsFallbackReasonZod = z.enum(UI_STRINGS_FALLBACK_REASONS);
+export type UiStringsFallbackReason = z.infer<typeof UiStringsFallbackReasonZod>;
 export const UI_TRANSLATION_MODES = ["critical_first", "full"] as const;
 export const UiTranslationModeZod = z.enum(UI_TRANSLATION_MODES);
 export type UiTranslationMode = z.infer<typeof UiTranslationModeZod>;
@@ -107,6 +122,7 @@ export function deriveBootstrapPhaseFromLegacy(params: {
   const bootstrap = String(params.ui_bootstrap_status ?? "").trim();
   const gate = String(params.ui_gate_status ?? "").trim();
   const strings = String(params.ui_strings_status ?? "").trim().toLowerCase();
+  if (gate === "blocked" || gate === "failed") return "failed";
   if (bootstrap === "init" && strings !== "ready") return "waiting_locale";
   if (strings && strings !== "ready") return "waiting_locale";
   if (gate === "waiting_locale") {
@@ -168,6 +184,8 @@ export const CanvasStateZod = z.object({
   ui_strings_version: z.string(),
   ui_strings_status: UiStringsStatusZod,
   ui_strings_requested_lang: z.string(),
+  ui_strings_fallback_applied: BoolStringZod,
+  ui_strings_fallback_reason: UiStringsFallbackReasonZod,
   ui_bootstrap_status: UiBootstrapStatusZod,
   ui_gate_status: UiGateStatusZod,
   ui_gate_reason: UiGateReasonZod,
@@ -221,7 +239,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "10";
+export const CURRENT_STATE_VERSION = "11";
 
 /**
  * Hard defaults (no nulls)
@@ -244,6 +262,8 @@ export function getDefaultState(): CanvasState {
     ui_strings_version: "",
     ui_strings_status: "pending",
     ui_strings_requested_lang: "",
+    ui_strings_fallback_applied: "false",
+    ui_strings_fallback_reason: "",
     ui_bootstrap_status: "init",
     ui_gate_status: "waiting_locale",
     ui_gate_reason: "translation_pending",
@@ -321,6 +341,20 @@ export function normalizeState(raw: unknown): CanvasState {
   const ui_strings_requested_lang = String((r as any).ui_strings_requested_lang ?? d.ui_strings_requested_lang)
     .trim()
     .toLowerCase();
+  const ui_strings_fallback_applied_raw = String(
+    (r as any).ui_strings_fallback_applied ?? d.ui_strings_fallback_applied
+  ).trim();
+  const ui_strings_fallback_applied: BoolString =
+    ui_strings_fallback_applied_raw === "true" ? "true" : "false";
+  const ui_strings_fallback_reason_raw = String(
+    (r as any).ui_strings_fallback_reason ?? d.ui_strings_fallback_reason
+  ).trim();
+  const ui_strings_fallback_reason: UiStringsFallbackReason =
+    ui_strings_fallback_reason_raw === "requested_lang_unavailable" ||
+    ui_strings_fallback_reason_raw === "timeout" ||
+    ui_strings_fallback_reason_raw === "invalid_requested_lang"
+      ? ui_strings_fallback_reason_raw
+      : "";
   const ui_bootstrap_status_raw = String((r as any).ui_bootstrap_status ?? d.ui_bootstrap_status).trim();
   const ui_bootstrap_status: UiBootstrapStatus =
     ui_bootstrap_status_raw === "awaiting_locale" || ui_bootstrap_status_raw === "ready"
@@ -328,12 +362,19 @@ export function normalizeState(raw: unknown): CanvasState {
       : "init";
   const ui_gate_status_raw = String((r as any).ui_gate_status ?? d.ui_gate_status).trim();
   const ui_gate_status: UiGateStatus =
-    ui_gate_status_raw === "waiting_locale" || ui_gate_status_raw === "ready"
+    ui_gate_status_raw === "waiting_locale" ||
+    ui_gate_status_raw === "ready" ||
+    ui_gate_status_raw === "blocked" ||
+    ui_gate_status_raw === "failed"
       ? ui_gate_status_raw
-      : "ready";
+      : "waiting_locale";
   const ui_gate_reason_raw = String((r as any).ui_gate_reason ?? d.ui_gate_reason).trim();
   const ui_gate_reason: UiGateReason =
-    ui_gate_reason_raw === "translation_pending" || ui_gate_reason_raw === "translation_retry"
+    ui_gate_reason_raw === "translation_pending" ||
+    ui_gate_reason_raw === "translation_retry" ||
+    ui_gate_reason_raw === "session_upgrade_required" ||
+    ui_gate_reason_raw === "contract_violation" ||
+    ui_gate_reason_raw === "invalid_state"
       ? ui_gate_reason_raw
       : "";
   const ui_gate_since_raw = Number((r as any).ui_gate_since_ms ?? d.ui_gate_since_ms);
@@ -476,6 +517,8 @@ export function normalizeState(raw: unknown): CanvasState {
     ui_strings_version,
     ui_strings_status,
     ui_strings_requested_lang,
+    ui_strings_fallback_applied,
+    ui_strings_fallback_reason,
     ui_bootstrap_status,
     ui_gate_status,
     ui_gate_reason,
@@ -531,6 +574,28 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v10 -> v11: add explicit ui fallback metadata.
+  if (s.state_version === "10") {
+    s = {
+      ...s,
+      state_version: "11",
+      ui_strings_fallback_applied:
+        String((s as any).ui_strings_fallback_applied ?? "false").trim() === "true" ? "true" : "false",
+      ui_strings_fallback_reason: (() => {
+        const reason = String((s as any).ui_strings_fallback_reason ?? "").trim();
+        if (
+          reason === "requested_lang_unavailable" ||
+          reason === "timeout" ||
+          reason === "invalid_requested_lang"
+        ) {
+          return reason;
+        }
+        return "";
+      })(),
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v9 -> v10: add critical-first translation metadata.
   if (s.state_version === "9") {
     const uiStatus = normalizeUiStringsStatus((s as any).ui_strings_status ?? "pending");
@@ -542,7 +607,7 @@ export function migrateState(raw: unknown): CanvasState {
       ui_strings_full_ready: uiStatusAllowsFull(uiStatus) ? "true" : "false",
       ui_strings_background_inflight: uiStatusAllowsFull(uiStatus) ? "false" : "true",
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v8 -> v9: add locale-ready UI gate metadata.

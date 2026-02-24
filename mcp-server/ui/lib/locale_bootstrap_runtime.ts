@@ -18,7 +18,8 @@ export type BootstrapPhase =
   | "waiting_both"
   | "interactive_fallback"
   | "ready"
-  | "recovery";
+  | "recovery"
+  | "failed";
 export type BootstrapRenderMode = "wait_shell" | "interactive" | "recovery";
 
 export type ResolvedWidgetPayload = {
@@ -108,7 +109,8 @@ function normalizeBootstrapPhase(raw: unknown): BootstrapPhase | "" {
     phase === "waiting_both" ||
     phase === "interactive_fallback" ||
     phase === "ready" ||
-    phase === "recovery"
+    phase === "recovery" ||
+    phase === "failed"
   ) {
     return phase;
   }
@@ -133,12 +135,13 @@ function phaseFromViewMode(raw: unknown): BootstrapPhase | "" {
   const mode = toLower(raw);
   if (mode === "waiting_locale") return "waiting_locale";
   if (mode === "recovery") return "recovery";
+  if (mode === "blocked" || mode === "failed") return "failed";
   if (mode === "interactive" || mode === "prestart") return "ready";
   return "";
 }
 
 function renderModeFromPhase(phase: BootstrapPhase): BootstrapRenderMode {
-  if (phase === "recovery") return "recovery";
+  if (phase === "recovery" || phase === "failed") return "recovery";
   if (
     phase === "waiting_state" ||
     phase === "waiting_locale" ||
@@ -499,6 +502,8 @@ function baseLang(value: unknown): string {
 
 function hasNonEnglishUiLanguageMismatch(result: Record<string, unknown>): boolean {
   const state = toRecord(result.state);
+  const fallbackApplied = toLower(state.ui_strings_fallback_applied) === "true";
+  if (fallbackApplied) return false;
   const targetLang = baseLang(state.language || result.language);
   if (!targetLang || targetLang === "en") return false;
   const i18n = toRecord(result.i18n);
@@ -516,15 +521,20 @@ export function computeHydrationState(
   const currentStep = hasState ? String(state.current_step || "").trim() : "";
   const needsHydration = !hasState || !currentStep;
   const uiGateStatus = toLower(state.ui_gate_status || resolved.result.ui_gate_status);
+  const terminalGate = uiGateStatus === "blocked" || uiGateStatus === "failed";
   const languageMismatch = hasNonEnglishUiLanguageMismatch(resolved.result);
   const i18nPending =
-    resolved.ui_strings_status === "pending" ||
-    resolved.ui_strings_status === "critical_ready" ||
-    resolved.ui_strings_status === "full_ready" ||
-    (resolved.ui_strings_status === "unknown" && uiGateStatus === "waiting_locale") ||
-    (resolved.ui_strings_status === "ready" && languageMismatch);
+    !terminalGate &&
+    (
+      resolved.ui_strings_status === "pending" ||
+      resolved.ui_strings_status === "critical_ready" ||
+      resolved.ui_strings_status === "full_ready" ||
+      (resolved.ui_strings_status === "unknown" && uiGateStatus === "waiting_locale") ||
+      (resolved.ui_strings_status === "ready" && languageMismatch)
+    );
   let waitingReason: WaitingReason = "none";
-  if (needsHydration && i18nPending) waitingReason = "both";
+  if (terminalGate) waitingReason = "none";
+  else if (needsHydration && i18nPending) waitingReason = "both";
   else if (needsHydration) waitingReason = "missing_state";
   else if (i18nPending) waitingReason = "i18n_pending";
   return {
@@ -628,6 +638,7 @@ export function computeBootstrapRenderState(params: {
   hasCurrentStep?: boolean;
 }): BootstrapRenderState {
   const { hydration, uiStringsStatus, uiFlags, uiView, localeKnownNonEn } = params;
+  const uiGateStatus = toLower(uiView.ui_gate_status || uiFlags.ui_gate_status);
   const waitingForMissingStateByHydration =
     hydration.waiting_reason === "missing_state" || hydration.waiting_reason === "both";
   const waitingForI18nByHydration =
@@ -642,6 +653,8 @@ export function computeBootstrapRenderState(params: {
   let finalPhase: BootstrapPhase;
   if (hydration.retry_exhausted) {
     finalPhase = "recovery";
+  } else if (uiGateStatus === "blocked" || uiGateStatus === "failed") {
+    finalPhase = "failed";
   } else if (phaseFromMode) {
     finalPhase = phaseFromMode;
   } else if (phaseFromPayload) {
@@ -665,6 +678,8 @@ export function computeBootstrapRenderState(params: {
   const bootstrapWaitingLocale =
     finalPhase === "recovery"
       ? false
+      : finalPhase === "failed"
+        ? false
       : (waitingForI18n || serverExplicitWaiting || forceLocaleWait);
   const effectivePhase: BootstrapPhase =
     bootstrapWaitingLocale && finalPhase === "ready" ? "waiting_locale" : finalPhase;

@@ -39,7 +39,7 @@ test("enforceUiStringsReadinessInvariant downgrades non-EN ready state when ui_s
   assert.equal(String((normalized as any).ui_strings_full_ready || ""), "false");
 });
 
-test("applyUiGateState does not force ready on timeout when non-EN ui_strings_lang mismatches language", () => {
+test("applyUiGateState forces deterministic EN fallback on timeout when non-EN ui_strings_lang mismatches language", () => {
   const nowMs = Date.now();
   const previousState = buildState({
     language: "nl",
@@ -74,9 +74,12 @@ test("applyUiGateState does not force ready on timeout when non-EN ui_strings_la
     nowMs,
   });
 
-  assert.equal(String((gated as any).ui_gate_status || ""), "waiting_locale");
-  assert.equal(String((gated as any).bootstrap_phase || ""), "waiting_locale");
-  assert.notEqual(String((gated as any).ui_strings_status || ""), "ready");
+  assert.equal(String((gated as any).ui_gate_status || ""), "ready");
+  assert.equal(String((gated as any).bootstrap_phase || ""), "ready");
+  assert.equal(String((gated as any).ui_strings_status || ""), "ready");
+  assert.equal(String((gated as any).ui_strings_lang || ""), "en");
+  assert.equal(String((gated as any).ui_strings_fallback_applied || ""), "true");
+  assert.equal(String((gated as any).ui_strings_fallback_reason || ""), "timeout");
 });
 
 test("applyUiGateState can recover to ready when non-EN language and ui_strings_lang are aligned", () => {

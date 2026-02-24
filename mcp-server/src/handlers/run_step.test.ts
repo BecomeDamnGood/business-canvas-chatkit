@@ -142,7 +142,7 @@ test("language policy: locale hint wins over paraphrased English chat input", as
   assert.equal(String(result?.state?.ui_gate_status || ""), "waiting_locale");
   assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, true);
   assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, false);
-  assert.equal(result?.ui?.flags?.interactive_fallback_active, false);
+  assert.equal(result?.ui?.flags?.interactive_fallback_active, true);
   assert.equal(String(result?.ui?.flags?.bootstrap_phase || ""), "waiting_locale");
   assert.equal(result?.ui?.flags?.locale_pending_background, true);
   assert.equal(String(result?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
@@ -220,7 +220,7 @@ test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps waiting contr
   assert.equal(String(polled?.state?.bootstrap_phase || ""), "waiting_locale");
   assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, true);
   assert.equal(polled?.ui?.flags?.bootstrap_interactive_ready, false);
-  assert.equal(polled?.ui?.flags?.interactive_fallback_active, false);
+  assert.equal(polled?.ui?.flags?.interactive_fallback_active, true);
   assert.equal(String(polled?.ui?.flags?.bootstrap_phase || ""), "waiting_locale");
   assert.equal(String(polled?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
 });
@@ -247,6 +247,25 @@ test("run_step canonicalizes legacy state.language_source transport values", asy
   assert.equal(result?.ok, true);
   assert.equal(String(result?.state?.language || ""), "nl");
   assert.equal(String(result?.state?.language_source || ""), "locale_hint");
+});
+
+test("run_step blocks invalid incoming contract state instead of silently accepting it", async () => {
+  const result = await run_step({
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      started: "true",
+      ui_gate_status: "not_a_valid_status",
+      last_specialist_result: {},
+    },
+  });
+  assert.equal(result?.ok, false);
+  assert.equal(String(result?.error?.type || ""), "invalid_state");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "failed");
+  assert.equal(String(result?.state?.ui_gate_reason || ""), "invalid_state");
+  assert.equal(String(result?.state?.bootstrap_phase || ""), "failed");
 });
 
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {
