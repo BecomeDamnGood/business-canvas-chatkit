@@ -303,27 +303,19 @@ export function applyUiGateState(params: {
       } as CanvasState;
     }
 
-    // Deterministic timeout behavior: force EN fallback instead of endless waiting.
-    const requestedLang =
-      normalizeLangCode(String((normalizedNextState as any)?.ui_strings_requested_lang || "")) ||
-      normalizeLangCode(String((normalizedNextState as any)?.language || "")) ||
-      "en";
+    // Timeout must not silently flip to EN-ready. Keep locale unresolved and poll/recover explicitly.
     return {
       ...(normalizedNextState as any),
-      ui_strings_status: "ready",
-      ui_bootstrap_status: "ready",
-      ui_strings_critical_ready: "true",
-      ui_strings_full_ready: "true",
-      ui_strings_background_inflight: "false",
-      ui_strings_lang: "en",
-      ui_strings_requested_lang: requestedLang,
-      ui_strings_fallback_applied: "true",
-      ui_strings_fallback_reason: "timeout",
-      ui_gate_status: "ready",
-      ui_gate_reason: "",
-      ui_gate_since_ms: 0,
-      bootstrap_phase: "ready",
-      bootstrap_retry_hint: "",
+      ui_strings_status: criticalRenderable ? "critical_ready" : "pending",
+      ui_bootstrap_status: "awaiting_locale",
+      ui_strings_critical_ready: criticalRenderable ? "true" : "false",
+      ui_strings_full_ready: "false",
+      ui_strings_background_inflight: "true",
+      ui_gate_status: "waiting_locale",
+      ui_gate_reason: "translation_retry",
+      ui_gate_since_ms: sinceMs,
+      bootstrap_phase: "waiting_locale",
+      bootstrap_retry_hint: flags.uiBootstrapPollActionV1 ? "poll" : "",
     } as CanvasState;
   }
   return {
