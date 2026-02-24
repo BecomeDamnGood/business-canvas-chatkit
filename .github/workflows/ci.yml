@@ -137,6 +137,10 @@ jobs:
         working-directory: mcp-server
         run: node scripts/predeploy_checklist_gate.mjs
 
+      - name: Contract smoke gate
+        working-directory: mcp-server
+        run: node --loader ts-node/esm scripts/contract-smoke.mjs
+
       - name: Test
         working-directory: mcp-server
         run: npm test

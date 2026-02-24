@@ -307,6 +307,29 @@ test("legacy chat state auto-upgrades instead of blocking and preserves NL local
   assert.equal(String(widgetStart?.prompt || "").includes("Mindd"), true);
 });
 
+test("legacy widget state auto-upgrades instead of blocking and seeds Step 0 from first text turn", async () => {
+  const widgetTurn = await run_step({
+    current_step_id: "step_0",
+    user_message: "Help mij met mijn businessplan voor mijn reclamebureau genaamd Mindd",
+    input_mode: "widget",
+    locale_hint: "nl",
+    locale_hint_source: "message_detect",
+    state: {
+      state_version: "1",
+      current_step: "step_0",
+      language: "nl",
+      language_locked: "false",
+      response_kind: "run_step",
+    },
+  });
+  assert.equal(widgetTurn?.ok, true);
+  assert.notEqual(String(widgetTurn?.state?.ui_gate_status || ""), "blocked");
+  assert.equal(String(widgetTurn?.state?.language || ""), "nl");
+  assert.equal(String(widgetTurn?.state?.business_name || ""), "Mindd");
+  assert.equal(String(widgetTurn?.state?.step_0_final || "").includes("Name: Mindd"), true);
+  assert.equal(String(widgetTurn?.state?.state_version || ""), "11");
+});
+
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {
   const first = await run_step({
     user_message: "",

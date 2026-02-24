@@ -553,9 +553,13 @@ function isSessionUpgradeRequiredResult(result: Record<string, unknown> | null |
 }
 
 export function languageFromState(resultState: Record<string, unknown> | null | undefined): string {
+  const fromRequested =
+    resultState?.ui_strings_requested_lang ? String(resultState.ui_strings_requested_lang).toLowerCase().trim() : "";
   const fromResult =
     resultState?.language ? String(resultState.language).toLowerCase().trim() : "";
-  return fromResult || "";
+  const fromUiLang =
+    resultState?.ui_strings_lang ? String(resultState.ui_strings_lang).toLowerCase().trim() : "";
+  return fromRequested || fromResult || fromUiLang || "";
 }
 
 export function uiLang(resultState: Record<string, unknown> | null | undefined): string {
@@ -620,6 +624,7 @@ let localeWaitRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
 let bootstrapPollInFlight = false;
 let bootstrapPollInFlightSignature = "";
+let sessionUpgradeRetryInFlight = false;
 
 function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   const raw = (globalThis as Record<string, unknown>)[name];
@@ -1196,15 +1201,33 @@ export async function callRunStep(
   const state = latest.state || { current_step: "step_0" };
 
   const baseState = internalForceEmptyState ? {} : state;
-  const stateLanguage = uiLang(baseState);
+  const stateRequestedLanguage = normalizeLocaleHintForPayload(
+    String(
+      (baseState as Record<string, unknown>).ui_strings_requested_lang ||
+      (baseState as Record<string, unknown>).ui_strings_lang ||
+      ""
+    )
+  );
+  const stateLanguage = normalizeLocaleHintForPayload(uiLang(baseState));
   const ws = widgetState();
-  const widgetLanguage = String((ws.language || ws.locale_hint || "") as string).trim().toLowerCase();
+  const widgetLanguage = normalizeLocaleHintForPayload(
+    String((ws.language || ws.locale_hint || "") as string).trim().toLowerCase()
+  );
   const locationLanguage = localeHintFromLocation();
-  const localeHint = internalForceLocaleHint || stateLanguage || widgetLanguage || locationLanguage;
+  const localeHint =
+    internalForceLocaleHint ||
+    stateRequestedLanguage ||
+    stateLanguage ||
+    widgetLanguage ||
+    locationLanguage;
   const localeHintSource =
     localeHint && internalForceLocaleHint
       ? (internalForceLocaleHintSource !== "none" ? internalForceLocaleHintSource : "message_detect")
-      : (localeHint ? (stateLanguage ? "message_detect" : "webplus_i18n") : "none");
+      : (
+        localeHint
+          ? ((stateRequestedLanguage || stateLanguage || widgetLanguage) ? "message_detect" : "webplus_i18n")
+          : "none"
+      );
   let nextState = Object.assign({}, baseState);
   if (cleanExtraState && typeof cleanExtraState === "object") {
     nextState = Object.assign({}, nextState, cleanExtraState);
@@ -1365,6 +1388,16 @@ export async function callRunStep(
     }
     const sessionUpgradeRequired = isSessionUpgradeRequiredResult(result);
     if (sessionUpgradeRequired && !internalSessionUpgradeRetry) {
+      if (sessionUpgradeRetryInFlight) {
+        if (isDevEnv()) {
+          console.log("[ui_session_upgrade_retry_deduped]", {
+            action_code: messageText,
+            source: isBootstrapPollCall ? "bootstrap_poll" : "interactive",
+          });
+        }
+        return;
+      }
+      sessionUpgradeRetryInFlight = true;
       const resultRecord = (result && typeof result === "object")
         ? (result as Record<string, unknown>)
         : {};
@@ -1389,13 +1422,17 @@ export async function callRunStep(
         });
       }
       resetClientSessionStateForUpgradeRetry();
-      await callRunStep(messageText || String(message || ""), {
-        ...(cleanExtraState || {}),
-        __session_upgrade_retry: "true",
-        __force_empty_state: "true",
-        __force_locale_hint: retryLocaleHint,
-        __force_locale_hint_source: "message_detect",
-      });
+      try {
+        await callRunStep(messageText || String(message || ""), {
+          ...(cleanExtraState || {}),
+          __session_upgrade_retry: "true",
+          __force_empty_state: "true",
+          __force_locale_hint: retryLocaleHint,
+          __force_locale_hint_source: "message_detect",
+        });
+      } finally {
+        sessionUpgradeRetryInFlight = false;
+      }
       return;
     }
 

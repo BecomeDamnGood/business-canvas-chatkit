@@ -14,6 +14,12 @@ ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}"
 
 cd "$REPO_PATH"
 
+echo "Running contract smoke gate..."
+(
+  cd mcp-server
+  node --loader ts-node/esm scripts/contract-smoke.mjs
+)
+
 echo "Querying ECR for existing tags..."
 EXISTING_TAGS=$(aws ecr describe-images --repository-name "$ECR_REPO" --region "$AWS_REGION" --query 'imageDetails[].imageTags[]' --output text 2>/dev/null || echo "")
 

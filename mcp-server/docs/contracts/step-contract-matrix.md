@@ -15,7 +15,7 @@ This document is the contract-first source of truth for step behavior in the Bus
 - button labels come from contract menus (`MENU_LABELS` via `ui.actions`), never from prompt/question numbered lines.
 - `CONFIRM`, `confirmation_question`, and `proceed_to_*` are not valid runtime drivers.
 - Step transitions are actioncode-driven only.
-- Legacy sessions with old markers are blocked with `session_upgrade_required` and must restart.
+- Legacy sessions are migrated first; only unhealable legacy markers are blocked with `session_upgrade_required`.
 - Backup docs are historical only and non-normative for runtime behavior (example: `mcp-server/docs/BACKUP-v92.md`).
 - Step prompts may describe route-token semantics, but may not include ActionCode to route mappings or ActionCode to `"yes"` mappings.
 

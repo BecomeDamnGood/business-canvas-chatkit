@@ -14,6 +14,7 @@ import {
   getDefaultState,
   getFinalsSnapshot,
   normalizeState,
+  migrateState,
   normalizeStateLanguageSource,
   CanvasStateZod,
   type CanvasState,
@@ -805,10 +806,14 @@ function sanitizeEscapeInWidget(specialist: any): any {
   return safe;
 }
 
-function detectLegacySessionMarkers(state: Record<string, unknown> | CanvasState): string[] {
+function detectLegacySessionMarkers(
+  state: Record<string, unknown> | CanvasState,
+  options?: { includeStateVersionMismatch?: boolean }
+): string[] {
   const reasons: string[] = [];
+  const includeStateVersionMismatch = options?.includeStateVersionMismatch === true;
   const stateVersion = String((state as any).state_version || "").trim();
-  if (stateVersion && stateVersion !== CURRENT_STATE_VERSION) {
+  if (includeStateVersionMismatch && stateVersion && stateVersion !== CURRENT_STATE_VERSION) {
     reasons.push("state_version_mismatch");
   }
   const last = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
@@ -7505,6 +7510,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     state_hygiene_resets_count: 0,
     wording_feedback_fallback_count: 0,
   };
+  let migrationApplied = false;
+  let migrationFromVersion = "";
+  let blockingMarkerClass = "none";
 
   const rememberLlmCall = (value: { attempts: number; usage: LLMUsage; model: string }) => {
     registerTurnLlmCall(llmTurnAccumulator, {
@@ -7532,12 +7540,29 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const isBootstrapPollCall = isBootstrapPollMarker || isBootstrapPollAction;
 
   const rawStateContractMarkers = detectInvalidContractStateMarkers((args.state ?? {}) as Record<string, unknown>);
+  let state = normalizeState(args.state ?? {});
+  const preMigrateStateVersion = String((state as any).state_version || "").trim();
+  if (preMigrateStateVersion && preMigrateStateVersion !== CURRENT_STATE_VERSION) {
+    migrationFromVersion = preMigrateStateVersion;
+  }
+  try {
+    state = migrateState(state);
+    if (migrationFromVersion && String((state as any).state_version || "") === CURRENT_STATE_VERSION) {
+      migrationApplied = true;
+    }
+  } catch {
+    if (!migrationFromVersion) {
+      migrationFromVersion = preMigrateStateVersion || "";
+    }
+  }
+  state = migrateLegacyI18nState(state, uiI18nTelemetry);
   let rawLegacyMarkers = [
-    ...detectLegacySessionMarkers((args.state ?? {}) as Record<string, unknown>),
+    ...detectLegacySessionMarkers(state),
     ...rawStateContractMarkers,
   ];
-  let state = normalizeState(args.state ?? {});
-  state = migrateLegacyI18nState(state, uiI18nTelemetry);
+  if (migrationFromVersion && !migrationApplied) {
+    rawLegacyMarkers.push("state_version_mismatch");
+  }
   const incomingPhaseRaw =
     rawState && typeof (rawState as any).__ui_phase_by_step === "object" && (rawState as any).__ui_phase_by_step !== null
       ? ((rawState as any).__ui_phase_by_step as Record<string, unknown>)
@@ -7614,12 +7639,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const hasRestartLegacyMarkers = rawLegacyMarkers.some((marker) =>
     marker === "state_version_mismatch" || marker.startsWith("legacy_")
   );
-  const shouldAutoUpgradeLegacyChatState =
-    inputMode === "chat" &&
+  const hasSeedableUserMessageForUpgrade =
+    String(userMessageCandidate || "").trim().length > 0 &&
+    !/^[0-9]+$/.test(String(userMessageCandidate || "").trim()) &&
+    !String(userMessageCandidate || "").trim().startsWith("ACTION_");
+  const shouldAutoUpgradeLegacyState =
     !isBootstrapPollCall &&
     hasRestartLegacyMarkers &&
-    String(userMessageCandidate || "").trim().length > 0;
-  if (shouldAutoUpgradeLegacyChatState) {
+    hasSeedableUserMessageForUpgrade;
+  if (shouldAutoUpgradeLegacyState) {
     const preservedHostWidgetSessionId = String((state as any).host_widget_session_id || "").trim();
     const preservedSessionId = String((state as any).__session_id || "").trim();
     const preservedSessionStartedAt = String((state as any).__session_started_at || "").trim();
@@ -7768,13 +7796,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       (responseStateForCleanup as any).ui_strings_fallback_reason =
         CONTRACT_UI_FALLBACK_REASONS.has(fallbackReasonRaw) ? fallbackReasonRaw : "";
       const uiStatus = String((responseStateForCleanup as any).ui_strings_status || "").trim().toLowerCase();
-      const uiLang = normalizeContractLang((responseStateForCleanup as any).ui_strings_lang || "");
-      if (uiStatus === "ready" && !uiLang) {
-        (responseStateForCleanup as any).ui_strings_lang = "en";
-        (responseStateForCleanup as any).ui_strings_fallback_applied = "true";
-        if (!String((responseStateForCleanup as any).ui_strings_fallback_reason || "").trim()) {
-          (responseStateForCleanup as any).ui_strings_fallback_reason = "invalid_requested_lang";
-        }
+      if (uiStatus === "ready") {
+        (responseStateForCleanup as any).ui_strings_lang = normalizeContractLang(
+          (responseStateForCleanup as any).ui_strings_lang || ""
+        );
       }
     }
     if ((finalResponse as any)?.ok === true) {
@@ -7846,6 +7871,16 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     }
 
     const stateForDecision = ((finalResponse as any)?.state || {}) as Record<string, unknown>;
+    const errorMarkers = Array.isArray((finalResponse as any)?.error?.markers)
+      ? ((finalResponse as any)?.error?.markers as unknown[]).map((marker) => String(marker || ""))
+      : [];
+    const markerClass = (() => {
+      if (blockingMarkerClass !== "none") return blockingMarkerClass;
+      if (errorMarkers.some((marker) => marker.startsWith("legacy_"))) return "legacy_marker";
+      if (errorMarkers.includes("state_version_mismatch")) return "state_version_mismatch";
+      if (errorMarkers.some((marker) => marker.startsWith("invalid_"))) return "invalid_state";
+      return "none";
+    })();
     console.log("[contract_decision]", {
       session_id: String((stateForDecision as any).bootstrap_session_id || ""),
       host_widget_session_id: String((stateForDecision as any).host_widget_session_id || ""),
@@ -7857,6 +7892,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       lang: String((stateForDecision as any).ui_strings_lang || (stateForDecision as any).language || ""),
       requested_lang: String((stateForDecision as any).ui_strings_requested_lang || ""),
       fallback_applied: String((stateForDecision as any).ui_strings_fallback_applied || "false"),
+      migration_applied: migrationApplied ? "true" : "false",
+      migration_from_version: migrationFromVersion,
+      blocking_marker_class: markerClass,
     });
 
     if (!tokenLoggingEnabled) return finalResponse as unknown as T;
@@ -7997,6 +8035,17 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const requiresRestart = legacyMarkers.some((marker) =>
       marker === "state_version_mismatch" || marker.startsWith("legacy_")
     );
+    if (requiresRestart) {
+      if (legacyMarkers.some((marker) => marker.startsWith("legacy_"))) {
+        blockingMarkerClass = "legacy_marker";
+      } else if (legacyMarkers.includes("state_version_mismatch")) {
+        blockingMarkerClass = "state_version_mismatch";
+      } else {
+        blockingMarkerClass = "legacy_other";
+      }
+    } else {
+      blockingMarkerClass = "invalid_state";
+    }
     const errorType = requiresRestart ? "session_upgrade_required" : "invalid_state";
     const blockedState = buildFailClosedState(
       state,
