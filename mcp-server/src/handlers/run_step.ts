@@ -474,51 +474,9 @@ function buildCriticalUiKeysStep0(): string[] {
 
 const CRITICAL_UI_KEYS_STEP0 = buildCriticalUiKeysStep0();
 
-type UiStringsResolveMode = "critical" | "full";
-
-type UiStringsCacheEntry = {
-  critical?: Record<string, string>;
-  full?: Record<string, string>;
+const UI_STRINGS_STATIC_BY_LANG: Record<string, Record<string, string>> = {
+  en: UI_STRINGS_WITH_MENU_KEYS,
 };
-
-function buildUiStringsZodSchemaForKeys(keys: string[]): z.ZodObject<Record<string, z.ZodString>> {
-  return z.object(
-    keys.reduce<Record<string, z.ZodString>>((acc, key) => {
-      acc[key] = z.string();
-      return acc;
-    }, {})
-  );
-}
-
-function buildUiStringsJsonSchemaForKeys(keys: string[]) {
-  return {
-    type: "object",
-    additionalProperties: false,
-    required: keys,
-    properties: keys.reduce<Record<string, { type: "string" }>>((acc, key) => {
-      acc[key] = { type: "string" };
-      return acc;
-    }, {}),
-  } as const;
-}
-
-const UiStringsZodSchema = z.object(
-  UI_STRINGS_KEYS.reduce<Record<string, z.ZodString>>((acc, k) => {
-    acc[k] = z.string();
-    return acc;
-  }, {})
-);
-const UiStringsJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: UI_STRINGS_KEYS,
-  properties: UI_STRINGS_KEYS.reduce<Record<string, { type: "string" }>>((acc, k) => {
-    acc[k] = { type: "string" };
-    return acc;
-  }, {}),
-} as const;
-
-const UI_STRINGS_CACHE = new Map<string, UiStringsCacheEntry>();
 
 function langFromState(state: CanvasState): string {
   if (isForceEnglishLanguageMode()) return "en";
@@ -5807,224 +5765,33 @@ function uiStringsRequestedStatusFromRaw(
   return localeStartUiStringsRequestedStatusFromRaw(raw);
 }
 
-function uiCriticalTranslationTimeoutMs(): number {
-  const fromEnv = Number(process.env.UI_CRITICAL_TRANSLATION_TIMEOUT_MS);
-  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.round(fromEnv);
-  return 8000;
-}
-
-function uiFullTranslationTimeoutMs(): number {
-  const fromEnv = Number(process.env.UI_FULL_TRANSLATION_TIMEOUT_MS);
-  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.round(fromEnv);
-  return 20000;
-}
-
-async function getUiStringsForLang(
-  lang: string,
-  model: string,
-  telemetry?: UiI18nTelemetryCounters | null,
-  options?: {
-    mode?: UiStringsResolveMode;
-    keys?: string[];
-    timeoutMs?: number;
-  }
-): Promise<{
-  ui_strings: Record<string, string>;
-  status: "ready" | "pending";
-  requested_lang: string;
-}> {
-  const mode: UiStringsResolveMode = options?.mode === "critical" ? "critical" : "full";
-  const sourceKeysRaw = Array.isArray(options?.keys) && options?.keys.length > 0
-    ? options?.keys
-    : UI_STRINGS_KEYS;
-  const sourceKeys = sourceKeysRaw.filter((key) => UI_STRINGS_KEYS.includes(key));
-  const timeoutMs =
-    typeof options?.timeoutMs === "number" && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
-      ? Math.round(options.timeoutMs)
-      : (mode === "critical" ? uiCriticalTranslationTimeoutMs() : uiFullTranslationTimeoutMs());
-  const sourceMap: Record<string, string> = {};
-  for (const key of sourceKeys) {
-    sourceMap[key] = String(UI_STRINGS_WITH_MENU_KEYS[key] || "");
-  }
-
-  if (isForceEnglishLanguageMode()) {
-    return {
-      ui_strings: sourceMap,
-      status: "ready",
-      requested_lang: "en",
-    };
-  }
-  const normalized = normalizeLangCode(lang) || "en";
-  if (normalized === "en") {
-    return {
-      ui_strings: sourceMap,
-      status: "ready",
-      requested_lang: "en",
-    };
-  }
-  const cached = UI_STRINGS_CACHE.get(normalized);
-  const cachedMap = mode === "critical" ? cached?.critical : cached?.full;
-  if (cachedMap) {
-    return {
-      ui_strings: cachedMap,
-      status: "ready",
-      requested_lang: normalized,
-    };
-  }
-
-  if (process.env.TS_NODE_TRANSPILE_ONLY === "true" && process.env.RUN_INTEGRATION_TESTS !== "1") {
-    bumpUiI18nCounter(telemetry, "translation_fallbacks");
-    if (isUiStrictNonEnPendingV1Enabled() || isUiInteractiveFallbackV1Enabled()) {
-      return { ui_strings: {}, status: "pending", requested_lang: normalized };
-    }
-    return { ui_strings: sourceMap, status: "ready", requested_lang: "en" };
-  }
-
-  if (!process.env.OPENAI_API_KEY) {
-    bumpUiI18nCounter(telemetry, "translation_fallbacks");
-    if (isUiStrictNonEnPendingV1Enabled() || isUiInteractiveFallbackV1Enabled()) {
-      return { ui_strings: {}, status: "pending", requested_lang: normalized };
-    }
-    return { ui_strings: sourceMap, status: "ready", requested_lang: "en" };
-  }
-
-  const instructions = [
-    "You are a UI translation engine for The Business Strategy Canvas Builder app.",
-    "Translate the VALUES to the target LANGUAGE.",
-    "Keep KEYS exactly the same.",
-    "Return valid JSON only. No markdown. No extra keys. No comments.",
-    "Preserve placeholders like N, M, X, {0}, and {1} exactly as-is.",
-    "Do not translate or alter the product name 'The Business Strategy Canvas Builder'; keep it exactly as-is.",
-    "Use concise, natural UI wording in the target language.",
-    "Do not use HTML or Markdown tags in values.",
-    "For menu labels, keep wording short and button-safe.",
-    "Do not add extra sentences not present in the source value.",
-  ].join("\n");
-
-  const plannerInput = `LANGUAGE: ${normalized}\nINPUT_JSON:\n${JSON.stringify(sourceMap)}`;
-
-  try {
-    if (shouldLogLocalDevDiagnostics()) {
-      console.log("[ui_strings_translate_call]", {
-        lang: normalized,
-      });
-    }
-    const res = await callStrictJson<Record<string, string>>({
-      model,
-      instructions,
-      plannerInput,
-      schemaName: mode === "critical" ? "UiStringsCritical" : "UiStrings",
-      jsonSchema: sourceKeys.length === UI_STRINGS_KEYS.length
-        ? UiStringsJsonSchema
-        : buildUiStringsJsonSchemaForKeys(sourceKeys),
-      zodSchema: sourceKeys.length === UI_STRINGS_KEYS.length
-        ? UiStringsZodSchema
-        : buildUiStringsZodSchemaForKeys(sourceKeys),
-      temperature: 0.2,
-      topP: 1,
-      maxOutputTokens: 8192,
-      timeoutMs,
-      debugLabel: "UiStrings",
-    });
-    const sanitized = sanitizeTranslatedUiStrings(res.data, telemetry, sourceKeys);
-    const existingCache = UI_STRINGS_CACHE.get(normalized) || {};
-    if (mode === "critical") {
-      UI_STRINGS_CACHE.set(normalized, {
-        ...existingCache,
-        critical: sanitized,
-      });
-    } else {
-      UI_STRINGS_CACHE.set(normalized, {
-        ...existingCache,
-        full: sanitized,
-        critical: pickUiStringsByKeys(sanitized, CRITICAL_UI_KEYS_STEP0),
-      });
-    }
-    return {
-      ui_strings: sanitized,
-      status: "ready",
-      requested_lang: normalized,
-    };
-  } catch {
-    bumpUiI18nCounter(telemetry, "translation_fallbacks");
-    if (isUiStrictNonEnPendingV1Enabled() || isUiInteractiveFallbackV1Enabled()) {
-      return {
-        ui_strings: {},
-        status: "pending",
-        requested_lang: normalized,
-      };
-    }
-    return {
-      ui_strings: sourceMap,
-      status: "ready",
-      requested_lang: "en",
-    };
-  }
-}
-
-function pickUiStringsByKeys(input: Record<string, string>, keys: string[]): Record<string, string> {
-  const next: Record<string, string> = {};
-  for (const key of keys) {
-    next[key] = String(input[key] || UI_STRINGS_WITH_MENU_KEYS[key] || "");
-  }
-  return next;
-}
-
-function uiStringsMatchEnglishCriticalFallback(
-  uiStrings: Record<string, string> | null | undefined,
-  criticalKeys: string[]
-): boolean {
-  if (!uiStrings || typeof uiStrings !== "object") return false;
-  let comparable = 0;
-  for (const key of criticalKeys) {
-    const english = String(UI_STRINGS_WITH_MENU_KEYS[key] || "");
-    if (!english.trim()) continue;
-    comparable += 1;
-    if (String(uiStrings[key] || "") !== english) return false;
-  }
-  return comparable > 0;
-}
-
-function resolveEffectiveUiStringsLang(params: {
-  targetLang: string;
-  requestedLangRaw: unknown;
-  uiStrings: Record<string, string> | null | undefined;
-}): string {
-  const targetLang = normalizeLangCode(params.targetLang) || "en";
-  if (targetLang !== "en" && uiStringsMatchEnglishCriticalFallback(params.uiStrings, CRITICAL_UI_KEYS_STEP0)) {
-    return "en";
-  }
-  const requestedLang = normalizeLangCode(String(params.requestedLangRaw ?? ""));
-  if (requestedLang) return requestedLang;
-  return targetLang;
-}
-
-function deriveUiFallbackMeta(params: {
-  targetLang: string;
+function resolveStaticUiBundle(
+  requestedLangRaw: unknown
+): {
   requestedLang: string;
   effectiveLang: string;
-  uiStatus: "ready" | "pending" | "critical_ready";
-  defaultReason?: "" | "requested_lang_unavailable" | "timeout" | "invalid_requested_lang";
-}): {
-  applied: BoolString;
-  reason: "" | "requested_lang_unavailable" | "timeout" | "invalid_requested_lang";
+  strings: Record<string, string>;
+  fallbackApplied: BoolString;
+  fallbackReason: "" | "requested_lang_unavailable" | "timeout" | "invalid_requested_lang";
 } {
-  const target = normalizeLangCode(params.targetLang);
-  const requested = normalizeLangCode(params.requestedLang);
-  const effective = normalizeLangCode(params.effectiveLang);
-  if (params.uiStatus !== "ready") return { applied: "false", reason: "" };
-  if (!target || target === "en") return { applied: "false", reason: "" };
-  if (!requested) {
-    return { applied: "true", reason: "invalid_requested_lang" };
-  }
-  if (!effective || effective === target) return { applied: "false", reason: "" };
-  if (effective === "en") {
+  const requestedLang = normalizeLangCode(String(requestedLangRaw || "")) || "en";
+  const bundle = UI_STRINGS_STATIC_BY_LANG[requestedLang];
+  if (bundle) {
     return {
-      applied: "true",
-      reason: params.defaultReason || "requested_lang_unavailable",
+      requestedLang,
+      effectiveLang: requestedLang,
+      strings: bundle,
+      fallbackApplied: "false",
+      fallbackReason: "",
     };
   }
-  return { applied: "false", reason: "" };
+  return {
+    requestedLang,
+    effectiveLang: "en",
+    strings: UI_STRINGS_STATIC_BY_LANG.en,
+    fallbackApplied: requestedLang === "en" ? "false" : "true",
+    fallbackReason: requestedLang === "en" ? "" : "requested_lang_unavailable",
+  };
 }
 
 async function ensureUiStringsForState(
@@ -6035,7 +5802,9 @@ async function ensureUiStringsForState(
     allowBackgroundFull?: boolean;
   }
 ): Promise<CanvasState> {
-  const allowBackgroundFull = options?.allowBackgroundFull !== false;
+  void model;
+  void telemetry;
+  void options;
   if (isForceEnglishLanguageMode()) {
     const forced = {
       ...(state as any),
@@ -6059,187 +5828,21 @@ async function ensureUiStringsForState(
     return applyUiGateState(state, forced);
   }
   const lang = normalizeLangCode(String((state as any).language ?? "")) || "en";
-  const useCriticalMode = isUiI18nCriticalKeysV1Enabled() && lang !== "en";
-  const existingLang = String((state as any).ui_strings_lang ?? "").trim().toLowerCase();
-  const existingVersion = String((state as any).ui_strings_version ?? "").trim();
-  const existingStatus = uiStringsRequestedStatusFromRaw((state as any).ui_strings_status ?? "ready");
-  const existing = (state as any).ui_strings;
-  const existingRequestedLang = String((state as any).ui_strings_requested_lang ?? "").trim().toLowerCase();
-  const existingCriticalReady = String((state as any).ui_strings_critical_ready ?? "false") === "true";
-  const existingFullReady = String((state as any).ui_strings_full_ready ?? "false") === "true";
-  const existingUiStringsMap =
-    existing && typeof existing === "object"
-      ? (existing as Record<string, string>)
-      : {};
-  const existingEffectiveUiLang = resolveEffectiveUiStringsLang({
-    targetLang: lang,
-    requestedLangRaw: existingRequestedLang || existingLang,
-    uiStrings: existingUiStringsMap,
-  });
-  if (
-    existing &&
-    typeof existing === "object" &&
-    existingEffectiveUiLang === lang &&
-    Object.keys(existing).length &&
-    existingVersion === UI_STRINGS_SCHEMA_VERSION &&
-    existingStatus === "ready" &&
-    (!useCriticalMode || (existingCriticalReady && existingFullReady))
-  ) {
-    const cached = {
-      ...(state as any),
-      ui_bootstrap_status: "ready",
-      ui_translation_mode: useCriticalMode ? "critical_first" : "full",
-      ui_strings_critical_ready: "true",
-      ui_strings_full_ready: "true",
-      ui_strings_background_inflight: "false",
-      ui_strings_lang: existingEffectiveUiLang || lang,
-      ui_strings_requested_lang: normalizeLangCode(existingRequestedLang || lang) || lang,
-      ui_strings_fallback_applied: "false",
-      ui_strings_fallback_reason: "",
-    } as CanvasState;
-    return applyUiGateState(state, cached);
-  }
-
-  const hasExistingForLang =
-    existing &&
-    typeof existing === "object" &&
-    existingEffectiveUiLang === lang &&
-    Object.keys(existing).length > 0;
-  const existingUiForLang = hasExistingForLang
-    ? (existing as Record<string, string>)
-    : {};
-
-  if (!useCriticalMode) {
-    const resolved = await getUiStringsForLang(lang, model, telemetry, {
-      mode: "full",
-      keys: UI_STRINGS_KEYS,
-      timeoutMs: uiFullTranslationTimeoutMs(),
-    });
-    if (resolved.status === "pending") {
-      bumpUiI18nCounter(telemetry, "ui_strings_pending_count");
-    }
-    const ui_strings = resolved.status === "ready"
-      ? resolved.ui_strings
-      : (hasExistingForLang ? existingUiForLang : UI_STRINGS_WITH_MENU_KEYS);
-    const effectiveUiStringsLang = resolveEffectiveUiStringsLang({
-      targetLang: lang,
-      requestedLangRaw: resolved.requested_lang || lang,
-      uiStrings: ui_strings,
-    });
-    const requestedUiStringsLang = normalizeLangCode(resolved.requested_lang || lang) || lang;
-    const nextStatus: "ready" | "pending" = resolved.status === "ready" ? "ready" : "pending";
-    const fallbackMeta = deriveUiFallbackMeta({
-      targetLang: lang,
-      requestedLang: requestedUiStringsLang,
-      effectiveLang: effectiveUiStringsLang,
-      uiStatus: nextStatus,
-      defaultReason: "requested_lang_unavailable",
-    });
-    const next = {
-      ...(state as any),
-      ui_strings,
-      ui_strings_lang: effectiveUiStringsLang,
-      ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
-      ui_strings_status: nextStatus,
-      ui_strings_requested_lang: requestedUiStringsLang,
-      ui_bootstrap_status: computeUiBootstrapStatus(state, nextStatus),
-      ui_translation_mode: "full",
-      ui_strings_critical_ready: nextStatus === "ready" ? "true" : "false",
-      ui_strings_full_ready: nextStatus === "ready" ? "true" : "false",
-      ui_strings_background_inflight: "false",
-      ui_strings_fallback_applied: fallbackMeta.applied,
-      ui_strings_fallback_reason: fallbackMeta.reason,
-    } as CanvasState;
-    return applyUiGateState(state, next);
-  }
-
-  let mergedUiStrings: Record<string, string> = {
-    ...UI_STRINGS_WITH_MENU_KEYS,
-    ...existingUiForLang,
-  };
-  let requestedLang = lang;
-  let criticalReady = existingCriticalReady && hasExistingForLang;
-  let fullReady = existingFullReady && hasExistingForLang && existingStatus === "ready";
-  let nextStatus: "ready" | "pending" | "critical_ready" =
-    fullReady ? "ready" : (criticalReady ? "critical_ready" : "pending");
-
-  if (!criticalReady) {
-    const criticalResolved = await getUiStringsForLang(lang, model, telemetry, {
-      mode: "critical",
-      keys: CRITICAL_UI_KEYS_STEP0,
-      timeoutMs: uiCriticalTranslationTimeoutMs(),
-    });
-    if (criticalResolved.status === "pending") {
-      bumpUiI18nCounter(telemetry, "ui_strings_pending_count");
-    }
-    requestedLang = criticalResolved.requested_lang || lang;
-    if (criticalResolved.status === "ready") {
-      criticalReady = true;
-      mergedUiStrings = {
-        ...mergedUiStrings,
-        ...criticalResolved.ui_strings,
-      };
-      nextStatus = "critical_ready";
-    } else {
-      criticalReady = false;
-      fullReady = false;
-      nextStatus = "pending";
-    }
-  }
-
-  if (criticalReady && !fullReady && allowBackgroundFull) {
-    const fullResolved = await getUiStringsForLang(lang, model, telemetry, {
-      mode: "full",
-      keys: UI_STRINGS_KEYS,
-      timeoutMs: uiFullTranslationTimeoutMs(),
-    });
-    if (fullResolved.status === "pending") {
-      bumpUiI18nCounter(telemetry, "ui_strings_pending_count");
-    }
-    requestedLang = fullResolved.requested_lang || requestedLang;
-    if (fullResolved.status === "ready") {
-      fullReady = true;
-      nextStatus = "ready";
-      mergedUiStrings = {
-        ...mergedUiStrings,
-        ...fullResolved.ui_strings,
-      };
-    } else {
-      fullReady = false;
-      nextStatus = criticalReady ? "critical_ready" : "pending";
-    }
-  } else if (criticalReady && !fullReady) {
-    nextStatus = "critical_ready";
-  }
-
-  const effectiveUiStringsLang = resolveEffectiveUiStringsLang({
-    targetLang: lang,
-    requestedLangRaw: requestedLang || lang,
-    uiStrings: mergedUiStrings,
-  });
-  const requestedUiStringsLang = normalizeLangCode(requestedLang || lang) || lang;
-  const statusForFallback = fullReady ? "ready" : nextStatus;
-  const fallbackMeta = deriveUiFallbackMeta({
-    targetLang: lang,
-    requestedLang: requestedUiStringsLang,
-    effectiveLang: effectiveUiStringsLang,
-    uiStatus: statusForFallback,
-    defaultReason: "requested_lang_unavailable",
-  });
+  const resolvedBundle = resolveStaticUiBundle(lang);
   const next = {
     ...(state as any),
-    ui_strings: mergedUiStrings,
-    ui_strings_lang: effectiveUiStringsLang,
+    ui_strings: resolvedBundle.strings,
+    ui_strings_lang: resolvedBundle.effectiveLang,
     ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
-    ui_strings_status: statusForFallback,
-    ui_strings_requested_lang: requestedUiStringsLang,
-    ui_bootstrap_status: computeUiBootstrapStatus(state, statusForFallback),
-    ui_translation_mode: "critical_first",
-    ui_strings_critical_ready: criticalReady ? "true" : "false",
-    ui_strings_full_ready: fullReady ? "true" : "false",
-    ui_strings_background_inflight: fullReady ? "false" : "true",
-    ui_strings_fallback_applied: fallbackMeta.applied,
-    ui_strings_fallback_reason: fallbackMeta.reason,
+    ui_strings_status: "ready",
+    ui_strings_requested_lang: resolvedBundle.requestedLang,
+    ui_bootstrap_status: "ready",
+    ui_translation_mode: "full",
+    ui_strings_critical_ready: "true",
+    ui_strings_full_ready: "true",
+    ui_strings_background_inflight: "false",
+    ui_strings_fallback_applied: resolvedBundle.fallbackApplied,
+    ui_strings_fallback_reason: resolvedBundle.fallbackReason,
   } as CanvasState;
   return applyUiGateState(state, next);
 }
@@ -9252,13 +8855,15 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
     // If Step 0 is already known, show readiness as a one-action menu.
     if (step0Final) {
-      const parsed = parseStep0Final(step0Final, String((state as any).business_name || "TBD"));
+      const startResolution = await ensureStartState(state, startLocaleSeedText);
+      const stateWithUi = startResolution.state;
+      const parsed = parseStep0Final(step0Final, String((stateWithUi as any).business_name || "TBD"));
       const name = String(parsed.name || "TBD").trim();
 
       const specialist: ValidationAndBusinessNameOutput = {
         action: "ASK",
         message: "",
-        question: step0ReadinessQuestion(state, parsed),
+        question: step0ReadinessQuestion(stateWithUi, parsed),
         refined_formulation: "",
         business_name: name || "TBD",
         step_0: step0Final,
@@ -9268,8 +8873,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       meta_topic: "NONE",
       };
 
-      const startResolution = await ensureStartState(state, startLocaleSeedText);
-      const stateWithUi = startResolution.state;
       return finalizeResponse(attachRegistryPayload({
         ok: true as const,
         tool: "run_step" as const,

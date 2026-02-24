@@ -139,17 +139,20 @@ test("language policy: locale hint wins over paraphrased English chat input", as
   assert.equal(result?.state?.language, "nl");
   assert.equal(result?.state?.language_source, "locale_hint");
   assert.equal(result?.state?.ui_strings_requested_lang, "nl");
-  assert.equal(result?.state?.ui_strings_status, "pending");
-  assert.equal(String(result?.state?.ui_gate_status || ""), "waiting_locale");
-  assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, true);
-  assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, false);
-  assert.equal(result?.ui?.flags?.interactive_fallback_active, true);
-  assert.equal(String(result?.ui?.flags?.bootstrap_phase || ""), "waiting_locale");
-  assert.equal(result?.ui?.flags?.locale_pending_background, true);
-  assert.equal(String(result?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
+  assert.equal(result?.state?.ui_strings_status, "ready");
+  assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
+  assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "true");
+  assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "requested_lang_unavailable");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
+  assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, false);
+  assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, true);
+  assert.equal(result?.ui?.flags?.interactive_fallback_active, false);
+  assert.equal(String(result?.ui?.flags?.bootstrap_phase || ""), "ready");
+  assert.equal(result?.ui?.flags?.locale_pending_background, false);
+  assert.equal(String(result?.ui?.flags?.bootstrap_retry_hint || ""), "");
 });
 
-test("language policy: pending fallback still reports ui_strings_lang=en when defaults are English", async () => {
+test("language policy: unsupported locale resolves ready with explicit fallback metadata", async () => {
   const result = await run_step({
     user_message: "",
     input_mode: "chat",
@@ -165,9 +168,12 @@ test("language policy: pending fallback still reports ui_strings_lang=en when de
   });
   assert.equal(result?.ok, true);
   assert.equal(String(result?.state?.language || ""), "nl");
-  assert.equal(String(result?.state?.ui_strings_status || ""), "pending");
+  assert.equal(String(result?.state?.ui_strings_status || ""), "ready");
   assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
   assert.equal(String(result?.state?.ui_strings_requested_lang || ""), "nl");
+  assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "true");
+  assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "requested_lang_unavailable");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
 });
 
 test("language policy: widget ACTION_START does not let webplus_i18n override seeded NL message", async () => {
@@ -191,7 +197,7 @@ test("language policy: widget ACTION_START does not let webplus_i18n override se
   assert.equal(String(result?.state?.language_source || ""), "message_detect");
 });
 
-test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps waiting contract stable", async () => {
+test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps ready contract stable", async () => {
   const first = await withEnv("UI_LOCALE_READY_GATE_V1", "1", () =>
     run_step({
       user_message: "ACTION_START",
@@ -207,7 +213,7 @@ test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps waiting contr
       },
     })
   );
-  assert.equal(String(first?.state?.ui_gate_status || ""), "waiting_locale");
+  assert.equal(String(first?.state?.ui_gate_status || ""), "ready");
 
   const polled = await withEnv("UI_LOCALE_READY_GATE_V1", "1", () =>
     run_step({
@@ -217,13 +223,14 @@ test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps waiting contr
     })
   );
   assert.equal(polled?.ok, true);
-  assert.equal(String(polled?.state?.ui_gate_status || ""), "waiting_locale");
-  assert.equal(String(polled?.state?.bootstrap_phase || ""), "waiting_locale");
-  assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, true);
-  assert.equal(polled?.ui?.flags?.bootstrap_interactive_ready, false);
-  assert.equal(polled?.ui?.flags?.interactive_fallback_active, true);
-  assert.equal(String(polled?.ui?.flags?.bootstrap_phase || ""), "waiting_locale");
-  assert.equal(String(polled?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
+  assert.equal(String(polled?.state?.ui_gate_status || ""), "ready");
+  assert.equal(String(polled?.state?.ui_strings_status || ""), "ready");
+  assert.equal(String(polled?.state?.bootstrap_phase || ""), "ready");
+  assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, false);
+  assert.equal(polled?.ui?.flags?.bootstrap_interactive_ready, true);
+  assert.equal(polled?.ui?.flags?.interactive_fallback_active, false);
+  assert.equal(String(polled?.ui?.flags?.bootstrap_phase || ""), "ready");
+  assert.equal(String(polled?.ui?.flags?.bootstrap_retry_hint || ""), "");
 });
 
 test("language policy source: legacy __locale_wait_retry alias is removed", () => {
@@ -284,7 +291,7 @@ test("legacy chat state auto-upgrades instead of blocking and preserves NL local
   });
   assert.equal(chatTurn?.ok, true);
   assert.notEqual(String(chatTurn?.state?.ui_gate_status || ""), "blocked");
-  assert.equal(String(chatTurn?.state?.ui_gate_reason || ""), "translation_pending");
+  assert.equal(String(chatTurn?.state?.ui_gate_reason || ""), "");
   assert.equal(String(chatTurn?.state?.language || ""), "nl");
   assert.equal(String(chatTurn?.state?.initial_user_message || "").includes("Mindd"), true);
 
