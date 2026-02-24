@@ -491,6 +491,22 @@ function normalizeUiStringsStatusFromResult(result: Record<string, unknown>): Re
   return normalizeUiStringsStatus(state.ui_strings_status || result.ui_strings_status || i18n.status);
 }
 
+function baseLang(value: unknown): string {
+  const normalized = toLower(value);
+  if (!normalized) return "";
+  return normalized.split(/[-_]/)[0] || "";
+}
+
+function hasNonEnglishUiLanguageMismatch(result: Record<string, unknown>): boolean {
+  const state = toRecord(result.state);
+  const targetLang = baseLang(state.language || result.language);
+  if (!targetLang || targetLang === "en") return false;
+  const i18n = toRecord(result.i18n);
+  const uiStringsLang = baseLang(state.ui_strings_lang || result.ui_strings_lang || i18n.lang);
+  if (!uiStringsLang) return false;
+  return uiStringsLang !== targetLang;
+}
+
 export function computeHydrationState(
   resolved: ResolvedWidgetPayload,
   retryState?: { retry_count?: number; retry_exhausted?: boolean }
@@ -500,11 +516,13 @@ export function computeHydrationState(
   const currentStep = hasState ? String(state.current_step || "").trim() : "";
   const needsHydration = !hasState || !currentStep;
   const uiGateStatus = toLower(state.ui_gate_status || resolved.result.ui_gate_status);
+  const languageMismatch = hasNonEnglishUiLanguageMismatch(resolved.result);
   const i18nPending =
     resolved.ui_strings_status === "pending" ||
     resolved.ui_strings_status === "critical_ready" ||
     resolved.ui_strings_status === "full_ready" ||
-    (resolved.ui_strings_status === "unknown" && uiGateStatus === "waiting_locale");
+    (resolved.ui_strings_status === "unknown" && uiGateStatus === "waiting_locale") ||
+    (resolved.ui_strings_status === "ready" && languageMismatch);
   let waitingReason: WaitingReason = "none";
   if (needsHydration && i18nPending) waitingReason = "both";
   else if (needsHydration) waitingReason = "missing_state";

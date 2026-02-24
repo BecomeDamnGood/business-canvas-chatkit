@@ -1056,8 +1056,6 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
   const uiStringsLang = safeString(
     state.ui_strings_lang ||
       (result as any).ui_strings_lang ||
-      state.language ||
-      (result as any).language ||
       ""
   );
   const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");

@@ -85,9 +85,12 @@ export function enforceUiStringsReadinessInvariant(params: {
     String((state as any)?.language || (state as any)?.ui_strings_requested_lang || (state as any)?.ui_strings_lang || "")
   );
   if (!lang || lang === "en") return state;
+  const uiStringsLang = normalizeLangCode(String((state as any)?.ui_strings_lang || ""));
+  const requestedLang = normalizeLangCode(String((state as any)?.ui_strings_requested_lang || ""));
+  const uiLanguageAligned = uiStringsLang ? uiStringsLang === lang : requestedLang === lang;
   const uiStatus = uiStringsRequestedStatusFromRaw((state as any)?.ui_strings_status ?? "pending");
   if (uiStatus !== "ready") return state;
-  if (hasRenderableUiStringsForState(state, criticalKeys)) return state;
+  if (uiLanguageAligned && hasRenderableUiStringsForState(state, criticalKeys)) return state;
   return {
     ...(state as any),
     ui_strings_status: "pending",
@@ -209,7 +212,26 @@ export function applyUiGateState(params: {
   if (nowMs - sinceMs > forceRecoverMs) {
     const uiStatus = uiStringsRequestedStatusFromRaw((normalizedNextState as any)?.ui_strings_status);
     const criticalRenderable = hasRenderableUiStringsForState(normalizedNextState, criticalKeys);
-    const canReady = criticalRenderable && (uiStatus === "ready" || flags.uiInteractiveFallbackV1);
+    const targetLang = normalizeLangCode(
+      String(
+        (normalizedNextState as any)?.language ||
+          (normalizedNextState as any)?.ui_strings_requested_lang ||
+          (normalizedNextState as any)?.ui_strings_lang ||
+          ""
+      )
+    );
+    const resolvedUiStringsLang = normalizeLangCode(String((normalizedNextState as any)?.ui_strings_lang || ""));
+    const requestedUiStringsLang = normalizeLangCode(
+      String((normalizedNextState as any)?.ui_strings_requested_lang || "")
+    );
+    const uiLanguageAligned =
+      !targetLang ||
+      targetLang === "en" ||
+      (resolvedUiStringsLang ? resolvedUiStringsLang === targetLang : requestedUiStringsLang === targetLang);
+    const canReady =
+      criticalRenderable &&
+      uiLanguageAligned &&
+      (uiStatus === "ready" || flags.uiInteractiveFallbackV1);
     return {
       ...(normalizedNextState as any),
       ui_strings_status: canReady ? "ready" : (criticalRenderable ? "critical_ready" : "pending"),

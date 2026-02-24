@@ -1100,7 +1100,7 @@ test("computeBootstrapRenderState maps interactive_fallback payloads to waiting_
   });
   assert.equal(state.phase, "waiting_locale");
   assert.equal(state.bootstrapWaitingLocale, true);
-  assert.equal(state.interactiveFallbackActive, false);
+  assert.equal(state.interactiveFallbackActive, true);
   assert.equal(state.waitingForI18n, true);
 });
 
@@ -1623,4 +1623,35 @@ test("computeHydrationState uses shared v2_minimal missing-state rule", () => {
   const hydration = computeHydrationState(resolved);
   assert.equal(hydration.needs_hydration, true);
   assert.equal(hydration.waiting_reason, "both");
+});
+
+test("computeHydrationState treats non-EN language/ui_strings_lang mismatch as i18n_pending even when status is ready", () => {
+  const resolved = {
+    result: {
+      state: {
+        current_step: "step_0",
+        language: "nl",
+        ui_strings_lang: "en",
+        ui_strings_status: "ready",
+        ui_gate_status: "ready",
+      },
+    },
+    source: "none",
+    has_state: true,
+    resolved_language: "nl",
+    resolved_language_source: "state.language",
+    ui_strings_status: "ready",
+    shape_version: "v2_minimal",
+    needs_hydration: false,
+    waiting_reason: "none",
+    bootstrap_phase: "ready",
+    bootstrap_session_id: "",
+    bootstrap_epoch: 0,
+    response_seq: 0,
+    response_kind: "",
+    host_widget_session_id: "",
+  } as any;
+  const hydration = computeHydrationState(resolved);
+  assert.equal(hydration.needs_hydration, false);
+  assert.equal(hydration.waiting_reason, "i18n_pending");
 });
