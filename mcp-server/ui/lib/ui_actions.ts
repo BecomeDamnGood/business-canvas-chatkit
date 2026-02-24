@@ -504,6 +504,54 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
   } catch {}
 }
 
+function replaceWidgetStateSafe(next: Record<string, unknown>): void {
+  const o = oa();
+  if (!o || typeof (o as { setWidgetState?: (s: Record<string, unknown>) => void }).setWidgetState !== "function")
+    return;
+  const ws = widgetState() || {};
+  const currentKeys = Object.keys(ws);
+  const nextKeys = Object.keys(next || {});
+  if (currentKeys.length === nextKeys.length) {
+    let changed = false;
+    for (const key of nextKeys) {
+      if (String(ws[key] ?? "") !== String(next[key] ?? "")) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed) return;
+  }
+  try {
+    (o as { setWidgetState: (s: Record<string, unknown>) => void }).setWidgetState(next || {});
+  } catch {}
+}
+
+function resetClientSessionStateForUpgradeRetry(): void {
+  resetQueuedStartAction();
+  clearLocaleWaitRetry();
+  bootstrapPollInFlight = false;
+  bootstrapPollInFlightSignature = "";
+  try {
+    delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  } catch {}
+  try {
+    delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  } catch {}
+  replaceWidgetStateSafe({});
+}
+
+function isSessionUpgradeRequiredResult(result: Record<string, unknown> | null | undefined): boolean {
+  const r = result && typeof result === "object" ? result : {};
+  const state = toRecord(r.state);
+  const error = toRecord(r.error);
+  const errorType = String(error.type || "").trim().toLowerCase();
+  if (errorType === "session_upgrade_required") return true;
+  const gateReason = String(state.ui_gate_reason || r.ui_gate_reason || "").trim().toLowerCase();
+  if (gateReason === "session_upgrade_required") return true;
+  const gateStatus = String(state.ui_gate_status || r.ui_gate_status || "").trim().toLowerCase();
+  return gateStatus === "blocked" && gateReason === "session_upgrade_required";
+}
+
 export function languageFromState(resultState: Record<string, unknown> | null | undefined): string {
   const fromResult =
     resultState?.language ? String(resultState.language).toLowerCase().trim() : "";
@@ -1051,11 +1099,23 @@ export async function callRunStep(
     String((extraState as Record<string, unknown> | undefined)?.__skip_start_queue || "")
       .trim()
       .toLowerCase() === "true";
+  const internalSessionUpgradeRetry =
+    String((extraState as Record<string, unknown> | undefined)?.__session_upgrade_retry || "")
+      .trim()
+      .toLowerCase() === "true";
+  const internalForceEmptyState =
+    String((extraState as Record<string, unknown> | undefined)?.__force_empty_state || "")
+      .trim()
+      .toLowerCase() === "true";
   const cleanExtraState =
     extraState && typeof extraState === "object"
       ? Object.fromEntries(
           Object.entries(extraState).filter(
-            ([key]) => key !== "__skip_start_queue" && key !== "__queue_flush_source"
+            ([key]) =>
+              key !== "__skip_start_queue" &&
+              key !== "__queue_flush_source" &&
+              key !== "__session_upgrade_retry" &&
+              key !== "__force_empty_state"
           )
         )
       : undefined;
@@ -1107,12 +1167,13 @@ export async function callRunStep(
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
   const state = latest.state || { current_step: "step_0" };
 
-  const stateLanguage = uiLang(state);
+  const baseState = internalForceEmptyState ? {} : state;
+  const stateLanguage = uiLang(baseState);
   const ws = widgetState();
   const widgetLanguage = String((ws.language || ws.locale_hint || "") as string).trim().toLowerCase();
   const locationLanguage = localeHintFromLocation();
   const localeHint = stateLanguage || widgetLanguage || locationLanguage;
-  let nextState = Object.assign({}, state);
+  let nextState = Object.assign({}, baseState);
   if (cleanExtraState && typeof cleanExtraState === "object") {
     nextState = Object.assign({}, nextState, cleanExtraState);
   }
@@ -1268,6 +1329,23 @@ export async function callRunStep(
             uiText(nextState, "transient.timeout", "This is taking longer than usual. Please try again.")
         );
       }
+      return;
+    }
+    const sessionUpgradeRequired = isSessionUpgradeRequiredResult(result);
+    if (sessionUpgradeRequired && !internalSessionUpgradeRetry) {
+      if (isDevEnv()) {
+        console.log("[ui_session_upgrade_retry]", {
+          action_code: messageText,
+          source: isBootstrapPollCall ? "bootstrap_poll" : "interactive",
+          reason: "session_upgrade_required",
+        });
+      }
+      resetClientSessionStateForUpgradeRetry();
+      await callRunStep(messageText || String(message || ""), {
+        ...(cleanExtraState || {}),
+        __session_upgrade_retry: "true",
+        __force_empty_state: "true",
+      });
       return;
     }
 
