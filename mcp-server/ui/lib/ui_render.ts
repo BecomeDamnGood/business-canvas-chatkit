@@ -573,12 +573,14 @@ export function render(overrideToolOutput?: unknown): void {
       ? (uiPayload.view as Record<string, unknown>)
       : {};
   const viewMode = String(uiView.mode || "").trim().toLowerCase();
+  const uiGateStatus = String((state?.ui_gate_status || "")).trim().toLowerCase();
   const localeBucket = baseLang(localeCandidate);
   const localeKnownNonEn =
     Boolean(localeBucket) && localeBucket !== "en" && localeBucket !== "default";
   const serverExplicitWaiting =
     viewMode === "waiting_locale" ||
-    (uiView.waiting_locale === true && !viewMode);
+    (uiView.waiting_locale === true && !viewMode) ||
+    uiGateStatus === "waiting_locale";
   const serverExplicitPrestart = viewMode === "prestart";
   const serverExplicitInteractive = viewMode === "interactive";
   const serverExplicitRecovery = viewMode === "recovery";
@@ -614,6 +616,7 @@ export function render(overrideToolOutput?: unknown): void {
     )
   );
   const interactiveFallbackActive = bootstrapState.interactiveFallbackActive;
+  const waitingGateActive = bootstrapWaitingLocale || uiGateStatus === "waiting_locale";
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings =
     Boolean(overrideStringsMap) &&
@@ -762,11 +765,12 @@ export function render(overrideToolOutput?: unknown): void {
     setWidgetStateSafe({ language: langPersist });
   }
 
-  const showPreStart = serverExplicitPrestart
+  const showPreStartBase = serverExplicitPrestart
     ? true
     : serverExplicitInteractive
       ? false
       : (hasToolOutputVal ? !serverStarted : !sessionStarted);
+  const showPreStart = waitingGateActive || serverExplicitRecovery ? false : showPreStartBase;
 
   const current =
     !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
@@ -787,8 +791,8 @@ export function render(overrideToolOutput?: unknown): void {
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
 
-  if ((bootstrapWaitingLocale && !interactiveFallbackActive) || serverExplicitRecovery) {
-    if (localeKnownNonEn && bootstrapWaitingLocale && !interactiveFallbackActive) {
+  if ((waitingGateActive && !interactiveFallbackActive) || serverExplicitRecovery) {
+    if (localeKnownNonEn && waitingGateActive && !interactiveFallbackActive) {
       console.log("[ui_non_en_wait_shell_rendered]", {
         resolved_language: resolved.resolved_language,
         ui_strings_status: uiStringsStatus,

@@ -1027,6 +1027,7 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
   let bootstrapPhaseRaw = stateBootstrapPhaseRaw || flagsBootstrapPhaseRaw;
   if (bootstrapPhaseRaw === "interactive_fallback") bootstrapPhaseRaw = "waiting_locale";
   const uiGateStatus = safeString(state.ui_gate_status || (result as any).ui_gate_status || "");
+  if (uiGateStatus === "waiting_locale") bootstrapPhaseRaw = "waiting_locale";
   const waitingLocaleByPhase =
     bootstrapPhaseRaw === "waiting_locale" ||
     bootstrapPhaseRaw === "waiting_both" ||
@@ -1063,7 +1064,7 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
   const hasInteractivePayload = safeString(promptBodyRaw).length > 0 || optionsRaw.length > 0;
   let mode: "waiting_locale" | "prestart" | "interactive" | "recovery" = "interactive";
   if (viewContractHardenV1) {
-    if (waitingLocale) mode = "waiting_locale";
+    if (uiGateStatus === "waiting_locale" || waitingLocale) mode = "waiting_locale";
     else if (prestartModeV1 && !started) mode = "prestart";
     else if (!hasInteractivePayload) mode = "recovery";
   } else if (waitingLocale) {

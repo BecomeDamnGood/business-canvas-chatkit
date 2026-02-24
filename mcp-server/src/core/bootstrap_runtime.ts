@@ -186,6 +186,7 @@ export function applyUiGateState(params: {
       ui_gate_reason: "",
       ui_gate_since_ms: 0,
       bootstrap_phase: "ready",
+      bootstrap_retry_hint: "",
     } as CanvasState;
   }
   const waiting = isNonEnglishPendingUiStringsState(normalizedNextState);
@@ -196,6 +197,7 @@ export function applyUiGateState(params: {
       ui_gate_reason: "",
       ui_gate_since_ms: 0,
       bootstrap_phase: "ready",
+      bootstrap_retry_hint: "",
     } as CanvasState;
   }
   const prevStatus = String((previousState as any)?.ui_gate_status ?? "").trim();
@@ -219,6 +221,7 @@ export function applyUiGateState(params: {
       ui_gate_reason: canReady ? "" : "translation_retry",
       ui_gate_since_ms: canReady ? 0 : sinceMs,
       bootstrap_phase: canReady ? "ready" : "waiting_locale",
+      bootstrap_retry_hint: canReady ? "" : (flags.uiBootstrapPollActionV1 ? "poll" : ""),
     } as CanvasState;
   }
   return {
@@ -227,6 +230,7 @@ export function applyUiGateState(params: {
     ui_gate_reason: mapReasonFromStatus(normalizedNextState),
     ui_gate_since_ms: sinceMs,
     bootstrap_phase: "waiting_locale",
+    bootstrap_retry_hint: flags.uiBootstrapPollActionV1 ? "poll" : "",
   } as CanvasState;
 }
 
