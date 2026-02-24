@@ -9178,10 +9178,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   if (isStartTrigger) {
     const initialUserMessageSeed = String((state as any).initial_user_message ?? "").trim();
-    const startLocaleSeedText =
-      actionCodeRaw === "ACTION_START"
-        ? (initialUserMessageSeed || userMessage)
-        : userMessage;
+    const startLocaleSeedText = initialUserMessageSeed || userMessage;
     const ensureStartState = async (
       targetState: CanvasState,
       routeOrText: string

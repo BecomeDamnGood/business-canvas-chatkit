@@ -358,13 +358,14 @@ function parsePositiveInt(value: unknown): number {
 
 function latestBootstrapOrderingFromState(): { sessionId: string; epoch: number; hostWidgetSessionId: string } {
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
-  const state = latest?.state && typeof latest.state === "object"
+  const latestState = latest?.state && typeof latest.state === "object"
     ? (latest.state as Record<string, unknown>)
     : {};
+  const ws = widgetState();
   return {
-    sessionId: String(state.bootstrap_session_id || "").trim(),
-    epoch: parsePositiveInt(state.bootstrap_epoch),
-    hostWidgetSessionId: String(state.host_widget_session_id || "").trim(),
+    sessionId: String(latestState.bootstrap_session_id || ws.bootstrap_session_id || "").trim(),
+    epoch: parsePositiveInt(latestState.bootstrap_epoch ?? ws.bootstrap_epoch),
+    hostWidgetSessionId: String(latestState.host_widget_session_id || ws.host_widget_session_id || "").trim(),
   };
 }
 
@@ -1201,17 +1202,20 @@ export async function callRunStep(
   const state = latest.state || { current_step: "step_0" };
 
   const baseState = internalForceEmptyState ? {} : state;
+  const ws = widgetState();
   const stateRequestedLanguage = normalizeLocaleHintForPayload(
     String((baseState as Record<string, unknown>).ui_strings_requested_lang || "")
   );
-  const stateLanguage = normalizeLocaleHintForPayload(String((baseState as Record<string, unknown>).language || ""));
-  const ws = widgetState();
+  const stateLanguage = normalizeLocaleHintForPayload(
+    String((baseState as Record<string, unknown>).language || ws.language || "")
+  );
   const widgetLanguage = normalizeLocaleHintForPayload(
     String((ws.language || ws.locale_hint || "") as string).trim().toLowerCase()
   );
   const locationLanguage = localeHintFromLocation();
   const hasServerState = Object.keys(baseState).length > 0;
-  const clientFallbackLocale = hasServerState ? "" : (widgetLanguage || locationLanguage);
+  const hasServerLanguage = Boolean(stateRequestedLanguage || stateLanguage);
+  const clientFallbackLocale = hasServerLanguage ? "" : (widgetLanguage || locationLanguage);
   const localeHint =
     internalForceLocaleHint ||
     stateRequestedLanguage ||
@@ -1222,7 +1226,7 @@ export async function callRunStep(
       ? (internalForceLocaleHintSource !== "none" ? internalForceLocaleHintSource : "message_detect")
       : (
         localeHint
-          ? ((stateRequestedLanguage || stateLanguage) ? "message_detect" : "webplus_i18n")
+          ? (stateRequestedLanguage ? "message_detect" : stateLanguage ? "locale_hint" : "webplus_i18n")
           : "none"
       );
   let nextState = Object.assign({}, baseState);

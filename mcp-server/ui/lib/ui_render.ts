@@ -628,12 +628,19 @@ export function render(overrideToolOutput?: unknown): void {
   const serverExplicitBlocked = viewMode === "blocked" || uiGateStatus === "blocked";
   const serverExplicitFailed = viewMode === "failed" || uiGateStatus === "failed";
   const hasServerExplicitMode = Boolean(viewMode);
+  const resolvedLangForLocaleCheck = resolved.resolved_language ||
+    String((state?.language || state?.ui_strings_requested_lang || "") as string)
+      .trim()
+      .toLowerCase()
+      .split(/[-_]/)[0] || "";
+  const localeKnownNonEn = Boolean(resolvedLangForLocaleCheck) &&
+    resolvedLangForLocaleCheck !== "en";
   const bootstrapState = computeBootstrapRenderState({
     hydration,
     uiStringsStatus,
     uiFlags,
     uiView,
-    localeKnownNonEn: false,
+    localeKnownNonEn,
     hasState: resolved.has_state,
     hasCurrentStep: String((state?.current_step || "") as string).trim().length > 0,
   });
@@ -750,12 +757,16 @@ export function render(overrideToolOutput?: unknown): void {
   }
 
   const langPersist = languageFromState(state);
+  const startedPersist = String((state?.started || "")).toLowerCase() === "true";
   if (
     langPersist &&
     (!ws.language ||
       String(ws.language).toLowerCase().trim() !== String(langPersist).toLowerCase().trim())
   ) {
     setWidgetStateSafe({ language: langPersist });
+  }
+  if (startedPersist && String(ws.started || "").toLowerCase() !== "true") {
+    setWidgetStateSafe({ started: "true" });
   }
 
   const showPreStartBase = serverExplicitPrestart
