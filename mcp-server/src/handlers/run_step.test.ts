@@ -268,6 +268,45 @@ test("run_step blocks invalid incoming contract state instead of silently accept
   assert.equal(String(result?.state?.bootstrap_phase || ""), "failed");
 });
 
+test("legacy chat state auto-upgrades instead of blocking and preserves NL locale", async () => {
+  const chatTurn = await run_step({
+    current_step_id: "step_0",
+    user_message: "Help met mijn businessplan voor mijn reclamebureau Mindd",
+    input_mode: "chat",
+    locale_hint: "nl",
+    locale_hint_source: "message_detect",
+    state: {
+      state_version: "1",
+      response_kind: "run_step",
+      response_seq: 0,
+    },
+  });
+  assert.equal(chatTurn?.ok, true);
+  assert.notEqual(String(chatTurn?.state?.ui_gate_status || ""), "blocked");
+  assert.equal(String(chatTurn?.state?.ui_gate_reason || ""), "translation_pending");
+  assert.equal(String(chatTurn?.state?.language || ""), "nl");
+  assert.equal(String(chatTurn?.state?.initial_user_message || "").includes("Mindd"), true);
+
+  const seededStep0 = String(chatTurn?.state?.step_0_final || "");
+  assert.equal(seededStep0.includes("Venture:"), true);
+  assert.equal(seededStep0.includes("Name: Mindd"), true);
+  assert.equal(String(chatTurn?.state?.business_name || ""), "Mindd");
+
+  const widgetStart = await run_step({
+    current_step_id: "step_0",
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    locale_hint: "en",
+    locale_hint_source: "webplus_i18n",
+    state: chatTurn?.state || {},
+  });
+  assert.equal(widgetStart?.ok, true);
+  assert.notEqual(String(widgetStart?.state?.ui_gate_status || ""), "blocked");
+  assert.equal(String(widgetStart?.state?.language || ""), "nl");
+  assert.equal(String(widgetStart?.state?.business_name || ""), "Mindd");
+  assert.equal(String(widgetStart?.prompt || "").includes("Mindd"), true);
+});
+
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {
   const first = await run_step({
     user_message: "",

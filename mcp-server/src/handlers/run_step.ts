@@ -885,9 +885,14 @@ function buildFailClosedState(
   const language = normalizeContractLang((normalized as any).language);
   const requestedLang =
     normalizeContractLang(options?.requestedLang || (normalized as any).ui_strings_requested_lang || language) || "en";
+  const resolvedLanguage = language || requestedLang;
+  const normalizedLanguageSource = normalizeStateLanguageSource((normalized as any).language_source);
   const uiStringsLang = normalizeContractLang((normalized as any).ui_strings_lang || "");
   return {
     ...(normalized as any),
+    language: resolvedLanguage,
+    language_source:
+      normalizedLanguageSource || (resolvedLanguage ? "locale_hint" : ""),
     ui_gate_status: reason === "invalid_state" ? "failed" : "blocked",
     ui_gate_reason: reason,
     ui_gate_since_ms: 0,
@@ -1443,6 +1448,145 @@ function hasValidStep0Final(step0FinalRaw: string): boolean {
   const name = String(nameMatch?.[1] || "").trim();
   const status = String(statusMatch?.[1] || "").trim().toLowerCase();
   return Boolean(venture) && Boolean(name) && (status === "existing" || status === "starting");
+}
+
+type Step0Seed = {
+  venture: string;
+  name: string;
+  status: "existing" | "starting";
+};
+
+const STEP0_VENTURE_PATTERNS: Array<{ pattern: RegExp; normalized: string }> = [
+  { pattern: /\breclamebureau\b/i, normalized: "reclamebureau" },
+  { pattern: /\badvertising agency\b/i, normalized: "advertising agency" },
+  { pattern: /\bmarketingbureau\b/i, normalized: "marketingbureau" },
+  { pattern: /\bmarketing agency\b/i, normalized: "marketing agency" },
+  { pattern: /\bcreative agency\b/i, normalized: "creative agency" },
+  { pattern: /\bagency\b/i, normalized: "agency" },
+  { pattern: /\bstudio\b/i, normalized: "studio" },
+  { pattern: /\bconsultancy\b/i, normalized: "consultancy" },
+  { pattern: /\bbedrijf\b/i, normalized: "bedrijf" },
+  { pattern: /\bcompany\b/i, normalized: "company" },
+];
+
+const STEP0_NAME_STOPWORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "businessplan",
+  "bureau",
+  "called",
+  "de",
+  "een",
+  "for",
+  "genaamd",
+  "help",
+  "het",
+  "ik",
+  "is",
+  "met",
+  "mijn",
+  "my",
+  "named",
+  "om",
+  "ons",
+  "onze",
+  "our",
+  "plan",
+  "reclamebureau",
+  "te",
+  "the",
+  "to",
+  "voor",
+  "with",
+]);
+
+function normalizeBusinessNameToken(raw: string): string {
+  const compact = String(raw || "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!compact) return "";
+  const stripped = compact.replace(/^[`"'“”'‘’.,:;!?()]+|[`"'“”'‘’.,:;!?()]+$/g, "").trim();
+  if (!stripped) return "";
+  if (stripped.length < 2 || stripped.length > 48) return "";
+  const lower = stripped.toLowerCase();
+  if (STEP0_NAME_STOPWORDS.has(lower)) return "";
+  if (/^(tbd|none|nvt|unknown)$/i.test(lower)) return "";
+  if (!/[a-z0-9]/i.test(stripped)) return "";
+  return stripped;
+}
+
+function inferStep0SeedFromInitialMessage(rawInput: string): Step0Seed | null {
+  const input = String(rawInput || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!input) return null;
+
+  const ventureMatch = STEP0_VENTURE_PATTERNS
+    .map(({ pattern, normalized }) => {
+      const match = pattern.exec(input);
+      return match ? { match, normalized } : null;
+    })
+    .filter((entry): entry is { match: RegExpExecArray; normalized: string } => Boolean(entry))
+    .sort((a, b) => b.match[0].length - a.match[0].length)[0];
+  if (!ventureMatch) return null;
+
+  let nameCandidate = "";
+  const explicitNameMatch = input.match(
+    /\b(?:genaamd|named|called)\s+([A-Za-z0-9][A-Za-z0-9&'’._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'’._-]*){0,2})/i
+  );
+  if (explicitNameMatch?.[1]) {
+    nameCandidate = normalizeBusinessNameToken(explicitNameMatch[1]);
+  }
+
+  if (!nameCandidate) {
+    const trailing = input.slice((ventureMatch.match.index ?? 0) + ventureMatch.match[0].length);
+    const trailingTokens = trailing.split(/\s+/).map((token) => normalizeBusinessNameToken(token)).filter(Boolean);
+    const firstTail = trailingTokens.find((token) => !STEP0_NAME_STOPWORDS.has(token.toLowerCase()));
+    if (firstTail) nameCandidate = firstTail;
+  }
+
+  if (!nameCandidate) {
+    const tailToken = normalizeBusinessNameToken(input.split(/\s+/).slice(-1)[0] || "");
+    if (tailToken && !STEP0_NAME_STOPWORDS.has(tailToken.toLowerCase())) {
+      nameCandidate = tailToken;
+    }
+  }
+
+  if (!nameCandidate) return null;
+
+  const lower = input.toLowerCase();
+  const startingSignals = [
+    /\bwant to start\b/i,
+    /\bi want to start\b/i,
+    /\bga starten\b/i,
+    /\bgaan starten\b/i,
+    /\bstarten\b/i,
+    /\boprichten\b/i,
+    /\bbeginnen\b/i,
+    /\bnieuw bedrijf\b/i,
+  ];
+  const status: "existing" | "starting" =
+    startingSignals.some((pattern) => pattern.test(lower)) ? "starting" : "existing";
+
+  return {
+    venture: ventureMatch.normalized,
+    name: nameCandidate,
+    status,
+  };
+}
+
+function maybeSeedStep0FromInitialMessage(state: CanvasState, sourceMessage: string): CanvasState {
+  const existingStep0Final = String((state as any).step_0_final || "").trim();
+  if (hasValidStep0Final(existingStep0Final)) return state;
+  const seed = inferStep0SeedFromInitialMessage(sourceMessage);
+  if (!seed) return state;
+  return {
+    ...(state as any),
+    step_0_final: `Venture: ${seed.venture} | Name: ${seed.name} | Status: ${seed.status}`,
+    business_name: seed.name,
+  } as CanvasState;
 }
 
 function step0ReadyActionLabel(state: CanvasState | null | undefined): string {
@@ -7388,7 +7532,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const isBootstrapPollCall = isBootstrapPollMarker || isBootstrapPollAction;
 
   const rawStateContractMarkers = detectInvalidContractStateMarkers((args.state ?? {}) as Record<string, unknown>);
-  const rawLegacyMarkers = [
+  let rawLegacyMarkers = [
     ...detectLegacySessionMarkers((args.state ?? {}) as Record<string, unknown>),
     ...rawStateContractMarkers,
   ];
@@ -7465,6 +7609,60 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     !String(userMessageCandidate ?? "").trim().startsWith("ACTION_")
   ) {
     (state as any).initial_user_message = String(userMessageCandidate).trim();
+  }
+
+  const hasRestartLegacyMarkers = rawLegacyMarkers.some((marker) =>
+    marker === "state_version_mismatch" || marker.startsWith("legacy_")
+  );
+  const shouldAutoUpgradeLegacyChatState =
+    inputMode === "chat" &&
+    !isBootstrapPollCall &&
+    hasRestartLegacyMarkers &&
+    String(userMessageCandidate || "").trim().length > 0;
+  if (shouldAutoUpgradeLegacyChatState) {
+    const preservedHostWidgetSessionId = String((state as any).host_widget_session_id || "").trim();
+    const preservedSessionId = String((state as any).__session_id || "").trim();
+    const preservedSessionStartedAt = String((state as any).__session_started_at || "").trim();
+    const preservedSessionTurnIndex = Number((state as any).__session_turn_index || 0);
+    const preservedSessionTurnId = String((state as any).__session_turn_id || "").trim();
+    state = normalizeState({});
+    if (preservedHostWidgetSessionId) (state as any).host_widget_session_id = preservedHostWidgetSessionId;
+    if (preservedSessionId) (state as any).__session_id = preservedSessionId;
+    if (preservedSessionStartedAt) (state as any).__session_started_at = preservedSessionStartedAt;
+    if (Number.isFinite(preservedSessionTurnIndex) && preservedSessionTurnIndex > 0) {
+      (state as any).__session_turn_index = Math.trunc(preservedSessionTurnIndex);
+    }
+    if (preservedSessionTurnId) (state as any).__session_turn_id = preservedSessionTurnId;
+    if (localeHint) {
+      (state as any).language = localeHint;
+      (state as any).language_source = normalizeStateLanguageSource(
+        localeHintSource === "message_detect" ? "message_detect" : "locale_hint"
+      );
+    }
+    (state as any).initial_user_message = String(userMessageCandidate || "").trim();
+    rawLegacyMarkers = rawLegacyMarkers.filter((marker) =>
+      !(marker === "state_version_mismatch" || marker.startsWith("legacy_"))
+    );
+    bumpUiI18nCounter(uiI18nTelemetry, "state_hygiene_resets_count");
+    console.log("[state_auto_upgrade]", {
+      input_mode: inputMode,
+      legacy_markers_removed: true,
+      locale_hint: localeHint,
+      locale_hint_source: localeHintSource,
+      current_step: String((state as any).current_step || STEP_0_ID),
+    });
+  }
+
+  const initialUserMessageForSeed = String((state as any).initial_user_message || "").trim();
+  if (initialUserMessageForSeed) {
+    const seededState = maybeSeedStep0FromInitialMessage(state, initialUserMessageForSeed);
+    if (seededState !== state) {
+      state = seededState;
+      console.log("[step0_seed_from_initial_message]", {
+        current_step: String((state as any).current_step || STEP_0_ID),
+        business_name: String((state as any).business_name || "").trim(),
+      });
+    }
   }
 
   // If user clicks a numbered option button, the UI sends ActionCode (new system) or "1"/"2"/"3" or "choice:X" (old system).
@@ -8976,11 +9174,14 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     String((state as any).intro_shown_session) !== "true" &&
     actionCodeRaw !== "ACTION_START" &&
     !isBootstrapPollCall;
+  const lastSpecialistAtStart = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+  const hasLastSpecialistAtStart = Object.keys(lastSpecialistAtStart).length > 0;
+  const allowStartActionWithSnapshot = actionCodeRaw === "ACTION_START" && hasLastSpecialistAtStart;
   const isStartTrigger =
     (userMessage.trim() === "" || actionCodeRaw === "ACTION_START" || forceStartGateTurn) &&
     state.current_step === STEP_0_ID &&
     String((state as any).intro_shown_session) !== "true" &&
-    Object.keys((state as any).last_specialist_result ?? {}).length === 0;
+    (!hasLastSpecialistAtStart || allowStartActionWithSnapshot);
 
   if (isStartTrigger) {
     const initialUserMessageSeed = String((state as any).initial_user_message ?? "").trim();
@@ -9001,7 +9202,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       }
       return resolveLocaleAndUiStringsReady(targetState, routeOrText);
     };
-    if (!startedAtTrigger) {
+    if (!startedAtTrigger && actionCodeRaw !== "ACTION_START") {
       const startResolution = await ensureStartState(state, startLocaleSeedText);
       const stateWithUi = startResolution.state;
       const startHint =
@@ -9040,7 +9241,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const isReuseFirst =
       existingFirst &&
       String(existingFirst.action) === "ASK" &&
-      String(existingFirst.question ?? "").trim() !== "";
+      String(existingFirst.question ?? "").trim() !== "" &&
+      actionCodeRaw !== "ACTION_START";
     if (isReuseFirst) {
       const startResolution = await ensureStartState(state, startLocaleSeedText);
       const stateWithUi = startResolution.state;
@@ -9091,7 +9293,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       meta_topic: "NONE",
       };
 
-      const startResolution = await ensureStartState(state, userMessage);
+      const startResolution = await ensureStartState(state, startLocaleSeedText);
       const stateWithUi = startResolution.state;
       return finalizeResponse(attachRegistryPayload({
         ok: true as const,

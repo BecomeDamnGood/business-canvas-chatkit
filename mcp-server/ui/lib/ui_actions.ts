@@ -573,6 +573,26 @@ function localeHintFromLocation(): string {
   }
 }
 
+function normalizeLocaleHintForPayload(raw: unknown): string {
+  const text = String(raw || "").trim().toLowerCase().replace(/_/g, "-");
+  if (!text) return "";
+  if (!/^[a-z]{2}(?:-[a-z0-9]{2,8})*$/.test(text)) return "";
+  return text;
+}
+
+function normalizeLocaleHintSourceForPayload(raw: unknown): "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none" {
+  const text = String(raw || "").trim();
+  if (
+    text === "openai_locale" ||
+    text === "webplus_i18n" ||
+    text === "request_header" ||
+    text === "message_detect"
+  ) {
+    return text;
+  }
+  return "none";
+}
+
 function uiText(
   state: Record<string, unknown> | null | undefined,
   key: string,
@@ -1107,6 +1127,12 @@ export async function callRunStep(
     String((extraState as Record<string, unknown> | undefined)?.__force_empty_state || "")
       .trim()
       .toLowerCase() === "true";
+  const internalForceLocaleHint = normalizeLocaleHintForPayload(
+    (extraState as Record<string, unknown> | undefined)?.__force_locale_hint || ""
+  );
+  const internalForceLocaleHintSource = normalizeLocaleHintSourceForPayload(
+    (extraState as Record<string, unknown> | undefined)?.__force_locale_hint_source || ""
+  );
   const cleanExtraState =
     extraState && typeof extraState === "object"
       ? Object.fromEntries(
@@ -1115,7 +1141,9 @@ export async function callRunStep(
               key !== "__skip_start_queue" &&
               key !== "__queue_flush_source" &&
               key !== "__session_upgrade_retry" &&
-              key !== "__force_empty_state"
+              key !== "__force_empty_state" &&
+              key !== "__force_locale_hint" &&
+              key !== "__force_locale_hint_source"
           )
         )
       : undefined;
@@ -1172,7 +1200,11 @@ export async function callRunStep(
   const ws = widgetState();
   const widgetLanguage = String((ws.language || ws.locale_hint || "") as string).trim().toLowerCase();
   const locationLanguage = localeHintFromLocation();
-  const localeHint = stateLanguage || widgetLanguage || locationLanguage;
+  const localeHint = internalForceLocaleHint || stateLanguage || widgetLanguage || locationLanguage;
+  const localeHintSource =
+    localeHint && internalForceLocaleHint
+      ? (internalForceLocaleHintSource !== "none" ? internalForceLocaleHintSource : "message_detect")
+      : (localeHint ? (stateLanguage ? "message_detect" : "webplus_i18n") : "none");
   let nextState = Object.assign({}, baseState);
   if (cleanExtraState && typeof cleanExtraState === "object") {
     nextState = Object.assign({}, nextState, cleanExtraState);
@@ -1206,7 +1238,7 @@ export async function callRunStep(
     user_message: String(message || ""),
     input_mode: "widget",
     locale_hint: localeHint,
-    locale_hint_source: localeHint ? (stateLanguage ? "message_detect" : "webplus_i18n") : "none",
+    locale_hint_source: localeHintSource,
     state: nextState,
   };
   const bootstrapPollSignature = isBootstrapPollCall
@@ -1333,11 +1365,27 @@ export async function callRunStep(
     }
     const sessionUpgradeRequired = isSessionUpgradeRequiredResult(result);
     if (sessionUpgradeRequired && !internalSessionUpgradeRetry) {
+      const resultRecord = (result && typeof result === "object")
+        ? (result as Record<string, unknown>)
+        : {};
+      const resultState = toRecord(resultRecord.state);
+      const resultI18n = toRecord(resultRecord.i18n);
+      const retryLocaleHint = normalizeLocaleHintForPayload(
+        String(
+          resultState.ui_strings_requested_lang ||
+            resultRecord.ui_strings_requested_lang ||
+            resultI18n.requested_lang ||
+            resultI18n.lang ||
+            resultRecord.language ||
+            localeHint
+        )
+      ) || localeHint;
       if (isDevEnv()) {
         console.log("[ui_session_upgrade_retry]", {
           action_code: messageText,
           source: isBootstrapPollCall ? "bootstrap_poll" : "interactive",
           reason: "session_upgrade_required",
+          retry_locale_hint: retryLocaleHint,
         });
       }
       resetClientSessionStateForUpgradeRetry();
@@ -1345,6 +1393,8 @@ export async function callRunStep(
         ...(cleanExtraState || {}),
         __session_upgrade_retry: "true",
         __force_empty_state: "true",
+        __force_locale_hint: retryLocaleHint,
+        __force_locale_hint_source: "message_detect",
       });
       return;
     }
