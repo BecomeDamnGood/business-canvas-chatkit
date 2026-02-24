@@ -1026,6 +1026,31 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
     result && typeof (result as any).state === "object" && (result as any).state
       ? ((result as any).state as Record<string, unknown>)
       : {};
+  const stateUiStringsRaw =
+    state && typeof state.ui_strings === "object" && state.ui_strings
+      ? (state.ui_strings as Record<string, unknown>)
+      : null;
+  const resultUiStringsRaw =
+    result && typeof (result as any).ui_strings === "object" && (result as any).ui_strings
+      ? ((result as any).ui_strings as Record<string, unknown>)
+      : null;
+  const uiStringsSource = stateUiStringsRaw || resultUiStringsRaw || null;
+  const uiStringsForPayload: Record<string, string> = {};
+  if (uiStringsSource) {
+    for (const [key, value] of Object.entries(uiStringsSource)) {
+      const safeKey = safeString(key).trim();
+      if (!safeKey) continue;
+      uiStringsForPayload[safeKey] = safeString(value ?? "");
+    }
+  }
+  const uiStringsLang = safeString(
+    state.ui_strings_lang ||
+      (result as any).ui_strings_lang ||
+      state.language ||
+      (result as any).language ||
+      ""
+  );
+  const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");
   const stateBootstrapPhaseRaw = safeString(state.bootstrap_phase || (result as any).bootstrap_phase || "");
   const flagsBootstrapPhaseRaw = safeString(flags.bootstrap_phase || "");
   let bootstrapPhaseRaw = stateBootstrapPhaseRaw || flagsBootstrapPhaseRaw;
@@ -1102,7 +1127,7 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
   if (startDispatchState) nextFlags.start_dispatch_state = startDispatchState;
   if (hostWidgetSessionId) nextFlags.host_widget_session_id = hostWidgetSessionId;
   if (viewContractVersion) nextFlags.view_contract_version = viewContractVersion;
-  return {
+  const uiStructured: Record<string, unknown> = {
     prompt: { body: promptBody },
     options,
     state: {
@@ -1122,6 +1147,14 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       bootstrap_phase: bootstrapPhase,
     },
   };
+  if (Object.keys(uiStringsForPayload).length > 0) {
+    uiStructured.i18n = {
+      lang: uiStringsLang,
+      status: uiStringsStatus,
+      strings: uiStringsForPayload,
+    };
+  }
+  return uiStructured;
 }
 
 function resolveBaseUrl(req?: any): string {

@@ -543,11 +543,23 @@ export function render(overrideToolOutput?: unknown): void {
     uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags
       ? (uiPayload.flags as Record<string, unknown>)
       : {};
+  const uiI18n =
+    uiPayload && typeof uiPayload.i18n === "object" && uiPayload.i18n
+      ? (uiPayload.i18n as Record<string, unknown>)
+      : {};
+  const payloadStrings =
+    uiI18n && typeof uiI18n.strings === "object" && uiI18n.strings
+      ? (uiI18n.strings as Record<string, unknown>)
+      : null;
+  const payloadLang = String((uiI18n.lang || "") as string).trim().toLowerCase();
 
   const overrideStrings =
     (state?.ui_strings && typeof state.ui_strings === "object" ? state.ui_strings : null) ||
-    (result?.ui_strings && typeof result.ui_strings === "object" ? result.ui_strings : null);
-  const overrideLang = String((state?.ui_strings_lang || "") as string).trim().toLowerCase();
+    (result?.ui_strings && typeof result.ui_strings === "object" ? result.ui_strings : null) ||
+    payloadStrings;
+  const overrideLang = String((state?.ui_strings_lang || result?.ui_strings_lang || payloadLang || "") as string)
+    .trim()
+    .toLowerCase();
   const ws = widgetState();
   const stateLang = languageFromState(state);
   const widgetLang = String((ws?.language || "") as string).trim().toLowerCase();
