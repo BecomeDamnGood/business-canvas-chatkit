@@ -1018,23 +1018,40 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
     result && typeof (result as any).state === "object" && (result as any).state
       ? ((result as any).state as Record<string, unknown>)
       : {};
-  const bootstrapPhaseRaw = safeString(flags.bootstrap_phase || state.bootstrap_phase || "");
-  const bootstrapPhase =
-    bootstrapPhaseRaw === "interactive_fallback" ? "waiting_locale" : bootstrapPhaseRaw;
+  const stateBootstrapPhaseRaw = safeString(state.bootstrap_phase || (result as any).bootstrap_phase || "");
+  const flagsBootstrapPhaseRaw = safeString(flags.bootstrap_phase || "");
+  let bootstrapPhaseRaw = stateBootstrapPhaseRaw || flagsBootstrapPhaseRaw;
+  if (bootstrapPhaseRaw === "interactive_fallback") bootstrapPhaseRaw = "waiting_locale";
+  const uiGateStatus = safeString(state.ui_gate_status || (result as any).ui_gate_status || "");
   const waitingLocaleByPhase =
-    bootstrapPhase === "waiting_locale" ||
-    bootstrapPhase === "waiting_both" ||
-    bootstrapPhase === "waiting_state";
-  const waitingLocale = flags.bootstrap_waiting_locale === true || waitingLocaleByPhase;
+    bootstrapPhaseRaw === "waiting_locale" ||
+    bootstrapPhaseRaw === "waiting_both" ||
+    bootstrapPhaseRaw === "waiting_state";
+  const waitingLocaleByGate = uiGateStatus === "waiting_locale";
+  const waitingLocale = waitingLocaleByGate || waitingLocaleByPhase;
+  const flagsWaitingLocale = flags.bootstrap_waiting_locale === true;
+  if (
+    (flagsBootstrapPhaseRaw && bootstrapPhaseRaw && flagsBootstrapPhaseRaw !== bootstrapPhaseRaw) ||
+    flagsWaitingLocale !== waitingLocale
+  ) {
+    console.warn("[ui_view_state_invariant_mismatch]", {
+      state_ui_gate_status: uiGateStatus,
+      state_bootstrap_phase: stateBootstrapPhaseRaw,
+      flags_bootstrap_phase: flagsBootstrapPhaseRaw,
+      state_waiting_locale: waitingLocale,
+      flags_waiting_locale: flagsWaitingLocale,
+    });
+  }
+  const bootstrapPhase = bootstrapPhaseRaw || (waitingLocale ? "waiting_locale" : "ready");
   const viewContractVersion =
-    safeString(flags.view_contract_version || state.view_contract_version || (result as any).view_contract_version || "") ||
+    safeString(state.view_contract_version || flags.view_contract_version || (result as any).view_contract_version || "") ||
     VIEW_CONTRACT_VERSION;
   const started = safeString(state.started || "").toLowerCase() === "true";
   const prompt = safeString((result as any).prompt ?? "");
   const text = safeString((result as any).text ?? "");
   const promptBodyRaw = prompt || text || "";
   const actionCodesRaw = Array.isArray(uiObj.action_codes) ? uiObj.action_codes : [];
-  const retryHint = safeString(flags.bootstrap_retry_hint ?? "");
+  const retryHint = safeString((state as any).bootstrap_retry_hint ?? flags.bootstrap_retry_hint ?? "");
   const optionsRaw = actionCodesRaw.map((code: unknown, idx: number) => ({
     id: safeString(idx + 1),
     actionCode: safeString(code),
@@ -1062,6 +1079,11 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       ? uiObj.expected_choice_count
       : (options.length ? options.length : undefined);
   const nextFlags: Record<string, unknown> = { ...flags };
+  const interactiveFallbackActive = waitingLocale ? false : flags.interactive_fallback_active === true;
+  nextFlags.bootstrap_phase = bootstrapPhase;
+  nextFlags.bootstrap_waiting_locale = waitingLocale;
+  nextFlags.bootstrap_interactive_ready = !waitingLocale;
+  nextFlags.interactive_fallback_active = interactiveFallbackActive;
   const transportReady = safeString(state.transport_ready ?? "");
   const startDispatchState = safeString(state.start_dispatch_state ?? "");
   const hostWidgetSessionId = safeString(

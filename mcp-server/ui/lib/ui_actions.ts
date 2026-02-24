@@ -1140,25 +1140,6 @@ export async function callRunStep(
       (nextState as Record<string, unknown>).response_seq = persistedResponseSeq;
     }
   }
-  if (!String((nextState as Record<string, unknown>).language || "").trim() && localeHint) {
-    (nextState as Record<string, unknown>).language = localeHint;
-  }
-
-  const isActionMessage = messageText.startsWith("ACTION_");
-  const shouldSetStarted =
-    messageText === "ACTION_START" ||
-    (Boolean(messageText) &&
-      !isBootstrapPollCall &&
-      !isActionMessage &&
-      !messageText.startsWith("__ROUTE__") &&
-      !messageText.startsWith("choice:"));
-  const widgetPatch: Record<string, unknown> = {};
-  if (shouldSetStarted) widgetPatch.started = "true";
-  if (stateLanguage) widgetPatch.language = stateLanguage;
-  if (Object.keys(widgetPatch).length > 0) {
-    setWidgetStateSafe(widgetPatch);
-  }
-
   const payload = {
     current_step_id: nextState.current_step || "step_0",
     user_message: String(message || ""),

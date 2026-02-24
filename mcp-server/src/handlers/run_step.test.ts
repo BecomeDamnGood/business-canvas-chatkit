@@ -148,6 +148,27 @@ test("language policy: locale hint wins over paraphrased English chat input", as
   assert.equal(String(result?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
 });
 
+test("language policy: widget ACTION_START does not let webplus_i18n override seeded NL message", async () => {
+  const result = await withEnv("UI_START_TRIGGER_LANG_RESOLVE_V1", "1", () =>
+    run_step({
+      user_message: "ACTION_START",
+      input_mode: "widget",
+      locale_hint: "en-US",
+      locale_hint_source: "webplus_i18n",
+      state: {
+        current_step: "step_0",
+        intro_shown_session: "false",
+        last_specialist_result: {},
+        started: "true",
+        initial_user_message: "help mij met mijn businessplan voor mijn reclamebureau Mindd",
+      },
+    })
+  );
+  assert.equal(result?.ok, true);
+  assert.equal(String(result?.state?.language || ""), "nl");
+  assert.equal(String(result?.state?.language_source || ""), "message_detect");
+});
+
 test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps waiting contract stable", async () => {
   const first = await withEnv("UI_LOCALE_READY_GATE_V1", "1", () =>
     run_step({

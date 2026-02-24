@@ -66,6 +66,18 @@ test("buildUiStructured emits server-authoritative view payload", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
   assert.match(source, /function buildUiStructured\(/);
   assert.match(source, /view:\s*\{[\s\S]*mode,[\s\S]*waiting_locale:[\s\S]*bootstrap_phase:/);
+  assert.match(source, /const uiGateStatus = safeString\(state\.ui_gate_status \|\| \(result as any\)\.ui_gate_status \|\| ""\);/);
+  assert.match(source, /const waitingLocale = waitingLocaleByGate \|\| waitingLocaleByPhase;/);
+  assert.match(source, /\[ui_view_state_invariant_mismatch\]/);
+});
+
+test("ui actions do not optimistically mutate started or state.language before run_step response", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /widgetPatch\.started = "true"/);
+  assert.doesNotMatch(
+    source,
+    /if \(!String\(\(nextState as Record<string, unknown>\)\.language \|\| ""\)\.trim\(\) && localeHint\)/
+  );
 });
 
 test("run_step handler always emits model-safe result and keeps full payload widget-only", () => {

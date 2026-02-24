@@ -386,24 +386,33 @@ export async function resolveLanguageForTurn(params: {
 
   if (deps.isUiLangSourceResolverV1Enabled() && localeHint) {
     const isWidgetTurn = inputMode === "widget";
-    const canUseLocaleHint = isWidgetTurn ? !current : (trustedLocaleHintSource || !current);
+    const isBrowserLocaleHint = localeHintSource === "webplus_i18n";
+    const hasDetectableMessage = countAlphaChars(msg) >= languageMinAlpha;
+    const shouldDeferToMessageDetect =
+      isWidgetTurn && isBrowserLocaleHint && !current && !locked && hasDetectableMessage;
+    const canUseLocaleHint = isWidgetTurn
+      ? (!current && trustedLocaleHintSource && !isBrowserLocaleHint)
+      : (trustedLocaleHintSource || !current);
     if (!canUseLocaleHint || locked) {
-      const persisted = current && !currentSource
-        ? deps.withLanguageDecision(state, current, "persisted", {
-            locked: locked ? "true" : "false",
-            override: override ? "true" : "false",
-          })
-        : state;
-      return deps.ensureUiStringsForState(persisted, model, telemetry);
+      if (!shouldDeferToMessageDetect) {
+        const persisted = current && !currentSource
+          ? deps.withLanguageDecision(state, current, "persisted", {
+              locked: locked ? "true" : "false",
+              override: override ? "true" : "false",
+            })
+          : state;
+        return deps.ensureUiStringsForState(persisted, model, telemetry);
+      }
+    } else {
+      if (current && current !== localeHint) {
+        deps.bumpUiI18nCounter(telemetry, "language_source_overridden_count");
+      }
+      const next = deps.withLanguageDecision(state, localeHint, "locale_hint", {
+        locked: "true",
+        override: "false",
+      });
+      return deps.ensureUiStringsForState(next, model, telemetry);
     }
-    if (current && current !== localeHint) {
-      deps.bumpUiI18nCounter(telemetry, "language_source_overridden_count");
-    }
-    const next = deps.withLanguageDecision(state, localeHint, "locale_hint", {
-      locked: "true",
-      override: "false",
-    });
-    return deps.ensureUiStringsForState(next, model, telemetry);
   }
 
   if (locked && current) {

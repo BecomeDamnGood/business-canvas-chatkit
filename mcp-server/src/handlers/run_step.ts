@@ -8562,7 +8562,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     Object.keys((state as any).last_specialist_result ?? {}).length === 0;
 
   if (isStartTrigger) {
-    const startLocaleSeedText = actionCodeRaw === "ACTION_START" ? "" : userMessage;
+    const initialUserMessageSeed = String((state as any).initial_user_message ?? "").trim();
+    const startLocaleSeedText =
+      actionCodeRaw === "ACTION_START"
+        ? (initialUserMessageSeed || userMessage)
+        : userMessage;
     const ensureStartState = async (
       targetState: CanvasState,
       routeOrText: string
