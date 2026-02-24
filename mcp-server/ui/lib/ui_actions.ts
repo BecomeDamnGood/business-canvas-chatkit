@@ -711,6 +711,12 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   if (_render) _render(normalized);
   const resolved = resolveWidgetPayload(normalized);
   const result = resolved.result;
+  const orderingPatch: Record<string, unknown> = {};
+  if (resolved.host_widget_session_id) orderingPatch.host_widget_session_id = resolved.host_widget_session_id;
+  if (resolved.bootstrap_session_id) orderingPatch.bootstrap_session_id = resolved.bootstrap_session_id;
+  if (resolved.bootstrap_epoch > 0) orderingPatch.bootstrap_epoch = resolved.bootstrap_epoch;
+  if (resolved.response_seq > 0) orderingPatch.response_seq = resolved.response_seq;
+  if (Object.keys(orderingPatch).length > 0) setWidgetStateSafe(orderingPatch);
   const source = String(opts?.source || "unknown");
   const hydration = maybeScheduleBootstrapRetry(resolved, source, {
     is_poll_response: opts?.is_poll_response === true,
@@ -1109,6 +1115,30 @@ export async function callRunStep(
   let nextState = Object.assign({}, state);
   if (cleanExtraState && typeof cleanExtraState === "object") {
     nextState = Object.assign({}, nextState, cleanExtraState);
+  }
+  const persistedHostWidgetSessionId = String(
+    (nextState as Record<string, unknown>).host_widget_session_id || ws.host_widget_session_id || ""
+  ).trim();
+  if (persistedHostWidgetSessionId) {
+    (nextState as Record<string, unknown>).host_widget_session_id = persistedHostWidgetSessionId;
+  }
+  if (!String((nextState as Record<string, unknown>).bootstrap_session_id || "").trim()) {
+    const persistedBootstrapSessionId = String(ws.bootstrap_session_id || "").trim();
+    if (persistedBootstrapSessionId) {
+      (nextState as Record<string, unknown>).bootstrap_session_id = persistedBootstrapSessionId;
+    }
+  }
+  if (parsePositiveInt((nextState as Record<string, unknown>).bootstrap_epoch) <= 0) {
+    const persistedBootstrapEpoch = parsePositiveInt(ws.bootstrap_epoch);
+    if (persistedBootstrapEpoch > 0) {
+      (nextState as Record<string, unknown>).bootstrap_epoch = persistedBootstrapEpoch;
+    }
+  }
+  if (parsePositiveInt((nextState as Record<string, unknown>).response_seq) <= 0) {
+    const persistedResponseSeq = parsePositiveInt(ws.response_seq);
+    if (persistedResponseSeq > 0) {
+      (nextState as Record<string, unknown>).response_seq = persistedResponseSeq;
+    }
   }
   if (!String((nextState as Record<string, unknown>).language || "").trim() && localeHint) {
     (nextState as Record<string, unknown>).language = localeHint;

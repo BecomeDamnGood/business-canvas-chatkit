@@ -230,6 +230,96 @@ function candidateValue(root: Record<string, unknown>, path: string): unknown {
   return cur;
 }
 
+function candidateMatchesAnchorOrdering(anchor: PayloadCandidate, candidate: PayloadCandidate): boolean {
+  let matched = false;
+  if (anchor.host_widget_session_id && candidate.host_widget_session_id) {
+    if (anchor.host_widget_session_id !== candidate.host_widget_session_id) return false;
+    matched = true;
+  }
+  if (anchor.bootstrap_session_id && candidate.bootstrap_session_id) {
+    if (anchor.bootstrap_session_id !== candidate.bootstrap_session_id) return false;
+    matched = true;
+  }
+  if (anchor.bootstrap_epoch > 0 && candidate.bootstrap_epoch > 0) {
+    if (anchor.bootstrap_epoch !== candidate.bootstrap_epoch) return false;
+    matched = true;
+  }
+  if (anchor.response_seq > 0 && candidate.response_seq > 0) {
+    if (anchor.response_seq !== candidate.response_seq) return false;
+    matched = true;
+  }
+  return matched;
+}
+
+function compareCandidatePriority(a: PayloadCandidate, b: PayloadCandidate): number {
+  if (a.richness !== b.richness) return b.richness - a.richness;
+  const aFresh = a.freshness ?? Number.NEGATIVE_INFINITY;
+  const bFresh = b.freshness ?? Number.NEGATIVE_INFINITY;
+  if (aFresh !== bFresh) return bFresh - aFresh;
+  return a.order - b.order;
+}
+
+function enrichBestCandidate(best: PayloadCandidate | null, candidates: PayloadCandidate[]): Record<string, unknown> {
+  if (!best) return {};
+  const base = best.value;
+  const scoped = candidates
+    .filter((candidate) => candidate !== best && candidateMatchesAnchorOrdering(best, candidate))
+    .sort(compareCandidatePriority);
+  if (!scoped.length) return base;
+  const enriched: Record<string, unknown> = { ...base };
+  const baseUi = toRecord(base.ui);
+  const baseState = toRecord(base.state);
+
+  if (!Object.keys(baseUi).length) {
+    const uiCandidate = scoped.find((candidate) => Object.keys(toRecord(candidate.value.ui)).length > 0);
+    if (uiCandidate) {
+      enriched.ui = toRecord(uiCandidate.value.ui);
+    }
+  }
+  if (!Object.keys(baseState).length) {
+    const stateCandidate = scoped.find((candidate) => Object.keys(toRecord(candidate.value.state)).length > 0);
+    if (stateCandidate) {
+      enriched.state = toRecord(stateCandidate.value.state);
+    }
+  }
+
+  const enrichedState = toRecord(enriched.state);
+  const enrichedUi = toRecord(enriched.ui);
+  const enrichedUiFlags = toRecord(enrichedUi.flags);
+  if (
+    !String(
+      enriched.host_widget_session_id ||
+      enrichedState.host_widget_session_id ||
+      enrichedUiFlags.host_widget_session_id ||
+      ""
+    ).trim()
+  ) {
+    const hostCandidate = scoped.find((candidate) => candidate.host_widget_session_id);
+    if (hostCandidate?.host_widget_session_id) {
+      enriched.host_widget_session_id = hostCandidate.host_widget_session_id;
+    }
+  }
+  if (!String(enriched.bootstrap_session_id || enrichedState.bootstrap_session_id || "").trim()) {
+    const sessionCandidate = scoped.find((candidate) => candidate.bootstrap_session_id);
+    if (sessionCandidate?.bootstrap_session_id) {
+      enriched.bootstrap_session_id = sessionCandidate.bootstrap_session_id;
+    }
+  }
+  if (parsePositiveInt(enriched.bootstrap_epoch || enrichedState.bootstrap_epoch) <= 0) {
+    const epochCandidate = scoped.find((candidate) => candidate.bootstrap_epoch > 0);
+    if (epochCandidate?.bootstrap_epoch) {
+      enriched.bootstrap_epoch = epochCandidate.bootstrap_epoch;
+    }
+  }
+  if (parsePositiveInt(enriched.response_seq || enrichedState.response_seq) <= 0) {
+    const seqCandidate = scoped.find((candidate) => candidate.response_seq > 0);
+    if (seqCandidate?.response_seq) {
+      enriched.response_seq = seqCandidate.response_seq;
+    }
+  }
+  return enriched;
+}
+
 export function mergeToolOutputWithResponseMetadata(
   toolOutputRaw: unknown,
   toolResponseMetadataRaw: unknown
@@ -429,7 +519,8 @@ export function resolveWidgetPayload(
     if (fallbackCandidates.length) candidates.push(...fallbackCandidates);
   }
   const best = pickBestCandidate(candidates);
-  const result = best ? best.value : {};
+  const result = enrichBestCandidate(best, candidates);
+  const sessionInfo = sessionInfoForResult(result);
   const state = toRecord(result.state);
   const hasState = Object.keys(state).length > 0;
   const { language, source } = resolveLanguageForPayload(result);
@@ -446,16 +537,16 @@ export function resolveWidgetPayload(
     needs_hydration: false,
     waiting_reason: "none",
     bootstrap_phase: bootstrapPhase,
-    bootstrap_session_id: best?.bootstrap_session_id || "",
-    bootstrap_epoch: best?.bootstrap_epoch || 0,
-    response_seq: best?.response_seq || 0,
+    bootstrap_session_id: sessionInfo.bootstrap_session_id || best?.bootstrap_session_id || "",
+    bootstrap_epoch: sessionInfo.bootstrap_epoch || best?.bootstrap_epoch || 0,
+    response_seq: sessionInfo.response_seq || best?.response_seq || 0,
     response_kind: (() => {
       const state = toRecord(result.state);
       const kind = String(state.response_kind || result.response_kind || "").trim();
       if (kind === "run_step") return kind;
       return "";
     })(),
-    host_widget_session_id: best?.host_widget_session_id || "",
+    host_widget_session_id: sessionInfo.host_widget_session_id || best?.host_widget_session_id || "",
   };
   const hydration = computeHydrationState(temp, options?.retryState);
   temp.needs_hydration = hydration.needs_hydration;

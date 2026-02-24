@@ -6,7 +6,7 @@ import type {
   UiStringsStatus,
 } from "./state.js";
 
-export type LocaleHintSource = "openai_locale" | "webplus_i18n" | "request_header" | "none";
+export type LocaleHintSource = "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
 export type UiGateReason = "translation_pending" | "translation_retry" | "";
 
 export type BootstrapContractState = {
