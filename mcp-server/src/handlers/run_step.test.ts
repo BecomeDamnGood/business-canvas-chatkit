@@ -148,6 +148,27 @@ test("language policy: locale hint wins over paraphrased English chat input", as
   assert.equal(String(result?.ui?.flags?.bootstrap_retry_hint || ""), "poll");
 });
 
+test("language policy: pending fallback still reports ui_strings_lang=en when defaults are English", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "nl-NL",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "Help met een businessplan voor mijn reclamebureau Mindd",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(String(result?.state?.language || ""), "nl");
+  assert.equal(String(result?.state?.ui_strings_status || ""), "pending");
+  assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
+  assert.equal(String(result?.state?.ui_strings_requested_lang || ""), "nl");
+});
+
 test("language policy: widget ACTION_START does not let webplus_i18n override seeded NL message", async () => {
   const result = await withEnv("UI_START_TRIGGER_LANG_RESOLVE_V1", "1", () =>
     run_step({
