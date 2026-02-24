@@ -86,22 +86,17 @@ for (const [label, content] of [
 ]) {
   assertMatchesRegex(
     content,
-    /registerTool\(\s*"open_canvas"[\s\S]*visibility:\s*\["model",\s*"app"\],[\s\S]*"openai\/outputTemplate":\s*uiResourceUri/,
-    label,
-    "must keep open_canvas as template owner with model+app visibility"
-  );
-  assertMatchesRegex(
-    content,
     /registerTool\(\s*"run_step"[\s\S]*visibility:\s*\["model",\s*"app"\],/,
     label,
-    "must keep run_step visibility as [\"model\",\"app\"] in compat-first mode"
+    "must keep run_step visibility as [\"model\",\"app\"]"
   );
   assertMatchesRegex(
     content,
-    /registerTool\(\s*"run_step"(?![\s\S]*"openai\/outputTemplate":\s*uiResourceUri)/,
+    /registerTool\(\s*"run_step"[\s\S]*"openai\/outputTemplate":\s*uiResourceUri/,
     label,
-    "must not attach openai/outputTemplate to run_step"
+    "run_step must own openai/outputTemplate"
   );
+  assertExcludes(content, 'registerTool("open_canvas"', label);
   assertIncludes(content, 'model_result_shape_version: "v2_minimal"', label);
   assertIncludes(content, "state: safeState,", label);
   assertExcludes(content, "structuredContent.seed_user_message =", label);

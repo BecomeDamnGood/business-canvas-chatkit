@@ -67,7 +67,7 @@ export function normalizeStateLanguageSource(raw: unknown): LanguageSource {
   }
   return "";
 }
-export const UI_STRINGS_STATUSES = ["ready", "pending", "error"] as const;
+export const UI_STRINGS_STATUSES = ["pending", "critical_ready", "full_ready", "ready"] as const;
 export const UiStringsStatusZod = z.enum(UI_STRINGS_STATUSES);
 export type UiStringsStatus = z.infer<typeof UiStringsStatusZod>;
 export const UI_BOOTSTRAP_STATUSES = ["init", "awaiting_locale", "ready"] as const;
@@ -83,13 +83,10 @@ export const UI_TRANSLATION_MODES = ["critical_first", "full"] as const;
 export const UiTranslationModeZod = z.enum(UI_TRANSLATION_MODES);
 export type UiTranslationMode = z.infer<typeof UiTranslationModeZod>;
 export const BOOTSTRAP_PHASES = [
-  "init",
-  "waiting_state",
   "waiting_locale",
-  "waiting_both",
-  "interactive_fallback",
   "ready",
   "recovery",
+  "failed",
 ] as const;
 export const BootstrapPhaseZod = z.enum(BOOTSTRAP_PHASES);
 export type BootstrapPhase = z.infer<typeof BootstrapPhaseZod>;
@@ -109,13 +106,39 @@ export function deriveBootstrapPhaseFromLegacy(params: {
 }): BootstrapPhase {
   const bootstrap = String(params.ui_bootstrap_status ?? "").trim();
   const gate = String(params.ui_gate_status ?? "").trim();
-  const strings = String(params.ui_strings_status ?? "").trim();
-  if (bootstrap === "init") return "init";
+  const strings = String(params.ui_strings_status ?? "").trim().toLowerCase();
+  if (bootstrap === "init" && strings !== "ready") return "waiting_locale";
+  if (strings && strings !== "ready") return "waiting_locale";
   if (gate === "waiting_locale") {
     return "waiting_locale";
   }
   if (bootstrap === "awaiting_locale") return "waiting_locale";
   return "ready";
+}
+
+function normalizeUiStringsStatus(raw: unknown): UiStringsStatus {
+  const status = String(raw ?? "").trim().toLowerCase();
+  if (
+    status === "pending" ||
+    status === "critical_ready" ||
+    status === "full_ready" ||
+    status === "ready"
+  ) {
+    return status as UiStringsStatus;
+  }
+  return "pending";
+}
+
+function uiStatusAllowsCritical(status: UiStringsStatus): boolean {
+  return status === "critical_ready" || status === "full_ready" || status === "ready";
+}
+
+function uiStatusAllowsFull(status: UiStringsStatus): boolean {
+  return status === "full_ready" || status === "ready";
+}
+
+function uiStatusIsReady(status: UiStringsStatus): boolean {
+  return status === "ready";
 }
 
 /**
@@ -156,10 +179,9 @@ export const CanvasStateZod = z.object({
   bootstrap_phase: BootstrapPhaseZod.optional(),
   bootstrap_session_id: z.string().optional(),
   bootstrap_epoch: z.number().int().positive().optional(),
-  open_canvas_invocation_id: z.string().optional(),
   view_contract_version: z.string().optional(),
   response_seq: z.number().int().nonnegative().optional(),
-  response_kind: z.enum(["open_canvas", "run_step"]).optional(),
+  response_kind: z.enum(["run_step"]).optional(),
   host_widget_session_id: z.string().optional(),
 
   // last output (used for proceed triggers / transitions)
@@ -223,13 +245,13 @@ export function getDefaultState(): CanvasState {
     ui_strings_status: "pending",
     ui_strings_requested_lang: "",
     ui_bootstrap_status: "init",
-    ui_gate_status: "ready",
-    ui_gate_reason: "",
+    ui_gate_status: "waiting_locale",
+    ui_gate_reason: "translation_pending",
     ui_gate_since_ms: 0,
-    ui_translation_mode: "full",
+    ui_translation_mode: "critical_first",
     ui_strings_critical_ready: "false",
     ui_strings_full_ready: "false",
-    ui_strings_background_inflight: "false",
+    ui_strings_background_inflight: "true",
 
     last_specialist_result: {},
 
@@ -295,9 +317,7 @@ export function normalizeState(raw: unknown): CanvasState {
   );
   const ui_strings_lang = String((r as any).ui_strings_lang ?? d.ui_strings_lang).trim().toLowerCase();
   const ui_strings_version = String((r as any).ui_strings_version ?? d.ui_strings_version).trim();
-  const ui_strings_status_raw = String((r as any).ui_strings_status ?? d.ui_strings_status).trim();
-  const ui_strings_status: UiStringsStatus =
-    ui_strings_status_raw === "pending" || ui_strings_status_raw === "error" ? ui_strings_status_raw : "ready";
+  const ui_strings_status = normalizeUiStringsStatus((r as any).ui_strings_status ?? d.ui_strings_status);
   const ui_strings_requested_lang = String((r as any).ui_strings_requested_lang ?? d.ui_strings_requested_lang)
     .trim()
     .toLowerCase();
@@ -336,30 +356,32 @@ export function normalizeState(raw: unknown): CanvasState {
   ).trim();
   const ui_strings_background_inflight: BoolString =
     ui_strings_background_inflight_raw === "true" ? "true" : "false";
-  const bootstrap_phase_raw = String((r as any).bootstrap_phase ?? "").trim();
+  const bootstrap_phase_raw = String((r as any).bootstrap_phase ?? "").trim().toLowerCase();
   const bootstrap_phase: BootstrapPhase =
-    bootstrap_phase_raw === "init" ||
-    bootstrap_phase_raw === "waiting_state" ||
     bootstrap_phase_raw === "waiting_locale" ||
-    bootstrap_phase_raw === "waiting_both" ||
-    bootstrap_phase_raw === "interactive_fallback" ||
     bootstrap_phase_raw === "ready" ||
-    bootstrap_phase_raw === "recovery"
-      ? bootstrap_phase_raw
-      : deriveBootstrapPhaseFromLegacy({
-          ui_bootstrap_status,
-          ui_gate_status,
-          ui_strings_status,
-        });
-  const bootstrap_phase_canonical: BootstrapPhase =
-    bootstrap_phase === "interactive_fallback" ? "waiting_locale" : bootstrap_phase;
+    bootstrap_phase_raw === "recovery" ||
+    bootstrap_phase_raw === "failed"
+      ? (bootstrap_phase_raw as BootstrapPhase)
+      : (
+        bootstrap_phase_raw === "init" ||
+        bootstrap_phase_raw === "waiting_state" ||
+        bootstrap_phase_raw === "waiting_both" ||
+        bootstrap_phase_raw === "interactive_fallback"
+          ? "waiting_locale"
+          : deriveBootstrapPhaseFromLegacy({
+              ui_bootstrap_status,
+              ui_gate_status,
+              ui_strings_status,
+            })
+      );
+  const bootstrap_phase_canonical: BootstrapPhase = bootstrap_phase;
   const bootstrap_session_id = String((r as any).bootstrap_session_id ?? "").trim();
   const bootstrap_epoch_raw = Number((r as any).bootstrap_epoch ?? 0);
   const bootstrap_epoch =
     Number.isFinite(bootstrap_epoch_raw) && bootstrap_epoch_raw > 0
       ? Math.trunc(bootstrap_epoch_raw)
       : 0;
-  const open_canvas_invocation_id = String((r as any).open_canvas_invocation_id ?? "").trim();
   const view_contract_version = String((r as any).view_contract_version ?? "").trim();
   const response_seq_raw = Number((r as any).response_seq ?? 0);
   const response_seq =
@@ -367,10 +389,8 @@ export function normalizeState(raw: unknown): CanvasState {
       ? Math.trunc(response_seq_raw)
       : 0;
   const response_kind_raw = String((r as any).response_kind ?? "").trim();
-  const response_kind =
-    response_kind_raw === "open_canvas" || response_kind_raw === "run_step"
-      ? (response_kind_raw as "open_canvas" | "run_step")
-      : "";
+  const response_kind: "run_step" | "" =
+    response_kind_raw === "run_step" ? "run_step" : "";
   const host_widget_session_id = String((r as any).host_widget_session_id ?? "").trim();
 
   const last_specialist_result =
@@ -467,7 +487,6 @@ export function normalizeState(raw: unknown): CanvasState {
     bootstrap_phase: bootstrap_phase_canonical,
     ...(bootstrap_session_id ? { bootstrap_session_id } : {}),
     ...(bootstrap_epoch > 0 ? { bootstrap_epoch } : {}),
-    ...(open_canvas_invocation_id ? { open_canvas_invocation_id } : {}),
     ...(view_contract_version ? { view_contract_version } : {}),
     ...(response_seq > 0 ? { response_seq } : {}),
     ...(response_kind ? { response_kind } : {}),
@@ -514,30 +533,23 @@ export function migrateState(raw: unknown): CanvasState {
 
   // v9 -> v10: add critical-first translation metadata.
   if (s.state_version === "9") {
-    const statusRaw = String((s as any).ui_strings_status ?? "ready").trim();
-    const uiStatus = statusRaw === "pending" || statusRaw === "error" ? statusRaw : "ready";
+    const uiStatus = normalizeUiStringsStatus((s as any).ui_strings_status ?? "pending");
     s = {
       ...s,
       state_version: "10",
-      ui_translation_mode: uiStatus === "ready" ? "full" : "critical_first",
-      ui_strings_critical_ready: uiStatus === "ready" ? "true" : "false",
-      ui_strings_full_ready: uiStatus === "ready" ? "true" : "false",
-      ui_strings_background_inflight: uiStatus === "ready" ? "false" : "true",
+      ui_translation_mode: uiStatusAllowsFull(uiStatus) ? "full" : "critical_first",
+      ui_strings_critical_ready: uiStatusAllowsCritical(uiStatus) ? "true" : "false",
+      ui_strings_full_ready: uiStatusAllowsFull(uiStatus) ? "true" : "false",
+      ui_strings_background_inflight: uiStatusAllowsFull(uiStatus) ? "false" : "true",
     };
     return CanvasStateZod.parse(s);
   }
 
   // v8 -> v9: add locale-ready UI gate metadata.
   if (s.state_version === "8") {
-    const statusRaw = String((s as any).ui_strings_status ?? "ready").trim();
-    const uiStatus = statusRaw === "pending" || statusRaw === "error" ? statusRaw : "ready";
-    const gateStatus: UiGateStatus = uiStatus === "ready" ? "ready" : "waiting_locale";
-    const gateReason: UiGateReason =
-      gateStatus === "ready"
-        ? ""
-        : uiStatus === "error"
-          ? "translation_retry"
-          : "translation_pending";
+    const uiStatus = normalizeUiStringsStatus((s as any).ui_strings_status ?? "pending");
+    const gateStatus: UiGateStatus = uiStatusIsReady(uiStatus) ? "ready" : "waiting_locale";
+    const gateReason: UiGateReason = gateStatus === "ready" ? "" : "translation_pending";
     const sinceRaw = Number((s as any).ui_gate_since_ms ?? 0);
     const ui_gate_since_ms =
       gateStatus === "ready"
@@ -551,10 +563,10 @@ export function migrateState(raw: unknown): CanvasState {
       ui_gate_status: gateStatus,
       ui_gate_reason: gateReason,
       ui_gate_since_ms,
-      ui_translation_mode: uiStatus === "ready" ? "full" : "critical_first",
-      ui_strings_critical_ready: uiStatus === "ready" ? "true" : "false",
-      ui_strings_full_ready: uiStatus === "ready" ? "true" : "false",
-      ui_strings_background_inflight: uiStatus === "ready" ? "false" : "true",
+      ui_translation_mode: uiStatusAllowsFull(uiStatus) ? "full" : "critical_first",
+      ui_strings_critical_ready: uiStatusAllowsCritical(uiStatus) ? "true" : "false",
+      ui_strings_full_ready: uiStatusAllowsFull(uiStatus) ? "true" : "false",
+      ui_strings_background_inflight: uiStatusAllowsFull(uiStatus) ? "false" : "true",
     };
     return migrateState(s);
   }
@@ -562,11 +574,11 @@ export function migrateState(raw: unknown): CanvasState {
   // v7 -> v8: add UI bootstrap status metadata.
   if (s.state_version === "7") {
     const bootstrapRaw = String((s as any).ui_bootstrap_status ?? "").trim();
-    const bootstrapFromStatus = String((s as any).ui_strings_status ?? "ready").trim();
+    const bootstrapFromStatus = normalizeUiStringsStatus((s as any).ui_strings_status ?? "pending");
     const ui_bootstrap_status =
       bootstrapRaw === "init" || bootstrapRaw === "awaiting_locale" || bootstrapRaw === "ready"
         ? bootstrapRaw
-        : bootstrapFromStatus === "ready"
+        : uiStatusIsReady(bootstrapFromStatus)
           ? "ready"
           : "awaiting_locale";
     s = {
@@ -584,21 +596,17 @@ export function migrateState(raw: unknown): CanvasState {
   // v6 -> v7: add language source + ui_strings status metadata.
   if (s.state_version === "6") {
     const language_source = normalizeStateLanguageSource((s as any).language_source ?? "");
-    const statusRaw = String((s as any).ui_strings_status ?? "ready").trim();
-    const ui_strings_status =
-      statusRaw === "pending" || statusRaw === "error"
-        ? statusRaw
-        : "ready";
+    const ui_strings_status = normalizeUiStringsStatus((s as any).ui_strings_status ?? "pending");
     s = {
       ...s,
       state_version: "7",
       language_source,
       ui_strings_status,
       ui_strings_requested_lang: String((s as any).ui_strings_requested_lang ?? "").trim().toLowerCase(),
-      ui_translation_mode: ui_strings_status === "ready" ? "full" : "critical_first",
-      ui_strings_critical_ready: ui_strings_status === "ready" ? "true" : "false",
-      ui_strings_full_ready: ui_strings_status === "ready" ? "true" : "false",
-      ui_strings_background_inflight: ui_strings_status === "ready" ? "false" : "true",
+      ui_translation_mode: uiStatusAllowsFull(ui_strings_status) ? "full" : "critical_first",
+      ui_strings_critical_ready: uiStatusAllowsCritical(ui_strings_status) ? "true" : "false",
+      ui_strings_full_ready: uiStatusAllowsFull(ui_strings_status) ? "true" : "false",
+      ui_strings_background_inflight: uiStatusAllowsFull(ui_strings_status) ? "false" : "true",
     };
     return migrateState(s);
   }

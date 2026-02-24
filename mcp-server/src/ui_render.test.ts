@@ -1196,7 +1196,7 @@ test("render keeps non-EN pending locale in explicit wait view without EN presta
   (globalThis as any).openai = originalOpenai;
 });
 
-test("render blocks prestart during startup grace for non-EN pending locale", () => {
+test("render honors explicit server prestart mode during startup grace", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -1351,7 +1351,7 @@ test("ui actions source supports self-heal transport and queued ACTION_START fal
   assert.match(source, /const transportPrimary = hasCallTool \? "callTool" : "bridge";/);
   assert.match(source, /transport_used: transportPrimary/);
   assert.match(source, /transport_used: transportUsed/);
-  assert.match(source, /const startTransportSelfHealEnabled = uiFlagEnabled\("UI_START_TRANSPORT_SELF_HEAL_V1", true\);/);
+  assert.match(source, /const startTransportSelfHealEnabled = true;/);
   assert.match(source, /allowUnconfirmedBridge: startTransportSelfHealEnabled/);
   assert.match(source, /ui_bridge_first_success_without_prior_flag/);
 });

@@ -587,7 +587,7 @@ export function render(overrideToolOutput?: unknown): void {
     serverExplicitPrestart ||
     serverExplicitInteractive ||
     serverExplicitRecovery;
-  const forceLocaleWait = localeKnownNonEn && uiStringsStatus !== "ready";
+  const forceLocaleWait = !hasServerExplicitMode && localeKnownNonEn && uiStringsStatus !== "ready";
   const bootstrapState = computeBootstrapRenderState({
     hydration,
     uiStringsStatus,
@@ -600,7 +600,11 @@ export function render(overrideToolOutput?: unknown): void {
   const waitingForMissingState = bootstrapState.waitingForMissingState;
   const waitingForI18n = bootstrapState.waitingForI18n;
   const startupGraceActive = isStartupGraceActive();
-  const startupPrestartBlocked = startupGraceActive && localeKnownNonEn && uiStringsStatus !== "ready";
+  const startupPrestartBlocked =
+    startupGraceActive &&
+    !hasServerExplicitMode &&
+    localeKnownNonEn &&
+    uiStringsStatus !== "ready";
   const bootstrapWaitingLocale = serverExplicitWaiting || (
     !hasServerExplicitMode &&
     (

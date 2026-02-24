@@ -15,28 +15,25 @@ test("MCP app contract: UI resource is registered and versioned", () => {
   assert.match(source, /mimeType:\s*"text\/html;profile=mcp-app"/);
 });
 
-test("MCP app contract: open_canvas and run_step are registered with title\/description\/inputSchema", () => {
-  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*title:[\s\S]*description:[\s\S]*inputSchema:/);
+test("MCP app contract: run_step is registered with title/description/inputSchema", () => {
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*title:[\s\S]*description:[\s\S]*inputSchema:/);
+  assert.doesNotMatch(source, /server\.registerTool\(\s*"open_canvas"/);
 });
 
-test("MCP app contract: open_canvas and run_step expose explicit outputSchema", () => {
+test("MCP app contract: run_step exposes explicit outputSchema", () => {
   assert.match(source, /const ToolStructuredContentOutputSchema = z\.object\(/);
-  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*outputSchema:\s*ToolStructuredContentOutputSchema/);
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*outputSchema:\s*ToolStructuredContentOutputSchema/);
 });
 
-test("MCP app contract: open_canvas is idempotent-hinted and run_step is not", () => {
-  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*idempotentHint:\s*true/);
+test("MCP app contract: run_step is not idempotent-hinted", () => {
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*idempotentHint:\s*false/);
 });
 
-test("MCP app contract: open_canvas owns outputTemplate and run_step does not", () => {
-  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*"openai\/outputTemplate": uiResourceUri/);
-  assert.doesNotMatch(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/outputTemplate": uiResourceUri/);
+test("MCP app contract: run_step owns outputTemplate + widgetAccessible", () => {
+  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/outputTemplate": uiResourceUri/);
+  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/widgetAccessible": true/);
 });
 
-test("MCP app contract: compat-first visibility remains model+app for both tools", () => {
-  assert.match(source, /server\.registerTool\(\s*"open_canvas"[\s\S]*visibility:\s*\["model",\s*"app"\]/);
+test("MCP app contract: run_step visibility remains model+app", () => {
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*visibility:\s*\["model",\s*"app"\]/);
 });

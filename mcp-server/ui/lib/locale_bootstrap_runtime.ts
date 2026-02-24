@@ -28,7 +28,7 @@ export type ResolvedWidgetPayload = {
   has_state: boolean;
   resolved_language: string;
   resolved_language_source: "state.language" | "state.ui_strings_lang" | "result.ui_strings_lang" | "result.language" | "locale_hint" | "none";
-  ui_strings_status: "ready" | "pending" | "error" | "unknown";
+  ui_strings_status: "ready" | "pending" | "critical_ready" | "full_ready" | "unknown";
   shape_version: string;
   needs_hydration: boolean;
   waiting_reason: WaitingReason;
@@ -36,7 +36,7 @@ export type ResolvedWidgetPayload = {
   bootstrap_session_id: string;
   bootstrap_epoch: number;
   response_seq: number;
-  response_kind: "open_canvas" | "run_step" | "";
+  response_kind: "run_step" | "";
   host_widget_session_id: string;
 };
 
@@ -93,8 +93,6 @@ function toLower(value: unknown): string {
   return String(value || "").trim().toLowerCase();
 }
 
-let bootstrapPhaseMismatchCount = 0;
-
 function normalizeBootstrapPhase(raw: unknown): BootstrapPhase | "" {
   const phase = toLower(raw);
   if (
@@ -111,9 +109,17 @@ function normalizeBootstrapPhase(raw: unknown): BootstrapPhase | "" {
   return "";
 }
 
-function normalizeUiStringsStatus(raw: unknown): "ready" | "pending" | "error" | "unknown" {
+function normalizeUiStringsStatus(
+  raw: unknown
+): "ready" | "pending" | "critical_ready" | "full_ready" | "unknown" {
   const status = toLower(raw);
-  if (status === "ready" || status === "pending" || status === "error") return status;
+  if (
+    status === "ready" ||
+    status === "pending" ||
+    status === "critical_ready" ||
+    status === "full_ready"
+  ) return status as "ready" | "pending" | "critical_ready" | "full_ready";
+  if (status === "error") return "pending";
   return "unknown";
 }
 
@@ -398,7 +404,8 @@ export function computeHydrationState(
   const uiGateStatus = toLower(state.ui_gate_status || resolved.result.ui_gate_status);
   const i18nPending =
     resolved.ui_strings_status === "pending" ||
-    resolved.ui_strings_status === "error" ||
+    resolved.ui_strings_status === "critical_ready" ||
+    resolved.ui_strings_status === "full_ready" ||
     (resolved.ui_strings_status === "unknown" && uiGateStatus === "waiting_locale");
   let waitingReason: WaitingReason = "none";
   if (needsHydration && i18nPending) waitingReason = "both";
@@ -445,7 +452,7 @@ export function resolveWidgetPayload(
     response_kind: (() => {
       const state = toRecord(result.state);
       const kind = String(state.response_kind || result.response_kind || "").trim();
-      if (kind === "open_canvas" || kind === "run_step") return kind;
+      if (kind === "run_step") return kind;
       return "";
     })(),
     host_widget_session_id: best?.host_widget_session_id || "",
@@ -460,7 +467,7 @@ export type BootstrapOrdering = {
   bootstrap_session_id: string;
   bootstrap_epoch: number;
   response_seq: number;
-  response_kind: "open_canvas" | "run_step" | "";
+  response_kind: "run_step" | "";
   host_widget_session_id: string;
 };
 
@@ -532,17 +539,6 @@ export function computeBootstrapRenderState(params: {
     finalPhase = "ready";
   }
 
-  const hydrationPhase: BootstrapPhase = waitingForMissingStateByHydration
-    ? (waitingForI18nByHydration ? "waiting_both" : "waiting_state")
-    : (waitingForI18nByHydration ? "waiting_locale" : "ready");
-  if (hydrationPhase !== finalPhase && !phaseFromPayload && !phaseFromMode) {
-    bootstrapPhaseMismatchCount += 1;
-    console.log("[bootstrap_phase_mismatch_ui]", {
-      bootstrap_phase_mismatch_count: bootstrapPhaseMismatchCount,
-      hydration_phase: hydrationPhase,
-      resolved_phase: finalPhase,
-    });
-  }
   const waitingForMissingState = finalPhase === "recovery"
     ? waitingForMissingStateByHydration
     : (finalPhase === "waiting_state" || finalPhase === "waiting_both");
@@ -555,7 +551,7 @@ export function computeBootstrapRenderState(params: {
       : (waitingForI18n || serverExplicitWaiting || forceLocaleWait);
   const effectivePhase: BootstrapPhase =
     bootstrapWaitingLocale && finalPhase === "ready" ? "waiting_locale" : finalPhase;
-  const interactiveFallbackActive = false;
+  const interactiveFallbackActive = bootstrapWaitingLocale;
   return {
     phase: effectivePhase,
     render_mode: renderModeFromPhase(effectivePhase),

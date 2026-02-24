@@ -185,7 +185,7 @@ import {
   resolveUiGateForceRecoverMs as localeStartResolveUiGateForceRecoverMs,
   parseExplicitLanguageOverride as localeStartParseExplicitLanguageOverride,
   resolveLanguageForTurn as localeStartResolveLanguageForTurn,
-} from "./run_step_locale_start.js";
+} from "../core/bootstrap_runtime.js";
 
 /**
  * Incoming tool args
@@ -203,7 +203,7 @@ const RunStepArgsSchema = z.object({
   user_message: z.string().default(""),
   input_mode: z.enum(["widget", "chat"]).optional().default("chat"),
   locale_hint: z.string().optional().default(""),
-  locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional().default("none"),
+  locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "message_detect", "none"]).optional().default("none"),
   // Use CanvasStateZod schema for type safety and validation
   // .partial() makes all fields optional (for empty/partial state)
   // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
@@ -5429,7 +5429,7 @@ function isInteractiveLocaleReady(state: CanvasState | null | undefined): boolea
 }
 
 type BootstrapContractState = {
-  phase?: "init" | "waiting_state" | "waiting_locale" | "waiting_both" | "interactive_fallback" | "ready" | "recovery";
+  phase?: "waiting_locale" | "ready" | "recovery" | "failed";
   waiting: boolean;
   ready: boolean;
   reason: "translation_pending" | "translation_retry" | "";
@@ -5616,7 +5616,9 @@ async function detectLanguageHeuristic(text: string): Promise<{ lang: string; co
   }
 }
 
-function uiStringsRequestedStatusFromRaw(raw: unknown): "ready" | "pending" | "error" {
+function uiStringsRequestedStatusFromRaw(
+  raw: unknown
+): "ready" | "pending" | "critical_ready" | "full_ready" {
   return localeStartUiStringsRequestedStatusFromRaw(raw);
 }
 
@@ -5643,7 +5645,7 @@ async function getUiStringsForLang(
   }
 ): Promise<{
   ui_strings: Record<string, string>;
-  status: "ready" | "pending" | "error";
+  status: "ready" | "pending";
   requested_lang: string;
 }> {
   const mode: UiStringsResolveMode = options?.mode === "critical" ? "critical" : "full";
@@ -5861,7 +5863,7 @@ async function ensureUiStringsForState(
     const ui_strings = resolved.status === "ready"
       ? resolved.ui_strings
       : (hasExistingForLang ? existingUiForLang : {});
-    const nextStatus = resolved.status === "ready" ? "ready" : resolved.status;
+    const nextStatus: "ready" | "pending" = resolved.status === "ready" ? "ready" : "pending";
     const next = {
       ...(state as any),
       ui_strings,
@@ -5885,7 +5887,8 @@ async function ensureUiStringsForState(
   let requestedLang = lang;
   let criticalReady = existingCriticalReady && hasExistingForLang;
   let fullReady = existingFullReady && hasExistingForLang && existingStatus === "ready";
-  let nextStatus: "ready" | "pending" | "error" = fullReady ? "ready" : "pending";
+  let nextStatus: "ready" | "pending" | "critical_ready" | "full_ready" =
+    fullReady ? "ready" : (criticalReady ? "critical_ready" : "pending");
 
   if (!criticalReady) {
     const criticalResolved = await getUiStringsForLang(lang, model, telemetry, {
@@ -5903,11 +5906,11 @@ async function ensureUiStringsForState(
         ...mergedUiStrings,
         ...criticalResolved.ui_strings,
       };
-      nextStatus = "pending";
+      nextStatus = "critical_ready";
     } else {
       criticalReady = false;
       fullReady = false;
-      nextStatus = criticalResolved.status;
+      nextStatus = "pending";
     }
   }
 
@@ -5930,10 +5933,10 @@ async function ensureUiStringsForState(
       };
     } else {
       fullReady = false;
-      nextStatus = fullResolved.status;
+      nextStatus = criticalReady ? "critical_ready" : "pending";
     }
   } else if (criticalReady && !fullReady) {
-    nextStatus = "pending";
+    nextStatus = "critical_ready";
   }
 
   const next = {
@@ -6986,11 +6989,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const localeHint = normalizeLocaleHint(String(args.locale_hint ?? ""));
   const localeHintSourceRaw = String(args.locale_hint_source ?? "none").trim();
   const localeHintSource =
-    localeHintSourceRaw === "openai_locale" ||
-    localeHintSourceRaw === "webplus_i18n" ||
-    localeHintSourceRaw === "request_header"
-      ? localeHintSourceRaw
-      : "none";
+  localeHintSourceRaw === "openai_locale" ||
+  localeHintSourceRaw === "webplus_i18n" ||
+  localeHintSourceRaw === "request_header" ||
+  localeHintSourceRaw === "message_detect"
+    ? localeHintSourceRaw
+    : "none";
   const policyFlags = resolveHolisticPolicyFlags();
   const wordingChoiceEnabled = policyFlags.wordingChoiceV2;
   const motivationQuotesEnabled = policyFlags.motivationQuotesV11;
@@ -7475,7 +7479,8 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const localeHintTrustedSource =
       localeHintSource === "openai_locale" ||
       localeHintSource === "webplus_i18n" ||
-      localeHintSource === "request_header";
+      localeHintSource === "request_header" ||
+      localeHintSource === "message_detect";
     const skipResetForChatLocaleHint =
       isUiStep0LangResetGuardV1Enabled() &&
       inputMode === "chat" &&

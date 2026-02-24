@@ -1040,7 +1040,7 @@ export async function callRunStep(
   const o = oa();
   const messageText = String(message || "").trim();
   const isStartAction = messageText === "ACTION_START";
-  const startTransportSelfHealEnabled = uiFlagEnabled("UI_START_TRANSPORT_SELF_HEAL_V1", true);
+  const startTransportSelfHealEnabled = true;
   const internalSkipStartQueue =
     String((extraState as Record<string, unknown> | undefined)?.__skip_start_queue || "")
       .trim()
@@ -1134,7 +1134,7 @@ export async function callRunStep(
     user_message: String(message || ""),
     input_mode: "widget",
     locale_hint: localeHint,
-    locale_hint_source: localeHint ? "webplus_i18n" : "none",
+    locale_hint_source: localeHint ? (stateLanguage ? "message_detect" : "webplus_i18n") : "none",
     state: nextState,
   };
   const bootstrapPollSignature = isBootstrapPollCall

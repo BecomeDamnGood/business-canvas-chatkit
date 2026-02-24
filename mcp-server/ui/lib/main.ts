@@ -93,11 +93,7 @@ function shouldAcceptBootstrapPayload(
     Boolean(ordering.bootstrap_session_id) &&
     Boolean(latestBootstrapOrderingCursor.sessionId) &&
     ordering.bootstrap_session_id === latestBootstrapOrderingCursor.sessionId;
-  const sameSessionEpochScope =
-    sameSessionScope &&
-    ordering.bootstrap_epoch > 0 &&
-    latestBootstrapOrderingCursor.epoch > 0 &&
-    ordering.bootstrap_epoch === latestBootstrapOrderingCursor.epoch;
+  const sameScope = sameHostScope || sameSessionScope;
   if (
     ordering.host_widget_session_id &&
     latestBootstrapOrderingCursor.hostWidgetSessionId &&
@@ -115,39 +111,47 @@ function shouldAcceptBootstrapPayload(
       source,
     });
   }
-  if (
-    ordering.response_seq > 0 &&
-    latestBootstrapOrderingCursor.responseSeq > 0 &&
-    (sameHostScope || sameSessionEpochScope) &&
-    ordering.response_seq < latestBootstrapOrderingCursor.responseSeq
-  ) {
-    console.warn("[stale_bootstrap_payload_dropped]", {
-      source,
-      reason: "response_seq",
-      incoming_response_seq: ordering.response_seq,
-      latest_response_seq: latestBootstrapOrderingCursor.responseSeq,
-      incoming_session_id: ordering.bootstrap_session_id,
-      latest_session_id: latestBootstrapOrderingCursor.sessionId,
-      incoming_host_widget_session_id: ordering.host_widget_session_id,
-      latest_host_widget_session_id: latestBootstrapOrderingCursor.hostWidgetSessionId,
-    });
-    return false;
-  }
-  if (
-    sameSessionScope &&
-    ordering.bootstrap_epoch > 0 &&
-    latestBootstrapOrderingCursor.epoch > 0 &&
-    ordering.bootstrap_epoch < latestBootstrapOrderingCursor.epoch
-  ) {
-    console.warn("[stale_bootstrap_payload_dropped]", {
-      source,
-      reason: "bootstrap_epoch",
-      incoming_epoch: ordering.bootstrap_epoch,
-      latest_epoch: latestBootstrapOrderingCursor.epoch,
-      session_id: ordering.bootstrap_session_id,
-      host_widget_session_id: ordering.host_widget_session_id,
-    });
-    return false;
+  if (sameScope && ordering.bootstrap_epoch > 0 && latestBootstrapOrderingCursor.epoch > 0) {
+    if (ordering.bootstrap_epoch < latestBootstrapOrderingCursor.epoch) {
+      console.warn("[stale_bootstrap_payload_dropped]", {
+        source,
+        reason: "bootstrap_epoch",
+        incoming_epoch: ordering.bootstrap_epoch,
+        latest_epoch: latestBootstrapOrderingCursor.epoch,
+        session_id: ordering.bootstrap_session_id,
+        host_widget_session_id: ordering.host_widget_session_id,
+      });
+      return false;
+    }
+    if (
+      ordering.bootstrap_epoch === latestBootstrapOrderingCursor.epoch &&
+      ordering.response_seq > 0 &&
+      latestBootstrapOrderingCursor.responseSeq > 0
+    ) {
+      if (ordering.response_seq < latestBootstrapOrderingCursor.responseSeq) {
+        console.warn("[stale_bootstrap_payload_dropped]", {
+          source,
+          reason: "response_seq",
+          incoming_response_seq: ordering.response_seq,
+          latest_response_seq: latestBootstrapOrderingCursor.responseSeq,
+          incoming_session_id: ordering.bootstrap_session_id,
+          latest_session_id: latestBootstrapOrderingCursor.sessionId,
+          incoming_host_widget_session_id: ordering.host_widget_session_id,
+          latest_host_widget_session_id: latestBootstrapOrderingCursor.hostWidgetSessionId,
+        });
+        return false;
+      }
+      if (ordering.response_seq === latestBootstrapOrderingCursor.responseSeq) {
+        console.log("[duplicate_bootstrap_payload_ignored]", {
+          source,
+          epoch: ordering.bootstrap_epoch,
+          response_seq: ordering.response_seq,
+          session_id: ordering.bootstrap_session_id,
+          host_widget_session_id: ordering.host_widget_session_id,
+        });
+        return false;
+      }
+    }
   }
   if (
     ordering.bootstrap_session_id &&
@@ -192,10 +196,9 @@ function ingestHostPayload(
 const STARTUP_GRACE_MS_DEFAULT = 320;
 
 function startupGraceMs(): number {
-  if (!uiFlagEnabled("UI_STARTUP_GRACE_V1", true)) return 0;
-  const raw = Number((globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_MS ?? STARTUP_GRACE_MS_DEFAULT);
+  const raw = Number((globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_MS ?? 0);
   if (!Number.isFinite(raw) || raw <= 0) return 0;
-  return Math.max(100, Math.min(1500, Math.trunc(raw)));
+  return Math.max(0, Math.min(1500, Math.trunc(raw)));
 }
 
 function setStartupGraceUntil(untilMs: number): void {

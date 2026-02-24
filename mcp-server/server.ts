@@ -23,10 +23,8 @@ import {
 import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
 import { safeString } from "./src/server_safe_string.js";
 import {
-  deriveCanonicalBootstrapState,
-  resolveUiGateForceRecoverMs,
   VIEW_CONTRACT_VERSION,
-} from "./src/handlers/run_step_locale_start.js";
+} from "./src/core/bootstrap_runtime.js";
 
 function loadDotEnv() {
   try {
@@ -80,6 +78,7 @@ const isLocalDev = process.env.LOCAL_DEV === "1";
 
 // Keep this aligned with your release tag
 const VERSION = safeString(process.env.VERSION ?? "").trim() || "v119";
+const IMAGE_DIGEST = safeString(process.env.IMAGE_DIGEST ?? "").trim();
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN =
@@ -91,29 +90,7 @@ const UI_RESOURCE_QUERY = `?v=${encodeURIComponent(VERSION)}`;
 const UI_RESOURCE_NAME = "business-canvas-widget";
 const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
-const OPEN_CANVAS_DEDUPE_TTL_MS = Number(process.env.OPEN_CANVAS_DEDUPE_TTL_MS || 5000);
 const BOOTSTRAP_SESSION_REGISTRY_TTL_MS = Number(process.env.BOOTSTRAP_SESSION_REGISTRY_TTL_MS || 30 * 60 * 1000);
-const OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0 = [
-  "prestart.headline",
-  "prestart.proven.title",
-  "prestart.proven.body",
-  "prestart.outcomes.title",
-  "prestart.outcomes.item1",
-  "prestart.outcomes.item2",
-  "prestart.outcomes.item3",
-  "prestart.meta.how.label",
-  "prestart.meta.how.value",
-  "prestart.meta.time.label",
-  "prestart.meta.time.value",
-] as const;
-
-type OpenCanvasToolResponse = {
-  content: Array<{ type: "text"; text: string }>;
-  structuredContent: Record<string, unknown>;
-  _meta?: Record<string, unknown>;
-};
-
-const openCanvasDedupeCache = new Map<string, { expiresAt: number; response: OpenCanvasToolResponse }>();
 const BOOTSTRAP_SESSION_ID_PREFIX = "bs_";
 type BootstrapSessionSnapshot = {
   sessionId: string;
@@ -125,100 +102,6 @@ type BootstrapSessionSnapshot = {
 };
 const bootstrapSessionRegistry = new Map<string, BootstrapSessionSnapshot>();
 let bootstrapResponseSeqCounter = 0;
-
-function envFlagEnabled(name: string, defaultValue: boolean): boolean {
-  const raw = safeString(process.env[name] ?? "").trim().toLowerCase();
-  if (!raw) return defaultValue;
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-}
-
-function stableStringify(value: unknown): string {
-  const walk = (input: unknown): unknown => {
-    if (input === null || input === undefined) return null;
-    if (Array.isArray(input)) return input.map((item) => walk(item));
-    if (typeof input === "object") {
-      const entries = Object.entries(input as Record<string, unknown>)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, val]) => [key, walk(val)]);
-      return Object.fromEntries(entries);
-    }
-    if (typeof input === "number") {
-      return Number.isFinite(input) ? input : null;
-    }
-    if (typeof input === "boolean" || typeof input === "string") return input;
-    return safeString(input);
-  };
-  try {
-    return JSON.stringify(walk(value));
-  } catch {
-    return "";
-  }
-}
-
-function compactOpenCanvasState(state: unknown): Record<string, unknown> {
-  const source = state && typeof state === "object" ? (state as Record<string, unknown>) : {};
-  return {
-    current_step: safeString(source.current_step ?? ""),
-    started: safeString(source.started ?? ""),
-    language: safeString(source.language ?? ""),
-    language_source: safeString(source.language_source ?? ""),
-    ui_strings_status: safeString(source.ui_strings_status ?? ""),
-    ui_bootstrap_status: safeString(source.ui_bootstrap_status ?? ""),
-    bootstrap_session_id: safeString(source.bootstrap_session_id ?? ""),
-    bootstrap_epoch: parsePositiveInt(source.bootstrap_epoch),
-    response_seq: parsePositiveInt(source.response_seq),
-    step_0_final: safeString(source.step_0_final ?? ""),
-    business_name: safeString(source.business_name ?? ""),
-    initial_user_message: safeString(source.initial_user_message ?? ""),
-  };
-}
-
-function openCanvasDedupeToken(args: {
-  user_message?: unknown;
-  locale_hint?: unknown;
-  locale_hint_source?: unknown;
-  state?: unknown;
-}): string {
-  const payload = {
-    tool: "open_canvas",
-    user_message: safeString(args.user_message ?? "").trim(),
-    locale_hint: normalizeLocaleHint(args.locale_hint),
-    locale_hint_source: normalizeLocaleHintSource(args.locale_hint_source),
-    state: compactOpenCanvasState(args.state),
-  };
-  return createHash("sha256").update(stableStringify(payload)).digest("hex");
-}
-
-function purgeExpiredOpenCanvasDedupeEntries(nowMs: number): void {
-  for (const [key, value] of openCanvasDedupeCache.entries()) {
-    if (value.expiresAt <= nowMs) openCanvasDedupeCache.delete(key);
-  }
-}
-
-function cloneOpenCanvasResponse<T extends OpenCanvasToolResponse>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function stampOpenCanvasDedupeMetadata(
-  response: OpenCanvasToolResponse,
-  dedupeToken: string,
-  dedupeAtMs: number
-): OpenCanvasToolResponse {
-  const meta = response._meta && typeof response._meta === "object" ? (response._meta as Record<string, unknown>) : null;
-  const widgetResult =
-    meta && meta.widget_result && typeof meta.widget_result === "object"
-      ? (meta.widget_result as Record<string, unknown>)
-      : null;
-  const widgetState =
-    widgetResult && widgetResult.state && typeof widgetResult.state === "object"
-      ? (widgetResult.state as Record<string, unknown>)
-      : null;
-  if (widgetState) {
-    widgetState.open_canvas_dedupe_token = dedupeToken;
-    widgetState.open_canvas_dedupe_at_ms = dedupeAtMs;
-  }
-  return response;
-}
 
 function parsePositiveInt(value: unknown): number {
   const n = Number(value);
@@ -258,40 +141,12 @@ function purgeExpiredBootstrapSessions(nowMs: number): void {
   }
 }
 
-function resolveBootstrapIdentity(args: {
-  sourceState: Record<string, unknown>;
-  isOpenCanvas: boolean;
-}): {
-  bootstrap_session_id: string;
-  bootstrap_epoch: number;
-  open_canvas_invocation_id: string;
-} {
-  const sourceState = args.sourceState || {};
-  const persistedSessionIdRaw = safeString(sourceState.bootstrap_session_id ?? "").trim();
-  const persistedSessionId = normalizeBootstrapSessionId(persistedSessionIdRaw);
-  const persistedEpoch = persistedSessionId ? (parsePositiveInt(sourceState.bootstrap_epoch) || 1) : 1;
-  const currentStep = safeString(sourceState.current_step ?? "").trim();
-  const started = safeString(sourceState.started ?? "").trim().toLowerCase() === "true";
-  const shouldResetEpoch = args.isOpenCanvas && Boolean(persistedSessionId) && (started || (currentStep && currentStep !== "step_0"));
-  if (persistedSessionIdRaw && !persistedSessionId) {
-    console.warn("[bootstrap_session_id_rejected]", {
-      source: "open_canvas_state",
-      provided: persistedSessionIdRaw,
-    });
-  }
-  const bootstrap_session_id = persistedSessionId || createBootstrapSessionId();
-  const bootstrap_epoch = shouldResetEpoch ? persistedEpoch + 1 : persistedEpoch;
-  const open_canvas_invocation_id = args.isOpenCanvas ? randomUUID() : safeString(sourceState.open_canvas_invocation_id ?? "");
-  return { bootstrap_session_id, bootstrap_epoch, open_canvas_invocation_id };
-}
-
 function attachBootstrapDiagnostics(args: {
-  responseKind: "open_canvas" | "run_step";
+  responseKind: "run_step";
   resultForClient: Record<string, unknown>;
   bootstrapSessionId: string;
   bootstrapEpoch: number;
   responseSeq: number;
-  openCanvasInvocationId?: string;
   hostWidgetSessionId?: string;
 }): Record<string, unknown> {
   const {
@@ -300,7 +155,6 @@ function attachBootstrapDiagnostics(args: {
     bootstrapSessionId,
     bootstrapEpoch,
     responseSeq,
-    openCanvasInvocationId,
     hostWidgetSessionId,
   } = args;
   const stateRaw =
@@ -315,9 +169,6 @@ function attachBootstrapDiagnostics(args: {
   };
   if (bootstrapSessionId) stateWithDiagnostics.bootstrap_session_id = bootstrapSessionId;
   if (bootstrapEpoch > 0) stateWithDiagnostics.bootstrap_epoch = bootstrapEpoch;
-  if (responseKind === "open_canvas" && openCanvasInvocationId) {
-    stateWithDiagnostics.open_canvas_invocation_id = openCanvasInvocationId;
-  }
   if (hostWidgetSessionId) {
     stateWithDiagnostics.host_widget_session_id = hostWidgetSessionId;
   }
@@ -337,7 +188,6 @@ function attachBootstrapDiagnostics(args: {
       response_seq: responseSeq,
       response_kind: responseKind,
       ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
-      ...(responseKind === "open_canvas" && openCanvasInvocationId ? { open_canvas_invocation_id: openCanvasInvocationId } : {}),
     },
   };
   if (bootstrapSessionId) {
@@ -355,7 +205,6 @@ function attachBootstrapDiagnostics(args: {
     ...(bootstrapSessionId ? { bootstrap_session_id: bootstrapSessionId } : {}),
     ...(bootstrapEpoch > 0 ? { bootstrap_epoch: bootstrapEpoch } : {}),
     ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
-    ...(responseKind === "open_canvas" && openCanvasInvocationId ? { open_canvas_invocation_id: openCanvasInvocationId } : {}),
   };
 }
 
@@ -598,9 +447,14 @@ function localeFromRequestHeaders(requestInfo: unknown): string {
   return localeFromMetaValue(record[canonical]);
 }
 
-function normalizeLocaleHintSource(raw: unknown): "openai_locale" | "webplus_i18n" | "request_header" | "none" {
+function normalizeLocaleHintSource(
+  raw: unknown
+): "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none" {
   const value = safeString(raw).trim();
-  return value === "openai_locale" || value === "webplus_i18n" || value === "request_header"
+  return value === "openai_locale" ||
+    value === "webplus_i18n" ||
+    value === "request_header" ||
+    value === "message_detect"
     ? value
     : "none";
 }
@@ -619,17 +473,17 @@ function canonicalizeStateForToolInput(raw: unknown): unknown {
   return next;
 }
 
-function uiStringsRenderableForLang(uiStringsRaw: unknown): boolean {
-  if (!uiStringsRaw || typeof uiStringsRaw !== "object" || Array.isArray(uiStringsRaw)) return false;
-  const uiStrings = uiStringsRaw as Record<string, unknown>;
-  return OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0.every((key) => safeString(uiStrings[key] || "").trim().length > 0);
-}
-
 function mergeLocaleHintInputs(
   argsLocaleHint: unknown,
   argsLocaleSource: unknown,
-  extraLocale: { locale_hint: string; locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "none" }
-): { locale_hint: string; locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "none" } {
+  extraLocale: {
+    locale_hint: string;
+    locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
+  }
+): {
+  locale_hint: string;
+  locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
+} {
   const argHint = normalizeLocaleHint(safeString(argsLocaleHint));
   const argSource = normalizeLocaleHintSource(argsLocaleSource);
   const extraHint = normalizeLocaleHint(safeString(extraLocale.locale_hint));
@@ -643,7 +497,7 @@ function mergeLocaleHintInputs(
 
 function resolveLocaleHintFromExtra(extra: unknown): {
   locale_hint: string;
-  locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "none";
+  locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
 } {
   const meta =
     extra && typeof extra === "object" && (extra as any)._meta && typeof (extra as any)._meta === "object"
@@ -723,207 +577,13 @@ function loadUiHtml(): string {
   }
 }
 
-function buildOpenCanvasBootstrapResponse(args: {
-  locale_hint: string;
-  locale_hint_source: "openai_locale" | "webplus_i18n" | "request_header" | "none";
-  host_widget_session_id?: string;
-  state?: Record<string, unknown>;
-  seed_user_message?: string;
-}): { structuredContent: Record<string, unknown>; meta: Record<string, unknown> } {
-  const sourceStateRaw = args.state && typeof args.state === "object" ? args.state : {};
-  const sourceState = normalizeState(sourceStateRaw);
-  const defaults = getDefaultState();
-  const resolvedLanguage = normalizeLocaleHint(args.locale_hint);
-  const persistedLanguage = safeString(sourceState.language || "").trim().toLowerCase();
-  const persistedLanguageSource = normalizeStateLanguageSource(sourceState.language_source);
-  const finalLanguage = resolvedLanguage || persistedLanguage || "en";
-  const finalLanguageSource =
-    resolvedLanguage
-      ? "locale_hint"
-      : (persistedLanguageSource || (persistedLanguage ? "persisted" : ""));
-  const seedMessage = safeString(args.seed_user_message ?? "").trim();
-  const incomingUiStrings =
-    sourceState.ui_strings && typeof sourceState.ui_strings === "object"
-      ? (sourceState.ui_strings as Record<string, string>)
-      : {};
-  const stringsRenderable = uiStringsRenderableForLang(incomingUiStrings);
-  const clientClaimsReady =
-    safeString(sourceState.ui_strings_status) === "ready" &&
-    safeString(sourceState.ui_strings_critical_ready) === "true" &&
-    persistedLanguage === finalLanguage;
-  const baseReady = stringsRenderable || finalLanguage === "en";
-  if (clientClaimsReady && !stringsRenderable && finalLanguage !== "en") {
-    console.warn("[open_canvas_ready_claim_inconsistent]", {
-      final_language: finalLanguage,
-      claimed_status: safeString(sourceState.ui_strings_status ?? ""),
-      critical_ready: safeString(sourceState.ui_strings_critical_ready ?? ""),
-      ui_strings_keys: Object.keys(incomingUiStrings).length,
-    });
-  }
-  const localeFlags = {
-    uiLocaleReadyGateV1: true,
-    uiInteractiveFallbackV1: true,
-    uiBootstrapPollActionV1: true,
-  };
-  const strictReadinessV1 = true;
-  const ingressSanitizerV1 = true;
-  const forceRecoverMs = resolveUiGateForceRecoverMs(process.env.UI_GATE_FORCE_RECOVER_MS);
-  const bootstrapIdentity = resolveBootstrapIdentity({
-    sourceState,
-    isOpenCanvas: true,
-  });
-  const hostWidgetSessionId = resolveEffectiveHostWidgetSessionId({
-    provided: args.host_widget_session_id,
-    state: sourceState,
-    bootstrapSessionId: bootstrapIdentity.bootstrap_session_id,
-  });
-  const bootstrapState: Record<string, unknown> = {
-    state_version: safeString(sourceState.state_version || defaults.state_version) || defaults.state_version,
-    current_step: "step_0",
-    started: "false",
-    active_specialist: "ValidationAndBusinessName",
-    intro_shown_for_step: "",
-    intro_shown_session: "false",
-    language: finalLanguage,
-    language_locked: finalLanguage ? "true" : "false",
-    language_override: "false",
-    language_source: finalLanguageSource,
-    ui_strings: stringsRenderable ? incomingUiStrings : {},
-    ui_strings_lang: finalLanguage,
-    ui_strings_version: safeString(sourceState.ui_strings_version || ""),
-    ui_strings_status: baseReady ? "ready" : "pending",
-    ui_strings_requested_lang: finalLanguage,
-    ui_bootstrap_status: baseReady ? "ready" : "awaiting_locale",
-    ui_gate_status: baseReady ? "ready" : "waiting_locale",
-    ui_gate_reason: baseReady ? "" : "translation_pending",
-    ui_gate_since_ms: baseReady ? 0 : Date.now(),
-    ui_translation_mode: baseReady ? "full" : "critical_first",
-    ui_strings_critical_ready: baseReady ? "true" : "false",
-    ui_strings_full_ready: baseReady ? "true" : "false",
-    ui_strings_background_inflight: baseReady ? "false" : "true",
-    bootstrap_phase: baseReady ? "ready" : "waiting_locale",
-    bootstrap_session_id: bootstrapIdentity.bootstrap_session_id,
-    bootstrap_epoch: bootstrapIdentity.bootstrap_epoch,
-    host_widget_session_id: hostWidgetSessionId,
-    open_canvas_invocation_id: bootstrapIdentity.open_canvas_invocation_id,
-    view_contract_version: VIEW_CONTRACT_VERSION,
-    last_specialist_result: {},
-    step_0_final: safeString(sourceState.step_0_final || ""),
-    dream_final: "",
-    purpose_final: "",
-    bigwhy_final: "",
-    role_final: "",
-    entity_final: "",
-    strategy_final: "",
-    targetgroup_final: "",
-    productsservices_final: "",
-    rulesofthegame_final: "",
-    presentation_brief_final: "",
-    provisional_by_step: {},
-    provisional_source_by_step: {},
-    __dream_runtime_mode: "self",
-    dream_builder_statements: [],
-    business_name: safeString(sourceState.business_name || "TBD") || "TBD",
-    quote_last_by_step: {},
-    summary_target: safeString(sourceState.summary_target || "unknown") || "unknown",
-  };
-  if (seedMessage && !safeString(bootstrapState.initial_user_message ?? "").trim()) {
-    bootstrapState.initial_user_message = seedMessage;
-  }
-  const nowMs = Date.now();
-  const candidateState = normalizeState(bootstrapState);
-  const canonicalBootstrap = strictReadinessV1 && ingressSanitizerV1
-    ? deriveCanonicalBootstrapState({
-        previousState: sourceState,
-        candidateState,
-        forceRecoverMs,
-        flags: localeFlags,
-        criticalKeys: [...OPEN_CANVAS_CRITICAL_UI_KEYS_STEP0],
-        nowMs,
-      })
-    : {
-        state: candidateState,
-        contract: {
-          phase: "ready",
-          waiting: false,
-          ready: true,
-          reason: "",
-          since_ms: 0,
-          retry_hint: "",
-        },
-        readyClaimRejected: false,
-        waitingLocale: false,
-        interactiveFallbackActive: false,
-        interactiveReady: true,
-      };
-  if (canonicalBootstrap.readyClaimRejected) {
-    console.warn("[ingress_ready_claim_rejected]", {
-      final_language: finalLanguage,
-      locale_hint_source: args.locale_hint_source,
-      source_state_keys: Object.keys(sourceState).length,
-    });
-  }
-  const gatedBootstrapState = canonicalBootstrap.state as Record<string, unknown>;
-  const waitingLocale = canonicalBootstrap.waitingLocale;
-  const interactiveFallbackActive = canonicalBootstrap.interactiveFallbackActive;
-  const bootstrapInteractiveReady = canonicalBootstrap.interactiveReady;
-  const responseSeq = nextBootstrapResponseSeq();
-
-  const resultForClientBase: Record<string, unknown> = {
-    ok: true,
-    tool: "open_canvas",
-    current_step_id: "step_0",
-    active_specialist: "ValidationAndBusinessName",
-    text: "",
-    prompt: "",
-    specialist: {},
-    state: gatedBootstrapState,
-    ui: {
-      action_codes: [],
-      flags: {
-        bootstrap_waiting_locale: waitingLocale,
-        bootstrap_interactive_ready: bootstrapInteractiveReady,
-        interactive_fallback_active: interactiveFallbackActive,
-        bootstrap_retry_hint: waitingLocale ? "poll" : "",
-        bootstrap_phase: safeString(gatedBootstrapState.bootstrap_phase || ""),
-        transport_ready: safeString(gatedBootstrapState.transport_ready || "unknown"),
-        start_dispatch_state: safeString(gatedBootstrapState.start_dispatch_state || "idle"),
-        host_widget_session_id: hostWidgetSessionId,
-      },
-    },
-  };
-  const resultForClient = attachBootstrapDiagnostics({
-    responseKind: "open_canvas",
-    resultForClient: resultForClientBase,
-    bootstrapSessionId: bootstrapIdentity.bootstrap_session_id,
-    bootstrapEpoch: bootstrapIdentity.bootstrap_epoch,
-    responseSeq,
-    openCanvasInvocationId: bootstrapIdentity.open_canvas_invocation_id,
-    hostWidgetSessionId,
-  });
-  const modelResult = buildModelSafeResult(resultForClient);
-  const structuredContent: Record<string, unknown> = {
-    title: `The Business Strategy Canvas Builder (${VERSION})`,
-    meta: "step: step_0 | specialist: ValidationAndBusinessName",
-    result: modelResult,
-  };
-  const uiPayload = buildUiStructured(resultForClient);
-  if (uiPayload) structuredContent.ui = uiPayload;
-  return {
-    structuredContent,
-    meta: {
-      widget_result: resultForClient,
-    },
-  };
-}
-
 /** Shared run_step logic for MCP tool and POST /run_step (local testing). */
 async function runStepHandler(args: {
   current_step_id: string;
   user_message: string;
   input_mode?: "widget" | "chat";
   locale_hint?: string;
-  locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "none";
+  locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
   host_widget_session_id?: string;
   state?: Record<string, unknown>;
 }): Promise<{ structuredContent: Record<string, unknown>; meta?: Record<string, unknown> }> {
@@ -934,7 +594,8 @@ async function runStepHandler(args: {
   const localeHintSource =
     localeHintSourceRaw === "openai_locale" ||
     localeHintSourceRaw === "webplus_i18n" ||
-    localeHintSourceRaw === "request_header"
+    localeHintSourceRaw === "request_header" ||
+    localeHintSourceRaw === "message_detect"
       ? localeHintSourceRaw
       : "none";
   const isStart = current_step_id === "step_0";
@@ -1288,7 +949,8 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   );
   const bootstrapEpoch = parsePositiveInt((result as any).bootstrap_epoch ?? state.bootstrap_epoch);
   const responseSeq = parsePositiveInt((result as any).response_seq ?? state.response_seq);
-  const responseKind = safeString((result as any).response_kind || state.response_kind || "");
+  const responseKindRaw = safeString((result as any).response_kind || state.response_kind || "");
+  const responseKind = responseKindRaw === "run_step" ? "run_step" : "";
   const hostWidgetSessionId = safeString(
     (result as any).host_widget_session_id ||
       state.host_widget_session_id ||
@@ -1495,18 +1157,13 @@ function createAppServer(baseUrl: string): McpServer {
     user_message: z.string().optional().default(""),
     input_mode: z.enum(["widget", "chat"]).optional(),
     locale_hint: z.string().optional(),
-    locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional(),
+    locale_hint_source: z
+      .enum(["openai_locale", "webplus_i18n", "request_header", "message_detect", "none"])
+      .optional(),
     host_widget_session_id: z.string().optional(),
     // Use CanvasStateZod schema for type safety and validation
     // .partial() makes all fields optional (for empty/partial state)
     // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
-    state: z.preprocess(canonicalizeStateForToolInput, CanvasStateZod.partial().passthrough().optional()),
-  });
-  const OpenCanvasInputSchema = z.object({
-    user_message: z.string().optional().default(""),
-    locale_hint: z.string().optional(),
-    locale_hint_source: z.enum(["openai_locale", "webplus_i18n", "request_header", "none"]).optional(),
-    host_widget_session_id: z.string().optional(),
     state: z.preprocess(canonicalizeStateForToolInput, CanvasStateZod.partial().passthrough().optional()),
   });
   const ModelSafeResultOutputSchema = z.object({
@@ -1521,125 +1178,6 @@ function createAppServer(baseUrl: string): McpServer {
     meta: z.string().optional(),
     result: ModelSafeResultOutputSchema,
   }).passthrough();
-
-  server.registerTool(
-    "open_canvas",
-    {
-      title: "Open Business Strategy Canvas Builder",
-      description:
-        "Open the Business Strategy Canvas Builder app so the user can continue in the UI. Call this once per user turn unless the user explicitly asks to reopen the app. Do not generate business content in chat after this call. Do not summarize app content. Output nothing or at most one short neutral sentence that the app is open.",
-      inputSchema: OpenCanvasInputSchema,
-      annotations: {
-        readOnlyHint: false,
-        openWorldHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-      },
-      outputSchema: ToolStructuredContentOutputSchema,
-      _meta: {
-        securitySchemes: [{ type: "noauth" }],
-        ui: {
-          resourceUri: uiResourceUri,
-          visibility: ["model", "app"],
-        },
-        "openai/outputTemplate": uiResourceUri,
-        "openai/widgetAccessible": true,
-        "openai/toolInvocation/invoking": "Opening app...",
-        "openai/toolInvocation/invoked": "App opened",
-      },
-    },
-    async (args, extra) => {
-      const localeFromExtra = resolveLocaleHintFromExtra(extra);
-      const hostWidgetSessionId = normalizeHostWidgetSessionId(
-        args.host_widget_session_id ?? resolveHostWidgetSessionIdFromExtra(extra)
-      );
-      if (hostWidgetSessionId) {
-        console.log("[host_session_id_seen]", {
-          source: "open_canvas_extra",
-          host_widget_session_id: hostWidgetSessionId,
-        });
-      } else {
-        console.log("[host_session_missing_fallback_internal]", {
-          source: "open_canvas_extra",
-        });
-      }
-      const mergedLocale = mergeLocaleHintInputs(
-        args.locale_hint,
-        args.locale_hint_source,
-        localeFromExtra
-      );
-      const dedupeEnabled = envFlagEnabled("OPEN_CANVAS_DEDUPE_V1", true);
-      const dedupeToken = openCanvasDedupeToken({
-        user_message: args.user_message,
-        locale_hint: mergedLocale.locale_hint,
-        locale_hint_source: mergedLocale.locale_hint_source,
-        state: args.state ?? {},
-      });
-      const nowMs = Date.now();
-      if (dedupeEnabled) {
-        purgeExpiredOpenCanvasDedupeEntries(nowMs);
-        const cached = openCanvasDedupeCache.get(dedupeToken);
-        if (cached && cached.expiresAt > nowMs) {
-          console.log("[open_canvas] dedupe", {
-            open_canvas_deduped: true,
-            open_canvas_dedupe_key_hash: dedupeToken.slice(0, 16),
-          });
-          return cloneOpenCanvasResponse(cached.response);
-        }
-      }
-      const { structuredContent, meta } = buildOpenCanvasBootstrapResponse({
-        locale_hint: mergedLocale.locale_hint,
-        locale_hint_source: mergedLocale.locale_hint_source,
-        host_widget_session_id: hostWidgetSessionId,
-        seed_user_message: safeString(args.user_message ?? ""),
-        state: (args.state ?? {}) as Record<string, unknown>,
-      });
-      const response = stampOpenCanvasDedupeMetadata(
-        {
-        content: [{ type: "text", text: "" }],
-        structuredContent,
-        ...(meta ? { _meta: meta } : {}),
-        },
-        dedupeToken,
-        nowMs
-      );
-      const bootstrapResult =
-        meta && typeof meta === "object" && (meta as any).widget_result && typeof (meta as any).widget_result === "object"
-          ? ((meta as any).widget_result as Record<string, unknown>)
-          : {};
-      const bootstrapState =
-        bootstrapResult.state && typeof bootstrapResult.state === "object"
-          ? (bootstrapResult.state as Record<string, unknown>)
-          : {};
-      const shouldCacheOpenCanvasResponse =
-        safeString(bootstrapState.ui_gate_status ?? "") !== "waiting_locale";
-      registerBootstrapSnapshot({
-        result: bootstrapResult,
-        nowMs,
-      });
-      if (dedupeEnabled && shouldCacheOpenCanvasResponse) {
-        openCanvasDedupeCache.set(dedupeToken, {
-          expiresAt: nowMs + OPEN_CANVAS_DEDUPE_TTL_MS,
-          response: cloneOpenCanvasResponse(response),
-        });
-      }
-      console.log("[open_canvas] dedupe", {
-        open_canvas_deduped: false,
-        open_canvas_dedupe_key_hash: dedupeToken.slice(0, 16),
-      });
-      console.log("[open_canvas] bootstrap response", {
-        locale_hint_source: mergedLocale.locale_hint_source,
-        host_widget_session_id: hostWidgetSessionId || "",
-        resolved_language: safeString(bootstrapState.language ?? ""),
-        bootstrap_state_language_source: safeString(bootstrapState.language_source ?? ""),
-        bootstrap_phase: safeString(bootstrapState.bootstrap_phase ?? ""),
-        ui_gate_status: safeString(bootstrapState.ui_gate_status ?? ""),
-        ui_bootstrap_status: safeString(bootstrapState.ui_bootstrap_status ?? ""),
-        current_step: safeString(bootstrapState.current_step ?? ""),
-      });
-      return response;
-    }
-  );
 
   server.registerTool(
     "run_step",
@@ -1664,6 +1202,7 @@ function createAppServer(baseUrl: string): McpServer {
           resourceUri: uiResourceUri,
           visibility: ["model", "app"],
         },
+        "openai/outputTemplate": uiResourceUri,
         "openai/widgetAccessible": true,
         "openai/toolInvocation/invoking": "Thinking...",
         "openai/toolInvocation/invoked": "Updated",
@@ -1709,10 +1248,8 @@ function createAppServer(baseUrl: string): McpServer {
   );
 
   console.log("[mcp_tool_contract]", {
-    open_canvas_visibility: ["model", "app"],
-    open_canvas_output_template: true,
     run_step_visibility: ["model", "app"],
-    run_step_output_template: false,
+    run_step_output_template: true,
     ui_resource_uri: uiResourceUri,
   });
 
@@ -1737,7 +1274,7 @@ const httpServer = async (req: any, res: any) => {
   if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/version") {
     res.writeHead(200, { "content-type": "text/plain" });
     if (req.method === "GET") {
-      res.end(`VERSION=${VERSION}`);
+      res.end(`VERSION=${VERSION}\nIMAGE_DIGEST=${IMAGE_DIGEST || "unknown"}`);
     } else {
       res.end();
     }
@@ -1823,7 +1360,7 @@ const httpServer = async (req: any, res: any) => {
           user_message?: string;
           input_mode?: "widget" | "chat";
           locale_hint?: string;
-          locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "none";
+          locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
           host_widget_session_id?: string;
           state?: Record<string, unknown>;
         };
@@ -1913,7 +1450,7 @@ const httpServer = async (req: any, res: any) => {
         const withVersion = loadUiHtml();
         res.writeHead(200, {
           "content-type": contentType,
-          "cache-control": "public, max-age=3600",
+          "cache-control": "no-store",
           "x-ui-version": VERSION,
         });
         res.end(withVersion);
@@ -1921,7 +1458,7 @@ const httpServer = async (req: any, res: any) => {
       }
       res.writeHead(200, {
         "content-type": contentType,
-        "cache-control": "public, max-age=3600",
+        "cache-control": "no-store",
         "x-ui-version": VERSION,
       });
       fs.createReadStream(resolved).pipe(res);
