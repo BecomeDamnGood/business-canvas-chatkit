@@ -940,6 +940,8 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
       : {};
   const currentStep = safeString(result.current_step_id || state.current_step || "step_0");
   const started = safeString(state.started || "");
+  const language = safeString((result as any).language || state.language || "");
+  const languageSource = safeString((result as any).language_source || state.language_source || "");
   const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");
   const uiGateStatus = safeString((result as any).ui_gate_status || state.ui_gate_status || "");
   const bootstrapPhase = safeString((result as any).bootstrap_phase || state.bootstrap_phase || "");
@@ -960,6 +962,8 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     current_step: currentStep || "step_0",
   };
   if (started) safeState.started = started;
+  if (language) safeState.language = language;
+  if (languageSource) safeState.language_source = languageSource;
   if (uiStringsStatus) safeState.ui_strings_status = uiStringsStatus;
   if (uiGateStatus) safeState.ui_gate_status = uiGateStatus;
   if (bootstrapPhase) safeState.bootstrap_phase = bootstrapPhase;
@@ -974,7 +978,7 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     tool: safeString(result.tool || "run_step"),
     current_step_id: currentStep,
     ui_gate_status: uiGateStatus,
-    language: safeString((result as any).language || state.language || ""),
+    language,
     interactive_fallback_active: flags.interactive_fallback_active === true,
     bootstrap_phase: bootstrapPhase,
     ...(bootstrapSessionId ? { bootstrap_session_id: bootstrapSessionId } : {}),

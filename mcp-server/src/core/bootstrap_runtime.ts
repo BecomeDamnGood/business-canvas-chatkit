@@ -215,10 +215,10 @@ export function applyUiGateState(params: {
       ui_strings_critical_ready: criticalRenderable ? "true" : "false",
       ui_strings_full_ready: canReady ? "true" : "false",
       ui_strings_background_inflight: canReady ? "false" : "true",
-      ui_gate_status: "ready",
-      ui_gate_reason: "",
-      ui_gate_since_ms: 0,
-      bootstrap_phase: "recovery",
+      ui_gate_status: canReady ? "ready" : "waiting_locale",
+      ui_gate_reason: canReady ? "" : "translation_retry",
+      ui_gate_since_ms: canReady ? 0 : sinceMs,
+      bootstrap_phase: canReady ? "ready" : "waiting_locale",
     } as CanvasState;
   }
   return {

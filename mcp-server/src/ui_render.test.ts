@@ -1043,7 +1043,7 @@ test("prestart source keeps stable structure and explicit skeleton gate", () => 
   assert.match(source, /appendTextNode\("div", "deliverables", ""\)/);
   assert.match(source, /const skeleton = appendTextNode\("div", "skeleton-stack", ""\);/);
   assert.match(source, /skeleton\.appendChild\(appendTextNode\("div", "skeleton-line", ""\)\);/);
-  assert.match(source, /const waitTitle = baseLang\(lang\) === "en" \? uiText\(lang, "prestart\.loading", "Loading translation…"\) : "";/);
+  assert.match(source, /const waitTitle = uiText\(lang, "prestart\.loading", "Loading translation…"\);/);
 });
 
 test("computeBootstrapRenderState returns waiting_locale phase for non-EN pending locale", () => {

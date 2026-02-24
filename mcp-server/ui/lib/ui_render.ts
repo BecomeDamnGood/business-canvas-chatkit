@@ -212,7 +212,7 @@ function renderBootstrapWaitShell(cardDesc: HTMLElement, lang: string): void {
   const shell = appendTextNode("div", "bootstrap-wait-shell", "");
   (shell as HTMLElement).style.display = "grid";
   (shell as HTMLElement).style.gap = "14px";
-  const waitTitle = baseLang(lang) === "en" ? uiText(lang, "prestart.loading", "Loading translation…") : "";
+  const waitTitle = uiText(lang, "prestart.loading", "Loading translation…");
   if (waitTitle) {
     shell.appendChild(
       appendTextNode(
