@@ -209,7 +209,7 @@ export function applyUiGateState(params: {
   if (nowMs - sinceMs > forceRecoverMs) {
     const uiStatus = uiStringsRequestedStatusFromRaw((normalizedNextState as any)?.ui_strings_status);
     const criticalRenderable = hasRenderableUiStringsForState(normalizedNextState, criticalKeys);
-    const canReady = uiStatus === "ready" && criticalRenderable;
+    const canReady = criticalRenderable && (uiStatus === "ready" || flags.uiInteractiveFallbackV1);
     return {
       ...(normalizedNextState as any),
       ui_strings_status: canReady ? "ready" : (criticalRenderable ? "critical_ready" : "pending"),

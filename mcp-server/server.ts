@@ -944,6 +944,8 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const languageSource = safeString((result as any).language_source || state.language_source || "");
   const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");
   const uiGateStatus = safeString((result as any).ui_gate_status || state.ui_gate_status || "");
+  const uiGateReason = safeString((result as any).ui_gate_reason || state.ui_gate_reason || "");
+  const uiGateSinceMs = Number((result as any).ui_gate_since_ms ?? state.ui_gate_since_ms ?? 0) || 0;
   const bootstrapPhase = safeString((result as any).bootstrap_phase || state.bootstrap_phase || "");
   const bootstrapSessionId = normalizeBootstrapSessionId(
     (result as any).bootstrap_session_id || state.bootstrap_session_id || ""
@@ -966,6 +968,8 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (languageSource) safeState.language_source = languageSource;
   if (uiStringsStatus) safeState.ui_strings_status = uiStringsStatus;
   if (uiGateStatus) safeState.ui_gate_status = uiGateStatus;
+  if (uiGateReason) safeState.ui_gate_reason = uiGateReason;
+  if (uiGateSinceMs > 0) safeState.ui_gate_since_ms = uiGateSinceMs;
   if (bootstrapPhase) safeState.bootstrap_phase = bootstrapPhase;
   if (bootstrapSessionId) safeState.bootstrap_session_id = bootstrapSessionId;
   if (bootstrapEpoch > 0) safeState.bootstrap_epoch = bootstrapEpoch;
@@ -1084,7 +1088,7 @@ function buildUiStructured(result: Record<string, unknown> | null | undefined): 
       ? uiObj.expected_choice_count
       : (options.length ? options.length : undefined);
   const nextFlags: Record<string, unknown> = { ...flags };
-  const interactiveFallbackActive = waitingLocale ? false : flags.interactive_fallback_active === true;
+  const interactiveFallbackActive = flags.interactive_fallback_active === true;
   nextFlags.bootstrap_phase = bootstrapPhase;
   nextFlags.bootstrap_waiting_locale = waitingLocale;
   nextFlags.bootstrap_interactive_ready = !waitingLocale;

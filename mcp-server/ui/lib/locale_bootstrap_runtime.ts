@@ -642,7 +642,8 @@ export function computeBootstrapRenderState(params: {
       : (waitingForI18n || serverExplicitWaiting || forceLocaleWait);
   const effectivePhase: BootstrapPhase =
     bootstrapWaitingLocale && finalPhase === "ready" ? "waiting_locale" : finalPhase;
-  const interactiveFallbackActive = bootstrapWaitingLocale;
+  const interactiveFallbackActive =
+    bootstrapWaitingLocale && uiFlags.interactive_fallback_active === true;
   return {
     phase: effectivePhase,
     render_mode: renderModeFromPhase(effectivePhase),

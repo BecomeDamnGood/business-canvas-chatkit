@@ -7357,7 +7357,18 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     const languageSeed = String((state as any).initial_user_message || "").trim();
     const localeResolution = await resolveLocaleAndUiStringsReady(state, languageSeed);
     state = localeResolution.state;
-    const retrySpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+    const retrySpecialistSeed = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+    const retrySpecialist = hasUsableSpecialistForRetry(retrySpecialistSeed)
+      ? retrySpecialistSeed
+      : buildTransientFallbackSpecialist(state);
+    const retryStepId = String((state as any).current_step || STEP_0_ID);
+    const retryActiveSpecialist = String((state as any).active_specialist || "").trim() ||
+      (retryStepId === STEP_0_ID ? STEP_0_SPECIALIST : "");
+    const retryState = {
+      ...(state as any),
+      active_specialist: retryActiveSpecialist,
+      last_specialist_result: retrySpecialist,
+    } as CanvasState;
     const bootstrapContract = deriveBootstrapContract(state);
     if (bootstrapContract.waiting) {
       return finalizeResponse(
@@ -7365,12 +7376,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           {
             ok: true as const,
             tool: "run_step" as const,
-            current_step_id: String((state as any).current_step || STEP_0_ID),
-            active_specialist: String((state as any).active_specialist || ""),
+            current_step_id: String((retryState as any).current_step || STEP_0_ID),
+            active_specialist: String((retryState as any).active_specialist || ""),
             text: buildTextForWidget({ specialist: retrySpecialist }),
             prompt: pickPrompt(retrySpecialist),
             specialist: retrySpecialist,
-            state,
+            state: retryState,
           },
           retrySpecialist,
           {
