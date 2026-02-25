@@ -1,14 +1,14 @@
 # Run Step Ownership Map
 
 Date: 2026-02-25  
-Status: Step 1 guardrail baseline
+Status: Step 2 UI payload extracted
 
 | Concern | Current location | Target module | Owner step | Migration status |
 | --- | --- | --- | --- | --- |
 | Ingress parse + canonicalization + fail-closed marker checks | `mcp-server/src/handlers/ingress.ts` | `mcp-server/src/handlers/ingress.ts` | Step 2 | completed |
 | Contract validation and finalize-response internals | `mcp-server/src/handlers/turn_contract.ts` | `mcp-server/src/handlers/turn_contract.ts` | Step 3 | completed |
 | Specialist strict/safe dispatch + transient adapters | `mcp-server/src/handlers/specialist_dispatch.ts` | `mcp-server/src/handlers/specialist_dispatch.ts` | Step 4 | completed |
-| UI payload composer (`buildUiPayload`, `attachRegistryPayload`, helpers) | `mcp-server/src/handlers/run_step.ts` | `mcp-server/src/handlers/run_step_ui_payload.ts` | Step 2 | pending |
+| UI payload composer (`buildUiPayload`, `attachRegistryPayload`, helpers) | `mcp-server/src/handlers/run_step_ui_payload.ts` | `mcp-server/src/handlers/run_step_ui_payload.ts` | Step 2 | completed |
 | Wording engine (`buildWordingChoiceFromTurn`, selection/merge flow) | `mcp-server/src/handlers/run_step.ts` | `mcp-server/src/handlers/run_step_wording.ts` | Step 3 | pending |
 | Special route branches (start/prestart, dream specials, presentation/synthetic) | `mcp-server/src/handlers/run_step.ts` | `mcp-server/src/handlers/run_step_routes/` | Step 4 | pending |
 | Post-specialist staged pipeline (render/validate/recovery chain) | `mcp-server/src/handlers/run_step.ts` | `mcp-server/src/handlers/run_step_pipeline.ts` | Step 5 | pending |

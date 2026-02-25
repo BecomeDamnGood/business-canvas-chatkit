@@ -159,3 +159,29 @@ Next agent exact TODO:
 - No additional hardening action required; continue only if a new post-Step-6 requirement is opened.
 Commit:
 - pending_after_commit
+
+## Step 2 - UI payload subsystem
+Date: 2026-02-25 20:21 CET
+Status: completed
+Completed:
+- Extracted UI payload subsystem into `mcp-server/src/handlers/run_step_ui_payload.ts` with `createRunStepUiPayloadHelpers`.
+- Moved `buildUiPayload`, `attachRegistryPayload`, `normalizeUiContractMeta` and direct payload helpers (phase/render-mode/menu transition helpers) out of `run_step.ts`.
+- Switched `run_step.ts` to delegation-only wiring via `uiPayloadHelpers` while preserving existing call sites and OpenAI MCP app contract behavior.
+- Updated ownership mapping to mark the UI payload concern as completed in `docs/run_step_ownership_map.md`.
+Pending:
+- No pending work for Step 2 scope.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_ui_payload.ts
+- docs/run_step_ownership_map.md
+- docs/run_step_refactor_memory.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- npm --prefix mcp-server run arch:run-step:check => pass
+Next agent exact TODO:
+- Start Step 3 and extract the wording subsystem (`buildWordingChoiceFromTurn` + selection/merge flow) into `mcp-server/src/handlers/run_step_wording.ts` while keeping UI payload ownership in `run_step_ui_payload.ts`.
+Commit:
+- pending_after_commit
