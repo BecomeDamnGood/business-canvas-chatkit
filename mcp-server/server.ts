@@ -467,9 +467,43 @@ function normalizeHostWidgetSessionId(raw: unknown): string {
   return value;
 }
 
+const ALLOWED_TRANSIENT_STATE_KEYS = new Set<string>([
+  "__text_submit",
+  "__pending_scores",
+  "__bootstrap_poll",
+  "__ui_telemetry",
+  "__ui_phase_by_step",
+  "__ui_render_mode_by_step",
+  "__request_id",
+  "__client_action_id",
+  "__session_id",
+  "__session_started_at",
+  "__session_log_file",
+  "__session_turn_index",
+  "__session_turn_id",
+  "__dream_runtime_mode",
+  "__dream_builder_prompt_stage",
+  "__last_clicked_action_for_contract",
+  "__last_clicked_label_for_contract",
+]);
+
+function stripUnknownTransientStateKeys(next: Record<string, unknown>): void {
+  for (const key of Object.keys(next)) {
+    if (!key.startsWith("__")) continue;
+    if (ALLOWED_TRANSIENT_STATE_KEYS.has(key)) continue;
+    delete next[key];
+  }
+}
+
 function canonicalizeStateForToolInput(raw: unknown): unknown {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
   const next = { ...(raw as Record<string, unknown>) };
+  // Server-side SSOT: UI string dictionary is backend-derived and should not be
+  // accepted as client-authoritative input.
+  if (Object.prototype.hasOwnProperty.call(next, "ui_strings")) {
+    delete next.ui_strings;
+  }
+  stripUnknownTransientStateKeys(next);
   next.language_source = normalizeStateLanguageSource(next.language_source);
   return next;
 }
@@ -629,7 +663,6 @@ async function runStepHandler(args: {
     source: hostWidgetSessionId.startsWith("internal:") ? "run_step_internal" : "run_step_args",
     host_widget_session_id: hostWidgetSessionId,
   });
-  const hostSessionGuardV1 = true;
   let stateForTool: Record<string, unknown> = {
     ...state,
     ...(hasInitiator || !shouldSeedInitialUserMessage ? {} : { initial_user_message: normalizedMessage }),
@@ -675,8 +708,7 @@ async function runStepHandler(args: {
   });
   const nowMs = Date.now();
   let incomingOrdering = readBootstrapOrdering({ state: stateForTool });
-  const bootstrapSessionGuardV1 = true;
-  if (bootstrapSessionGuardV1 && incomingOrdering.sessionId && incomingOrdering.epoch > 0) {
+  if (incomingOrdering.sessionId && incomingOrdering.epoch > 0) {
     const staleCheck = isStaleBootstrapPayload({
       sessionId: incomingOrdering.sessionId,
       hostWidgetSessionId: incomingOrdering.hostWidgetSessionId,
@@ -685,7 +717,6 @@ async function runStepHandler(args: {
       nowMs,
     });
     if (
-      hostSessionGuardV1 &&
       incomingOrdering.hostWidgetSessionId &&
       staleCheck.latest?.hostWidgetSessionId &&
       incomingOrdering.hostWidgetSessionId !== staleCheck.latest.hostWidgetSessionId
@@ -745,8 +776,6 @@ async function runStepHandler(args: {
         meta: `step: ${staleStepMeta} | specialist: ${staleSpecialistMeta}`,
         result: modelResult,
       };
-      const uiPayload = buildUiStructured(staleResult);
-      if (uiPayload) structuredContent.ui = uiPayload;
       return {
         structuredContent,
         meta: { widget_result: staleResult },
@@ -827,8 +856,6 @@ async function runStepHandler(args: {
       meta: `step: ${stepMeta} | specialist: ${specialistMeta}`,
       result: modelResult,
     };
-    const uiPayload = buildUiStructured(resultForClient);
-    if (uiPayload) structuredContent.ui = uiPayload;
     registerBootstrapSnapshot({
       result: resultForClient,
       nowMs: Date.now(),
@@ -915,8 +942,6 @@ async function runStepHandler(args: {
       meta: "error",
       result: modelResult,
     };
-    const uiPayload = buildUiStructured(fallbackResult as Record<string, unknown>);
-    if (uiPayload) structuredContent.ui = uiPayload;
     return {
       structuredContent,
       meta: {
@@ -1036,174 +1061,6 @@ function buildContentFromResult(
   if (waitingLocale) return "";
   if (options?.isFirstStart) return "Canvas Builder geopend in de app.";
   return "";
-}
-
-function buildUiStructured(result: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
-  if (!result || typeof result !== "object") return null;
-  const prestartModeV1 = true;
-  const viewContractHardenV1 = true;
-  const uiObj = (result as any).ui && typeof (result as any).ui === "object" ? (result as any).ui : {};
-  const flags =
-    uiObj.flags && typeof uiObj.flags === "object"
-      ? (uiObj.flags as Record<string, unknown>)
-      : {};
-  const state =
-    result && typeof (result as any).state === "object" && (result as any).state
-      ? ((result as any).state as Record<string, unknown>)
-      : {};
-  const stateUiStringsRaw =
-    state && typeof state.ui_strings === "object" && state.ui_strings
-      ? (state.ui_strings as Record<string, unknown>)
-      : null;
-  const resultUiStringsRaw =
-    result && typeof (result as any).ui_strings === "object" && (result as any).ui_strings
-      ? ((result as any).ui_strings as Record<string, unknown>)
-      : null;
-  const uiStringsSource = stateUiStringsRaw || resultUiStringsRaw || null;
-  const uiStringsForPayload: Record<string, string> = {};
-  if (uiStringsSource) {
-    for (const [key, value] of Object.entries(uiStringsSource)) {
-      const safeKey = safeString(key).trim();
-      if (!safeKey) continue;
-      uiStringsForPayload[safeKey] = safeString(value ?? "");
-    }
-  }
-  const uiStringsLang = safeString(
-    state.ui_strings_lang ||
-      (result as any).ui_strings_lang ||
-      ""
-  );
-  const uiStringsStatus = safeString(state.ui_strings_status || (result as any).ui_strings_status || "");
-  const uiStringsRequestedLang = safeString(
-    state.ui_strings_requested_lang || (result as any).ui_strings_requested_lang || ""
-  );
-  const uiStringsFallbackApplied = safeString(
-    state.ui_strings_fallback_applied || (result as any).ui_strings_fallback_applied || "false"
-  );
-  const uiStringsFallbackReason = safeString(
-    state.ui_strings_fallback_reason || (result as any).ui_strings_fallback_reason || ""
-  );
-  const stateBootstrapPhaseRaw = safeString(state.bootstrap_phase || (result as any).bootstrap_phase || "");
-  const flagsBootstrapPhaseRaw = safeString(flags.bootstrap_phase || "");
-  let bootstrapPhaseRaw = stateBootstrapPhaseRaw || flagsBootstrapPhaseRaw;
-  if (bootstrapPhaseRaw === "interactive_fallback") bootstrapPhaseRaw = "waiting_locale";
-  const uiGateStatus = safeString(state.ui_gate_status || (result as any).ui_gate_status || "");
-  const uiGateReason = safeString(state.ui_gate_reason || (result as any).ui_gate_reason || "");
-  if (uiGateStatus === "waiting_locale") bootstrapPhaseRaw = "waiting_locale";
-  const waitingLocaleByPhase =
-    bootstrapPhaseRaw === "waiting_locale" ||
-    bootstrapPhaseRaw === "waiting_both" ||
-    bootstrapPhaseRaw === "waiting_state";
-  const waitingLocaleByGate = uiGateStatus === "waiting_locale";
-  const blockedOrFailedGate = uiGateStatus === "blocked" || uiGateStatus === "failed";
-  const waitingLocale = waitingLocaleByGate || waitingLocaleByPhase;
-  const waitingLocaleEffective = blockedOrFailedGate ? false : waitingLocale;
-  const flagsWaitingLocale = flags.bootstrap_waiting_locale === true;
-  if (
-    (flagsBootstrapPhaseRaw && bootstrapPhaseRaw && flagsBootstrapPhaseRaw !== bootstrapPhaseRaw) ||
-    flagsWaitingLocale !== waitingLocaleEffective
-  ) {
-    console.warn("[ui_view_state_invariant_mismatch]", {
-      state_ui_gate_status: uiGateStatus,
-      state_bootstrap_phase: stateBootstrapPhaseRaw,
-      flags_bootstrap_phase: flagsBootstrapPhaseRaw,
-      state_waiting_locale: waitingLocaleEffective,
-      flags_waiting_locale: flagsWaitingLocale,
-    });
-  }
-  const bootstrapPhase = bootstrapPhaseRaw || (waitingLocaleEffective ? "waiting_locale" : "ready");
-  const viewContractVersion =
-    safeString(state.view_contract_version || flags.view_contract_version || (result as any).view_contract_version || "") ||
-    VIEW_CONTRACT_VERSION;
-  const started = safeString(state.started || "").toLowerCase() === "true";
-  const prompt = safeString((result as any).prompt ?? "");
-  const text = safeString((result as any).text ?? "");
-  const promptBodyRaw = prompt || text || "";
-  const actionCodesRaw = Array.isArray(uiObj.action_codes) ? uiObj.action_codes : [];
-  const retryHint = safeString((state as any).bootstrap_retry_hint ?? flags.bootstrap_retry_hint ?? "");
-  const optionsRaw = actionCodesRaw.map((code: unknown, idx: number) => ({
-    id: safeString(idx + 1),
-    actionCode: safeString(code),
-  }));
-  const hasInteractivePayload = safeString(promptBodyRaw).length > 0 || optionsRaw.length > 0;
-  let mode: "waiting_locale" | "prestart" | "interactive" | "blocked" | "failed" = "interactive";
-  if (viewContractHardenV1) {
-    if (uiGateStatus === "failed") mode = "failed";
-    else if (uiGateStatus === "blocked") mode = "blocked";
-    else if (uiGateStatus === "waiting_locale" || waitingLocale) mode = "waiting_locale";
-    else if (prestartModeV1 && !started) mode = "prestart";
-    else if (!hasInteractivePayload) mode = "failed";
-  } else if (waitingLocaleEffective) {
-    mode = "waiting_locale";
-  }
-  const promptBody = mode === "interactive" ? promptBodyRaw : "";
-  const options = mode === "interactive" ? optionsRaw : [];
-  if (mode !== "interactive" && !waitingLocaleEffective && started && !hasInteractivePayload) {
-    console.warn("[ui_interactive_empty_payload_blocked]", {
-      current_step: safeString(state.current_step ?? ""),
-      bootstrap_phase: bootstrapPhase,
-      result_ok: result.ok === true,
-    });
-  }
-  const expectedChoiceCount =
-    typeof uiObj.expected_choice_count === "number"
-      ? uiObj.expected_choice_count
-      : (options.length ? options.length : undefined);
-  const nextFlags: Record<string, unknown> = { ...flags };
-  const interactiveFallbackActive = flags.interactive_fallback_active === true;
-  nextFlags.bootstrap_phase = bootstrapPhase;
-  nextFlags.bootstrap_waiting_locale = waitingLocaleEffective;
-  nextFlags.bootstrap_interactive_ready = !waitingLocaleEffective && !blockedOrFailedGate;
-  nextFlags.interactive_fallback_active = interactiveFallbackActive;
-  nextFlags.ui_gate_status = uiGateStatus;
-  nextFlags.ui_gate_reason = uiGateReason;
-  const transportReady = safeString(state.transport_ready ?? "");
-  const startDispatchState = safeString(state.start_dispatch_state ?? "");
-  const hostWidgetSessionId = safeString(
-    state.host_widget_session_id || flags.host_widget_session_id || (result as any).host_widget_session_id || ""
-  );
-  if (transportReady) nextFlags.transport_ready = transportReady;
-  if (startDispatchState) nextFlags.start_dispatch_state = startDispatchState;
-  if (hostWidgetSessionId) nextFlags.host_widget_session_id = hostWidgetSessionId;
-  if (viewContractVersion) nextFlags.view_contract_version = viewContractVersion;
-  const uiStructured: Record<string, unknown> = {
-    prompt: { body: promptBody },
-    options,
-    state: {
-      menu_id: safeString((result as any)?.specialist?.menu_id ?? ""),
-      expected_choice_count: expectedChoiceCount,
-      flags: nextFlags,
-    },
-    view: {
-      version: VERSION,
-      mode,
-      waiting_locale: waitingLocaleEffective,
-      view_contract_version: viewContractVersion,
-      recovery_action:
-        waitingLocaleEffective && retryHint === "poll"
-          ? "retry_poll"
-          : "",
-      bootstrap_phase: bootstrapPhase,
-    },
-  };
-  // Carry full app result under ui.result so the widget can hydrate from a single
-  // structuredContent payload without relying on metadata mirrors.
-  try {
-    uiStructured.result = JSON.parse(JSON.stringify(result));
-  } catch {
-    uiStructured.result = { ...(result || {}) };
-  }
-  if (Object.keys(uiStringsForPayload).length > 0) {
-    uiStructured.i18n = {
-      lang: uiStringsLang,
-      status: uiStringsStatus,
-      requested_lang: uiStringsRequestedLang,
-      fallback_applied: uiStringsFallbackApplied === "true",
-      fallback_reason: uiStringsFallbackReason,
-      strings: uiStringsForPayload,
-    };
-  }
-  return uiStructured;
 }
 
 function resolveBaseUrl(req?: any): string {

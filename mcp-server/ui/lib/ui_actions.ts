@@ -14,7 +14,6 @@ import {
   computeHydrationState as computeHydrationStateCore,
   extractBootstrapOrdering as extractBootstrapOrderingCore,
   mergeToolOutputWithResponseMetadata,
-  normalizeToolOutput as normalizeToolOutputCore,
   resolveWidgetPayload as resolveWidgetPayloadCore,
 } from "./locale_bootstrap_runtime.js";
 export type {
@@ -226,7 +225,7 @@ function scheduleQueuedStartHandshakeRetry(reason: string): void {
       uiText(
         (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__?.state || {},
         "transient.connection_failed",
-        "Connection to the app host failed. Please try again."
+        ""
       )
     );
     return;
@@ -268,7 +267,7 @@ function queueStartAction(params: {
     uiText(
       (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__?.state || {},
       "transient.connecting",
-      "Connecting to the app host..."
+      ""
     )
   );
   scheduleQueuedStartHandshakeRetry(params.reason);
@@ -334,20 +333,10 @@ export function notifyHostTransportSignal(source: "set_globals" | "host_notifica
   void flushQueuedStartAction(source);
 }
 
-const HYDRATION_MAX_RETRIES = 3;
-
-let localeWaitRetryCount = 0;
-let localeWaitRetryExhausted = false;
-let lastPollSignature = "";
-
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function toLower(value: unknown): string {
-  return String(value || "").trim().toLowerCase();
 }
 
 function parsePositiveInt(value: unknown): number {
@@ -380,46 +369,20 @@ function bootstrapPollSignatureFromState(state: Record<string, unknown> | null |
   ].join("|");
 }
 
-function normalizeToolOutput(
-  raw: unknown,
-  options?: { fallbackRaw?: unknown }
-): Record<string, unknown> {
-  return normalizeToolOutputCore(raw, {
-    fallbackRaw: options?.fallbackRaw,
-    retryState: {
-      retry_count: localeWaitRetryCount,
-      retry_exhausted: localeWaitRetryExhausted,
-    },
-  });
-}
-
 export function computeHydrationState(resolved: import("./locale_bootstrap_runtime.js").ResolvedWidgetPayload): import("./locale_bootstrap_runtime.js").HydrationStatus {
-  return computeHydrationStateCore(resolved, {
-    retry_count: localeWaitRetryCount,
-    retry_exhausted: localeWaitRetryExhausted,
-  });
+  return computeHydrationStateCore(resolved);
 }
 
 export function resolveWidgetPayload(
-  raw: unknown,
-  options?: { fallbackRaw?: unknown }
+  raw: unknown
 ): import("./locale_bootstrap_runtime.js").ResolvedWidgetPayload {
-  return resolveWidgetPayloadCore(raw, {
-    fallbackRaw: options?.fallbackRaw,
-    retryState: {
-      retry_count: localeWaitRetryCount,
-      retry_exhausted: localeWaitRetryExhausted,
-    },
-  });
+  return resolveWidgetPayloadCore(raw);
 }
 
 export function extractBootstrapOrdering(
-  raw: unknown,
-  options?: { fallbackRaw?: unknown }
+  raw: unknown
 ): import("./locale_bootstrap_runtime.js").BootstrapOrdering {
-  return extractBootstrapOrderingCore(raw, {
-    fallbackRaw: options?.fallbackRaw,
-  });
+  return extractBootstrapOrderingCore(raw);
 }
 
 export function computeBootstrapRenderState(params: {
@@ -435,8 +398,7 @@ export function computeBootstrapRenderState(params: {
 }
 
 export function applyToolResult(raw: unknown): Record<string, unknown> {
-  const previous = getLastToolOutput();
-  const normalized = normalizeToolOutput(raw, { fallbackRaw: previous });
+  const normalized = toRecord(raw);
   try {
     (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = normalized;
   } catch {}
@@ -445,8 +407,7 @@ export function applyToolResult(raw: unknown): Record<string, unknown> {
 
 export function setLastToolOutput(raw: unknown): void {
   try {
-    const previous = getLastToolOutput();
-    (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = normalizeToolOutput(raw, { fallbackRaw: previous });
+    (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = toRecord(raw);
   } catch {}
 }
 
@@ -467,14 +428,11 @@ export function hasToolOutput(): boolean {
 /** Allow render() to use callTool return value, otherwise fall back to host toolOutput / cache. */
 export function toolData(overrideRaw?: unknown): Record<string, unknown> {
   const cached = getLastToolOutput();
-  if (overrideRaw) return normalizeToolOutput(overrideRaw);
+  if (overrideRaw) return toRecord(overrideRaw);
   const o = oa();
   const oo = o as { toolOutput?: unknown; toolResponseMetadata?: unknown };
   if (o && (oo.toolOutput || oo.toolResponseMetadata)) {
-    return normalizeToolOutput(
-      mergeToolOutputWithResponseMetadata(oo.toolOutput, oo.toolResponseMetadata),
-      { fallbackRaw: cached }
-    );
+    return mergeToolOutputWithResponseMetadata(oo.toolOutput, oo.toolResponseMetadata);
   }
   if (cached && Object.keys(cached).length) return cached;
   return {};
@@ -505,54 +463,6 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
   } catch {}
 }
 
-function replaceWidgetStateSafe(next: Record<string, unknown>): void {
-  const o = oa();
-  if (!o || typeof (o as { setWidgetState?: (s: Record<string, unknown>) => void }).setWidgetState !== "function")
-    return;
-  const ws = widgetState() || {};
-  const currentKeys = Object.keys(ws);
-  const nextKeys = Object.keys(next || {});
-  if (currentKeys.length === nextKeys.length) {
-    let changed = false;
-    for (const key of nextKeys) {
-      if (String(ws[key] ?? "") !== String(next[key] ?? "")) {
-        changed = true;
-        break;
-      }
-    }
-    if (!changed) return;
-  }
-  try {
-    (o as { setWidgetState: (s: Record<string, unknown>) => void }).setWidgetState(next || {});
-  } catch {}
-}
-
-function resetClientSessionStateForUpgradeRetry(): void {
-  resetQueuedStartAction();
-  clearLocaleWaitRetry();
-  bootstrapPollInFlight = false;
-  bootstrapPollInFlightSignature = "";
-  try {
-    delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
-  } catch {}
-  try {
-    delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
-  } catch {}
-  replaceWidgetStateSafe({});
-}
-
-function isSessionUpgradeRequiredResult(result: Record<string, unknown> | null | undefined): boolean {
-  const r = result && typeof result === "object" ? result : {};
-  const state = toRecord(r.state);
-  const error = toRecord(r.error);
-  const errorType = String(error.type || "").trim().toLowerCase();
-  if (errorType === "session_upgrade_required") return true;
-  const gateReason = String(state.ui_gate_reason || r.ui_gate_reason || "").trim().toLowerCase();
-  if (gateReason === "session_upgrade_required") return true;
-  const gateStatus = String(state.ui_gate_status || r.ui_gate_status || "").trim().toLowerCase();
-  return gateStatus === "blocked" && gateReason === "session_upgrade_required";
-}
-
 export function languageFromState(resultState: Record<string, unknown> | null | undefined): string {
   const fromResult =
     resultState?.language ? String(resultState.language).toLowerCase().trim() : "";
@@ -567,41 +477,10 @@ export function uiLang(resultState: Record<string, unknown> | null | undefined):
   return languageFromState(resultState);
 }
 
-function localeHintFromLocation(): string {
-  if (typeof window === "undefined" || !window.location) return "";
-  try {
-    const params = new URLSearchParams(String(window.location.search || ""));
-    const raw = params.get("locale_hint") || params.get("locale") || params.get("lang") || "";
-    return String(raw || "").trim().toLowerCase().replace(/_/g, "-");
-  } catch {
-    return "";
-  }
-}
-
-function normalizeLocaleHintForPayload(raw: unknown): string {
-  const text = String(raw || "").trim().toLowerCase().replace(/_/g, "-");
-  if (!text) return "";
-  if (!/^[a-z]{2}(?:-[a-z0-9]{2,8})*$/.test(text)) return "";
-  return text;
-}
-
-function normalizeLocaleHintSourceForPayload(raw: unknown): "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none" {
-  const text = String(raw || "").trim();
-  if (
-    text === "openai_locale" ||
-    text === "webplus_i18n" ||
-    text === "request_header" ||
-    text === "message_detect"
-  ) {
-    return text;
-  }
-  return "none";
-}
-
 function uiText(
   state: Record<string, unknown> | null | undefined,
   key: string,
-  fallback: string
+  _fallback: string
 ): string {
   const map = state?.ui_strings && typeof state.ui_strings === "object"
     ? (state.ui_strings as Record<string, unknown>)
@@ -610,7 +489,7 @@ function uiText(
   if (fromState) return fromState;
   const lang = uiLang(state) || "en";
   const translated = _t ? String(_t(lang, key) || "").trim() : "";
-  return translated || fallback;
+  return translated || "";
 }
 
 let rateLimitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -618,14 +497,9 @@ let lastCallAt = 0;
 const CLICK_DEBOUNCE_MS = 250;
 const RUN_STEP_TIMEOUT_MS = 25000;
 const BRIDGE_RESPONSE_TIMEOUT_MS = 6000;
-const LOCALE_WAIT_RETRY_MIN_MS = 800;
-const LOCALE_WAIT_RETRY_MAX_MS = 2000;
 const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
-let localeWaitRetryTimer: ReturnType<typeof setTimeout> | null = null;
-let localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
 let bootstrapPollInFlight = false;
 let bootstrapPollInFlightSignature = "";
-let sessionUpgradeRetryInFlight = false;
 
 function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   const raw = (globalThis as Record<string, unknown>)[name];
@@ -635,117 +509,13 @@ function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
 }
 
-function clearLocaleWaitRetry(opts?: { resetCounters?: boolean }): void {
-  if (localeWaitRetryTimer) clearTimeout(localeWaitRetryTimer);
-  localeWaitRetryTimer = null;
-  localeWaitRetryDelayMs = LOCALE_WAIT_RETRY_MIN_MS;
-  if (opts?.resetCounters !== false) {
-    localeWaitRetryCount = 0;
-    localeWaitRetryExhausted = false;
-    lastPollSignature = "";
-  }
-}
-
-function isUiBootstrapWaitRetryEnabled(result: Record<string, unknown>): boolean {
-  const uiPayload =
-    result?.ui && typeof result.ui === "object"
-      ? (result.ui as Record<string, unknown>)
-      : {};
-  const uiFlags =
-    uiPayload.flags && typeof uiPayload.flags === "object"
-      ? (uiPayload.flags as Record<string, unknown>)
-      : {};
-  if (uiFlags.ui_bootstrap_wait_retry_v1 === false) return false;
-  if (uiFlags.ui_bootstrap_wait_retry_v1 === true) return true;
-  return true;
-}
-function buildRetryState(result: Record<string, unknown>): Record<string, unknown> {
-  const stateFromResult = toRecord(result.state);
-  const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
-  const latestState = toRecord(latest.state);
-  const stateFromWidget = toRecord(widgetState());
-  return {
-    ...stateFromWidget,
-    ...latestState,
-    ...stateFromResult,
-  };
-}
-
 function maybeScheduleBootstrapRetry(
-  resolved: ResolvedWidgetPayload,
-  source: string,
-  opts?: { is_poll_response?: boolean }
+  resolved: ResolvedWidgetPayload
 ): HydrationStatus {
-  const hydration = computeHydrationState(resolved);
-  const waiting = hydration.waiting_reason !== "none";
-  if (!waiting || !isUiBootstrapWaitRetryEnabled(resolved.result)) {
-    clearLocaleWaitRetry();
-    return computeHydrationState(resolved);
-  }
-  if (opts?.is_poll_response === true) {
-    const state = toRecord(resolved.result.state);
-    const gateStatus = toLower(state.ui_gate_status || resolved.result.ui_gate_status);
-    const signature = `${gateStatus}|${resolved.ui_strings_status}`;
-    if (signature === lastPollSignature) {
-      localeWaitRetryExhausted = true;
-      clearLocaleWaitRetry({ resetCounters: false });
-      if (isDevEnv()) {
-        console.log("[hydration_same_response_circuit_breaker]", {
-          source,
-          signature,
-          retry_count: localeWaitRetryCount,
-          waiting_reason: hydration.waiting_reason,
-        });
-      }
-      return computeHydrationState(resolved);
-    }
-    lastPollSignature = signature;
-  }
-  if (hydration.retry_exhausted || localeWaitRetryExhausted || localeWaitRetryCount >= HYDRATION_MAX_RETRIES) {
-    localeWaitRetryExhausted = true;
-    if (isDevEnv()) {
-      console.log("[hydration_failed_max_retries]", {
-        source,
-        retry_count: localeWaitRetryCount,
-        waiting_reason: hydration.waiting_reason,
-      });
-    }
-    return computeHydrationState(resolved);
-  }
-  if (bootstrapPollInFlight) {
-    return computeHydrationState(resolved);
-  }
-  if (!localeWaitRetryTimer) {
-    const retryState = buildRetryState(resolved.result);
-    const delay = localeWaitRetryDelayMs;
-    localeWaitRetryTimer = setTimeout(() => {
-      localeWaitRetryTimer = null;
-      localeWaitRetryCount += 1;
-      void callRunStep(ACTION_BOOTSTRAP_POLL, {
-        ...retryState,
-        __bootstrap_poll: "true",
-        __hydrate_poll: "true",
-      });
-    }, delay);
-    localeWaitRetryDelayMs = Math.min(
-      LOCALE_WAIT_RETRY_MAX_MS,
-      Math.round(localeWaitRetryDelayMs * 1.8)
-    );
-    if (isDevEnv()) {
-      console.log("[ui_bootstrap_retry_scheduled]", {
-        source,
-        delay_ms: delay,
-        next_delay_ms: localeWaitRetryDelayMs,
-        waiting_reason: hydration.waiting_reason,
-        retry_count: localeWaitRetryCount,
-      });
-    }
-  }
   return computeHydrationState(resolved);
 }
 
 export function resetHydrationRetryCycle(opts?: { trigger_poll?: boolean; source?: string }): void {
-  clearLocaleWaitRetry();
   if (opts?.trigger_poll !== true) return;
   const source = String(opts?.source || "manual");
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
@@ -768,9 +538,9 @@ export function ensureBootstrapRetryForResult(
   rawOrResult: Record<string, unknown> | null | undefined,
   opts?: { source?: string }
 ): boolean {
-  const source = String(opts?.source || "render");
+  void opts;
   const resolved = resolveWidgetPayload(rawOrResult || {});
-  const hydration = maybeScheduleBootstrapRetry(resolved, source, { is_poll_response: false });
+  const hydration = maybeScheduleBootstrapRetry(resolved);
   return hydration.waiting_reason !== "none";
 }
 
@@ -792,9 +562,7 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   if (resolved.response_seq > 0) orderingPatch.response_seq = resolved.response_seq;
   if (Object.keys(orderingPatch).length > 0) setWidgetStateSafe(orderingPatch);
   const source = String(opts?.source || "unknown");
-  const hydration = maybeScheduleBootstrapRetry(resolved, source, {
-    is_poll_response: opts?.is_poll_response === true,
-  });
+  const hydration = maybeScheduleBootstrapRetry(resolved);
   if (isDevEnv()) {
     console.log("[ui_bootstrap_state]", {
       source,
@@ -1125,31 +893,13 @@ export async function callRunStep(
     String((extraState as Record<string, unknown> | undefined)?.__skip_start_queue || "")
       .trim()
       .toLowerCase() === "true";
-  const internalSessionUpgradeRetry =
-    String((extraState as Record<string, unknown> | undefined)?.__session_upgrade_retry || "")
-      .trim()
-      .toLowerCase() === "true";
-  const internalForceEmptyState =
-    String((extraState as Record<string, unknown> | undefined)?.__force_empty_state || "")
-      .trim()
-      .toLowerCase() === "true";
-  const internalForceLocaleHint = normalizeLocaleHintForPayload(
-    (extraState as Record<string, unknown> | undefined)?.__force_locale_hint || ""
-  );
-  const internalForceLocaleHintSource = normalizeLocaleHintSourceForPayload(
-    (extraState as Record<string, unknown> | undefined)?.__force_locale_hint_source || ""
-  );
   const cleanExtraState =
     extraState && typeof extraState === "object"
       ? Object.fromEntries(
           Object.entries(extraState).filter(
             ([key]) =>
               key !== "__skip_start_queue" &&
-              key !== "__queue_flush_source" &&
-              key !== "__session_upgrade_retry" &&
-              key !== "__force_empty_state" &&
-              key !== "__force_locale_hint" &&
-              key !== "__force_locale_hint_source"
+              key !== "__queue_flush_source"
           )
         )
       : undefined;
@@ -1194,41 +944,12 @@ export async function callRunStep(
     if (hasToolOutput && !isBootstrapPollCall) return;
     if (!persistedStarted && !isBootstrapPollCall) return;
   }
-  if (!isBootstrapPollCall) {
-    clearLocaleWaitRetry();
-  }
 
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
   const state = latest.state || { current_step: "step_0" };
 
-  const baseState = internalForceEmptyState ? {} : state;
+  const baseState = state;
   const ws = widgetState();
-  const stateRequestedLanguage = normalizeLocaleHintForPayload(
-    String((baseState as Record<string, unknown>).ui_strings_requested_lang || "")
-  );
-  const stateLanguage = normalizeLocaleHintForPayload(
-    String((baseState as Record<string, unknown>).language || ws.language || "")
-  );
-  const widgetLanguage = normalizeLocaleHintForPayload(
-    String((ws.language || ws.locale_hint || "") as string).trim().toLowerCase()
-  );
-  const locationLanguage = localeHintFromLocation();
-  const hasServerState = Object.keys(baseState).length > 0;
-  const hasServerLanguage = Boolean(stateRequestedLanguage || stateLanguage);
-  const clientFallbackLocale = hasServerLanguage ? "" : (widgetLanguage || locationLanguage);
-  const localeHint =
-    internalForceLocaleHint ||
-    stateRequestedLanguage ||
-    stateLanguage ||
-    clientFallbackLocale;
-  const localeHintSource =
-    localeHint && internalForceLocaleHint
-      ? (internalForceLocaleHintSource !== "none" ? internalForceLocaleHintSource : "message_detect")
-      : (
-        localeHint
-          ? (stateRequestedLanguage ? "message_detect" : stateLanguage ? "locale_hint" : "webplus_i18n")
-          : "none"
-      );
   let nextState = Object.assign({}, baseState);
   if (cleanExtraState && typeof cleanExtraState === "object") {
     nextState = Object.assign({}, nextState, cleanExtraState);
@@ -1261,8 +982,8 @@ export async function callRunStep(
     current_step_id: nextState.current_step || "step_0",
     user_message: String(message || ""),
     input_mode: "widget",
-    locale_hint: localeHint,
-    locale_hint_source: localeHintSource,
+    locale_hint: "",
+    locale_hint_source: "none" as const,
     state: nextState,
   };
   const bootstrapPollSignature = isBootstrapPollCall
@@ -1312,12 +1033,12 @@ export async function callRunStep(
         timeout_ms: timeoutMs,
       });
     }
-    setInlineNotice(uiText(nextState, "transient.timeout", "This is taking longer than usual. Please try again."));
+    setInlineNotice(uiText(nextState, "transient.timeout", ""));
     setLoading(false);
   }, timeoutMs);
 
   try {
-    const transportPrimary = hasCallTool ? "callTool" : "bridge";
+    const transportPrimary = hasBridgePath ? "bridge" : "callTool";
     if (isStartAction) clearInlineNotice();
     if (isStartAction) {
       setWidgetStateSafe({
@@ -1361,7 +1082,7 @@ export async function callRunStep(
         elapsed_ms: Date.now() - startedAt,
       });
     }
-    const normalizedRaw = normalizeToolOutput(resp);
+    const normalizedRaw = toRecord(resp);
     const result = resolveWidgetPayload(normalizedRaw).result;
     const errorObj = result?.error as
       | { type?: string; user_message?: string; retry_after_ms?: number; retry_action?: string }
@@ -1372,71 +1093,20 @@ export async function callRunStep(
       (errorObj.type === "timeout" || errorObj.type === "rate_limited") &&
       (errorObj.retry_action === "retry_same_action" || errorObj.type === "rate_limited");
     if (transientRetryError) {
-      clearLocaleWaitRetry();
       if (errorObj.type === "rate_limited") {
         setInlineNotice(
           errorObj.user_message ||
-            uiText(nextState, "transient.rate_limited", "Please wait a moment and try again.")
+            uiText(nextState, "transient.rate_limited", "")
         );
         lockRateLimit(errorObj.retry_after_ms ?? 1500);
       } else {
         setInlineNotice(
           errorObj.user_message ||
-            uiText(nextState, "transient.timeout", "This is taking longer than usual. Please try again.")
+            uiText(nextState, "transient.timeout", "")
         );
       }
       return;
     }
-    const sessionUpgradeRequired = isSessionUpgradeRequiredResult(result);
-    if (sessionUpgradeRequired && !internalSessionUpgradeRetry) {
-      if (sessionUpgradeRetryInFlight) {
-        if (isDevEnv()) {
-          console.log("[ui_session_upgrade_retry_deduped]", {
-            action_code: messageText,
-            source: isBootstrapPollCall ? "bootstrap_poll" : "interactive",
-          });
-        }
-        return;
-      }
-      sessionUpgradeRetryInFlight = true;
-      const resultRecord = (result && typeof result === "object")
-        ? (result as Record<string, unknown>)
-        : {};
-      const resultState = toRecord(resultRecord.state);
-      const resultI18n = toRecord(resultRecord.i18n);
-      const retryLocaleHint = normalizeLocaleHintForPayload(
-        String(
-          resultState.ui_strings_requested_lang ||
-            resultRecord.ui_strings_requested_lang ||
-            resultI18n.requested_lang ||
-            resultI18n.lang ||
-            resultRecord.language ||
-            localeHint
-        )
-      ) || localeHint;
-      if (isDevEnv()) {
-        console.log("[ui_session_upgrade_retry]", {
-          action_code: messageText,
-          source: isBootstrapPollCall ? "bootstrap_poll" : "interactive",
-          reason: "session_upgrade_required",
-          retry_locale_hint: retryLocaleHint,
-        });
-      }
-      resetClientSessionStateForUpgradeRetry();
-      try {
-        await callRunStep(messageText || String(message || ""), {
-          ...(cleanExtraState || {}),
-          __session_upgrade_retry: "true",
-          __force_empty_state: "true",
-          __force_locale_hint: retryLocaleHint,
-          __force_locale_hint_source: "message_detect",
-        });
-      } finally {
-        sessionUpgradeRetryInFlight = false;
-      }
-      return;
-    }
-
     handleToolResultAndMaybeScheduleBootstrapRetry(resp, {
       source: "call_run_step",
       is_poll_response: isBootstrapPollCall,
@@ -1448,7 +1118,6 @@ export async function callRunStep(
       });
     }
   } catch (e) {
-    clearLocaleWaitRetry();
     if (didTimeout) return;
     const msg = (e && (e as Error).message) ? String((e as Error).message) : "";
     const lowerMsg = msg.toLowerCase();
@@ -1485,7 +1154,7 @@ export async function callRunStep(
           elapsed_ms: Date.now() - startedAt,
         });
       }
-      setInlineNotice(uiText(nextState, "transient.timeout", "This is taking longer than usual. Please try again."));
+      setInlineNotice(uiText(nextState, "transient.timeout", ""));
       return;
     }
     console.error("run_step failed", e);

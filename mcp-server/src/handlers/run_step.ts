@@ -182,7 +182,6 @@ import {
   isInteractiveLocaleReady as localeStartIsInteractiveLocaleReady,
   deriveBootstrapContract as localeStartDeriveBootstrapContract,
   applyUiGateState as localeStartApplyUiGateState,
-  computeUiBootstrapStatus as localeStartComputeUiBootstrapStatus,
   uiStringsRequestedStatusFromRaw as localeStartUiStringsRequestedStatusFromRaw,
   resolveUiGateForceRecoverMs as localeStartResolveUiGateForceRecoverMs,
   parseExplicitLanguageOverride as localeStartParseExplicitLanguageOverride,
@@ -194,9 +193,43 @@ import {
  * Incoming tool args
  * NOTE: Some tool callers include current_step_id ("start") — accepted but not relied on.
  */
+const ALLOWED_TRANSIENT_STATE_KEYS = new Set<string>([
+  "__text_submit",
+  "__pending_scores",
+  "__bootstrap_poll",
+  "__ui_telemetry",
+  "__ui_phase_by_step",
+  "__ui_render_mode_by_step",
+  "__request_id",
+  "__client_action_id",
+  "__session_id",
+  "__session_started_at",
+  "__session_log_file",
+  "__session_turn_index",
+  "__session_turn_id",
+  "__dream_runtime_mode",
+  "__dream_builder_prompt_stage",
+  "__last_clicked_action_for_contract",
+  "__last_clicked_label_for_contract",
+]);
+
+function stripUnknownTransientStateKeys(next: Record<string, unknown>): void {
+  for (const key of Object.keys(next)) {
+    if (!key.startsWith("__")) continue;
+    if (ALLOWED_TRANSIENT_STATE_KEYS.has(key)) continue;
+    delete next[key];
+  }
+}
+
 function canonicalizeStateForRunStepArgs(raw: unknown): unknown {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
   const next = { ...(raw as Record<string, unknown>) };
+  // Server-side SSOT: localized string map is derived by backend each turn.
+  // Never trust client-echoed ui_strings payload as authoritative state.
+  if (Object.prototype.hasOwnProperty.call(next, "ui_strings")) {
+    delete next.ui_strings;
+  }
+  stripUnknownTransientStateKeys(next);
   next.language_source = normalizeStateLanguageSource(next.language_source);
   return next;
 }
@@ -338,6 +371,21 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   "contract.recap.noOutput": "We have not yet defined the {0}.",
   "transient.rate_limited": "Please wait a moment and try again.",
   "transient.timeout": "This is taking longer than usual. Please try again.",
+  "transient.connection_failed": "Connection to the app host failed. Please try again.",
+  "transient.connecting": "Connecting to the app host...",
+  "hydration.retry.title": "We could not load the app state.",
+  "hydration.retry.body": "Please retry to continue.",
+  "hydration.retry.action": "Retry",
+  "error.session_upgrade.title": "This session needs to be restarted.",
+  "error.session_upgrade.body": "Please start a new session to continue.",
+  "error.contract.title": "The app state is invalid.",
+  "error.contract.body": "Please refresh or start a new session.",
+  "error.generic.title": "Something went wrong.",
+  "error.generic.body": "Please refresh and try again.",
+  "dev.error.prefix": "[ui_error]",
+  "dev.error.unknown": "unknown error",
+  "dev.error.unhandled_rejection": "unhandled rejection",
+  "media.image.alt": "Image",
   "wordingChoice.chooseVersion": "Choose this version",
   "wordingChoice.useInputFallback": "Use this input",
   "bigwhy.tooLong.message":
@@ -465,6 +513,17 @@ function buildCriticalUiKeysStep0(): string[] {
     "step0.readiness.suffix",
     "transient.rate_limited",
     "transient.timeout",
+    "transient.connection_failed",
+    "transient.connecting",
+    "hydration.retry.title",
+    "hydration.retry.body",
+    "hydration.retry.action",
+    "error.session_upgrade.title",
+    "error.session_upgrade.body",
+    "error.contract.title",
+    "error.contract.body",
+    "error.generic.title",
+    "error.generic.body",
   ]);
   for (const key of UI_STRINGS_KEYS) {
     if (key.startsWith("menuLabel.STEP0_")) keySet.add(key);
@@ -495,11 +554,6 @@ type HolisticPolicyFlags = {
   wordingChoiceV2: boolean;
   timeoutGuardV2: boolean;
   motivationQuotesV11: boolean;
-};
-
-type MigrationFlags = {
-  intentsV1: boolean;
-  structuredActionsV1: boolean;
 };
 
 type CallUsageSnapshot = {
@@ -636,14 +690,6 @@ function resolveHolisticPolicyFlags(): HolisticPolicyFlags {
     wordingChoiceV2: holisticPolicyV2 && envFlagEnabled("BSC_WORDING_CHOICE_V2", localDevDefaults),
     timeoutGuardV2: holisticPolicyV2 && envFlagEnabled("BSC_TIMEOUT_GUARD_V2", localDevDefaults),
     motivationQuotesV11: holisticPolicyV2 && envFlagEnabled("BSC_MOTIVATION_QUOTES_V11", localDevDefaults),
-  };
-}
-
-function resolveMigrationFlags(): MigrationFlags {
-  const localDevDefaults = process.env.LOCAL_DEV === "1";
-  return {
-    intentsV1: envFlagEnabled("BSC_INTENTS_V1", true),
-    structuredActionsV1: envFlagEnabled("BSC_STRUCTURED_ACTIONS_V1", localDevDefaults),
   };
 }
 
@@ -5099,7 +5145,6 @@ function buildUiPayload(
   wordingChoiceOverride?: WordingChoiceUiPayload | null,
   stateOverride?: CanvasState | null,
   stepIdOverride?: string,
-  migrationFlags?: MigrationFlags,
   contractMetaOverride?: UiContractMeta | null
 ): {
   action_codes?: string[];
@@ -5179,7 +5224,6 @@ function buildUiPayload(
   const contractMeta = normalizeUiContractMeta(specialist, contractMetaOverride);
   const rawQuestionText = pickPrompt(specialist);
   void renderedActionsOverride;
-  void migrationFlags;
   const effectiveState = (stateOverride && typeof stateOverride === "object" ? stateOverride : null) as
     | CanvasState
     | null;
@@ -5404,7 +5448,6 @@ function attachRegistryPayload<T extends Record<string, unknown>>(
     wordingChoiceOverride,
     payloadState,
     payloadStepId,
-    undefined,
     effectiveContractOverride
   );
   const hasWidgetActions =
@@ -5621,17 +5664,6 @@ function applyUiGateState(
   });
 }
 
-function computeUiBootstrapStatus(
-  state: CanvasState | null | undefined,
-  uiStatusRaw: string
-): "init" | "awaiting_locale" | "ready" {
-  return localeStartComputeUiBootstrapStatus({
-    state,
-    uiStatusRaw,
-    uiBootstrapStateV1: isUiBootstrapStateV1Enabled(),
-  });
-}
-
 function normalizeLanguageSource(raw: unknown): LanguageSource {
   return normalizeStateLanguageSource(raw);
 }
@@ -5707,35 +5739,6 @@ function sanitizeTranslatedUiStrings(
   if (missingKeys > 0) bumpUiI18nCounter(telemetry, "translation_missing_keys", missingKeys);
   if (htmlViolations > 0) bumpUiI18nCounter(telemetry, "translation_html_violations", htmlViolations);
   return next;
-}
-
-function migrateLegacyI18nState(
-  state: CanvasState,
-  telemetry?: UiI18nTelemetryCounters | null
-): CanvasState {
-  const existingRaw = (state as any).ui_strings;
-  const existing = existingRaw && typeof existingRaw === "object"
-    ? (existingRaw as Record<string, unknown>)
-    : null;
-  if (!existing) return state;
-  const nextUi: Record<string, string> = {};
-  let missingKeys = 0;
-  for (const key of UI_STRINGS_KEYS) {
-    const candidate = String(existing[key] || "");
-    if (candidate.trim() || !String(UI_STRINGS_WITH_MENU_KEYS[key] || "").trim()) {
-      nextUi[key] = candidate;
-      continue;
-    }
-    nextUi[key] = String(UI_STRINGS_WITH_MENU_KEYS[key] || "");
-    missingKeys += 1;
-  }
-  if (missingKeys <= 0) return state;
-  bumpUiI18nCounter(telemetry, "legacy_i18n_migration_count");
-  bumpUiI18nCounter(telemetry, "ui_strings_missing_keys", missingKeys);
-  return {
-    ...(state as any),
-    ui_strings: nextUi,
-  } as CanvasState;
 }
 
 async function detectLanguageHeuristic(text: string): Promise<{ lang: string; confident: boolean }> {
@@ -7038,7 +7041,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const policyFlags = resolveHolisticPolicyFlags();
   const wordingChoiceEnabled = policyFlags.wordingChoiceV2;
   const motivationQuotesEnabled = policyFlags.motivationQuotesV11;
-  const migrationFlags = resolveMigrationFlags();
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
     const incomingLanguageSourceNormalized = normalizeStateLanguageSource((args.state as any)?.language_source);
     console.log("[run_step] input_mode", {
@@ -7129,7 +7131,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       migrationFromVersion = preMigrateStateVersion || "";
     }
   }
-  state = migrateLegacyI18nState(state, uiI18nTelemetry);
   let rawLegacyMarkers = [
     ...detectLegacySessionMarkers(state),
     ...rawStateContractMarkers,
@@ -7345,6 +7346,32 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     return "gpt-4o-mini";
   };
 
+  const applyUiClientActionContract = (targetState: CanvasState | null | undefined): void => {
+    if (!targetState || typeof targetState !== "object") return;
+    const stateRef = targetState as any;
+    const currentStep = String(stateRef.current_step || "").trim();
+    const activeSpecialist = String(stateRef.active_specialist || "").trim();
+    const lastSpecialist =
+      stateRef.last_specialist_result && typeof stateRef.last_specialist_result === "object"
+        ? (stateRef.last_specialist_result as Record<string, unknown>)
+        : {};
+    const scoringPhase = String(lastSpecialist.scoring_phase || "").trim().toLowerCase() === "true";
+    const dreamRuntimeMode = getDreamRuntimeMode(targetState);
+    const textSubmitUsesScores =
+      currentStep === DREAM_STEP_ID &&
+      activeSpecialist === DREAM_EXPLAINER_SPECIALIST &&
+      (dreamRuntimeMode === "builder_scoring" || scoringPhase);
+    stateRef.ui_action_start = "ACTION_START";
+    stateRef.ui_action_text_submit = textSubmitUsesScores
+      ? "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES"
+      : "ACTION_TEXT_SUBMIT";
+    stateRef.ui_action_text_submit_payload_mode = textSubmitUsesScores ? "scores" : "text";
+    stateRef.ui_action_wording_pick_user = "ACTION_WORDING_PICK_USER";
+    stateRef.ui_action_wording_pick_suggestion = "ACTION_WORDING_PICK_SUGGESTION";
+    stateRef.ui_action_dream_start_exercise = "ACTION_DREAM_INTRO_START_EXERCISE";
+    stateRef.ui_action_dream_switch_to_self = "ACTION_DREAM_SWITCH_TO_SELF";
+  };
+
   const finalizeResponse = <T extends RunStepSuccess | RunStepError>(response: T): T => {
     let finalResponse = response as unknown as RunStepSuccess | RunStepError;
     const responseStateForCleanup = (finalResponse as any)?.state as CanvasState | undefined;
@@ -7376,6 +7403,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           (responseStateForCleanup as any).ui_strings_lang || ""
         );
       }
+      applyUiClientActionContract(responseStateForCleanup);
     }
     if ((finalResponse as any)?.ok === true) {
       const uiViolation = validateUiPayloadContractParity((finalResponse || {}) as Record<string, unknown>);
@@ -7571,12 +7599,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     clickedLabelForNoRepeat = "";
     (state as any).__last_clicked_action_for_contract = "";
     (state as any).__last_clicked_label_for_contract = "";
-  }
-  if (isBootstrapPollCall && !isUiLocaleReadyGateV1Enabled()) {
-    actionCodeRaw = "";
-    userMessage = "";
-    clickedActionCodeForNoRepeat = "";
-    clickedLabelForNoRepeat = "";
   }
 
   const legacyMarkers = Array.from(

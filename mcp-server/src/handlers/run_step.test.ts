@@ -749,6 +749,26 @@ test("session id persists and token markdown log is written per turn", async () 
   }
 });
 
+test("state transient allowlist keeps session metadata and strips unknown __ keys", async () => {
+  const seededSessionId = "session_allowlist_seed";
+  const result = await run_step({
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "false",
+      __session_id: seededSessionId,
+      __unknown_payload_noise: "drop_me",
+    } as Record<string, unknown>,
+  });
+
+  assert.equal(result?.ok, true);
+  assert.equal(String((result as any)?.state?.__session_id || ""), seededSessionId);
+  assert.equal(Object.prototype.hasOwnProperty.call((result as any)?.state || {}, "__unknown_payload_noise"), false);
+});
+
 // Meta-filter: first message is never dropped (pristineAtEntry ? rawNormalized : ...) in run_step.ts.
 // Bullets/requirements/goals no longer trigger looksLikeMetaInstruction; only injection markers do.
 // Full flow with bulleted brief would require LLM mock; covered by code review and manual test.

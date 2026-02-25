@@ -1,13 +1,5 @@
 export type PayloadSource =
   | "meta.widget_result"
-  | "toolResponseMetadata.widget_result"
-  | "toolResponseMetadata._meta.widget_result"
-  | "structured.result"
-  | "structured.ui.result"
-  | "raw.result"
-  | "raw.ui.result"
-  | "raw.ui"
-  | "raw"
   | "none";
 
 export type WaitingReason = "missing_state" | "i18n_pending" | "both" | "none";
@@ -31,8 +23,6 @@ export type ResolvedWidgetPayload = {
     | "state.language"
     | "state.ui_strings_requested_lang"
     | "state.ui_strings_lang"
-    | "result.i18n.requested_lang"
-    | "result.i18n.lang"
     | "none";
   ui_strings_status: "ready" | "pending" | "critical_ready" | "unknown";
   shape_version: string;
@@ -62,18 +52,6 @@ export type BootstrapRenderState = {
   forceLocaleWait: boolean;
   bootstrapWaitingLocale: boolean;
   interactiveFallbackActive: boolean;
-};
-
-type PayloadCandidate = {
-  source: PayloadSource;
-  value: Record<string, unknown>;
-  richness: number;
-  freshness: number | null;
-  order: number;
-  bootstrap_session_id: string;
-  bootstrap_epoch: number;
-  response_seq: number;
-  host_widget_session_id: string;
 };
 
 const WIDGET_RESULT_KEYS = new Set([
@@ -133,7 +111,7 @@ function normalizeUiStringsStatus(
 function phaseFromViewMode(raw: unknown): BootstrapPhase | "" {
   const mode = toLower(raw);
   if (mode === "waiting_locale") return "waiting_locale";
-  if (mode === "recovery") return "waiting_locale";
+  if (mode === "recovery") return "recovery";
   if (mode === "blocked" || mode === "failed") return "failed";
   if (mode === "interactive" || mode === "prestart") return "ready";
   return "";
@@ -168,15 +146,6 @@ export function isWidgetResultLike(value: unknown): value is Record<string, unkn
   return false;
 }
 
-function parseFreshness(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n)) return n;
-  }
-  return null;
-}
-
 function parsePositiveInt(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
   if (typeof value === "string") {
@@ -206,128 +175,6 @@ function sessionInfoForResult(result: Record<string, unknown>): {
   };
 }
 
-function freshnessForResult(result: Record<string, unknown>): number | null {
-  const direct = parseFreshness(result.updated_at_ms ?? result.result_version ?? result.turn_index);
-  if (direct !== null) return direct;
-  const state = toRecord(result.state);
-  return parseFreshness(state.updated_at_ms ?? state.result_version ?? state.turn_index);
-}
-
-function computePayloadRichness(result: Record<string, unknown>): number {
-  const state = toRecord(result.state);
-  const ui = toRecord(result.ui);
-  let score = 0;
-  if (Object.keys(state).length) score += 40;
-  if (String(state.current_step || "").trim()) score += 40;
-  if (Object.keys(ui).length) score += 30;
-  if (String(result.prompt || "").trim()) score += 20;
-  if (String(result.text || "").trim()) score += 20;
-  if (toRecord(result.specialist) && Object.keys(toRecord(result.specialist)).length) score += 15;
-  if (String(result.current_step_id || "").trim()) score += 10;
-  if (String(result.model_result_shape_version || "").trim()) score += 5;
-  return score;
-}
-
-function candidateValue(root: Record<string, unknown>, path: string): unknown {
-  const segs = path.split(".");
-  let cur: unknown = root;
-  for (const seg of segs) {
-    if (!cur || typeof cur !== "object") return undefined;
-    cur = (cur as Record<string, unknown>)[seg];
-  }
-  return cur;
-}
-
-function candidateMatchesAnchorOrdering(anchor: PayloadCandidate, candidate: PayloadCandidate): boolean {
-  let matched = false;
-  if (anchor.host_widget_session_id && candidate.host_widget_session_id) {
-    if (anchor.host_widget_session_id !== candidate.host_widget_session_id) return false;
-    matched = true;
-  }
-  if (anchor.bootstrap_session_id && candidate.bootstrap_session_id) {
-    if (anchor.bootstrap_session_id !== candidate.bootstrap_session_id) return false;
-    matched = true;
-  }
-  if (anchor.bootstrap_epoch > 0 && candidate.bootstrap_epoch > 0) {
-    if (anchor.bootstrap_epoch !== candidate.bootstrap_epoch) return false;
-    matched = true;
-  }
-  if (anchor.response_seq > 0 && candidate.response_seq > 0) {
-    if (anchor.response_seq !== candidate.response_seq) return false;
-    matched = true;
-  }
-  return matched;
-}
-
-function compareCandidatePriority(a: PayloadCandidate, b: PayloadCandidate): number {
-  if (a.richness !== b.richness) return b.richness - a.richness;
-  const aFresh = a.freshness ?? Number.NEGATIVE_INFINITY;
-  const bFresh = b.freshness ?? Number.NEGATIVE_INFINITY;
-  if (aFresh !== bFresh) return bFresh - aFresh;
-  return a.order - b.order;
-}
-
-function enrichBestCandidate(best: PayloadCandidate | null, candidates: PayloadCandidate[]): Record<string, unknown> {
-  if (!best) return {};
-  const base = best.value;
-  const scoped = candidates
-    .filter((candidate) => candidate !== best && candidateMatchesAnchorOrdering(best, candidate))
-    .sort(compareCandidatePriority);
-  if (!scoped.length) return base;
-  const enriched: Record<string, unknown> = { ...base };
-  const baseUi = toRecord(base.ui);
-  const baseState = toRecord(base.state);
-
-  if (!Object.keys(baseUi).length) {
-    const uiCandidate = scoped.find((candidate) => Object.keys(toRecord(candidate.value.ui)).length > 0);
-    if (uiCandidate) {
-      enriched.ui = toRecord(uiCandidate.value.ui);
-    }
-  }
-  if (!Object.keys(baseState).length) {
-    const stateCandidate = scoped.find((candidate) => Object.keys(toRecord(candidate.value.state)).length > 0);
-    if (stateCandidate) {
-      enriched.state = toRecord(stateCandidate.value.state);
-    }
-  }
-
-  const enrichedState = toRecord(enriched.state);
-  const enrichedUi = toRecord(enriched.ui);
-  const enrichedUiFlags = toRecord(enrichedUi.flags);
-  if (
-    !String(
-      enriched.host_widget_session_id ||
-      enrichedState.host_widget_session_id ||
-      enrichedUiFlags.host_widget_session_id ||
-      ""
-    ).trim()
-  ) {
-    const hostCandidate = scoped.find((candidate) => candidate.host_widget_session_id);
-    if (hostCandidate?.host_widget_session_id) {
-      enriched.host_widget_session_id = hostCandidate.host_widget_session_id;
-    }
-  }
-  if (!String(enriched.bootstrap_session_id || enrichedState.bootstrap_session_id || "").trim()) {
-    const sessionCandidate = scoped.find((candidate) => candidate.bootstrap_session_id);
-    if (sessionCandidate?.bootstrap_session_id) {
-      enriched.bootstrap_session_id = sessionCandidate.bootstrap_session_id;
-    }
-  }
-  if (parsePositiveInt(enriched.bootstrap_epoch || enrichedState.bootstrap_epoch) <= 0) {
-    const epochCandidate = scoped.find((candidate) => candidate.bootstrap_epoch > 0);
-    if (epochCandidate?.bootstrap_epoch) {
-      enriched.bootstrap_epoch = epochCandidate.bootstrap_epoch;
-    }
-  }
-  if (parsePositiveInt(enriched.response_seq || enrichedState.response_seq) <= 0) {
-    const seqCandidate = scoped.find((candidate) => candidate.response_seq > 0);
-    if (seqCandidate?.response_seq) {
-      enriched.response_seq = seqCandidate.response_seq;
-    }
-  }
-  return enriched;
-}
-
 export function mergeToolOutputWithResponseMetadata(
   toolOutputRaw: unknown,
   toolResponseMetadataRaw: unknown
@@ -340,131 +187,31 @@ export function mergeToolOutputWithResponseMetadata(
   const mergedMeta = toRecord(merged._meta);
   const metadataMeta = toRecord(metadata._meta);
   const mergedMetaNext: Record<string, unknown> = { ...mergedMeta, ...metadataMeta };
-  if (metadata.widget_result !== undefined) {
-    mergedMetaNext.widget_result = metadata.widget_result;
-  } else if (metadataMeta.widget_result !== undefined && mergedMetaNext.widget_result === undefined) {
-    mergedMetaNext.widget_result = metadataMeta.widget_result;
-  }
   merged._meta = mergedMetaNext;
   merged.toolResponseMetadata = metadata;
   return merged;
 }
 
-function collectPayloadCandidates(raw: unknown, orderOffset = 0): PayloadCandidate[] {
+function pickWidgetResultFromMeta(raw: unknown): {
+  result: Record<string, unknown>;
+  source: PayloadSource;
+} {
   const root = toRecord(raw);
-  const structured = toRecord(root.structuredContent);
   const meta = toRecord(root._meta);
-  const toolResponseMetadata = toRecord(root.toolResponseMetadata);
-  const toolResponseMetadataMeta = toRecord(toolResponseMetadata._meta);
-  const candidates: PayloadCandidate[] = [];
-  const add = (source: PayloadSource, value: unknown, order: number): void => {
-    if (!isWidgetResultLike(value)) return;
-    const rec = value as Record<string, unknown>;
-    const sessionInfo = sessionInfoForResult(rec);
-    candidates.push({
-      source,
-      value: rec,
-      richness: computePayloadRichness(rec),
-      freshness: freshnessForResult(rec),
-      order: order + orderOffset,
-      bootstrap_session_id: sessionInfo.bootstrap_session_id,
-      bootstrap_epoch: sessionInfo.bootstrap_epoch,
-      response_seq: sessionInfo.response_seq,
-      host_widget_session_id: sessionInfo.host_widget_session_id,
-    });
+  const ordered: Array<{ source: PayloadSource; value: unknown }> = [
+    { source: "meta.widget_result", value: meta.widget_result },
+  ];
+  for (const candidate of ordered) {
+    if (!isWidgetResultLike(candidate.value)) continue;
+    return {
+      result: candidate.value as Record<string, unknown>,
+      source: candidate.source,
+    };
+  }
+  return {
+    result: {},
+    source: "none",
   };
-  add("meta.widget_result", meta.widget_result, 0);
-  add("toolResponseMetadata.widget_result", toolResponseMetadata.widget_result, 1);
-  add("toolResponseMetadata._meta.widget_result", toolResponseMetadataMeta.widget_result, 2);
-  add("structured.result", structured.result, 3);
-  add("structured.ui.result", candidateValue(structured, "ui.result"), 4);
-  add("raw.result", root.result, 5);
-  add("raw.ui.result", candidateValue(root, "ui.result"), 6);
-  add("raw.ui", root.ui, 7);
-  add("raw", root, 8);
-  return candidates;
-}
-
-function pickBestCandidate(candidates: PayloadCandidate[]): PayloadCandidate | null {
-  if (!candidates.length) return null;
-  let scoped = candidates;
-  const hostScopedCandidates = candidates.filter((candidate) => candidate.host_widget_session_id);
-  if (hostScopedCandidates.length > 0) {
-    let hostAnchor = hostScopedCandidates[0];
-    for (let i = 1; i < hostScopedCandidates.length; i += 1) {
-      const cur = hostScopedCandidates[i];
-      if (cur.response_seq !== hostAnchor.response_seq) {
-        if (cur.response_seq > hostAnchor.response_seq) hostAnchor = cur;
-        continue;
-      }
-      if (cur.bootstrap_epoch !== hostAnchor.bootstrap_epoch) {
-        if (cur.bootstrap_epoch > hostAnchor.bootstrap_epoch) hostAnchor = cur;
-        continue;
-      }
-      if (cur.order < hostAnchor.order) hostAnchor = cur;
-    }
-    const hostScoped = candidates.filter((candidate) => {
-      if (candidate.host_widget_session_id !== hostAnchor.host_widget_session_id) return false;
-      if (hostAnchor.bootstrap_epoch > 0 && candidate.bootstrap_epoch !== hostAnchor.bootstrap_epoch) return false;
-      if (hostAnchor.response_seq > 0 && candidate.response_seq !== hostAnchor.response_seq) return false;
-      return true;
-    });
-    if (hostScoped.length > 0) {
-      if (hostScoped.length < candidates.length) {
-        console.warn("[host_session_mismatch_dropped]", {
-          kept_host_widget_session_id: hostAnchor.host_widget_session_id,
-          dropped_candidate_count: candidates.length - hostScoped.length,
-        });
-      }
-      scoped = hostScoped;
-    }
-  }
-  const candidatesWithSession = scoped.filter(
-    (candidate) => candidate.bootstrap_session_id && candidate.bootstrap_epoch > 0
-  );
-  if (candidatesWithSession.length > 0) {
-    let anchor = candidatesWithSession[0];
-    const anchorPool = candidatesWithSession;
-    for (let i = 1; i < anchorPool.length; i += 1) {
-      const cur = anchorPool[i];
-      if (cur.bootstrap_epoch !== anchor.bootstrap_epoch) {
-        if (cur.bootstrap_epoch > anchor.bootstrap_epoch) anchor = cur;
-        continue;
-      }
-      if (cur.response_seq !== anchor.response_seq) {
-        if (cur.response_seq > anchor.response_seq) anchor = cur;
-        continue;
-      }
-      if (cur.order < anchor.order) anchor = cur;
-    }
-    scoped = scoped.filter((candidate) => {
-      if (candidate.bootstrap_session_id !== anchor.bootstrap_session_id) return false;
-      if (candidate.bootstrap_epoch !== anchor.bootstrap_epoch) return false;
-      if (anchor.host_widget_session_id && candidate.host_widget_session_id !== anchor.host_widget_session_id) {
-        return false;
-      }
-      if (anchor.response_seq > 0 && candidate.response_seq !== anchor.response_seq) return false;
-      return true;
-    });
-    if (!scoped.length) scoped = [anchor];
-  }
-
-  let best = scoped[0];
-  for (let i = 1; i < scoped.length; i += 1) {
-    const cur = scoped[i];
-    if (cur.richness !== best.richness) {
-      if (cur.richness > best.richness) best = cur;
-      continue;
-    }
-    const bestHasFreshness = best.freshness !== null;
-    const curHasFreshness = cur.freshness !== null;
-    if (bestHasFreshness && curHasFreshness && cur.freshness !== best.freshness) {
-      if ((cur.freshness as number) > (best.freshness as number)) best = cur;
-      continue;
-    }
-    if (cur.order < best.order) best = cur;
-  }
-  return best;
 }
 
 function resolveLanguageForPayload(result: Record<string, unknown>): {
@@ -478,57 +225,24 @@ function resolveLanguageForPayload(result: Record<string, unknown>): {
   if (fromStateRequestedLang) return { language: fromStateRequestedLang, source: "state.ui_strings_requested_lang" };
   const fromStateUiLang = toLower(state.ui_strings_lang);
   if (fromStateUiLang) return { language: fromStateUiLang, source: "state.ui_strings_lang" };
-  const i18n = toRecord(result.i18n);
-  const fromI18nRequestedLang = toLower(i18n.requested_lang);
-  if (fromI18nRequestedLang) return { language: fromI18nRequestedLang, source: "result.i18n.requested_lang" };
-  const fromI18nLang = toLower(i18n.lang);
-  if (fromI18nLang) return { language: fromI18nLang, source: "result.i18n.lang" };
   return { language: "", source: "none" };
 }
 
 function normalizeUiStringsStatusFromResult(result: Record<string, unknown>): ResolvedWidgetPayload["ui_strings_status"] {
   const state = toRecord(result.state);
-  const i18n = toRecord(result.i18n);
-  return normalizeUiStringsStatus(state.ui_strings_status || result.ui_strings_status || i18n.status);
-}
-
-function baseLang(value: unknown): string {
-  const normalized = toLower(value);
-  if (!normalized) return "";
-  return normalized.split(/[-_]/)[0] || "";
-}
-
-function hasNonEnglishUiLanguageMismatch(result: Record<string, unknown>): boolean {
-  const state = toRecord(result.state);
-  const fallbackApplied = toLower(state.ui_strings_fallback_applied) === "true";
-  if (fallbackApplied) return false;
-  const targetLang = baseLang(state.language || state.ui_strings_requested_lang);
-  if (!targetLang || targetLang === "en") return false;
-  const i18n = toRecord(result.i18n);
-  const uiStringsLang = baseLang(state.ui_strings_lang || i18n.lang);
-  if (!uiStringsLang) return false;
-  return uiStringsLang !== targetLang;
+  return normalizeUiStringsStatus(state.ui_strings_status);
 }
 
 export function computeHydrationState(
-  resolved: ResolvedWidgetPayload,
-  retryState?: { retry_count?: number; retry_exhausted?: boolean }
+  resolved: ResolvedWidgetPayload
 ): HydrationStatus {
   const state = toRecord(resolved.result.state);
   const hasState = Object.keys(state).length > 0;
   const currentStep = hasState ? String(state.current_step || "").trim() : "";
   const needsHydration = !hasState || !currentStep;
-  const uiGateStatus = toLower(state.ui_gate_status || resolved.result.ui_gate_status);
+  const uiGateStatus = toLower(state.ui_gate_status);
   const terminalGate = uiGateStatus === "blocked" || uiGateStatus === "failed";
-  const languageMismatch = hasNonEnglishUiLanguageMismatch(resolved.result);
-  const i18nPending =
-    !terminalGate &&
-    (
-      resolved.ui_strings_status === "pending" ||
-      resolved.ui_strings_status === "critical_ready" ||
-      (resolved.ui_strings_status === "unknown" && uiGateStatus === "waiting_locale") ||
-      (resolved.ui_strings_status === "ready" && languageMismatch)
-    );
+  const i18nPending = !terminalGate && uiGateStatus === "waiting_locale";
   let waitingReason: WaitingReason = "none";
   if (terminalGate) waitingReason = "none";
   else if (needsHydration && i18nPending) waitingReason = "both";
@@ -536,52 +250,47 @@ export function computeHydrationState(
   else if (i18nPending) waitingReason = "i18n_pending";
   return {
     needs_hydration: needsHydration,
-    retry_count: Number(retryState?.retry_count ?? 0),
-    retry_exhausted: Boolean(retryState?.retry_exhausted),
+    retry_count: 0,
+    retry_exhausted: false,
     waiting_reason: waitingReason,
   };
 }
 
 export function resolveWidgetPayload(
-  raw: unknown,
-  options?: { fallbackRaw?: unknown; retryState?: { retry_count?: number; retry_exhausted?: boolean } }
+  raw: unknown
 ): ResolvedWidgetPayload {
-  const candidates = collectPayloadCandidates(raw);
-  if (options?.fallbackRaw !== undefined) {
-    const fallbackCandidates = collectPayloadCandidates(options.fallbackRaw, 100);
-    if (fallbackCandidates.length) candidates.push(...fallbackCandidates);
-  }
-  const best = pickBestCandidate(candidates);
-  const result = enrichBestCandidate(best, candidates);
+  const primary = pickWidgetResultFromMeta(raw);
+  const result = primary.result;
+  const payloadSource: PayloadSource = Object.keys(primary.result).length ? primary.source : "none";
   const sessionInfo = sessionInfoForResult(result);
   const state = toRecord(result.state);
   const hasState = Object.keys(state).length > 0;
-  const { language, source } = resolveLanguageForPayload(result);
+  const { language, source: languageSource } = resolveLanguageForPayload(result);
   const shapeVersion = String(result.model_result_shape_version || "").trim();
   const bootstrapPhase = normalizeBootstrapPhase(state.bootstrap_phase || result.bootstrap_phase);
   const temp: ResolvedWidgetPayload = {
     result,
-    source: best ? best.source : "none",
+    source: payloadSource,
     has_state: hasState,
     resolved_language: language,
-    resolved_language_source: source,
+    resolved_language_source: languageSource,
     ui_strings_status: normalizeUiStringsStatusFromResult(result),
     shape_version: shapeVersion,
     needs_hydration: false,
     waiting_reason: "none",
     bootstrap_phase: bootstrapPhase,
-    bootstrap_session_id: sessionInfo.bootstrap_session_id || best?.bootstrap_session_id || "",
-    bootstrap_epoch: sessionInfo.bootstrap_epoch || best?.bootstrap_epoch || 0,
-    response_seq: sessionInfo.response_seq || best?.response_seq || 0,
+    bootstrap_session_id: sessionInfo.bootstrap_session_id,
+    bootstrap_epoch: sessionInfo.bootstrap_epoch,
+    response_seq: sessionInfo.response_seq,
     response_kind: (() => {
       const state = toRecord(result.state);
       const kind = String(state.response_kind || result.response_kind || "").trim();
       if (kind === "run_step") return kind;
       return "";
     })(),
-    host_widget_session_id: sessionInfo.host_widget_session_id || best?.host_widget_session_id || "",
+    host_widget_session_id: sessionInfo.host_widget_session_id,
   };
-  const hydration = computeHydrationState(temp, options?.retryState);
+  const hydration = computeHydrationState(temp);
   temp.needs_hydration = hydration.needs_hydration;
   temp.waiting_reason = hydration.waiting_reason;
   return temp;
@@ -595,8 +304,8 @@ export type BootstrapOrdering = {
   host_widget_session_id: string;
 };
 
-export function extractBootstrapOrdering(raw: unknown, options?: { fallbackRaw?: unknown }): BootstrapOrdering {
-  const resolved = resolveWidgetPayload(raw, options);
+export function extractBootstrapOrdering(raw: unknown): BootstrapOrdering {
+  const resolved = resolveWidgetPayload(raw);
   return {
     bootstrap_session_id: resolved.bootstrap_session_id,
     bootstrap_epoch: resolved.bootstrap_epoch,
@@ -607,20 +316,9 @@ export function extractBootstrapOrdering(raw: unknown, options?: { fallbackRaw?:
 }
 
 export function normalizeToolOutput(
-  raw: unknown,
-  options?: { fallbackRaw?: unknown; retryState?: { retry_count?: number; retry_exhausted?: boolean } }
+  raw: unknown
 ): Record<string, unknown> {
-  const root = toRecord(raw);
-  const structured = toRecord(root.structuredContent);
-  const resolved = resolveWidgetPayload(raw, options);
-  if (Object.keys(resolved.result).length) {
-    structured.result = resolved.result;
-    const uiFromResult = toRecord(resolved.result.ui);
-    if (Object.keys(uiFromResult).length && Object.keys(toRecord(structured.ui)).length === 0) {
-      structured.ui = uiFromResult;
-    }
-  }
-  if (Object.keys(structured).length) return structured;
+  const resolved = resolveWidgetPayload(raw);
   if (Object.keys(resolved.result).length) return { result: resolved.result };
   return {};
 }
@@ -634,50 +332,22 @@ export function computeBootstrapRenderState(params: {
   hasState?: boolean;
   hasCurrentStep?: boolean;
 }): BootstrapRenderState {
-  const { hydration, uiStringsStatus, uiFlags, uiView, localeKnownNonEn } = params;
-  const uiGateStatus = toLower(uiView.ui_gate_status || uiFlags.ui_gate_status);
-  const waitingForMissingStateByHydration =
-    hydration.waiting_reason === "missing_state" || hydration.waiting_reason === "both";
-  const waitingForI18nByHydration =
-    hydration.waiting_reason === "i18n_pending" || hydration.waiting_reason === "both";
+  const { uiFlags, uiView } = params;
+  void params.hydration;
+  void params.uiStringsStatus;
+  void params.localeKnownNonEn;
+  void params.hasState;
+  void params.hasCurrentStep;
   const serverExplicitWaiting = toLower(uiView.mode) === "waiting_locale" || uiView.waiting_locale === true;
-  const forceLocaleWait = localeKnownNonEn && uiStringsStatus !== "ready";
   const phaseFromMode = phaseFromViewMode(uiView.mode);
-  const phaseFromPayloadRaw = normalizeBootstrapPhase(uiView.bootstrap_phase || uiFlags.bootstrap_phase);
-  const phaseFromPayload =
-    phaseFromPayloadRaw === "interactive_fallback" ? "waiting_locale" : phaseFromPayloadRaw;
+  const finalPhase: BootstrapPhase = phaseFromMode || "waiting_state";
 
-  let finalPhase: BootstrapPhase;
-  if (hydration.retry_exhausted) {
-    finalPhase = "recovery";
-  } else if (uiGateStatus === "blocked" || uiGateStatus === "failed") {
-    finalPhase = "failed";
-  } else if (phaseFromMode) {
-    finalPhase = phaseFromMode;
-  } else if (phaseFromPayload) {
-    finalPhase = phaseFromPayload;
-  } else if (waitingForMissingStateByHydration && waitingForI18nByHydration) {
-    finalPhase = "waiting_both";
-  } else if (waitingForMissingStateByHydration) {
-    finalPhase = "waiting_state";
-  } else if (waitingForI18nByHydration || forceLocaleWait) {
-    finalPhase = "waiting_locale";
-  } else {
-    finalPhase = "ready";
-  }
-
-  const waitingForMissingState = finalPhase === "recovery"
-    ? waitingForMissingStateByHydration
-    : (finalPhase === "waiting_state" || finalPhase === "waiting_both");
-  const waitingForI18n = finalPhase === "recovery"
-    ? (!waitingForMissingStateByHydration && waitingForI18nByHydration)
-    : (finalPhase === "waiting_locale" || finalPhase === "waiting_both");
+  const waitingForMissingState = finalPhase === "waiting_state" || finalPhase === "waiting_both";
+  const waitingForI18n = finalPhase === "waiting_locale" || finalPhase === "waiting_both";
   const bootstrapWaitingLocale =
-    finalPhase === "recovery"
-      ? false
-      : finalPhase === "failed"
+    finalPhase === "failed"
         ? false
-      : (waitingForI18n || serverExplicitWaiting || forceLocaleWait);
+      : (waitingForI18n || serverExplicitWaiting);
   const effectivePhase: BootstrapPhase =
     bootstrapWaitingLocale && finalPhase === "ready" ? "waiting_locale" : finalPhase;
   const interactiveFallbackActive =
@@ -688,7 +358,7 @@ export function computeBootstrapRenderState(params: {
     waitingForMissingState,
     waitingForI18n,
     serverExplicitWaiting,
-    forceLocaleWait,
+    forceLocaleWait: false,
     bootstrapWaitingLocale,
     interactiveFallbackActive,
   };

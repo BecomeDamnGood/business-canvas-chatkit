@@ -101,6 +101,10 @@ function makeDocument() {
   };
 }
 
+function toolOutputFromWidgetResult(result: Record<string, unknown>) {
+  return { _meta: { widget_result: result } };
+}
+
 test("renderChoiceButtons handles missing ui without throwing", () => {
   const originalDocument = (globalThis as any).document;
   const fakeDocument = makeDocument();
@@ -193,7 +197,7 @@ test("renderChoiceButtons shows safe error when action_codes exist but prompt la
 
   const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
   assert.equal(buttons.length, 0);
-  assert.equal(String(wrap.style.display || ""), "flex");
+  assert.equal(String(wrap.style.display || ""), "none");
 
   (globalThis as any).document = originalDocument;
 });
@@ -213,8 +217,7 @@ test("render keeps structured actions visible even when prompt has no numbered o
   (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
 
   setSessionStarted(true);
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       registry_version: "test",
       state: {
         current_step: "purpose",
@@ -223,6 +226,12 @@ test("render keeps structured actions visible even when prompt has no numbered o
         intro_shown_for_step: "purpose",
         started: "true",
         language: "en",
+        ui_strings: {
+          wordingChoiceHeading: "This is your input:",
+          wordingChoiceSuggestionLabel: "This would be my suggestion:",
+          wordingChoiceInstruction: "Please click what suits you best.",
+          "wordingChoice.chooseVersion": "Choose this version",
+        },
       },
       specialist: {
         action: "ASK",
@@ -231,14 +240,14 @@ test("render keeps structured actions visible even when prompt has no numbered o
       },
       prompt: "Please choose 1 or 2.",
       ui: {
+        view: { mode: "interactive" },
         questionText: "Please share your thoughts.",
         actions: [
           { id: "a1", label: "Confirm wording", action_code: "ACTION_PURPOSE_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__PURPOSE_REFINE_CONFIRM__" } },
           { id: "a2", label: "Adjust wording", action_code: "ACTION_PURPOSE_REFINE_ADJUST", intent: { type: "ROUTE", route: "__ROUTE__PURPOSE_REFINE_ADJUST__" } },
         ],
       },
-    },
-  });
+    }));
 
   const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
   assert.equal(buttons.length, 2);
@@ -295,24 +304,25 @@ test("render handles Dream intro payload without ui and does not throw", () => {
 
   setSessionStarted(true);
   assert.doesNotThrow(() => {
-    render({
-      result: {
-        registry_version: "test",
-        state: {
-          current_step: "dream",
-          active_specialist: "Dream",
-          intro_shown_session: "true",
-          intro_shown_for_step: "dream",
-          language: "en",
-        },
-        specialist: {
-          action: "ASK",
-          question: "1) Alpha\n2) Beta",
-          menu_id: "TEST_MENU",
-          suggest_dreambuilder: "false",
-        },
+    render(toolOutputFromWidgetResult({
+      registry_version: "test",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+        intro_shown_session: "true",
+        intro_shown_for_step: "dream",
+        language: "en",
       },
-    });
+      specialist: {
+        action: "ASK",
+        question: "1) Alpha\n2) Beta",
+        menu_id: "TEST_MENU",
+        suggest_dreambuilder: "false",
+      },
+      ui: {
+        view: { mode: "interactive" },
+      },
+    }));
   });
   setSessionStarted(false);
 
@@ -336,40 +346,39 @@ test("render shows both Dream REFINE contract buttons when prompt/menu/action_co
   (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
 
   setSessionStarted(true);
-  render({
-    result: {
-      registry_version: "test",
-      state: {
-        current_step: "dream",
-        active_specialist: "Dream",
-        intro_shown_session: "true",
-        intro_shown_for_step: "dream",
-        started: "true",
-        language: "en",
-        business_name: "Acme",
-      },
-      specialist: {
-        action: "REFINE",
-        question:
-          "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
-        menu_id: "DREAM_MENU_REFINE",
-        suggest_dreambuilder: "false",
-      },
-      prompt:
-        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
-      ui: {
-        action_codes: [
-          "ACTION_DREAM_REFINE_CONFIRM",
-          "ACTION_DREAM_REFINE_START_EXERCISE",
-        ],
-        expected_choice_count: 2,
-        actions: [
-          { id: "a1", label: "I'm happy with this wording, please continue to step 3 Purpose", action_code: "ACTION_DREAM_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__DREAM_REFINE_CONFIRM__" } },
-          { id: "a2", label: "Do a small exercise that helps to define your dream.", action_code: "ACTION_DREAM_REFINE_START_EXERCISE", intent: { type: "ROUTE", route: "__ROUTE__DREAM_START_EXERCISE__" } },
-        ],
-      },
+  render(toolOutputFromWidgetResult({
+    registry_version: "test",
+    state: {
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      language: "en",
+      business_name: "Acme",
     },
-  });
+    specialist: {
+      action: "REFINE",
+      question:
+        "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+      menu_id: "DREAM_MENU_REFINE",
+      suggest_dreambuilder: "false",
+    },
+    prompt:
+      "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
+    ui: {
+      view: { mode: "interactive" },
+      action_codes: [
+        "ACTION_DREAM_REFINE_CONFIRM",
+        "ACTION_DREAM_REFINE_START_EXERCISE",
+      ],
+      expected_choice_count: 2,
+      actions: [
+        { id: "a1", label: "I'm happy with this wording, please continue to step 3 Purpose", action_code: "ACTION_DREAM_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__DREAM_REFINE_CONFIRM__" } },
+        { id: "a2", label: "Do a small exercise that helps to define your dream.", action_code: "ACTION_DREAM_REFINE_START_EXERCISE", intent: { type: "ROUTE", route: "__ROUTE__DREAM_START_EXERCISE__" } },
+      ],
+    },
+  }));
 
   const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
   assert.equal(buttons.length, 2);
@@ -429,33 +438,32 @@ test("render respects explicit empty result.text and does not fall back to speci
   setSessionStarted(true);
   setSessionWelcomeShown(true);
 
-  render({
-    result: {
-      text: "",
-      registry_version: "test",
-      state: {
-        current_step: "dream",
-        active_specialist: "DreamExplainer",
-        intro_shown_session: "true",
-        intro_shown_for_step: "dream",
-        language: "en",
-      },
-      specialist: {
-        action: "ASK",
-        menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
-        question:
-          "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
-      },
-      prompt:
-        "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
-      ui: {
-        questionText:
-          "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
-        action_codes: ["ACTION_DREAM_SWITCH_TO_SELF"],
-        expected_choice_count: 1,
-      },
+  render(toolOutputFromWidgetResult({
+    text: "",
+    registry_version: "test",
+    state: {
+      current_step: "dream",
+      active_specialist: "DreamExplainer",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      language: "en",
     },
-  });
+    specialist: {
+      action: "ASK",
+      menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
+      question:
+        "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
+    },
+    prompt:
+      "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
+    ui: {
+      view: { mode: "interactive" },
+      questionText:
+        "1) Switch back to self-formulate the dream\n\nWhat more do you see changing in the future, positive or negative? Let your imagination run free.",
+      action_codes: ["ACTION_DREAM_SWITCH_TO_SELF"],
+      expected_choice_count: 1,
+    },
+  }));
 
   assert.equal(String(cardDesc.textContent || "").trim(), "");
 
@@ -483,8 +491,7 @@ test("render shows section title when step-intro chrome flag is present", () => 
   setSessionStarted(true);
   setSessionWelcomeShown(true);
 
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       text: "Purpose intro body",
       registry_version: "test",
       state: {
@@ -495,6 +502,9 @@ test("render shows section title when step-intro chrome flag is present", () => 
         started: "true",
         language: "en",
         business_name: "Mindd",
+        ui_strings: {
+          "sectionTitle.purposeOf": "The Purpose of {0}",
+        },
       },
       specialist: {
         action: "INTRO",
@@ -502,17 +512,16 @@ test("render shows section title when step-intro chrome flag is present", () => 
       },
       prompt: "Please define your purpose.",
       ui: {
+        view: { mode: "interactive" },
         flags: { show_step_intro_chrome: true },
         action_codes: ["ACTION_PURPOSE_INTRO_EXPLAIN_MORE", "ACTION_PURPOSE_INTRO_DEFINE"],
         expected_choice_count: 2,
       },
-    },
-  });
+    }));
 
   assert.equal(String(sectionTitle.textContent || ""), "The Purpose of Mindd");
 
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       text: "Purpose follow-up body",
       registry_version: "test",
       state: {
@@ -530,11 +539,11 @@ test("render shows section title when step-intro chrome flag is present", () => 
       },
       prompt: "Refine your Purpose for Mindd or choose an option.",
       ui: {
+        view: { mode: "interactive" },
         action_codes: ["ACTION_PURPOSE_REFINE_CONFIRM", "ACTION_PURPOSE_REFINE_ADJUST"],
         expected_choice_count: 2,
       },
-    },
-  });
+    }));
 
   assert.equal(String(sectionTitle.textContent || ""), "");
 
@@ -562,8 +571,7 @@ test("badge and section title follow prestart or step-intro chrome flag", () => 
 
   setSessionStarted(false);
   setSessionWelcomeShown(false);
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       registry_version: "test",
       state: {
         current_step: "step_0",
@@ -573,14 +581,13 @@ test("badge and section title follow prestart or step-intro chrome flag", () => 
       specialist: {
         action: "ASK",
       },
-    },
-  });
+      ui: { view: { mode: "prestart" } },
+    }));
   assert.equal(String(badge.style.display || ""), "block");
 
   setSessionStarted(true);
   setSessionWelcomeShown(true);
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       registry_version: "test",
       state: {
         current_step: "step_0",
@@ -596,12 +603,11 @@ test("badge and section title follow prestart or step-intro chrome flag", () => 
       },
       prompt:
         "Just to set the context, we'll start with the basics.",
-    },
-  });
+      ui: { view: { mode: "interactive" } },
+    }));
   assert.equal(String(badge.style.display || ""), "none");
 
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       registry_version: "test",
       state: {
         current_step: "dream",
@@ -610,6 +616,9 @@ test("badge and section title follow prestart or step-intro chrome flag", () => 
         intro_shown_for_step: "dream",
         started: "true",
         language: "en",
+        ui_strings: {
+          "sectionTitle.dream": "Your Dream",
+        },
       },
       specialist: {
         action: "INTRO",
@@ -617,15 +626,14 @@ test("badge and section title follow prestart or step-intro chrome flag", () => 
       },
       text: "Dream intro body",
       ui: {
+        view: { mode: "interactive" },
         flags: { show_step_intro_chrome: true },
       },
-    },
-  });
+    }));
   assert.equal(String(badge.style.display || ""), "block");
   assert.equal(String(sectionTitle.textContent || ""), "Your Dream");
 
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       registry_version: "test",
       state: {
         current_step: "bigwhy",
@@ -641,8 +649,8 @@ test("badge and section title follow prestart or step-intro chrome flag", () => 
         menu_id: "BIGWHY_MENU_INTRO",
       },
       text: "Big Why follow-up body",
-    },
-  });
+      ui: { view: { mode: "interactive" } },
+    }));
   assert.equal(String(badge.style.display || ""), "none");
   assert.equal(String(sectionTitle.textContent || ""), "");
 
@@ -672,10 +680,7 @@ test("stripStructuredChoiceLines removes numbered options and keeps headline tex
     "",
     "Refine your Purpose or choose an option.",
   ].join("\n");
-  assert.equal(
-    stripStructuredChoiceLines(prompt),
-    "Refine your Purpose or choose an option."
-  );
+  assert.equal(stripStructuredChoiceLines(prompt), prompt.trim());
 });
 
 test("stripStructuredChoiceLines keeps plain prompt unchanged", () => {
@@ -701,34 +706,35 @@ test("render structures only cardDesc body while prompt stays plain inline text"
   setSessionStarted(true);
   setSessionWelcomeShown(true);
 
-  render({
-    result: {
-      text: [
-        "A paragraph line.",
-        "",
-        "1. First ordered item",
-        "2. Second ordered item",
-        "",
-        "- First bullet",
-        "- Second bullet",
-      ].join("\n"),
-      registry_version: "test",
-      state: {
-        current_step: "dream",
-        active_specialist: "Dream",
-        intro_shown_session: "true",
-        intro_shown_for_step: "dream",
-        started: "true",
-        language: "en",
-      },
-      specialist: {
-        action: "ASK",
-        menu_id: "DREAM_MENU_INTRO",
-        question: "Define your Dream for Mindd or choose an option.",
-      },
-      prompt: "Define your Dream for Mindd or choose an option.",
+  render(toolOutputFromWidgetResult({
+    text: [
+      "A paragraph line.",
+      "",
+      "1. First ordered item",
+      "2. Second ordered item",
+      "",
+      "- First bullet",
+      "- Second bullet",
+    ].join("\n"),
+    registry_version: "test",
+    state: {
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      language: "en",
     },
-  });
+    specialist: {
+      action: "ASK",
+      menu_id: "DREAM_MENU_INTRO",
+      question: "Define your Dream for Mindd or choose an option.",
+    },
+    prompt: "Define your Dream for Mindd or choose an option.",
+    ui: {
+      view: { mode: "interactive" },
+    },
+  }));
 
   const cardNodes = cardDesc.childNodes || [];
   assert.ok(cardNodes.some((node: any) => node && node.tagName === "P"));
@@ -759,37 +765,40 @@ test("render shows wording choice panel in text mode and keeps confirm hidden un
   (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
 
   setSessionStarted(true);
-  render({
-    result: {
-      registry_version: "test",
-      state: {
-        current_step: "purpose",
-        active_specialist: "Purpose",
-        intro_shown_session: "true",
-        intro_shown_for_step: "purpose",
-        started: "true",
-        language: "en",
-      },
-      specialist: {
-        action: "CONFIRM",
-        question: "Please confirm your purpose.",
-        menu_id: "PURPOSE_MENU_REFINE",
-      },
-      prompt: "Please confirm your purpose.",
-      ui: {
-        flags: { require_wording_pick: true },
-        wording_choice: {
-          enabled: true,
-          mode: "text",
-          user_text: "Mindd helps teams with clarity.",
-          suggestion_text: "Mindd exists to restore focus and meaning in work.",
-          user_items: [],
-          suggestion_items: [],
-          instruction: "Please click what suits you best.",
-        },
+  render(toolOutputFromWidgetResult({
+    registry_version: "test",
+    state: {
+      current_step: "purpose",
+      active_specialist: "Purpose",
+      intro_shown_session: "true",
+      intro_shown_for_step: "purpose",
+      started: "true",
+      language: "en",
+      ui_strings: {
+        wordingChoiceHeading: "This is your input:",
+        wordingChoiceSuggestionLabel: "This would be my suggestion:",
       },
     },
-  });
+    specialist: {
+      action: "CONFIRM",
+      question: "Please confirm your purpose.",
+      menu_id: "PURPOSE_MENU_REFINE",
+    },
+    prompt: "Please confirm your purpose.",
+    ui: {
+      view: { mode: "interactive" },
+      flags: { require_wording_pick: true },
+      wording_choice: {
+        enabled: true,
+        mode: "text",
+        user_text: "Mindd helps teams with clarity.",
+        suggestion_text: "Mindd exists to restore focus and meaning in work.",
+        user_items: [],
+        suggestion_items: [],
+        instruction: "Please click what suits you best.",
+      },
+    },
+  }));
 
   const wordingWrap = (fakeDocument as any).getElementById("wordingChoiceWrap");
   const userText = (fakeDocument as any).getElementById("wordingChoiceUserText");
@@ -825,39 +834,38 @@ test("render hides regular choice buttons while wording choice is required", () 
   (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
 
   setSessionStarted(true);
-  render({
-    result: {
-      registry_version: "test",
-      state: {
-        current_step: "role",
-        active_specialist: "Role",
-        intro_shown_session: "true",
-        intro_shown_for_step: "role",
-        started: "true",
-        language: "en",
-      },
-      specialist: {
-        action: "REFINE",
-        question: "1) I'm happy with this wording, continue to step 6 Entity.\n2) Refine this wording for me",
-        menu_id: "ROLE_MENU_REFINE",
-      },
-      prompt: "1) I'm happy with this wording, continue to step 6 Entity.\n2) Refine this wording for me",
-      ui: {
-        action_codes: ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"],
-        expected_choice_count: 2,
-        flags: { require_wording_pick: true },
-        wording_choice: {
-          enabled: true,
-          mode: "text",
-          user_text: "we offer the best quality",
-          suggestion_text: "Mindd sets standards for purpose-driven quality.",
-          user_items: [],
-          suggestion_items: [],
-          instruction: "Please click what suits you best.",
-        },
+  render(toolOutputFromWidgetResult({
+    registry_version: "test",
+    state: {
+      current_step: "role",
+      active_specialist: "Role",
+      intro_shown_session: "true",
+      intro_shown_for_step: "role",
+      started: "true",
+      language: "en",
+    },
+    specialist: {
+      action: "REFINE",
+      question: "1) I'm happy with this wording, continue to step 6 Entity.\n2) Refine this wording for me",
+      menu_id: "ROLE_MENU_REFINE",
+    },
+    prompt: "1) I'm happy with this wording, continue to step 6 Entity.\n2) Refine this wording for me",
+    ui: {
+      view: { mode: "interactive" },
+      action_codes: ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"],
+      expected_choice_count: 2,
+      flags: { require_wording_pick: true },
+      wording_choice: {
+        enabled: true,
+        mode: "text",
+        user_text: "we offer the best quality",
+        suggestion_text: "Mindd sets standards for purpose-driven quality.",
+        user_items: [],
+        suggestion_items: [],
+        instruction: "Please click what suits you best.",
       },
     },
-  });
+  }));
 
   const buttons = wrap.childNodes.filter((node: any) => node && node.tagName === "BUTTON");
   assert.equal(buttons.length, 0);
@@ -883,8 +891,7 @@ test("render shows wording choice panel in list mode with full items", () => {
   (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
 
   setSessionStarted(true);
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       registry_version: "test",
       state: {
         current_step: "strategy",
@@ -893,6 +900,11 @@ test("render shows wording choice panel in list mode with full items", () => {
         intro_shown_for_step: "strategy",
         started: "true",
         language: "en",
+        ui_strings: {
+          wordingChoiceHeading: "This is your input:",
+          wordingChoiceSuggestionLabel: "This would be my suggestion:",
+          "wordingChoice.chooseVersion": "Choose this version",
+        },
       },
       specialist: {
         action: "REFINE",
@@ -901,6 +913,7 @@ test("render shows wording choice panel in list mode with full items", () => {
       },
       prompt: "Refine your strategy or choose an option.",
       ui: {
+        view: { mode: "interactive" },
         flags: { require_wording_pick: true },
         wording_choice: {
           enabled: true,
@@ -912,8 +925,7 @@ test("render shows wording choice panel in list mode with full items", () => {
           instruction: "Please click what suits you best.",
         },
       },
-    },
-  });
+    }));
 
   const userList = (fakeDocument as any).getElementById("wordingChoiceUserList");
   const suggestionList = (fakeDocument as any).getElementById("wordingChoiceSuggestionList");
@@ -951,8 +963,7 @@ test("render ignores transient timeout payload and keeps previous visible view",
 
   setSessionStarted(true);
   setSessionWelcomeShown(true);
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       registry_version: "test",
       state: {
         current_step: "dream",
@@ -971,18 +982,21 @@ test("render ignores transient timeout payload and keeps previous visible view",
       prompt:
         "1) I'm happy with this wording, please continue to step 3 Purpose\n2) Do a small exercise that helps to define your dream.",
       ui: {
+        view: { mode: "interactive" },
         action_codes: [
           "ACTION_DREAM_REFINE_CONFIRM",
           "ACTION_DREAM_REFINE_START_EXERCISE",
         ],
         expected_choice_count: 2,
+        actions: [
+          { id: "a1", label: "Confirm wording", action_code: "ACTION_DREAM_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__DREAM_REFINE_CONFIRM__" } },
+          { id: "a2", label: "Start exercise", action_code: "ACTION_DREAM_REFINE_START_EXERCISE", intent: { type: "ROUTE", route: "__ROUTE__DREAM_START_EXERCISE__" } },
+        ],
       },
-    },
-  });
+    }));
   assert.equal(String(wrap.style.display || ""), "flex");
 
-  render({
-    result: {
+  render(toolOutputFromWidgetResult({
       ok: false,
       state: {
         current_step: "dream",
@@ -996,13 +1010,13 @@ test("render ignores transient timeout payload and keeps previous visible view",
         action: "ASK",
         question: "Do you want to continue?",
       },
+      ui: { view: { mode: "interactive" } },
       error: {
         type: "timeout",
         user_message: "This is taking longer than usual. Please try again.",
         retry_action: "retry_same_action",
       },
-    },
-  });
+    }));
   assert.equal(String(inlineNotice.textContent || ""), "This is taking longer than usual. Please try again.");
   assert.equal(String(inlineNotice.style.display || ""), "block");
   assert.equal(String(wrap.style.display || ""), "flex");
@@ -1021,7 +1035,8 @@ test("btnStartDreamExercise sends Dream start-exercise actioncode", () => {
   );
   assert.ok(blockMatch, "Expected btnStartDreamExercise handler block in ui/lib/main.ts");
   const block = blockMatch[0];
-  assert.match(block, /callRunStep\("ACTION_DREAM_INTRO_START_EXERCISE"\)/);
+  assert.match(block, /const actionCode = actionCodeFromState\("ui_action_dream_start_exercise"\);/);
+  assert.match(block, /callRunStep\(actionCode\)/);
 });
 
 test("prestart render uses deterministic DOM builders and no HTML injection", () => {
@@ -1034,16 +1049,14 @@ test("prestart render uses deterministic DOM builders and no HTML injection", ()
 
 test("prestart source keeps stable structure and explicit skeleton gate", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const startupUnhydrated = !hasToolOutputVal \|\| !resolved\.has_state;/);
-  assert.match(source, /const waitingLocalizedPrestart = isNonEnglish && \(uiStringsStatus !== "ready" \|\| !hasLocalizedPrestart\);/);
-  assert.match(source, /const allowEnglishFallback = hydration\.retry_exhausted;/);
-  assert.match(source, /const showSkeleton = startupUnhydrated \|\| \(waitingLocalizedPrestart && !allowEnglishFallback\);/);
+  assert.match(source, /const hasPrestartContent = hasPrestartContentForLang\(lang\);/);
+  assert.match(source, /const showSkeleton = uiStringsStatus !== "ready" \|\| !hasPrestartContent;/);
   assert.match(source, /appendTextNode\("p", "card-headline", content\.headline\)/);
   assert.match(source, /appendTextNode\("div", "meta-row", ""\)/);
   assert.match(source, /appendTextNode\("div", "deliverables", ""\)/);
   assert.match(source, /const skeleton = appendTextNode\("div", "skeleton-stack", ""\);/);
   assert.match(source, /skeleton\.appendChild\(appendTextNode\("div", "skeleton-line", ""\)\);/);
-  assert.match(source, /const waitTitle = uiText\(lang, "prestart\.loading", "Loading translation…"\);/);
+  assert.match(source, /const waitTitle = uiText\(lang, "prestart\.loading", ""\);/);
 });
 
 test("computeBootstrapRenderState returns waiting_locale phase for non-EN pending locale", () => {
@@ -1073,9 +1086,8 @@ test("computeBootstrapRenderState returns waiting_locale phase for non-EN pendin
 
 test("render source ignores empty or mismatched locale override maps", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const hasOverrideStrings =[\s\S]*Object\.keys\(overrideStringsMap \|\| \{\}\)\.some/);
-  assert.match(source, /const shouldApplyOverride =[\s\S]*uiStringsStatus === "ready"[\s\S]*overrideBucket === langBucket/);
-  assert.match(source, /if \(shouldApplyOverride\) \{[\s\S]*UI_STRINGS\[overrideBucket\] = \{ \.\.\.UI_STRINGS\.default, \.\.\.\(overrideStringsMap as Record<string, string>\) \};/);
+  assert.match(source, /const hasOverrideStrings = Boolean\(overrideStringsMap\) && Object\.keys\(overrideStringsMap \|\| \{\}\)\.length > 0;/);
+  assert.match(source, /setRuntimeUiStrings\(hasOverrideStrings \? overrideStringsMap : \{\}\);/);
 });
 
 test("computeBootstrapRenderState maps interactive_fallback payloads to waiting_locale", () => {
@@ -1104,7 +1116,7 @@ test("computeBootstrapRenderState maps interactive_fallback payloads to waiting_
   assert.equal(state.waitingForI18n, true);
 });
 
-test("computeBootstrapRenderState keeps recovery routing deterministic when retries are exhausted", () => {
+test("computeBootstrapRenderState honors explicit waiting_locale mode over client retry state", () => {
   const state = computeBootstrapRenderState({
     hydration: {
       needs_hydration: true,
@@ -1123,19 +1135,18 @@ test("computeBootstrapRenderState keeps recovery routing deterministic when retr
     hasState: false,
     hasCurrentStep: false,
   });
-  assert.equal(state.phase, "recovery");
-  assert.equal(state.render_mode, "recovery");
-  assert.equal(state.waitingForMissingState, true);
-  assert.equal(state.bootstrapWaitingLocale, false);
+  assert.equal(state.phase, "waiting_locale");
+  assert.equal(state.render_mode, "wait_shell");
+  assert.equal(state.waitingForMissingState, false);
+  assert.equal(state.bootstrapWaitingLocale, true);
 });
 
 test("main source handles host tool-result via shared bootstrap scheduler", () => {
   const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
   assert.match(source, /function normalizeHostToolResultNotification\(/);
-  assert.match(source, /function shouldAcceptBootstrapPayload\(/);
   assert.match(source, /function ingestHostPayload\(/);
-  assert.match(source, /stale_bootstrap_payload_dropped/);
   assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
+  assert.match(source, /const toolOutputCandidate = params\.result;/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(toolOutputCandidate, metadata\)/);
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
   assert.match(source, /notifyHostTransportSignal\("bridge_message"\)/);
@@ -1144,8 +1155,9 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*ingestHostPayload\(payload, "host_notification"\)/);
   assert.match(source, /openai:set_globals[\s\S]*ingestHostPayload\(payload, "set_globals"\)/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(\s*host\?\.toolOutput,\s*host\?\.toolResponseMetadata\s*\)/);
-  assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*callRunStep\("ACTION_START", \{ started: "true" \}\)/);
+  assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*const actionCode = actionCodeFromState\("ui_action_start"\);[\s\S]*callRunStep\(actionCode, \{ started: "true" \}\)/);
   assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
+  assert.doesNotMatch(source, /function shouldAcceptBootstrapPayload\(/);
 });
 
 test("render keeps non-EN pending locale in explicit wait view without EN prestart content", () => {
@@ -1166,28 +1178,26 @@ test("render keeps non-EN pending locale in explicit wait view without EN presta
 
   setSessionStarted(false);
   setSessionWelcomeShown(false);
-  render({
-    result: {
-      state: {
-        current_step: "step_0",
-        started: "false",
-        language: "nl",
-        ui_strings_status: "pending",
-        ui_gate_status: "waiting_locale",
+  render(toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      started: "false",
+      language: "nl",
+      ui_strings_status: "pending",
+      ui_gate_status: "waiting_locale",
+    },
+    ui: {
+      flags: {
+        bootstrap_waiting_locale: true,
+        bootstrap_interactive_ready: false,
+        interactive_fallback_active: false,
       },
-      ui: {
-        flags: {
-          bootstrap_waiting_locale: true,
-          bootstrap_interactive_ready: false,
-          interactive_fallback_active: false,
-        },
-        view: {
-          mode: "waiting_locale",
-          waiting_locale: true,
-        },
+      view: {
+        mode: "waiting_locale",
+        waiting_locale: true,
       },
     },
-  });
+  }));
 
   assert.equal(String(btnStart.style.display || ""), "none");
   assert.equal(String(uiSubtitle.textContent || ""), "");
@@ -1215,28 +1225,26 @@ test("render prioritizes waiting gate over inconsistent prestart mode during sta
   (globalThis as any).openai = { toolOutput: null, widgetState: { language: "nl" }, setWidgetState() {} };
   (globalThis as any).__BSC_STARTUP_GRACE_UNTIL_MS = Date.now() + 500;
 
-  render({
-    result: {
-      state: {
-        current_step: "step_0",
-        started: "false",
-        language: "nl",
-        ui_strings_status: "pending",
-        ui_gate_status: "waiting_locale",
+  render(toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      started: "false",
+      language: "nl",
+      ui_strings_status: "pending",
+      ui_gate_status: "waiting_locale",
+    },
+    ui: {
+      flags: {
+        bootstrap_waiting_locale: true,
+        bootstrap_interactive_ready: true,
+        interactive_fallback_active: true,
       },
-      ui: {
-        flags: {
-          bootstrap_waiting_locale: true,
-          bootstrap_interactive_ready: true,
-          interactive_fallback_active: true,
-        },
-        view: {
-          mode: "prestart",
-          waiting_locale: false,
-        },
+      view: {
+        mode: "prestart",
+        waiting_locale: false,
       },
     },
-  });
+  }));
 
   assert.equal(String(btnStart.style.display || ""), "none");
   assert.equal((cardDesc.childNodes || []).length, 0);
@@ -1247,7 +1255,7 @@ test("render prioritizes waiting gate over inconsistent prestart mode during sta
   (globalThis as any).openai = originalOpenai;
 });
 
-test("resolveWidgetPayload drops cross-host candidates and keeps same host chain", () => {
+test("resolveWidgetPayload reads only _meta.widget_result as authoritative source", () => {
   const resolved = resolveWidgetPayload({
     _meta: {
       widget_result: {
@@ -1274,9 +1282,10 @@ test("resolveWidgetPayload drops cross-host candidates and keeps same host chain
       },
     },
   });
-  assert.equal(resolved.host_widget_session_id, "host_b");
-  assert.equal(resolved.bootstrap_session_id, "session_b");
-  assert.equal(resolved.bootstrap_epoch, 2);
+  assert.equal(resolved.source, "meta.widget_result");
+  assert.equal(resolved.host_widget_session_id, "host_a");
+  assert.equal(resolved.bootstrap_session_id, "session_a");
+  assert.equal(resolved.bootstrap_epoch, 1);
 });
 
 test("bridge event trust checks source and origin", () => {
@@ -1321,7 +1330,6 @@ test("bridge event trust checks source and origin", () => {
 test("ui actions source uses explicit bootstrap poll action and shared result handler", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
   assert.match(source, /const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";/);
-  assert.match(source, /const HYDRATION_MAX_RETRIES = 3;/);
   assert.match(source, /let bootstrapPollInFlight = false;/);
   assert.match(source, /ui_bootstrap_poll_deduped/);
   assert.match(source, /if \(bootstrapPollInFlight\) \{/);
@@ -1333,7 +1341,6 @@ test("ui actions source uses explicit bootstrap poll action and shared result ha
   assert.match(source, /export function resetHydrationRetryCycle/);
   assert.match(source, /export function ensureBootstrapRetryForResult/);
   assert.match(source, /export function handleToolResultAndMaybeScheduleBootstrapRetry/);
-  assert.match(source, /hydration_failed_max_retries/);
   assert.match(source, /recovery_retry_clicked/);
   assert.doesNotMatch(source, /__locale_wait_retry/);
 });
@@ -1351,7 +1358,7 @@ test("ui actions source supports self-heal transport and queued ACTION_START fal
   assert.match(source, /bootstrap_session_epoch_mismatch/);
   assert.match(source, /notifyHostTransportSignal/);
   assert.match(source, /function canUseBridge\(\): boolean \{[\s\S]*return bridgeEnabled;/);
-  assert.match(source, /const transportPrimary = hasCallTool \? "callTool" : "bridge";/);
+  assert.match(source, /const transportPrimary = hasBridgePath \? "bridge" : "callTool";/);
   assert.match(source, /transport_used: transportPrimary/);
   assert.match(source, /transport_used: transportUsed/);
   assert.match(source, /const startTransportSelfHealEnabled = true;/);
@@ -1365,7 +1372,7 @@ test("ui actions source has bridge timeout guard", () => {
   assert.match(source, /setTimeout\(\(\) => \{[\s\S]*reject\(new Error\("bridge timeout"\)\);[\s\S]*\}, BRIDGE_RESPONSE_TIMEOUT_MS\);/);
 });
 
-test("computeBootstrapRenderState classifies missing state + pending locale as waiting_both", () => {
+test("computeBootstrapRenderState defaults to waiting_state without explicit server locale wait", () => {
   const state = computeBootstrapRenderState({
     hydration: {
       needs_hydration: true,
@@ -1384,10 +1391,10 @@ test("computeBootstrapRenderState classifies missing state + pending locale as w
     hasState: false,
     hasCurrentStep: false,
   });
-  assert.equal(state.phase, "waiting_both");
+  assert.equal(state.phase, "waiting_state");
   assert.equal(state.waitingForMissingState, true);
-  assert.equal(state.waitingForI18n, true);
-  assert.equal(state.bootstrapWaitingLocale, true);
+  assert.equal(state.waitingForI18n, false);
+  assert.equal(state.bootstrapWaitingLocale, false);
 });
 
 test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result", () => {
@@ -1411,7 +1418,7 @@ test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result
   assert.equal(resolved.needs_hydration, false);
 });
 
-test("resolveWidgetPayload prefers structured.ui.result over minimal structured.result", () => {
+test("resolveWidgetPayload ignores structuredContent candidates without _meta.widget_result", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -1445,9 +1452,8 @@ test("resolveWidgetPayload prefers structured.ui.result over minimal structured.
     },
   });
 
-  assert.equal(resolved.source, "structured.ui.result");
-  assert.equal(String((resolved.result.state as Record<string, unknown>).language || ""), "nl");
-  assert.equal(String(resolved.result.prompt || ""), "Vraag");
+  assert.equal(resolved.source, "none");
+  assert.equal(Object.keys(resolved.result).length, 0);
 });
 
 test("resolveWidgetPayload ignores structured.ui envelope as a widget result candidate", () => {
@@ -1469,12 +1475,12 @@ test("resolveWidgetPayload ignores structured.ui envelope as a widget result can
     },
   });
 
-  assert.equal(resolved.source, "structured.result");
-  assert.equal(String((resolved.result.state as Record<string, unknown>).current_step || ""), "step_0");
-  assert.equal(resolved.resolved_language, "nl");
+  assert.equal(resolved.source, "none");
+  assert.equal(Object.keys(resolved.result).length, 0);
+  assert.equal(resolved.resolved_language, "");
 });
 
-test("resolveWidgetPayload can hydrate from toolResponseMetadata widget_result when _meta is absent", () => {
+test("resolveWidgetPayload does not hydrate from toolResponseMetadata widget_result when _meta is absent", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -1490,9 +1496,9 @@ test("resolveWidgetPayload can hydrate from toolResponseMetadata widget_result w
     },
   });
 
-  assert.equal(resolved.source, "toolResponseMetadata.widget_result");
-  assert.equal(String((resolved.result.state as Record<string, unknown>).current_step || ""), "step_0");
-  assert.equal(resolved.needs_hydration, false);
+  assert.equal(resolved.source, "none");
+  assert.equal(Object.keys(resolved.result).length, 0);
+  assert.equal(resolved.needs_hydration, true);
 });
 
 test("resolveWidgetPayload applies freshness override when metadata is available", () => {
@@ -1517,97 +1523,90 @@ test("resolveWidgetPayload applies freshness override when metadata is available
     },
   });
 
-  assert.equal(resolved.source, "structured.ui.result");
+  assert.equal(resolved.source, "meta.widget_result");
   assert.equal(
     String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""),
-    "Newer"
+    "Middle"
   );
 });
 
-test("resolveWidgetPayload ignores stale cross-session fallback payloads", () => {
-  const resolved = resolveWidgetPayload(
-    {
-      structuredContent: {
-        result: {
-          state: {
-            current_step: "step_0",
-            bootstrap_session_id: "session_new",
-            bootstrap_epoch: 2,
-            response_seq: 20,
-          },
-          ui: { questionText: "NewSession" },
+test("resolveWidgetPayload ignores legacy fallbackRaw/structuredContent when root _meta.widget_result is absent", () => {
+  const resolved = resolveWidgetPayload({
+    structuredContent: {
+      result: {
+        state: {
+          current_step: "step_0",
+          bootstrap_session_id: "session_structured",
+          bootstrap_epoch: 2,
+          response_seq: 20,
         },
+        ui: { questionText: "StructuredShouldNotWin" },
       },
     },
-    {
-      fallbackRaw: {
-        _meta: {
-          widget_result: {
-            state: {
-              current_step: "step_0",
-              bootstrap_session_id: "session_old",
-              bootstrap_epoch: 1,
-              response_seq: 999,
-            },
-            ui: {
-              questionText: "OldSessionShouldNotWin",
-              big_blob: "x".repeat(200),
-            },
-          },
-        },
-      },
-    } as any
-  );
-
-  assert.equal(resolved.bootstrap_session_id, "session_new");
-  assert.equal(resolved.bootstrap_epoch, 2);
-  assert.equal(resolved.response_seq, 20);
-  assert.equal(String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""), "NewSession");
-});
-
-test("resolveWidgetPayload keeps newest response_seq within same session/epoch", () => {
-  const resolved = resolveWidgetPayload(
-    {
-      structuredContent: {
-        result: {
+    fallbackRaw: {
+      _meta: {
+        widget_result: {
           state: {
             current_step: "step_0",
-            bootstrap_session_id: "session_same",
-            bootstrap_epoch: 3,
-            response_seq: 12,
-            host_widget_session_id: "host_same",
+            bootstrap_session_id: "session_fallback",
+            bootstrap_epoch: 1,
+            response_seq: 999,
           },
           ui: {
-            questionText: "Newest",
+            questionText: "FallbackShouldNotWin",
           },
         },
       },
     },
-    {
-      fallbackRaw: {
-        _meta: {
-          widget_result: {
-            state: {
-              current_step: "step_0",
-              bootstrap_session_id: "session_same",
-              bootstrap_epoch: 3,
-              response_seq: 11,
-              host_widget_session_id: "host_same",
-            },
-            ui: {
-              questionText: "OlderButRicher",
-              big_blob: "x".repeat(400),
-            },
+  });
+
+  assert.equal(resolved.source, "none");
+  assert.equal(Object.keys(resolved.result).length, 0);
+  assert.equal(resolved.bootstrap_session_id, "");
+  assert.equal(resolved.bootstrap_epoch, 0);
+  assert.equal(resolved.response_seq, 0);
+});
+
+test("resolveWidgetPayload uses only root _meta.widget_result even when fallbackRaw has richer ordering", () => {
+  const resolved = resolveWidgetPayload({
+    _meta: {
+      widget_result: {
+        state: {
+          current_step: "step_0",
+          bootstrap_session_id: "session_root",
+          bootstrap_epoch: 3,
+          response_seq: 12,
+          host_widget_session_id: "host_root",
+        },
+        ui: {
+          questionText: "RootWins",
+        },
+      },
+    },
+    fallbackRaw: {
+      _meta: {
+        widget_result: {
+          state: {
+            current_step: "step_0",
+            bootstrap_session_id: "session_fallback",
+            bootstrap_epoch: 9,
+            response_seq: 999,
+            host_widget_session_id: "host_fallback",
+          },
+          ui: {
+            questionText: "FallbackIgnored",
           },
         },
       },
-    } as any
-  );
+    },
+  });
 
-  assert.equal(resolved.bootstrap_session_id, "session_same");
+  assert.equal(resolved.source, "meta.widget_result");
+  assert.equal(resolved.bootstrap_session_id, "session_root");
   assert.equal(resolved.bootstrap_epoch, 3);
   assert.equal(resolved.response_seq, 12);
-  assert.equal(String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""), "Newest");
+  assert.equal(resolved.host_widget_session_id, "host_root");
+  assert.equal(String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""), "RootWins");
 });
 
 test("computeHydrationState uses shared v2_minimal missing-state rule", () => {
@@ -1622,7 +1621,7 @@ test("computeHydrationState uses shared v2_minimal missing-state rule", () => {
   });
   const hydration = computeHydrationState(resolved);
   assert.equal(hydration.needs_hydration, true);
-  assert.equal(hydration.waiting_reason, "both");
+  assert.equal(hydration.waiting_reason, "missing_state");
 });
 
 test("computeHydrationState treats non-EN language/ui_strings_lang mismatch as i18n_pending even when status is ready", () => {
@@ -1653,5 +1652,5 @@ test("computeHydrationState treats non-EN language/ui_strings_lang mismatch as i
   } as any;
   const hydration = computeHydrationState(resolved);
   assert.equal(hydration.needs_hydration, false);
-  assert.equal(hydration.waiting_reason, "i18n_pending");
+  assert.equal(hydration.waiting_reason, "none");
 });

@@ -3,18 +3,16 @@
  */
 
 import {
-  STRATEGY_STEP_ID,
   ORDER,
-  UI_STRINGS,
-  baseLang,
   t,
   titlesForLang,
   prestartContentForLang,
   hasPrestartContentForLang,
   getSectionTitle,
+  setRuntimeUiStrings,
 } from "./ui_constants.js";
 import { escapeHtml, renderInlineText, renderStructuredText, stripInlineText } from "./ui_text.js";
-import { extractChoicesFromPrompt, type Choice } from "./ui_choices.js";
+import type { Choice } from "./ui_choices.js";
 import {
   callRunStep,
   setLoading,
@@ -24,18 +22,11 @@ import {
   lockRateLimit,
   toolData,
   setLastToolOutput,
-  widgetState,
-  setWidgetStateSafe,
-  languageFromState,
   uiLang,
-  hasToolOutput,
-  ensureBootstrapRetryForResult,
   resolveWidgetPayload,
-  computeHydrationState,
-  computeBootstrapRenderState,
   resetHydrationRetryCycle,
 } from "./ui_actions.js";
-import { getIsLoading, getSessionStarted, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
+import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 
 function stepIndex(stepId: string): number {
   const idx = ORDER.indexOf(stepId);
@@ -48,17 +39,15 @@ export function extractStepTitle(stepId: string, lang: string | null | undefined
   return fullTitle.replace(/^[^\d]*\d+:\s*/, "");
 }
 
-function uiText(lang: string | null | undefined, key: string, fallback: string): string {
+function uiText(lang: string | null | undefined, key: string, _fallback: string): string {
   const translated = String(t(lang, key) || "").trim();
   if (translated) return translated;
-  const fallbackFromDefault = String(t("default", key) || "").trim();
-  if (fallbackFromDefault) return fallbackFromDefault;
-  return fallback;
+  return "";
 }
 
 function stepLabelShort(stepId: string, lang: string | null | undefined): string {
   const full = extractStepTitle(stepId, lang);
-  if (stepId === "step_0") return uiText(lang, "stepLabel.validation", "Validation");
+  if (stepId === "step_0") return uiText(lang, "stepLabel.validation", "");
   return full.length > 12 ? full.slice(0, 12) + "…" : full;
 }
 
@@ -104,22 +93,7 @@ export function dedupeBodyAgainstPrompt(bodyRaw: string, promptRaw: string): str
 }
 
 export function stripStructuredChoiceLines(promptRaw: string): string {
-  const lines = String(promptRaw || "").split(/\r?\n/).filter((line) => line.trim().length > 0);
-  if (!lines.length) return "";
-  const chooserNoise = [
-    /^(please\s+)?(choose|pick|select)\s+\d+(?:\s*(?:,|\/|or|and)\s*\d+)*\.?$/i,
-    /^(please\s+)?(choose|pick|select)\s+an?\s+option(\s+below)?\.?$/i,
-    /^(please\s+)?(choose|pick|select)\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
-    /^choose\s+an?\s+option\s+by\s+typing\s+.+$/i,
-  ];
-  const kept: string[] = [];
-  for (const line of lines) {
-    const normalized = String(line || "").trim();
-    if (/^\s*[1-9][\)\.]\s+/.test(normalized)) continue;
-    if (chooserNoise.some((pattern) => pattern.test(normalized))) continue;
-    kept.push(line);
-  }
-  return kept.join("\n").trim();
+  return String(promptRaw || "").trim();
 }
 
 function setStaticStrings(lang: string): void {
@@ -196,7 +170,7 @@ function renderBootstrapWaitShell(cardDesc: HTMLElement, lang: string): void {
   const shell = appendTextNode("div", "bootstrap-wait-shell", "");
   (shell as HTMLElement).style.display = "grid";
   (shell as HTMLElement).style.gap = "14px";
-  const waitTitle = uiText(lang, "prestart.loading", "Loading translation…");
+  const waitTitle = uiText(lang, "prestart.loading", "");
   if (waitTitle) {
     shell.appendChild(
       appendTextNode(
@@ -228,20 +202,20 @@ function renderHydrationRecovery(cardDesc: HTMLElement, lang: string): void {
     appendTextNode(
       "div",
       "bootstrap-recovery-title",
-      uiText(lang, "hydration.retry.title", "We could not load the app state.")
+      uiText(lang, "hydration.retry.title", "")
     )
   );
   shell.appendChild(
     appendTextNode(
       "div",
       "bootstrap-recovery-copy",
-      uiText(lang, "hydration.retry.body", "Please retry to continue.")
+      uiText(lang, "hydration.retry.body", "")
     )
   );
   const btn = appendTextNode(
     "button",
     "choiceBtn",
-    uiText(lang, "hydration.retry.action", "Retry")
+    uiText(lang, "hydration.retry.action", "")
   ) as HTMLButtonElement;
   btn.id = "btnHydrationRetry";
   btn.type = "button";
@@ -256,27 +230,19 @@ function blockedMessageForReason(
 ): { title: string; body: string } {
   if (reason === "session_upgrade_required") {
     return {
-      title: uiText(lang, "error.session_upgrade.title", "This session needs to be restarted."),
-      body: uiText(
-        lang,
-        "error.session_upgrade.body",
-        fallbackMessage || "Please start a new session to continue."
-      ),
+      title: uiText(lang, "error.session_upgrade.title", ""),
+      body: uiText(lang, "error.session_upgrade.body", "") || fallbackMessage || "",
     };
   }
   if (reason === "contract_violation") {
     return {
-      title: uiText(lang, "error.contract.title", "The app state is invalid."),
-      body: uiText(
-        lang,
-        "error.contract.body",
-        fallbackMessage || "Please refresh or start a new session."
-      ),
+      title: uiText(lang, "error.contract.title", ""),
+      body: uiText(lang, "error.contract.body", "") || fallbackMessage || "",
     };
   }
   return {
-    title: uiText(lang, "error.generic.title", "Something went wrong."),
-    body: uiText(lang, "error.generic.body", fallbackMessage || "Please refresh and try again."),
+    title: uiText(lang, "error.generic.title", ""),
+    body: uiText(lang, "error.generic.body", "") || fallbackMessage || "",
   };
 }
 
@@ -290,26 +256,12 @@ function renderBlockedState(cardDesc: HTMLElement, lang: string, title: string, 
   cardDesc.appendChild(shell);
 }
 
-function parseMenuFromContractId(contractIdRaw: unknown, stepIdRaw: unknown): string {
-  const contractId = String(contractIdRaw || "").trim();
-  const stepId = String(stepIdRaw || "").trim();
-  if (!contractId || !stepId) return "";
-  const parts = contractId.split(":");
-  if (parts.length < 3) return "";
-  const [contractStep, , ...menuParts] = parts;
-  if (String(contractStep || "").trim() !== stepId) return "";
-  const menuId = menuParts.join(":").trim();
-  if (!menuId || menuId === "NO_MENU") return "";
-  return menuId;
-}
-
 export function renderChoiceButtons(choices: Choice[] | null | undefined, resultData: Record<string, unknown>): void {
   const wrap = document.getElementById("choiceWrap");
   if (!wrap) return;
   wrap.innerHTML = "";
 
   const state = (resultData?.state as Record<string, unknown>) || {};
-  const currentStep = String(state?.current_step || "").trim();
   const uiPayload =
     resultData && typeof resultData.ui === "object" && resultData.ui
       ? (resultData.ui as Record<string, unknown>)
@@ -317,114 +269,22 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   const structuredActions = Array.isArray(uiPayload.actions)
     ? (uiPayload.actions as Array<Record<string, unknown>>)
     : [];
-  const choicesArr = Array.isArray(choices) ? choices : [];
-  const registryVersion = String(resultData?.registry_version || "").trim();
-  const registryActionCodes = Array.isArray(uiPayload.action_codes) ? uiPayload.action_codes : [];
-  const contractId = String(uiPayload.contract_id || "").trim();
-  const menuId = parseMenuFromContractId(contractId, currentStep);
-  const expectedChoiceCount =
-    typeof uiPayload.expected_choice_count === "number"
-      ? uiPayload.expected_choice_count
-      : registryActionCodes.length;
-  const labelsCount = choicesArr.length;
+  const _unusedChoices = Array.isArray(choices) ? choices : [];
+  void _unusedChoices;
   const lang = uiLang(state);
-
-  function showOptionsError(): void {
-    if (!wrap) return;
-    wrap.style.display = "flex";
-    wrap.innerHTML = "";
-    const err = document.createElement("div");
-    err.className = "choiceError";
-    err.textContent = t(lang, "optionsDisplayError");
-    wrap.appendChild(err);
-  }
-
-  const choicesCopy = [...choicesArr];
-
-  if (structuredActions.length > 0) {
-    const isLoading = getIsLoading();
-    const langForStructured = uiLang(state);
-    wrap.style.display = "flex";
-    for (const action of structuredActions) {
-      const labelKey = String(action?.label_key || "").trim();
-      const labelFromPayload = stripInlineText(String(action?.label || "")).trim();
-      const label = labelFromPayload || (labelKey ? String(t(langForStructured, labelKey) || "").trim() : "");
-      const actionCode = String(action?.action_code || "").trim();
-      if (!label || !actionCode) {
-        console.warn("[structured_actions_invalid]", {
-          registry_version: registryVersion,
-          contract_id: contractId,
-          current_step: currentStep,
-        });
-        continue;
-      }
-      const btn = document.createElement("button");
-      btn.className = "choiceBtn";
-      btn.type = "button";
-      btn.textContent = label;
-      btn.disabled = isLoading;
-      btn.addEventListener("click", () => {
-        if (getIsLoading()) return;
-        if (registryVersion && menuId) {
-          console.log("[actioncode_click]", {
-            registryVersion,
-            contractId,
-            currentStep,
-            action_code: actionCode,
-            source: "structured_actions",
-          });
-        }
-        callRunStep(actionCode);
-      });
-      wrap.appendChild(btn);
-    }
-    if (wrap.childNodes.length === 0) {
-      wrap.style.display = "none";
-      setInlineNotice(t(langForStructured, "optionsDisplayError"));
-    }
-    return;
-  }
-
-  if (menuId || registryActionCodes.length > 0) {
-    console.warn("[actioncodes_labels_missing]", {
-      registry_version: registryVersion,
-      contract_id: contractId,
-      current_step: currentStep,
-      labels_count: labelsCount,
-      expected_choice_count: expectedChoiceCount,
-    });
-    showOptionsError();
-    return;
-  }
-
-  if (choicesArr.length === 0) {
+  if (structuredActions.length === 0) {
     wrap.style.display = "none";
     return;
   }
 
-  for (const c of choicesCopy) {
-    const label = stripInlineText(String(c.label || "")).trim();
-    if (!label) {
-      console.error("Empty choice label", { contractId, currentStep, choiceIndex: c.value });
-      showOptionsError();
-      return;
-    }
-  }
-
-  if (registryVersion && menuId) {
-    console.log("[actioncode_render]", { registryVersion, contractId, currentStep });
-  }
-
   wrap.style.display = "flex";
   const isLoading = getIsLoading();
-  let renderIndex = 0;
-  for (const c of choicesCopy) {
-    const label = stripInlineText(String(c.label || "")).trim();
-    const actionCode = String(c.value || "").trim();
-    if (!actionCode) {
-      showOptionsError();
-      return;
-    }
+  for (const action of structuredActions) {
+    const labelKey = String(action?.label_key || "").trim();
+    const labelFromPayload = stripInlineText(String(action?.label || "")).trim();
+    const label = labelFromPayload || (labelKey ? String(t(lang, labelKey) || "").trim() : "");
+    const actionCode = String(action?.action_code || "").trim();
+    if (!label || !actionCode) continue;
     const btn = document.createElement("button");
     btn.className = "choiceBtn";
     btn.type = "button";
@@ -432,18 +292,13 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
     btn.disabled = isLoading;
     btn.addEventListener("click", () => {
       if (getIsLoading()) return;
-      if (registryVersion && menuId) {
-        console.log("[actioncode_click]", {
-          registryVersion,
-          contractId,
-          currentStep,
-          action_code: actionCode,
-        });
-      }
       callRunStep(actionCode);
     });
     wrap.appendChild(btn);
-    renderIndex += 1;
+  }
+  if (wrap.childNodes.length === 0) {
+    wrap.style.display = "none";
+    setInlineNotice(t(lang, "optionsDisplayError"));
   }
 }
 
@@ -511,9 +366,9 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   headingEl.textContent = "";
   (headingEl as HTMLElement).style.display = "none";
   instructionEl.textContent = instruction;
-  userTextEl.textContent = userLabel || uiText(lang, "wordingChoiceHeading", "This is your input:");
+  userTextEl.textContent = userLabel || uiText(lang, "wordingChoiceHeading", "");
   suggestionTextEl.textContent =
-    suggestionLabel || uiText(lang, "wordingChoiceSuggestionLabel", "This would be my suggestion:");
+    suggestionLabel || uiText(lang, "wordingChoiceSuggestionLabel", "");
 
   if (mode === "list") {
     (userTextEl as HTMLElement).style.display = "block";
@@ -532,8 +387,8 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
       li.textContent = normalizeListItem(item);
       suggestionListEl.appendChild(li);
     }
-    userBtn.textContent = uiText(lang, "wordingChoice.chooseVersion", "Choose this version");
-    suggestionBtn.textContent = uiText(lang, "wordingChoice.chooseVersion", "Choose this version");
+    userBtn.textContent = uiText(lang, "wordingChoice.chooseVersion", "");
+    suggestionBtn.textContent = uiText(lang, "wordingChoice.chooseVersion", "");
   } else {
     (userTextEl as HTMLElement).style.display = "block";
     (suggestionTextEl as HTMLElement).style.display = "block";
@@ -541,7 +396,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     (suggestionListEl as HTMLElement).style.display = "none";
     userListEl.innerHTML = "";
     suggestionListEl.innerHTML = "";
-    userBtn.textContent = userText || uiText(lang, "wordingChoice.useInputFallback", "Use this input");
+    userBtn.textContent = userText || uiText(lang, "wordingChoice.useInputFallback", "");
     suggestionBtn.textContent = suggestionText || suggestionLabel;
   }
   userBtn.disabled = getIsLoading();
@@ -572,34 +427,16 @@ export function render(overrideToolOutput?: unknown): void {
     uiPayload && typeof uiPayload.i18n === "object" && uiPayload.i18n
       ? (uiPayload.i18n as Record<string, unknown>)
       : {};
-  const payloadStrings =
-    uiI18n && typeof uiI18n.strings === "object" && uiI18n.strings
-      ? (uiI18n.strings as Record<string, unknown>)
-      : null;
-  const payloadLang = String((uiI18n.lang || "") as string).trim().toLowerCase();
+  void uiI18n;
 
   const overrideStrings =
-    (state?.ui_strings && typeof state.ui_strings === "object" ? state.ui_strings : null) ||
-    (result?.ui_strings && typeof result.ui_strings === "object" ? result.ui_strings : null) ||
-    payloadStrings;
-  const overrideLang = String((state?.ui_strings_lang || result?.ui_strings_lang || payloadLang || "") as string)
+    (state?.ui_strings && typeof state.ui_strings === "object" ? state.ui_strings : null);
+  const overrideLang = String((state?.ui_strings_lang || "") as string)
     .trim()
     .toLowerCase();
-  const fallbackApplied =
-    String(
-      (
-        state?.ui_strings_fallback_applied ||
-        result?.ui_strings_fallback_applied ||
-        uiI18n?.fallback_applied ||
-        "false"
-      ) as string
-    )
-      .trim()
-      .toLowerCase() === "true";
-  const ws = widgetState();
-  const stateLang = languageFromState(state);
-  const localeCandidate = resolved.resolved_language || stateLang || uiLang(state);
-  const lang = (fallbackApplied && overrideLang) ? overrideLang : (localeCandidate || "en");
+  const localeCandidate = resolved.resolved_language ||
+    String((state?.language || "") as string).trim().toLowerCase();
+  const lang = overrideLang || localeCandidate || "en";
 
   const latestRoot = (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__;
   const latestState = latestRoot?.state && typeof latestRoot.state === "object"
@@ -611,84 +448,33 @@ export function render(overrideToolOutput?: unknown): void {
     lang,
   };
 
-  ensureBootstrapRetryForResult(data, { source: "render" });
-  const hydration = computeHydrationState(resolved);
-  const uiStringsStatus = resolved.ui_strings_status;
   const uiView =
     uiPayload && typeof uiPayload.view === "object" && uiPayload.view
       ? (uiPayload.view as Record<string, unknown>)
       : {};
+  const uiStringsStatus = String((state?.ui_strings_status || "")).trim().toLowerCase();
   const viewMode = String(uiView.mode || "").trim().toLowerCase();
-  const uiGateStatus = String((state?.ui_gate_status || "")).trim().toLowerCase();
   const uiGateReason = String((state?.ui_gate_reason || "")).trim().toLowerCase();
-  const serverExplicitWaiting =
-    viewMode === "waiting_locale" || uiGateStatus === "waiting_locale";
+  const serverExplicitWaiting = viewMode === "waiting_locale";
   const serverExplicitPrestart = viewMode === "prestart";
   const serverExplicitInteractive = viewMode === "interactive";
-  const serverExplicitBlocked = viewMode === "blocked" || uiGateStatus === "blocked";
-  const serverExplicitFailed = viewMode === "failed" || uiGateStatus === "failed";
-  const hasServerExplicitMode = Boolean(viewMode);
-  const resolvedLangForLocaleCheck = resolved.resolved_language ||
-    String((state?.language || state?.ui_strings_requested_lang || "") as string)
-      .trim()
-      .toLowerCase()
-      .split(/[-_]/)[0] || "";
-  const localeKnownNonEn = Boolean(resolvedLangForLocaleCheck) &&
-    resolvedLangForLocaleCheck !== "en";
-  const bootstrapState = computeBootstrapRenderState({
-    hydration,
-    uiStringsStatus,
-    uiFlags,
-    uiView,
-    localeKnownNonEn,
-    hasState: resolved.has_state,
-    hasCurrentStep: String((state?.current_step || "") as string).trim().length > 0,
-  });
-  const waitingForMissingState = hasServerExplicitMode ? false : bootstrapState.waitingForMissingState;
-  const waitingForI18n = hasServerExplicitMode ? false : bootstrapState.waitingForI18n;
-  const bootstrapWaitingLocale = serverExplicitWaiting || (
-    !hasServerExplicitMode &&
-    (
-      waitingForI18n ||
-      bootstrapState.bootstrapWaitingLocale
-    )
-  );
-  const interactiveFallbackActive =
-    hasServerExplicitMode
-      ? (serverExplicitWaiting && uiFlags.interactive_fallback_active === true)
-      : bootstrapState.interactiveFallbackActive;
-  const waitingGateActive = bootstrapWaitingLocale || uiGateStatus === "waiting_locale";
+  const serverExplicitRecovery = viewMode === "recovery";
+  const serverExplicitBlocked = viewMode === "blocked";
+  const serverExplicitFailed = viewMode === "failed";
+  const hasExplicitServerRouting =
+    serverExplicitWaiting ||
+    serverExplicitPrestart ||
+    serverExplicitInteractive ||
+    serverExplicitRecovery ||
+    serverExplicitBlocked ||
+    serverExplicitFailed;
+  const bootstrapWaitingLocale = serverExplicitWaiting;
+  const interactiveFallbackActive = bootstrapWaitingLocale && uiFlags.interactive_fallback_active === true;
+  const waitingGateActive = bootstrapWaitingLocale;
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
-  const hasOverrideStrings =
-    Boolean(overrideStringsMap) &&
-    Object.keys(overrideStringsMap || {}).some((key) => String(overrideStringsMap?.[key] || "").trim().length > 0);
-  const langBucket = baseLang(lang);
-  const overrideBucket = baseLang(overrideLang || lang);
-  const shouldApplyOverride =
-    hasOverrideStrings &&
-    uiStringsStatus === "ready" &&
-    (overrideBucket === langBucket || fallbackApplied);
-  if (!shouldApplyOverride && overrideStringsMap && Object.keys(overrideStringsMap).length > 0) {
-    const dev = typeof location !== "undefined" && location.hostname === "localhost";
-    if (dev) {
-      console.log("[ui_override_ignored]", {
-        has_override_strings: hasOverrideStrings,
-        ui_strings_status: uiStringsStatus,
-        override_bucket: overrideBucket,
-        lang_bucket: langBucket,
-      });
-    }
-  }
-  if (shouldApplyOverride) {
-    UI_STRINGS[overrideBucket] = { ...UI_STRINGS.default, ...(overrideStringsMap as Record<string, string>) };
-  }
-  const hasToolOutputVal = hasToolOutput();
-  const serverStarted = String((state?.started || "")).toLowerCase() === "true";
-  const sessionStarted = getSessionStarted();
-  if (hasToolOutputVal && serverStarted && !sessionStarted) {
-    setSessionStarted(true);
-  }
-  if (waitingForMissingState) {
+  const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
+  setRuntimeUiStrings(hasOverrideStrings ? overrideStringsMap : {});
+  if (!hasExplicitServerRouting) {
     const inputWrap = document.getElementById("inputWrap");
     const btnStart = document.getElementById("btnStart");
     const startHint = document.getElementById("startHint");
@@ -719,20 +505,7 @@ export function render(overrideToolOutput?: unknown): void {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      if (hydration.retry_exhausted) {
-        renderHydrationRecovery(prestartEl, lang);
-        const retryBtn = document.getElementById("btnHydrationRetry") as HTMLButtonElement | null;
-        if (retryBtn) {
-          retryBtn.disabled = getIsLoading();
-          retryBtn.onclick = () => {
-            if (getIsLoading()) return;
-            setLoading(true);
-            resetHydrationRetryCycle({ trigger_poll: true, source: "render_retry_button" });
-          };
-        }
-      } else {
-        renderBootstrapWaitShell(prestartEl, lang);
-      }
+      renderBootstrapWaitShell(prestartEl, lang);
     }
     if (getIsLoading()) setLoading(false);
     return;
@@ -742,13 +515,13 @@ export function render(overrideToolOutput?: unknown): void {
     if (errorObj.type === "rate_limited") {
       setInlineNotice(
         errorObj.user_message ||
-          uiText(lang, "transient.rate_limited", "Please wait a moment and try again.")
+          uiText(lang, "transient.rate_limited", "")
       );
       lockRateLimit(errorObj.retry_after_ms ?? 1500);
     } else {
       setInlineNotice(
         errorObj.user_message ||
-          uiText(lang, "transient.timeout", "This is taking longer than usual. Please try again.")
+          uiText(lang, "transient.timeout", "")
       );
     }
     if (result?.ok === false) return;
@@ -756,33 +529,20 @@ export function render(overrideToolOutput?: unknown): void {
     clearInlineNotice();
   }
 
-  const langPersist = languageFromState(state);
-  const startedPersist = String((state?.started || "")).toLowerCase() === "true";
-  if (
-    langPersist &&
-    (!ws.language ||
-      String(ws.language).toLowerCase().trim() !== String(langPersist).toLowerCase().trim())
-  ) {
-    setWidgetStateSafe({ language: langPersist });
-  }
-  if (startedPersist && String(ws.started || "").toLowerCase() !== "true") {
-    setWidgetStateSafe({ started: "true" });
-  }
-
-  const showPreStartBase = serverExplicitPrestart
-    ? true
-    : serverExplicitInteractive
-      ? false
-      : (hasToolOutputVal ? !serverStarted : !sessionStarted);
-  const showPreStart = waitingGateActive || serverExplicitBlocked || serverExplicitFailed ? false : showPreStartBase;
+  const showPreStart =
+    serverExplicitPrestart &&
+    !waitingGateActive &&
+    !serverExplicitBlocked &&
+    !serverExplicitFailed &&
+    !serverExplicitRecovery;
 
   const current =
-    !showPreStart && hasToolOutputVal ? (state.current_step as string) || "step_0" : "step_0";
+    !showPreStart ? (state.current_step as string) || "step_0" : "step_0";
   const idx = stepIndex(current);
   const stepTitle = bootstrapWaitingLocale && !interactiveFallbackActive
     ? ""
     : current === "step_0"
-      ? uiText(lang, "stepLabel.validation", "Validation")
+      ? uiText(lang, "stepLabel.validation", "")
       : extractStepTitle(current, lang);
   buildStepper(idx, stepTitle, lang);
 
@@ -795,7 +555,12 @@ export function render(overrideToolOutput?: unknown): void {
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
 
-  if ((waitingGateActive && !interactiveFallbackActive) || serverExplicitBlocked || serverExplicitFailed) {
+  if (
+    (waitingGateActive && !interactiveFallbackActive) ||
+    serverExplicitBlocked ||
+    serverExplicitFailed ||
+    serverExplicitRecovery
+  ) {
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
@@ -820,7 +585,7 @@ export function render(overrideToolOutput?: unknown): void {
           String((result?.error as Record<string, unknown> | undefined)?.user_message || "").trim();
         const blockedCopy = blockedMessageForReason(lang, uiGateReason, errorMessage);
         renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
-      } else if (hydration.retry_exhausted) {
+      } else if (serverExplicitRecovery) {
         renderHydrationRecovery(prestartEl, lang);
         const retryBtn = document.getElementById("btnHydrationRetry") as HTMLButtonElement | null;
         if (retryBtn) {
@@ -862,7 +627,7 @@ export function render(overrideToolOutput?: unknown): void {
 
   if (sectionTitleEl) {
     if (showPreStart && current === "step_0") {
-      sectionTitleEl.textContent = uiText(lang, "sectionTitle.step_0", "Validation & Business Name");
+      sectionTitleEl.textContent = uiText(lang, "sectionTitle.step_0", "");
     } else if (!showPreStart && current !== "step_0" && showStepIntroChrome) {
       const businessName = String((state?.business_name || "")).trim();
       sectionTitleEl.textContent = getSectionTitle(lang, current, businessName);
@@ -892,12 +657,8 @@ export function render(overrideToolOutput?: unknown): void {
     const prompt = document.getElementById("prompt");
     if (cardDesc) {
       const prestartEl = cardDesc as HTMLElement;
-      const isNonEnglish = baseLang(lang) !== "en" && baseLang(lang) !== "default";
-      const hasLocalizedPrestart = hasPrestartContentForLang(lang);
-      const startupUnhydrated = !hasToolOutputVal || !resolved.has_state;
-      const waitingLocalizedPrestart = isNonEnglish && (uiStringsStatus !== "ready" || !hasLocalizedPrestart);
-      const allowEnglishFallback = hydration.retry_exhausted;
-      const showSkeleton = startupUnhydrated || (waitingLocalizedPrestart && !allowEnglishFallback);
+      const hasPrestartContent = hasPrestartContentForLang(lang);
+      const showSkeleton = uiStringsStatus !== "ready" || !hasPrestartContent;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
       if (showSkeleton) renderPrestartSkeleton(prestartEl, lang);
@@ -952,10 +713,6 @@ export function render(overrideToolOutput?: unknown): void {
       : "")
   ) as string;
   const promptSource = uiQuestionText || promptRaw;
-  const isBenProfileBody =
-    /!\[\s*ben steenstra\s*\]\(/i.test(bodyRaw) ||
-    /bensteenstra\.com/i.test(bodyRaw) ||
-    /my name is ben steenstra/i.test(bodyRaw);
   let body: string;
   if (isDreamDirectionView && promptSource) {
     body = promptSource;
@@ -967,12 +724,10 @@ export function render(overrideToolOutput?: unknown): void {
   if (cardDescEl) {
     cardDescEl.style.display = "block";
     cardDescEl.classList.add("has-grid");
-    const isStep0AskLayout = current === "step_0" && !isBenProfileBody;
+    const isStep0AskLayout = current === "step_0";
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     renderStructuredText(cardDescEl, body || "");
-    const hasBenProfileImage =
-      cardDescEl.querySelector('img.cardDesc-image[src*="ben-steenstra.webp"]') !== null;
-    cardDescEl.classList.toggle("is-ben-profile", isBenProfileBody || hasBenProfileImage);
+    cardDescEl.classList.remove("is-ben-profile");
   }
 
   const previewWrap = document.getElementById("presentationPreview");
@@ -996,19 +751,15 @@ export function render(overrideToolOutput?: unknown): void {
 
   const purposeInstructionHintEl = document.getElementById("purposeInstructionHint");
   if (purposeInstructionHintEl) {
-    const payloadContractId = String(((result?.ui as Record<string, unknown>)?.contract_id || "")).trim();
-    const menuId = parseMenuFromContractId(payloadContractId, current);
-    const purposeHintAllowedMenus = new Set(["PURPOSE_MENU_EXPLAIN", "PURPOSE_MENU_EXAMPLES"]);
     const showPurposeHint =
       current === "purpose" &&
-      (uiFlags.showPurposeHint as boolean) === true &&
-      purposeHintAllowedMenus.has(menuId);
+      (uiFlags.showPurposeHint as boolean) === true;
     if (showPurposeHint) {
       purposeInstructionHintEl.style.display = "block";
       purposeInstructionHintEl.textContent = uiText(
         lang,
         "purposeInstructionHint",
-        "Answer the question, formulate your own Purpose, or choose an option"
+        ""
       );
     } else {
       purposeInstructionHintEl.style.display = "none";
@@ -1111,7 +862,7 @@ export function render(overrideToolOutput?: unknown): void {
       const cluster = clusters[cii];
       const indices = cluster.statement_indices || [];
       const themeName = String(cluster.theme || "").trim() ||
-        uiText(lang, "scoring.categoryFallback", "Category {0}").replace("{0}", String(cii + 1));
+        uiText(lang, "scoring.categoryFallback", "").replace("{0}", String(cii + 1));
       const clusterDiv = document.createElement("div");
       clusterDiv.className = "scoringCluster";
       clusterDiv.setAttribute("data-cluster-index", String(cii));
@@ -1159,7 +910,7 @@ export function render(overrideToolOutput?: unknown): void {
         input.value =
           !isNaN(numVal) && numVal >= 1 && numVal <= 10 ? String(Math.round(numVal)) : "";
         input.placeholder = "0";
-        input.setAttribute("aria-label", uiText(lang, "scoring.aria.scoreInput", "Score 1 to 10"));
+        input.setAttribute("aria-label", uiText(lang, "scoring.aria.scoreInput", ""));
         row.appendChild(stSpan);
         row.appendChild(input);
         if (rowsEl) rowsEl.appendChild(row);
@@ -1185,7 +936,7 @@ export function render(overrideToolOutput?: unknown): void {
       }
       const avgText = filled === 0 ? "—" : (sum / filled).toFixed(1);
       const themeName = String(clusters[ci].theme || "").trim() ||
-        uiText(lang, "scoring.categoryFallback", "Category {0}").replace("{0}", String(ci + 1));
+        uiText(lang, "scoring.categoryFallback", "").replace("{0}", String(ci + 1));
       const showStats = filled > 0;
       const avgHtml = showStats
         ? '<span class="avgScore">' + t(lang, "scoringAvg").replace("X", avgText) + "</span>"
@@ -1253,8 +1004,10 @@ export function render(overrideToolOutput?: unknown): void {
           }
           payload.push(row);
         }
+        const actionCode = String((state as Record<string, unknown>).ui_action_text_submit || "").trim();
+        if (!actionCode) return;
         win.__dreamScoringScores = [];
-        callRunStep(JSON.stringify({ action: "submit_scores", scores: payload }));
+        callRunStep(actionCode, { __pending_scores: payload });
       };
     }
 
@@ -1327,9 +1080,8 @@ export function render(overrideToolOutput?: unknown): void {
   if (hasStructuredActions) {
     promptText = isDreamDirectionView ? "" : stripStructuredChoiceLines(promptSource);
   } else {
-    const parsed = extractChoicesFromPrompt(promptSource);
-    choicesArr = Array.isArray(parsed.choices) ? parsed.choices : [];
-    promptText = isDreamDirectionView ? "" : parsed.promptShown;
+    choicesArr = [];
+    promptText = isDreamDirectionView ? "" : promptSource;
   }
 
   let requireWordingPick = false;
@@ -1366,32 +1118,7 @@ export function render(overrideToolOutput?: unknown): void {
     return choiceWrap.childNodes.length > 0;
   })();
   const choiceMode =
-    !requireWordingPick && (renderedChoiceButtons || hasStructuredActions || choicesArr.length > 0);
-  let statementCount =
-    (Array.isArray(statementsArray) ? statementsArray.length : 0) || 0;
-  if (
-    current === "dream" &&
-    isDreamExplainerMode &&
-    statementCount < 20 &&
-    lastStatements.length >= 20
-  ) {
-    statementCount = lastStatements.length;
-  }
-  const effectiveStatementsForButton =
-    (Array.isArray(statementsArray) ? statementsArray.length : 0) ||
-    (Array.isArray((specialist as { statements?: unknown[] }).statements)
-      ? (specialist as { statements: unknown[] }).statements.length
-      : 0) ||
-    0;
-  const inDreamBuilderView = hasExplicitViewMode
-    ? (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine || isViewModeDreamBuilderScoring)
-    : isDreamExplainerMode;
-  const showGoToNextStep =
-    current === "dream" &&
-    inDreamBuilderView &&
-    effectiveStatementsForButton >= 20 &&
-    !isViewModeDreamBuilderScoring &&
-    !requireWordingPick;
+    !requireWordingPick && (renderedChoiceButtons || hasStructuredActions);
 
   inputWrap.style.display = "flex";
   const sde = document.getElementById("btnStartDreamExercise");
@@ -1405,24 +1132,13 @@ export function render(overrideToolOutput?: unknown): void {
   } else {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
-    if (sde) {
-      (sde as HTMLElement).style.display = isDreamStepPreExercise ? "inline-flex" : "none";
-    }
-    if (sb) {
-      const showSwitchByMode = hasExplicitViewMode
-        ? (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine)
-        : isDreamExplainerMode;
-      (sb as HTMLElement).style.display =
-        showSwitchByMode
-          ? "inline-flex"
-          : "none";
-    }
+    if (sde) (sde as HTMLElement).style.display = "none";
+    if (sb) (sb as HTMLElement).style.display = "none";
   }
 
   const btnGoToNextStepEl = document.getElementById("btnGoToNextStep");
   if (btnGoToNextStepEl) {
-    (btnGoToNextStepEl as HTMLElement).style.display =
-      showGoToNextStep && !getIsLoading() ? "inline-flex" : "none";
+    (btnGoToNextStepEl as HTMLElement).style.display = "none";
     (btnGoToNextStepEl as HTMLButtonElement).disabled = getIsLoading();
   }
 

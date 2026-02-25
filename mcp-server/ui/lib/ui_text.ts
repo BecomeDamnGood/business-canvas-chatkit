@@ -3,6 +3,16 @@
  * Security: never use innerHTML for LLM/tool output. Bold is rendered via DOM nodes only.
  */
 
+import { t } from "./ui_constants.js";
+
+function latestWidgetLangForText(): string {
+  const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown>; lang?: string } }).__BSC_LATEST__;
+  const state = latest?.state && typeof latest.state === "object" ? latest.state : {};
+  return String(latest?.lang || state.ui_strings_lang || state.language || "en")
+    .trim()
+    .toLowerCase();
+}
+
 export function escapeHtml(s: string | null | undefined): string {
   if (s == null) return "";
   const div = document.createElement("div");
@@ -156,7 +166,7 @@ function extractMarkdownImage(line: string): { alt: string; url: string } | null
   if (!raw) return null;
   const m = raw.match(/^!\[([^\]]*)\]\(([^)\s]+)\)$/);
   if (!m) return null;
-  const alt = String(m[1] || "").trim() || "Image";
+  const alt = String(m[1] || "").trim() || String(t(latestWidgetLangForText(), "media.image.alt") || "").trim();
   const url = String(m[2] || "").trim();
   if (!url || !/^(https?:\/\/|\/)/i.test(url)) return null;
   return { alt, url };
