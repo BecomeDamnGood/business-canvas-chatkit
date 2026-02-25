@@ -15,6 +15,7 @@ import {
   resolveAllowedHostOrigin,
   setBridgeEnabled,
   setSendEnabled,
+  setInlineNotice,
   setLoading,
 } from "./ui_actions.js";
 import { render } from "./ui_render.js";
@@ -52,11 +53,46 @@ function actionCodeFromState(stateKey: string): string {
   return String(state[stateKey] || "").trim();
 }
 
+function isWidgetResultLike(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const rec = value as Record<string, unknown>;
+  const keys = Object.keys(rec);
+  if (!keys.length) return false;
+  const state = rec.state;
+  if (state !== undefined && (typeof state !== "object" || state === null || Array.isArray(state))) {
+    return false;
+  }
+  const widgetLikeKeys = new Set([
+    "state",
+    "ui",
+    "prompt",
+    "text",
+    "specialist",
+    "current_step_id",
+    "model_result_shape_version",
+    "ui_strings",
+    "ui_strings_lang",
+    "language",
+  ]);
+  return keys.some((key) => widgetLikeKeys.has(key));
+}
+
 function normalizeHostToolResultNotification(paramsRaw: unknown): Record<string, unknown> {
   const params = toRecord(paramsRaw);
+  const directCandidate = params;
   const resultCandidate = toRecord(params.result);
   const toolOutputCandidate = params.toolOutput;
   const metadata = toRecord(params.toolResponseMetadata);
+  if (isWidgetResultLike(directCandidate)) {
+    if (Object.keys(resultCandidate).length > 0 || Object.keys(toRecord(toolOutputCandidate)).length > 0) {
+      console.warn("[host_tool_result_mixed_shape_used]", {
+        has_direct_result: true,
+        has_result_wrapper: Object.keys(resultCandidate).length > 0,
+        has_tool_output: Object.keys(toRecord(toolOutputCandidate)).length > 0,
+      });
+    }
+    return mergeToolOutputWithResponseMetadata(directCandidate, metadata);
+  }
   if (Object.keys(resultCandidate).length > 0) {
     if (Object.keys(toRecord(toolOutputCandidate)).length > 0) {
       console.warn("[host_tool_result_mixed_shape_used]", {
@@ -91,7 +127,7 @@ function ingestHostPayload(
 const STARTUP_GRACE_MS_DEFAULT = 320;
 
 function startupGraceMs(): number {
-  const raw = Number((globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_MS ?? 0);
+  const raw = Number((globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_MS ?? STARTUP_GRACE_MS_DEFAULT);
   if (!Number.isFinite(raw) || raw <= 0) return 0;
   return Math.max(0, Math.min(1500, Math.trunc(raw)));
 }
@@ -232,7 +268,13 @@ function submitWidgetInput(): void {
   const st = latestWidgetState();
   const submitActionCode = String(st.ui_action_text_submit || "").trim();
   const submitPayloadMode = String(st.ui_action_text_submit_payload_mode || "text").trim().toLowerCase();
-  if (!submitActionCode) return;
+  if (!submitActionCode) {
+    console.warn("[ui_action_missing]", { state_key: "ui_action_text_submit" });
+    setInlineNotice(
+      uiStringFromContract("error.contract.body") || "Please refresh and try again."
+    );
+    return;
+  }
 
   const win = globalThis as unknown as { __dreamScoringScores?: unknown[][] };
   const shouldSubmitScores = submitPayloadMode === "scores";
@@ -294,7 +336,13 @@ if (wordingChoicePickUser) {
   wordingChoicePickUser.addEventListener("click", () => {
     if (getIsLoading()) return;
     const actionCode = actionCodeFromState("ui_action_wording_pick_user");
-    if (!actionCode) return;
+    if (!actionCode) {
+      console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_user" });
+      setInlineNotice(
+        uiStringFromContract("error.contract.body") || "Please refresh and try again."
+      );
+      return;
+    }
     callRunStep(actionCode);
   });
 }
@@ -304,7 +352,13 @@ if (wordingChoicePickSuggestion) {
   wordingChoicePickSuggestion.addEventListener("click", () => {
     if (getIsLoading()) return;
     const actionCode = actionCodeFromState("ui_action_wording_pick_suggestion");
-    if (!actionCode) return;
+    if (!actionCode) {
+      console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_suggestion" });
+      setInlineNotice(
+        uiStringFromContract("error.contract.body") || "Please refresh and try again."
+      );
+      return;
+    }
     callRunStep(actionCode);
   });
 }
@@ -314,7 +368,14 @@ if (btnStart) {
   btnStart.addEventListener("click", () => {
     if (getIsLoading()) return;
     const actionCode = actionCodeFromState("ui_action_start");
-    if (!actionCode) return;
+    if (!actionCode) {
+      console.warn("[ui_action_missing]", { state_key: "ui_action_start" });
+      setInlineNotice(
+        uiStringFromContract("error.contract.body") || "Please refresh and try again."
+      );
+      (btnStart as HTMLButtonElement).disabled = true;
+      return;
+    }
     setSessionStarted(true);
     setSessionWelcomeShown(false);
     callRunStep(actionCode, { started: "true" });
@@ -326,7 +387,13 @@ if (btnStartDreamExercise) {
   btnStartDreamExercise.addEventListener("click", () => {
     if (getIsLoading()) return;
     const actionCode = actionCodeFromState("ui_action_dream_start_exercise");
-    if (!actionCode) return;
+    if (!actionCode) {
+      console.warn("[ui_action_missing]", { state_key: "ui_action_dream_start_exercise" });
+      setInlineNotice(
+        uiStringFromContract("error.contract.body") || "Please refresh and try again."
+      );
+      return;
+    }
     callRunStep(actionCode);
   });
 }
@@ -336,7 +403,13 @@ if (btnSwitchToSelfDream) {
   btnSwitchToSelfDream.addEventListener("click", () => {
     if (getIsLoading()) return;
     const actionCode = actionCodeFromState("ui_action_dream_switch_to_self");
-    if (!actionCode) return;
+    if (!actionCode) {
+      console.warn("[ui_action_missing]", { state_key: "ui_action_dream_switch_to_self" });
+      setInlineNotice(
+        uiStringFromContract("error.contract.body") || "Please refresh and try again."
+      );
+      return;
+    }
     callRunStep(actionCode);
   });
 }

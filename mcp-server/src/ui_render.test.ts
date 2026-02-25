@@ -1145,6 +1145,9 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /function normalizeHostToolResultNotification\(/);
   assert.match(source, /function ingestHostPayload\(/);
   assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
+  assert.match(source, /const directCandidate = params;/);
+  assert.match(source, /if \(isWidgetResultLike\(directCandidate\)\) \{/);
+  assert.match(source, /mergeToolOutputWithResponseMetadata\(directCandidate, metadata\)/);
   assert.match(source, /const resultCandidate = toRecord\(params\.result\);/);
   assert.match(source, /if \(Object\.keys\(resultCandidate\)\.length > 0\) \{[\s\S]*mergeToolOutputWithResponseMetadata\(resultCandidate, metadata\)/);
   assert.match(source, /const toolOutputCandidate = params\.toolOutput;/);
@@ -1159,6 +1162,7 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /openai:set_globals[\s\S]*ingestHostPayload\(payload, "set_globals"\)/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(\s*host\?\.toolOutput,\s*host\?\.toolResponseMetadata\s*\)/);
   assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*const actionCode = actionCodeFromState\("ui_action_start"\);[\s\S]*callRunStep\(actionCode, \{ started: "true" \}\)/);
+  assert.match(source, /\[ui_action_missing\]/);
   assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
   assert.doesNotMatch(source, /function shouldAcceptBootstrapPayload\(/);
 });
@@ -1244,6 +1248,7 @@ test("render keeps non-EN pending locale in explicit wait view without EN presta
       current_step: "step_0",
       started: "false",
       language: "nl",
+      ui_action_start: "ACTION_START",
       ui_strings_status: "pending",
       ui_gate_status: "waiting_locale",
     },
@@ -1291,6 +1296,7 @@ test("render follows explicit server prestart mode during startup grace", () => 
       current_step: "step_0",
       started: "false",
       language: "nl",
+      ui_action_start: "ACTION_START",
       ui_strings_status: "pending",
       ui_gate_status: "waiting_locale",
     },
@@ -1451,7 +1457,7 @@ test("ui actions source uses explicit bootstrap poll action and shared result ha
   assert.doesNotMatch(source, /__locale_wait_retry/);
 });
 
-test("ui actions source supports self-heal transport and queued ACTION_START fallback", () => {
+test("ui actions source uses deterministic transport without queued ACTION_START fallback", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
   assert.match(source, /type TransportStatus = "unknown" \| "ready_callTool" \| "ready_bridge" \| "unavailable";/);
   assert.match(source, /function resolveTransportStatus\(\): TransportStatus/);
@@ -1460,21 +1466,17 @@ test("ui actions source supports self-heal transport and queued ACTION_START fal
   assert.match(source, /function mergeOutboundOrdering\(/);
   assert.match(source, /\[ui_ordering_applied\]/);
   assert.match(source, /\[ui_ordering_dropped_stale\]/);
-  assert.match(source, /function queueStartAction\(/);
-  assert.match(source, /async function flushQueuedStartAction\(/);
-  assert.match(source, /ui_start_transport_unavailable/);
-  assert.match(source, /ui_start_action_queued/);
-  assert.match(source, /ui_start_action_flushed/);
+  assert.match(source, /ui_transport_unavailable/);
   assert.match(source, /ui_start_dispatch_failed/);
-  assert.match(source, /bootstrap_session_epoch_mismatch/);
+  assert.match(source, /ui_ordering_patch_dropped/);
   assert.match(source, /notifyHostTransportSignal/);
   assert.match(source, /function canUseBridge\(\): boolean \{[\s\S]*return bridgeEnabled;/);
-  assert.match(source, /const transportPrimary = hasBridgePath \? "bridge" : "callTool";/);
-  assert.match(source, /transport_used: transportPrimary/);
+  assert.match(source, /const transportPrimary: "callTool" \| "bridge" = hasCallTool \? "callTool" : "bridge";/);
   assert.match(source, /transport_used: transportUsed/);
-  assert.match(source, /const startTransportSelfHealEnabled = true;/);
-  assert.match(source, /allowUnconfirmedBridge: startTransportSelfHealEnabled/);
-  assert.match(source, /ui_bridge_first_success_without_prior_flag/);
+  assert.match(source, /allowUnconfirmedBridge: true/);
+  assert.doesNotMatch(source, /queueStartAction/);
+  assert.doesNotMatch(source, /flushQueuedStartAction/);
+  assert.doesNotMatch(source, /startTransportSelfHealEnabled/);
 });
 
 test("ui actions source has bridge timeout guard", () => {
@@ -1778,4 +1780,72 @@ test("computeHydrationState treats non-EN language/ui_strings_lang mismatch as i
   const hydration = computeHydrationState(resolved);
   assert.equal(hydration.needs_hydration, false);
   assert.equal(hydration.waiting_reason, "none");
+});
+
+test("resolveWidgetPayload accepts direct widget-result shape from host notification params", () => {
+  const resolved = resolveWidgetPayload({
+    current_step_id: "step_0",
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "session_direct",
+      bootstrap_epoch: 2,
+      response_seq: 11,
+      host_widget_session_id: "host_direct",
+      language: "nl",
+      ui_strings_status: "ready",
+    },
+    ui: {
+      view: {
+        mode: "interactive",
+      },
+    },
+  });
+  assert.equal(resolved.source, "root.result");
+  assert.equal(resolved.bootstrap_session_id, "session_direct");
+  assert.equal(resolved.bootstrap_epoch, 2);
+  assert.equal(resolved.response_seq, 11);
+  assert.equal(resolved.host_widget_session_id, "host_direct");
+});
+
+test("render fail-closes interactive mode with missing content into blocked shell", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const cardDesc = (fakeDocument as any).getElementById("cardDesc");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "?lang=nl" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: { language: "nl" }, setWidgetState() {} };
+
+  render(toolOutputFromWidgetResult({
+    state: {
+      current_step: "dream",
+      started: "true",
+      language: "nl",
+      ui_strings_status: "ready",
+      ui_gate_status: "ready",
+      ui_action_text_submit: "",
+    },
+    ui: {
+      view: {
+        mode: "interactive",
+      },
+      actions: [],
+    },
+    prompt: "",
+    text: "",
+  }));
+
+  assert.ok((cardDesc.childNodes || []).length > 0);
+  const shell = (cardDesc.childNodes || [])[0] as { className?: string; childNodes?: any[] };
+  assert.equal(String(shell?.className || "").includes("bootstrap-wait-shell"), true);
+  assert.ok(((shell?.childNodes || []) as any[]).length >= 2);
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
 });

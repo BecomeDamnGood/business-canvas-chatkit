@@ -189,6 +189,12 @@ function pickWidgetResultFromKnownShapes(raw: unknown): {
       source: "root.result",
     };
   }
+  if (isWidgetResultLike(root)) {
+    return {
+      result: root,
+      source: "root.result",
+    };
+  }
   return {
     result: {},
     source: "none",

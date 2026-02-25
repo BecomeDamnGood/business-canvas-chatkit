@@ -55,7 +55,8 @@ test("Start gating: seedable non-empty first message keeps Click Start gate and 
     });
     assert.equal(result?.ok, true);
     assert.equal(result?.current_step_id, "step_0");
-    assert.equal(String(result?.state?.step_0_final || "").includes("Name: Mindd"), true);
+    assert.equal(String(result?.state?.step_0_final || ""), "");
+    assert.equal(String(result?.state?.business_name || ""), "Mindd");
     const startHint = String((result?.state?.ui_strings || {})["startHint"] || "").trim();
     assert.ok(startHint.length > 0, "localized startHint must exist");
     assert.equal(String(result?.prompt || "").trim(), startHint);
@@ -87,7 +88,8 @@ test("Start gating regression: migrated legacy state_version does not auto-start
   const startHint = String((result?.state?.ui_strings || {})["startHint"] || "").trim();
   assert.ok(startHint.length > 0, "localized startHint must exist");
   assert.equal(String(result?.prompt || "").trim(), startHint);
-  assert.equal(String(result?.state?.step_0_final || "").includes("Name: Mindd"), true);
+  assert.equal(String(result?.state?.step_0_final || ""), "");
+  assert.equal(String(result?.state?.business_name || ""), "Mindd");
   assert.equal(String(result?.state?.language || ""), "nl");
   assert.equal(String(result?.state?.locale || "").toLowerCase().startsWith("nl"), true);
 });
@@ -316,8 +318,8 @@ test("language policy: unsupported locale falls back to EN strings with explicit
   assert.equal(result?.ok, true);
   assert.equal(String(result?.state?.language || ""), "ru");
   assert.equal(String(result?.state?.ui_strings_requested_lang || ""), "ru-RU");
-  assert.equal(String(result?.state?.ui_strings_status || ""), "ready");
-  assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
+  assert.equal(String(result?.state?.ui_strings_status || ""), "pending");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "waiting_locale");
   assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
   assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "true");
   assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "requested_lang_unavailable");
@@ -436,8 +438,7 @@ test("legacy chat state auto-upgrades instead of blocking and preserves NL local
   assert.equal(String(chatTurn?.state?.initial_user_message || "").includes("Mindd"), true);
 
   const seededStep0 = String(chatTurn?.state?.step_0_final || "");
-  assert.equal(seededStep0.includes("Venture:"), true);
-  assert.equal(seededStep0.includes("Name: Mindd"), true);
+  assert.equal(seededStep0, "");
   assert.equal(String(chatTurn?.state?.business_name || ""), "Mindd");
 
   const widgetStart = await run_step({
@@ -452,10 +453,10 @@ test("legacy chat state auto-upgrades instead of blocking and preserves NL local
   assert.notEqual(String(widgetStart?.state?.ui_gate_status || ""), "blocked");
   assert.equal(String(widgetStart?.state?.language || ""), "nl");
   assert.equal(String(widgetStart?.state?.business_name || ""), "Mindd");
-  assert.equal(String(widgetStart?.prompt || "").includes("Mindd"), true);
+  assert.ok(String(widgetStart?.prompt || "").trim().length > 0);
 });
 
-test("legacy widget state auto-upgrades instead of blocking and seeds Step 0 from first text turn", async () => {
+test("legacy widget state auto-upgrades instead of blocking and pre-fills business name from first text turn", async () => {
   const widgetTurn = await run_step({
     current_step_id: "step_0",
     user_message: "Help mij met mijn businessplan voor mijn reclamebureau genaamd Mindd",
@@ -474,7 +475,7 @@ test("legacy widget state auto-upgrades instead of blocking and seeds Step 0 fro
   assert.notEqual(String(widgetTurn?.state?.ui_gate_status || ""), "blocked");
   assert.equal(String(widgetTurn?.state?.language || ""), "nl");
   assert.equal(String(widgetTurn?.state?.business_name || ""), "Mindd");
-  assert.equal(String(widgetTurn?.state?.step_0_final || "").includes("Name: Mindd"), true);
+  assert.equal(String(widgetTurn?.state?.step_0_final || ""), "");
   assert.equal(String(widgetTurn?.state?.state_version || ""), "12");
 });
 

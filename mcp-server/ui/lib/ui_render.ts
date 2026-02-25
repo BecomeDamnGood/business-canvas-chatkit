@@ -510,7 +510,12 @@ export function render(overrideToolOutput?: unknown): void {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      renderBootstrapWaitShell(prestartEl, lang);
+      const blockedCopy = blockedMessageForReason(
+        lang,
+        "contract_violation",
+        uiText(lang, "error.contract.body", "")
+      );
+      renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
     }
     if (getIsLoading()) setLoading(false);
     return;
@@ -655,7 +660,7 @@ export function render(overrideToolOutput?: unknown): void {
     if (choiceWrap) choiceWrap.style.display = "none";
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
-    (btnStart as HTMLElement).style.display = "inline-flex";
+    (btnStart as HTMLElement).style.display = hasStartAction ? "inline-flex" : "none";
     if (!hasStartAction) {
       console.warn("[ui_contract_missing_start_action]", {
         current_step: String((state?.current_step || "")).trim() || "step_0",
@@ -674,8 +679,13 @@ export function render(overrideToolOutput?: unknown): void {
       else renderPrestartContent(prestartEl, lang);
     }
     if (prompt) prompt.textContent = "";
-    startHint.textContent = "";
-    (startHint as HTMLElement).style.display = "none";
+    if (!hasStartAction) {
+      startHint.textContent = uiText(lang, "error.contract.body", "");
+      (startHint as HTMLElement).style.display = "block";
+    } else {
+      startHint.textContent = "";
+      (startHint as HTMLElement).style.display = "none";
+    }
     if (isLoading) setLoading(false);
     (btnStart as HTMLButtonElement).disabled = getIsLoading() || !hasStartAction;
     return;
@@ -735,6 +745,11 @@ export function render(overrideToolOutput?: unknown): void {
   const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
   const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
   if (!hasRenderableInteractiveContent) {
+    console.warn("[ui_contract_interactive_missing_content]", {
+      current_step: current,
+      view_mode: viewMode || "",
+      payload_source: resolved.source,
+    });
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
@@ -742,7 +757,12 @@ export function render(overrideToolOutput?: unknown): void {
     if (cardDescEl) {
       cardDescEl.classList.remove("has-grid");
       cardDescEl.classList.remove("is-step0-ask-layout");
-      renderBootstrapWaitShell(cardDescEl, lang);
+      const blockedCopy = blockedMessageForReason(
+        lang,
+        "contract_violation",
+        uiText(lang, "error.contract.body", "")
+      );
+      renderBlockedState(cardDescEl, lang, blockedCopy.title, blockedCopy.body);
     }
     const prompt = document.getElementById("prompt");
     if (prompt) prompt.textContent = "";

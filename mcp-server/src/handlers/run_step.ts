@@ -192,7 +192,7 @@ import {
   UI_STRINGS_WITH_MENU_KEYS,
   UI_STRINGS_KEYS,
   UI_STRINGS_SCHEMA_VERSION,
-  CRITICAL_UI_KEYS_STEP0,
+  criticalUiKeysForStep,
   UI_STRINGS_SOURCE_EN,
 } from "../i18n/ui_strings_defaults.js";
 
@@ -1380,14 +1380,13 @@ function inferStep0SeedFromInitialMessage(rawInput: string): Step0Seed | null {
   };
 }
 
-function maybeSeedStep0FromInitialMessage(state: CanvasState, sourceMessage: string): CanvasState {
-  const existingStep0Final = String((state as any).step_0_final || "").trim();
-  if (hasValidStep0Final(existingStep0Final)) return state;
+function maybeSeedStep0CandidateFromInitialMessage(state: CanvasState, sourceMessage: string): CanvasState {
   const seed = inferStep0SeedFromInitialMessage(sourceMessage);
   if (!seed) return state;
+  const currentBusinessName = String((state as any).business_name || "").trim();
+  if (currentBusinessName && currentBusinessName.toLowerCase() !== "tbd") return state;
   return {
     ...(state as any),
-    step_0_final: `Venture: ${seed.venture} | Name: ${seed.name} | Status: ${seed.status}`,
     business_name: seed.name,
   } as CanvasState;
 }
@@ -5402,14 +5401,19 @@ function normalizeLocaleHint(raw: string): string {
   return localeStartNormalizeLocaleHint(raw);
 }
 
+function criticalUiKeysForState(state: CanvasState | null | undefined): string[] {
+  const step = String((state as any)?.current_step || STEP_0_ID).trim() || STEP_0_ID;
+  return criticalUiKeysForStep(step);
+}
+
 function hasRenderableUiStringsForState(state: CanvasState | null | undefined): boolean {
-  return localeStartHasRenderableUiStringsForState(state, CRITICAL_UI_KEYS_STEP0);
+  return localeStartHasRenderableUiStringsForState(state, criticalUiKeysForState(state));
 }
 
 function enforceUiStringsReadinessInvariant(state: CanvasState): CanvasState {
   return localeStartEnforceUiStringsReadinessInvariant({
     state,
-    criticalKeys: CRITICAL_UI_KEYS_STEP0,
+    criticalKeys: criticalUiKeysForState(state),
   });
 }
 
@@ -5426,7 +5430,7 @@ function isInteractiveLocaleReady(state: CanvasState | null | undefined): boolea
   return localeStartIsInteractiveLocaleReady({
     state,
     uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
-    criticalKeys: CRITICAL_UI_KEYS_STEP0,
+    criticalKeys: criticalUiKeysForState(state),
   });
 }
 
@@ -5451,7 +5455,7 @@ function deriveBootstrapContract(state: CanvasState | null | undefined): Bootstr
       uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
       uiBootstrapPollActionV1: isUiBootstrapPollActionV1Enabled(),
     },
-    criticalKeys: CRITICAL_UI_KEYS_STEP0,
+    criticalKeys: criticalUiKeysForState(state),
     nowMs: Date.now(),
   });
 }
@@ -5478,7 +5482,7 @@ function applyUiGateState(
       uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
       uiBootstrapPollActionV1: isUiBootstrapPollActionV1Enabled(),
     },
-    criticalKeys: CRITICAL_UI_KEYS_STEP0,
+    criticalKeys: criticalUiKeysForState(nextState),
     nowMs: Date.now(),
   });
 }
@@ -5563,6 +5567,7 @@ type UiCatalogResolution = {
 
 function resolveUiStringsFromCatalog(
   requestedLocaleRaw: string,
+  criticalKeys: string[],
   telemetry?: UiI18nTelemetryCounters | null
 ): UiCatalogResolution {
   const requestedLocale = normalizeLocaleHint(requestedLocaleRaw);
@@ -5577,7 +5582,7 @@ function resolveUiStringsFromCatalog(
       fallback_applied: "true",
       fallback_reason: "invalid_requested_lang",
       translated_key_count: 0,
-      critical_keys_missing: CRITICAL_UI_KEYS_STEP0.length,
+      critical_keys_missing: criticalKeys.length,
     };
   }
 
@@ -5595,7 +5600,7 @@ function resolveUiStringsFromCatalog(
       fallback_applied: "true",
       fallback_reason: "requested_lang_unavailable",
       translated_key_count: 0,
-      critical_keys_missing: CRITICAL_UI_KEYS_STEP0.length,
+      critical_keys_missing: criticalKeys.length,
     };
   }
 
@@ -5612,7 +5617,7 @@ function resolveUiStringsFromCatalog(
       continue;
     }
     merged[key] = fallback;
-    if (CRITICAL_UI_KEYS_STEP0.includes(key)) {
+    if (criticalKeys.includes(key)) {
       criticalKeysMissing += 1;
     }
   }
@@ -5629,7 +5634,7 @@ function resolveUiStringsFromCatalog(
     fallback_applied: "false",
     fallback_reason: "",
     translated_key_count: translatedKeyCount,
-    critical_keys_missing: 0,
+    critical_keys_missing: criticalKeysMissing,
   };
 }
 
@@ -5683,6 +5688,7 @@ async function ensureUiStringsForState(
       String((state as any).locale ?? (state as any).ui_strings_requested_lang ?? (state as any).language ?? "")
     ) || "en";
   const lang = normalizeLangCode(locale) || "en";
+  const criticalKeys = criticalUiKeysForState(state);
   if (lang === "en") {
     const englishReady = {
       ...(state as any),
@@ -5716,7 +5722,7 @@ async function ensureUiStringsForState(
     return gated;
   }
 
-  const catalogResolution = resolveUiStringsFromCatalog(locale, telemetry);
+  const catalogResolution = resolveUiStringsFromCatalog(locale, criticalKeys, telemetry);
   console.log("[ui_strings_catalog_resolve]", {
     requested_locale: locale,
     requested_lang: lang,
@@ -5736,13 +5742,13 @@ async function ensureUiStringsForState(
     ui_strings: catalogResolution.strings,
     ui_strings_lang: catalogResolution.ui_strings_lang,
     ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
-    ui_strings_status: "ready",
+    ui_strings_status: catalogResolution.critical_keys_missing > 0 ? "pending" : "ready",
     ui_strings_requested_lang: locale,
     ui_bootstrap_status: "ready",
     ui_translation_mode: "full",
-    ui_strings_critical_ready: "true",
-    ui_strings_full_ready: "true",
-    ui_strings_background_inflight: "false",
+    ui_strings_critical_ready: catalogResolution.critical_keys_missing > 0 ? "false" : "true",
+    ui_strings_full_ready: catalogResolution.critical_keys_missing > 0 ? "false" : "true",
+    ui_strings_background_inflight: catalogResolution.critical_keys_missing > 0 ? "true" : "false",
     ui_strings_fallback_applied: catalogResolution.fallback_applied,
     ui_strings_fallback_reason: catalogResolution.fallback_reason,
   } as CanvasState;
@@ -7243,10 +7249,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   const initialUserMessageForSeed = String((state as any).initial_user_message || "").trim();
   if (initialUserMessageForSeed) {
-    const seededState = maybeSeedStep0FromInitialMessage(state, initialUserMessageForSeed);
+    const seededState = maybeSeedStep0CandidateFromInitialMessage(state, initialUserMessageForSeed);
     if (seededState !== state) {
       state = seededState;
-      console.log("[step0_seed_from_initial_message]", {
+      console.log("[step0_candidate_seed_from_initial_message]", {
         current_step: String((state as any).current_step || STEP_0_ID),
         business_name: String((state as any).business_name || "").trim(),
       });
@@ -8789,7 +8795,27 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
 
   // START trigger (widget start screen)
   const startedAtTrigger = String((state as any).started ?? "").trim().toLowerCase() === "true";
-  const forceStartGateTurn =
+  const ensureStartState = async (
+    targetState: CanvasState,
+    routeOrText: string
+  ): Promise<{ state: CanvasState; interactiveReady: boolean }> => {
+    const hasResolvedLanguage = Boolean(normalizeLangCode(String((targetState as any).language || "")));
+    if (languageResolvedThisTurn && hasResolvedLanguage) {
+      return {
+        state: targetState,
+        interactiveReady: isInteractiveLocaleReady(targetState),
+      };
+    }
+    if (!isUiStartTriggerLangResolveV1Enabled()) {
+      const stateWithUi = await ensureUiStrings(targetState, routeOrText);
+      return {
+        state: stateWithUi,
+        interactiveReady: isInteractiveLocaleReady(stateWithUi),
+      };
+    }
+    return resolveLocaleAndUiStringsReady(targetState, routeOrText);
+  };
+  const shouldReturnPrestartGate =
     !startedAtTrigger &&
     state.current_step === STEP_0_ID &&
     String((state as any).intro_shown_session) !== "true" &&
@@ -8799,34 +8825,51 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const hasLastSpecialistAtStart = Object.keys(lastSpecialistAtStart).length > 0;
   const allowStartActionWithSnapshot = actionCodeRaw === "ACTION_START" && hasLastSpecialistAtStart;
   const isStartTrigger =
-    (userMessage.trim() === "" || actionCodeRaw === "ACTION_START" || forceStartGateTurn) &&
+    (userMessage.trim() === "" || actionCodeRaw === "ACTION_START") &&
     state.current_step === STEP_0_ID &&
     String((state as any).intro_shown_session) !== "true" &&
     (!hasLastSpecialistAtStart || allowStartActionWithSnapshot);
+  if (shouldReturnPrestartGate) {
+    const initialUserMessageSeed = String((state as any).initial_user_message ?? "").trim();
+    const startLocaleSeedText = initialUserMessageSeed || userMessage;
+    const startResolution = await ensureStartState(state, startLocaleSeedText);
+    const stateWithUi = startResolution.state;
+    const startHint =
+      typeof (stateWithUi as any).ui_strings?.startHint === "string"
+        ? String((stateWithUi as any).ui_strings.startHint)
+        : uiDefaultString("startHint", "Click Start in the widget to begin.");
+    const specialist: ValidationAndBusinessNameOutput = {
+      action: "ASK",
+      message: "",
+      question: startHint,
+      refined_formulation: "",
+      business_name: (state as any).business_name || "TBD",
+      step_0: "",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    };
+    return finalizeResponse(attachRegistryPayload({
+      ok: true as const,
+      tool: "run_step" as const,
+      current_step_id: String(state.current_step),
+      active_specialist: STEP_0_SPECIALIST,
+      text: "",
+      prompt: specialist.question,
+      specialist,
+      state: {
+        ...stateWithUi,
+        started: "false",
+        active_specialist: STEP_0_SPECIALIST,
+        last_specialist_result: specialist,
+      },
+    }, specialist, responseUiFlags));
+  }
 
   if (isStartTrigger) {
     const initialUserMessageSeed = String((state as any).initial_user_message ?? "").trim();
     const startLocaleSeedText = initialUserMessageSeed || userMessage;
-    const ensureStartState = async (
-      targetState: CanvasState,
-      routeOrText: string
-    ): Promise<{ state: CanvasState; interactiveReady: boolean }> => {
-      const hasResolvedLanguage = Boolean(normalizeLangCode(String((targetState as any).language || "")));
-      if (languageResolvedThisTurn && hasResolvedLanguage) {
-        return {
-          state: targetState,
-          interactiveReady: isInteractiveLocaleReady(targetState),
-        };
-      }
-      if (!isUiStartTriggerLangResolveV1Enabled()) {
-        const stateWithUi = await ensureUiStrings(targetState, routeOrText);
-        return {
-          state: stateWithUi,
-          interactiveReady: isInteractiveLocaleReady(stateWithUi),
-        };
-      }
-      return resolveLocaleAndUiStringsReady(targetState, routeOrText);
-    };
     if (!startedAtTrigger && actionCodeRaw !== "ACTION_START") {
       const startResolution = await ensureStartState(state, startLocaleSeedText);
       const stateWithUi = startResolution.state;

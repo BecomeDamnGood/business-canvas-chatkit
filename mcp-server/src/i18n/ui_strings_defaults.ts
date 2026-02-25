@@ -269,4 +269,49 @@ function buildCriticalUiKeysStep0(): string[] {
 
 export const CRITICAL_UI_KEYS_STEP0 = buildCriticalUiKeysStep0();
 
+export const CRITICAL_UI_KEYS_INTERACTIVE_BASE: string[] = [
+  "byText",
+  "uiSubtitle",
+  "uiUseWidgetToContinue",
+  "inputPlaceholder",
+  "btnGoToNextStep",
+  "sendTitle",
+  "transient.rate_limited",
+  "transient.timeout",
+  "transient.connection_failed",
+  "transient.connecting",
+  "hydration.retry.title",
+  "hydration.retry.body",
+  "hydration.retry.action",
+  "error.session_upgrade.title",
+  "error.session_upgrade.body",
+  "error.contract.title",
+  "error.contract.body",
+  "error.generic.title",
+  "error.generic.body",
+].filter((key) => UI_STRINGS_KEYS.includes(key));
+
+const STEP_TITLE_KEYS: Record<string, string> = {
+  step_0: "title.step_0",
+  dream: "title.dream",
+  purpose: "title.purpose",
+  bigwhy: "title.bigwhy",
+  role: "title.role",
+  entity: "title.entity",
+  strategy: "title.strategy",
+  targetgroup: "title.targetgroup",
+  productsservices: "title.productsservices",
+  rulesofthegame: "title.rulesofthegame",
+  presentation: "title.presentation",
+};
+
+export function criticalUiKeysForStep(stepIdRaw: string): string[] {
+  const stepId = String(stepIdRaw || "").trim().toLowerCase();
+  if (stepId === "step_0") return CRITICAL_UI_KEYS_STEP0;
+  const titleKey = STEP_TITLE_KEYS[stepId];
+  const keys = new Set<string>(CRITICAL_UI_KEYS_INTERACTIVE_BASE);
+  if (titleKey && UI_STRINGS_KEYS.includes(titleKey)) keys.add(titleKey);
+  return [...keys];
+}
+
 export const UI_STRINGS_SOURCE_EN: Record<string, string> = UI_STRINGS_WITH_MENU_KEYS;

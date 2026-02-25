@@ -36,19 +36,6 @@ const pendingBridgeCalls = new Map<string, { resolve: (v: unknown) => void; reje
 let bridgeTargetOriginCache: string | null = null;
 let bridgeTargetOriginSource = "";
 type TransportStatus = "unknown" | "ready_callTool" | "ready_bridge" | "unavailable";
-type QueuedStartAction = {
-  message: string;
-  extraState: Record<string, unknown>;
-  queuedAtMs: number;
-  expectedBootstrapSessionId: string;
-  expectedBootstrapEpoch: number;
-  expectedHostWidgetSessionId: string;
-};
-const START_HANDSHAKE_MAX_RETRIES = 5;
-const START_HANDSHAKE_RETRY_MS = 450;
-let queuedStartAction: QueuedStartAction | null = null;
-let startHandshakeRetryTimer: ReturnType<typeof setTimeout> | null = null;
-let startHandshakeRetryCount = 0;
 
 export function initActionsConfig(config: {
   render: (overrideRaw?: unknown) => void;
@@ -60,9 +47,6 @@ export function initActionsConfig(config: {
 
 export function setBridgeEnabled(enabled: boolean): void {
   bridgeEnabled = enabled;
-  if (enabled) {
-    void flushQueuedStartAction("bridge_enabled");
-  }
 }
 
 function oa(): unknown {
@@ -139,7 +123,7 @@ export function resolveAllowedHostOrigin(): string {
     });
     return bridgeTargetOriginCache;
   }
-  const fallbackEnabled = uiFlagEnabled("UI_BRIDGE_ORIGIN_FALLBACK_V1", isDevEnv());
+  const fallbackEnabled = uiFlagEnabled("UI_BRIDGE_ORIGIN_FALLBACK_V1", false);
   bridgeTargetOriginCache = fallbackEnabled ? "*" : "";
   bridgeTargetOriginSource = fallbackEnabled ? "fallback_wildcard" : "unresolved";
   console.log("[bridge_target_origin_resolved]", {
@@ -201,136 +185,10 @@ function resolveTransportStatus(): TransportStatus {
   return "unavailable";
 }
 
-function clearStartHandshakeRetryTimer(): void {
-  if (startHandshakeRetryTimer) clearTimeout(startHandshakeRetryTimer);
-  startHandshakeRetryTimer = null;
-}
-
-function resetQueuedStartAction(): void {
-  queuedStartAction = null;
-  startHandshakeRetryCount = 0;
-  clearStartHandshakeRetryTimer();
-}
-
-function scheduleQueuedStartHandshakeRetry(reason: string): void {
-  if (!queuedStartAction) return;
-  if (startHandshakeRetryTimer) return;
-  if (startHandshakeRetryCount >= START_HANDSHAKE_MAX_RETRIES) {
-    console.log("[ui_start_dispatch_failed]", {
-      reason: "transport_retry_exhausted",
-      last_reason: reason,
-      retry_count: startHandshakeRetryCount,
-    });
-    setInlineNotice(
-      uiText(
-        (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__?.state || {},
-        "transient.connection_failed",
-        ""
-      )
-    );
-    return;
-  }
-  const retryDelay = START_HANDSHAKE_RETRY_MS * (startHandshakeRetryCount + 1);
-  startHandshakeRetryTimer = setTimeout(() => {
-    startHandshakeRetryTimer = null;
-    startHandshakeRetryCount += 1;
-    void flushQueuedStartAction("retry_timer");
-  }, retryDelay);
-}
-
-function queueStartAction(params: {
-  message: string;
-  extraState?: Record<string, unknown>;
-  reason: string;
-}): void {
-  const ordering = latestBootstrapOrderingFromState();
-  queuedStartAction = {
-    message: String(params.message || "ACTION_START"),
-    extraState: params.extraState && typeof params.extraState === "object" ? { ...params.extraState } : {},
-    queuedAtMs: Date.now(),
-    expectedBootstrapSessionId: ordering.sessionId,
-    expectedBootstrapEpoch: ordering.epoch,
-    expectedHostWidgetSessionId: ordering.hostWidgetSessionId,
-  };
-  console.log("[ui_start_action_queued]", {
-    reason: params.reason,
-    retry_count: startHandshakeRetryCount,
-    bootstrap_session_id: ordering.sessionId,
-    bootstrap_epoch: ordering.epoch,
-    host_widget_session_id: ordering.hostWidgetSessionId,
-  });
-  setWidgetStateSafe({
-    start_dispatch_state: "queued",
-    transport_ready: "false",
-  });
-  setInlineNotice(
-    uiText(
-      (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__?.state || {},
-      "transient.connecting",
-      ""
-    )
-  );
-  scheduleQueuedStartHandshakeRetry(params.reason);
-}
-
-async function flushQueuedStartAction(source: string): Promise<void> {
-  if (!queuedStartAction) return;
-  const transportStatus = resolveTransportStatus();
-  if (transportStatus === "unavailable") {
-    scheduleQueuedStartHandshakeRetry(source);
-    return;
-  }
-  const latestOrdering = latestBootstrapOrderingFromState();
-  const expectedSessionId = queuedStartAction.expectedBootstrapSessionId;
-  const expectedEpoch = queuedStartAction.expectedBootstrapEpoch;
-  const expectedHostWidgetSessionId = queuedStartAction.expectedHostWidgetSessionId;
-  const sessionCompatible =
-    !expectedSessionId ||
-    !latestOrdering.sessionId ||
-    latestOrdering.sessionId === expectedSessionId;
-  const epochCompatible =
-    expectedEpoch <= 0 ||
-    latestOrdering.epoch <= 0 ||
-    latestOrdering.epoch >= expectedEpoch;
-  const hostSessionCompatible =
-    !expectedHostWidgetSessionId ||
-    !latestOrdering.hostWidgetSessionId ||
-    latestOrdering.hostWidgetSessionId === expectedHostWidgetSessionId;
-  const sessionGuardEnabled = true;
-  const hostGuardEnabled = true;
-  if ((sessionGuardEnabled && (!sessionCompatible || !epochCompatible)) || (hostGuardEnabled && !hostSessionCompatible)) {
-    console.log("[bootstrap_session_epoch_mismatch]", {
-      source,
-      expected_session_id: expectedSessionId,
-      latest_session_id: latestOrdering.sessionId,
-      expected_epoch: expectedEpoch,
-      latest_epoch: latestOrdering.epoch,
-      expected_host_widget_session_id: expectedHostWidgetSessionId,
-      latest_host_widget_session_id: latestOrdering.hostWidgetSessionId,
-    });
-    scheduleQueuedStartHandshakeRetry(source);
-    return;
-  }
-  const queued = queuedStartAction;
-  resetQueuedStartAction();
-  setWidgetStateSafe({
-    start_dispatch_state: "dispatching",
-    transport_ready: transportStatus === "ready_callTool" || transportStatus === "ready_bridge" ? "true" : "probing",
-  });
-  console.log("[ui_start_action_flushed]", {
-    source,
-    queued_for_ms: Math.max(0, Date.now() - queued.queuedAtMs),
-    transport_status: transportStatus,
-  });
-  await callRunStep(queued.message, {
-    ...queued.extraState,
-    __skip_start_queue: "true",
-    __queue_flush_source: source,
-  });
-}
-
 export function notifyHostTransportSignal(source: "set_globals" | "host_notification" | "bridge_message" | "manual"): void {
-  void flushQueuedStartAction(source);
+  if (source === "bridge_message") {
+    bridgeEnabled = true;
+  }
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -402,7 +260,7 @@ function decideOrderingPatch(
   if (incoming.epoch > current.epoch) return { apply: true, reason: "new_epoch" };
   if (incoming.epoch < current.epoch) return { apply: false, reason: "older_epoch" };
   if (incoming.responseSeq > current.responseSeq) return { apply: true, reason: "new_response_seq" };
-  if (incoming.responseSeq === current.responseSeq) return { apply: true, reason: "same_response_seq" };
+  if (incoming.responseSeq === current.responseSeq) return { apply: false, reason: "same_response_seq" };
   return { apply: false, reason: "older_response_seq" };
 }
 
@@ -428,23 +286,6 @@ function mergeOutboundOrdering(params: {
   if (fromWidget.epoch < fromNext.epoch) return fromNext;
   if (fromWidget.responseSeq > fromNext.responseSeq) return fromWidget;
   return fromNext;
-}
-
-function latestBootstrapOrderingFromState(): { sessionId: string; epoch: number; hostWidgetSessionId: string } {
-  const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
-  const latestState = latest?.state && typeof latest.state === "object"
-    ? (latest.state as Record<string, unknown>)
-    : {};
-  const ws = widgetState();
-  const latestOrdering = readBootstrapOrderingState(latestState);
-  const widgetOrdering = readBootstrapOrderingState(ws);
-  const mergedOrdering = mergeOutboundOrdering({ nextState: latestState, widgetState: ws });
-  return {
-    sessionId: mergedOrdering.sessionId || latestOrdering.sessionId || widgetOrdering.sessionId,
-    epoch: mergedOrdering.epoch || latestOrdering.epoch || widgetOrdering.epoch,
-    hostWidgetSessionId:
-      mergedOrdering.hostWidgetSessionId || latestOrdering.hostWidgetSessionId || widgetOrdering.hostWidgetSessionId,
-  };
 }
 
 function bootstrapPollSignatureFromState(state: Record<string, unknown> | null | undefined): string {
@@ -538,6 +379,23 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
     return;
   const ws = widgetState() || {};
   const next = { ...ws, ...(patch || {}) };
+  const orderingKeys = ["bootstrap_session_id", "bootstrap_epoch", "response_seq", "host_widget_session_id"];
+  const includesOrderingPatch = orderingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch || {}, key));
+  if (includesOrderingPatch) {
+    const currentOrdering = readBootstrapOrderingState(ws);
+    const incomingOrdering = readBootstrapOrderingState(next);
+    const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
+    if (!orderingDecision.apply && hasValidBootstrapOrdering(incomingOrdering)) {
+      for (const key of orderingKeys) {
+        next[key] = ws[key];
+      }
+      console.warn("[ui_ordering_patch_dropped]", {
+        reason: orderingDecision.reason,
+        incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+        current_tuple: describeBootstrapOrdering(currentOrdering),
+      });
+    }
+  }
   const keys = Object.keys(next);
   let changed = false;
   for (const k of keys) {
@@ -993,6 +851,22 @@ export function setLoading(next: boolean): void {
   if (sendEl) (sendEl as HTMLButtonElement).disabled = loading || v.length === 0;
 }
 
+function resolveLocaleHintForPayload(state: Record<string, unknown>): {
+  localeHint: string;
+  localeHintSource: "message_detect" | "none";
+} {
+  const locale = String(
+    state.locale ||
+      state.ui_strings_requested_lang ||
+      state.ui_strings_lang ||
+      state.language ||
+      ""
+  )
+    .trim();
+  if (!locale) return { localeHint: "", localeHintSource: "none" };
+  return { localeHint: locale, localeHintSource: "message_detect" };
+}
+
 export async function callRunStep(
   message: string | number,
   extraState?: Record<string, unknown>
@@ -1000,38 +874,29 @@ export async function callRunStep(
   const o = oa();
   const messageText = String(message || "").trim();
   const isStartAction = messageText === "ACTION_START";
-  const startTransportSelfHealEnabled = true;
-  const internalSkipStartQueue =
-    String((extraState as Record<string, unknown> | undefined)?.__skip_start_queue || "")
-      .trim()
-      .toLowerCase() === "true";
   const cleanExtraState =
     extraState && typeof extraState === "object"
-      ? Object.fromEntries(
-          Object.entries(extraState).filter(
-            ([key]) =>
-              key !== "__skip_start_queue" &&
-              key !== "__queue_flush_source"
-          )
-        )
+      ? { ...extraState }
       : undefined;
   const transportStatus = resolveTransportStatus();
   const hasCallTool = transportStatus === "ready_callTool";
   const hasBridgePath =
-    transportStatus === "ready_bridge" ||
-    (startTransportSelfHealEnabled && transportStatus === "unknown");
+    transportStatus === "ready_bridge" || transportStatus === "unknown";
   if (!hasCallTool && !hasBridgePath) {
-    if (isStartAction && !internalSkipStartQueue && startTransportSelfHealEnabled) {
-      console.log("[ui_start_transport_unavailable]", {
-        transport_status: transportStatus,
+    if (isStartAction) {
+      setWidgetStateSafe({
+        start_dispatch_state: "failed",
+        transport_ready: "false",
       });
-      queueStartAction({
-        message: messageText || "ACTION_START",
-        extraState: cleanExtraState,
-        reason: "transport_unavailable",
-      });
-      return;
     }
+    console.warn("[ui_transport_unavailable]", {
+      action_code: messageText,
+      transport_status: transportStatus,
+    });
+    setInlineNotice(
+      uiText((cleanExtraState as Record<string, unknown>) || {}, "transient.connection_failed", "") ||
+        "Connection to the app host failed. Please try again."
+    );
     console.warn("run_step: host did not provide callTool or MCP bridge");
     const errEl = document.getElementById("cardDesc");
     const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
@@ -1073,12 +938,13 @@ export async function callRunStep(
     (nextState as Record<string, unknown>).response_seq = outboundOrdering.responseSeq;
     (nextState as Record<string, unknown>).host_widget_session_id = outboundOrdering.hostWidgetSessionId;
   }
+  const localeHint = resolveLocaleHintForPayload(nextState as Record<string, unknown>);
   const payload = {
     current_step_id: nextState.current_step || "step_0",
     user_message: String(message || ""),
     input_mode: "widget",
-    locale_hint: "",
-    locale_hint_source: "none" as const,
+    locale_hint: localeHint.localeHint,
+    locale_hint_source: localeHint.localeHintSource,
     state: nextState,
   };
   const bootstrapPollSignature = isBootstrapPollCall
@@ -1133,7 +999,7 @@ export async function callRunStep(
   }, timeoutMs);
 
   try {
-    const transportPrimary = hasBridgePath ? "bridge" : "callTool";
+    const transportPrimary: "callTool" | "bridge" = hasCallTool ? "callTool" : "bridge";
     if (isStartAction) clearInlineNotice();
     if (isStartAction) {
       setWidgetStateSafe({
@@ -1141,31 +1007,19 @@ export async function callRunStep(
         transport_ready: transportPrimary === "callTool" || canUseBridge() ? "true" : "probing",
       });
     }
-    if (isDevEnv()) {
-      console.log("[ui_action_dispatched]", {
-        action_code: messageText,
-        transport_used: transportPrimary,
-        ordering_tuple: describeBootstrapOrdering(readBootstrapOrderingState(nextState)),
-      });
-    }
+    console.log("[ui_action_dispatched]", {
+      action_code: messageText,
+      transport_used: transportPrimary,
+      ordering_tuple: describeBootstrapOrdering(readBootstrapOrderingState(nextState)),
+    });
     let resp: unknown;
-    let transportUsed: "callTool" | "bridge" | "bridge_fallback_callTool" = transportPrimary;
-    try {
-      resp = transportPrimary === "callTool"
-        ? await (o as { callTool: (name: string, args: unknown) => Promise<unknown> }).callTool("run_step", payload)
-        : await callToolViaBridge("run_step", payload, { allowUnconfirmedBridge: startTransportSelfHealEnabled });
-      if (transportPrimary === "bridge" && !bridgeEnabled) {
+    const transportUsed: "callTool" | "bridge" = transportPrimary;
+    if (transportPrimary === "callTool") {
+      resp = await (o as { callTool: (name: string, args: unknown) => Promise<unknown> }).callTool("run_step", payload);
+    } else {
+      resp = await callToolViaBridge("run_step", payload, { allowUnconfirmedBridge: true });
+      if (!bridgeEnabled) {
         bridgeEnabled = true;
-        console.log("[ui_bridge_first_success_without_prior_flag]", {
-          action_code: messageText,
-        });
-      }
-    } catch (primaryError) {
-      if (transportPrimary === "bridge" && hasCallTool) {
-        transportUsed = "bridge_fallback_callTool";
-        resp = await (o as { callTool: (name: string, args: unknown) => Promise<unknown> }).callTool("run_step", payload);
-      } else {
-        throw primaryError;
       }
     }
     if (didTimeout) return;
@@ -1221,7 +1075,7 @@ export async function callRunStep(
       lowerMsg.includes("bridge unavailable") ||
       lowerMsg.includes("bridge timeout") ||
       lowerMsg.includes("transport");
-    if (isStartAction && !internalSkipStartQueue && transportError && startTransportSelfHealEnabled) {
+    if (isStartAction && transportError) {
       console.log("[ui_start_dispatch_failed]", {
         reason: "transport_error",
         message: msg,
@@ -1230,11 +1084,7 @@ export async function callRunStep(
         start_dispatch_state: "failed",
         transport_ready: "false",
       });
-      queueStartAction({
-        message: messageText || "ACTION_START",
-        extraState: cleanExtraState,
-        reason: "transport_error",
-      });
+      setInlineNotice(uiText(nextState, "transient.connection_failed", ""));
       return;
     }
     const isTimeout =
