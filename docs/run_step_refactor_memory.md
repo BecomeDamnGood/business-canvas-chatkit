@@ -43,3 +43,25 @@ Next agent exact TODO:
 - Start Step 3 extraction from the updated baseline and keep ingress-only responsibilities in `mcp-server/src/handlers/ingress.ts` unchanged.
 Commit:
 - pending_after_commit
+
+## Step 3 - Turn Contract
+Date: 2026-02-25 17:30 CET
+Status: completed
+Completed:
+- Extracted `validateUiPayloadContractParity` from `run_step.ts` into `mcp-server/src/handlers/turn_contract.ts` with dependency injection for step/menu label resolution.
+- Extracted `assertRunStepContractOrThrow` into `mcp-server/src/handlers/turn_contract.ts` while preserving strict bootstrap/i18n fail-closed checks.
+- Extracted `buildContractFailurePayload` into `mcp-server/src/handlers/turn_contract.ts` with unchanged failure payload shape.
+- Extracted contract-safe `finalizeResponse` internals into `finalizeResponseContractInternals` and delegated from `run_step.ts` without changing telemetry/token logging flow.
+Pending:
+- None for Step 3 scope.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/turn_contract.ts
+- docs/run_step_refactor_memory.md
+Tests run:
+- npm --prefix mcp-server run typecheck => pass
+- cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/core/turn_policy_renderer.test.ts src/handlers/step_contracts.test.ts src/handlers/run_step_finals.test.ts src/mcp_app_contract.test.ts => pass
+Next agent exact TODO:
+- Start Step 4 from this baseline; keep `mcp-server/src/handlers/turn_contract.ts` as the sole owner of turn contract/finalization helper logic.
+Commit:
+- pending_after_commit
