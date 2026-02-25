@@ -212,6 +212,90 @@ test("language policy: widget ACTION_START does not blindly trust webplus_i18n l
   assert.ok(["en", "nl"].includes(String(result?.state?.language || "")));
 });
 
+test("language policy: static catalog resolves base locale (fr-CA -> fr) without waiting gate", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "fr-CA",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(String(result?.state?.language || ""), "fr");
+  assert.equal(String(result?.state?.ui_strings_requested_lang || ""), "fr-CA");
+  assert.equal(String(result?.state?.ui_strings_status || ""), "ready");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
+  assert.equal(String(result?.state?.ui_strings_lang || ""), "fr-CA");
+  assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "false");
+  assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "");
+  assert.equal(
+    String(((result?.state?.ui_strings || {}) as Record<string, string>)["prestart.loading"] || ""),
+    "Chargement de la traduction…"
+  );
+});
+
+test("language policy: static catalog resolves zh-CN via zh-Hans base locale", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "zh-CN",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(String(result?.state?.language || ""), "zh");
+  assert.equal(String(result?.state?.ui_strings_requested_lang || ""), "zh-CN");
+  assert.equal(String(result?.state?.ui_strings_status || ""), "ready");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
+  assert.equal(String(result?.state?.ui_strings_lang || ""), "zh-CN");
+  assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "false");
+  assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "");
+  assert.equal(
+    String(((result?.state?.ui_strings || {}) as Record<string, string>)["prestart.loading"] || ""),
+    "正在加载翻译…"
+  );
+});
+
+test("language policy: unsupported locale falls back to EN strings with explicit fallback metadata", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "ru-RU",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(String(result?.state?.language || ""), "ru");
+  assert.equal(String(result?.state?.ui_strings_requested_lang || ""), "ru-RU");
+  assert.equal(String(result?.state?.ui_strings_status || ""), "ready");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
+  assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
+  assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "true");
+  assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "requested_lang_unavailable");
+  assert.equal(
+    String(((result?.state?.ui_strings || {}) as Record<string, string>)["prestart.loading"] || ""),
+    "Loading translation…"
+  );
+});
+
 test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps ready contract stable", async () => {
   const first = await withEnv("UI_LOCALE_READY_GATE_V1", "1", () =>
     run_step({

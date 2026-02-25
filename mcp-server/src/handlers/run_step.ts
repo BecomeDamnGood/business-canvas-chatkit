@@ -187,6 +187,7 @@ import {
   resolveLanguageForTurn as localeStartResolveLanguageForTurn,
   VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION,
 } from "../core/bootstrap_runtime.js";
+import { UI_STRINGS_CATALOG_BY_LOCALE } from "../i18n/ui_strings_catalog.js";
 
 /**
  * Incoming tool args
@@ -481,7 +482,7 @@ const UI_STRINGS_WITH_MENU_KEYS: Record<string, string> = {
 };
 
 const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_WITH_MENU_KEYS);
-const UI_STRINGS_SCHEMA_VERSION = "2026-02-21-ui-i18n-v3_2";
+const UI_STRINGS_SCHEMA_VERSION = "2026-02-25-ui-i18n-v4_catalog";
 
 function buildCriticalUiKeysStep0(): string[] {
   const keySet = new Set<string>([
@@ -535,112 +536,40 @@ function buildCriticalUiKeysStep0(): string[] {
 const CRITICAL_UI_KEYS_STEP0 = buildCriticalUiKeysStep0();
 
 const UI_STRINGS_SOURCE_EN: Record<string, string> = UI_STRINGS_WITH_MENU_KEYS;
-const UI_RUNTIME_TRANSLATION_CACHE_FILE = String(
-  process.env.UI_RUNTIME_TRANSLATION_CACHE_FILE || path.join(os.tmpdir(), "bsc-ui-runtime-translation-cache.json")
-).trim();
-const UI_RUNTIME_TRANSLATION_CACHE_VERSION = 1;
-const UI_RUNTIME_TRANSLATION_CACHE = new Map<string, Record<string, string>>();
-let uiRuntimeTranslationCacheLoaded = false;
 
-const UiStringsTranslationResultZodSchema = z.object({
-  translations: z.record(z.string(), z.string()),
-});
+type StaticUiCatalogEntry = {
+  locale: string;
+  lang: string;
+  strings: Record<string, string>;
+};
 
-const UiStringsTranslationResultJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["translations"],
-  properties: {
-    translations: {
-      type: "object",
-      additionalProperties: { type: "string" },
-    },
-  },
-} as const;
+const UI_STRINGS_CATALOG_EXACT = new Map<string, StaticUiCatalogEntry>();
+const UI_STRINGS_CATALOG_BY_LANG = new Map<string, StaticUiCatalogEntry>();
 
-function uiRuntimeTranslationCacheKey(lang: string): string {
-  const locale = normalizeLocaleHint(lang) || normalizeLangCode(lang);
-  return `${UI_STRINGS_SCHEMA_VERSION}:${String(locale || "").trim().toLowerCase()}`;
+function normalizeCatalogLocaleTag(raw: string): string {
+  return localeStartNormalizeLocaleHint(String(raw || "")) || localeStartNormalizeLangCode(String(raw || ""));
 }
 
-function loadUiRuntimeTranslationCacheOnce(): void {
-  if (uiRuntimeTranslationCacheLoaded) return;
-  uiRuntimeTranslationCacheLoaded = true;
-  if (!UI_RUNTIME_TRANSLATION_CACHE_FILE) return;
-  try {
-    if (!fs.existsSync(UI_RUNTIME_TRANSLATION_CACHE_FILE)) return;
-    const raw = fs.readFileSync(UI_RUNTIME_TRANSLATION_CACHE_FILE, "utf8");
-    if (!raw.trim()) return;
-    const parsed = JSON.parse(raw) as {
-      version?: number;
-      entries?: Array<{
-        key?: string;
-        strings?: Record<string, string>;
-      }>;
-    };
-    if (Number(parsed?.version || 0) !== UI_RUNTIME_TRANSLATION_CACHE_VERSION) return;
-    const entries = Array.isArray(parsed?.entries) ? parsed.entries : [];
-    for (const entry of entries) {
-      const key = String(entry?.key || "").trim();
-      const stringsRaw = entry?.strings;
-      if (!key || !stringsRaw || typeof stringsRaw !== "object") continue;
-      const next: Record<string, string> = {};
-      for (const uiKey of UI_STRINGS_KEYS) {
-        const val = String((stringsRaw as Record<string, unknown>)[uiKey] || "");
-        if (!val.trim()) continue;
-        next[uiKey] = val;
-      }
-      if (Object.keys(next).length !== UI_STRINGS_KEYS.length) continue;
-      UI_RUNTIME_TRANSLATION_CACHE.set(key, next);
+function buildStaticUiCatalogIndexes(): void {
+  for (const [localeRaw, stringsRaw] of Object.entries(UI_STRINGS_CATALOG_BY_LOCALE)) {
+    const locale = normalizeCatalogLocaleTag(localeRaw);
+    const lang = localeStartNormalizeLangCode(locale);
+    if (!locale || !lang) continue;
+    const strings =
+      stringsRaw && typeof stringsRaw === "object"
+        ? Object.fromEntries(
+            Object.entries(stringsRaw).map(([key, value]) => [String(key || ""), String(value || "")])
+          )
+        : {};
+    const entry: StaticUiCatalogEntry = { locale, lang, strings };
+    UI_STRINGS_CATALOG_EXACT.set(locale.toLowerCase(), entry);
+    if (!UI_STRINGS_CATALOG_BY_LANG.has(lang)) {
+      UI_STRINGS_CATALOG_BY_LANG.set(lang, entry);
     }
-  } catch {
-    // Corrupt cache is non-fatal. Runtime translation can repopulate it.
   }
 }
 
-function persistUiRuntimeTranslationCache(): void {
-  if (!UI_RUNTIME_TRANSLATION_CACHE_FILE) return;
-  try {
-    const entries = [...UI_RUNTIME_TRANSLATION_CACHE.entries()].map(([key, strings]) => ({
-      key,
-      strings,
-    }));
-    const payload = JSON.stringify(
-      {
-        version: UI_RUNTIME_TRANSLATION_CACHE_VERSION,
-        entries,
-      },
-      null,
-      2
-    );
-    const dir = path.dirname(UI_RUNTIME_TRANSLATION_CACHE_FILE);
-    fs.mkdirSync(dir, { recursive: true });
-    const tmp = `${UI_RUNTIME_TRANSLATION_CACHE_FILE}.tmp`;
-    fs.writeFileSync(tmp, payload, "utf8");
-    fs.renameSync(tmp, UI_RUNTIME_TRANSLATION_CACHE_FILE);
-  } catch {
-    // Persist failures are non-fatal; in-memory cache still applies for the process lifetime.
-  }
-}
-
-function getUiRuntimeTranslationFromCache(lang: string): Record<string, string> | null {
-  loadUiRuntimeTranslationCacheOnce();
-  const key = uiRuntimeTranslationCacheKey(lang);
-  const cached = UI_RUNTIME_TRANSLATION_CACHE.get(key);
-  if (!cached) return null;
-  return { ...cached };
-}
-
-function setUiRuntimeTranslationCache(lang: string, strings: Record<string, string>): void {
-  loadUiRuntimeTranslationCacheOnce();
-  const key = uiRuntimeTranslationCacheKey(lang);
-  UI_RUNTIME_TRANSLATION_CACHE.set(key, { ...strings });
-  persistUiRuntimeTranslationCache();
-}
-
-function hasRuntimeTranslationApiConfigured(): boolean {
-  return Boolean(String(process.env.OPENAI_API_KEY || "").trim());
-}
+buildStaticUiCatalogIndexes();
 
 function langFromState(state: CanvasState): string {
   if (isForceEnglishLanguageMode()) return "en";
@@ -5854,53 +5783,6 @@ function looksLikeHtml(input: string): boolean {
   return /<\s*\/?\s*[a-z][^>]*>/i.test(String(input || ""));
 }
 
-function sanitizeTranslatedUiStrings(
-  translated: Record<string, string>,
-  telemetry?: UiI18nTelemetryCounters | null,
-  sourceKeys: string[] = UI_STRINGS_KEYS
-): {
-  strings: Record<string, string>;
-  missingKeys: number;
-  htmlViolations: number;
-} {
-  const next: Record<string, string> = {};
-  for (const key of sourceKeys) {
-    next[key] = String(UI_STRINGS_SOURCE_EN[key] || "");
-  }
-  let missingKeys = 0;
-  let htmlViolations = 0;
-  for (const key of sourceKeys) {
-    if (!Object.prototype.hasOwnProperty.call(translated, key)) {
-      missingKeys += 1;
-      continue;
-    }
-    const rawValue = translated[key];
-    if (typeof rawValue !== "string") {
-      missingKeys += 1;
-      continue;
-    }
-    const fallback = String(UI_STRINGS_SOURCE_EN[key] || "");
-    const candidate = String(rawValue);
-    if (looksLikeHtml(candidate)) {
-      htmlViolations += 1;
-      continue;
-    }
-    // Allow empty output only when the English source is intentionally empty.
-    if (!candidate.trim() && fallback.trim()) {
-      missingKeys += 1;
-      continue;
-    }
-    next[key] = candidate;
-  }
-  if (missingKeys > 0) bumpUiI18nCounter(telemetry, "translation_missing_keys", missingKeys);
-  if (htmlViolations > 0) bumpUiI18nCounter(telemetry, "translation_html_violations", htmlViolations);
-  return {
-    strings: next,
-    missingKeys,
-    htmlViolations,
-  };
-}
-
 async function detectLanguageHeuristic(text: string): Promise<{ lang: string; confident: boolean }> {
   const raw = String(text ?? "").trim();
   if (!raw) return { lang: "", confident: false };
@@ -5928,69 +5810,89 @@ function uiStringsRequestedStatusFromRaw(
   return localeStartUiStringsRequestedStatusFromRaw(raw);
 }
 
-async function translateUiStringsAtRuntime(
-  requestedLang: string,
-  model: string,
+type UiCatalogMatchKind = "exact" | "base" | "fallback_en";
+
+type UiCatalogResolution = {
+  strings: Record<string, string>;
+  match_kind: UiCatalogMatchKind;
+  matched_locale: string;
+  ui_strings_lang: string;
+  fallback_applied: BoolString;
+  fallback_reason: "" | "requested_lang_unavailable" | "invalid_requested_lang";
+  translated_key_count: number;
+  critical_keys_missing: number;
+};
+
+function resolveUiStringsFromCatalog(
+  requestedLocaleRaw: string,
   telemetry?: UiI18nTelemetryCounters | null
-): Promise<Record<string, string> | null> {
-  const normalizedLocale = normalizeLocaleHint(requestedLang) || normalizeLangCode(requestedLang);
-  const normalizedLang = normalizeLangCode(normalizedLocale);
-  if (!normalizedLang || normalizedLang === "en") return { ...UI_STRINGS_SOURCE_EN };
-
-  const cached = getUiRuntimeTranslationFromCache(normalizedLocale);
-  if (cached) return cached;
-  if (!hasRuntimeTranslationApiConfigured()) {
+): UiCatalogResolution {
+  const requestedLocale = normalizeLocaleHint(requestedLocaleRaw);
+  const requestedLang = normalizeLangCode(requestedLocale);
+  if (!requestedLocale || !requestedLang || requestedLang === "und") {
     bumpUiI18nCounter(telemetry, "translation_fallbacks");
-    return null;
+    return {
+      strings: { ...UI_STRINGS_SOURCE_EN },
+      match_kind: "fallback_en",
+      matched_locale: "en",
+      ui_strings_lang: "en",
+      fallback_applied: "true",
+      fallback_reason: "invalid_requested_lang",
+      translated_key_count: 0,
+      critical_keys_missing: CRITICAL_UI_KEYS_STEP0.length,
+    };
   }
 
-  const sourceStrings: Record<string, string> = {};
+  const exact = UI_STRINGS_CATALOG_EXACT.get(requestedLocale.toLowerCase()) || null;
+  const byLang = UI_STRINGS_CATALOG_BY_LANG.get(requestedLang) || null;
+  const chosen = exact || byLang;
+
+  if (!chosen || !chosen.strings || typeof chosen.strings !== "object") {
+    bumpUiI18nCounter(telemetry, "translation_fallbacks");
+    return {
+      strings: { ...UI_STRINGS_SOURCE_EN },
+      match_kind: "fallback_en",
+      matched_locale: "en",
+      ui_strings_lang: "en",
+      fallback_applied: "true",
+      fallback_reason: "requested_lang_unavailable",
+      translated_key_count: 0,
+      critical_keys_missing: CRITICAL_UI_KEYS_STEP0.length,
+    };
+  }
+
+  let translatedKeyCount = 0;
+  let criticalKeysMissing = 0;
+  const merged: Record<string, string> = {};
   for (const key of UI_STRINGS_KEYS) {
-    sourceStrings[key] = String(UI_STRINGS_SOURCE_EN[key] || "");
-  }
-
-  const plannerInput = JSON.stringify({
-    source_language: "en",
-    target_language: normalizedLocale,
-    constraints: [
-      "Keep all keys exactly as-is.",
-      "Keep placeholders like {0}, {1}, N, M, X exactly unchanged.",
-      "Preserve newline structure and punctuation.",
-      "Return plain text only; never output HTML.",
-    ],
-    strings: sourceStrings,
-  });
-
-  try {
-    const translated = await callStrictJson<{ translations: Record<string, string> }>({
-      model,
-      instructions:
-        "Translate each UI string from English into the requested language. " +
-        "Return JSON only with a top-level 'translations' object.",
-      plannerInput,
-      schemaName: "UiStringsTranslationResult",
-      jsonSchema: UiStringsTranslationResultJsonSchema as any,
-      zodSchema: UiStringsTranslationResultZodSchema,
-      temperature: 0,
-      topP: 1,
-      maxOutputTokens: 16000,
-      debugLabel: "UiStringsTranslation",
-    });
-    const cleaned = sanitizeTranslatedUiStrings(
-      translated?.data?.translations || {},
-      telemetry,
-      UI_STRINGS_KEYS
-    );
-    if (cleaned.missingKeys > 0 || cleaned.htmlViolations > 0) {
-      bumpUiI18nCounter(telemetry, "translation_fallbacks");
-      return null;
+    const fallback = String(UI_STRINGS_SOURCE_EN[key] || "");
+    const raw = chosen.strings[key];
+    const candidate = typeof raw === "string" ? String(raw) : "";
+    if (candidate.trim() && !looksLikeHtml(candidate)) {
+      merged[key] = candidate;
+      if (candidate !== fallback) translatedKeyCount += 1;
+      continue;
     }
-    setUiRuntimeTranslationCache(normalizedLocale, cleaned.strings);
-    return cleaned.strings;
-  } catch {
-    bumpUiI18nCounter(telemetry, "translation_fallbacks");
-    return null;
+    merged[key] = fallback;
+    if (CRITICAL_UI_KEYS_STEP0.includes(key)) {
+      criticalKeysMissing += 1;
+    }
   }
+
+  if (criticalKeysMissing > 0) {
+    bumpUiI18nCounter(telemetry, "translation_missing_keys", criticalKeysMissing);
+  }
+
+  return {
+    strings: merged,
+    match_kind: exact ? "exact" : "base",
+    matched_locale: chosen.locale,
+    ui_strings_lang: requestedLocale,
+    fallback_applied: "false",
+    fallback_reason: "",
+    translated_key_count: translatedKeyCount,
+    critical_keys_missing: 0,
+  };
 }
 
 async function ensureUiStringsForState(
@@ -6001,6 +5903,7 @@ async function ensureUiStringsForState(
     allowBackgroundFull?: boolean;
   }
 ): Promise<CanvasState> {
+  void model;
   void options;
   if (isForceEnglishLanguageMode()) {
     const forced = {
@@ -6023,7 +5926,19 @@ async function ensureUiStringsForState(
       ui_strings_fallback_applied: "false",
       ui_strings_fallback_reason: "",
     } as CanvasState;
-    return applyUiGateState(state, forced);
+    const gated = applyUiGateState(state, forced);
+    console.log("[ui_gate_decision]", {
+      source: "force_en",
+      locale: String((gated as any).locale || ""),
+      language: String((gated as any).language || ""),
+      ui_strings_requested_lang: String((gated as any).ui_strings_requested_lang || ""),
+      ui_strings_lang: String((gated as any).ui_strings_lang || ""),
+      ui_strings_status: String((gated as any).ui_strings_status || ""),
+      ui_gate_status: String((gated as any).ui_gate_status || ""),
+      ui_gate_reason: String((gated as any).ui_gate_reason || ""),
+      bootstrap_phase: String((gated as any).bootstrap_phase || ""),
+    });
+    return gated;
   }
   const locale =
     normalizeLocaleHint(
@@ -6048,50 +5963,66 @@ async function ensureUiStringsForState(
       ui_strings_fallback_applied: "false",
       ui_strings_fallback_reason: "",
     } as CanvasState;
-    return applyUiGateState(state, englishReady);
+    const gated = applyUiGateState(state, englishReady);
+    console.log("[ui_gate_decision]", {
+      source: "english_default",
+      locale: String((gated as any).locale || ""),
+      language: String((gated as any).language || ""),
+      ui_strings_requested_lang: String((gated as any).ui_strings_requested_lang || ""),
+      ui_strings_lang: String((gated as any).ui_strings_lang || ""),
+      ui_strings_status: String((gated as any).ui_strings_status || ""),
+      ui_gate_status: String((gated as any).ui_gate_status || ""),
+      ui_gate_reason: String((gated as any).ui_gate_reason || ""),
+      bootstrap_phase: String((gated as any).bootstrap_phase || ""),
+    });
+    return gated;
   }
 
-  const translated = await translateUiStringsAtRuntime(lang, model, telemetry);
-  if (translated) {
-    const localizedReady = {
-      ...(state as any),
-      locale,
-      language: lang,
-      ui_strings: translated,
-      ui_strings_lang: locale,
-      ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
-      ui_strings_status: "ready",
-      ui_strings_requested_lang: locale,
-      ui_bootstrap_status: "ready",
-      ui_translation_mode: "full",
-      ui_strings_critical_ready: "true",
-      ui_strings_full_ready: "true",
-      ui_strings_background_inflight: "false",
-      ui_strings_fallback_applied: "false",
-      ui_strings_fallback_reason: "",
-    } as CanvasState;
-    return applyUiGateState(state, localizedReady);
-  }
+  const catalogResolution = resolveUiStringsFromCatalog(locale, telemetry);
+  console.log("[ui_strings_catalog_resolve]", {
+    requested_locale: locale,
+    requested_lang: lang,
+    match_kind: catalogResolution.match_kind,
+    matched_locale: catalogResolution.matched_locale,
+    translated_key_count: catalogResolution.translated_key_count,
+    total_key_count: UI_STRINGS_KEYS.length,
+    critical_keys_missing: catalogResolution.critical_keys_missing,
+    fallback_applied: catalogResolution.fallback_applied,
+    fallback_reason: catalogResolution.fallback_reason,
+  });
 
-  const pending = {
+  const localizedReady = {
     ...(state as any),
     locale,
     language: lang,
-    ui_strings: UI_STRINGS_SOURCE_EN,
-    ui_strings_lang: "en",
+    ui_strings: catalogResolution.strings,
+    ui_strings_lang: catalogResolution.ui_strings_lang,
     ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
-    ui_strings_status: "pending",
+    ui_strings_status: "ready",
     ui_strings_requested_lang: locale,
-    ui_bootstrap_status: "awaiting_locale",
-    ui_translation_mode: "critical_first",
-    ui_strings_critical_ready: "false",
-    ui_strings_full_ready: "false",
-    ui_strings_background_inflight: "true",
-    ui_strings_fallback_applied: "false",
-    ui_strings_fallback_reason: "",
+    ui_bootstrap_status: "ready",
+    ui_translation_mode: "full",
+    ui_strings_critical_ready: "true",
+    ui_strings_full_ready: "true",
+    ui_strings_background_inflight: "false",
+    ui_strings_fallback_applied: catalogResolution.fallback_applied,
+    ui_strings_fallback_reason: catalogResolution.fallback_reason,
   } as CanvasState;
-  bumpUiI18nCounter(telemetry, "ui_strings_pending_count");
-  return applyUiGateState(state, pending);
+  const gated = applyUiGateState(state, localizedReady);
+  console.log("[ui_gate_decision]", {
+    source: "static_catalog",
+    locale: String((gated as any).locale || ""),
+    language: String((gated as any).language || ""),
+    ui_strings_requested_lang: String((gated as any).ui_strings_requested_lang || ""),
+    ui_strings_lang: String((gated as any).ui_strings_lang || ""),
+    ui_strings_status: String((gated as any).ui_strings_status || ""),
+    ui_gate_status: String((gated as any).ui_gate_status || ""),
+    ui_gate_reason: String((gated as any).ui_gate_reason || ""),
+    bootstrap_phase: String((gated as any).bootstrap_phase || ""),
+    fallback_applied: String((gated as any).ui_strings_fallback_applied || "false"),
+    fallback_reason: String((gated as any).ui_strings_fallback_reason || ""),
+  });
+  return gated;
 }
 
 function withLanguageDecision(
@@ -6125,7 +6056,7 @@ async function resolveLanguageForTurn(
   }
 ): Promise<CanvasState> {
   const allowBackgroundFull = options?.allowBackgroundFull === true;
-  return localeStartResolveLanguageForTurn({
+  const resolved = await localeStartResolveLanguageForTurn({
     state,
     userMessage,
     localeHintRaw,
@@ -6149,6 +6080,18 @@ async function resolveLanguageForTurn(
     },
     telemetry,
   });
+  console.log("[ui_locale_resolve]", {
+    input_mode: inputMode,
+    locale_hint: String(localeHintRaw || ""),
+    locale_hint_source: String(localeHintSourceRaw || ""),
+    resolved_locale: String((resolved as any).locale || ""),
+    resolved_language: String((resolved as any).language || ""),
+    language_source: String((resolved as any).language_source || ""),
+    ui_strings_requested_lang: String((resolved as any).ui_strings_requested_lang || ""),
+    ui_strings_lang: String((resolved as any).ui_strings_lang || ""),
+    ui_strings_status: String((resolved as any).ui_strings_status || ""),
+  });
+  return resolved;
 }
 
 function parseExplicitLanguageOverride(message: string): string {
