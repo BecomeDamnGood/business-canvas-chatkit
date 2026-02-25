@@ -1146,8 +1146,9 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /function ingestHostPayload\(/);
   assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
   assert.match(source, /const resultCandidate = toRecord\(params\.result\);/);
-  assert.match(source, /if \(Object\.keys\(resultCandidate\)\.length > 0\) \{[\s\S]*return resultCandidate;/);
+  assert.match(source, /if \(Object\.keys\(resultCandidate\)\.length > 0\) \{[\s\S]*mergeToolOutputWithResponseMetadata\(resultCandidate, metadata\)/);
   assert.match(source, /const toolOutputCandidate = params\.toolOutput;/);
+  assert.match(source, /\[host_tool_result_mixed_shape_used\]/);
   assert.match(source, /\[host_tool_result_legacy_shape_used\]/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(toolOutputCandidate, metadata\)/);
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
@@ -1160,6 +1161,15 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*const actionCode = actionCodeFromState\("ui_action_start"\);[\s\S]*callRunStep\(actionCode, \{ started: "true" \}\)/);
   assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
   assert.doesNotMatch(source, /function shouldAcceptBootstrapPayload\(/);
+});
+
+test("render source fail-closes missing server view mode and enforces start action in prestart", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
+  assert.match(source, /\[ui_contract_missing_view_mode\]/);
+  assert.match(source, /const startActionCode = String\(\(state\?\.ui_action_start \|\| ""\)\)\.trim\(\);/);
+  assert.match(source, /const hasStartAction = startActionCode\.length > 0;/);
+  assert.match(source, /\[ui_contract_missing_start_action\]/);
+  assert.match(source, /\(btnStart as HTMLButtonElement\)\.disabled = getIsLoading\(\) \|\| !hasStartAction;/);
 });
 
 test("handleToolResultAndMaybeScheduleBootstrapRetry keeps widget ordering monotonic", () => {

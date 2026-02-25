@@ -64,6 +64,7 @@ test("run_step handler logs locale + language readiness in request/response line
     source,
     /\[run_step\] response[\s\S]*resolved_language[\s\S]*language_source[\s\S]*ui_strings_status[\s\S]*ui_bootstrap_status/
   );
+  assert.match(source, /\[run_step\] response[\s\S]*ui_view_mode[\s\S]*ui_action_start_present/);
 });
 
 test("run_step contract emits server-authoritative ui.view payload", () => {
@@ -72,6 +73,10 @@ test("run_step contract emits server-authoritative ui.view payload", () => {
   assert.match(source, /function deriveUiViewPayload\(/);
   assert.match(source, /const CONTRACT_UI_VIEW_MODES = new Set\(\[/);
   assert.match(source, /if \(uiPayload && \(!uiView \|\| !CONTRACT_UI_VIEW_MODES\.has\(uiViewMode\)\)\) \{[\s\S]*invalid_ui_view_mode/);
+  assert.match(source, /if \(currentStep === STEP_0_ID && !started && uiGateStatus === "ready"\) \{/);
+  assert.match(source, /prestart_ready_requires_prestart_mode/);
+  assert.match(source, /prestart_ready_requires_ui_strings/);
+  assert.match(source, /prestart_ready_requires_start_action/);
 });
 
 test("ui actions do not optimistically mutate started or state.language before run_step response", () => {

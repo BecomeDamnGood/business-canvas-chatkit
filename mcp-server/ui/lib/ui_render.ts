@@ -474,6 +474,12 @@ export function render(overrideToolOutput?: unknown): void {
   const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
   setRuntimeUiStrings(hasOverrideStrings ? overrideStringsMap : {});
   if (!hasExplicitServerRouting) {
+    console.warn("[ui_contract_missing_view_mode]", {
+      payload_source: resolved.source,
+      view_mode: viewMode || "",
+      ui_gate_status: String((state?.ui_gate_status || "")).trim().toLowerCase(),
+      bootstrap_phase: String((state?.bootstrap_phase || "")).trim().toLowerCase(),
+    });
     const inputWrap = document.getElementById("inputWrap");
     const btnStart = document.getElementById("btnStart");
     const startHint = document.getElementById("startHint");
@@ -553,6 +559,8 @@ export function render(overrideToolOutput?: unknown): void {
   const startHint = document.getElementById("startHint");
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
+  const startActionCode = String((state?.ui_action_start || "")).trim();
+  const hasStartAction = startActionCode.length > 0;
 
   if (
     waitingGateActive ||
@@ -648,6 +656,12 @@ export function render(overrideToolOutput?: unknown): void {
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
     (btnStart as HTMLElement).style.display = "inline-flex";
+    if (!hasStartAction) {
+      console.warn("[ui_contract_missing_start_action]", {
+        current_step: String((state?.current_step || "")).trim() || "step_0",
+        ui_gate_status: String((state?.ui_gate_status || "")).trim().toLowerCase(),
+      });
+    }
     const cardDesc = document.getElementById("cardDesc");
     const prompt = document.getElementById("prompt");
     if (cardDesc) {
@@ -663,6 +677,7 @@ export function render(overrideToolOutput?: unknown): void {
     startHint.textContent = "";
     (startHint as HTMLElement).style.display = "none";
     if (isLoading) setLoading(false);
+    (btnStart as HTMLButtonElement).disabled = getIsLoading() || !hasStartAction;
     return;
   }
 

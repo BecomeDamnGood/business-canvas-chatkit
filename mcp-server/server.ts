@@ -849,6 +849,10 @@ async function runStepHandler(args: {
       resultUi.flags && typeof resultUi.flags === "object"
         ? (resultUi.flags as Record<string, unknown>)
         : {};
+    const resultUiView =
+      resultUi.view && typeof resultUi.view === "object"
+        ? (resultUi.view as Record<string, unknown>)
+        : {};
     const bootstrapWaitingLocale = resultUiFlags.bootstrap_waiting_locale === true;
     const bootstrapRetryHint = safeString(resultUiFlags.bootstrap_retry_hint ?? "");
     const bootstrapRetryScheduled = bootstrapWaitingLocale && bootstrapRetryHint === "poll";
@@ -867,6 +871,8 @@ async function runStepHandler(args: {
       ui_gate_since_ms: Number(resultState.ui_gate_since_ms ?? 0) || 0,
       bootstrap_waiting_locale: bootstrapWaitingLocale,
       bootstrap_retry_scheduled: bootstrapRetryScheduled,
+      ui_view_mode: safeString(resultUiView.mode ?? ""),
+      ui_action_start_present: safeString(resultState.ui_action_start ?? "") === "ACTION_START",
       host_widget_session_id: hostWidgetSessionId || "",
       current_step: safeString(resultState.current_step ?? stepMeta),
       active_specialist: specialistMeta,
