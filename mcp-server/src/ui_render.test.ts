@@ -10,6 +10,7 @@ import {
 import {
   computeBootstrapRenderState,
   computeHydrationState,
+  handleToolResultAndMaybeScheduleBootstrapRetry,
   isTrustedBridgeMessageEvent,
   mergeToolOutputWithResponseMetadata,
   resetBridgeOriginCacheForTests,
@@ -1144,7 +1145,10 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /function normalizeHostToolResultNotification\(/);
   assert.match(source, /function ingestHostPayload\(/);
   assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
+  assert.match(source, /const resultCandidate = toRecord\(params\.result\);/);
+  assert.match(source, /if \(Object\.keys\(resultCandidate\)\.length > 0\) \{[\s\S]*return resultCandidate;/);
   assert.match(source, /const toolOutputCandidate = params\.toolOutput;/);
+  assert.match(source, /\[host_tool_result_legacy_shape_used\]/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(toolOutputCandidate, metadata\)/);
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
   assert.match(source, /notifyHostTransportSignal\("bridge_message"\)/);
@@ -1156,6 +1160,55 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*const actionCode = actionCodeFromState\("ui_action_start"\);[\s\S]*callRunStep\(actionCode, \{ started: "true" \}\)/);
   assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
   assert.doesNotMatch(source, /function shouldAcceptBootstrapPayload\(/);
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry keeps widget ordering monotonic", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const hostState: Record<string, unknown> = {
+    bootstrap_session_id: "bs_demo",
+    bootstrap_epoch: 1,
+    response_seq: 5,
+    host_widget_session_id: "internal:demo",
+  };
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: { ...hostState },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+
+  const stalePayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 4,
+      host_widget_session_id: "internal:demo",
+    },
+  });
+  handleToolResultAndMaybeScheduleBootstrapRetry(stalePayload, { source: "host_notification" });
+  assert.equal(
+    Number(((globalThis as any).openai.widgetState as Record<string, unknown>).response_seq || 0),
+    5
+  );
+
+  const newerPayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+  });
+  handleToolResultAndMaybeScheduleBootstrapRetry(newerPayload, { source: "host_notification" });
+  assert.equal(
+    Number(((globalThis as any).openai.widgetState as Record<string, unknown>).response_seq || 0),
+    6
+  );
+
+  (globalThis as any).openai = originalOpenai;
 });
 
 test("render keeps non-EN pending locale in explicit wait view without EN prestart content", () => {
@@ -1392,6 +1445,11 @@ test("ui actions source supports self-heal transport and queued ACTION_START fal
   const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
   assert.match(source, /type TransportStatus = "unknown" \| "ready_callTool" \| "ready_bridge" \| "unavailable";/);
   assert.match(source, /function resolveTransportStatus\(\): TransportStatus/);
+  assert.match(source, /type BootstrapOrderingState = \{/);
+  assert.match(source, /function decideOrderingPatch\(/);
+  assert.match(source, /function mergeOutboundOrdering\(/);
+  assert.match(source, /\[ui_ordering_applied\]/);
+  assert.match(source, /\[ui_ordering_dropped_stale\]/);
   assert.match(source, /function queueStartAction\(/);
   assert.match(source, /async function flushQueuedStartAction\(/);
   assert.match(source, /ui_start_transport_unavailable/);

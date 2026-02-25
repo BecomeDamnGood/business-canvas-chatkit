@@ -143,14 +143,11 @@ function sessionInfoForResult(result: Record<string, unknown>): {
 } {
   const state = toRecord(result.state);
   return {
-    bootstrap_session_id: String(state.bootstrap_session_id || result.bootstrap_session_id || "").trim(),
-    bootstrap_epoch: parsePositiveInt(state.bootstrap_epoch || result.bootstrap_epoch),
-    response_seq: parsePositiveInt(state.response_seq || result.response_seq),
+    bootstrap_session_id: String(state.bootstrap_session_id || "").trim(),
+    bootstrap_epoch: parsePositiveInt(state.bootstrap_epoch),
+    response_seq: parsePositiveInt(state.response_seq),
     host_widget_session_id: String(
-      state.host_widget_session_id ||
-        result.host_widget_session_id ||
-        (toRecord(result.ui).flags && toRecord(toRecord(result.ui).flags).host_widget_session_id) ||
-        ""
+      state.host_widget_session_id || ""
     ).trim(),
   };
 }

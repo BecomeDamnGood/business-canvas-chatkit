@@ -51,6 +51,10 @@ test("bootstrap session/epoch guards drop stale payloads and keep monotone seque
   assert.match(source, /bootstrap_session_id/);
   assert.match(source, /bootstrap_epoch/);
   assert.match(source, /response_seq/);
+  assert.match(source, /incoming_tuple/);
+  assert.match(source, /latest_tuple/);
+  assert.match(source, /if \(staleCheck\.stale\) \{[\s\S]*const staleResult = staleSource;/);
+  assert.doesNotMatch(source, /if \(staleCheck\.stale\) \{[\s\S]{0,1000}const responseSeq = nextBootstrapResponseSeq\(\);/);
 });
 
 test("run_step handler logs locale + language readiness in request/response lines", () => {

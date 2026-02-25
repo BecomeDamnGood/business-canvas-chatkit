@@ -765,20 +765,7 @@ async function runStepHandler(args: {
               specialist: {},
               state: normalizeState(stateForTool),
             };
-      const responseSeq = nextBootstrapResponseSeq();
-      const staleResult = attachBootstrapDiagnostics({
-        responseKind: "run_step",
-        resultForClient: staleSource,
-        bootstrapSessionId: staleCheck.latest?.sessionId || incomingOrdering.sessionId,
-        bootstrapEpoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
-        responseSeq,
-        hostWidgetSessionId:
-          staleCheck.latest?.hostWidgetSessionId || incomingOrdering.hostWidgetSessionId || hostWidgetSessionId,
-      });
-      registerBootstrapSnapshot({
-        result: staleResult,
-        nowMs,
-      });
+      const staleResult = staleSource;
       const staleStepMeta =
         safeString((staleResult.state as Record<string, unknown> | undefined)?.current_step ?? "unknown") || "unknown";
       const staleSpecialistMeta = safeString(staleResult.active_specialist ?? "unknown") || "unknown";
@@ -792,6 +779,18 @@ async function runStepHandler(args: {
         payload_response_seq: incomingOrdering.responseSeq,
         latest_epoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
         latest_response_seq: staleCheck.latest?.lastResponseSeq || 0,
+        incoming_tuple: {
+          bootstrap_session_id: incomingOrdering.sessionId,
+          bootstrap_epoch: incomingOrdering.epoch,
+          response_seq: incomingOrdering.responseSeq,
+          host_widget_session_id: incomingOrdering.hostWidgetSessionId || "",
+        },
+        latest_tuple: {
+          bootstrap_session_id: staleCheck.latest?.sessionId || "",
+          bootstrap_epoch: staleCheck.latest?.epoch || 0,
+          response_seq: staleCheck.latest?.lastResponseSeq || 0,
+          host_widget_session_id: staleCheck.latest?.hostWidgetSessionId || "",
+        },
       });
       const modelResult = buildModelSafeResult(staleResult);
       const structuredContent: Record<string, unknown> = {

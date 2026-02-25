@@ -54,8 +54,19 @@ function actionCodeFromState(stateKey: string): string {
 
 function normalizeHostToolResultNotification(paramsRaw: unknown): Record<string, unknown> {
   const params = toRecord(paramsRaw);
+  const resultCandidate = toRecord(params.result);
+  if (Object.keys(resultCandidate).length > 0) {
+    return resultCandidate;
+  }
   const toolOutputCandidate = params.toolOutput;
   const metadata = toRecord(params.toolResponseMetadata);
+  if (Object.keys(metadata).length > 0 || Object.keys(toRecord(toolOutputCandidate)).length > 0) {
+    console.warn("[host_tool_result_legacy_shape_used]", {
+      has_result: false,
+      has_tool_output: Object.keys(toRecord(toolOutputCandidate)).length > 0,
+      has_tool_response_metadata: Object.keys(metadata).length > 0,
+    });
+  }
   return mergeToolOutputWithResponseMetadata(toolOutputCandidate, metadata);
 }
 

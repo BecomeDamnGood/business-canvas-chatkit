@@ -345,16 +345,105 @@ function parsePositiveInt(value: unknown): number {
   return Math.trunc(n);
 }
 
+type BootstrapOrderingState = {
+  sessionId: string;
+  epoch: number;
+  responseSeq: number;
+  hostWidgetSessionId: string;
+};
+
+function readBootstrapOrderingState(raw: unknown): BootstrapOrderingState {
+  const state = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return {
+    sessionId: String(state.bootstrap_session_id || "").trim(),
+    epoch: parsePositiveInt(state.bootstrap_epoch),
+    responseSeq: parsePositiveInt(state.response_seq),
+    hostWidgetSessionId: String(state.host_widget_session_id || "").trim(),
+  };
+}
+
+function hasValidBootstrapOrdering(ordering: BootstrapOrderingState): boolean {
+  return Boolean(ordering.sessionId) && ordering.epoch > 0 && ordering.responseSeq > 0;
+}
+
+function describeBootstrapOrdering(ordering: BootstrapOrderingState): {
+  bootstrap_session_id: string;
+  bootstrap_epoch: number;
+  response_seq: number;
+  host_widget_session_id: string;
+} {
+  return {
+    bootstrap_session_id: ordering.sessionId,
+    bootstrap_epoch: ordering.epoch,
+    response_seq: ordering.responseSeq,
+    host_widget_session_id: ordering.hostWidgetSessionId,
+  };
+}
+
+function decideOrderingPatch(
+  current: BootstrapOrderingState,
+  incoming: BootstrapOrderingState
+): { apply: boolean; reason: string } {
+  if (!hasValidBootstrapOrdering(incoming)) return { apply: false, reason: "incoming_invalid" };
+  if (!hasValidBootstrapOrdering(current)) return { apply: true, reason: "current_missing" };
+  if (
+    current.sessionId &&
+    incoming.sessionId &&
+    current.sessionId === incoming.sessionId &&
+    current.hostWidgetSessionId &&
+    incoming.hostWidgetSessionId &&
+    current.hostWidgetSessionId !== incoming.hostWidgetSessionId
+  ) {
+    return { apply: false, reason: "host_session_mismatch" };
+  }
+  if (current.sessionId && incoming.sessionId && current.sessionId !== incoming.sessionId) {
+    return { apply: true, reason: "new_session" };
+  }
+  if (incoming.epoch > current.epoch) return { apply: true, reason: "new_epoch" };
+  if (incoming.epoch < current.epoch) return { apply: false, reason: "older_epoch" };
+  if (incoming.responseSeq > current.responseSeq) return { apply: true, reason: "new_response_seq" };
+  if (incoming.responseSeq === current.responseSeq) return { apply: true, reason: "same_response_seq" };
+  return { apply: false, reason: "older_response_seq" };
+}
+
+function mergeOutboundOrdering(params: {
+  nextState: Record<string, unknown>;
+  widgetState: Record<string, unknown>;
+}): BootstrapOrderingState {
+  const fromNext = readBootstrapOrderingState(params.nextState);
+  const fromWidget = readBootstrapOrderingState(params.widgetState);
+  if (!hasValidBootstrapOrdering(fromNext)) {
+    return hasValidBootstrapOrdering(fromWidget) ? fromWidget : fromNext;
+  }
+  if (!hasValidBootstrapOrdering(fromWidget)) return fromNext;
+  if (fromNext.sessionId !== fromWidget.sessionId) return fromNext;
+  if (
+    fromNext.hostWidgetSessionId &&
+    fromWidget.hostWidgetSessionId &&
+    fromNext.hostWidgetSessionId !== fromWidget.hostWidgetSessionId
+  ) {
+    return fromNext;
+  }
+  if (fromWidget.epoch > fromNext.epoch) return fromWidget;
+  if (fromWidget.epoch < fromNext.epoch) return fromNext;
+  if (fromWidget.responseSeq > fromNext.responseSeq) return fromWidget;
+  return fromNext;
+}
+
 function latestBootstrapOrderingFromState(): { sessionId: string; epoch: number; hostWidgetSessionId: string } {
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
   const latestState = latest?.state && typeof latest.state === "object"
     ? (latest.state as Record<string, unknown>)
     : {};
   const ws = widgetState();
+  const latestOrdering = readBootstrapOrderingState(latestState);
+  const widgetOrdering = readBootstrapOrderingState(ws);
+  const mergedOrdering = mergeOutboundOrdering({ nextState: latestState, widgetState: ws });
   return {
-    sessionId: String(latestState.bootstrap_session_id || ws.bootstrap_session_id || "").trim(),
-    epoch: parsePositiveInt(latestState.bootstrap_epoch ?? ws.bootstrap_epoch),
-    hostWidgetSessionId: String(latestState.host_widget_session_id || ws.host_widget_session_id || "").trim(),
+    sessionId: mergedOrdering.sessionId || latestOrdering.sessionId || widgetOrdering.sessionId,
+    epoch: mergedOrdering.epoch || latestOrdering.epoch || widgetOrdering.epoch,
+    hostWidgetSessionId:
+      mergedOrdering.hostWidgetSessionId || latestOrdering.hostWidgetSessionId || widgetOrdering.hostWidgetSessionId,
   };
 }
 
@@ -555,13 +644,36 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   if (_render) _render(normalized);
   const resolved = resolveWidgetPayload(normalized);
   const result = resolved.result;
-  const orderingPatch: Record<string, unknown> = {};
-  if (resolved.host_widget_session_id) orderingPatch.host_widget_session_id = resolved.host_widget_session_id;
-  if (resolved.bootstrap_session_id) orderingPatch.bootstrap_session_id = resolved.bootstrap_session_id;
-  if (resolved.bootstrap_epoch > 0) orderingPatch.bootstrap_epoch = resolved.bootstrap_epoch;
-  if (resolved.response_seq > 0) orderingPatch.response_seq = resolved.response_seq;
-  if (Object.keys(orderingPatch).length > 0) setWidgetStateSafe(orderingPatch);
   const source = String(opts?.source || "unknown");
+  const currentOrdering = readBootstrapOrderingState(widgetState());
+  const incomingOrdering: BootstrapOrderingState = {
+    sessionId: resolved.bootstrap_session_id,
+    epoch: resolved.bootstrap_epoch,
+    responseSeq: resolved.response_seq,
+    hostWidgetSessionId: resolved.host_widget_session_id,
+  };
+  const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
+  if (orderingDecision.apply) {
+    setWidgetStateSafe({
+      bootstrap_session_id: incomingOrdering.sessionId,
+      bootstrap_epoch: incomingOrdering.epoch,
+      response_seq: incomingOrdering.responseSeq,
+      host_widget_session_id: incomingOrdering.hostWidgetSessionId,
+    });
+    console.log("[ui_ordering_applied]", {
+      source,
+      reason: orderingDecision.reason,
+      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+      current_tuple: describeBootstrapOrdering(currentOrdering),
+    });
+  } else if (hasValidBootstrapOrdering(incomingOrdering)) {
+    console.warn("[ui_ordering_dropped_stale]", {
+      source,
+      reason: orderingDecision.reason,
+      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+      current_tuple: describeBootstrapOrdering(currentOrdering),
+    });
+  }
   const hydration = maybeScheduleBootstrapRetry(resolved);
   if (isDevEnv()) {
     console.log("[ui_bootstrap_state]", {
@@ -954,29 +1066,12 @@ export async function callRunStep(
   if (cleanExtraState && typeof cleanExtraState === "object") {
     nextState = Object.assign({}, nextState, cleanExtraState);
   }
-  const persistedHostWidgetSessionId = String(
-    (nextState as Record<string, unknown>).host_widget_session_id || ws.host_widget_session_id || ""
-  ).trim();
-  if (persistedHostWidgetSessionId) {
-    (nextState as Record<string, unknown>).host_widget_session_id = persistedHostWidgetSessionId;
-  }
-  if (!String((nextState as Record<string, unknown>).bootstrap_session_id || "").trim()) {
-    const persistedBootstrapSessionId = String(ws.bootstrap_session_id || "").trim();
-    if (persistedBootstrapSessionId) {
-      (nextState as Record<string, unknown>).bootstrap_session_id = persistedBootstrapSessionId;
-    }
-  }
-  if (parsePositiveInt((nextState as Record<string, unknown>).bootstrap_epoch) <= 0) {
-    const persistedBootstrapEpoch = parsePositiveInt(ws.bootstrap_epoch);
-    if (persistedBootstrapEpoch > 0) {
-      (nextState as Record<string, unknown>).bootstrap_epoch = persistedBootstrapEpoch;
-    }
-  }
-  if (parsePositiveInt((nextState as Record<string, unknown>).response_seq) <= 0) {
-    const persistedResponseSeq = parsePositiveInt(ws.response_seq);
-    if (persistedResponseSeq > 0) {
-      (nextState as Record<string, unknown>).response_seq = persistedResponseSeq;
-    }
+  const outboundOrdering = mergeOutboundOrdering({ nextState, widgetState: ws });
+  if (hasValidBootstrapOrdering(outboundOrdering)) {
+    (nextState as Record<string, unknown>).bootstrap_session_id = outboundOrdering.sessionId;
+    (nextState as Record<string, unknown>).bootstrap_epoch = outboundOrdering.epoch;
+    (nextState as Record<string, unknown>).response_seq = outboundOrdering.responseSeq;
+    (nextState as Record<string, unknown>).host_widget_session_id = outboundOrdering.hostWidgetSessionId;
   }
   const payload = {
     current_step_id: nextState.current_step || "step_0",
@@ -1050,6 +1145,7 @@ export async function callRunStep(
       console.log("[ui_action_dispatched]", {
         action_code: messageText,
         transport_used: transportPrimary,
+        ordering_tuple: describeBootstrapOrdering(readBootstrapOrderingState(nextState)),
       });
     }
     let resp: unknown;
