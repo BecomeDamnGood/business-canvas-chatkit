@@ -11,6 +11,7 @@ import {
   computeBootstrapRenderState,
   computeHydrationState,
   isTrustedBridgeMessageEvent,
+  mergeToolOutputWithResponseMetadata,
   resetBridgeOriginCacheForTests,
   resolveWidgetPayload,
   resolveAllowedHostOrigin,
@@ -1495,6 +1496,21 @@ test("resolveWidgetPayload does not hydrate from toolResponseMetadata widget_res
   assert.equal(resolved.source, "none");
   assert.equal(Object.keys(resolved.result).length, 0);
   assert.equal(resolved.needs_hydration, true);
+});
+
+test("mergeToolOutputWithResponseMetadata accepts flat metadata object shape", () => {
+  const merged = mergeToolOutputWithResponseMetadata(
+    { structuredContent: { result: { ok: true } } },
+    {
+      widget_result: {
+        state: { current_step: "step_0", language: "nl", ui_strings_status: "pending" },
+      },
+    }
+  );
+  const meta = (merged._meta && typeof merged._meta === "object")
+    ? (merged._meta as Record<string, unknown>)
+    : {};
+  assert.equal(String(((meta.widget_result as Record<string, unknown>)?.state as Record<string, unknown>)?.current_step || ""), "step_0");
 });
 
 test("resolveWidgetPayload applies freshness override when metadata is available", () => {

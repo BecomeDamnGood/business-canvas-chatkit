@@ -165,7 +165,9 @@ export function mergeToolOutputWithResponseMetadata(
   if (!Object.keys(metadata).length) return merged;
 
   const mergedMeta = toRecord(merged._meta);
-  const metadataMeta = toRecord(metadata._meta);
+  // OpenAI host metadata may be either the _meta object itself or wrapped in {_meta: ...}.
+  const wrappedMetadataMeta = toRecord(metadata._meta);
+  const metadataMeta = Object.keys(wrappedMetadataMeta).length ? wrappedMetadataMeta : metadata;
   merged._meta = { ...mergedMeta, ...metadataMeta };
   return merged;
 }

@@ -397,14 +397,37 @@ function normalizeStepId(rawStepId: string): string {
 }
 
 function normalizeLocaleHint(raw: unknown): string {
-  const text = safeString(raw ?? "").trim().toLowerCase();
+  const text = safeString(raw ?? "").trim();
   if (!text) return "";
   const firstPart = text.split(",")[0]?.trim() || "";
   const firstToken = firstPart.split(";")[0]?.trim() || "";
   if (!firstToken) return "";
-  const code = firstToken.split(/[-_]/)[0]?.trim() || "";
-  if (!/^[a-z]{2,3}$/.test(code)) return "";
-  return code;
+  const normalizedRaw = firstToken
+    .replace(/_/g, "-")
+    .replace(/-{2,}/g, "-");
+  const parts = normalizedRaw
+    .split("-")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return "";
+  const languagePart = parts[0] || "";
+  if (!/^[A-Za-z]{2,3}$/.test(languagePart)) return "";
+  const language = languagePart.toLowerCase();
+  if (language === "und") return "";
+  const rest: string[] = [];
+  for (const part of parts.slice(1)) {
+    if (!/^[A-Za-z0-9]{1,8}$/.test(part)) return "";
+    if (/^[A-Za-z]{4}$/.test(part)) {
+      rest.push(part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+      continue;
+    }
+    if (/^[A-Za-z]{2}$/.test(part) || /^[0-9]{3}$/.test(part)) {
+      rest.push(part.toUpperCase());
+      continue;
+    }
+    rest.push(part.toLowerCase());
+  }
+  return [language, ...rest].join("-");
 }
 
 function localeFromMetaValue(value: unknown): string {
@@ -844,7 +867,6 @@ async function runStepHandler(args: {
       ui_gate_reason: safeString(resultState.ui_gate_reason ?? ""),
       ui_gate_since_ms: Number(resultState.ui_gate_since_ms ?? 0) || 0,
       bootstrap_waiting_locale: bootstrapWaitingLocale,
-      interactive_fallback_active: resultUiFlags.interactive_fallback_active === true,
       bootstrap_retry_scheduled: bootstrapRetryScheduled,
       host_widget_session_id: hostWidgetSessionId || "",
       current_step: safeString(resultState.current_step ?? stepMeta),
@@ -967,6 +989,7 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const currentStep = safeString(result.current_step_id || state.current_step || "step_0");
   const started = safeString(state.started || "");
   const initialUserMessage = safeString(state.initial_user_message || "");
+  const locale = safeString((result as any).locale || state.locale || "");
   const language = safeString((result as any).language || state.language || "");
   const languageSource = safeString((result as any).language_source || state.language_source || "");
   const uiStringsLang = safeString(state.ui_strings_lang || (result as any).ui_strings_lang || "");
@@ -1003,6 +1026,7 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   };
   if (started) safeState.started = started;
   if (initialUserMessage) safeState.initial_user_message = initialUserMessage;
+  if (locale) safeState.locale = locale;
   if (language) safeState.language = language;
   if (languageSource) safeState.language_source = languageSource;
   if (uiStringsLang) safeState.ui_strings_lang = uiStringsLang;
@@ -1027,13 +1051,13 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     current_step_id: currentStep,
     ui_gate_status: uiGateStatus,
     ui_gate_reason: uiGateReason,
+    ...(locale ? { locale } : {}),
     language,
     ui_strings_status: uiStringsStatus,
     ui_strings_lang: uiStringsLang,
     ui_strings_requested_lang: uiStringsRequestedLang,
     ui_strings_fallback_applied: uiStringsFallbackApplied === "true",
     ui_strings_fallback_reason: uiStringsFallbackReason,
-    interactive_fallback_active: flags.interactive_fallback_active === true,
     bootstrap_phase: bootstrapPhase,
     ...(bootstrapSessionId ? { bootstrap_session_id: bootstrapSessionId } : {}),
     ...(bootstrapEpoch > 0 ? { bootstrap_epoch: bootstrapEpoch } : {}),
