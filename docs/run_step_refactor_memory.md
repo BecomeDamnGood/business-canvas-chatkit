@@ -279,3 +279,35 @@ Next agent exact TODO:
 - Start Step 6 convergence: final facade cleanup and hardening pass, keeping `run_step_pipeline.ts` as sole owner of the post-specialist stage chain and `run_step_state_update.ts` as sole owner of state mutation staging.
 Commit:
 - pending_after_commit
+
+## Step 6 - Convergence + hardening
+Date: 2026-02-25 21:15 CET
+Status: completed
+Completed:
+- Removed dead facade helpers from `mcp-server/src/handlers/run_step.ts` (unused adapters/policy utilities) to reduce top-level noise without changing orchestration flow.
+- Converged facade helper imports through `mcp-server/src/handlers/run_step_modules.ts` by exporting `createRunStepUiPayloadHelpers` from the module barrel.
+- Updated source-guard coverage in `mcp-server/src/handlers/run_step_finals.test.ts` to enforce Step-6 expectation that legacy bullet message-derivation helper code is no longer present in the facade.
+- Published architecture conformance report at `docs/run_step_architecture_conformance_report.md`.
+- Updated ownership status map in `docs/run_step_ownership_map.md` to reflect completed Step-5 pipeline/state extraction and current Step-6 in-progress domains.
+Pending:
+- `run_step.ts` remains above target size band; i18n/runtime and response assembly extractions are still pending for full thin-facade completion.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_modules.ts
+- mcp-server/src/handlers/run_step_finals.test.ts
+- docs/run_step_ownership_map.md
+- docs/run_step_architecture_conformance_report.md
+- docs/run_step_refactor_memory.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- git diff --name-only | wc -l => pass (3)
+- git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}' => pass (adds=5 dels=183 total=188)
+- git diff -- mcp-server/src/handlers/run_step.ts | rg '^@@' | wc -l => pass (7)
+- npm --prefix mcp-server run arch:run-step:check => pass
+Next agent exact TODO:
+- Extract i18n/bootstrap runtime wrappers to `mcp-server/src/handlers/run_step_i18n_runtime.ts`, then extract shared response assembly to `mcp-server/src/handlers/run_step_response.ts`, and re-run the full Step gates.
+Commit:
+- pending_after_commit

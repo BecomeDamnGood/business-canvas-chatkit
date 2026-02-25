@@ -3224,11 +3224,10 @@ test("menu safety overlay is removed from runtime path", () => {
   assert.doesNotMatch(source, /const shouldApplyMenuSafetyPolicy\s*=/);
 });
 
-test("bullet consistency policy derives statements from bulleted message content", () => {
+test("bullet consistency message-derivation helpers are removed from facade path", () => {
   const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(source, /function extractBulletedItemsFromMessage\(messageRaw: string\): string\[]/);
-  assert.match(source, /const fromMessageBullets = extractBulletedItemsFromMessage\(rawMessage\)/);
-  assert.match(source, /const statements = fromStatements.length > 0[\s\S]*fromMessageBullets/);
+  assert.doesNotMatch(source, /function extractBulletedItemsFromMessage\(messageRaw: string\): string\[]/);
+  assert.doesNotMatch(source, /const fromMessageBullets = extractBulletedItemsFromMessage\(rawMessage\)/);
 });
 
 test("DreamExplainer off-topic handling uses explicit contract branch", () => {

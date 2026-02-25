@@ -149,8 +149,8 @@ import {
   createCallSpecialistStrictSafe,
   hasUsableSpecialistForRetry as hasUsableSpecialistForRetryDispatch,
 } from "./specialist_dispatch.js";
-import { createRunStepUiPayloadHelpers } from "./run_step_ui_payload.js";
 import {
+  createRunStepUiPayloadHelpers,
   createRunStepWordingHelpers,
   createRunStepRouteHelpers,
   createRunStepStateUpdateHelpers,
@@ -2008,11 +2008,6 @@ function menuHasConfirmAction(menuId: string): boolean {
   return actionCodes.some((code) => isConfirmActionCode(String(code || "").trim()));
 }
 
-function filterConfirmActionCodes(actionCodes: string[], allowConfirm: boolean): string[] {
-  if (allowConfirm) return actionCodes;
-  return actionCodes.filter((code) => !isConfirmActionCode(code));
-}
-
 function normalizeLightUserInput(input: string): string {
   const collapsed = String(input || "")
     .replace(/\s+/g, " ")
@@ -2725,10 +2720,6 @@ function compactWordingPanelBody(messageRaw: string): string {
   return ensureSentenceEnd(firstSentence || firstLine);
 }
 
-function isBulletChoiceStep(stepId: string): boolean {
-  return stepId === STRATEGY_STEP_ID || stepId === RULESOFTHEGAME_STEP_ID;
-}
-
 function isBulletConsistencyStep(stepId: string): boolean {
   return (
     stepId === STRATEGY_STEP_ID ||
@@ -2749,125 +2740,6 @@ function isInformationalContextPolicyStep(stepId: string): boolean {
     stepId === PRODUCTSSERVICES_STEP_ID ||
     stepId === RULESOFTHEGAME_STEP_ID
   );
-}
-
-function extractBulletedItemsFromMessage(messageRaw: string): string[] {
-  const lines = String(messageRaw || "")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .map((line) => String(line || "").replace(/<[^>]+>/g, "").trim())
-    .filter(Boolean);
-  const out: string[] = [];
-  for (const line of lines) {
-    const match = line.match(/^(?:[-*•]|\d+[\).])\s+(.+)$/);
-    if (!match) continue;
-    const item = String(match[1] || "").trim();
-    if (!item) continue;
-    out.push(item);
-  }
-  return out;
-}
-
-function sanitizeBulletStepPolicySpecialist(
-  specialist: Record<string, unknown>,
-  previous: Record<string, unknown>
-): Record<string, unknown> {
-  const currentStatements = Array.isArray(specialist.statements) ? specialist.statements : [];
-  const previousStatements = Array.isArray(previous.statements) ? previous.statements : [];
-  const fromStatements = (currentStatements.length ? currentStatements : previousStatements)
-    .map((line) => String(line || "").trim())
-    .filter(Boolean);
-  const listFieldCandidate = String(
-    specialist.strategy ||
-    specialist.productsservices ||
-    specialist.rulesofthegame ||
-    specialist.refined_formulation ||
-    previous.strategy ||
-    previous.productsservices ||
-    previous.rulesofthegame ||
-    previous.refined_formulation ||
-    ""
-  ).trim();
-  const fromListField = parseListItems(listFieldCandidate)
-    .map((line) => String(line || "").trim())
-    .filter(Boolean);
-  const rawMessage = String(specialist.message || "").replace(/\r/g, "\n");
-  const fromMessageBullets = extractBulletedItemsFromMessage(rawMessage)
-    .map((line) => String(line || "").trim())
-    .filter(Boolean);
-  const statements = fromStatements.length > 0
-    ? fromStatements
-    : fromListField.length > 0
-      ? fromListField
-      : fromMessageBullets;
-  if (statements.length === 0) return specialist;
-
-  const statementKeys = new Set(statements.map((line) => canonicalizeComparableText(line)).filter(Boolean));
-  const specialistWithStatements = { ...specialist, statements };
-  if (!rawMessage.trim()) return specialistWithStatements;
-
-  const lineMatchesStatement = (lineRaw: string): boolean => {
-    const trimmed = String(lineRaw || "").trim();
-    if (!trimmed) return false;
-    const noTag = trimmed.replace(/<[^>]+>/g, "").trim();
-    const noMarker = noTag.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim();
-    const key = canonicalizeComparableText(noMarker);
-    return Boolean(key) && statementKeys.has(key);
-  };
-
-  const lines = rawMessage.split("\n");
-  const kept: string[] = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = String(lines[i] || "");
-    const trimmed = line.trim();
-    if (!trimmed) {
-      kept.push("");
-      continue;
-    }
-
-    if (lineMatchesStatement(trimmed)) continue;
-
-    const colonIdx = trimmed.indexOf(":");
-    if (colonIdx > 0) {
-      const suffix = trimmed.slice(colonIdx + 1).trim();
-      if (suffix && lineMatchesStatement(suffix)) continue;
-    }
-
-    const plain = trimmed.replace(/<[^>]+>/g, "").trim();
-    const lower = plain.toLowerCase();
-    if (
-      lower.startsWith("so far we have these") ||
-      lower.includes("this is what we have established so far based on our dialogue") ||
-      lower.startsWith("your current strategy for") ||
-      lower.startsWith("your current products and services for") ||
-      lower.startsWith("your current rules of the game for")
-    ) {
-      continue;
-    }
-
-    if (/:$/.test(plain)) {
-      let nextNonEmpty = "";
-      for (let j = i + 1; j < lines.length; j += 1) {
-        const candidate = String(lines[j] || "").trim();
-        if (!candidate) continue;
-        nextNonEmpty = candidate;
-        break;
-      }
-      if (nextNonEmpty && lineMatchesStatement(nextNonEmpty)) continue;
-    }
-
-    kept.push(line);
-  }
-
-  const message = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { ...specialistWithStatements, message };
-}
-
-function sanitizePreviousForBulletPolicy(previous: Record<string, unknown>): Record<string, unknown> {
-  return {
-    ...previous,
-    question: "",
-  };
 }
 
 const FINAL_FIELD_BY_STEP_ID: Record<string, string> = {
@@ -3314,12 +3186,6 @@ const MOTIVATION_QUOTES_BY_STEP: Record<string, string[]> = {
     `Do you know what Edsger W. Dijkstra said: "Simplicity is a prerequisite for reliability."`,
   ],
 };
-
-function isActionLikeUserMessage(raw: string): boolean {
-  const text = String(raw || "").trim();
-  if (!text) return false;
-  return text.startsWith("ACTION_") || text.startsWith("__ROUTE__");
-}
 
 const MOTIVATION_USER_INTENTS = new Set([
   "STEP_INPUT",
@@ -3942,45 +3808,6 @@ export const buildWordingChoiceFromTurn = wordingHelpers.buildWordingChoiceFromT
 
 export const resolveActionCodeMenuTransition = uiPayloadHelpers.resolveActionCodeMenuTransition;
 
-function expandChoiceFromPreviousQuestion(userMsg: string, prevQuestion: string): string {
-  const t = String(userMsg ?? "").trim();
-  if (t !== "1" && t !== "2" && t !== "3") return userMsg; // safe for future 3-option menus
-
-  const q = String(prevQuestion ?? "");
-  if (!q) return userMsg;
-
-  const lines = q.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-
-  const wanted = `${t})`;
-  for (const line of lines) {
-    // Match "1) something" or "1. something"
-    const m = line.match(/^([123])[\)\.]\s*(.+?)\s*$/);
-    if (m && `${m[1]})` === wanted) {
-      return m[2].trim();
-    }
-  }
-
-  return userMsg;
-}
-
-function isClearYes(userMessage: string): boolean {
-  const tRaw = String(userMessage ?? "").trim();
-  if (!tRaw) return false;
-
-  // Always accept explicit option click.
-  if (tRaw === "1") return true;
-
-  // Only treat very short replies as "clear yes" to avoid accidental triggers.
-  const t = tRaw.toLowerCase();
-  if (t.length > 24) return false;
-
-  const yesPhrases = new Set([
-    "yes", "y", "yeah", "yep", "sure", "ok", "okay", "k", "continue", "go on",
-  ]);
-
-  return yesPhrases.has(t);
-}
-
 /** Only flag explicit injection markers; never flag bullets/requirements/goals (business brief). */
 function looksLikeMetaInstruction(userMessage: string): boolean {
   const t = String(userMessage ?? "").trim();
@@ -4060,11 +3887,6 @@ function enforceUiStringsReadinessInvariant(state: CanvasState): CanvasState {
 
 function isNonEnglishPendingUiStringsState(state: CanvasState | null | undefined): boolean {
   return localeStartIsNonEnglishPendingUiStringsState(state);
-}
-
-function isInteractiveFallbackState(state: CanvasState | null | undefined): boolean {
-  void state;
-  return false;
 }
 
 function isInteractiveLocaleReady(state: CanvasState | null | undefined): boolean {
