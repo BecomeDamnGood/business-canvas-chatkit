@@ -67,6 +67,43 @@ export function normalizeStateLanguageSource(raw: unknown): LanguageSource {
   }
   return "";
 }
+
+function normalizeLocaleTag(raw: unknown): string {
+  const normalizedRaw = String(raw ?? "")
+    .trim()
+    .replace(/_/g, "-")
+    .replace(/-{2,}/g, "-");
+  if (!normalizedRaw) return "";
+  const parts = normalizedRaw
+    .split("-")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return "";
+  const languagePart = parts[0] || "";
+  if (!/^[A-Za-z]{2,3}$/.test(languagePart)) return "";
+  const language = languagePart.toLowerCase();
+  if (language === "und") return "";
+  const rest: string[] = [];
+  for (const part of parts.slice(1)) {
+    if (!/^[A-Za-z0-9]{1,8}$/.test(part)) return "";
+    if (/^[A-Za-z]{4}$/.test(part)) {
+      rest.push(part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+      continue;
+    }
+    if (/^[A-Za-z]{2}$/.test(part) || /^[0-9]{3}$/.test(part)) {
+      rest.push(part.toUpperCase());
+      continue;
+    }
+    rest.push(part.toLowerCase());
+  }
+  return [language, ...rest].join("-");
+}
+
+function languageFromLocale(raw: unknown): string {
+  const locale = normalizeLocaleTag(raw);
+  if (!locale) return "";
+  return locale.split("-")[0] || "";
+}
 export const UI_STRINGS_STATUSES = ["pending", "critical_ready", "ready"] as const;
 export const UiStringsStatusZod = z.enum(UI_STRINGS_STATUSES);
 export type UiStringsStatus = z.infer<typeof UiStringsStatusZod>;
@@ -176,6 +213,7 @@ export const CanvasStateZod = z.object({
 
   // language handling (multi-language UX)
   language: z.string(),
+  locale: z.string(),
   language_locked: BoolStringZod, // once set from a meaningful user message, we don't auto-flip
   language_override: BoolStringZod, // true only when user explicitly requested a language
   language_source: LanguageSourceZod,
@@ -240,7 +278,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "11";
+export const CURRENT_STATE_VERSION = "12";
 export const DEFAULT_VIEW_CONTRACT_VERSION = "v3_ssot_rigid";
 
 /**
@@ -256,6 +294,7 @@ export function getDefaultState(): CanvasState {
     intro_shown_session: "false",
 
     language: "",
+    locale: "",
     language_locked: "false",
     language_override: "false",
     language_source: "",
@@ -325,7 +364,8 @@ export function normalizeState(raw: unknown): CanvasState {
   const intro_shown_session_raw = String(r.intro_shown_session ?? d.intro_shown_session).trim();
   const intro_shown_session: BoolString = intro_shown_session_raw === "true" ? "true" : "false";
 
-  const language = String(r.language ?? d.language).trim().toLowerCase();
+  const locale = normalizeLocaleTag((r as any).locale ?? r.language ?? d.locale);
+  const language = languageFromLocale(r.language ?? locale) || languageFromLocale(locale);
   const language_locked_raw = String(r.language_locked ?? d.language_locked).trim();
   const language_locked: BoolString = language_locked_raw === "true" ? "true" : "false";
   const language_override_raw = String(r.language_override ?? d.language_override).trim();
@@ -513,6 +553,7 @@ export function normalizeState(raw: unknown): CanvasState {
     intro_shown_session,
 
     language,
+    locale,
     language_locked,
     language_override,
     language_source,
@@ -578,6 +619,21 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v11 -> v12: add canonical locale field (BCP47-like) while keeping language as base code.
+  if (s.state_version === "11") {
+    const locale = normalizeLocaleTag(
+      (s as any).locale || (s as any).ui_strings_requested_lang || (s as any).language || ""
+    );
+    const language = languageFromLocale((s as any).language || locale) || "";
+    s = {
+      ...s,
+      state_version: "12",
+      locale,
+      language,
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v10 -> v11: add explicit ui fallback metadata.
   if (s.state_version === "10") {
     s = {
@@ -597,7 +653,7 @@ export function migrateState(raw: unknown): CanvasState {
         return "";
       })(),
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v9 -> v10: add critical-first translation metadata.

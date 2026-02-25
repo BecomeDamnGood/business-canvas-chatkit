@@ -178,7 +178,6 @@ import {
   hasRenderableUiStringsForState as localeStartHasRenderableUiStringsForState,
   enforceUiStringsReadinessInvariant as localeStartEnforceUiStringsReadinessInvariant,
   isNonEnglishPendingUiStringsState as localeStartIsNonEnglishPendingUiStringsState,
-  isInteractiveFallbackState as localeStartIsInteractiveFallbackState,
   isInteractiveLocaleReady as localeStartIsInteractiveLocaleReady,
   deriveBootstrapContract as localeStartDeriveBootstrapContract,
   applyUiGateState as localeStartApplyUiGateState,
@@ -560,7 +559,8 @@ const UiStringsTranslationResultJsonSchema = {
 } as const;
 
 function uiRuntimeTranslationCacheKey(lang: string): string {
-  return `${UI_STRINGS_SCHEMA_VERSION}:${String(lang || "").trim().toLowerCase()}`;
+  const locale = normalizeLocaleHint(lang) || normalizeLangCode(lang);
+  return `${UI_STRINGS_SCHEMA_VERSION}:${String(locale || "").trim().toLowerCase()}`;
 }
 
 function loadUiRuntimeTranslationCacheOnce(): void {
@@ -644,7 +644,8 @@ function hasRuntimeTranslationApiConfigured(): boolean {
 
 function langFromState(state: CanvasState): string {
   if (isForceEnglishLanguageMode()) return "en";
-  const l = String((state as any).language ?? "").trim().toLowerCase();
+  const locale = normalizeLocaleHint(String((state as any).locale ?? ""));
+  const l = normalizeLangCode(String((state as any).language ?? "")) || normalizeLangCode(locale);
   return l || "en";
 }
 
@@ -974,6 +975,10 @@ const CONTRACT_UI_FALLBACK_REASONS = new Set([
 function detectInvalidContractStateMarkers(stateRaw: Record<string, unknown> | null | undefined): string[] {
   const state = stateRaw && typeof stateRaw === "object" ? stateRaw : {};
   const markers: string[] = [];
+  const localeRaw = String((state as any).locale ?? "").trim();
+  if (localeRaw && !normalizeContractLocale(localeRaw)) {
+    markers.push("invalid_locale");
+  }
   const uiGateStatus = String((state as any).ui_gate_status ?? "").trim();
   if (uiGateStatus && !CONTRACT_UI_GATE_STATUSES.has(uiGateStatus)) {
     markers.push("invalid_ui_gate_status");
@@ -994,7 +999,11 @@ function detectInvalidContractStateMarkers(stateRaw: Record<string, unknown> | n
 }
 
 function normalizeContractLang(raw: unknown): string {
-  return localeStartNormalizeLangCode(String(raw ?? "")) || "";
+  return normalizeLangCode(String(raw ?? "")) || "";
+}
+
+function normalizeContractLocale(raw: unknown): string {
+  return normalizeLocaleHint(String(raw ?? "")) || "";
 }
 
 function buildFailClosedState(
@@ -1005,14 +1014,22 @@ function buildFailClosedState(
   }
 ): CanvasState {
   const normalized = stateRaw ? normalizeState(stateRaw) : getDefaultState();
-  const language = normalizeContractLang((normalized as any).language);
+  const locale =
+    normalizeContractLocale(
+      (normalized as any).locale ||
+        options?.requestedLang ||
+        (normalized as any).ui_strings_requested_lang ||
+        (normalized as any).language
+    ) || "en";
+  const language = normalizeContractLang((normalized as any).language || locale) || "en";
   const requestedLang =
-    normalizeContractLang(options?.requestedLang || (normalized as any).ui_strings_requested_lang || language) || "en";
+    normalizeContractLocale(options?.requestedLang || (normalized as any).ui_strings_requested_lang || locale) || "en";
   const resolvedLanguage = language || requestedLang;
   const normalizedLanguageSource = normalizeStateLanguageSource((normalized as any).language_source);
-  const uiStringsLang = normalizeContractLang((normalized as any).ui_strings_lang || "");
+  const uiStringsLang = normalizeContractLocale((normalized as any).ui_strings_lang || "");
   return {
     ...(normalized as any),
+    locale,
     language: resolvedLanguage,
     language_source:
       normalizedLanguageSource || (resolvedLanguage ? "locale_hint" : ""),
@@ -1023,7 +1040,7 @@ function buildFailClosedState(
     bootstrap_phase: "failed",
     bootstrap_retry_hint: "",
     ui_strings_requested_lang: requestedLang,
-    ui_strings_lang: uiStringsLang || (requestedLang === "en" ? "en" : ""),
+    ui_strings_lang: uiStringsLang || (normalizeContractLang(requestedLang) === "en" ? "en" : ""),
     ui_strings_fallback_applied: "false",
     ui_strings_fallback_reason: "",
   } as CanvasState;
@@ -1379,10 +1396,6 @@ function isUiTranslationFastModelV1Enabled(): boolean {
 
 function isUiI18nCriticalKeysV1Enabled(): boolean {
   return envFlagEnabled("UI_I18N_CRITICAL_KEYS_V1", true);
-}
-
-function isUiInteractiveFallbackV1Enabled(): boolean {
-  return true;
 }
 
 function isWordingPanelCleanBodyV1Enabled(): boolean {
@@ -5363,9 +5376,6 @@ function buildUiPayload(
   if (String(process.env.UI_I18N_CRITICAL_KEYS_V1 || "").trim()) {
     flags.ui_i18n_critical_keys_v1 = isUiI18nCriticalKeysV1Enabled();
   }
-  if (String(process.env.UI_INTERACTIVE_FALLBACK_V1 || "").trim()) {
-    flags.ui_interactive_fallback_v1 = isUiInteractiveFallbackV1Enabled();
-  }
   const introChromeRaw = String((specialist as any)?.ui_show_step_intro_chrome || "").trim().toLowerCase();
   if ((specialist as any)?.ui_show_step_intro_chrome === true || introChromeRaw === "true") {
     flags.show_step_intro_chrome = true;
@@ -5383,7 +5393,6 @@ function buildUiPayload(
     flags.bootstrap_retry_hint = bootstrap.retry_hint;
     flags.bootstrap_phase = String(bootstrap.phase || "");
     flags.locale_pending_background = bootstrap.waiting;
-    flags.interactive_fallback_active = isInteractiveFallbackState(effectiveState);
   }
   const effectiveStepId = String(stepIdOverride || (effectiveState as any)?.current_step || "").trim();
   const contractMenuId = parseMenuFromContractIdForStep(contractMeta.contractId, effectiveStepId);
@@ -5742,18 +5751,14 @@ function isNonEnglishPendingUiStringsState(state: CanvasState | null | undefined
 }
 
 function isInteractiveFallbackState(state: CanvasState | null | undefined): boolean {
-  return localeStartIsInteractiveFallbackState({
-    state,
-    uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),
-    criticalKeys: CRITICAL_UI_KEYS_STEP0,
-  });
+  void state;
+  return false;
 }
 
 function isInteractiveLocaleReady(state: CanvasState | null | undefined): boolean {
   return localeStartIsInteractiveLocaleReady({
     state,
     uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
-    uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),
     criticalKeys: CRITICAL_UI_KEYS_STEP0,
   });
 }
@@ -5777,7 +5782,6 @@ function deriveBootstrapContract(state: CanvasState | null | undefined): Bootstr
     state,
     flags: {
       uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
-      uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),
       uiBootstrapPollActionV1: isUiBootstrapPollActionV1Enabled(),
     },
     criticalKeys: CRITICAL_UI_KEYS_STEP0,
@@ -5786,7 +5790,6 @@ function deriveBootstrapContract(state: CanvasState | null | undefined): Bootstr
 }
 
 function shouldSuppressFallbackText(state: CanvasState | null | undefined): boolean {
-  if (isInteractiveFallbackState(state)) return false;
   if (isUiNoPendingTextSuppressV1Enabled()) return false;
   if (!isUiPendingNoFallbackTextV1Enabled()) return false;
   if (!isNonEnglishPendingUiStringsState(state)) return false;
@@ -5806,7 +5809,6 @@ function applyUiGateState(
     forceRecoverMs: localeStartResolveUiGateForceRecoverMs(process.env.UI_GATE_FORCE_RECOVER_MS),
     flags: {
       uiLocaleReadyGateV1: isUiLocaleReadyGateV1Enabled(),
-      uiInteractiveFallbackV1: isUiInteractiveFallbackV1Enabled(),
       uiBootstrapPollActionV1: isUiBootstrapPollActionV1Enabled(),
     },
     criticalKeys: CRITICAL_UI_KEYS_STEP0,
@@ -5931,10 +5933,11 @@ async function translateUiStringsAtRuntime(
   model: string,
   telemetry?: UiI18nTelemetryCounters | null
 ): Promise<Record<string, string> | null> {
-  const normalizedLang = normalizeLangCode(requestedLang);
+  const normalizedLocale = normalizeLocaleHint(requestedLang) || normalizeLangCode(requestedLang);
+  const normalizedLang = normalizeLangCode(normalizedLocale);
   if (!normalizedLang || normalizedLang === "en") return { ...UI_STRINGS_SOURCE_EN };
 
-  const cached = getUiRuntimeTranslationFromCache(normalizedLang);
+  const cached = getUiRuntimeTranslationFromCache(normalizedLocale);
   if (cached) return cached;
   if (!hasRuntimeTranslationApiConfigured()) {
     bumpUiI18nCounter(telemetry, "translation_fallbacks");
@@ -5948,7 +5951,7 @@ async function translateUiStringsAtRuntime(
 
   const plannerInput = JSON.stringify({
     source_language: "en",
-    target_language: normalizedLang,
+    target_language: normalizedLocale,
     constraints: [
       "Keep all keys exactly as-is.",
       "Keep placeholders like {0}, {1}, N, M, X exactly unchanged.",
@@ -5982,7 +5985,7 @@ async function translateUiStringsAtRuntime(
       bumpUiI18nCounter(telemetry, "translation_fallbacks");
       return null;
     }
-    setUiRuntimeTranslationCache(normalizedLang, cleaned.strings);
+    setUiRuntimeTranslationCache(normalizedLocale, cleaned.strings);
     return cleaned.strings;
   } catch {
     bumpUiI18nCounter(telemetry, "translation_fallbacks");
@@ -6003,6 +6006,7 @@ async function ensureUiStringsForState(
     const forced = {
       ...(state as any),
       language: "en",
+      locale: "en",
       language_locked: "true",
       language_override: "false",
       language_source: "persisted",
@@ -6021,15 +6025,21 @@ async function ensureUiStringsForState(
     } as CanvasState;
     return applyUiGateState(state, forced);
   }
-  const lang = normalizeLangCode(String((state as any).language ?? "")) || "en";
+  const locale =
+    normalizeLocaleHint(
+      String((state as any).locale ?? (state as any).ui_strings_requested_lang ?? (state as any).language ?? "")
+    ) || "en";
+  const lang = normalizeLangCode(locale) || "en";
   if (lang === "en") {
     const englishReady = {
       ...(state as any),
+      locale,
+      language: "en",
       ui_strings: UI_STRINGS_SOURCE_EN,
-      ui_strings_lang: "en",
+      ui_strings_lang: locale,
       ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
       ui_strings_status: "ready",
-      ui_strings_requested_lang: "en",
+      ui_strings_requested_lang: locale,
       ui_bootstrap_status: "ready",
       ui_translation_mode: "full",
       ui_strings_critical_ready: "true",
@@ -6045,11 +6055,13 @@ async function ensureUiStringsForState(
   if (translated) {
     const localizedReady = {
       ...(state as any),
+      locale,
+      language: lang,
       ui_strings: translated,
-      ui_strings_lang: lang,
+      ui_strings_lang: locale,
       ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
       ui_strings_status: "ready",
-      ui_strings_requested_lang: lang,
+      ui_strings_requested_lang: locale,
       ui_bootstrap_status: "ready",
       ui_translation_mode: "full",
       ui_strings_critical_ready: "true",
@@ -6063,11 +6075,13 @@ async function ensureUiStringsForState(
 
   const pending = {
     ...(state as any),
+    locale,
+    language: lang,
     ui_strings: UI_STRINGS_SOURCE_EN,
     ui_strings_lang: "en",
     ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
     ui_strings_status: "pending",
-    ui_strings_requested_lang: lang,
+    ui_strings_requested_lang: locale,
     ui_bootstrap_status: "awaiting_locale",
     ui_translation_mode: "critical_first",
     ui_strings_critical_ready: "false",
@@ -6084,11 +6098,14 @@ function withLanguageDecision(
   state: CanvasState,
   language: string,
   source: LanguageSource,
-  options: { locked: BoolString; override: BoolString }
+  options: { locked: BoolString; override: BoolString; locale?: string }
 ): CanvasState {
+  const normalizedLocale = normalizeLocaleHint(String(options.locale || "")) || normalizeLocaleHint(language) || "";
+  const normalizedLanguage = normalizeLangCode(language) || normalizeLangCode(normalizedLocale) || "";
   return {
     ...(state as any),
-    language,
+    language: normalizedLanguage,
+    locale: normalizedLocale || normalizedLanguage,
     language_locked: options.locked,
     language_override: options.override,
     language_source: source,
@@ -7129,8 +7146,12 @@ function assertRunStepContractOrThrow(response: RunStepSuccess | RunStepError): 
   const uiGateStatus = String(state.ui_gate_status || "").trim();
   const uiGateReason = String(state.ui_gate_reason || "").trim();
   const uiStringsStatus = String(state.ui_strings_status || "").trim().toLowerCase();
-  const uiStringsLang = normalizeContractLang(state.ui_strings_lang || "");
-  const uiStringsRequestedLang = normalizeContractLang(state.ui_strings_requested_lang || "");
+  const locale = normalizeContractLocale(state.locale || "");
+  const language = normalizeContractLang(state.language || locale);
+  const uiStringsLang = normalizeContractLocale(state.ui_strings_lang || "");
+  const uiStringsRequestedLang = normalizeContractLocale(state.ui_strings_requested_lang || "");
+  const uiStringsLangBase = normalizeContractLang(uiStringsLang);
+  const uiStringsRequestedLangBase = normalizeContractLang(uiStringsRequestedLang);
   const fallbackApplied = String(state.ui_strings_fallback_applied || "false").trim() === "true";
   const fallbackReason = String(state.ui_strings_fallback_reason || "").trim();
   const viewContractVersion = String(state.view_contract_version || "").trim();
@@ -7149,6 +7170,9 @@ function assertRunStepContractOrThrow(response: RunStepSuccess | RunStepError): 
   }
   if (uiPayload && (!uiView || !CONTRACT_UI_VIEW_MODES.has(uiViewMode))) {
     throw new Error("invalid_ui_view_mode");
+  }
+  if (!language) {
+    throw new Error("missing_language");
   }
   if (!viewContractVersion) {
     throw new Error("missing_view_contract_version");
@@ -7186,7 +7210,11 @@ function assertRunStepContractOrThrow(response: RunStepSuccess | RunStepError): 
     if (!uiStringsLang) {
       throw new Error("ready_ui_strings_requires_lang");
     }
-    if (uiStringsLang !== uiStringsRequestedLang && !fallbackApplied) {
+    if (
+      uiStringsRequestedLangBase !== "en" &&
+      uiStringsLangBase !== uiStringsRequestedLangBase &&
+      !fallbackApplied
+    ) {
       throw new Error("lang_mismatch_requires_fallback_metadata");
     }
   }
@@ -7244,8 +7272,14 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         : {};
     const currentStep = String(rawObject.current_step_id ?? rawStateObject.current_step ?? STEP_0_ID).trim() || STEP_0_ID;
     const requestedLang =
-      normalizeContractLang(
-        String(rawObject.locale_hint ?? rawStateObject.ui_strings_requested_lang ?? rawStateObject.language ?? "")
+      normalizeContractLocale(
+        String(
+          rawObject.locale_hint ??
+            rawStateObject.ui_strings_requested_lang ??
+            rawStateObject.locale ??
+            rawStateObject.language ??
+            ""
+        )
       ) || "en";
     const blockedState = buildFailClosedState(
       normalizeState(rawStateObject),
@@ -7626,13 +7660,18 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         delete (responseStateForCleanup as any).__last_clicked_action_for_contract;
       }
       const requestedLang =
-        normalizeContractLang(
+        normalizeContractLocale(
           (responseStateForCleanup as any).ui_strings_requested_lang ||
+            (responseStateForCleanup as any).locale ||
             (responseStateForCleanup as any).language ||
             (responseStateForCleanup as any).ui_strings_lang ||
             "en"
         ) || "en";
       (responseStateForCleanup as any).ui_strings_requested_lang = requestedLang;
+      (responseStateForCleanup as any).locale =
+        normalizeContractLocale((responseStateForCleanup as any).locale || requestedLang) || requestedLang;
+      (responseStateForCleanup as any).language =
+        normalizeContractLang((responseStateForCleanup as any).language || (responseStateForCleanup as any).locale) || "en";
       (responseStateForCleanup as any).ui_strings_fallback_applied =
         String((responseStateForCleanup as any).ui_strings_fallback_applied || "false").trim() === "true"
           ? "true"
@@ -7642,9 +7681,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
         CONTRACT_UI_FALLBACK_REASONS.has(fallbackReasonRaw) ? fallbackReasonRaw : "";
       const uiStatus = String((responseStateForCleanup as any).ui_strings_status || "").trim().toLowerCase();
       if (uiStatus === "ready") {
-        (responseStateForCleanup as any).ui_strings_lang = normalizeContractLang(
-          (responseStateForCleanup as any).ui_strings_lang || ""
-        );
+        (responseStateForCleanup as any).ui_strings_lang =
+          normalizeContractLocale(
+            (responseStateForCleanup as any).ui_strings_lang || (responseStateForCleanup as any).locale || ""
+          ) || requestedLang;
       }
       applyUiClientActionContract(responseStateForCleanup);
     }
@@ -7678,7 +7718,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           bootstrap_interactive_ready: false,
           bootstrap_retry_hint: "",
           locale_pending_background: false,
-          interactive_fallback_active: false,
           bootstrap_phase: "failed",
         }
       );
@@ -7714,7 +7753,12 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       phase: String((stateForDecision as any).bootstrap_phase || ""),
       gate_status: String((stateForDecision as any).ui_gate_status || ""),
       gate_reason: String((stateForDecision as any).ui_gate_reason || ""),
-      lang: String((stateForDecision as any).ui_strings_lang || (stateForDecision as any).language || ""),
+      lang: String(
+        (stateForDecision as any).ui_strings_lang ||
+          (stateForDecision as any).locale ||
+          (stateForDecision as any).language ||
+          ""
+      ),
       requested_lang: String((stateForDecision as any).ui_strings_requested_lang || ""),
       fallback_applied: String((stateForDecision as any).ui_strings_fallback_applied || "false"),
       migration_applied: migrationApplied ? "true" : "false",
@@ -7830,7 +7874,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
             bootstrap_interactive_ready: bootstrapContract.ready,
             bootstrap_retry_hint: bootstrapContract.retry_hint,
             locale_pending_background: bootstrapContract.waiting,
-            interactive_fallback_active: isInteractiveFallbackState(state),
             bootstrap_phase: String(bootstrapContract.phase || ""),
           }
         )
@@ -7901,7 +7944,6 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           bootstrap_interactive_ready: false,
           bootstrap_retry_hint: "",
           locale_pending_background: false,
-          interactive_fallback_active: false,
           bootstrap_phase: "failed",
         }
       )

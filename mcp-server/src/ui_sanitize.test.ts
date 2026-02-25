@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { renderInlineText, renderStructuredText } from "../ui/lib/ui_text.js";
-import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.js";
-import { renderChoiceButtons } from "../ui/lib/ui_render.js";
-import { setIsLoading } from "../ui/lib/ui_state.js";
+import { renderInlineText, renderStructuredText } from "../ui/lib/ui_text.ts";
+import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.ts";
+import { renderChoiceButtons } from "../ui/lib/ui_render.ts";
+import { setIsLoading } from "../ui/lib/ui_state.ts";
 
 test("renderInlineText builds STRONG nodes safely", { concurrency: false }, () => {
   const originalDocument = (globalThis as unknown as { document: unknown }).document;
@@ -132,7 +132,7 @@ test("renderInlineText auto-links plain URLs", { concurrency: false }, () => {
   }
 });
 
-test("extractChoicesFromPrompt keeps numbering with <strong> tags and renders buttons", { concurrency: false }, () => {
+test("extractChoicesFromPrompt stays inert while structured ui.actions still render buttons", { concurrency: false }, () => {
   const originalDocument = (globalThis as unknown as { document: unknown }).document;
   const wrap: {
     childNodes: unknown[];
@@ -196,8 +196,9 @@ test("extractChoicesFromPrompt keeps numbering with <strong> tags and renders bu
   setIsLoading(false);
 
   const prompt = "Choose one:\n1) <strong>Alpha</strong>\n2) Beta";
-  const { choices } = extractChoicesFromPrompt(prompt);
-  assert.equal(choices.length, 2);
+  const { promptShown, choices } = extractChoicesFromPrompt(prompt);
+  assert.equal(promptShown, prompt);
+  assert.equal(choices.length, 0);
 
   renderChoiceButtons(choices, {
     specialist: { menu_id: "TEST_MENU" },

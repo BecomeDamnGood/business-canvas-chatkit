@@ -67,7 +67,6 @@ test("applyUiGateState keeps non-EN locale in waiting/retry on timeout without s
     forceRecoverMs: 100,
     flags: {
       uiLocaleReadyGateV1: true,
-      uiInteractiveFallbackV1: true,
       uiBootstrapPollActionV1: true,
     },
     criticalKeys: CRITICAL_KEYS,
@@ -111,7 +110,6 @@ test("applyUiGateState can recover to ready when non-EN language and ui_strings_
     forceRecoverMs: 100,
     flags: {
       uiLocaleReadyGateV1: true,
-      uiInteractiveFallbackV1: true,
       uiBootstrapPollActionV1: true,
     },
     criticalKeys: CRITICAL_KEYS,

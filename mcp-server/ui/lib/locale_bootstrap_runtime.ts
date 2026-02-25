@@ -1,17 +1,7 @@
-export type PayloadSource =
-  | "meta.widget_result"
-  | "none";
+export type PayloadSource = "meta.widget_result" | "none";
 
-export type WaitingReason = "missing_state" | "i18n_pending" | "both" | "none";
-export type BootstrapPhase =
-  | "init"
-  | "waiting_state"
-  | "waiting_locale"
-  | "waiting_both"
-  | "interactive_fallback"
-  | "ready"
-  | "recovery"
-  | "failed";
+export type WaitingReason = "missing_state" | "i18n_pending" | "none";
+export type BootstrapPhase = "waiting_locale" | "ready" | "recovery" | "failed";
 export type BootstrapRenderMode = "wait_shell" | "interactive" | "recovery";
 
 export type ResolvedWidgetPayload = {
@@ -80,11 +70,7 @@ function toLower(value: unknown): string {
 function normalizeBootstrapPhase(raw: unknown): BootstrapPhase | "" {
   const phase = toLower(raw);
   if (
-    phase === "init" ||
-    phase === "waiting_state" ||
     phase === "waiting_locale" ||
-    phase === "waiting_both" ||
-    phase === "interactive_fallback" ||
     phase === "ready" ||
     phase === "recovery" ||
     phase === "failed"
@@ -98,11 +84,9 @@ function normalizeUiStringsStatus(
   raw: unknown
 ): "ready" | "pending" | "critical_ready" | "unknown" {
   const status = toLower(raw);
-  if (
-    status === "ready" ||
-    status === "pending" ||
-    status === "critical_ready"
-  ) return status as "ready" | "pending" | "critical_ready";
+  if (status === "ready" || status === "pending" || status === "critical_ready") {
+    return status;
+  }
   if (status === "full_ready") return "critical_ready";
   if (status === "error") return "pending";
   return "unknown";
@@ -119,14 +103,7 @@ function phaseFromViewMode(raw: unknown): BootstrapPhase | "" {
 
 function renderModeFromPhase(phase: BootstrapPhase): BootstrapRenderMode {
   if (phase === "recovery" || phase === "failed") return "recovery";
-  if (
-    phase === "waiting_state" ||
-    phase === "waiting_locale" ||
-    phase === "waiting_both" ||
-    phase === "interactive_fallback"
-  ) {
-    return "wait_shell";
-  }
+  if (phase === "waiting_locale") return "wait_shell";
   return "interactive";
 }
 
@@ -137,7 +114,10 @@ export function isWidgetResultLike(value: unknown): value is Record<string, unkn
   if (!keys.length) return false;
   if (typeof (rec as { html?: unknown }).html === "string" && keys.length <= 2) return false;
   const state = rec.state;
-  if (state !== undefined && (typeof state !== "object" || state === null || Array.isArray(state))) {
+  if (
+    state !== undefined &&
+    (typeof state !== "object" || state === null || Array.isArray(state))
+  ) {
     return false;
   }
   for (const key of keys) {
@@ -168,9 +148,9 @@ function sessionInfoForResult(result: Record<string, unknown>): {
     response_seq: parsePositiveInt(state.response_seq || result.response_seq),
     host_widget_session_id: String(
       state.host_widget_session_id ||
-      result.host_widget_session_id ||
-      (toRecord(result.ui).flags && toRecord(toRecord(result.ui).flags).host_widget_session_id) ||
-      ""
+        result.host_widget_session_id ||
+        (toRecord(result.ui).flags && toRecord(toRecord(result.ui).flags).host_widget_session_id) ||
+        ""
     ).trim(),
   };
 }
@@ -186,9 +166,7 @@ export function mergeToolOutputWithResponseMetadata(
 
   const mergedMeta = toRecord(merged._meta);
   const metadataMeta = toRecord(metadata._meta);
-  const mergedMetaNext: Record<string, unknown> = { ...mergedMeta, ...metadataMeta };
-  merged._meta = mergedMetaNext;
-  merged.toolResponseMetadata = metadata;
+  merged._meta = { ...mergedMeta, ...metadataMeta };
   return merged;
 }
 
@@ -198,14 +176,11 @@ function pickWidgetResultFromMeta(raw: unknown): {
 } {
   const root = toRecord(raw);
   const meta = toRecord(root._meta);
-  const ordered: Array<{ source: PayloadSource; value: unknown }> = [
-    { source: "meta.widget_result", value: meta.widget_result },
-  ];
-  for (const candidate of ordered) {
-    if (!isWidgetResultLike(candidate.value)) continue;
+  const candidate = meta.widget_result;
+  if (isWidgetResultLike(candidate)) {
     return {
-      result: candidate.value as Record<string, unknown>,
-      source: candidate.source,
+      result: candidate as Record<string, unknown>,
+      source: "meta.widget_result",
     };
   }
   return {
@@ -222,20 +197,22 @@ function resolveLanguageForPayload(result: Record<string, unknown>): {
   const fromStateLanguage = toLower(state.language);
   if (fromStateLanguage) return { language: fromStateLanguage, source: "state.language" };
   const fromStateRequestedLang = toLower(state.ui_strings_requested_lang);
-  if (fromStateRequestedLang) return { language: fromStateRequestedLang, source: "state.ui_strings_requested_lang" };
+  if (fromStateRequestedLang) {
+    return { language: fromStateRequestedLang, source: "state.ui_strings_requested_lang" };
+  }
   const fromStateUiLang = toLower(state.ui_strings_lang);
   if (fromStateUiLang) return { language: fromStateUiLang, source: "state.ui_strings_lang" };
   return { language: "", source: "none" };
 }
 
-function normalizeUiStringsStatusFromResult(result: Record<string, unknown>): ResolvedWidgetPayload["ui_strings_status"] {
+function normalizeUiStringsStatusFromResult(
+  result: Record<string, unknown>
+): ResolvedWidgetPayload["ui_strings_status"] {
   const state = toRecord(result.state);
   return normalizeUiStringsStatus(state.ui_strings_status);
 }
 
-export function computeHydrationState(
-  resolved: ResolvedWidgetPayload
-): HydrationStatus {
+export function computeHydrationState(resolved: ResolvedWidgetPayload): HydrationStatus {
   const state = toRecord(resolved.result.state);
   const hasState = Object.keys(state).length > 0;
   const currentStep = hasState ? String(state.current_step || "").trim() : "";
@@ -244,10 +221,8 @@ export function computeHydrationState(
   const terminalGate = uiGateStatus === "blocked" || uiGateStatus === "failed";
   const i18nPending = !terminalGate && uiGateStatus === "waiting_locale";
   let waitingReason: WaitingReason = "none";
-  if (terminalGate) waitingReason = "none";
-  else if (needsHydration && i18nPending) waitingReason = "both";
-  else if (needsHydration) waitingReason = "missing_state";
-  else if (i18nPending) waitingReason = "i18n_pending";
+  if (!terminalGate && needsHydration) waitingReason = "missing_state";
+  if (!terminalGate && i18nPending) waitingReason = "i18n_pending";
   return {
     needs_hydration: needsHydration,
     retry_count: 0,
@@ -256,9 +231,7 @@ export function computeHydrationState(
   };
 }
 
-export function resolveWidgetPayload(
-  raw: unknown
-): ResolvedWidgetPayload {
+export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
   const primary = pickWidgetResultFromMeta(raw);
   const result = primary.result;
   const payloadSource: PayloadSource = Object.keys(primary.result).length ? primary.source : "none";
@@ -283,7 +256,6 @@ export function resolveWidgetPayload(
     bootstrap_epoch: sessionInfo.bootstrap_epoch,
     response_seq: sessionInfo.response_seq,
     response_kind: (() => {
-      const state = toRecord(result.state);
       const kind = String(state.response_kind || result.response_kind || "").trim();
       if (kind === "run_step") return kind;
       return "";
@@ -315,9 +287,7 @@ export function extractBootstrapOrdering(raw: unknown): BootstrapOrdering {
   };
 }
 
-export function normalizeToolOutput(
-  raw: unknown
-): Record<string, unknown> {
+export function normalizeToolOutput(raw: unknown): Record<string, unknown> {
   const resolved = resolveWidgetPayload(raw);
   if (Object.keys(resolved.result).length) return { result: resolved.result };
   return {};
@@ -332,34 +302,28 @@ export function computeBootstrapRenderState(params: {
   hasState?: boolean;
   hasCurrentStep?: boolean;
 }): BootstrapRenderState {
-  const { uiFlags, uiView } = params;
   void params.hydration;
   void params.uiStringsStatus;
+  void params.uiFlags;
   void params.localeKnownNonEn;
   void params.hasState;
   void params.hasCurrentStep;
-  const serverExplicitWaiting = toLower(uiView.mode) === "waiting_locale" || uiView.waiting_locale === true;
-  const phaseFromMode = phaseFromViewMode(uiView.mode);
-  const finalPhase: BootstrapPhase = phaseFromMode || "waiting_state";
+  const mode = toLower(params.uiView.mode);
+  const serverExplicitWaiting = mode === "waiting_locale" || params.uiView.waiting_locale === true;
+  const phaseFromMode = phaseFromViewMode(params.uiView.mode);
+  const finalPhase: BootstrapPhase = phaseFromMode || "waiting_locale";
 
-  const waitingForMissingState = finalPhase === "waiting_state" || finalPhase === "waiting_both";
-  const waitingForI18n = finalPhase === "waiting_locale" || finalPhase === "waiting_both";
-  const bootstrapWaitingLocale =
-    finalPhase === "failed"
-        ? false
-      : (waitingForI18n || serverExplicitWaiting);
-  const effectivePhase: BootstrapPhase =
-    bootstrapWaitingLocale && finalPhase === "ready" ? "waiting_locale" : finalPhase;
-  const interactiveFallbackActive =
-    bootstrapWaitingLocale && uiFlags.interactive_fallback_active === true;
+  const waitingForI18n = finalPhase === "waiting_locale";
+  const bootstrapWaitingLocale = finalPhase !== "failed" && waitingForI18n;
+
   return {
-    phase: effectivePhase,
-    render_mode: renderModeFromPhase(effectivePhase),
-    waitingForMissingState,
+    phase: finalPhase,
+    render_mode: renderModeFromPhase(finalPhase),
+    waitingForMissingState: false,
     waitingForI18n,
     serverExplicitWaiting,
     forceLocaleWait: false,
     bootstrapWaitingLocale,
-    interactiveFallbackActive,
+    interactiveFallbackActive: false,
   };
 }

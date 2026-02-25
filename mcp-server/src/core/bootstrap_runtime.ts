@@ -24,7 +24,6 @@ export const DEFAULT_UI_GATE_FORCE_RECOVER_MS = 4000;
 
 export type LocaleUiFlags = {
   uiLocaleReadyGateV1: boolean;
-  uiInteractiveFallbackV1: boolean;
   uiBootstrapPollActionV1: boolean;
 };
 
@@ -38,16 +37,45 @@ export function resolveUiGateForceRecoverMs(raw: unknown, fallbackMs = DEFAULT_U
   return Math.trunc(parsed);
 }
 
+export function normalizeLocaleTag(raw: string): string {
+  const normalizedRaw = String(raw || "")
+    .trim()
+    .replace(/_/g, "-")
+    .replace(/-{2,}/g, "-");
+  if (!normalizedRaw) return "";
+  const parts = normalizedRaw
+    .split("-")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return "";
+  const languagePart = parts[0] || "";
+  if (!/^[A-Za-z]{2,3}$/.test(languagePart)) return "";
+  const language = languagePart.toLowerCase();
+  if (language === "und") return "";
+  const rest: string[] = [];
+  for (const part of parts.slice(1)) {
+    if (!/^[A-Za-z0-9]{1,8}$/.test(part)) return "";
+    if (/^[A-Za-z]{4}$/.test(part)) {
+      rest.push(part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+      continue;
+    }
+    if (/^[A-Za-z]{2}$/.test(part) || /^[0-9]{3}$/.test(part)) {
+      rest.push(part.toUpperCase());
+      continue;
+    }
+    rest.push(part.toLowerCase());
+  }
+  return [language, ...rest].join("-");
+}
+
 export function normalizeLangCode(raw: string): string {
-  const s = String(raw || "").trim().toLowerCase();
-  if (!s || s === "und") return "";
-  return s.split(/[-_]/)[0] || "";
+  const locale = normalizeLocaleTag(raw);
+  if (!locale) return "";
+  return locale.split("-")[0] || "";
 }
 
 export function normalizeLocaleHint(raw: string): string {
-  const normalized = normalizeLangCode(String(raw || ""));
-  if (!/^[a-z]{2,3}$/.test(normalized)) return "";
-  return normalized;
+  return normalizeLocaleTag(String(raw || ""));
 }
 
 export function countAlphaChars(input: string): number {
@@ -117,16 +145,13 @@ export function isInteractiveFallbackState(params: {
   uiInteractiveFallbackV1: boolean;
   criticalKeys?: string[];
 }): boolean {
-  const { state, uiInteractiveFallbackV1 } = params;
-  if (!uiInteractiveFallbackV1) return false;
-  if (!isNonEnglishPendingUiStringsState(state)) return false;
-  return true;
+  void params;
+  return false;
 }
 
 export function isInteractiveLocaleReady(params: {
   state: CanvasState | null | undefined;
   uiLocaleReadyGateV1: boolean;
-  uiInteractiveFallbackV1: boolean;
   criticalKeys: string[];
 }): boolean {
   const { state, uiLocaleReadyGateV1, criticalKeys } = params;
@@ -283,10 +308,7 @@ export function applyUiGateState(params: {
       !targetLang ||
       targetLang === "en" ||
       (resolvedUiStringsLang ? resolvedUiStringsLang === targetLang : requestedUiStringsLang === targetLang);
-    const canReady =
-      criticalRenderable &&
-      uiLanguageAligned &&
-      (uiStatus === "ready" || flags.uiInteractiveFallbackV1);
+    const canReady = criticalRenderable && uiLanguageAligned && uiStatus === "ready";
     if (canReady) {
       return {
         ...(normalizedNextState as any),
@@ -349,37 +371,23 @@ export function parseExplicitLanguageOverride(message: string): string {
   const raw = String(message ?? "").trim().toLowerCase();
   if (!raw) return "";
 
-  const codeMatch = raw.match(/\b(lang|language)\s*[:=]\s*([a-z]{2,3})\b/);
+  const codeMatch = raw.match(
+    /\b(lang|language|locale)\s*[:=]\s*([a-z]{2,3}(?:[-_][a-z0-9]{2,8}){0,5})\b/i
+  );
   if (codeMatch && codeMatch[2]) {
-    const code = codeMatch[2].slice(0, 2);
-    return code;
+    return normalizeLocaleHint(codeMatch[2]);
   }
 
-  const keywords = [
-    "switch", "change", "use", "speak", "language", "lang",
-  ];
+  const directCode = normalizeLocaleHint(raw);
+  if (directCode) return directCode;
+
+  const keywords = ["switch", "change", "use", "speak", "language", "lang", "locale"];
   const hasKeyword = keywords.some((k) => raw.includes(k));
   if (!hasKeyword) return "";
 
-  const nameMap: Record<string, string> = {
-    english: "en",
-    german: "de",
-    deutsch: "de",
-    french: "fr",
-    spanish: "es",
-    italian: "it",
-    portuguese: "pt",
-    chinese: "zh",
-    japanese: "ja",
-    korean: "ko",
-    arabic: "ar",
-    hindi: "hi",
-    turkish: "tr",
-    russian: "ru",
-  };
-
-  for (const [name, code] of Object.entries(nameMap)) {
-    if (raw.includes(name)) return code;
+  const contextCode = raw.match(/\b(?:to|in|use)\s+([a-z]{2,3}(?:[-_][a-z0-9]{2,8}){0,5})\b/i);
+  if (contextCode && contextCode[1]) {
+    return normalizeLocaleHint(contextCode[1]);
   }
 
   return "";
@@ -414,7 +422,7 @@ export async function resolveLanguageForTurn(params: {
       state: CanvasState,
       language: string,
       source: LanguageSource,
-      options: { locked: BoolString; override: BoolString }
+      options: { locked: BoolString; override: BoolString; locale?: string }
     ) => CanvasState;
   };
   telemetry?: unknown;
@@ -448,14 +456,16 @@ export async function resolveLanguageForTurn(params: {
 
   const explicit = msg.trim() ? parseExplicitLanguageOverride(msg) : "";
   if (explicit) {
-    const next = deps.withLanguageDecision(state, explicit, "explicit_override", {
+    const next = deps.withLanguageDecision(state, normalizeLangCode(explicit), "explicit_override", {
       locked: "true",
       override: "true",
+      locale: explicit,
     });
     return deps.ensureUiStringsForState(next, model, telemetry);
   }
 
-  const current = String((state as any).language ?? "").trim().toLowerCase();
+  const currentLocale = normalizeLocaleHint(String((state as any).locale ?? ""));
+  const current = normalizeLangCode(String((state as any).language ?? "")) || normalizeLangCode(currentLocale);
   const currentSource = deps.normalizeLanguageSource((state as any).language_source);
   const locked = String((state as any).language_locked ?? "false") === "true";
   const override = String((state as any).language_override ?? "false") === "true";
@@ -465,6 +475,7 @@ export async function resolveLanguageForTurn(params: {
       : deps.withLanguageDecision(state, current, "explicit_override", {
           locked: "true",
           override: "true",
+          locale: currentLocale || current,
         });
     return deps.ensureUiStringsForState(persisted, model, telemetry);
   }
@@ -485,6 +496,7 @@ export async function resolveLanguageForTurn(params: {
 
   if (deps.isUiLangSourceResolverV1Enabled() && localeHint) {
     const isWidgetTurn = inputMode === "widget";
+    const localeHintLanguage = normalizeLangCode(localeHint);
     const isBrowserLocaleHint = localeHintSource === "webplus_i18n";
     const hasDetectableMessage = countAlphaChars(msg) >= languageMinAlpha;
     const shouldDeferToMessageDetect =
@@ -506,9 +518,10 @@ export async function resolveLanguageForTurn(params: {
       if (current && current !== localeHint) {
         deps.bumpUiI18nCounter(telemetry, "language_source_overridden_count");
       }
-      const next = deps.withLanguageDecision(state, localeHint, "locale_hint", {
+      const next = deps.withLanguageDecision(state, localeHintLanguage, "locale_hint", {
         locked: "true",
         override: "false",
+        locale: localeHint,
       });
       return deps.ensureUiStringsForState(next, model, telemetry);
     }
@@ -520,6 +533,7 @@ export async function resolveLanguageForTurn(params: {
       : deps.withLanguageDecision(state, current, "persisted", {
           locked: "true",
           override: "false",
+          locale: currentLocale || current,
         });
     return deps.ensureUiStringsForState(persisted, model, telemetry);
   }
@@ -529,6 +543,7 @@ export async function resolveLanguageForTurn(params: {
       ? deps.withLanguageDecision(state, current, "persisted", {
           locked: locked ? "true" : "false",
           override: override ? "true" : "false",
+          locale: currentLocale || current,
         })
       : state;
     return deps.ensureUiStringsForState(persisted, model, telemetry);
@@ -540,6 +555,7 @@ export async function resolveLanguageForTurn(params: {
       ? deps.withLanguageDecision(state, current, "persisted", {
           locked: locked ? "true" : "false",
           override: override ? "true" : "false",
+          locale: currentLocale || current,
         })
       : state;
     return deps.ensureUiStringsForState(persisted, model, telemetry);
@@ -548,6 +564,7 @@ export async function resolveLanguageForTurn(params: {
   const next = deps.withLanguageDecision(state, detected.lang, "message_detect", {
     locked: "true",
     override: "false",
+    locale: detected.lang,
   });
 
   return deps.ensureUiStringsForState(next, model, telemetry);

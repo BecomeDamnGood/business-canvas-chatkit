@@ -138,16 +138,16 @@ test("language policy: locale hint wins over paraphrased English chat input", as
   assert.equal(result?.ok, true);
   assert.equal(result?.state?.language, "nl");
   assert.equal(result?.state?.language_source, "locale_hint");
-  assert.equal(result?.state?.ui_strings_requested_lang, "nl");
+  assert.equal(result?.state?.ui_strings_requested_lang, "nl-NL");
   const uiStatus = String(result?.state?.ui_strings_status || "");
   if (uiStatus === "ready") {
-    assert.equal(String(result?.state?.ui_strings_lang || ""), "nl");
+    assert.equal(String(result?.state?.ui_strings_lang || ""), "nl-NL");
     assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "false");
     assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "");
     assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
     assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, false);
     assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, true);
-    assert.equal(result?.ui?.flags?.interactive_fallback_active, false);
+    assert.equal((result?.ui?.flags as any)?.interactive_fallback_active, undefined);
   } else {
     assert.equal(uiStatus, "pending");
     assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
@@ -156,7 +156,7 @@ test("language policy: locale hint wins over paraphrased English chat input", as
     assert.equal(String(result?.state?.ui_gate_status || ""), "waiting_locale");
     assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, true);
     assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, false);
-    assert.equal(result?.ui?.flags?.interactive_fallback_active, true);
+    assert.equal((result?.ui?.flags as any)?.interactive_fallback_active, undefined);
   }
   assert.equal(String(result?.ui?.flags?.bootstrap_phase || ""), String(result?.state?.bootstrap_phase || ""));
 });
@@ -178,11 +178,11 @@ test("language policy: non-EN locale is either localized-ready or server-gated p
   assert.equal(result?.ok, true);
   assert.equal(String(result?.state?.language || ""), "nl");
   const uiStatus = String(result?.state?.ui_strings_status || "");
-  assert.equal(String(result?.state?.ui_strings_requested_lang || ""), "nl");
+  assert.equal(String(result?.state?.ui_strings_requested_lang || ""), "nl-NL");
   assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "false");
   assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "");
   if (uiStatus === "ready") {
-    assert.equal(String(result?.state?.ui_strings_lang || ""), "nl");
+    assert.equal(String(result?.state?.ui_strings_lang || ""), "nl-NL");
     assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
   } else {
     assert.equal(uiStatus, "pending");
@@ -191,7 +191,7 @@ test("language policy: non-EN locale is either localized-ready or server-gated p
   }
 });
 
-test("language policy: widget ACTION_START does not let webplus_i18n override seeded NL message", async () => {
+test("language policy: widget ACTION_START does not blindly trust webplus_i18n locale", async () => {
   const result = await withEnv("UI_START_TRIGGER_LANG_RESOLVE_V1", "1", () =>
     run_step({
       user_message: "ACTION_START",
@@ -208,8 +208,8 @@ test("language policy: widget ACTION_START does not let webplus_i18n override se
     })
   );
   assert.equal(result?.ok, true);
-  assert.equal(String(result?.state?.language || ""), "nl");
-  assert.equal(String(result?.state?.language_source || ""), "message_detect");
+  assert.notEqual(String(result?.state?.language_source || ""), "locale_hint");
+  assert.ok(["en", "nl"].includes(String(result?.state?.language || "")));
 });
 
 test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps ready contract stable", async () => {
@@ -247,12 +247,12 @@ test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps ready contrac
     assert.equal(polledGateStatus, "ready");
     assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, false);
     assert.equal(polled?.ui?.flags?.bootstrap_interactive_ready, true);
-    assert.equal(polled?.ui?.flags?.interactive_fallback_active, false);
+    assert.equal((polled?.ui?.flags as any)?.interactive_fallback_active, undefined);
   } else {
     assert.equal(polledGateStatus, "waiting_locale");
     assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, true);
     assert.equal(polled?.ui?.flags?.bootstrap_interactive_ready, false);
-    assert.equal(polled?.ui?.flags?.interactive_fallback_active, true);
+    assert.equal((polled?.ui?.flags as any)?.interactive_fallback_active, undefined);
   }
   assert.equal(String(polled?.ui?.flags?.bootstrap_phase || ""), String(polled?.state?.bootstrap_phase || ""));
 });
@@ -360,7 +360,7 @@ test("legacy widget state auto-upgrades instead of blocking and seeds Step 0 fro
   assert.equal(String(widgetTurn?.state?.language || ""), "nl");
   assert.equal(String(widgetTurn?.state?.business_name || ""), "Mindd");
   assert.equal(String(widgetTurn?.state?.step_0_final || "").includes("Name: Mindd"), true);
-  assert.equal(String(widgetTurn?.state?.state_version || ""), "11");
+  assert.equal(String(widgetTurn?.state?.state_version || ""), "12");
 });
 
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {

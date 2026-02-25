@@ -6,7 +6,7 @@ import {
   render,
   renderChoiceButtons,
   stripStructuredChoiceLines,
-} from "../ui/lib/ui_render.js";
+} from "../ui/lib/ui_render.ts";
 import {
   computeBootstrapRenderState,
   computeHydrationState,
@@ -15,8 +15,8 @@ import {
   resolveWidgetPayload,
   resolveAllowedHostOrigin,
   resetHydrationRetryCycle,
-} from "../ui/lib/ui_actions.js";
-import { setSessionStarted, setSessionWelcomeShown } from "../ui/lib/ui_state.js";
+} from "../ui/lib/ui_actions.ts";
+import { setSessionStarted, setSessionWelcomeShown } from "../ui/lib/ui_state.ts";
 
 test.beforeEach(() => {
   setSessionStarted(false);
@@ -1071,14 +1071,13 @@ test("computeBootstrapRenderState returns waiting_locale phase for non-EN pendin
     uiFlags: {
       bootstrap_waiting_locale: true,
       bootstrap_interactive_ready: false,
-      interactive_fallback_active: false,
     },
     uiView: { mode: "waiting_locale", waiting_locale: true },
     localeKnownNonEn: true,
     hasState: true,
     hasCurrentStep: true,
   });
-  assert.ok(state.phase === "waiting_locale" || state.phase === "waiting_both");
+  assert.equal(state.phase, "waiting_locale");
   assert.equal(state.bootstrapWaitingLocale, true);
   assert.equal(state.interactiveFallbackActive, false);
   assert.equal(state.waitingForMissingState, false);
@@ -1090,7 +1089,7 @@ test("render source ignores empty or mismatched locale override maps", () => {
   assert.match(source, /setRuntimeUiStrings\(hasOverrideStrings \? overrideStringsMap : \{\}\);/);
 });
 
-test("computeBootstrapRenderState maps interactive_fallback payloads to waiting_locale", () => {
+test("computeBootstrapRenderState ignores interactive_fallback marker and stays waiting_locale", () => {
   const state = computeBootstrapRenderState({
     hydration: {
       needs_hydration: false,
@@ -1102,7 +1101,6 @@ test("computeBootstrapRenderState maps interactive_fallback payloads to waiting_
     uiFlags: {
       bootstrap_waiting_locale: true,
       bootstrap_interactive_ready: true,
-      interactive_fallback_active: true,
       bootstrap_phase: "interactive_fallback",
     },
     uiView: { mode: "waiting_locale", waiting_locale: true, bootstrap_phase: "interactive_fallback" },
@@ -1110,9 +1108,9 @@ test("computeBootstrapRenderState maps interactive_fallback payloads to waiting_
     hasState: true,
     hasCurrentStep: true,
   });
-  assert.ok(state.phase === "waiting_locale" || state.phase === "waiting_both");
+  assert.equal(state.phase, "waiting_locale");
   assert.equal(state.bootstrapWaitingLocale, true);
-  assert.equal(state.interactiveFallbackActive, true);
+  assert.equal(state.interactiveFallbackActive, false);
   assert.equal(state.waitingForI18n, true);
 });
 
@@ -1128,7 +1126,6 @@ test("computeBootstrapRenderState honors explicit waiting_locale mode over clien
     uiFlags: {
       bootstrap_waiting_locale: true,
       bootstrap_interactive_ready: false,
-      interactive_fallback_active: false,
     },
     uiView: { mode: "waiting_locale", waiting_locale: true },
     localeKnownNonEn: true,
@@ -1146,7 +1143,7 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /function normalizeHostToolResultNotification\(/);
   assert.match(source, /function ingestHostPayload\(/);
   assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
-  assert.match(source, /const toolOutputCandidate = params\.result;/);
+  assert.match(source, /const toolOutputCandidate = params\.toolOutput;/);
   assert.match(source, /mergeToolOutputWithResponseMetadata\(toolOutputCandidate, metadata\)/);
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
   assert.match(source, /notifyHostTransportSignal\("bridge_message"\)/);
@@ -1209,7 +1206,7 @@ test("render keeps non-EN pending locale in explicit wait view without EN presta
   (globalThis as any).openai = originalOpenai;
 });
 
-test("render prioritizes waiting gate over inconsistent prestart mode during startup grace", () => {
+test("render follows explicit server prestart mode during startup grace", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -1246,8 +1243,8 @@ test("render prioritizes waiting gate over inconsistent prestart mode during sta
     },
   }));
 
-  assert.equal(String(btnStart.style.display || ""), "none");
-  assert.equal((cardDesc.childNodes || []).length, 0);
+  assert.equal(String(btnStart.style.display || ""), "inline-flex");
+  assert.ok((cardDesc.childNodes || []).length > 0);
   resetHydrationRetryCycle();
   (globalThis as any).__BSC_STARTUP_GRACE_UNTIL_MS = originalGraceUntil;
   (globalThis as any).document = originalDocument;
@@ -1372,29 +1369,28 @@ test("ui actions source has bridge timeout guard", () => {
   assert.match(source, /setTimeout\(\(\) => \{[\s\S]*reject\(new Error\("bridge timeout"\)\);[\s\S]*\}, BRIDGE_RESPONSE_TIMEOUT_MS\);/);
 });
 
-test("computeBootstrapRenderState defaults to waiting_state without explicit server locale wait", () => {
+test("computeBootstrapRenderState defaults to waiting_locale without explicit server mode", () => {
   const state = computeBootstrapRenderState({
     hydration: {
       needs_hydration: true,
       retry_count: 0,
       retry_exhausted: false,
-      waiting_reason: "both",
+      waiting_reason: "missing_state",
     },
     uiStringsStatus: "pending",
     uiFlags: {
       bootstrap_waiting_locale: true,
       bootstrap_interactive_ready: false,
-      interactive_fallback_active: false,
     },
     uiView: {},
     localeKnownNonEn: true,
     hasState: false,
     hasCurrentStep: false,
   });
-  assert.equal(state.phase, "waiting_state");
-  assert.equal(state.waitingForMissingState, true);
-  assert.equal(state.waitingForI18n, false);
-  assert.equal(state.bootstrapWaitingLocale, false);
+  assert.equal(state.phase, "waiting_locale");
+  assert.equal(state.waitingForMissingState, false);
+  assert.equal(state.waitingForI18n, true);
+  assert.equal(state.bootstrapWaitingLocale, true);
 });
 
 test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result", () => {

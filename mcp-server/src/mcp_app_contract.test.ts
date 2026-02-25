@@ -29,11 +29,17 @@ test("MCP app contract: run_step is not idempotent-hinted", () => {
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*idempotentHint:\s*false/);
 });
 
-test("MCP app contract: run_step owns outputTemplate + widgetAccessible", () => {
+test("MCP app contract: run_step owns ui.resourceUri + outputTemplate alias + widgetAccessible", () => {
+  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*ui:\s*\{[\s\S]*resourceUri:\s*uiResourceUri/);
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/outputTemplate": uiResourceUri/);
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/widgetAccessible": true/);
 });
 
 test("MCP app contract: run_step visibility remains model+app", () => {
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*visibility:\s*\["model",\s*"app"\]/);
+});
+
+test("MCP app contract: run_step declares invocation status strings", () => {
+  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/toolInvocation\/invoking":\s*"Thinking\.\.\."/);
+  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/toolInvocation\/invoked":\s*"Updated"/);
 });

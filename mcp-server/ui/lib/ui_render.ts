@@ -469,7 +469,6 @@ export function render(overrideToolOutput?: unknown): void {
     serverExplicitBlocked ||
     serverExplicitFailed;
   const bootstrapWaitingLocale = serverExplicitWaiting;
-  const interactiveFallbackActive = bootstrapWaitingLocale && uiFlags.interactive_fallback_active === true;
   const waitingGateActive = bootstrapWaitingLocale;
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
@@ -539,7 +538,7 @@ export function render(overrideToolOutput?: unknown): void {
   const current =
     !showPreStart ? (state.current_step as string) || "step_0" : "step_0";
   const idx = stepIndex(current);
-  const stepTitle = bootstrapWaitingLocale && !interactiveFallbackActive
+  const stepTitle = bootstrapWaitingLocale
     ? ""
     : current === "step_0"
       ? uiText(lang, "stepLabel.validation", "")
@@ -556,7 +555,7 @@ export function render(overrideToolOutput?: unknown): void {
   const isLoading = getIsLoading();
 
   if (
-    (waitingGateActive && !interactiveFallbackActive) ||
+    waitingGateActive ||
     serverExplicitBlocked ||
     serverExplicitFailed ||
     serverExplicitRecovery
@@ -612,10 +611,6 @@ export function render(overrideToolOutput?: unknown): void {
   }
 
   setStaticStrings(lang);
-  if (bootstrapWaitingLocale && interactiveFallbackActive) {
-    const uiSubtitle = document.getElementById("uiSubtitle");
-    if (uiSubtitle) uiSubtitle.textContent = "";
-  }
 
   const specialist = (result?.specialist as Record<string, unknown>) || {};
   const sectionTitleEl = document.getElementById("sectionTitle");
@@ -671,7 +666,7 @@ export function render(overrideToolOutput?: unknown): void {
     return;
   }
 
-  inputWrap.style.display = "flex";
+  inputWrap.style.display = "none";
   inputWrap.classList.toggle("is-step0-ask-layout", current === "step_0");
   (btnStart as HTMLElement).style.display = "none";
   startHint.textContent = "";
@@ -719,8 +714,29 @@ export function render(overrideToolOutput?: unknown): void {
   } else {
     body = bodyRaw || "";
   }
-
   const cardDescEl = document.getElementById("cardDesc");
+
+  const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
+  const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
+  const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
+  if (!hasRenderableInteractiveContent) {
+    const choiceWrap = document.getElementById("choiceWrap");
+    if (choiceWrap) choiceWrap.style.display = "none";
+    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    if (cardDescEl) {
+      cardDescEl.classList.remove("has-grid");
+      cardDescEl.classList.remove("is-step0-ask-layout");
+      renderBootstrapWaitShell(cardDescEl, lang);
+    }
+    const prompt = document.getElementById("prompt");
+    if (prompt) prompt.textContent = "";
+    inputWrap.style.display = "none";
+    setSendEnabled(false);
+    if (isLoading) setLoading(false);
+    return;
+  }
+
   if (cardDescEl) {
     cardDescEl.style.display = "block";
     cardDescEl.classList.add("has-grid");
@@ -1120,7 +1136,10 @@ export function render(overrideToolOutput?: unknown): void {
   const choiceMode =
     !requireWordingPick && (renderedChoiceButtons || hasStructuredActions);
 
-  inputWrap.style.display = "flex";
+  const textSubmitActionCode = String((state as Record<string, unknown>).ui_action_text_submit || "").trim();
+  const textSubmitAvailable = textSubmitActionCode.length > 0;
+  inputWrap.style.display = choiceMode || !textSubmitAvailable ? "none" : "flex";
+  if (!textSubmitAvailable) setSendEnabled(false);
   const sde = document.getElementById("btnStartDreamExercise");
   const sb = document.getElementById("btnSwitchToSelfDream");
 

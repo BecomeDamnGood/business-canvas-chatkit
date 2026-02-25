@@ -54,16 +54,14 @@ const serverTs = readUtf8(serverTsPath);
 const distServerJs = readUtf8(distServerJsPath);
 const buildUiScript = readUtf8(buildUiScriptPath);
 
-assertIncludes(
-  srcRenderTs,
-  'ensureBootstrapRetryForResult(data, { source: "render" });',
-  "ui/lib/ui_render.ts"
-);
-assertIncludes(srcRenderTs, "const bootstrapWaitingLocale =", "ui/lib/ui_render.ts");
-assertExcludes(srcRenderTs, "pendingNonEnglishByState", "ui/lib/ui_render.ts");
+assertIncludes(srcRenderTs, "const hasExplicitServerRouting =", "ui/lib/ui_render.ts");
+assertIncludes(srcRenderTs, "renderBootstrapWaitShell(", "ui/lib/ui_render.ts");
+assertIncludes(srcRenderTs, "const hasRenderableInteractiveContent =", "ui/lib/ui_render.ts");
+assertExcludes(srcRenderTs, "interactive_fallback_active", "ui/lib/ui_render.ts");
 
 assertIncludes(srcActionsTs, "export function ensureBootstrapRetryForResult(", "ui/lib/ui_actions.ts");
 assertExcludes(srcActionsTs, "__locale_wait_retry", "ui/lib/ui_actions.ts");
+assertExcludes(srcActionsTs, "interactive_fallback_active", "ui/lib/ui_actions.ts");
 
 assertIncludes(
   srcMainTs,
@@ -75,7 +73,7 @@ assertIncludes(
   'handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });',
   "ui/lib/main.ts"
 );
-assertIncludes(srcMainTs, 'callRunStep("ACTION_START", { started: "true" });', "ui/lib/main.ts");
+assertIncludes(srcMainTs, "const toolOutputCandidate = params.toolOutput;", "ui/lib/main.ts");
 assertExcludes(srcMainTs, "if (hasToolOutput())", "ui/lib/main.ts");
 
 assertIncludes(buildUiScript, 'path.join(uiLibDir, "main.ts")', "scripts/build-ui.mjs");
@@ -100,6 +98,7 @@ for (const [label, content] of [
   assertIncludes(content, 'model_result_shape_version: "v2_minimal"', label);
   assertIncludes(content, "state: safeState,", label);
   assertExcludes(content, "structuredContent.seed_user_message =", label);
+  assertIncludes(content, "resourceUri: uiResourceUri", label);
 }
 
 assertExcludes(serverTs, "isMcpAppFirstToolsV1Enabled", "server.ts");
@@ -109,12 +108,14 @@ for (const [label, content] of [
   ["ui/step-card.bundled.html", uiBundle],
   ["dist/ui/step-card.bundled.html", distBundle],
 ]) {
-  assertIncludes(content, "ensureBootstrapRetryForResult(data, { source: \"render\" });", label);
   assertIncludes(content, "mergeToolOutputWithResponseMetadata(", label);
   assertIncludes(content, 'handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });', label);
+  assertIncludes(content, "const toolOutputCandidate = params.toolOutput;", label);
   assertIncludes(content, ".skeleton-line", label);
   assertIncludes(content, "@keyframes skeletonShimmer", label);
-  assertExcludes(content, "pendingNonEnglishByState", label);
+  assertExcludes(content, "interactive_fallback_active", label);
+  assertExcludes(content, "waiting_both", label);
+  assertExcludes(content, "waiting_state", label);
   assertExcludes(content, "__locale_wait_retry", label);
 }
 

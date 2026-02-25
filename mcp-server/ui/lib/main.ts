@@ -54,7 +54,7 @@ function actionCodeFromState(stateKey: string): string {
 
 function normalizeHostToolResultNotification(paramsRaw: unknown): Record<string, unknown> {
   const params = toRecord(paramsRaw);
-  const toolOutputCandidate = params.result;
+  const toolOutputCandidate = params.toolOutput;
   const metadata = toRecord(params.toolResponseMetadata);
   return mergeToolOutputWithResponseMetadata(toolOutputCandidate, metadata);
 }
