@@ -89,3 +89,23 @@ Next agent exact TODO:
 - Start Step 5 from this baseline and keep specialist dispatch/runtime error adapters owned by `mcp-server/src/handlers/specialist_dispatch.ts`.
 Commit:
 - pending_after_commit
+
+## Step 5 - Integration
+Date: 2026-02-25 17:44 CET
+Status: completed
+Completed:
+- Thinned `run_step.ts` facade wiring by removing dead specialist-schema/instruction imports that were fully extracted in Step 4.
+- Kept existing delegate flow/order intact (`ingress` parsing, `turn_contract` finalization, `specialist_dispatch` strict/safe call path) with no policy changes.
+- Updated server-side source guard to validate ui.view contract ownership across the integrated modules (`run_step.ts`, `ingress.ts`, `turn_contract.ts`).
+Pending:
+- None for Step 5 scope.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/server_safe_string.test.ts
+- docs/run_step_refactor_memory.md
+Tests run:
+- npm --prefix mcp-server test => pass
+Next agent exact TODO:
+- Continue with next planned refactor step from this baseline while preserving module ownership boundaries introduced in Steps 2-5.
+Commit:
+- pending_after_commit

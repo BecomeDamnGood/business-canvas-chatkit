@@ -33,125 +33,66 @@ import {
 import {
   STEP_0_ID,
   STEP_0_SPECIALIST,
-  VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS,
-  ValidationAndBusinessNameJsonSchema,
-  ValidationAndBusinessNameZodSchema,
-  buildStep0SpecialistInput,
   type ValidationAndBusinessNameOutput,
 } from "../steps/step_0_validation.js";
 
 import {
   DREAM_STEP_ID,
   DREAM_SPECIALIST,
-  DREAM_INSTRUCTIONS,
-  DreamJsonSchema,
-  DreamZodSchema,
-  buildDreamSpecialistInput,
   type DreamOutput,
 } from "../steps/dream.js";
 
 import {
   DREAM_EXPLAINER_SPECIALIST,
-  DREAM_EXPLAINER_INSTRUCTIONS,
-  DreamExplainerJsonSchema,
-  DreamExplainerZodSchema,
-  buildDreamExplainerSpecialistInput,
-  type DreamExplainerOutput,
 } from "../steps/dream_explainer.js";
 
 import {
   PURPOSE_STEP_ID,
   PURPOSE_SPECIALIST,
-  PURPOSE_INSTRUCTIONS,
-  PurposeJsonSchema,
-  PurposeZodSchema,
-  buildPurposeSpecialistInput,
-  type PurposeOutput,
 } from "../steps/purpose.js";
 
 import {
   BIGWHY_STEP_ID,
   BIGWHY_SPECIALIST,
-  BIGWHY_INSTRUCTIONS,
-  BigWhyJsonSchema,
-  BigWhyZodSchema,
-  buildBigWhySpecialistInput,
-  type BigWhyOutput,
 } from "../steps/bigwhy.js";
 
 import {
   ROLE_STEP_ID,
   ROLE_SPECIALIST,
-  ROLE_INSTRUCTIONS,
-  RoleJsonSchema,
-  RoleZodSchema,
-  buildRoleSpecialistInput,
   type RoleOutput,
 } from "../steps/role.js";
 
 import {
   ENTITY_STEP_ID,
   ENTITY_SPECIALIST,
-  ENTITY_INSTRUCTIONS,
-  EntityJsonSchema,
-  EntityZodSchema,
-  buildEntitySpecialistInput,
-  type EntityOutput,
 } from "../steps/entity.js";
 
 import {
   STRATEGY_STEP_ID,
   STRATEGY_SPECIALIST,
-  STRATEGY_INSTRUCTIONS,
-  StrategyJsonSchema,
-  StrategyZodSchema,
-  buildStrategySpecialistInput,
-  type StrategyOutput,
 } from "../steps/strategy.js";
 
 import {
   TARGETGROUP_STEP_ID,
   TARGETGROUP_SPECIALIST,
-  TARGETGROUP_INSTRUCTIONS,
-  TargetGroupJsonSchema,
-  TargetGroupZodSchema,
-  buildTargetGroupSpecialistInput,
-  type TargetGroupOutput,
 } from "../steps/targetgroup.js";
 
 import {
   PRODUCTSSERVICES_STEP_ID,
   PRODUCTSSERVICES_SPECIALIST,
-  PRODUCTSSERVICES_INSTRUCTIONS,
-  ProductsServicesJsonSchema,
-  ProductsServicesZodSchema,
-  buildProductsServicesSpecialistInput,
-  type ProductsServicesOutput,
 } from "../steps/productsservices.js";
 
 import {
   RULESOFTHEGAME_STEP_ID,
   RULESOFTHEGAME_SPECIALIST,
-  RULESOFTHEGAME_INSTRUCTIONS,
-  RulesOfTheGameJsonSchema,
-  RulesOfTheGameZodSchema,
-  buildRulesOfTheGameSpecialistInput,
-  type RulesOfTheGameOutput,
   postProcessRulesOfTheGame,
-  postProcessRulesOfTheGameFromBullets,
   buildRulesOfTheGameBullets,
-  buildUserFeedbackForRulesProcessing,
 } from "../steps/rulesofthegame.js";
-import { normalizeRulesOfTheGameOutputContract } from "../steps/rulesofthegame_contract.js";
 import { SPECIALIST_META_TOPICS, type SpecialistMetaTopic } from "../steps/user_intent.js";
 
 import {
   PRESENTATION_STEP_ID,
   PRESENTATION_SPECIALIST,
-  PRESENTATION_INSTRUCTIONS,
-  PresentationJsonSchema,
-  PresentationZodSchema,
-  buildPresentationSpecialistInput,
   type PresentationOutput,
 } from "../steps/presentation.js";
 import { loadModule as loadCld3 } from "cld3-asm";

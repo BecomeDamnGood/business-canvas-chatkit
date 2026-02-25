@@ -68,15 +68,20 @@ test("run_step handler logs locale + language readiness in request/response line
 });
 
 test("run_step contract emits server-authoritative ui.view payload", () => {
-  const source = fs.readFileSync(new URL("./handlers/run_step.ts", import.meta.url), "utf8");
-  assert.match(source, /type UiViewPayload = \{[\s\S]*mode: UiViewModeRoute;[\s\S]*waiting_locale: boolean;/);
-  assert.match(source, /function deriveUiViewPayload\(/);
-  assert.match(source, /const CONTRACT_UI_VIEW_MODES = new Set\(\[/);
-  assert.match(source, /if \(uiPayload && \(!uiView \|\| !CONTRACT_UI_VIEW_MODES\.has\(uiViewMode\)\)\) \{[\s\S]*invalid_ui_view_mode/);
-  assert.match(source, /if \(currentStep === STEP_0_ID && !started && uiGateStatus === "ready"\) \{/);
-  assert.match(source, /prestart_ready_requires_prestart_mode/);
-  assert.match(source, /prestart_ready_requires_ui_strings/);
-  assert.match(source, /prestart_ready_requires_start_action/);
+  const runStepSource = fs.readFileSync(new URL("./handlers/run_step.ts", import.meta.url), "utf8");
+  const ingressSource = fs.readFileSync(new URL("./handlers/ingress.ts", import.meta.url), "utf8");
+  const turnContractSource = fs.readFileSync(new URL("./handlers/turn_contract.ts", import.meta.url), "utf8");
+  assert.match(runStepSource, /type UiViewPayload = \{[\s\S]*mode: UiViewModeRoute;[\s\S]*waiting_locale: boolean;/);
+  assert.match(runStepSource, /function deriveUiViewPayload\(/);
+  assert.match(ingressSource, /CONTRACT_UI_VIEW_MODES = new Set\(\[/);
+  assert.match(
+    turnContractSource,
+    /if \(uiPayload && \(!uiView \|\| !CONTRACT_UI_VIEW_MODES\.has\(uiViewMode\)\)\) \{[\s\S]*invalid_ui_view_mode/
+  );
+  assert.match(turnContractSource, /if \(currentStep === STEP_0_ID && !started && uiGateStatus === "ready"\) \{/);
+  assert.match(turnContractSource, /prestart_ready_requires_prestart_mode/);
+  assert.match(turnContractSource, /prestart_ready_requires_ui_strings/);
+  assert.match(turnContractSource, /prestart_ready_requires_start_action/);
 });
 
 test("ui actions do not optimistically mutate started or state.language before run_step response", () => {
