@@ -62,13 +62,12 @@ test("run_step handler logs locale + language readiness in request/response line
   );
 });
 
-test("buildUiStructured emits server-authoritative view payload", () => {
-  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
-  assert.match(source, /function buildUiStructured\(/);
-  assert.match(source, /view:\s*\{[\s\S]*mode,[\s\S]*waiting_locale:[\s\S]*bootstrap_phase:/);
-  assert.match(source, /const uiGateStatus = safeString\(state\.ui_gate_status \|\| \(result as any\)\.ui_gate_status \|\| ""\);/);
-  assert.match(source, /const waitingLocale = waitingLocaleByGate \|\| waitingLocaleByPhase;/);
-  assert.match(source, /\[ui_view_state_invariant_mismatch\]/);
+test("run_step contract emits server-authoritative ui.view payload", () => {
+  const source = fs.readFileSync(new URL("./handlers/run_step.ts", import.meta.url), "utf8");
+  assert.match(source, /type UiViewPayload = \{[\s\S]*mode: UiViewModeRoute;[\s\S]*waiting_locale: boolean;/);
+  assert.match(source, /function deriveUiViewPayload\(/);
+  assert.match(source, /const CONTRACT_UI_VIEW_MODES = new Set\(\[/);
+  assert.match(source, /if \(uiPayload && \(!uiView \|\| !CONTRACT_UI_VIEW_MODES\.has\(uiViewMode\)\)\) \{[\s\S]*invalid_ui_view_mode/);
 });
 
 test("ui actions do not optimistically mutate started or state.language before run_step response", () => {

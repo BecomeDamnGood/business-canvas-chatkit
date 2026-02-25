@@ -139,20 +139,29 @@ test("language policy: locale hint wins over paraphrased English chat input", as
   assert.equal(result?.state?.language, "nl");
   assert.equal(result?.state?.language_source, "locale_hint");
   assert.equal(result?.state?.ui_strings_requested_lang, "nl");
-  assert.equal(result?.state?.ui_strings_status, "ready");
-  assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
-  assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "true");
-  assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "requested_lang_unavailable");
-  assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
-  assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, false);
-  assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, true);
-  assert.equal(result?.ui?.flags?.interactive_fallback_active, false);
-  assert.equal(String(result?.ui?.flags?.bootstrap_phase || ""), "ready");
-  assert.equal(result?.ui?.flags?.locale_pending_background, false);
-  assert.equal(String(result?.ui?.flags?.bootstrap_retry_hint || ""), "");
+  const uiStatus = String(result?.state?.ui_strings_status || "");
+  if (uiStatus === "ready") {
+    assert.equal(String(result?.state?.ui_strings_lang || ""), "nl");
+    assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "false");
+    assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "");
+    assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
+    assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, false);
+    assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, true);
+    assert.equal(result?.ui?.flags?.interactive_fallback_active, false);
+  } else {
+    assert.equal(uiStatus, "pending");
+    assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
+    assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "false");
+    assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "");
+    assert.equal(String(result?.state?.ui_gate_status || ""), "waiting_locale");
+    assert.equal(result?.ui?.flags?.bootstrap_waiting_locale, true);
+    assert.equal(result?.ui?.flags?.bootstrap_interactive_ready, false);
+    assert.equal(result?.ui?.flags?.interactive_fallback_active, true);
+  }
+  assert.equal(String(result?.ui?.flags?.bootstrap_phase || ""), String(result?.state?.bootstrap_phase || ""));
 });
 
-test("language policy: unsupported locale resolves ready with explicit fallback metadata", async () => {
+test("language policy: non-EN locale is either localized-ready or server-gated pending (no ready-EN fallback)", async () => {
   const result = await run_step({
     user_message: "",
     input_mode: "chat",
@@ -168,12 +177,18 @@ test("language policy: unsupported locale resolves ready with explicit fallback 
   });
   assert.equal(result?.ok, true);
   assert.equal(String(result?.state?.language || ""), "nl");
-  assert.equal(String(result?.state?.ui_strings_status || ""), "ready");
-  assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
+  const uiStatus = String(result?.state?.ui_strings_status || "");
   assert.equal(String(result?.state?.ui_strings_requested_lang || ""), "nl");
-  assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "true");
-  assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "requested_lang_unavailable");
-  assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
+  assert.equal(String(result?.state?.ui_strings_fallback_applied || ""), "false");
+  assert.equal(String(result?.state?.ui_strings_fallback_reason || ""), "");
+  if (uiStatus === "ready") {
+    assert.equal(String(result?.state?.ui_strings_lang || ""), "nl");
+    assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
+  } else {
+    assert.equal(uiStatus, "pending");
+    assert.equal(String(result?.state?.ui_strings_lang || ""), "en");
+    assert.equal(String(result?.state?.ui_gate_status || ""), "waiting_locale");
+  }
 });
 
 test("language policy: widget ACTION_START does not let webplus_i18n override seeded NL message", async () => {
@@ -213,7 +228,8 @@ test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps ready contrac
       },
     })
   );
-  assert.equal(String(first?.state?.ui_gate_status || ""), "ready");
+  const firstGateStatus = String(first?.state?.ui_gate_status || "");
+  assert.ok(firstGateStatus === "ready" || firstGateStatus === "waiting_locale");
 
   const polled = await withEnv("UI_LOCALE_READY_GATE_V1", "1", () =>
     run_step({
@@ -223,14 +239,22 @@ test("language policy: ACTION_BOOTSTRAP_POLL is accepted and keeps ready contrac
     })
   );
   assert.equal(polled?.ok, true);
-  assert.equal(String(polled?.state?.ui_gate_status || ""), "ready");
-  assert.equal(String(polled?.state?.ui_strings_status || ""), "ready");
-  assert.equal(String(polled?.state?.bootstrap_phase || ""), "ready");
-  assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, false);
-  assert.equal(polled?.ui?.flags?.bootstrap_interactive_ready, true);
-  assert.equal(polled?.ui?.flags?.interactive_fallback_active, false);
-  assert.equal(String(polled?.ui?.flags?.bootstrap_phase || ""), "ready");
-  assert.equal(String(polled?.ui?.flags?.bootstrap_retry_hint || ""), "");
+  const polledGateStatus = String(polled?.state?.ui_gate_status || "");
+  const polledUiStatus = String(polled?.state?.ui_strings_status || "");
+  assert.ok(polledGateStatus === "ready" || polledGateStatus === "waiting_locale");
+  assert.ok(polledUiStatus === "ready" || polledUiStatus === "pending");
+  if (polledUiStatus === "ready") {
+    assert.equal(polledGateStatus, "ready");
+    assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, false);
+    assert.equal(polled?.ui?.flags?.bootstrap_interactive_ready, true);
+    assert.equal(polled?.ui?.flags?.interactive_fallback_active, false);
+  } else {
+    assert.equal(polledGateStatus, "waiting_locale");
+    assert.equal(polled?.ui?.flags?.bootstrap_waiting_locale, true);
+    assert.equal(polled?.ui?.flags?.bootstrap_interactive_ready, false);
+    assert.equal(polled?.ui?.flags?.interactive_fallback_active, true);
+  }
+  assert.equal(String(polled?.ui?.flags?.bootstrap_phase || ""), String(polled?.state?.bootstrap_phase || ""));
 });
 
 test("language policy source: legacy __locale_wait_retry alias is removed", () => {
@@ -291,7 +315,8 @@ test("legacy chat state auto-upgrades instead of blocking and preserves NL local
   });
   assert.equal(chatTurn?.ok, true);
   assert.notEqual(String(chatTurn?.state?.ui_gate_status || ""), "blocked");
-  assert.equal(String(chatTurn?.state?.ui_gate_reason || ""), "");
+  const gateReason = String(chatTurn?.state?.ui_gate_reason || "");
+  assert.ok(gateReason === "" || gateReason === "translation_pending");
   assert.equal(String(chatTurn?.state?.language || ""), "nl");
   assert.equal(String(chatTurn?.state?.initial_user_message || "").includes("Mindd"), true);
 

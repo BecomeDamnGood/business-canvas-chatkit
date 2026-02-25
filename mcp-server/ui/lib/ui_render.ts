@@ -695,12 +695,12 @@ export function render(overrideToolOutput?: unknown): void {
     }
     return "";
   })();
-  const uiViewMode = String(uiPayload.view_mode || "").trim();
-  const hasExplicitViewMode = uiViewMode.length > 0;
-  const isViewModeWordingChoice = uiViewMode === "wording_choice";
-  const isViewModeDreamBuilderCollect = uiViewMode === "dream_builder_collect";
-  const isViewModeDreamBuilderRefine = uiViewMode === "dream_builder_refine";
-  const isViewModeDreamBuilderScoring = uiViewMode === "dream_builder_scoring";
+  const uiViewVariant = String((uiView.variant || "")).trim();
+  const hasExplicitViewVariant = uiViewVariant.length > 0;
+  const isViewModeWordingChoice = uiViewVariant === "wording_choice";
+  const isViewModeDreamBuilderCollect = uiViewVariant === "dream_builder_collect";
+  const isViewModeDreamBuilderRefine = uiViewVariant === "dream_builder_refine";
+  const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
   const uiQuestionText = String(uiPayload.questionText || "").trim();
   const structuredActions = Array.isArray(uiPayload.actions)
     ? (uiPayload.actions as Array<Record<string, unknown>>)
@@ -876,7 +876,7 @@ export function render(overrideToolOutput?: unknown): void {
           sum += n;
         }
       }
-      const avgText = filled === 0 ? "—" : (sum / filled).toFixed(1);
+      const avgText = filled === 0 ? uiText(lang, "scoring.avg.empty", "") : (sum / filled).toFixed(1);
       const showStats = filled > 0;
       const avgHtml = showStats
         ? '<span class="avgScore">' + t(lang, "scoringAvg").replace("X", avgText) + "</span>"
@@ -909,7 +909,7 @@ export function render(overrideToolOutput?: unknown): void {
         const numVal = rawVal !== "" && rawVal !== undefined ? Number(rawVal) : NaN;
         input.value =
           !isNaN(numVal) && numVal >= 1 && numVal <= 10 ? String(Math.round(numVal)) : "";
-        input.placeholder = "0";
+        input.placeholder = uiText(lang, "scoring.input.placeholder", "");
         input.setAttribute("aria-label", uiText(lang, "scoring.aria.scoreInput", ""));
         row.appendChild(stSpan);
         row.appendChild(input);
@@ -934,7 +934,7 @@ export function render(overrideToolOutput?: unknown): void {
           sum += n;
         }
       }
-      const avgText = filled === 0 ? "—" : (sum / filled).toFixed(1);
+      const avgText = filled === 0 ? uiText(lang, "scoring.avg.empty", "") : (sum / filled).toFixed(1);
       const themeName = String(clusters[ci].theme || "").trim() ||
         uiText(lang, "scoring.categoryFallback", "").replace("{0}", String(ci + 1));
       const showStats = filled > 0;
@@ -1033,7 +1033,7 @@ export function render(overrideToolOutput?: unknown): void {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   } else if (
     current === "dream" &&
-    (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine || (!hasExplicitViewMode && isDreamExplainerMode)) &&
+    (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine || (!hasExplicitViewVariant && isDreamExplainerMode)) &&
     Array.isArray(statementsArray) &&
     statementsArray.length > 0 &&
     statementsArray.length < 20

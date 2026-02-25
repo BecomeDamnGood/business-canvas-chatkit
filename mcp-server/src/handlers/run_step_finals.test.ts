@@ -1608,18 +1608,27 @@ test("Step 0 start-trigger with unsupported locale sets ready gate with fallback
   );
   assert.equal(result.ok, true);
   assert.equal(String(result.state?.language || ""), "nl");
-  assert.equal(String(result.state?.ui_strings_status || ""), "ready");
-  assert.equal(String(result.state?.ui_strings_lang || ""), "en");
+  const uiStatus = String(result.state?.ui_strings_status || "");
   assert.equal(String(result.state?.ui_strings_requested_lang || ""), "nl");
-  assert.equal(String(result.state?.ui_strings_fallback_applied || ""), "true");
-  assert.equal(String(result.state?.ui_strings_fallback_reason || ""), "requested_lang_unavailable");
-  assert.equal(String(result.state?.ui_bootstrap_status || ""), "ready");
-  assert.equal(String(result.state?.ui_gate_status || ""), "ready");
-  assert.equal(result.ui?.flags?.bootstrap_waiting_locale, false);
-  assert.equal(result.ui?.flags?.bootstrap_interactive_ready, true);
-  assert.equal(result.ui?.flags?.interactive_fallback_active, false);
-  assert.equal(result.ui?.flags?.locale_pending_background, false);
-  assert.equal(String(result.ui?.flags?.bootstrap_retry_hint || ""), "");
+  assert.equal(String(result.state?.ui_strings_fallback_applied || ""), "false");
+  assert.equal(String(result.state?.ui_strings_fallback_reason || ""), "");
+  if (uiStatus === "ready") {
+    assert.equal(String(result.state?.ui_strings_lang || ""), "nl");
+    assert.equal(String(result.state?.ui_bootstrap_status || ""), "ready");
+    assert.equal(String(result.state?.ui_gate_status || ""), "ready");
+    assert.equal(result.ui?.flags?.bootstrap_waiting_locale, false);
+    assert.equal(result.ui?.flags?.bootstrap_interactive_ready, true);
+    assert.equal(result.ui?.flags?.interactive_fallback_active, false);
+  } else {
+    assert.equal(uiStatus, "pending");
+    assert.equal(String(result.state?.ui_strings_lang || ""), "en");
+    assert.equal(String(result.state?.ui_bootstrap_status || ""), "awaiting_locale");
+    assert.equal(String(result.state?.ui_gate_status || ""), "waiting_locale");
+    assert.equal(result.ui?.flags?.bootstrap_waiting_locale, true);
+    assert.equal(result.ui?.flags?.bootstrap_interactive_ready, false);
+    assert.equal(result.ui?.flags?.interactive_fallback_active, true);
+  }
+  assert.equal(result.ui?.flags?.locale_pending_background, uiStatus === "ready" ? false : true);
 });
 
 test("global free-text policy: ActionCode turn bypasses renderer", async () => {

@@ -357,6 +357,8 @@ const UI_STRINGS_DEFAULT: Record<string, string> = {
   btnScoringContinue: "Formulate my dream for me based on what I find important.",
   scoringFilled: "N/M",
   scoringAvg: "Average: X",
+  "scoring.avg.empty": "—",
+  "scoring.input.placeholder": "0",
   purposeInstructionHint: "Answer the question, formulate your own Purpose, or choose an option",
   "offtopic.redirect.template": "Let's continue with the {0} of {1}.",
   "offtopic.current.template": "The current {0} of {1} is.",
@@ -533,9 +535,112 @@ function buildCriticalUiKeysStep0(): string[] {
 
 const CRITICAL_UI_KEYS_STEP0 = buildCriticalUiKeysStep0();
 
-const UI_STRINGS_STATIC_BY_LANG: Record<string, Record<string, string>> = {
-  en: UI_STRINGS_WITH_MENU_KEYS,
-};
+const UI_STRINGS_SOURCE_EN: Record<string, string> = UI_STRINGS_WITH_MENU_KEYS;
+const UI_RUNTIME_TRANSLATION_CACHE_FILE = String(
+  process.env.UI_RUNTIME_TRANSLATION_CACHE_FILE || path.join(os.tmpdir(), "bsc-ui-runtime-translation-cache.json")
+).trim();
+const UI_RUNTIME_TRANSLATION_CACHE_VERSION = 1;
+const UI_RUNTIME_TRANSLATION_CACHE = new Map<string, Record<string, string>>();
+let uiRuntimeTranslationCacheLoaded = false;
+
+const UiStringsTranslationResultZodSchema = z.object({
+  translations: z.record(z.string(), z.string()),
+});
+
+const UiStringsTranslationResultJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["translations"],
+  properties: {
+    translations: {
+      type: "object",
+      additionalProperties: { type: "string" },
+    },
+  },
+} as const;
+
+function uiRuntimeTranslationCacheKey(lang: string): string {
+  return `${UI_STRINGS_SCHEMA_VERSION}:${String(lang || "").trim().toLowerCase()}`;
+}
+
+function loadUiRuntimeTranslationCacheOnce(): void {
+  if (uiRuntimeTranslationCacheLoaded) return;
+  uiRuntimeTranslationCacheLoaded = true;
+  if (!UI_RUNTIME_TRANSLATION_CACHE_FILE) return;
+  try {
+    if (!fs.existsSync(UI_RUNTIME_TRANSLATION_CACHE_FILE)) return;
+    const raw = fs.readFileSync(UI_RUNTIME_TRANSLATION_CACHE_FILE, "utf8");
+    if (!raw.trim()) return;
+    const parsed = JSON.parse(raw) as {
+      version?: number;
+      entries?: Array<{
+        key?: string;
+        strings?: Record<string, string>;
+      }>;
+    };
+    if (Number(parsed?.version || 0) !== UI_RUNTIME_TRANSLATION_CACHE_VERSION) return;
+    const entries = Array.isArray(parsed?.entries) ? parsed.entries : [];
+    for (const entry of entries) {
+      const key = String(entry?.key || "").trim();
+      const stringsRaw = entry?.strings;
+      if (!key || !stringsRaw || typeof stringsRaw !== "object") continue;
+      const next: Record<string, string> = {};
+      for (const uiKey of UI_STRINGS_KEYS) {
+        const val = String((stringsRaw as Record<string, unknown>)[uiKey] || "");
+        if (!val.trim()) continue;
+        next[uiKey] = val;
+      }
+      if (Object.keys(next).length !== UI_STRINGS_KEYS.length) continue;
+      UI_RUNTIME_TRANSLATION_CACHE.set(key, next);
+    }
+  } catch {
+    // Corrupt cache is non-fatal. Runtime translation can repopulate it.
+  }
+}
+
+function persistUiRuntimeTranslationCache(): void {
+  if (!UI_RUNTIME_TRANSLATION_CACHE_FILE) return;
+  try {
+    const entries = [...UI_RUNTIME_TRANSLATION_CACHE.entries()].map(([key, strings]) => ({
+      key,
+      strings,
+    }));
+    const payload = JSON.stringify(
+      {
+        version: UI_RUNTIME_TRANSLATION_CACHE_VERSION,
+        entries,
+      },
+      null,
+      2
+    );
+    const dir = path.dirname(UI_RUNTIME_TRANSLATION_CACHE_FILE);
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = `${UI_RUNTIME_TRANSLATION_CACHE_FILE}.tmp`;
+    fs.writeFileSync(tmp, payload, "utf8");
+    fs.renameSync(tmp, UI_RUNTIME_TRANSLATION_CACHE_FILE);
+  } catch {
+    // Persist failures are non-fatal; in-memory cache still applies for the process lifetime.
+  }
+}
+
+function getUiRuntimeTranslationFromCache(lang: string): Record<string, string> | null {
+  loadUiRuntimeTranslationCacheOnce();
+  const key = uiRuntimeTranslationCacheKey(lang);
+  const cached = UI_RUNTIME_TRANSLATION_CACHE.get(key);
+  if (!cached) return null;
+  return { ...cached };
+}
+
+function setUiRuntimeTranslationCache(lang: string, strings: Record<string, string>): void {
+  loadUiRuntimeTranslationCacheOnce();
+  const key = uiRuntimeTranslationCacheKey(lang);
+  UI_RUNTIME_TRANSLATION_CACHE.set(key, { ...strings });
+  persistUiRuntimeTranslationCache();
+}
+
+function hasRuntimeTranslationApiConfigured(): boolean {
+  return Boolean(String(process.env.OPENAI_API_KEY || "").trim());
+}
 
 function langFromState(state: CanvasState): string {
   if (isForceEnglishLanguageMode()) return "en";
@@ -851,6 +956,14 @@ const CONTRACT_UI_GATE_REASONS = new Set([
   "invalid_state",
 ]);
 const CONTRACT_UI_STRINGS_STATUSES = new Set(["pending", "critical_ready", "ready"]);
+const CONTRACT_UI_VIEW_MODES = new Set([
+  "waiting_locale",
+  "prestart",
+  "interactive",
+  "recovery",
+  "blocked",
+  "failed",
+]);
 const CONTRACT_UI_FALLBACK_REASONS = new Set([
   "",
   "requested_lang_unavailable",
@@ -2409,12 +2522,48 @@ export function isWordingChoiceEligibleContext(
   return true;
 }
 
-type UiViewMode =
+type UiViewVariant =
   | "default"
   | "wording_choice"
   | "dream_builder_collect"
   | "dream_builder_scoring"
   | "dream_builder_refine";
+
+type UiViewModeRoute =
+  | "waiting_locale"
+  | "prestart"
+  | "interactive"
+  | "recovery"
+  | "blocked"
+  | "failed";
+
+type UiViewPayload = {
+  mode: UiViewModeRoute;
+  waiting_locale: boolean;
+  variant?: Exclude<UiViewVariant, "default">;
+};
+
+function deriveUiViewPayload(
+  state: CanvasState | null | undefined,
+  variant: UiViewVariant
+): UiViewPayload | null {
+  if (!state || typeof state !== "object") return null;
+  const gateStatus = String((state as any).ui_gate_status || "").trim().toLowerCase();
+  const phase = String((state as any).bootstrap_phase || "").trim().toLowerCase();
+  const currentStep = String((state as any).current_step || "step_0").trim() || "step_0";
+  const started = String((state as any).started || "").trim().toLowerCase() === "true";
+  let mode: UiViewModeRoute = "interactive";
+  if (gateStatus === "waiting_locale" || phase === "waiting_locale") mode = "waiting_locale";
+  else if (gateStatus === "blocked") mode = "blocked";
+  else if (gateStatus === "failed" || phase === "failed") mode = "failed";
+  else if (phase === "recovery") mode = "recovery";
+  else if (currentStep === "step_0" && !started) mode = "prestart";
+  return {
+    mode,
+    waiting_locale: mode === "waiting_locale",
+    ...(variant !== "default" ? { variant } : {}),
+  };
+}
 
 function isConfirmActionCode(actionCode: string): boolean {
   const entry = ACTIONCODE_REGISTRY.actions[actionCode];
@@ -5154,7 +5303,7 @@ function buildUiPayload(
   contract_id?: string;
   contract_version?: string;
   text_keys?: string[];
-  view_mode?: UiViewMode;
+  view?: UiViewPayload;
   flags: Record<string, boolean | string>;
   wording_choice?: WordingChoiceUiPayload;
 } | undefined {
@@ -5254,20 +5403,21 @@ function buildUiPayload(
     Boolean(wordingChoiceOverride?.enabled) ||
     String((specialist as any)?.wording_choice_pending || "").trim() === "true" ||
     Boolean((flagsOverride || {}).require_wording_pick);
-  let viewMode: UiViewMode = "default";
+  let viewVariant: UiViewVariant = "default";
   if (
     effectiveStepId === DREAM_STEP_ID &&
     ((scoringPhase && hasClusters && Math.max(statementsCount, canonicalStatementsCount) >= 20) ||
       dreamRuntimeMode === "builder_scoring")
   ) {
-    viewMode = "dream_builder_scoring";
+    viewVariant = "dream_builder_scoring";
   } else if (wordingPickPending) {
-    viewMode = "wording_choice";
+    viewVariant = "wording_choice";
   } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_refine") {
-    viewMode = "dream_builder_refine";
+    viewVariant = "dream_builder_refine";
   } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_collect") {
-    viewMode = "dream_builder_collect";
+    viewVariant = "dream_builder_collect";
   }
+  const view = deriveUiViewPayload(effectiveState, viewVariant);
   if (Array.isArray(actionCodesOverride)) {
     const safeOverrideCodes = sanitizeWidgetActionCodes(
       actionCodesOverride.map((code) => String(code || "").trim()).filter(Boolean)
@@ -5286,17 +5436,17 @@ function buildUiPayload(
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-        ...(viewMode ? { view_mode: viewMode } : {}),
+        ...(view ? { view } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
     }
-    if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId) {
+    if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
       return {
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-        ...(viewMode ? { view_mode: viewMode } : {}),
+        ...(view ? { view } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
@@ -5327,12 +5477,12 @@ function buildUiPayload(
         flags.escape_actioncodes_suppressed = true;
       }
       if (safeCodes.length === 0) {
-        if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId) {
+        if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
           return {
             ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
             ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
             ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-            ...(viewMode ? { view_mode: viewMode } : {}),
+            ...(view ? { view } : {}),
             flags,
             ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
           };
@@ -5349,18 +5499,18 @@ function buildUiPayload(
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-        ...(viewMode ? { view_mode: viewMode } : {}),
+        ...(view ? { view } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
     }
   }
-  if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId) {
+  if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
     return {
       ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
       ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
       ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-      ...(viewMode ? { view_mode: viewMode } : {}),
+      ...(view ? { view } : {}),
       flags,
       ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
     };
@@ -5706,10 +5856,14 @@ function sanitizeTranslatedUiStrings(
   translated: Record<string, string>,
   telemetry?: UiI18nTelemetryCounters | null,
   sourceKeys: string[] = UI_STRINGS_KEYS
-): Record<string, string> {
+): {
+  strings: Record<string, string>;
+  missingKeys: number;
+  htmlViolations: number;
+} {
   const next: Record<string, string> = {};
   for (const key of sourceKeys) {
-    next[key] = String(UI_STRINGS_WITH_MENU_KEYS[key] || "");
+    next[key] = String(UI_STRINGS_SOURCE_EN[key] || "");
   }
   let missingKeys = 0;
   let htmlViolations = 0;
@@ -5723,7 +5877,7 @@ function sanitizeTranslatedUiStrings(
       missingKeys += 1;
       continue;
     }
-    const fallback = String(UI_STRINGS_WITH_MENU_KEYS[key] || "");
+    const fallback = String(UI_STRINGS_SOURCE_EN[key] || "");
     const candidate = String(rawValue);
     if (looksLikeHtml(candidate)) {
       htmlViolations += 1;
@@ -5738,7 +5892,11 @@ function sanitizeTranslatedUiStrings(
   }
   if (missingKeys > 0) bumpUiI18nCounter(telemetry, "translation_missing_keys", missingKeys);
   if (htmlViolations > 0) bumpUiI18nCounter(telemetry, "translation_html_violations", htmlViolations);
-  return next;
+  return {
+    strings: next,
+    missingKeys,
+    htmlViolations,
+  };
 }
 
 async function detectLanguageHeuristic(text: string): Promise<{ lang: string; confident: boolean }> {
@@ -5768,33 +5926,68 @@ function uiStringsRequestedStatusFromRaw(
   return localeStartUiStringsRequestedStatusFromRaw(raw);
 }
 
-function resolveStaticUiBundle(
-  requestedLangRaw: unknown
-): {
-  requestedLang: string;
-  effectiveLang: string;
-  strings: Record<string, string>;
-  fallbackApplied: BoolString;
-  fallbackReason: "" | "requested_lang_unavailable" | "timeout" | "invalid_requested_lang";
-} {
-  const requestedLang = normalizeLangCode(String(requestedLangRaw || "")) || "en";
-  const bundle = UI_STRINGS_STATIC_BY_LANG[requestedLang];
-  if (bundle) {
-    return {
-      requestedLang,
-      effectiveLang: requestedLang,
-      strings: bundle,
-      fallbackApplied: "false",
-      fallbackReason: "",
-    };
+async function translateUiStringsAtRuntime(
+  requestedLang: string,
+  model: string,
+  telemetry?: UiI18nTelemetryCounters | null
+): Promise<Record<string, string> | null> {
+  const normalizedLang = normalizeLangCode(requestedLang);
+  if (!normalizedLang || normalizedLang === "en") return { ...UI_STRINGS_SOURCE_EN };
+
+  const cached = getUiRuntimeTranslationFromCache(normalizedLang);
+  if (cached) return cached;
+  if (!hasRuntimeTranslationApiConfigured()) {
+    bumpUiI18nCounter(telemetry, "translation_fallbacks");
+    return null;
   }
-  return {
-    requestedLang,
-    effectiveLang: "en",
-    strings: UI_STRINGS_STATIC_BY_LANG.en,
-    fallbackApplied: requestedLang === "en" ? "false" : "true",
-    fallbackReason: requestedLang === "en" ? "" : "requested_lang_unavailable",
-  };
+
+  const sourceStrings: Record<string, string> = {};
+  for (const key of UI_STRINGS_KEYS) {
+    sourceStrings[key] = String(UI_STRINGS_SOURCE_EN[key] || "");
+  }
+
+  const plannerInput = JSON.stringify({
+    source_language: "en",
+    target_language: normalizedLang,
+    constraints: [
+      "Keep all keys exactly as-is.",
+      "Keep placeholders like {0}, {1}, N, M, X exactly unchanged.",
+      "Preserve newline structure and punctuation.",
+      "Return plain text only; never output HTML.",
+    ],
+    strings: sourceStrings,
+  });
+
+  try {
+    const translated = await callStrictJson<{ translations: Record<string, string> }>({
+      model,
+      instructions:
+        "Translate each UI string from English into the requested language. " +
+        "Return JSON only with a top-level 'translations' object.",
+      plannerInput,
+      schemaName: "UiStringsTranslationResult",
+      jsonSchema: UiStringsTranslationResultJsonSchema as any,
+      zodSchema: UiStringsTranslationResultZodSchema,
+      temperature: 0,
+      topP: 1,
+      maxOutputTokens: 16000,
+      debugLabel: "UiStringsTranslation",
+    });
+    const cleaned = sanitizeTranslatedUiStrings(
+      translated?.data?.translations || {},
+      telemetry,
+      UI_STRINGS_KEYS
+    );
+    if (cleaned.missingKeys > 0 || cleaned.htmlViolations > 0) {
+      bumpUiI18nCounter(telemetry, "translation_fallbacks");
+      return null;
+    }
+    setUiRuntimeTranslationCache(normalizedLang, cleaned.strings);
+    return cleaned.strings;
+  } catch {
+    bumpUiI18nCounter(telemetry, "translation_fallbacks");
+    return null;
+  }
 }
 
 async function ensureUiStringsForState(
@@ -5805,8 +5998,6 @@ async function ensureUiStringsForState(
     allowBackgroundFull?: boolean;
   }
 ): Promise<CanvasState> {
-  void model;
-  void telemetry;
   void options;
   if (isForceEnglishLanguageMode()) {
     const forced = {
@@ -5815,7 +6006,7 @@ async function ensureUiStringsForState(
       language_locked: "true",
       language_override: "false",
       language_source: "persisted",
-      ui_strings: UI_STRINGS_WITH_MENU_KEYS,
+      ui_strings: UI_STRINGS_SOURCE_EN,
       ui_strings_lang: "en",
       ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
       ui_strings_status: "ready",
@@ -5831,23 +6022,62 @@ async function ensureUiStringsForState(
     return applyUiGateState(state, forced);
   }
   const lang = normalizeLangCode(String((state as any).language ?? "")) || "en";
-  const resolvedBundle = resolveStaticUiBundle(lang);
-  const next = {
+  if (lang === "en") {
+    const englishReady = {
+      ...(state as any),
+      ui_strings: UI_STRINGS_SOURCE_EN,
+      ui_strings_lang: "en",
+      ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
+      ui_strings_status: "ready",
+      ui_strings_requested_lang: "en",
+      ui_bootstrap_status: "ready",
+      ui_translation_mode: "full",
+      ui_strings_critical_ready: "true",
+      ui_strings_full_ready: "true",
+      ui_strings_background_inflight: "false",
+      ui_strings_fallback_applied: "false",
+      ui_strings_fallback_reason: "",
+    } as CanvasState;
+    return applyUiGateState(state, englishReady);
+  }
+
+  const translated = await translateUiStringsAtRuntime(lang, model, telemetry);
+  if (translated) {
+    const localizedReady = {
+      ...(state as any),
+      ui_strings: translated,
+      ui_strings_lang: lang,
+      ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
+      ui_strings_status: "ready",
+      ui_strings_requested_lang: lang,
+      ui_bootstrap_status: "ready",
+      ui_translation_mode: "full",
+      ui_strings_critical_ready: "true",
+      ui_strings_full_ready: "true",
+      ui_strings_background_inflight: "false",
+      ui_strings_fallback_applied: "false",
+      ui_strings_fallback_reason: "",
+    } as CanvasState;
+    return applyUiGateState(state, localizedReady);
+  }
+
+  const pending = {
     ...(state as any),
-    ui_strings: resolvedBundle.strings,
-    ui_strings_lang: resolvedBundle.effectiveLang,
+    ui_strings: UI_STRINGS_SOURCE_EN,
+    ui_strings_lang: "en",
     ui_strings_version: UI_STRINGS_SCHEMA_VERSION,
-    ui_strings_status: "ready",
-    ui_strings_requested_lang: resolvedBundle.requestedLang,
-    ui_bootstrap_status: "ready",
-    ui_translation_mode: "full",
-    ui_strings_critical_ready: "true",
-    ui_strings_full_ready: "true",
-    ui_strings_background_inflight: "false",
-    ui_strings_fallback_applied: resolvedBundle.fallbackApplied,
-    ui_strings_fallback_reason: resolvedBundle.fallbackReason,
+    ui_strings_status: "pending",
+    ui_strings_requested_lang: lang,
+    ui_bootstrap_status: "awaiting_locale",
+    ui_translation_mode: "critical_first",
+    ui_strings_critical_ready: "false",
+    ui_strings_full_ready: "false",
+    ui_strings_background_inflight: "true",
+    ui_strings_fallback_applied: "false",
+    ui_strings_fallback_reason: "",
   } as CanvasState;
-  return applyUiGateState(state, next);
+  bumpUiI18nCounter(telemetry, "ui_strings_pending_count");
+  return applyUiGateState(state, pending);
 }
 
 function withLanguageDecision(
@@ -6866,6 +7096,7 @@ type RunStepBase = {
     contract_id?: string;
     contract_version?: string;
     text_keys?: string[];
+    view?: UiViewPayload;
     flags: Record<string, boolean | string>;
     wording_choice?: WordingChoiceUiPayload;
   };
@@ -6885,6 +7116,15 @@ function assertRunStepContractOrThrow(response: RunStepSuccess | RunStepError): 
   if (!state || typeof state !== "object") {
     throw new Error("missing_state");
   }
+  const uiPayload =
+    (response as any)?.ui && typeof (response as any).ui === "object"
+      ? ((response as any).ui as Record<string, unknown>)
+      : null;
+  const uiView =
+    uiPayload && uiPayload.view && typeof uiPayload.view === "object"
+      ? (uiPayload.view as Record<string, unknown>)
+      : null;
+  const uiViewMode = String((uiView || {}).mode || "").trim().toLowerCase();
   const bootstrapPhase = String(state.bootstrap_phase || "").trim().toLowerCase();
   const uiGateStatus = String(state.ui_gate_status || "").trim();
   const uiGateReason = String(state.ui_gate_reason || "").trim();
@@ -6906,6 +7146,9 @@ function assertRunStepContractOrThrow(response: RunStepSuccess | RunStepError): 
   }
   if (!CONTRACT_UI_STRINGS_STATUSES.has(uiStringsStatus)) {
     throw new Error("invalid_ui_strings_status");
+  }
+  if (uiPayload && (!uiView || !CONTRACT_UI_VIEW_MODES.has(uiViewMode))) {
+    throw new Error("invalid_ui_view_mode");
   }
   if (!viewContractVersion) {
     throw new Error("missing_view_contract_version");
