@@ -144,6 +144,32 @@ function menuIdFromSpecialistPayload(payload: any): string {
   return parseMenuFromContractId(payload?.ui_contract_id || "");
 }
 
+function uiContractSnapshot(turn: any): Record<string, unknown> {
+  const ui = turn?.ui && typeof turn.ui === "object" ? turn.ui : {};
+  const actions = Array.isArray((ui as any).actions)
+    ? ((ui as any).actions as any[]).map((action) => ({
+        id: String(action?.id || ""),
+        label: String(action?.label || ""),
+        label_key: String(action?.label_key || ""),
+        action_code: String(action?.action_code || ""),
+        intent: String(action?.intent || ""),
+        primary: action?.primary === true,
+      }))
+    : [];
+  const actionCodes = Array.isArray((ui as any).action_codes)
+    ? ((ui as any).action_codes as unknown[]).map((code) => String(code || ""))
+    : [];
+  const textKeys = Array.isArray((ui as any).text_keys)
+    ? ((ui as any).text_keys as unknown[]).map((key) => String(key || ""))
+    : [];
+  return {
+    actions,
+    action_codes: actionCodes,
+    contract_id: String((ui as any).contract_id || ""),
+    text_keys: textKeys,
+  };
+}
+
 function setPhaseContract(state: Record<string, unknown>, stepId: string, menuId: string): void {
   if (!stepId || !menuId) return;
   const existing =
@@ -896,6 +922,45 @@ test("dream suggestions pick-one is deterministic and immediately stages a Dream
   assert.equal(String(result.specialist?.dream || ""), suggestionA);
   assert.equal(String(result.specialist?.refined_formulation || ""), suggestionA);
   assert.equal(String(result.text || "").includes(suggestionA), true);
+});
+
+test("ui contract fields are deterministic for the same Dream suggestions pick-one input", async () => {
+  const suggestionA =
+    "Mindd dreams of a world in which creative professionals feel truly understood and empowered to express their full potential.";
+  const suggestionB =
+    "Mindd dreams of a world in which businesses and individuals connect through authentic, meaningful communication that inspires trust and growth.";
+  const baseArgs = {
+    input_mode: "widget" as const,
+    user_message: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
+    state: {
+      ...getDefaultState(),
+      current_step: "dream",
+      active_specialist: "Dream",
+      intro_shown_session: "true",
+      intro_shown_for_step: "dream",
+      started: "true",
+      business_name: "Mindd",
+      __ui_phase_by_step: {
+        dream: "dream:phase:DREAM_MENU_SUGGESTIONS",
+      },
+      last_specialist_result: {
+        action: "ASK",
+        ui_contract_id: "dream:phase:DREAM_MENU_SUGGESTIONS",
+        question:
+          "1) Pick one for me and continue\n2) Do a small exercise that helps to define your dream.",
+        message: `${suggestionA} ${suggestionB} I hope these suggestions inspire you to write your own Dream.`,
+        refined_formulation: "",
+        dream: "",
+        is_offtopic: false,
+      },
+    },
+  };
+
+  const first = await run_step(baseArgs);
+  const second = await run_step(baseArgs);
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  assert.deepEqual(uiContractSnapshot(first), uiContractSnapshot(second));
 });
 
 test("role examples choose-for-me is deterministic and immediately stages a Role candidate", async () => {

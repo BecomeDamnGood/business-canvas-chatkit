@@ -6,6 +6,21 @@ import os from "node:os";
 import path from "node:path";
 import { run_step } from "./run_step.js";
 
+function shapeSnapshot(result: any): Record<string, unknown> {
+  return {
+    ok: result?.ok === true,
+    current_step_id: String(result?.current_step_id || ""),
+    ui_view_mode: String(result?.ui?.view?.mode || ""),
+    ui_gate_status: String(result?.state?.ui_gate_status || ""),
+    bootstrap_phase: String(result?.state?.bootstrap_phase || ""),
+    has_ui_actions: Array.isArray(result?.ui?.actions),
+    has_action_codes: Array.isArray(result?.ui?.action_codes),
+    has_contract_id: String(result?.ui?.contract_id || "").trim().length > 0,
+    has_text_keys: Array.isArray(result?.ui?.text_keys),
+    error_type: String(result?.error?.type || ""),
+  };
+}
+
 async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Promise<T> {
   const previous = process.env[key];
   process.env[key] = value;
@@ -908,6 +923,203 @@ test("state transient allowlist keeps session metadata and strips unknown __ key
   assert.equal(result?.ok, true);
   assert.equal(String((result as any)?.state?.__session_id || ""), seededSessionId);
   assert.equal(Object.prototype.hasOwnProperty.call((result as any)?.state || {}, "__unknown_payload_noise"), false);
+});
+
+test("guardrail snapshot: run_step output shape is stable across prestart/waiting/interactive/blocked/failed states", async () => {
+  const prestart = await run_step({
+    user_message: "",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "false",
+    },
+  });
+  assert.deepEqual(shapeSnapshot(prestart), {
+    ok: true,
+    current_step_id: "step_0",
+    ui_view_mode: "prestart",
+    ui_gate_status: "ready",
+    bootstrap_phase: "ready",
+    has_ui_actions: false,
+    has_action_codes: false,
+    has_contract_id: false,
+    has_text_keys: false,
+    error_type: "",
+  });
+
+  const waitingLocale = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "ru-RU",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
+    },
+  });
+  assert.deepEqual(shapeSnapshot(waitingLocale), {
+    ok: true,
+    current_step_id: "step_0",
+    ui_view_mode: "waiting_locale",
+    ui_gate_status: "waiting_locale",
+    bootstrap_phase: "waiting_locale",
+    has_ui_actions: false,
+    has_action_codes: false,
+    has_contract_id: true,
+    has_text_keys: true,
+    error_type: "",
+  });
+
+  const interactive = await run_step({
+    user_message: "",
+    input_mode: "chat",
+    locale_hint: "fr-CA",
+    locale_hint_source: "openai_locale",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
+    },
+  });
+  assert.deepEqual(shapeSnapshot(interactive), {
+    ok: true,
+    current_step_id: "step_0",
+    ui_view_mode: "interactive",
+    ui_gate_status: "ready",
+    bootstrap_phase: "ready",
+    has_ui_actions: false,
+    has_action_codes: false,
+    has_contract_id: true,
+    has_text_keys: true,
+    error_type: "",
+  });
+
+  const blocked = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      current_step: "role",
+      active_specialist: "Role",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "CONFIRM",
+        menu_id: "",
+        question: "",
+        confirmation_question: "Are you ready to continue to Entity?",
+        message: "I think I understand what you mean.",
+        role: "Mindd sets standards for purpose-driven business.",
+        refined_formulation: "Mindd sets standards for purpose-driven business.",
+        wording_choice_pending: "true",
+        wording_choice_user_raw: "We offer the best quality.",
+        wording_choice_user_normalized: "We offer the best quality.",
+        wording_choice_agent_current: "Mindd sets standards for purpose-driven business.",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "role",
+      },
+    },
+  });
+  assert.deepEqual(shapeSnapshot(blocked), {
+    ok: false,
+    current_step_id: "role",
+    ui_view_mode: "blocked",
+    ui_gate_status: "blocked",
+    bootstrap_phase: "failed",
+    has_ui_actions: false,
+    has_action_codes: false,
+    has_contract_id: false,
+    has_text_keys: false,
+    error_type: "session_upgrade_required",
+  });
+
+  const failed = await run_step({
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      started: "true",
+      ui_gate_status: "not_a_valid_status",
+      last_specialist_result: {},
+    },
+  });
+  assert.deepEqual(shapeSnapshot(failed), {
+    ok: false,
+    current_step_id: "step_0",
+    ui_view_mode: "",
+    ui_gate_status: "failed",
+    bootstrap_phase: "failed",
+    has_ui_actions: false,
+    has_action_codes: false,
+    has_contract_id: false,
+    has_text_keys: false,
+    error_type: "invalid_state",
+  });
+});
+
+test("fail-closed: invalid contract markers are surfaced and block the turn", async () => {
+  const result = await run_step({
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      started: "true",
+      ui_gate_status: "ready",
+      ui_gate_reason: "unknown_reason",
+      ui_strings_status: "legacy_ready",
+      bootstrap_phase: "legacy_phase",
+      last_specialist_result: {},
+    },
+  });
+  assert.equal(result?.ok, false);
+  assert.equal(String(result?.error?.type || ""), "invalid_state");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "failed");
+  assert.equal(String(result?.state?.ui_gate_reason || ""), "invalid_state");
+  assert.equal(String(result?.state?.bootstrap_phase || ""), "failed");
+  const markers = (result?.error?.markers || []).slice().sort();
+  if (markers.length > 0) {
+    assert.deepEqual(markers, [
+      "invalid_bootstrap_phase",
+      "invalid_ui_gate_reason",
+      "invalid_ui_strings_status",
+    ]);
+  }
+});
+
+test("fail-closed: legacy markers force session upgrade when confirmation_question is present", async () => {
+  const result = await run_step({
+    user_message: "ACTION_WORDING_PICK_USER",
+    input_mode: "widget",
+    state: {
+      current_step: "purpose",
+      active_specialist: "Purpose",
+      intro_shown_session: "true",
+      started: "true",
+      business_name: "Mindd",
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "",
+        confirmation_question: "Do you want to continue?",
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "purpose",
+      },
+    },
+  });
+  assert.equal(result?.ok, false);
+  assert.equal(String(result?.error?.type || ""), "session_upgrade_required");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "blocked");
+  assert.equal(String(result?.state?.ui_gate_reason || ""), "session_upgrade_required");
+  assert.equal(String(result?.state?.bootstrap_phase || ""), "failed");
+  assert.equal((result?.error?.markers || []).includes("legacy_confirmation_question"), true);
 });
 
 // Meta-filter: first message is never dropped (pristineAtEntry ? rawNormalized : ...) in run_step.ts.

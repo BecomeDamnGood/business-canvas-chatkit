@@ -43,3 +43,26 @@ test("MCP app contract: run_step declares invocation status strings", () => {
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/toolInvocation\/invoking":\s*"Thinking\.\.\."/);
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/toolInvocation\/invoked":\s*"Updated"/);
 });
+
+test("MCP wrapper parity: structuredContent.result is always model-safe and _meta.widget_result keeps full payload", () => {
+  assert.match(source, /const modelResult = buildModelSafeResult\(staleResult\)/);
+  assert.match(source, /const modelResult = buildModelSafeResult\(resultForClient\)/);
+  assert.match(source, /const modelResult = buildModelSafeResult\(fallbackResult as Record<string, unknown>\)/);
+  assert.match(source, /meta:\s*\{\s*widget_result:\s*staleResult\s*\}/);
+  assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient\s*,?\s*\}/);
+  assert.match(source, /meta:\s*\{\s*widget_result:\s*fallbackResult\s*,?\s*\}/);
+});
+
+test("MCP wrapper parity: model-safe result contract remains minimal in buildModelSafeResult", () => {
+  const fnMatch = source.match(/function buildModelSafeResult\(result: Record<string, unknown>\): Record<string, unknown> \{[\s\S]*?\n\}/);
+  assert.ok(fnMatch && fnMatch[0], "buildModelSafeResult function must exist");
+  const fnBody = String(fnMatch?.[0] || "");
+  assert.match(fnBody, /model_result_shape_version:\s*"v2_minimal"/);
+  assert.match(fnBody, /\bok:\s*result\.ok === true/);
+  assert.match(fnBody, /\btool:\s*safeString\(result\.tool \|\| "run_step"\)/);
+  assert.match(fnBody, /\bcurrent_step_id:\s*currentStep/);
+  assert.match(fnBody, /\bstate:\s*safeState/);
+  assert.doesNotMatch(fnBody, /\bprompt\s*:/);
+  assert.doesNotMatch(fnBody, /\bspecialist\s*:/);
+  assert.doesNotMatch(fnBody, /\berror\s*:/);
+});
