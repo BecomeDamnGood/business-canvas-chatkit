@@ -247,3 +247,35 @@ Next agent exact TODO:
 - Start Step 5 and extract post-specialist pipeline and state mutation flow into `mcp-server/src/handlers/run_step_pipeline.ts` and `mcp-server/src/handlers/run_step_state_update.ts` while keeping `run_step_routes.ts` as sole owner of special-route handling.
 Commit:
 - pending_after_commit
+
+## Step 5 - Pipeline + state subsystem
+Date: 2026-02-25 21:09 CET
+Status: completed
+Completed:
+- Extracted state mutation logic into `mcp-server/src/handlers/run_step_state_update.ts` with `createRunStepStateUpdateHelpers` (`applyStateUpdate` + post-specialist dream/runtime mutations).
+- Extracted post-specialist stage chain into `mcp-server/src/handlers/run_step_pipeline.ts` with explicit stage-order manifest and a single `runPostSpecialistPipeline` entrypoint.
+- Switched `run_step.ts` to facade wiring: initialize helpers, call pipeline once after special-route dispatch, and finalize once via `finalizeResponse(pipelinePayload)`.
+- Updated source-guard ownership assertions in `run_step_finals.test.ts` to validate wording/off-topic pipeline ownership in `run_step_pipeline.ts`.
+- Extended `mcp-server/src/handlers/run_step_modules.ts` barrel exports to include pipeline/state helper factories.
+Pending:
+- No pending work for Step 5 scope.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_pipeline.ts
+- mcp-server/src/handlers/run_step_state_update.ts
+- mcp-server/src/handlers/run_step_modules.ts
+- mcp-server/src/handlers/run_step_finals.test.ts
+- docs/run_step_refactor_memory.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- git diff --name-only | wc -l => pass (4)
+- git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}' => pass (adds=132 dels=675 total=807)
+- git diff -- mcp-server/src/handlers/run_step.ts | rg '^@@' | wc -l => pass (4)
+- npm --prefix mcp-server run arch:run-step:check => pass
+Next agent exact TODO:
+- Start Step 6 convergence: final facade cleanup and hardening pass, keeping `run_step_pipeline.ts` as sole owner of the post-specialist stage chain and `run_step_state_update.ts` as sole owner of state mutation staging.
+Commit:
+- pending_after_commit

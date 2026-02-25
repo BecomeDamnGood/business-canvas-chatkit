@@ -149,8 +149,13 @@ import {
   createCallSpecialistStrictSafe,
   hasUsableSpecialistForRetry as hasUsableSpecialistForRetryDispatch,
 } from "./specialist_dispatch.js";
-import { createRunStepUiPayloadHelpers, type UiContractMeta } from "./run_step_ui_payload.js";
-import { createRunStepWordingHelpers, createRunStepRouteHelpers } from "./run_step_modules.js";
+import { createRunStepUiPayloadHelpers } from "./run_step_ui_payload.js";
+import {
+  createRunStepWordingHelpers,
+  createRunStepRouteHelpers,
+  createRunStepStateUpdateHelpers,
+  createRunStepPipelineHelpers,
+} from "./run_step_modules.js";
 
 function uiDefaultString(key: string, fallback = ""): string {
   const candidate = String(UI_STRINGS_WITH_MENU_KEYS[key] || "").trim();
@@ -4619,112 +4624,29 @@ const SPECIALIST_INSTRUCTION_BLOCKS = {
   offtopicFlagContractInstruction: OFFTOPIC_FLAG_CONTRACT_INSTRUCTION,
 };
 
-/**
- * Persist state updates consistently (no nulls).
- * Contract mode: step outputs are staged per step and only committed to *_final on explicit next-step actioncodes.
- * Exported for unit tests.
- */
-export function applyStateUpdate(params: {
-  prev: CanvasState;
-  decision: OrchestratorOutput;
-  specialistResult: any;
-  showSessionIntroUsed: BoolString;
-  provisionalSource?: ProvisionalSource;
-}): CanvasState {
-  const { prev, decision, specialistResult, showSessionIntroUsed } = params;
+const stateUpdateHelpers = createRunStepStateUpdateHelpers({
+  step0Id: STEP_0_ID,
+  dreamStepId: DREAM_STEP_ID,
+  purposeStepId: PURPOSE_STEP_ID,
+  bigwhyStepId: BIGWHY_STEP_ID,
+  roleStepId: ROLE_STEP_ID,
+  entityStepId: ENTITY_STEP_ID,
+  strategyStepId: STRATEGY_STEP_ID,
+  targetgroupStepId: TARGETGROUP_STEP_ID,
+  productsservicesStepId: PRODUCTSSERVICES_STEP_ID,
+  rulesofthegameStepId: RULESOFTHEGAME_STEP_ID,
+  presentationStepId: PRESENTATION_STEP_ID,
+  dreamSpecialist: DREAM_SPECIALIST,
+  dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
+  withProvisionalValue,
+  postProcessRulesOfTheGame,
+  buildRulesOfTheGameBullets,
+  setDreamRuntimeMode,
+  getDreamRuntimeMode,
+});
 
-  const action = String(specialistResult?.action ?? "");
-  const isOfftopic = specialistResult?.is_offtopic === true;
-  const next_step = String(decision.current_step ?? "");
-  const active_specialist = String(decision.specialist_to_call ?? "");
-  const provisionalSource: ProvisionalSource = params.provisionalSource || "system_generated";
-
-  let nextState: CanvasState = {
-    ...prev,
-    current_step: next_step,
-    active_specialist,
-    last_specialist_result:
-      typeof specialistResult === "object" && specialistResult !== null ? specialistResult : {},
-
-    intro_shown_session: showSessionIntroUsed === "true" ? "true" : (prev as any).intro_shown_session,
-
-    // mark a step intro as shown only when the specialist actually outputs INTRO
-    intro_shown_for_step: action === "INTRO" ? next_step : (prev as any).intro_shown_for_step,
-  };
-
-  // Contract rule: off-topic turns must never mutate canonical finals.
-  if (isOfftopic) {
-    return nextState;
-  }
-
-  // ---- Step 0 ----
-  if (next_step === STEP_0_ID) {
-    if (typeof specialistResult?.step_0 === "string" && specialistResult.step_0.trim()) {
-      (nextState as any).step_0_final = specialistResult.step_0.trim();
-      nextState = withProvisionalValue(nextState, STEP_0_ID, specialistResult.step_0.trim(), provisionalSource);
-    }
-    if (typeof specialistResult?.business_name === "string" && specialistResult.business_name.trim()) {
-      (nextState as any).business_name = specialistResult.business_name.trim();
-    }
-  }
-
-  const stageFieldValue = (stepId: string, raw: unknown, fallbackRaw?: unknown): void => {
-    const primary = typeof raw === "string" ? raw.trim() : "";
-    const fallback = typeof fallbackRaw === "string" ? fallbackRaw.trim() : "";
-    const value = primary || fallback;
-    if (!value) return;
-    nextState = withProvisionalValue(nextState, stepId, value, provisionalSource);
-  };
-
-  // ---- Stage per-step value (temporary final until explicit next-step confirm) ----
-  if (next_step === DREAM_STEP_ID) {
-    stageFieldValue(DREAM_STEP_ID, specialistResult?.dream, specialistResult?.refined_formulation);
-  }
-  if (next_step === PURPOSE_STEP_ID) {
-    stageFieldValue(PURPOSE_STEP_ID, specialistResult?.purpose, specialistResult?.refined_formulation);
-  }
-  if (next_step === BIGWHY_STEP_ID) {
-    stageFieldValue(BIGWHY_STEP_ID, specialistResult?.bigwhy, specialistResult?.refined_formulation);
-  }
-  if (next_step === ROLE_STEP_ID) {
-    stageFieldValue(ROLE_STEP_ID, specialistResult?.role, specialistResult?.refined_formulation);
-  }
-  if (next_step === ENTITY_STEP_ID) {
-    stageFieldValue(ENTITY_STEP_ID, specialistResult?.entity, specialistResult?.refined_formulation);
-  }
-  if (next_step === STRATEGY_STEP_ID) {
-    stageFieldValue(STRATEGY_STEP_ID, specialistResult?.strategy, specialistResult?.refined_formulation);
-  }
-  if (next_step === TARGETGROUP_STEP_ID) {
-    const v = String(specialistResult?.targetgroup || specialistResult?.refined_formulation || "").trim();
-    const firstSentence = v.split(/[.!?]/)[0].trim();
-    if (firstSentence) {
-      const words = firstSentence.split(/\s+/).filter(Boolean);
-      const trimmed = words.length > 10 ? words.slice(0, 10).join(" ") : firstSentence;
-      nextState = withProvisionalValue(nextState, TARGETGROUP_STEP_ID, trimmed, provisionalSource);
-    }
-  }
-  if (next_step === PRODUCTSSERVICES_STEP_ID) {
-    stageFieldValue(PRODUCTSSERVICES_STEP_ID, specialistResult?.productsservices, specialistResult?.refined_formulation);
-  }
-  if (next_step === RULESOFTHEGAME_STEP_ID) {
-    const statementsArray = Array.isArray(specialistResult.statements)
-      ? (specialistResult.statements as string[])
-      : [];
-    const processed = postProcessRulesOfTheGame(statementsArray, 6);
-    const bullets = buildRulesOfTheGameBullets(processed.finalRules);
-    stageFieldValue(
-      RULESOFTHEGAME_STEP_ID,
-      bullets,
-      specialistResult?.rulesofthegame || specialistResult?.refined_formulation
-    );
-  }
-  if (next_step === PRESENTATION_STEP_ID) {
-    stageFieldValue(PRESENTATION_STEP_ID, specialistResult?.presentation_brief, specialistResult?.refined_formulation);
-  }
-
-  return nextState;
-}
+const { applyPostSpecialistStateMutations } = stateUpdateHelpers;
+export const applyStateUpdate = stateUpdateHelpers.applyStateUpdate;
 
 const callSpecialistStrict = createCallSpecialistStrict({
   instructionBlocks: SPECIALIST_INSTRUCTION_BLOCKS,
@@ -5967,6 +5889,55 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   state = await ensureLanguage(state, userMessage);
   languageResolvedThisTurn = true;
   const lang = langFromState(state);
+  const pipelineHelpers = createRunStepPipelineHelpers<RunStepSuccess | RunStepError>({
+    step0Id: STEP_0_ID,
+    dreamStepId: DREAM_STEP_ID,
+    bigwhyStepId: BIGWHY_STEP_ID,
+    strategyStepId: STRATEGY_STEP_ID,
+    dreamSpecialist: DREAM_SPECIALIST,
+    dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
+    strategySpecialist: STRATEGY_SPECIALIST,
+    dreamExplainerSwitchSelfMenuId: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
+    dreamForceRefineRoutePrefix: DREAM_FORCE_REFINE_ROUTE_PREFIX,
+    strategyConsolidateRouteToken: STRATEGY_CONSOLIDATE_ROUTE_TOKEN,
+    bigwhyMaxWords: BIGWHY_MAX_WORDS,
+    uiContractVersion: UI_CONTRACT_VERSION,
+    buildRoutingContext,
+    callSpecialistStrictSafe,
+    attachRegistryPayload,
+    normalizeEntitySpecialistResult,
+    applyCentralMetaTopicRouter,
+    normalizeNonStep0OfftopicSpecialist,
+    normalizeStep0AskDisplayContract,
+    hasValidStep0Final,
+    applyPostSpecialistStateMutations,
+    getDreamRuntimeMode,
+    isMetaOfftopicFallbackTurn,
+    shouldTreatAsStepContributingInput,
+    hasDreamSpecialistCandidate,
+    buildDreamRefineFallbackSpecialist,
+    strategyStatementsForConsolidateGuard,
+    pickBigWhyCandidate,
+    countWords,
+    buildBigWhyTooLongFeedback,
+    renderFreeTextTurnPolicy,
+    validateRenderedContractOrRecover,
+    applyUiPhaseByStep,
+    buildContractId,
+    isWordingChoiceEligibleContext,
+    buildWordingChoiceFromTurn,
+    buildWordingChoiceFromPendingSpecialist,
+    enforceDreamBuilderQuestionProgress,
+    applyMotivationQuotesContractV11,
+    buildTextForWidget,
+    pickPrompt,
+    looksLikeMetaInstruction,
+    bumpUiI18nCounter: (telemetry, key) =>
+      bumpUiI18nCounter(
+        telemetry as UiI18nTelemetryCounters | null | undefined,
+        key as keyof UiI18nTelemetryCounters
+      ),
+  });
 
   const routeHelpers = createRunStepRouteHelpers<RunStepSuccess | RunStepError>({
     step0Id: STEP_0_ID,
@@ -6039,571 +6010,23 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     lang,
   });
   if (specialRouteResponse) return specialRouteResponse;
-  // --------- ORCHESTRATE (decision 1) ----------
-  const decision1 = decideOrchestration(state, userMessage);
-
-  // We do not render a session intro here.
-  const showSessionIntro: BoolString = decision1.show_session_intro;
-
-  // --------- CALL SPECIALIST (first) ----------
-  const call1 = await callSpecialistStrictSafe(
-    { model, state, decision: decision1, userMessage },
-    buildRoutingContext(userMessage),
-    state
-  );
-  if (!call1.ok) return finalizeResponse(call1.payload);
-  rememberLlmCall(call1.value);
-  let attempts = call1.value.attempts;
-  let specialistResult: any = call1.value.specialistResult;
-  const previousSpecialistForTurn = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-  const currentStepId = String(decision1.current_step || "");
-  // --------- PATCH: DreamExplainer scoring view must have statements ----------
-  if (
-    decision1.specialist_to_call === DREAM_EXPLAINER_SPECIALIST &&
-    specialistResult &&
-    String(specialistResult.scoring_phase ?? "") === "true" &&
-    (!Array.isArray(specialistResult.statements) || specialistResult.statements.length === 0)
-  ) {
-    const prevStatements = Array.isArray((state as any).dream_builder_statements)
-      ? (state as any).dream_builder_statements
-      : Array.isArray((state as any).last_specialist_result?.statements)
-        ? (state as any).last_specialist_result.statements
-        : [];
-    if (prevStatements.length > 0) {
-      specialistResult = { ...specialistResult, statements: prevStatements };
-    }
-  }
-
-  // --------- GUARD: scoring view only when at least 20 statements ----------
-  if (
-    decision1.specialist_to_call === DREAM_EXPLAINER_SPECIALIST &&
-    specialistResult &&
-    String(specialistResult.scoring_phase ?? "") === "true"
-  ) {
-    const stmtCount = Array.isArray(specialistResult.statements) ? specialistResult.statements.length : 0;
-    if (stmtCount < 20) {
-      specialistResult = {
-        ...specialistResult,
-        scoring_phase: "false",
-        clusters: [],
-      };
-    }
-  }
-  if (decision1.specialist_to_call === DREAM_EXPLAINER_SPECIALIST) {
-    const modeAtTurnStart = getDreamRuntimeMode(state);
-    const previousCanonicalCount = Array.isArray((state as any).dream_builder_statements)
-      ? ((state as any).dream_builder_statements as unknown[]).length
-      : 0;
-    const currentStatementCount = Array.isArray(specialistResult?.statements)
-      ? (specialistResult.statements as unknown[]).length
-      : 0;
-    const effectiveStatementCount = Math.max(previousCanonicalCount, currentStatementCount);
-    const scoringPhase = String(specialistResult?.scoring_phase ?? "") === "true";
-    const hasClusters =
-      Array.isArray(specialistResult?.clusters) &&
-      (specialistResult.clusters as unknown[]).length > 0;
-    if (
-      (modeAtTurnStart === "builder_collect" || modeAtTurnStart === "builder_scoring") &&
-      effectiveStatementCount >= 20 &&
-      (!scoringPhase || !hasClusters)
-    ) {
-      const specialistSnapshot =
-        specialistResult && typeof specialistResult === "object" ? specialistResult : {};
-      return finalizeResponse(attachRegistryPayload({
-        ok: false as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: String((state as any).active_specialist || ""),
-        text: "",
-        prompt: "",
-        specialist: specialistSnapshot,
-        state,
-        error: {
-          type: "contract_violation",
-          message: "DreamBuilder reached scoring threshold without scoring view.",
-          reason: "dreambuilder_scoring_required_after_threshold",
-          step: String(state.current_step || ""),
-          statement_count: effectiveStatementCount,
-          runtime_mode: modeAtTurnStart,
-        },
-      }, specialistSnapshot));
-    }
-  }
-
-  // --------- DREAM CONTRACT REPAIR ----------
-  if (
-    String(decision1.current_step || "") === DREAM_STEP_ID &&
-    String(decision1.specialist_to_call || "") === DREAM_SPECIALIST
-  ) {
-    const isOfftopic =
-      specialistResult?.is_offtopic === true ||
-      String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
-    const isMetaFallback = isMetaOfftopicFallbackTurn({
-      stepId: DREAM_STEP_ID,
-      userMessage,
-      specialistResult,
-    });
-    const hasContributingInput = shouldTreatAsStepContributingInput(String(userMessage || ""), DREAM_STEP_ID);
-    const candidateMissing = !hasDreamSpecialistCandidate(specialistResult);
-    if (!isOfftopic && !isMetaFallback && hasContributingInput && candidateMissing) {
-      const repairSeed = String(userMessage || "").trim();
-      const repairInput = repairSeed
-        ? `${DREAM_FORCE_REFINE_ROUTE_PREFIX}\n${repairSeed}`
-        : DREAM_FORCE_REFINE_ROUTE_PREFIX;
-      const callRepair = await callSpecialistStrictSafe(
-        { model, state, decision: decision1, userMessage: repairInput },
-        buildRoutingContext(repairInput),
-        state
-      );
-      if (callRepair.ok) {
-        rememberLlmCall(callRepair.value);
-        attempts = Math.max(attempts, callRepair.value.attempts);
-        const repaired = callRepair.value.specialistResult;
-        const repairedOfftopic =
-          repaired?.is_offtopic === true ||
-          String(repaired?.is_offtopic || "").trim().toLowerCase() === "true";
-        if (!repairedOfftopic && hasDreamSpecialistCandidate(repaired)) {
-          specialistResult = repaired;
-        } else {
-          specialistResult = buildDreamRefineFallbackSpecialist(specialistResult, userMessage, state);
-        }
-      } else {
-        specialistResult = buildDreamRefineFallbackSpecialist(specialistResult, userMessage, state);
-      }
-    }
-  }
-
-  // --------- STRATEGY CONSOLIDATE CONTRACT GUARD ----------
-  if (
-    String(decision1.current_step || "") === STRATEGY_STEP_ID &&
-    String(decision1.specialist_to_call || "") === STRATEGY_SPECIALIST &&
-    String(userMessage || "").trim().startsWith(STRATEGY_CONSOLIDATE_ROUTE_TOKEN)
-  ) {
-    const initialOfftopic =
-      specialistResult?.is_offtopic === true ||
-      String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
-    const initialCount = strategyStatementsForConsolidateGuard(specialistResult, state).length;
-    if (!initialOfftopic && initialCount > 7) {
-      const seedStatements = strategyStatementsForConsolidateGuard(specialistResult, state);
-      const repairInput = seedStatements.length > 0
-        ? `${STRATEGY_CONSOLIDATE_ROUTE_TOKEN}\n${seedStatements.join("\n")}`
-        : STRATEGY_CONSOLIDATE_ROUTE_TOKEN;
-      const repairCall = await callSpecialistStrictSafe(
-        { model, state, decision: decision1, userMessage: repairInput },
-        buildRoutingContext(repairInput),
-        state
-      );
-      if (!repairCall.ok) return finalizeResponse(repairCall.payload);
-      rememberLlmCall(repairCall.value);
-      attempts = Math.max(attempts, repairCall.value.attempts);
-      specialistResult = repairCall.value.specialistResult;
-    }
-
-    const repairedOfftopic =
-      specialistResult?.is_offtopic === true ||
-      String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
-    const repairedCount = strategyStatementsForConsolidateGuard(specialistResult, state).length;
-    if (!repairedOfftopic && repairedCount > 7) {
-      const specialistSnapshot =
-        specialistResult && typeof specialistResult === "object" ? specialistResult : {};
-      return finalizeResponse(attachRegistryPayload({
-        ok: false as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: String((state as any).active_specialist || ""),
-        text: "",
-        prompt: "",
-        specialist: specialistSnapshot,
-        state,
-        error: {
-          type: "contract_violation",
-          message: "Strategy consolidate route returned more than 7 focus points.",
-          reason: "strategy_consolidate_overflow_after_repair",
-          step: String(state.current_step || ""),
-          statement_count: repairedCount,
-        },
-      }, specialistSnapshot));
-    }
-  }
-
-  // --------- BIGWHY SIZE GUARD ----------
-  if (String(decision1.current_step || "") === BIGWHY_STEP_ID) {
-    const candidate = pickBigWhyCandidate(specialistResult);
-    if (candidate && countWords(candidate) > BIGWHY_MAX_WORDS) {
-      const shortenRequest = `__SHORTEN_BIGWHY__ ${candidate}`;
-      const callShorten = await callSpecialistStrictSafe({
-        model,
-        state,
-        decision: decision1,
-        userMessage: shortenRequest,
-      }, buildRoutingContext(shortenRequest), state);
-      if (!callShorten.ok) return finalizeResponse(callShorten.payload);
-      rememberLlmCall(callShorten.value);
-      attempts = Math.max(attempts, callShorten.value.attempts);
-      specialistResult = callShorten.value.specialistResult;
-      const shortened = pickBigWhyCandidate(specialistResult);
-      if (!shortened || countWords(shortened) > BIGWHY_MAX_WORDS) {
-        specialistResult = buildBigWhyTooLongFeedback(state);
-      }
-    }
-  }
-
-  // --------- UPDATE STATE (after first specialist) ----------
-  specialistResult = normalizeEntitySpecialistResult(String(decision1.current_step || ""), specialistResult);
-  specialistResult = applyCentralMetaTopicRouter({
-    stepId: String(decision1.current_step || ""),
-    specialistResult: (specialistResult || {}) as Record<string, unknown>,
-    previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+  const pipelinePayload = await pipelineHelpers.runPostSpecialistPipeline({
     state,
-  });
-  const currentStepIdForOfftopic = String(decision1.current_step || "");
-  const currentSpecialistId = String(decision1.specialist_to_call || "");
-  const isOfftopicTurnAfterFallback =
-    specialistResult?.is_offtopic === true ||
-    String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
-  if (currentStepIdForOfftopic !== STEP_0_ID && isOfftopicTurnAfterFallback) {
-    state = await ensureUiStrings(state, userMessage);
-  }
-  specialistResult = normalizeNonStep0OfftopicSpecialist({
-    stepId: currentStepIdForOfftopic,
-    activeSpecialist: currentSpecialistId,
     userMessage,
-    specialistResult,
-    previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-    state,
+    actionCodeRaw,
+    responseUiFlags,
+    model,
+    uiI18nTelemetry,
+    inputMode: inputMode === "widget" ? "widget" : "chat",
+    wordingChoiceEnabled,
+    motivationQuotesEnabled,
+    submittedUserText,
+    lang,
+    rawNormalized,
+    pristineAtEntry,
+    decideOrchestration,
+    ensureUiStrings,
+    rememberLlmCall,
   });
-  if (currentStepIdForOfftopic === STEP_0_ID) {
-    const sourceActionStep0 = String((specialistResult as any)?.action || "").trim().toUpperCase();
-    specialistResult = normalizeStep0AskDisplayContract(
-      STEP_0_ID,
-      specialistResult,
-      state,
-      userMessage
-    );
-    const normalizedActionStep0 = String((specialistResult as any)?.action || "").trim().toUpperCase();
-    if (
-      sourceActionStep0 === "ESCAPE" &&
-      normalizedActionStep0 === "ASK" &&
-      hasValidStep0Final(String((state as any).step_0_final || ""))
-    ) {
-      bumpUiI18nCounter(uiI18nTelemetry, "step0_escape_ready_recovered_count");
-    }
-  }
-
-  let nextState = applyStateUpdate({
-    prev: state,
-    decision: decision1,
-    specialistResult,
-    showSessionIntroUsed: "false",
-    provisionalSource: actionCodeRaw ? "action_route" : "user_input",
-  });
-  if (
-    decision1.specialist_to_call === DREAM_EXPLAINER_SPECIALIST &&
-    Array.isArray(specialistResult?.statements)
-  ) {
-    const canonicalStatements = (specialistResult.statements as unknown[])
-      .map((line) => String(line || "").trim())
-      .filter(Boolean);
-    (nextState as any).dream_builder_statements = canonicalStatements;
-  }
-  if (
-    decision1.specialist_to_call === DREAM_EXPLAINER_SPECIALIST &&
-    String((state as any).dream_awaiting_direction ?? "").trim() === "true"
-  ) {
-    (nextState as any).dream_awaiting_direction = "false";
-  }
-  if (
-    decision1.specialist_to_call === DREAM_EXPLAINER_SPECIALIST &&
-    specialistResult &&
-    Array.isArray(specialistResult.statements) &&
-    specialistResult.statements.length >= 20
-  ) {
-    (nextState as any).dream_scoring_statements = specialistResult.statements;
-  }
-  if (String((nextState as any).current_step || "") === DREAM_STEP_ID) {
-    if (decision1.specialist_to_call === DREAM_SPECIALIST) {
-      setDreamRuntimeMode(nextState, "self");
-    } else if (decision1.specialist_to_call === DREAM_EXPLAINER_SPECIALIST) {
-      const scoringPhase = String(specialistResult?.scoring_phase ?? "") === "true";
-      const hasClusters =
-        Array.isArray(specialistResult?.clusters) &&
-        (specialistResult.clusters as unknown[]).length > 0;
-      if (scoringPhase && hasClusters) {
-        setDreamRuntimeMode(nextState, "builder_scoring");
-      } else if (getDreamRuntimeMode(state) === "builder_scoring" && !scoringPhase) {
-        setDreamRuntimeMode(nextState, "builder_refine");
-      } else if (getDreamRuntimeMode(state) === "builder_refine" && !scoringPhase) {
-        setDreamRuntimeMode(nextState, "builder_refine");
-      } else {
-        setDreamRuntimeMode(nextState, "builder_collect");
-      }
-    }
-  } else {
-    setDreamRuntimeMode(nextState, "self");
-  }
-
-  let finalDecision = decision1;
-
-  let actionCodesOverride: string[] | null = null;
-  let renderedActionsOverride: RenderedAction[] | null = null;
-  let wordingChoiceOverride: WordingChoiceUiPayload | null = null;
-  let contractMetaOverride: UiContractMeta | null = null;
-  const renderedRaw = renderFreeTextTurnPolicy({
-    stepId: String((nextState as any).current_step ?? ""),
-    state: nextState,
-    specialist: (specialistResult || {}) as Record<string, unknown>,
-    previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-  });
-  const validatedRendered = validateRenderedContractOrRecover({
-    stepId: String((nextState as any).current_step ?? ""),
-    rendered: renderedRaw,
-    state: nextState,
-    previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-    telemetry: uiI18nTelemetry,
-  });
-  nextState = validatedRendered.state;
-  const rendered = validatedRendered.rendered;
-  const contractViolation = validatedRendered.violation;
-  if (contractViolation) {
-    return finalizeResponse(attachRegistryPayload({
-      ok: false as const,
-      tool: "run_step" as const,
-      current_step_id: String(nextState.current_step),
-      active_specialist: String((nextState as any).active_specialist || ""),
-      text: "",
-      prompt: "",
-      specialist: rendered.specialist,
-      state: nextState,
-      error: {
-        type: "contract_violation",
-        message: "Rendered output violates the UI contract.",
-        reason: contractViolation,
-        step: String((nextState as any).current_step ?? ""),
-        contract_id: rendered.contractId,
-      },
-    }, rendered.specialist));
-  }
-  specialistResult = rendered.specialist;
-  let renderedStatusForPolicy: TurnOutputStatus = rendered.status;
-  actionCodesOverride = rendered.uiActionCodes;
-  renderedActionsOverride = rendered.uiActions;
-  contractMetaOverride = {
-    contractId: rendered.contractId,
-    contractVersion: rendered.contractVersion,
-    textKeys: rendered.textKeys,
-  };
-  applyUiPhaseByStep(nextState, String((nextState as any).current_step ?? ""), rendered.contractId);
-  (nextState as any).last_specialist_result = specialistResult;
-  let requireWordingPick = false;
-
-  const isDreamExplainerOfftopicTurn =
-    String((nextState as any).current_step || "") === DREAM_STEP_ID &&
-    String((nextState as any).active_specialist || "") === DREAM_EXPLAINER_SPECIALIST &&
-    (specialistResult?.is_offtopic === true ||
-      String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true");
-  if (isDreamExplainerOfftopicTurn) {
-    const previousSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-    specialistResult = normalizeNonStep0OfftopicSpecialist({
-      stepId: String((nextState as any).current_step || ""),
-      activeSpecialist: String((nextState as any).active_specialist || ""),
-      userMessage,
-      specialistResult,
-      previousSpecialist,
-      state: nextState,
-    });
-    const currentStepId = String((nextState as any).current_step || "");
-    const offTopicContractId = buildContractId(
-      currentStepId,
-      rendered.status,
-      DREAM_EXPLAINER_SWITCH_SELF_MENU_ID
-    );
-    applyUiPhaseByStep(nextState, currentStepId, offTopicContractId);
-    const rerenderedRaw = renderFreeTextTurnPolicy({
-      stepId: currentStepId,
-      state: nextState,
-      specialist: (specialistResult || {}) as Record<string, unknown>,
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-    });
-    const validatedRerendered = validateRenderedContractOrRecover({
-      stepId: currentStepId,
-      rendered: rerenderedRaw,
-      state: nextState,
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-      telemetry: uiI18nTelemetry,
-    });
-    nextState = validatedRerendered.state;
-    const rerendered = validatedRerendered.rendered;
-    const rerenderViolation = validatedRerendered.violation;
-    if (rerenderViolation) {
-      return finalizeResponse(attachRegistryPayload({
-        ok: false as const,
-        tool: "run_step" as const,
-        current_step_id: String(nextState.current_step),
-        active_specialist: String((nextState as any).active_specialist || ""),
-        text: "",
-        prompt: "",
-        specialist: rerendered.specialist,
-        state: nextState,
-        error: {
-          type: "contract_violation",
-          message: "Rendered output violates the UI contract.",
-          reason: rerenderViolation,
-          step: currentStepId,
-          contract_id: rerendered.contractId,
-        },
-      }, rerendered.specialist));
-    }
-    specialistResult = rerendered.specialist;
-    renderedStatusForPolicy = rerendered.status;
-    actionCodesOverride = rerendered.uiActionCodes;
-    renderedActionsOverride = rerendered.uiActions;
-    contractMetaOverride = {
-      contractId: rerendered.contractId,
-      contractVersion: rerendered.contractVersion,
-      textKeys: rerendered.textKeys,
-    };
-    applyUiPhaseByStep(nextState, currentStepId, rerendered.contractId);
-    (nextState as any).last_specialist_result = specialistResult;
-  }
-  const currentStepForWordingChoice = String((nextState as any).current_step || "");
-  const currentSpecialistForWordingChoice = String((nextState as any).active_specialist || "");
-  const previousSpecialistForWordingChoice = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-  const dreamRuntimeModeForWording = getDreamRuntimeMode(nextState);
-  const isCurrentTurnOfftopic =
-    specialistResult?.is_offtopic === true ||
-    String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
-  const eligibleForWordingChoiceTurn = isWordingChoiceEligibleContext(
-    currentStepForWordingChoice,
-    currentSpecialistForWordingChoice,
-    (specialistResult || {}) as Record<string, unknown>,
-    ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-    dreamRuntimeModeForWording
-  );
-  const userTextForWordingChoice = (() => {
-    const submitted = String(submittedUserText || "").trim();
-    if (submitted) return submitted;
-    const raw = String(userMessage || "").trim();
-    if (!raw) return "";
-    if (raw.startsWith("ACTION_")) return "";
-    if (raw.startsWith("__ROUTE__")) return "";
-    return raw;
-  })();
-  if (
-    wordingChoiceEnabled &&
-    inputMode === "widget" &&
-    eligibleForWordingChoiceTurn &&
-    !isCurrentTurnOfftopic &&
-    String((specialistResult as any)?.wording_choice_pending || "") !== "true"
-  ) {
-    const rebuilt = buildWordingChoiceFromTurn({
-      stepId: currentStepForWordingChoice,
-      activeSpecialist: currentSpecialistForWordingChoice,
-      previousSpecialist: previousSpecialistForWordingChoice,
-      specialistResult,
-      userTextRaw: userTextForWordingChoice,
-      isOfftopic: false,
-      dreamRuntimeModeRaw: dreamRuntimeModeForWording,
-    });
-    specialistResult = rebuilt.specialist;
-  }
-  (nextState as any).last_specialist_result = specialistResult;
-  if (wordingChoiceEnabled && inputMode === "widget") {
-    const pendingEligible = isWordingChoiceEligibleContext(
-      String((nextState as any).current_step || ""),
-      String((nextState as any).active_specialist || ""),
-      (specialistResult || {}) as Record<string, unknown>,
-      previousSpecialistForWordingChoice,
-      dreamRuntimeModeForWording
-    );
-    const pendingChoice = pendingEligible
-      ? buildWordingChoiceFromPendingSpecialist(
-          specialistResult,
-          String((nextState as any).active_specialist || ""),
-          previousSpecialistForWordingChoice,
-          String((nextState as any).current_step || ""),
-          dreamRuntimeModeForWording
-        )
-      : null;
-    if (pendingChoice) {
-      wordingChoiceOverride = pendingChoice;
-      requireWordingPick = true;
-      actionCodesOverride = [];
-      renderedActionsOverride = [];
-    }
-  }
-
-  const canonicalDreamBuilderStatementsCount =
-    Array.isArray((nextState as any).dream_builder_statements)
-      ? ((nextState as any).dream_builder_statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
-      : 0;
-  specialistResult = enforceDreamBuilderQuestionProgress(specialistResult, {
-    currentStepId: String((nextState as any).current_step || ""),
-    activeSpecialist: String((nextState as any).active_specialist || ""),
-    canonicalStatementCount: canonicalDreamBuilderStatementsCount,
-    wordingChoicePending: requireWordingPick || Boolean(wordingChoiceOverride?.enabled),
-    state: nextState,
-  });
-  if (!requireWordingPick && !wordingChoiceOverride?.enabled) {
-    const motivationApplied = applyMotivationQuotesContractV11({
-      enabled: motivationQuotesEnabled,
-      stepId: String((nextState as any).current_step || ""),
-      userMessage,
-      renderedStatus: renderedStatusForPolicy,
-      specialistResult: (specialistResult || {}) as Record<string, unknown>,
-      previousSpecialist: previousSpecialistForWordingChoice,
-      state: nextState,
-      requireWordingPick,
-    });
-    specialistResult = motivationApplied.specialistResult;
-    if (motivationApplied.suppressChoices) {
-      actionCodesOverride = [];
-      renderedActionsOverride = [];
-    }
-  }
-  (nextState as any).last_specialist_result = specialistResult;
-
-  const currentStepForContract = String((nextState as any).current_step ?? "");
-  const specialistContractId = String((specialistResult as any)?.ui_contract_id || "").trim();
-  if (currentStepForContract && specialistContractId) {
-    applyUiPhaseByStep(nextState, currentStepForContract, specialistContractId);
-    if (!contractMetaOverride?.contractId) {
-      contractMetaOverride = {
-        contractId: specialistContractId,
-        contractVersion: String((specialistResult as any)?.ui_contract_version || UI_CONTRACT_VERSION),
-        textKeys: Array.isArray((specialistResult as any)?.ui_text_keys)
-          ? (specialistResult as any)?.ui_text_keys
-          : [],
-      };
-    }
-  }
-
-  const text = buildTextForWidget({ specialist: specialistResult });
-  const prompt = pickPrompt(specialistResult);
-
-  // keep state consistent even though we don't render session intro copy here
-  if (showSessionIntro === "true" && String((nextState as any).intro_shown_session) !== "true") {
-    (nextState as any).intro_shown_session = "true";
-  }
-
-  const mergedFlags = {
-    ...(responseUiFlags || {}),
-    ...(requireWordingPick ? { require_wording_pick: true } : {}),
-  };
-
-  return finalizeResponse(attachRegistryPayload({
-    ok: true as const,
-    tool: "run_step" as const,
-    current_step_id: String(nextState.current_step),
-    active_specialist: String((nextState as any).active_specialist || ""),
-    text,
-    prompt,
-    specialist: specialistResult,
-    state: nextState,
-    debug: {
-      decision: finalDecision,
-      attempts,
-      language: lang,
-      meta_user_message_ignored: looksLikeMetaInstruction(rawNormalized) && pristineAtEntry,
-    },
-  }, specialistResult, mergedFlags, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride));
+  return finalizeResponse(pipelinePayload);
 }

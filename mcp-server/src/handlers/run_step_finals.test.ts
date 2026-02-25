@@ -2297,8 +2297,8 @@ test("wording choice: DreamExplainer rewrite is eligible for user-vs-suggestion 
 });
 
 test("wording choice runtime rebuild is contract-eligible across steps (not DreamExplainer-only)", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(source, /const eligibleForWordingChoiceTurn = isWordingChoiceEligibleContext\(/);
+  const source = fs.readFileSync(new URL("./run_step_pipeline.ts", import.meta.url), "utf8");
+  assert.match(source, /const eligibleForWordingChoiceTurn = deps\.isWordingChoiceEligibleContext\(/);
   assert.match(source, /stepId:\s*currentStepForWordingChoice/);
   assert.match(source, /activeSpecialist:\s*currentSpecialistForWordingChoice/);
   assert.doesNotMatch(source, /stepId:\s*DREAM_STEP_ID,\s*\n\s*activeSpecialist:\s*String\(\(nextState as any\)\.active_specialist \|\| ""\)/);
@@ -3232,9 +3232,9 @@ test("bullet consistency policy derives statements from bulleted message content
 });
 
 test("DreamExplainer off-topic handling uses explicit contract branch", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  const source = fs.readFileSync(new URL("./run_step_pipeline.ts", import.meta.url), "utf8");
   assert.match(source, /const isDreamExplainerOfftopicTurn\s*=/);
-  assert.match(source, /buildContractId\(\s*currentStepId,\s*rendered\.status,\s*DREAM_EXPLAINER_SWITCH_SELF_MENU_ID\s*\)/);
+  assert.match(source, /deps\.buildContractId\(\s*currentStepId,\s*rendered\.status,\s*deps\.dreamExplainerSwitchSelfMenuId\s*\)/);
 });
 
 test("wording choice: Entity user pick restores contract menu buttons when source prompt has no numbered options", async () => {
