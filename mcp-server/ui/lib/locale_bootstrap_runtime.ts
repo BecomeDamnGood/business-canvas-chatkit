@@ -1,4 +1,4 @@
-export type PayloadSource = "meta.widget_result" | "none";
+export type PayloadSource = "meta.widget_result" | "root.result" | "none";
 
 export type WaitingReason = "missing_state" | "i18n_pending" | "none";
 export type BootstrapPhase = "waiting_locale" | "ready" | "recovery" | "failed";
@@ -172,7 +172,7 @@ export function mergeToolOutputWithResponseMetadata(
   return merged;
 }
 
-function pickWidgetResultFromMeta(raw: unknown): {
+function pickWidgetResultFromKnownShapes(raw: unknown): {
   result: Record<string, unknown>;
   source: PayloadSource;
 } {
@@ -183,6 +183,13 @@ function pickWidgetResultFromMeta(raw: unknown): {
     return {
       result: candidate as Record<string, unknown>,
       source: "meta.widget_result",
+    };
+  }
+  const rootResult = toRecord(root.result);
+  if (isWidgetResultLike(rootResult)) {
+    return {
+      result: rootResult,
+      source: "root.result",
     };
   }
   return {
@@ -234,7 +241,7 @@ export function computeHydrationState(resolved: ResolvedWidgetPayload): Hydratio
 }
 
 export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
-  const primary = pickWidgetResultFromMeta(raw);
+  const primary = pickWidgetResultFromKnownShapes(raw);
   const result = primary.result;
   const payloadSource: PayloadSource = Object.keys(primary.result).length ? primary.source : "none";
   const sessionInfo = sessionInfoForResult(result);

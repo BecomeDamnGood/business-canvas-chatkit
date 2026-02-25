@@ -1253,8 +1253,18 @@ test("render follows explicit server prestart mode during startup grace", () => 
   (globalThis as any).openai = originalOpenai;
 });
 
-test("resolveWidgetPayload reads only _meta.widget_result as authoritative source", () => {
+test("resolveWidgetPayload prefers _meta.widget_result over root.result", () => {
   const resolved = resolveWidgetPayload({
+    result: {
+      current_step_id: "step_0",
+      state: {
+        current_step: "step_0",
+        bootstrap_session_id: "session_root",
+        bootstrap_epoch: 3,
+        response_seq: 3,
+        host_widget_session_id: "host_root",
+      },
+    },
     _meta: {
       widget_result: {
         current_step_id: "step_0",
@@ -1284,6 +1294,41 @@ test("resolveWidgetPayload reads only _meta.widget_result as authoritative sourc
   assert.equal(resolved.host_widget_session_id, "host_a");
   assert.equal(resolved.bootstrap_session_id, "session_a");
   assert.equal(resolved.bootstrap_epoch, 1);
+});
+
+test("resolveWidgetPayload accepts root.result when _meta.widget_result is absent", () => {
+  const resolved = resolveWidgetPayload({
+    title: "The Business Strategy Canvas Builder",
+    meta: "step: step_0 | specialist: ValidationAndBusinessName",
+    result: {
+      model_result_shape_version: "v2_minimal",
+      current_step_id: "step_0",
+      state: {
+        current_step: "step_0",
+        language: "nl",
+        ui_strings_status: "ready",
+        ui_gate_status: "ready",
+        bootstrap_session_id: "session_root_only",
+        bootstrap_epoch: 1,
+        response_seq: 2,
+        host_widget_session_id: "host_root_only",
+      },
+      ui: {
+        view: {
+          mode: "interactive",
+          waiting_locale: false,
+        },
+      },
+    },
+  });
+
+  assert.equal(resolved.source, "root.result");
+  assert.equal(String((resolved.result.current_step_id || "")), "step_0");
+  assert.equal(resolved.bootstrap_session_id, "session_root_only");
+  assert.equal(resolved.bootstrap_epoch, 1);
+  assert.equal(resolved.response_seq, 2);
+  assert.equal(resolved.host_widget_session_id, "host_root_only");
+  assert.equal(resolved.needs_hydration, false);
 });
 
 test("bridge event trust checks source and origin", () => {
