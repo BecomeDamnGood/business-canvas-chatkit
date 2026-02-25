@@ -2479,10 +2479,14 @@ test("step transition commits staged value and clears provisional state", async 
 });
 
 test("Dream readiness guard accepts explicit start-exercise route in widget mode", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
-  assert.match(source, /const explicitDreamExerciseRoute\s*=\s*userMessage === "__ROUTE__DREAM_START_EXERCISE__";/);
-  assert.match(source, /const useDreamExplainerGuard =[\s\S]*state\.current_step === DREAM_STEP_ID && explicitDreamExerciseRoute/);
-  assert.doesNotMatch(source, /lastResult\.suggest_dreambuilder/);
+  const runStepSource = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  const routesSource = fs.readFileSync(new URL("./run_step_routes.ts", import.meta.url), "utf8");
+  assert.match(runStepSource, /createRunStepRouteHelpers/);
+  assert.match(runStepSource, /handleSpecialRouteRegistry\(/);
+  assert.match(routesSource, /dream_start_exercise/);
+  assert.match(routesSource, /context\.userMessage === deps\.dreamStartExerciseRouteToken/);
+  assert.match(routesSource, /String\(\(context\.state as any\)\.current_step \|\| ""\) === deps\.dreamStepId/);
+  assert.doesNotMatch(routesSource, /lastResult\.suggest_dreambuilder/);
 });
 
 test("single-path flags: only wording-choice runtime flag remains active", () => {

@@ -150,7 +150,7 @@ import {
   hasUsableSpecialistForRetry as hasUsableSpecialistForRetryDispatch,
 } from "./specialist_dispatch.js";
 import { createRunStepUiPayloadHelpers, type UiContractMeta } from "./run_step_ui_payload.js";
-import { createRunStepWordingHelpers } from "./run_step_wording.js";
+import { createRunStepWordingHelpers, createRunStepRouteHelpers } from "./run_step_modules.js";
 
 function uiDefaultString(key: string, fallback = ""): string {
   const candidate = String(UI_STRINGS_WITH_MENU_KEYS[key] || "").trim();
@@ -267,6 +267,9 @@ const DREAM_PICK_ONE_ROUTE_TOKEN = "__ROUTE__DREAM_PICK_ONE__";
 const ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN = "__ROUTE__ROLE_CHOOSE_FOR_ME__";
 const DREAM_FORCE_REFINE_ROUTE_PREFIX = "__ROUTE__DREAM_FORCE_REFINE__";
 const STRATEGY_CONSOLIDATE_ROUTE_TOKEN = "__ROUTE__STRATEGY_CONSOLIDATE__";
+const PRESENTATION_MAKE_ROUTE_TOKEN = "__ROUTE__PRESENTATION_MAKE__";
+const SWITCH_TO_SELF_DREAM_TOKEN = "__SWITCH_TO_SELF_DREAM__";
+const DREAM_START_EXERCISE_ROUTE_TOKEN = "__ROUTE__DREAM_START_EXERCISE__";
 const ACTION_BOOTSTRAP_POLL_TOKEN = "ACTION_BOOTSTRAP_POLL";
 const WIDGET_ESCAPE_LABEL_PATTERNS: RegExp[] = [
   /\bfinish\s+later\b/i,
@@ -5325,6 +5328,27 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     };
   };
 
+  const ensureStartState = async (
+    targetState: CanvasState,
+    routeOrText: string
+  ): Promise<{ state: CanvasState; interactiveReady: boolean }> => {
+    const hasResolvedLanguage = Boolean(normalizeLangCode(String((targetState as any).language || "")));
+    if (languageResolvedThisTurn && hasResolvedLanguage) {
+      return {
+        state: targetState,
+        interactiveReady: isInteractiveLocaleReady(targetState),
+      };
+    }
+    if (!isUiStartTriggerLangResolveV1Enabled()) {
+      const stateWithUi = await ensureUiStrings(targetState, routeOrText);
+      return {
+        state: stateWithUi,
+        interactiveReady: isInteractiveLocaleReady(stateWithUi),
+      };
+    }
+    return resolveLocaleAndUiStringsReady(targetState, routeOrText);
+  };
+
   if (isBootstrapPollCall && isUiLocaleReadyGateV1Enabled()) {
     const languageSeed = String((state as any).initial_user_message || "").trim();
     const localeResolution = await resolveLocaleAndUiStringsReady(state, languageSeed);
@@ -5944,924 +5968,77 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   languageResolvedThisTurn = true;
   const lang = langFromState(state);
 
-  if (
-    String(state.current_step || "") === DREAM_STEP_ID &&
-    userMessage === DREAM_PICK_ONE_ROUTE_TOKEN
-  ) {
-    const previousSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-    const pickedSuggestion = pickDreamSuggestionFromPreviousState(state, previousSpecialist);
-    if (pickedSuggestion) {
-      const specialist: DreamOutput = {
-        action: "ASK",
-        message: wordingSelectionMessage(DREAM_STEP_ID, state, String((state as any).active_specialist || "")),
-        question: "",
-        refined_formulation: pickedSuggestion,
-        dream: pickedSuggestion,
-        suggest_dreambuilder: "false",
-        wants_recap: false,
-        is_offtopic: false,
-        user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-      };
-      const forcedDecision: OrchestratorOutput = {
-        specialist_to_call: DREAM_SPECIALIST,
-        specialist_input: `CURRENT_STEP_ID: ${DREAM_STEP_ID} | USER_MESSAGE: ${DREAM_PICK_ONE_ROUTE_TOKEN}`,
-        current_step: DREAM_STEP_ID,
-        intro_shown_for_step: String((state as any).intro_shown_for_step ?? ""),
-        intro_shown_session: String((state as any).intro_shown_session ?? "") === "true" ? "true" : "false",
-        show_step_intro: "false",
-        show_session_intro: "false",
-      };
-      let nextStatePicked = applyStateUpdate({
-        prev: state,
-        decision: forcedDecision,
-        specialistResult: specialist,
-        showSessionIntroUsed: "false",
-        provisionalSource: "action_route",
-      });
-      setDreamRuntimeMode(nextStatePicked, "self");
-      const renderedPickedRaw = renderFreeTextTurnPolicy({
-        stepId: String((nextStatePicked as any).current_step ?? ""),
-        state: nextStatePicked,
-        specialist: (nextStatePicked as any).last_specialist_result || {},
-        previousSpecialist,
-      });
-      const validatedPicked = validateRenderedContractOrRecover({
-        stepId: String((nextStatePicked as any).current_step ?? ""),
-        rendered: renderedPickedRaw,
-        state: nextStatePicked,
-        previousSpecialist,
-        telemetry: uiI18nTelemetry,
-      });
-      nextStatePicked = validatedPicked.state;
-      const renderedPicked = validatedPicked.rendered;
-      const pickedViolation = validatedPicked.violation;
-      if (pickedViolation) {
-        return finalizeResponse(attachRegistryPayload({
-          ok: false as const,
-          tool: "run_step" as const,
-          current_step_id: String(nextStatePicked.current_step),
-          active_specialist: DREAM_SPECIALIST,
-          text: "",
-          prompt: "",
-          specialist: renderedPicked.specialist,
-          state: nextStatePicked,
-          error: {
-            type: "contract_violation",
-            message: "Rendered output violates the UI contract.",
-            reason: pickedViolation,
-            step: String((nextStatePicked as any).current_step ?? ""),
-            contract_id: renderedPicked.contractId,
-          },
-        }, renderedPicked.specialist));
-      }
-      (nextStatePicked as any).last_specialist_result = renderedPicked.specialist;
-      applyUiPhaseByStep(
-        nextStatePicked,
-        String((nextStatePicked as any).current_step ?? ""),
-        renderedPicked.contractId
-      );
-      const nextStatePickedUi = await ensureUiStrings(nextStatePicked, userMessage);
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(nextStatePicked.current_step),
-        active_specialist: DREAM_SPECIALIST,
-        text: buildTextForWidget({ specialist: renderedPicked.specialist }),
-        prompt: pickPrompt(renderedPicked.specialist),
-        specialist: renderedPicked.specialist,
-        state: nextStatePickedUi,
-      }, renderedPicked.specialist, responseUiFlags, renderedPicked.uiActionCodes, renderedPicked.uiActions, null, {
-        contractId: renderedPicked.contractId,
-        contractVersion: renderedPicked.contractVersion,
-        textKeys: renderedPicked.textKeys,
-      }));
-    }
-  }
+  const routeHelpers = createRunStepRouteHelpers<RunStepSuccess | RunStepError>({
+    step0Id: STEP_0_ID,
+    step0Specialist: STEP_0_SPECIALIST,
+    dreamStepId: DREAM_STEP_ID,
+    dreamSpecialist: DREAM_SPECIALIST,
+    dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
+    roleStepId: ROLE_STEP_ID,
+    roleSpecialist: ROLE_SPECIALIST,
+    presentationStepId: PRESENTATION_STEP_ID,
+    presentationSpecialist: PRESENTATION_SPECIALIST,
+    dreamPickOneRouteToken: DREAM_PICK_ONE_ROUTE_TOKEN,
+    roleChooseForMeRouteToken: ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN,
+    presentationMakeRouteToken: PRESENTATION_MAKE_ROUTE_TOKEN,
+    switchToSelfDreamToken: SWITCH_TO_SELF_DREAM_TOKEN,
+    dreamStartExerciseRouteToken: DREAM_START_EXERCISE_ROUTE_TOKEN,
+    wordingSelectionMessage,
+    pickPrompt,
+    buildTextForWidget,
+    applyStateUpdate,
+    setDreamRuntimeMode,
+    getDreamRuntimeMode,
+    renderFreeTextTurnPolicy,
+    validateRenderedContractOrRecover,
+    applyUiPhaseByStep,
+    ensureUiStrings,
+    ensureStartState,
+    attachRegistryPayload,
+    finalizeResponse,
+    pickDreamSuggestionFromPreviousState,
+    pickDreamCandidateFromState,
+    pickRoleSuggestionFromPreviousState,
+    hasPresentationTemplate,
+    generatePresentationPptx,
+    convertPptxToPdf,
+    convertPdfToPng,
+    cleanupOldPresentationFiles,
+    baseUrlFromEnv,
+    uiStringFromStateMap,
+    uiDefaultString,
+    buildContractId,
+    parseStep0Final,
+    step0ReadinessQuestion,
+    step0CardDescForState,
+    step0QuestionForState,
+    callSpecialistStrictSafe,
+    buildRoutingContext,
+    rememberLlmCall,
+    isUiStateHygieneSwitchV1Enabled,
+    clearStepInteractiveState,
+    bumpUiI18nCounter: (telemetry, key) =>
+      bumpUiI18nCounter(
+        telemetry as UiI18nTelemetryCounters | null | undefined,
+        key as keyof UiI18nTelemetryCounters
+      ),
+  });
 
-  if (
-    String(state.current_step || "") === ROLE_STEP_ID &&
-    userMessage === ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN
-  ) {
-    const previousSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-    const pickedSuggestion = pickRoleSuggestionFromPreviousState(state, previousSpecialist);
-    if (pickedSuggestion) {
-      const specialist: RoleOutput = {
-        action: "ASK",
-        message: wordingSelectionMessage(ROLE_STEP_ID, state, String((state as any).active_specialist || "")),
-        question: "",
-        refined_formulation: pickedSuggestion,
-        role: pickedSuggestion,
-        wants_recap: false,
-        is_offtopic: false,
-        user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-      };
-      const forcedDecision: OrchestratorOutput = {
-        specialist_to_call: ROLE_SPECIALIST,
-        specialist_input: `CURRENT_STEP_ID: ${ROLE_STEP_ID} | USER_MESSAGE: ${ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN}`,
-        current_step: ROLE_STEP_ID,
-        intro_shown_for_step: String((state as any).intro_shown_for_step ?? ""),
-        intro_shown_session: String((state as any).intro_shown_session ?? "") === "true" ? "true" : "false",
-        show_step_intro: "false",
-        show_session_intro: "false",
-      };
-      let nextStatePicked = applyStateUpdate({
-        prev: state,
-        decision: forcedDecision,
-        specialistResult: specialist,
-        showSessionIntroUsed: "false",
-        provisionalSource: "action_route",
-      });
-      const renderedPickedRaw = renderFreeTextTurnPolicy({
-        stepId: String((nextStatePicked as any).current_step ?? ""),
-        state: nextStatePicked,
-        specialist: (nextStatePicked as any).last_specialist_result || {},
-        previousSpecialist,
-      });
-      const validatedPicked = validateRenderedContractOrRecover({
-        stepId: String((nextStatePicked as any).current_step ?? ""),
-        rendered: renderedPickedRaw,
-        state: nextStatePicked,
-        previousSpecialist,
-        telemetry: uiI18nTelemetry,
-      });
-      nextStatePicked = validatedPicked.state;
-      const renderedPicked = validatedPicked.rendered;
-      const pickedViolation = validatedPicked.violation;
-      if (pickedViolation) {
-        return finalizeResponse(attachRegistryPayload({
-          ok: false as const,
-          tool: "run_step" as const,
-          current_step_id: String(nextStatePicked.current_step),
-          active_specialist: ROLE_SPECIALIST,
-          text: "",
-          prompt: "",
-          specialist: renderedPicked.specialist,
-          state: nextStatePicked,
-          error: {
-            type: "contract_violation",
-            message: "Rendered output violates the UI contract.",
-            reason: pickedViolation,
-            step: String((nextStatePicked as any).current_step ?? ""),
-            contract_id: renderedPicked.contractId,
-          },
-        }, renderedPicked.specialist));
-      }
-      (nextStatePicked as any).last_specialist_result = renderedPicked.specialist;
-      applyUiPhaseByStep(
-        nextStatePicked,
-        String((nextStatePicked as any).current_step ?? ""),
-        renderedPicked.contractId
-      );
-      const nextStatePickedUi = await ensureUiStrings(nextStatePicked, userMessage);
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(nextStatePicked.current_step),
-        active_specialist: ROLE_SPECIALIST,
-        text: buildTextForWidget({ specialist: renderedPicked.specialist }),
-        prompt: pickPrompt(renderedPicked.specialist),
-        specialist: renderedPicked.specialist,
-        state: nextStatePickedUi,
-      }, renderedPicked.specialist, responseUiFlags, renderedPicked.uiActionCodes, renderedPicked.uiActions, null, {
-        contractId: renderedPicked.contractId,
-        contractVersion: renderedPicked.contractVersion,
-        textKeys: renderedPicked.textKeys,
-      }));
-    }
-  }
-
-  // Presentation: create PPTX on button click (no LLM)
-  if (state.current_step === PRESENTATION_STEP_ID && userMessage === "__ROUTE__PRESENTATION_MAKE__") {
-    try {
-      console.log("[presentation] Generate requested", {
-        cwd: process.cwd(),
-        hasTemplate: hasPresentationTemplate(),
-      });
-      const { fileName, filePath } = generatePresentationPptx(state);
-      console.log("[presentation] PPTX generated", { fileName, filePath });
-      const outDir = path.join(os.tmpdir(), "business-canvas-presentations");
-      const pdfPath = convertPptxToPdf(filePath, outDir);
-      console.log("[presentation] PDF generated", { pdfPath });
-      const pngPath = convertPdfToPng(pdfPath, outDir);
-      console.log("[presentation] PNG generated", { pngPath });
-
-      cleanupOldPresentationFiles(outDir, 24 * 60 * 60 * 1000);
-
-      const baseUrl = baseUrlFromEnv();
-      const pdfFile = path.basename(pdfPath);
-      const pngFile = path.basename(pngPath);
-      const pdfUrl = baseUrl ? `${baseUrl}/presentations/${pdfFile}` : `/presentations/${pdfFile}`;
-      const pngUrl = baseUrl ? `${baseUrl}/presentations/${pngFile}` : `/presentations/${pngFile}`;
-
-      const message = uiStringFromStateMap(
-        state,
-        "presentation.ready",
-        uiDefaultString("presentation.ready", "Your presentation is ready.")
-      );
-
-      const specialist: PresentationOutput = {
-        action: "ASK",
-        message,
-        question: "",
-        refined_formulation: "",
-        presentation_brief: "",
-        wants_recap: false,
-        is_offtopic: false,
-        user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-      };
-
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: PRESENTATION_SPECIALIST,
-        text: buildTextForWidget({ specialist }),
-        prompt: "",
-        specialist,
-        presentation_assets: {
-          pdf_url: pdfUrl,
-          png_url: pngUrl,
-          base_name: path.basename(fileName, ".pptx"),
-        },
-        state: {
-          ...state,
-          active_specialist: PRESENTATION_SPECIALIST,
-          last_specialist_result: specialist,
-        },
-      }, specialist, responseUiFlags));
-    } catch (err) {
-      console.error("[presentation] Generation failed", err);
-      const message = uiStringFromStateMap(
-        state,
-        "presentation.error",
-        uiDefaultString(
-          "presentation.error",
-          "Presentation generation failed. Please check that the template exists and try again."
-        )
-      );
-
-      const specialist: PresentationOutput = {
-        action: "ASK",
-        message,
-        question: "",
-        refined_formulation: "",
-        presentation_brief: "",
-        wants_recap: false,
-        is_offtopic: false,
-        user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-      };
-
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: PRESENTATION_SPECIALIST,
-        text: buildTextForWidget({ specialist }),
-        prompt: "",
-        specialist,
-        state: {
-          ...state,
-          active_specialist: PRESENTATION_SPECIALIST,
-          last_specialist_result: specialist,
-        },
-      }, specialist, responseUiFlags));
-    }
-  }
-
-  // Switch back from Dream Explainer to normal Dream: route to Dream specialist, no intro, short prompt to write dream in own words.
-  const SWITCH_TO_SELF_DREAM_TOKEN = "__SWITCH_TO_SELF_DREAM__";
-  // --------- DREAM EXPLAINER: submit_scores → synthetic Dream-direction ASK (no LLM) ---------
-  const isDreamStepExplainer =
-    state.current_step === DREAM_STEP_ID &&
-    String((state as any).active_specialist ?? "") === DREAM_EXPLAINER_SPECIALIST;
-  let parsedScores: number[][] | null = null;
-  if (isDreamStepExplainer && userMessage.trim().length > 0) {
-    if (userMessage === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES") {
-      if (Array.isArray(transientPendingScores)) parsedScores = transientPendingScores as number[][];
-    } else {
-      try {
-        const parsed = JSON.parse(userMessage) as { action?: string; scores?: number[][] };
-        if (parsed?.action === "submit_scores" && Array.isArray(parsed.scores)) {
-          parsedScores = parsed.scores;
-        }
-      } catch {
-        // not JSON or invalid
-      }
-    }
-  }
-  if (isDreamStepExplainer && parsedScores && parsedScores.length > 0) {
-    const lastResult = (state as any).last_specialist_result || {};
-    const clusters = Array.isArray(lastResult.clusters) ? lastResult.clusters : [];
-    const statementsFromCanonical = Array.isArray((state as any).dream_builder_statements)
-      ? (state as any).dream_builder_statements
-      : [];
-    const statementsFromLast = Array.isArray(lastResult.statements) ? lastResult.statements : [];
-    const statements =
-      statementsFromCanonical.length > 0
-        ? statementsFromCanonical
-        : statementsFromLast.length > 0
-          ? statementsFromLast
-        : Array.isArray((state as any).dream_scoring_statements)
-          ? (state as any).dream_scoring_statements
-          : [];
-    if (clusters.length === parsedScores.length && statements.length > 0) {
-      type ClusterInfo = { theme: string; statement_indices: number[] };
-      const clusterAverages: { theme: string; average: number }[] = clusters.map((c: ClusterInfo, ci: number) => {
-        const row = parsedScores![ci] || [];
-        const nums = row.map((n) => (typeof n === "number" && !isNaN(n) ? Math.max(1, Math.min(10, n)) : 0)).filter((n) => n > 0);
-        const sum = nums.reduce((a, b) => a + b, 0);
-        const average = nums.length > 0 ? sum / nums.length : 0;
-        return { theme: String((c as any).theme ?? "").trim() || `Category ${ci + 1}`, average };
-      });
-      const maxAvg = Math.max(...clusterAverages.map((x) => x.average), 0);
-      const topClusters = clusterAverages.filter((x) => x.average === maxAvg && x.average > 0);
-      const nextStateScores: CanvasState = {
-        ...state,
-        last_specialist_result: {
-          action: "ASK",
-          message: "",
-          question: "",
-          refined_formulation: "",
-          dream: "",
-          suggest_dreambuilder: "true",
-          statements,
-          user_state: "ok",
-          wants_recap: false,
-          is_offtopic: false,
-          user_intent: "STEP_INPUT",
-          meta_topic: "NONE",
-          scoring_phase: "false",
-          clusters: [],
-        },
-      } as CanvasState;
-      setDreamRuntimeMode(nextStateScores, "builder_scoring");
-      (nextStateScores as any).dream_builder_statements = statements;
-      (nextStateScores as any).dream_scores = parsedScores;
-      (nextStateScores as any).dream_top_clusters = topClusters;
-      (nextStateScores as any).dream_awaiting_direction = "true";
-
-      // Immediate formulation (Option A): user clicked "Formulate my dream" → agent formulates from clusters + business context, no extra question screen
-      const forcedDecision: OrchestratorOutput = {
-        specialist_to_call: DREAM_EXPLAINER_SPECIALIST,
-        specialist_input: `CURRENT_STEP_ID: ${DREAM_STEP_ID} | USER_MESSAGE: (user chose to continue without text)`,
-        current_step: DREAM_STEP_ID,
-        intro_shown_for_step: String((state as any).intro_shown_for_step ?? "").trim() || "dream",
-        intro_shown_session: String((state as any).intro_shown_session ?? "").trim() === "true" ? "true" : "false",
-        show_step_intro: "false",
-        show_session_intro: "false",
-      };
-      const callFormulation = await callSpecialistStrictSafe({
-        model,
-        state: nextStateScores,
-        decision: forcedDecision,
-        userMessage: "", // so USER_DREAM_DIRECTION = "(user chose to continue without text)" → Option A
-      }, buildRoutingContext(userMessage), nextStateScores);
-      if (!callFormulation.ok) return finalizeResponse(callFormulation.payload);
-      rememberLlmCall(callFormulation.value);
-      const formulationResult = callFormulation.value.specialistResult;
-      const nextStateFormulation = applyStateUpdate({
-        prev: nextStateScores,
-        decision: forcedDecision,
-        specialistResult: formulationResult,
-        showSessionIntroUsed: "false",
-        provisionalSource: "system_generated",
-      });
-      (nextStateFormulation as any).dream_builder_statements = statements;
-      setDreamRuntimeMode(nextStateFormulation, "builder_refine");
-      (nextStateFormulation as any).dream_awaiting_direction = "false";
-      const renderedFormulationRaw = renderFreeTextTurnPolicy({
-        stepId: String((nextStateFormulation as any).current_step ?? ""),
-        state: nextStateFormulation,
-        specialist: (formulationResult || {}) as Record<string, unknown>,
-        previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-      });
-      const validatedFormulation = validateRenderedContractOrRecover({
-        stepId: String((nextStateFormulation as any).current_step ?? ""),
-        rendered: renderedFormulationRaw,
-        state: nextStateFormulation,
-        previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-        telemetry: uiI18nTelemetry,
-      });
-      const renderedFormulation = validatedFormulation.rendered;
-      const formulationViolation = validatedFormulation.violation;
-      if (formulationViolation) {
-        return finalizeResponse(attachRegistryPayload({
-          ok: false as const,
-          tool: "run_step" as const,
-          current_step_id: String(nextStateFormulation.current_step),
-          active_specialist: DREAM_EXPLAINER_SPECIALIST,
-          text: "",
-          prompt: "",
-          specialist: renderedFormulation.specialist,
-          state: nextStateFormulation,
-          error: {
-            type: "contract_violation",
-            message: "Rendered output violates the UI contract.",
-            reason: formulationViolation,
-            step: String((nextStateFormulation as any).current_step ?? ""),
-            contract_id: renderedFormulation.contractId,
-          },
-        }, renderedFormulation.specialist));
-      }
-      (nextStateFormulation as any).last_specialist_result = renderedFormulation.specialist;
-      applyUiPhaseByStep(
-        nextStateFormulation,
-        String((nextStateFormulation as any).current_step ?? ""),
-        renderedFormulation.contractId
-      );
-      const nextStateFormulationUi = await ensureUiStrings(nextStateFormulation, userMessage);
-      const textFormulation = buildTextForWidget({ specialist: renderedFormulation.specialist });
-      const promptFormulation = pickPrompt(renderedFormulation.specialist);
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(nextStateFormulation.current_step),
-        active_specialist: DREAM_EXPLAINER_SPECIALIST,
-        text: textFormulation,
-        prompt: promptFormulation,
-        specialist: renderedFormulation.specialist,
-        state: nextStateFormulationUi,
-        debug: { submit_scores_handled: true, formulation_direct: true, top_cluster_count: topClusters.length },
-      }, renderedFormulation.specialist, responseUiFlags, renderedFormulation.uiActionCodes, renderedFormulation.uiActions, null, {
-        contractId: renderedFormulation.contractId,
-        contractVersion: renderedFormulation.contractVersion,
-        textKeys: renderedFormulation.textKeys,
-      }));
-    }
-  }
-
-  if (userMessage.trim() === SWITCH_TO_SELF_DREAM_TOKEN && state.current_step === DREAM_STEP_ID) {
-    setDreamRuntimeMode(state, "self");
-    const existingDreamCandidate = pickDreamCandidateFromState(state);
-    if (!existingDreamCandidate) {
-      const switchBaseState = isUiStateHygieneSwitchV1Enabled()
-        ? clearStepInteractiveState(state, DREAM_STEP_ID)
-        : state;
-      if (switchBaseState !== state) {
-        bumpUiI18nCounter(uiI18nTelemetry, "state_hygiene_resets_count");
-      }
-      const specialist: DreamOutput = {
-        action: "ASK",
-        message:
-          "That's a great way to start. Writing your own dream helps clarify what really matters to you and your business.\n\nTake a moment to write a draft of your dream. I'll help you refine it if needed.",
-        question: "",
-        refined_formulation: "",
-        dream: "",
-        suggest_dreambuilder: "false",
-        wants_recap: false,
-        is_offtopic: false,
-        user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-      };
-      let nextStateSwitch: CanvasState = {
-        ...switchBaseState,
-        active_specialist: DREAM_SPECIALIST,
-        last_specialist_result: specialist,
-      } as CanvasState;
-      setDreamRuntimeMode(nextStateSwitch, "self");
-      (nextStateSwitch as any).dream_awaiting_direction = "false";
-      applyUiPhaseByStep(
-        nextStateSwitch,
-        DREAM_STEP_ID,
-        buildContractId(DREAM_STEP_ID, "no_output", "DREAM_MENU_INTRO")
-      );
-      const renderedSwitchRaw = renderFreeTextTurnPolicy({
-        stepId: String((nextStateSwitch as any).current_step ?? ""),
-        state: nextStateSwitch,
-        specialist: (nextStateSwitch as any).last_specialist_result || {},
-        previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-      });
-      const validatedSwitch = validateRenderedContractOrRecover({
-        stepId: String((nextStateSwitch as any).current_step ?? ""),
-        rendered: renderedSwitchRaw,
-        state: nextStateSwitch,
-        previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-        telemetry: uiI18nTelemetry,
-      });
-      nextStateSwitch = validatedSwitch.state;
-      const renderedSwitch = validatedSwitch.rendered;
-      const switchViolation = validatedSwitch.violation;
-      if (switchViolation) {
-        return finalizeResponse(attachRegistryPayload({
-          ok: false as const,
-          tool: "run_step" as const,
-          current_step_id: String(nextStateSwitch.current_step),
-          active_specialist: DREAM_SPECIALIST,
-          text: "",
-          prompt: "",
-          specialist: renderedSwitch.specialist,
-          state: nextStateSwitch,
-          error: {
-            type: "contract_violation",
-            message: "Rendered output violates the UI contract.",
-            reason: switchViolation,
-            step: String((nextStateSwitch as any).current_step ?? ""),
-            contract_id: renderedSwitch.contractId,
-          },
-        }, renderedSwitch.specialist));
-      }
-      (nextStateSwitch as any).last_specialist_result = renderedSwitch.specialist;
-      applyUiPhaseByStep(nextStateSwitch, String((nextStateSwitch as any).current_step ?? ""), renderedSwitch.contractId);
-      const nextStateSwitchUi = await ensureUiStrings(nextStateSwitch, userMessage);
-      const textSwitch = buildTextForWidget({ specialist: renderedSwitch.specialist });
-      const promptSwitch = pickPrompt(renderedSwitch.specialist);
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(nextStateSwitch.current_step),
-        active_specialist: DREAM_SPECIALIST,
-        text: textSwitch,
-        prompt: promptSwitch,
-        specialist: renderedSwitch.specialist,
-        state: nextStateSwitchUi,
-      }, renderedSwitch.specialist, responseUiFlags, renderedSwitch.uiActionCodes, renderedSwitch.uiActions, null, {
-        contractId: renderedSwitch.contractId,
-        contractVersion: renderedSwitch.contractVersion,
-        textKeys: renderedSwitch.textKeys,
-      }));
-    }
-    (state as any).intro_shown_for_step = "dream";
-    const forcedDecision: OrchestratorOutput = {
-      specialist_to_call: DREAM_SPECIALIST,
-      specialist_input: `CURRENT_STEP_ID: ${DREAM_STEP_ID} | USER_MESSAGE: I want to write my dream in my own words.`,
-      current_step: DREAM_STEP_ID,
-      intro_shown_for_step: "dream",
-      intro_shown_session: String((state as any).intro_shown_session ?? "").trim() === "true" ? "true" : "false",
-      show_step_intro: "false",
-      show_session_intro: "false",
-    };
-    const callDream = await callSpecialistStrictSafe({
-      model,
-      state,
-      decision: forcedDecision,
-      userMessage: "I want to write my dream in my own words.",
-    }, buildRoutingContext(userMessage), state);
-    if (!callDream.ok) return finalizeResponse(callDream.payload);
-    rememberLlmCall(callDream.value);
-    let nextStateSwitch = applyStateUpdate({
-      prev: state,
-      decision: forcedDecision,
-      specialistResult: callDream.value.specialistResult,
-      showSessionIntroUsed: "false",
-      provisionalSource: "system_generated",
-    });
-    setDreamRuntimeMode(nextStateSwitch, "self");
-    const renderedSwitchRaw = renderFreeTextTurnPolicy({
-      stepId: String((nextStateSwitch as any).current_step ?? ""),
-      state: nextStateSwitch,
-      specialist: (nextStateSwitch as any).last_specialist_result || {},
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-    });
-    const validatedSwitch = validateRenderedContractOrRecover({
-      stepId: String((nextStateSwitch as any).current_step ?? ""),
-      rendered: renderedSwitchRaw,
-      state: nextStateSwitch,
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-      telemetry: uiI18nTelemetry,
-    });
-    nextStateSwitch = validatedSwitch.state;
-    const renderedSwitch = validatedSwitch.rendered;
-    const switchViolation = validatedSwitch.violation;
-    if (switchViolation) {
-      return finalizeResponse(attachRegistryPayload({
-        ok: false as const,
-        tool: "run_step" as const,
-        current_step_id: String(nextStateSwitch.current_step),
-        active_specialist: DREAM_SPECIALIST,
-        text: "",
-        prompt: "",
-        specialist: renderedSwitch.specialist,
-        state: nextStateSwitch,
-        error: {
-          type: "contract_violation",
-          message: "Rendered output violates the UI contract.",
-          reason: switchViolation,
-          step: String((nextStateSwitch as any).current_step ?? ""),
-          contract_id: renderedSwitch.contractId,
-        },
-      }, renderedSwitch.specialist));
-    }
-    (nextStateSwitch as any).last_specialist_result = renderedSwitch.specialist;
-    applyUiPhaseByStep(nextStateSwitch, String((nextStateSwitch as any).current_step ?? ""), renderedSwitch.contractId);
-    const nextStateSwitchUi = await ensureUiStrings(nextStateSwitch, userMessage);
-    const textSwitch = buildTextForWidget({ specialist: renderedSwitch.specialist });
-    const promptSwitch = pickPrompt(renderedSwitch.specialist);
-    return finalizeResponse(attachRegistryPayload({
-      ok: true as const,
-      tool: "run_step" as const,
-      current_step_id: String(nextStateSwitch.current_step),
-      active_specialist: DREAM_SPECIALIST,
-      text: textSwitch,
-      prompt: promptSwitch,
-      specialist: renderedSwitch.specialist,
-      state: nextStateSwitchUi,
-    }, renderedSwitch.specialist, responseUiFlags, renderedSwitch.uiActionCodes, renderedSwitch.uiActions, null, {
-      contractId: renderedSwitch.contractId,
-      contractVersion: renderedSwitch.contractVersion,
-      textKeys: renderedSwitch.textKeys,
-    }));
-  }
-
-  // START trigger (widget start screen)
-  const startedAtTrigger = String((state as any).started ?? "").trim().toLowerCase() === "true";
-  const ensureStartState = async (
-    targetState: CanvasState,
-    routeOrText: string
-  ): Promise<{ state: CanvasState; interactiveReady: boolean }> => {
-    const hasResolvedLanguage = Boolean(normalizeLangCode(String((targetState as any).language || "")));
-    if (languageResolvedThisTurn && hasResolvedLanguage) {
-      return {
-        state: targetState,
-        interactiveReady: isInteractiveLocaleReady(targetState),
-      };
-    }
-    if (!isUiStartTriggerLangResolveV1Enabled()) {
-      const stateWithUi = await ensureUiStrings(targetState, routeOrText);
-      return {
-        state: stateWithUi,
-        interactiveReady: isInteractiveLocaleReady(stateWithUi),
-      };
-    }
-    return resolveLocaleAndUiStringsReady(targetState, routeOrText);
-  };
-  const shouldReturnPrestartGate =
-    !startedAtTrigger &&
-    state.current_step === STEP_0_ID &&
-    String((state as any).intro_shown_session) !== "true" &&
-    actionCodeRaw !== "ACTION_START" &&
-    !isBootstrapPollCall;
-  const lastSpecialistAtStart = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-  const hasLastSpecialistAtStart = Object.keys(lastSpecialistAtStart).length > 0;
-  const allowStartActionWithSnapshot = actionCodeRaw === "ACTION_START" && hasLastSpecialistAtStart;
-  const isStartTrigger =
-    (userMessage.trim() === "" || actionCodeRaw === "ACTION_START") &&
-    state.current_step === STEP_0_ID &&
-    String((state as any).intro_shown_session) !== "true" &&
-    (!hasLastSpecialistAtStart || allowStartActionWithSnapshot);
-  if (shouldReturnPrestartGate) {
-    const initialUserMessageSeed = String((state as any).initial_user_message ?? "").trim();
-    const startLocaleSeedText = initialUserMessageSeed || userMessage;
-    const startResolution = await ensureStartState(state, startLocaleSeedText);
-    const stateWithUi = startResolution.state;
-    const startHint =
-      typeof (stateWithUi as any).ui_strings?.startHint === "string"
-        ? String((stateWithUi as any).ui_strings.startHint)
-        : uiDefaultString("startHint", "Click Start in the widget to begin.");
-    const specialist: ValidationAndBusinessNameOutput = {
-      action: "ASK",
-      message: "",
-      question: startHint,
-      refined_formulation: "",
-      business_name: (state as any).business_name || "TBD",
-      step_0: "",
-      wants_recap: false,
-      is_offtopic: false,
-      user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-    };
-    return finalizeResponse(attachRegistryPayload({
-      ok: true as const,
-      tool: "run_step" as const,
-      current_step_id: String(state.current_step),
-      active_specialist: STEP_0_SPECIALIST,
-      text: "",
-      prompt: specialist.question,
-      specialist,
-      state: {
-        ...stateWithUi,
-        started: "false",
-        active_specialist: STEP_0_SPECIALIST,
-        last_specialist_result: specialist,
-      },
-    }, specialist, responseUiFlags));
-  }
-
-  if (isStartTrigger) {
-    const initialUserMessageSeed = String((state as any).initial_user_message ?? "").trim();
-    const startLocaleSeedText = initialUserMessageSeed || userMessage;
-    if (!startedAtTrigger && actionCodeRaw !== "ACTION_START") {
-      const startResolution = await ensureStartState(state, startLocaleSeedText);
-      const stateWithUi = startResolution.state;
-      const startHint =
-        typeof (stateWithUi as any).ui_strings?.startHint === "string"
-          ? String((stateWithUi as any).ui_strings.startHint)
-          : uiDefaultString("startHint", "Click Start in the widget to begin.");
-      const specialist: ValidationAndBusinessNameOutput = {
-        action: "ASK",
-        message: "",
-        question: startHint,
-        refined_formulation: "",
-        business_name: (state as any).business_name || "TBD",
-        step_0: "",
-        wants_recap: false,
-        is_offtopic: false,
-        user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-      };
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: STEP_0_SPECIALIST,
-        text: "",
-        prompt: specialist.question,
-        specialist,
-        state: {
-          ...stateWithUi,
-          started: "false",
-          active_specialist: STEP_0_SPECIALIST,
-          last_specialist_result: specialist,
-        },
-      }, specialist, responseUiFlags));
-    }
-
-    (state as any).intro_shown_session = "true";
-
-    const step0Final = String((state as any).step_0_final ?? "").trim();
-
-    // If Step 0 is already known, show readiness as a one-action menu.
-    if (step0Final) {
-      const startResolution = await ensureStartState(state, startLocaleSeedText);
-      const stateWithUi = startResolution.state;
-      const parsed = parseStep0Final(step0Final, String((stateWithUi as any).business_name || "TBD"));
-      const name = String(parsed.name || "TBD").trim();
-
-      const specialist: ValidationAndBusinessNameOutput = {
-        action: "ASK",
-        message: "",
-        question: step0ReadinessQuestion(stateWithUi, parsed),
-        refined_formulation: "",
-        business_name: name || "TBD",
-        step_0: step0Final,
-        wants_recap: false,
-        is_offtopic: false,
-        user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-      };
-
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: STEP_0_SPECIALIST,
-        text: "",
-        prompt: specialist.question,
-        specialist,
-        state: {
-          ...stateWithUi,
-          started: startResolution.interactiveReady ? "true" : "false",
-          active_specialist: STEP_0_SPECIALIST,
-          last_specialist_result: specialist,
-        },
-      }, specialist, responseUiFlags));
-    }
-
-    // Otherwise: first-time Step 0 setup question.
-    const initialMsg = String((state as any).initial_user_message ?? "").trim();
-    const langSeed = initialMsg || userMessage;
-    const startResolution = await ensureStartState(state, langSeed);
-    state = startResolution.state;
-    const stateWithUi = startResolution.state;
-    const specialist: ValidationAndBusinessNameOutput = {
-      action: "ASK",
-      message: step0CardDescForState(state),
-      question: step0QuestionForState(state),
-      refined_formulation: "",
-      business_name: (state as any).business_name || "TBD",
-      step_0: "",
-      wants_recap: false,
-      is_offtopic: false,
-      user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-    };
-
-    return finalizeResponse(attachRegistryPayload({
-      ok: true as const,
-      tool: "run_step" as const,
-      current_step_id: String(state.current_step),
-      active_specialist: STEP_0_SPECIALIST,
-      text: specialist.message,
-      prompt: specialist.question,
-      specialist,
-      state: {
-        ...stateWithUi,
-        started: startResolution.interactiveReady ? "true" : "false",
-        active_specialist: STEP_0_SPECIALIST,
-        last_specialist_result: specialist,
-      },
-    }, specialist, responseUiFlags));
-  }
-
-  // --------- DREAM READINESS → DREAM EXPLAINER (guard) ----------
-  const explicitDreamExerciseRoute = userMessage === "__ROUTE__DREAM_START_EXERCISE__";
-  const useDreamExplainerGuard =
-    state.current_step === DREAM_STEP_ID && explicitDreamExerciseRoute;
-  if (useDreamExplainerGuard) {
-    setDreamRuntimeMode(state, "builder_collect");
-    const forcedDecision: OrchestratorOutput = {
-      specialist_to_call: DREAM_EXPLAINER_SPECIALIST,
-      specialist_input: `CURRENT_STEP_ID: ${DREAM_STEP_ID} | USER_MESSAGE: ${userMessage}`,
-      current_step: DREAM_STEP_ID,
-      intro_shown_for_step: String((state as any).intro_shown_for_step ?? ""),
-      intro_shown_session: (state as any).intro_shown_session === "true" ? "true" : "false",
-      show_step_intro: "false",
-      show_session_intro: "false",
-    };
-    const callDreamExplainer = await callSpecialistStrictSafe({
-      model,
-      state,
-      decision: forcedDecision,
-      userMessage,
-    }, buildRoutingContext(userMessage), state);
-    if (!callDreamExplainer.ok) return finalizeResponse(callDreamExplainer.payload);
-    rememberLlmCall(callDreamExplainer.value);
-    const nextStateDream = applyStateUpdate({
-      prev: state,
-      decision: forcedDecision,
-      specialistResult: callDreamExplainer.value.specialistResult,
-      showSessionIntroUsed: "false",
-      provisionalSource: "action_route",
-    });
-    if (Array.isArray(callDreamExplainer.value.specialistResult?.statements)) {
-      (nextStateDream as any).dream_builder_statements = (callDreamExplainer.value.specialistResult.statements as unknown[])
-        .map((line) => String(line || "").trim())
-        .filter(Boolean);
-    }
-    const dreamScoringPhase = String(callDreamExplainer.value.specialistResult?.scoring_phase ?? "") === "true";
-    const dreamHasClusters =
-      Array.isArray(callDreamExplainer.value.specialistResult?.clusters) &&
-      (callDreamExplainer.value.specialistResult.clusters as unknown[]).length > 0;
-    if (dreamScoringPhase && dreamHasClusters) {
-      setDreamRuntimeMode(nextStateDream, "builder_scoring");
-    } else if (getDreamRuntimeMode(state) === "builder_scoring" && !dreamScoringPhase) {
-      setDreamRuntimeMode(nextStateDream, "builder_refine");
-    } else {
-      setDreamRuntimeMode(nextStateDream, "builder_collect");
-    }
-    let renderedDream = renderFreeTextTurnPolicy({
-      stepId: String((nextStateDream as any).current_step ?? ""),
-      state: nextStateDream,
-      specialist: (nextStateDream as any).last_specialist_result || {},
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-    });
-    const validatedDream = validateRenderedContractOrRecover({
-      stepId: String((nextStateDream as any).current_step ?? ""),
-      rendered: renderedDream,
-      state: nextStateDream,
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-      telemetry: uiI18nTelemetry,
-    });
-    renderedDream = validatedDream.rendered;
-    const dreamViolation = validatedDream.violation;
-    if (dreamViolation) {
-      return finalizeResponse(attachRegistryPayload({
-        ok: false as const,
-        tool: "run_step" as const,
-        current_step_id: String(nextStateDream.current_step),
-        active_specialist: String((nextStateDream as any).active_specialist || ""),
-        text: "",
-        prompt: "",
-        specialist: renderedDream.specialist,
-        state: nextStateDream,
-        error: {
-          type: "contract_violation",
-          message: "Rendered output violates the UI contract.",
-          reason: dreamViolation,
-          step: String((nextStateDream as any).current_step ?? ""),
-          contract_id: renderedDream.contractId,
-        },
-      }, renderedDream.specialist));
-    }
-    (nextStateDream as any).last_specialist_result = renderedDream.specialist;
-    applyUiPhaseByStep(nextStateDream, String((nextStateDream as any).current_step ?? ""), renderedDream.contractId);
-    const textDream = buildTextForWidget({ specialist: renderedDream.specialist });
-    const promptDream = pickPrompt(renderedDream.specialist);
-    return finalizeResponse(attachRegistryPayload({
-      ok: true as const,
-      tool: "run_step" as const,
-      current_step_id: String(nextStateDream.current_step),
-      active_specialist: String((nextStateDream as any).active_specialist || ""),
-      text: textDream,
-      prompt: promptDream,
-      specialist: renderedDream.specialist,
-      state: nextStateDream,
-      debug: {
-        decision: forcedDecision,
-        attempts: callDreamExplainer.value.attempts,
-        language: lang,
-        meta_user_message_ignored: false,
-      },
-    }, renderedDream.specialist, responseUiFlags, renderedDream.uiActionCodes, renderedDream.uiActions, null, {
-      contractId: renderedDream.contractId,
-      contractVersion: renderedDream.contractVersion,
-      textKeys: renderedDream.textKeys,
-    }));
-  }
-
+  const specialRouteResponse = await routeHelpers.handleSpecialRouteRegistry({
+    state,
+    userMessage,
+    actionCodeRaw,
+    responseUiFlags,
+    model,
+    uiI18nTelemetry,
+    transientPendingScores: transientPendingScores as number[][] | null,
+    inputMode: inputMode === "widget" ? "widget" : "chat",
+    wordingChoiceEnabled,
+    languageResolvedThisTurn,
+    isBootstrapPollCall,
+    lang,
+  });
+  if (specialRouteResponse) return specialRouteResponse;
   // --------- ORCHESTRATE (decision 1) ----------
   const decision1 = decideOrchestration(state, userMessage);
 

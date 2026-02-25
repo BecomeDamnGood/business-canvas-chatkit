@@ -214,3 +214,36 @@ Next agent exact TODO:
 - Start Step 4 and extract special route branches (start/prestart, dream specials, synthetic pick/presentation routes) into dedicated route module(s) while preserving wording ownership in `mcp-server/src/handlers/run_step_wording.ts`.
 Commit:
 - pending_after_commit
+
+## Step 4 - Special route registry subsystem
+Date: 2026-02-25 20:56 CET
+Status: completed
+Completed:
+- Extracted special routes from `run_step.ts` into `mcp-server/src/handlers/run_step_routes.ts` with a deterministic `canHandle`/`handle` registry order.
+- Moved start/prestart, dream special routes, synthetic pick routes, and presentation generation route into route handlers while preserving route token behavior and response contracts.
+- Replaced inline branch-heavy special-route control flow in `run_step.ts` with one `handleSpecialRouteRegistry` dispatch path.
+- Added `mcp-server/src/handlers/run_step_modules.ts` barrel import so `run_step.ts` stays within architecture import-boundary budget.
+- Updated source guard test to validate Dream start-exercise route ownership through `run_step_routes.ts`.
+- Updated ownership map to mark special route subsystem as completed.
+Pending:
+- No pending work for Step 4 scope.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_routes.ts
+- mcp-server/src/handlers/run_step_modules.ts
+- mcp-server/src/handlers/run_step_finals.test.ts
+- docs/run_step_ownership_map.md
+- docs/run_step_refactor_memory.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- git diff --name-only | wc -l => pass (2)
+- git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}' => pass (adds=103 dels=922 total=1025)
+- git diff -- mcp-server/src/handlers/run_step.ts | rg '^@@' | wc -l => pass (4)
+- npm --prefix mcp-server run arch:run-step:check => pass
+Next agent exact TODO:
+- Start Step 5 and extract post-specialist pipeline and state mutation flow into `mcp-server/src/handlers/run_step_pipeline.ts` and `mcp-server/src/handlers/run_step_state_update.ts` while keeping `run_step_routes.ts` as sole owner of special-route handling.
+Commit:
+- pending_after_commit
