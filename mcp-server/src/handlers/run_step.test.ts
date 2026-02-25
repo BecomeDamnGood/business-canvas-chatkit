@@ -38,7 +38,7 @@ test("Start gating: empty state without started yields Click Start (no advance)"
   assert.ok(result?.prompt?.includes("Click Start"), "prompt tells user to click Start");
 });
 
-test("Start gating: seedable non-empty first message bypasses Click Start and returns Step 0 readiness", async () => {
+test("Start gating: seedable non-empty first message keeps Click Start gate and does not auto-advance", async () => {
   const localeHints = ["nl-NL", "fr-FR", "zh-CN", "ja-JP"];
   for (const localeHint of localeHints) {
     const result = await run_step({
@@ -56,9 +56,40 @@ test("Start gating: seedable non-empty first message bypasses Click Start and re
     assert.equal(result?.ok, true);
     assert.equal(result?.current_step_id, "step_0");
     assert.equal(String(result?.state?.step_0_final || "").includes("Name: Mindd"), true);
-    assert.equal(String(result?.prompt || "").includes("Click Start"), false);
-    assert.equal(String(result?.prompt || "").includes("Mindd"), true);
+    const startHint = String((result?.state?.ui_strings || {})["startHint"] || "").trim();
+    assert.ok(startHint.length > 0, "localized startHint must exist");
+    assert.equal(String(result?.prompt || "").trim(), startHint);
+    assert.equal(String(result?.state?.started || "").toLowerCase(), "false");
   }
+});
+
+test("Start gating regression: migrated legacy state_version does not auto-start or flip NL to EN", async () => {
+  const result = await run_step({
+    current_step_id: "step_0",
+    user_message: "Help mij met mijn businessplan voor mijn reclamebureau Mindd",
+    input_mode: "chat",
+    locale_hint: "en-GB",
+    locale_hint_source: "openai_locale",
+    state: {
+      state_version: "1.0",
+      current_step: "step_0",
+      language: "nl",
+      locale: "nl-NL",
+      language_locked: "false",
+      language_override: "false",
+      language_source: "message_detect",
+      ui_bootstrap_status: "init",
+      ui_gate_status: "waiting_locale",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(String(result?.state?.started || "").toLowerCase(), "false");
+  const startHint = String((result?.state?.ui_strings || {})["startHint"] || "").trim();
+  assert.ok(startHint.length > 0, "localized startHint must exist");
+  assert.equal(String(result?.prompt || "").trim(), startHint);
+  assert.equal(String(result?.state?.step_0_final || "").includes("Name: Mindd"), true);
+  assert.equal(String(result?.state?.language || ""), "nl");
+  assert.equal(String(result?.state?.locale || "").toLowerCase().startsWith("nl"), true);
 });
 
 test("ACTION_START smoke: widget start returns first Step 0 question", async () => {

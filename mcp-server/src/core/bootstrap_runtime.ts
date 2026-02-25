@@ -480,6 +480,16 @@ export async function resolveLanguageForTurn(params: {
     return deps.ensureUiStringsForState(persisted, model, telemetry);
   }
 
+  if (!locked && !override && inputMode === "chat" && current && currentSource === "message_detect") {
+    // Once chat language is detected from user text, keep it stable unless user explicitly overrides it.
+    const persisted = deps.withLanguageDecision(state, current, "message_detect", {
+      locked: "true",
+      override: "false",
+      locale: currentLocale || current,
+    });
+    return deps.ensureUiStringsForState(persisted, model, telemetry);
+  }
+
   const localeHint = deps.isUiLocaleMetaV1Enabled() ? normalizeLocaleHint(localeHintRaw) : "";
   const localeHintSource =
     localeHintSourceRaw === "openai_locale" ||
@@ -499,11 +509,24 @@ export async function resolveLanguageForTurn(params: {
     const localeHintLanguage = normalizeLangCode(localeHint);
     const isBrowserLocaleHint = localeHintSource === "webplus_i18n";
     const hasDetectableMessage = countAlphaChars(msg) >= languageMinAlpha;
+    const hasCurrentLanguage = Boolean(current);
+    const currentFromStableSource =
+      currentSource === "message_detect" ||
+      currentSource === "persisted" ||
+      currentSource === "explicit_override";
+    const shouldPreserveChatLanguage =
+      !isWidgetTurn &&
+      hasCurrentLanguage &&
+      !locked &&
+      currentFromStableSource &&
+      hasDetectableMessage &&
+      Boolean(localeHintLanguage) &&
+      current !== localeHintLanguage;
     const shouldDeferToMessageDetect =
       isWidgetTurn && isBrowserLocaleHint && !current && !locked && hasDetectableMessage;
     const canUseLocaleHint = isWidgetTurn
       ? (!current && trustedLocaleHintSource && !isBrowserLocaleHint)
-      : (trustedLocaleHintSource || !current);
+      : ((trustedLocaleHintSource || !current) && !shouldPreserveChatLanguage);
     if (!canUseLocaleHint || locked) {
       if (!shouldDeferToMessageDetect) {
         const persisted = current && !currentSource

@@ -7351,10 +7351,19 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       migrationFromVersion = preMigrateStateVersion || "";
     }
   }
+  const incomingLanguageSource = normalizeStateLanguageSource((rawState as any).language_source);
+  if (incomingLanguageSource && !normalizeStateLanguageSource((state as any).language_source)) {
+    // Keep caller-provided language source when legacy migration versions dropped it.
+    (state as any).language_source = incomingLanguageSource;
+  }
   let rawLegacyMarkers = [
     ...detectLegacySessionMarkers(state),
     ...rawStateContractMarkers,
   ];
+  if (migrationApplied) {
+    // Accept successfully migrated legacy versions (e.g. "1", "1.0") without forcing restart recovery paths.
+    rawLegacyMarkers = rawLegacyMarkers.filter((marker) => marker !== "state_version_mismatch");
+  }
   if (migrationFromVersion && !migrationApplied) {
     rawLegacyMarkers.push("state_version_mismatch");
   }
@@ -9062,8 +9071,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       }
       return resolveLocaleAndUiStringsReady(targetState, routeOrText);
     };
-    const step0FinalKnown = hasValidStep0Final(String((state as any).step_0_final ?? "").trim());
-    if (!startedAtTrigger && actionCodeRaw !== "ACTION_START" && !step0FinalKnown) {
+    if (!startedAtTrigger && actionCodeRaw !== "ACTION_START") {
       const startResolution = await ensureStartState(state, startLocaleSeedText);
       const stateWithUi = startResolution.state;
       const startHint =
