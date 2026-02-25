@@ -185,3 +185,32 @@ Next agent exact TODO:
 - Start Step 3 and extract the wording subsystem (`buildWordingChoiceFromTurn` + selection/merge flow) into `mcp-server/src/handlers/run_step_wording.ts` while keeping UI payload ownership in `run_step_ui_payload.ts`.
 Commit:
 - pending_after_commit
+
+## Step 3 - Wording subsystem
+Date: 2026-02-25 20:38 CET
+Status: completed
+Completed:
+- Extracted wording pending/pick/build flow into `mcp-server/src/handlers/run_step_wording.ts` via `createRunStepWordingHelpers`.
+- Moved wording selection/merge utilities and feedback sanitization logic out of `run_step.ts` and delegated through one helper wiring point.
+- Kept `run_step.ts` exports stable for tests (`isWordingChoiceEligibleStep`, `isWordingChoiceEligibleContext`, `isListChoiceScope`, `stripUnsupportedReformulationClaims`, `buildWordingChoiceFromTurn`) via helper-backed bindings.
+- Updated ownership map to mark wording subsystem migration as completed.
+Pending:
+- No pending work for Step 3 scope.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_wording.ts
+- docs/run_step_ownership_map.md
+- docs/run_step_refactor_memory.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- git diff --name-only | wc -l => pass (1)
+- git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}' => pass (adds=55 dels=715 total=770)
+- git diff -- mcp-server/src/handlers/run_step.ts | rg '^@@' | wc -l => pass (8)
+- npm --prefix mcp-server run arch:run-step:check => pass
+Next agent exact TODO:
+- Start Step 4 and extract special route branches (start/prestart, dream specials, synthetic pick/presentation routes) into dedicated route module(s) while preserving wording ownership in `mcp-server/src/handlers/run_step_wording.ts`.
+Commit:
+- pending_after_commit

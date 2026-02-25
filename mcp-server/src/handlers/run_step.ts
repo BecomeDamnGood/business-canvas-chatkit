@@ -150,6 +150,7 @@ import {
   hasUsableSpecialistForRetry as hasUsableSpecialistForRetryDispatch,
 } from "./specialist_dispatch.js";
 import { createRunStepUiPayloadHelpers, type UiContractMeta } from "./run_step_ui_payload.js";
+import { createRunStepWordingHelpers } from "./run_step_wording.js";
 
 function uiDefaultString(key: string, fallback = ""): string {
   const candidate = String(UI_STRINGS_WITH_MENU_KEYS[key] || "").trim();
@@ -1940,34 +1941,6 @@ type WordingChoiceUiPayload = {
   instruction: string;
 };
 
-export function isWordingChoiceEligibleStep(stepId: string): boolean {
-  return String(stepId || "").trim() !== STEP_0_ID;
-}
-
-function isDreamBuilderContext(stepId: string, dreamRuntimeModeRaw?: unknown): boolean {
-  const step = String(stepId || "").trim().toLowerCase();
-  if (step !== DREAM_STEP_ID) return false;
-  return normalizeDreamRuntimeMode(dreamRuntimeModeRaw) !== "self";
-}
-
-export function isWordingChoiceEligibleContext(
-  stepId: string,
-  activeSpecialist: string,
-  specialist?: Record<string, unknown> | null,
-  previousSpecialist?: Record<string, unknown> | null,
-  dreamRuntimeModeRaw?: unknown
-): boolean {
-  void activeSpecialist;
-  if (!isWordingChoiceEligibleStep(stepId)) return false;
-  if (!isDreamBuilderContext(stepId, dreamRuntimeModeRaw)) return true;
-  const current = specialist && typeof specialist === "object" ? specialist : {};
-  const previous = previousSpecialist && typeof previousSpecialist === "object" ? previousSpecialist : {};
-  if (normalizeDreamRuntimeMode(dreamRuntimeModeRaw) === "builder_scoring") return false;
-  const scoringFlag = String((current as any).scoring_phase || (previous as any).scoring_phase || "").trim();
-  if (scoringFlag === "true") return false;
-  return true;
-}
-
 type UiViewVariant =
   | "default"
   | "wording_choice"
@@ -2221,32 +2194,6 @@ function enforceDreamBuilderQuestionProgress(
   return {
     ...specialist,
     question: nextQuestion,
-  };
-}
-
-function copyPendingWordingChoiceState(current: any, previous: Record<string, unknown>): any {
-  const pending = String(previous.wording_choice_pending || "") === "true";
-  if (!pending) return current;
-  return {
-    ...current,
-    wording_choice_pending: "true",
-    wording_choice_selected: "",
-    wording_choice_user_raw: String(previous.wording_choice_user_raw || ""),
-    wording_choice_user_normalized: String(previous.wording_choice_user_normalized || ""),
-    wording_choice_user_items: Array.isArray(previous.wording_choice_user_items)
-      ? previous.wording_choice_user_items
-      : [],
-    wording_choice_suggestion_items: Array.isArray(previous.wording_choice_suggestion_items)
-      ? previous.wording_choice_suggestion_items
-      : [],
-    wording_choice_base_items: Array.isArray(previous.wording_choice_base_items)
-      ? previous.wording_choice_base_items
-      : [],
-    wording_choice_agent_current: String(previous.wording_choice_agent_current || ""),
-    wording_choice_mode: String(previous.wording_choice_mode || ""),
-    wording_choice_target_field: String(previous.wording_choice_target_field || ""),
-    feedback_reason_key: String(previous.feedback_reason_key || ""),
-    feedback_reason_text: String(previous.feedback_reason_text || ""),
   };
 }
 
@@ -2706,35 +2653,6 @@ function splitSentenceItems(input: string): string[] {
   return items.length >= 2 ? items : [];
 }
 
-function parseUserListItemsForStep(stepId: string, userRaw: string, suggestionItems: string[]): string[] {
-  const items = parseListItems(userRaw)
-    .map((line) => String(line || "").trim())
-    .filter(Boolean);
-  if (stepId !== DREAM_STEP_ID || items.length !== 1) return items;
-  const sentenceItems = splitSentenceItems(userRaw);
-  if (sentenceItems.length < 2) return items;
-  // DreamBuilder often receives paragraph-style input with multiple statements.
-  // Splitting sentences keeps the list-choice cards readable and consistent with bullet steps.
-  if (suggestionItems.length > 0) return sentenceItems;
-  return items;
-}
-
-function extractCommittedListItems(stepId: string, previousSpecialist: any): string[] {
-  if (Array.isArray(previousSpecialist?.wording_choice_base_items)) {
-    return (previousSpecialist.wording_choice_base_items as string[])
-      .map((line) => String(line || "").trim())
-      .filter(Boolean);
-  }
-  if (Array.isArray(previousSpecialist?.statements)) {
-    return (previousSpecialist.statements as string[])
-      .map((line) => String(line || "").trim())
-      .filter(Boolean);
-  }
-  const field = fieldForStep(stepId);
-  const raw = field ? String(previousSpecialist?.[field] || "").trim() : "";
-  return parseListItems(raw);
-}
-
 function canonicalizeComparableText(input: string): string {
   return normalizeSurfaceSignature(normalizeLightUserInput(input));
 }
@@ -2770,92 +2688,6 @@ export function areEquivalentWordingVariants(params: {
   return isSpellingOnlyCorrection(userRaw, suggestionRaw);
 }
 
-function diffListItems(baseItems: string[], candidateItems: string[]): string[] {
-  const base = baseItems.map((line) => canonicalizeComparableText(line));
-  const used = new Array(base.length).fill(false);
-  const delta: string[] = [];
-  for (const rawCandidate of candidateItems) {
-    const candidate = String(rawCandidate || "").trim();
-    if (!candidate) continue;
-    const normalized = canonicalizeComparableText(candidate);
-    let matchedIndex = -1;
-    for (let i = 0; i < base.length; i += 1) {
-      if (used[i]) continue;
-      if (base[i] !== normalized) continue;
-      matchedIndex = i;
-      break;
-    }
-    if (matchedIndex >= 0) {
-      used[matchedIndex] = true;
-      continue;
-    }
-    delta.push(candidate);
-  }
-  return delta;
-}
-
-function mergeListItems(baseItems: string[], candidateItems: string[]): string[] {
-  const merged: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of [...baseItems, ...candidateItems]) {
-    const line = String(raw || "").trim();
-    if (!line) continue;
-    const key = canonicalizeComparableText(line);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    merged.push(line);
-  }
-  return merged;
-}
-
-function sanitizePendingListMessage(messageRaw: string, knownItems: string[]): string {
-  const message = String(messageRaw || "").replace(/\r/g, "\n");
-  if (!message.trim()) return "";
-  const known = new Set(
-    knownItems
-      .map((line) => canonicalizeComparableText(line))
-      .filter(Boolean)
-  );
-  const lines = message.split("\n");
-  const kept: string[] = [];
-  for (const lineRaw of lines) {
-    const line = String(lineRaw || "");
-    const trimmed = line.trim();
-    if (!trimmed) {
-      kept.push("");
-      continue;
-    }
-    const normalized = trimmed.replace(/<[^>]+>/g, "").trim();
-    if (
-      /\b(i['’]?ve|i have)\s+(reformulat\w*|rewritten|broadened|converted)\b/i.test(normalized) ||
-      /^statement\s*\d+\s*:/i.test(normalized) ||
-      /^statements?\s+\d+\s*(?:to|-)\s*\d+/i.test(normalized) ||
-      /\bif you meant something different\b/i.test(normalized)
-    ) {
-      continue;
-    }
-    if (/^<\/?strong>/i.test(trimmed) && /so far/i.test(trimmed)) continue;
-    if (/^so far\b/i.test(trimmed)) continue;
-    if (/^<\/?strong>/i.test(trimmed) && /established so far/i.test(trimmed)) continue;
-    if (/^(this is your input|this would be my suggestion)\s*:?\s*$/i.test(trimmed.replace(/<[^>]+>/g, "").trim())) continue;
-    const withoutMarker = trimmed.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim();
-    const directKey = canonicalizeComparableText(withoutMarker);
-    if (known.has(directKey)) continue;
-    const sentenceItems = splitSentenceItems(withoutMarker);
-    if (sentenceItems.length >= 2) {
-      const sentenceKeys = sentenceItems
-        .map((line) => canonicalizeComparableText(line))
-        .filter(Boolean);
-      if (sentenceKeys.length >= 2 && sentenceKeys.every((key) => known.has(key))) continue;
-    }
-    kept.push(line);
-  }
-  return kept
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 function compactWordingPanelBody(messageRaw: string): string {
   const message = String(messageRaw || "").replace(/\r/g, "\n").trim();
   if (!message) return "";
@@ -2883,108 +2715,6 @@ function compactWordingPanelBody(messageRaw: string): string {
     .map((part) => part.trim())
     .filter(Boolean)[0] || "";
   return ensureSentenceEnd(firstSentence || firstLine);
-}
-
-function sanitizePendingTextMessage(messageRaw: string, suggestionRaw: string): string {
-  const message = String(messageRaw || "").replace(/\r/g, "\n").trim();
-  const suggestion = String(suggestionRaw || "").trim();
-  if (!message || !suggestion) return message;
-  const suggestionComparable = canonicalizeComparableText(suggestion);
-  if (!suggestionComparable) return message;
-  const paragraphs = message
-    .split(/\n{2,}/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const kept = paragraphs.filter((paragraph) => {
-    const comparable = canonicalizeComparableText(paragraph);
-    return comparable && comparable !== suggestionComparable && !comparable.includes(suggestionComparable);
-  });
-  return kept.join("\n\n").trim();
-}
-
-function extractFeedbackReasonSentenceFromSpecialistMessage(params: {
-  messageRaw: string;
-  suggestionRaw: string;
-  userRaw: string;
-  knownItems: string[];
-}): string {
-  const source = String(params.messageRaw || "").replace(/\r/g, "\n").trim();
-  if (!source) return "";
-  const suggestionComparable = canonicalizeComparableText(String(params.suggestionRaw || ""));
-  const userComparable = canonicalizeComparableText(String(params.userRaw || ""));
-  const knownComparables = new Set(
-    params.knownItems
-      .map((line) => canonicalizeComparableText(line))
-      .filter(Boolean)
-  );
-  const lines = source
-    .split(/\n+/)
-    .map((line) => stripChoiceInstructionNoise(String(line || "").replace(/<[^>]+>/g, " ").trim()))
-    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
-    .filter(Boolean);
-  const blockedLinePatterns = [
-    /^this is your input:?$/i,
-    /^this would be my suggestion:?$/i,
-    /^please click what suits you best\.?$/i,
-    /^choose this version$/i,
-    /^if you meant something different/i,
-    /^statement\s*\d+\s*:/i,
-    /^so far\b/i,
-    /^your current\b/i,
-  ];
-  const candidates: string[] = [];
-  for (const line of lines) {
-    if (blockedLinePatterns.some((pattern) => pattern.test(line))) continue;
-    const lineComparable = canonicalizeComparableText(line);
-    if (!lineComparable) continue;
-    if (knownComparables.has(lineComparable)) continue;
-    if (
-      (suggestionComparable && (lineComparable === suggestionComparable || lineComparable.includes(suggestionComparable))) ||
-      (userComparable && (lineComparable === userComparable || lineComparable.includes(userComparable)))
-    ) {
-      continue;
-    }
-    const sentences = line
-      .split(/(?<=[.!?])\s+/)
-      .map((part) => String(part || "").trim())
-      .filter(Boolean);
-    for (const sentence of sentences) {
-      const normalized = sentence.replace(/\s+/g, " ").trim();
-      if (!normalized) continue;
-      if (blockedLinePatterns.some((pattern) => pattern.test(normalized))) continue;
-      const sentenceComparable = canonicalizeComparableText(normalized);
-      if (!sentenceComparable) continue;
-      if (
-        (suggestionComparable &&
-          (sentenceComparable === suggestionComparable || sentenceComparable.includes(suggestionComparable))) ||
-        (userComparable && (sentenceComparable === userComparable || sentenceComparable.includes(userComparable))) ||
-        knownComparables.has(sentenceComparable)
-      ) {
-        continue;
-      }
-      if (tokenizeWords(normalized).length < 5) continue;
-      candidates.push(normalized);
-    }
-  }
-  if (candidates.length === 0) return "";
-  return normalizeCompactFeedbackSentence(candidates[0], "");
-}
-
-export function isListChoiceScope(stepId: string, activeSpecialist: string): boolean {
-  if (
-    stepId === DREAM_STEP_ID &&
-    String(activeSpecialist || "").trim() === DREAM_EXPLAINER_SPECIALIST
-  ) {
-    return true;
-  }
-  if (
-    stepId === STRATEGY_STEP_ID ||
-    stepId === PRODUCTSSERVICES_STEP_ID ||
-    stepId === RULESOFTHEGAME_STEP_ID
-  ) {
-    return true;
-  }
-  return false;
 }
 
 function isBulletChoiceStep(stepId: string): boolean {
@@ -4105,450 +3835,6 @@ function validateNonStep0OfftopicMessageShape(
   return null;
 }
 
-function normalizeCompactFeedbackSentence(raw: string, fallback: string): string {
-  const cleaned = String(raw || "")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .map((line) => String(line || "").trim())
-    .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const source = cleaned || fallback;
-  const firstSentence = source
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean)[0] || source;
-  const normalized = firstSentence.charAt(0).toUpperCase() + firstSentence.slice(1);
-  return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
-}
-
-function resolveFeedbackReasonFromSpecialist(state: CanvasState, prev: any): string {
-  const reasonKey = String(prev?.feedback_reason_key || "").trim();
-  const reasonText = String(prev?.feedback_reason_text || "").trim();
-  if (reasonKey) {
-    const reasonUiKey = `wording.feedback.reason.${reasonKey}`;
-    const fallback = uiDefaultString(reasonUiKey, "");
-    const fromMap = uiStringFromStateMap(state, reasonUiKey, fallback);
-    if (fromMap) return normalizeCompactFeedbackSentence(fromMap, "");
-  }
-  if (reasonText) {
-    return normalizeCompactFeedbackSentence(reasonText, "");
-  }
-  const fallbackFromMessage = extractFeedbackReasonSentenceFromSpecialistMessage({
-    messageRaw: String(prev?.message || ""),
-    suggestionRaw: String(prev?.wording_choice_agent_current || prev?.refined_formulation || ""),
-    userRaw: String(prev?.wording_choice_user_normalized || prev?.wording_choice_user_raw || ""),
-    knownItems: mergeListItems(
-      Array.isArray(prev?.wording_choice_base_items) ? (prev.wording_choice_base_items as string[]) : [],
-      Array.isArray(prev?.wording_choice_suggestion_items) ? (prev.wording_choice_suggestion_items as string[]) : []
-    ),
-  });
-  if (fallbackFromMessage) return fallbackFromMessage;
-  return "";
-}
-
-function userChoiceFeedbackMessage(
-  stepId: string,
-  state: CanvasState,
-  prev: any,
-  activeSpecialist = "",
-  telemetry?: UiI18nTelemetryCounters | null
-): string {
-  const acknowledgment = normalizeCompactFeedbackSentence(
-    uiStringFromStateMap(
-      state,
-      "wording.feedback.user_pick.ack.default",
-      uiDefaultString("wording.feedback.user_pick.ack.default", "You chose your own wording, and that's okay.")
-    ),
-    "You chose your own wording, and that's okay."
-  );
-  const fallbackReason = normalizeCompactFeedbackSentence(
-    uiStringFromStateMap(
-      state,
-      "wording.feedback.user_pick.reason.default",
-      uiDefaultString(
-        "wording.feedback.user_pick.reason.default",
-        "This keeps your original meaning while staying aligned with this step."
-      )
-    ),
-    "This keeps your original meaning while staying aligned with this step."
-  );
-  let reason = fallbackReason;
-  if (isUiWordingFeedbackKeyedV1Enabled()) {
-    const explicitReason = resolveFeedbackReasonFromSpecialist(state, prev);
-    if (explicitReason) {
-      reason = explicitReason;
-    } else {
-      bumpUiI18nCounter(telemetry, "wording_feedback_fallback_count");
-    }
-  }
-  const feedback = `${acknowledgment} ${reason}`.trim();
-  const selection = wordingSelectionMessage(stepId, state, activeSpecialist);
-  return selection ? `${feedback}\n\n${selection}` : feedback;
-}
-
-function mergeUniqueMessageBlocks(primary: string, secondary: string): string {
-  const normalize = (value: string): string => canonicalizeComparableText(value);
-  const seenParagraphs = new Set<string>();
-  const out: string[] = [];
-  for (const block of [primary, secondary]) {
-    const trimmed = String(block || "").trim();
-    if (!trimmed) continue;
-    const paragraphs = trimmed
-      .replace(/\r/g, "\n")
-      .split(/\n{2,}/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-    const keptParagraphs: string[] = [];
-    for (const paragraph of paragraphs) {
-      const key = normalize(paragraph);
-      if (!key || seenParagraphs.has(key)) continue;
-      seenParagraphs.add(key);
-      keptParagraphs.push(paragraph);
-    }
-    if (keptParagraphs.length > 0) {
-      out.push(keptParagraphs.join("\n\n"));
-    }
-  }
-  return out.join("\n\n").trim();
-}
-
-function withUpdatedTargetField(result: any, stepId: string, value: string): any {
-  const field = fieldForStep(stepId);
-  if (!field || !value) return result;
-  return { ...result, [field]: value };
-}
-
-function pickWordingAgentBase(lastSpecialistResult: any): string {
-  const stored = String(lastSpecialistResult?.wording_choice_agent_current || "").trim();
-  if (stored) return stored;
-  return String(lastSpecialistResult?.refined_formulation || "").trim();
-}
-
-function pickWordingSuggestionList(currentSpecialist: any, fallbackText: string): string[] {
-  if (Array.isArray(currentSpecialist?.statements) && currentSpecialist.statements.length > 0) {
-    return (currentSpecialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean);
-  }
-  const refined = String(currentSpecialist?.refined_formulation || "").trim();
-  return parseListItems(refined || fallbackText);
-}
-
-function isRefineAdjustRouteToken(token: string): boolean {
-  const upper = String(token || "").toUpperCase();
-  return upper.includes("_REFINE__") || upper.includes("_ADJUST__");
-}
-
-function isWordingPickRouteToken(token: string): boolean {
-  return token === "__WORDING_PICK_USER__" || token === "__WORDING_PICK_SUGGESTION__";
-}
-
-export function stripUnsupportedReformulationClaims(messageRaw: string): string {
-  const message = String(messageRaw || "").replace(/\r/g, "\n");
-  if (!message.trim()) return "";
-  const blocked = [
-    /\b(i['’]?ve|i have)\s+reformulat\w*\b/i,
-    /\b(i['’]?ve|i have)\s+rewritten\b/i,
-    /\byou['’]?ve provided some clear focus points\b/i,
-  ];
-  const lines = message.split("\n");
-  const kept: string[] = [];
-  for (const lineRaw of lines) {
-    const line = String(lineRaw || "");
-    const trimmed = line.trim();
-    if (!trimmed) {
-      kept.push("");
-      continue;
-    }
-    if (blocked.some((re) => re.test(trimmed))) continue;
-    kept.push(line);
-  }
-  return kept
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-export function buildWordingChoiceFromTurn(params: {
-  stepId: string;
-  activeSpecialist: string;
-  previousSpecialist: any;
-  specialistResult: any;
-  userTextRaw: string;
-  isOfftopic: boolean;
-  forcePending?: boolean;
-  dreamRuntimeModeRaw?: unknown;
-}): { specialist: any; wordingChoice: WordingChoiceUiPayload | null } {
-  const {
-    stepId,
-    activeSpecialist,
-    previousSpecialist,
-    specialistResult,
-    userTextRaw,
-    isOfftopic,
-    forcePending,
-    dreamRuntimeModeRaw,
-  } = params;
-  if (!isWordingChoiceEligibleContext(stepId, activeSpecialist, specialistResult, previousSpecialist, dreamRuntimeModeRaw)) {
-    return {
-      specialist: {
-        ...specialistResult,
-        wording_choice_pending: "false",
-        wording_choice_selected: "",
-        feedback_reason_key: "",
-        feedback_reason_text: "",
-      },
-      wordingChoice: null,
-    };
-  }
-  if (isOfftopic) return { specialist: specialistResult, wordingChoice: null };
-  const fallbackUserRaw = forcePending
-    ? String(previousSpecialist?.wording_choice_user_raw || previousSpecialist?.wording_choice_user_normalized || "").trim()
-    : "";
-  const userRaw = String(userTextRaw || fallbackUserRaw).trim();
-  if (!forcePending && !shouldTreatAsStepContributingInput(userRaw, stepId)) {
-    return { specialist: specialistResult, wordingChoice: null };
-  }
-  const suggestionRaw = pickDualChoiceSuggestion(stepId, specialistResult, previousSpecialist, userRaw);
-  if (!userRaw || !suggestionRaw) return { specialist: specialistResult, wordingChoice: null };
-  const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
-  const mode: WordingChoiceMode =
-    isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
-  const normalizedUser = mode === "list" ? normalizeListUserInput(userRaw) : normalizeLightUserInput(userRaw);
-  const baseItems = mode === "list" ? extractCommittedListItems(stepId, previousSpecialist || {}) : [];
-  const suggestionFullItems = mode === "list" ? pickWordingSuggestionList(specialistResult, suggestionRaw) : [];
-  const userRawItems = mode === "list"
-    ? parseUserListItemsForStep(stepId, userRaw, suggestionFullItems)
-    : [];
-  const userItems = mode === "list" ? diffListItems(baseItems, userRawItems) : [];
-  const suggestionItems = mode === "list" ? diffListItems(baseItems, suggestionFullItems) : [];
-  if (mode === "list" && !forcePending && userItems.length === 0) {
-    return { specialist: specialistResult, wordingChoice: null };
-  }
-  const equivalent = areEquivalentWordingVariants({
-    mode,
-    userRaw: normalizedUser,
-    suggestionRaw,
-    userItems: mode === "list" ? userItems : userItems,
-    suggestionItems: mode === "list" ? suggestionItems : suggestionItems,
-  });
-  if (equivalent) {
-    const chosenItems = mode === "list"
-      ? mergeListItems(baseItems, suggestionItems.length > 0 ? suggestionItems : userItems)
-      : [];
-    const chosen = mode === "list"
-      ? chosenItems.join("\n")
-      : (String(suggestionRaw || "").trim() || normalizedUser);
-    const autoSelectedBase = {
-      ...specialistResult,
-      wording_choice_pending: "false",
-      wording_choice_selected: "suggestion",
-      feedback_reason_key: "",
-      feedback_reason_text: "",
-      refined_formulation: chosen,
-      ...(mode === "list" ? { statements: chosenItems } : {}),
-    };
-    const autoSelected = withUpdatedTargetField(autoSelectedBase, stepId, chosen);
-    return { specialist: autoSelected, wordingChoice: null };
-  }
-  if (!forcePending && !isMaterialRewriteCandidate(userRaw, suggestionRaw)) {
-    return { specialist: specialistResult, wordingChoice: null };
-  }
-  const pendingMessage = mode === "list"
-    ? sanitizePendingListMessage(
-      String(specialistResult?.message || ""),
-      mergeListItems(baseItems, suggestionFullItems)
-    )
-    : sanitizePendingTextMessage(
-      String(specialistResult?.message || ""),
-      String(suggestionRaw || "")
-    );
-  const feedbackReasonText = extractFeedbackReasonSentenceFromSpecialistMessage({
-    messageRaw: String(specialistResult?.message || ""),
-    suggestionRaw,
-    userRaw,
-    knownItems: mergeListItems(baseItems, suggestionFullItems),
-  });
-  const targetField = fieldForStep(stepId);
-  const committedTextFromPrev = targetField ? String(previousSpecialist?.[targetField] || "").trim() : "";
-  const committedText = mode === "list" ? baseItems.join("\n") : committedTextFromPrev;
-  const enriched = {
-    ...specialistResult,
-    message: pendingMessage,
-    wording_choice_pending: "true",
-    wording_choice_selected: "",
-    wording_choice_user_raw: userRaw,
-    wording_choice_user_normalized: normalizedUser,
-    wording_choice_user_items: userItems,
-    wording_choice_base_items: baseItems,
-    wording_choice_agent_current: suggestionRaw,
-    wording_choice_suggestion_items: suggestionItems,
-    wording_choice_mode: mode,
-    wording_choice_target_field: targetField,
-    feedback_reason_key: "",
-    feedback_reason_text: feedbackReasonText,
-  };
-  if (targetField) {
-    (enriched as any)[targetField] = committedText;
-  }
-  if (mode === "list") {
-    (enriched as any).statements = baseItems;
-  }
-  (enriched as any).refined_formulation =
-    committedText || String(previousSpecialist?.refined_formulation || "").trim();
-  const wordingChoice: WordingChoiceUiPayload = {
-    enabled: true,
-    mode,
-    user_text: normalizedUser,
-    suggestion_text: suggestionRaw,
-    user_items: userItems,
-    suggestion_items: suggestionItems,
-    instruction: uiDefaultString("wordingChoiceInstruction", "Please click what suits you best."),
-  };
-  return { specialist: enriched, wordingChoice };
-}
-
-function applyWordingPickSelection(params: {
-  stepId: string;
-  routeToken: string;
-  state: CanvasState;
-  telemetry?: UiI18nTelemetryCounters | null;
-}): { handled: boolean; specialist: any; nextState: CanvasState } {
-  const { stepId, routeToken, state } = params;
-  if (!isWordingPickRouteToken(routeToken)) {
-    return { handled: false, specialist: {}, nextState: state };
-  }
-  const prev = ((state as any).last_specialist_result || {}) as any;
-  if (String(prev.wording_choice_pending || "") !== "true") {
-    return { handled: false, specialist: prev, nextState: state };
-  }
-  const pickedUser = routeToken === "__WORDING_PICK_USER__";
-  const mode = String(prev.wording_choice_mode || "text") === "list" ? "list" : "text";
-  const baseItems = mode === "list" ? extractCommittedListItems(stepId, prev) : [];
-  const fallbackPickedRaw = pickedUser
-    ? String(prev.wording_choice_user_normalized || prev.wording_choice_user_raw || "").trim()
-    : String(prev.wording_choice_agent_current || prev.refined_formulation || "").trim();
-  const pickedItems = mode === "list"
-    ? (() => {
-      const fromPending = pickedUser
-        ? (Array.isArray(prev.wording_choice_user_items)
-          ? (prev.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-          : [])
-        : (Array.isArray(prev.wording_choice_suggestion_items)
-          ? (prev.wording_choice_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-          : []);
-      if (fromPending.length > 0) return fromPending;
-      return parseListItems(fallbackPickedRaw);
-    })()
-    : [];
-  const rawChosen = mode === "list"
-    ? mergeListItems(baseItems, pickedItems).join("\n")
-    : fallbackPickedRaw;
-  const chosen = stepId === ENTITY_STEP_ID ? normalizeEntityPhrase(rawChosen) || rawChosen : rawChosen;
-  if (!chosen) return { handled: false, specialist: prev, nextState: state };
-  const activeSpecialist = String((state as any)?.active_specialist || "").trim();
-  const userFeedback = userChoiceFeedbackMessage(stepId, state, prev, activeSpecialist, params.telemetry);
-  const selectedMessage = pickedUser
-    ? userFeedback
-    : wordingSelectionMessage(stepId, state, activeSpecialist);
-  const selected = withUpdatedTargetField(
-    {
-      ...prev,
-      message: selectedMessage,
-      wording_choice_pending: "false",
-      wording_choice_selected: pickedUser ? "user" : "suggestion",
-      wording_choice_user_raw: "",
-      wording_choice_user_normalized: "",
-      wording_choice_user_items: [],
-      wording_choice_suggestion_items: [],
-      wording_choice_base_items: mode === "list" ? parseListItems(chosen) : [],
-      refined_formulation: chosen,
-      wording_choice_agent_current: chosen,
-      feedback_reason_key: "",
-      feedback_reason_text: "",
-      ...(mode === "list" ? { statements: parseListItems(chosen) } : {}),
-    },
-    stepId,
-    chosen
-  );
-  const targetField = fieldForStep(stepId);
-  const provisionalValue = targetField ? String((selected as any)?.[targetField] || "").trim() : "";
-  const stateForRender = provisionalValue
-    ? withProvisionalValue(state, stepId, provisionalValue, "wording_pick")
-    : state;
-  let selectedWithContract = selected;
-  let selectedContractId = String((selected as any)?.ui_contract_id || "");
-  const rendered = renderFreeTextTurnPolicy({
-    stepId,
-    state: stateForRender,
-    specialist: selected as Record<string, unknown>,
-    previousSpecialist: prev as Record<string, unknown>,
-  });
-  const renderedSpecialist = rendered.specialist as any;
-  selectedWithContract = {
-    ...selected,
-    action: "ASK",
-    message: mergeUniqueMessageBlocks(
-      String(selected.message || ""),
-      String(renderedSpecialist?.message || "")
-    ),
-    question: String(renderedSpecialist?.question || ""),
-    wording_choice_pending: "false",
-    wording_choice_selected: pickedUser ? "user" : "suggestion",
-    ui_contract_id: String((renderedSpecialist as any)?.ui_contract_id || rendered.contractId || ""),
-    ui_contract_version: String((renderedSpecialist as any)?.ui_contract_version || rendered.contractVersion || ""),
-    ui_text_keys: Array.isArray((renderedSpecialist as any)?.ui_text_keys)
-      ? (renderedSpecialist as any)?.ui_text_keys
-      : rendered.textKeys,
-  };
-  selectedContractId = String(rendered.contractId || (selectedWithContract as any)?.ui_contract_id || "");
-  const nextState: CanvasState = {
-    ...stateForRender,
-    last_specialist_result: selectedWithContract,
-  };
-  applyUiPhaseByStep(nextState, stepId, selectedContractId);
-  return { handled: true, specialist: selectedWithContract, nextState };
-}
-
-function buildWordingChoiceFromPendingSpecialist(
-  specialist: any,
-  activeSpecialist: string,
-  previousSpecialist?: any,
-  stepIdHint = "",
-  dreamRuntimeModeRaw?: unknown
-): WordingChoiceUiPayload | null {
-  if (String(specialist?.wording_choice_pending || "") !== "true") return null;
-  const stepId = String(stepIdHint || specialist?.wording_choice_target_field || "").trim();
-  if (!stepId) return null;
-  if (
-    !isWordingChoiceEligibleContext(
-      stepId,
-      activeSpecialist,
-      specialist,
-      previousSpecialist || {},
-      dreamRuntimeModeRaw
-    )
-  ) {
-    return null;
-  }
-  const mode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
-  const userItems = Array.isArray(specialist?.wording_choice_user_items)
-    ? (specialist.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-    : [];
-  const suggestionItems = Array.isArray(specialist?.wording_choice_suggestion_items)
-    ? (specialist.wording_choice_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-    : [];
-  return {
-    enabled: true,
-    mode,
-    user_text: String(specialist?.wording_choice_user_normalized || specialist?.wording_choice_user_raw || "").trim(),
-    suggestion_text: String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim(),
-    user_items: userItems,
-    suggestion_items: suggestionItems,
-    instruction: uiDefaultString("wordingChoiceInstruction", "Please click what suits you best."),
-  };
-}
-
 const uiPayloadHelpers = createRunStepUiPayloadHelpers({
   shouldLogLocalDevDiagnostics,
   pickPrompt,
@@ -4591,6 +3877,60 @@ const {
   labelForActionInMenu,
   attachRegistryPayload,
 } = uiPayloadHelpers;
+
+const wordingHelpers = createRunStepWordingHelpers({
+  step0Id: STEP_0_ID,
+  dreamStepId: DREAM_STEP_ID,
+  strategyStepId: STRATEGY_STEP_ID,
+  productsservicesStepId: PRODUCTSSERVICES_STEP_ID,
+  rulesofthegameStepId: RULESOFTHEGAME_STEP_ID,
+  entityStepId: ENTITY_STEP_ID,
+  dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
+  normalizeDreamRuntimeMode,
+  uiDefaultString,
+  uiStringFromStateMap,
+  fieldForStep,
+  parseListItems,
+  splitSentenceItems,
+  normalizeListUserInput,
+  normalizeLightUserInput,
+  canonicalizeComparableText,
+  stripChoiceInstructionNoise,
+  tokenizeWords,
+  isMaterialRewriteCandidate,
+  shouldTreatAsStepContributingInput,
+  pickDualChoiceSuggestion,
+  areEquivalentWordingVariants,
+  normalizeEntityPhrase,
+  withProvisionalValue,
+  renderFreeTextTurnPolicy,
+  applyUiPhaseByStep,
+  isUiWordingFeedbackKeyedV1Enabled,
+  bumpUiI18nCounter: (telemetry, key, amount) =>
+    bumpUiI18nCounter(
+      telemetry as UiI18nTelemetryCounters | null | undefined,
+      key as keyof UiI18nTelemetryCounters,
+      amount
+    ),
+  wordingSelectionMessage,
+});
+
+const {
+  mergeListItems,
+  sanitizePendingListMessage,
+  copyPendingWordingChoiceState,
+  pickWordingAgentBase,
+  isRefineAdjustRouteToken,
+  isWordingPickRouteToken,
+  applyWordingPickSelection,
+  buildWordingChoiceFromPendingSpecialist,
+} = wordingHelpers;
+
+export const isWordingChoiceEligibleStep = wordingHelpers.isWordingChoiceEligibleStep;
+export const isWordingChoiceEligibleContext = wordingHelpers.isWordingChoiceEligibleContext;
+export const isListChoiceScope = wordingHelpers.isListChoiceScope;
+export const stripUnsupportedReformulationClaims = wordingHelpers.stripUnsupportedReformulationClaims;
+export const buildWordingChoiceFromTurn = wordingHelpers.buildWordingChoiceFromTurn;
 
 export const resolveActionCodeMenuTransition = uiPayloadHelpers.resolveActionCodeMenuTransition;
 
