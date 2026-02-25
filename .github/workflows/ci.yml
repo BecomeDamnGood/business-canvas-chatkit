@@ -141,6 +141,12 @@ jobs:
         working-directory: mcp-server
         run: node --loader ts-node/esm scripts/contract-smoke.mjs
 
+      - name: Run-step architecture guardrails
+        working-directory: mcp-server
+        env:
+          RUN_STEP_ARCH_PHASE: baseline
+        run: npm run arch:run-step:check
+
       - name: Test
         working-directory: mcp-server
         run: npm test

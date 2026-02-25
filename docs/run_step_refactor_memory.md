@@ -21,6 +21,36 @@ Next agent exact TODO:
 Commit:
 - pending_after_commit
 
+## Step 1 - Guardrails
+Date: 2026-02-25 20:12 CET
+Status: completed
+Completed:
+- Added ownership map at `docs/run_step_ownership_map.md` with concern boundaries, target modules, owner steps, and migration status.
+- Added LOC guardrail script at `mcp-server/scripts/arch/run_step_loc_check.mjs` with phased budgets (`baseline`, `phase_A`, `phase_B`, `phase_C`, `stretch`).
+- Added import-boundary guardrail script at `mcp-server/scripts/arch/run_step_boundary_check.mjs` with allowed facade import domains and phased dependency budgets.
+- Added complexity guardrail script at `mcp-server/scripts/arch/run_step_complexity_check.mjs` with AST-based top-level function and cyclomatic budgets by phase.
+- Wired architecture checks into `mcp-server/package.json` and `.github/workflows/ci.yml` (`Run-step architecture guardrails` step).
+Pending:
+- Advance architecture phase from `baseline` to stricter phases as subsystem extractions land in next steps.
+Changed files:
+- .github/workflows/ci.yml
+- mcp-server/package.json
+- mcp-server/scripts/arch/run_step_loc_check.mjs
+- mcp-server/scripts/arch/run_step_boundary_check.mjs
+- mcp-server/scripts/arch/run_step_complexity_check.mjs
+- docs/run_step_ownership_map.md
+- docs/run_step_refactor_memory.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- npm --prefix mcp-server run arch:run-step:check => pass
+Next agent exact TODO:
+- Start Step 2 and extract the full UI payload subsystem from `run_step.ts` into `mcp-server/src/handlers/run_step_ui_payload.ts`, then move guardrail phase toward `phase_A` when budgets are met.
+Commit:
+- pending_after_commit
+
 ## Step 2 - Ingress
 Date: 2026-02-25 17:24 CET
 Status: completed
