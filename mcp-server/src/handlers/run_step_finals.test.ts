@@ -799,8 +799,8 @@ test("rules contract guard normalizes contradictory ASK payload to valid bullet 
   assert.equal(String((normalized.specialist as any).question || ""), "");
 });
 
-test("run_step applies rules contract normalization before rules post-processing", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+test("specialist dispatch applies rules contract normalization before rules post-processing", () => {
+  const source = fs.readFileSync(new URL("./specialist_dispatch.ts", import.meta.url), "utf8");
   assert.match(source, /normalizeRulesOfTheGameOutputContract/);
   assert.match(
     source,

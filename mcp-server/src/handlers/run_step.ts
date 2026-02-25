@@ -6,7 +6,7 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 
-import { callStrictJson, type LLMUsage } from "../core/llm.js";
+import { type LLMUsage } from "../core/llm.js";
 import { resolveModelForCall } from "../core/model_routing.js";
 import { appendSessionTokenLog } from "../core/session_token_log.js";
 import {
@@ -200,6 +200,14 @@ import {
   type RunStepArgs,
 } from "./ingress.js";
 import { finalizeResponseContractInternals } from "./turn_contract.js";
+import {
+  createBuildRateLimitErrorPayload,
+  createBuildTimeoutErrorPayload,
+  createBuildTransientFallbackSpecialist,
+  createCallSpecialistStrict,
+  createCallSpecialistStrictSafe,
+  hasUsableSpecialistForRetry as hasUsableSpecialistForRetryDispatch,
+} from "./specialist_dispatch.js";
 
 function uiDefaultString(key: string, fallback = ""): string {
   const candidate = String(UI_STRINGS_WITH_MENU_KEYS[key] || "").trim();
@@ -5755,25 +5763,14 @@ const META_TOPIC_CONTRACT_INSTRUCTION = `META_TOPIC CONTRACT (HARD)
 - Set meta_topic="RECAP" when wants_recap=true.
 - Set meta_topic="NONE" for normal step input, inspiration-only requests, or generic off-topic content.`;
 
-function composeSpecialistInstructions(
-  baseInstructions: string,
-  contextBlock: string,
-  options?: { includeUniversalMeta?: boolean }
-): string {
-  const blocks = [
-    baseInstructions,
-    LANGUAGE_LOCK_INSTRUCTION,
-    contextBlock,
-    RECAP_INSTRUCTION,
-  ];
-  if (options?.includeUniversalMeta) {
-    blocks.push(UNIVERSAL_META_OFFTOPIC_POLICY);
-  }
-  blocks.push(USER_INTENT_CONTRACT_INSTRUCTION);
-  blocks.push(META_TOPIC_CONTRACT_INSTRUCTION);
-  blocks.push(OFFTOPIC_FLAG_CONTRACT_INSTRUCTION);
-  return blocks.join("\n\n");
-}
+const SPECIALIST_INSTRUCTION_BLOCKS = {
+  languageLockInstruction: LANGUAGE_LOCK_INSTRUCTION,
+  recapInstruction: RECAP_INSTRUCTION,
+  universalMetaOfftopicPolicy: UNIVERSAL_META_OFFTOPIC_POLICY,
+  userIntentContractInstruction: USER_INTENT_CONTRACT_INSTRUCTION,
+  metaTopicContractInstruction: META_TOPIC_CONTRACT_INSTRUCTION,
+  offtopicFlagContractInstruction: OFFTOPIC_FLAG_CONTRACT_INSTRUCTION,
+};
 
 /**
  * Persist state updates consistently (no nulls).
@@ -5882,597 +5879,45 @@ export function applyStateUpdate(params: {
   return nextState;
 }
 
-async function callSpecialistStrict(params: {
-  model: string;
-  state: CanvasState;
-  decision: OrchestratorOutput;
-  userMessage: string;
-}): Promise<{ specialistResult: any; attempts: number; usage: LLMUsage; model: string }> {
-  const { model, state, decision, userMessage } = params;
-  const specialist = String(decision.specialist_to_call ?? "");
-  const contextBlock = buildSpecialistContextBlock(state);
-  const lang = langFromState(state);
+const callSpecialistStrict = createCallSpecialistStrict({
+  instructionBlocks: SPECIALIST_INSTRUCTION_BLOCKS,
+  buildSpecialistContextBlock,
+  langFromState,
+  getDreamRuntimeMode,
+});
 
-  if (process.env.TS_NODE_TRANSPILE_ONLY === "true" && process.env.RUN_INTEGRATION_TESTS !== "1") {
-    if (process.env.TEST_FORCE_RATE_LIMIT === "1") {
-      const err = new Error("rate_limit_exceeded");
-      (err as any).rate_limited = true;
-      (err as any).retry_after_ms = 1500;
-      throw err;
-    }
-    if (process.env.TEST_FORCE_TIMEOUT === "1") {
-      const err = new Error("timeout");
-      (err as any).type = "timeout";
-      (err as any).retry_action = "retry_same_action";
-      throw err;
-    }
-    const forceOfftopic = process.env.TEST_FORCE_OFFTOPIC === "1";
-    const base = {
-      action: "ASK",
-      message: "",
-      question: "Test question",
-      refined_formulation: "",
-      wants_recap: false,
-      is_offtopic: forceOfftopic,
-      user_intent: forceOfftopic ? "OFFTOPIC" : "STEP_INPUT",
-      meta_topic: "NONE",
-    };
-    const specialistResult =
-      specialist === STEP_0_SPECIALIST
-        ? { ...base, business_name: "TBD", step_0: "" }
-        : base;
-    return {
-      specialistResult,
-      attempts: 0,
-      usage: {
-        input_tokens: null,
-        output_tokens: null,
-        total_tokens: null,
-        provider_available: false,
-      },
-      model,
-    };
-  }
+const hasUsableSpecialistForRetry = (specialist: any): boolean =>
+  hasUsableSpecialistForRetryDispatch(specialist, pickPrompt);
 
-  if (specialist === STEP_0_SPECIALIST) {
-    const langExplicit = String((state as any).language ?? "").trim();
-    const plannerInput = buildStep0SpecialistInput(userMessage, langExplicit ? lang : "");
+const buildTransientFallbackSpecialist = createBuildTransientFallbackSpecialist({
+  step0CardDescForState,
+  step0QuestionForState,
+  pickPrompt,
+  renderFreeTextTurnPolicy,
+});
 
-    const res = await callStrictJson<ValidationAndBusinessNameOutput>({
-      model,
-      instructions: composeSpecialistInstructions(VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS, contextBlock),
-      plannerInput,
-      schemaName: "ValidationAndBusinessName",
-      jsonSchema: ValidationAndBusinessNameJsonSchema as any,
-      zodSchema: ValidationAndBusinessNameZodSchema,
-      temperature: 0.2,
-      topP: 1,
-      maxOutputTokens: 2048,
-      debugLabel: "ValidationAndBusinessName",
-    });
+const buildRateLimitErrorPayload = createBuildRateLimitErrorPayload({
+  resolveHolisticPolicyFlags,
+  buildTransientFallbackSpecialist,
+  attachRegistryPayload,
+  uiStringFromStateMap,
+  uiDefaultString,
+});
 
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
+const buildTimeoutErrorPayload = createBuildTimeoutErrorPayload({
+  resolveHolisticPolicyFlags,
+  buildTransientFallbackSpecialist,
+  attachRegistryPayload,
+  uiStringFromStateMap,
+  uiDefaultString,
+});
 
-  if (specialist === DREAM_SPECIALIST) {
-    const langExplicitDream = String((state as any).language ?? "").trim();
-    const plannerInput = buildDreamSpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || DREAM_STEP_ID),
-      langExplicitDream ? lang : ""
-    );
-
-    const res = await callStrictJson<DreamOutput>({
-      model,
-      instructions: composeSpecialistInstructions(DREAM_INSTRUCTIONS, contextBlock),
-      plannerInput,
-      schemaName: "Dream",
-      jsonSchema: DreamJsonSchema as any,
-      zodSchema: DreamZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "Dream",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === DREAM_EXPLAINER_SPECIALIST) {
-    const langExplicitExplainer = String((state as any).language ?? "").trim();
-    const fromCanonical = Array.isArray((state as any).dream_builder_statements)
-      ? ((state as any).dream_builder_statements as string[])
-      : [];
-    const fromLast = Array.isArray((state as any).last_specialist_result?.statements)
-      ? ((state as any).last_specialist_result.statements as string[])
-      : [];
-    const fromScoring = Array.isArray((state as any).dream_scoring_statements)
-      ? ((state as any).dream_scoring_statements as string[])
-      : [];
-    const previousStatements =
-      fromCanonical.length > 0
-        ? fromCanonical
-        : fromScoring.length >= fromLast.length && fromScoring.length > 0
-          ? fromScoring
-          : fromLast;
-    const dreamAwaitingDirection = String((state as any).dream_awaiting_direction ?? "").trim() === "true";
-    const topClusters = dreamAwaitingDirection && Array.isArray((state as any).dream_top_clusters)
-      ? ((state as any).dream_top_clusters as { theme: string; average: number }[])
-      : undefined;
-    const businessContext = dreamAwaitingDirection && topClusters
-      ? {
-          step_0_final: String((state as any).step_0_final ?? "").trim(),
-          business_name: String((state as any).business_name ?? "").trim(),
-        }
-      : undefined;
-    const plannerInput = buildDreamExplainerSpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || DREAM_STEP_ID),
-      langExplicitExplainer ? lang : "",
-      previousStatements,
-      topClusters,
-      businessContext,
-      getDreamRuntimeMode(state)
-    );
-
-    const res = await callStrictJson<DreamExplainerOutput>({
-      model,
-      instructions: composeSpecialistInstructions(DREAM_EXPLAINER_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "DreamExplainer",
-      jsonSchema: DreamExplainerJsonSchema as any,
-      zodSchema: DreamExplainerZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "DreamExplainer",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === PURPOSE_SPECIALIST) {
-    const plannerInput = buildPurposeSpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || PURPOSE_STEP_ID),
-      lang
-    );
-
-    const res = await callStrictJson<PurposeOutput>({
-      model,
-      instructions: composeSpecialistInstructions(PURPOSE_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "Purpose",
-      jsonSchema: PurposeJsonSchema as any,
-      zodSchema: PurposeZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "Purpose",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === BIGWHY_SPECIALIST) {
-    const plannerInput = buildBigWhySpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || BIGWHY_STEP_ID),
-      lang
-    );
-
-    const res = await callStrictJson<BigWhyOutput>({
-      model,
-      instructions: composeSpecialistInstructions(BIGWHY_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "BigWhy",
-      jsonSchema: BigWhyJsonSchema as any,
-      zodSchema: BigWhyZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "BigWhy",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === ROLE_SPECIALIST) {
-    const plannerInput = buildRoleSpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || ROLE_STEP_ID),
-      lang
-    );
-
-    const res = await callStrictJson<RoleOutput>({
-      model,
-      instructions: composeSpecialistInstructions(ROLE_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "Role",
-      jsonSchema: RoleJsonSchema as any,
-      zodSchema: RoleZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "Role",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === ENTITY_SPECIALIST) {
-    const plannerInput = buildEntitySpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || ENTITY_STEP_ID),
-      lang
-    );
-
-    const res = await callStrictJson<EntityOutput>({
-      model,
-      instructions: composeSpecialistInstructions(ENTITY_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "Entity",
-      jsonSchema: EntityJsonSchema as any,
-      zodSchema: EntityZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "Entity",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === STRATEGY_SPECIALIST) {
-    const lastResult = (state as any).last_specialist_result || {};
-    const statementsFromLast = Array.isArray(lastResult.statements) ? lastResult.statements : [];
-    const plannerInput = buildStrategySpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || STRATEGY_STEP_ID),
-      lang,
-      statementsFromLast
-    );
-
-    const res = await callStrictJson<StrategyOutput>({
-      model,
-      instructions: composeSpecialistInstructions(STRATEGY_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "Strategy",
-      jsonSchema: StrategyJsonSchema as any,
-      zodSchema: StrategyZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "Strategy",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === TARGETGROUP_SPECIALIST) {
-    const plannerInput = buildTargetGroupSpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || TARGETGROUP_STEP_ID),
-      lang,
-      contextBlock
-    );
-
-    const res = await callStrictJson<TargetGroupOutput>({
-      model,
-      instructions: composeSpecialistInstructions(TARGETGROUP_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "TargetGroup",
-      jsonSchema: TargetGroupJsonSchema as any,
-      zodSchema: TargetGroupZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "TargetGroup",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === PRODUCTSSERVICES_SPECIALIST) {
-    const plannerInput = buildProductsServicesSpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || PRODUCTSSERVICES_STEP_ID),
-      lang,
-      contextBlock
-    );
-
-    const res = await callStrictJson<ProductsServicesOutput>({
-      model,
-      instructions: composeSpecialistInstructions(PRODUCTSSERVICES_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "ProductsServices",
-      jsonSchema: ProductsServicesJsonSchema as any,
-      zodSchema: ProductsServicesZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "ProductsServices",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === RULESOFTHEGAME_SPECIALIST) {
-    const lastResult = (state as any).last_specialist_result || {};
-    const statementsFromLast = Array.isArray(lastResult.statements) ? lastResult.statements : [];
-    const plannerInput = buildRulesOfTheGameSpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || RULESOFTHEGAME_STEP_ID),
-      lang,
-      statementsFromLast
-    );
-
-    const res = await callStrictJson<RulesOfTheGameOutput>({
-      model,
-      instructions: composeSpecialistInstructions(RULESOFTHEGAME_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "RulesOfTheGame",
-      jsonSchema: RulesOfTheGameJsonSchema as any,
-      zodSchema: RulesOfTheGameZodSchema,
-      temperature: 0.3,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "RulesOfTheGame",
-    });
-
-    let data = res.data;
-    const normalizedRules = normalizeRulesOfTheGameOutputContract({
-      specialist: data as unknown as Record<string, unknown>,
-      previousStatements: statementsFromLast,
-    });
-    data = normalizedRules.specialist as any;
-
-    // Apply post-processing when a Rules of the Game candidate is present.
-    if (
-      data &&
-      typeof data === "object" &&
-      typeof (data as any).rulesofthegame === "string" &&
-      String((data as any).rulesofthegame || "").trim() !== ""
-    ) {
-      const statementsForProcessing = Array.isArray((data as any).statements)
-        ? ((data as any).statements as string[])
-        : [];
-      const processed = postProcessRulesOfTheGame(statementsForProcessing, 6);
-      const bullets = buildRulesOfTheGameBullets(processed.finalRules);
-
-      if (bullets) {
-        data = {
-          ...(data as any),
-          refined_formulation: bullets,
-          rulesofthegame: bullets,
-        };
-      }
-
-      const feedback = buildUserFeedbackForRulesProcessing(processed);
-      if (feedback) {
-        const baseMessage =
-          typeof (data as any).message === "string" ? String((data as any).message).trim() : "";
-        (data as any) = {
-          ...(data as any),
-          message: baseMessage ? `${baseMessage}\n\n${feedback}` : feedback,
-        };
-      }
-    }
-
-    return { specialistResult: data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  if (specialist === PRESENTATION_SPECIALIST) {
-    const plannerInput = buildPresentationSpecialistInput(
-      userMessage,
-      (state as any).intro_shown_for_step,
-      String(decision.current_step || PRESENTATION_STEP_ID),
-      lang
-    );
-
-    const res = await callStrictJson<PresentationOutput>({
-      model,
-      instructions: composeSpecialistInstructions(PRESENTATION_INSTRUCTIONS, contextBlock, {
-        includeUniversalMeta: true,
-      }),
-      plannerInput,
-      schemaName: "Presentation",
-      jsonSchema: PresentationJsonSchema as any,
-      zodSchema: PresentationZodSchema,
-      temperature: 0.2,
-      topP: 1,
-      maxOutputTokens: 10000,
-      debugLabel: "Presentation",
-    });
-
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
-  }
-
-  // Safe fallback: Step 0 ESCAPE payload (language-neutral English here; UI/flow will recover)
-  return {
-    specialistResult: {
-      action: "ESCAPE",
-      message: "I can only help you here with The Business Strategy Canvas Builder.",
-      question: "Do you want to continue with verification now?",
-      refined_formulation: "",
-      business_name: "TBD",
-      step_0: "",
-      wants_recap: false,
-      is_offtopic: false,
-      user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-    },
-    attempts: 0,
-    usage: {
-      input_tokens: null,
-      output_tokens: null,
-      total_tokens: null,
-      provider_available: false,
-    },
-    model,
-  };
-}
-
-function isRateLimitError(err: any): boolean {
-  return Boolean(
-    err &&
-    (err.rate_limited === true ||
-      err.code === "rate_limit_exceeded" ||
-      err.type === "rate_limit_exceeded" ||
-      err.status === 429)
-  );
-}
-
-function isTimeoutError(err: any): boolean {
-  return Boolean(err && err.type === "timeout");
-}
-
-function hasUsableSpecialistForRetry(specialist: any): boolean {
-  if (!specialist || typeof specialist !== "object") return false;
-  const action = String(specialist.action || "").trim().toUpperCase();
-  if (action !== "ASK") return false;
-  const prompt = pickPrompt(specialist);
-  const message = String(specialist.message || "").trim();
-  const refined = String(specialist.refined_formulation || "").trim();
-  return Boolean(prompt || message || refined);
-}
-
-function buildTransientFallbackSpecialist(state: CanvasState): Record<string, unknown> {
-  const last = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-  if (hasUsableSpecialistForRetry(last)) return last;
-
-  const stepId = String((state as any).current_step || STEP_0_ID);
-  if (stepId === STEP_0_ID) {
-    return {
-      action: "ASK",
-      message: step0CardDescForState(state),
-      question: step0QuestionForState(state),
-      refined_formulation: "",
-      business_name: String((state as any).business_name || "TBD"),
-      step_0: "",
-      wants_recap: false,
-      is_offtopic: false,
-      user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-    };
-  }
-
-  const rendered = renderFreeTextTurnPolicy({
-    stepId,
-    state,
-    specialist: {
-      action: "ASK",
-      message: "",
-      question: "",
-        refined_formulation: "",
-        wants_recap: false,
-        is_offtopic: false,
-        user_intent: "STEP_INPUT",
-        meta_topic: "NONE",
-      },
-      previousSpecialist: last,
-    });
-  return rendered.specialist;
-}
-
-function buildRateLimitErrorPayload(state: CanvasState, err: any): RunStepError {
-  const retryAfterMs = Number(err?.retry_after_ms) > 0 ? Number(err.retry_after_ms) : 1500;
-  const timeoutGuardEnabled = resolveHolisticPolicyFlags().timeoutGuardV2;
-  const last = timeoutGuardEnabled
-    ? buildTransientFallbackSpecialist(state)
-    : ((state as any).last_specialist_result || {});
-  if (timeoutGuardEnabled) {
-    console.log("[timeout_transient_returned]", {
-      type: "rate_limited",
-      retry_after_ms: retryAfterMs,
-      step: String(state.current_step || "step_0"),
-      request_id: String((state as any).__request_id ?? ""),
-      client_action_id: String((state as any).__client_action_id ?? ""),
-    });
-  }
-  return attachRegistryPayload({
-    ok: false as const,
-    tool: "run_step" as const,
-    current_step_id: String(state.current_step || "step_0"),
-    active_specialist: String((state as any).active_specialist || ""),
-    text: "",
-    prompt: "",
-    specialist: last,
-    state,
-    error: {
-      type: "rate_limited",
-      retry_after_ms: retryAfterMs,
-      user_message: uiStringFromStateMap(
-        state,
-        "transient.rate_limited",
-        uiDefaultString("transient.rate_limited", "Please wait a moment and try again.")
-      ),
-      retry_action: "retry_same_action",
-    },
-  }, last);
-}
-
-function buildTimeoutErrorPayload(state: CanvasState, err: any): RunStepError {
-  const timeoutGuardEnabled = resolveHolisticPolicyFlags().timeoutGuardV2;
-  const last = timeoutGuardEnabled
-    ? buildTransientFallbackSpecialist(state)
-    : ((state as any).last_specialist_result || {});
-  if (timeoutGuardEnabled) {
-    console.log("[timeout_transient_returned]", {
-      type: "timeout",
-      step: String(state.current_step || "step_0"),
-      request_id: String((state as any).__request_id ?? ""),
-      client_action_id: String((state as any).__client_action_id ?? ""),
-    });
-  }
-  return attachRegistryPayload({
-    ok: false as const,
-    tool: "run_step" as const,
-    current_step_id: String(state.current_step || "step_0"),
-    active_specialist: String((state as any).active_specialist || ""),
-    text: "",
-    prompt: "",
-    specialist: last,
-    state,
-    error: {
-      type: "timeout",
-      user_message: uiStringFromStateMap(
-        state,
-        "transient.timeout",
-        uiDefaultString("transient.timeout", "This is taking longer than usual. Please try again.")
-      ),
-      retry_action: "retry_same_action",
-    },
-  }, last);
-}
+const callSpecialistStrictSafeDispatch = createCallSpecialistStrictSafe({
+  callSpecialistStrict,
+  shouldLogLocalDevDiagnostics,
+  buildRateLimitErrorPayload,
+  buildTimeoutErrorPayload,
+});
 
 async function callSpecialistStrictSafe(
   params: { model: string; state: CanvasState; decision: OrchestratorOutput; userMessage: string },
@@ -6487,75 +5932,11 @@ async function callSpecialistStrictSafe(
   ok: true;
   value: { specialistResult: any; attempts: number; usage: LLMUsage; model: string };
 } | { ok: false; payload: RunStepError }> {
-  const startedAt = Date.now();
-  const logDiagnostics = shouldLogLocalDevDiagnostics();
-  const routeDecision = resolveModelForCall({
-    fallbackModel: params.model,
-    routingEnabled: routing.enabled,
-    actionCode: routing.actionCode,
-    intentType: routing.intentType,
-    specialist: String(params.decision?.specialist_to_call ?? ""),
-    purpose: "specialist",
-  });
-  if (
-    !routeDecision.applied &&
-    routing.shadow &&
-    (shouldLogLocalDevDiagnostics() || process.env.BSC_MODEL_ROUTING_SHADOW_LOG === "1") &&
-    routeDecision.candidate_model &&
-    routeDecision.candidate_model !== params.model
-  ) {
-    console.log("[model_routing_shadow]", {
-      specialist: String(params.decision?.specialist_to_call ?? ""),
-      current_step: String(params.decision?.current_step ?? ""),
-      baseline_model: params.model,
-      shadow_model: routeDecision.candidate_model,
-      source: routeDecision.source,
-      config_version: routeDecision.config_version,
-      request_id: String((stateForError as any).__request_id ?? ""),
-      client_action_id: String((stateForError as any).__client_action_id ?? ""),
-    });
+  const result = await callSpecialistStrictSafeDispatch(params, routing, stateForError);
+  if (!result.ok) {
+    return { ok: false as const, payload: result.payload as unknown as RunStepError };
   }
-  const callParams = {
-    ...params,
-    model: routeDecision.model,
-  };
-  try {
-    const value = await callSpecialistStrict(callParams);
-    if (logDiagnostics) {
-      console.log("[run_step_llm_call]", {
-        ok: true,
-        specialist: String(params.decision?.specialist_to_call ?? ""),
-        current_step: String(params.decision?.current_step ?? ""),
-        model: String(value.model || routeDecision.model || ""),
-        model_source: routeDecision.source,
-        elapsed_ms: Date.now() - startedAt,
-        request_id: String((stateForError as any).__request_id ?? ""),
-        client_action_id: String((stateForError as any).__client_action_id ?? ""),
-      });
-    }
-    return { ok: true as const, value };
-  } catch (err: any) {
-    if (logDiagnostics) {
-      console.log("[run_step_llm_call]", {
-        ok: false,
-        specialist: String(params.decision?.specialist_to_call ?? ""),
-        current_step: String(params.decision?.current_step ?? ""),
-        model: String(routeDecision.model || ""),
-        model_source: routeDecision.source,
-        elapsed_ms: Date.now() - startedAt,
-        request_id: String((stateForError as any).__request_id ?? ""),
-        client_action_id: String((stateForError as any).__client_action_id ?? ""),
-        error_type: String(err?.type ?? err?.code ?? err?.name ?? "unknown"),
-      });
-    }
-    if (isRateLimitError(err)) {
-      return { ok: false as const, payload: buildRateLimitErrorPayload(stateForError, err) };
-    }
-    if (isTimeoutError(err)) {
-      return { ok: false as const, payload: buildTimeoutErrorPayload(stateForError, err) };
-    }
-    throw err;
-  }
+  return result;
 }
 
 /**

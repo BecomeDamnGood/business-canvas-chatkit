@@ -65,3 +65,27 @@ Next agent exact TODO:
 - Start Step 4 from this baseline; keep `mcp-server/src/handlers/turn_contract.ts` as the sole owner of turn contract/finalization helper logic.
 Commit:
 - pending_after_commit
+
+## Step 4 - Specialist Dispatch
+Date: 2026-02-25 17:40 CET
+Status: completed
+Completed:
+- Extracted specialist instruction composition into `mcp-server/src/handlers/specialist_dispatch.ts` via `composeSpecialistInstructions` with unchanged instruction block ordering.
+- Extracted strict specialist execution into `callSpecialistStrict` with identical per-specialist schema/instruction/input routing, including Rules-of-the-Game normalization before post-processing.
+- Extracted strict-safe specialist execution into `callSpecialistStrictSafe` with unchanged model-routing shadow logging and retryable timeout/rate-limit handling.
+- Extracted timeout/rate-limit/error adapters (`isRateLimitError`, `isTimeoutError`, transient retry fallback builder, and structured transient payload builders) and wired `run_step.ts` to use dispatch wrappers.
+- Updated source-guard test to assert the Rules-of-the-Game normalization sequence in `specialist_dispatch.ts` after extraction.
+Pending:
+- None for Step 4 scope.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/specialist_dispatch.ts
+- mcp-server/src/handlers/run_step_finals.test.ts
+- docs/run_step_refactor_memory.md
+Tests run:
+- npm --prefix mcp-server run typecheck => pass
+- cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/core/llm_timeout.test.ts src/core/model_routing.test.ts src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts => pass
+Next agent exact TODO:
+- Start Step 5 from this baseline and keep specialist dispatch/runtime error adapters owned by `mcp-server/src/handlers/specialist_dispatch.ts`.
+Commit:
+- pending_after_commit
