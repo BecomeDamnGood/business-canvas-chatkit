@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-const PHASE_ORDER = ["baseline", "phase_A", "phase_B", "phase_C", "stretch"];
+const PHASE_ORDER = ["baseline", "phase_A", "phase_B", "phase_C", "phase_20"];
 const PHASE_BUDGETS = Object.freeze({
   baseline: {
     maxTotalImports: 40,
@@ -34,12 +34,19 @@ const PHASE_BUDGETS = Object.freeze({
     maxExternalImports: 4,
     minLocalHandlerImports: 5,
   },
-  stretch: {
-    maxTotalImports: 16,
-    maxStepImports: 5,
-    maxCoreImports: 6,
+  phase_20: {
+    maxTotalImports: 14,
+    maxStepImports: 4,
+    maxCoreImports: 5,
     maxExternalImports: 4,
-    minLocalHandlerImports: 6,
+    minLocalHandlerImports: 7,
+  },
+  stretch: {
+    maxTotalImports: 14,
+    maxStepImports: 4,
+    maxCoreImports: 5,
+    maxExternalImports: 4,
+    minLocalHandlerImports: 7,
   },
 });
 

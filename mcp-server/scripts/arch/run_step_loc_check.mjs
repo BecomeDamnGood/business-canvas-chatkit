@@ -8,10 +8,11 @@ const PHASE_BUDGETS = Object.freeze({
   phase_A: { maxLines: 4000, label: "After first major subsystem moves" },
   phase_B: { maxLines: 2500, label: "Primary target band entry" },
   phase_C: { maxLines: 1500, label: "Facade-oriented convergence" },
-  stretch: { maxLines: 1200, label: "Stretch target (low-risk only)" },
+  phase_20: { maxLines: 1170, label: "Final 20 percent thin-facade target" },
+  stretch: { maxLines: 1170, label: "Deprecated alias for phase_20" },
 });
 
-const PHASE_ORDER = ["baseline", "phase_A", "phase_B", "phase_C", "stretch"];
+const PHASE_ORDER = ["baseline", "phase_A", "phase_B", "phase_C", "phase_20"];
 
 function readRequestedPhase() {
   const argv = process.argv.slice(2);

@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-const PHASE_ORDER = ["baseline", "phase_A", "phase_B", "phase_C", "stretch"];
+const PHASE_ORDER = ["baseline", "phase_A", "phase_B", "phase_C", "phase_20"];
 const PHASE_BUDGETS = Object.freeze({
   baseline: {
     maxTopLevelFunctions: 250,
@@ -30,11 +30,17 @@ const PHASE_BUDGETS = Object.freeze({
     maxRunStepCyclomatic: 280,
     maxTotalTopLevelCyclomatic: 1400,
   },
+  phase_20: {
+    maxTopLevelFunctions: 70,
+    maxRunStepLines: 420,
+    maxRunStepCyclomatic: 120,
+    maxTotalTopLevelCyclomatic: 750,
+  },
   stretch: {
-    maxTopLevelFunctions: 90,
-    maxRunStepLines: 700,
-    maxRunStepCyclomatic: 180,
-    maxTotalTopLevelCyclomatic: 1000,
+    maxTopLevelFunctions: 70,
+    maxRunStepLines: 420,
+    maxRunStepCyclomatic: 120,
+    maxTotalTopLevelCyclomatic: 750,
   },
 });
 

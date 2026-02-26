@@ -1,7 +1,7 @@
 # Run Step Ownership Map
 
-Date: 2026-02-25  
-Status: Step 6 convergence hardening executed (facade thinning in progress)
+Date: 2026-02-26  
+Status: 20 percent program PR1 guardrail progression wired; CI required phase remains `baseline`
 
 | Concern | Current location | Target module | Owner step | Migration status |
 | --- | --- | --- | --- | --- |
@@ -23,4 +23,27 @@ Status: Step 6 convergence hardening executed (facade thinning in progress)
 - `phase_A` <= 4000 LOC
 - `phase_B` <= 2500 LOC
 - `phase_C` <= 1500 LOC
-- `stretch` <= 1200 LOC
+- `phase_20` <= 1170 LOC (final 20 percent thin-facade target)
+
+Compatibility note:
+- `stretch` remains accepted as a deprecated alias of `phase_20` in architecture scripts.
+
+## Required phase progression
+
+- `baseline` -> `phase_A` -> `phase_B` -> `phase_C` -> `phase_20`
+- CI stays pinned to `baseline` until explicit phase-flip criteria below are met and reported.
+
+## CI phase-flip criteria and reporting
+
+| CI required phase | Earliest flip point | Required evidence in `docs/run_step_refactor_20pct_log.md` |
+| --- | --- | --- |
+| `baseline` | now (PR1) | Keep mandatory checks green and report active `RUN_STEP_ARCH_PHASE` validation command result for each PR. |
+| `phase_A` | after PR3 | `run_step.ts` LOC <= 4000 plus `RUN_STEP_ARCH_PHASE=phase_A npm --prefix mcp-server run arch:run-step:check` pass in PR2 and PR3 logs. |
+| `phase_B` | after PR5 | `run_step.ts` LOC <= 2500 plus `RUN_STEP_ARCH_PHASE=phase_B npm --prefix mcp-server run arch:run-step:check` pass in PR4 and PR5 logs. |
+| `phase_C` | after PR7 | `run_step.ts` LOC <= 1500 plus `RUN_STEP_ARCH_PHASE=phase_C npm --prefix mcp-server run arch:run-step:check` pass in PR6 and PR7 logs. |
+| `phase_20` | after PR8 | `run_step.ts` LOC <= 1170 plus `RUN_STEP_ARCH_PHASE=phase_20 npm --prefix mcp-server run arch:run-step:check` pass and all mandatory tests/parity checks green in PR8 log. |
+
+Mandatory per-PR reporting fields for CI phase decisions:
+- Current `run_step.ts` LOC.
+- Current target phase check command and pass/fail result.
+- Recommendation: `hold` or `flip_to_<phase>` with exact next CI env value.
