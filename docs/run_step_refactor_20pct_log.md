@@ -122,6 +122,63 @@ run_step.ts LOC:
 Commit:
 - pending_in_current_workspace
 
+## PR7 - Facade boundary collapse + test decoupling
+Date: 2026-02-26 10:14 CET
+Status: paused_at_70
+Scope goal:
+- Collapse `run_step.ts` facade imports behind a local dependency module and decouple tests from facade-owned helper exports without changing runtime behavior.
+Completed:
+- Added `mcp-server/src/handlers/run_step_dependencies.ts` and moved step/core/adapters/contracts/i18n imports behind a local handler composition boundary.
+- Rewired `mcp-server/src/handlers/run_step.ts` to consume dependency symbols from `./run_step_dependencies.js` (boundary counts now `total=10`, `steps=0`, `core=0`, `external=1`, `local_handlers=9` at `phase_C`).
+- Added `mcp-server/src/handlers/run_step_state_update_defaults.ts` and migrated `step_contracts.test.ts` and `run_step_finals.test.ts` to import `applyStateUpdate` from the state-update owner path.
+- Added `mcp-server/src/handlers/run_step_wording_heuristics_defaults.ts` and migrated `run_step_finals.test.ts` to import wording heuristic helpers (`pickDualChoiceSuggestion`, rewrite/offtopic equivalence helpers) from owning-module defaults.
+- Exported `resolveActionCodeTransition` and `resolveActionCodeMenuTransition` directly from `mcp-server/src/handlers/run_step_ui_payload.ts` and migrated `run_step_finals.test.ts` to import transition mapping there.
+- Reduced facade compatibility exports in `run_step.ts` by removing test-facing exports for `applyStateUpdate`, `pickDualChoiceSuggestion`, and `resolveActionCodeMenuTransition`.
+- 70% rule metrics before decision: files=6, adds+dels=214, `run_step.ts` hunks=4, `run_step.ts` LOC=3294.
+Pending:
+- Migrate remaining `run_step_finals.test.ts` helper imports off `./run_step.js`:
+  - `isWordingChoiceEligibleStep`, `isWordingChoiceEligibleContext`, `isListChoiceScope`, `buildWordingChoiceFromTurn`, `stripUnsupportedReformulationClaims`
+  - `applyMotivationQuotesContractV11`, `applyCentralMetaTopicRouter`, `normalizeNonStep0OfftopicSpecialist`
+  - `normalizeStep0AskDisplayContract`, `normalizeStep0OfftopicToAsk`
+  - `buildTextForWidget`, `pickPrompt`, `informationalActionMutatesProgress`, `isMetaOfftopicFallbackTurn`, `RECAP_INSTRUCTION`
+- Add owning-module default composition exports for wording/policy-meta/step0 helper clusters (or equivalent), then switch tests to those modules.
+- Remove any additional facade compatibility exports in `run_step.ts` once tests no longer import them.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_ui_payload.ts
+- mcp-server/src/handlers/run_step_finals.test.ts
+- mcp-server/src/handlers/step_contracts.test.ts
+- mcp-server/src/handlers/run_step_dependencies.ts
+- mcp-server/src/handlers/run_step_state_update_defaults.ts
+- mcp-server/src/handlers/run_step_wording_heuristics_defaults.ts
+- docs/run_step_refactor_20pct_log.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs => fail (known repo-root loader resolution issue for `ts-node`)
+- node --loader ts-node/esm scripts/contract-smoke.mjs (workdir `mcp-server`) => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- RUN_STEP_ARCH_PHASE=phase_C npm --prefix mcp-server run arch:run-step:boundary => pass
+- RUN_STEP_ARCH_PHASE=phase_C npm --prefix mcp-server run arch:run-step:check => fail (LOC gate; `run_step.ts lines=3294`, `phase_C limit=1500`)
+run_step.ts LOC:
+- before: 3338
+- after: 3294
+70% handoff details (mandatory when paused_at_70):
+- Completed exactly:
+  - Import-boundary collapse for facade via `run_step_dependencies.ts`.
+  - Partial test decoupling for state-update + wording-heuristics + ui transition helpers.
+- Remaining exact TODO for next agent:
+  - Create owning-module default helper compositions for wording + policy-meta + step0 clusters and migrate remaining `run_step_finals.test.ts` imports off `run_step.ts`.
+  - Remove corresponding compatibility exports from `run_step.ts` after import migration.
+  - Re-run mandatory checks and append PR7 completion log entry.
+- First commands for next agent:
+  - `rg -n "from \"\\.\\/run_step\\.js\"" mcp-server/src/handlers/run_step_finals.test.ts`
+  - `sed -n '1,120p' mcp-server/src/handlers/run_step_finals.test.ts`
+  - `rg -n "export const (isWordingChoiceEligibleStep|buildWordingChoiceFromTurn|applyMotivationQuotesContractV11|normalizeStep0AskDisplayContract)" mcp-server/src/handlers/run_step.ts`
+Commit:
+- pending_in_current_workspace
+
 ## PR5 - Step0 + wording heuristics extraction
 Date: 2026-02-26 09:55 CET
 Status: completed

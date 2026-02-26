@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { getDefaultState } from "../core/state.js";
-import { applyStateUpdate } from "./run_step.js";
+import { applyStateUpdate } from "./run_step_state_update_defaults.js";
 
 test("offtopic contract: applyStateUpdate does not mutate canonical finals", () => {
   const prev = getDefaultState();

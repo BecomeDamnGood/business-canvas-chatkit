@@ -121,6 +121,54 @@ function menuBelongsToStep(menuId: string, stepId: string): boolean {
   });
 }
 
+export function resolveActionCodeTransition(
+  actionCode: string,
+  stepId: string,
+  sourceMenuId: string
+): ResolvedActionCodeTransition | null {
+  const safeActionCode = String(actionCode || "").trim().toUpperCase();
+  const safeStepId = String(stepId || "").trim();
+  const safeSourceMenu = String(sourceMenuId || "").trim();
+  const sourceMenuForMatch = safeSourceMenu || "NO_MENU";
+  if (!safeActionCode || !safeStepId) return null;
+  const transition = NEXT_MENU_BY_ACTIONCODE[safeActionCode];
+  if (!transition) return null;
+  if (String(transition.step_id || "").trim() !== safeStepId) return null;
+  const fromMenus = Array.isArray(transition.from_menu_ids)
+    ? transition.from_menu_ids.map((menu) => String(menu || "").trim()).filter(Boolean)
+    : [];
+  if (fromMenus.length > 0 && !fromMenus.includes(sourceMenuForMatch)) return null;
+  const targetStepId = String(transition.to_step_id || safeStepId).trim();
+  if (!targetStepId) return null;
+  const renderMode: "menu" | "no_buttons" =
+    String(transition.render_mode || "").trim() === "no_buttons" ? "no_buttons" : "menu";
+  const targetMenuId = String(transition.to_menu_id || "").trim();
+  if (renderMode === "menu") {
+    if (!targetMenuId) return null;
+    if (!menuBelongsToStep(targetMenuId, targetStepId)) return null;
+  }
+  return {
+    actionCode: safeActionCode,
+    stepId: safeStepId,
+    sourceMenuId: sourceMenuForMatch,
+    targetStepId,
+    targetMenuId: renderMode === "menu" ? targetMenuId : "",
+    renderMode,
+  };
+}
+
+export function resolveActionCodeMenuTransition(
+  actionCode: string,
+  stepId: string,
+  sourceMenuId: string
+): string {
+  const resolved = resolveActionCodeTransition(actionCode, stepId, sourceMenuId);
+  if (!resolved) return "";
+  if (resolved.renderMode !== "menu") return "";
+  if (resolved.targetStepId !== String(stepId || "").trim()) return "";
+  return resolved.targetMenuId;
+}
+
 export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
   function normalizeUiContractMeta(
     specialist: any,
@@ -216,54 +264,6 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
         : {};
     return parseMenuFromContractIdForStep(phaseMap[String(stepId || "").trim()], stepId);
-  }
-
-  function resolveActionCodeTransition(
-    actionCode: string,
-    stepId: string,
-    sourceMenuId: string
-  ): ResolvedActionCodeTransition | null {
-    const safeActionCode = String(actionCode || "").trim().toUpperCase();
-    const safeStepId = String(stepId || "").trim();
-    const safeSourceMenu = String(sourceMenuId || "").trim();
-    const sourceMenuForMatch = safeSourceMenu || "NO_MENU";
-    if (!safeActionCode || !safeStepId) return null;
-    const transition = NEXT_MENU_BY_ACTIONCODE[safeActionCode];
-    if (!transition) return null;
-    if (String(transition.step_id || "").trim() !== safeStepId) return null;
-    const fromMenus = Array.isArray(transition.from_menu_ids)
-      ? transition.from_menu_ids.map((menu) => String(menu || "").trim()).filter(Boolean)
-      : [];
-    if (fromMenus.length > 0 && !fromMenus.includes(sourceMenuForMatch)) return null;
-    const targetStepId = String(transition.to_step_id || safeStepId).trim();
-    if (!targetStepId) return null;
-    const renderMode: "menu" | "no_buttons" =
-      String(transition.render_mode || "").trim() === "no_buttons" ? "no_buttons" : "menu";
-    const targetMenuId = String(transition.to_menu_id || "").trim();
-    if (renderMode === "menu") {
-      if (!targetMenuId) return null;
-      if (!menuBelongsToStep(targetMenuId, targetStepId)) return null;
-    }
-    return {
-      actionCode: safeActionCode,
-      stepId: safeStepId,
-      sourceMenuId: sourceMenuForMatch,
-      targetStepId,
-      targetMenuId: renderMode === "menu" ? targetMenuId : "",
-      renderMode,
-    };
-  }
-
-  function resolveActionCodeMenuTransition(
-    actionCode: string,
-    stepId: string,
-    sourceMenuId: string
-  ): string {
-    const resolved = resolveActionCodeTransition(actionCode, stepId, sourceMenuId);
-    if (!resolved) return "";
-    if (resolved.renderMode !== "menu") return "";
-    if (resolved.targetStepId !== String(stepId || "").trim()) return "";
-    return resolved.targetMenuId;
   }
 
   function labelForActionInMenu(menuId: string, actionCode: string): string {

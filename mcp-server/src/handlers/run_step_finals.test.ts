@@ -6,30 +6,32 @@ import { getDefaultState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import {
   run_step,
-  applyStateUpdate,
   buildTextForWidget,
   isWordingChoiceEligibleStep,
   isWordingChoiceEligibleContext,
   informationalActionMutatesProgress,
   isListChoiceScope,
-  isMaterialRewriteCandidate,
-  areEquivalentWordingVariants,
-  isClearlyGeneralOfftopicInput,
-  shouldTreatAsStepContributingInput,
   isMetaOfftopicFallbackTurn,
-  pickDualChoiceSuggestion,
   buildWordingChoiceFromTurn,
   stripUnsupportedReformulationClaims,
   pickPrompt,
   applyMotivationQuotesContractV11,
   applyCentralMetaTopicRouter,
   RECAP_INSTRUCTION,
-  UNIVERSAL_META_OFFTOPIC_POLICY,
   normalizeNonStep0OfftopicSpecialist,
   normalizeStep0AskDisplayContract,
   normalizeStep0OfftopicToAsk,
-  resolveActionCodeMenuTransition,
 } from "./run_step.js";
+import { applyStateUpdate } from "./run_step_state_update_defaults.js";
+import {
+  pickDualChoiceSuggestion,
+  isMaterialRewriteCandidate,
+  areEquivalentWordingVariants,
+  isClearlyGeneralOfftopicInput,
+  shouldTreatAsStepContributingInput,
+} from "./run_step_wording_heuristics_defaults.js";
+import { resolveActionCodeMenuTransition } from "./run_step_ui_payload.js";
+import { UNIVERSAL_META_OFFTOPIC_POLICY } from "./run_step_policy_meta.js";
 import { BigWhyZodSchema } from "../steps/bigwhy.js";
 import { VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS } from "../steps/step_0_validation.js";
 import { PURPOSE_INSTRUCTIONS } from "../steps/purpose.js";
