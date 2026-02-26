@@ -1548,7 +1548,7 @@ async function runStepHandler(args: {
             correlation_id: correlationId,
             trace_id: traceId,
             session_id: incomingOrdering.sessionId || normalizedBootstrapSessionId,
-            step_id: safeString((stateForTool as any).current_step ?? stepIdStr || "step_0") || "step_0",
+            step_id: safeString((stateForTool as any).current_step ?? stepIdStr ?? "step_0") || "step_0",
             contract_id: resolveContractIdFromRecord({ state: stateForTool }),
           },
           {

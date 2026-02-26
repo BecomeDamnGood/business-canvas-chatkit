@@ -867,20 +867,54 @@ export function setLoading(next: boolean): void {
   if (sendEl) (sendEl as HTMLButtonElement).disabled = loading || v.length === 0;
 }
 
+function normalizeLocaleHintCandidate(raw: unknown): string {
+  const normalizedRaw = String(raw || "")
+    .trim()
+    .replace(/_/g, "-")
+    .replace(/-{2,}/g, "-");
+  if (!normalizedRaw) return "";
+  const parts = normalizedRaw
+    .split("-")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length) return "";
+  const languagePart = parts[0] || "";
+  if (!/^[A-Za-z]{2,3}$/.test(languagePart)) return "";
+  const language = languagePart.toLowerCase();
+  if (language === "und") return "";
+  const rest: string[] = [];
+  for (const part of parts.slice(1)) {
+    if (!/^[A-Za-z0-9]{1,8}$/.test(part)) return "";
+    if (/^[A-Za-z]{4}$/.test(part)) {
+      rest.push(part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+      continue;
+    }
+    if (/^[A-Za-z]{2}$/.test(part) || /^[0-9]{3}$/.test(part)) {
+      rest.push(part.toUpperCase());
+      continue;
+    }
+    rest.push(part.toLowerCase());
+  }
+  return [language, ...rest].join("-");
+}
+
 function resolveLocaleHintForPayload(state: Record<string, unknown>): {
   localeHint: string;
   localeHintSource: "message_detect" | "none";
 } {
-  const locale = String(
-    state.locale ||
-      state.ui_strings_requested_lang ||
-      state.ui_strings_lang ||
-      state.language ||
-      ""
-  )
-    .trim();
-  if (!locale) return { localeHint: "", localeHintSource: "none" };
-  return { localeHint: locale, localeHintSource: "message_detect" };
+  const explicitLocale =
+    normalizeLocaleHintCandidate(state.locale) ||
+    normalizeLocaleHintCandidate(state.ui_strings_requested_lang) ||
+    normalizeLocaleHintCandidate(state.ui_strings_lang);
+  const languageSource = String(state.language_source || "").trim().toLowerCase();
+  if (languageSource === "message_detect") {
+    const detectedLocale = normalizeLocaleHintCandidate(state.language) || explicitLocale;
+    if (detectedLocale) {
+      return { localeHint: detectedLocale, localeHintSource: "message_detect" };
+    }
+  }
+  // Avoid sending a synthetic/default locale hint (especially EN) from startup fallback state.
+  return { localeHint: "", localeHintSource: "none" };
 }
 
 export async function callRunStep(
@@ -1049,7 +1083,13 @@ export async function callRunStep(
       });
     }
     const normalizedRaw = toRecord(resp);
-    const result = resolveWidgetPayload(normalizedRaw).result;
+    const resolvedResponse = resolveWidgetPayload(normalizedRaw);
+    const directResult = resolvedResponse.result;
+    const ingestedResult = handleToolResultAndMaybeScheduleBootstrapRetry(normalizedRaw, {
+      source: "call_run_step",
+    });
+    const hasIngestedResult = Object.keys(ingestedResult).length > 0;
+    const result = hasIngestedResult ? ingestedResult : directResult;
     const errorObj = result?.error as
       | { type?: string; user_message?: string; retry_after_ms?: number; retry_action?: string }
       | null;
@@ -1078,7 +1118,8 @@ export async function callRunStep(
         request_id: requestId,
         client_action_id: clientActionId,
         current_step: String(nextState.current_step || ""),
-        has_widget_result: resolveWidgetPayload(normalizedRaw).source === "meta.widget_result",
+        has_widget_result: resolvedResponse.source === "meta.widget_result",
+        response_ingested: hasIngestedResult,
       });
     }
     if (isStartAction) {

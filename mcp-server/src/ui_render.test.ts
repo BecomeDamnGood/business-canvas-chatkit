@@ -1418,7 +1418,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry accepts new session payload
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("callRunStep treats callTool response as dispatch ack and does not ingest render state", async () => {
+test("callRunStep ingests callTool response immediately and updates render state", async () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -1479,7 +1479,7 @@ test("callRunStep treats callTool response as dispatch ack and does not ingest r
   await callRunStep("ACTION_TEST_ACK_ONLY");
   assert.equal(
     resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).response_seq,
-    6
+    7
   );
 
   (globalThis as any).document = originalDocument;

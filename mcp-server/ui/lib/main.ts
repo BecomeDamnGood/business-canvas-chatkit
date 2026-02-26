@@ -142,12 +142,10 @@ function clearStartupGrace(): void {
 }
 
 function buildStartupInitState(): Record<string, unknown> {
-  const language = latestWidgetLang() || "en";
   return {
     state: {
       current_step: "step_0",
       started: "false",
-      language,
       ui_gate_status: STARTUP_WAITING_VIEW_MODE,
       ui_strings_status: "pending",
     },
@@ -448,7 +446,7 @@ if (typeof window !== "undefined") {
         ingestHostPayload(payload, "set_globals");
         notifyHostTransportSignal("set_globals");
       } else {
-        render();
+        renderStartupWaitShell("set_globals_empty_payload");
       }
     } catch (e) {
       console.error(e);
