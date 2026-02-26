@@ -8,7 +8,7 @@
     "build:ui": "tsc -p tsconfig.ui.json --noEmit",
     "typecheck": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.ui.json --noEmit",
     "start": "node dist/server.js",
-    "test": "npm run typecheck && node ../tools/server-safe-string-scan.mjs && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/core/orchestrator.test.ts src/core/orchestrator.transitions.test.ts src/core/state.test.ts src/core/glossary.test.ts src/core/llm_timeout.test.ts src/core/model_routing.test.ts src/core/session_token_log.test.ts src/core/turn_policy_renderer.test.ts src/contracts/adapters.test.ts src/handlers/golden_trace_contract.test.ts src/handlers/step_contracts.test.ts src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts src/steps/offtopic_schema_contract.test.ts src/steps/dream_explainer.test.ts src/steps/strategy_instructions.test.ts src/steps/rulesofthegame_instructions.test.ts src/steps/rulesofthegame_contract.test.ts src/steps/instructions_contract_sweep.test.ts src/server_safe_string.test.ts src/mcp_app_contract.test.ts src/ui_sanitize.test.ts src/ui_render.test.ts",
+    "test": "npm run typecheck && node ../tools/server-safe-string-scan.mjs && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/core/orchestrator.test.ts src/core/orchestrator.transitions.test.ts src/core/state.test.ts src/core/glossary.test.ts src/core/llm_timeout.test.ts src/core/model_routing.test.ts src/core/session_token_log.test.ts src/core/turn_policy_renderer.test.ts src/contracts/adapters.test.ts src/contracts/contract_inventory_snapshot.test.ts src/handlers/golden_trace_contract.test.ts src/handlers/step_contracts.test.ts src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts src/steps/offtopic_schema_contract.test.ts src/steps/dream_explainer.test.ts src/steps/strategy_instructions.test.ts src/steps/rulesofthegame_instructions.test.ts src/steps/rulesofthegame_contract.test.ts src/steps/instructions_contract_sweep.test.ts src/server_safe_string.test.ts src/mcp_app_contract.test.ts src/ui_sanitize.test.ts src/ui_render.test.ts",
     "smoke:runtime": "node scripts/runtime-smoke.mjs",
     "arch:run-step:loc": "node scripts/arch/run_step_loc_check.mjs",
     "arch:run-step:boundary": "node scripts/arch/run_step_boundary_check.mjs",
@@ -21,7 +21,9 @@
     "arch:run-step-runtime:complexity": "node scripts/arch/run_step_runtime_complexity_check.mjs",
     "arch:run-step-runtime:check": "npm run arch:run-step-runtime:loc && npm run arch:run-step-runtime:boundary && npm run arch:run-step-runtime:complexity",
     "arch:run-step:any-budget": "node scripts/arch/run_step_any_budget_check.mjs",
-    "compliance:mcp-app": "node scripts/mcp_app_compliance_gate.mjs"
+    "compliance:mcp-app": "node scripts/mcp_app_compliance_gate.mjs",
+    "contract:inventory:snapshot": "node scripts/contract_inventory_snapshot_check.mjs",
+    "verify:release-proof": "node scripts/release_proof_verification.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",

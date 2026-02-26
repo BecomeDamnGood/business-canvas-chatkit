@@ -29,6 +29,13 @@ Expliciete traceability tussen contractfamilies en ADR-besluiten.
   - compatclassificatie (`breaking`),
   - CI-gate update of expliciete motivatie waarom niet nodig.
 
+## SSOT Snapshot
+
+- Machine-readable snapshot: [contract_inventory_snapshot.json](./contract_inventory_snapshot.json)
+- Enforced by:
+  - `mcp-server/scripts/contract_inventory_snapshot_check.mjs`
+  - `mcp-server/src/contracts/contract_inventory_snapshot.test.ts`
+
 ## Operations referentie
 
 - Failure playbook: [operations_failure_playbook.md](../operations_failure_playbook.md)

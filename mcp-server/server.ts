@@ -102,6 +102,7 @@ const UI_RESOURCE_QUERY = `?v=${encodeURIComponent(VERSION)}`;
 const UI_RESOURCE_NAME = "business-canvas-widget";
 const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
+const MCP_SIMULATED_HANDLE_DELAY_MS = Number(process.env.MCP_SIMULATED_HANDLE_DELAY_MS || 0);
 const BOOTSTRAP_SESSION_REGISTRY_TTL_MS = Number(process.env.BOOTSTRAP_SESSION_REGISTRY_TTL_MS || 30 * 60 * 1000);
 const IDEMPOTENCY_ENTRY_TTL_MS = Number(process.env.IDEMPOTENCY_ENTRY_TTL_MS || BOOTSTRAP_SESSION_REGISTRY_TTL_MS);
 const BOOTSTRAP_SESSION_ID_PREFIX = "bs_";
@@ -134,6 +135,11 @@ function parsePositiveInt(value: unknown): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return 0;
   return Math.trunc(n);
+}
+
+function delay(ms: number): Promise<void> {
+  if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const normalizeIdempotencyKey = normalizeIngressIdempotencyKey;
@@ -2256,6 +2262,21 @@ const httpServer = async (req: any, res: any) => {
       } catch (e: any) {
         const code = safeString(e?.code ?? "");
         if (code === "body_too_large") {
+          logStructuredEvent(
+            "warn",
+            "post_run_step_body_too_large",
+            {
+              correlation_id: correlationId,
+              trace_id: traceId,
+              session_id: "",
+              step_id: "",
+              contract_id: "",
+            },
+            {
+              method: req.method,
+              max_size: MAX_REQUEST_SIZE_BYTES,
+            }
+          );
           res.writeHead(413, { "content-type": "application/json" });
           res.end(JSON.stringify({
             error: "body_too_large",
@@ -2264,6 +2285,21 @@ const httpServer = async (req: any, res: any) => {
           }));
           return;
         }
+        logStructuredEvent(
+          "warn",
+          "post_run_step_request_aborted",
+          {
+            correlation_id: correlationId,
+            trace_id: traceId,
+            session_id: "",
+            step_id: "",
+            contract_id: "",
+          },
+          {
+            method: req.method,
+            code: code || "request_aborted",
+          }
+        );
         res.writeHead(400, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "request_aborted", error_code: "request_aborted" }));
         return;
@@ -2272,12 +2308,41 @@ const httpServer = async (req: any, res: any) => {
       try {
         parsedBody = JSON.parse(raw.toString("utf-8") || "{}");
       } catch {
+        logStructuredEvent(
+          "warn",
+          "post_run_step_invalid_json",
+          {
+            correlation_id: correlationId,
+            trace_id: traceId,
+            session_id: "",
+            step_id: "",
+            contract_id: "",
+          },
+          {
+            method: req.method,
+          }
+        );
         res.writeHead(400, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "invalid_json", error_code: "invalid_json" }));
         return;
       }
       const parsedArgsResult = RunStepToolInputSchema.safeParse(parsedBody);
       if (!parsedArgsResult.success) {
+        logStructuredEvent(
+          "warn",
+          "post_run_step_invalid_payload",
+          {
+            correlation_id: correlationId,
+            trace_id: traceId,
+            session_id: "",
+            step_id: "",
+            contract_id: "",
+          },
+          {
+            method: req.method,
+            issue_count: parsedArgsResult.error.issues.length,
+          }
+        );
         res.writeHead(400, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
@@ -2484,6 +2549,21 @@ const httpServer = async (req: any, res: any) => {
         } catch (e: any) {
           const code = safeString(e?.code ?? "");
           if (code === "body_too_large") {
+            logStructuredEvent(
+              "warn",
+              "mcp_request_rejected_body_too_large",
+              {
+                correlation_id: correlationId,
+                trace_id: traceId,
+                session_id: "",
+                step_id: "",
+                contract_id: "",
+              },
+              {
+                method: req.method,
+                max_size: MAX_REQUEST_SIZE_BYTES,
+              }
+            );
             const errPayload = jsonRpcErrorResponse(413, "Request entity too large", {
               error_code: "body_too_large",
               correlation_id: correlationId,
@@ -2494,6 +2574,21 @@ const httpServer = async (req: any, res: any) => {
             res.end(JSON.stringify(errPayload.payload));
             return;
           }
+          logStructuredEvent(
+            "warn",
+            "mcp_request_aborted",
+            {
+              correlation_id: correlationId,
+              trace_id: traceId,
+              session_id: "",
+              step_id: "",
+              contract_id: "",
+            },
+            {
+              method: req.method,
+              code: code || "request_aborted",
+            }
+          );
           const errPayload = jsonRpcErrorResponse(400, "Request aborted", {
             error_code: "request_aborted",
             correlation_id: correlationId,
@@ -2528,6 +2623,21 @@ const httpServer = async (req: any, res: any) => {
         try {
           parsedBody = JSON.parse(raw.toString("utf-8"));
         } catch (e) {
+          logStructuredEvent(
+            "warn",
+            "mcp_request_invalid_json",
+            {
+              correlation_id: correlationId,
+              trace_id: traceId,
+              session_id: "",
+              step_id: "",
+              contract_id: "",
+            },
+            {
+              method: req.method,
+              body_size: raw.length,
+            }
+          );
           const errPayload = jsonRpcErrorResponse(400, "Parse error: Invalid JSON", {
             error_code: "invalid_json",
             correlation_id: correlationId,
@@ -2540,6 +2650,21 @@ const httpServer = async (req: any, res: any) => {
       }
 
       timeout = setTimeout(() => {
+        logStructuredEvent(
+          "warn",
+          "mcp_request_timeout",
+          {
+            correlation_id: correlationId,
+            trace_id: traceId,
+            session_id: "",
+            step_id: "",
+            contract_id: "",
+          },
+          {
+            method: req.method,
+            timeout_ms: REQUEST_TIMEOUT_MS,
+          }
+        );
         if (!res.headersSent) {
           const errPayload = jsonRpcErrorResponse(408, "Request timeout", {
             error_code: "timeout",
@@ -2552,6 +2677,25 @@ const httpServer = async (req: any, res: any) => {
         try { transport.close(); } catch {}
         try { mcpServer.close(); } catch {}
       }, REQUEST_TIMEOUT_MS);
+
+      if (MCP_SIMULATED_HANDLE_DELAY_MS > 0) {
+        logStructuredEvent(
+          "info",
+          "mcp_request_delay_injected",
+          {
+            correlation_id: correlationId,
+            trace_id: traceId,
+            session_id: "",
+            step_id: "",
+            contract_id: "",
+          },
+          {
+            method: req.method,
+            delay_ms: MCP_SIMULATED_HANDLE_DELAY_MS,
+          }
+        );
+        await delay(MCP_SIMULATED_HANDLE_DELAY_MS);
+      }
 
       await mcpServer.connect(transport);
       await transport.handleRequest(req, res, parsedBody);

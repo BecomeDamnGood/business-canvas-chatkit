@@ -17,6 +17,18 @@ const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024
 const ABUSE_THRESHOLD = Number(process.env.ABUSE_THRESHOLD || 100); // requests per minute
 const ABUSE_BAN_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
+type StructuredLogSeverity = "info" | "warn" | "error";
+
+function normalizeLogField(value: unknown, maxLen = 512): string {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return text.length > maxLen ? text.slice(0, maxLen) : text;
+}
+
+function getHeader(req: any, name: string): string {
+  return normalizeLogField(req?.headers?.[name.toLowerCase()] || "");
+}
+
 function getClientIp(req: any): string {
   // Check various headers for IP (for proxies/load balancers)
   const forwarded = req.headers["x-forwarded-for"];
@@ -31,28 +43,54 @@ function getClientIp(req: any): string {
   return req.socket?.remoteAddress || "unknown";
 }
 
-function getTraceId(req: any): string {
-  const headers = req?.headers || {};
+function getCorrelationId(req: any): string {
   return (
-    headers["x-request-id"] ||
-    headers["x-amzn-trace-id"] ||
-    headers["x-amz-apigw-id"] ||
-    headers["x-b3-traceid"] ||
-    headers["traceparent"] ||
-    ""
-  ).toString();
+    getHeader(req, "x-correlation-id") ||
+    getHeader(req, "x-request-id") ||
+    normalizeLogField((req as any)?.__correlationId || "")
+  );
 }
 
-function logRequestMeta(prefix: string, req: any, extra?: Record<string, unknown>) {
-  const meta = {
-    ip: getClientIp(req),
-    method: req?.method,
-    url: req?.url,
-    traceId: getTraceId(req),
-    contentLength: Number(req?.headers?.["content-length"] || 0),
-    ...extra,
+function getTraceId(req: any): string {
+  return (
+    getHeader(req, "x-amzn-trace-id") ||
+    getHeader(req, "traceparent") ||
+    getHeader(req, "x-b3-traceid") ||
+    getHeader(req, "x-request-id") ||
+    getCorrelationId(req)
+  );
+}
+
+function logStructuredRateEvent(
+  severity: StructuredLogSeverity,
+  event: string,
+  req: any,
+  details: Record<string, unknown> = {}
+) {
+  const payload = {
+    event: normalizeLogField(event, 128) || "event_unknown",
+    severity,
+    correlation_id: getCorrelationId(req),
+    trace_id: getTraceId(req),
+    session_id: "",
+    step_id: "",
+    contract_id: "",
+    ip: normalizeLogField(getClientIp(req), 128),
+    method: normalizeLogField(req?.method || "", 16),
+    url: normalizeLogField(req?.url || "", 256),
+    content_length: Number(req?.headers?.["content-length"] || 0),
+    ...details,
   };
-  console.warn(prefix, JSON.stringify(meta));
+  const text = JSON.stringify(payload);
+  if (severity === "error") {
+    console.error(text);
+    return;
+  }
+  if (severity === "warn") {
+    console.warn(text);
+    return;
+  }
+  console.log(text);
 }
 
 function isRateLimited(ip: string): { limited: boolean; retryAfter?: number } {
@@ -65,6 +103,11 @@ function isRateLimited(ip: string): { limited: boolean; retryAfter?: number } {
     return { limited: true, retryAfter };
   }
 
+  if (entry && entry.count >= RATE_LIMIT_REQUESTS_PER_MINUTE && entry.resetTime > now) {
+    const retryAfter = Math.ceil((entry.resetTime - now) / 1000);
+    return { limited: true, retryAfter };
+  }
+
   // Clean up expired entries
   if (entry && entry.resetTime < now) {
     delete store[ip];
@@ -73,7 +116,7 @@ function isRateLimited(ip: string): { limited: boolean; retryAfter?: number } {
   return { limited: false };
 }
 
-function recordRequest(ip: string): void {
+function recordRequest(ip: string): { bannedNow: boolean; count: number } {
   const now = Date.now();
   const entry = store[ip];
 
@@ -83,6 +126,7 @@ function recordRequest(ip: string): void {
       count: 1,
       resetTime: now + RATE_LIMIT_WINDOW_MS,
     };
+    return { bannedNow: false, count: 1 };
   } else {
     // Increment count
     entry.count++;
@@ -90,16 +134,14 @@ function recordRequest(ip: string): void {
     // Check abuse threshold
     if (entry.count >= ABUSE_THRESHOLD) {
       entry.bannedUntil = now + ABUSE_BAN_DURATION_MS;
-      console.warn(`[rateLimit] IP ${ip} banned for ${ABUSE_BAN_DURATION_MS}ms due to abuse (${entry.count} requests)`);
+      return { bannedNow: true, count: entry.count };
     }
+    return { bannedNow: false, count: entry.count };
   }
 }
 
 function logCostSignal(req: any, startTime: number, actualBodySize?: number): void {
   const duration = Date.now() - startTime;
-  const ip = getClientIp(req);
-  const method = req.method;
-  const url = req.url;
   
   // Use actual body size if available, otherwise fall back to content-length header
   const bodySize =
@@ -108,8 +150,12 @@ function logCostSignal(req: any, startTime: number, actualBodySize?: number): vo
     Number(req.headers["content-length"] || 0);
   // Estimate tokens (rough approximation: ~4 chars per token)
   const estimatedTokens = Math.ceil(bodySize / 4);
-  
-  console.log(`[costSignal] IP=${ip} method=${method} url=${url} duration=${duration}ms bodySize=${bodySize}bytes estimatedTokens=${estimatedTokens}`);
+
+  logStructuredRateEvent("info", "mcp_cost_signal", req, {
+    duration_ms: duration,
+    body_size_bytes: bodySize,
+    estimated_tokens: estimatedTokens,
+  });
 }
 
 /**
@@ -125,8 +171,8 @@ export function createRateLimitMiddleware() {
     // Check if rate limited
     const rateLimitCheck = isRateLimited(ip);
     if (rateLimitCheck.limited) {
-      logRequestMeta("[rateLimit] Rate limit exceeded", req, {
-        retryAfter: rateLimitCheck.retryAfter || 60,
+      logStructuredRateEvent("warn", "mcp_rate_limit_exceeded", req, {
+        retry_after_s: rateLimitCheck.retryAfter || 60,
       });
       res.writeHead(429, {
         "Content-Type": "application/json",
@@ -139,8 +185,8 @@ export function createRateLimitMiddleware() {
     // Check content-length header (early rejection for known large requests)
     const contentLength = Number(req.headers["content-length"] || 0);
     if (contentLength > MAX_REQUEST_SIZE_BYTES) {
-      logRequestMeta("[rateLimit] Request entity too large (content-length)", req, {
-        maxSize: MAX_REQUEST_SIZE_BYTES,
+      logStructuredRateEvent("warn", "mcp_request_rejected_body_too_large_header", req, {
+        max_size: MAX_REQUEST_SIZE_BYTES,
       });
       res.writeHead(413, {
         "Content-Type": "application/json",
@@ -150,7 +196,13 @@ export function createRateLimitMiddleware() {
     }
 
     // Record request
-    recordRequest(ip);
+    const record = recordRequest(ip);
+    if (record.bannedNow) {
+      logStructuredRateEvent("warn", "mcp_rate_limit_abuse_ban_applied", req, {
+        ban_duration_ms: ABUSE_BAN_DURATION_MS,
+        request_count: record.count,
+      });
+    }
 
     // Log cost signal after response with actual body size (if available)
     const originalEnd = res.end.bind(res);
@@ -179,6 +231,17 @@ setInterval(() => {
     }
   }
   if (cleaned > 0) {
-    console.log(`[rateLimit] Cleaned up ${cleaned} expired entries`);
+    console.log(
+      JSON.stringify({
+        event: "mcp_rate_limit_store_cleanup",
+        severity: "info",
+        correlation_id: "",
+        trace_id: "",
+        session_id: "",
+        step_id: "",
+        contract_id: "",
+        cleaned_entries: cleaned,
+      })
+    );
   }
 }, 5 * 60 * 1000); // Every 5 minutes

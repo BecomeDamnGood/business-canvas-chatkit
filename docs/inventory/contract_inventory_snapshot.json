@@ -1,0 +1,31 @@
+{
+  "snapshot_version": "2026-02-26.1",
+  "ssot_versions": {
+    "current_state_version": "12",
+    "default_view_contract_version": "v3_ssot_rigid",
+    "view_contract_version": "v3_ssot_rigid",
+    "ui_contract_version": "2026-02-21-ux-contract-v3-key-first",
+    "mcp_tool_contract_family_version": "2026-02-26.1",
+    "run_step_tool_input_schema_version": "1.0.0",
+    "run_step_tool_output_schema_version": "1.0.0",
+    "run_step_model_result_shape_version": "v2_minimal"
+  },
+  "required_inventory_contract_families": [
+    "Runtime orchestration boundaries",
+    "State contracts en migratie",
+    "UI contract matrix/id/bootstrap",
+    "Tool API input/output (`run_step`)",
+    "Transport outputSchema enforcement (`run_step`)",
+    "Idempotency/replay en transities",
+    "Bootstrap/session ordering",
+    "SSOT action/menu/step-final",
+    "Observability/logging/diagnostics"
+  ],
+  "required_adr_refs": [
+    "ADR-001",
+    "ADR-002",
+    "ADR-003",
+    "ADR-004",
+    "ADR-005"
+  ]
+}

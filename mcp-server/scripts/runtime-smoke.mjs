@@ -55,6 +55,7 @@ async function main() {
       ...process.env,
       LOCAL_DEV: process.env.LOCAL_DEV || "1",
       PORT: port,
+      HOST: process.env.HOST || "127.0.0.1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

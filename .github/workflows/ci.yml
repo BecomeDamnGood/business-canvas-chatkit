@@ -147,6 +147,10 @@ jobs:
         working-directory: mcp-server
         run: npm run compliance:mcp-app
 
+      - name: Contract inventory snapshot gate
+        working-directory: mcp-server
+        run: npm run contract:inventory:snapshot
+
       - name: Run-step architecture guardrails
         working-directory: mcp-server
         env:

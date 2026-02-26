@@ -415,7 +415,7 @@ function isSemanticViolationReason(reason: string | null | undefined): reason is
 }
 
 function hasAcceptedOutputEvidence(state: CanvasState, stepId: string): boolean {
-  const finalField = String(fieldForStep(stepId) || "").trim();
+  const finalField = String(FINAL_FIELD_BY_STEP_ID[stepId] || "").trim();
   const committedFinal = finalField ? String((state as Record<string, unknown>)?.[finalField] || "").trim() : "";
   if (committedFinal) return true;
   const provisional = provisionalValueForStep(state as Record<string, unknown>, stepId);
