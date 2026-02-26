@@ -147,6 +147,12 @@ jobs:
           RUN_STEP_ARCH_PHASE: phase_20
         run: npm run arch:run-step:check
 
+      - name: Run-step runtime architecture guardrails
+        working-directory: mcp-server
+        env:
+          RUN_STEP_RUNTIME_ARCH_PHASE: phase_R0
+        run: npm run arch:run-step-runtime:check
+
       - name: Test
         working-directory: mcp-server
         run: npm test
