@@ -1,7 +1,7 @@
 # Run Step Ownership Map
 
 Date: 2026-02-26  
-Status: 20 percent program PR1 guardrail progression wired; CI required phase remains `baseline`
+Status: 20 percent program converged; CI required phase set to `phase_20`
 
 | Concern | Current location | Target module | Owner step | Migration status |
 | --- | --- | --- | --- | --- |
@@ -13,9 +13,9 @@ Status: 20 percent program PR1 guardrail progression wired; CI required phase re
 | Special route branches (start/prestart, dream specials, presentation/synthetic) | `mcp-server/src/handlers/run_step_routes.ts` | `mcp-server/src/handlers/run_step_routes.ts` | Step 4 | completed |
 | Post-specialist staged pipeline (render/validate/recovery chain) | `mcp-server/src/handlers/run_step_pipeline.ts` | `mcp-server/src/handlers/run_step_pipeline.ts` | Step 5 | completed |
 | State mutation + provisional source/runtime mode transitions | `mcp-server/src/handlers/run_step_state_update.ts` | `mcp-server/src/handlers/run_step_state_update.ts` | Step 5 | completed |
-| i18n/bootstrap runtime wrappers and UI-strings gate orchestration | `mcp-server/src/handlers/run_step.ts` | `mcp-server/src/handlers/run_step_i18n_runtime.ts` | Step 5 | pending |
-| Shared success/error/fail-closed response assembly helpers | `mcp-server/src/handlers/run_step.ts` + `mcp-server/src/handlers/turn_contract.ts` | `mcp-server/src/handlers/run_step_response.ts` | Step 6 | in_progress |
-| Facade orchestration + dependency composition only | `mcp-server/src/handlers/run_step.ts` | `mcp-server/src/handlers/run_step.ts` | Step 6 | in_progress |
+| i18n/bootstrap runtime wrappers and UI-strings gate orchestration | `mcp-server/src/handlers/run_step_runtime.ts` | `mcp-server/src/handlers/run_step_i18n_runtime.ts` | Step 5 | completed |
+| Shared success/error/fail-closed response assembly helpers | `mcp-server/src/handlers/run_step_runtime.ts` + `mcp-server/src/handlers/turn_contract.ts` | `mcp-server/src/handlers/run_step_response.ts` | Step 6 | completed |
+| Facade orchestration + dependency composition only | `mcp-server/src/handlers/run_step.ts` | `mcp-server/src/handlers/run_step.ts` | Step 6 | completed |
 
 ## Guardrail phase budgets (reference)
 
@@ -31,7 +31,7 @@ Compatibility note:
 ## Required phase progression
 
 - `baseline` -> `phase_A` -> `phase_B` -> `phase_C` -> `phase_20`
-- CI stays pinned to `baseline` until explicit phase-flip criteria below are met and reported.
+- CI required phase is now `phase_20`.
 
 ## CI phase-flip criteria and reporting
 

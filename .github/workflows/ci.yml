@@ -144,7 +144,7 @@ jobs:
       - name: Run-step architecture guardrails
         working-directory: mcp-server
         env:
-          RUN_STEP_ARCH_PHASE: baseline
+          RUN_STEP_ARCH_PHASE: phase_20
         run: npm run arch:run-step:check
 
       - name: Test

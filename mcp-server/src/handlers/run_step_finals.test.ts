@@ -6,6 +6,8 @@ import { getDefaultState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import {
   run_step,
+} from "./run_step.js";
+import {
   buildTextForWidget,
   isWordingChoiceEligibleStep,
   isWordingChoiceEligibleContext,
@@ -21,7 +23,7 @@ import {
   normalizeNonStep0OfftopicSpecialist,
   normalizeStep0AskDisplayContract,
   normalizeStep0OfftopicToAsk,
-} from "./run_step.js";
+} from "./run_step_runtime.js";
 import { applyStateUpdate } from "./run_step_state_update_defaults.js";
 import {
   pickDualChoiceSuggestion,
@@ -2442,7 +2444,7 @@ test("wording choice: pending list mode does not repeat suggestion paragraph in 
 });
 
 test("step transition fast-path is actioncode-driven (no legacy confirm gate)", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  const source = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
   assert.match(source, /const ACTIONCODE_STEP_TRANSITIONS:\s*Record<string,\s*string>/);
   assert.match(source, /ACTION_STEP0_READY_START:\s*DREAM_STEP_ID/);
   assert.match(source, /if \(actionCodeRaw && ACTIONCODE_STEP_TRANSITIONS\[actionCodeRaw\]\)/);
@@ -2481,7 +2483,7 @@ test("step transition commits staged value and clears provisional state", async 
 });
 
 test("Dream readiness guard accepts explicit start-exercise route in widget mode", () => {
-  const runStepSource = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  const runStepSource = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
   const routesSource = fs.readFileSync(new URL("./run_step_routes.ts", import.meta.url), "utf8");
   assert.match(runStepSource, /createRunStepRouteHelpers/);
   assert.match(runStepSource, /handleSpecialRouteRegistry\(/);
@@ -2492,7 +2494,7 @@ test("Dream readiness guard accepts explicit start-exercise route in widget mode
 });
 
 test("single-path flags: only wording-choice runtime flag remains active", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  const source = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
   assert.match(source, /BSC_WORDING_CHOICE_V2/);
   assert.match(source, /policyFlags\.wordingChoiceV2/);
   assert.doesNotMatch(source, /policyFlags\.offtopicV2/);
@@ -2501,7 +2503,7 @@ test("single-path flags: only wording-choice runtime flag remains active", () =>
 });
 
 test("DreamBuilder follow-up wording is contract-side (run_step), not ui-side overlay", () => {
-  const runStepSource = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  const runStepSource = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
   const uiRenderSource = fs.readFileSync(new URL("../../ui/lib/ui_render.ts", import.meta.url), "utf8");
 
   assert.match(runStepSource, /function enforceDreamBuilderQuestionProgress\(/);
@@ -2673,7 +2675,7 @@ test("switch-to-self intro route clears stale dream provisional and wording pend
 });
 
 test("bullet consistency helpers remain, but no runtime overlay gate exists", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  const source = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
   assert.match(source, /function isBulletConsistencyStep\(stepId: string\): boolean/);
   assert.match(source, /stepId === STRATEGY_STEP_ID/);
   assert.match(source, /stepId === PRODUCTSSERVICES_STEP_ID/);
@@ -3203,7 +3205,7 @@ test("wording choice: generic Purpose acknowledgement is replaced with step-spec
 });
 
 test("informational context policy scope excludes presentation step", () => {
-  const source = fs.readFileSync(new URL("./run_step.ts", import.meta.url), "utf8");
+  const source = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
   assert.match(source, /function isInformationalContextPolicyStep\(stepId: string\): boolean/);
   const fnMatch = source.match(
     /function isInformationalContextPolicyStep\(stepId: string\): boolean \{[\s\S]*?\n\}/
