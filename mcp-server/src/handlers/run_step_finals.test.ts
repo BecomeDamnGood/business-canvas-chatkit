@@ -2517,6 +2517,16 @@ test("Dream readiness guard accepts explicit start-exercise route in widget mode
   assert.doesNotMatch(routesSource, /lastResult\.suggest_dreambuilder/);
 });
 
+test("special route assembly uses TurnResponseEngine path", () => {
+  const runStepSource = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
+  const routesSource = fs.readFileSync(new URL("./run_step_routes.ts", import.meta.url), "utf8");
+  assert.match(runStepSource, /response:\s*\{\s*attachRegistryPayload,\s*finalizeResponse,\s*turnResponseEngine\s*\}/);
+  assert.match(routesSource, /deps\.turnResponseEngine\.renderValidateRecover/);
+  assert.match(routesSource, /deps\.turnResponseEngine\.attachAndFinalize/);
+  assert.doesNotMatch(routesSource, /deps\.validateRenderedContractOrRecover\(/);
+  assert.doesNotMatch(routesSource, /deps\.renderFreeTextTurnPolicy\(/);
+});
+
 test("single-path flags: only wording-choice runtime flag remains active", () => {
   const source = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
   assert.match(source, /BSC_WORDING_CHOICE_V2/);

@@ -137,6 +137,7 @@ export type RunStepRouteSpecialistPorts<TResponse> = {
 export type RunStepRouteResponsePorts<TResponse> = {
   attachRegistryPayload: (...args: any[]) => any;
   finalizeResponse: (response: TResponse) => TResponse;
+  turnResponseEngine: TurnResponseEngine<TResponse>;
 };
 
 export type RunStepRouteSuggestionPorts = {

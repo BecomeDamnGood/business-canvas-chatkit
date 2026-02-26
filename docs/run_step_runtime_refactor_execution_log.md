@@ -199,3 +199,46 @@
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2497`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `150`
 - commit hash: pending (captured after commit command)
+
+### PR6 - 2026-02-26
+- status: completed
+- capacity budget:
+  - target: 68%
+  - observed: 61%
+- scope goal: Migrate route response assembly to TurnResponseEngine and remove duplicated route-side render/validate/finalize blocks.
+- completed:
+  - Rewired `run_step_routes.ts` special-route response path to shared `TurnResponseEngine` via route-local intent finalizer.
+  - Removed duplicated route-side render/validate/recover/payload assembly blocks across:
+    - `synthetic_dream_pick`
+    - `synthetic_role_pick`
+    - `dream_submit_scores`
+    - `dream_switch_to_self`
+    - `dream_start_exercise`
+  - Routed route error/success finalization through engine finalize helpers.
+  - Extended route ports to include `turnResponseEngine` and wired runtime route ports to pass it.
+  - Added source-contract assertions proving route path uses shared `TurnResponseEngine` and no direct route render/validate calls remain.
+- pending:
+  - None.
+- changed files:
+  - mcp-server/src/handlers/run_step_routes.ts
+  - mcp-server/src/handlers/run_step_ports.ts
+  - mcp-server/src/handlers/run_step_runtime.ts
+  - mcp-server/src/handlers/run_step_finals.test.ts
+  - docs/run_step_runtime_refactor_execution_log.md
+- tests:
+  - `npm --prefix mcp-server run build` (pass)
+  - `node mcp-server/scripts/ui_artifact_parity_check.mjs` (pass)
+  - `node --loader ts-node/esm scripts/contract-smoke.mjs` (workdir `mcp-server`) (pass)
+  - `npm --prefix mcp-server test` (pass)
+  - `RUN_STEP_ARCH_PHASE=phase_C npm --prefix mcp-server run arch:run-step:check` (pass)
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R3 npm --prefix mcp-server run arch:run-step-runtime:check` (fail: LOC gate `2497 > 2100`)
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R2 npm --prefix mcp-server run arch:run-step-runtime:check` (pass)
+  - `npm --prefix mcp-server run arch:run-step:di-budget` (pass)
+- metrics:
+  - `git diff --name-only | wc -l` => `6`
+  - `git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}'` => `adds=127 dels=371 total=498`
+  - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `1`
+  - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2497`
+  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `125`
+  - `DI factories >12 deps` => `0`
+- commit hash: pending (captured after commit command)

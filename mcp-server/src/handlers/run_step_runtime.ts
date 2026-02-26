@@ -2474,7 +2474,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     step0: { ensureStartState, parseStep0Final, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState },
     presentation: { hasPresentationTemplate, generatePresentationPptx, convertPptxToPdf, convertPdfToPng, cleanupOldPresentationFiles, baseUrlFromEnv, uiStringFromStateMap, uiDefaultString },
     specialist: { callSpecialistStrictSafe, buildRoutingContext, rememberLlmCall },
-    response: { attachRegistryPayload, finalizeResponse },
+    response: { attachRegistryPayload, finalizeResponse, turnResponseEngine },
     suggestions: { pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState },
     i18n: { bumpUiI18nCounter: uiI18nCounterPort },
   };

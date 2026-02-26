@@ -84,49 +84,83 @@ function parseSubmitScoresPayload(
   return null;
 }
 
-function buildRenderedContractViolationResponse<TResponse>(params: {
-  deps: RunStepRouteFlatPorts<TResponse>;
+type RouteTurnIntent = {
   state: CanvasState;
-  currentStepId: string;
-  activeSpecialist: string;
-  rendered: RenderedRouteOutput;
-  reason: string;
-}): TResponse {
-  const payload = params.deps.attachRegistryPayload(
-    {
-      ok: false as const,
-      tool: "run_step" as const,
-      current_step_id: String(params.currentStepId),
-      active_specialist: String(params.activeSpecialist || ""),
-      text: "",
-      prompt: "",
-      specialist: params.rendered.specialist,
-      state: params.state,
-      error: {
-        type: "contract_violation",
-        message: "Rendered output violates the UI contract.",
-        reason: params.reason,
-        step: String(params.currentStepId || ""),
-        contract_id: params.rendered.contractId,
-      },
-    },
-    params.rendered.specialist
-  );
-  return params.deps.finalizeResponse(payload as unknown as TResponse);
-}
-
-function updateRenderedState(
-  deps: RunStepRouteFlatPorts<unknown>,
-  state: CanvasState,
-  rendered: RenderedRouteOutput
-): CanvasState {
-  (state as any).last_specialist_result = rendered.specialist;
-  deps.applyUiPhaseByStep(state, String((state as any).current_step ?? ""), rendered.contractId);
-  return state;
-}
+  specialist: Record<string, unknown>;
+  previousSpecialist: Record<string, unknown>;
+  responseUiFlags: Record<string, boolean | string> | null;
+  debug?: Record<string, unknown>;
+};
 
 export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TResponse>) {
   const deps = flattenRunStepRoutePorts(ports);
+
+  function finalizeRoutePayload(payload: TResponse): TResponse {
+    return deps.turnResponseEngine.finalize(payload);
+  }
+
+  function buildRenderedContractViolationPayload(params: {
+    state: CanvasState;
+    stepId: string;
+    activeSpecialist: string;
+    rendered: RenderedRouteOutput;
+    reason: string;
+  }): TResponse {
+    return deps.attachRegistryPayload(
+      {
+        ok: false as const,
+        tool: "run_step" as const,
+        current_step_id: String(params.stepId),
+        active_specialist: String(params.activeSpecialist || ""),
+        text: "",
+        prompt: "",
+        specialist: params.rendered.specialist,
+        state: params.state,
+        error: {
+          type: "contract_violation",
+          message: "Rendered output violates the UI contract.",
+          reason: params.reason,
+          step: String(params.stepId || ""),
+          contract_id: params.rendered.contractId,
+        },
+      },
+      params.rendered.specialist
+    );
+  }
+
+  async function finalizeRouteTurnIntent(
+    context: RouteRegistryContext,
+    intent: RouteTurnIntent
+  ): Promise<TResponse> {
+    const renderedResult = deps.turnResponseEngine.renderValidateRecover({
+      state: intent.state,
+      specialist: intent.specialist,
+      previousSpecialist: intent.previousSpecialist,
+      telemetry: context.uiI18nTelemetry,
+      onContractViolation: ({ state, stepId, activeSpecialist, rendered, reason }) =>
+        buildRenderedContractViolationPayload({
+          state,
+          stepId,
+          activeSpecialist,
+          rendered: rendered as unknown as RenderedRouteOutput,
+          reason,
+        }),
+    });
+    if (!renderedResult.ok) return renderedResult.payload;
+
+    const stateWithUi = await deps.ensureUiStrings(renderedResult.value.state, context.userMessage);
+
+    return deps.turnResponseEngine.attachAndFinalize({
+      state: stateWithUi,
+      specialist: renderedResult.value.specialist,
+      responseUiFlags: intent.responseUiFlags,
+      actionCodesOverride: renderedResult.value.actionCodes,
+      renderedActionsOverride: renderedResult.value.renderedActions,
+      contractMetaOverride: renderedResult.value.contractMeta,
+      debug: intent.debug,
+    });
+  }
+
   const registryById: Record<string, SpecialRouteHandler<TResponse>> = {
     synthetic_dream_pick: {
       id: "synthetic_dream_pick",
@@ -175,62 +209,12 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         });
 
         deps.setDreamRuntimeMode(nextState, "self");
-
-        const renderedRaw = deps.renderFreeTextTurnPolicy({
-          stepId: String((nextState as any).current_step ?? ""),
+        return finalizeRouteTurnIntent(context, {
           state: nextState,
           specialist: asRecord((nextState as any).last_specialist_result || {}),
           previousSpecialist,
+          responseUiFlags: context.responseUiFlags,
         });
-
-        const validated = deps.validateRenderedContractOrRecover({
-          stepId: String((nextState as any).current_step ?? ""),
-          rendered: renderedRaw,
-          state: nextState,
-          previousSpecialist,
-          telemetry: context.uiI18nTelemetry,
-        });
-
-        nextState = validated.state;
-        const rendered = validated.rendered;
-        if (validated.violation) {
-          return buildRenderedContractViolationResponse({
-            deps,
-            state: nextState,
-            currentStepId: String((nextState as any).current_step ?? ""),
-            activeSpecialist: deps.dreamSpecialist,
-            rendered,
-            reason: validated.violation,
-          });
-        }
-
-        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextState, rendered);
-        const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
-
-        const payload = deps.attachRegistryPayload(
-          {
-            ok: true as const,
-            tool: "run_step" as const,
-            current_step_id: String(nextState.current_step),
-            active_specialist: deps.dreamSpecialist,
-            text: deps.buildTextForWidget({ specialist: rendered.specialist }),
-            prompt: deps.pickPrompt(rendered.specialist),
-            specialist: rendered.specialist,
-            state: nextStateWithUi,
-          },
-          rendered.specialist,
-          context.responseUiFlags,
-          rendered.uiActionCodes,
-          rendered.uiActions,
-          null,
-          {
-            contractId: rendered.contractId,
-            contractVersion: rendered.contractVersion,
-            textKeys: rendered.textKeys,
-          }
-        );
-
-        return deps.finalizeResponse(payload as unknown as TResponse);
       },
     },
 
@@ -278,62 +262,12 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           showSessionIntroUsed: "false",
           provisionalSource: "action_route",
         });
-
-        const renderedRaw = deps.renderFreeTextTurnPolicy({
-          stepId: String((nextState as any).current_step ?? ""),
+        return finalizeRouteTurnIntent(context, {
           state: nextState,
           specialist: asRecord((nextState as any).last_specialist_result || {}),
           previousSpecialist,
+          responseUiFlags: context.responseUiFlags,
         });
-
-        const validated = deps.validateRenderedContractOrRecover({
-          stepId: String((nextState as any).current_step ?? ""),
-          rendered: renderedRaw,
-          state: nextState,
-          previousSpecialist,
-          telemetry: context.uiI18nTelemetry,
-        });
-
-        nextState = validated.state;
-        const rendered = validated.rendered;
-        if (validated.violation) {
-          return buildRenderedContractViolationResponse({
-            deps,
-            state: nextState,
-            currentStepId: String((nextState as any).current_step ?? ""),
-            activeSpecialist: deps.roleSpecialist,
-            rendered,
-            reason: validated.violation,
-          });
-        }
-
-        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextState, rendered);
-        const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
-
-        const payload = deps.attachRegistryPayload(
-          {
-            ok: true as const,
-            tool: "run_step" as const,
-            current_step_id: String(nextState.current_step),
-            active_specialist: deps.roleSpecialist,
-            text: deps.buildTextForWidget({ specialist: rendered.specialist }),
-            prompt: deps.pickPrompt(rendered.specialist),
-            specialist: rendered.specialist,
-            state: nextStateWithUi,
-          },
-          rendered.specialist,
-          context.responseUiFlags,
-          rendered.uiActionCodes,
-          rendered.uiActions,
-          null,
-          {
-            contractId: rendered.contractId,
-            contractVersion: rendered.contractVersion,
-            textKeys: rendered.textKeys,
-          }
-        );
-
-        return deps.finalizeResponse(payload as unknown as TResponse);
       },
     },
 
@@ -408,7 +342,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             context.responseUiFlags
           );
 
-          return deps.finalizeResponse(payload as unknown as TResponse);
+          return finalizeRoutePayload(payload as unknown as TResponse);
         } catch (err) {
           console.error("[presentation] Generation failed", err);
 
@@ -452,7 +386,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             context.responseUiFlags
           );
 
-          return deps.finalizeResponse(payload as unknown as TResponse);
+          return finalizeRoutePayload(payload as unknown as TResponse);
         }
       },
     },
@@ -553,7 +487,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           nextStateScores
         );
 
-        if (!callFormulation.ok) return deps.finalizeResponse(callFormulation.payload);
+        if (!callFormulation.ok) return finalizeRoutePayload(callFormulation.payload);
         deps.rememberLlmCall(callFormulation.value);
 
         const formulationResult = callFormulation.value.specialistResult;
@@ -568,66 +502,17 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         (nextStateFormulation as any).dream_builder_statements = statements;
         deps.setDreamRuntimeMode(nextStateFormulation, "builder_refine");
         (nextStateFormulation as any).dream_awaiting_direction = "false";
-
-        const renderedRaw = deps.renderFreeTextTurnPolicy({
-          stepId: String((nextStateFormulation as any).current_step ?? ""),
+        return finalizeRouteTurnIntent(context, {
           state: nextStateFormulation,
-          specialist: asRecord(formulationResult || {}),
+          specialist: asRecord((nextStateFormulation as any).last_specialist_result || {}),
           previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
-        });
-
-        const validated = deps.validateRenderedContractOrRecover({
-          stepId: String((nextStateFormulation as any).current_step ?? ""),
-          rendered: renderedRaw,
-          state: nextStateFormulation,
-          previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
-          telemetry: context.uiI18nTelemetry,
-        });
-
-        const rendered = validated.rendered;
-        if (validated.violation) {
-          return buildRenderedContractViolationResponse({
-            deps,
-            state: nextStateFormulation,
-            currentStepId: String((nextStateFormulation as any).current_step ?? ""),
-            activeSpecialist: deps.dreamExplainerSpecialist,
-            rendered,
-            reason: validated.violation,
-          });
-        }
-
-        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextStateFormulation, rendered);
-
-        const nextStateWithUi = await deps.ensureUiStrings(nextStateFormulation, context.userMessage);
-        const payload = deps.attachRegistryPayload(
-          {
-            ok: true as const,
-            tool: "run_step" as const,
-            current_step_id: String(nextStateFormulation.current_step),
-            active_specialist: deps.dreamExplainerSpecialist,
-            text: deps.buildTextForWidget({ specialist: rendered.specialist }),
-            prompt: deps.pickPrompt(rendered.specialist),
-            specialist: rendered.specialist,
-            state: nextStateWithUi,
-            debug: {
-              submit_scores_handled: true,
-              formulation_direct: true,
-              top_cluster_count: topClusters.length,
-            },
+          responseUiFlags: context.responseUiFlags,
+          debug: {
+            submit_scores_handled: true,
+            formulation_direct: true,
+            top_cluster_count: topClusters.length,
           },
-          rendered.specialist,
-          context.responseUiFlags,
-          rendered.uiActionCodes,
-          rendered.uiActions,
-          null,
-          {
-            contractId: rendered.contractId,
-            contractVersion: rendered.contractVersion,
-            textKeys: rendered.textKeys,
-          }
-        );
-
-        return deps.finalizeResponse(payload as unknown as TResponse);
+        });
       },
     },
 
@@ -677,62 +562,12 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             deps.dreamStepId,
             deps.buildContractId(deps.dreamStepId, "no_output", "DREAM_MENU_INTRO")
           );
-
-          const renderedRaw = deps.renderFreeTextTurnPolicy({
-            stepId: String((nextState as any).current_step ?? ""),
+          return finalizeRouteTurnIntent(context, {
             state: nextState,
             specialist: asRecord((nextState as any).last_specialist_result || {}),
             previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
+            responseUiFlags: context.responseUiFlags,
           });
-
-          const validated = deps.validateRenderedContractOrRecover({
-            stepId: String((nextState as any).current_step ?? ""),
-            rendered: renderedRaw,
-            state: nextState,
-            previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
-            telemetry: context.uiI18nTelemetry,
-          });
-
-          nextState = validated.state;
-          const rendered = validated.rendered;
-          if (validated.violation) {
-            return buildRenderedContractViolationResponse({
-              deps,
-              state: nextState,
-              currentStepId: String((nextState as any).current_step ?? ""),
-              activeSpecialist: deps.dreamSpecialist,
-              rendered,
-              reason: validated.violation,
-            });
-          }
-
-          updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextState, rendered);
-          const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
-
-          const payload = deps.attachRegistryPayload(
-            {
-              ok: true as const,
-              tool: "run_step" as const,
-              current_step_id: String(nextState.current_step),
-              active_specialist: deps.dreamSpecialist,
-              text: deps.buildTextForWidget({ specialist: rendered.specialist }),
-              prompt: deps.pickPrompt(rendered.specialist),
-              specialist: rendered.specialist,
-              state: nextStateWithUi,
-            },
-            rendered.specialist,
-            context.responseUiFlags,
-            rendered.uiActionCodes,
-            rendered.uiActions,
-            null,
-            {
-              contractId: rendered.contractId,
-              contractVersion: rendered.contractVersion,
-              textKeys: rendered.textKeys,
-            }
-          );
-
-          return deps.finalizeResponse(payload as unknown as TResponse);
         }
 
         (context.state as any).intro_shown_for_step = "dream";
@@ -758,7 +593,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           context.state
         );
 
-        if (!callDream.ok) return deps.finalizeResponse(callDream.payload);
+        if (!callDream.ok) return finalizeRoutePayload(callDream.payload);
         deps.rememberLlmCall(callDream.value);
 
         let nextState = deps.applyStateUpdate({
@@ -770,62 +605,12 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         });
 
         deps.setDreamRuntimeMode(nextState, "self");
-
-        const renderedRaw = deps.renderFreeTextTurnPolicy({
-          stepId: String((nextState as any).current_step ?? ""),
+        return finalizeRouteTurnIntent(context, {
           state: nextState,
           specialist: asRecord((nextState as any).last_specialist_result || {}),
           previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
+          responseUiFlags: context.responseUiFlags,
         });
-
-        const validated = deps.validateRenderedContractOrRecover({
-          stepId: String((nextState as any).current_step ?? ""),
-          rendered: renderedRaw,
-          state: nextState,
-          previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
-          telemetry: context.uiI18nTelemetry,
-        });
-
-        nextState = validated.state;
-        const rendered = validated.rendered;
-        if (validated.violation) {
-          return buildRenderedContractViolationResponse({
-            deps,
-            state: nextState,
-            currentStepId: String((nextState as any).current_step ?? ""),
-            activeSpecialist: deps.dreamSpecialist,
-            rendered,
-            reason: validated.violation,
-          });
-        }
-
-        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextState, rendered);
-
-        const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
-        const payload = deps.attachRegistryPayload(
-          {
-            ok: true as const,
-            tool: "run_step" as const,
-            current_step_id: String(nextState.current_step),
-            active_specialist: deps.dreamSpecialist,
-            text: deps.buildTextForWidget({ specialist: rendered.specialist }),
-            prompt: deps.pickPrompt(rendered.specialist),
-            specialist: rendered.specialist,
-            state: nextStateWithUi,
-          },
-          rendered.specialist,
-          context.responseUiFlags,
-          rendered.uiActionCodes,
-          rendered.uiActions,
-          null,
-          {
-            contractId: rendered.contractId,
-            contractVersion: rendered.contractVersion,
-            textKeys: rendered.textKeys,
-          }
-        );
-
-        return deps.finalizeResponse(payload as unknown as TResponse);
       },
     },
 
@@ -920,7 +705,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             context.responseUiFlags
           );
 
-          return deps.finalizeResponse(payload as unknown as TResponse);
+          return finalizeRoutePayload(payload as unknown as TResponse);
         }
 
         (context.state as any).intro_shown_session = "true";
@@ -965,7 +750,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             context.responseUiFlags
           );
 
-          return deps.finalizeResponse(payload as unknown as TResponse);
+          return finalizeRoutePayload(payload as unknown as TResponse);
         }
 
         const initialMsg = String((context.state as any).initial_user_message ?? "").trim();
@@ -1006,7 +791,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           context.responseUiFlags
         );
 
-        return deps.finalizeResponse(payload as unknown as TResponse);
+        return finalizeRoutePayload(payload as unknown as TResponse);
       },
     },
 
@@ -1040,7 +825,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           context.state
         );
 
-        if (!callDreamExplainer.ok) return deps.finalizeResponse(callDreamExplainer.payload);
+        if (!callDreamExplainer.ok) return finalizeRoutePayload(callDreamExplainer.payload);
         deps.rememberLlmCall(callDreamExplainer.value);
 
         const nextStateDream = deps.applyStateUpdate({
@@ -1071,66 +856,18 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         } else {
           deps.setDreamRuntimeMode(nextStateDream, "builder_collect");
         }
-
-        let rendered = deps.renderFreeTextTurnPolicy({
-          stepId: String((nextStateDream as any).current_step ?? ""),
+        return finalizeRouteTurnIntent(context, {
           state: nextStateDream,
           specialist: asRecord((nextStateDream as any).last_specialist_result || {}),
           previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
-        });
-
-        const validated = deps.validateRenderedContractOrRecover({
-          stepId: String((nextStateDream as any).current_step ?? ""),
-          rendered,
-          state: nextStateDream,
-          previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
-          telemetry: context.uiI18nTelemetry,
-        });
-
-        rendered = validated.rendered;
-        if (validated.violation) {
-          return buildRenderedContractViolationResponse({
-            deps,
-            state: nextStateDream,
-            currentStepId: String((nextStateDream as any).current_step ?? ""),
-            activeSpecialist: String((nextStateDream as any).active_specialist || ""),
-            rendered,
-            reason: validated.violation,
-          });
-        }
-
-        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextStateDream, rendered);
-
-        const payload = deps.attachRegistryPayload(
-          {
-            ok: true as const,
-            tool: "run_step" as const,
-            current_step_id: String(nextStateDream.current_step),
-            active_specialist: String((nextStateDream as any).active_specialist || ""),
-            text: deps.buildTextForWidget({ specialist: rendered.specialist }),
-            prompt: deps.pickPrompt(rendered.specialist),
-            specialist: rendered.specialist,
-            state: nextStateDream,
-            debug: {
-              decision: forcedDecision,
-              attempts: callDreamExplainer.value.attempts,
-              language: context.lang,
-              meta_user_message_ignored: false,
-            },
+          responseUiFlags: context.responseUiFlags,
+          debug: {
+            decision: forcedDecision,
+            attempts: callDreamExplainer.value.attempts,
+            language: context.lang,
+            meta_user_message_ignored: false,
           },
-          rendered.specialist,
-          context.responseUiFlags,
-          rendered.uiActionCodes,
-          rendered.uiActions,
-          null,
-          {
-            contractId: rendered.contractId,
-            contractVersion: rendered.contractVersion,
-            textKeys: rendered.textKeys,
-          }
-        );
-
-        return deps.finalizeResponse(payload as unknown as TResponse);
+        });
       },
     },
   };
