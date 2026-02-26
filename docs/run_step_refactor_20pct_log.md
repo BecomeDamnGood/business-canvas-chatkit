@@ -17,7 +17,7 @@ Program source:
 | PR | Title | Status | run_step.ts LOC before | run_step.ts LOC after | Commit on main |
 | --- | --- | --- | --- | --- | --- |
 | PR1 | Guardrails to 20 percent target | completed | 5854 | 5854 | pending_in_current_workspace |
-| PR2 | i18n/bootstrap extraction | pending | - | - | - |
+| PR2 | i18n/bootstrap extraction | completed | 5854 | 5360 | pending_in_current_workspace |
 | PR3 | Response/fail-closed extraction | pending | - | - | - |
 | PR4 | Policy/meta-topic extraction | pending | - | - | - |
 | PR5 | Step0 + wording heuristics extraction | pending | - | - | - |
@@ -81,6 +81,36 @@ Architecture checks:
 run_step.ts LOC:
 - before: 5854
 - after: 5854
+Commit:
+- pending_in_current_workspace
+
+## PR2 - i18n/bootstrap extraction
+Date: 2026-02-26 09:32 CET
+Status: completed
+Scope goal:
+- Extract i18n/bootstrap runtime orchestration from `run_step.ts` into `run_step_i18n_runtime.ts` without behavior change.
+Completed:
+- Added `mcp-server/src/handlers/run_step_i18n_runtime.ts` as the dedicated owner for language/locale/ui_strings runtime orchestration.
+- Moved bootstrap/i18n runtime wrappers and telemetry helpers (`deriveBootstrapContract`, `ensureUiStringsForState`, `resolveLanguageForTurn`, normalization/readiness helpers, telemetry counters) into the new module.
+- Wired `run_step.ts` to consume one cohesive runtime API via `createRunStepI18nRuntimeHelpers(...)` and removed the inlined runtime cluster.
+- Kept existing logging keys/values and fail-closed gate behavior unchanged in runtime decisions and locale/bootstrap logs.
+Pending:
+- PR3 response/fail-closed extraction to continue facade thinning and reduce `run_step.ts` toward `phase_A`.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_i18n_runtime.ts
+- docs/run_step_refactor_20pct_log.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs => fail (ts-node loader not resolved from repo root)
+- node --loader ts-node/esm scripts/contract-smoke.mjs (workdir `mcp-server`) => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- RUN_STEP_ARCH_PHASE=phase_A npm --prefix mcp-server run arch:run-step:check => fail (expected; `run_step.ts lines=5360`, `phase_A limit=4000`)
+run_step.ts LOC:
+- before: 5854
+- after: 5360
 Commit:
 - pending_in_current_workspace
 
