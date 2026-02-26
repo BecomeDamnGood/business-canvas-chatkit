@@ -85,7 +85,6 @@ import {
   postProcessRulesOfTheGame,
   buildRulesOfTheGameBullets,
 } from "../steps/rulesofthegame.js";
-import { SPECIALIST_META_TOPICS, type SpecialistMetaTopic } from "../steps/user_intent.js";
 
 import {
   PRESENTATION_STEP_ID,
@@ -131,17 +130,46 @@ import {
   createRunStepRouteHelpers,
   createRunStepStateUpdateHelpers,
   createRunStepPipelineHelpers,
+  createRunStepPolicyMetaHelpers,
 } from "./run_step_modules.js";
 import {
   createRunStepI18nRuntimeHelpers,
   type UiI18nTelemetryCounters,
 } from "./run_step_i18n_runtime.js";
 import { createRunStepResponseHelpers } from "./run_step_response.js";
+import {
+  LANGUAGE_LOCK_INSTRUCTION,
+  UNIVERSAL_META_OFFTOPIC_POLICY,
+  OFF_TOPIC_POLICY,
+  OFFTOPIC_FLAG_CONTRACT_INSTRUCTION,
+  USER_INTENT_CONTRACT_INSTRUCTION,
+  META_TOPIC_CONTRACT_INSTRUCTION,
+} from "./run_step_policy_meta.js";
+
+export {
+  LANGUAGE_LOCK_INSTRUCTION,
+  UNIVERSAL_META_OFFTOPIC_POLICY,
+  OFF_TOPIC_POLICY,
+};
 
 function uiDefaultString(key: string, fallback = ""): string {
   const candidate = String(UI_STRINGS_WITH_MENU_KEYS[key] || "").trim();
   if (candidate) return candidate;
   return String(fallback || "").trim();
+}
+
+function formatIndexedTemplate(templateRaw: string, values: string[]): string {
+  let out = String(templateRaw || "");
+  for (let i = 0; i < values.length; i += 1) {
+    out = out.replace(new RegExp(`\\{${i}\\}`, "g"), String(values[i] || ""));
+  }
+  return out;
+}
+
+function ensureSentenceEnd(raw: string): string {
+  const text = String(raw || "").trim();
+  if (!text) return "";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
 function step0CardDescForState(state: CanvasState | null | undefined): string {
@@ -2099,17 +2127,6 @@ export function normalizeStep0OfftopicToAsk(specialist: any, state: CanvasState,
   };
 }
 
-function stripNumberedChoiceLines(prompt: string): string {
-  return String(prompt || "")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .map((line) => String(line || "").trim())
-    .filter(Boolean)
-    .filter((line) => !/^[1-9][\)\.]\s+/.test(line))
-    .join("\n")
-    .trim();
-}
-
 function enforceDreamBuilderQuestionProgress(
   specialistResult: any,
   params: {
@@ -2959,557 +2976,32 @@ function wordingStepLabel(stepId: string): string {
   return "step";
 }
 
-const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
-  [DREAM_STEP_ID]: "offtopic.step.dream",
-  [PURPOSE_STEP_ID]: "offtopic.step.purpose",
-  [BIGWHY_STEP_ID]: "offtopic.step.bigwhy",
-  [ROLE_STEP_ID]: "offtopic.step.role",
-  [ENTITY_STEP_ID]: "offtopic.step.entity",
-  [STRATEGY_STEP_ID]: "offtopic.step.strategy",
-  [TARGETGROUP_STEP_ID]: "offtopic.step.targetgroup",
-  [PRODUCTSSERVICES_STEP_ID]: "offtopic.step.productsservices",
-  [RULESOFTHEGAME_STEP_ID]: "offtopic.step.rulesofthegame",
-  [PRESENTATION_STEP_ID]: "offtopic.step.presentation",
+const policyMetaHelpers = createRunStepPolicyMetaHelpers({
+  fieldForStep,
+  wordingStepLabel,
+  finalFieldByStepId: FINAL_FIELD_BY_STEP_ID,
+  provisionalValueForStep,
+  parseStep0Final,
+  stripChoiceInstructionNoise,
+  uiDefaultString,
+  uiStringFromStateMap,
+});
+
+const {
+  resolveMotivationUserIntent,
+  resolveSpecialistMetaTopic,
+  buildBenProfileMessage,
+  applyMotivationQuotesContractV11,
+  applyCentralMetaTopicRouter,
+  normalizeNonStep0OfftopicSpecialist,
+  validateNonStep0OfftopicMessageShape,
+} = policyMetaHelpers;
+
+export {
+  applyMotivationQuotesContractV11,
+  applyCentralMetaTopicRouter,
+  normalizeNonStep0OfftopicSpecialist,
 };
-
-function uiStringFromState(state: CanvasState, key: string, fallback: string): string {
-  const uiStrings = ((state as any).ui_strings && typeof (state as any).ui_strings === "object")
-    ? ((state as any).ui_strings as Record<string, unknown>)
-    : {};
-  const value = typeof uiStrings[key] === "string" ? String(uiStrings[key] || "").trim() : "";
-  return value || fallback;
-}
-
-function formatIndexedTemplate(templateRaw: string, values: string[]): string {
-  let out = String(templateRaw || "");
-  for (let i = 0; i < values.length; i += 1) {
-    out = out.replace(new RegExp(`\\{${i}\\}`, "g"), String(values[i] || ""));
-  }
-  return out;
-}
-
-function ensureSentenceEnd(raw: string): string {
-  const text = String(raw || "").trim();
-  if (!text) return "";
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-}
-
-function countSentenceUnits(raw: string): number {
-  return String(raw || "")
-    .replace(/\r/g, " ")
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .length;
-}
-
-function offTopicStepLabel(stepId: string, state: CanvasState): string {
-  const key = OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP[stepId] || "";
-  if (!key) return wordingStepLabel(stepId);
-  return uiStringFromState(state, key, wordingStepLabel(stepId));
-}
-
-function offTopicCompanyName(state: CanvasState): string {
-  const fromState = String((state as any)?.business_name || "").trim();
-  if (fromState && fromState !== "TBD") return fromState;
-
-  const step0Final = String((state as any)?.step_0_final || "").trim();
-  if (step0Final) {
-    const parsed = parseStep0Final(step0Final, "TBD");
-    const parsedName = String(parsed?.name || "").trim();
-    if (parsedName && parsedName !== "TBD") return parsedName;
-  }
-  return uiStringFromState(state, "offtopic.companyFallback", "your future company");
-}
-
-function offTopicCurrentContextLine(stepId: string, state: CanvasState): string {
-  const template = uiStringFromState(
-    state,
-    "offtopic.current.template",
-    "The current {0} of {1} is."
-  );
-  return ensureSentenceEnd(
-    formatIndexedTemplate(template, [
-      offTopicStepLabel(stepId, state),
-      offTopicCompanyName(state),
-    ]).trim()
-  );
-}
-
-function offTopicRedirectLine(stepId: string, state: CanvasState): string {
-  const template = uiStringFromState(
-    state,
-    "offtopic.redirect.template",
-    "Let's continue with the {0} of {1}."
-  );
-  return ensureSentenceEnd(
-    formatIndexedTemplate(template, [
-      offTopicStepLabel(stepId, state),
-      offTopicCompanyName(state),
-    ]).trim()
-  );
-}
-
-const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
-const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
-const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
-
-function buildBenProfileMessage(state?: CanvasState | null): string {
-  const paragraph1 = uiStringFromStateMap(state || null, "meta.benProfile.paragraph1", uiDefaultString("meta.benProfile.paragraph1"));
-  const paragraph2 = uiStringFromStateMap(state || null, "meta.benProfile.paragraph2", uiDefaultString("meta.benProfile.paragraph2"));
-  const paragraph3 = uiStringFromStateMap(state || null, "meta.benProfile.paragraph3", uiDefaultString("meta.benProfile.paragraph3"));
-  const paragraph4Template = uiStringFromStateMap(state || null, "meta.benProfile.paragraph4", uiDefaultString("meta.benProfile.paragraph4"));
-  const paragraph4 = formatIndexedTemplate(paragraph4Template, [BEN_PROFILE_WEBSITE_URL]);
-  return [
-    `![Ben Steenstra](${BEN_PROFILE_IMAGE_URL})`,
-    paragraph1,
-    paragraph2,
-    paragraph3,
-    paragraph4,
-  ].join("\n\n");
-}
-
-const MOTIVATION_HIGHER_PURPOSE_OPENER = uiDefaultString("motivation.opener");
-const MOTIVATION_PROVEN_LINE = uiDefaultString(
-  "motivation.provenLine",
-  "This is a proven model used worldwide, including by Samsung, HTC, LG, New Black, and Fresh 'n Rebel."
-);
-const MOTIVATION_FIXED_CONTINUE_PROMPT = uiDefaultString(
-  "motivation.continuePrompt",
-  "Give me one honest sentence. Not perfect. Just true."
-);
-
-const MOTIVATION_MISSING_PIECE_BY_STEP: Record<string, string> = {
-  [STEP_0_ID]: "the concrete starting point of your business",
-  [DREAM_STEP_ID]: "the future change your company truly wants to create",
-  [PURPOSE_STEP_ID]: "the deeper reason your work matters beyond output",
-  [BIGWHY_STEP_ID]: "the deeper meaning that keeps your direction alive under pressure",
-  [ROLE_STEP_ID]: "the stable contribution your company chooses to make",
-  [ENTITY_STEP_ID]: "the clear identity people can immediately understand",
-  [STRATEGY_STEP_ID]: "the focus choices that protect execution and consistency",
-  [TARGETGROUP_STEP_ID]: "the specific audience this is really for",
-  [PRODUCTSSERVICES_STEP_ID]: "the concrete value you will actually deliver",
-  [RULESOFTHEGAME_STEP_ID]: "the non-negotiable rules that protect quality and trust",
-  [PRESENTATION_STEP_ID]: "the story that makes your choices clear and usable for others",
-};
-
-const MOTIVATION_QUOTES_BY_STEP: Record<string, string[]> = {
-  [STEP_0_ID]: [
-    `Do you know what Dwight D. Eisenhower said: "Plans are worthless, but planning is everything."`,
-    `Do you know what Arthur Ashe said: "Start where you are. Use what you have. Do what you can."`,
-    `Do you know what James Clear said: "You do not rise to the level of your goals. You fall to the level of your systems."`,
-  ],
-  [DREAM_STEP_ID]: [
-    `Do you know what Eleanor Roosevelt said: "The future belongs to those who believe in the beauty of their dreams."`,
-    `Do you know what Nelson Mandela said: "It always seems impossible until it’s done."`,
-    `Do you know what Walt Disney said: "All our dreams can come true, if we have the courage to pursue them."`,
-  ],
-  [PURPOSE_STEP_ID]: [
-    `Do you know what Simon Sinek said: "People don’t buy what you do; they buy why you do it."`,
-    `Do you know what John F. Kennedy said: "Efforts and courage are not enough without purpose and direction."`,
-    `Do you know what Friedrich Nietzsche said: "He who has a why to live can bear almost any how."`,
-  ],
-  [BIGWHY_STEP_ID]: [
-    `Do you know what Viktor E. Frankl said: "When we are no longer able to change a situation, we are challenged to change ourselves."`,
-    `Do you know what Howard Thurman said: "Don’t ask what the world needs. Ask what makes you come alive."`,
-    `Do you know what Rumi said: "Let yourself be silently drawn by the strange pull of what you really love."`,
-  ],
-  [ROLE_STEP_ID]: [
-    `Do you know what Lao Tzu said: "To lead people, walk behind them."`,
-    `Do you know what Ralph Nader said: "The function of leadership is to produce more leaders, not more followers."`,
-    `Do you know what Simon Sinek said: "Leadership is not about being in charge. It is about taking care of those in your charge."`,
-  ],
-  [ENTITY_STEP_ID]: [
-    `Do you know what Jeff Bezos said: "Your brand is what people say about you when you’re not in the room."`,
-    `Do you know what Marty Neumeier said: "A brand is a person’s gut feeling about a product, service, or company."`,
-    `Do you know what Scott Cook said: "A brand is no longer what we tell the consumer it is. It is what consumers tell each other it is."`,
-  ],
-  [STRATEGY_STEP_ID]: [
-    `Do you know what Michael E. Porter said: "The essence of strategy is choosing what not to do."`,
-    `Do you know what Henry Mintzberg said: "Strategy is a pattern in a stream of decisions."`,
-    `Do you know what Dwight D. Eisenhower said: "Plans are worthless, but planning is everything."`,
-  ],
-  [TARGETGROUP_STEP_ID]: [
-    `Do you know what Peter Drucker said: "The purpose of business is to create a customer."`,
-    `Do you know what Steve Jobs said: "Start with the customer experience and work backward."`,
-    `Do you know what Seth Godin said: "If you try to reach everyone, you’ll reach no one."`,
-  ],
-  [PRODUCTSSERVICES_STEP_ID]: [
-    `Do you know what Theodore Levitt said: "People don’t want to buy a quarter-inch drill. They want a quarter-inch hole."`,
-    `Do you know what Paul Graham said: "Make something people want."`,
-    `Do you know what Jeff Bezos said: "We’re customer obsessed, not competitor obsessed."`,
-  ],
-  [RULESOFTHEGAME_STEP_ID]: [
-    `Do you know what Ray Dalio said: "Principles are ways of successfully dealing with reality."`,
-    `Do you know what Warren Buffett said: "It takes 20 years to build a reputation and five minutes to ruin it."`,
-    `Do you know what James Clear said: "You do not rise to the level of your goals. You fall to the level of your systems."`,
-  ],
-  [PRESENTATION_STEP_ID]: [
-    `Do you know what Maya Angelou said: "People will never forget how you made them feel."`,
-    `Do you know what George Bernard Shaw said: "The single biggest problem in communication is the illusion that it has taken place."`,
-    `Do you know what Edsger W. Dijkstra said: "Simplicity is a prerequisite for reliability."`,
-  ],
-};
-
-const MOTIVATION_USER_INTENTS = new Set([
-  "STEP_INPUT",
-  "WHY_NEEDED",
-  "RESISTANCE",
-  "INSPIRATION_REQUEST",
-  "META_QUESTION",
-  "RECAP_REQUEST",
-  "OFFTOPIC",
-] as const);
-
-type MotivationUserIntent =
-  | "STEP_INPUT"
-  | "WHY_NEEDED"
-  | "RESISTANCE"
-  | "INSPIRATION_REQUEST"
-  | "META_QUESTION"
-  | "RECAP_REQUEST"
-  | "OFFTOPIC";
-
-function resolveMotivationUserIntent(specialist: Record<string, unknown>): MotivationUserIntent {
-  const intentRaw = String((specialist as any).user_intent || "").trim().toUpperCase();
-  if (MOTIVATION_USER_INTENTS.has(intentRaw as MotivationUserIntent)) {
-    return intentRaw as MotivationUserIntent;
-  }
-  const wantsRecap =
-    specialist.wants_recap === true ||
-    String((specialist as any).wants_recap || "").trim().toLowerCase() === "true";
-  if (wantsRecap) return "RECAP_REQUEST";
-  const isOfftopic =
-    specialist.is_offtopic === true ||
-    String((specialist as any).is_offtopic || "").trim().toLowerCase() === "true";
-  if (isOfftopic) return "OFFTOPIC";
-  return "STEP_INPUT";
-}
-
-function resolveSpecialistMetaTopic(specialist: Record<string, unknown>): SpecialistMetaTopic {
-  const topicRaw = String((specialist as any).meta_topic || "").trim().toUpperCase();
-  const intent = resolveMotivationUserIntent(specialist);
-  const wantsRecap =
-    specialist.wants_recap === true ||
-    String((specialist as any).wants_recap || "").trim().toLowerCase() === "true";
-  if (topicRaw === "MODEL_PROCESS") {
-    return intent === "WHY_NEEDED" || intent === "RESISTANCE"
-      ? "MODEL_VALUE"
-      : "MODEL_CREDIBILITY";
-  }
-  if (SPECIALIST_META_TOPIC_SET.has(topicRaw)) return topicRaw as SpecialistMetaTopic;
-  if (wantsRecap || intent === "RECAP_REQUEST") return "RECAP";
-  if (intent === "WHY_NEEDED" || intent === "RESISTANCE") return "MODEL_VALUE";
-  if (intent === "META_QUESTION") return "MODEL_CREDIBILITY";
-  return "NONE";
-}
-
-function quoteLastByStepState(state: CanvasState): Record<string, string> {
-  const raw = ((state as any).quote_last_by_step && typeof (state as any).quote_last_by_step === "object")
-    ? ((state as any).quote_last_by_step as Record<string, unknown>)
-    : {};
-  return Object.fromEntries(
-    Object.entries(raw).map(([k, v]) => [String(k), String(v || "")])
-  );
-}
-
-function pickQuoteForStep(stepId: string, state: CanvasState): string {
-  const pool = Array.isArray(MOTIVATION_QUOTES_BY_STEP[stepId]) ? MOTIVATION_QUOTES_BY_STEP[stepId] : [];
-  if (pool.length === 0) return "";
-  const quoteState = quoteLastByStepState(state);
-  const last = String(quoteState[stepId] || "").trim();
-  const candidates = pool.length > 1 ? pool.filter((quote) => quote !== last) : pool.slice();
-  const index = Math.max(0, Math.min(candidates.length - 1, Math.floor(Math.random() * candidates.length)));
-  const selected = String(candidates[index] || candidates[0] || "").trim();
-  if (!selected) return "";
-  quoteState[stepId] = selected;
-  (state as any).quote_last_by_step = quoteState;
-  return selected;
-}
-
-function normalizeEssenceValueToSingleSentence(raw: string): string {
-  const compact = String(raw || "")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim())
-    .filter(Boolean)
-    .join("; ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!compact) return "";
-  const firstSentence = compact.split(/(?<=[.!?])\s+/)[0]?.trim() || compact;
-  return firstSentence.replace(/[.!?]+$/, "").trim();
-}
-
-function overviewEssenceSentence(
-  stepId: string,
-  state: CanvasState,
-  specialist: Record<string, unknown>,
-  previousSpecialist: Record<string, unknown>
-): string {
-  if (!stepId) return "";
-  if (stepId === STEP_0_ID) {
-    const step0Final = String((state as any).step_0_final || "").trim() || String((specialist as any).step_0 || "").trim();
-    if (!step0Final) return "";
-    const parsed = parseStep0Final(step0Final, String((state as any).business_name || "TBD"));
-    if (!parsed.venture || !parsed.name) return "";
-    const statement =
-      String(parsed.status || "").toLowerCase() === "existing"
-        ? `You have a ${parsed.venture} called ${parsed.name}`
-        : `You want to start a ${parsed.venture} called ${parsed.name}`;
-    return statement;
-  }
-
-  const field = fieldForStep(stepId);
-  const finalField = FINAL_FIELD_BY_STEP_ID[stepId] || "";
-  const provisional = provisionalValueForStep(state, stepId);
-  const finalValue = finalField ? String((state as any)[finalField] || "").trim() : "";
-  const fieldValue = field ? String((specialist as any)[field] || "").trim() : "";
-  const previousFieldValue = field ? String((previousSpecialist as any)[field] || "").trim() : "";
-  const refined = String((specialist as any).refined_formulation || "").trim();
-  const previousRefined = String((previousSpecialist as any).refined_formulation || "").trim();
-
-  let base = fieldValue || refined || provisional || finalValue || previousFieldValue || previousRefined;
-  if (!base) {
-    const statements = Array.isArray((specialist as any).statements)
-      ? ((specialist as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
-      : Array.isArray((previousSpecialist as any).statements)
-        ? ((previousSpecialist as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
-        : [];
-    if (statements.length > 0) base = statements.join("; ");
-  }
-
-  const normalized = normalizeEssenceValueToSingleSentence(base);
-  if (!normalized) return "";
-  return `The current ${offTopicStepLabel(stepId, state)} of ${offTopicCompanyName(state)} is ${normalized}`;
-}
-
-function buildMotivationContinueLine(state: CanvasState, stepId: string, status: TurnOutputStatus): string {
-  const basePiece = MOTIVATION_MISSING_PIECE_BY_STEP[stepId] || "the missing piece that matters most right now";
-  const piece =
-    status === "valid_output"
-      ? `the next sharpening of ${basePiece}`
-      : basePiece;
-  const template = uiStringFromStateMap(
-    state,
-    "motivation.continueTemplate",
-    uiDefaultString(
-      "motivation.continueTemplate",
-      "What we are doing now is protecting your motivation by making \"{0}\" clear in words you can actually carry into real decisions."
-    )
-  );
-  return formatIndexedTemplate(template, [piece]).trim();
-}
-
-type MotivationPolicyApplyParams = {
-  enabled: boolean;
-  stepId: string;
-  userMessage: string;
-  renderedStatus: TurnOutputStatus;
-  specialistResult: Record<string, unknown>;
-  previousSpecialist: Record<string, unknown>;
-  state: CanvasState;
-  requireWordingPick: boolean;
-};
-
-type MotivationPolicyApplyResult = {
-  specialistResult: Record<string, unknown>;
-  suppressChoices: boolean;
-};
-
-export function applyMotivationQuotesContractV11(params: MotivationPolicyApplyParams): MotivationPolicyApplyResult {
-  const specialist = params.specialistResult && typeof params.specialistResult === "object"
-    ? { ...params.specialistResult }
-    : {};
-  if (!params.enabled) return { specialistResult: specialist, suppressChoices: false };
-  if (!MOTIVATION_QUOTES_BY_STEP[params.stepId]) return { specialistResult: specialist, suppressChoices: false };
-  if (String((specialist as any).action || "").trim().toUpperCase() !== "ASK") {
-    return { specialistResult: specialist, suppressChoices: false };
-  }
-  const isOfftopic =
-    specialist.is_offtopic === true ||
-    String((specialist as any).is_offtopic || "").trim().toLowerCase() === "true";
-  if (isOfftopic || params.requireWordingPick) {
-    return { specialistResult: specialist, suppressChoices: false };
-  }
-
-  const userIntent = resolveMotivationUserIntent(specialist);
-  const metaTopic = resolveSpecialistMetaTopic(specialist);
-  const whyTrigger =
-    userIntent === "WHY_NEEDED" ||
-    userIntent === "RESISTANCE" ||
-    metaTopic === "MODEL_VALUE";
-  const inspirationTrigger = userIntent === "INSPIRATION_REQUEST";
-  const questionRaw = stripNumberedChoiceLines(String((specialist as any).question || "")).trim();
-
-  if (whyTrigger) {
-    const essence = overviewEssenceSentence(params.stepId, params.state, specialist, params.previousSpecialist);
-    const quote = pickQuoteForStep(params.stepId, params.state);
-    const opener = uiStringFromStateMap(
-      params.state,
-      "motivation.opener",
-      MOTIVATION_HIGHER_PURPOSE_OPENER
-    );
-    const provenLine = uiStringFromStateMap(
-      params.state,
-      "motivation.provenLine",
-      MOTIVATION_PROVEN_LINE
-    );
-    const continuePrompt = uiStringFromStateMap(
-      params.state,
-      "motivation.continuePrompt",
-      MOTIVATION_FIXED_CONTINUE_PROMPT
-    );
-    const blocks: string[] = [
-      opener,
-      provenLine,
-    ];
-    if (essence) {
-      const essenceTemplate = uiStringFromStateMap(
-        params.state,
-        "motivation.essencePrefix",
-        uiDefaultString("motivation.essencePrefix", "Essence so far: \"{0}\"")
-      );
-      blocks.push(formatIndexedTemplate(essenceTemplate, [essence]).trim());
-    }
-    blocks.push(buildMotivationContinueLine(params.state, params.stepId, params.renderedStatus));
-    if (quote) blocks.push(quote);
-
-    return {
-      specialistResult: {
-        ...specialist,
-        action: "ASK",
-        message: blocks.join("\n\n").trim(),
-        question: essence ? continuePrompt : (questionRaw || continuePrompt),
-        user_intent: userIntent,
-        meta_topic: "MODEL_VALUE",
-        wants_recap: false,
-        is_offtopic: false,
-      },
-      suppressChoices: false,
-    };
-  }
-
-  if (inspirationTrigger) {
-    const quote = pickQuoteForStep(params.stepId, params.state);
-    if (!quote) return { specialistResult: specialist, suppressChoices: false };
-    const currentMessage = String((specialist as any).message || "").trim();
-    const nextMessage = currentMessage
-      ? `${currentMessage}\n\n${quote}`
-      : quote;
-    return {
-      specialistResult: {
-        ...specialist,
-        message: nextMessage,
-      },
-      suppressChoices: false,
-    };
-  }
-
-  return { specialistResult: specialist, suppressChoices: false };
-}
-
-function buildModelCredibilityMessage(stepId: string, state: CanvasState): string {
-  const provenLine = uiStringFromStateMap(
-    state,
-    "motivation.provenLine",
-    MOTIVATION_PROVEN_LINE
-  );
-  return [
-    uiStringFromStateMap(
-      state,
-      "meta.modelCredibility.body",
-      uiDefaultString(
-        "meta.modelCredibility.body",
-        "This is a practical, step-by-step canvas model that turns ideas into clear choices and real trade-offs."
-      )
-    ),
-    provenLine,
-    offTopicRedirectLine(stepId, state),
-  ].join(" ");
-}
-
-export function applyCentralMetaTopicRouter(params: {
-  stepId: string;
-  specialistResult: Record<string, unknown>;
-  previousSpecialist?: Record<string, unknown>;
-  state: CanvasState;
-}): Record<string, unknown> {
-  const stepId = String(params.stepId || "").trim();
-  const specialist = params.specialistResult && typeof params.specialistResult === "object"
-    ? { ...params.specialistResult }
-    : {};
-  if (!stepId || stepId === STEP_0_ID) return specialist;
-
-  const metaTopic = resolveSpecialistMetaTopic(specialist);
-  if (metaTopic === "NONE" || metaTopic === "RECAP") return specialist;
-
-  const base = {
-    ...specialist,
-    action: "ASK",
-    is_offtopic: false,
-    wants_recap: false,
-    meta_topic: metaTopic,
-  } as Record<string, unknown>;
-
-  if (metaTopic === "BEN_PROFILE") {
-    const essence = overviewEssenceSentence(
-      stepId,
-      params.state,
-      specialist,
-      params.previousSpecialist && typeof params.previousSpecialist === "object"
-        ? params.previousSpecialist
-        : {}
-    );
-    return {
-      ...base,
-      message: essence
-        ? `${buildBenProfileMessage(params.state)}\n\n${essence}`
-        : buildBenProfileMessage(params.state),
-    };
-  }
-
-  if (metaTopic === "MODEL_CREDIBILITY") {
-    return {
-      ...base,
-      message: buildModelCredibilityMessage(stepId, params.state),
-    };
-  }
-
-  return base;
-}
-
-function stripOfftopicStructureSentences(raw: string): string {
-  const text = String(raw || "").replace(/\r/g, "\n").trim();
-  if (!text) return "";
-  const withoutStrongCurrent = text.replace(
-    /<strong>\s*the current\b[\s\S]{0,240}?<\/strong>/gi,
-    " "
-  );
-  const lines = withoutStrongCurrent
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !/^(?:[-*•]|\d+[.)])\s+/.test(line));
-  const compact = lines.join(" ").replace(/\s+/g, " ").trim();
-  if (!compact) return "";
-  const parts = compact
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const structuralPatterns = [
-    /\bthe current\b.{0,120}\bof\b.{0,120}\bis[.!?]?$/i,
-    /\blet(?:'|’)?s continue with\b.{0,120}\bof\b.{0,120}[.!?]?$/i,
-    /\blet(?:'|’)?s continue with\b.{0,120}\bstep\b.{0,40}\b(?:for|of)\b.{0,120}[.!?]?$/i,
-    /\bnow,?\s+back\s+to\b/i,
-  ];
-  const kept = parts.filter((part) => !structuralPatterns.some((re) => re.test(part)));
-  let out = kept.join(" ").trim();
-  if (/(?:^|\s)•\s+/.test(out)) {
-    out = out.split(/(?:^|\s)•\s+/)[0]?.trim() || "";
-  }
-  return out;
-}
 
 function wordingCompanyName(state: CanvasState): string {
   const fromState = String((state as any)?.business_name || "").trim();
@@ -3529,148 +3021,6 @@ function wordingSelectionMessage(stepId: string, state: CanvasState, activeSpeci
   const specialist = String(activeSpecialist || (state as any)?.active_specialist || "").trim();
   if (stepId === DREAM_STEP_ID && specialist === DREAM_EXPLAINER_SPECIALIST) return "";
   return `Your current ${wordingStepLabel(stepId)} for ${wordingCompanyName(state)} is:`;
-}
-
-function isLikelyMetaQuestionTurn(params: {
-  userMessage: string;
-  specialistResult: any;
-}): boolean {
-  void params.userMessage;
-  const specialist = params.specialistResult && typeof params.specialistResult === "object"
-    ? params.specialistResult
-    : {};
-  if (specialist.wants_recap === true || String(specialist.wants_recap || "").trim().toLowerCase() === "true") {
-    return true;
-  }
-  const userIntent = resolveMotivationUserIntent(specialist);
-  if (
-    userIntent === "META_QUESTION" ||
-    userIntent === "RECAP_REQUEST" ||
-    userIntent === "WHY_NEEDED" ||
-    userIntent === "RESISTANCE"
-  ) return true;
-  const metaTopic = resolveSpecialistMetaTopic(specialist);
-  return metaTopic !== "NONE";
-}
-
-export function normalizeNonStep0OfftopicSpecialist(params: {
-  stepId: string;
-  activeSpecialist: string;
-  userMessage: string;
-  specialistResult: any;
-  previousSpecialist: Record<string, unknown>;
-  state: CanvasState;
-}): any {
-  const stepId = String(params.stepId || "").trim();
-  const specialist = params.specialistResult && typeof params.specialistResult === "object"
-    ? params.specialistResult
-    : {};
-  if (!stepId || stepId === STEP_0_ID) return specialist;
-  const isOfftopic =
-    specialist.is_offtopic === true ||
-    String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
-  if (!isOfftopic) return specialist;
-  const metaTopic = resolveSpecialistMetaTopic(specialist);
-  if (metaTopic === "BEN_PROFILE") {
-    return {
-      ...specialist,
-      action: "ASK",
-      is_offtopic: true,
-      message: buildBenProfileMessage(params.state),
-      __offtopic_meta_passthrough: "true",
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-      feedback_reason_key: "",
-      feedback_reason_text: "",
-    };
-  }
-  if (isLikelyMetaQuestionTurn({ userMessage: params.userMessage, specialistResult: specialist })) {
-    return {
-      ...specialist,
-      __offtopic_meta_passthrough: "true",
-    };
-  }
-
-  const specialistMessage = stripOfftopicStructureSentences(
-    stripChoiceInstructionNoise(String(specialist.message || "").trim())
-  );
-  const redirectSentence = offTopicRedirectLine(stepId, params.state);
-  const message = specialistMessage
-    ? `${specialistMessage} ${redirectSentence}`.trim()
-    : redirectSentence;
-
-  const next = {
-    ...specialist,
-    action: "ASK",
-    message,
-    __offtopic_meta_passthrough: "false",
-      wording_choice_pending: "false",
-      wording_choice_selected: "",
-      feedback_reason_key: "",
-      feedback_reason_text: "",
-    } as Record<string, unknown>;
-
-  if (stepId === DREAM_STEP_ID && String(params.activeSpecialist || "").trim() === DREAM_EXPLAINER_SPECIALIST) {
-    next.suggest_dreambuilder = "true";
-    const currentStatements =
-      Array.isArray((next as any).statements) && (next as any).statements.length > 0
-        ? ((next as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
-        : [];
-    if (currentStatements.length > 0) {
-      next.statements = currentStatements;
-    } else {
-      const previousStatements = Array.isArray((params.previousSpecialist as any)?.statements)
-        ? ((params.previousSpecialist as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
-        : [];
-      next.statements = previousStatements;
-    }
-  }
-  return next;
-}
-
-function validateNonStep0OfftopicMessageShape(
-  stepId: string,
-  specialist: Record<string, unknown>,
-  state?: CanvasState
-): string | null {
-  if (!state || stepId === STEP_0_ID) return null;
-  const isOfftopic =
-    specialist.is_offtopic === true ||
-    String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
-  if (!isOfftopic) return null;
-  if (String(specialist.__offtopic_meta_passthrough || "").trim().toLowerCase() === "true") return null;
-  if (isLikelyMetaQuestionTurn({ userMessage: "", specialistResult: specialist })) return null;
-
-  const message = String(specialist.message || "").trim();
-  if (!message) return "offtopic_message_empty";
-
-  const bannedLegacyPatterns = [
-    /\bside\s+question\b/i,
-    /\bdetour\b/i,
-    /\boff-?topic\b.{0,24}\bstep\b/i,
-  ];
-  if (bannedLegacyPatterns.some((pattern) => pattern.test(message))) {
-    return "offtopic_contains_legacy_phrase";
-  }
-
-  const redirectSentence = offTopicRedirectLine(stepId, state);
-  const redirectIndex = message.indexOf(redirectSentence);
-  if (redirectIndex < 0) {
-    return "offtopic_missing_redirect_sentence";
-  }
-
-  const currentAnchorSentence = offTopicCurrentContextLine(stepId, state);
-  const structuredPrefix = message.slice(0, redirectIndex + redirectSentence.length).trim();
-  const hasCurrentAnchorExact = structuredPrefix.includes(currentAnchorSentence);
-  const hasCurrentAnchorGeneric = /\bthe current\b.{0,120}\bof\b.{0,120}\bis[.!?]?/i.test(structuredPrefix);
-  if (hasCurrentAnchorExact || hasCurrentAnchorGeneric) {
-    return "offtopic_current_context_must_be_recap_only";
-  }
-
-  const sentenceCount = countSentenceUnits(structuredPrefix);
-  if (sentenceCount < 1 || sentenceCount > 3) return "offtopic_invalid_sentence_count";
-
-  return null;
 }
 
 const uiPayloadHelpers = createRunStepUiPayloadHelpers({
@@ -3882,65 +3232,6 @@ export const RECAP_INSTRUCTION = `UNIVERSAL RECAP (every step)
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
   Then set question to your normal next question for this step.
 - When wants_recap=false: behave as usual.`;
-
-export const LANGUAGE_LOCK_INSTRUCTION = `LANGUAGE OVERRIDE (HARD)
-- ALWAYS produce ALL user-facing JSON strings in the LANGUAGE parameter.
-- If LANGUAGE is missing or empty: detect language from USER_MESSAGE and use that language.
-- Once LANGUAGE is set, keep using it unless the user explicitly requests a different language.
-- Do NOT mix languages.
-- Do not translate or alter the product name 'The Business Strategy Canvas Builder'; keep it exactly as-is.`;
-
-/**
- * Universal meta vs off-topic policy (steps other than Step 0 only).
- * Appended to every step prompt except step_0. Intent-driven; no language-specific keyword lists.
- * Exported for tests (non-Step0 steps include this block).
- */
-export const UNIVERSAL_META_OFFTOPIC_POLICY = `UNIVERSAL_META_OFFTOPIC_POLICY (apply only on steps after Step 0)
-
-1) ALLOWED META (always answer briefly, then return to the step)
-Treat as allowed at any time; infer from intent (no language-specific keyword lists):
-- Profile/credibility questions about the method creator or model origin
-- Questions about process/model value ("why this is needed", "what is the point")
-- Requests to recap what we have established so far (use wants_recap above; do not replace that mechanism)
-After answering: put the short answer in message, then set question to your normal next question for this step.
-
-2) OFF-TOPIC OR NONSENSE (Step-0 tone + deterministic redirect)
-If the user asks something unrelated to The Business Strategy Canvas Builder or the current step:
-- action must be ASK.
-- message must follow this structure (localized):
-  Sentence 1: short, friendly, empathetic, non-judgmental boundary. Light humor is allowed as a small wink (never sarcastic, never at the user's expense).
-  Sentence 2 (optional): include only for clearly off-topic/nonsense signals; keep the same tone.
-  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If company name is unknown, use the localized equivalent of "your future company".
-- Keep question for normal contract-driven next-step continuation; do not output numbered options in message.`;
-
-/** @deprecated Use UNIVERSAL_META_OFFTOPIC_POLICY. Kept for test backward compatibility. */
-export const OFF_TOPIC_POLICY = UNIVERSAL_META_OFFTOPIC_POLICY;
-
-const OFFTOPIC_FLAG_CONTRACT_INSTRUCTION = `OFFTOPIC CONTRACT (HARD)
-- Always return a boolean field "is_offtopic".
-- Set is_offtopic=false when the user's input can be incorporated into the current step output.
-- Set is_offtopic=true only when the input is unrelated to this step.
-- Meta intents (process value, model credibility, profile, recap) are not off-topic: keep is_offtopic=false for those.
-- If is_offtopic=true: answer briefly in message, do not ask to proceed to the next step, and keep proceed flags false.`;
-
-const USER_INTENT_CONTRACT_INSTRUCTION = `USER_INTENT CONTRACT (HARD)
-- Always return a string field "user_intent" with one of:
-  STEP_INPUT, WHY_NEEDED, RESISTANCE, INSPIRATION_REQUEST, META_QUESTION, RECAP_REQUEST, OFFTOPIC.
-- Infer user_intent from meaning and context (semantic intent), not from language-specific keyword lists.
-- If unsure, set user_intent="STEP_INPUT".
-- If wants_recap=true, set user_intent="RECAP_REQUEST".
-- If is_offtopic=true for unrelated content, set user_intent="OFFTOPIC".
-- For process/step-benefit doubt ("what is the point / why this is needed"), set user_intent to WHY_NEEDED or RESISTANCE accordingly.`;
-
-const META_TOPIC_CONTRACT_INSTRUCTION = `META_TOPIC CONTRACT (HARD)
-- Always return a string field "meta_topic" with one of:
-  NONE, MODEL_VALUE, MODEL_CREDIBILITY, BEN_PROFILE, RECAP.
-- Infer meta_topic from meaning/context semantically, not from language-specific keyword lists.
-- Set meta_topic="MODEL_VALUE" for process/model-value questions.
-- Set meta_topic="MODEL_CREDIBILITY" for model/method credibility or origin questions.
-- Set meta_topic="BEN_PROFILE" for profile/credibility questions about the method creator.
-- Set meta_topic="RECAP" when wants_recap=true.
-- Set meta_topic="NONE" for normal step input, inspiration-only requests, or generic off-topic content.`;
 
 const SPECIALIST_INSTRUCTION_BLOCKS = {
   languageLockInstruction: LANGUAGE_LOCK_INSTRUCTION,

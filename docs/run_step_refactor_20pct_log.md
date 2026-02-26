@@ -182,3 +182,41 @@ run_step.ts LOC:
 - after: 5854
 Commit:
 - pending_in_current_workspace
+
+## PR4 - Policy/meta-topic extraction
+Date: 2026-02-26 09:45 CET
+Status: completed
+Scope goal:
+- Extract policy/meta/offtopic/motivation contract cluster from `run_step.ts` into a dedicated module while keeping fail-closed semantics and MCP app contract behavior unchanged.
+Completed:
+- Added `mcp-server/src/handlers/run_step_policy_meta.ts` and moved:
+  - `LANGUAGE_LOCK_INSTRUCTION`
+  - `UNIVERSAL_META_OFFTOPIC_POLICY` / `OFF_TOPIC_POLICY`
+  - `applyMotivationQuotesContractV11`
+  - `applyCentralMetaTopicRouter`
+  - `normalizeNonStep0OfftopicSpecialist`
+  - related meta/offtopic validators and intent/meta-topic resolvers.
+- Kept temporary compatibility re-exports from `run_step.ts` for tests (`LANGUAGE_LOCK_INSTRUCTION`, `UNIVERSAL_META_OFFTOPIC_POLICY`, `OFF_TOPIC_POLICY`, `applyMotivationQuotesContractV11`, `applyCentralMetaTopicRouter`, `normalizeNonStep0OfftopicSpecialist`).
+- Wired `run_step.ts` to consume extracted helpers via `createRunStepPolicyMetaHelpers(...)` without changing runtime contract wiring.
+- Updated `mcp-server/src/handlers/run_step_modules.ts` export surface with `createRunStepPolicyMetaHelpers`.
+- 70% rule decision: continue to completion (metrics before decision: files=4, adds+dels=828, `run_step.ts` hunks=7, `run_step.ts` LOC=4580).
+Pending:
+- PR5 Step0 + wording heuristics extraction.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_modules.ts
+- mcp-server/src/handlers/run_step_policy_meta.ts
+- docs/run_step_refactor_20pct_log.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs => fail (known repo-root loader resolution issue for `ts-node`)
+- node --loader ts-node/esm scripts/contract-smoke.mjs (workdir `mcp-server`) => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- RUN_STEP_ARCH_PHASE=phase_B npm --prefix mcp-server run arch:run-step:check => fail (expected at current phase; `run_step.ts lines=4580`, `phase_B limit=2500`)
+run_step.ts LOC:
+- before: 5289
+- after: 4580
+Commit:
+- pending_in_current_workspace
