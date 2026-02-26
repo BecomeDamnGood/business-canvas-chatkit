@@ -1,181 +1,12 @@
-import type { CanvasState, ProvisionalSource } from "../core/state.js";
-import type { OrchestratorOutput } from "../core/orchestrator.js";
+import type { CanvasState } from "../core/state.js";
+import {
+  type RunStepContext,
+  type RunStepPostSpecialistPipelineRequest,
+  toRunPostSpecialistPipelineRequest,
+} from "./run_step_context.js";
+import type { RunStepPipelinePorts } from "./run_step_ports.js";
 import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
-
-type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
-
-type RenderedPolicyResult = {
-  [key: string]: unknown;
-  status: string;
-  specialist: Record<string, unknown>;
-  contractId: string;
-  contractVersion: string;
-  textKeys: string[];
-  uiActionCodes: string[];
-  uiActions: unknown[];
-};
-
-type ValidatedRenderedResult = {
-  rendered: any;
-  state: CanvasState;
-  violation: string | null;
-};
-
-type CallSpecialistSuccess = {
-  ok: true;
-  value: {
-    specialistResult: any;
-    attempts: number;
-    usage: any;
-    model: string;
-  };
-};
-
-type CallSpecialistFailure<TPayload> = {
-  ok: false;
-  payload: TPayload;
-};
-
-type RunStepPipelineDeps<TPayload> = {
-  step0Id: string;
-  dreamStepId: string;
-  bigwhyStepId: string;
-  strategyStepId: string;
-  dreamSpecialist: string;
-  dreamExplainerSpecialist: string;
-  strategySpecialist: string;
-  dreamExplainerSwitchSelfMenuId: string;
-  dreamForceRefineRoutePrefix: string;
-  strategyConsolidateRouteToken: string;
-  bigwhyMaxWords: number;
-  uiContractVersion: string;
-  buildRoutingContext: (routeOrText: string) => {
-    enabled: boolean;
-    shadow: boolean;
-    actionCode?: string;
-    intentType?: string;
-  };
-  callSpecialistStrictSafe: (
-    params: { model: string; state: CanvasState; decision: OrchestratorOutput; userMessage: string },
-    routing: {
-      enabled: boolean;
-      shadow: boolean;
-      actionCode?: string;
-      intentType?: string;
-    },
-    stateForError: CanvasState
-  ) => Promise<CallSpecialistSuccess | CallSpecialistFailure<TPayload>>;
-  attachRegistryPayload: (...args: any[]) => TPayload;
-  normalizeEntitySpecialistResult: (stepId: string, specialist: any) => any;
-  applyCentralMetaTopicRouter: (params: {
-    stepId: string;
-    specialistResult: Record<string, unknown>;
-    previousSpecialist?: Record<string, unknown>;
-    state: CanvasState;
-  }) => Record<string, unknown>;
-  normalizeNonStep0OfftopicSpecialist: (params: {
-    stepId: string;
-    activeSpecialist: string;
-    userMessage: string;
-    specialistResult: any;
-    previousSpecialist: Record<string, unknown>;
-    state: CanvasState;
-  }) => any;
-  normalizeStep0AskDisplayContract: (
-    stepId: string,
-    specialist: any,
-    state: CanvasState,
-    userInput?: string
-  ) => any;
-  hasValidStep0Final: (value: string) => boolean;
-  applyPostSpecialistStateMutations: (params: {
-    prevState: CanvasState;
-    decision: OrchestratorOutput;
-    specialistResult: any;
-    provisionalSource: ProvisionalSource;
-  }) => CanvasState;
-  getDreamRuntimeMode: (state: CanvasState) => DreamRuntimeMode;
-  isMetaOfftopicFallbackTurn: (params: {
-    stepId: string;
-    userMessage: string;
-    specialistResult: any;
-  }) => boolean;
-  shouldTreatAsStepContributingInput: (userMessage: string, stepId: string) => boolean;
-  hasDreamSpecialistCandidate: (specialistResult: any) => boolean;
-  buildDreamRefineFallbackSpecialist: (base: any, userInput: string, state: CanvasState) => any;
-  strategyStatementsForConsolidateGuard: (result: any, state: CanvasState) => string[];
-  pickBigWhyCandidate: (result: any) => string;
-  countWords: (text: string) => number;
-  buildBigWhyTooLongFeedback: (stateForText: CanvasState) => any;
-  renderFreeTextTurnPolicy: (params: any) => RenderedPolicyResult;
-  validateRenderedContractOrRecover: (params: any) => ValidatedRenderedResult;
-  applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
-  buildContractId: (stepId: string, status: any, menuId: string) => string;
-  isWordingChoiceEligibleContext: (
-    stepId: string,
-    activeSpecialist: string,
-    specialist?: Record<string, unknown> | null,
-    previousSpecialist?: Record<string, unknown> | null,
-    dreamRuntimeModeRaw?: unknown
-  ) => boolean;
-  buildWordingChoiceFromTurn: (params: {
-    stepId: string;
-    activeSpecialist: string;
-    previousSpecialist: Record<string, unknown>;
-    specialistResult: Record<string, unknown>;
-    userTextRaw: string;
-    isOfftopic: boolean;
-    forcePending?: boolean;
-    dreamRuntimeModeRaw?: unknown;
-  }) => {
-    specialist: Record<string, unknown>;
-    wordingChoice?: WordingChoiceUiPayload | null;
-  };
-  buildWordingChoiceFromPendingSpecialist: (
-    specialistResult: any,
-    activeSpecialist: string,
-    previousSpecialist: Record<string, unknown>,
-    stepId: string,
-    dreamRuntimeModeRaw?: unknown
-  ) => WordingChoiceUiPayload | null;
-  enforceDreamBuilderQuestionProgress: (
-    specialistResult: any,
-    params: {
-      currentStepId: string;
-      activeSpecialist: string;
-      canonicalStatementCount: number;
-      wordingChoicePending: boolean;
-      state: CanvasState;
-    }
-  ) => any;
-  applyMotivationQuotesContractV11: (params: any) => {
-    specialistResult: Record<string, unknown>;
-    suppressChoices: boolean;
-  };
-  buildTextForWidget: (params: { specialist: any }) => string;
-  pickPrompt: (specialist: any) => string;
-  looksLikeMetaInstruction: (userMessage: string) => boolean;
-  bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
-};
-
-type RunPostSpecialistPipelineParams = {
-  state: CanvasState;
-  userMessage: string;
-  actionCodeRaw: string;
-  responseUiFlags: Record<string, boolean | string> | null;
-  model: string;
-  uiI18nTelemetry: unknown;
-  inputMode: "widget" | "chat";
-  wordingChoiceEnabled: boolean;
-  motivationQuotesEnabled: boolean;
-  submittedUserText: string;
-  lang: string;
-  rawNormalized: string;
-  pristineAtEntry: boolean;
-  decideOrchestration: (routeState: CanvasState, routeUserMessage: string) => OrchestratorOutput;
-  ensureUiStrings: (state: CanvasState, routeOrText: string) => Promise<CanvasState>;
-  rememberLlmCall: (value: { attempts: number; usage: any; model: string }) => void;
-};
+type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 const POST_SPECIALIST_STAGE_ORDER = [
   "pre_guard_normalization",
@@ -187,7 +18,7 @@ const POST_SPECIALIST_STAGE_ORDER = [
   "contract_propagation",
 ] as const;
 
-export function createRunStepPipelineHelpers<TPayload>(deps: RunStepPipelineDeps<TPayload>) {
+export function createRunStepPipelineHelpers<TPayload>(deps: RunStepPipelinePorts<TPayload>) {
   function buildContractViolationPayload(params: {
     state: CanvasState;
     stepId: string;
@@ -219,7 +50,8 @@ export function createRunStepPipelineHelpers<TPayload>(deps: RunStepPipelineDeps
     );
   }
 
-  async function runPostSpecialistPipeline(params: RunPostSpecialistPipelineParams): Promise<TPayload> {
+  async function runPostSpecialistPipeline(context: RunStepContext): Promise<TPayload> {
+    const params: RunPostSpecialistPipelineParams = toRunPostSpecialistPipelineRequest(context);
     void POST_SPECIALIST_STAGE_ORDER;
 
     let state = params.state;

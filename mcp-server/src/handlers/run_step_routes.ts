@@ -2,106 +2,18 @@ import path from "node:path";
 import os from "node:os";
 
 import type { CanvasState } from "../core/state.js";
+import {
+  type RunStepContext,
+  type RunStepRouteRegistryRequest,
+  toRouteRegistryRequest,
+} from "./run_step_context.js";
+import {
+  type RunStepRenderedRouteOutput,
+  type RunStepRoutePorts,
+} from "./run_step_ports.js";
 
-export type RenderedRouteOutput = {
-  specialist: Record<string, unknown>;
-  contractId: string;
-  contractVersion: string;
-  textKeys: string[];
-  uiActionCodes: string[];
-  uiActions: unknown[];
-};
-
-type ValidateRenderedContractResult = {
-  rendered: any;
-  state: CanvasState;
-  violation: string | null;
-};
-
-type CallSpecialistSuccess = {
-  ok: true;
-  value: {
-    specialistResult: any;
-    attempts: number;
-    usage: any;
-    model: string;
-  };
-};
-
-type CallSpecialistFailure<TResponse> = {
-  ok: false;
-  payload: TResponse;
-};
-
-type RouteRegistryDeps<TResponse> = {
-  step0Id: string;
-  step0Specialist: string;
-  dreamStepId: string;
-  dreamSpecialist: string;
-  dreamExplainerSpecialist: string;
-  roleStepId: string;
-  roleSpecialist: string;
-  presentationStepId: string;
-  presentationSpecialist: string;
-  dreamPickOneRouteToken: string;
-  roleChooseForMeRouteToken: string;
-  presentationMakeRouteToken: string;
-  switchToSelfDreamToken: string;
-  dreamStartExerciseRouteToken: string;
-  wordingSelectionMessage: (stepId: string, state: CanvasState, activeSpecialist?: string) => string;
-  pickPrompt: (specialist: any) => string;
-  buildTextForWidget: (params: { specialist: any }) => string;
-  applyStateUpdate: (params: any) => CanvasState;
-  setDreamRuntimeMode: (state: CanvasState, mode: "self" | "builder_collect" | "builder_scoring" | "builder_refine") => void;
-  getDreamRuntimeMode: (state: CanvasState) => "self" | "builder_collect" | "builder_scoring" | "builder_refine";
-  renderFreeTextTurnPolicy: (params: any) => any;
-  validateRenderedContractOrRecover: (params: any) => ValidateRenderedContractResult;
-  applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
-  ensureUiStrings: (state: CanvasState, routeOrText: string) => Promise<CanvasState>;
-  ensureStartState: (
-    state: CanvasState,
-    routeOrText: string
-  ) => Promise<{ state: CanvasState; interactiveReady: boolean }>;
-  attachRegistryPayload: (...args: any[]) => any;
-  finalizeResponse: (response: TResponse) => TResponse;
-  pickDreamSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
-  pickDreamCandidateFromState: (state: CanvasState) => string;
-  pickRoleSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
-  hasPresentationTemplate: () => boolean;
-  generatePresentationPptx: (state: CanvasState) => { fileName: string; filePath: string };
-  convertPptxToPdf: (pptxPath: string, outDir: string) => string;
-  convertPdfToPng: (pdfPath: string, outDir: string) => string;
-  cleanupOldPresentationFiles: (outDir: string, maxAgeMs: number) => void;
-  baseUrlFromEnv: () => string;
-  uiStringFromStateMap: (state: CanvasState | null | undefined, key: string, fallback: string) => string;
-  uiDefaultString: (key: string, fallback?: string) => string;
-  buildContractId: (...args: any[]) => string;
-  parseStep0Final: (...args: any[]) => any;
-  step0ReadinessQuestion: (...args: any[]) => string;
-  step0CardDescForState: (state: CanvasState | null | undefined) => string;
-  step0QuestionForState: (state: CanvasState | null | undefined) => string;
-  callSpecialistStrictSafe: (...args: any[]) => Promise<CallSpecialistSuccess | CallSpecialistFailure<TResponse>>;
-  buildRoutingContext: (routeOrText: string) => any;
-  rememberLlmCall: (value: { attempts: number; usage: any; model: string }) => void;
-  isUiStateHygieneSwitchV1Enabled: () => boolean;
-  clearStepInteractiveState: (state: CanvasState, stepId: string) => CanvasState;
-  bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
-};
-
-export type RouteRegistryContext = {
-  state: CanvasState;
-  userMessage: string;
-  actionCodeRaw: string;
-  responseUiFlags: Record<string, boolean | string> | null;
-  model: string;
-  uiI18nTelemetry: unknown;
-  transientPendingScores: number[][] | null;
-  inputMode: "widget" | "chat";
-  wordingChoiceEnabled: boolean;
-  languageResolvedThisTurn: boolean;
-  isBootstrapPollCall: boolean;
-  lang: string;
-};
+export type RenderedRouteOutput = RunStepRenderedRouteOutput;
+export type RouteRegistryContext = RunStepRouteRegistryRequest;
 
 type SpecialRouteHandler<TResponse> = {
   id: string;
@@ -144,7 +56,7 @@ function parseSubmitScoresPayload(
 }
 
 function buildRenderedContractViolationResponse<TResponse>(params: {
-  deps: RouteRegistryDeps<TResponse>;
+  deps: RunStepRoutePorts<TResponse>;
   state: CanvasState;
   currentStepId: string;
   activeSpecialist: string;
@@ -175,7 +87,7 @@ function buildRenderedContractViolationResponse<TResponse>(params: {
 }
 
 function updateRenderedState(
-  deps: RouteRegistryDeps<unknown>,
+  deps: RunStepRoutePorts<unknown>,
   state: CanvasState,
   rendered: RenderedRouteOutput
 ): CanvasState {
@@ -184,7 +96,7 @@ function updateRenderedState(
   return state;
 }
 
-export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TResponse>) {
+export function createRunStepRouteHelpers<TResponse>(deps: RunStepRoutePorts<TResponse>) {
   const registryById: Record<string, SpecialRouteHandler<TResponse>> = {
     synthetic_dream_pick: {
       id: "synthetic_dream_pick",
@@ -213,7 +125,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TRe
           meta_topic: "NONE",
         };
 
-        const forcedDecision: any = {
+        const forcedDecision: Record<string, unknown> = {
           specialist_to_call: deps.dreamSpecialist,
           specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: ${deps.dreamPickOneRouteToken}`,
           current_step: deps.dreamStepId,
@@ -262,7 +174,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RouteRegistryDeps<unknown>, nextState, rendered);
+        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextState, rendered);
         const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
 
         const payload = deps.attachRegistryPayload(
@@ -318,7 +230,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TRe
           meta_topic: "NONE",
         };
 
-        const forcedDecision: any = {
+        const forcedDecision: Record<string, unknown> = {
           specialist_to_call: deps.roleSpecialist,
           specialist_input: `CURRENT_STEP_ID: ${deps.roleStepId} | USER_MESSAGE: ${deps.roleChooseForMeRouteToken}`,
           current_step: deps.roleStepId,
@@ -365,7 +277,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RouteRegistryDeps<unknown>, nextState, rendered);
+        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextState, rendered);
         const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
 
         const payload = deps.attachRegistryPayload(
@@ -654,7 +566,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RouteRegistryDeps<unknown>, nextStateFormulation, rendered);
+        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextStateFormulation, rendered);
 
         const nextStateWithUi = await deps.ensureUiStrings(nextStateFormulation, context.userMessage);
         const payload = deps.attachRegistryPayload(
@@ -764,7 +676,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TRe
             });
           }
 
-          updateRenderedState(deps as unknown as RouteRegistryDeps<unknown>, nextState, rendered);
+          updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextState, rendered);
           const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
 
           const payload = deps.attachRegistryPayload(
@@ -857,7 +769,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RouteRegistryDeps<unknown>, nextState, rendered);
+        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextState, rendered);
 
         const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
         const payload = deps.attachRegistryPayload(
@@ -1157,7 +1069,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RouteRegistryDeps<unknown>, nextStateDream, rendered);
+        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextStateDream, rendered);
 
         const payload = deps.attachRegistryPayload(
           {
@@ -1195,11 +1107,12 @@ export function createRunStepRouteHelpers<TResponse>(deps: RouteRegistryDeps<TRe
 
   const orderedHandlers = ROUTE_REGISTRY_ORDER.map((id) => registryById[id]);
 
-  async function handleSpecialRouteRegistry(context: RouteRegistryContext): Promise<TResponse | null> {
+  async function handleSpecialRouteRegistry(context: RunStepContext): Promise<TResponse | null> {
+    const routeContext = toRouteRegistryRequest(context);
     for (const handler of orderedHandlers) {
       if (!handler) continue;
-      if (!handler.canHandle(context)) continue;
-      const response = await handler.handle(context);
+      if (!handler.canHandle(routeContext)) continue;
+      const response = await handler.handle(routeContext);
       if (response) return response;
     }
     return null;

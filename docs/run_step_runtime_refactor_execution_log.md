@@ -84,3 +84,39 @@
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `3294`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `370`
 - commit hash: pending (captured after commit command)
+
+### PR3 - 2026-02-26
+- status: completed
+- scope goal: Introduce typed run-step context + ports backbone and rewire runtime/pipeline/routes wiring.
+- completed:
+  - Added `run_step_context.ts` with stable sub-contexts: `routing`, `rendering`, `state`, `specialist`.
+  - Added `run_step_ports.ts` with typed `RunStepRoutePorts` and `RunStepPipelinePorts`.
+  - Rewired `run_step_routes.ts` and `run_step_pipeline.ts` to consume typed context adapters + typed ports.
+  - Rewired `run_step_runtime.ts` to construct a single `RunStepContext` and typed port objects.
+  - Added `run_step_runtime_backbone.ts` to extract runtime constants/flags/LLM tracking utilities.
+  - Updated `run_step_modules.ts` to export new context/ports types.
+  - Kept runtime behavior/contracts intact while passing phase_R1 LOC + complexity budgets.
+- pending:
+  - None.
+- changed files:
+  - mcp-server/src/handlers/run_step_context.ts
+  - mcp-server/src/handlers/run_step_ports.ts
+  - mcp-server/src/handlers/run_step_runtime_backbone.ts
+  - mcp-server/src/handlers/run_step_runtime.ts
+  - mcp-server/src/handlers/run_step_routes.ts
+  - mcp-server/src/handlers/run_step_pipeline.ts
+  - mcp-server/src/handlers/run_step_modules.ts
+  - docs/run_step_runtime_refactor_execution_log.md
+- tests:
+  - `npm --prefix mcp-server run build` (pass)
+  - `node mcp-server/scripts/ui_artifact_parity_check.mjs` (pass)
+  - `node --loader ts-node/esm scripts/contract-smoke.mjs` (workdir `mcp-server`) (pass)
+  - `npm --prefix mcp-server test` (pass)
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R1 npm --prefix mcp-server run arch:run-step-runtime:check` (pass)
+- metrics:
+  - `git status --short -- mcp-server/src/handlers/run_step_modules.ts mcp-server/src/handlers/run_step_pipeline.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_context.ts mcp-server/src/handlers/run_step_ports.ts mcp-server/src/handlers/run_step_runtime_backbone.ts docs/run_step_runtime_refactor_execution_log.md | wc -l` => `8`
+  - `git diff --numstat -- mcp-server/src/handlers/run_step_modules.ts mcp-server/src/handlers/run_step_pipeline.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_context.ts mcp-server/src/handlers/run_step_ports.ts mcp-server/src/handlers/run_step_runtime_backbone.ts docs/run_step_runtime_refactor_execution_log.md | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}'` => `adds=193 dels=751 total=944`
+  - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `20`
+  - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2983`
+  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `300`
+- commit hash: pending (captured after commit command)

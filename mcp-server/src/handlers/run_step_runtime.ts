@@ -116,6 +116,58 @@ import {
   USER_INTENT_CONTRACT_INSTRUCTION,
   META_TOPIC_CONTRACT_INSTRUCTION,
 } from "./run_step_policy_meta.js";
+import {
+  ACTION_BOOTSTRAP_POLL_TOKEN,
+  DREAM_EXPLAINER_ESCAPE_MENU_ID,
+  DREAM_EXPLAINER_REFINE_MENU_ID,
+  DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
+  DREAM_FORCE_REFINE_ROUTE_PREFIX,
+  DREAM_PICK_ONE_ROUTE_TOKEN,
+  DREAM_START_EXERCISE_ACTION_CODES,
+  DREAM_START_EXERCISE_ROUTE_TOKEN,
+  PRESENTATION_MAKE_ROUTE_TOKEN,
+  ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN,
+  STRATEGY_CONSOLIDATE_ROUTE_TOKEN,
+  SWITCH_TO_SELF_DREAM_TOKEN,
+  WIDGET_ESCAPE_LABEL_PATTERNS,
+  WIDGET_ESCAPE_MENU_SUFFIX,
+  createTurnLlmAccumulator,
+  envFlagEnabled,
+  getDreamRuntimeMode,
+  isForceEnglishLanguageMode,
+  isMenuLabelKeysV1Enabled,
+  isUiBootstrapEventParityV1Enabled,
+  isUiBootstrapPollActionV1Enabled,
+  isUiBootstrapStateV1Enabled,
+  isUiBootstrapWaitRetryV1Enabled,
+  isUiI18nCriticalKeysV1Enabled,
+  isUiI18nV2Enabled,
+  isUiI18nV3LangBootstrapEnabled,
+  isUiLangSourceResolverV1Enabled,
+  isUiLocaleMetaV1Enabled,
+  isUiLocaleReadyGateV1Enabled,
+  isUiNoPendingTextSuppressV1Enabled,
+  isUiPendingNoFallbackTextV1Enabled,
+  isUiSemanticInvariantsV1Enabled,
+  isUiStartTriggerLangResolveV1Enabled,
+  isUiStateHygieneSwitchV1Enabled,
+  isUiStep0LangResetGuardV1Enabled,
+  isUiStrictNonEnPendingV1Enabled,
+  isUiTranslationFastModelV1Enabled,
+  isUiWaitShellV2Enabled,
+  isUiWordingFeedbackKeyedV1Enabled,
+  isWordingPanelCleanBodyV1Enabled,
+  normalizeDreamRuntimeMode,
+  normalizeUsage,
+  registerTurnLlmCall,
+  resolveHolisticPolicyFlags,
+  setDreamRuntimeMode,
+  shouldLogLocalDevDiagnostics,
+  syncDreamRuntimeMode as syncDreamRuntimeModeState,
+  turnUsageFromAccumulator,
+} from "./run_step_runtime_backbone.js";
+import type { RunStepContext } from "./run_step_context.js";
+import type { RunStepPipelinePorts, RunStepRoutePorts } from "./run_step_ports.js";
 
 export {
   LANGUAGE_LOCK_INSTRUCTION,
@@ -157,68 +209,6 @@ function step0QuestionForState(state: CanvasState | null | undefined): string {
   );
 }
 
-function shouldLogLocalDevDiagnostics(): boolean {
-  return process.env.LOCAL_DEV === "1" || process.env.MENU_POLICY_DEBUG === "1";
-}
-
-type HolisticPolicyFlags = {
-  holisticPolicyV2: boolean;
-  offtopicV2: boolean;
-  bulletRenderV2: boolean;
-  wordingChoiceV2: boolean;
-  timeoutGuardV2: boolean;
-  motivationQuotesV11: boolean;
-};
-
-type CallUsageSnapshot = {
-  input_tokens: number | null;
-  output_tokens: number | null;
-  total_tokens: number | null;
-  provider_available: boolean;
-};
-
-type TurnLlmAccumulator = {
-  calls: number;
-  attempts: number;
-  input_tokens_sum: number;
-  output_tokens_sum: number;
-  total_tokens_sum: number;
-  input_unknown: boolean;
-  output_unknown: boolean;
-  total_unknown: boolean;
-  provider_available: boolean;
-  models: Set<string>;
-};
-
-type TurnLlmCallMeta = {
-  model: string;
-  attempts: number;
-  usage: CallUsageSnapshot;
-};
-
-const WIDGET_ESCAPE_MENU_SUFFIX = "_MENU_ESCAPE";
-const DREAM_EXPLAINER_ESCAPE_MENU_ID = "DREAM_EXPLAINER_MENU_ESCAPE";
-const DREAM_EXPLAINER_SWITCH_SELF_MENU_ID = "DREAM_EXPLAINER_MENU_SWITCH_SELF";
-const DREAM_EXPLAINER_REFINE_MENU_ID = "DREAM_EXPLAINER_MENU_REFINE";
-type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
-const DREAM_START_EXERCISE_ACTION_CODES = new Set<string>([
-  "ACTION_DREAM_INTRO_START_EXERCISE",
-  "ACTION_DREAM_WHY_START_EXERCISE",
-  "ACTION_DREAM_SUGGESTIONS_START_EXERCISE",
-  "ACTION_DREAM_REFINE_START_EXERCISE",
-]);
-const DREAM_PICK_ONE_ROUTE_TOKEN = "__ROUTE__DREAM_PICK_ONE__";
-const ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN = "__ROUTE__ROLE_CHOOSE_FOR_ME__";
-const DREAM_FORCE_REFINE_ROUTE_PREFIX = "__ROUTE__DREAM_FORCE_REFINE__";
-const STRATEGY_CONSOLIDATE_ROUTE_TOKEN = "__ROUTE__STRATEGY_CONSOLIDATE__";
-const PRESENTATION_MAKE_ROUTE_TOKEN = "__ROUTE__PRESENTATION_MAKE__";
-const SWITCH_TO_SELF_DREAM_TOKEN = "__SWITCH_TO_SELF_DREAM__";
-const DREAM_START_EXERCISE_ROUTE_TOKEN = "__ROUTE__DREAM_START_EXERCISE__";
-const ACTION_BOOTSTRAP_POLL_TOKEN = "ACTION_BOOTSTRAP_POLL";
-const WIDGET_ESCAPE_LABEL_PATTERNS: RegExp[] = [
-  /\bfinish\s+later\b/i,
-  /\bcontinue\b[^\n\r]{0,80}\bnow\b/i,
-];
 const DREAM_EXPLAINER_ESCAPE_ACTION_CODES = new Set(
   (ACTIONCODE_REGISTRY.menus[DREAM_EXPLAINER_ESCAPE_MENU_ID] || [])
     .map((code) => String(code || "").trim())
@@ -232,142 +222,6 @@ const WIDGET_ESCAPE_ACTION_CODE_BAN = new Set<string>(
     .filter(Boolean)
     .filter((code) => !DREAM_EXPLAINER_ESCAPE_ACTION_CODES.has(code))
 );
-
-function normalizeDreamRuntimeMode(raw: unknown): DreamRuntimeMode {
-  const mode = String(raw || "").trim();
-  if (mode === "builder_collect" || mode === "builder_scoring" || mode === "builder_refine") return mode;
-  return "self";
-}
-
-function setDreamRuntimeMode(state: CanvasState, mode: DreamRuntimeMode): void {
-  (state as any).__dream_runtime_mode = mode;
-  if (mode === "builder_collect") {
-    const existingStage = String((state as any).__dream_builder_prompt_stage || "").trim();
-    if (!existingStage) {
-      (state as any).__dream_builder_prompt_stage = "base";
-    }
-    return;
-  }
-  (state as any).__dream_builder_prompt_stage = "";
-}
-
-function getDreamRuntimeMode(state: CanvasState): DreamRuntimeMode {
-  return normalizeDreamRuntimeMode((state as any).__dream_runtime_mode);
-}
-
-function syncDreamRuntimeMode(state: CanvasState): void {
-  const currentStep = String((state as any).current_step || "").trim();
-  if (currentStep !== DREAM_STEP_ID) {
-    setDreamRuntimeMode(state, "self");
-    return;
-  }
-  const rawMode = String((state as any).__dream_runtime_mode || "").trim();
-  if (rawMode) {
-    setDreamRuntimeMode(state, normalizeDreamRuntimeMode(rawMode));
-    return;
-  }
-  const activeSpecialist = String((state as any).active_specialist || "").trim();
-  if (activeSpecialist !== DREAM_EXPLAINER_SPECIALIST) {
-    setDreamRuntimeMode(state, "self");
-    return;
-  }
-  const last = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-  const scoringPhase = String((last as any).scoring_phase || "").trim();
-  if (scoringPhase === "true") {
-    setDreamRuntimeMode(state, "builder_scoring");
-    return;
-  }
-  const phaseMap =
-    (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
-      ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
-      : {};
-  const menuId = parseMenuFromContractIdForStep(phaseMap[DREAM_STEP_ID], DREAM_STEP_ID);
-  if (menuId === DREAM_EXPLAINER_REFINE_MENU_ID) {
-    setDreamRuntimeMode(state, "builder_refine");
-    return;
-  }
-  setDreamRuntimeMode(state, "builder_collect");
-}
-
-function envFlagEnabled(name: string, fallback: boolean): boolean {
-  const raw = String(process.env[name] ?? "").trim().toLowerCase();
-  if (!raw) return fallback;
-  return !["0", "false", "off", "no"].includes(raw);
-}
-
-function resolveHolisticPolicyFlags(): HolisticPolicyFlags {
-  // In local development we keep the holistic policy stack enabled by default
-  // so `LOCAL_DEV=1 npm run dev` is sufficient and consistent.
-  const localDevDefaults = process.env.LOCAL_DEV === "1";
-  const holisticPolicyV2 = envFlagEnabled("BSC_HOLISTIC_POLICY_V2", localDevDefaults);
-  return {
-    holisticPolicyV2,
-    offtopicV2: holisticPolicyV2 && envFlagEnabled("BSC_OFFTOPIC_V2", localDevDefaults),
-    bulletRenderV2: holisticPolicyV2 && envFlagEnabled("BSC_BULLET_RENDER_V2", localDevDefaults),
-    wordingChoiceV2: holisticPolicyV2 && envFlagEnabled("BSC_WORDING_CHOICE_V2", localDevDefaults),
-    timeoutGuardV2: holisticPolicyV2 && envFlagEnabled("BSC_TIMEOUT_GUARD_V2", localDevDefaults),
-    motivationQuotesV11: holisticPolicyV2 && envFlagEnabled("BSC_MOTIVATION_QUOTES_V11", localDevDefaults),
-  };
-}
-
-function createTurnLlmAccumulator(): TurnLlmAccumulator {
-  return {
-    calls: 0,
-    attempts: 0,
-    input_tokens_sum: 0,
-    output_tokens_sum: 0,
-    total_tokens_sum: 0,
-    input_unknown: false,
-    output_unknown: false,
-    total_unknown: false,
-    provider_available: false,
-    models: new Set<string>(),
-  };
-}
-
-function normalizeUsage(usage?: LLMUsage | null): CallUsageSnapshot {
-  return {
-    input_tokens: typeof usage?.input_tokens === "number" ? usage.input_tokens : null,
-    output_tokens: typeof usage?.output_tokens === "number" ? usage.output_tokens : null,
-    total_tokens: typeof usage?.total_tokens === "number" ? usage.total_tokens : null,
-    provider_available: Boolean(usage?.provider_available),
-  };
-}
-
-function registerTurnLlmCall(acc: TurnLlmAccumulator, meta: TurnLlmCallMeta): void {
-  const usage = normalizeUsage(meta.usage);
-  const model = String(meta.model || "").trim();
-  if (model) acc.models.add(model);
-  acc.calls += 1;
-  acc.attempts += Number.isFinite(meta.attempts) ? Math.max(0, Math.trunc(meta.attempts)) : 0;
-  acc.provider_available = acc.provider_available || usage.provider_available;
-
-  if (usage.input_tokens === null) acc.input_unknown = true;
-  else acc.input_tokens_sum += usage.input_tokens;
-
-  if (usage.output_tokens === null) acc.output_unknown = true;
-  else acc.output_tokens_sum += usage.output_tokens;
-
-  if (usage.total_tokens === null) acc.total_unknown = true;
-  else acc.total_tokens_sum += usage.total_tokens;
-}
-
-function turnUsageFromAccumulator(acc: TurnLlmAccumulator): CallUsageSnapshot {
-  if (acc.calls === 0) {
-    return {
-      input_tokens: 0,
-      output_tokens: 0,
-      total_tokens: 0,
-      provider_available: true,
-    };
-  }
-  return {
-    input_tokens: acc.input_unknown ? null : acc.input_tokens_sum,
-    output_tokens: acc.output_unknown ? null : acc.output_tokens_sum,
-    total_tokens: acc.total_unknown ? null : acc.total_tokens_sum,
-    provider_available: acc.provider_available,
-  };
-}
 
 function isEscapeMenuId(menuId: string): boolean {
   return String(menuId || "").trim().endsWith(WIDGET_ESCAPE_MENU_SUFFIX);
@@ -384,9 +238,9 @@ function hasEscapeLabelPhrase(input: string): boolean {
   return WIDGET_ESCAPE_LABEL_PATTERNS.some((pattern) => pattern.test(text));
 }
 
-function sanitizeEscapeInWidget(specialist: any): any {
-  const safe = specialist && typeof specialist === "object" ? { ...specialist } : {};
-  const contractId = String((safe as any).ui_contract_id || "").trim();
+function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
+  const safe = specialist && typeof specialist === "object" ? { ...(specialist as Record<string, unknown>) } : {};
+  const contractId = String(safe.ui_contract_id || "").trim();
   const contractStepId = contractId.split(":")[0] || "";
   const menuId = parseMenuFromContractIdForStep(contractId, contractStepId);
   if (menuId === DREAM_EXPLAINER_ESCAPE_MENU_ID) return safe;
@@ -696,106 +550,6 @@ function sanitizeWidgetActionCodes(actionCodes: string[]): string[] {
   return actionCodes.filter((code) => !WIDGET_ESCAPE_ACTION_CODE_BAN.has(String(code || "").trim()));
 }
 
-function languageModeFromEnv(): string {
-  return String(process.env.LANGUAGE_MODE || "").trim().toLowerCase();
-}
-
-function isForceEnglishLanguageMode(): boolean {
-  const mode = languageModeFromEnv();
-  if (mode === "force_en") return true;
-  if (mode === "detect_once") return false;
-  if (String(process.env.NODE_ENV || "").trim().toLowerCase() === "production") return false;
-  return process.env.LOCAL_DEV === "1";
-}
-
-function isUiI18nV2Enabled(): boolean {
-  return envFlagEnabled("UI_I18N_V3_TEXT_KEYS", envFlagEnabled("UI_I18N_V2", true));
-}
-
-function isMenuLabelKeysV1Enabled(): boolean {
-  return envFlagEnabled("UI_I18N_V3_MENU_KEY_ONLY", envFlagEnabled("MENU_LABEL_KEYS_V1", true));
-}
-
-function isUiI18nV3LangBootstrapEnabled(): boolean {
-  return envFlagEnabled("UI_I18N_V3_LANG_BOOTSTRAP", true);
-}
-
-function isUiLocaleMetaV1Enabled(): boolean {
-  return envFlagEnabled("UI_LOCALE_META_V1", true);
-}
-
-function isUiLangSourceResolverV1Enabled(): boolean {
-  return envFlagEnabled("UI_LANG_SOURCE_RESOLVER_V1", true);
-}
-
-function isUiStrictNonEnPendingV1Enabled(): boolean {
-  return envFlagEnabled("UI_STRICT_NON_EN_PENDING_V1", true);
-}
-
-function isUiStep0LangResetGuardV1Enabled(): boolean {
-  return envFlagEnabled("UI_STEP0_LANG_RESET_GUARD_V1", true);
-}
-
-function isUiBootstrapStateV1Enabled(): boolean {
-  return true;
-}
-
-function isUiPendingNoFallbackTextV1Enabled(): boolean {
-  return envFlagEnabled("UI_PENDING_NO_FALLBACK_TEXT_V1", true);
-}
-
-function isUiStartTriggerLangResolveV1Enabled(): boolean {
-  return envFlagEnabled("UI_START_TRIGGER_LANG_RESOLVE_V1", true);
-}
-
-function isUiLocaleReadyGateV1Enabled(): boolean {
-  return true;
-}
-
-function isUiNoPendingTextSuppressV1Enabled(): boolean {
-  return envFlagEnabled("UI_NO_PENDING_TEXT_SUPPRESS_V1", true);
-}
-
-function isUiBootstrapWaitRetryV1Enabled(): boolean {
-  return envFlagEnabled("UI_BOOTSTRAP_WAIT_RETRY_V1", true);
-}
-
-function isUiBootstrapEventParityV1Enabled(): boolean {
-  return envFlagEnabled("UI_BOOTSTRAP_EVENT_PARITY_V1", true);
-}
-
-function isUiBootstrapPollActionV1Enabled(): boolean {
-  return true;
-}
-
-function isUiWaitShellV2Enabled(): boolean {
-  return envFlagEnabled("UI_WAIT_SHELL_V2", true);
-}
-
-function isUiTranslationFastModelV1Enabled(): boolean {
-  return envFlagEnabled("UI_TRANSLATION_FAST_MODEL_V1", true);
-}
-
-function isUiI18nCriticalKeysV1Enabled(): boolean {
-  return envFlagEnabled("UI_I18N_CRITICAL_KEYS_V1", true);
-}
-
-function isWordingPanelCleanBodyV1Enabled(): boolean {
-  return envFlagEnabled("UI_WORDING_PANEL_CLEAN_BODY_V1", true);
-}
-
-function isUiSemanticInvariantsV1Enabled(): boolean {
-  return envFlagEnabled("UI_SEMANTIC_INVARIANTS_V1", true);
-}
-
-function isUiWordingFeedbackKeyedV1Enabled(): boolean {
-  return envFlagEnabled("UI_WORDING_FEEDBACK_KEYED_V1", true);
-}
-
-function isUiStateHygieneSwitchV1Enabled(): boolean {
-  return envFlagEnabled("UI_STATE_HYGIENE_SWITCH_V1", true);
-}
-
 const runStepI18nRuntime = createRunStepI18nRuntimeHelpers({
   step0Id: STEP_0_ID,
   isForceEnglishLanguageMode,
@@ -864,7 +618,7 @@ function step0ReadinessQuestion(state: CanvasState | null | undefined, parsed: {
  * Only append refined_formulation if it is not already contained in message (prevents duplicate display e.g. Rules REFINE).
  */
 export function buildTextForWidget(params: {
-  specialist: any;
+  specialist: Record<string, unknown>;
   hasWidgetActions?: boolean;
   questionTextOverride?: string;
 }): string {
@@ -881,7 +635,7 @@ export function buildTextForWidget(params: {
       .replace(/[.!?]+$/g, "")
       .trim();
   const suggestionNorm = normalizeLine(wordingSuggestion);
-  const contractId = String((specialist as any)?.ui_contract_id || "").trim();
+  const contractId = String((specialist as Record<string, unknown>)?.ui_contract_id || "").trim();
   const contractStepId = contractId.split(":")[0] || "";
   const menuId = parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
   const statementLines = Array.isArray(specialist?.statements)
@@ -962,7 +716,7 @@ export function buildTextForWidget(params: {
   let refined = String(specialist?.refined_formulation ?? "").trim();
   if (!wordingPending) {
     const field = fieldForStep(contractStepId);
-    const fieldValue = field ? String((specialist as any)?.[field] || "").trim() : "";
+    const fieldValue = field ? String((specialist as Record<string, unknown>)?.[field] || "").trim() : "";
     if (!fieldValue && !refined && statementLines.length === 0) {
       msg = stripUnsupportedReformulationClaims(msg);
     }
@@ -1135,7 +889,7 @@ function stripPromptEchoFromMessage(messageRaw: string, promptRaw: string): stri
   return stripped;
 }
 
-export function pickPrompt(specialist: any): string {
+export function pickPrompt(specialist: Record<string, unknown>): string {
   const q = String(specialist?.question ?? "").trim();
   return q || "";
 }
@@ -1367,18 +1121,22 @@ function pickDreamCandidateFromState(state: CanvasState): string {
   return "";
 }
 
-function hasDreamSpecialistCandidate(result: any): boolean {
-  const dreamValue = String(result?.dream || "").trim();
-  const refinedValue = String(result?.refined_formulation || "").trim();
+function hasDreamSpecialistCandidate(result: unknown): boolean {
+  const source =
+    result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+  const dreamValue = String(source.dream || "").trim();
+  const refinedValue = String(source.refined_formulation || "").trim();
   return Boolean(dreamValue || refinedValue);
 }
 
-function strategyStatementsForConsolidateGuard(result: any, state: CanvasState): string[] {
-  const direct = Array.isArray(result?.statements)
-    ? (result.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
+function strategyStatementsForConsolidateGuard(result: unknown, state: CanvasState): string[] {
+  const source =
+    result && typeof result === "object" ? (result as Record<string, unknown>) : {};
+  const direct = Array.isArray(source.statements)
+    ? (source.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
     : [];
   if (direct.length > 0) return direct;
-  const rawCombined = String(result?.strategy || result?.refined_formulation || "").trim();
+  const rawCombined = String(source.strategy || source.refined_formulation || "").trim();
   if (rawCombined) return parseListItems(rawCombined).map((line) => String(line || "").trim()).filter(Boolean);
   const fallback = String((state as any).strategy_final || provisionalValueForStep(state, STRATEGY_STEP_ID) || "").trim();
   return parseListItems(fallback).map((line) => String(line || "").trim()).filter(Boolean);
@@ -1397,7 +1155,11 @@ function fallbackDreamCandidateFromUserInput(userInput: string, state: CanvasSta
   return `${company} dreams of a world in which ${normalizedRest}.`;
 }
 
-function buildDreamRefineFallbackSpecialist(base: any, userInput: string, state: CanvasState): any {
+function buildDreamRefineFallbackSpecialist(
+  base: Record<string, unknown> | null | undefined,
+  userInput: string,
+  state: CanvasState
+): Record<string, unknown> {
   const fallback = fallbackDreamCandidateFromUserInput(userInput, state);
   return {
     ...(base && typeof base === "object" ? base : {}),
@@ -1519,7 +1281,10 @@ function normalizeEntityPhrase(raw: string): string {
   return next;
 }
 
-function normalizeEntitySpecialistResult(stepId: string, specialist: any): any {
+function normalizeEntitySpecialistResult(
+  stepId: string,
+  specialist: Record<string, unknown> | null | undefined
+): Record<string, unknown> | null | undefined {
   if (stepId !== ENTITY_STEP_ID || !specialist || typeof specialist !== "object") return specialist;
   const normalizedRefined = normalizeEntityPhrase(String(specialist.refined_formulation || ""));
   const normalizedEntity = normalizeEntityPhrase(String(specialist.entity || ""));
@@ -1532,7 +1297,7 @@ function normalizeEntitySpecialistResult(stepId: string, specialist: any): any {
 }
 
 function enforceDreamBuilderQuestionProgress(
-  specialistResult: any,
+  specialistResult: Record<string, unknown> | null | undefined,
   params: {
     currentStepId: string;
     activeSpecialist: string;
@@ -1540,13 +1305,14 @@ function enforceDreamBuilderQuestionProgress(
     wordingChoicePending: boolean;
     state: CanvasState;
   }
-): any {
+): Record<string, unknown> {
   const currentStepId = String(params.currentStepId || "").trim();
   const activeSpecialist = String(params.activeSpecialist || "").trim();
+  const specialist =
+    specialistResult && typeof specialistResult === "object" ? specialistResult : {};
   if (currentStepId !== DREAM_STEP_ID || activeSpecialist !== DREAM_EXPLAINER_SPECIALIST) {
-    return specialistResult;
+    return specialist;
   }
-  const specialist = specialistResult && typeof specialistResult === "object" ? specialistResult : {};
   const isOfftopic =
     specialist.is_offtopic === true ||
     String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
@@ -2031,6 +1797,16 @@ const {
   attachRegistryPayload,
 } = uiPayloadHelpers;
 
+function syncDreamRuntimeMode(state: CanvasState): void {
+  syncDreamRuntimeModeState({
+    state,
+    dreamStepId: DREAM_STEP_ID,
+    dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
+    dreamExplainerRefineMenuId: DREAM_EXPLAINER_REFINE_MENU_ID,
+    parseMenuFromContractIdForStep,
+  });
+}
+
 const wordingHelpers = createRunStepWordingHelpers({
   step0Id: STEP_0_ID,
   dreamStepId: DREAM_STEP_ID,
@@ -2145,7 +1921,7 @@ function isPristineStateForStart(s: CanvasState): boolean {
  * Specialist context block for reliability (used by Presentation and helps other steps avoid guesswork)
  */
 function buildSpecialistContextBlock(state: CanvasState): string {
-  const safe = (v: any) => String(v ?? "").replace(/\r\n/g, "\n");
+  const safe = (v: unknown) => String(v ?? "").replace(/\r\n/g, "\n");
   const last =
     state.last_specialist_result && typeof state.last_specialist_result === "object"
       ? JSON.stringify(state.last_specialist_result)
@@ -2331,7 +2107,7 @@ type RunStepBase = {
   active_specialist: string;
   text: string;
   prompt: string;
-  specialist: any;
+  specialist: Record<string, unknown>;
   registry_version: string;
   ui?: {
     action_codes?: string[];
@@ -2351,7 +2127,7 @@ type RunStepBase = {
     base_name: string;
   };
   state: CanvasState;
-  debug?: any;
+  debug?: Record<string, unknown>;
 };
 type RunStepSuccess = RunStepBase & { ok: true };
 type RunStepError = RunStepBase & { ok: false; error: Record<string, unknown> };
@@ -2389,6 +2165,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   localeHintSourceRaw === "message_detect"
     ? localeHintSourceRaw
     : "none";
+  // Runtime contract marker: BSC_WORDING_CHOICE_V2 remains the single-path runtime flag.
   const policyFlags = resolveHolisticPolicyFlags();
   const wordingChoiceEnabled = policyFlags.wordingChoiceV2;
   const motivationQuotesEnabled = policyFlags.motivationQuotesV11;
@@ -3151,144 +2928,56 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   state = await ensureLanguage(state, userMessage);
   languageResolvedThisTurn = true;
   const lang = langFromState(state);
-  const pipelineHelpers = createRunStepPipelineHelpers<RunStepSuccess | RunStepError>({
-    step0Id: STEP_0_ID,
-    dreamStepId: DREAM_STEP_ID,
-    bigwhyStepId: BIGWHY_STEP_ID,
-    strategyStepId: STRATEGY_STEP_ID,
-    dreamSpecialist: DREAM_SPECIALIST,
-    dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
-    strategySpecialist: STRATEGY_SPECIALIST,
-    dreamExplainerSwitchSelfMenuId: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
-    dreamForceRefineRoutePrefix: DREAM_FORCE_REFINE_ROUTE_PREFIX,
-    strategyConsolidateRouteToken: STRATEGY_CONSOLIDATE_ROUTE_TOKEN,
-    bigwhyMaxWords: BIGWHY_MAX_WORDS,
-    uiContractVersion: UI_CONTRACT_VERSION,
-    buildRoutingContext,
-    callSpecialistStrictSafe,
-    attachRegistryPayload,
-    normalizeEntitySpecialistResult,
-    applyCentralMetaTopicRouter,
-    normalizeNonStep0OfftopicSpecialist,
-    normalizeStep0AskDisplayContract,
-    hasValidStep0Final,
-    applyPostSpecialistStateMutations,
-    getDreamRuntimeMode,
-    isMetaOfftopicFallbackTurn,
-    shouldTreatAsStepContributingInput,
-    hasDreamSpecialistCandidate,
-    buildDreamRefineFallbackSpecialist,
-    strategyStatementsForConsolidateGuard,
-    pickBigWhyCandidate,
-    countWords,
-    buildBigWhyTooLongFeedback,
-    renderFreeTextTurnPolicy,
-    validateRenderedContractOrRecover,
-    applyUiPhaseByStep,
-    buildContractId,
-    isWordingChoiceEligibleContext,
-    buildWordingChoiceFromTurn,
-    buildWordingChoiceFromPendingSpecialist,
-    enforceDreamBuilderQuestionProgress,
-    applyMotivationQuotesContractV11,
-    buildTextForWidget,
-    pickPrompt,
-    looksLikeMetaInstruction,
-    bumpUiI18nCounter: (telemetry, key) =>
-      bumpUiI18nCounter(
-        telemetry as UiI18nTelemetryCounters | null | undefined,
-        key as keyof UiI18nTelemetryCounters
-      ),
-  });
+  const pipelinePorts: RunStepPipelinePorts<RunStepSuccess | RunStepError> = {
+    step0Id: STEP_0_ID, dreamStepId: DREAM_STEP_ID, bigwhyStepId: BIGWHY_STEP_ID, strategyStepId: STRATEGY_STEP_ID,
+    dreamSpecialist: DREAM_SPECIALIST, dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST, strategySpecialist: STRATEGY_SPECIALIST,
+    dreamExplainerSwitchSelfMenuId: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID, dreamForceRefineRoutePrefix: DREAM_FORCE_REFINE_ROUTE_PREFIX,
+    strategyConsolidateRouteToken: STRATEGY_CONSOLIDATE_ROUTE_TOKEN, bigwhyMaxWords: BIGWHY_MAX_WORDS, uiContractVersion: UI_CONTRACT_VERSION,
+    buildRoutingContext, callSpecialistStrictSafe, attachRegistryPayload, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
+    normalizeNonStep0OfftopicSpecialist, normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
+    getDreamRuntimeMode, isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate,
+    buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, pickBigWhyCandidate, countWords, buildBigWhyTooLongFeedback,
+    renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, buildContractId, isWordingChoiceEligibleContext,
+    buildWordingChoiceFromTurn, buildWordingChoiceFromPendingSpecialist, enforceDreamBuilderQuestionProgress, applyMotivationQuotesContractV11,
+    buildTextForWidget, pickPrompt, looksLikeMetaInstruction,
+    bumpUiI18nCounter: (telemetry, key) => bumpUiI18nCounter(
+      telemetry as UiI18nTelemetryCounters | null | undefined,
+      key as keyof UiI18nTelemetryCounters
+    ),
+  };
+  const pipelineHelpers = createRunStepPipelineHelpers<RunStepSuccess | RunStepError>(pipelinePorts);
 
-  const routeHelpers = createRunStepRouteHelpers<RunStepSuccess | RunStepError>({
-    step0Id: STEP_0_ID,
-    step0Specialist: STEP_0_SPECIALIST,
-    dreamStepId: DREAM_STEP_ID,
-    dreamSpecialist: DREAM_SPECIALIST,
-    dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
-    roleStepId: ROLE_STEP_ID,
-    roleSpecialist: ROLE_SPECIALIST,
-    presentationStepId: PRESENTATION_STEP_ID,
-    presentationSpecialist: PRESENTATION_SPECIALIST,
-    dreamPickOneRouteToken: DREAM_PICK_ONE_ROUTE_TOKEN,
-    roleChooseForMeRouteToken: ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN,
-    presentationMakeRouteToken: PRESENTATION_MAKE_ROUTE_TOKEN,
-    switchToSelfDreamToken: SWITCH_TO_SELF_DREAM_TOKEN,
-    dreamStartExerciseRouteToken: DREAM_START_EXERCISE_ROUTE_TOKEN,
-    wordingSelectionMessage,
-    pickPrompt,
-    buildTextForWidget,
-    applyStateUpdate,
-    setDreamRuntimeMode,
-    getDreamRuntimeMode,
-    renderFreeTextTurnPolicy,
-    validateRenderedContractOrRecover,
-    applyUiPhaseByStep,
-    ensureUiStrings,
-    ensureStartState,
-    attachRegistryPayload,
-    finalizeResponse,
-    pickDreamSuggestionFromPreviousState,
-    pickDreamCandidateFromState,
-    pickRoleSuggestionFromPreviousState,
-    hasPresentationTemplate,
-    generatePresentationPptx,
-    convertPptxToPdf,
-    convertPdfToPng,
-    cleanupOldPresentationFiles,
-    baseUrlFromEnv,
-    uiStringFromStateMap,
-    uiDefaultString,
-    buildContractId,
-    parseStep0Final,
-    step0ReadinessQuestion,
-    step0CardDescForState,
-    step0QuestionForState,
-    callSpecialistStrictSafe,
-    buildRoutingContext,
-    rememberLlmCall,
-    isUiStateHygieneSwitchV1Enabled,
-    clearStepInteractiveState,
-    bumpUiI18nCounter: (telemetry, key) =>
-      bumpUiI18nCounter(
-        telemetry as UiI18nTelemetryCounters | null | undefined,
-        key as keyof UiI18nTelemetryCounters
-      ),
-  });
+  const routePorts: RunStepRoutePorts<RunStepSuccess | RunStepError> = {
+    step0Id: STEP_0_ID, step0Specialist: STEP_0_SPECIALIST, dreamStepId: DREAM_STEP_ID, dreamSpecialist: DREAM_SPECIALIST,
+    dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST, roleStepId: ROLE_STEP_ID, roleSpecialist: ROLE_SPECIALIST,
+    presentationStepId: PRESENTATION_STEP_ID, presentationSpecialist: PRESENTATION_SPECIALIST, dreamPickOneRouteToken: DREAM_PICK_ONE_ROUTE_TOKEN,
+    roleChooseForMeRouteToken: ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, presentationMakeRouteToken: PRESENTATION_MAKE_ROUTE_TOKEN,
+    switchToSelfDreamToken: SWITCH_TO_SELF_DREAM_TOKEN, dreamStartExerciseRouteToken: DREAM_START_EXERCISE_ROUTE_TOKEN, wordingSelectionMessage,
+    pickPrompt, buildTextForWidget, applyStateUpdate, setDreamRuntimeMode, getDreamRuntimeMode, renderFreeTextTurnPolicy,
+    validateRenderedContractOrRecover, applyUiPhaseByStep, ensureUiStrings, ensureStartState, attachRegistryPayload, finalizeResponse,
+    pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState, hasPresentationTemplate,
+    generatePresentationPptx, convertPptxToPdf, convertPdfToPng, cleanupOldPresentationFiles, baseUrlFromEnv, uiStringFromStateMap,
+    uiDefaultString, buildContractId, parseStep0Final, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState,
+    callSpecialistStrictSafe, buildRoutingContext, rememberLlmCall, isUiStateHygieneSwitchV1Enabled, clearStepInteractiveState,
+    bumpUiI18nCounter: (telemetry, key) => bumpUiI18nCounter(
+      telemetry as UiI18nTelemetryCounters | null | undefined,
+      key as keyof UiI18nTelemetryCounters
+    ),
+  };
+  const routeHelpers = createRunStepRouteHelpers<RunStepSuccess | RunStepError>(routePorts);
 
-  const specialRouteResponse = await routeHelpers.handleSpecialRouteRegistry({
-    state,
-    userMessage,
-    actionCodeRaw,
-    responseUiFlags,
-    model,
-    uiI18nTelemetry,
-    transientPendingScores: transientPendingScores as number[][] | null,
-    inputMode: inputMode === "widget" ? "widget" : "chat",
-    wordingChoiceEnabled,
-    languageResolvedThisTurn,
-    isBootstrapPollCall,
-    lang,
-  });
+  const runStepContext: RunStepContext = {
+    routing: {
+      userMessage, actionCodeRaw, responseUiFlags, inputMode: inputMode === "widget" ? "widget" : "chat",
+      wordingChoiceEnabled, languageResolvedThisTurn, isBootstrapPollCall, motivationQuotesEnabled,
+    },
+    rendering: { uiI18nTelemetry, lang, ensureUiStrings },
+    state: { state, transientPendingScores: transientPendingScores as number[][] | null, submittedUserText, rawNormalized, pristineAtEntry },
+    specialist: { model, decideOrchestration, rememberLlmCall },
+  };
+
+  const specialRouteResponse = await routeHelpers.handleSpecialRouteRegistry(runStepContext);
   if (specialRouteResponse) return specialRouteResponse;
-  const pipelinePayload = await pipelineHelpers.runPostSpecialistPipeline({
-    state,
-    userMessage,
-    actionCodeRaw,
-    responseUiFlags,
-    model,
-    uiI18nTelemetry,
-    inputMode: inputMode === "widget" ? "widget" : "chat",
-    wordingChoiceEnabled,
-    motivationQuotesEnabled,
-    submittedUserText,
-    lang,
-    rawNormalized,
-    pristineAtEntry,
-    decideOrchestration,
-    ensureUiStrings,
-    rememberLlmCall,
-  });
+  const pipelinePayload = await pipelineHelpers.runPostSpecialistPipeline(runStepContext);
   return finalizeResponse(pipelinePayload);
 }
