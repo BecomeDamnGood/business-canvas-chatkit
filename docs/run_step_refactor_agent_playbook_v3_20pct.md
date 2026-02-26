@@ -85,7 +85,7 @@ If stopping at 70%, log must include:
 ```bash
 npm --prefix mcp-server run build
 node mcp-server/scripts/ui_artifact_parity_check.mjs
-node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs
+cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs
 npm --prefix mcp-server test
 ```
 
@@ -221,7 +221,7 @@ MANDATORY
 REQUIRED CHECKS
 - npm --prefix mcp-server run build
 - node mcp-server/scripts/ui_artifact_parity_check.mjs
-- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs
+- cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs
 - npm --prefix mcp-server test
 - RUN_STEP_ARCH_PHASE=phase_A npm --prefix mcp-server run arch:run-step:check
 
@@ -287,7 +287,7 @@ MANDATORY
 REQUIRED CHECKS
 - npm --prefix mcp-server run build
 - node mcp-server/scripts/ui_artifact_parity_check.mjs
-- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs
+- cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs
 - npm --prefix mcp-server test
 - RUN_STEP_ARCH_PHASE=phase_A npm --prefix mcp-server run arch:run-step:check
 
@@ -354,7 +354,7 @@ MANDATORY
 REQUIRED CHECKS
 - npm --prefix mcp-server run build
 - node mcp-server/scripts/ui_artifact_parity_check.mjs
-- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs
+- cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs
 - npm --prefix mcp-server test
 - RUN_STEP_ARCH_PHASE=phase_A npm --prefix mcp-server run arch:run-step:check
 
@@ -421,7 +421,7 @@ MANDATORY
 REQUIRED CHECKS
 - npm --prefix mcp-server run build
 - node mcp-server/scripts/ui_artifact_parity_check.mjs
-- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs
+- cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs
 - npm --prefix mcp-server test
 - RUN_STEP_ARCH_PHASE=phase_B npm --prefix mcp-server run arch:run-step:check
 
@@ -484,7 +484,7 @@ MANDATORY
 REQUIRED CHECKS
 - npm --prefix mcp-server run build
 - node mcp-server/scripts/ui_artifact_parity_check.mjs
-- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs
+- cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs
 - npm --prefix mcp-server test
 - RUN_STEP_ARCH_PHASE=phase_B npm --prefix mcp-server run arch:run-step:check
 
@@ -545,7 +545,7 @@ MANDATORY
 REQUIRED CHECKS
 - npm --prefix mcp-server run build
 - node mcp-server/scripts/ui_artifact_parity_check.mjs
-- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs
+- cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs
 - npm --prefix mcp-server test
 - RUN_STEP_ARCH_PHASE=phase_C npm --prefix mcp-server run arch:run-step:check
 
@@ -607,7 +607,7 @@ MANDATORY
 REQUIRED CHECKS
 - npm --prefix mcp-server run build
 - node mcp-server/scripts/ui_artifact_parity_check.mjs
-- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs
+- cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs
 - npm --prefix mcp-server test
 - RUN_STEP_ARCH_PHASE=phase_C npm --prefix mcp-server run arch:run-step:check
 
@@ -677,7 +677,7 @@ MANDATORY
 REQUIRED CHECKS
 - npm --prefix mcp-server run build
 - node mcp-server/scripts/ui_artifact_parity_check.mjs
-- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs
+- cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs
 - npm --prefix mcp-server test
 - RUN_STEP_ARCH_PHASE=phase_20 npm --prefix mcp-server run arch:run-step:check
 

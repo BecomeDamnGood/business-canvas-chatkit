@@ -4,14 +4,14 @@
 
 | PR | Scope Goal | Status | Commit |
 | --- | --- | --- | --- |
-| PR1 | Freeze runtime behavior/contracts with runtime goldens and contract tests | completed | pending (set by commit command) |
-| PR2 | Add runtime-first architecture checks and CI gate | completed | pending (set by commit command) |
-| PR3 | Introduce typed run-step context + ports backbone and rewire runtime/pipeline/routes wiring | completed | pending (set by commit command) |
-| PR4 | Enforce DI budget and split runtime helper factories into grouped ports/services | completed | pending (set by commit command) |
-| PR5 | Introduce TurnResponseEngine for pipeline path and complete phase_R2 runtime extraction gate | completed | pending (set by commit command) |
-| PR6 | Migrate route response assembly to TurnResponseEngine and remove duplicated route-side render/validate/finalize blocks | completed | pending (set by commit command) |
-| PR7 | Eliminate any at ingress/LLM/output boundaries with specialist schema typing + CI ratchet | completed | pending (set by commit command) |
-| PR8 | Runtime orchestration layering, KPI convergence, and phase_R4 runtime gates | completed | pending (set by commit command) |
+| PR1 | Freeze runtime behavior/contracts with runtime goldens and contract tests | completed | `24bf58b` |
+| PR2 | Add runtime-first architecture checks and CI gate | completed | `62a0b00` |
+| PR3 | Introduce typed run-step context + ports backbone and rewire runtime/pipeline/routes wiring | completed | `c2c1e47` |
+| PR4 | Enforce DI budget and split runtime helper factories into grouped ports/services | completed | `c27b880` |
+| PR5 | Introduce TurnResponseEngine for pipeline path and complete phase_R2 runtime extraction gate | completed | `be3ead7` |
+| PR6 | Migrate route response assembly to TurnResponseEngine and remove duplicated route-side render/validate/finalize blocks | completed | `42c18e5` |
+| PR7 | Eliminate any at ingress/LLM/output boundaries with specialist schema typing + CI ratchet | completed | `758b7c3` |
+| PR8 | Runtime orchestration layering, KPI convergence, and phase_R4 runtime gates | completed | `a714fb1` |
 
 ## Entry Template
 
@@ -58,7 +58,7 @@
   - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `0`
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `3294`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `370`
-- commit hash: be3ead7fdf2197ee775c4e9e6703861cc5ba9e68
+- commit hash: 24bf58b
 
 ### PR2 - 2026-02-26
 - status: completed
@@ -89,7 +89,7 @@
   - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `0`
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `3294`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `370`
-- commit hash: 42c18e5cf3452afebfbf94514e7a83939d3f36cb
+- commit hash: 62a0b00
 
 ### PR3 - 2026-02-26
 - status: completed
@@ -125,7 +125,7 @@
   - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `20`
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2983`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `300`
-- commit hash: pending (captured after commit command)
+- commit hash: c2c1e47
 
 ### PR4 - 2026-02-26
 - status: completed
@@ -161,7 +161,7 @@
   - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `1`
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2979`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `300`
-- commit hash: pending (captured after commit command)
+- commit hash: c27b880
 
 ### PR5 - 2026-02-26
 - status: completed
@@ -201,7 +201,7 @@
   - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `43`
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2497`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `150`
-- commit hash: pending (captured after commit command)
+- commit hash: be3ead7
 
 ### PR6 - 2026-02-26
 - status: completed
@@ -244,7 +244,7 @@
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2497`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `125`
   - `DI factories >12 deps` => `0`
-- commit hash: pending (captured after commit command)
+- commit hash: 42c18e5
 
 ### PR7 - 2026-02-26
 - status: completed
@@ -291,7 +291,7 @@
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2507`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `0`
   - `rg -n "\\bany\\b" mcp-server/src/handlers --glob '*.ts' | wc -l` => `580` (from `706`, script baseline `HEAD~1`)
-- commit hash: pending (captured after commit command)
+- commit hash: 758b7c3
 
 ### PR8 - 2026-02-26
 - status: completed
@@ -352,4 +352,4 @@
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `0`
   - `scoped changed files count` => `12`
   - `note` => `global git diff counts include pre-existing local edits outside PR8 scope`
-- commit hash: a714fb1f5e23d8c465f6f90d70f4f86377f4a2c4
+- commit hash: a714fb1

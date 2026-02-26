@@ -37,8 +37,20 @@ Doel: actueel overzicht van contracten met owner, versie, enforcement en compat-
 | Structured turn payload (`StructuredTurnPayloadZod`) | UI content contract | `mcp-server/src/contracts/ui_actions.ts` | Geen expliciete versie | Zod object met optionele `uiHints` | `Partieel BC` | Additieve velden mogelijk; required velden blijven strict. |
 | MCP `run_step` input (`RunStepInputSchema`) | MCP tool API input | `mcp-server/server.ts`, `mcp-server/src/handlers/ingress.ts` | Impliciet (release) | `RunStepArgsSchema.extend(...)`; state-canonicalization via `canonicalizeStateForRunStepArgs` | `Partieel BC` | Ingress is SSOT voor transient allowlist + idempotency-key normalisatie. |
 | MCP `run_step` output (`ToolStructuredContentOutputSchema`) | MCP tool API output | `mcp-server/server.ts` | `model_result_shape_version = "v2_minimal"` binnen result | MCP SDK `validateToolOutput()` + expliciete parse op lokale `/run_step` bridge (`ToolStructuredContentOutputSchema.parse`) | `Partieel BC` | Basisminima strict, extra velden toegestaan; transport-pariteit afgedwongen. |
+| Widget render-state SSOT (`_meta.widget_result` + ordering tuple) | UI render authority contract | `mcp-server/server.ts`, `mcp-server/ui/lib/locale_bootstrap_runtime.ts` | Impliciet (ADR-006 policy) | Contract-tests voor payload-source autoriteit en ordering tuple; fail-closed bij missende/corrupte authority source | `Partieel BC` | Legacy `root.result` alleen tijdelijk tijdens migratie; nooit truth-source na uitfasering. |
 | View/bootstrap diagnostics contract (`view_contract_version`) | Runtime diagnostics contract | `mcp-server/src/core/bootstrap_runtime.ts` + `mcp-server/server.ts` | `VIEW_CONTRACT_VERSION = "v3_ssot_rigid"` | `attachBootstrapDiagnostics()` zet versie in `state` + `ui.flags` | `Partieel BC` | Contract is operationeel, maar formele compatmatrix ontbreekt. |
 | `run_step` idempotency/replay ownership | Runtime execution contract | `mcp-server/server.ts` (owner), `mcp-server/src/handlers/run_step_runtime.ts` (fallback buiten server-owned calls) | Impliciet (release) | Server markeert `__idempotency_registry_owner="server"`; runtime registry checkt alleen als owner niet server is | `Partieel BC` | Voorkomt dubbele registry-handhaving op MCP/local-dev server-pad, behoudt directe-runtime compat. |
+
+## Operationele telemetry-koppeling (playbook)
+
+Voor on-call incidentdetectie op contractbreuk gelden minimaal deze events/ratio's:
+
+- `run_step_response` (succesvolume en accept reason-codes)
+- `run_step_error` (foutvolume + error classificatie)
+- `stale_bootstrap_payload_dropped` (ordering/concurrency drift)
+- `unknown_action_code` (registry/UI contract drift)
+
+Referentie playbook: [docs/operations_failure_playbook.md](../../../docs/operations_failure_playbook.md)
 
 ## Infra verificatie (Agent 6C)
 
@@ -55,7 +67,8 @@ Doel: actueel overzicht van contracten met owner, versie, enforcement en compat-
 
 ## Onzekerheden / blockers (actueel)
 
-- `Onzeker / te checken`: consumers buiten `mcp-server` die contractwaarden hardcoderen zijn niet in deze scope meegenomen.
+- Repo-lokale scan (2026-02-26): buiten `mcp-server` zijn alleen documentatie-referenties gevonden, geen extra runtime-consumer codepaden.
+- `Onzeker / te checken`: consumers buiten deze repository blijven onbekend en vragen aparte inventarisatie.
 
 ## Handoff naar 6B (ADR-koppeling)
 
@@ -81,3 +94,4 @@ Overkoepelende mapping: [docs/inventory/contract-adr-inventory.md](../../../docs
 | `run_step` idempotency/replay | [ADR-003](../../../docs/adr/ADR-003-run-step-idempotency-replay.md) |
 | Bootstrap/session ordering concurrency | [ADR-004](../../../docs/adr/ADR-004-bootstrap-session-concurrency.md) |
 | SSOT governance action/menu/step-final | [ADR-005](../../../docs/adr/ADR-005-ssot-actioncode-governance.md) |
+| Widget render-state authority (`_meta.widget_result`) | [ADR-006](../../../docs/adr/ADR-006-widget-result-ssot.md) |

@@ -16,14 +16,14 @@ Program source:
 
 | PR | Title | Status | run_step.ts LOC before | run_step.ts LOC after | Commit on main |
 | --- | --- | --- | --- | --- | --- |
-| PR1 | Guardrails to 20 percent target | completed | 5854 | 5854 | pending_in_current_workspace |
-| PR2 | i18n/bootstrap extraction | completed | 5854 | 5360 | pending_in_current_workspace |
-| PR3 | Response/fail-closed extraction | completed | 5360 | 5289 | pending_in_current_workspace |
-| PR4 | Policy/meta-topic extraction | completed | 5289 | 4580 | pending_in_current_workspace |
-| PR5 | Step0 + wording heuristics extraction | completed | 4580 | 3905 | pending_in_current_workspace |
-| PR6 | Presentation + preflight extraction | completed | 3905 | 3338 | pending_in_current_workspace |
-| PR7 | Facade boundary collapse + test decoupling | completed | 3338 | 3294 | pending_in_current_workspace |
-| PR8 | Final convergence to <=20 percent | completed | 3294 | 13 | pending_in_current_workspace |
+| PR1 | Guardrails to 20 percent target | completed | 5854 | 5854 | `f5bbb49` |
+| PR2 | i18n/bootstrap extraction | completed | 5854 | 5360 | `70581aa` |
+| PR3 | Response/fail-closed extraction | completed | 5360 | 5289 | `5bc9694` |
+| PR4 | Policy/meta-topic extraction | completed | 5289 | 4580 | `1b23781` |
+| PR5 | Step0 + wording heuristics extraction | completed | 4580 | 3905 | `d1660a9` |
+| PR6 | Presentation + preflight extraction | completed | 3905 | 3338 | `3024dde` |
+| PR7 | Facade boundary collapse + test decoupling | completed | 3338 | 3294 | `7e2f95c` (closed in `d8dc880`) |
+| PR8 | Final convergence to <=20 percent | completed | 3294 | 13 | `d8dc880` |
 
 ---
 
@@ -82,7 +82,7 @@ run_step.ts LOC:
 - before: 5854
 - after: 5854
 Commit:
-- pending_in_current_workspace
+- n/a (program setup log bootstrap)
 
 ## PR6 - Presentation + preflight extraction
 Date: 2026-02-26 10:06 CET
@@ -120,11 +120,11 @@ run_step.ts LOC:
 - before: 3905
 - after: 3338
 Commit:
-- pending_in_current_workspace
+- 3024dde
 
 ## PR7 - Facade boundary collapse + test decoupling
 Date: 2026-02-26 10:14 CET
-Status: paused_at_70
+Status: completed (closed in PR8)
 Scope goal:
 - Collapse `run_step.ts` facade imports behind a local dependency module and decouple tests from facade-owned helper exports without changing runtime behavior.
 Completed:
@@ -136,13 +136,7 @@ Completed:
 - Reduced facade compatibility exports in `run_step.ts` by removing test-facing exports for `applyStateUpdate`, `pickDualChoiceSuggestion`, and `resolveActionCodeMenuTransition`.
 - 70% rule metrics before decision: files=6, adds+dels=214, `run_step.ts` hunks=4, `run_step.ts` LOC=3294.
 Pending:
-- Migrate remaining `run_step_finals.test.ts` helper imports off `./run_step.js`:
-  - `isWordingChoiceEligibleStep`, `isWordingChoiceEligibleContext`, `isListChoiceScope`, `buildWordingChoiceFromTurn`, `stripUnsupportedReformulationClaims`
-  - `applyMotivationQuotesContractV11`, `applyCentralMetaTopicRouter`, `normalizeNonStep0OfftopicSpecialist`
-  - `normalizeStep0AskDisplayContract`, `normalizeStep0OfftopicToAsk`
-  - `buildTextForWidget`, `pickPrompt`, `informationalActionMutatesProgress`, `isMetaOfftopicFallbackTurn`, `RECAP_INSTRUCTION`
-- Add owning-module default composition exports for wording/policy-meta/step0 helper clusters (or equivalent), then switch tests to those modules.
-- Remove any additional facade compatibility exports in `run_step.ts` once tests no longer import them.
+- None. Remaining TODO from 70%-handoff is afgerond in PR8 (`d8dc880`).
 Changed files:
 - mcp-server/src/handlers/run_step.ts
 - mcp-server/src/handlers/run_step_ui_payload.ts
@@ -169,15 +163,13 @@ run_step.ts LOC:
   - Import-boundary collapse for facade via `run_step_dependencies.ts`.
   - Partial test decoupling for state-update + wording-heuristics + ui transition helpers.
 - Remaining exact TODO for next agent:
-  - Create owning-module default helper compositions for wording + policy-meta + step0 clusters and migrate remaining `run_step_finals.test.ts` imports off `run_step.ts`.
-  - Remove corresponding compatibility exports from `run_step.ts` after import migration.
-  - Re-run mandatory checks and append PR7 completion log entry.
+  - resolved in PR8 (`d8dc880`)
 - First commands for next agent:
   - `rg -n "from \"\\.\\/run_step\\.js\"" mcp-server/src/handlers/run_step_finals.test.ts`
   - `sed -n '1,120p' mcp-server/src/handlers/run_step_finals.test.ts`
   - `rg -n "export const (isWordingChoiceEligibleStep|buildWordingChoiceFromTurn|applyMotivationQuotesContractV11|normalizeStep0AskDisplayContract)" mcp-server/src/handlers/run_step.ts`
 Commit:
-- pending_in_current_workspace
+- 7e2f95c (closure in d8dc880)
 
 ## PR8 - Final convergence to <=20 percent
 Date: 2026-02-26 10:22 CET
@@ -220,7 +212,7 @@ run_step.ts LOC:
 - before: 3294
 - after: 13
 Commit:
-- pending_in_current_workspace
+- d8dc880
 
 ## PR5 - Step0 + wording heuristics extraction
 Date: 2026-02-26 09:55 CET
@@ -258,7 +250,7 @@ run_step.ts LOC:
 - before: 4580
 - after: 3905
 Commit:
-- pending_in_current_workspace
+- d1660a9
 
 ## PR3 - Response/fail-closed extraction
 Date: 2026-02-26 09:37 CET
@@ -292,7 +284,7 @@ run_step.ts LOC:
 - before: 5360
 - after: 5289
 Commit:
-- pending_in_current_workspace
+- 5bc9694
 
 ## PR2 - i18n/bootstrap extraction
 Date: 2026-02-26 09:32 CET
@@ -322,7 +314,7 @@ run_step.ts LOC:
 - before: 5854
 - after: 5360
 Commit:
-- pending_in_current_workspace
+- 70581aa
 
 ## PR1 - Guardrails to 20 percent target
 Date: 2026-02-26 09:24 CET
@@ -357,7 +349,7 @@ run_step.ts LOC:
 - before: 5854
 - after: 5854
 Commit:
-- pending_in_current_workspace
+- f5bbb49
 
 ## PR4 - Policy/meta-topic extraction
 Date: 2026-02-26 09:45 CET
@@ -395,4 +387,4 @@ run_step.ts LOC:
 - before: 5289
 - after: 4580
 Commit:
-- pending_in_current_workspace
+- 1b23781

@@ -23,3 +23,11 @@
 - If `ui.action_codes` is missing or count mismatch: user sees "We can't safely display these options right now. Please try again." and no buttons are rendered.
 - Log events for diagnosis: `[menu_contract_missing]`, `[actioncodes_missing]`, `[actioncodes_count_mismatch]`.
 - Shadow-compare telemetry (`?debug_actioncodes=1`) removed (no legacy mapping to compare).
+
+## Rollout notes: stale ingest + stale rebase (Step 7)
+- New server rollout flags:
+  - `RUN_STEP_STALE_INGEST_GUARD_V1` (default `false`)
+  - `RUN_STEP_STALE_REBASE_V1` (default `false`, only effective when ingest guard is `true`)
+- Current safe baseline remains both flags `false` until canary enable.
+- Validate live flag state via `GET /diagnostics` under `runtime.rollout_flags`.
+- If `runtime.rollout_flags` is absent on an older live build, use `aws apprunner describe-service` and read `RuntimeEnvironmentVariables`.
