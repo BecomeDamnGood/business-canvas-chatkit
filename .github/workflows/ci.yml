@@ -66,6 +66,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -156,6 +158,10 @@ jobs:
       - name: Run-step DI budget guardrails
         working-directory: mcp-server
         run: npm run arch:run-step:di-budget
+
+      - name: Run-step any budget guardrails
+        working-directory: mcp-server
+        run: npm run arch:run-step:any-budget
 
       - name: Test
         working-directory: mcp-server

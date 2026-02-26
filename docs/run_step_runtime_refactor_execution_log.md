@@ -9,6 +9,8 @@
 | PR3 | Introduce typed run-step context + ports backbone and rewire runtime/pipeline/routes wiring | completed | pending (set by commit command) |
 | PR4 | Enforce DI budget and split runtime helper factories into grouped ports/services | completed | pending (set by commit command) |
 | PR5 | Introduce TurnResponseEngine for pipeline path and complete phase_R2 runtime extraction gate | completed | pending (set by commit command) |
+| PR6 | Migrate route response assembly to TurnResponseEngine and remove duplicated route-side render/validate/finalize blocks | completed | pending (set by commit command) |
+| PR7 | Eliminate any at ingress/LLM/output boundaries with specialist schema typing + CI ratchet | completed | pending (set by commit command) |
 
 ## Entry Template
 
@@ -241,4 +243,51 @@
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2497`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `125`
   - `DI factories >12 deps` => `0`
+- commit hash: pending (captured after commit command)
+
+### PR7 - 2026-02-26
+- status: completed
+- capacity budget:
+  - target: 70%
+  - observed: 69%
+- scope goal: Eliminate `any` in runtime/routes/pipeline boundaries with specialist-output typing and enforce PR-by-PR any ratchet in CI.
+- completed:
+  - Added specialist schema registry + inferred type surface in `run_step_specialist_types.ts` using step `zod` schemas.
+  - Added shared guard helpers in `run_step_type_guards.ts` and rewired pipeline to use guard-based narrowing (`unknown -> record/string[]/bool`).
+  - Updated runtime specialist boundary (`callSpecialistStrictSafe`) to parse specialist payloads through schema-by-specialist dispatch before route/pipeline consumption.
+  - Removed `any` usage from `run_step_pipeline.ts` and `run_step_routes.ts`; runtime/routes/pipeline aggregate dropped to `0`.
+  - Added CI ratchet script `run_step_any_budget_check.mjs` enforcing:
+    - no newly-added `any` lines in `src/handlers`
+    - handlers-wide `any` count must decrease vs baseline ref
+    - runtime/routes/pipeline `any` limit (`<=140`)
+  - Wired ratchet to `package.json` and `.github/workflows/ci.yml`.
+  - Updated source-contract assertion in `run_step_finals.test.ts` for the stricter non-`any` route-state cast pattern.
+- pending:
+  - None.
+- changed files:
+  - mcp-server/src/handlers/run_step_specialist_types.ts
+  - mcp-server/src/handlers/run_step_type_guards.ts
+  - mcp-server/src/handlers/run_step_runtime.ts
+  - mcp-server/src/handlers/run_step_routes.ts
+  - mcp-server/src/handlers/run_step_pipeline.ts
+  - mcp-server/scripts/arch/run_step_any_budget_check.mjs
+  - mcp-server/package.json
+  - .github/workflows/ci.yml
+  - mcp-server/src/handlers/run_step_finals.test.ts
+  - docs/run_step_runtime_refactor_execution_log.md
+- tests:
+  - `npm --prefix mcp-server run build` (pass)
+  - `node mcp-server/scripts/ui_artifact_parity_check.mjs` (pass)
+  - `node --loader ts-node/esm scripts/contract-smoke.mjs` (workdir `mcp-server`) (pass)
+  - `npm --prefix mcp-server test` (pass)
+  - `npm --prefix mcp-server run arch:run-step:any-budget` (pass)
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R3 npm --prefix mcp-server run arch:run-step-runtime:check` (fail: LOC gate `2507 > 2100`, expected outside this PR scope)
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R0 npm --prefix mcp-server run arch:run-step-runtime:check` (pass)
+- metrics:
+  - `git diff --name-only | wc -l` => `8`
+  - `git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}'` => `adds=196 dels=172 total=368`
+  - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `2`
+  - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2507`
+  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `0`
+  - `rg -n "\\bany\\b" mcp-server/src/handlers --glob '*.ts' | wc -l` => `580` (from `706`, script baseline `HEAD~1`)
 - commit hash: pending (captured after commit command)

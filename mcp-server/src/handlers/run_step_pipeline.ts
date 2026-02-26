@@ -8,6 +8,12 @@ import {
 import type { RunStepPipelinePorts } from "./run_step_ports.js";
 import type { TurnResponseRenderFailureContext } from "./run_step_turn_response_engine.js";
 import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
+import {
+  asRecord,
+  asStateRecord,
+  isTrueFlag,
+  readStringArray,
+} from "./run_step_type_guards.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 type RunStepPipelineFlatPorts<TPayload> =
@@ -133,19 +139,20 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     params.rememberLlmCall(call1.value);
 
     let attempts = call1.value.attempts;
-    let specialistResult: any = call1.value.specialistResult;
+    let specialistResult = asRecord(call1.value.specialistResult);
+    const stateRecord = asStateRecord(state);
 
     if (
       decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
-      specialistResult &&
-      String(specialistResult.scoring_phase ?? "") === "true" &&
-      (!Array.isArray(specialistResult.statements) || specialistResult.statements.length === 0)
+      isTrueFlag(specialistResult.scoring_phase) &&
+      readStringArray(specialistResult.statements).length === 0
     ) {
-      const prevStatements = Array.isArray((state as any).dream_builder_statements)
-        ? (state as any).dream_builder_statements
-        : Array.isArray((state as any).last_specialist_result?.statements)
-          ? (state as any).last_specialist_result.statements
-          : [];
+      const prevStatements = (() => {
+        const canonical = readStringArray(stateRecord.dream_builder_statements);
+        if (canonical.length > 0) return canonical;
+        const previousSpecialist = asRecord(stateRecord.last_specialist_result);
+        return readStringArray(previousSpecialist.statements);
+      })();
       if (prevStatements.length > 0) {
         specialistResult = { ...specialistResult, statements: prevStatements };
       }
@@ -153,10 +160,9 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
 
     if (
       decision1.specialist_to_call === deps.dreamExplainerSpecialist &&
-      specialistResult &&
-      String(specialistResult.scoring_phase ?? "") === "true"
+      isTrueFlag(specialistResult.scoring_phase)
     ) {
-      const stmtCount = Array.isArray(specialistResult.statements) ? specialistResult.statements.length : 0;
+      const stmtCount = readStringArray(specialistResult.statements).length;
       if (stmtCount < 20) {
         specialistResult = {
           ...specialistResult,
@@ -167,28 +173,21 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     }
     if (decision1.specialist_to_call === deps.dreamExplainerSpecialist) {
       const modeAtTurnStart = deps.getDreamRuntimeMode(state);
-      const previousCanonicalCount = Array.isArray((state as any).dream_builder_statements)
-        ? ((state as any).dream_builder_statements as unknown[]).length
-        : 0;
-      const currentStatementCount = Array.isArray(specialistResult?.statements)
-        ? (specialistResult.statements as unknown[]).length
-        : 0;
+      const previousCanonicalCount = readStringArray(stateRecord.dream_builder_statements).length;
+      const currentStatementCount = readStringArray(specialistResult.statements).length;
       const effectiveStatementCount = Math.max(previousCanonicalCount, currentStatementCount);
-      const scoringPhase = String(specialistResult?.scoring_phase ?? "") === "true";
-      const hasClusters =
-        Array.isArray(specialistResult?.clusters) &&
-        (specialistResult.clusters as unknown[]).length > 0;
+      const scoringPhase = isTrueFlag(specialistResult.scoring_phase);
+      const hasClusters = Array.isArray(specialistResult.clusters) && specialistResult.clusters.length > 0;
       if (
         (modeAtTurnStart === "builder_collect" || modeAtTurnStart === "builder_scoring") &&
         effectiveStatementCount >= 20 &&
         (!scoringPhase || !hasClusters)
       ) {
-        const specialistSnapshot =
-          specialistResult && typeof specialistResult === "object" ? specialistResult : {};
+        const specialistSnapshot = asRecord(specialistResult);
         return buildFinalizedContractViolationPayload({
           state,
           stepId: String(state.current_step || ""),
-          activeSpecialist: String((state as any).active_specialist || ""),
+          activeSpecialist: String(stateRecord.active_specialist || ""),
           specialistSnapshot,
           message: "DreamBuilder reached scoring threshold without scoring view.",
           reason: "dreambuilder_scoring_required_after_threshold",
@@ -227,7 +226,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         if (callRepair.ok) {
           params.rememberLlmCall(callRepair.value);
           attempts = Math.max(attempts, callRepair.value.attempts);
-          const repaired = callRepair.value.specialistResult;
+          const repaired = asRecord(callRepair.value.specialistResult);
           const repairedOfftopic =
             repaired?.is_offtopic === true ||
             String(repaired?.is_offtopic || "").trim().toLowerCase() === "true";
@@ -264,7 +263,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         if (!repairCall.ok) return finalizePipelinePayload(repairCall.payload);
         params.rememberLlmCall(repairCall.value);
         attempts = Math.max(attempts, repairCall.value.attempts);
-        specialistResult = repairCall.value.specialistResult;
+        specialistResult = asRecord(repairCall.value.specialistResult);
       }
 
       const repairedOfftopic =
@@ -272,12 +271,11 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
       const repairedCount = deps.strategyStatementsForConsolidateGuard(specialistResult, state).length;
       if (!repairedOfftopic && repairedCount > 7) {
-        const specialistSnapshot =
-          specialistResult && typeof specialistResult === "object" ? specialistResult : {};
+        const specialistSnapshot = asRecord(specialistResult);
         return buildFinalizedContractViolationPayload({
           state,
           stepId: String(state.current_step || ""),
-          activeSpecialist: String((state as any).active_specialist || ""),
+          activeSpecialist: String(stateRecord.active_specialist || ""),
           specialistSnapshot,
           message: "Strategy consolidate route returned more than 7 focus points.",
           reason: "strategy_consolidate_overflow_after_repair",
@@ -305,7 +303,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         if (!callShorten.ok) return finalizePipelinePayload(callShorten.payload);
         params.rememberLlmCall(callShorten.value);
         attempts = Math.max(attempts, callShorten.value.attempts);
-        specialistResult = callShorten.value.specialistResult;
+        specialistResult = asRecord(callShorten.value.specialistResult);
         const shortened = deps.pickBigWhyCandidate(specialistResult);
         if (!shortened || deps.countWords(shortened) > deps.bigwhyMaxWords) {
           specialistResult = deps.buildBigWhyTooLongFeedback(state);
@@ -316,8 +314,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     specialistResult = deps.normalizeEntitySpecialistResult(String(decision1.current_step || ""), specialistResult);
     specialistResult = deps.applyCentralMetaTopicRouter({
       stepId: String(decision1.current_step || ""),
-      specialistResult: (specialistResult || {}) as Record<string, unknown>,
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+      specialistResult: asRecord(specialistResult),
+      previousSpecialist: asRecord(stateRecord.last_specialist_result),
       state,
     });
     const currentStepIdForOfftopic = String(decision1.current_step || "");
@@ -333,22 +331,22 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       activeSpecialist: currentSpecialistId,
       userMessage,
       specialistResult,
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+      previousSpecialist: asRecord(asStateRecord(state).last_specialist_result),
       state,
     });
     if (currentStepIdForOfftopic === deps.step0Id) {
-      const sourceActionStep0 = String((specialistResult as any)?.action || "").trim().toUpperCase();
+      const sourceActionStep0 = String(specialistResult.action || "").trim().toUpperCase();
       specialistResult = deps.normalizeStep0AskDisplayContract(
         deps.step0Id,
         specialistResult,
         state,
         userMessage
       );
-      const normalizedActionStep0 = String((specialistResult as any)?.action || "").trim().toUpperCase();
+      const normalizedActionStep0 = String(specialistResult.action || "").trim().toUpperCase();
       if (
         sourceActionStep0 === "ESCAPE" &&
         normalizedActionStep0 === "ASK" &&
-        deps.hasValidStep0Final(String((state as any).step_0_final || ""))
+        deps.hasValidStep0Final(String(asStateRecord(state).step_0_final || ""))
       ) {
         deps.bumpUiI18nCounter(params.uiI18nTelemetry, "step0_escape_ready_recovered_count");
       }
@@ -368,8 +366,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     let contractMetaOverride: UiContractMeta | null = null;
     const initialRender = deps.turnResponseEngine.renderValidateRecover({
       state: nextState,
-      specialist: (specialistResult || {}) as Record<string, unknown>,
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+      specialist: asRecord(specialistResult),
+      previousSpecialist: asRecord(asStateRecord(state).last_specialist_result),
       telemetry: params.uiI18nTelemetry,
       onContractViolation: buildRenderedContractViolationPayload,
     });
@@ -383,21 +381,21 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     let requireWordingPick = false;
 
     const isDreamExplainerOfftopicTurn =
-      String((nextState as any).current_step || "") === deps.dreamStepId &&
-      String((nextState as any).active_specialist || "") === deps.dreamExplainerSpecialist &&
+      String(asStateRecord(nextState).current_step || "") === deps.dreamStepId &&
+      String(asStateRecord(nextState).active_specialist || "") === deps.dreamExplainerSpecialist &&
       (specialistResult?.is_offtopic === true ||
         String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true");
     if (isDreamExplainerOfftopicTurn) {
-      const previousSpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+      const previousSpecialist = asRecord(asStateRecord(state).last_specialist_result);
       specialistResult = deps.normalizeNonStep0OfftopicSpecialist({
-        stepId: String((nextState as any).current_step || ""),
-        activeSpecialist: String((nextState as any).active_specialist || ""),
+        stepId: String(asStateRecord(nextState).current_step || ""),
+        activeSpecialist: String(asStateRecord(nextState).active_specialist || ""),
         userMessage,
         specialistResult,
         previousSpecialist,
         state: nextState,
       });
-      const currentStepId = String((nextState as any).current_step || "");
+      const currentStepId = String(asStateRecord(nextState).current_step || "");
       const offTopicContractId = deps.buildContractId(
         currentStepId,
         renderedStatusForPolicy,
@@ -406,8 +404,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       deps.applyUiPhaseByStep(nextState, currentStepId, offTopicContractId);
       const rerender = deps.turnResponseEngine.renderValidateRecover({
         state: nextState,
-        specialist: (specialistResult || {}) as Record<string, unknown>,
-        previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+        specialist: asRecord(specialistResult),
+        previousSpecialist: asRecord(asStateRecord(state).last_specialist_result),
         telemetry: params.uiI18nTelemetry,
         onContractViolation: buildRenderedContractViolationPayload,
       });
@@ -419,9 +417,9 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       renderedActionsOverride = rerender.value.renderedActions;
       contractMetaOverride = rerender.value.contractMeta;
     }
-    const currentStepForWordingChoice = String((nextState as any).current_step || "");
-    const currentSpecialistForWordingChoice = String((nextState as any).active_specialist || "");
-    const previousSpecialistForWordingChoice = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+    const currentStepForWordingChoice = String(asStateRecord(nextState).current_step || "");
+    const currentSpecialistForWordingChoice = String(asStateRecord(nextState).active_specialist || "");
+    const previousSpecialistForWordingChoice = asRecord(asStateRecord(state).last_specialist_result);
     const dreamRuntimeModeForWording = deps.getDreamRuntimeMode(nextState);
     const isCurrentTurnOfftopic =
       specialistResult?.is_offtopic === true ||
@@ -429,8 +427,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const eligibleForWordingChoiceTurn = deps.isWordingChoiceEligibleContext(
       currentStepForWordingChoice,
       currentSpecialistForWordingChoice,
-      (specialistResult || {}) as Record<string, unknown>,
-      ((state as any).last_specialist_result || {}) as Record<string, unknown>,
+      asRecord(specialistResult),
+      asRecord(asStateRecord(state).last_specialist_result),
       dreamRuntimeModeForWording
     );
     const userTextForWordingChoice = (() => {
@@ -447,7 +445,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       params.inputMode === "widget" &&
       eligibleForWordingChoiceTurn &&
       !isCurrentTurnOfftopic &&
-      String((specialistResult as any)?.wording_choice_pending || "") !== "true"
+      !isTrueFlag(specialistResult.wording_choice_pending)
     ) {
       const rebuilt = deps.buildWordingChoiceFromTurn({
         stepId: currentStepForWordingChoice,
@@ -460,21 +458,21 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       });
       specialistResult = rebuilt.specialist;
     }
-    (nextState as any).last_specialist_result = specialistResult;
+    asStateRecord(nextState).last_specialist_result = specialistResult;
     if (params.wordingChoiceEnabled && params.inputMode === "widget") {
       const pendingEligible = deps.isWordingChoiceEligibleContext(
-        String((nextState as any).current_step || ""),
-        String((nextState as any).active_specialist || ""),
-        (specialistResult || {}) as Record<string, unknown>,
+        String(asStateRecord(nextState).current_step || ""),
+        String(asStateRecord(nextState).active_specialist || ""),
+        asRecord(specialistResult),
         previousSpecialistForWordingChoice,
         dreamRuntimeModeForWording
       );
       const pendingChoice = pendingEligible
         ? deps.buildWordingChoiceFromPendingSpecialist(
             specialistResult,
-            String((nextState as any).active_specialist || ""),
+            String(asStateRecord(nextState).active_specialist || ""),
             previousSpecialistForWordingChoice,
-            String((nextState as any).current_step || ""),
+            String(asStateRecord(nextState).current_step || ""),
             dreamRuntimeModeForWording
           )
         : null;
@@ -487,12 +485,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     }
 
     const canonicalDreamBuilderStatementsCount =
-      Array.isArray((nextState as any).dream_builder_statements)
-        ? ((nextState as any).dream_builder_statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
-        : 0;
+      readStringArray(asStateRecord(nextState).dream_builder_statements).length;
     specialistResult = deps.enforceDreamBuilderQuestionProgress(specialistResult, {
-      currentStepId: String((nextState as any).current_step || ""),
-      activeSpecialist: String((nextState as any).active_specialist || ""),
+      currentStepId: String(asStateRecord(nextState).current_step || ""),
+      activeSpecialist: String(asStateRecord(nextState).active_specialist || ""),
       canonicalStatementCount: canonicalDreamBuilderStatementsCount,
       wordingChoicePending: requireWordingPick || Boolean(wordingChoiceOverride?.enabled),
       state: nextState,
@@ -500,10 +496,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     if (!requireWordingPick && !wordingChoiceOverride?.enabled) {
       const motivationApplied = deps.applyMotivationQuotesContractV11({
         enabled: params.motivationQuotesEnabled,
-        stepId: String((nextState as any).current_step || ""),
+        stepId: String(asStateRecord(nextState).current_step || ""),
         userMessage,
         renderedStatus: renderedStatusForPolicy,
-        specialistResult: (specialistResult || {}) as Record<string, unknown>,
+        specialistResult: asRecord(specialistResult),
         previousSpecialist: previousSpecialistForWordingChoice,
         state: nextState,
         requireWordingPick,
@@ -514,25 +510,23 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         renderedActionsOverride = [];
       }
     }
-    (nextState as any).last_specialist_result = specialistResult;
+    asStateRecord(nextState).last_specialist_result = specialistResult;
 
-    const currentStepForContract = String((nextState as any).current_step ?? "");
-    const specialistContractId = String((specialistResult as any)?.ui_contract_id || "").trim();
+    const currentStepForContract = String(asStateRecord(nextState).current_step ?? "");
+    const specialistContractId = String(specialistResult.ui_contract_id || "").trim();
     if (currentStepForContract && specialistContractId) {
       deps.applyUiPhaseByStep(nextState, currentStepForContract, specialistContractId);
       if (!contractMetaOverride?.contractId) {
         contractMetaOverride = {
           contractId: specialistContractId,
-          contractVersion: String((specialistResult as any)?.ui_contract_version || deps.uiContractVersion),
-          textKeys: Array.isArray((specialistResult as any)?.ui_text_keys)
-            ? (specialistResult as any)?.ui_text_keys
-            : [],
+          contractVersion: String(specialistResult.ui_contract_version || deps.uiContractVersion),
+          textKeys: readStringArray(specialistResult.ui_text_keys),
         };
       }
     }
 
-    if (showSessionIntro === "true" && String((nextState as any).intro_shown_session) !== "true") {
-      (nextState as any).intro_shown_session = "true";
+    if (showSessionIntro === "true" && String(asStateRecord(nextState).intro_shown_session) !== "true") {
+      asStateRecord(nextState).intro_shown_session = "true";
     }
 
     const mergedFlags = {

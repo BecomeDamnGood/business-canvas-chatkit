@@ -17,7 +17,8 @@
     "arch:run-step-runtime:loc": "node scripts/arch/run_step_runtime_loc_check.mjs",
     "arch:run-step-runtime:boundary": "node scripts/arch/run_step_runtime_boundary_check.mjs",
     "arch:run-step-runtime:complexity": "node scripts/arch/run_step_runtime_complexity_check.mjs",
-    "arch:run-step-runtime:check": "npm run arch:run-step-runtime:loc && npm run arch:run-step-runtime:boundary && npm run arch:run-step-runtime:complexity"
+    "arch:run-step-runtime:check": "npm run arch:run-step-runtime:loc && npm run arch:run-step-runtime:boundary && npm run arch:run-step-runtime:complexity",
+    "arch:run-step:any-budget": "node scripts/arch/run_step_any_budget_check.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",

@@ -2513,7 +2513,10 @@ test("Dream readiness guard accepts explicit start-exercise route in widget mode
   assert.match(runStepSource, /handleSpecialRouteRegistry\(/);
   assert.match(routesSource, /dream_start_exercise/);
   assert.match(routesSource, /context\.userMessage === deps\.dreamStartExerciseRouteToken/);
-  assert.match(routesSource, /String\(\(context\.state as any\)\.current_step \|\| ""\) === deps\.dreamStepId/);
+  assert.match(
+    routesSource,
+    /String\(\(context\.state as Record<string, unknown>\)\.current_step \|\| ""\) === deps\.dreamStepId/
+  );
   assert.doesNotMatch(routesSource, /lastResult\.suggest_dreambuilder/);
 });
 

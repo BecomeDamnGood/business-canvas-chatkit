@@ -92,6 +92,7 @@ import {
   type UiI18nTelemetryCounters,
 } from "./run_step_i18n_runtime.js";
 import { createRunStepResponseHelpers } from "./run_step_response.js";
+import { parseSpecialistOutputById } from "./run_step_specialist_types.js";
 import {
   parseStep0Final,
   hasValidStep0Final,
@@ -1550,13 +1551,22 @@ async function callSpecialistStrictSafe(
   stateForError: CanvasState
 ): Promise<{
   ok: true;
-  value: { specialistResult: unknown; attempts: number; usage: LLMUsage; model: string };
+  value: { specialistResult: Record<string, unknown>; attempts: number; usage: LLMUsage; model: string };
 } | { ok: false; payload: RunStepError }> {
   const result = await callSpecialistStrictSafeDispatch(params, routing, stateForError);
   if (!result.ok) {
     return { ok: false as const, payload: result.payload as unknown as RunStepError };
   }
-  return result;
+  return {
+    ok: true as const,
+    value: {
+      ...result.value,
+      specialistResult: parseSpecialistOutputById(
+        String(params.decision.specialist_to_call || ""),
+        result.value.specialistResult
+      ),
+    },
+  };
 }
 
 const runStepPreflightHelpers = createRunStepPreflightHelpers({

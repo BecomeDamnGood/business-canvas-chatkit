@@ -1,6 +1,7 @@
 import path from "node:path";
 import os from "node:os";
 
+import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { CanvasState } from "../core/state.js";
 import {
   type RunStepContext,
@@ -165,10 +166,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     synthetic_dream_pick: {
       id: "synthetic_dream_pick",
       canHandle: (context) =>
-        String((context.state as any).current_step || "") === deps.dreamStepId &&
+        String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
         context.userMessage === deps.dreamPickOneRouteToken,
       handle: async (context) => {
-        const previousSpecialist = asRecord((context.state as any).last_specialist_result || {});
+        const previousSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
         const pickedSuggestion = deps.pickDreamSuggestionFromPreviousState(context.state, previousSpecialist);
         if (!pickedSuggestion) return null;
 
@@ -177,7 +178,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           message: deps.wordingSelectionMessage(
             deps.dreamStepId,
             context.state,
-            String((context.state as any).active_specialist || "")
+            String((context.state as Record<string, unknown>).active_specialist || "")
           ),
           question: "",
           refined_formulation: pickedSuggestion,
@@ -189,16 +190,16 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           meta_topic: "NONE",
         };
 
-        const forcedDecision: Record<string, unknown> = {
+        const forcedDecision = {
           specialist_to_call: deps.dreamSpecialist,
           specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: ${deps.dreamPickOneRouteToken}`,
           current_step: deps.dreamStepId,
-          intro_shown_for_step: String((context.state as any).intro_shown_for_step ?? ""),
+          intro_shown_for_step: String((context.state as Record<string, unknown>).intro_shown_for_step ?? ""),
           intro_shown_session:
-            String((context.state as any).intro_shown_session ?? "") === "true" ? "true" : "false",
+            String((context.state as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
           show_step_intro: "false",
           show_session_intro: "false",
-        };
+        } as unknown as OrchestratorOutput;
 
         let nextState = deps.applyStateUpdate({
           prev: context.state,
@@ -211,7 +212,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         deps.setDreamRuntimeMode(nextState, "self");
         return finalizeRouteTurnIntent(context, {
           state: nextState,
-          specialist: asRecord((nextState as any).last_specialist_result || {}),
+          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
           previousSpecialist,
           responseUiFlags: context.responseUiFlags,
         });
@@ -221,10 +222,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     synthetic_role_pick: {
       id: "synthetic_role_pick",
       canHandle: (context) =>
-        String((context.state as any).current_step || "") === deps.roleStepId &&
+        String((context.state as Record<string, unknown>).current_step || "") === deps.roleStepId &&
         context.userMessage === deps.roleChooseForMeRouteToken,
       handle: async (context) => {
-        const previousSpecialist = asRecord((context.state as any).last_specialist_result || {});
+        const previousSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
         const pickedSuggestion = deps.pickRoleSuggestionFromPreviousState(context.state, previousSpecialist);
         if (!pickedSuggestion) return null;
 
@@ -233,7 +234,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           message: deps.wordingSelectionMessage(
             deps.roleStepId,
             context.state,
-            String((context.state as any).active_specialist || "")
+            String((context.state as Record<string, unknown>).active_specialist || "")
           ),
           question: "",
           refined_formulation: pickedSuggestion,
@@ -244,16 +245,16 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           meta_topic: "NONE",
         };
 
-        const forcedDecision: Record<string, unknown> = {
+        const forcedDecision = {
           specialist_to_call: deps.roleSpecialist,
           specialist_input: `CURRENT_STEP_ID: ${deps.roleStepId} | USER_MESSAGE: ${deps.roleChooseForMeRouteToken}`,
           current_step: deps.roleStepId,
-          intro_shown_for_step: String((context.state as any).intro_shown_for_step ?? ""),
+          intro_shown_for_step: String((context.state as Record<string, unknown>).intro_shown_for_step ?? ""),
           intro_shown_session:
-            String((context.state as any).intro_shown_session ?? "") === "true" ? "true" : "false",
+            String((context.state as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
           show_step_intro: "false",
           show_session_intro: "false",
-        };
+        } as unknown as OrchestratorOutput;
 
         let nextState = deps.applyStateUpdate({
           prev: context.state,
@@ -264,7 +265,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         });
         return finalizeRouteTurnIntent(context, {
           state: nextState,
-          specialist: asRecord((nextState as any).last_specialist_result || {}),
+          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
           previousSpecialist,
           responseUiFlags: context.responseUiFlags,
         });
@@ -274,7 +275,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     presentation_generate: {
       id: "presentation_generate",
       canHandle: (context) =>
-        String((context.state as any).current_step || "") === deps.presentationStepId &&
+        String((context.state as Record<string, unknown>).current_step || "") === deps.presentationStepId &&
         context.userMessage === deps.presentationMakeRouteToken,
       handle: async (context) => {
         try {
@@ -322,7 +323,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             {
               ok: true as const,
               tool: "run_step" as const,
-              current_step_id: String((context.state as any).current_step || ""),
+              current_step_id: String((context.state as Record<string, unknown>).current_step || ""),
               active_specialist: deps.presentationSpecialist,
               text: deps.buildTextForWidget({ specialist }),
               prompt: "",
@@ -333,7 +334,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
                 base_name: path.basename(fileName, ".pptx"),
               },
               state: {
-                ...(context.state as any),
+                ...(context.state as Record<string, unknown>),
                 active_specialist: deps.presentationSpecialist,
                 last_specialist_result: specialist,
               },
@@ -371,13 +372,13 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             {
               ok: true as const,
               tool: "run_step" as const,
-              current_step_id: String((context.state as any).current_step || ""),
+              current_step_id: String((context.state as Record<string, unknown>).current_step || ""),
               active_specialist: deps.presentationSpecialist,
               text: deps.buildTextForWidget({ specialist }),
               prompt: "",
               specialist,
               state: {
-                ...(context.state as any),
+                ...(context.state as Record<string, unknown>),
                 active_specialist: deps.presentationSpecialist,
                 last_specialist_result: specialist,
               },
@@ -394,21 +395,21 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     dream_submit_scores: {
       id: "dream_submit_scores",
       canHandle: (context) =>
-        String((context.state as any).current_step || "") === deps.dreamStepId &&
-        String((context.state as any).active_specialist || "") === deps.dreamExplainerSpecialist &&
+        String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
+        String((context.state as Record<string, unknown>).active_specialist || "") === deps.dreamExplainerSpecialist &&
         String(context.userMessage || "").trim().length > 0,
       handle: async (context) => {
         const parsedScores = parseSubmitScoresPayload(context.userMessage, context.transientPendingScores);
         if (!parsedScores || parsedScores.length === 0) return null;
 
-        const lastResult = asRecord((context.state as any).last_specialist_result || {});
-        const clusters = Array.isArray((lastResult as any).clusters) ? ((lastResult as any).clusters as unknown[]) : [];
+        const lastResult = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
+        const clusters = Array.isArray((lastResult as Record<string, unknown>).clusters) ? ((lastResult as Record<string, unknown>).clusters as unknown[]) : [];
 
-        const statementsFromCanonical = Array.isArray((context.state as any).dream_builder_statements)
-          ? ((context.state as any).dream_builder_statements as unknown[])
+        const statementsFromCanonical = Array.isArray((context.state as Record<string, unknown>).dream_builder_statements)
+          ? ((context.state as Record<string, unknown>).dream_builder_statements as unknown[])
           : [];
-        const statementsFromLast = Array.isArray((lastResult as any).statements)
-          ? ((lastResult as any).statements as unknown[])
+        const statementsFromLast = Array.isArray((lastResult as Record<string, unknown>).statements)
+          ? ((lastResult as Record<string, unknown>).statements as unknown[])
           : [];
 
         const statements =
@@ -416,8 +417,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             ? statementsFromCanonical
             : statementsFromLast.length > 0
               ? statementsFromLast
-              : Array.isArray((context.state as any).dream_scoring_statements)
-                ? ((context.state as any).dream_scoring_statements as unknown[])
+              : Array.isArray((context.state as Record<string, unknown>).dream_scoring_statements)
+                ? ((context.state as Record<string, unknown>).dream_scoring_statements as unknown[])
                 : [];
 
         if (clusters.length !== parsedScores.length || statements.length === 0) return null;
@@ -431,7 +432,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           const sum = nums.reduce((a, b) => a + b, 0);
           const average = nums.length > 0 ? sum / nums.length : 0;
           return {
-            theme: String((cluster as any).theme ?? "").trim() || `Category ${clusterIndex + 1}`,
+            theme: String((cluster as Record<string, unknown>).theme ?? "").trim() || `Category ${clusterIndex + 1}`,
             average,
           };
         });
@@ -439,8 +440,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const maxAverage = Math.max(...clusterAverages.map((entry) => entry.average), 0);
         const topClusters = clusterAverages.filter((entry) => entry.average === maxAverage && entry.average > 0);
 
-        const nextStateScores = {
-          ...(context.state as any),
+        const nextStateScores: CanvasState = {
+          ...context.state,
           last_specialist_result: {
             action: "ASK",
             message: "",
@@ -457,24 +458,24 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             scoring_phase: "false",
             clusters: [],
           },
-        } as CanvasState;
+        };
 
         deps.setDreamRuntimeMode(nextStateScores, "builder_scoring");
-        (nextStateScores as any).dream_builder_statements = statements;
-        (nextStateScores as any).dream_scores = parsedScores;
-        (nextStateScores as any).dream_top_clusters = topClusters;
-        (nextStateScores as any).dream_awaiting_direction = "true";
+        (nextStateScores as Record<string, unknown>).dream_builder_statements = statements;
+        (nextStateScores as Record<string, unknown>).dream_scores = parsedScores;
+        (nextStateScores as Record<string, unknown>).dream_top_clusters = topClusters;
+        (nextStateScores as Record<string, unknown>).dream_awaiting_direction = "true";
 
-        const forcedDecision: any = {
+        const forcedDecision = {
           specialist_to_call: deps.dreamExplainerSpecialist,
           specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: (user chose to continue without text)`,
           current_step: deps.dreamStepId,
-          intro_shown_for_step: String((context.state as any).intro_shown_for_step ?? "").trim() || "dream",
+          intro_shown_for_step: String((context.state as Record<string, unknown>).intro_shown_for_step ?? "").trim() || "dream",
           intro_shown_session:
-            String((context.state as any).intro_shown_session ?? "").trim() === "true" ? "true" : "false",
+            String((context.state as Record<string, unknown>).intro_shown_session ?? "").trim() === "true" ? "true" : "false",
           show_step_intro: "false",
           show_session_intro: "false",
-        };
+        } as unknown as OrchestratorOutput;
 
         const callFormulation = await deps.callSpecialistStrictSafe(
           {
@@ -499,13 +500,13 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           provisionalSource: "system_generated",
         });
 
-        (nextStateFormulation as any).dream_builder_statements = statements;
+        (nextStateFormulation as Record<string, unknown>).dream_builder_statements = statements;
         deps.setDreamRuntimeMode(nextStateFormulation, "builder_refine");
-        (nextStateFormulation as any).dream_awaiting_direction = "false";
+        (nextStateFormulation as Record<string, unknown>).dream_awaiting_direction = "false";
         return finalizeRouteTurnIntent(context, {
           state: nextStateFormulation,
-          specialist: asRecord((nextStateFormulation as any).last_specialist_result || {}),
-          previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
+          specialist: asRecord((nextStateFormulation as Record<string, unknown>).last_specialist_result || {}),
+          previousSpecialist: asRecord((context.state as Record<string, unknown>).last_specialist_result || {}),
           responseUiFlags: context.responseUiFlags,
           debug: {
             submit_scores_handled: true,
@@ -519,7 +520,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     dream_switch_to_self: {
       id: "dream_switch_to_self",
       canHandle: (context) =>
-        String((context.state as any).current_step || "") === deps.dreamStepId &&
+        String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
         String(context.userMessage || "").trim() === deps.switchToSelfDreamToken,
       handle: async (context) => {
         deps.setDreamRuntimeMode(context.state, "self");
@@ -548,14 +549,14 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             meta_topic: "NONE",
           };
 
-          let nextState = {
-            ...(switchBaseState as any),
+          let nextState: CanvasState = {
+            ...switchBaseState,
             active_specialist: deps.dreamSpecialist,
             last_specialist_result: specialist,
-          } as CanvasState;
+          };
 
           deps.setDreamRuntimeMode(nextState, "self");
-          (nextState as any).dream_awaiting_direction = "false";
+          (nextState as Record<string, unknown>).dream_awaiting_direction = "false";
 
           deps.applyUiPhaseByStep(
             nextState,
@@ -564,23 +565,23 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           );
           return finalizeRouteTurnIntent(context, {
             state: nextState,
-            specialist: asRecord((nextState as any).last_specialist_result || {}),
-            previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
+            specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
+            previousSpecialist: asRecord((context.state as Record<string, unknown>).last_specialist_result || {}),
             responseUiFlags: context.responseUiFlags,
           });
         }
 
-        (context.state as any).intro_shown_for_step = "dream";
-        const forcedDecision: any = {
+        (context.state as Record<string, unknown>).intro_shown_for_step = "dream";
+        const forcedDecision = {
           specialist_to_call: deps.dreamSpecialist,
           specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: I want to write my dream in my own words.`,
           current_step: deps.dreamStepId,
           intro_shown_for_step: "dream",
           intro_shown_session:
-            String((context.state as any).intro_shown_session ?? "").trim() === "true" ? "true" : "false",
+            String((context.state as Record<string, unknown>).intro_shown_session ?? "").trim() === "true" ? "true" : "false",
           show_step_intro: "false",
           show_session_intro: "false",
-        };
+        } as unknown as OrchestratorOutput;
 
         const callDream = await deps.callSpecialistStrictSafe(
           {
@@ -607,8 +608,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         deps.setDreamRuntimeMode(nextState, "self");
         return finalizeRouteTurnIntent(context, {
           state: nextState,
-          specialist: asRecord((nextState as any).last_specialist_result || {}),
-          previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
+          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
+          previousSpecialist: asRecord((context.state as Record<string, unknown>).last_specialist_result || {}),
           responseUiFlags: context.responseUiFlags,
         });
       },
@@ -617,10 +618,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     start_prestart: {
       id: "start_prestart",
       canHandle: (context) => {
-        const startedAtTrigger = String((context.state as any).started ?? "").trim().toLowerCase() === "true";
-        const currentStep = String((context.state as any).current_step || "");
-        const introShown = String((context.state as any).intro_shown_session || "");
-        const lastSpecialist = asRecord((context.state as any).last_specialist_result || {});
+        const startedAtTrigger = String((context.state as Record<string, unknown>).started ?? "").trim().toLowerCase() === "true";
+        const currentStep = String((context.state as Record<string, unknown>).current_step || "");
+        const introShown = String((context.state as Record<string, unknown>).intro_shown_session || "");
+        const lastSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
         const hasLastSpecialist = Object.keys(lastSpecialist).length > 0;
         const allowStartActionWithSnapshot =
           context.actionCodeRaw === "ACTION_START" && hasLastSpecialist;
@@ -638,10 +639,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         return shouldReturnPrestartGate || isStartTrigger;
       },
       handle: async (context) => {
-        const startedAtTrigger = String((context.state as any).started ?? "").trim().toLowerCase() === "true";
-        const currentStep = String((context.state as any).current_step || "");
-        const introShown = String((context.state as any).intro_shown_session || "");
-        const lastSpecialist = asRecord((context.state as any).last_specialist_result || {});
+        const startedAtTrigger = String((context.state as Record<string, unknown>).started ?? "").trim().toLowerCase() === "true";
+        const currentStep = String((context.state as Record<string, unknown>).current_step || "");
+        const introShown = String((context.state as Record<string, unknown>).intro_shown_session || "");
+        const lastSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
         const hasLastSpecialist = Object.keys(lastSpecialist).length > 0;
         const allowStartActionWithSnapshot =
           context.actionCodeRaw === "ACTION_START" && hasLastSpecialist;
@@ -661,15 +662,16 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
 
         if (!shouldReturnPrestartGate && !isStartTrigger) return null;
 
-        const initialUserMessageSeed = String((context.state as any).initial_user_message ?? "").trim();
+        const initialUserMessageSeed = String((context.state as Record<string, unknown>).initial_user_message ?? "").trim();
         const startLocaleSeedText = initialUserMessageSeed || context.userMessage;
 
         if (shouldReturnPrestartGate) {
           const startResolution = await deps.ensureStartState(context.state, startLocaleSeedText);
           const stateWithUi = startResolution.state;
+          const uiStrings = asRecord((stateWithUi as Record<string, unknown>).ui_strings);
           const startHint =
-            typeof (stateWithUi as any).ui_strings?.startHint === "string"
-              ? String((stateWithUi as any).ui_strings.startHint)
+            typeof uiStrings.startHint === "string"
+              ? String(uiStrings.startHint)
               : deps.uiDefaultString("startHint", "Click Start in the widget to begin.");
 
           const specialist = {
@@ -677,7 +679,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             message: "",
             question: startHint,
             refined_formulation: "",
-            business_name: (context.state as any).business_name || "TBD",
+            business_name: (context.state as Record<string, unknown>).business_name || "TBD",
             step_0: "",
             wants_recap: false,
             is_offtopic: false,
@@ -689,13 +691,13 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             {
               ok: true as const,
               tool: "run_step" as const,
-              current_step_id: String((context.state as any).current_step || ""),
+              current_step_id: String((context.state as Record<string, unknown>).current_step || ""),
               active_specialist: deps.step0Specialist,
               text: "",
               prompt: specialist.question,
               specialist,
               state: {
-                ...(stateWithUi as any),
+                ...(stateWithUi as Record<string, unknown>),
                 started: "false",
                 active_specialist: deps.step0Specialist,
                 last_specialist_result: specialist,
@@ -708,13 +710,13 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           return finalizeRoutePayload(payload as unknown as TResponse);
         }
 
-        (context.state as any).intro_shown_session = "true";
-        const step0Final = String((context.state as any).step_0_final ?? "").trim();
+        (context.state as Record<string, unknown>).intro_shown_session = "true";
+        const step0Final = String((context.state as Record<string, unknown>).step_0_final ?? "").trim();
 
         if (step0Final) {
           const startResolution = await deps.ensureStartState(context.state, startLocaleSeedText);
           const stateWithUi = startResolution.state;
-          const parsed = deps.parseStep0Final(step0Final, String((stateWithUi as any).business_name || "TBD"));
+          const parsed = deps.parseStep0Final(step0Final, String((stateWithUi as Record<string, unknown>).business_name || "TBD"));
           const name = String(parsed.name || "TBD").trim();
 
           const specialist = {
@@ -734,13 +736,13 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             {
               ok: true as const,
               tool: "run_step" as const,
-              current_step_id: String((context.state as any).current_step || ""),
+              current_step_id: String((context.state as Record<string, unknown>).current_step || ""),
               active_specialist: deps.step0Specialist,
               text: "",
               prompt: specialist.question,
               specialist,
               state: {
-                ...(stateWithUi as any),
+                ...(stateWithUi as Record<string, unknown>),
                 started: startResolution.interactiveReady ? "true" : "false",
                 active_specialist: deps.step0Specialist,
                 last_specialist_result: specialist,
@@ -753,7 +755,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           return finalizeRoutePayload(payload as unknown as TResponse);
         }
 
-        const initialMsg = String((context.state as any).initial_user_message ?? "").trim();
+        const initialMsg = String((context.state as Record<string, unknown>).initial_user_message ?? "").trim();
         const langSeed = initialMsg || context.userMessage;
         const startResolution = await deps.ensureStartState(context.state, langSeed);
         const stateWithUi = startResolution.state;
@@ -763,7 +765,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           message: deps.step0CardDescForState(stateWithUi),
           question: deps.step0QuestionForState(stateWithUi),
           refined_formulation: "",
-          business_name: (stateWithUi as any).business_name || "TBD",
+          business_name: (stateWithUi as Record<string, unknown>).business_name || "TBD",
           step_0: "",
           wants_recap: false,
           is_offtopic: false,
@@ -775,13 +777,13 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           {
             ok: true as const,
             tool: "run_step" as const,
-            current_step_id: String((stateWithUi as any).current_step || ""),
+            current_step_id: String((stateWithUi as Record<string, unknown>).current_step || ""),
             active_specialist: deps.step0Specialist,
             text: specialist.message,
             prompt: specialist.question,
             specialist,
             state: {
-              ...(stateWithUi as any),
+              ...(stateWithUi as Record<string, unknown>),
               started: startResolution.interactiveReady ? "true" : "false",
               active_specialist: deps.step0Specialist,
               last_specialist_result: specialist,
@@ -798,21 +800,21 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     dream_start_exercise: {
       id: "dream_start_exercise",
       canHandle: (context) =>
-        String((context.state as any).current_step || "") === deps.dreamStepId &&
+        String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
         context.userMessage === deps.dreamStartExerciseRouteToken,
       handle: async (context) => {
         deps.setDreamRuntimeMode(context.state, "builder_collect");
 
-        const forcedDecision: any = {
+        const forcedDecision = {
           specialist_to_call: deps.dreamExplainerSpecialist,
           specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: ${context.userMessage}`,
           current_step: deps.dreamStepId,
-          intro_shown_for_step: String((context.state as any).intro_shown_for_step ?? ""),
+          intro_shown_for_step: String((context.state as Record<string, unknown>).intro_shown_for_step ?? ""),
           intro_shown_session:
-            (context.state as any).intro_shown_session === "true" ? "true" : "false",
+            (context.state as Record<string, unknown>).intro_shown_session === "true" ? "true" : "false",
           show_step_intro: "false",
           show_session_intro: "false",
-        };
+        } as unknown as OrchestratorOutput;
 
         const callDreamExplainer = await deps.callSpecialistStrictSafe(
           {
@@ -837,7 +839,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         });
 
         if (Array.isArray(callDreamExplainer.value.specialistResult?.statements)) {
-          (nextStateDream as any).dream_builder_statements =
+          (nextStateDream as Record<string, unknown>).dream_builder_statements =
             (callDreamExplainer.value.specialistResult.statements as unknown[])
               .map((line) => String(line || "").trim())
               .filter(Boolean);
@@ -858,8 +860,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         }
         return finalizeRouteTurnIntent(context, {
           state: nextStateDream,
-          specialist: asRecord((nextStateDream as any).last_specialist_result || {}),
-          previousSpecialist: asRecord((context.state as any).last_specialist_result || {}),
+          specialist: asRecord((nextStateDream as Record<string, unknown>).last_specialist_result || {}),
+          previousSpecialist: asRecord((context.state as Record<string, unknown>).last_specialist_result || {}),
           responseUiFlags: context.responseUiFlags,
           debug: {
             decision: forcedDecision,
