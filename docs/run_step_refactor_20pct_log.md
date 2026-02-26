@@ -19,8 +19,8 @@ Program source:
 | PR1 | Guardrails to 20 percent target | completed | 5854 | 5854 | pending_in_current_workspace |
 | PR2 | i18n/bootstrap extraction | completed | 5854 | 5360 | pending_in_current_workspace |
 | PR3 | Response/fail-closed extraction | completed | 5360 | 5289 | pending_in_current_workspace |
-| PR4 | Policy/meta-topic extraction | pending | - | - | - |
-| PR5 | Step0 + wording heuristics extraction | pending | - | - | - |
+| PR4 | Policy/meta-topic extraction | completed | 5289 | 4580 | pending_in_current_workspace |
+| PR5 | Step0 + wording heuristics extraction | completed | 4580 | 3905 | pending_in_current_workspace |
 | PR6 | Presentation + preflight extraction | pending | - | - | - |
 | PR7 | Facade boundary collapse + test decoupling | pending | - | - | - |
 | PR8 | Final convergence to <=20 percent | pending | - | - | - |
@@ -81,6 +81,44 @@ Architecture checks:
 run_step.ts LOC:
 - before: 5854
 - after: 5854
+Commit:
+- pending_in_current_workspace
+
+## PR5 - Step0 + wording heuristics extraction
+Date: 2026-02-26 09:55 CET
+Status: completed
+Scope goal:
+- Move step0 parse/seed/ask-display normalization and wording rewrite/similarity heuristics out of `run_step.ts` into dedicated domain modules while preserving behavior 1:1.
+Completed:
+- Added `mcp-server/src/handlers/run_step_step0.ts` with extracted step0 subsystem logic:
+  - `parseStep0Final`, `hasValidStep0Final`, step0 candidate seed inference, and seed application from initial user message.
+  - `createRunStepStep0DisplayHelpers(...)` with `normalizeStep0AskDisplayContract` and `normalizeStep0OfftopicToAsk`.
+- Added `mcp-server/src/handlers/run_step_wording_heuristics.ts` with extracted wording heuristic logic:
+  - text/list normalization, comparable canonicalization, tokenization, material-rewrite + equivalence checks.
+  - step-contributing/offtopic heuristics.
+  - suggestion-pick heuristics (`pickDualChoiceSuggestion`, dream/role previous-state suggestion pickers).
+- Updated `mcp-server/src/handlers/run_step_modules.ts` export surface for `createRunStepStep0DisplayHelpers` and `createRunStepWordingHeuristicHelpers`.
+- Rewired `mcp-server/src/handlers/run_step.ts` facade to consume new helpers and kept compatibility exports used by tests (`normalizeStep0AskDisplayContract`, `normalizeStep0OfftopicToAsk`, `isMaterialRewriteCandidate`, `areEquivalentWordingVariants`, `isClearlyGeneralOfftopicInput`, `shouldTreatAsStepContributingInput`, `pickDualChoiceSuggestion`).
+- 70% rule decision: continue to completion (metrics before decision: files=4, adds+dels=789, `run_step.ts` hunks=9, `run_step.ts` LOC=3905).
+Pending:
+- PR6 presentation + preflight extraction.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_modules.ts
+- mcp-server/src/handlers/run_step_step0.ts
+- mcp-server/src/handlers/run_step_wording_heuristics.ts
+- docs/run_step_refactor_20pct_log.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs => fail (known repo-root loader resolution issue for `ts-node`)
+- node --loader ts-node/esm scripts/contract-smoke.mjs (workdir `mcp-server`) => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- RUN_STEP_ARCH_PHASE=phase_B npm --prefix mcp-server run arch:run-step:check => fail (expected at current phase; `run_step.ts lines=3905`, `phase_B limit=2500`)
+run_step.ts LOC:
+- before: 4580
+- after: 3905
 Commit:
 - pending_in_current_workspace
 
