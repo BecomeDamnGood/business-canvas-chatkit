@@ -84,6 +84,44 @@ run_step.ts LOC:
 Commit:
 - pending_in_current_workspace
 
+## PR6 - Presentation + preflight extraction
+Date: 2026-02-26 10:06 CET
+Status: completed
+Scope goal:
+- Extract presentation helper utilities and run-step preflight flow from `run_step.ts` into dedicated modules while preserving fail-closed and OpenAI MCP app contracts.
+Completed:
+- Added `mcp-server/src/handlers/run_step_presentation.ts` and moved presentation helper cluster:
+  - PPT placeholder/XML processing utilities.
+  - PPTX generation + PDF/PNG conversion + presentation file cleanup + base URL resolution.
+- Added `mcp-server/src/handlers/run_step_preflight.ts` and moved preflight cluster:
+  - legacy migration + auto-upgrade preprocessing.
+  - bootstrap poll preprocessing branch.
+  - actioncode click/text-submit normalization and routing intent normalization.
+- Updated `mcp-server/src/handlers/run_step_modules.ts` export surface with presentation and preflight helper factories.
+- Rewired `mcp-server/src/handlers/run_step.ts` to orchestration calls via the new modules and removed inlined presentation/preflight blocks.
+- 70% rule decision: continue to completion (metrics before decision: files=4, adds+dels=813, `run_step.ts` hunks=9, `run_step.ts` LOC=3338).
+Pending:
+- PR7 facade boundary collapse + test decoupling.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_modules.ts
+- mcp-server/src/handlers/run_step_presentation.ts
+- mcp-server/src/handlers/run_step_preflight.ts
+- docs/run_step_refactor_20pct_log.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs => fail (known repo-root loader resolution issue for `ts-node`)
+- node --loader ts-node/esm scripts/contract-smoke.mjs (workdir `mcp-server`) => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- RUN_STEP_ARCH_PHASE=phase_C npm --prefix mcp-server run arch:run-step:check => fail (expected at current phase; `run_step.ts lines=3338`, `phase_C limit=1500`)
+run_step.ts LOC:
+- before: 3905
+- after: 3338
+Commit:
+- pending_in_current_workspace
+
 ## PR5 - Step0 + wording heuristics extraction
 Date: 2026-02-26 09:55 CET
 Status: completed

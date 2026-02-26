@@ -1,10 +1,5 @@
 // mcp-server/src/handlers/run_step.ts
 import { z } from "zod";
-import fs from "node:fs";
-import path from "node:path";
-import os from "node:os";
-import crypto from "node:crypto";
-import { execFileSync } from "node:child_process";
 
 import { type LLMUsage } from "../core/llm.js";
 import { resolveModelForCall } from "../core/model_routing.js";
@@ -23,7 +18,6 @@ import {
   type OrchestratorOutput,
 } from "../core/orchestrator.js";
 import {
-  getPresentationTemplatePath,
   hasPresentationTemplate,
 } from "../core/presentation_paths.js";
 
@@ -133,6 +127,8 @@ import {
   createRunStepPipelineHelpers,
   createRunStepPolicyMetaHelpers,
   createRunStepStep0DisplayHelpers,
+  createRunStepPresentationHelpers,
+  createRunStepPreflightHelpers,
 } from "./run_step_modules.js";
 import {
   createRunStepI18nRuntimeHelpers,
@@ -868,155 +864,6 @@ const {
   langFromState,
 } = runStepI18nRuntime;
 
-function baseUrlFromEnv(): string {
-  const explicit = String(process.env.PUBLIC_BASE_URL || process.env.BASE_URL || "").trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
-  if (process.env.LOCAL_DEV === "1") {
-    const port = String(process.env.PORT || "3000").trim();
-    return `http://localhost:${port}`;
-  }
-  return "";
-}
-
-function normalizePresentationTextSingle(input: string): string {
-  return String(input || "")
-    .replace(/\r?\n+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function presentationLines(input: string): string[] {
-  const raw = String(input || "").replace(/\r/g, "");
-  const lines = raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => line.replace(/^[•\-]\s+/, "").trim())
-    .filter((line) => line.length > 0);
-  return lines.length ? lines : [""];
-}
-
-function escapeRegExp(input: string): string {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-type SectionKey = "strategy" | "targetgroup" | "productsservices" | "rulesofthegame";
-
-const SECTION_LABELS: Record<SectionKey, string[]> = {
-  strategy: ["strategy"],
-  targetgroup: ["target group"],
-  productsservices: ["products and services", "products & services"],
-  rulesofthegame: ["rules of the game"],
-};
-
-function detectSectionLabel(line: string): { section: SectionKey; rest: string } | null {
-  const trimmed = line.trim();
-  for (const [section, labels] of Object.entries(SECTION_LABELS) as [SectionKey, string[]][]) {
-    for (const label of labels) {
-      const re = new RegExp(`^${escapeRegExp(label)}\\s*[:\\-–]?\\s*(.*)$`, "i");
-      const match = trimmed.match(re);
-      if (match) {
-        const rest = String(match[1] || "").trim();
-        return { section, rest };
-      }
-    }
-  }
-  return null;
-}
-
-function sanitizeLinesForSection(lines: string[], section: SectionKey): string[] {
-  const out: string[] = [];
-  for (const line of lines) {
-    const cleaned = line.trim();
-    if (!cleaned || /^[.\-•]+$/.test(cleaned)) continue;
-    const detected = detectSectionLabel(cleaned);
-    if (detected) {
-      if (detected.section !== section) break;
-      if (detected.rest) out.push(detected.rest);
-      continue;
-    }
-    out.push(cleaned);
-  }
-  return out.length ? out : [""];
-}
-
-function extractFirstTag(xml: string, tag: string): string {
-  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>|<${tag}[^>]*/>`);
-  const m = xml.match(re);
-  return m ? m[0] : "";
-}
-
-function hasNumberedLines(lines: string[]): boolean {
-  if (!lines || lines.length === 0) return false;
-  const firstLine = lines[0].trim();
-  return /^\d+[.)]\s/.test(firstLine);
-}
-
-function removeBulletsFromPPr(pPr: string): string {
-  if (!pPr) return pPr;
-  // Remove bullet-related tags
-  return pPr
-    .replace(/<a:buFont[^>]*>[\s\S]*?<\/a:buFont>/g, "")
-    .replace(/<a:buNone\/>/g, "")
-    .replace(/<a:buAutoNum[^>]*\/>/g, "")
-    .replace(/<a:buChar[^>]*\/>/g, "")
-    .replace(/<a:buBlip[^>]*\/>/g, "");
-}
-
-function buildParagraphXml(params: {
-  pPr: string;
-  rPr: string;
-  endParaRPr: string;
-  text: string;
-}): string {
-  const { pPr, rPr, endParaRPr, text } = params;
-  const parts: string[] = ["<a:p>"];
-  if (pPr) parts.push(pPr);
-  parts.push("<a:r>");
-  if (rPr) parts.push(rPr);
-  parts.push(`<a:t>${escapeXml(text)}</a:t>`);
-  parts.push("</a:r>");
-  if (endParaRPr) parts.push(endParaRPr);
-  parts.push("</a:p>");
-  return parts.join("");
-}
-
-function replacePlaceholderParagraphs(xml: string, placeholder: string, lines: string[]): string {
-  const paraRe = /<a:p\b[\s\S]*?<\/a:p>/g;
-  return xml.replace(paraRe, (paraXml) => {
-    if (!paraXml.includes(`<a:t>${placeholder}</a:t>`)) return paraXml;
-    let pPr = extractFirstTag(paraXml, "a:pPr");
-    const rPr = extractFirstTag(paraXml, "a:rPr");
-    const endParaRPr = extractFirstTag(paraXml, "a:endParaRPr");
-    const safeLines = lines && lines.length ? lines : [""];
-    
-    // Remove bullets from pPr for Strategy when lines are numbered
-    if (placeholder === "{{STRATEGY}}" && hasNumberedLines(safeLines)) {
-      pPr = removeBulletsFromPPr(pPr);
-    }
-    
-    return safeLines
-      .map((line) =>
-        buildParagraphXml({
-          pPr,
-          rPr,
-          endParaRPr,
-          text: line,
-        })
-      )
-      .join("");
-  });
-}
-
-function escapeXml(input: string): string {
-  return String(input)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
 function step0ReadyActionLabel(state: CanvasState | null | undefined): string {
   if (shouldSuppressFallbackText(state)) return "";
   const key = labelKeyForMenuAction("STEP0_MENU_READY_START", "ACTION_STEP0_READY_START", 0);
@@ -1053,176 +900,6 @@ function step0ReadinessQuestion(state: CanvasState | null | undefined, parsed: {
   const statement = step0ReadinessStatement(state, parsed);
   if (!readyLabel || !statement || !suffix) return "";
   return `1) ${readyLabel}\n\n${statement} ${suffix}`.trim();
-}
-
-function collectXmlFiles(rootDir: string): string[] {
-  if (!fs.existsSync(rootDir)) return [];
-  const entries = fs.readdirSync(rootDir, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    const full = path.join(rootDir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...collectXmlFiles(full));
-    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".xml")) {
-      files.push(full);
-    }
-  }
-  return files;
-}
-
-function replacePlaceholdersInDir(
-  rootDir: string,
-  replacements: Record<string, string>,
-  paragraphReplacements: Record<string, string[]>
-): void {
-  const xmlFiles = collectXmlFiles(rootDir);
-  for (const filePath of xmlFiles) {
-    const original = fs.readFileSync(filePath, "utf-8");
-    let updated = original;
-    for (const [placeholder, lines] of Object.entries(paragraphReplacements)) {
-      if (!placeholder) continue;
-      updated = replacePlaceholderParagraphs(updated, placeholder, lines);
-    }
-    for (const [placeholder, value] of Object.entries(replacements)) {
-      if (!placeholder) continue;
-      updated = updated.split(placeholder).join(value);
-    }
-    // Prevent auto-resize changing font size
-    updated = updated.replace(/<a:normAutofit\/>/g, "<a:noAutofit/>");
-    if (updated !== original) {
-      fs.writeFileSync(filePath, updated, "utf-8");
-    }
-  }
-}
-
-function headingLabelsForState(state: CanvasState): Record<string, string> {
-  return {
-    PURPOSEH: uiStringFromStateMap(state, "ppt.heading.purpose", uiDefaultString("ppt.heading.purpose", "Purpose")),
-    ROLEH: uiStringFromStateMap(state, "ppt.heading.role", uiDefaultString("ppt.heading.role", "Role")),
-    STRATEGYH: uiStringFromStateMap(state, "ppt.heading.strategy", uiDefaultString("ppt.heading.strategy", "Strategy")),
-    ENTITYH: uiStringFromStateMap(state, "ppt.heading.entity", uiDefaultString("ppt.heading.entity", "Entity")),
-    DREAMH: uiStringFromStateMap(state, "ppt.heading.dream", uiDefaultString("ppt.heading.dream", "Dream")),
-    TARGET_GROUPH: uiStringFromStateMap(state, "ppt.heading.targetgroup", uiDefaultString("ppt.heading.targetgroup", "Target Group")),
-    PRODUCTS_SERVICESH: uiStringFromStateMap(
-      state,
-      "ppt.heading.productsservices",
-      uiDefaultString("ppt.heading.productsservices", "Products and Services")
-    ),
-    RULES_OF_THE_GAMEH: uiStringFromStateMap(
-      state,
-      "ppt.heading.rulesofthegame",
-      uiDefaultString("ppt.heading.rulesofthegame", "Rules of the Game")
-    ),
-  };
-}
-
-function generatePresentationPptx(state: CanvasState): { fileName: string; filePath: string } {
-  const templatePath = getPresentationTemplatePath();
-  if (!fs.existsSync(templatePath)) {
-    throw new Error("Presentation template not found");
-  }
-
-  const step0Final = String((state as any).step_0_final ?? "").trim();
-  const fallbackName = String((state as any).business_name ?? "").trim();
-  const { name } = parseStep0Final(step0Final, fallbackName);
-
-  const labels = headingLabelsForState(state);
-
-  const strategyLines = sanitizeLinesForSection(
-    presentationLines(String((state as any).strategy_final ?? "")),
-    "strategy"
-  );
-  const targetGroupLines = sanitizeLinesForSection(
-    presentationLines(String((state as any).targetgroup_final ?? "")),
-    "targetgroup"
-  );
-  const productsServicesLines = sanitizeLinesForSection(
-    presentationLines(String((state as any).productsservices_final ?? "")),
-    "productsservices"
-  );
-  const rulesLines = sanitizeLinesForSection(
-    presentationLines(String((state as any).rulesofthegame_final ?? "")),
-    "rulesofthegame"
-  );
-
-  const replacements: Record<string, string> = {
-    "{{BUSINESS_NAME}}": escapeXml(normalizePresentationTextSingle(name || "TBD")),
-    "{{BIG_WHY}}": escapeXml(normalizePresentationTextSingle(String((state as any).bigwhy_final ?? ""))),
-    "{{BIGWHY}}": escapeXml(normalizePresentationTextSingle(String((state as any).bigwhy_final ?? ""))),
-    "{{PURPOSE}}": escapeXml(normalizePresentationTextSingle(String((state as any).purpose_final ?? ""))),
-    "{{ROLE}}": escapeXml(normalizePresentationTextSingle(String((state as any).role_final ?? ""))),
-    "{{ENTITY}}": escapeXml(normalizePresentationTextSingle(String((state as any).entity_final ?? ""))),
-    "{{DREAM}}": escapeXml(normalizePresentationTextSingle(String((state as any).dream_final ?? ""))),
-    // fallback for bullet fields (only used if paragraph replacement fails)
-    "{{STRATEGY}}": escapeXml(strategyLines.join("\n")),
-    "{{TARGET_GROUP}}": escapeXml(targetGroupLines.join("\n")),
-    "{{PRODUCTS_SERVICES}}": escapeXml(productsServicesLines.join("\n")),
-    "{{RULES_OF_THE_GAME}}": escapeXml(rulesLines.join("\n")),
-    "{{PURPOSEH}}": escapeXml(labels.PURPOSEH),
-    "{{ROLEH}}": escapeXml(labels.ROLEH),
-    "{{STRATEGYH}}": escapeXml(labels.STRATEGYH),
-    "{{ENTITYH}}": escapeXml(labels.ENTITYH),
-    "{{DREAMH}}": escapeXml(labels.DREAMH),
-    "{{TARGET_GROUPH}}": escapeXml(labels.TARGET_GROUPH),
-    "{{PRODUCTS_SERVICESH}}": escapeXml(labels.PRODUCTS_SERVICESH),
-    "{{RULES_OF_THE_GAMEH}}": escapeXml(labels.RULES_OF_THE_GAMEH),
-  };
-
-  const paragraphReplacements: Record<string, string[]> = {
-    "{{STRATEGY}}": strategyLines,
-    "{{TARGET_GROUP}}": targetGroupLines,
-    "{{PRODUCTS_SERVICES}}": productsServicesLines,
-    "{{RULES_OF_THE_GAME}}": rulesLines,
-  };
-
-  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "bsc-pptx-"));
-  const outDir = path.join(os.tmpdir(), "business-canvas-presentations");
-  fs.mkdirSync(outDir, { recursive: true });
-
-  try {
-    execFileSync("unzip", ["-q", templatePath, "-d", workDir]);
-    const pptDir = path.join(workDir, "ppt");
-    replacePlaceholdersInDir(pptDir, replacements, paragraphReplacements);
-
-    const fileName = `presentation-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.pptx`;
-    const filePath = path.join(outDir, fileName);
-    execFileSync("zip", ["-qr", filePath, "."], { cwd: workDir });
-    return { fileName, filePath };
-  } finally {
-    fs.rmSync(workDir, { recursive: true, force: true });
-  }
-}
-
-function cleanupOldPresentationFiles(dir: string, maxAgeMs: number): void {
-  try {
-    const now = Date.now();
-    if (!fs.existsSync(dir)) return;
-    for (const entry of fs.readdirSync(dir)) {
-      const full = path.join(dir, entry);
-      try {
-        const stat = fs.statSync(full);
-        if (!stat.isFile()) continue;
-        if (now - stat.mtimeMs > maxAgeMs) fs.unlinkSync(full);
-      } catch {
-        // ignore cleanup errors
-      }
-    }
-  } catch {
-    // ignore cleanup errors
-  }
-}
-
-function convertPptxToPdf(pptxPath: string, outDir: string): string {
-  execFileSync("soffice", ["--headless", "--convert-to", "pdf", "--outdir", outDir, pptxPath]);
-  const base = path.basename(pptxPath, ".pptx");
-  return path.join(outDir, `${base}.pdf`);
-}
-
-function convertPdfToPng(pdfPath: string, outDir: string): string {
-  const base = path.basename(pdfPath, ".pdf");
-  const outPrefix = path.join(outDir, base);
-  execFileSync("pdftoppm", ["-png", "-f", "1", "-singlefile", pdfPath, outPrefix]);
-  return `${outPrefix}.png`;
 }
 
 /**
@@ -1567,6 +1244,19 @@ function uiStringFromStateMap(
   if (shouldSuppressFallbackText(state)) return "";
   return String(fallback || "").trim();
 }
+
+const presentationHelpers = createRunStepPresentationHelpers({
+  uiDefaultString,
+  uiStringFromStateMap,
+});
+
+const {
+  baseUrlFromEnv,
+  generatePresentationPptx,
+  cleanupOldPresentationFiles,
+  convertPptxToPdf,
+  convertPdfToPng,
+} = presentationHelpers;
 
 function labelKeysForMenuActionCodes(menuId: string, actionCodes: string[]): string[] {
   const safeMenuId = String(menuId || "").trim();
@@ -2651,6 +2341,27 @@ async function callSpecialistStrictSafe(
   return result;
 }
 
+const runStepPreflightHelpers = createRunStepPreflightHelpers({
+  step0Id: STEP_0_ID,
+  currentStateVersion: CURRENT_STATE_VERSION,
+  actionBootstrapPollToken: ACTION_BOOTSTRAP_POLL_TOKEN,
+  normalizeState,
+  migrateState,
+  normalizeStateLanguageSource,
+  detectLegacySessionMarkers,
+  detectInvalidContractStateMarkers,
+  syncDreamRuntimeMode,
+  isPristineStateForStart,
+  extractUserMessageFromWrappedInput,
+  looksLikeMetaInstruction,
+  maybeSeedStep0CandidateFromInitialMessage,
+  bumpUiI18nCounter: (telemetry, key) =>
+    bumpUiI18nCounter(
+      telemetry as UiI18nTelemetryCounters | null | undefined,
+      key as keyof UiI18nTelemetryCounters
+    ),
+});
+
 /**
  * MCP tool implementation (widget-leading)
  *
@@ -2782,222 +2493,38 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     });
   };
 
-  const rawState = (args.state ?? {}) as Record<string, unknown>;
-  const uiTelemetry = (rawState as any).__ui_telemetry;
-  if (uiTelemetry && typeof uiTelemetry === "object") {
-    console.log("[ui_telemetry]", uiTelemetry);
-  }
-  const transientTextSubmit = typeof (rawState as any).__text_submit === "string"
-    ? String((rawState as any).__text_submit)
-    : "";
-  const transientPendingScores = Array.isArray((rawState as any).__pending_scores)
-    ? (rawState as any).__pending_scores
-    : null;
-  const isBootstrapPollMarker =
-    String((rawState as any).__bootstrap_poll || "").trim().toLowerCase() === "true";
-  const isBootstrapPollAction =
-    String(args.user_message ?? "").trim().toUpperCase() === ACTION_BOOTSTRAP_POLL_TOKEN;
-  const isBootstrapPollCall = isBootstrapPollMarker || isBootstrapPollAction;
-
-  const rawStateContractMarkers = detectInvalidContractStateMarkers((args.state ?? {}) as Record<string, unknown>);
-  let state = normalizeState(args.state ?? {});
-  const preMigrateStateVersion = String((state as any).state_version || "").trim();
-  if (preMigrateStateVersion && preMigrateStateVersion !== CURRENT_STATE_VERSION) {
-    migrationFromVersion = preMigrateStateVersion;
-  }
-  try {
-    state = migrateState(state);
-    if (migrationFromVersion && String((state as any).state_version || "") === CURRENT_STATE_VERSION) {
-      migrationApplied = true;
-    }
-  } catch {
-    if (!migrationFromVersion) {
-      migrationFromVersion = preMigrateStateVersion || "";
-    }
-  }
-  const incomingLanguageSource = normalizeStateLanguageSource((rawState as any).language_source);
-  if (incomingLanguageSource && !normalizeStateLanguageSource((state as any).language_source)) {
-    // Keep caller-provided language source when legacy migration versions dropped it.
-    (state as any).language_source = incomingLanguageSource;
-  }
-  let rawLegacyMarkers = [
-    ...detectLegacySessionMarkers(state),
-    ...rawStateContractMarkers,
-  ];
-  if (migrationApplied) {
-    // Accept successfully migrated legacy versions (e.g. "1", "1.0") without forcing restart recovery paths.
-    rawLegacyMarkers = rawLegacyMarkers.filter((marker) => marker !== "state_version_mismatch");
-  }
-  if (migrationFromVersion && !migrationApplied) {
-    rawLegacyMarkers.push("state_version_mismatch");
-  }
-  const incomingPhaseRaw =
-    rawState && typeof (rawState as any).__ui_phase_by_step === "object" && (rawState as any).__ui_phase_by_step !== null
-      ? ((rawState as any).__ui_phase_by_step as Record<string, unknown>)
-      : null;
-  if (incomingPhaseRaw) {
-    const phaseByStep = Object.fromEntries(
-      Object.entries(incomingPhaseRaw)
-        .map(([stepId, contractId]) => [String(stepId || "").trim(), String(contractId || "").trim()])
-        .filter(([stepId, contractId]) => stepId && contractId)
-    );
-    if (Object.keys(phaseByStep).length > 0) {
-      (state as any).__ui_phase_by_step = phaseByStep;
-    }
-  }
-  const incomingSessionId = String((rawState as any).__session_id || "").trim();
-  const incomingSessionStartedAt = String((rawState as any).__session_started_at || "").trim();
-  const incomingSessionLogFile = String((rawState as any).__session_log_file || "").trim();
-  const incomingSessionTurnIndex = Number((rawState as any).__session_turn_index ?? 0);
-  if (incomingSessionId) (state as any).__session_id = incomingSessionId;
-  if (incomingSessionStartedAt) (state as any).__session_started_at = incomingSessionStartedAt;
-  if (incomingSessionLogFile) (state as any).__session_log_file = incomingSessionLogFile;
-  if (Number.isFinite(incomingSessionTurnIndex) && incomingSessionTurnIndex >= 0) {
-    (state as any).__session_turn_index = Math.trunc(incomingSessionTurnIndex);
-  }
-  if (!String((state as any).__session_id || "").trim()) {
-    (state as any).__session_id = crypto.randomUUID();
-    (state as any).__session_started_at = new Date().toISOString();
-    (state as any).__session_turn_index = 0;
-  }
-  if (!String((state as any).__session_started_at || "").trim()) {
-    (state as any).__session_started_at = new Date().toISOString();
-  }
-  const previousTurnIndex = Number((state as any).__session_turn_index || 0);
-  const nextTurnIndex = Number.isFinite(previousTurnIndex) ? previousTurnIndex + 1 : 1;
-  (state as any).__session_turn_index = nextTurnIndex;
-  const requestScopedTurnId = String((rawState as any).__request_id || "").trim();
-  (state as any).__session_turn_id = requestScopedTurnId || crypto.randomUUID();
-  if ((state as any).__ui_telemetry) {
-    delete (state as any).__ui_telemetry;
-  }
-  if ((state as any).__bootstrap_poll) {
-    delete (state as any).__bootstrap_poll;
-  }
-  const fromArgs = String(rawState?.initial_user_message ?? "").trim();
-  if (fromArgs && !String((state as any).initial_user_message ?? "").trim()) {
-    (state as any).initial_user_message = fromArgs;
-  }
-  if (String(rawState?.started ?? "").trim().toLowerCase() === "true") {
-    (state as any).started = "true";
-  }
-  syncDreamRuntimeMode(state);
-  const pristineAtEntry = isPristineStateForStart(state);
-
-  const userMessageRaw = String(args.user_message ?? "");
-  const extracted = extractUserMessageFromWrappedInput(userMessageRaw);
-  const rawNormalized = extracted ? extracted : userMessageRaw;
-
-  // Never discard the first user message as business context (e.g. long bulleted briefs).
-  const userMessageCandidate =
-    pristineAtEntry ? rawNormalized : (looksLikeMetaInstruction(rawNormalized) ? "" : rawNormalized);
-
-
-  // Store the initial user message once. This enables a backend fallback when the widget Start button
-  // sends an empty message, but the user already provided an initiator message in the chat.
-  if (
-    String((state as any).initial_user_message ?? "").trim() === "" &&
-    String(userMessageCandidate ?? "").trim() !== "" &&
-    !/^[0-9]+$/.test(String(userMessageCandidate ?? "").trim()) &&
-    !String(userMessageCandidate ?? "").trim().startsWith("ACTION_")
-  ) {
-    (state as any).initial_user_message = String(userMessageCandidate).trim();
-  }
-
-  const hasRestartLegacyMarkers = rawLegacyMarkers.some((marker) =>
-    marker === "state_version_mismatch" || marker.startsWith("legacy_")
-  );
-  const hasSeedableUserMessageForUpgrade =
-    String(userMessageCandidate || "").trim().length > 0 &&
-    !/^[0-9]+$/.test(String(userMessageCandidate || "").trim()) &&
-    !String(userMessageCandidate || "").trim().startsWith("ACTION_");
-  const shouldAutoUpgradeLegacyState =
-    !isBootstrapPollCall &&
-    hasRestartLegacyMarkers &&
-    hasSeedableUserMessageForUpgrade;
-  if (shouldAutoUpgradeLegacyState) {
-    const preservedHostWidgetSessionId = String((state as any).host_widget_session_id || "").trim();
-    const preservedSessionId = String((state as any).__session_id || "").trim();
-    const preservedSessionStartedAt = String((state as any).__session_started_at || "").trim();
-    const preservedSessionTurnIndex = Number((state as any).__session_turn_index || 0);
-    const preservedSessionTurnId = String((state as any).__session_turn_id || "").trim();
-    state = normalizeState({});
-    if (preservedHostWidgetSessionId) (state as any).host_widget_session_id = preservedHostWidgetSessionId;
-    if (preservedSessionId) (state as any).__session_id = preservedSessionId;
-    if (preservedSessionStartedAt) (state as any).__session_started_at = preservedSessionStartedAt;
-    if (Number.isFinite(preservedSessionTurnIndex) && preservedSessionTurnIndex > 0) {
-      (state as any).__session_turn_index = Math.trunc(preservedSessionTurnIndex);
-    }
-    if (preservedSessionTurnId) (state as any).__session_turn_id = preservedSessionTurnId;
-    if (localeHint) {
-      (state as any).language = localeHint;
-      (state as any).language_source = normalizeStateLanguageSource(
-        localeHintSource === "message_detect" ? "message_detect" : "locale_hint"
-      );
-    }
-    (state as any).initial_user_message = String(userMessageCandidate || "").trim();
-    rawLegacyMarkers = rawLegacyMarkers.filter((marker) =>
-      !(marker === "state_version_mismatch" || marker.startsWith("legacy_"))
-    );
-    bumpUiI18nCounter(uiI18nTelemetry, "state_hygiene_resets_count");
-    console.log("[state_auto_upgrade]", {
-      input_mode: inputMode,
-      legacy_markers_removed: true,
-      locale_hint: localeHint,
-      locale_hint_source: localeHintSource,
-      current_step: String((state as any).current_step || STEP_0_ID),
-    });
-  }
-
-  const initialUserMessageForSeed = String((state as any).initial_user_message || "").trim();
-  if (initialUserMessageForSeed) {
-    const seededState = maybeSeedStep0CandidateFromInitialMessage(state, initialUserMessageForSeed);
-    if (seededState !== state) {
-      state = seededState;
-      console.log("[step0_candidate_seed_from_initial_message]", {
-        current_step: String((state as any).current_step || STEP_0_ID),
-        business_name: String((state as any).business_name || "").trim(),
-      });
-    }
-  }
-
-  // If user clicks a numbered option button, the UI sends ActionCode (new system) or "1"/"2"/"3" or "choice:X" (old system).
-  // Process ActionCode first (new hard-coded system), then fall back to old system for backwards compatibility.
-  const lastSpecialistResult = (state as any)?.last_specialist_result;
-
-  let actionCodeRaw = userMessageCandidate.startsWith("ACTION_") ? userMessageCandidate : "";
-  const isActionCodeTurnForPolicy = actionCodeRaw !== "" && actionCodeRaw !== "ACTION_TEXT_SUBMIT";
-  let userMessage = userMessageCandidate;
-  let submittedUserText = "";
-  let clickedLabelForNoRepeat = "";
-  let clickedActionCodeForNoRepeat = "";
+  const preflight = runStepPreflightHelpers.initializeRunStepPreflight({
+    args,
+    localeHint,
+    localeHintSource,
+    inputMode,
+    uiI18nTelemetry,
+  });
+  migrationApplied = preflight.migrationApplied;
+  migrationFromVersion = preflight.migrationFromVersion;
+  let state = preflight.state;
+  let rawLegacyMarkers = preflight.rawLegacyMarkers;
+  const transientTextSubmit = preflight.transientTextSubmit;
+  const transientPendingScores = preflight.transientPendingScores;
+  const isBootstrapPollCall = preflight.isBootstrapPollCall;
+  const pristineAtEntry = preflight.pristineAtEntry;
+  const rawNormalized = preflight.rawNormalized;
+  const userMessageCandidate = preflight.userMessageCandidate;
+  const lastSpecialistResult = preflight.lastSpecialistResult;
+  let actionCodeRaw = preflight.actionCodeRaw;
+  const isActionCodeTurnForPolicy = preflight.isActionCodeTurnForPolicy;
+  let userMessage = preflight.userMessage;
+  let submittedUserText = preflight.submittedUserText;
+  let clickedLabelForNoRepeat = preflight.clickedLabelForNoRepeat;
+  let clickedActionCodeForNoRepeat = preflight.clickedActionCodeForNoRepeat;
   let languageResolvedThisTurn = false;
-
-  const deriveIntentTypeForRouting = (actionCode: string, routeOrText: string): string => {
-    const normalizedActionCode = String(actionCode || "").trim();
-    const normalizedRoute = String(routeOrText || "").trim();
-    if (!normalizedActionCode && !normalizedRoute) return "";
-    try {
-      const routeFromRegistry =
-        normalizedActionCode && ACTIONCODE_REGISTRY.actions[normalizedActionCode]
-          ? String(ACTIONCODE_REGISTRY.actions[normalizedActionCode]?.route || "").trim()
-          : "";
-      const intent = actionCodeToIntent({
-        actionCode: normalizedActionCode,
-        route: routeFromRegistry || normalizedRoute,
-      });
-      return String(intent?.type || "").trim();
-    } catch {
-      return "";
-    }
-  };
 
   const buildRoutingContext = (routeOrText: string) => {
     return {
       enabled: modelRoutingEnabled,
       shadow: modelRoutingShadow,
       actionCode: actionCodeRaw,
-      intentType: deriveIntentTypeForRouting(actionCodeRaw, routeOrText),
+      intentType: runStepPreflightHelpers.deriveIntentTypeForRouting(actionCodeRaw, routeOrText),
     };
   };
 
@@ -3144,156 +2671,62 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     return resolveLocaleAndUiStringsReady(targetState, routeOrText);
   };
 
-  if (isBootstrapPollCall && isUiLocaleReadyGateV1Enabled()) {
-    const languageSeed = String((state as any).initial_user_message || "").trim();
-    const localeResolution = await resolveLocaleAndUiStringsReady(state, languageSeed);
-    state = localeResolution.state;
-    const retrySpecialistSeed = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-    const retrySpecialist = hasUsableSpecialistForRetry(retrySpecialistSeed)
-      ? retrySpecialistSeed
-      : buildTransientFallbackSpecialist(state);
-    const retryStepId = String((state as any).current_step || STEP_0_ID);
-    const retryActiveSpecialist = String((state as any).active_specialist || "").trim() ||
-      (retryStepId === STEP_0_ID ? STEP_0_SPECIALIST : "");
-    const retryState = {
-      ...(state as any),
-      active_specialist: retryActiveSpecialist,
-      last_specialist_result: retrySpecialist,
-    } as CanvasState;
-    const bootstrapContract = deriveBootstrapContract(state);
-    if (bootstrapContract.waiting) {
-      return finalizeResponse(
-        attachRegistryPayload(
-          {
-            ok: true as const,
-            tool: "run_step" as const,
-            current_step_id: String((retryState as any).current_step || STEP_0_ID),
-            active_specialist: String((retryState as any).active_specialist || ""),
-            text: buildTextForWidget({ specialist: retrySpecialist }),
-            prompt: pickPrompt(retrySpecialist),
-            specialist: retrySpecialist,
-            state: retryState,
-          },
-          retrySpecialist,
-          {
-            bootstrap_waiting_locale: bootstrapContract.waiting,
-            bootstrap_interactive_ready: bootstrapContract.ready,
-            bootstrap_retry_hint: bootstrapContract.retry_hint,
-            locale_pending_background: bootstrapContract.waiting,
-            bootstrap_phase: String(bootstrapContract.phase || ""),
-          }
-        )
-      );
-    }
-    actionCodeRaw = "";
-    userMessage = "";
-    clickedActionCodeForNoRepeat = "";
-    clickedLabelForNoRepeat = "";
-    (state as any).__last_clicked_action_for_contract = "";
-    (state as any).__last_clicked_label_for_contract = "";
-  }
+  const bootstrapPreflight = await runStepPreflightHelpers.preprocessBootstrapPoll<RunStepSuccess | RunStepError>({
+    state,
+    isBootstrapPollCall,
+    actionCodeRaw,
+    userMessage,
+    clickedLabelForNoRepeat,
+    clickedActionCodeForNoRepeat,
+    step0Specialist: STEP_0_SPECIALIST,
+    isUiLocaleReadyGateV1Enabled,
+    resolveLocaleAndUiStringsReady,
+    hasUsableSpecialistForRetry,
+    buildTransientFallbackSpecialist,
+    deriveBootstrapContract,
+    buildTextForWidget,
+    pickPrompt,
+    attachRegistryPayload: (payload, specialist, flagsOverride) =>
+      attachRegistryPayload(payload, specialist, flagsOverride),
+    finalizeResponse: (payload) => finalizeResponse(payload),
+  });
+  if (bootstrapPreflight.response) return bootstrapPreflight.response;
+  state = bootstrapPreflight.state;
+  actionCodeRaw = bootstrapPreflight.actionCodeRaw;
+  userMessage = bootstrapPreflight.userMessage;
+  clickedActionCodeForNoRepeat = bootstrapPreflight.clickedActionCodeForNoRepeat;
+  clickedLabelForNoRepeat = bootstrapPreflight.clickedLabelForNoRepeat;
 
-  const legacyMarkers = Array.from(
-    new Set([
-      ...rawLegacyMarkers,
-      ...detectLegacySessionMarkers(state),
-      ...detectInvalidContractStateMarkers(state as unknown as Record<string, unknown>),
-    ])
-  );
-  if (legacyMarkers.length > 0) {
-    const legacySpecialist = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-    const requiresRestart = legacyMarkers.some((marker) =>
-      marker === "state_version_mismatch" || marker.startsWith("legacy_")
-    );
-    if (requiresRestart) {
-      if (legacyMarkers.some((marker) => marker.startsWith("legacy_"))) {
-        blockingMarkerClass = "legacy_marker";
-      } else if (legacyMarkers.includes("state_version_mismatch")) {
-        blockingMarkerClass = "state_version_mismatch";
-      } else {
-        blockingMarkerClass = "legacy_other";
-      }
-    } else {
-      blockingMarkerClass = "invalid_state";
-    }
-    const errorType = requiresRestart ? "session_upgrade_required" : "invalid_state";
-    const blockedState = buildFailClosedState(
-      state,
-      requiresRestart ? "session_upgrade_required" : "invalid_state",
-      {
-        requestedLang: localeHint || String((state as any).language || ""),
-      }
-    );
-    return finalizeResponse(
-      attachRegistryPayload(
-        {
-          ok: false as const,
-          tool: "run_step" as const,
-          current_step_id: String(blockedState.current_step),
-          active_specialist: String((blockedState as any).active_specialist || ""),
-          text: "",
-          prompt: "",
-          specialist: legacySpecialist,
-          state: blockedState,
-          error: {
-            type: errorType,
-            message: requiresRestart
-              ? "Legacy session state is blocked in strict contract mode."
-              : "Incoming state violates the strict startup/i18n contract.",
-            markers: legacyMarkers,
-            required_action: "restart_session",
-          },
-        },
-        legacySpecialist,
-        {
-          bootstrap_waiting_locale: false,
-          bootstrap_interactive_ready: false,
-          bootstrap_retry_hint: "",
-          locale_pending_background: false,
-          bootstrap_phase: "failed",
-        }
-      )
-    );
-  }
+  const legacyPreflight = runStepPreflightHelpers.handleLegacyPreflight<RunStepSuccess | RunStepError>({
+    state,
+    rawLegacyMarkers,
+    localeHint,
+    buildFailClosedState,
+    attachRegistryPayload: (payload, specialist, flagsOverride) =>
+      attachRegistryPayload(payload, specialist, flagsOverride),
+    finalizeResponse: (payload) => finalizeResponse(payload),
+  });
+  blockingMarkerClass = legacyPreflight.blockingMarkerClass;
+  if (legacyPreflight.response) return legacyPreflight.response;
 
-  if (actionCodeRaw) {
-    const sourceStep = String(state.current_step || "").trim();
-    const menuId = inferCurrentMenuForStep(state, sourceStep);
-    if (menuId) {
-      const expectedCount = ACTIONCODE_REGISTRY.menus[menuId]?.length;
-      console.log("[actioncode_click]", {
-        registry_version: ACTIONCODE_REGISTRY.version,
-        contract_id: String(((state as any).__ui_phase_by_step || {})[sourceStep] || ""),
-        step: sourceStep,
-        expected_count: expectedCount,
-        action_code: actionCodeRaw,
-        input_mode: inputMode,
-      });
-    }
-    const sourceMenu = inferCurrentMenuForStep(state, sourceStep);
-    clickedActionCodeForNoRepeat = String(actionCodeRaw || "").trim().toUpperCase();
-    clickedLabelForNoRepeat = labelForActionInMenu(sourceMenu, clickedActionCodeForNoRepeat);
-    (state as any).__last_clicked_action_for_contract = clickedActionCodeForNoRepeat;
-    (state as any).__last_clicked_label_for_contract = clickedLabelForNoRepeat;
-  }
-
-  if (actionCodeRaw === "ACTION_TEXT_SUBMIT") {
-    const submitted = String(transientTextSubmit ?? "").trim();
-    submittedUserText = submitted;
-    userMessage = submitted;
-    actionCodeRaw = "";
-    clickedActionCodeForNoRepeat = "";
-    clickedLabelForNoRepeat = "";
-    (state as any).__last_clicked_action_for_contract = "";
-    (state as any).__last_clicked_label_for_contract = "";
-    if (
-      String((state as any).initial_user_message ?? "").trim() === "" &&
-      submitted &&
-      !/^[0-9]+$/.test(submitted)
-    ) {
-      (state as any).initial_user_message = submitted;
-    }
-  }
+  const actionCodePreflight = runStepPreflightHelpers.applyActionCodeNormalization({
+    state,
+    actionCodeRaw,
+    userMessage,
+    submittedUserText,
+    clickedLabelForNoRepeat,
+    clickedActionCodeForNoRepeat,
+    transientTextSubmit,
+    inputMode,
+    inferCurrentMenuForStep,
+    labelForActionInMenu,
+  });
+  state = actionCodePreflight.state;
+  actionCodeRaw = actionCodePreflight.actionCodeRaw;
+  userMessage = actionCodePreflight.userMessage;
+  submittedUserText = actionCodePreflight.submittedUserText;
+  clickedActionCodeForNoRepeat = actionCodePreflight.clickedActionCodeForNoRepeat;
+  clickedLabelForNoRepeat = actionCodePreflight.clickedLabelForNoRepeat;
 
   // If we're at Step 0 with no final yet and the user just typed real text,
   // reset any stale language from previous sessions so language is determined
