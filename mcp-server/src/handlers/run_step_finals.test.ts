@@ -3261,7 +3261,7 @@ test("bullet consistency message-derivation helpers are removed from facade path
 test("DreamExplainer off-topic handling uses explicit contract branch", () => {
   const source = fs.readFileSync(new URL("./run_step_pipeline.ts", import.meta.url), "utf8");
   assert.match(source, /const isDreamExplainerOfftopicTurn\s*=/);
-  assert.match(source, /deps\.buildContractId\(\s*currentStepId,\s*rendered\.status,\s*deps\.dreamExplainerSwitchSelfMenuId\s*\)/);
+  assert.match(source, /deps\.buildContractId\(\s*currentStepId,\s*renderedStatusForPolicy,\s*deps\.dreamExplainerSwitchSelfMenuId\s*\)/);
 });
 
 test("wording choice: Entity user pick restores contract menu buttons when source prompt has no numbered options", async () => {

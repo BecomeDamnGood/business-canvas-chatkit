@@ -85,6 +85,7 @@ import {
   createRunStepStep0DisplayHelpers,
   createRunStepPresentationHelpers,
   createRunStepPreflightHelpers,
+  createTurnResponseEngine,
 } from "./run_step_modules.js";
 import {
   createRunStepI18nRuntimeHelpers,
@@ -2344,6 +2345,24 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       models: [...llmTurnAccumulator.models.values()],
     }),
   });
+  const turnResponseEngine = createTurnResponseEngine<RunStepSuccess | RunStepError>({
+    renderFreeTextTurnPolicy,
+    validateRenderedContractOrRecover,
+    applyUiPhaseByStep,
+    buildTextForWidget: ({ specialist }) => buildTextForWidget({ specialist }),
+    pickPrompt: (specialist) => pickPrompt(specialist),
+    attachRegistryPayload: (payload, specialist, flagsOverride, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride) =>
+      attachRegistryPayload(
+        payload,
+        specialist,
+        flagsOverride,
+        actionCodesOverride,
+        renderedActionsOverride,
+        wordingChoiceOverride,
+        contractMetaOverride
+      ) as RunStepSuccess | RunStepError,
+    finalizeResponse: (payload) => finalizeResponse(payload),
+  });
 
   const ensureUiStrings = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
     const translationModel = resolveTranslationModel(routeOrText);
@@ -2941,7 +2960,19 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     state: { applyPostSpecialistStateMutations, getDreamRuntimeMode, isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate, buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, pickBigWhyCandidate, countWords, buildBigWhyTooLongFeedback, enforceDreamBuilderQuestionProgress, applyMotivationQuotesContractV11 },
     render: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, buildContractId },
     wording: { isWordingChoiceEligibleContext, buildWordingChoiceFromTurn, buildWordingChoiceFromPendingSpecialist },
-    response: { attachRegistryPayload, buildTextForWidget, pickPrompt },
+    response: {
+      attachRegistryPayload: (payload, specialist, flagsOverride, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride) =>
+        attachRegistryPayload(
+          payload,
+          specialist,
+          flagsOverride,
+          actionCodesOverride,
+          renderedActionsOverride,
+          wordingChoiceOverride,
+          contractMetaOverride
+        ) as RunStepSuccess | RunStepError,
+      turnResponseEngine,
+    },
     guard: { looksLikeMetaInstruction },
     i18n: { bumpUiI18nCounter: uiI18nCounterPort },
   };
@@ -2975,5 +3006,5 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const specialRouteResponse = await routeHelpers.handleSpecialRouteRegistry(runStepContext);
   if (specialRouteResponse) return specialRouteResponse;
   const pipelinePayload = await pipelineHelpers.runPostSpecialistPipeline(runStepContext);
-  return finalizeResponse(pipelinePayload);
+  return pipelinePayload;
 }

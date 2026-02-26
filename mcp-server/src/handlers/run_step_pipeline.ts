@@ -1,10 +1,12 @@
 import type { CanvasState } from "../core/state.js";
+import type { RenderedAction } from "../contracts/ui_actions.js";
 import {
   type RunStepContext,
   type RunStepPostSpecialistPipelineRequest,
   toRunPostSpecialistPipelineRequest,
 } from "./run_step_context.js";
 import type { RunStepPipelinePorts } from "./run_step_ports.js";
+import type { TurnResponseRenderFailureContext } from "./run_step_turn_response_engine.js";
 import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
@@ -49,6 +51,11 @@ function flattenRunStepPipelinePorts<TPayload>(
 
 export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePorts<TPayload>) {
   const deps = flattenRunStepPipelinePorts(ports);
+
+  function finalizePipelinePayload(payload: TPayload): TPayload {
+    return deps.turnResponseEngine.finalize(payload);
+  }
+
   function buildContractViolationPayload(params: {
     state: CanvasState;
     stepId: string;
@@ -80,6 +87,34 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     );
   }
 
+  function buildFinalizedContractViolationPayload(params: {
+    state: CanvasState;
+    stepId: string;
+    activeSpecialist: string;
+    specialistSnapshot: Record<string, unknown>;
+    reason: string;
+    message: string;
+    extraError?: Record<string, unknown>;
+  }): TPayload {
+    return finalizePipelinePayload(buildContractViolationPayload(params));
+  }
+
+  function buildRenderedContractViolationPayload(
+    params: TurnResponseRenderFailureContext
+  ): TPayload {
+    return buildContractViolationPayload({
+      state: params.state,
+      stepId: params.stepId,
+      activeSpecialist: params.activeSpecialist,
+      specialistSnapshot: params.rendered.specialist,
+      message: "Rendered output violates the UI contract.",
+      reason: params.reason,
+      extraError: {
+        contract_id: params.rendered.contractId,
+      },
+    });
+  }
+
   async function runPostSpecialistPipeline(context: RunStepContext): Promise<TPayload> {
     const params: RunPostSpecialistPipelineParams = toRunPostSpecialistPipelineRequest(context);
     void POST_SPECIALIST_STAGE_ORDER;
@@ -94,7 +129,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       deps.buildRoutingContext(userMessage),
       state
     );
-    if (!call1.ok) return call1.payload;
+    if (!call1.ok) return finalizePipelinePayload(call1.payload);
     params.rememberLlmCall(call1.value);
 
     let attempts = call1.value.attempts;
@@ -150,7 +185,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       ) {
         const specialistSnapshot =
           specialistResult && typeof specialistResult === "object" ? specialistResult : {};
-        return buildContractViolationPayload({
+        return buildFinalizedContractViolationPayload({
           state,
           stepId: String(state.current_step || ""),
           activeSpecialist: String((state as any).active_specialist || ""),
@@ -226,7 +261,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           deps.buildRoutingContext(repairInput),
           state
         );
-        if (!repairCall.ok) return repairCall.payload;
+        if (!repairCall.ok) return finalizePipelinePayload(repairCall.payload);
         params.rememberLlmCall(repairCall.value);
         attempts = Math.max(attempts, repairCall.value.attempts);
         specialistResult = repairCall.value.specialistResult;
@@ -239,7 +274,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       if (!repairedOfftopic && repairedCount > 7) {
         const specialistSnapshot =
           specialistResult && typeof specialistResult === "object" ? specialistResult : {};
-        return buildContractViolationPayload({
+        return buildFinalizedContractViolationPayload({
           state,
           stepId: String(state.current_step || ""),
           activeSpecialist: String((state as any).active_specialist || ""),
@@ -267,7 +302,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           deps.buildRoutingContext(shortenRequest),
           state
         );
-        if (!callShorten.ok) return callShorten.payload;
+        if (!callShorten.ok) return finalizePipelinePayload(callShorten.payload);
         params.rememberLlmCall(callShorten.value);
         attempts = Math.max(attempts, callShorten.value.attempts);
         specialistResult = callShorten.value.specialistResult;
@@ -328,49 +363,23 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
 
     const finalDecision = decision1;
     let actionCodesOverride: string[] | null = null;
-    let renderedActionsOverride: unknown[] | null = null;
+    let renderedActionsOverride: RenderedAction[] | null = null;
     let wordingChoiceOverride: WordingChoiceUiPayload | null = null;
     let contractMetaOverride: UiContractMeta | null = null;
-    const renderedRaw = deps.renderFreeTextTurnPolicy({
-      stepId: String((nextState as any).current_step ?? ""),
+    const initialRender = deps.turnResponseEngine.renderValidateRecover({
       state: nextState,
       specialist: (specialistResult || {}) as Record<string, unknown>,
       previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-    });
-    const validatedRendered = deps.validateRenderedContractOrRecover({
-      stepId: String((nextState as any).current_step ?? ""),
-      rendered: renderedRaw,
-      state: nextState,
-      previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
       telemetry: params.uiI18nTelemetry,
+      onContractViolation: buildRenderedContractViolationPayload,
     });
-    nextState = validatedRendered.state;
-    const rendered = validatedRendered.rendered;
-    const contractViolation = validatedRendered.violation;
-    if (contractViolation) {
-      return buildContractViolationPayload({
-        state: nextState,
-        stepId: String((nextState as any).current_step ?? ""),
-        activeSpecialist: String((nextState as any).active_specialist || ""),
-        specialistSnapshot: rendered.specialist,
-        message: "Rendered output violates the UI contract.",
-        reason: contractViolation,
-        extraError: {
-          contract_id: rendered.contractId,
-        },
-      });
-    }
-    specialistResult = rendered.specialist;
-    let renderedStatusForPolicy = rendered.status;
-    actionCodesOverride = rendered.uiActionCodes;
-    renderedActionsOverride = rendered.uiActions;
-    contractMetaOverride = {
-      contractId: rendered.contractId,
-      contractVersion: rendered.contractVersion,
-      textKeys: rendered.textKeys,
-    };
-    deps.applyUiPhaseByStep(nextState, String((nextState as any).current_step ?? ""), rendered.contractId);
-    (nextState as any).last_specialist_result = specialistResult;
+    if (!initialRender.ok) return initialRender.payload;
+    nextState = initialRender.value.state;
+    specialistResult = initialRender.value.specialist;
+    let renderedStatusForPolicy = initialRender.value.renderedStatus;
+    actionCodesOverride = initialRender.value.actionCodes;
+    renderedActionsOverride = initialRender.value.renderedActions;
+    contractMetaOverride = initialRender.value.contractMeta;
     let requireWordingPick = false;
 
     const isDreamExplainerOfftopicTurn =
@@ -391,50 +400,24 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       const currentStepId = String((nextState as any).current_step || "");
       const offTopicContractId = deps.buildContractId(
         currentStepId,
-        rendered.status,
+        renderedStatusForPolicy,
         deps.dreamExplainerSwitchSelfMenuId
       );
       deps.applyUiPhaseByStep(nextState, currentStepId, offTopicContractId);
-      const rerenderedRaw = deps.renderFreeTextTurnPolicy({
-        stepId: currentStepId,
+      const rerender = deps.turnResponseEngine.renderValidateRecover({
         state: nextState,
         specialist: (specialistResult || {}) as Record<string, unknown>,
         previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
-      });
-      const validatedRerendered = deps.validateRenderedContractOrRecover({
-        stepId: currentStepId,
-        rendered: rerenderedRaw,
-        state: nextState,
-        previousSpecialist: ((state as any).last_specialist_result || {}) as Record<string, unknown>,
         telemetry: params.uiI18nTelemetry,
+        onContractViolation: buildRenderedContractViolationPayload,
       });
-      nextState = validatedRerendered.state;
-      const rerendered = validatedRerendered.rendered;
-      const rerenderViolation = validatedRerendered.violation;
-      if (rerenderViolation) {
-        return buildContractViolationPayload({
-          state: nextState,
-          stepId: currentStepId,
-          activeSpecialist: String((nextState as any).active_specialist || ""),
-          specialistSnapshot: rerendered.specialist,
-          message: "Rendered output violates the UI contract.",
-          reason: rerenderViolation,
-          extraError: {
-            contract_id: rerendered.contractId,
-          },
-        });
-      }
-      specialistResult = rerendered.specialist;
-      renderedStatusForPolicy = rerendered.status;
-      actionCodesOverride = rerendered.uiActionCodes;
-      renderedActionsOverride = rerendered.uiActions;
-      contractMetaOverride = {
-        contractId: rerendered.contractId,
-        contractVersion: rerendered.contractVersion,
-        textKeys: rerendered.textKeys,
-      };
-      deps.applyUiPhaseByStep(nextState, currentStepId, rerendered.contractId);
-      (nextState as any).last_specialist_result = specialistResult;
+      if (!rerender.ok) return rerender.payload;
+      nextState = rerender.value.state;
+      specialistResult = rerender.value.specialist;
+      renderedStatusForPolicy = rerender.value.renderedStatus;
+      actionCodesOverride = rerender.value.actionCodes;
+      renderedActionsOverride = rerender.value.renderedActions;
+      contractMetaOverride = rerender.value.contractMeta;
     }
     const currentStepForWordingChoice = String((nextState as any).current_step || "");
     const currentSpecialistForWordingChoice = String((nextState as any).active_specialist || "");
@@ -548,9 +531,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       }
     }
 
-    const text = deps.buildTextForWidget({ specialist: specialistResult });
-    const prompt = deps.pickPrompt(specialistResult);
-
     if (showSessionIntro === "true" && String((nextState as any).intro_shown_session) !== "true") {
       (nextState as any).intro_shown_session = "true";
     }
@@ -560,30 +540,21 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       ...(requireWordingPick ? { require_wording_pick: true } : {}),
     };
 
-    return deps.attachRegistryPayload(
-      {
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(nextState.current_step),
-        active_specialist: String((nextState as any).active_specialist || ""),
-        text,
-        prompt,
-        specialist: specialistResult,
-        state: nextState,
-        debug: {
-          decision: finalDecision,
-          attempts,
-          language: params.lang,
-          meta_user_message_ignored: deps.looksLikeMetaInstruction(params.rawNormalized) && params.pristineAtEntry,
-        },
-      },
-      specialistResult,
-      mergedFlags,
+    return deps.turnResponseEngine.attachAndFinalize({
+      state: nextState,
+      specialist: specialistResult,
+      responseUiFlags: mergedFlags,
       actionCodesOverride,
       renderedActionsOverride,
       wordingChoiceOverride,
-      contractMetaOverride
-    );
+      contractMetaOverride,
+      debug: {
+        decision: finalDecision,
+        attempts,
+        language: params.lang,
+        meta_user_message_ignored: deps.looksLikeMetaInstruction(params.rawNormalized) && params.pristineAtEntry,
+      },
+    });
   }
 
   return {

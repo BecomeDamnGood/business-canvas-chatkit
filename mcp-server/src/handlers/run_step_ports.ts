@@ -1,5 +1,7 @@
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { CanvasState, ProvisionalSource } from "../core/state.js";
+import type { RenderedAction } from "../contracts/ui_actions.js";
+import type { TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 
 export type RunStepSpecialistRouting = {
@@ -283,9 +285,16 @@ export type RunStepPipelineWordingPorts = {
 };
 
 export type RunStepPipelineResponsePorts<TPayload> = {
-  attachRegistryPayload: (...args: any[]) => TPayload;
-  buildTextForWidget: (params: { specialist: any }) => string;
-  pickPrompt: (specialist: any) => string;
+  attachRegistryPayload: (
+    payload: Record<string, unknown>,
+    specialist: Record<string, unknown>,
+    flagsOverride?: Record<string, boolean | string> | null,
+    actionCodesOverride?: string[] | null,
+    renderedActionsOverride?: RenderedAction[] | null,
+    wordingChoiceOverride?: WordingChoiceUiPayload | null,
+    contractMetaOverride?: UiContractMeta | null
+  ) => TPayload;
+  turnResponseEngine: TurnResponseEngine<TPayload>;
 };
 
 export type RunStepPipelineGuardPorts = {

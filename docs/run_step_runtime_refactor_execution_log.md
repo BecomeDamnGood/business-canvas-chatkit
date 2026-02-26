@@ -158,3 +158,52 @@
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2979`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `300`
 - commit hash: pending (captured after commit command)
+
+### PR5 - 2026-02-26
+- status: paused_at_70_with_handoff
+- scope goal: Introduce TurnResponseEngine and adopt it in the pipeline path first.
+- completed exactly:
+  - Added `mcp-server/src/handlers/run_step_turn_response_engine.ts` with shared render/validate/recover + attach/finalize flow.
+  - Integrated pipeline rendering/response assembly through `TurnResponseEngine` in `mcp-server/src/handlers/run_step_pipeline.ts`.
+  - Integrated runtime wiring in `mcp-server/src/handlers/run_step_runtime.ts` by constructing and passing `turnResponseEngine` into pipeline ports and returning pipeline payload directly.
+  - Updated module/type wiring in:
+    - `mcp-server/src/handlers/run_step_modules.ts`
+    - `mcp-server/src/handlers/run_step_ports.ts`
+  - Updated contract/source assertion in `mcp-server/src/handlers/run_step_finals.test.ts` for new off-topic rerender variable name.
+- remaining exact TODO:
+  - Pass mandatory architecture gate `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R2 npm --prefix mcp-server run arch:run-step-runtime:check`.
+  - Current blocker is runtime LOC budget: `run_step_runtime.ts` is `3010` lines and phase_R2 requires `<=2500`.
+  - Extract at least ~510 lines out of runtime owner without changing contract/fail-closed behavior (likely by moving large internal runtime blocks to focused runtime helper modules).
+  - Re-run mandatory suite and update this PR5 entry from paused to completed with final commit hash.
+- first commands next agent:
+  - `git status --short`
+  - `npm --prefix mcp-server run build`
+  - `npm --prefix mcp-server test`
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R2 npm --prefix mcp-server run arch:run-step-runtime:check`
+  - `wc -l mcp-server/src/handlers/run_step_runtime.ts`
+  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l`
+- risks/assumptions:
+  - Pipeline path now finalizes inside engine; runtime no longer finalizes pipeline output. Keep this ownership stable while extracting runtime LOC.
+  - Route path is intentionally not migrated yet; avoid incidental behavior drift there.
+  - Phase_R2 failure is LOC-gated before complexity; LOC extraction should be done first, then validate complexity budget.
+- changed files:
+  - mcp-server/src/handlers/run_step_turn_response_engine.ts
+  - mcp-server/src/handlers/run_step_pipeline.ts
+  - mcp-server/src/handlers/run_step_runtime.ts
+  - mcp-server/src/handlers/run_step_ports.ts
+  - mcp-server/src/handlers/run_step_modules.ts
+  - mcp-server/src/handlers/run_step_finals.test.ts
+  - docs/run_step_runtime_refactor_execution_log.md
+- tests:
+  - `npm --prefix mcp-server run build` (pass)
+  - `node mcp-server/scripts/ui_artifact_parity_check.mjs` (pass)
+  - `node --loader ts-node/esm scripts/contract-smoke.mjs` (workdir `mcp-server`) (pass)
+  - `npm --prefix mcp-server test` (pass)
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R2 npm --prefix mcp-server run arch:run-step-runtime:check` (fail: `run_step_runtime.ts lines=3010 > limit=2500`)
+- metrics:
+  - `git diff --name-only | wc -l` => `7`
+  - `git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}'` => `adds=130 dels=109 total=239`
+  - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `4`
+  - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `3010`
+  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `289`
+- commit hash: pending (captured after commit command)
