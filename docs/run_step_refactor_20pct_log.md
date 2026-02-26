@@ -18,7 +18,7 @@ Program source:
 | --- | --- | --- | --- | --- | --- |
 | PR1 | Guardrails to 20 percent target | completed | 5854 | 5854 | pending_in_current_workspace |
 | PR2 | i18n/bootstrap extraction | completed | 5854 | 5360 | pending_in_current_workspace |
-| PR3 | Response/fail-closed extraction | pending | - | - | - |
+| PR3 | Response/fail-closed extraction | completed | 5360 | 5289 | pending_in_current_workspace |
 | PR4 | Policy/meta-topic extraction | pending | - | - | - |
 | PR5 | Step0 + wording heuristics extraction | pending | - | - | - |
 | PR6 | Presentation + preflight extraction | pending | - | - | - |
@@ -81,6 +81,40 @@ Architecture checks:
 run_step.ts LOC:
 - before: 5854
 - after: 5854
+Commit:
+- pending_in_current_workspace
+
+## PR3 - Response/fail-closed extraction
+Date: 2026-02-26 09:37 CET
+Status: completed
+Scope goal:
+- Extract shared response assembly from `run_step.ts` into `run_step_response.ts` while preserving fail-closed semantics and OpenAI MCP app-compatible payload behavior.
+Completed:
+- Added `mcp-server/src/handlers/run_step_response.ts` and moved finalize-response internals there:
+  - `finalizeResponseContractInternals` invocation and registry payload integration hook.
+  - ui telemetry merge into `state.__ui_telemetry`.
+  - contract decision logging with marker-class derivation.
+  - session token log append flow with unchanged payload/field mapping.
+- Replaced the inlined `finalizeResponse` closure in `run_step.ts` with `createRunStepResponseHelpers(...)` wiring and kept `run_step.ts` as caller-only for response finalization.
+- Preserved fail-closed payload behavior and contract-shape invariants for success/error paths.
+- 70% rule decision: continue to completion (diff remained narrow and low-risk: files=3, adds/dels total=123, `run_step.ts` hunks=4).
+Pending:
+- PR4 policy/meta-topic extraction.
+Changed files:
+- mcp-server/src/handlers/run_step.ts
+- mcp-server/src/handlers/run_step_response.ts
+- docs/run_step_refactor_20pct_log.md
+Tests run:
+- npm --prefix mcp-server run build => pass
+- node mcp-server/scripts/ui_artifact_parity_check.mjs => pass
+- node --loader ts-node/esm mcp-server/scripts/contract-smoke.mjs => fail (known repo-root loader resolution issue for `ts-node`)
+- node --loader ts-node/esm scripts/contract-smoke.mjs (workdir `mcp-server`) => pass
+- npm --prefix mcp-server test => pass
+Architecture checks:
+- RUN_STEP_ARCH_PHASE=phase_A npm --prefix mcp-server run arch:run-step:check => fail (expected; `run_step.ts lines=5289`, `phase_A limit=4000`)
+run_step.ts LOC:
+- before: 5360
+- after: 5289
 Commit:
 - pending_in_current_workspace
 
