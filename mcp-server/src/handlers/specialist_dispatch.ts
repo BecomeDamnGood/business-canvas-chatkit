@@ -195,6 +195,14 @@ type ErrorPayloadDeps = {
   ) => T;
   uiStringFromStateMap: (state: CanvasState | null | undefined, key: string, fallback: string) => string;
   uiDefaultString: (key: string, fallback: string) => string;
+  logFromState?: (params: {
+    severity: "info" | "warn" | "error";
+    event: string;
+    state: CanvasState;
+    step_id?: string;
+    contract_id?: string;
+    details?: Record<string, unknown>;
+  }) => void;
 };
 
 type CallSpecialistStrictSafeDeps = {
@@ -202,6 +210,14 @@ type CallSpecialistStrictSafeDeps = {
   shouldLogLocalDevDiagnostics: () => boolean;
   buildRateLimitErrorPayload: (state: CanvasState, err: any) => RunStepErrorLike;
   buildTimeoutErrorPayload: (state: CanvasState, err: any) => RunStepErrorLike;
+  logFromState?: (params: {
+    severity: "info" | "warn" | "error";
+    event: string;
+    state: CanvasState;
+    step_id?: string;
+    contract_id?: string;
+    details?: Record<string, unknown>;
+  }) => void;
 };
 
 export function composeSpecialistInstructions(
@@ -774,12 +790,16 @@ export function buildRateLimitErrorPayload(
     ? deps.buildTransientFallbackSpecialist(state)
     : ((state as any).last_specialist_result || {});
   if (timeoutGuardEnabled) {
-    console.log("[timeout_transient_returned]", {
-      type: "rate_limited",
-      retry_after_ms: retryAfterMs,
-      step: String(state.current_step || "step_0"),
-      request_id: String((state as any).__request_id ?? ""),
-      client_action_id: String((state as any).__client_action_id ?? ""),
+    deps.logFromState?.({
+      severity: "warn",
+      event: "transient_fallback_returned",
+      state,
+      step_id: String(state.current_step || "step_0"),
+      details: {
+        type: "rate_limited",
+        retry_after_ms: retryAfterMs,
+        client_action_id: String((state as any).__client_action_id ?? ""),
+      },
     });
   }
   return deps.attachRegistryPayload({
@@ -793,6 +813,9 @@ export function buildRateLimitErrorPayload(
     state,
     error: {
       type: "rate_limited",
+      category: "infra",
+      severity: "transient",
+      retryable: true,
       retry_after_ms: retryAfterMs,
       user_message: deps.uiStringFromStateMap(
         state,
@@ -815,11 +838,15 @@ export function buildTimeoutErrorPayload(
     ? deps.buildTransientFallbackSpecialist(state)
     : ((state as any).last_specialist_result || {});
   if (timeoutGuardEnabled) {
-    console.log("[timeout_transient_returned]", {
-      type: "timeout",
-      step: String(state.current_step || "step_0"),
-      request_id: String((state as any).__request_id ?? ""),
-      client_action_id: String((state as any).__client_action_id ?? ""),
+    deps.logFromState?.({
+      severity: "warn",
+      event: "transient_fallback_returned",
+      state,
+      step_id: String(state.current_step || "step_0"),
+      details: {
+        type: "timeout",
+        client_action_id: String((state as any).__client_action_id ?? ""),
+      },
     });
   }
   return deps.attachRegistryPayload({
@@ -833,6 +860,9 @@ export function buildTimeoutErrorPayload(
     state,
     error: {
       type: "timeout",
+      category: "infra",
+      severity: "transient",
+      retryable: true,
       user_message: deps.uiStringFromStateMap(
         state,
         "transient.timeout",
@@ -874,15 +904,19 @@ export async function callSpecialistStrictSafe(
     routeDecision.candidate_model &&
     routeDecision.candidate_model !== params.model
   ) {
-    console.log("[model_routing_shadow]", {
-      specialist: String(params.decision?.specialist_to_call ?? ""),
-      current_step: String(params.decision?.current_step ?? ""),
-      baseline_model: params.model,
-      shadow_model: routeDecision.candidate_model,
-      source: routeDecision.source,
-      config_version: routeDecision.config_version,
-      request_id: String((stateForError as any).__request_id ?? ""),
-      client_action_id: String((stateForError as any).__client_action_id ?? ""),
+    deps.logFromState?.({
+      severity: "info",
+      event: "model_routing_shadow",
+      state: stateForError,
+      step_id: String(params.decision?.current_step ?? ""),
+      details: {
+        specialist: String(params.decision?.specialist_to_call ?? ""),
+        baseline_model: params.model,
+        shadow_model: routeDecision.candidate_model,
+        source: routeDecision.source,
+        config_version: routeDecision.config_version,
+        client_action_id: String((stateForError as any).__client_action_id ?? ""),
+      },
     });
   }
   const callParams = {
@@ -892,30 +926,38 @@ export async function callSpecialistStrictSafe(
   try {
     const value = await deps.callSpecialistStrict(callParams);
     if (logDiagnostics) {
-      console.log("[run_step_llm_call]", {
-        ok: true,
-        specialist: String(params.decision?.specialist_to_call ?? ""),
-        current_step: String(params.decision?.current_step ?? ""),
-        model: String(value.model || routeDecision.model || ""),
-        model_source: routeDecision.source,
-        elapsed_ms: Date.now() - startedAt,
-        request_id: String((stateForError as any).__request_id ?? ""),
-        client_action_id: String((stateForError as any).__client_action_id ?? ""),
+      deps.logFromState?.({
+        severity: "info",
+        event: "run_step_llm_call",
+        state: stateForError,
+        step_id: String(params.decision?.current_step ?? ""),
+        details: {
+          ok: true,
+          specialist: String(params.decision?.specialist_to_call ?? ""),
+          model: String(value.model || routeDecision.model || ""),
+          model_source: routeDecision.source,
+          elapsed_ms: Date.now() - startedAt,
+          client_action_id: String((stateForError as any).__client_action_id ?? ""),
+        },
       });
     }
     return { ok: true as const, value };
   } catch (err: any) {
     if (logDiagnostics) {
-      console.log("[run_step_llm_call]", {
-        ok: false,
-        specialist: String(params.decision?.specialist_to_call ?? ""),
-        current_step: String(params.decision?.current_step ?? ""),
-        model: String(routeDecision.model || ""),
-        model_source: routeDecision.source,
-        elapsed_ms: Date.now() - startedAt,
-        request_id: String((stateForError as any).__request_id ?? ""),
-        client_action_id: String((stateForError as any).__client_action_id ?? ""),
-        error_type: String(err?.type ?? err?.code ?? err?.name ?? "unknown"),
+      deps.logFromState?.({
+        severity: "warn",
+        event: "run_step_llm_call",
+        state: stateForError,
+        step_id: String(params.decision?.current_step ?? ""),
+        details: {
+          ok: false,
+          specialist: String(params.decision?.specialist_to_call ?? ""),
+          model: String(routeDecision.model || ""),
+          model_source: routeDecision.source,
+          elapsed_ms: Date.now() - startedAt,
+          client_action_id: String((stateForError as any).__client_action_id ?? ""),
+          error_type: String(err?.type ?? err?.code ?? err?.name ?? "unknown"),
+        },
       });
     }
     if (isRateLimitError(err)) {

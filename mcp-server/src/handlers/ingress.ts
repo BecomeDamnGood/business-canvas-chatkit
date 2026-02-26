@@ -21,12 +21,14 @@ export const ALLOWED_TRANSIENT_STATE_KEYS = new Set<string>([
   "__ui_phase_by_step",
   "__ui_render_mode_by_step",
   "__request_id",
+  "__trace_id",
   "__client_action_id",
   "__session_id",
   "__session_started_at",
   "__session_log_file",
   "__session_turn_index",
   "__session_turn_id",
+  "__idempotency_registry_owner",
   "__dream_runtime_mode",
   "__dream_builder_prompt_stage",
   "__last_clicked_action_for_contract",
@@ -71,7 +73,7 @@ function resolveIngressIdempotencyKey(params: {
   const explicit = normalizeIngressIdempotencyKey(params.explicit);
   if (explicit) return explicit;
   const state = params.state && typeof params.state === "object" ? params.state : {};
-  return normalizeIngressIdempotencyKey((state as any).__client_action_id);
+  return normalizeIngressIdempotencyKey(state.__client_action_id);
 }
 
 export const RunStepArgsSchema = z.object({

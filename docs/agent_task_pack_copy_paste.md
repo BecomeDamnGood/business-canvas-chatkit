@@ -636,6 +636,355 @@ Output verplicht:
 
 ---
 
+## Agent 7A - Stabiliteitsgate: alle checks weer groen
+
+### Intro voor deze agent
+De mega-update is gedaan; nu moet de basispipeline aantoonbaar groen zijn.  
+Deze fase fixt eerst de bekende rode checks en levert een harde statusmatrix op.
+
+### Codefocus
+- `mcp-server/` checkscripts + falende tests
+- `chatkit/frontend` en `managed-chatkit/frontend` basischecks
+
+### Copy/paste prompt
+```md
+Doel:
+Maak de kernchecks weer groen en lever een harde "bewijs dat niets stuk is"-status op.
+
+Verplicht eerst lezen:
+- `docs/repo_architecture_audit_2026-02-26.md`
+- Relevante secties: `Executive Summary`, `MCP / agent-proof beoordeling (0-5)`, `Opsplitsing & debugbaarheid`.
+- Laatste handoff/output van de mega-update validatie (indien aanwezig).
+- Start je output met: `Auditsecties gelezen: ...`
+
+Algemene regels (verplicht):
+1. Gebruik maximaal circa 70% contextbudget.
+2. Lees alleen de opgegeven bestanden + direct noodzakelijke imports.
+3. Stop expliciet wanneer je de circa 70%-grens nadert of de taak klaar is.
+4. Rapporteer exact: wat gedaan is, wat nog moet gebeuren, risico's/open vragen.
+5. Schrijf alleen een nieuwe "Agency Instruction" als je stopt door de circa 70%-grens EN de taak nog niet af is. Als alles afgerond is, hoeft dit niet.
+6. Maak kleine, verifieerbare stappen; geen scope creep.
+
+Taakscope (bestanden):
+- Lees alleen:
+  - mcp-server/package.json
+  - mcp-server/scripts/*
+  - mcp-server/src/server_safe_string.test.ts
+  - mcp-server/src/core/bootstrap_runtime.test.ts
+  - mcp-server/src/handlers/* (alleen waar tests/checks op falen)
+  - chatkit/frontend/package.json
+  - managed-chatkit/frontend/package.json
+  - strikt noodzakelijke imports
+
+Uit te voeren:
+1. Draai en rapporteer status van: typecheck, lint/format (waar aanwezig), unit/integration tests, build.
+2. Fix de actuele rode checks:
+   - `server-safe-string-scan` failure (String(...) in server-flow) OF scanner-regel alignen met intent.
+   - `server_safe_string.test.ts` assertions die niet meer passen bij structured logs/events.
+   - `i18n_literal_guard` policy-conflict (NL locale literals vs deny-patterns) met duidelijke keuze: scope/policy aanpassen.
+   - `arch:run-step:any-budget` drift (budget of code alignen, gemotiveerd).
+3. Draai dezelfde checks opnieuw en bewijs regressievrij resultaat.
+4. Lever een compacte checkmatrix: command, resultaat, korte notitie.
+
+Output verplicht:
+1. Gedaan (met checkmatrix en exacte fixes).
+2. Nog te doen (voor 7B).
+3. Risico's/open vragen.
+4. Als gestopt door ~70% en niet klaar: Nieuwe Agency Instruction voor Agent 7A of 7B. Als klaar: meld expliciet `Geen vervolgprompt nodig`.
+```
+
+---
+
+## Agent 7B - Smoke + e2e betrouwbaarheid
+
+### Intro voor deze agent
+Nadat de basischecks groen zijn, moet runtimegedrag in praktijk aantoonbaar werken.  
+Deze fase maakt smoke/e2e runs deterministischer en rapportabel.
+
+### Codefocus
+- `mcp-server/server.ts`
+- e2e-config/tests in frontend pakketten
+- eventueel startup scripts
+
+### Copy/paste prompt
+```md
+Doel:
+Verifieer app-smoke en e2e basisflow, en elimineer bekende flaky blocker(s).
+
+Verplicht eerst lezen:
+- Handoff output van Agent 7A (verplicht).
+- Relevante smoke/e2e scripts in package.json van:
+  - mcp-server
+  - chatkit/frontend
+  - managed-chatkit/frontend
+- Start je output met: `Auditsecties gelezen: ...`
+
+Algemene regels (verplicht):
+1. Gebruik maximaal circa 70% contextbudget.
+2. Lees alleen de opgegeven bestanden + direct noodzakelijke imports.
+3. Stop expliciet wanneer je de circa 70%-grens nadert of de taak klaar is.
+4. Rapporteer exact: wat gedaan is, wat nog moet gebeuren, risico's/open vragen.
+5. Schrijf alleen een nieuwe "Agency Instruction" als je stopt door de circa 70%-grens EN de taak nog niet af is. Als alles afgerond is, hoeft dit niet.
+6. Maak kleine, verifieerbare stappen; geen scope creep.
+
+Taakscope (bestanden):
+- Lees alleen:
+  - mcp-server/server.ts
+  - relevante e2e testfiles/config (alleen de falende flow + noodzakelijke helpers)
+  - package.json scripts van betrokken pakketten
+  - strikt noodzakelijke imports
+
+Uit te voeren:
+1. Definieer minimale smoke-suite:
+   - server start
+   - health/ready check (of tijdelijke fallback endpoint check)
+   - step_0 request-response basisflow
+   - idempotency replay/duplicate request gedrag
+2. Maak de falende e2e-startflow stabiel (bijv. selector-contract, ready-state gating, test fixture).
+3. Draai smoke + geselecteerde e2e smoke subset en rapporteer doorlooptijd + resultaat.
+4. Documenteer wat nog geen volledige e2e-dekking heeft.
+
+Output verplicht:
+1. Gedaan.
+2. Nog te doen (voor 8A).
+3. Risico's/open vragen.
+4. Als gestopt door ~70% en niet klaar: Nieuwe Agency Instruction voor Agent 7B of 8A. Als klaar: meld expliciet `Geen vervolgprompt nodig`.
+```
+
+---
+
+## Agent 8A - SSOT/contract-audit remediation
+
+### Intro voor deze agent
+Deze fase pakt dubbele waarheden en contract-breaches aan.  
+Doel: 1 duidelijke owner per regel en consistente runtime enforcement.
+
+### Codefocus
+- `mcp-server/server.ts`
+- `mcp-server/src/handlers/ingress.ts`
+- `mcp-server/src/handlers/run_step_runtime.ts`
+- `mcp-server/src/handlers/run_step_routes.ts`
+- `mcp-server/src/core/state.ts`
+
+### Copy/paste prompt
+```md
+Doel:
+Werk contract-SSOT uit: verwijder duplicaten, sluit validatiegaten, en leg ownership expliciet vast.
+
+Verplicht eerst lezen:
+- `docs/repo_architecture_audit_2026-02-26.md`
+- Relevante secties: `Contract inventory`, `Contract-based design + SSOT`, `Waar state leeft en hoe het stroomt`.
+- Handoff output van Agent 7B (verplicht).
+- Start je output met: `Auditsecties gelezen: ...`
+
+Algemene regels (verplicht):
+1. Gebruik maximaal circa 70% contextbudget.
+2. Lees alleen de opgegeven bestanden + direct noodzakelijke imports.
+3. Stop expliciet wanneer je de circa 70%-grens nadert of de taak klaar is.
+4. Rapporteer exact: wat gedaan is, wat nog moet gebeuren, risico's/open vragen.
+5. Schrijf alleen een nieuwe "Agency Instruction" als je stopt door de circa 70%-grens EN de taak nog niet af is. Als alles afgerond is, hoeft dit niet.
+6. Maak kleine, verifieerbare stappen; geen scope creep.
+
+Taakscope (bestanden):
+- Lees alleen:
+  - mcp-server/server.ts
+  - mcp-server/src/handlers/ingress.ts
+  - mcp-server/src/handlers/run_step_runtime.ts
+  - mcp-server/src/handlers/run_step_routes.ts
+  - mcp-server/src/core/state.ts
+  - contract-inventory docs + strikt noodzakelijke imports
+
+Uit te voeren:
+1. Elimineer dubbele SSOT's in scope:
+   - idempotency registry ownership centraliseren.
+   - transient-state allowlist/canonicalization centraliseren.
+   - step->field mapping duplicatie reduceren.
+2. Maak runtime validation compleet op bekende gaten:
+   - JSON.parse payloads met te lichte checks (schema-driven maken).
+   - local-dev body read zonder size-limit alignen met veilige ingress-principes.
+3. Valideer contract-enforcement end-to-end (types + runtime assertions).
+4. Update contract inventory met: owner, enforcement punt, compat/notes.
+
+Output verplicht:
+1. Gedaan (incl. lijst van opgeloste duplicaten).
+2. Nog te doen (voor 8B).
+3. Risico's/open vragen.
+4. Als gestopt door ~70% en niet klaar: Nieuwe Agency Instruction voor Agent 8A of 8B. Als klaar: meld expliciet `Geen vervolgprompt nodig`.
+```
+
+---
+
+## Agent 8B - Boundary enforcement + dependency violations
+
+### Intro voor deze agent
+Deze fase toetst of de opsplitsing echt klopt en maakt overtredingen zichtbaar/handhaafbaar.  
+Doel: harde architectuurgrenzen i.p.v. impliciete afspraken.
+
+### Codefocus
+- `mcp-server/src/core/*`
+- `mcp-server/src/handlers/*`
+- arch scripts in `mcp-server/scripts/arch/*`
+
+### Copy/paste prompt
+```md
+Doel:
+Voer een boundary-check uit met concrete import/dependency overtredingen en fix of gate ze.
+
+Verplicht eerst lezen:
+- `docs/repo_architecture_audit_2026-02-26.md`
+- Relevante secties: `Architectuurkaart`, `Complexiteitsanalyse`, `Aanbevelingen met prioriteit`.
+- Handoff output van Agent 8A (verplicht).
+- Start je output met: `Auditsecties gelezen: ...`
+
+Algemene regels (verplicht):
+1. Gebruik maximaal circa 70% contextbudget.
+2. Lees alleen de opgegeven bestanden + direct noodzakelijke imports.
+3. Stop expliciet wanneer je de circa 70%-grens nadert of de taak klaar is.
+4. Rapporteer exact: wat gedaan is, wat nog moet gebeuren, risico's/open vragen.
+5. Schrijf alleen een nieuwe "Agency Instruction" als je stopt door de circa 70%-grens EN de taak nog niet af is. Als alles afgerond is, hoeft dit niet.
+6. Maak kleine, verifieerbare stappen; geen scope creep.
+
+Taakscope (bestanden):
+- Lees alleen:
+  - mcp-server/src/core/*
+  - mcp-server/src/handlers/*
+  - mcp-server/scripts/arch/*
+  - strikt noodzakelijke imports
+
+Uit te voeren:
+1. Genereer lijst met overtredingen per import/dependency:
+   - domain/core die infra/UI dependencies binnenhaalt.
+   - application orchestration die teveel rules bevat.
+   - infra adapters die omhoog lekken.
+2. Fix directe overtredingen in scope waar risico laag is.
+3. Voor niet-direct-fixbare overtredingen: voeg expliciete architectuur-gates/checks toe (script + CI hook).
+4. Lever een violation register (severity, file, reden, status).
+
+Output verplicht:
+1. Gedaan.
+2. Nog te doen (voor 9A).
+3. Risico's/open vragen.
+4. Als gestopt door ~70% en niet klaar: Nieuwe Agency Instruction voor Agent 8B of 9A. Als klaar: meld expliciet `Geen vervolgprompt nodig`.
+```
+
+---
+
+## Agent 9A - OpenAI MCP app compliance hardening
+
+### Intro voor deze agent
+Deze fase maakt de codebase expliciet "MCP app compliant" i.p.v. impliciet werkend.  
+Focus ligt op schema-contracten, versieerbaarheid, determinisme en retry-safety.
+
+### Codefocus
+- `mcp-server/server.ts`
+- tool contract/schema modules
+- write paths met side-effects
+
+### Copy/paste prompt
+```md
+Doel:
+Maak tool- en agent-geschiktheid expliciet conform MCP-app eisen: schema-driven, versionable, deterministic core.
+
+Verplicht eerst lezen:
+- `docs/repo_architecture_audit_2026-02-26.md`
+- Relevante secties: `MCP / agent-proof beoordeling (0-5)`, `Contract inventory`.
+- Handoff output van Agent 8B (verplicht).
+- Start je output met: `Auditsecties gelezen: ...`
+
+Algemene regels (verplicht):
+1. Gebruik maximaal circa 70% contextbudget.
+2. Lees alleen de opgegeven bestanden + direct noodzakelijke imports.
+3. Stop expliciet wanneer je de circa 70%-grens nadert of de taak klaar is.
+4. Rapporteer exact: wat gedaan is, wat nog moet gebeuren, risico's/open vragen.
+5. Schrijf alleen een nieuwe "Agency Instruction" als je stopt door de circa 70%-grens EN de taak nog niet af is. Als alles afgerond is, hoeft dit niet.
+6. Maak kleine, verifieerbare stappen; geen scope creep.
+
+Taakscope (bestanden):
+- Lees alleen:
+  - mcp-server/server.ts
+  - mcp-server/src/contracts/*
+  - mcp-server/src/handlers/* (alleen tool-ingress/egress en writes)
+  - strikt noodzakelijke imports
+
+Uit te voeren:
+1. Tool interfaces:
+   - waarborg schema-driven input/output voor alle publieke tools.
+   - maak versioning expliciet (contract/schema versie + compatbeleid).
+2. Determinisme:
+   - verplaats side-effects achter adapters/ports.
+   - borg dat core policy-paden deterministisch testbaar blijven.
+3. Retry/idempotency:
+   - verifieer write-path retry-safety; fix ontbrekende idempotency of conflict handling.
+4. Security hygiene:
+   - check dat secrets/PII niet in logs/prompts terechtkomen.
+5. Voeg compliance-checklist + automatische checks toe aan CI.
+
+Output verplicht:
+1. Gedaan.
+2. Nog te doen (voor 9B).
+3. Risico's/open vragen.
+4. Als gestopt door ~70% en niet klaar: Nieuwe Agency Instruction voor Agent 9A of 9B. Als klaar: meld expliciet `Geen vervolgprompt nodig`.
+```
+
+---
+
+## Agent 9B - Observability + failure playbook
+
+### Intro voor deze agent
+Laatste fase: operationele paraatheid.  
+Doel: bij falen snel kunnen detecteren, lokaliseren en herstellen.
+
+### Codefocus
+- logging/telemetry paden in `mcp-server`
+- docs voor operations/playbooks
+
+### Copy/paste prompt
+```md
+Doel:
+Maak observability compleet en lever een praktisch failure playbook met top failure modes.
+
+Verplicht eerst lezen:
+- `docs/repo_architecture_audit_2026-02-26.md`
+- Relevante secties: `Opsplitsing & debugbaarheid`, `MCP / agent-proof beoordeling (0-5)`.
+- Handoff output van Agent 9A (verplicht).
+- Start je output met: `Auditsecties gelezen: ...`
+
+Algemene regels (verplicht):
+1. Gebruik maximaal circa 70% contextbudget.
+2. Lees alleen de opgegeven bestanden + direct noodzakelijke imports.
+3. Stop expliciet wanneer je de circa 70%-grens nadert of de taak klaar is.
+4. Rapporteer exact: wat gedaan is, wat nog moet gebeuren, risico's/open vragen.
+5. Schrijf alleen een nieuwe "Agency Instruction" als je stopt door de circa 70%-grens EN de taak nog niet af is. Als alles afgerond is, hoeft dit niet.
+6. Maak kleine, verifieerbare stappen; geen scope creep.
+
+Taakscope (bestanden):
+- Lees alleen:
+  - mcp-server/server.ts
+  - mcp-server/src/handlers/*
+  - mcp-server/src/core/* (alleen logging/diagnostics gerelateerd)
+  - docs/ (playbook/inventory gerelateerde bestanden)
+  - strikt noodzakelijke imports
+
+Uit te voeren:
+1. Zorg voor consistente structured logging met correlation/trace ids door de volledige flow.
+2. Controleer en verbeter error mapping (transient vs fatal, contract vs infra).
+3. Voeg health/ready/diagnostics endpoint(s) toe of documenteer expliciet waarom niet.
+4. Lever failure playbook met top 10 failure modes:
+   - trigger/symptoom
+   - detectie (log event/metric)
+   - eerste mitigatie
+   - duurzame fix richting
+5. Koppel playbook terug aan contract inventory/ADR waar relevant.
+
+Output verplicht:
+1. Gedaan.
+2. Nog te doen.
+3. Risico's/open vragen.
+4. Als klaar: meld expliciet `Geen vervolgprompt nodig`.
+```
+
+---
+
 ## Handoff-template (verplicht einde voor elke agent)
 
 Gebruik exact dit format in de eindoutput van elke agent:

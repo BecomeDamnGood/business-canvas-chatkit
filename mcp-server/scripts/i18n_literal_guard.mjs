@@ -13,6 +13,9 @@ const EXCLUDE_PATTERNS = [
   /\/dist\//,
   /\/node_modules\//,
   /\/coverage\//,
+  /^mcp-server\/src\/i18n\//,
+  /\/__golden__\//,
+  /\.test\.(ts|tsx|js|mjs)$/i,
   /\.snap$/i,
 ];
 

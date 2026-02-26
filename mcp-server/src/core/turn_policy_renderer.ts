@@ -1,7 +1,7 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
 import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "./menu_contract.js";
 import { getFinalFieldForStepId, type CanvasState } from "./state.js";
-import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
+import { actionCodeToIntent } from "./actioncode_intent.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import {
   DEFAULT_MENU_BY_STATUS,

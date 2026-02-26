@@ -2502,12 +2502,14 @@ test("step transition commits staged step_0 value before moving to dream", async
   });
 
   assert.equal(result.ok, true);
+  const resultState = (result.state || {}) as Record<string, unknown>;
+  const provisionalByStep =
+    resultState.provisional_by_step && typeof resultState.provisional_by_step === "object"
+      ? (resultState.provisional_by_step as Record<string, unknown>)
+      : {};
   assert.equal(String(result.current_step_id || ""), "dream");
-  assert.equal(
-    String((result.state as any)?.step_0_final || ""),
-    "Venture: advertising agency | Name: Mindd | Status: existing"
-  );
-  assert.equal(String((result.state as any)?.provisional_by_step?.step_0 || ""), "");
+  assert.equal(String(resultState.step_0_final || ""), "Venture: advertising agency | Name: Mindd | Status: existing");
+  assert.equal(String(provisionalByStep.step_0 || ""), "");
 });
 
 test("step transition commits staged value and clears provisional state", async () => {

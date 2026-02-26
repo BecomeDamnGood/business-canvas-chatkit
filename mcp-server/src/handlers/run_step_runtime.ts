@@ -22,7 +22,6 @@ import {
   normalizeStateLanguageSource,
   deriveTransitionEventFromLegacy,
   orchestrateFromTransition,
-  hasPresentationTemplate,
   STEP_0_ID,
   STEP_0_SPECIALIST,
   DREAM_STEP_ID,
@@ -228,9 +227,44 @@ const {
 } = runtimeStateHelpers;
 export const informationalActionMutatesProgress =
   runtimeStateHelpers.informationalActionMutatesProgress;
+
+function logFromState(params: {
+  severity: "info" | "warn" | "error";
+  event: string;
+  state: CanvasState | Record<string, unknown> | null | undefined;
+  step_id?: string;
+  contract_id?: string;
+  details?: Record<string, unknown>;
+}): void {
+  const context = createStructuredLogContextFromState(
+    (params.state || {}) as Record<string, unknown>,
+    {
+      ...(params.step_id ? { step_id: params.step_id } : {}),
+      ...(params.contract_id ? { contract_id: params.contract_id } : {}),
+    }
+  );
+  logStructuredEvent(
+    params.severity,
+    params.event,
+    context,
+    params.details || {}
+  );
+}
+
 const runtimeActionHelpers = createRunStepRuntimeActionHelpers({
   step0Id: STEP_0_ID,
   actioncodeRegistry: ACTIONCODE_REGISTRY,
+  onUnknownActionCode: ({ actionCode, currentStep, state }) => {
+    logFromState({
+      severity: "warn",
+      event: "unknown_action_code",
+      state,
+      step_id: currentStep,
+      details: {
+        action_code: actionCode,
+      },
+    });
+  },
 });
 const {
   processActionCode,
@@ -381,7 +415,7 @@ function isSemanticViolationReason(reason: string | null | undefined): reason is
 }
 
 function hasAcceptedOutputEvidence(state: CanvasState, stepId: string): boolean {
-  const finalField = String(FINAL_FIELD_BY_STEP_ID[stepId] || "").trim();
+  const finalField = String(fieldForStep(stepId) || "").trim();
   const committedFinal = finalField ? String((state as Record<string, unknown>)?.[finalField] || "").trim() : "";
   if (committedFinal) return true;
   const provisional = provisionalValueForStep(state as Record<string, unknown>, stepId);
@@ -780,11 +814,7 @@ const presentationHelpers = createRunStepPresentationHelpers({
 });
 
 const {
-  baseUrlFromEnv,
-  generatePresentationPptx,
-  cleanupOldPresentationFiles,
-  convertPptxToPdf,
-  convertPdfToPng,
+  generatePresentationAssets,
 } = presentationHelpers;
 
 function labelKeysForMenuActionCodes(menuId: string, actionCodes: string[]): string[] {
@@ -1268,6 +1298,7 @@ const buildRateLimitErrorPayload = createBuildRateLimitErrorPayload({
   attachRegistryPayload,
   uiStringFromStateMap,
   uiDefaultString,
+  logFromState,
 });
 
 const buildTimeoutErrorPayload = createBuildTimeoutErrorPayload({
@@ -1276,6 +1307,7 @@ const buildTimeoutErrorPayload = createBuildTimeoutErrorPayload({
   attachRegistryPayload,
   uiStringFromStateMap,
   uiDefaultString,
+  logFromState,
 });
 
 const callSpecialistStrictSafeDispatch = createCallSpecialistStrictSafe({
@@ -1283,6 +1315,7 @@ const callSpecialistStrictSafeDispatch = createCallSpecialistStrictSafe({
   shouldLogLocalDevDiagnostics,
   buildRateLimitErrorPayload,
   buildTimeoutErrorPayload,
+  logFromState,
 });
 
 async function callSpecialistStrictSafe(
@@ -1333,7 +1366,8 @@ const runStepPreflightHelpers = createRunStepPreflightHelpers({
       telemetry as UiI18nTelemetryCounters | null | undefined,
       key as keyof UiI18nTelemetryCounters
     ),
-  });
+  logStructuredEvent: logFromState,
+});
 
 const RUNTIME_IDEMPOTENCY_ENTRY_TTL_MS = Number(
   process.env.RUNTIME_IDEMPOTENCY_ENTRY_TTL_MS || 30 * 60 * 1000
@@ -1370,6 +1404,7 @@ function stableHashValue(value: unknown, depth = 0): unknown {
   for (const key of Object.keys(raw).sort()) {
     if (
       key === "__request_id" ||
+      key === "__trace_id" ||
       key === "idempotency_key" ||
       key === "idempotency_outcome" ||
       key === "idempotency_error_code"
@@ -1409,7 +1444,7 @@ function buildRuntimeIdempotencyScopeKey(state: Record<string, unknown>): string
   if (bootstrapSessionId) return `session:${bootstrapSessionId}`;
   const hostWidgetSessionId = String(state.host_widget_session_id || "").trim();
   if (hostWidgetSessionId) return `host:${hostWidgetSessionId}`;
-  const runtimeSessionId = String((state as any).__session_id || "").trim();
+  const runtimeSessionId = String(state.__session_id || "").trim();
   if (runtimeSessionId) return `runtime:${runtimeSessionId}`;
   return "scope:runtime_unknown";
 }
@@ -1561,7 +1596,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       state: ingressParsed.blockedState,
       error: {
         type: "invalid_state",
+        category: "contract",
+        severity: "fatal",
+        retryable: false,
         message: "Input validation error for run_step.",
+        retry_action: "restart_session",
         required_action: "restart_session",
         details: ingressParsed.issues,
       },
@@ -1582,11 +1621,16 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     args.state && typeof args.state === "object" && !Array.isArray(args.state)
       ? (args.state as Record<string, unknown>)
       : {};
+  // SSOT ownership: server path owns idempotency registry and signals this via transient marker.
+  const idempotencyRegistryOwner = String(rawStateForIdempotency.__idempotency_registry_owner || "")
+    .trim()
+    .toLowerCase();
+  const runtimeOwnsIdempotency = idempotencyRegistryOwner !== "server";
   const idempotencyKey = String(args.idempotency_key || "").trim();
-  const idempotencyScopeKey = idempotencyKey
+  const idempotencyScopeKey = runtimeOwnsIdempotency && idempotencyKey
     ? buildRuntimeIdempotencyScopeKey(rawStateForIdempotency)
     : "";
-  const idempotencyRequestHash = idempotencyKey
+  const idempotencyRequestHash = runtimeOwnsIdempotency && idempotencyKey
     ? createRuntimeIdempotencyRequestHash({
         currentStepId: String(args.current_step_id || STEP_0_ID),
         userMessage: String(args.user_message || ""),
@@ -1597,11 +1641,11 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       })
     : "";
   const idempotencyRecordKey =
-    idempotencyKey && idempotencyRequestHash
+    runtimeOwnsIdempotency && idempotencyKey && idempotencyRequestHash
       ? buildRuntimeIdempotencyRegistryKey(idempotencyScopeKey, idempotencyKey)
       : "";
   const idempotencyTracker =
-    idempotencyKey && idempotencyRequestHash && idempotencyRecordKey
+    runtimeOwnsIdempotency && idempotencyKey && idempotencyRequestHash && idempotencyRecordKey
       ? {
           idempotencyKey,
           scopeKey: idempotencyScopeKey,
@@ -1655,6 +1699,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       state: normalizedState,
       error: {
         type: params.errorType,
+        category: "contract",
+        severity: params.errorType === "idempotency_inflight" ? "transient" : "fatal",
+        retryable: params.errorType === "idempotency_inflight",
         code: params.errorCode,
         message: params.message,
         retry_action: params.retryAction,
@@ -2033,7 +2080,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     state: { applyStateUpdate, setDreamRuntimeMode, getDreamRuntimeMode, isUiStateHygieneSwitchV1Enabled, clearStepInteractiveState },
     contracts: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, ensureUiStrings: finalizeLayer.ensureUiStrings, buildContractId },
     step0: { ensureStartState: finalizeLayer.ensureStartState, parseStep0Final, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState },
-    presentation: { hasPresentationTemplate, generatePresentationPptx, convertPptxToPdf, convertPdfToPng, cleanupOldPresentationFiles, baseUrlFromEnv, uiStringFromStateMap, uiDefaultString },
+    presentation: { generatePresentationAssets, uiStringFromStateMap, uiDefaultString },
     specialist: { callSpecialistStrictSafe, buildRoutingContext: finalizeLayer.buildRoutingContext, rememberLlmCall },
     response: { attachRegistryPayload: finalizeLayer.attachRegistryPayload, finalizeResponse: finalizeLayer.finalizeResponse, turnResponseEngine: finalizeLayer.turnResponseEngine },
     suggestions: { pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState },

@@ -136,12 +136,12 @@ export type RunStepRouteStep0Ports = {
 };
 
 export type RunStepRoutePresentationPorts = {
-  hasPresentationTemplate: () => boolean;
-  generatePresentationPptx: (state: CanvasState) => { fileName: string; filePath: string };
-  convertPptxToPdf: (pptxPath: string, outDir: string) => string;
-  convertPdfToPng: (pdfPath: string, outDir: string) => string;
-  cleanupOldPresentationFiles: (outDir: string, maxAgeMs: number) => void;
-  baseUrlFromEnv: () => string;
+  generatePresentationAssets: (state: CanvasState) => {
+    pdfUrl: string;
+    pngUrl: string;
+    baseName: string;
+    assetFingerprint: string;
+  };
   uiStringFromStateMap: (state: CanvasState | null | undefined, key: string, fallback: string) => string;
   uiDefaultString: (key: string, fallback?: string) => string;
 };

@@ -9,22 +9,34 @@ import os from "node:os";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { z } from "zod";
 import { createRateLimitMiddleware } from "./src/middleware/rateLimit.js";
 import { applySecurityHeaders } from "./src/middleware/security.js";
+import {
+  MCP_TOOL_CONTRACT_FAMILY_VERSION,
+  RUN_STEP_MODEL_RESULT_SHAPE_VERSION,
+  RUN_STEP_TOOL_COMPAT_POLICY,
+  RUN_STEP_TOOL_CONTRACT_META,
+  RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
+  RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
+  RunStepToolInputSchema,
+  RunStepToolStructuredContentOutputSchema,
+} from "./src/contracts/mcp_tool_contract.js";
 import {
   CURRENT_STATE_VERSION,
   CanvasStateZod,
   getDefaultState,
   getFinalsSnapshot,
   normalizeState,
-  normalizeStateLanguageSource,
 } from "./src/core/state.js";
 import { getPresentationTemplatePath } from "./src/core/presentation_paths.js";
 import { safeString } from "./src/server_safe_string.js";
 import {
   VIEW_CONTRACT_VERSION,
 } from "./src/core/bootstrap_runtime.js";
+import {
+  canonicalizeStateForRunStepArgs as canonicalizeStateForToolInput,
+  normalizeIngressIdempotencyKey,
+} from "./src/handlers/ingress.js";
 
 function loadDotEnv() {
   try {
@@ -93,8 +105,6 @@ const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 3
 const BOOTSTRAP_SESSION_REGISTRY_TTL_MS = Number(process.env.BOOTSTRAP_SESSION_REGISTRY_TTL_MS || 30 * 60 * 1000);
 const IDEMPOTENCY_ENTRY_TTL_MS = Number(process.env.IDEMPOTENCY_ENTRY_TTL_MS || BOOTSTRAP_SESSION_REGISTRY_TTL_MS);
 const BOOTSTRAP_SESSION_ID_PREFIX = "bs_";
-const IDEMPOTENCY_KEY_MAX_LEN = 128;
-const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._:-]{1,128}$/;
 const IDEMPOTENCY_ERROR_CODES = {
   REPLAY: "idempotency_replay",
   CONFLICT: "idempotency_key_conflict",
@@ -126,24 +136,19 @@ function parsePositiveInt(value: unknown): number {
   return Math.trunc(n);
 }
 
-function normalizeIdempotencyKey(raw: unknown): string {
-  const value = safeString(raw ?? "").trim();
-  if (!value) return "";
-  if (value.length > IDEMPOTENCY_KEY_MAX_LEN) return "";
-  return IDEMPOTENCY_KEY_RE.test(value) ? value : "";
-}
+const normalizeIdempotencyKey = normalizeIngressIdempotencyKey;
 
 function toStableHashValue(value: unknown, depth = 0): unknown {
   if (depth > 10) return "[depth_limit]";
   if (value === null || value === undefined) return null;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
-  if (typeof value === "bigint") return String(value);
+  if (typeof value === "bigint") return value.toString();
   if (Array.isArray(value)) return value.map((entry) => toStableHashValue(entry, depth + 1));
   if (typeof value !== "object") return safeString(value);
   const raw = value as Record<string, unknown>;
   const next: Record<string, unknown> = {};
   for (const key of Object.keys(raw).sort()) {
-    if (key === "__request_id") continue;
+    if (key === "__request_id" || key === "__trace_id") continue;
     next[key] = toStableHashValue(raw[key], depth + 1);
   }
   return next;
@@ -191,6 +196,25 @@ function purgeExpiredIdempotencyEntries(nowMs: number): void {
       idempotencyRegistry.delete(registryKey);
     }
   }
+}
+
+function summarizeIdempotencyRegistry(nowMs: number): {
+  total: number;
+  inflight: number;
+  completed: number;
+} {
+  purgeExpiredIdempotencyEntries(nowMs);
+  let inflight = 0;
+  let completed = 0;
+  for (const entry of idempotencyRegistry.values()) {
+    if (entry.status === "inflight") inflight += 1;
+    else completed += 1;
+  }
+  return {
+    total: idempotencyRegistry.size,
+    inflight,
+    completed,
+  };
 }
 
 function markIdempotencyInFlight(params: {
@@ -261,6 +285,13 @@ function purgeExpiredBootstrapSessions(nowMs: number): void {
   }
 }
 
+function summarizeBootstrapSessions(nowMs: number): {
+  total: number;
+} {
+  purgeExpiredBootstrapSessions(nowMs);
+  return { total: bootstrapSessionRegistry.size };
+}
+
 function attachBootstrapDiagnostics(args: {
   responseKind: "run_step";
   resultForClient: Record<string, unknown>;
@@ -284,6 +315,9 @@ function attachBootstrapDiagnostics(args: {
   const stateWithDiagnostics: Record<string, unknown> = {
     ...stateRaw,
     view_contract_version: VIEW_CONTRACT_VERSION,
+    tool_contract_family_version: MCP_TOOL_CONTRACT_FAMILY_VERSION,
+    run_step_input_schema_version: RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
+    run_step_output_schema_version: RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
     response_seq: responseSeq,
     response_kind: responseKind,
   };
@@ -305,6 +339,9 @@ function attachBootstrapDiagnostics(args: {
     flags: {
       ...flagsRaw,
       view_contract_version: VIEW_CONTRACT_VERSION,
+      tool_contract_family_version: MCP_TOOL_CONTRACT_FAMILY_VERSION,
+      run_step_input_schema_version: RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
+      run_step_output_schema_version: RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
       response_seq: responseSeq,
       response_kind: responseKind,
       ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
@@ -464,6 +501,14 @@ function getCorrelationId(req: any): string {
   return existing ? safeString(existing) : randomUUID();
 }
 
+function getTraceId(req: any): string {
+  return (
+    getHeader(req, "x-amzn-trace-id") ||
+    getHeader(req, "traceparent") ||
+    getHeader(req, "x-b3-traceid")
+  );
+}
+
 function ensureCorrelationHeader(res: any, correlationId: string) {
   if (!res.headersSent) {
     res.setHeader("X-Correlation-Id", correlationId);
@@ -482,12 +527,15 @@ type StructuredLogSeverity = "info" | "warn" | "error";
 
 type StructuredLogContext = {
   correlation_id?: unknown;
+  trace_id?: unknown;
   session_id?: unknown;
   step_id?: unknown;
   contract_id?: unknown;
 };
 
 const LOG_REDACT_KEY_RE = /(authorization|cookie|token|secret|password|api[_-]?key)/i;
+const LOG_REDACT_VALUE_RE =
+  /(bearer\s+[a-z0-9._-]{8,}|sk-[a-z0-9._-]{8,}|xox[baprs]-[a-z0-9-]{8,}|api[_-]?key\s*[:=]\s*\S+)/i;
 
 function normalizeLogField(value: unknown, maxLen = 256): string {
   const text = safeString(value ?? "").trim();
@@ -497,9 +545,12 @@ function normalizeLogField(value: unknown, maxLen = 256): string {
 
 function sanitizeLogValue(value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value;
-  if (typeof value === "string") return normalizeLogField(value, 512);
+  if (typeof value === "string") {
+    const normalized = normalizeLogField(value, 512);
+    return LOG_REDACT_VALUE_RE.test(normalized) ? "[redacted]" : normalized;
+  }
   if (typeof value === "number" || typeof value === "boolean") return value;
-  if (typeof value === "bigint") return String(value);
+  if (typeof value === "bigint") return value.toString();
   if (Array.isArray(value)) {
     if (depth >= 2) return "[array_omitted]";
     return value.slice(0, 20).map((entry) => sanitizeLogValue(entry, depth + 1));
@@ -519,7 +570,13 @@ function sanitizeLogDetails(details: Record<string, unknown>): Record<string, un
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(details)) {
     if (key === "event" || key === "severity") continue;
-    if (key === "correlation_id" || key === "session_id" || key === "step_id" || key === "contract_id") continue;
+    if (
+      key === "correlation_id" ||
+      key === "trace_id" ||
+      key === "session_id" ||
+      key === "step_id" ||
+      key === "contract_id"
+    ) continue;
     next[key] = LOG_REDACT_KEY_RE.test(key) ? "[redacted]" : sanitizeLogValue(value, 0);
   }
   return next;
@@ -587,6 +644,20 @@ function resolveCorrelationIdFromExtra(extra: unknown): string {
   return normalizeLogField(meta["x-correlation-id"] ?? meta["x-request-id"] ?? meta["traceparent"] ?? "", 512);
 }
 
+function resolveTraceIdFromExtra(extra: unknown): string {
+  const requestInfo = extra && typeof extra === "object" ? (extra as any).requestInfo : null;
+  const fromHeaders =
+    getHeaderFromRequestInfo(requestInfo, "x-amzn-trace-id") ||
+    getHeaderFromRequestInfo(requestInfo, "traceparent") ||
+    getHeaderFromRequestInfo(requestInfo, "x-b3-traceid");
+  if (fromHeaders) return fromHeaders;
+  const meta =
+    extra && typeof extra === "object" && (extra as any)._meta && typeof (extra as any)._meta === "object"
+      ? ((extra as any)._meta as Record<string, unknown>)
+      : {};
+  return normalizeLogField(meta["x-amzn-trace-id"] ?? meta["traceparent"] ?? meta["x-b3-traceid"] ?? "", 512);
+}
+
 function resolveIdempotencyKeyFromExtra(extra: unknown): string {
   const requestInfo = extra && typeof extra === "object" ? (extra as any).requestInfo : null;
   const fromHeaders =
@@ -614,6 +685,7 @@ function logStructuredEvent(
   const payload = {
     event: normalizeLogField(event, 128) || "event_unknown",
     correlation_id: normalizeLogField(context.correlation_id, 512),
+    trace_id: normalizeLogField(context.trace_id, 512),
     session_id: normalizeLogField(context.session_id, 128),
     step_id: normalizeLogField(context.step_id, 128),
     contract_id: normalizeLogField(context.contract_id, 128),
@@ -645,6 +717,81 @@ function jsonRpcErrorResponse(
       error: { code, message, data },
       id: null,
     },
+  };
+}
+
+type RunStepErrorCategory = "contract" | "infra" | "internal";
+type RunStepErrorSeverity = "transient" | "fatal";
+
+type RunStepErrorClassification = {
+  category: RunStepErrorCategory;
+  severity: RunStepErrorSeverity;
+  type: "contract_violation" | "infra_transient" | "server_error";
+  retry_action: "restart_session" | "retry_same_action" | "reload";
+  user_message: string;
+  code: string;
+};
+
+function classifyRunStepExecutionError(err: any): RunStepErrorClassification {
+  const rawStatus = Number(err?.status ?? err?.statusCode ?? err?.response?.status);
+  const status = Number.isFinite(rawStatus) ? rawStatus : 0;
+  const rawCode = safeString(err?.code ?? err?.response?.data?.code ?? err?.response?.data?.error?.code ?? "").trim();
+  const code = rawCode.toLowerCase();
+  const message = safeString(err?.message ?? err ?? "").trim().toLowerCase();
+  const contractSignals = [
+    "contract_violation",
+    "ui contract",
+    "invalid_state",
+    "session_upgrade_required",
+    "legacy session state is blocked",
+    "strict startup/i18n contract",
+  ];
+  const transientSignals = [
+    "timeout",
+    "timed out",
+    "rate_limit",
+    "rate limit",
+    "too many requests",
+    "econnreset",
+    "etimedout",
+    "eai_again",
+    "enotfound",
+    "econnrefused",
+    "fetch failed",
+  ];
+  const hasContractSignal = contractSignals.some((token) => message.includes(token) || code.includes(token));
+  const hasTransientSignal =
+    transientSignals.some((token) => message.includes(token) || code.includes(token)) ||
+    status === 429 ||
+    status === 408 ||
+    status >= 500;
+  if (hasContractSignal) {
+    return {
+      category: "contract",
+      severity: "fatal",
+      type: "contract_violation",
+      retry_action: "restart_session",
+      user_message: "Sessie ongeldig, start opnieuw.",
+      code: code || "contract_violation",
+    };
+  }
+  if (hasTransientSignal) {
+    return {
+      category: "infra",
+      severity: "transient",
+      type: "infra_transient",
+      retry_action: "retry_same_action",
+      user_message: "Probeer opnieuw.",
+      code: code || (status === 429 ? "rate_limited" : status === 408 ? "timeout" : "infra_transient"),
+    };
+  }
+  return {
+    category: "internal",
+    severity: "fatal",
+    type: "server_error",
+    retry_action: "reload",
+    user_message: "Probeer opnieuw.",
+    code: code || "server_error",
   };
 }
 
@@ -808,61 +955,6 @@ function normalizeHostWidgetSessionId(raw: unknown): string {
   return value;
 }
 
-const ModelSafeResultOutputSchema = z.object({
-  model_result_shape_version: z.literal("v2_minimal"),
-  ok: z.boolean(),
-  tool: z.string(),
-  current_step_id: z.string(),
-  state: z.record(z.string(), z.unknown()),
-}).passthrough();
-
-const ToolStructuredContentOutputSchema = z.object({
-  title: z.string().optional(),
-  meta: z.string().optional(),
-  result: ModelSafeResultOutputSchema,
-}).passthrough();
-
-const ALLOWED_TRANSIENT_STATE_KEYS = new Set<string>([
-  "__text_submit",
-  "__pending_scores",
-  "__bootstrap_poll",
-  "__ui_telemetry",
-  "__ui_phase_by_step",
-  "__ui_render_mode_by_step",
-  "__request_id",
-  "__client_action_id",
-  "__session_id",
-  "__session_started_at",
-  "__session_log_file",
-  "__session_turn_index",
-  "__session_turn_id",
-  "__dream_runtime_mode",
-  "__dream_builder_prompt_stage",
-  "__last_clicked_action_for_contract",
-  "__last_clicked_label_for_contract",
-]);
-
-function stripUnknownTransientStateKeys(next: Record<string, unknown>): void {
-  for (const key of Object.keys(next)) {
-    if (!key.startsWith("__")) continue;
-    if (ALLOWED_TRANSIENT_STATE_KEYS.has(key)) continue;
-    delete next[key];
-  }
-}
-
-function canonicalizeStateForToolInput(raw: unknown): unknown {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
-  const next = { ...(raw as Record<string, unknown>) };
-  // Server-side SSOT: UI string dictionary is backend-derived and should not be
-  // accepted as client-authoritative input.
-  if (Object.prototype.hasOwnProperty.call(next, "ui_strings")) {
-    delete next.ui_strings;
-  }
-  stripUnknownTransientStateKeys(next);
-  next.language_source = normalizeStateLanguageSource(next.language_source);
-  return next;
-}
-
 function mergeLocaleHintInputs(
   argsLocaleHint: unknown,
   argsLocaleSource: unknown,
@@ -976,10 +1068,12 @@ async function runStepHandler(args: {
   locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
   idempotency_key?: string;
   correlation_id?: string;
+  trace_id?: string;
   host_widget_session_id?: string;
   state?: Record<string, unknown>;
 }): Promise<{ structuredContent: Record<string, unknown>; meta?: Record<string, unknown> }> {
   const correlationId = normalizeLogField(args.correlation_id, 512) || randomUUID();
+  const traceId = normalizeLogField(args.trace_id, 512) || correlationId;
   const current_step_id = normalizeStepId(args.current_step_id ?? "");
   const state = (args.state ?? {}) as Record<string, unknown>;
   const user_message_raw = safeString(args.user_message ?? "");
@@ -1022,6 +1116,7 @@ async function runStepHandler(args: {
     "host_session_id_seen",
     {
       correlation_id: correlationId,
+      trace_id: traceId,
       session_id: normalizeBootstrapSessionId((state as any).bootstrap_session_id),
       step_id: current_step_id,
       contract_id: resolveContractIdFromRecord({ state }),
@@ -1036,6 +1131,7 @@ async function runStepHandler(args: {
     ...(hasInitiator || !shouldSeedInitialUserMessage ? {} : { initial_user_message: normalizedMessage }),
     ...(shouldMarkStarted ? { started: "true" } : {}),
     __request_id: correlationId,
+    ...(traceId ? { __trace_id: traceId } : {}),
   };
   if (requiresExplicitStart && !shouldMarkStarted) {
     stateForTool = { ...stateForTool, started: "false" };
@@ -1048,6 +1144,7 @@ async function runStepHandler(args: {
       "bootstrap_session_id_rejected",
       {
         correlation_id: correlationId,
+        trace_id: traceId,
         session_id: "",
         step_id: current_step_id,
         contract_id: resolveContractIdFromRecord({ state: stateForTool }),
@@ -1067,7 +1164,11 @@ async function runStepHandler(args: {
     bootstrap_session_id: normalizedBootstrapSessionId,
     bootstrap_epoch: normalizedBootstrapEpoch,
   };
-  stateForTool = { ...stateForTool, host_widget_session_id: hostWidgetSessionId };
+  stateForTool = {
+    ...stateForTool,
+    host_widget_session_id: hostWidgetSessionId,
+    __idempotency_registry_owner: "server",
+  };
 
   const stepIdStr = safeString(current_step_id ?? "");
   const msgLen = typeof user_message_raw === "string" ? user_message_raw.length : 0;
@@ -1083,6 +1184,7 @@ async function runStepHandler(args: {
     "run_step_request",
     {
       correlation_id: correlationId,
+      trace_id: traceId,
       session_id: normalizedBootstrapSessionId,
       step_id: stepIdStr || "step_0",
       contract_id: resolveContractIdFromRecord({ state: stateForTool }),
@@ -1158,6 +1260,9 @@ async function runStepHandler(args: {
       state: normalizedState,
       error: {
         type: params.errorType,
+        category: "contract",
+        severity: params.outcome === "inflight" ? "transient" : "fatal",
+        retryable: params.outcome === "inflight",
         code: params.errorCode,
         message: params.message,
         retry_action: params.retryAction,
@@ -1196,6 +1301,7 @@ async function runStepHandler(args: {
           "idempotency_conflict",
           {
             correlation_id: correlationId,
+            trace_id: traceId,
             session_id: incomingOrdering.sessionId || normalizedBootstrapSessionId,
             step_id: stepIdStr || "step_0",
             contract_id: resolveContractIdFromRecord(conflictResult),
@@ -1235,6 +1341,7 @@ async function runStepHandler(args: {
           "idempotency_replay_served",
           {
             correlation_id: correlationId,
+            trace_id: traceId,
             session_id: incomingOrdering.sessionId || normalizedBootstrapSessionId,
             step_id: replayStepMeta,
             contract_id: resolveContractIdFromRecord(replayResult),
@@ -1266,6 +1373,7 @@ async function runStepHandler(args: {
         "idempotency_replay_inflight",
         {
           correlation_id: correlationId,
+          trace_id: traceId,
           session_id: incomingOrdering.sessionId || normalizedBootstrapSessionId,
           step_id: stepIdStr || "step_0",
           contract_id: resolveContractIdFromRecord(inflightResult),
@@ -1312,6 +1420,7 @@ async function runStepHandler(args: {
         "host_session_mismatch_dropped",
         {
           correlation_id: correlationId,
+          trace_id: traceId,
           session_id: incomingOrdering.sessionId,
           step_id: stepIdStr || "step_0",
           contract_id: resolveContractIdFromRecord({ state: stateForTool }),
@@ -1351,6 +1460,7 @@ async function runStepHandler(args: {
         "stale_bootstrap_payload_dropped",
         {
           correlation_id: correlationId,
+          trace_id: traceId,
           session_id: incomingOrdering.sessionId,
           step_id: stepIdStr || "step_0",
           contract_id: resolveContractIdFromRecord(staleResult),
@@ -1450,6 +1560,7 @@ async function runStepHandler(args: {
       "run_step_response",
       {
         correlation_id: correlationId,
+        trace_id: traceId,
         session_id: normalizeBootstrapSessionId(resultState.bootstrap_session_id ?? sessionId),
         step_id: safeString(resultState.current_step ?? stepMeta) || "unknown",
         contract_id: resolveContractIdFromRecord(resultForClient),
@@ -1508,11 +1619,13 @@ async function runStepHandler(args: {
       safeString((stateForTool as any)?.debug?.enable ?? "").toLowerCase() === "true";
     const errorStatus = err?.status ?? err?.statusCode ?? err?.response?.status;
     const errorCode = err?.code ?? err?.response?.data?.code ?? err?.response?.data?.error?.code;
+    const classification = classifyRunStepExecutionError(err);
     logStructuredEvent(
       "error",
       "run_step_error",
       {
         correlation_id: correlationId,
+        trace_id: traceId,
         session_id: incomingOrdering.sessionId || normalizeBootstrapSessionId((stateForTool as any).bootstrap_session_id),
         step_id: safeString((stateForTool as any).current_step ?? current_step_id) || "step_0",
         contract_id: resolveContractIdFromRecord({ state: stateForTool }),
@@ -1521,6 +1634,10 @@ async function runStepHandler(args: {
         message: safeString(err?.message ?? err ?? "unknown_error"),
         status: errorStatus === undefined ? "" : safeString(errorStatus),
         code: errorCode === undefined ? "" : safeString(errorCode),
+        error_category: classification.category,
+        error_severity: classification.severity,
+        error_type: classification.type,
+        retry_action: classification.retry_action,
         debug_enabled: debugEnabled ? "true" : "false",
       }
     );
@@ -1530,6 +1647,7 @@ async function runStepHandler(args: {
         "run_step_error_stack",
         {
           correlation_id: correlationId,
+          trace_id: traceId,
           session_id: incomingOrdering.sessionId || normalizeBootstrapSessionId((stateForTool as any).bootstrap_session_id),
           step_id: safeString((stateForTool as any).current_step ?? current_step_id) || "step_0",
           contract_id: resolveContractIdFromRecord({ state: stateForTool }),
@@ -1566,9 +1684,13 @@ async function runStepHandler(args: {
       specialist: {},
       state: currentState,
       error: {
-        type: "server_error",
-        message: "Probeer opnieuw", // UI message, niet chat
-        retry_action: "reload"
+        type: classification.type,
+        category: classification.category,
+        severity: classification.severity,
+        retryable: classification.severity === "transient",
+        code: classification.code,
+        message: classification.user_message, // UI message, niet chat
+        retry_action: classification.retry_action,
       },
     };
     let fallbackResult = attachBootstrapDiagnostics({
@@ -1686,6 +1808,24 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
       flags.host_widget_session_id ||
       ""
   );
+  const toolContractFamilyVersion = safeString(
+    (result as any).tool_contract_family_version ||
+      state.tool_contract_family_version ||
+      flags.tool_contract_family_version ||
+      MCP_TOOL_CONTRACT_FAMILY_VERSION
+  );
+  const runStepInputSchemaVersion = safeString(
+    (result as any).run_step_input_schema_version ||
+      state.run_step_input_schema_version ||
+      flags.run_step_input_schema_version ||
+      RUN_STEP_TOOL_INPUT_SCHEMA_VERSION
+  );
+  const runStepOutputSchemaVersion = safeString(
+    (result as any).run_step_output_schema_version ||
+      state.run_step_output_schema_version ||
+      flags.run_step_output_schema_version ||
+      RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION
+  );
   const safeState: Record<string, unknown> = {
     current_step: currentStep || "step_0",
   };
@@ -1712,8 +1852,11 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (idempotencyOutcome) safeState.idempotency_outcome = idempotencyOutcome;
   if (idempotencyErrorCode) safeState.idempotency_error_code = idempotencyErrorCode;
   if (hostWidgetSessionId) safeState.host_widget_session_id = hostWidgetSessionId;
+  if (toolContractFamilyVersion) safeState.tool_contract_family_version = toolContractFamilyVersion;
+  if (runStepInputSchemaVersion) safeState.run_step_input_schema_version = runStepInputSchemaVersion;
+  if (runStepOutputSchemaVersion) safeState.run_step_output_schema_version = runStepOutputSchemaVersion;
   return {
-    model_result_shape_version: "v2_minimal",
+    model_result_shape_version: RUN_STEP_MODEL_RESULT_SHAPE_VERSION,
     ok: result.ok === true,
     tool: safeString(result.tool || "run_step"),
     current_step_id: currentStep,
@@ -1735,6 +1878,9 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     ...(idempotencyOutcome ? { idempotency_outcome: idempotencyOutcome } : {}),
     ...(idempotencyErrorCode ? { idempotency_error_code: idempotencyErrorCode } : {}),
     ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
+    ...(toolContractFamilyVersion ? { tool_contract_family_version: toolContractFamilyVersion } : {}),
+    ...(runStepInputSchemaVersion ? { run_step_input_schema_version: runStepInputSchemaVersion } : {}),
+    ...(runStepOutputSchemaVersion ? { run_step_output_schema_version: runStepOutputSchemaVersion } : {}),
     state: safeState,
   };
 }
@@ -1815,37 +1961,20 @@ function createAppServer(baseUrl: string): McpServer {
     }
   );
 
-  const RunStepInputSchema = z.object({
-    // ChatGPT/Widget sometimes sends this as "start" or omits it
-    current_step_id: z.string().optional().default("step_0"),
-    user_message: z.string().optional().default(""),
-    input_mode: z.enum(["widget", "chat"]).optional(),
-    locale_hint: z.string().optional(),
-    locale_hint_source: z
-      .enum(["openai_locale", "webplus_i18n", "request_header", "message_detect", "none"])
-      .optional(),
-    idempotency_key: z.string().optional(),
-    host_widget_session_id: z.string().optional(),
-    // Use CanvasStateZod schema for type safety and validation
-    // .partial() makes all fields optional (for empty/partial state)
-    // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
-    state: z.preprocess(canonicalizeStateForToolInput, CanvasStateZod.partial().passthrough().optional()),
-  });
-
   server.registerTool(
     "run_step",
     {
       title: "Business Strategy Canvas Builder",
       description:
         "Use this tool to open or progress the Business Strategy Canvas Builder UI. Do not generate business content in chat. Do not summarize or explain what the app shows. After calling this tool, output nothing or at most one short neutral sentence confirming the app is open. All questions and interaction happen inside the app UI.",
-      inputSchema: RunStepInputSchema,
+      inputSchema: RunStepToolInputSchema,
       annotations: {
         readOnlyHint: false, // Tool generates files and modifies state
         openWorldHint: false, // No external posts
         destructiveHint: false, // No destructive actions
         idempotentHint: false,
       },
-      outputSchema: ToolStructuredContentOutputSchema,
+      outputSchema: RunStepToolStructuredContentOutputSchema,
       // Note: securitySchemes is in _meta per MCP SDK implementation requirements.
       // The MCP SDK does not support top-level securitySchemes in the current version.
       // This is included in the MCP response JSON that ChatGPT/OpenAI receives.
@@ -1859,6 +1988,7 @@ function createAppServer(baseUrl: string): McpServer {
         "openai/widgetAccessible": true,
         "openai/toolInvocation/invoking": "Thinking...",
         "openai/toolInvocation/invoked": "Updated",
+        contract: RUN_STEP_TOOL_CONTRACT_META,
       },
     },
     async (args, extra) => {
@@ -1868,6 +1998,7 @@ function createAppServer(baseUrl: string): McpServer {
         (args.state ?? {}) as Record<string, unknown>
       );
       const correlationId = resolveCorrelationIdFromExtra(extra);
+      const traceId = resolveTraceIdFromExtra(extra) || correlationId;
       const localeFromExtra = resolveLocaleHintFromExtra(extra);
       const hostWidgetSessionId = normalizeHostWidgetSessionId(
         args.host_widget_session_id ?? resolveHostWidgetSessionIdFromExtra(extra)
@@ -1891,6 +2022,7 @@ function createAppServer(baseUrl: string): McpServer {
         locale_hint_source: mergedLocale.locale_hint_source,
         idempotency_key: idempotencyKey,
         correlation_id: correlationId,
+        trace_id: traceId,
         host_widget_session_id: hostWidgetSessionId,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
@@ -1901,9 +2033,10 @@ function createAppServer(baseUrl: string): McpServer {
             ? ((structuredContent as any).result as Record<string, unknown>)
             : null);
       const contentText = buildContentFromResult(contentSource, { isFirstStart });
+      const parsedStructuredContent = RunStepToolStructuredContentOutputSchema.parse(structuredContent);
       return {
         content: [{ type: "text", text: contentText }],
-        structuredContent,
+        structuredContent: parsedStructuredContent,
         ...(meta ? { _meta: meta } : {}),
       };
     }
@@ -1913,6 +2046,9 @@ function createAppServer(baseUrl: string): McpServer {
     run_step_visibility: ["model", "app"],
     run_step_output_template: true,
     ui_resource_uri: uiResourceUri,
+    tool_contract_family_version: MCP_TOOL_CONTRACT_FAMILY_VERSION,
+    run_step_input_schema_version: RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
+    run_step_output_schema_version: RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
   });
 
   return server;
@@ -1932,12 +2068,107 @@ const httpServer = async (req: any, res: any) => {
     return;
   }
 
-  // Health check (App Runner)
-  if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/version") {
-    res.writeHead(200, { "content-type": "text/plain" });
+  // Health/ready checks (App Runner + local smoke)
+  const isVersionEndpoint = url.pathname === "/version";
+  const isReadyEndpoint =
+    url.pathname === "/health" || url.pathname === "/healthz" || url.pathname === "/ready";
+  const isDiagnosticsEndpoint = url.pathname === "/diagnostics";
+  if (
+    (req.method === "GET" || req.method === "HEAD") &&
+    (isVersionEndpoint || isReadyEndpoint || isDiagnosticsEndpoint)
+  ) {
+    const correlationId = getCorrelationId(req);
+    const traceId = getTraceId(req) || correlationId;
+    ensureCorrelationHeader(res, correlationId);
+    if (isVersionEndpoint) {
+      res.writeHead(200, { "content-type": "text/plain" });
+      if (req.method === "GET") {
+        res.end(
+          `VERSION=${VERSION}\nIMAGE_DIGEST=${IMAGE_DIGEST || "unknown"}\nCONTRACT_VERSION=${VIEW_CONTRACT_VERSION}\nSTATE_VERSION=${CURRENT_STATE_VERSION}\nTOOL_CONTRACT_FAMILY_VERSION=${MCP_TOOL_CONTRACT_FAMILY_VERSION}\nRUN_STEP_INPUT_SCHEMA_VERSION=${RUN_STEP_TOOL_INPUT_SCHEMA_VERSION}\nRUN_STEP_OUTPUT_SCHEMA_VERSION=${RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION}`
+        );
+      } else {
+        res.end();
+      }
+      return;
+    }
+    if (isDiagnosticsEndpoint) {
+      const nowMs = Date.now();
+      const bootstrapSessions = summarizeBootstrapSessions(nowMs);
+      const idempotency = summarizeIdempotencyRegistry(nowMs);
+      const memoryUsage = process.memoryUsage();
+      logStructuredEvent(
+        "info",
+        "diagnostics_endpoint_read",
+        {
+          correlation_id: correlationId,
+          trace_id: traceId,
+          session_id: "",
+          step_id: "",
+          contract_id: "",
+        },
+        {
+          method: req.method,
+        }
+      );
+      res.writeHead(200, { "content-type": "application/json" });
+      if (req.method === "GET") {
+        res.end(
+          JSON.stringify({
+            status: "ok",
+            ready: true,
+            timestamp: new Date(nowMs).toISOString(),
+            uptime_s: Math.floor(process.uptime()),
+            correlation_id: correlationId,
+            trace_id: traceId,
+            versions: {
+              app: VERSION,
+              state: CURRENT_STATE_VERSION,
+              view_contract: VIEW_CONTRACT_VERSION,
+              tool_contract_family: MCP_TOOL_CONTRACT_FAMILY_VERSION,
+              run_step_input_schema: RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
+              run_step_output_schema: RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
+            },
+            registries: {
+              bootstrap_sessions: bootstrapSessions,
+              idempotency,
+            },
+            limits: {
+              max_request_size_bytes: MAX_REQUEST_SIZE_BYTES,
+              request_timeout_ms: REQUEST_TIMEOUT_MS,
+              bootstrap_session_registry_ttl_ms: BOOTSTRAP_SESSION_REGISTRY_TTL_MS,
+              idempotency_entry_ttl_ms: IDEMPOTENCY_ENTRY_TTL_MS,
+            },
+            runtime: {
+              local_dev: isLocalDev,
+              pid: process.pid,
+              memory_bytes: {
+                rss: memoryUsage.rss,
+                heap_total: memoryUsage.heapTotal,
+                heap_used: memoryUsage.heapUsed,
+                external: memoryUsage.external,
+              },
+            },
+          })
+        );
+      } else {
+        res.end();
+      }
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
     if (req.method === "GET") {
       res.end(
-        `VERSION=${VERSION}\nIMAGE_DIGEST=${IMAGE_DIGEST || "unknown"}\nCONTRACT_VERSION=${VIEW_CONTRACT_VERSION}\nSTATE_VERSION=${CURRENT_STATE_VERSION}`
+        JSON.stringify({
+          status: "ok",
+          ready: true,
+          version: VERSION,
+          state_version: CURRENT_STATE_VERSION,
+          contract_version: VIEW_CONTRACT_VERSION,
+          tool_contract_family_version: MCP_TOOL_CONTRACT_FAMILY_VERSION,
+          run_step_input_schema_version: RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
+          run_step_output_schema_version: RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
+          run_step_compatibility: RUN_STEP_TOOL_COMPAT_POLICY,
+        })
       );
     } else {
       res.end();
@@ -2017,20 +2248,52 @@ const httpServer = async (req: any, res: any) => {
     // POST /run_step — bridge endpoint: same handler as MCP tool, same structuredContent shape.
     if (req.method === "POST" && url.pathname === "/run_step") {
       const correlationId = getCorrelationId(req);
+      const traceId = getTraceId(req) || correlationId;
       ensureCorrelationHeader(res, correlationId);
-      let body = "";
-      for await (const chunk of req) body += chunk;
+      let raw: Buffer;
       try {
-        const args = JSON.parse(body || "{}") as {
-          current_step_id?: string;
-          user_message?: string;
-          input_mode?: "widget" | "chat";
-          locale_hint?: string;
-          locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
-          idempotency_key?: string;
-          host_widget_session_id?: string;
-          state?: Record<string, unknown>;
-        };
+        raw = await readBodyWithLimit(req, MAX_REQUEST_SIZE_BYTES);
+      } catch (e: any) {
+        const code = safeString(e?.code ?? "");
+        if (code === "body_too_large") {
+          res.writeHead(413, { "content-type": "application/json" });
+          res.end(JSON.stringify({
+            error: "body_too_large",
+            error_code: "body_too_large",
+            max_size: MAX_REQUEST_SIZE_BYTES,
+          }));
+          return;
+        }
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "request_aborted", error_code: "request_aborted" }));
+        return;
+      }
+      let parsedBody: unknown = {};
+      try {
+        parsedBody = JSON.parse(raw.toString("utf-8") || "{}");
+      } catch {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid_json", error_code: "invalid_json" }));
+        return;
+      }
+      const parsedArgsResult = RunStepToolInputSchema.safeParse(parsedBody);
+      if (!parsedArgsResult.success) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "invalid_run_step_payload",
+            error_code: "invalid_run_step_payload",
+            issues: parsedArgsResult.error.issues,
+          })
+        );
+        return;
+      }
+      try {
+        const args = parsedArgsResult.data;
+        const parsedState =
+          args.state && typeof args.state === "object" && !Array.isArray(args.state)
+            ? (args.state as Record<string, unknown>)
+            : {};
         const idempotencyKeyFromHeaders =
           normalizeIdempotencyKey(getHeader(req, "idempotency-key")) ||
           normalizeIdempotencyKey(getHeader(req, "x-idempotency-key"));
@@ -2044,13 +2307,14 @@ const httpServer = async (req: any, res: any) => {
             normalizeIdempotencyKey(args.idempotency_key) ||
             idempotencyKeyFromHeaders ||
             normalizeIdempotencyKey(
-              (args.state as Record<string, unknown> | undefined)?.__client_action_id ?? ""
+              parsedState.__client_action_id ?? ""
             ),
           correlation_id: correlationId,
+          trace_id: traceId,
           host_widget_session_id: normalizeHostWidgetSessionId(args.host_widget_session_id),
-          state: args.state,
+          state: parsedState,
         });
-        const parsedStructuredContent = ToolStructuredContentOutputSchema.parse(structuredContent);
+        const parsedStructuredContent = RunStepToolStructuredContentOutputSchema.parse(structuredContent);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ structuredContent: parsedStructuredContent, ...(meta ? { _meta: meta } : {}) }));
       } catch (e) {
@@ -2059,6 +2323,7 @@ const httpServer = async (req: any, res: any) => {
           "post_run_step_error",
           {
             correlation_id: correlationId,
+            trace_id: traceId,
             session_id: "",
             step_id: "",
             contract_id: "",
@@ -2163,6 +2428,7 @@ const httpServer = async (req: any, res: any) => {
   const MCP_METHODS = new Set(["POST", "GET", "DELETE", "OPTIONS"]);
   if (url.pathname === MCP_PATH && req.method && MCP_METHODS.has(req.method)) {
     const correlationId = getCorrelationId(req);
+    const traceId = getTraceId(req) || correlationId;
     (req as any).__correlationId = correlationId;
     ensureCorrelationHeader(res, correlationId);
 
@@ -2221,6 +2487,7 @@ const httpServer = async (req: any, res: any) => {
             const errPayload = jsonRpcErrorResponse(413, "Request entity too large", {
               error_code: "body_too_large",
               correlation_id: correlationId,
+              trace_id: traceId,
               max_size: MAX_REQUEST_SIZE_BYTES,
             }, -32000);
             res.writeHead(errPayload.status, { "Content-Type": "application/json" });
@@ -2230,6 +2497,7 @@ const httpServer = async (req: any, res: any) => {
           const errPayload = jsonRpcErrorResponse(400, "Request aborted", {
             error_code: "request_aborted",
             correlation_id: correlationId,
+            trace_id: traceId,
           }, -32000);
           res.writeHead(errPayload.status, { "Content-Type": "application/json" });
           res.end(JSON.stringify(errPayload.payload));
@@ -2242,6 +2510,7 @@ const httpServer = async (req: any, res: any) => {
           "mcp_request_received",
           {
             correlation_id: correlationId,
+            trace_id: traceId,
             session_id: "",
             step_id: "",
             contract_id: "",
@@ -2262,6 +2531,7 @@ const httpServer = async (req: any, res: any) => {
           const errPayload = jsonRpcErrorResponse(400, "Parse error: Invalid JSON", {
             error_code: "invalid_json",
             correlation_id: correlationId,
+            trace_id: traceId,
           });
           res.writeHead(errPayload.status, { "Content-Type": "application/json" });
           res.end(JSON.stringify(errPayload.payload));
@@ -2274,6 +2544,7 @@ const httpServer = async (req: any, res: any) => {
           const errPayload = jsonRpcErrorResponse(408, "Request timeout", {
             error_code: "timeout",
             correlation_id: correlationId,
+            trace_id: traceId,
           }, -32000);
           res.writeHead(errPayload.status, { "Content-Type": "application/json" });
           res.end(JSON.stringify(errPayload.payload));
@@ -2290,6 +2561,7 @@ const httpServer = async (req: any, res: any) => {
         "mcp_request_error",
         {
           correlation_id: correlationId,
+          trace_id: traceId,
           session_id: "",
           step_id: "",
           contract_id: "",
@@ -2302,6 +2574,7 @@ const httpServer = async (req: any, res: any) => {
         const errPayload = jsonRpcErrorResponse(500, "Internal server error", {
           error_code: "server_error",
           correlation_id: correlationId,
+          trace_id: traceId,
         }, -32000);
         res.writeHead(errPayload.status, { "Content-Type": "application/json" });
         res.end(JSON.stringify(errPayload.payload));

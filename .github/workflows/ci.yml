@@ -143,11 +143,19 @@ jobs:
         working-directory: mcp-server
         run: node --loader ts-node/esm scripts/contract-smoke.mjs
 
+      - name: MCP app compliance gate
+        working-directory: mcp-server
+        run: npm run compliance:mcp-app
+
       - name: Run-step architecture guardrails
         working-directory: mcp-server
         env:
           RUN_STEP_ARCH_PHASE: phase_20
         run: npm run arch:run-step:check
+
+      - name: Run-step layer boundary guardrails
+        working-directory: mcp-server
+        run: npm run arch:run-step:layer-boundary
 
       - name: Run-step runtime architecture guardrails
         working-directory: mcp-server

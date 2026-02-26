@@ -89,6 +89,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         state: params.state,
         error: {
           type: "contract_violation",
+          category: "contract",
+          severity: "fatal",
+          retryable: false,
+          retry_action: "restart_session",
           message: params.message,
           reason: params.reason,
           step: params.stepId,

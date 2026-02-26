@@ -1042,9 +1042,11 @@ test("idempotency runtime: duplicate request met zelfde key en payload retournee
   });
   assert.equal(first?.ok, true);
   assert.equal(second?.ok, true);
-  assert.equal(String((first as any)?.idempotency_outcome || ""), "fresh");
-  assert.equal(String((second as any)?.idempotency_outcome || ""), "replay");
-  assert.equal(String((second as any)?.idempotency_error_code || ""), "idempotency_replay");
+  const firstResult = (first || {}) as Record<string, unknown>;
+  const secondResult = (second || {}) as Record<string, unknown>;
+  assert.equal(String(firstResult.idempotency_outcome || ""), "fresh");
+  assert.equal(String(secondResult.idempotency_outcome || ""), "replay");
+  assert.equal(String(secondResult.idempotency_error_code || ""), "idempotency_replay");
   assert.equal(String(second?.prompt || ""), String(first?.prompt || ""));
   assert.equal(String(second?.text || ""), String(first?.text || ""));
   assert.equal(String(second?.current_step_id || ""), String(first?.current_step_id || ""));
@@ -1081,9 +1083,11 @@ test("idempotency runtime: zelfde key met ander payload mapped naar conflict fou
   assert.equal(String(conflict?.error?.type || ""), "idempotency_conflict");
   assert.equal(String(conflict?.error?.code || ""), "idempotency_key_conflict");
   assert.equal(String(conflict?.error?.retry_action || ""), "regenerate_key");
-  assert.equal(String((conflict as any)?.idempotency_outcome || ""), "conflict");
-  assert.equal(String((conflict as any)?.idempotency_error_code || ""), "idempotency_key_conflict");
-  assert.equal(String((conflict?.state as any)?.idempotency_outcome || ""), "conflict");
+  const conflictResult = (conflict || {}) as Record<string, unknown>;
+  const conflictState = (conflict?.state || {}) as Record<string, unknown>;
+  assert.equal(String(conflictResult.idempotency_outcome || ""), "conflict");
+  assert.equal(String(conflictResult.idempotency_error_code || ""), "idempotency_key_conflict");
+  assert.equal(String(conflictState.idempotency_outcome || ""), "conflict");
 });
 
 test("idempotency runtime: parallel duplicate request mapped naar inflight fout", async () => {
@@ -1111,9 +1115,11 @@ test("idempotency runtime: parallel duplicate request mapped naar inflight fout"
     assert.equal(String(second?.error?.type || ""), "idempotency_inflight");
     assert.equal(String(second?.error?.code || ""), "idempotency_replay_inflight");
     assert.equal(String(second?.error?.retry_action || ""), "retry_same_key");
-    assert.equal(String((second as any)?.idempotency_outcome || ""), "inflight");
-    assert.equal(String((second as any)?.idempotency_error_code || ""), "idempotency_replay_inflight");
-    assert.equal(String((second?.state as any)?.idempotency_outcome || ""), "inflight");
+    const secondResult = (second || {}) as Record<string, unknown>;
+    const secondState = (second?.state || {}) as Record<string, unknown>;
+    assert.equal(String(secondResult.idempotency_outcome || ""), "inflight");
+    assert.equal(String(secondResult.idempotency_error_code || ""), "idempotency_replay_inflight");
+    assert.equal(String(secondState.idempotency_outcome || ""), "inflight");
   } finally {
     if (prevDelay === undefined) delete process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS;
     else process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS = prevDelay;

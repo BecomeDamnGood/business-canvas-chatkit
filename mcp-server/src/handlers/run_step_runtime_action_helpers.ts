@@ -13,6 +13,11 @@ type ActioncodeRegistryShape = {
 type CreateRunStepRuntimeActionHelpersDeps = {
   step0Id: string;
   actioncodeRegistry: ActioncodeRegistryShape;
+  onUnknownActionCode?: (params: {
+    actionCode: string;
+    currentStep: string;
+    state: CanvasState;
+  }) => void;
 };
 
 export type WordingChoiceMode = "text" | "list";
@@ -65,7 +70,11 @@ export function createRunStepRuntimeActionHelpers(deps: CreateRunStepRuntimeActi
     const entry = deps.actioncodeRegistry.actions[actionCode];
     if (entry) return String(entry.route || "").trim();
     if (actionCode.startsWith("ACTION_")) {
-      console.warn("[actioncode] Unknown ActionCode", { actionCode, currentStep });
+      deps.onUnknownActionCode?.({
+        actionCode,
+        currentStep,
+        state,
+      });
     }
     return actionCode;
   }

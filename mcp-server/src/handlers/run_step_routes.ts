@@ -1,8 +1,7 @@
-import path from "node:path";
-import os from "node:os";
+import { z } from "zod";
 
 import type { OrchestratorOutput } from "../core/orchestrator.js";
-import type { CanvasState } from "../core/state.js";
+import { getFinalFieldForStepId, type CanvasState } from "../core/state.js";
 import { buildUiContractId } from "../core/ui_contract_id.js";
 import {
   type RunStepContext,
@@ -67,6 +66,11 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+const SubmitScoresPayloadSchema = z.object({
+  action: z.literal("submit_scores"),
+  scores: z.array(z.array(z.number().finite())),
+});
+
 function parseSubmitScoresPayload(
   userMessage: string,
   transientPendingScores: number[][] | null
@@ -76,10 +80,10 @@ function parseSubmitScoresPayload(
     return Array.isArray(transientPendingScores) ? transientPendingScores : null;
   }
   try {
-    const parsed = JSON.parse(userMessage) as { action?: string; scores?: number[][] };
-    if (parsed?.action === "submit_scores" && Array.isArray(parsed.scores)) {
-      return parsed.scores;
-    }
+    const parsed = JSON.parse(userMessage) as unknown;
+    const parsedPayload = SubmitScoresPayloadSchema.safeParse(parsed);
+    if (!parsedPayload.success) return null;
+    return parsedPayload.data.scores;
   } catch {
     return null;
   }
@@ -280,27 +284,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         context.userMessage === deps.presentationMakeRouteToken,
       handle: async (context) => {
         try {
-          console.log("[presentation] Generate requested", {
-            cwd: process.cwd(),
-            hasTemplate: deps.hasPresentationTemplate(),
-          });
-
-          const { fileName, filePath } = deps.generatePresentationPptx(context.state);
-          console.log("[presentation] PPTX generated", { fileName, filePath });
-
-          const outDir = path.join(os.tmpdir(), "business-canvas-presentations");
-          const pdfPath = deps.convertPptxToPdf(filePath, outDir);
-          console.log("[presentation] PDF generated", { pdfPath });
-          const pngPath = deps.convertPdfToPng(pdfPath, outDir);
-          console.log("[presentation] PNG generated", { pngPath });
-
-          deps.cleanupOldPresentationFiles(outDir, 24 * 60 * 60 * 1000);
-
-          const baseUrl = deps.baseUrlFromEnv();
-          const pdfFile = path.basename(pdfPath);
-          const pngFile = path.basename(pngPath);
-          const pdfUrl = baseUrl ? `${baseUrl}/presentations/${pdfFile}` : `/presentations/${pdfFile}`;
-          const pngUrl = baseUrl ? `${baseUrl}/presentations/${pngFile}` : `/presentations/${pngFile}`;
+          const assets = deps.generatePresentationAssets(context.state);
 
           const message = deps.uiStringFromStateMap(
             context.state,
@@ -330,14 +314,15 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
               prompt: "",
               specialist,
               presentation_assets: {
-                pdf_url: pdfUrl,
-                png_url: pngUrl,
-                base_name: path.basename(fileName, ".pptx"),
+                pdf_url: assets.pdfUrl,
+                png_url: assets.pngUrl,
+                base_name: assets.baseName,
               },
               state: {
                 ...(context.state as Record<string, unknown>),
                 active_specialist: deps.presentationSpecialist,
                 last_specialist_result: specialist,
+                presentation_asset_fingerprint: assets.assetFingerprint,
               },
             },
             specialist,
@@ -345,8 +330,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           );
 
           return finalizeRoutePayload(payload as unknown as TResponse);
-        } catch (err) {
-          console.error("[presentation] Generation failed", err);
+        } catch {
+          console.error("[presentation] Generation failed");
 
           const message = deps.uiStringFromStateMap(
             context.state,
@@ -712,7 +697,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         }
 
         (context.state as Record<string, unknown>).intro_shown_session = "true";
-        const step0Final = String((context.state as Record<string, unknown>).step_0_final ?? "").trim();
+        const step0FinalField = getFinalFieldForStepId(deps.step0Id) || "step_0_final";
+        const step0Final = String((context.state as Record<string, unknown>)[step0FinalField] ?? "").trim();
 
         if (step0Final) {
           const startResolution = await deps.ensureStartState(context.state, startLocaleSeedText);

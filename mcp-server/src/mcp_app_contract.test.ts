@@ -21,13 +21,16 @@ test("MCP app contract: run_step is registered with title/description/inputSchem
 });
 
 test("MCP app contract: run_step exposes explicit outputSchema", () => {
-  assert.match(source, /const ToolStructuredContentOutputSchema = z\.object\(/);
-  assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*outputSchema:\s*ToolStructuredContentOutputSchema/);
+  assert.match(source, /RunStepToolStructuredContentOutputSchema/);
+  assert.match(
+    source,
+    /server\.registerTool\(\s*"run_step"[\s\S]*outputSchema:\s*RunStepToolStructuredContentOutputSchema/
+  );
 });
 
 test("MCP app contract: local /run_step bridge enforces ToolStructuredContentOutputSchema", () => {
   assert.match(source, /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)/);
-  assert.match(source, /const parsedStructuredContent = ToolStructuredContentOutputSchema\.parse\(structuredContent\)/);
+  assert.match(source, /const parsedStructuredContent = RunStepToolStructuredContentOutputSchema\.parse\(structuredContent\)/);
   assert.match(source, /JSON\.stringify\(\{ structuredContent: parsedStructuredContent, \.\.\.\(meta \? \{ _meta: meta \} : \{\}\) \}\)/);
 });
 
@@ -63,7 +66,7 @@ test("MCP wrapper parity: model-safe result contract remains minimal in buildMod
   const fnMatch = source.match(/function buildModelSafeResult\(result: Record<string, unknown>\): Record<string, unknown> \{[\s\S]*?\n\}/);
   assert.ok(fnMatch && fnMatch[0], "buildModelSafeResult function must exist");
   const fnBody = String(fnMatch?.[0] || "");
-  assert.match(fnBody, /model_result_shape_version:\s*"v2_minimal"/);
+  assert.match(fnBody, /model_result_shape_version:\s*RUN_STEP_MODEL_RESULT_SHAPE_VERSION/);
   assert.match(fnBody, /\bok:\s*result\.ok === true/);
   assert.match(fnBody, /\btool:\s*safeString\(result\.tool \|\| "run_step"\)/);
   assert.match(fnBody, /\bcurrent_step_id:\s*currentStep/);
@@ -74,7 +77,7 @@ test("MCP wrapper parity: model-safe result contract remains minimal in buildMod
 });
 
 test("MCP app contract: run_step input accepteert idempotency_key en extra-header fallback", () => {
-  assert.match(source, /const RunStepInputSchema = z\.object\([\s\S]*idempotency_key:\s*z\.string\(\)\.optional\(\)/);
+  assert.match(source, /RunStepToolInputSchema/);
   assert.match(source, /function resolveIdempotencyKeyFromExtra\(extra: unknown\): string/);
   assert.match(source, /getHeaderFromRequestInfo\(requestInfo, "idempotency-key"\)/);
   assert.match(source, /getHeaderFromRequestInfo\(requestInfo, "x-idempotency-key"\)/);
@@ -86,4 +89,25 @@ test("MCP app contract: server definieert replay\/conflict foutcodes voor idempo
   assert.match(source, /INFLIGHT:\s*"idempotency_replay_inflight"/);
   assert.match(source, /"idempotency_conflict"/);
   assert.match(source, /"idempotency_replay_served"/);
+});
+
+test("MCP app contract: run_step publishes contract metadata and version fields", () => {
+  assert.match(source, /"openai\/toolInvocation\/invoked": "Updated"/);
+  assert.match(source, /contract: RUN_STEP_TOOL_CONTRACT_META/);
+  assert.match(source, /TOOL_CONTRACT_FAMILY_VERSION=/);
+  assert.match(source, /RUN_STEP_INPUT_SCHEMA_VERSION=/);
+  assert.match(source, /RUN_STEP_OUTPUT_SCHEMA_VERSION=/);
+});
+
+test("MCP app contract: diagnostics endpoint is exposed with operational registry stats", () => {
+  assert.match(source, /const isDiagnosticsEndpoint = url\.pathname === "\/diagnostics"/);
+  assert.match(source, /"diagnostics_endpoint_read"/);
+  assert.match(source, /bootstrap_sessions:/);
+  assert.match(source, /idempotency,/);
+});
+
+test("MCP app contract: trace id is propagated into run_step flow and logs", () => {
+  assert.match(source, /trace_id\?: string/);
+  assert.match(source, /__trace_id/);
+  assert.match(source, /trace_id: traceId/);
 });

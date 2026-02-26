@@ -6,12 +6,15 @@ export type StructuredLogSeverity = "info" | "warn" | "error";
 
 export type StructuredLogContext = {
   correlation_id: string;
+  trace_id: string;
   session_id: string;
   step_id: string;
   contract_id: string;
 };
 
 const LOG_REDACT_KEY_RE = /(authorization|cookie|token|secret|password|api[_-]?key)/i;
+const LOG_REDACT_VALUE_RE =
+  /(bearer\s+[a-z0-9._-]{8,}|sk-[a-z0-9._-]{8,}|xox[baprs]-[a-z0-9-]{8,}|api[_-]?key\s*[:=]\s*\S+)/i;
 
 function normalizeLogField(value: unknown, maxLen = 256): string {
   const text = String(value ?? "").trim();
@@ -21,7 +24,10 @@ function normalizeLogField(value: unknown, maxLen = 256): string {
 
 function sanitizeLogValue(value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value;
-  if (typeof value === "string") return normalizeLogField(value, 512);
+  if (typeof value === "string") {
+    const normalized = normalizeLogField(value, 512);
+    return LOG_REDACT_VALUE_RE.test(normalized) ? "[redacted]" : normalized;
+  }
   if (typeof value === "number" || typeof value === "boolean") return value;
   if (typeof value === "bigint") return String(value);
   if (Array.isArray(value)) {
@@ -43,7 +49,13 @@ function sanitizeLogDetails(details: Record<string, unknown>): Record<string, un
   const next: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(details)) {
     if (key === "event" || key === "severity") continue;
-    if (key === "correlation_id" || key === "session_id" || key === "step_id" || key === "contract_id") continue;
+    if (
+      key === "correlation_id" ||
+      key === "trace_id" ||
+      key === "session_id" ||
+      key === "step_id" ||
+      key === "contract_id"
+    ) continue;
     next[key] = LOG_REDACT_KEY_RE.test(key) ? "[redacted]" : sanitizeLogValue(value, 0);
   }
   return next;
@@ -82,6 +94,7 @@ export function createStructuredLogContextFromState(
       : resolveContractId({}, state);
   return {
     correlation_id: normalizeLogField(state.__request_id, 512),
+    trace_id: normalizeLogField(state.__trace_id ?? state.__request_id, 512),
     session_id: normalizeLogField(state.bootstrap_session_id ?? state.__session_id, 128),
     step_id: normalizeLogField(
       overrides && Object.prototype.hasOwnProperty.call(overrides, "step_id")
@@ -112,6 +125,7 @@ export function logStructuredEvent(
   const payload = {
     event: normalizeLogField(event, 128) || "event_unknown",
     correlation_id: context.correlation_id,
+    trace_id: context.trace_id,
     session_id: context.session_id,
     step_id: context.step_id,
     contract_id: context.contract_id,
@@ -187,7 +201,10 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       };
     }
 
-    const stateForDecision = ((finalResponse as any)?.state || {}) as Record<string, unknown>;
+    const stateForDecision =
+      finalResponse.state && typeof finalResponse.state === "object"
+        ? (finalResponse.state as Record<string, unknown>)
+        : {};
     const errorMarkers = Array.isArray((finalResponse as any)?.error?.markers)
       ? ((finalResponse as any)?.error?.markers as unknown[]).map((marker) => String(marker || ""))
       : [];
@@ -201,20 +218,20 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
     })();
     const decisionContext = createLogContext(finalResponse, stateForDecision);
     logStructuredEvent("info", "contract_decision", decisionContext, {
-      host_widget_session_id_present: String((stateForDecision as any).host_widget_session_id || "") ? "true" : "false",
-      epoch: Number((stateForDecision as any).bootstrap_epoch || 0),
-      seq: Number((stateForDecision as any).response_seq || 0),
-      phase: String((stateForDecision as any).bootstrap_phase || ""),
-      gate_status: String((stateForDecision as any).ui_gate_status || ""),
-      gate_reason: String((stateForDecision as any).ui_gate_reason || ""),
+      host_widget_session_id_present: String(stateForDecision.host_widget_session_id || "") ? "true" : "false",
+      epoch: Number(stateForDecision.bootstrap_epoch || 0),
+      seq: Number(stateForDecision.response_seq || 0),
+      phase: String(stateForDecision.bootstrap_phase || ""),
+      gate_status: String(stateForDecision.ui_gate_status || ""),
+      gate_reason: String(stateForDecision.ui_gate_reason || ""),
       lang: String(
-        (stateForDecision as any).ui_strings_lang ||
-          (stateForDecision as any).locale ||
-          (stateForDecision as any).language ||
+        stateForDecision.ui_strings_lang ||
+          stateForDecision.locale ||
+          stateForDecision.language ||
           ""
       ),
-      requested_lang: String((stateForDecision as any).ui_strings_requested_lang || ""),
-      fallback_applied: String((stateForDecision as any).ui_strings_fallback_applied || "false"),
+      requested_lang: String(stateForDecision.ui_strings_requested_lang || ""),
+      fallback_applied: String(stateForDecision.ui_strings_fallback_applied || "false"),
       migration_applied: deps.getMigrationApplied() ? "true" : "false",
       migration_from_version: deps.getMigrationFromVersion(),
       blocking_marker_class: markerClass,
@@ -247,9 +264,10 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       });
       (responseState as any).__session_log_file = appendResult.filePath;
     } catch (err: any) {
+      const finalResponseState = finalResponse.state;
       const stateForError =
-        (finalResponse as any)?.state && typeof (finalResponse as any).state === "object"
-          ? ((finalResponse as any).state as Record<string, unknown>)
+        finalResponseState && typeof finalResponseState === "object"
+          ? (finalResponseState as Record<string, unknown>)
           : {};
       logStructuredEvent("warn", "session_token_log_write_failed", createLogContext(finalResponse, stateForError), {
         message: String(err?.message || err || "unknown"),

@@ -233,6 +233,21 @@ function headingLabelsForState(
   };
 }
 
+function toStableFingerprintValue(value: unknown, depth = 0): unknown {
+  if (depth > 10) return "[depth_limit]";
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) return value.map((entry) => toStableFingerprintValue(entry, depth + 1));
+  if (typeof value !== "object") return String(value);
+  const raw = value as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  for (const key of Object.keys(raw).sort()) {
+    next[key] = toStableFingerprintValue(raw[key], depth + 1);
+  }
+  return next;
+}
+
 export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) {
   function baseUrlFromEnv(): string {
     const explicit = String(process.env.PUBLIC_BASE_URL || process.env.BASE_URL || "").trim();
@@ -244,17 +259,65 @@ export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) 
     return "";
   }
 
-  function generatePresentationPptx(state: CanvasState): { fileName: string; filePath: string } {
+  function buildPresentationAssetFingerprint(
+    state: CanvasState,
+    labels: Record<string, string>,
+    templatePath: string
+  ): string {
+    const templateStat = fs.statSync(templatePath);
+    const payload = toStableFingerprintValue({
+      schema_version: "presentation_asset_fingerprint_v1",
+      template: {
+        file: path.basename(templatePath),
+        size: templateStat.size,
+        mtime_ms: Math.trunc(templateStat.mtimeMs),
+      },
+      labels,
+      content: {
+        business_name: String((state as any).business_name ?? ""),
+        step_0_final: String((state as any).step_0_final ?? ""),
+        purpose_final: String((state as any).purpose_final ?? ""),
+        role_final: String((state as any).role_final ?? ""),
+        entity_final: String((state as any).entity_final ?? ""),
+        dream_final: String((state as any).dream_final ?? ""),
+        bigwhy_final: String((state as any).bigwhy_final ?? ""),
+        strategy_final: String((state as any).strategy_final ?? ""),
+        targetgroup_final: String((state as any).targetgroup_final ?? ""),
+        productsservices_final: String((state as any).productsservices_final ?? ""),
+        rulesofthegame_final: String((state as any).rulesofthegame_final ?? ""),
+      },
+    });
+    return crypto
+      .createHash("sha256")
+      .update(JSON.stringify(payload))
+      .digest("hex")
+      .slice(0, 16);
+  }
+
+  function generatePresentationPptx(state: CanvasState): {
+    fileName: string;
+    filePath: string;
+    outDir: string;
+    assetFingerprint: string;
+  } {
     const templatePath = getPresentationTemplatePath();
     if (!fs.existsSync(templatePath)) {
       throw new Error("Presentation template not found");
     }
+    const outDir = path.join(os.tmpdir(), "business-canvas-presentations");
+    fs.mkdirSync(outDir, { recursive: true });
 
     const step0Final = String((state as any).step_0_final ?? "").trim();
     const fallbackName = String((state as any).business_name ?? "").trim();
     const { name } = parseStep0Final(step0Final, fallbackName);
 
     const labels = headingLabelsForState(state, deps);
+    const assetFingerprint = buildPresentationAssetFingerprint(state, labels, templatePath);
+    const fileName = `presentation-${assetFingerprint}.pptx`;
+    const filePath = path.join(outDir, fileName);
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      return { fileName, filePath, outDir, assetFingerprint };
+    }
 
     const strategyLines = sanitizeLinesForSection(
       presentationLines(String((state as any).strategy_final ?? "")),
@@ -303,18 +366,28 @@ export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) 
     };
 
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "bsc-pptx-"));
-    const outDir = path.join(os.tmpdir(), "business-canvas-presentations");
-    fs.mkdirSync(outDir, { recursive: true });
 
     try {
       execFileSync("unzip", ["-q", templatePath, "-d", workDir]);
       const pptDir = path.join(workDir, "ppt");
       replacePlaceholdersInDir(pptDir, replacements, paragraphReplacements);
 
-      const fileName = `presentation-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.pptx`;
-      const filePath = path.join(outDir, fileName);
-      execFileSync("zip", ["-qr", filePath, "."], { cwd: workDir });
-      return { fileName, filePath };
+      const tempFilePath = path.join(
+        outDir,
+        `${fileName}.${process.pid}.${Date.now()}.tmp`
+      );
+      execFileSync("zip", ["-qr", tempFilePath, "."], { cwd: workDir });
+      try {
+        fs.renameSync(tempFilePath, filePath);
+      } catch (error) {
+        const code = String((error as NodeJS.ErrnoException)?.code || "");
+        if ((code === "EEXIST" || code === "ENOTEMPTY") && fs.existsSync(filePath)) {
+          fs.rmSync(tempFilePath, { force: true });
+        } else {
+          throw error;
+        }
+      }
+      return { fileName, filePath, outDir, assetFingerprint };
     } finally {
       fs.rmSync(workDir, { recursive: true, force: true });
     }
@@ -340,23 +413,51 @@ export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) 
   }
 
   function convertPptxToPdf(pptxPath: string, outDir: string): string {
-    execFileSync("soffice", ["--headless", "--convert-to", "pdf", "--outdir", outDir, pptxPath]);
+    fs.mkdirSync(outDir, { recursive: true });
     const base = path.basename(pptxPath, ".pptx");
-    return path.join(outDir, `${base}.pdf`);
+    const targetPath = path.join(outDir, `${base}.pdf`);
+    if (fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
+      return targetPath;
+    }
+    execFileSync("soffice", ["--headless", "--convert-to", "pdf", "--outdir", outDir, pptxPath]);
+    return targetPath;
   }
 
   function convertPdfToPng(pdfPath: string, outDir: string): string {
+    fs.mkdirSync(outDir, { recursive: true });
     const base = path.basename(pdfPath, ".pdf");
     const outPrefix = path.join(outDir, base);
+    const targetPath = `${outPrefix}.png`;
+    if (fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
+      return targetPath;
+    }
     execFileSync("pdftoppm", ["-png", "-f", "1", "-singlefile", pdfPath, outPrefix]);
-    return `${outPrefix}.png`;
+    return targetPath;
+  }
+
+  function generatePresentationAssets(state: CanvasState): {
+    pdfUrl: string;
+    pngUrl: string;
+    baseName: string;
+    assetFingerprint: string;
+  } {
+    const generated = generatePresentationPptx(state);
+    const pdfPath = convertPptxToPdf(generated.filePath, generated.outDir);
+    const pngPath = convertPdfToPng(pdfPath, generated.outDir);
+    cleanupOldPresentationFiles(generated.outDir, 24 * 60 * 60 * 1000);
+
+    const baseUrl = baseUrlFromEnv();
+    const pdfFile = path.basename(pdfPath);
+    const pngFile = path.basename(pngPath);
+    return {
+      pdfUrl: baseUrl ? `${baseUrl}/presentations/${pdfFile}` : `/presentations/${pdfFile}`,
+      pngUrl: baseUrl ? `${baseUrl}/presentations/${pngFile}` : `/presentations/${pngFile}`,
+      baseName: path.basename(generated.fileName, ".pptx"),
+      assetFingerprint: generated.assetFingerprint,
+    };
   }
 
   return {
-    baseUrlFromEnv,
-    generatePresentationPptx,
-    cleanupOldPresentationFiles,
-    convertPptxToPdf,
-    convertPdfToPng,
+    generatePresentationAssets,
   };
 }

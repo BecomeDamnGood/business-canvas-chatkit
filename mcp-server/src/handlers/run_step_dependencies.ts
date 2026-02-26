@@ -91,7 +91,7 @@ import {
   UI_CONTRACT_VERSION,
   buildContractId,
 } from "../core/ui_contract_matrix.js";
-import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
+import { actionCodeToIntent } from "../core/actioncode_intent.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import { UI_STRINGS_WITH_MENU_KEYS } from "../i18n/ui_strings_defaults.js";
 

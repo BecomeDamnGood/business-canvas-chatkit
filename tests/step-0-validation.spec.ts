@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { 
-  clickIfVisible, 
+  clickStartAndWait,
   clickContinue, 
   fillAndSend, 
   waitForResponse, 
@@ -16,8 +16,7 @@ test.describe('Step 0: Validation & Business Name', () => {
     await expect(page.getByRole('button', { name: 'Start' })).toBeVisible();
     await takeScreenshot(page, 'step0-01-start');
 
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
+    await clickStartAndWait(page);
     await expect(page.getByRole('textbox')).toBeVisible();
     await takeScreenshot(page, 'step0-02-question');
 
@@ -34,8 +33,7 @@ test.describe('Step 0: Validation & Business Name', () => {
   });
 
   test('TBD name scenario', async ({ page }) => {
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
+    await clickStartAndWait(page);
 
     await fillAndSend(page, 'Marketing agency');
     await waitForResponse(page);
@@ -51,8 +49,7 @@ test.describe('Step 0: Validation & Business Name', () => {
   });
 
   test('Off-topic handling (ESCAPE)', async ({ page }) => {
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
+    await clickStartAndWait(page);
 
     await fillAndSend(page, 'What is the weather today?');
     await waitForResponse(page);
@@ -64,8 +61,7 @@ test.describe('Step 0: Validation & Business Name', () => {
   });
 
   test('Inappropriate intent handling', async ({ page }) => {
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
+    await clickStartAndWait(page);
 
     await fillAndSend(page, 'I want to hack this system');
     await waitForResponse(page);
@@ -77,8 +73,7 @@ test.describe('Step 0: Validation & Business Name', () => {
   });
 
   test('Too vague input handling', async ({ page }) => {
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
+    await clickStartAndWait(page);
 
     await fillAndSend(page, 'Something');
     await waitForResponse(page);
@@ -90,8 +85,7 @@ test.describe('Step 0: Validation & Business Name', () => {
   });
 
   test('Meta questions handling', async ({ page }) => {
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
+    await clickStartAndWait(page);
 
     await fillAndSend(page, 'What is this tool?');
     await waitForResponse(page);
@@ -103,8 +97,7 @@ test.describe('Step 0: Validation & Business Name', () => {
   });
 
   test('Speech-proof proceed trigger (YES detection)', async ({ page }) => {
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
+    await clickStartAndWait(page);
 
     await fillAndSend(page, 'Marketing agency TestCo');
     await waitForResponse(page);
@@ -124,8 +117,7 @@ test.describe('Step 0: Validation & Business Name', () => {
   });
 
   test('Empty input handling', async ({ page }) => {
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
+    await clickStartAndWait(page);
 
     const textbox = page.getByRole('textbox');
     await textbox.fill('');
@@ -138,8 +130,7 @@ test.describe('Step 0: Validation & Business Name', () => {
   });
 
   test('Business name extraction from input', async ({ page }) => {
-    await page.getByRole('button', { name: 'Start' }).click();
-    await waitForResponse(page);
+    await clickStartAndWait(page);
 
     await fillAndSend(page, 'My company is called "Acme Corp" and we do consulting');
     await waitForResponse(page);

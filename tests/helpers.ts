@@ -54,6 +54,33 @@ export async function waitForResponse(page: Page, timeout: number = 2000): Promi
 }
 
 /**
+ * Click the initial Start button and wait until the first /run_step cycle settles.
+ * This avoids flaky fixed sleeps at test start.
+ */
+export async function clickStartAndWait(page: Page): Promise<void> {
+  const startBtn = page.getByRole('button', { name: /start/i }).first();
+  await expect(startBtn).toBeVisible({ timeout: 15000 });
+
+  const requestMatcher = (r: import('@playwright/test').Request) =>
+    r.url().includes('/run_step') && r.method() === 'POST';
+  const responseMatcher = (r: import('@playwright/test').Response) =>
+    r.url().includes('/run_step') && r.request().method() === 'POST';
+
+  const requestPromise = page.waitForRequest(requestMatcher, { timeout: 15000 }).catch(() => null);
+  await startBtn.click();
+  const request = await requestPromise;
+
+  if (request) {
+    await page.waitForResponse((response) => response.request() === request, { timeout: 60000 }).catch(() => null);
+  } else {
+    await page.waitForResponse(responseMatcher, { timeout: 15000 }).catch(() => null);
+  }
+
+  await waitForResponse(page, 300);
+  await getChatInputLocator(page).waitFor({ state: 'visible', timeout: 15000 });
+}
+
+/**
  * Find the main chat textarea (not score inputs). Tries multiple strategies.
  */
 function getChatInputLocator(page: Page) {

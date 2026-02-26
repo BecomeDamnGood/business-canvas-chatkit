@@ -288,21 +288,21 @@ Checklist:
 - ADR-010: Teststrategie buiten `mcp-server`.
 
 ## Contract inventory
-| Contract | Type | Owner-module | Enforcement | Versie |
-|---|---|---|---|---|
-| MCP `run_step` input | API schema (Zod) | `server.ts` | Tool registration inputSchema | implicit (release-coupled) |
-| MCP `run_step` output | API schema (Zod) | `server.ts` | Tool registration outputSchema | implicit |
-| Canvas state | Domain schema (Zod) | `core/state.ts` | `normalizeState`, `migrateState` | `CURRENT_STATE_VERSION=12` |
-| Ingress args/state markers | Input contract | `handlers/ingress.ts` | `parseRunStepIngressArgs` fail-closed | implicit |
-| Turn output contract parity | Output contract | `handlers/turn_contract.ts` | `assertRunStepContractOrThrow` | implicit |
-| UI contract id/menu | UI contract matrix | `core/ui_contract_matrix.ts` | renderer/pipeline/routes | `UI_CONTRACT_VERSION` |
-| Action code registry | Registry contract | `core/actioncode_registry.ts` | menu/action resolution | `ACTIONCODE_REGISTRY_VERSION` (env) |
-| Step intents | Domain command contract | `contracts/intents.ts` | parsers/adapters | implicit |
-| Transition events | Domain event contract | `contracts/transitions.ts` | orchestrator transitions | implicit |
-| UI rendered action payload | UI payload schema | `contracts/ui_actions.ts` | response engine/pipeline | implicit |
-| Orchestrator output | Domain output schema | `core/orchestrator.ts` | runtime orchestration | implicit |
-| Specialist step outputs | Per-step schema (Zod/JSON) | `handlers/specialist_dispatch.ts` + `steps/*` | `callStrictJson` + Zod parse | implicit per step |
-| UI/i18n bootstrap state | Runtime contract type | `handlers/run_step_i18n_runtime.ts` | i18n gating | implicit |
+| Contract | Type | Owner-module | Enforcement | Versie | Compat/notes |
+|---|---|---|---|---|---|
+| MCP `run_step` input | API schema (Zod) | `server.ts` + `handlers/ingress.ts` | `RunStepArgsSchema` (tool + local-dev parse), ingress canonicalization | implicit (release-coupled) | `state` canonicalization + transient allowlist via ingress-SSOT |
+| MCP `run_step` output | API schema (Zod) | `server.ts` | Tool registration outputSchema | implicit | output shape gevalideerd op MCP + lokale bridge |
+| Canvas state | Domain schema (Zod) | `core/state.ts` | `normalizeState`, `migrateState` | `CURRENT_STATE_VERSION=12` | step->final mapping SSOT: `STEP_FINAL_FIELD_BY_STEP_ID` |
+| Ingress args/state markers | Input contract | `handlers/ingress.ts` | `parseRunStepIngressArgs` fail-closed | implicit | idempotency-key normalisatie SSOT (`normalizeIngressIdempotencyKey`) |
+| Turn output contract parity | Output contract | `handlers/turn_contract.ts` | `assertRunStepContractOrThrow` | implicit | fail-closed op contract mismatch |
+| UI contract id/menu | UI contract matrix | `core/ui_contract_matrix.ts` | renderer/pipeline/routes | `UI_CONTRACT_VERSION` | menu/action resolutie blijft fail-closed |
+| Action code registry | Registry contract | `core/actioncode_registry.ts` | menu/action resolution | `ACTIONCODE_REGISTRY_VERSION` (env) | registry diff/contract checks in CI |
+| Step intents | Domain command contract | `contracts/intents.ts` | parsers/adapters | implicit | adapter compat nodig bij intent uitbreiding |
+| Transition events | Domain event contract | `contracts/transitions.ts` | orchestrator transitions | implicit | event-naam stabiliteit vereist voor replay/debug |
+| UI rendered action payload | UI payload schema | `contracts/ui_actions.ts` | response engine/pipeline | implicit | schema-first, runtime checks op renderpad |
+| Orchestrator output | Domain output schema | `core/orchestrator.ts` | runtime orchestration | implicit | determinisme vereist voor idempotent gedrag |
+| Specialist step outputs | Per-step schema (Zod/JSON) | `handlers/specialist_dispatch.ts` + `steps/*` | `callStrictJson` + Zod parse | implicit per step | strict parse voorkomt silent payload drift |
+| UI/i18n bootstrap state | Runtime contract type | `handlers/run_step_i18n_runtime.ts` | i18n gating | implicit | bootstrap compatibility via migration + gate-status |
 
 ## Concrete code-locaties (selectie)
 - `mcp-server/src/handlers/run_step_runtime.ts:1371` (`run_step`)
@@ -316,4 +316,3 @@ Checklist:
 - `mcp-server/src/handlers/turn_contract.ts:74` (`assertRunStepContractOrThrow`)
 - `mcp-server/server.ts:1152` (`RunStepInputSchema`)
 - `mcp-server/server.ts:1180` (`registerTool`)
-

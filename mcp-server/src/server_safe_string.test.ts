@@ -12,10 +12,9 @@ test("safeString handles unstringifiable objects without throwing", () => {
 
 test("local /run_step bridge forwards input_mode to runStepHandler", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
-  assert.match(
-    source,
-    /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)[\s\S]*input_mode\?: "widget" \| "chat";[\s\S]*input_mode: args\.input_mode,/
-  );
+  assert.match(source, /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)/);
+  assert.match(source, /input_mode\?: "widget" \| "chat";/);
+  assert.match(source, /input_mode: args\.input_mode,/);
 });
 
 test("run_step MCP handler derives locale hint from request metadata and forwards it", () => {
@@ -37,8 +36,8 @@ test("run_step handler enforces explicit ACTION_START before step_0 can mark sta
 
 test("tool input schema canonicalizes legacy state.language_source before zod enum validation", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
-  assert.match(source, /function canonicalizeStateForToolInput\(/);
-  assert.match(source, /next\.language_source = normalizeStateLanguageSource\(next\.language_source\);/);
+  assert.match(source, /canonicalizeStateForRunStepArgs as canonicalizeStateForToolInput/);
+  assert.match(source, /state: canonicalizeStateForToolInput\(args\.state\),/);
 });
 
 test("bootstrap session/epoch guards drop stale payloads and keep monotone sequencing", () => {
@@ -47,24 +46,26 @@ test("bootstrap session/epoch guards drop stale payloads and keep monotone seque
   assert.match(source, /function isStaleBootstrapPayload\(/);
   assert.match(source, /function registerBootstrapSnapshot\(/);
   assert.match(source, /const responseSeq = nextBootstrapResponseSeq\(\);/);
-  assert.match(source, /\[stale_bootstrap_payload_dropped\]/);
+  assert.match(source, /"stale_bootstrap_payload_dropped"/);
   assert.match(source, /bootstrap_session_id/);
   assert.match(source, /bootstrap_epoch/);
   assert.match(source, /response_seq/);
-  assert.match(source, /incoming_tuple/);
-  assert.match(source, /latest_tuple/);
-  assert.match(source, /if \(staleCheck\.stale\) \{[\s\S]*const staleResult = staleSource;/);
+  assert.match(source, /payload_epoch/);
+  assert.match(source, /payload_response_seq/);
+  assert.match(source, /latest_epoch/);
+  assert.match(source, /latest_response_seq/);
+  assert.match(source, /if \(staleCheck\.stale\) \{[\s\S]*const staleSource =/);
   assert.doesNotMatch(source, /if \(staleCheck\.stale\) \{[\s\S]{0,1000}const responseSeq = nextBootstrapResponseSeq\(\);/);
 });
 
 test("run_step handler logs locale + language readiness in request/response lines", () => {
   const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
-  assert.match(source, /\[run_step\] request[\s\S]*locale_hint[\s\S]*locale_hint_source/);
+  assert.match(source, /"run_step_request"[\s\S]*locale_hint[\s\S]*locale_hint_source/);
   assert.match(
     source,
-    /\[run_step\] response[\s\S]*resolved_language[\s\S]*language_source[\s\S]*ui_strings_status[\s\S]*ui_bootstrap_status/
+    /"run_step_response"[\s\S]*resolved_language[\s\S]*language_source[\s\S]*ui_strings_status[\s\S]*ui_bootstrap_status/
   );
-  assert.match(source, /\[run_step\] response[\s\S]*ui_view_mode[\s\S]*ui_action_start_present/);
+  assert.match(source, /"run_step_response"[\s\S]*ui_view_mode[\s\S]*ui_action_start_present/);
 });
 
 test("run_step contract emits server-authoritative ui.view payload", () => {
@@ -133,4 +134,21 @@ test("runtime golden fixtures exist for prestart/waiting_locale/interactive/bloc
     const fixturePath = new URL(`./handlers/__golden__/runtime/${filename}`, import.meta.url);
     assert.equal(fs.existsSync(fixturePath), true, `missing runtime golden fixture ${filename}`);
   }
+});
+
+test("structured logging redacts token-like values in both server and runtime layers", () => {
+  const serverSource = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const runtimeResponseSource = fs.readFileSync(new URL("./handlers/run_step_response.ts", import.meta.url), "utf8");
+  assert.match(serverSource, /const LOG_REDACT_VALUE_RE =/);
+  assert.match(runtimeResponseSource, /const LOG_REDACT_VALUE_RE =/);
+});
+
+test("presentation write-side runs through a dedicated adapter and deterministic artifact names", () => {
+  const routeSource = fs.readFileSync(new URL("./handlers/run_step_routes.ts", import.meta.url), "utf8");
+  const presentationSource = fs.readFileSync(new URL("./handlers/run_step_presentation.ts", import.meta.url), "utf8");
+  assert.match(routeSource, /const assets = deps\.generatePresentationAssets\(context\.state\);/);
+  assert.doesNotMatch(routeSource, /deps\.convertPptxToPdf\(/);
+  assert.doesNotMatch(routeSource, /deps\.convertPdfToPng\(/);
+  assert.match(presentationSource, /const fileName = `presentation-\$\{assetFingerprint\}\.pptx`;/);
+  assert.match(presentationSource, /if \(fs\.existsSync\(filePath\) && fs\.statSync\(filePath\)\.isFile\(\)\)/);
 });

@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
+import { actionCodeToIntent } from "../core/actioncode_intent.js";
 import type { CanvasState } from "../core/state.js";
-import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
 
 type LocaleHintSource =
   | "openai_locale"
@@ -33,6 +33,14 @@ type RunStepPreflightDeps = {
   looksLikeMetaInstruction: (userMessage: string) => boolean;
   maybeSeedStep0CandidateFromInitialMessage: (state: CanvasState, message: string) => CanvasState;
   bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
+  logStructuredEvent?: (params: {
+    severity: "info" | "warn" | "error";
+    event: string;
+    state: CanvasState | Record<string, unknown> | null | undefined;
+    step_id?: string;
+    contract_id?: string;
+    details?: Record<string, unknown>;
+  }) => void;
 };
 
 type InitializePreflightParams = {
@@ -139,7 +147,15 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
     const rawState = (params.args.state ?? {}) as Record<string, unknown>;
     const uiTelemetry = (rawState as any).__ui_telemetry;
     if (uiTelemetry && typeof uiTelemetry === "object") {
-      console.log("[ui_telemetry]", uiTelemetry);
+      deps.logStructuredEvent?.({
+        severity: "info",
+        event: "ui_telemetry_seen",
+        state: rawState,
+        step_id: String(rawState.current_step || deps.step0Id),
+        details: {
+          keys: Object.keys(uiTelemetry as Record<string, unknown>).slice(0, 20),
+        },
+      });
     }
 
     const transientTextSubmit = typeof (rawState as any).__text_submit === "string"
@@ -454,6 +470,18 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
     }
 
     const errorType = requiresRestart ? "session_upgrade_required" : "invalid_state";
+    deps.logStructuredEvent?.({
+      severity: requiresRestart ? "warn" : "error",
+      event: "legacy_preflight_blocked",
+      state: params.state,
+      step_id: String((params.state as any).current_step || deps.step0Id),
+      details: {
+        error_type: errorType,
+        blocking_marker_class: blockingMarkerClass,
+        marker_count: legacyMarkers.length,
+        markers: legacyMarkers,
+      },
+    });
     const blockedState = params.buildFailClosedState(
       params.state,
       requiresRestart ? "session_upgrade_required" : "invalid_state",
@@ -473,9 +501,13 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
         state: blockedState,
         error: {
           type: errorType,
+          category: "contract",
+          severity: "fatal",
+          retryable: false,
           message: requiresRestart
             ? "Legacy session state is blocked in strict contract mode."
             : "Incoming state violates the strict startup/i18n contract.",
+          retry_action: "restart_session",
           markers: legacyMarkers,
           required_action: "restart_session",
         },
@@ -508,13 +540,19 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       const menuId = params.inferCurrentMenuForStep(state, sourceStep);
       if (menuId) {
         const expectedCount = ACTIONCODE_REGISTRY.menus[menuId]?.length;
-        console.log("[actioncode_click]", {
-          registry_version: ACTIONCODE_REGISTRY.version,
+        deps.logStructuredEvent?.({
+          severity: "info",
+          event: "actioncode_click",
+          state,
+          step_id: sourceStep || deps.step0Id,
           contract_id: String(((state as any).__ui_phase_by_step || {})[sourceStep] || ""),
-          step: sourceStep,
-          expected_count: expectedCount,
-          action_code: actionCodeRaw,
-          input_mode: params.inputMode,
+          details: {
+            registry_version: ACTIONCODE_REGISTRY.version,
+            menu_id: menuId,
+            expected_count: expectedCount ?? 0,
+            action_code: actionCodeRaw,
+            input_mode: params.inputMode,
+          },
         });
       }
       const sourceMenu = params.inferCurrentMenuForStep(state, sourceStep);
