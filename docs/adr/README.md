@@ -17,3 +17,4 @@ Deze map bevat Architecture Decision Records (ADR's) voor contract- en runtime-b
 - [ADR-003 run_step idempotency and replay](./ADR-003-run-step-idempotency-replay.md)
 - [ADR-004 Bootstrap/session concurrency ordering](./ADR-004-bootstrap-session-concurrency.md)
 - [ADR-005 SSOT and ActionCode governance](./ADR-005-ssot-actioncode-governance.md)
+- [ADR-006 Widget-result SSOT authority](./ADR-006-widget-result-ssot.md)

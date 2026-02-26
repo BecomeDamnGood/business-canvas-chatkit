@@ -470,6 +470,9 @@ export function render(overrideToolOutput?: unknown): void {
     serverExplicitFailed;
   const bootstrapWaitingLocale = serverExplicitWaiting;
   const waitingGateActive = bootstrapWaitingLocale;
+  const startupPayloadMissing =
+    Object.keys(result || {}).length === 0 &&
+    Object.keys(state).length === 0;
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
   setRuntimeUiStrings(hasOverrideStrings ? overrideStringsMap : {});
@@ -510,12 +513,16 @@ export function render(overrideToolOutput?: unknown): void {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      const blockedCopy = blockedMessageForReason(
-        lang,
-        "contract_violation",
-        uiText(lang, "error.contract.body", "")
-      );
-      renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
+      if (startupPayloadMissing) {
+        renderBootstrapWaitShell(prestartEl, lang);
+      } else {
+        const blockedCopy = blockedMessageForReason(
+          lang,
+          "contract_violation",
+          uiText(lang, "error.contract.body", "")
+        );
+        renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
+      }
     }
     if (getIsLoading()) setLoading(false);
     return;

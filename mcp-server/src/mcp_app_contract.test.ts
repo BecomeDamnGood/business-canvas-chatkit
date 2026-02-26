@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+const widgetRuntimeSource = fs.readFileSync(
+  new URL("../ui/lib/locale_bootstrap_runtime.ts", import.meta.url),
+  "utf8"
+);
 
 test("MCP app contract: server initializes MCP capabilities for tools/resources", () => {
   assert.match(source, /new McpServer\([\s\S]*capabilities:\s*\{[\s\S]*tools:\s*\{\}[\s\S]*resources:\s*\{\}/);
@@ -62,6 +66,17 @@ test("MCP wrapper parity: structuredContent.result is always model-safe and _met
   assert.match(source, /meta:\s*\{\s*widget_result:\s*fallbackResult\s*,?\s*\}/);
 });
 
+test("MCP app contract: widget render-state resolves _meta.widget_result first with compatible fallback paths", () => {
+  assert.match(widgetRuntimeSource, /const candidate = meta\.widget_result/);
+  assert.match(widgetRuntimeSource, /bootstrap_session_id/);
+  assert.match(widgetRuntimeSource, /bootstrap_epoch/);
+  assert.match(widgetRuntimeSource, /response_seq/);
+  assert.match(widgetRuntimeSource, /host_widget_session_id/);
+  assert.match(widgetRuntimeSource, /const rootResult = toRecord\(root\.result\)/);
+  assert.match(widgetRuntimeSource, /source:\s*"meta\.widget_result"/);
+  assert.match(widgetRuntimeSource, /source:\s*"root\.result"/);
+});
+
 test("MCP wrapper parity: model-safe result contract remains minimal in buildModelSafeResult", () => {
   const fnMatch = source.match(/function buildModelSafeResult\(result: Record<string, unknown>\): Record<string, unknown> \{[\s\S]*?\n\}/);
   assert.ok(fnMatch && fnMatch[0], "buildModelSafeResult function must exist");
@@ -104,6 +119,50 @@ test("MCP app contract: diagnostics endpoint is exposed with operational registr
   assert.match(source, /"diagnostics_endpoint_read"/);
   assert.match(source, /bootstrap_sessions:/);
   assert.match(source, /idempotency,/);
+});
+
+test("MCP app contract: lifecycle logs expose explicit accept/drop/rebase reason-codes", () => {
+  assert.match(source, /accept_reason_code:\s*staleRebaseApplied \? "accepted_after_stale_rebase" : "accepted_fresh_dispatch"/);
+  assert.match(source, /drop_reason_code:\s*"host_session_mismatch"/);
+  assert.match(source, /rebase_reason_code:\s*"stale_interactive_action_rebased"/);
+});
+
+test("MCP app contract: stale interactive rebase policy is explicitly limited to ACTION_START", () => {
+  assert.match(source, /const REBASE_ELIGIBLE_INTERACTIVE_ACTIONS = new Set<string>\(\["ACTION_START"\]\);/);
+  assert.match(source, /staleInteractiveActionPolicy\.rebaseEligible/);
+  assert.match(source, /stale_policy_reason_code:\s*staleInteractiveActionPolicy\.reasonCode/);
+});
+
+test("MCP app contract: stale ingest/rebase rollout flags are explicit and default-safe", () => {
+  assert.match(source, /const RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED = envFlagEnabled\("RUN_STEP_STALE_INGEST_GUARD_V1", false\);/);
+  assert.match(source, /const RUN_STEP_STALE_REBASE_V1_ENABLED = envFlagEnabled\("RUN_STEP_STALE_REBASE_V1", false\);/);
+  assert.match(source, /if \(incomingOrdering\.sessionId && incomingOrdering\.epoch > 0 && staleIngestGuardEnabled\)/);
+  assert.match(source, /staleCheck\.reason !== "host_session" &&[\s\S]*staleRebaseEnabled[\s\S]*staleInteractiveActionPolicy\.rebaseEligible/);
+  assert.match(source, /drop_reason_code:\s*dropReasonCode/);
+  assert.match(source, /stale_rebase_flag_disabled/);
+});
+
+test("MCP app contract: diagnostics publishes rollout flag states for canary checks", () => {
+  assert.match(source, /rollout_flags:\s*\{/);
+  assert.match(source, /run_step_stale_ingest_guard_v1:\s*RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED/);
+  assert.match(source, /run_step_stale_rebase_v1:\s*RUN_STEP_STALE_REBASE_V1_ENABLED/);
+  assert.match(
+    source,
+    /run_step_stale_rebase_v1_effective:\s*RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED && RUN_STEP_STALE_REBASE_V1_ENABLED/
+  );
+});
+
+test("MCP app contract: run_step wrapper logs render-source lifecycle", () => {
+  assert.match(source, /"run_step_render_source_selected"/);
+  assert.match(source, /render_source:\s*renderSource/);
+  assert.match(source, /render_source_reason_code:\s*renderSourceReasonCode/);
+  assert.match(source, /meta_widget_result_authoritative/);
+});
+
+test("MCP app contract: ready endpoint includes correlation tracing + diagnostics reference", () => {
+  assert.match(source, /"ready_endpoint_read"/);
+  assert.match(source, /run_step_compatibility:\s*RUN_STEP_TOOL_COMPAT_POLICY,/);
+  assert.match(source, /diagnostics_endpoint:\s*"\/diagnostics"/);
 });
 
 test("MCP app contract: trace id is propagated into run_step flow and logs", () => {

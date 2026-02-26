@@ -8,6 +8,7 @@ import {
   stripStructuredChoiceLines,
 } from "../ui/lib/ui_render.ts";
 import {
+  callRunStep,
   computeBootstrapRenderState,
   computeHydrationState,
   handleToolResultAndMaybeScheduleBootstrapRetry,
@@ -1144,6 +1145,10 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
   assert.match(source, /function normalizeHostToolResultNotification\(/);
   assert.match(source, /function ingestHostPayload\(/);
+  assert.match(source, /const STARTUP_WAITING_VIEW_MODE = "waiting_locale";/);
+  assert.match(source, /function buildStartupInitState\(\): Record<string, unknown> \{/);
+  assert.match(source, /const startupInitState = buildStartupInitState\(\);/);
+  assert.match(source, /render\(startupInitState\);/);
   assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
   assert.match(source, /const directCandidate = params;/);
   assert.match(source, /if \(isWidgetResultLike\(directCandidate\)\) \{/);
@@ -1223,6 +1228,329 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry keeps widget ordering monot
   );
 
   (globalThis as any).openai = originalOpenai;
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry drops stale payload before cache update", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  const hostState: Record<string, unknown> = {
+    bootstrap_session_id: "bs_demo",
+    bootstrap_epoch: 1,
+    response_seq: 6,
+    host_widget_session_id: "internal:demo",
+  };
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: { ...hostState },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+  });
+
+  const stalePayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 5,
+      host_widget_session_id: "internal:demo",
+    },
+  });
+  const result = handleToolResultAndMaybeScheduleBootstrapRetry(stalePayload, { source: "host_notification" });
+  assert.equal(Object.keys(result).length, 0);
+  assert.equal(
+    resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).response_seq,
+    6
+  );
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry drops tupleless payload after ordering is established", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  const hostState: Record<string, unknown> = {
+    bootstrap_session_id: "bs_demo",
+    bootstrap_epoch: 1,
+    response_seq: 6,
+    host_widget_session_id: "internal:demo",
+  };
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: { ...hostState },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+  });
+
+  const tuplelessPayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      language: "en",
+    },
+  });
+  const result = handleToolResultAndMaybeScheduleBootstrapRetry(tuplelessPayload, { source: "host_notification" });
+  assert.equal(Object.keys(result).length, 0);
+  assert.equal(
+    resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).response_seq,
+    6
+  );
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry drops duplicate payload with same ordering tuple", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  const hostState: Record<string, unknown> = {
+    bootstrap_session_id: "bs_demo",
+    bootstrap_epoch: 1,
+    response_seq: 6,
+    host_widget_session_id: "internal:demo",
+  };
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: { ...hostState },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    ui: { questionText: "current" },
+  });
+
+  const duplicatePayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    ui: { questionText: "duplicate-should-drop" },
+  });
+
+  const result = handleToolResultAndMaybeScheduleBootstrapRetry(duplicatePayload, { source: "host_notification" });
+  assert.equal(Object.keys(result).length, 0);
+  const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
+  assert.equal(String((((cachedResult.ui as Record<string, unknown>) || {}).questionText) || ""), "current");
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry accepts new session payload even when response_seq resets", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: {
+      bootstrap_session_id: "bs_old",
+      bootstrap_epoch: 4,
+      response_seq: 22,
+      host_widget_session_id: "internal:old",
+    },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_old",
+      bootstrap_epoch: 4,
+      response_seq: 22,
+      host_widget_session_id: "internal:old",
+    },
+    ui: { questionText: "old-session" },
+  });
+
+  const nextSessionPayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_new",
+      bootstrap_epoch: 1,
+      response_seq: 1,
+      host_widget_session_id: "internal:new",
+    },
+    ui: { questionText: "new-session" },
+  });
+
+  const result = handleToolResultAndMaybeScheduleBootstrapRetry(nextSessionPayload, { source: "host_notification" });
+  assert.equal(Object.keys(result).length > 0, true);
+  assert.equal(String(((result.state as Record<string, unknown> | undefined) || {}).current_step || ""), "step_0");
+  const stateAfter = (globalThis as any).openai.widgetState as Record<string, unknown>;
+  assert.equal(String(stateAfter.bootstrap_session_id || ""), "bs_new");
+  assert.equal(Number(stateAfter.bootstrap_epoch || 0), 1);
+  assert.equal(Number(stateAfter.response_seq || 0), 1);
+  assert.equal(String(stateAfter.host_widget_session_id || ""), "internal:new");
+  const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
+  assert.equal(String((((cachedResult.ui as Record<string, unknown>) || {}).questionText) || ""), "new-session");
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("callRunStep treats callTool response as dispatch ack and does not ingest render state", async () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalLatest = (globalThis as any).__BSC_LATEST__;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    ui: { view: { mode: "interactive" } },
+  });
+  (globalThis as any).__BSC_LATEST__ = {
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    lang: "en",
+  };
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: {
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+    async callTool() {
+      return toolOutputFromWidgetResult({
+        state: {
+          current_step: "step_0",
+          bootstrap_session_id: "bs_demo",
+          bootstrap_epoch: 1,
+          response_seq: 7,
+          host_widget_session_id: "internal:demo",
+        },
+        ui: { view: { mode: "interactive" } },
+      });
+    },
+  };
+
+  await callRunStep("ACTION_TEST_ACK_ONLY");
+  assert.equal(
+    resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).response_seq,
+    6
+  );
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LATEST__ = originalLatest;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("callRunStep dedupes duplicate bootstrap poll dispatches while one poll is in flight", async () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalLatest = (globalThis as any).__BSC_LATEST__;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = {};
+
+  const baseState = {
+    current_step: "step_0",
+    bootstrap_session_id: "bs_demo",
+    bootstrap_epoch: 1,
+    response_seq: 6,
+    host_widget_session_id: "internal:demo",
+  };
+  (globalThis as any).__BSC_LATEST__ = { state: { ...baseState }, lang: "en" };
+
+  let callCount = 0;
+  let resolveInFlight: ((value: unknown) => void) | null = null;
+  const inFlight = new Promise<unknown>((resolve) => {
+    resolveInFlight = resolve;
+  });
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: { ...baseState },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+    async callTool() {
+      callCount += 1;
+      return inFlight;
+    },
+  };
+
+  const first = callRunStep("ACTION_BOOTSTRAP_POLL", { ...baseState, __bootstrap_poll: "true" });
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const second = callRunStep("ACTION_BOOTSTRAP_POLL", { ...baseState, __bootstrap_poll: "true" });
+  if (resolveInFlight) {
+    resolveInFlight(
+      toolOutputFromWidgetResult({
+        state: {
+          ...baseState,
+          response_seq: 7,
+        },
+      })
+    );
+  }
+  await Promise.all([first, second]);
+  assert.equal(callCount, 1);
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LATEST__ = originalLatest;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
 test("render keeps non-EN pending locale in explicit wait view without EN prestart content", () => {
@@ -1320,6 +1648,38 @@ test("render follows explicit server prestart mode during startup grace", () => 
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
   (globalThis as any).openai = originalOpenai;
+});
+
+test("render shows startup wait shell when payload is absent", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalLatest = (globalThis as any).__BSC_LATEST__;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+
+  const fakeDocument = makeDocument();
+  const cardDesc = (fakeDocument as any).getElementById("cardDesc");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+  (globalThis as any).__BSC_LATEST__ = undefined;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = {};
+
+  render();
+
+  assert.ok((cardDesc.childNodes || []).length > 0);
+  const shell = (cardDesc.childNodes || [])[0] as { className?: string; childNodes?: any[] };
+  assert.equal(String(shell?.className || "").includes("bootstrap-wait-shell"), true);
+  assert.ok(((shell?.childNodes || []) as any[]).length > 0);
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LATEST__ = originalLatest;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
 test("resolveWidgetPayload prefers _meta.widget_result over root.result", () => {
@@ -1466,6 +1826,9 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.match(source, /function mergeOutboundOrdering\(/);
   assert.match(source, /\[ui_ordering_applied\]/);
   assert.match(source, /\[ui_ordering_dropped_stale\]/);
+  assert.match(source, /\[ui_ingest_dropped_no_widget_result\]/);
+  assert.match(source, /incoming_missing_tuple/);
+  assert.match(source, /\[ui_dispatch_ack_only\]/);
   assert.match(source, /ui_transport_unavailable/);
   assert.match(source, /ui_start_dispatch_failed/);
   assert.match(source, /ui_ordering_patch_dropped/);

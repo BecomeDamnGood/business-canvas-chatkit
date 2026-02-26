@@ -172,6 +172,17 @@ function menuIdFromSpecialistPayload(payload: any): string {
   return parseMenuFromContractId(payload?.ui_contract_id || "");
 }
 
+test("menuIdFromTurn enforces ui.contract_id as source-of-truth over conflicting action_codes", () => {
+  const menuId = menuIdFromTurn({
+    current_step_id: "dream",
+    ui: {
+      contract_id: "dream:phase:DREAM_MENU_REFINE",
+      action_codes: ["ACTION_DREAM_INTRO_EXPLAIN_MORE"],
+    },
+  });
+  assert.equal(menuId, "DREAM_MENU_REFINE");
+});
+
 function uiContractSnapshot(turn: any): Record<string, unknown> {
   const ui = turn?.ui && typeof turn.ui === "object" ? turn.ui : {};
   const actions = Array.isArray((ui as any).actions)

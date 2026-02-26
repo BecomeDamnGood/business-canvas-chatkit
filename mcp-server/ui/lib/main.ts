@@ -125,6 +125,7 @@ function ingestHostPayload(
 }
 
 const STARTUP_GRACE_MS_DEFAULT = 320;
+const STARTUP_WAITING_VIEW_MODE = "waiting_locale";
 
 function startupGraceMs(): number {
   const raw = Number((globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_MS ?? STARTUP_GRACE_MS_DEFAULT);
@@ -138,6 +139,30 @@ function setStartupGraceUntil(untilMs: number): void {
 
 function clearStartupGrace(): void {
   (globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_UNTIL_MS = 0;
+}
+
+function buildStartupInitState(): Record<string, unknown> {
+  const language = latestWidgetLang() || "en";
+  return {
+    state: {
+      current_step: "step_0",
+      started: "false",
+      language,
+      ui_gate_status: STARTUP_WAITING_VIEW_MODE,
+      ui_strings_status: "pending",
+    },
+    ui: {
+      flags: {
+        bootstrap_waiting_locale: true,
+        bootstrap_interactive_ready: false,
+        interactive_fallback_active: false,
+      },
+      view: {
+        mode: STARTUP_WAITING_VIEW_MODE,
+        waiting_locale: true,
+      },
+    },
+  };
 }
 
 function readSetGlobalsPayloadFromHost(): Record<string, unknown> {
@@ -157,8 +182,9 @@ function tryInitialIngestFromHost(source: "set_globals" | "host_notification"): 
 
 function renderStartupWaitShell(reason: string): void {
   const graceMs = startupGraceMs();
+  const startupInitState = buildStartupInitState();
   if (graceMs <= 0) {
-    render();
+    render(startupInitState);
     return;
   }
   const untilMs = Date.now() + graceMs;
@@ -167,7 +193,7 @@ function renderStartupWaitShell(reason: string): void {
     reason,
     grace_ms: graceMs,
   });
-  render();
+  render(startupInitState);
   setTimeout(() => {
     if (Date.now() < untilMs) return;
     clearStartupGrace();
@@ -175,7 +201,7 @@ function renderStartupWaitShell(reason: string): void {
       console.log("[startup_payload_missing_after_grace]", {
         grace_ms: graceMs,
       });
-      render();
+      render(startupInitState);
     }
   }, graceMs);
 }

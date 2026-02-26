@@ -137,6 +137,15 @@ function parsePositiveInt(value: unknown): number {
   return Math.trunc(n);
 }
 
+function envFlagEnabled(name: string, fallback: boolean): boolean {
+  const raw = String(process.env[name] ?? "").trim().toLowerCase();
+  if (!raw) return fallback;
+  return !["0", "false", "off", "no"].includes(raw);
+}
+
+const RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED = envFlagEnabled("RUN_STEP_STALE_INGEST_GUARD_V1", false);
+const RUN_STEP_STALE_REBASE_V1_ENABLED = envFlagEnabled("RUN_STEP_STALE_REBASE_V1", false);
+
 function delay(ms: number): Promise<void> {
   if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -1055,6 +1064,47 @@ function isFirstStartStep(stepId: string, state: Record<string, unknown> | null 
   return stepId === "step_0" && !hasNonBusinessFinals(state);
 }
 
+const REBASE_ELIGIBLE_INTERACTIVE_ACTIONS = new Set<string>(["ACTION_START"]);
+
+type StaleInteractiveActionPolicy = {
+  normalizedAction: string;
+  isInteractiveAction: boolean;
+  rebaseEligible: boolean;
+  reasonCode:
+    | "text_input"
+    | "interactive_action_not_rebase_eligible"
+    | "interactive_action_rebase_eligible";
+};
+
+function classifyStaleInteractiveActionPolicy(actionRaw: unknown): StaleInteractiveActionPolicy {
+  const normalizedAction = safeString(actionRaw ?? "").trim().toUpperCase();
+  const isInteractiveAction = normalizedAction.startsWith("ACTION_");
+  if (!isInteractiveAction) {
+    return {
+      normalizedAction,
+      isInteractiveAction: false,
+      rebaseEligible: false,
+      reasonCode: "text_input",
+    };
+  }
+  const rebaseEligible = REBASE_ELIGIBLE_INTERACTIVE_ACTIONS.has(normalizedAction);
+  return {
+    normalizedAction,
+    isInteractiveAction: true,
+    rebaseEligible,
+    reasonCode: rebaseEligible
+      ? "interactive_action_rebase_eligible"
+      : "interactive_action_not_rebase_eligible",
+  };
+}
+
+function readStateFromWidgetResult(result: Record<string, unknown> | null | undefined): Record<string, unknown> | null {
+  if (!result || typeof result !== "object") return null;
+  const stateRaw = (result as any).state;
+  if (!stateRaw || typeof stateRaw !== "object") return null;
+  return JSON.parse(JSON.stringify(stateRaw)) as Record<string, unknown>;
+}
+
 function loadUiHtml(): string {
   try {
     const raw = readFileSync(new URL("./ui/step-card.bundled.html", import.meta.url), "utf-8");
@@ -1182,6 +1232,11 @@ async function runStepHandler(args: {
   const localeHint = safeString(args.locale_hint ?? "");
   const inputMode = safeString(args.input_mode ?? "chat");
   const action = upperMessage.startsWith("ACTION_") ? upperMessage : "text_input";
+  const staleIngestGuardEnabled = RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED;
+  const staleRebaseEnabled = staleIngestGuardEnabled && RUN_STEP_STALE_REBASE_V1_ENABLED;
+  const staleInteractiveActionPolicy = classifyStaleInteractiveActionPolicy(action);
+  let staleRebaseApplied = false;
+  let staleRebaseReasonCode = "";
   const idempotencyKey = normalizeIdempotencyKey(
     args.idempotency_key ?? (stateForTool as any).__client_action_id ?? ""
   );
@@ -1204,6 +1259,8 @@ async function runStepHandler(args: {
       locale_hint_source: localeHintSource,
       host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
       idempotency_key_present: idempotencyKey ? "true" : "false",
+      stale_ingest_guard_enabled: staleIngestGuardEnabled,
+      stale_rebase_enabled: staleRebaseEnabled,
     }
   );
   const nowMs = Date.now();
@@ -1408,7 +1465,7 @@ async function runStepHandler(args: {
     });
   }
 
-  if (incomingOrdering.sessionId && incomingOrdering.epoch > 0) {
+  if (incomingOrdering.sessionId && incomingOrdering.epoch > 0 && staleIngestGuardEnabled) {
     const staleCheck = isStaleBootstrapPayload({
       sessionId: incomingOrdering.sessionId,
       hostWidgetSessionId: incomingOrdering.hostWidgetSessionId,
@@ -1435,73 +1492,161 @@ async function runStepHandler(args: {
           input_mode: inputMode || "chat",
           action,
           host_widget_session_id_present: "true",
+          drop_reason_code: "host_session_mismatch",
         }
       );
     }
     if (staleCheck.stale) {
-      const staleSource =
-        staleCheck.latest && staleCheck.latest.lastWidgetResult && Object.keys(staleCheck.latest.lastWidgetResult).length
-          ? (JSON.parse(JSON.stringify(staleCheck.latest.lastWidgetResult)) as Record<string, unknown>)
-          : {
-              ok: true,
-              tool: "run_step",
-              current_step_id: safeString((stateForTool as any).current_step ?? "step_0") || "step_0",
-              active_specialist: safeString((stateForTool as any).active_specialist ?? ""),
-              text: "",
-              prompt: "",
-              specialist: {},
-              state: normalizeState(stateForTool),
-            };
-      const staleResult = attachIdempotencyDiagnostics({
-        resultForClient: staleSource,
-        idempotencyKey,
-        outcome: "replay",
-        ...(idempotencyKey ? { errorCode: IDEMPOTENCY_ERROR_CODES.REPLAY } : {}),
-      });
-      const staleStepMeta =
-        safeString((staleResult.state as Record<string, unknown> | undefined)?.current_step ?? "unknown") || "unknown";
-      const staleSpecialistMeta = safeString(staleResult.active_specialist ?? "unknown") || "unknown";
-      logStructuredEvent(
-        "warn",
-        "stale_bootstrap_payload_dropped",
-        {
-          correlation_id: correlationId,
-          trace_id: traceId,
-          session_id: incomingOrdering.sessionId,
-          step_id: stepIdStr || "step_0",
-          contract_id: resolveContractIdFromRecord(staleResult),
-        },
-        {
-          input_mode: inputMode || "chat",
-          action,
-          stale_reason: staleCheck.reason || "unknown",
-          payload_epoch: incomingOrdering.epoch,
-          payload_response_seq: incomingOrdering.responseSeq,
-          latest_epoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
-          latest_response_seq: staleCheck.latest?.lastResponseSeq || 0,
-          host_widget_session_id_present: incomingOrdering.hostWidgetSessionId ? "true" : "false",
-        }
-      );
-      const modelResult = buildModelSafeResult(staleResult);
-      const structuredContent: Record<string, unknown> = {
-        title: `The Business Strategy Canvas Builder (${VERSION})`,
-        meta: `step: ${staleStepMeta} | specialist: ${staleSpecialistMeta}`,
-        result: modelResult,
-      };
-      if (idempotencyTracker) {
-        markIdempotencyCompleted({
-          registryKey: idempotencyTracker.registryKey,
-          scopeKey: idempotencyTracker.scopeKey,
-          idempotencyKey: idempotencyTracker.idempotencyKey,
-          requestHash: idempotencyTracker.requestHash,
-          resultForClient: staleResult,
-          nowMs: Date.now(),
+      const payloadEpoch = incomingOrdering.epoch;
+      const payloadResponseSeq = incomingOrdering.responseSeq;
+      const payloadHostWidgetSessionIdPresent = incomingOrdering.hostWidgetSessionId ? "true" : "false";
+      const latestStateSnapshot = readStateFromWidgetResult(staleCheck.latest?.lastWidgetResult);
+      const canRebaseStalePayload =
+        staleCheck.reason !== "host_session" &&
+        staleRebaseEnabled &&
+        staleInteractiveActionPolicy.rebaseEligible &&
+        !!latestStateSnapshot;
+
+      if (canRebaseStalePayload && latestStateSnapshot) {
+        const rebasedSessionId =
+          normalizeBootstrapSessionId((latestStateSnapshot as any).bootstrap_session_id) ||
+          staleCheck.latest?.sessionId ||
+          incomingOrdering.sessionId ||
+          normalizedBootstrapSessionId;
+        const rebasedEpoch =
+          parsePositiveInt((latestStateSnapshot as any).bootstrap_epoch) ||
+          staleCheck.latest?.epoch ||
+          incomingOrdering.epoch ||
+          normalizedBootstrapEpoch;
+        const rebasedResponseSeq =
+          parsePositiveInt((latestStateSnapshot as any).response_seq) ||
+          staleCheck.latest?.lastResponseSeq ||
+          incomingOrdering.responseSeq;
+        const rebasedHostWidgetSessionId =
+          normalizeHostWidgetSessionId((latestStateSnapshot as any).host_widget_session_id) ||
+          staleCheck.latest?.hostWidgetSessionId ||
+          hostWidgetSessionId;
+
+        stateForTool = {
+          ...latestStateSnapshot,
+          ...(hasInitiator || !shouldSeedInitialUserMessage ? {} : { initial_user_message: normalizedMessage }),
+          ...(shouldMarkStarted ? { started: "true" } : {}),
+          __request_id: correlationId,
+          ...(traceId ? { __trace_id: traceId } : {}),
+          bootstrap_session_id: rebasedSessionId,
+          bootstrap_epoch: rebasedEpoch,
+          ...(rebasedResponseSeq > 0 ? { response_seq: rebasedResponseSeq } : {}),
+          host_widget_session_id: rebasedHostWidgetSessionId,
+          __idempotency_registry_owner: "server",
+        };
+        incomingOrdering = readBootstrapOrdering({ state: stateForTool });
+
+        logStructuredEvent(
+          "info",
+          "stale_bootstrap_payload_rebased",
+          {
+            correlation_id: correlationId,
+            trace_id: traceId,
+            session_id: incomingOrdering.sessionId || normalizedBootstrapSessionId,
+            step_id: safeString((stateForTool as any).current_step ?? stepIdStr || "step_0") || "step_0",
+            contract_id: resolveContractIdFromRecord({ state: stateForTool }),
+          },
+          {
+            input_mode: inputMode || "chat",
+            action,
+            stale_reason: staleCheck.reason || "unknown",
+            stale_reason_code: staleCheck.reason || "unknown",
+            stale_policy_reason_code: staleInteractiveActionPolicy.reasonCode,
+            rebase_reason_code: "stale_interactive_action_rebased",
+            payload_epoch: payloadEpoch,
+            payload_response_seq: payloadResponseSeq,
+            latest_epoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
+            latest_response_seq: staleCheck.latest?.lastResponseSeq || 0,
+            host_widget_session_id_present: payloadHostWidgetSessionIdPresent,
+            stale_ingest_guard_enabled: staleIngestGuardEnabled,
+            stale_rebase_enabled: staleRebaseEnabled,
+          }
+        );
+        staleRebaseApplied = true;
+        staleRebaseReasonCode = "stale_interactive_action_rebased";
+      } else {
+        const staleSource =
+          staleCheck.latest && staleCheck.latest.lastWidgetResult && Object.keys(staleCheck.latest.lastWidgetResult).length
+            ? (JSON.parse(JSON.stringify(staleCheck.latest.lastWidgetResult)) as Record<string, unknown>)
+            : {
+                ok: true,
+                tool: "run_step",
+                current_step_id: safeString((stateForTool as any).current_step ?? "step_0") || "step_0",
+                active_specialist: safeString((stateForTool as any).active_specialist ?? ""),
+                text: "",
+                prompt: "",
+                specialist: {},
+                state: normalizeState(stateForTool),
+              };
+        const staleResult = attachIdempotencyDiagnostics({
+          resultForClient: staleSource,
+          idempotencyKey,
+          outcome: "replay",
+          ...(idempotencyKey ? { errorCode: IDEMPOTENCY_ERROR_CODES.REPLAY } : {}),
         });
+        const staleStepMeta =
+          safeString((staleResult.state as Record<string, unknown> | undefined)?.current_step ?? "unknown") || "unknown";
+        const staleSpecialistMeta = safeString(staleResult.active_specialist ?? "unknown") || "unknown";
+        const dropReasonCode =
+          staleCheck.reason === "host_session"
+            ? "host_session_mismatch"
+            : !staleRebaseEnabled
+              ? "stale_rebase_flag_disabled"
+            : staleInteractiveActionPolicy.rebaseEligible
+              ? "stale_rebase_state_missing"
+              : "stale_action_not_rebase_eligible";
+        logStructuredEvent(
+          "warn",
+          "stale_bootstrap_payload_dropped",
+          {
+            correlation_id: correlationId,
+            trace_id: traceId,
+            session_id: incomingOrdering.sessionId,
+            step_id: stepIdStr || "step_0",
+            contract_id: resolveContractIdFromRecord(staleResult),
+          },
+          {
+            input_mode: inputMode || "chat",
+            action,
+            stale_reason: staleCheck.reason || "unknown",
+            stale_reason_code: staleCheck.reason || "unknown",
+            stale_policy_reason_code: staleInteractiveActionPolicy.reasonCode,
+            drop_reason_code: dropReasonCode,
+            payload_epoch: payloadEpoch,
+            payload_response_seq: payloadResponseSeq,
+            latest_epoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
+            latest_response_seq: staleCheck.latest?.lastResponseSeq || 0,
+            host_widget_session_id_present: payloadHostWidgetSessionIdPresent,
+            stale_ingest_guard_enabled: staleIngestGuardEnabled,
+            stale_rebase_enabled: staleRebaseEnabled,
+          }
+        );
+        const modelResult = buildModelSafeResult(staleResult);
+        const structuredContent: Record<string, unknown> = {
+          title: `The Business Strategy Canvas Builder (${VERSION})`,
+          meta: `step: ${staleStepMeta} | specialist: ${staleSpecialistMeta}`,
+          result: modelResult,
+        };
+        if (idempotencyTracker) {
+          markIdempotencyCompleted({
+            registryKey: idempotencyTracker.registryKey,
+            scopeKey: idempotencyTracker.scopeKey,
+            idempotencyKey: idempotencyTracker.idempotencyKey,
+            requestHash: idempotencyTracker.requestHash,
+            resultForClient: staleResult,
+            nowMs: Date.now(),
+          });
+        }
+        return {
+          structuredContent,
+          meta: { widget_result: staleResult },
+        };
       }
-      return {
-        structuredContent,
-        meta: { widget_result: staleResult },
-      };
     }
   }
 
@@ -1590,6 +1735,11 @@ async function runStepHandler(args: {
         ui_action_start_present: safeString(resultState.ui_action_start ?? "") === "ACTION_START",
         host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
         active_specialist: specialistMeta,
+        accept_reason_code: staleRebaseApplied ? "accepted_after_stale_rebase" : "accepted_fresh_dispatch",
+        rebase_applied: staleRebaseApplied,
+        rebase_reason_code: staleRebaseReasonCode,
+        stale_ingest_guard_enabled: staleIngestGuardEnabled,
+        stale_rebase_enabled: staleRebaseEnabled,
       }
     );
     const modelResult = buildModelSafeResult(resultForClient);
@@ -2032,12 +2182,50 @@ function createAppServer(baseUrl: string): McpServer {
         host_widget_session_id: hostWidgetSessionId,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
+      const hasMetaWidgetResult =
+        meta &&
+        typeof meta === "object" &&
+        (meta as any).widget_result &&
+        typeof (meta as any).widget_result === "object";
       const contentSource =
-        meta && typeof meta === "object" && (meta as any).widget_result && typeof (meta as any).widget_result === "object"
+        hasMetaWidgetResult
           ? ((meta as any).widget_result as Record<string, unknown>)
           : ((structuredContent && (structuredContent as any).result)
             ? ((structuredContent as any).result as Record<string, unknown>)
             : null);
+      const contentSourceState =
+        contentSource && typeof contentSource === "object" && contentSource.state && typeof contentSource.state === "object"
+          ? (contentSource.state as Record<string, unknown>)
+          : {};
+      const renderSource = hasMetaWidgetResult
+        ? "meta.widget_result"
+        : (contentSource ? "structuredContent.result" : "none");
+      const renderSourceReasonCode = hasMetaWidgetResult
+        ? "meta_widget_result_authoritative"
+        : (contentSource ? "structured_content_result_fallback" : "render_source_missing");
+      const renderSourceStepId =
+        safeString(
+          (contentSource as any)?.current_step_id ??
+          contentSourceState.current_step ??
+          normalizedStepId ??
+          "step_0"
+        ) || "step_0";
+      logStructuredEvent(
+        contentSource ? "info" : "warn",
+        "run_step_render_source_selected",
+        {
+          correlation_id: correlationId,
+          trace_id: traceId,
+          session_id: normalizeBootstrapSessionId(contentSourceState.bootstrap_session_id),
+          step_id: renderSourceStepId,
+          contract_id: resolveContractIdFromRecord(contentSource || { state: args.state ?? {} }),
+        },
+        {
+          render_source: renderSource,
+          render_source_reason_code: renderSourceReasonCode,
+          host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
+        }
+      );
       const contentText = buildContentFromResult(contentSource, { isFirstStart });
       const parsedStructuredContent = RunStepToolStructuredContentOutputSchema.parse(structuredContent);
       return {
@@ -2146,6 +2334,12 @@ const httpServer = async (req: any, res: any) => {
             },
             runtime: {
               local_dev: isLocalDev,
+              rollout_flags: {
+                run_step_stale_ingest_guard_v1: RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED,
+                run_step_stale_rebase_v1: RUN_STEP_STALE_REBASE_V1_ENABLED,
+                run_step_stale_rebase_v1_effective:
+                  RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED && RUN_STEP_STALE_REBASE_V1_ENABLED,
+              },
               pid: process.pid,
               memory_bytes: {
                 rss: memoryUsage.rss,
@@ -2161,12 +2355,32 @@ const httpServer = async (req: any, res: any) => {
       }
       return;
     }
+    if (isReadyEndpoint) {
+      logStructuredEvent(
+        "info",
+        "ready_endpoint_read",
+        {
+          correlation_id: correlationId,
+          trace_id: traceId,
+          session_id: "",
+          step_id: "",
+          contract_id: "",
+        },
+        {
+          method: req.method,
+          path: url.pathname,
+          ready_reason_code: "readiness_probe",
+        }
+      );
+    }
     res.writeHead(200, { "content-type": "application/json" });
     if (req.method === "GET") {
       res.end(
         JSON.stringify({
           status: "ok",
           ready: true,
+          correlation_id: correlationId,
+          trace_id: traceId,
           version: VERSION,
           state_version: CURRENT_STATE_VERSION,
           contract_version: VIEW_CONTRACT_VERSION,
@@ -2174,6 +2388,7 @@ const httpServer = async (req: any, res: any) => {
           run_step_input_schema_version: RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
           run_step_output_schema_version: RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
           run_step_compatibility: RUN_STEP_TOOL_COMPAT_POLICY,
+          diagnostics_endpoint: "/diagnostics",
         })
       );
     } else {

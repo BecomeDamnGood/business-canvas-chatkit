@@ -73,10 +73,26 @@ Error (`ok: false`):
 - No legacy fallback routing in widget mode.
 - `registry_version` should be logged with menu/button interactions.
 
-## 8) Bootstrap/Locale Authority (Single Source of Truth)
+## 8) Widget Render-State SSOT
+
+- Authoritative render-state source is `_meta.widget_result` only.
+- Authoritative ordering tuple (from `_meta.widget_result.state`) is:
+  - `bootstrap_session_id`
+  - `bootstrap_epoch`
+  - `response_seq`
+  - `host_widget_session_id`
+- This tuple is the only authority for stale/newer decisioning in widget state progression.
+- `structuredContent.result` remains model-safe/minimal and is not authoritative for widget render-state.
+
+## 9) Bootstrap/Locale Authority Rules
 
 - Server-side bootstrap policy is authoritative for `bootstrap_phase`, `ui_gate_status`, `ui_strings_status`, and `ui.view.mode`.
-- The widget must treat incoming state claims as untrusted hints and only render server-emitted intent.
-- Rich UI state is carried through `_meta.widget_result`; `structuredContent.result` remains minimal/model-safe.
+- The widget must treat incoming state claims as untrusted hints and only render server-emitted intent from `_meta.widget_result`.
 - `interactive_fallback` is not used for non-EN pending locale on `step_0`; server must emit `waiting_locale` or `recovery`.
 - Widget render priority is: `ui.view.mode` first, then recovery fallback for corrupt/missing payload.
+
+## 10) Migration Compatibility Window
+
+- Legacy payloadvormen (`root.result` en andere alternate wrappers) mogen alleen tijdelijk bestaan tijdens migratie.
+- Tijdens dit window moeten producers canonicaliseren naar `_meta.widget_result` voor widget-consumptie.
+- Alternate bronnen mogen niet als truth-source gebruikt worden voor render-state of ordering.

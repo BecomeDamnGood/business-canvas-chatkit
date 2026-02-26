@@ -327,17 +327,25 @@ export function computeBootstrapRenderState(params: {
   return computeBootstrapRenderStateCore(params);
 }
 
+function hydrateWidgetResultEnvelope(raw: unknown): Record<string, unknown> {
+  const resolved = resolveWidgetPayloadCore(raw);
+  if (!Object.keys(resolved.result).length) return {};
+  return {
+    _meta: {
+      widget_result: resolved.result,
+    },
+  };
+}
+
 export function applyToolResult(raw: unknown): Record<string, unknown> {
-  const normalized = toRecord(raw);
-  try {
-    (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = normalized;
-  } catch {}
-  return normalized;
+  return hydrateWidgetResultEnvelope(raw);
 }
 
 export function setLastToolOutput(raw: unknown): void {
+  const normalized = hydrateWidgetResultEnvelope(raw);
+  if (!Object.keys(normalized).length) return;
   try {
-    (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = toRecord(raw);
+    (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = normalized;
   } catch {}
 }
 
@@ -347,23 +355,13 @@ function getLastToolOutput(): Record<string, unknown> {
 }
 
 export function hasToolOutput(): boolean {
-  const o = oa();
-  const oo = o as { toolOutput?: unknown; toolResponseMetadata?: unknown };
-  return (
-    Boolean(o && (oo.toolOutput || oo.toolResponseMetadata)) ||
-    Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length)
-  );
+  return Boolean(getLastToolOutput() && Object.keys(getLastToolOutput()).length);
 }
 
-/** Allow render() to use callTool return value, otherwise fall back to host toolOutput / cache. */
+/** Render state reads only canonical hydrated payload cached from host ingest. */
 export function toolData(overrideRaw?: unknown): Record<string, unknown> {
+  if (overrideRaw !== undefined) return hydrateWidgetResultEnvelope(overrideRaw);
   const cached = getLastToolOutput();
-  if (overrideRaw) return toRecord(overrideRaw);
-  const o = oa();
-  const oo = o as { toolOutput?: unknown; toolResponseMetadata?: unknown };
-  if (o && (oo.toolOutput || oo.toolResponseMetadata)) {
-    return mergeToolOutputWithResponseMetadata(oo.toolOutput, oo.toolResponseMetadata);
-  }
   if (cached && Object.keys(cached).length) return cached;
   return {};
 }
@@ -498,11 +496,14 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     is_poll_response?: boolean;
   }
 ): Record<string, unknown> {
+  const source = String(opts?.source || "unknown");
   const normalized = applyToolResult(raw);
-  if (_render) _render(normalized);
+  if (!Object.keys(normalized).length) {
+    console.warn("[ui_ingest_dropped_no_widget_result]", { source });
+    return {};
+  }
   const resolved = resolveWidgetPayload(normalized);
   const result = resolved.result;
-  const source = String(opts?.source || "unknown");
   const currentOrdering = readBootstrapOrderingState(widgetState());
   const incomingOrdering: BootstrapOrderingState = {
     sessionId: resolved.bootstrap_session_id,
@@ -510,8 +511,28 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     responseSeq: resolved.response_seq,
     hostWidgetSessionId: resolved.host_widget_session_id,
   };
+  const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
+  const currentHasOrdering = hasValidBootstrapOrdering(currentOrdering);
   const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
-  if (orderingDecision.apply) {
+  if (incomingHasOrdering && !orderingDecision.apply) {
+    console.warn("[ui_ordering_dropped_stale]", {
+      source,
+      reason: orderingDecision.reason,
+      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+      current_tuple: describeBootstrapOrdering(currentOrdering),
+    });
+    return {};
+  }
+  if (!incomingHasOrdering && currentHasOrdering) {
+    console.warn("[ui_ordering_dropped_stale]", {
+      source,
+      reason: "incoming_missing_tuple",
+      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+      current_tuple: describeBootstrapOrdering(currentOrdering),
+    });
+    return {};
+  }
+  if (incomingHasOrdering && orderingDecision.apply) {
     setWidgetStateSafe({
       bootstrap_session_id: incomingOrdering.sessionId,
       bootstrap_epoch: incomingOrdering.epoch,
@@ -524,14 +545,9 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       incoming_tuple: describeBootstrapOrdering(incomingOrdering),
       current_tuple: describeBootstrapOrdering(currentOrdering),
     });
-  } else if (hasValidBootstrapOrdering(incomingOrdering)) {
-    console.warn("[ui_ordering_dropped_stale]", {
-      source,
-      reason: orderingDecision.reason,
-      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-      current_tuple: describeBootstrapOrdering(currentOrdering),
-    });
   }
+  setLastToolOutput(normalized);
+  if (_render) _render(normalized);
   const hydration = maybeScheduleBootstrapRetry(resolved);
   if (isDevEnv()) {
     console.log("[ui_bootstrap_state]", {
@@ -1057,10 +1073,14 @@ export async function callRunStep(
       }
       return;
     }
-    handleToolResultAndMaybeScheduleBootstrapRetry(resp, {
-      source: "call_run_step",
-      is_poll_response: isBootstrapPollCall,
-    });
+    if (debugCalls) {
+      console.log("[ui_dispatch_ack_only]", {
+        request_id: requestId,
+        client_action_id: clientActionId,
+        current_step: String(nextState.current_step || ""),
+        has_widget_result: resolveWidgetPayload(normalizedRaw).source === "meta.widget_result",
+      });
+    }
     if (isStartAction) {
       setWidgetStateSafe({
         start_dispatch_state: "ready",

@@ -156,6 +156,97 @@ test("ACTION_START smoke: widget start returns first Step 0 question", async () 
   );
 });
 
+test("ACTION_START replay from stale step_0 snapshot stays deterministic", async () => {
+  const staleSnapshotState = {
+    current_step: "step_0",
+    intro_shown_session: "false",
+    started: "true",
+    last_specialist_result: {},
+  } as Record<string, unknown>;
+
+  const first = await run_step({
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: staleSnapshotState,
+  });
+  const second = await run_step({
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: staleSnapshotState,
+  });
+
+  assert.equal(first?.ok, true);
+  assert.equal(second?.ok, true);
+  assert.equal(String(second?.current_step_id || ""), String(first?.current_step_id || ""));
+  assert.equal(String(second?.active_specialist || ""), String(first?.active_specialist || ""));
+  assert.equal(String(second?.prompt || ""), String(first?.prompt || ""));
+  assert.deepEqual(second?.ui?.action_codes || [], first?.ui?.action_codes || []);
+});
+
+test("ACTION_START race from identical stale snapshot keeps output contract stable", async () => {
+  const input = {
+    user_message: "ACTION_START",
+    input_mode: "widget" as const,
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      started: "true",
+      last_specialist_result: {},
+    } as Record<string, unknown>,
+  };
+
+  const [first, second] = await Promise.all([run_step(input), run_step(input)]);
+
+  assert.equal(first?.ok, true);
+  assert.equal(second?.ok, true);
+  assert.equal(String(second?.current_step_id || ""), String(first?.current_step_id || ""));
+  assert.equal(String(second?.active_specialist || ""), String(first?.active_specialist || ""));
+  assert.equal(String(second?.prompt || ""), String(first?.prompt || ""));
+  assert.equal(String(second?.ui?.contract_id || ""), String(first?.ui?.contract_id || ""));
+  assert.deepEqual(second?.ui?.action_codes || [], first?.ui?.action_codes || []);
+});
+
+test("ACTION_START stress: duplicate stale dispatches converge to one deterministic interactive Step 0 contract", async () => {
+  const input = {
+    user_message: "ACTION_START",
+    input_mode: "widget" as const,
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      started: "true",
+      last_specialist_result: {},
+    } as Record<string, unknown>,
+  };
+
+  const runs = await Promise.all(
+    Array.from({ length: 12 }, async (_, idx) => {
+      if (idx % 3 === 0) await new Promise((resolve) => setTimeout(resolve, 1));
+      return run_step(input);
+    })
+  );
+
+  for (const result of runs) {
+    assert.equal(result?.ok, true);
+    assert.equal(String(result?.current_step_id || ""), "step_0");
+    assert.equal(String(result?.ui?.view?.mode || ""), "interactive");
+  }
+
+  const snapshots = new Set(
+    runs.map((result) =>
+      JSON.stringify({
+        current_step_id: String(result?.current_step_id || ""),
+        active_specialist: String(result?.active_specialist || ""),
+        prompt: String(result?.prompt || ""),
+        contract_id: String(result?.ui?.contract_id || ""),
+        action_codes: Array.isArray(result?.ui?.action_codes)
+          ? (result?.ui?.action_codes as unknown[]).map((code) => String(code || ""))
+          : [],
+      })
+    )
+  );
+  assert.equal(snapshots.size, 1, "all duplicate stale ACTION_START runs should produce the same snapshot");
+});
+
 test("i18n: detect language from initial_user_message on start trigger", async () => {
   const result = await run_step({
     user_message: "",
