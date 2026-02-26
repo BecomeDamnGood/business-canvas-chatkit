@@ -4,7 +4,27 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { run_step } from "./run_step.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const RUNTIME_GOLDEN_DIR = path.join(__dirname, "__golden__", "runtime");
+const RUNTIME_GOLDEN_FILES = [
+  "prestart.json",
+  "waiting_locale.json",
+  "interactive.json",
+  "blocked.json",
+  "failed.json",
+] as const;
+
+type RuntimeGoldenFixture = {
+  id: string;
+  path: string;
+  input: Record<string, unknown>;
+  expected: {
+    snapshot: Record<string, unknown>;
+  };
+};
 
 function shapeSnapshot(result: any): Record<string, unknown> {
   return {
@@ -19,6 +39,11 @@ function shapeSnapshot(result: any): Record<string, unknown> {
     has_text_keys: Array.isArray(result?.ui?.text_keys),
     error_type: String(result?.error?.type || ""),
   };
+}
+
+function loadRuntimeGoldenFixture(filename: (typeof RUNTIME_GOLDEN_FILES)[number]): RuntimeGoldenFixture {
+  const raw = fs.readFileSync(path.join(RUNTIME_GOLDEN_DIR, filename), "utf8");
+  return JSON.parse(raw) as RuntimeGoldenFixture;
 }
 
 async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Promise<T> {
@@ -925,143 +950,12 @@ test("state transient allowlist keeps session metadata and strips unknown __ key
   assert.equal(Object.prototype.hasOwnProperty.call((result as any)?.state || {}, "__unknown_payload_noise"), false);
 });
 
-test("guardrail snapshot: run_step output shape is stable across prestart/waiting/interactive/blocked/failed states", async () => {
-  const prestart = await run_step({
-    user_message: "",
-    state: {
-      current_step: "step_0",
-      intro_shown_session: "false",
-      last_specialist_result: {},
-      started: "false",
-    },
-  });
-  assert.deepEqual(shapeSnapshot(prestart), {
-    ok: true,
-    current_step_id: "step_0",
-    ui_view_mode: "prestart",
-    ui_gate_status: "ready",
-    bootstrap_phase: "ready",
-    has_ui_actions: false,
-    has_action_codes: false,
-    has_contract_id: false,
-    has_text_keys: false,
-    error_type: "",
-  });
-
-  const waitingLocale = await run_step({
-    user_message: "",
-    input_mode: "chat",
-    locale_hint: "ru-RU",
-    locale_hint_source: "openai_locale",
-    state: {
-      current_step: "step_0",
-      intro_shown_session: "false",
-      last_specialist_result: {},
-      started: "true",
-      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
-    },
-  });
-  assert.deepEqual(shapeSnapshot(waitingLocale), {
-    ok: true,
-    current_step_id: "step_0",
-    ui_view_mode: "waiting_locale",
-    ui_gate_status: "waiting_locale",
-    bootstrap_phase: "waiting_locale",
-    has_ui_actions: false,
-    has_action_codes: false,
-    has_contract_id: true,
-    has_text_keys: true,
-    error_type: "",
-  });
-
-  const interactive = await run_step({
-    user_message: "",
-    input_mode: "chat",
-    locale_hint: "fr-CA",
-    locale_hint_source: "openai_locale",
-    state: {
-      current_step: "step_0",
-      intro_shown_session: "false",
-      last_specialist_result: {},
-      started: "true",
-      initial_user_message: "I want help with my business plan for my advertising agency called Mindd.",
-    },
-  });
-  assert.deepEqual(shapeSnapshot(interactive), {
-    ok: true,
-    current_step_id: "step_0",
-    ui_view_mode: "interactive",
-    ui_gate_status: "ready",
-    bootstrap_phase: "ready",
-    has_ui_actions: false,
-    has_action_codes: false,
-    has_contract_id: true,
-    has_text_keys: true,
-    error_type: "",
-  });
-
-  const blocked = await run_step({
-    user_message: "ACTION_WORDING_PICK_USER",
-    input_mode: "widget",
-    state: {
-      current_step: "role",
-      active_specialist: "Role",
-      intro_shown_session: "true",
-      started: "true",
-      business_name: "Mindd",
-      last_specialist_result: {
-        action: "CONFIRM",
-        menu_id: "",
-        question: "",
-        confirmation_question: "Are you ready to continue to Entity?",
-        message: "I think I understand what you mean.",
-        role: "Mindd sets standards for purpose-driven business.",
-        refined_formulation: "Mindd sets standards for purpose-driven business.",
-        wording_choice_pending: "true",
-        wording_choice_user_raw: "We offer the best quality.",
-        wording_choice_user_normalized: "We offer the best quality.",
-        wording_choice_agent_current: "Mindd sets standards for purpose-driven business.",
-        wording_choice_mode: "text",
-        wording_choice_target_field: "role",
-      },
-    },
-  });
-  assert.deepEqual(shapeSnapshot(blocked), {
-    ok: false,
-    current_step_id: "role",
-    ui_view_mode: "blocked",
-    ui_gate_status: "blocked",
-    bootstrap_phase: "failed",
-    has_ui_actions: false,
-    has_action_codes: false,
-    has_contract_id: false,
-    has_text_keys: false,
-    error_type: "session_upgrade_required",
-  });
-
-  const failed = await run_step({
-    user_message: "ACTION_START",
-    input_mode: "widget",
-    state: {
-      current_step: "step_0",
-      intro_shown_session: "false",
-      started: "true",
-      ui_gate_status: "not_a_valid_status",
-      last_specialist_result: {},
-    },
-  });
-  assert.deepEqual(shapeSnapshot(failed), {
-    ok: false,
-    current_step_id: "step_0",
-    ui_view_mode: "",
-    ui_gate_status: "failed",
-    bootstrap_phase: "failed",
-    has_ui_actions: false,
-    has_action_codes: false,
-    has_contract_id: false,
-    has_text_keys: false,
-    error_type: "invalid_state",
-  });
+test("guardrail snapshot: runtime golden traces stay stable for prestart/waiting_locale/interactive/blocked/failed", async () => {
+  for (const filename of RUNTIME_GOLDEN_FILES) {
+    const fixture = loadRuntimeGoldenFixture(filename);
+    const result = await run_step(fixture.input);
+    assert.deepEqual(shapeSnapshot(result), fixture.expected.snapshot, `${fixture.path}: shape snapshot drift`);
+  }
 });
 
 test("fail-closed: invalid contract markers are surfaced and block the turn", async () => {

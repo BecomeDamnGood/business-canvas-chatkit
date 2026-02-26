@@ -1,0 +1,27 @@
+{
+  "id": "runtime_prestart_golden",
+  "path": "prestart",
+  "input": {
+    "user_message": "",
+    "state": {
+      "current_step": "step_0",
+      "intro_shown_session": "false",
+      "last_specialist_result": {},
+      "started": "false"
+    }
+  },
+  "expected": {
+    "snapshot": {
+      "ok": true,
+      "current_step_id": "step_0",
+      "ui_view_mode": "prestart",
+      "ui_gate_status": "ready",
+      "bootstrap_phase": "ready",
+      "has_ui_actions": false,
+      "has_action_codes": false,
+      "has_contract_id": false,
+      "has_text_keys": false,
+      "error_type": ""
+    }
+  }
+}

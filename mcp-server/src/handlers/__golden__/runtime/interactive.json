@@ -1,0 +1,31 @@
+{
+  "id": "runtime_interactive_golden",
+  "path": "interactive",
+  "input": {
+    "user_message": "",
+    "input_mode": "chat",
+    "locale_hint": "fr-CA",
+    "locale_hint_source": "openai_locale",
+    "state": {
+      "current_step": "step_0",
+      "intro_shown_session": "false",
+      "last_specialist_result": {},
+      "started": "true",
+      "initial_user_message": "I want help with my business plan for my advertising agency called Mindd."
+    }
+  },
+  "expected": {
+    "snapshot": {
+      "ok": true,
+      "current_step_id": "step_0",
+      "ui_view_mode": "interactive",
+      "ui_gate_status": "ready",
+      "bootstrap_phase": "ready",
+      "has_ui_actions": false,
+      "has_action_codes": false,
+      "has_contract_id": true,
+      "has_text_keys": true,
+      "error_type": ""
+    }
+  }
+}

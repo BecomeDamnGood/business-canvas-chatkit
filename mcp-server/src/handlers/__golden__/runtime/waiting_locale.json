@@ -1,0 +1,31 @@
+{
+  "id": "runtime_waiting_locale_golden",
+  "path": "waiting_locale",
+  "input": {
+    "user_message": "",
+    "input_mode": "chat",
+    "locale_hint": "ru-RU",
+    "locale_hint_source": "openai_locale",
+    "state": {
+      "current_step": "step_0",
+      "intro_shown_session": "false",
+      "last_specialist_result": {},
+      "started": "true",
+      "initial_user_message": "I want help with my business plan for my advertising agency called Mindd."
+    }
+  },
+  "expected": {
+    "snapshot": {
+      "ok": true,
+      "current_step_id": "step_0",
+      "ui_view_mode": "waiting_locale",
+      "ui_gate_status": "waiting_locale",
+      "bootstrap_phase": "waiting_locale",
+      "has_ui_actions": false,
+      "has_action_codes": false,
+      "has_contract_id": true,
+      "has_text_keys": true,
+      "error_type": ""
+    }
+  }
+}

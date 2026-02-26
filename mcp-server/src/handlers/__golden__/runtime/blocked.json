@@ -1,0 +1,44 @@
+{
+  "id": "runtime_blocked_golden",
+  "path": "blocked",
+  "input": {
+    "user_message": "ACTION_WORDING_PICK_USER",
+    "input_mode": "widget",
+    "state": {
+      "current_step": "role",
+      "active_specialist": "Role",
+      "intro_shown_session": "true",
+      "started": "true",
+      "business_name": "Mindd",
+      "last_specialist_result": {
+        "action": "CONFIRM",
+        "menu_id": "",
+        "question": "",
+        "confirmation_question": "Are you ready to continue to Entity?",
+        "message": "I think I understand what you mean.",
+        "role": "Mindd sets standards for purpose-driven business.",
+        "refined_formulation": "Mindd sets standards for purpose-driven business.",
+        "wording_choice_pending": "true",
+        "wording_choice_user_raw": "We offer the best quality.",
+        "wording_choice_user_normalized": "We offer the best quality.",
+        "wording_choice_agent_current": "Mindd sets standards for purpose-driven business.",
+        "wording_choice_mode": "text",
+        "wording_choice_target_field": "role"
+      }
+    }
+  },
+  "expected": {
+    "snapshot": {
+      "ok": false,
+      "current_step_id": "role",
+      "ui_view_mode": "blocked",
+      "ui_gate_status": "blocked",
+      "bootstrap_phase": "failed",
+      "has_ui_actions": false,
+      "has_action_codes": false,
+      "has_contract_id": false,
+      "has_text_keys": false,
+      "error_type": "session_upgrade_required"
+    }
+  }
+}

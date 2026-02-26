@@ -107,3 +107,22 @@ test("single tool contract: run_step owns output template and model+app visibili
   assert.match(source, /visibility:\s*\["model",\s*"app"\]/);
   assert.match(source, /"openai\/outputTemplate": uiResourceUri/);
 });
+
+test("run_step facade delegates to runtime owner and keeps thin forwarding contract", () => {
+  const facadeSource = fs.readFileSync(new URL("./handlers/run_step.ts", import.meta.url), "utf8");
+  const runtimeSource = fs.readFileSync(new URL("./handlers/run_step_runtime.ts", import.meta.url), "utf8");
+  assert.match(facadeSource, /import \{ run_step as runStepRuntime \} from "\.\/run_step_runtime\.js";/);
+  assert.match(
+    facadeSource,
+    /export async function run_step\(rawArgs: unknown\)\s*\{\s*return runStepRuntime\(rawArgs\);\s*\}/
+  );
+  assert.match(runtimeSource, /export async function run_step\(rawArgs: unknown\): Promise<RunStepSuccess \| RunStepError>/);
+});
+
+test("runtime golden fixtures exist for prestart/waiting_locale/interactive/blocked/failed contracts", () => {
+  const required = ["prestart.json", "waiting_locale.json", "interactive.json", "blocked.json", "failed.json"];
+  for (const filename of required) {
+    const fixturePath = new URL(`./handlers/__golden__/runtime/${filename}`, import.meta.url);
+    assert.equal(fs.existsSync(fixturePath), true, `missing runtime golden fixture ${filename}`);
+  }
+});

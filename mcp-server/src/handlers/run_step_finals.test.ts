@@ -2,6 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { getDefaultState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import {
@@ -41,6 +43,28 @@ import { normalizeRulesOfTheGameOutputContract } from "../steps/rulesofthegame_c
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { MENU_LABELS, NEXT_MENU_BY_ACTIONCODE } from "../core/ui_contract_matrix.js";
 import { renderFreeTextTurnPolicy } from "../core/turn_policy_renderer.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const RUNTIME_GOLDEN_DIR = path.join(__dirname, "__golden__", "runtime");
+
+type RuntimeGoldenFixture = {
+  id: string;
+  path: string;
+  input: Record<string, unknown>;
+  expected: {
+    snapshot: {
+      ok: boolean;
+      ui_gate_status: string;
+      bootstrap_phase: string;
+      error_type: string;
+    };
+  };
+};
+
+function loadRuntimeGoldenFixture(filename: string): RuntimeGoldenFixture {
+  const raw = fs.readFileSync(path.join(RUNTIME_GOLDEN_DIR, filename), "utf8");
+  return JSON.parse(raw) as RuntimeGoldenFixture;
+}
 
 async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Promise<T> {
   const prev = process.env[key];
@@ -3689,4 +3713,31 @@ test("wording choice: DreamExplainer pick does not prepend generic current-dream
     String(result.specialist?.message || "").toLowerCase().includes("your current dream for"),
     false
   );
+});
+
+test("runtime golden fail-closed paths preserve blocked/failed owner contract", async () => {
+  const fixtures = [
+    loadRuntimeGoldenFixture("blocked.json"),
+    loadRuntimeGoldenFixture("failed.json"),
+  ];
+
+  for (const fixture of fixtures) {
+    const result = await run_step(fixture.input);
+    assert.equal(result.ok, fixture.expected.snapshot.ok, `${fixture.path}: ok`);
+    assert.equal(
+      String((result.state as any)?.ui_gate_status || ""),
+      fixture.expected.snapshot.ui_gate_status,
+      `${fixture.path}: ui_gate_status`
+    );
+    assert.equal(
+      String((result.state as any)?.bootstrap_phase || ""),
+      fixture.expected.snapshot.bootstrap_phase,
+      `${fixture.path}: bootstrap_phase`
+    );
+    assert.equal(
+      String(result.error?.type || ""),
+      fixture.expected.snapshot.error_type,
+      `${fixture.path}: error.type`
+    );
+  }
 });
