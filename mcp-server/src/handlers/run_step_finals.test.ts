@@ -2699,12 +2699,17 @@ test("switch-to-self intro route clears stale dream provisional and wording pend
 });
 
 test("bullet consistency helpers remain, but no runtime overlay gate exists", () => {
-  const source = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
-  assert.match(source, /function isBulletConsistencyStep\(stepId: string\): boolean/);
-  assert.match(source, /stepId === STRATEGY_STEP_ID/);
-  assert.match(source, /stepId === PRODUCTSSERVICES_STEP_ID/);
-  assert.match(source, /stepId === RULESOFTHEGAME_STEP_ID/);
-  assert.doesNotMatch(source, /const shouldApplyBulletConsistencyPolicy\s*=/);
+  const helperSource = fs.readFileSync(
+    new URL("./run_step_runtime_state_helpers.ts", import.meta.url),
+    "utf8"
+  );
+  const runtimeSource = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
+  assert.match(helperSource, /function isBulletConsistencyStep\(stepId: string\): boolean/);
+  assert.match(helperSource, /stepId === deps\.strategyStepId/);
+  assert.match(helperSource, /stepId === deps\.productsservicesStepId/);
+  assert.match(helperSource, /stepId === deps\.rulesofthegameStepId/);
+  assert.match(runtimeSource, /createRunStepRuntimeStateHelpers\(/);
+  assert.doesNotMatch(runtimeSource, /const shouldApplyBulletConsistencyPolicy\s*=/);
 });
 
 test("wording choice: selecting user variant updates candidate and clears pending", async () => {
@@ -3229,16 +3234,19 @@ test("wording choice: generic Purpose acknowledgement is replaced with step-spec
 });
 
 test("informational context policy scope excludes presentation step", () => {
-  const source = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
+  const source = fs.readFileSync(
+    new URL("./run_step_runtime_state_helpers.ts", import.meta.url),
+    "utf8"
+  );
   assert.match(source, /function isInformationalContextPolicyStep\(stepId: string\): boolean/);
   const fnMatch = source.match(
-    /function isInformationalContextPolicyStep\(stepId: string\): boolean \{[\s\S]*?\n\}/
+    /function isInformationalContextPolicyStep\(stepId: string\): boolean \{[\s\S]*?\n\s*\}/
   );
   assert.ok(fnMatch && fnMatch[0], "scope helper exists");
   const fnBody = String(fnMatch?.[0] || "");
-  assert.match(fnBody, /stepId === DREAM_STEP_ID/);
-  assert.match(fnBody, /stepId === RULESOFTHEGAME_STEP_ID/);
-  assert.doesNotMatch(fnBody, /stepId === PRESENTATION_STEP_ID/);
+  assert.match(fnBody, /stepId === deps\.dreamStepId/);
+  assert.match(fnBody, /stepId === deps\.rulesofthegameStepId/);
+  assert.doesNotMatch(fnBody, /stepId === deps\.presentationStepId/);
 });
 
 test("informational context overlay is removed from runtime path", () => {

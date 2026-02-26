@@ -8,6 +8,7 @@
 | PR2 | Add runtime-first architecture checks and CI gate | completed | pending (set by commit command) |
 | PR3 | Introduce typed run-step context + ports backbone and rewire runtime/pipeline/routes wiring | completed | pending (set by commit command) |
 | PR4 | Enforce DI budget and split runtime helper factories into grouped ports/services | completed | pending (set by commit command) |
+| PR5 | Introduce TurnResponseEngine for pipeline path and complete phase_R2 runtime extraction gate | completed | pending (set by commit command) |
 
 ## Entry Template
 
@@ -160,50 +161,41 @@
 - commit hash: pending (captured after commit command)
 
 ### PR5 - 2026-02-26
-- status: paused_at_70_with_handoff
-- scope goal: Introduce TurnResponseEngine and adopt it in the pipeline path first.
-- completed exactly:
-  - Added `mcp-server/src/handlers/run_step_turn_response_engine.ts` with shared render/validate/recover + attach/finalize flow.
-  - Integrated pipeline rendering/response assembly through `TurnResponseEngine` in `mcp-server/src/handlers/run_step_pipeline.ts`.
-  - Integrated runtime wiring in `mcp-server/src/handlers/run_step_runtime.ts` by constructing and passing `turnResponseEngine` into pipeline ports and returning pipeline payload directly.
-  - Updated module/type wiring in:
-    - `mcp-server/src/handlers/run_step_modules.ts`
-    - `mcp-server/src/handlers/run_step_ports.ts`
-  - Updated contract/source assertion in `mcp-server/src/handlers/run_step_finals.test.ts` for new off-topic rerender variable name.
-- remaining exact TODO:
-  - Pass mandatory architecture gate `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R2 npm --prefix mcp-server run arch:run-step-runtime:check`.
-  - Current blocker is runtime LOC budget: `run_step_runtime.ts` is `3010` lines and phase_R2 requires `<=2500`.
-  - Extract at least ~510 lines out of runtime owner without changing contract/fail-closed behavior (likely by moving large internal runtime blocks to focused runtime helper modules).
-  - Re-run mandatory suite and update this PR5 entry from paused to completed with final commit hash.
-- first commands next agent:
-  - `git status --short`
-  - `npm --prefix mcp-server run build`
-  - `npm --prefix mcp-server test`
-  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R2 npm --prefix mcp-server run arch:run-step-runtime:check`
-  - `wc -l mcp-server/src/handlers/run_step_runtime.ts`
-  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l`
-- risks/assumptions:
-  - Pipeline path now finalizes inside engine; runtime no longer finalizes pipeline output. Keep this ownership stable while extracting runtime LOC.
-  - Route path is intentionally not migrated yet; avoid incidental behavior drift there.
-  - Phase_R2 failure is LOC-gated before complexity; LOC extraction should be done first, then validate complexity budget.
+- status: completed
+- scope goal: Introduce TurnResponseEngine for pipeline path and complete phase_R2 runtime extraction gate.
+- completed:
+  - Extracted runtime-only subsystems out of `run_step_runtime.ts` into focused helpers:
+    - `mcp-server/src/handlers/run_step_runtime_state_helpers.ts`
+    - `mcp-server/src/handlers/run_step_runtime_action_helpers.ts`
+    - `mcp-server/src/handlers/run_step_runtime_dream_helpers.ts`
+  - Rewired runtime owner to consume helper factories while preserving pipeline TurnResponseEngine ownership and finalize contracts.
+  - Kept runtime contract ownership stable in existing response/contract layer and preserved fail-closed behavior.
+  - Updated source-contract tests to follow extracted helper-module ownership:
+    - `mcp-server/src/handlers/run_step_finals.test.ts`
+    - `mcp-server/src/server_safe_string.test.ts`
+  - Brought phase_R2 checks to green:
+    - runtime LOC to `2497` (`<=2500`)
+    - runtime/routes/pipeline aggregate `any` tokens to `150` (`<=220`)
+- pending:
+  - None.
 - changed files:
-  - mcp-server/src/handlers/run_step_turn_response_engine.ts
-  - mcp-server/src/handlers/run_step_pipeline.ts
   - mcp-server/src/handlers/run_step_runtime.ts
-  - mcp-server/src/handlers/run_step_ports.ts
-  - mcp-server/src/handlers/run_step_modules.ts
+  - mcp-server/src/handlers/run_step_runtime_state_helpers.ts
+  - mcp-server/src/handlers/run_step_runtime_action_helpers.ts
+  - mcp-server/src/handlers/run_step_runtime_dream_helpers.ts
   - mcp-server/src/handlers/run_step_finals.test.ts
+  - mcp-server/src/server_safe_string.test.ts
   - docs/run_step_runtime_refactor_execution_log.md
 - tests:
   - `npm --prefix mcp-server run build` (pass)
   - `node mcp-server/scripts/ui_artifact_parity_check.mjs` (pass)
   - `node --loader ts-node/esm scripts/contract-smoke.mjs` (workdir `mcp-server`) (pass)
   - `npm --prefix mcp-server test` (pass)
-  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R2 npm --prefix mcp-server run arch:run-step-runtime:check` (fail: `run_step_runtime.ts lines=3010 > limit=2500`)
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R2 npm --prefix mcp-server run arch:run-step-runtime:check` (pass)
 - metrics:
   - `git diff --name-only | wc -l` => `7`
-  - `git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}'` => `adds=130 dels=109 total=239`
-  - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `4`
-  - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `3010`
-  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `289`
+  - `git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}'` => `adds=921 dels=743 total=1664`
+  - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `43`
+  - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2497`
+  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `150`
 - commit hash: pending (captured after commit command)

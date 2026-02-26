@@ -69,10 +69,18 @@ test("run_step handler logs locale + language readiness in request/response line
 
 test("run_step contract emits server-authoritative ui.view payload", () => {
   const runStepSource = fs.readFileSync(new URL("./handlers/run_step_runtime.ts", import.meta.url), "utf8");
+  const actionHelpersSource = fs.readFileSync(
+    new URL("./handlers/run_step_runtime_action_helpers.ts", import.meta.url),
+    "utf8"
+  );
   const ingressSource = fs.readFileSync(new URL("./handlers/ingress.ts", import.meta.url), "utf8");
   const turnContractSource = fs.readFileSync(new URL("./handlers/turn_contract.ts", import.meta.url), "utf8");
-  assert.match(runStepSource, /type UiViewPayload = \{[\s\S]*mode: UiViewModeRoute;[\s\S]*waiting_locale: boolean;/);
-  assert.match(runStepSource, /function deriveUiViewPayload\(/);
+  assert.match(
+    actionHelpersSource,
+    /export type UiViewPayload = \{[\s\S]*mode: UiViewModeRoute;[\s\S]*waiting_locale: boolean;/
+  );
+  assert.match(actionHelpersSource, /function deriveUiViewPayload\(/);
+  assert.match(runStepSource, /createRunStepRuntimeActionHelpers\(/);
   assert.match(ingressSource, /CONTRACT_UI_VIEW_MODES = new Set\(\[/);
   assert.match(
     turnContractSource,
