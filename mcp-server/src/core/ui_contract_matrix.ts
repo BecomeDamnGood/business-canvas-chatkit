@@ -1,4 +1,5 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
+import { buildUiContractId } from "./ui_contract_id.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -604,10 +605,7 @@ export const DEFAULT_MENU_BY_STATUS: Record<string, Record<TurnOutputStatus, str
 };
 
 export function buildContractId(stepId: string, status: TurnOutputStatus, menuId: string): string {
-  const safeStep = String(stepId || "").trim() || "unknown_step";
-  const safeStatus = String(status || "").trim() || "unknown_status";
-  const safeMenu = String(menuId || "").trim() || "NO_MENU";
-  return `${safeStep}:${safeStatus}:${safeMenu}`;
+  return buildUiContractId(stepId, status, menuId);
 }
 
 export function buildNoOutputRecap(stepLabel: string): string {

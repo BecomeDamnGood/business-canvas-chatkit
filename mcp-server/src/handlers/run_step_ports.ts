@@ -1,6 +1,8 @@
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { CanvasState, ProvisionalSource } from "../core/state.js";
+import type { TurnOutputStatus, TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
+import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import type { TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 
@@ -17,19 +19,10 @@ export type RunStepDreamRuntimeMode =
   | "builder_scoring"
   | "builder_refine";
 
-export type RunStepRenderedPolicyResult = {
-  [key: string]: unknown;
-  status: string;
-  specialist: Record<string, unknown>;
-  contractId: string;
-  contractVersion: string;
-  textKeys: string[];
-  uiActionCodes: string[];
-  uiActions: unknown[];
-};
+export type RunStepRenderedPolicyResult = TurnPolicyRenderResult;
 
 export type RunStepValidatedRenderedResult = {
-  rendered: any;
+  rendered: unknown;
   state: CanvasState;
   violation: string | null;
 };
@@ -40,8 +33,33 @@ export type RunStepRenderedRouteOutput = {
   contractVersion: string;
   textKeys: string[];
   uiActionCodes: string[];
-  uiActions: unknown[];
+  uiActions: RenderedAction[];
 };
+
+export type RunStepRenderFreeTextTurnPolicy = (params: {
+  stepId: string;
+  state: CanvasState;
+  specialist: Record<string, unknown>;
+  previousSpecialist: Record<string, unknown>;
+}) => TurnPolicyRenderResult;
+
+export type RunStepValidateRenderedContractOrRecover = (params: {
+  stepId: string;
+  rendered: TurnPolicyRenderResult;
+  state: CanvasState;
+  previousSpecialist: Record<string, unknown>;
+  telemetry?: UiI18nTelemetryCounters | null;
+}) => RunStepValidatedRenderedResult;
+
+export type RunStepAttachRegistryPayload<TPayload> = (
+  payload: Record<string, unknown>,
+  specialist: Record<string, unknown>,
+  flagsOverride?: Record<string, boolean | string> | null,
+  actionCodesOverride?: string[] | null,
+  renderedActionsOverride?: RenderedAction[] | null,
+  wordingChoiceOverride?: WordingChoiceUiPayload | null,
+  contractMetaOverride?: UiContractMeta | null
+) => TPayload;
 
 export type RunStepCallSpecialistSuccess = {
   ok: true;
@@ -99,11 +117,11 @@ export type RunStepRouteStatePorts = {
 };
 
 export type RunStepRouteContractPorts = {
-  renderFreeTextTurnPolicy: (params: any) => any;
-  validateRenderedContractOrRecover: (params: any) => RunStepValidatedRenderedResult;
+  renderFreeTextTurnPolicy: RunStepRenderFreeTextTurnPolicy;
+  validateRenderedContractOrRecover: RunStepValidateRenderedContractOrRecover;
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
   ensureUiStrings: (state: CanvasState, routeOrText: string) => Promise<CanvasState>;
-  buildContractId: (...args: any[]) => string;
+  buildContractId: (stepId: string, status: TurnOutputStatus, menuId: string) => string;
 };
 
 export type RunStepRouteStep0Ports = {
@@ -135,7 +153,7 @@ export type RunStepRouteSpecialistPorts<TResponse> = {
 };
 
 export type RunStepRouteResponsePorts<TResponse> = {
-  attachRegistryPayload: (...args: any[]) => any;
+  attachRegistryPayload: RunStepAttachRegistryPayload<TResponse>;
   finalizeResponse: (response: TResponse) => TResponse;
   turnResponseEngine: TurnResponseEngine<TResponse>;
 };
@@ -249,10 +267,10 @@ export type RunStepPipelineStatePorts = {
 };
 
 export type RunStepPipelineRenderPorts = {
-  renderFreeTextTurnPolicy: (params: any) => RunStepRenderedPolicyResult;
-  validateRenderedContractOrRecover: (params: any) => RunStepValidatedRenderedResult;
+  renderFreeTextTurnPolicy: RunStepRenderFreeTextTurnPolicy;
+  validateRenderedContractOrRecover: RunStepValidateRenderedContractOrRecover;
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
-  buildContractId: (stepId: string, status: any, menuId: string) => string;
+  buildContractId: (stepId: string, status: TurnOutputStatus, menuId: string) => string;
 };
 
 export type RunStepPipelineWordingPorts = {
@@ -286,15 +304,7 @@ export type RunStepPipelineWordingPorts = {
 };
 
 export type RunStepPipelineResponsePorts<TPayload> = {
-  attachRegistryPayload: (
-    payload: Record<string, unknown>,
-    specialist: Record<string, unknown>,
-    flagsOverride?: Record<string, boolean | string> | null,
-    actionCodesOverride?: string[] | null,
-    renderedActionsOverride?: RenderedAction[] | null,
-    wordingChoiceOverride?: WordingChoiceUiPayload | null,
-    contractMetaOverride?: UiContractMeta | null
-  ) => TPayload;
+  attachRegistryPayload: RunStepAttachRegistryPayload<TPayload>;
   turnResponseEngine: TurnResponseEngine<TPayload>;
 };
 

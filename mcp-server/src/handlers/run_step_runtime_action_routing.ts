@@ -1,40 +1,14 @@
 import type { CanvasState } from "../core/state.js";
-import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
-import type { UiContractMeta } from "./run_step_ui_payload.js";
+import type { RunStepAttachRegistryPayload } from "./run_step_ports.js";
 import type { WordingChoiceUiPayload } from "./run_step_runtime_action_helpers.js";
-
-const BIGWHY_MAX_WORDS = 28;
-
-function pickFirstNonEmpty(...vals: Array<unknown>): string {
-  for (const v of vals) {
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
-  return "";
-}
-
-function countWords(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).filter(Boolean).length;
-}
-
-function pickBigWhyCandidate(result: Record<string, unknown> | null | undefined): string {
-  const fromFinal = typeof result?.bigwhy === "string" ? result.bigwhy.trim() : "";
-  if (fromFinal) return fromFinal;
-  const fromRefine = typeof result?.refined_formulation === "string" ? result.refined_formulation.trim() : "";
-  return fromRefine;
-}
-
-type RunStepRuntimeActionRoutingAttach<TPayload extends Record<string, unknown>> = (
-  payload: Record<string, unknown>,
-  specialist: Record<string, unknown>,
-  flagsOverride?: Record<string, boolean | string> | null,
-  actionCodesOverride?: string[] | null,
-  renderedActionsOverride?: RenderedAction[] | null,
-  wordingChoiceOverride?: WordingChoiceUiPayload | null,
-  contractMetaOverride?: UiContractMeta | null
-) => TPayload;
+import {
+  BIGWHY_MAX_WORDS,
+  buildActionCodeStepTransitions,
+  countWords,
+  pickBigWhyCandidate,
+  resolveRequiredFinalValue,
+} from "./run_step_runtime_action_routing_policy.js";
 
 export type RunStepRuntimeActionRoutingOutput<TPayload extends Record<string, unknown>> = {
   response: TPayload | null;
@@ -176,7 +150,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     uiStringFromStateMap: (state: CanvasState | null | undefined, key: string, fallback: string) => string;
     uiDefaultString: (key: string, fallback?: string) => string;
     finalizeResponse: (payload: TPayload) => TPayload;
-    attachRegistryPayload: RunStepRuntimeActionRoutingAttach<TPayload>;
+    attachRegistryPayload: RunStepAttachRegistryPayload<TPayload>;
     resolveResponseUiFlags: (actionCodeOrRouteToken: string) => Record<string, boolean | string> | null;
   };
 }): Promise<RunStepRuntimeActionRoutingOutput<TPayload>> {
@@ -220,96 +194,18 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     };
   };
 
-  const requireFinalValue = (
-    stepId: string,
-    prev: Record<string, unknown>,
-    stateObj: CanvasState
-  ): { field: string; value: string } => {
-    const provisional = statePorts.provisionalValueForStep(stateObj as Record<string, unknown>, stepId);
-    if (stepId === ids.step0Id) {
-      return {
-        field: "step_0_final",
-        value: pickFirstNonEmpty(provisional, prev.step_0, (stateObj as Record<string, unknown>).step_0_final),
-      };
-    }
-    if (stepId === ids.dreamStepId) {
-      return {
-        field: "dream_final",
-        value: pickFirstNonEmpty(provisional, prev.dream, prev.refined_formulation, (stateObj as Record<string, unknown>).dream_final),
-      };
-    }
-    if (stepId === ids.purposeStepId) {
-      return {
-        field: "purpose_final",
-        value: pickFirstNonEmpty(provisional, prev.purpose, prev.refined_formulation, (stateObj as Record<string, unknown>).purpose_final),
-      };
-    }
-    if (stepId === ids.bigwhyStepId) {
-      return {
-        field: "bigwhy_final",
-        value: pickFirstNonEmpty(provisional, prev.bigwhy, prev.refined_formulation, (stateObj as Record<string, unknown>).bigwhy_final),
-      };
-    }
-    if (stepId === ids.roleStepId) {
-      return {
-        field: "role_final",
-        value: pickFirstNonEmpty(provisional, prev.role, prev.refined_formulation, (stateObj as Record<string, unknown>).role_final),
-      };
-    }
-    if (stepId === ids.entityStepId) {
-      return {
-        field: "entity_final",
-        value: pickFirstNonEmpty(provisional, prev.entity, prev.refined_formulation, (stateObj as Record<string, unknown>).entity_final),
-      };
-    }
-    if (stepId === ids.strategyStepId) {
-      return {
-        field: "strategy_final",
-        value: pickFirstNonEmpty(provisional, prev.strategy, prev.refined_formulation, (stateObj as Record<string, unknown>).strategy_final),
-      };
-    }
-    if (stepId === ids.targetgroupStepId) {
-      return {
-        field: "targetgroup_final",
-        value: pickFirstNonEmpty(provisional, prev.targetgroup, prev.refined_formulation, (stateObj as Record<string, unknown>).targetgroup_final),
-      };
-    }
-    if (stepId === ids.productsservicesStepId) {
-      return {
-        field: "productsservices_final",
-        value: pickFirstNonEmpty(provisional, prev.productsservices, prev.refined_formulation, (stateObj as Record<string, unknown>).productsservices_final),
-      };
-    }
-    if (stepId === ids.rulesofthegameStepId) {
-      return {
-        field: "rulesofthegame_final",
-        value: pickFirstNonEmpty(provisional, prev.rulesofthegame, prev.refined_formulation, (stateObj as Record<string, unknown>).rulesofthegame_final),
-      };
-    }
-    if (stepId === ids.presentationStepId) {
-      return {
-        field: "presentation_brief_final",
-        value: pickFirstNonEmpty(provisional, prev.presentation_brief, prev.refined_formulation, (stateObj as Record<string, unknown>).presentation_brief_final),
-      };
-    }
-    return { field: "", value: "" };
-  };
-
-  const actionCodeStepTransitions: Record<string, string> = {
-    ACTION_STEP0_READY_START: ids.dreamStepId,
-    ACTION_DREAM_REFINE_CONFIRM: ids.purposeStepId,
-    ACTION_DREAM_EXPLAINER_REFINE_CONFIRM: ids.purposeStepId,
-    ACTION_PURPOSE_REFINE_CONFIRM: ids.bigwhyStepId,
-    ACTION_PURPOSE_CONFIRM_SINGLE: ids.bigwhyStepId,
-    ACTION_BIGWHY_REFINE_CONFIRM: ids.roleStepId,
-    ACTION_ROLE_REFINE_CONFIRM: ids.entityStepId,
-    ACTION_ENTITY_EXAMPLE_CONFIRM: ids.strategyStepId,
-    ACTION_STRATEGY_CONFIRM_SATISFIED: ids.targetgroupStepId,
-    ACTION_STRATEGY_FINAL_CONTINUE: ids.targetgroupStepId,
-    ACTION_TARGETGROUP_POSTREFINE_CONFIRM: ids.productsservicesStepId,
-    ACTION_PRODUCTSSERVICES_CONFIRM: ids.rulesofthegameStepId,
-    ACTION_RULES_CONFIRM_ALL: ids.presentationStepId,
-  };
+  const actionCodeStepTransitions = buildActionCodeStepTransitions({
+    dreamStepId: ids.dreamStepId,
+    purposeStepId: ids.purposeStepId,
+    bigwhyStepId: ids.bigwhyStepId,
+    roleStepId: ids.roleStepId,
+    entityStepId: ids.entityStepId,
+    strategyStepId: ids.strategyStepId,
+    targetgroupStepId: ids.targetgroupStepId,
+    productsservicesStepId: ids.productsservicesStepId,
+    rulesofthegameStepId: ids.rulesofthegameStepId,
+    presentationStepId: ids.presentationStepId,
+  });
 
   if (runtime.actionCodeRaw && actionCodeStepTransitions[runtime.actionCodeRaw]) {
     const stepId = String(state.current_step ?? "");
@@ -380,7 +276,14 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
     }
 
-    const finalInfo = requireFinalValue(stepId, prev, state);
+    const finalInfo = resolveRequiredFinalValue({
+      stepId,
+      previousSpecialist: prev,
+      state: state as Record<string, unknown>,
+      provisionalValue: statePorts.provisionalValueForStep(state as Record<string, unknown>, stepId),
+      step0Id: ids.step0Id,
+      presentationStepId: ids.presentationStepId,
+    });
     const sourceMenuForTransition = action.inferCurrentMenuForStep(state, stepId);
     const resolvedTransition = action.resolveActionCodeTransition(
       runtime.actionCodeRaw,

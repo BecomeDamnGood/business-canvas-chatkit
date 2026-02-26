@@ -1,4 +1,5 @@
 // mcp-server/src/handlers/run_step.ts
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import {
@@ -94,6 +95,10 @@ import {
   createRunStepI18nRuntimeHelpers,
   type UiI18nTelemetryCounters,
 } from "./run_step_i18n_runtime.js";
+import {
+  createStructuredLogContextFromState,
+  logStructuredEvent,
+} from "./run_step_response.js";
 import { parseSpecialistOutputById } from "./run_step_specialist_types.js";
 import {
   parseStep0Final,
@@ -1328,7 +1333,179 @@ const runStepPreflightHelpers = createRunStepPreflightHelpers({
       telemetry as UiI18nTelemetryCounters | null | undefined,
       key as keyof UiI18nTelemetryCounters
     ),
-});
+  });
+
+const RUNTIME_IDEMPOTENCY_ENTRY_TTL_MS = Number(
+  process.env.RUNTIME_IDEMPOTENCY_ENTRY_TTL_MS || 30 * 60 * 1000
+);
+const RUNTIME_IDEMPOTENCY_ERROR_CODES = {
+  REPLAY: "idempotency_replay",
+  CONFLICT: "idempotency_key_conflict",
+  INFLIGHT: "idempotency_replay_inflight",
+} as const;
+type RuntimeIdempotencyEntry = {
+  scopeKey: string;
+  idempotencyKey: string;
+  requestHash: string;
+  status: "inflight" | "completed";
+  updatedAtMs: number;
+  resultForClient?: Record<string, unknown>;
+};
+const runtimeIdempotencyRegistry = new Map<string, RuntimeIdempotencyEntry>();
+
+function runtimeIdempotencyDelayMs(): number {
+  const delayMs = Number(process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS || 0);
+  return Number.isFinite(delayMs) && delayMs > 0 ? Math.trunc(delayMs) : 0;
+}
+
+function stableHashValue(value: unknown, depth = 0): unknown {
+  if (depth > 10) return "[depth_limit]";
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "bigint") return String(value);
+  if (Array.isArray(value)) return value.map((entry) => stableHashValue(entry, depth + 1));
+  if (typeof value !== "object") return String(value);
+  const raw = value as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  for (const key of Object.keys(raw).sort()) {
+    if (
+      key === "__request_id" ||
+      key === "idempotency_key" ||
+      key === "idempotency_outcome" ||
+      key === "idempotency_error_code"
+    ) {
+      continue;
+    }
+    next[key] = stableHashValue(raw[key], depth + 1);
+  }
+  return next;
+}
+
+function cloneRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+function createRuntimeIdempotencyRequestHash(args: {
+  currentStepId: string;
+  userMessage: string;
+  inputMode: string;
+  localeHint: string;
+  localeHintSource: string;
+  state: Record<string, unknown>;
+}): string {
+  const payload = stableHashValue({
+    current_step_id: String(args.currentStepId || STEP_0_ID).trim() || STEP_0_ID,
+    user_message: String(args.userMessage || ""),
+    input_mode: String(args.inputMode || "chat"),
+    locale_hint: String(args.localeHint || ""),
+    locale_hint_source: String(args.localeHintSource || "none"),
+    state: args.state,
+  });
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function buildRuntimeIdempotencyScopeKey(state: Record<string, unknown>): string {
+  const bootstrapSessionId = String(state.bootstrap_session_id || "").trim();
+  if (bootstrapSessionId) return `session:${bootstrapSessionId}`;
+  const hostWidgetSessionId = String(state.host_widget_session_id || "").trim();
+  if (hostWidgetSessionId) return `host:${hostWidgetSessionId}`;
+  const runtimeSessionId = String((state as any).__session_id || "").trim();
+  if (runtimeSessionId) return `runtime:${runtimeSessionId}`;
+  return "scope:runtime_unknown";
+}
+
+function buildRuntimeIdempotencyRegistryKey(scopeKey: string, idempotencyKey: string): string {
+  return `${scopeKey}::${idempotencyKey}`;
+}
+
+function purgeExpiredRuntimeIdempotencyEntries(nowMs: number): void {
+  for (const [registryKey, snapshot] of runtimeIdempotencyRegistry.entries()) {
+    if (snapshot.updatedAtMs + RUNTIME_IDEMPOTENCY_ENTRY_TTL_MS <= nowMs) {
+      runtimeIdempotencyRegistry.delete(registryKey);
+    }
+  }
+}
+
+function markRuntimeIdempotencyInFlight(params: {
+  registryKey: string;
+  scopeKey: string;
+  idempotencyKey: string;
+  requestHash: string;
+  nowMs: number;
+}): void {
+  runtimeIdempotencyRegistry.set(params.registryKey, {
+    scopeKey: params.scopeKey,
+    idempotencyKey: params.idempotencyKey,
+    requestHash: params.requestHash,
+    status: "inflight",
+    updatedAtMs: params.nowMs,
+  });
+}
+
+function markRuntimeIdempotencyCompleted(params: {
+  registryKey: string;
+  scopeKey: string;
+  idempotencyKey: string;
+  requestHash: string;
+  resultForClient: Record<string, unknown>;
+  nowMs: number;
+}): void {
+  const existing = runtimeIdempotencyRegistry.get(params.registryKey);
+  if (existing && existing.requestHash !== params.requestHash) return;
+  runtimeIdempotencyRegistry.set(params.registryKey, {
+    scopeKey: params.scopeKey,
+    idempotencyKey: params.idempotencyKey,
+    requestHash: params.requestHash,
+    status: "completed",
+    updatedAtMs: params.nowMs,
+    resultForClient: cloneRecord(params.resultForClient),
+  });
+}
+
+function attachRuntimeIdempotencyDiagnostics(args: {
+  resultForClient: Record<string, unknown>;
+  idempotencyKey: string;
+  outcome: "fresh" | "replay" | "conflict" | "inflight";
+  errorCode?: string;
+}): Record<string, unknown> {
+  const { resultForClient, idempotencyKey, outcome, errorCode } = args;
+  if (!idempotencyKey) return resultForClient;
+  const stateRaw =
+    resultForClient.state && typeof resultForClient.state === "object"
+      ? (resultForClient.state as Record<string, unknown>)
+      : {};
+  const uiRaw =
+    resultForClient.ui && typeof resultForClient.ui === "object"
+      ? (resultForClient.ui as Record<string, unknown>)
+      : {};
+  const flagsRaw =
+    uiRaw.flags && typeof uiRaw.flags === "object"
+      ? (uiRaw.flags as Record<string, unknown>)
+      : {};
+  const stateWithDiagnostics: Record<string, unknown> = {
+    ...stateRaw,
+    idempotency_key: idempotencyKey,
+    idempotency_outcome: outcome,
+    ...(errorCode ? { idempotency_error_code: errorCode } : {}),
+  };
+  const uiWithDiagnostics: Record<string, unknown> = {
+    ...uiRaw,
+    flags: {
+      ...flagsRaw,
+      idempotency_key: idempotencyKey,
+      idempotency_outcome: outcome,
+      ...(errorCode ? { idempotency_error_code: errorCode } : {}),
+    },
+  };
+  return {
+    ...resultForClient,
+    state: stateWithDiagnostics,
+    ui: uiWithDiagnostics,
+    idempotency_key: idempotencyKey,
+    idempotency_outcome: outcome,
+    ...(errorCode ? { idempotency_error_code: errorCode } : {}),
+  };
+}
 
 /**
  * MCP tool implementation (widget-leading)
@@ -1401,13 +1578,156 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   localeHintSourceRaw === "message_detect"
     ? localeHintSourceRaw
     : "none";
+  const rawStateForIdempotency =
+    args.state && typeof args.state === "object" && !Array.isArray(args.state)
+      ? (args.state as Record<string, unknown>)
+      : {};
+  const idempotencyKey = String(args.idempotency_key || "").trim();
+  const idempotencyScopeKey = idempotencyKey
+    ? buildRuntimeIdempotencyScopeKey(rawStateForIdempotency)
+    : "";
+  const idempotencyRequestHash = idempotencyKey
+    ? createRuntimeIdempotencyRequestHash({
+        currentStepId: String(args.current_step_id || STEP_0_ID),
+        userMessage: String(args.user_message || ""),
+        inputMode: String(inputMode || "chat"),
+        localeHint: String(localeHint || ""),
+        localeHintSource: String(localeHintSource || "none"),
+        state: rawStateForIdempotency,
+      })
+    : "";
+  const idempotencyRecordKey =
+    idempotencyKey && idempotencyRequestHash
+      ? buildRuntimeIdempotencyRegistryKey(idempotencyScopeKey, idempotencyKey)
+      : "";
+  const idempotencyTracker =
+    idempotencyKey && idempotencyRequestHash && idempotencyRecordKey
+      ? {
+          idempotencyKey,
+          scopeKey: idempotencyScopeKey,
+          requestHash: idempotencyRequestHash,
+          registryKey: idempotencyRecordKey,
+        }
+      : null;
+  const finalizeIdempotencyResult = (
+    result: RunStepSuccess | RunStepError,
+    options?: {
+      outcome?: "fresh" | "replay" | "conflict" | "inflight";
+      errorCode?: string;
+      persist?: boolean;
+    }
+  ): RunStepSuccess | RunStepError => {
+    if (!idempotencyTracker) return result;
+    const outcome = options?.outcome || "fresh";
+    const withDiagnostics = attachRuntimeIdempotencyDiagnostics({
+      resultForClient: result as unknown as Record<string, unknown>,
+      idempotencyKey,
+      outcome,
+      ...(options?.errorCode ? { errorCode: options.errorCode } : {}),
+    }) as RunStepSuccess | RunStepError;
+    if (options?.persist === false) return withDiagnostics;
+    markRuntimeIdempotencyCompleted({
+      registryKey: idempotencyTracker.registryKey,
+      scopeKey: idempotencyTracker.scopeKey,
+      idempotencyKey: idempotencyTracker.idempotencyKey,
+      requestHash: idempotencyTracker.requestHash,
+      resultForClient: withDiagnostics as unknown as Record<string, unknown>,
+      nowMs: Date.now(),
+    });
+    return withDiagnostics;
+  };
+  const buildIdempotencyErrorResult = (params: {
+    errorType: "idempotency_conflict" | "idempotency_inflight";
+    errorCode: string;
+    message: string;
+    retryAction: "retry_same_key" | "regenerate_key";
+  }): RunStepError => {
+    const normalizedState = normalizeState(args.state ?? {});
+    return {
+      ok: false,
+      tool: "run_step",
+      current_step_id: String(args.current_step_id || normalizedState.current_step || STEP_0_ID),
+      active_specialist: String((normalizedState as Record<string, unknown>).active_specialist || ""),
+      text: "",
+      prompt: "",
+      specialist: {},
+      registry_version: ACTIONCODE_REGISTRY.version,
+      state: normalizedState,
+      error: {
+        type: params.errorType,
+        code: params.errorCode,
+        message: params.message,
+        retry_action: params.retryAction,
+      },
+    };
+  };
+  if (idempotencyTracker) {
+    purgeExpiredRuntimeIdempotencyEntries(Date.now());
+    const existing = runtimeIdempotencyRegistry.get(idempotencyTracker.registryKey);
+    if (existing) {
+      if (existing.requestHash !== idempotencyTracker.requestHash) {
+        return finalizeIdempotencyResult(
+          buildIdempotencyErrorResult({
+            errorType: "idempotency_conflict",
+            errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.CONFLICT,
+            message: "Deze idempotency key is al gebruikt met een ander request.",
+            retryAction: "regenerate_key",
+          }),
+          {
+            outcome: "conflict",
+            errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.CONFLICT,
+            persist: false,
+          }
+        );
+      }
+      if (existing.status === "completed" && existing.resultForClient) {
+        return finalizeIdempotencyResult(
+          cloneRecord(existing.resultForClient) as unknown as RunStepSuccess | RunStepError,
+          {
+            outcome: "replay",
+            errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.REPLAY,
+            persist: false,
+          }
+        );
+      }
+      return finalizeIdempotencyResult(
+        buildIdempotencyErrorResult({
+          errorType: "idempotency_inflight",
+          errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.INFLIGHT,
+          message: "Een request met dezelfde idempotency key wordt al verwerkt.",
+          retryAction: "retry_same_key",
+        }),
+        {
+          outcome: "inflight",
+          errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.INFLIGHT,
+          persist: false,
+        }
+      );
+    }
+    markRuntimeIdempotencyInFlight({
+      registryKey: idempotencyTracker.registryKey,
+      scopeKey: idempotencyTracker.scopeKey,
+      idempotencyKey: idempotencyTracker.idempotencyKey,
+      requestHash: idempotencyTracker.requestHash,
+      nowMs: Date.now(),
+    });
+    const delayMs = runtimeIdempotencyDelayMs();
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  try {
   // Runtime contract marker: BSC_WORDING_CHOICE_V2 remains the single-path runtime flag.
   const policyFlags = resolveHolisticPolicyFlags();
   const wordingChoiceEnabled = policyFlags.wordingChoiceV2;
   const motivationQuotesEnabled = policyFlags.motivationQuotesV11;
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
     const incomingLanguageSourceNormalized = normalizeStateLanguageSource((args.state as Record<string, unknown>)?.language_source);
-    console.log("[run_step] input_mode", {
+    const loggingState =
+      args.state && typeof args.state === "object" ? (args.state as Record<string, unknown>) : {};
+    logStructuredEvent("info", "run_step_input_mode", createStructuredLogContextFromState(loggingState, {
+      step_id: args.current_step_id || loggingState.current_step,
+    }), {
       inputMode,
       locale_hint: localeHint,
       locale_hint_source: localeHintSource,
@@ -1574,7 +1894,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       ensureUiStrings: finalizeLayer.ensureUiStrings,
       finalizeResponse: finalizeLayer.finalizeResponse,
       attachRegistryPayload: (payload, specialist, flagsOverride) =>
-        attachRegistryPayload(payload, specialist, flagsOverride) as RunStepSuccess | RunStepError,
+        finalizeLayer.attachRegistryPayload(payload, specialist, flagsOverride),
     },
     behavior: {
       hasUsableSpecialistForRetry,
@@ -1592,7 +1912,9 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       isUiStep0LangResetGuardV1Enabled,
     },
   });
-  if (preflightLayer.response) return preflightLayer.response as RunStepSuccess | RunStepError;
+  if (preflightLayer.response) {
+    return finalizeIdempotencyResult(preflightLayer.response as RunStepSuccess | RunStepError);
+  }
 
   state = preflightLayer.state;
   actionCodeRaw = preflightLayer.actionCodeRaw;
@@ -1668,20 +1990,13 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
       uiStringFromStateMap,
       uiDefaultString,
       finalizeResponse: finalizeLayer.finalizeResponse,
-      attachRegistryPayload: (payload, specialist, flagsOverride, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride) =>
-        attachRegistryPayload(
-          payload,
-          specialist,
-          flagsOverride,
-          actionCodesOverride,
-          renderedActionsOverride,
-          wordingChoiceOverride,
-          contractMetaOverride
-        ) as RunStepSuccess | RunStepError,
+      attachRegistryPayload: finalizeLayer.attachRegistryPayload,
       resolveResponseUiFlags: (routeToken) => ACTIONCODE_REGISTRY.ui_flags[routeToken] || null,
     },
   });
-  if (actionRoutingLayer.response) return actionRoutingLayer.response as RunStepSuccess | RunStepError;
+  if (actionRoutingLayer.response) {
+    return finalizeIdempotencyResult(actionRoutingLayer.response as RunStepSuccess | RunStepError);
+  }
 
   state = actionRoutingLayer.state;
   userMessage = actionRoutingLayer.userMessage;
@@ -1704,16 +2019,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     render: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, buildContractId },
     wording: { isWordingChoiceEligibleContext, buildWordingChoiceFromTurn, buildWordingChoiceFromPendingSpecialist },
     response: {
-      attachRegistryPayload: (payload, specialist, flagsOverride, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride) =>
-        attachRegistryPayload(
-          payload,
-          specialist,
-          flagsOverride,
-          actionCodesOverride,
-          renderedActionsOverride,
-          wordingChoiceOverride,
-          contractMetaOverride
-        ) as RunStepSuccess | RunStepError,
+      attachRegistryPayload: finalizeLayer.attachRegistryPayload,
       turnResponseEngine: finalizeLayer.turnResponseEngine,
     },
     guard: { looksLikeMetaInstruction },
@@ -1729,7 +2035,7 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     step0: { ensureStartState: finalizeLayer.ensureStartState, parseStep0Final, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState },
     presentation: { hasPresentationTemplate, generatePresentationPptx, convertPptxToPdf, convertPdfToPng, cleanupOldPresentationFiles, baseUrlFromEnv, uiStringFromStateMap, uiDefaultString },
     specialist: { callSpecialistStrictSafe, buildRoutingContext: finalizeLayer.buildRoutingContext, rememberLlmCall },
-    response: { attachRegistryPayload, finalizeResponse: finalizeLayer.finalizeResponse, turnResponseEngine: finalizeLayer.turnResponseEngine },
+    response: { attachRegistryPayload: finalizeLayer.attachRegistryPayload, finalizeResponse: finalizeLayer.finalizeResponse, turnResponseEngine: finalizeLayer.turnResponseEngine },
     suggestions: { pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState },
     i18n: { bumpUiI18nCounter: uiI18nCounterPort },
   };
@@ -1756,10 +2062,19 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     specialist: { decideOrchestration, rememberLlmCall },
     routePorts,
   });
-  if (specialRoutesLayer.response) return specialRoutesLayer.response as RunStepSuccess | RunStepError;
+  if (specialRoutesLayer.response) {
+    return finalizeIdempotencyResult(specialRoutesLayer.response as RunStepSuccess | RunStepError);
+  }
 
-  return runStepRuntimePostPipelineLayer<RunStepSuccess | RunStepError>({
+  const postPipelineResult = await runStepRuntimePostPipelineLayer<RunStepSuccess | RunStepError>({
     context: specialRoutesLayer.context,
     pipelinePorts,
   });
+  return finalizeIdempotencyResult(postPipelineResult);
+  } catch (error) {
+    if (idempotencyTracker) {
+      runtimeIdempotencyRegistry.delete(idempotencyTracker.registryKey);
+    }
+    throw error;
+  }
 }

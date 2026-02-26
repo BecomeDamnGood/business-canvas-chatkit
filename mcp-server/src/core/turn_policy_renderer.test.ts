@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getDefaultState } from "./state.js";
+import { getDefaultState, getFinalFieldForStepId } from "./state.js";
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
 import { MENU_LABELS, MENU_LABEL_KEYS } from "./menu_contract.js";
 import { renderFreeTextTurnPolicy } from "./turn_policy_renderer.js";
@@ -50,20 +50,7 @@ function stepIdForMenu(menuId: string): string {
 }
 
 function finalFieldForStep(stepId: string): string {
-  const byStep: Record<string, string> = {
-    step_0: "step_0_final",
-    dream: "dream_final",
-    purpose: "purpose_final",
-    bigwhy: "bigwhy_final",
-    role: "role_final",
-    entity: "entity_final",
-    strategy: "strategy_final",
-    targetgroup: "targetgroup_final",
-    productsservices: "productsservices_final",
-    rulesofthegame: "rulesofthegame_final",
-    presentation: "presentation_brief_final",
-  };
-  return String(byStep[stepId] || "");
+  return String(getFinalFieldForStepId(stepId) || "");
 }
 
 function makeMenuQuestion(actionCount: number): string {

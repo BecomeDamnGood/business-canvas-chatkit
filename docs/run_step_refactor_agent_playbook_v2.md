@@ -3,6 +3,10 @@
 Date: 2026-02-25
 Status: Active
 
+Update 2026-02-26:
+- New 20 percent target program playbook: [run_step_refactor_agent_playbook_v3_20pct.md](/Users/MinddMacBen/business-canvas-chatkit/docs/run_step_refactor_agent_playbook_v3_20pct.md)
+- New mandatory execution log for that program: [run_step_refactor_20pct_log.md](/Users/MinddMacBen/business-canvas-chatkit/docs/run_step_refactor_20pct_log.md)
+
 Architecture context:
 - [run_step_strategic_architecture_plan.md](/Users/MinddMacBen/business-canvas-chatkit/docs/run_step_strategic_architecture_plan.md)
 

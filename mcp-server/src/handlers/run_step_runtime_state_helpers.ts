@@ -1,4 +1,8 @@
-import type { CanvasState, ProvisionalSource } from "../core/state.js";
+import {
+  STEP_FINAL_FIELD_BY_STEP_ID,
+  type CanvasState,
+  type ProvisionalSource,
+} from "../core/state.js";
 
 type ParseStep0FinalFn = (raw: string, fallbackName: string) => { name?: string } | null | undefined;
 
@@ -69,19 +73,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     );
   }
 
-  const FINAL_FIELD_BY_STEP_ID: Record<string, string> = {
-    [deps.step0Id]: "step_0_final",
-    [deps.dreamStepId]: "dream_final",
-    [deps.purposeStepId]: "purpose_final",
-    [deps.bigwhyStepId]: "bigwhy_final",
-    [deps.roleStepId]: "role_final",
-    [deps.entityStepId]: "entity_final",
-    [deps.strategyStepId]: "strategy_final",
-    [deps.targetgroupStepId]: "targetgroup_final",
-    [deps.productsservicesStepId]: "productsservices_final",
-    [deps.rulesofthegameStepId]: "rulesofthegame_final",
-    [deps.presentationStepId]: "presentation_brief_final",
-  };
+  const FINAL_FIELD_BY_STEP_ID: Record<string, string> = { ...STEP_FINAL_FIELD_BY_STEP_ID };
 
   function normalizedProvisionalByStep(state: any): Record<string, string> {
     const raw =

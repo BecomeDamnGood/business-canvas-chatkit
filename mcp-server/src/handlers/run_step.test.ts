@@ -1016,6 +1016,110 @@ test("fail-closed: legacy markers force session upgrade when confirmation_questi
   assert.equal((result?.error?.markers || []).includes("legacy_confirmation_question"), true);
 });
 
+test("idempotency runtime: duplicate request met zelfde key en payload retourneert replay deterministisch", async () => {
+  const idempotencyKey = `runtime-replay-${Date.now()}`;
+  const first = await run_step({
+    idempotency_key: idempotencyKey,
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+    },
+  });
+  const second = await run_step({
+    idempotency_key: idempotencyKey,
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+    },
+  });
+  assert.equal(first?.ok, true);
+  assert.equal(second?.ok, true);
+  assert.equal(String((first as any)?.idempotency_outcome || ""), "fresh");
+  assert.equal(String((second as any)?.idempotency_outcome || ""), "replay");
+  assert.equal(String((second as any)?.idempotency_error_code || ""), "idempotency_replay");
+  assert.equal(String(second?.prompt || ""), String(first?.prompt || ""));
+  assert.equal(String(second?.text || ""), String(first?.text || ""));
+  assert.equal(String(second?.current_step_id || ""), String(first?.current_step_id || ""));
+  assert.equal(String(second?.active_specialist || ""), String(first?.active_specialist || ""));
+  assert.deepEqual(second?.specialist || {}, first?.specialist || {});
+  assert.equal(
+    String((second?.state as Record<string, unknown> | undefined)?.__session_turn_id || ""),
+    String((first?.state as Record<string, unknown> | undefined)?.__session_turn_id || "")
+  );
+});
+
+test("idempotency runtime: zelfde key met ander payload mapped naar conflict fout", async () => {
+  const idempotencyKey = `runtime-conflict-${Date.now()}`;
+  const baseState = {
+    current_step: "step_0",
+    intro_shown_session: "false",
+    last_specialist_result: {},
+    started: "true",
+  };
+  const first = await run_step({
+    idempotency_key: idempotencyKey,
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: baseState,
+  });
+  const conflict = await run_step({
+    idempotency_key: idempotencyKey,
+    user_message: "",
+    input_mode: "chat",
+    state: baseState,
+  });
+  assert.equal(first?.ok, true);
+  assert.equal(conflict?.ok, false);
+  assert.equal(String(conflict?.error?.type || ""), "idempotency_conflict");
+  assert.equal(String(conflict?.error?.code || ""), "idempotency_key_conflict");
+  assert.equal(String(conflict?.error?.retry_action || ""), "regenerate_key");
+  assert.equal(String((conflict as any)?.idempotency_outcome || ""), "conflict");
+  assert.equal(String((conflict as any)?.idempotency_error_code || ""), "idempotency_key_conflict");
+  assert.equal(String((conflict?.state as any)?.idempotency_outcome || ""), "conflict");
+});
+
+test("idempotency runtime: parallel duplicate request mapped naar inflight fout", async () => {
+  const prevDelay = process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS;
+  process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS = "120";
+  const idempotencyKey = `runtime-inflight-${Date.now()}`;
+  const input = {
+    idempotency_key: idempotencyKey,
+    user_message: "ACTION_START",
+    input_mode: "widget" as const,
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+    },
+  };
+  try {
+    const firstPromise = run_step(input);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const second = await run_step(input);
+    const first = await firstPromise;
+    assert.equal(first?.ok, true);
+    assert.equal(second?.ok, false);
+    assert.equal(String(second?.error?.type || ""), "idempotency_inflight");
+    assert.equal(String(second?.error?.code || ""), "idempotency_replay_inflight");
+    assert.equal(String(second?.error?.retry_action || ""), "retry_same_key");
+    assert.equal(String((second as any)?.idempotency_outcome || ""), "inflight");
+    assert.equal(String((second as any)?.idempotency_error_code || ""), "idempotency_replay_inflight");
+    assert.equal(String((second?.state as any)?.idempotency_outcome || ""), "inflight");
+  } finally {
+    if (prevDelay === undefined) delete process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS;
+    else process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS = prevDelay;
+  }
+});
+
 // Meta-filter: first message is never dropped (pristineAtEntry ? rawNormalized : ...) in run_step.ts.
 // Bullets/requirements/goals no longer trigger looksLikeMetaInstruction; only injection markers do.
 // Full flow with bulleted brief would require LLM mock; covered by code review and manual test.

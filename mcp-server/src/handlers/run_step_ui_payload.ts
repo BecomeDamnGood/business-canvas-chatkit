@@ -2,6 +2,7 @@ import { type CanvasState } from "../core/state.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { MENU_LABEL_DEFAULTS, labelKeyForMenuAction } from "../core/menu_contract.js";
 import { NEXT_MENU_BY_ACTIONCODE, UI_CONTRACT_VERSION } from "../core/ui_contract_matrix.js";
+import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../core/ui_contract_id.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
@@ -231,31 +232,11 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
   }
 
   function parseMenuFromContractIdForStep(contractIdRaw: unknown, stepId: string): string {
-    const contractId = String(contractIdRaw || "").trim();
-    const safeStepId = String(stepId || "").trim();
-    if (!contractId || !safeStepId) return "";
-    const parts = contractId.split(":");
-    if (parts.length < 3) return "";
-    const [contractStep, , ...menuParts] = parts;
-    if (String(contractStep || "").trim() !== safeStepId) return "";
-    const menuId = menuParts.join(":").trim();
-    if (!menuId || menuId === "NO_MENU") return "";
-    return menuId;
+    return parseUiContractMenuForStep(contractIdRaw, stepId);
   }
 
   function parseStatusFromContractIdForStep(contractIdRaw: unknown, stepId: string): TurnOutputStatus | null {
-    const contractId = String(contractIdRaw || "").trim();
-    const safeStepId = String(stepId || "").trim();
-    if (!contractId || !safeStepId) return null;
-    const parts = contractId.split(":");
-    if (parts.length < 3) return null;
-    const contractStep = String(parts[0] || "").trim();
-    const status = String(parts[1] || "").trim();
-    if (contractStep !== safeStepId) return null;
-    if (status === "no_output" || status === "incomplete_output" || status === "valid_output") {
-      return status;
-    }
-    return null;
+    return parseUiContractStatusForStep(contractIdRaw, stepId);
   }
 
   function inferCurrentMenuForStep(state: CanvasState, stepId: string): string {

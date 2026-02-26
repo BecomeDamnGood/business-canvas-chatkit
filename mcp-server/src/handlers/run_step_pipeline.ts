@@ -1,4 +1,10 @@
 import type { CanvasState } from "../core/state.js";
+import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
+import {
+  buildUiContractId,
+  parseUiContractId,
+  validateUiContractIdForStep,
+} from "../core/ui_contract_id.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import {
   type RunStepContext,
@@ -398,7 +404,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       const currentStepId = String(asStateRecord(nextState).current_step || "");
       const offTopicContractId = deps.buildContractId(
         currentStepId,
-        renderedStatusForPolicy,
+        renderedStatusForPolicy as TurnOutputStatus,
         deps.dreamExplainerSwitchSelfMenuId
       );
       deps.applyUiPhaseByStep(nextState, currentStepId, offTopicContractId);
@@ -513,7 +519,17 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     asStateRecord(nextState).last_specialist_result = specialistResult;
 
     const currentStepForContract = String(asStateRecord(nextState).current_step ?? "");
-    const specialistContractId = String(specialistResult.ui_contract_id || "").trim();
+    const specialistContractIdRaw = specialistResult.ui_contract_id;
+    const specialistContractIdParsed = parseUiContractId(specialistContractIdRaw);
+    const specialistContractId =
+      specialistContractIdParsed &&
+      validateUiContractIdForStep(specialistContractIdRaw, currentStepForContract)
+        ? buildUiContractId(
+            specialistContractIdParsed.stepId,
+            specialistContractIdParsed.status,
+            specialistContractIdParsed.menuId
+          )
+        : String(specialistContractIdRaw || "").trim();
     if (currentStepForContract && specialistContractId) {
       deps.applyUiPhaseByStep(nextState, currentStepForContract, specialistContractId);
       if (!contractMetaOverride?.contractId) {

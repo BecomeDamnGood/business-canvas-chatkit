@@ -1,11 +1,8 @@
 import type { CanvasState } from "../core/state.js";
-
-type RunStepRuntimePreflightLocaleHintSource =
-  | "openai_locale"
-  | "webplus_i18n"
-  | "request_header"
-  | "message_detect"
-  | "none";
+import {
+  shouldSkipStep0LanguageReset,
+  type RunStepRuntimePreflightLocaleHintSource,
+} from "./run_step_runtime_preflight_policy.js";
 
 type RunStepRuntimePreflightPorts<TPayload extends Record<string, unknown>> = {
   preprocessBootstrapPoll: (params: {
@@ -261,20 +258,14 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
     const stateLanguageSource = language.normalizeLanguageSource(
       (state as Record<string, unknown>).language_source
     );
-    const localeHintTrustedSource =
-      constants.localeHintSource === "openai_locale" ||
-      constants.localeHintSource === "webplus_i18n" ||
-      constants.localeHintSource === "request_header" ||
-      constants.localeHintSource === "message_detect";
-    const skipResetForChatLocaleHint =
-      language.isUiStep0LangResetGuardV1Enabled() &&
-      constants.inputMode === "chat" &&
-      Boolean(constants.localeHint) &&
-      (
-        localeHintTrustedSource ||
-        stateLanguageSource === "locale_hint" ||
-        stateLanguage === constants.localeHint
-      );
+    const skipResetForChatLocaleHint = shouldSkipStep0LanguageReset({
+      guardEnabled: language.isUiStep0LangResetGuardV1Enabled(),
+      inputMode: constants.inputMode,
+      localeHint: constants.localeHint,
+      localeHintSource: constants.localeHintSource,
+      stateLanguageSource,
+      stateLanguage,
+    });
     if (!hasOverride && !skipResetForChatLocaleHint) {
       (state as Record<string, unknown>).language = "";
       (state as Record<string, unknown>).language_locked = "false";

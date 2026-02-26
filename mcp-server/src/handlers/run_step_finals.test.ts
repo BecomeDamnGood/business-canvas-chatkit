@@ -2472,9 +2472,42 @@ test("step transition fast-path is actioncode-driven (no legacy confirm gate)", 
     new URL("./run_step_runtime_action_routing.ts", import.meta.url),
     "utf8"
   );
-  assert.match(source, /const actionCodeStepTransitions:\s*Record<string,\s*string>/);
-  assert.match(source, /ACTION_STEP0_READY_START:\s*ids\.dreamStepId/);
+  assert.match(source, /buildActionCodeStepTransitions/);
+  assert.match(source, /resolveRequiredFinalValue/);
+  assert.match(source, /const actionCodeStepTransitions = buildActionCodeStepTransitions\(\{/);
+  assert.match(source, /dreamStepId:\s*ids\.dreamStepId/);
   assert.match(source, /runtime\.actionCodeRaw && actionCodeStepTransitions\[runtime\.actionCodeRaw\]/);
+});
+
+test("step transition commits staged step_0 value before moving to dream", async () => {
+  const result = await run_step({
+    user_message: "ACTION_STEP0_READY_START",
+    input_mode: "widget",
+    state: {
+      ...getDefaultState(),
+      current_step: "step_0",
+      active_specialist: "Step0Validation",
+      intro_shown_session: "true",
+      started: "true",
+      step_0_final: "",
+      provisional_by_step: {
+        step_0: "Venture: advertising agency | Name: Mindd | Status: existing",
+      },
+      last_specialist_result: {
+        action: "ASK",
+        menu_id: "STEP0_MENU_READY_START",
+        question: "1) Start met de eerste stap: Dream",
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(String(result.current_step_id || ""), "dream");
+  assert.equal(
+    String((result.state as any)?.step_0_final || ""),
+    "Venture: advertising agency | Name: Mindd | Status: existing"
+  );
+  assert.equal(String((result.state as any)?.provisional_by_step?.step_0 || ""), "");
 });
 
 test("step transition commits staged value and clears provisional state", async () => {
@@ -2537,7 +2570,7 @@ test("special route assembly uses TurnResponseEngine path", () => {
   const routesSource = fs.readFileSync(new URL("./run_step_routes.ts", import.meta.url), "utf8");
   assert.match(
     runStepSource,
-    /response:\s*\{\s*attachRegistryPayload,\s*finalizeResponse:\s*finalizeLayer\.finalizeResponse,\s*turnResponseEngine:\s*finalizeLayer\.turnResponseEngine\s*\}/
+    /response:\s*\{\s*attachRegistryPayload:\s*finalizeLayer\.attachRegistryPayload,\s*finalizeResponse:\s*finalizeLayer\.finalizeResponse,\s*turnResponseEngine:\s*finalizeLayer\.turnResponseEngine\s*\}/
   );
   assert.match(specialRoutesSource, /handleSpecialRouteRegistry/);
   assert.match(routesSource, /deps\.turnResponseEngine\.renderValidateRecover/);
@@ -3298,7 +3331,10 @@ test("bullet consistency message-derivation helpers are removed from facade path
 test("DreamExplainer off-topic handling uses explicit contract branch", () => {
   const source = fs.readFileSync(new URL("./run_step_pipeline.ts", import.meta.url), "utf8");
   assert.match(source, /const isDreamExplainerOfftopicTurn\s*=/);
-  assert.match(source, /deps\.buildContractId\(\s*currentStepId,\s*renderedStatusForPolicy,\s*deps\.dreamExplainerSwitchSelfMenuId\s*\)/);
+  assert.match(
+    source,
+    /deps\.buildContractId\(\s*currentStepId,\s*renderedStatusForPolicy(?:\s+as\s+TurnOutputStatus)?,\s*deps\.dreamExplainerSwitchSelfMenuId\s*\)/
+  );
 });
 
 test("wording choice: Entity user pick restores contract menu buttons when source prompt has no numbered options", async () => {

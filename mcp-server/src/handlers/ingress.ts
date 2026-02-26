@@ -54,6 +54,26 @@ export function canonicalizeStateForRunStepArgs(raw: unknown): unknown {
   return next;
 }
 
+export const IDEMPOTENCY_KEY_MAX_LEN = 128;
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._:-]{1,128}$/;
+
+export function normalizeIngressIdempotencyKey(raw: unknown): string {
+  const value = String(raw ?? "").trim();
+  if (!value) return "";
+  if (value.length > IDEMPOTENCY_KEY_MAX_LEN) return "";
+  return IDEMPOTENCY_KEY_RE.test(value) ? value : "";
+}
+
+function resolveIngressIdempotencyKey(params: {
+  explicit: unknown;
+  state: Record<string, unknown> | null | undefined;
+}): string {
+  const explicit = normalizeIngressIdempotencyKey(params.explicit);
+  if (explicit) return explicit;
+  const state = params.state && typeof params.state === "object" ? params.state : {};
+  return normalizeIngressIdempotencyKey((state as any).__client_action_id);
+}
+
 export const RunStepArgsSchema = z.object({
   current_step_id: z.string().optional().default("step_0"),
   user_message: z.string().default(""),
@@ -63,6 +83,9 @@ export const RunStepArgsSchema = z.object({
     .enum(["openai_locale", "webplus_i18n", "request_header", "message_detect", "none"])
     .optional()
     .default("none"),
+  idempotency_key: z
+    .preprocess(normalizeIngressIdempotencyKey, z.string().max(IDEMPOTENCY_KEY_MAX_LEN).optional())
+    .default(""),
   // Use CanvasStateZod schema for type safety and validation
   // .partial() makes all fields optional (for empty/partial state)
   // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
@@ -225,9 +248,20 @@ export function parseRunStepIngressArgs(
       : "";
   const parsedArgs = RunStepArgsSchema.safeParse(rawArgs);
   if (parsedArgs.success) {
+    const parsedState =
+      parsedArgs.data.state && typeof parsedArgs.data.state === "object" && !Array.isArray(parsedArgs.data.state)
+        ? (parsedArgs.data.state as Record<string, unknown>)
+        : {};
+    const idempotencyKey = resolveIngressIdempotencyKey({
+      explicit: parsedArgs.data.idempotency_key,
+      state: parsedState,
+    });
     return {
       ok: true,
-      args: parsedArgs.data,
+      args: {
+        ...parsedArgs.data,
+        idempotency_key: idempotencyKey,
+      },
       incomingLanguageSourceRaw,
     };
   }

@@ -27,6 +27,10 @@ import {
   criticalUiKeysForStep,
   UI_STRINGS_SOURCE_EN,
 } from "../i18n/ui_strings_defaults.js";
+import {
+  createStructuredLogContextFromState,
+  logStructuredEvent,
+} from "./run_step_response.js";
 
 const LANGUAGE_CONFIDENCE_THRESHOLD = 0.8;
 const LANGUAGE_MIN_ALPHA = 8;
@@ -362,7 +366,7 @@ export function createRunStepI18nRuntimeHelpers(deps: RunStepI18nRuntimeDeps) {
         ui_strings_fallback_reason: "",
       } as CanvasState;
       const gated = applyUiGateState(state, forced);
-      console.log("[ui_gate_decision]", {
+      logStructuredEvent("info", "ui_gate_decision", createStructuredLogContextFromState(gated as Record<string, unknown>), {
         source: "force_en",
         locale: String((gated as any).locale || ""),
         language: String((gated as any).language || ""),
@@ -400,7 +404,7 @@ export function createRunStepI18nRuntimeHelpers(deps: RunStepI18nRuntimeDeps) {
         ui_strings_fallback_reason: "",
       } as CanvasState;
       const gated = applyUiGateState(state, englishReady);
-      console.log("[ui_gate_decision]", {
+      logStructuredEvent("info", "ui_gate_decision", createStructuredLogContextFromState(gated as Record<string, unknown>), {
         source: "english_default",
         locale: String((gated as any).locale || ""),
         language: String((gated as any).language || ""),
@@ -415,17 +419,22 @@ export function createRunStepI18nRuntimeHelpers(deps: RunStepI18nRuntimeDeps) {
     }
 
     const catalogResolution = resolveUiStringsFromCatalog(locale, criticalKeys, telemetry);
-    console.log("[ui_strings_catalog_resolve]", {
-      requested_locale: locale,
-      requested_lang: lang,
-      match_kind: catalogResolution.match_kind,
-      matched_locale: catalogResolution.matched_locale,
-      translated_key_count: catalogResolution.translated_key_count,
-      total_key_count: UI_STRINGS_KEYS.length,
-      critical_keys_missing: catalogResolution.critical_keys_missing,
-      fallback_applied: catalogResolution.fallback_applied,
-      fallback_reason: catalogResolution.fallback_reason,
-    });
+    logStructuredEvent(
+      "info",
+      "ui_strings_catalog_resolve",
+      createStructuredLogContextFromState(state as Record<string, unknown>),
+      {
+        requested_locale: locale,
+        requested_lang: lang,
+        match_kind: catalogResolution.match_kind,
+        matched_locale: catalogResolution.matched_locale,
+        translated_key_count: catalogResolution.translated_key_count,
+        total_key_count: UI_STRINGS_KEYS.length,
+        critical_keys_missing: catalogResolution.critical_keys_missing,
+        fallback_applied: catalogResolution.fallback_applied,
+        fallback_reason: catalogResolution.fallback_reason,
+      }
+    );
 
     const localizedReady = {
       ...(state as any),
@@ -445,7 +454,7 @@ export function createRunStepI18nRuntimeHelpers(deps: RunStepI18nRuntimeDeps) {
       ui_strings_fallback_reason: catalogResolution.fallback_reason,
     } as CanvasState;
     const gated = applyUiGateState(state, localizedReady);
-    console.log("[ui_gate_decision]", {
+    logStructuredEvent("info", "ui_gate_decision", createStructuredLogContextFromState(gated as Record<string, unknown>), {
       source: "static_catalog",
       locale: String((gated as any).locale || ""),
       language: String((gated as any).language || ""),
@@ -516,7 +525,7 @@ export function createRunStepI18nRuntimeHelpers(deps: RunStepI18nRuntimeDeps) {
       },
       telemetry,
     });
-    console.log("[ui_locale_resolve]", {
+    logStructuredEvent("info", "ui_locale_resolve", createStructuredLogContextFromState(resolved as Record<string, unknown>), {
       input_mode: inputMode,
       locale_hint: String(localeHintRaw || ""),
       locale_hint_source: String(localeHintSourceRaw || ""),

@@ -2,8 +2,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CANONICAL_STEPS,
   CURRENT_STATE_VERSION,
   FINALS_KEYS,
+  STEP_FINAL_FIELD_BY_STEP_ID,
   getDefaultState,
   getFinalsSnapshot,
   migrateState,
@@ -34,6 +36,12 @@ test("getFinalsSnapshot: keys are stable (FINALS_KEYS)", () => {
   assert.ok(FINALS_KEYS.includes("dream_final"));
   assert.ok(FINALS_KEYS.includes("presentation_brief_final"));
   assert.equal(FINALS_KEYS.length, 12);
+});
+
+test("step->final SSOT map: canonical coverage and finals alignment stay consistent", () => {
+  assert.deepEqual(Object.keys(STEP_FINAL_FIELD_BY_STEP_ID), [...CANONICAL_STEPS]);
+  const finalsFromMap = Object.values(STEP_FINAL_FIELD_BY_STEP_ID);
+  assert.deepEqual(FINALS_KEYS.filter((key) => key !== "business_name"), finalsFromMap);
 });
 
 test("finals persistence: normalizeState preserves existing finals", () => {
@@ -118,4 +126,28 @@ test("migrateState: v6 language_source maps legacy transport source to locale_hi
     language_source: "webplus_i18n",
   });
   assert.equal(migrated.language_source, "locale_hint");
+});
+
+test("normalizeState: bewaart idempotency metadata uit runtime/server", () => {
+  const normalized = normalizeState({
+    ...getDefaultState(),
+    idempotency_key: "turn-001",
+    idempotency_outcome: "replay",
+    idempotency_error_code: "idempotency_replay",
+  });
+  assert.equal(normalized.idempotency_key, "turn-001");
+  assert.equal(normalized.idempotency_outcome, "replay");
+  assert.equal(normalized.idempotency_error_code, "idempotency_replay");
+});
+
+test("normalizeState: ongeldige idempotency_outcome wordt fail-closed naar leeg", () => {
+  const normalized = normalizeState({
+    ...getDefaultState(),
+    idempotency_key: "turn-002",
+    idempotency_outcome: "unexpected_value",
+    idempotency_error_code: "idempotency_replay",
+  });
+  assert.equal(normalized.idempotency_key, "turn-002");
+  assert.equal(normalized.idempotency_outcome, "");
+  assert.equal(normalized.idempotency_error_code, "idempotency_replay");
 });

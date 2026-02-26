@@ -1,11 +1,13 @@
 import type { CanvasState } from "../core/state.js";
-import type { TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
-import type { RenderedAction } from "../contracts/ui_actions.js";
 
 import { createRunStepResponseHelpers } from "./run_step_response.js";
+import type {
+  RunStepAttachRegistryPayload,
+  RunStepRenderFreeTextTurnPolicy,
+  RunStepValidateRenderedContractOrRecover,
+} from "./run_step_ports.js";
 import { createTurnResponseEngine, type TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
-import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 
 export type RunStepRuntimeInputMode = "widget" | "chat";
 
@@ -385,15 +387,7 @@ type RunStepRuntimeFinalizeResponseDeps<TPayload> = {
   parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
   labelKeysForMenuActionCodes: (menuId: string, actionCodes: string[]) => string[];
   onUiParityError: () => void;
-  attachRegistryPayload: (
-    payload: Record<string, unknown>,
-    specialist: Record<string, unknown>,
-    flagsOverride?: Record<string, boolean | string> | null,
-    actionCodesOverride?: string[] | null,
-    renderedActionsOverride?: RenderedAction[] | null,
-    wordingChoiceOverride?: WordingChoiceUiPayload | null,
-    contractMetaOverride?: UiContractMeta | null
-  ) => TPayload;
+  attachRegistryPayload: RunStepAttachRegistryPayload<TPayload>;
   uiI18nTelemetry: unknown;
   getMigrationApplied: () => boolean;
   getMigrationFromVersion: () => string;
@@ -417,28 +411,14 @@ type RunStepRuntimeFinalizeResponseDeps<TPayload> = {
     questionTextOverride?: string;
   }) => string;
   pickPrompt: (specialist: Record<string, unknown>) => string;
-  renderFreeTextTurnPolicy: (params: {
-    stepId: string;
-    state: CanvasState;
-    specialist: Record<string, unknown>;
-    previousSpecialist: Record<string, unknown>;
-  }) => TurnPolicyRenderResult;
-  validateRenderedContractOrRecover: (params: {
-    stepId: string;
-    rendered: TurnPolicyRenderResult;
-    state: CanvasState;
-    previousSpecialist: Record<string, unknown>;
-    telemetry?: UiI18nTelemetryCounters | null;
-  }) => {
-    rendered: unknown;
-    state: CanvasState;
-    violation: string | null;
-  };
+  renderFreeTextTurnPolicy: RunStepRenderFreeTextTurnPolicy;
+  validateRenderedContractOrRecover: RunStepValidateRenderedContractOrRecover;
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
 };
 
 export type RunStepRuntimeFinalizeLayer<TPayload extends Record<string, unknown>> = {
   buildRoutingContext: (routeOrText: string) => RunStepRuntimeRoutingContext;
+  attachRegistryPayload: RunStepAttachRegistryPayload<TPayload>;
   finalizeResponse: (payload: TPayload) => TPayload;
   turnResponseEngine: TurnResponseEngine<TPayload>;
   ensureUiStrings: (state: CanvasState, routeOrText: string) => Promise<CanvasState>;
@@ -632,6 +612,7 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
 
   return {
     buildRoutingContext,
+    attachRegistryPayload: response.attachRegistryPayload,
     finalizeResponse: (payload) => finalizeResponse(payload),
     turnResponseEngine,
     ensureUiStrings,

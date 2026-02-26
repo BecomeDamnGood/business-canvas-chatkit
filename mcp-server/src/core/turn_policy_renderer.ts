@@ -1,6 +1,6 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
 import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "./menu_contract.js";
-import type { CanvasState } from "./state.js";
+import { getFinalFieldForStepId, type CanvasState } from "./state.js";
 import { actionCodeToIntent } from "../adapters/actioncode_to_intent.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import {
@@ -9,6 +9,7 @@ import {
   buildContractId,
   buildContractTextKeys,
 } from "./ui_contract_matrix.js";
+import { parseUiContractMenuForStep } from "./ui_contract_id.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -61,20 +62,6 @@ const STEP0_NO_OUTPUT_PROMPT_EN =
   "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?";
 const STEP0_CARDDESC_EN = "Just to set the context, we'll start with the basics.";
 const STEP0_CONFIRM_SUFFIX_EN = "Are you ready to start with the first step: the Dream?";
-
-const FINAL_FIELD_BY_STEP: Record<string, string> = {
-  step_0: "step_0_final",
-  dream: "dream_final",
-  purpose: "purpose_final",
-  bigwhy: "bigwhy_final",
-  role: "role_final",
-  entity: "entity_final",
-  strategy: "strategy_final",
-  targetgroup: "targetgroup_final",
-  productsservices: "productsservices_final",
-  rulesofthegame: "rulesofthegame_final",
-  presentation: "presentation_brief_final",
-};
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
 
@@ -139,7 +126,7 @@ function isAcceptedProvisional(state: CanvasState, stepId: string): boolean {
 }
 
 function isAcceptedOutput(stepId: string, state: CanvasState): boolean {
-  const finalField = FINAL_FIELD_BY_STEP[stepId] || "";
+  const finalField = getFinalFieldForStepId(stepId);
   const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
   if (committedFinal) return true;
   return isAcceptedProvisional(state, stepId);
@@ -220,18 +207,6 @@ function isConfirmActionCode(actionCode: string): boolean {
   if (entry.route === "yes") return true;
   const upper = actionCode.toUpperCase();
   return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
-}
-
-function parseMenuFromContractId(contractIdRaw: unknown, stepId: string): string {
-  const contractId = String(contractIdRaw || "").trim();
-  if (!contractId) return "";
-  const parts = contractId.split(":");
-  if (parts.length < 3) return "";
-  const [contractStep, , ...menuParts] = parts;
-  if (String(contractStep || "").trim() !== stepId) return "";
-  const menuId = menuParts.join(":").trim();
-  if (!menuId || menuId === "NO_MENU") return "";
-  return menuId;
 }
 
 function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
@@ -558,7 +533,7 @@ function computeStatus(
     return { status: "incomplete_output", confirmEligible: false, recapBody: recap, statementCount: 0 };
   }
 
-  const finalField = FINAL_FIELD_BY_STEP[stepId] || "";
+  const finalField = getFinalFieldForStepId(stepId);
   const committedFinalValue = finalField ? String((state as any)[finalField] ?? "").trim() : "";
   const provisionalValue = provisionalForStep(state, stepId);
   const acceptedOutput = isAcceptedOutput(stepId, state);
@@ -829,11 +804,11 @@ function resolveMenuContract(params: {
   const phaseMap = (state as any).__ui_phase_by_step && typeof (state as any).__ui_phase_by_step === "object"
     ? ((state as any).__ui_phase_by_step as Record<string, unknown>)
     : {};
-  const specialistPhaseMenu = parseMenuFromContractId((specialist as any).ui_contract_id, stepId);
-  const previousPhaseMenu = parseMenuFromContractId((prev as any).ui_contract_id, stepId);
+  const specialistPhaseMenu = parseUiContractMenuForStep((specialist as any).ui_contract_id, stepId);
+  const previousPhaseMenu = parseUiContractMenuForStep((prev as any).ui_contract_id, stepId);
   const phaseMenu = (ignorePhaseForOfftopicNoOutput || forceDefaultMenuForValidOutput)
     ? ""
-    : parseMenuFromContractId(phaseMap[stepId], stepId) || specialistPhaseMenu || previousPhaseMenu;
+    : parseUiContractMenuForStep(phaseMap[stepId], stepId) || specialistPhaseMenu || previousPhaseMenu;
   const menuIsValidForStep = (menuRaw: string): boolean => {
     const menu = String(menuRaw || "").trim();
     if (!menu || isEscapeMenu(menu)) return false;
@@ -907,7 +882,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const specialistForDisplay: Record<string, unknown> = { ...specialist };
   if (isOfftopic && stepId !== "step_0") {
     const field = stepId === "rulesofthegame" ? "rulesofthegame" : stepId;
-    const finalField = FINAL_FIELD_BY_STEP[stepId] || "";
+    const finalField = getFinalFieldForStepId(stepId);
     const existingField = String((specialistForDisplay as any)[field] || "").trim();
     const existingRefined = String((specialistForDisplay as any).refined_formulation || "").trim();
     const previousField = String((prev as any)[field] || "").trim();

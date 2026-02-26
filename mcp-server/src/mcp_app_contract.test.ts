@@ -25,6 +25,12 @@ test("MCP app contract: run_step exposes explicit outputSchema", () => {
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*outputSchema:\s*ToolStructuredContentOutputSchema/);
 });
 
+test("MCP app contract: local /run_step bridge enforces ToolStructuredContentOutputSchema", () => {
+  assert.match(source, /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)/);
+  assert.match(source, /const parsedStructuredContent = ToolStructuredContentOutputSchema\.parse\(structuredContent\)/);
+  assert.match(source, /JSON\.stringify\(\{ structuredContent: parsedStructuredContent, \.\.\.\(meta \? \{ _meta: meta \} : \{\}\) \}\)/);
+});
+
 test("MCP app contract: run_step is not idempotent-hinted", () => {
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*idempotentHint:\s*false/);
 });
@@ -65,4 +71,19 @@ test("MCP wrapper parity: model-safe result contract remains minimal in buildMod
   assert.doesNotMatch(fnBody, /\bprompt\s*:/);
   assert.doesNotMatch(fnBody, /\bspecialist\s*:/);
   assert.doesNotMatch(fnBody, /\berror\s*:/);
+});
+
+test("MCP app contract: run_step input accepteert idempotency_key en extra-header fallback", () => {
+  assert.match(source, /const RunStepInputSchema = z\.object\([\s\S]*idempotency_key:\s*z\.string\(\)\.optional\(\)/);
+  assert.match(source, /function resolveIdempotencyKeyFromExtra\(extra: unknown\): string/);
+  assert.match(source, /getHeaderFromRequestInfo\(requestInfo, "idempotency-key"\)/);
+  assert.match(source, /getHeaderFromRequestInfo\(requestInfo, "x-idempotency-key"\)/);
+});
+
+test("MCP app contract: server definieert replay\/conflict foutcodes voor idempotency", () => {
+  assert.match(source, /const IDEMPOTENCY_ERROR_CODES = \{[\s\S]*REPLAY:\s*"idempotency_replay"/);
+  assert.match(source, /CONFLICT:\s*"idempotency_key_conflict"/);
+  assert.match(source, /INFLIGHT:\s*"idempotency_replay_inflight"/);
+  assert.match(source, /"idempotency_conflict"/);
+  assert.match(source, /"idempotency_replay_served"/);
 });

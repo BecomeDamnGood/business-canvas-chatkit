@@ -2,6 +2,134 @@ import { appendSessionTokenLog } from "../core/session_token_log.js";
 import type { CanvasState } from "../core/state.js";
 import { finalizeResponseContractInternals } from "./turn_contract.js";
 
+export type StructuredLogSeverity = "info" | "warn" | "error";
+
+export type StructuredLogContext = {
+  correlation_id: string;
+  session_id: string;
+  step_id: string;
+  contract_id: string;
+};
+
+const LOG_REDACT_KEY_RE = /(authorization|cookie|token|secret|password|api[_-]?key)/i;
+
+function normalizeLogField(value: unknown, maxLen = 256): string {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+  return text.length > maxLen ? text.slice(0, maxLen) : text;
+}
+
+function sanitizeLogValue(value: unknown, depth = 0): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") return normalizeLogField(value, 512);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "bigint") return String(value);
+  if (Array.isArray(value)) {
+    if (depth >= 2) return "[array_omitted]";
+    return value.slice(0, 20).map((entry) => sanitizeLogValue(entry, depth + 1));
+  }
+  if (typeof value === "object") {
+    if (depth >= 2) return "[object_omitted]";
+    const next: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>).slice(0, 40)) {
+      next[key] = LOG_REDACT_KEY_RE.test(key) ? "[redacted]" : sanitizeLogValue(entry, depth + 1);
+    }
+    return next;
+  }
+  return normalizeLogField(value, 256);
+}
+
+function sanitizeLogDetails(details: Record<string, unknown>): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (key === "event" || key === "severity") continue;
+    if (key === "correlation_id" || key === "session_id" || key === "step_id" || key === "contract_id") continue;
+    next[key] = LOG_REDACT_KEY_RE.test(key) ? "[redacted]" : sanitizeLogValue(value, 0);
+  }
+  return next;
+}
+
+function resolveContractId(
+  response: Record<string, unknown>,
+  state: Record<string, unknown>
+): string {
+  const ui =
+    response.ui && typeof response.ui === "object"
+      ? (response.ui as Record<string, unknown>)
+      : {};
+  return normalizeLogField(
+    response.contract_id ??
+      response.ui_contract_id ??
+      state.contract_id ??
+      state.ui_contract_id ??
+      state.current_contract_id ??
+      ui.contract_id ??
+      ui.view_contract_id ??
+      "",
+    128
+  );
+}
+
+export function createStructuredLogContextFromState(
+  stateRaw: Record<string, unknown> | null | undefined,
+  overrides?: { step_id?: unknown; contract_id?: unknown }
+): StructuredLogContext {
+  const state =
+    stateRaw && typeof stateRaw === "object" ? (stateRaw as Record<string, unknown>) : {};
+  const contractIdRaw =
+    overrides && Object.prototype.hasOwnProperty.call(overrides, "contract_id")
+      ? overrides.contract_id
+      : resolveContractId({}, state);
+  return {
+    correlation_id: normalizeLogField(state.__request_id, 512),
+    session_id: normalizeLogField(state.bootstrap_session_id ?? state.__session_id, 128),
+    step_id: normalizeLogField(
+      overrides && Object.prototype.hasOwnProperty.call(overrides, "step_id")
+        ? overrides.step_id
+        : state.current_step,
+      128
+    ),
+    contract_id: normalizeLogField(contractIdRaw, 128),
+  };
+}
+
+function createLogContext(
+  response: Record<string, unknown>,
+  state: Record<string, unknown>
+): StructuredLogContext {
+  return createStructuredLogContextFromState(state, {
+    step_id: response.current_step_id ?? state.current_step,
+    contract_id: resolveContractId(response, state),
+  });
+}
+
+export function logStructuredEvent(
+  severity: StructuredLogSeverity,
+  event: string,
+  context: StructuredLogContext,
+  details: Record<string, unknown> = {}
+): void {
+  const payload = {
+    event: normalizeLogField(event, 128) || "event_unknown",
+    correlation_id: context.correlation_id,
+    session_id: context.session_id,
+    step_id: context.step_id,
+    contract_id: context.contract_id,
+    severity,
+    ...sanitizeLogDetails(details),
+  };
+  const text = JSON.stringify(payload);
+  if (severity === "error") {
+    console.error(text);
+    return;
+  }
+  if (severity === "warn") {
+    console.warn(text);
+    return;
+  }
+  console.log(text);
+}
+
 type TokenUsageSnapshot = {
   input_tokens: number | null;
   output_tokens: number | null;
@@ -71,10 +199,9 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       if (errorMarkers.some((marker) => marker.startsWith("invalid_"))) return "invalid_state";
       return "none";
     })();
-
-    console.log("[contract_decision]", {
-      session_id: String((stateForDecision as any).bootstrap_session_id || ""),
-      host_widget_session_id: String((stateForDecision as any).host_widget_session_id || ""),
+    const decisionContext = createLogContext(finalResponse, stateForDecision);
+    logStructuredEvent("info", "contract_decision", decisionContext, {
+      host_widget_session_id_present: String((stateForDecision as any).host_widget_session_id || "") ? "true" : "false",
       epoch: Number((stateForDecision as any).bootstrap_epoch || 0),
       seq: Number((stateForDecision as any).response_seq || 0),
       phase: String((stateForDecision as any).bootstrap_phase || ""),
@@ -120,7 +247,11 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       });
       (responseState as any).__session_log_file = appendResult.filePath;
     } catch (err: any) {
-      console.warn("[session_token_log_write_failed]", {
+      const stateForError =
+        (finalResponse as any)?.state && typeof (finalResponse as any).state === "object"
+          ? ((finalResponse as any).state as Record<string, unknown>)
+          : {};
+      logStructuredEvent("warn", "session_token_log_write_failed", createLogContext(finalResponse, stateForError), {
         message: String(err?.message || err || "unknown"),
       });
     }

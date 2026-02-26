@@ -3,6 +3,7 @@ import os from "node:os";
 
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { CanvasState } from "../core/state.js";
+import { buildUiContractId } from "../core/ui_contract_id.js";
 import {
   type RunStepContext,
   type RunStepRouteRegistryRequest,
@@ -561,7 +562,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           deps.applyUiPhaseByStep(
             nextState,
             deps.dreamStepId,
-            deps.buildContractId(deps.dreamStepId, "no_output", "DREAM_MENU_INTRO")
+            buildUiContractId(deps.dreamStepId, "no_output", "DREAM_MENU_INTRO")
           );
           return finalizeRouteTurnIntent(context, {
             state: nextState,

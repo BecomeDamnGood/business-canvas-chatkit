@@ -2,7 +2,6 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { inspect } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,7 +91,15 @@ const UI_RESOURCE_NAME = "business-canvas-widget";
 const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 30000); // 30s default
 const BOOTSTRAP_SESSION_REGISTRY_TTL_MS = Number(process.env.BOOTSTRAP_SESSION_REGISTRY_TTL_MS || 30 * 60 * 1000);
+const IDEMPOTENCY_ENTRY_TTL_MS = Number(process.env.IDEMPOTENCY_ENTRY_TTL_MS || BOOTSTRAP_SESSION_REGISTRY_TTL_MS);
 const BOOTSTRAP_SESSION_ID_PREFIX = "bs_";
+const IDEMPOTENCY_KEY_MAX_LEN = 128;
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._:-]{1,128}$/;
+const IDEMPOTENCY_ERROR_CODES = {
+  REPLAY: "idempotency_replay",
+  CONFLICT: "idempotency_key_conflict",
+  INFLIGHT: "idempotency_replay_inflight",
+} as const;
 type BootstrapSessionSnapshot = {
   sessionId: string;
   hostWidgetSessionId: string;
@@ -102,12 +109,124 @@ type BootstrapSessionSnapshot = {
   lastWidgetResult: Record<string, unknown>;
 };
 const bootstrapSessionRegistry = new Map<string, BootstrapSessionSnapshot>();
+type IdempotencyRegistryEntry = {
+  scopeKey: string;
+  idempotencyKey: string;
+  requestHash: string;
+  status: "inflight" | "completed";
+  updatedAtMs: number;
+  resultForClient?: Record<string, unknown>;
+};
+const idempotencyRegistry = new Map<string, IdempotencyRegistryEntry>();
 let bootstrapResponseSeqCounter = 0;
 
 function parsePositiveInt(value: unknown): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return 0;
   return Math.trunc(n);
+}
+
+function normalizeIdempotencyKey(raw: unknown): string {
+  const value = safeString(raw ?? "").trim();
+  if (!value) return "";
+  if (value.length > IDEMPOTENCY_KEY_MAX_LEN) return "";
+  return IDEMPOTENCY_KEY_RE.test(value) ? value : "";
+}
+
+function toStableHashValue(value: unknown, depth = 0): unknown {
+  if (depth > 10) return "[depth_limit]";
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "bigint") return String(value);
+  if (Array.isArray(value)) return value.map((entry) => toStableHashValue(entry, depth + 1));
+  if (typeof value !== "object") return safeString(value);
+  const raw = value as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  for (const key of Object.keys(raw).sort()) {
+    if (key === "__request_id") continue;
+    next[key] = toStableHashValue(raw[key], depth + 1);
+  }
+  return next;
+}
+
+function createIdempotencyRequestHash(args: {
+  currentStepId: string;
+  userMessage: string;
+  inputMode: string;
+  localeHint: string;
+  localeHintSource: string;
+  state: Record<string, unknown>;
+}): string {
+  const payload = toStableHashValue({
+    current_step_id: safeString(args.currentStepId || "step_0") || "step_0",
+    user_message: safeString(args.userMessage ?? ""),
+    input_mode: safeString(args.inputMode || "chat") || "chat",
+    locale_hint: safeString(args.localeHint ?? ""),
+    locale_hint_source: safeString(args.localeHintSource ?? "none") || "none",
+    state: canonicalizeStateForToolInput(args.state),
+  });
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function buildIdempotencyScopeKey(params: {
+  bootstrapSessionId: string;
+  hostWidgetSessionId: string;
+}): string {
+  if (params.bootstrapSessionId) return `session:${params.bootstrapSessionId}`;
+  if (params.hostWidgetSessionId) return `host:${params.hostWidgetSessionId}`;
+  return "scope:unknown";
+}
+
+function buildIdempotencyRegistryKey(scopeKey: string, idempotencyKey: string): string {
+  return `${scopeKey}::${idempotencyKey}`;
+}
+
+function cloneRecord(value: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+}
+
+function purgeExpiredIdempotencyEntries(nowMs: number): void {
+  for (const [registryKey, snapshot] of idempotencyRegistry.entries()) {
+    if (snapshot.updatedAtMs + IDEMPOTENCY_ENTRY_TTL_MS <= nowMs) {
+      idempotencyRegistry.delete(registryKey);
+    }
+  }
+}
+
+function markIdempotencyInFlight(params: {
+  registryKey: string;
+  scopeKey: string;
+  idempotencyKey: string;
+  requestHash: string;
+  nowMs: number;
+}): void {
+  idempotencyRegistry.set(params.registryKey, {
+    scopeKey: params.scopeKey,
+    idempotencyKey: params.idempotencyKey,
+    requestHash: params.requestHash,
+    status: "inflight",
+    updatedAtMs: params.nowMs,
+  });
+}
+
+function markIdempotencyCompleted(params: {
+  registryKey: string;
+  scopeKey: string;
+  idempotencyKey: string;
+  requestHash: string;
+  resultForClient: Record<string, unknown>;
+  nowMs: number;
+}): void {
+  const existing = idempotencyRegistry.get(params.registryKey);
+  if (existing && existing.requestHash !== params.requestHash) return;
+  idempotencyRegistry.set(params.registryKey, {
+    scopeKey: params.scopeKey,
+    idempotencyKey: params.idempotencyKey,
+    requestHash: params.requestHash,
+    status: "completed",
+    updatedAtMs: params.nowMs,
+    resultForClient: cloneRecord(params.resultForClient),
+  });
 }
 
 function isUuidV4(value: string): boolean {
@@ -206,6 +325,51 @@ function attachBootstrapDiagnostics(args: {
     ...(bootstrapSessionId ? { bootstrap_session_id: bootstrapSessionId } : {}),
     ...(bootstrapEpoch > 0 ? { bootstrap_epoch: bootstrapEpoch } : {}),
     ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
+  };
+}
+
+function attachIdempotencyDiagnostics(args: {
+  resultForClient: Record<string, unknown>;
+  idempotencyKey: string;
+  outcome: "fresh" | "replay" | "conflict" | "inflight";
+  errorCode?: string;
+}): Record<string, unknown> {
+  const { resultForClient, idempotencyKey, outcome, errorCode } = args;
+  if (!idempotencyKey) return resultForClient;
+  const stateRaw =
+    resultForClient.state && typeof resultForClient.state === "object"
+      ? (resultForClient.state as Record<string, unknown>)
+      : {};
+  const uiRaw =
+    resultForClient.ui && typeof resultForClient.ui === "object"
+      ? (resultForClient.ui as Record<string, unknown>)
+      : {};
+  const flagsRaw =
+    uiRaw.flags && typeof uiRaw.flags === "object"
+      ? (uiRaw.flags as Record<string, unknown>)
+      : {};
+  const stateWithDiagnostics: Record<string, unknown> = {
+    ...stateRaw,
+    idempotency_key: idempotencyKey,
+    idempotency_outcome: outcome,
+    ...(errorCode ? { idempotency_error_code: errorCode } : {}),
+  };
+  const uiWithDiagnostics: Record<string, unknown> = {
+    ...uiRaw,
+    flags: {
+      ...flagsRaw,
+      idempotency_key: idempotencyKey,
+      idempotency_outcome: outcome,
+      ...(errorCode ? { idempotency_error_code: errorCode } : {}),
+    },
+  };
+  return {
+    ...resultForClient,
+    state: stateWithDiagnostics,
+    ui: uiWithDiagnostics,
+    idempotency_key: idempotencyKey,
+    idempotency_outcome: outcome,
+    ...(errorCode ? { idempotency_error_code: errorCode } : {}),
   };
 }
 
@@ -312,6 +476,160 @@ function ensureCorrelationHeader(res: any, correlationId: string) {
     }
     return originalWriteHead(statusCode, hdrs);
   };
+}
+
+type StructuredLogSeverity = "info" | "warn" | "error";
+
+type StructuredLogContext = {
+  correlation_id?: unknown;
+  session_id?: unknown;
+  step_id?: unknown;
+  contract_id?: unknown;
+};
+
+const LOG_REDACT_KEY_RE = /(authorization|cookie|token|secret|password|api[_-]?key)/i;
+
+function normalizeLogField(value: unknown, maxLen = 256): string {
+  const text = safeString(value ?? "").trim();
+  if (!text) return "";
+  return text.length > maxLen ? text.slice(0, maxLen) : text;
+}
+
+function sanitizeLogValue(value: unknown, depth = 0): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "string") return normalizeLogField(value, 512);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value === "bigint") return String(value);
+  if (Array.isArray(value)) {
+    if (depth >= 2) return "[array_omitted]";
+    return value.slice(0, 20).map((entry) => sanitizeLogValue(entry, depth + 1));
+  }
+  if (typeof value === "object") {
+    if (depth >= 2) return "[object_omitted]";
+    const next: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>).slice(0, 40)) {
+      next[key] = LOG_REDACT_KEY_RE.test(key) ? "[redacted]" : sanitizeLogValue(entry, depth + 1);
+    }
+    return next;
+  }
+  return normalizeLogField(value, 256);
+}
+
+function sanitizeLogDetails(details: Record<string, unknown>): Record<string, unknown> {
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (key === "event" || key === "severity") continue;
+    if (key === "correlation_id" || key === "session_id" || key === "step_id" || key === "contract_id") continue;
+    next[key] = LOG_REDACT_KEY_RE.test(key) ? "[redacted]" : sanitizeLogValue(value, 0);
+  }
+  return next;
+}
+
+function resolveContractIdFromRecord(record: Record<string, unknown> | null | undefined): string {
+  if (!record || typeof record !== "object") return "";
+  const state =
+    record.state && typeof record.state === "object"
+      ? (record.state as Record<string, unknown>)
+      : {};
+  const ui =
+    record.ui && typeof record.ui === "object"
+      ? (record.ui as Record<string, unknown>)
+      : {};
+  const direct = normalizeLogField(record.contract_id ?? record.ui_contract_id ?? "", 128);
+  if (direct) return direct;
+  const fromState = normalizeLogField(state.contract_id ?? state.ui_contract_id ?? state.current_contract_id ?? "", 128);
+  if (fromState) return fromState;
+  return normalizeLogField(ui.contract_id ?? ui.view_contract_id ?? "", 128);
+}
+
+function getHeaderFromRequestInfo(requestInfo: unknown, headerName: string): string {
+  const headersRaw =
+    requestInfo && typeof requestInfo === "object" && (requestInfo as any).headers
+      ? ((requestInfo as any).headers as unknown)
+      : null;
+  if (!headersRaw) return "";
+  const normalizedHeaderName = headerName.toLowerCase();
+  if (typeof (headersRaw as any).get === "function") {
+    const fromGet = normalizeLogField((headersRaw as any).get(headerName) ?? (headersRaw as any).get(normalizedHeaderName), 512);
+    if (fromGet) return fromGet;
+  }
+  if (Array.isArray(headersRaw)) {
+    for (const entry of headersRaw) {
+      if (!Array.isArray(entry) || entry.length < 2) continue;
+      const key = safeString(entry[0] ?? "").trim().toLowerCase();
+      if (key !== normalizedHeaderName) continue;
+      const value = normalizeLogField(entry[1], 512);
+      if (value) return value;
+    }
+  }
+  if (typeof headersRaw !== "object") return "";
+  const record = headersRaw as Record<string, unknown>;
+  for (const [key, value] of Object.entries(record)) {
+    if (safeString(key ?? "").trim().toLowerCase() !== normalizedHeaderName) continue;
+    const normalized = normalizeLogField(value, 512);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function resolveCorrelationIdFromExtra(extra: unknown): string {
+  const requestInfo = extra && typeof extra === "object" ? (extra as any).requestInfo : null;
+  const fromHeaders =
+    getHeaderFromRequestInfo(requestInfo, "x-correlation-id") ||
+    getHeaderFromRequestInfo(requestInfo, "x-request-id") ||
+    getHeaderFromRequestInfo(requestInfo, "x-amzn-trace-id") ||
+    getHeaderFromRequestInfo(requestInfo, "traceparent");
+  if (fromHeaders) return fromHeaders;
+  const meta =
+    extra && typeof extra === "object" && (extra as any)._meta && typeof (extra as any)._meta === "object"
+      ? ((extra as any)._meta as Record<string, unknown>)
+      : {};
+  return normalizeLogField(meta["x-correlation-id"] ?? meta["x-request-id"] ?? meta["traceparent"] ?? "", 512);
+}
+
+function resolveIdempotencyKeyFromExtra(extra: unknown): string {
+  const requestInfo = extra && typeof extra === "object" ? (extra as any).requestInfo : null;
+  const fromHeaders =
+    getHeaderFromRequestInfo(requestInfo, "idempotency-key") ||
+    getHeaderFromRequestInfo(requestInfo, "x-idempotency-key");
+  if (fromHeaders) return normalizeIdempotencyKey(fromHeaders);
+  const meta =
+    extra && typeof extra === "object" && (extra as any)._meta && typeof (extra as any)._meta === "object"
+      ? ((extra as any)._meta as Record<string, unknown>)
+      : {};
+  return normalizeIdempotencyKey(
+    meta["idempotency_key"] ??
+      meta["idempotency-key"] ??
+      meta["x-idempotency-key"] ??
+      ""
+  );
+}
+
+function logStructuredEvent(
+  severity: StructuredLogSeverity,
+  event: string,
+  context: StructuredLogContext,
+  details: Record<string, unknown> = {}
+): void {
+  const payload = {
+    event: normalizeLogField(event, 128) || "event_unknown",
+    correlation_id: normalizeLogField(context.correlation_id, 512),
+    session_id: normalizeLogField(context.session_id, 128),
+    step_id: normalizeLogField(context.step_id, 128),
+    contract_id: normalizeLogField(context.contract_id, 128),
+    severity,
+    ...sanitizeLogDetails(details),
+  };
+  const text = JSON.stringify(payload);
+  if (severity === "error") {
+    console.error(text);
+    return;
+  }
+  if (severity === "warn") {
+    console.warn(text);
+    return;
+  }
+  console.log(text);
 }
 
 function jsonRpcErrorResponse(
@@ -490,6 +808,20 @@ function normalizeHostWidgetSessionId(raw: unknown): string {
   return value;
 }
 
+const ModelSafeResultOutputSchema = z.object({
+  model_result_shape_version: z.literal("v2_minimal"),
+  ok: z.boolean(),
+  tool: z.string(),
+  current_step_id: z.string(),
+  state: z.record(z.string(), z.unknown()),
+}).passthrough();
+
+const ToolStructuredContentOutputSchema = z.object({
+  title: z.string().optional(),
+  meta: z.string().optional(),
+  result: ModelSafeResultOutputSchema,
+}).passthrough();
+
 const ALLOWED_TRANSIENT_STATE_KEYS = new Set<string>([
   "__text_submit",
   "__pending_scores",
@@ -642,9 +974,12 @@ async function runStepHandler(args: {
   input_mode?: "widget" | "chat";
   locale_hint?: string;
   locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
+  idempotency_key?: string;
+  correlation_id?: string;
   host_widget_session_id?: string;
   state?: Record<string, unknown>;
 }): Promise<{ structuredContent: Record<string, unknown>; meta?: Record<string, unknown> }> {
+  const correlationId = normalizeLogField(args.correlation_id, 512) || randomUUID();
   const current_step_id = normalizeStepId(args.current_step_id ?? "");
   const state = (args.state ?? {}) as Record<string, unknown>;
   const user_message_raw = safeString(args.user_message ?? "");
@@ -682,14 +1017,25 @@ async function runStepHandler(args: {
     state,
     bootstrapSessionId: (state as any).bootstrap_session_id,
   });
-  console.log("[host_session_id_seen]", {
-    source: hostWidgetSessionId.startsWith("internal:") ? "run_step_internal" : "run_step_args",
-    host_widget_session_id: hostWidgetSessionId,
-  });
+  logStructuredEvent(
+    "info",
+    "host_session_id_seen",
+    {
+      correlation_id: correlationId,
+      session_id: normalizeBootstrapSessionId((state as any).bootstrap_session_id),
+      step_id: current_step_id,
+      contract_id: resolveContractIdFromRecord({ state }),
+    },
+    {
+      source: hostWidgetSessionId.startsWith("internal:") ? "run_step_internal" : "run_step_args",
+      host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
+    }
+  );
   let stateForTool: Record<string, unknown> = {
     ...state,
     ...(hasInitiator || !shouldSeedInitialUserMessage ? {} : { initial_user_message: normalizedMessage }),
     ...(shouldMarkStarted ? { started: "true" } : {}),
+    __request_id: correlationId,
   };
   if (requiresExplicitStart && !shouldMarkStarted) {
     stateForTool = { ...stateForTool, started: "false" };
@@ -697,10 +1043,20 @@ async function runStepHandler(args: {
   const incomingBootstrapSessionRaw = safeString((stateForTool as any).bootstrap_session_id ?? "").trim();
   const incomingBootstrapSession = normalizeBootstrapSessionId(incomingBootstrapSessionRaw);
   if (incomingBootstrapSessionRaw && !incomingBootstrapSession) {
-    console.warn("[bootstrap_session_id_rejected]", {
-      source: "run_step_state",
-      provided: incomingBootstrapSessionRaw,
-    });
+    logStructuredEvent(
+      "warn",
+      "bootstrap_session_id_rejected",
+      {
+        correlation_id: correlationId,
+        session_id: "",
+        step_id: current_step_id,
+        contract_id: resolveContractIdFromRecord({ state: stateForTool }),
+      },
+      {
+        source: "run_step_state",
+        provided_length: incomingBootstrapSessionRaw.length,
+      }
+    );
   }
   const normalizedBootstrapSessionId = incomingBootstrapSession || createBootstrapSessionId();
   const normalizedBootstrapEpoch = incomingBootstrapSession
@@ -719,18 +1075,225 @@ async function runStepHandler(args: {
   const localeHint = safeString(args.locale_hint ?? "");
   const inputMode = safeString(args.input_mode ?? "chat");
   const action = upperMessage.startsWith("ACTION_") ? upperMessage : "text_input";
-  console.log("[run_step] request", {
-    input_mode: inputMode || "chat",
-    action,
-    step_id: stepIdStr,
-    user_message_len: msgLen,
-    state_keys: stateKeysCount,
-    locale_hint: localeHint,
-    locale_hint_source: localeHintSource,
-    host_widget_session_id: hostWidgetSessionId || "",
-  });
+  const idempotencyKey = normalizeIdempotencyKey(
+    args.idempotency_key ?? (stateForTool as any).__client_action_id ?? ""
+  );
+  logStructuredEvent(
+    "info",
+    "run_step_request",
+    {
+      correlation_id: correlationId,
+      session_id: normalizedBootstrapSessionId,
+      step_id: stepIdStr || "step_0",
+      contract_id: resolveContractIdFromRecord({ state: stateForTool }),
+    },
+    {
+      input_mode: inputMode || "chat",
+      action,
+      user_message_len: msgLen,
+      state_keys: stateKeysCount,
+      locale_hint: localeHint,
+      locale_hint_source: localeHintSource,
+      host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
+      idempotency_key_present: idempotencyKey ? "true" : "false",
+    }
+  );
   const nowMs = Date.now();
   let incomingOrdering = readBootstrapOrdering({ state: stateForTool });
+  const idempotencyScopeKey = buildIdempotencyScopeKey({
+    bootstrapSessionId: normalizedBootstrapSessionId,
+    hostWidgetSessionId,
+  });
+  const idempotencyRequestHash = idempotencyKey
+    ? createIdempotencyRequestHash({
+        currentStepId: current_step_id,
+        userMessage: user_message_raw,
+        inputMode,
+        localeHint,
+        localeHintSource,
+        state: stateForTool,
+      })
+    : "";
+  const idempotencyRecordKey =
+    idempotencyKey && idempotencyRequestHash
+      ? buildIdempotencyRegistryKey(idempotencyScopeKey, idempotencyKey)
+      : "";
+  const idempotencyTracker =
+    idempotencyKey && idempotencyRequestHash && idempotencyRecordKey
+      ? {
+          idempotencyKey,
+          scopeKey: idempotencyScopeKey,
+          requestHash: idempotencyRequestHash,
+          registryKey: idempotencyRecordKey,
+        }
+      : null;
+
+  const buildIdempotencyErrorResult = (params: {
+    errorType: "idempotency_conflict" | "idempotency_inflight";
+    errorCode: string;
+    message: string;
+    retryAction: "retry_same_key" | "regenerate_key";
+    outcome: "conflict" | "inflight";
+  }): Record<string, unknown> => {
+    const normalizedState = (() => {
+      try {
+        return normalizeState(
+          (stateForTool && typeof stateForTool === "object" && stateForTool !== null)
+            ? stateForTool
+            : getDefaultState()
+        );
+      } catch {
+        return getDefaultState();
+      }
+    })();
+    const responseSeq = nextBootstrapResponseSeq();
+    const errorBase = {
+      ok: false as const,
+      tool: "run_step",
+      current_step_id: current_step_id || "step_0",
+      active_specialist: "",
+      text: "",
+      prompt: "",
+      specialist: {},
+      state: normalizedState,
+      error: {
+        type: params.errorType,
+        code: params.errorCode,
+        message: params.message,
+        retry_action: params.retryAction,
+      },
+    };
+    const withBootstrap = attachBootstrapDiagnostics({
+      responseKind: "run_step",
+      resultForClient: errorBase as Record<string, unknown>,
+      bootstrapSessionId: incomingOrdering.sessionId || normalizedBootstrapSessionId,
+      bootstrapEpoch: incomingOrdering.epoch || normalizedBootstrapEpoch,
+      responseSeq,
+      hostWidgetSessionId: hostWidgetSessionId || incomingOrdering.hostWidgetSessionId,
+    });
+    return attachIdempotencyDiagnostics({
+      resultForClient: withBootstrap,
+      idempotencyKey,
+      outcome: params.outcome,
+      errorCode: params.errorCode,
+    });
+  };
+
+  if (idempotencyTracker) {
+    purgeExpiredIdempotencyEntries(nowMs);
+    const existing = idempotencyRegistry.get(idempotencyTracker.registryKey);
+    if (existing) {
+      if (existing.requestHash !== idempotencyTracker.requestHash) {
+        const conflictResult = buildIdempotencyErrorResult({
+          errorType: "idempotency_conflict",
+          errorCode: IDEMPOTENCY_ERROR_CODES.CONFLICT,
+          message: "Deze idempotency key is al gebruikt met een ander request.",
+          retryAction: "regenerate_key",
+          outcome: "conflict",
+        });
+        logStructuredEvent(
+          "warn",
+          "idempotency_conflict",
+          {
+            correlation_id: correlationId,
+            session_id: incomingOrdering.sessionId || normalizedBootstrapSessionId,
+            step_id: stepIdStr || "step_0",
+            contract_id: resolveContractIdFromRecord(conflictResult),
+          },
+          {
+            input_mode: inputMode || "chat",
+            action,
+            idempotency_key_present: "true",
+            reason: "payload_mismatch",
+          }
+        );
+        const modelResult = buildModelSafeResult(conflictResult);
+        return {
+          structuredContent: {
+            title: `The Business Strategy Canvas Builder (${VERSION})`,
+            meta: "idempotency_conflict",
+            result: modelResult,
+          },
+          meta: { widget_result: conflictResult },
+        };
+      }
+      if (existing.status === "completed" && existing.resultForClient) {
+        const replayResult = attachIdempotencyDiagnostics({
+          resultForClient: cloneRecord(existing.resultForClient),
+          idempotencyKey,
+          outcome: "replay",
+          errorCode: IDEMPOTENCY_ERROR_CODES.REPLAY,
+        });
+        const replayState =
+          replayResult.state && typeof replayResult.state === "object"
+            ? (replayResult.state as Record<string, unknown>)
+            : {};
+        const replayStepMeta = safeString(replayState.current_step ?? current_step_id ?? "unknown") || "unknown";
+        const replaySpecialistMeta = safeString(replayResult.active_specialist ?? "unknown") || "unknown";
+        logStructuredEvent(
+          "info",
+          "idempotency_replay_served",
+          {
+            correlation_id: correlationId,
+            session_id: incomingOrdering.sessionId || normalizedBootstrapSessionId,
+            step_id: replayStepMeta,
+            contract_id: resolveContractIdFromRecord(replayResult),
+          },
+          {
+            input_mode: inputMode || "chat",
+            action,
+            idempotency_key_present: "true",
+          }
+        );
+        return {
+          structuredContent: {
+            title: `The Business Strategy Canvas Builder (${VERSION})`,
+            meta: `step: ${replayStepMeta} | specialist: ${replaySpecialistMeta}`,
+            result: buildModelSafeResult(replayResult),
+          },
+          meta: { widget_result: replayResult },
+        };
+      }
+      const inflightResult = buildIdempotencyErrorResult({
+        errorType: "idempotency_inflight",
+        errorCode: IDEMPOTENCY_ERROR_CODES.INFLIGHT,
+        message: "Een request met dezelfde idempotency key wordt al verwerkt.",
+        retryAction: "retry_same_key",
+        outcome: "inflight",
+      });
+      logStructuredEvent(
+        "warn",
+        "idempotency_replay_inflight",
+        {
+          correlation_id: correlationId,
+          session_id: incomingOrdering.sessionId || normalizedBootstrapSessionId,
+          step_id: stepIdStr || "step_0",
+          contract_id: resolveContractIdFromRecord(inflightResult),
+        },
+        {
+          input_mode: inputMode || "chat",
+          action,
+          idempotency_key_present: "true",
+        }
+      );
+      return {
+        structuredContent: {
+          title: `The Business Strategy Canvas Builder (${VERSION})`,
+          meta: "idempotency_inflight",
+          result: buildModelSafeResult(inflightResult),
+        },
+        meta: { widget_result: inflightResult },
+      };
+    }
+    markIdempotencyInFlight({
+      registryKey: idempotencyTracker.registryKey,
+      scopeKey: idempotencyTracker.scopeKey,
+      idempotencyKey: idempotencyTracker.idempotencyKey,
+      requestHash: idempotencyTracker.requestHash,
+      nowMs,
+    });
+  }
+
   if (incomingOrdering.sessionId && incomingOrdering.epoch > 0) {
     const staleCheck = isStaleBootstrapPayload({
       sessionId: incomingOrdering.sessionId,
@@ -744,12 +1307,21 @@ async function runStepHandler(args: {
       staleCheck.latest?.hostWidgetSessionId &&
       incomingOrdering.hostWidgetSessionId !== staleCheck.latest.hostWidgetSessionId
     ) {
-      console.warn("[host_session_mismatch_dropped]", {
-        input_mode: inputMode || "chat",
-        action,
-        incoming_host_widget_session_id: incomingOrdering.hostWidgetSessionId,
-        latest_host_widget_session_id: staleCheck.latest.hostWidgetSessionId,
-      });
+      logStructuredEvent(
+        "warn",
+        "host_session_mismatch_dropped",
+        {
+          correlation_id: correlationId,
+          session_id: incomingOrdering.sessionId,
+          step_id: stepIdStr || "step_0",
+          contract_id: resolveContractIdFromRecord({ state: stateForTool }),
+        },
+        {
+          input_mode: inputMode || "chat",
+          action,
+          host_widget_session_id_present: "true",
+        }
+      );
     }
     if (staleCheck.stale) {
       const staleSource =
@@ -765,39 +1337,51 @@ async function runStepHandler(args: {
               specialist: {},
               state: normalizeState(stateForTool),
             };
-      const staleResult = staleSource;
+      const staleResult = attachIdempotencyDiagnostics({
+        resultForClient: staleSource,
+        idempotencyKey,
+        outcome: "replay",
+        ...(idempotencyKey ? { errorCode: IDEMPOTENCY_ERROR_CODES.REPLAY } : {}),
+      });
       const staleStepMeta =
         safeString((staleResult.state as Record<string, unknown> | undefined)?.current_step ?? "unknown") || "unknown";
       const staleSpecialistMeta = safeString(staleResult.active_specialist ?? "unknown") || "unknown";
-      console.warn("[stale_bootstrap_payload_dropped]", {
-        input_mode: inputMode || "chat",
-        action,
-        session_id: incomingOrdering.sessionId,
-        host_widget_session_id: incomingOrdering.hostWidgetSessionId || "",
-        stale_reason: staleCheck.reason || "unknown",
-        payload_epoch: incomingOrdering.epoch,
-        payload_response_seq: incomingOrdering.responseSeq,
-        latest_epoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
-        latest_response_seq: staleCheck.latest?.lastResponseSeq || 0,
-        incoming_tuple: {
-          bootstrap_session_id: incomingOrdering.sessionId,
-          bootstrap_epoch: incomingOrdering.epoch,
-          response_seq: incomingOrdering.responseSeq,
-          host_widget_session_id: incomingOrdering.hostWidgetSessionId || "",
+      logStructuredEvent(
+        "warn",
+        "stale_bootstrap_payload_dropped",
+        {
+          correlation_id: correlationId,
+          session_id: incomingOrdering.sessionId,
+          step_id: stepIdStr || "step_0",
+          contract_id: resolveContractIdFromRecord(staleResult),
         },
-        latest_tuple: {
-          bootstrap_session_id: staleCheck.latest?.sessionId || "",
-          bootstrap_epoch: staleCheck.latest?.epoch || 0,
-          response_seq: staleCheck.latest?.lastResponseSeq || 0,
-          host_widget_session_id: staleCheck.latest?.hostWidgetSessionId || "",
-        },
-      });
+        {
+          input_mode: inputMode || "chat",
+          action,
+          stale_reason: staleCheck.reason || "unknown",
+          payload_epoch: incomingOrdering.epoch,
+          payload_response_seq: incomingOrdering.responseSeq,
+          latest_epoch: staleCheck.latest?.epoch || incomingOrdering.epoch,
+          latest_response_seq: staleCheck.latest?.lastResponseSeq || 0,
+          host_widget_session_id_present: incomingOrdering.hostWidgetSessionId ? "true" : "false",
+        }
+      );
       const modelResult = buildModelSafeResult(staleResult);
       const structuredContent: Record<string, unknown> = {
         title: `The Business Strategy Canvas Builder (${VERSION})`,
         meta: `step: ${staleStepMeta} | specialist: ${staleSpecialistMeta}`,
         result: modelResult,
       };
+      if (idempotencyTracker) {
+        markIdempotencyCompleted({
+          registryKey: idempotencyTracker.registryKey,
+          scopeKey: idempotencyTracker.scopeKey,
+          idempotencyKey: idempotencyTracker.idempotencyKey,
+          requestHash: idempotencyTracker.requestHash,
+          resultForClient: staleResult,
+          nowMs: Date.now(),
+        });
+      }
       return {
         structuredContent,
         meta: { widget_result: staleResult },
@@ -825,13 +1409,18 @@ async function runStepHandler(args: {
     const responseSeq = nextBootstrapResponseSeq();
     const sessionId = normalizeBootstrapSessionId(resultStateRaw.bootstrap_session_id ?? incomingOrdering.sessionId);
     const epoch = parsePositiveInt(resultStateRaw.bootstrap_epoch ?? incomingOrdering.epoch);
-    const resultForClient = attachBootstrapDiagnostics({
+    let resultForClient = attachBootstrapDiagnostics({
       responseKind: "run_step",
       resultForClient: resultForClientRaw,
       bootstrapSessionId: sessionId,
       bootstrapEpoch: epoch,
       responseSeq,
       hostWidgetSessionId,
+    });
+    resultForClient = attachIdempotencyDiagnostics({
+      resultForClient,
+      idempotencyKey,
+      outcome: "fresh",
     });
     const stepMeta =
       safeString((result as { state?: { current_step?: string } }).state?.current_step ?? "unknown") || "unknown";
@@ -856,27 +1445,36 @@ async function runStepHandler(args: {
     const bootstrapWaitingLocale = resultUiFlags.bootstrap_waiting_locale === true;
     const bootstrapRetryHint = safeString(resultUiFlags.bootstrap_retry_hint ?? "");
     const bootstrapRetryScheduled = bootstrapWaitingLocale && bootstrapRetryHint === "poll";
-    console.log("[run_step] response", {
-      input_mode: inputMode || "chat",
-      resolved_language: safeString(resultState.language ?? ""),
-      language_source: safeString(resultState.language_source ?? ""),
-      ui_strings_status: safeString(resultState.ui_strings_status ?? ""),
-      ui_translation_mode: safeString(resultState.ui_translation_mode ?? ""),
-      ui_strings_critical_ready: safeString(resultState.ui_strings_critical_ready ?? ""),
-      ui_strings_full_ready: safeString(resultState.ui_strings_full_ready ?? ""),
-      bootstrap_phase: safeString(resultState.bootstrap_phase ?? resultUiFlags.bootstrap_phase ?? ""),
-      ui_bootstrap_status: safeString(resultState.ui_bootstrap_status ?? ""),
-      ui_gate_status: safeString(resultState.ui_gate_status ?? ""),
-      ui_gate_reason: safeString(resultState.ui_gate_reason ?? ""),
-      ui_gate_since_ms: Number(resultState.ui_gate_since_ms ?? 0) || 0,
-      bootstrap_waiting_locale: bootstrapWaitingLocale,
-      bootstrap_retry_scheduled: bootstrapRetryScheduled,
-      ui_view_mode: safeString(resultUiView.mode ?? ""),
-      ui_action_start_present: safeString(resultState.ui_action_start ?? "") === "ACTION_START",
-      host_widget_session_id: hostWidgetSessionId || "",
-      current_step: safeString(resultState.current_step ?? stepMeta),
-      active_specialist: specialistMeta,
-    });
+    logStructuredEvent(
+      "info",
+      "run_step_response",
+      {
+        correlation_id: correlationId,
+        session_id: normalizeBootstrapSessionId(resultState.bootstrap_session_id ?? sessionId),
+        step_id: safeString(resultState.current_step ?? stepMeta) || "unknown",
+        contract_id: resolveContractIdFromRecord(resultForClient),
+      },
+      {
+        input_mode: inputMode || "chat",
+        resolved_language: safeString(resultState.language ?? ""),
+        language_source: safeString(resultState.language_source ?? ""),
+        ui_strings_status: safeString(resultState.ui_strings_status ?? ""),
+        ui_translation_mode: safeString(resultState.ui_translation_mode ?? ""),
+        ui_strings_critical_ready: safeString(resultState.ui_strings_critical_ready ?? ""),
+        ui_strings_full_ready: safeString(resultState.ui_strings_full_ready ?? ""),
+        bootstrap_phase: safeString(resultState.bootstrap_phase ?? resultUiFlags.bootstrap_phase ?? ""),
+        ui_bootstrap_status: safeString(resultState.ui_bootstrap_status ?? ""),
+        ui_gate_status: safeString(resultState.ui_gate_status ?? ""),
+        ui_gate_reason: safeString(resultState.ui_gate_reason ?? ""),
+        ui_gate_since_ms: Number(resultState.ui_gate_since_ms ?? 0) || 0,
+        bootstrap_waiting_locale: bootstrapWaitingLocale,
+        bootstrap_retry_scheduled: bootstrapRetryScheduled,
+        ui_view_mode: safeString(resultUiView.mode ?? ""),
+        ui_action_start_present: safeString(resultState.ui_action_start ?? "") === "ACTION_START",
+        host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
+        active_specialist: specialistMeta,
+      }
+    );
     const modelResult = buildModelSafeResult(resultForClient);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
@@ -887,6 +1485,16 @@ async function runStepHandler(args: {
       result: resultForClient,
       nowMs: Date.now(),
     });
+    if (idempotencyTracker) {
+      markIdempotencyCompleted({
+        registryKey: idempotencyTracker.registryKey,
+        scopeKey: idempotencyTracker.scopeKey,
+        idempotencyKey: idempotencyTracker.idempotencyKey,
+        requestHash: idempotencyTracker.requestHash,
+        resultForClient,
+        nowMs: Date.now(),
+      });
+    }
     return {
       structuredContent,
       meta: {
@@ -898,27 +1506,39 @@ async function runStepHandler(args: {
     const debugEnabled =
       process.env.LOCAL_DEV === "1" ||
       safeString((stateForTool as any)?.debug?.enable ?? "").toLowerCase() === "true";
-    console.error("[run_step] ERROR:", safeString(err?.message ?? err), safeString(err?.meta ?? ""));
-    if (err?.stack) {
-      console.error("[run_step] STACK:", safeString(err.stack));
-    }
-    if (debugEnabled) {
-      const details = err instanceof Error
-        ? [err.message, err.stack].filter(Boolean).join("\n")
-        : inspect(err, { depth: 8, breakLength: 120 });
-      console.error("[run_step] DEV: exception details:", details);
-      if (err?.cause) {
-        console.error("[run_step] DEV: cause:", inspect(err.cause, { depth: 8, breakLength: 120 }));
+    const errorStatus = err?.status ?? err?.statusCode ?? err?.response?.status;
+    const errorCode = err?.code ?? err?.response?.data?.code ?? err?.response?.data?.error?.code;
+    logStructuredEvent(
+      "error",
+      "run_step_error",
+      {
+        correlation_id: correlationId,
+        session_id: incomingOrdering.sessionId || normalizeBootstrapSessionId((stateForTool as any).bootstrap_session_id),
+        step_id: safeString((stateForTool as any).current_step ?? current_step_id) || "step_0",
+        contract_id: resolveContractIdFromRecord({ state: stateForTool }),
+      },
+      {
+        message: safeString(err?.message ?? err ?? "unknown_error"),
+        status: errorStatus === undefined ? "" : safeString(errorStatus),
+        code: errorCode === undefined ? "" : safeString(errorCode),
+        debug_enabled: debugEnabled ? "true" : "false",
       }
-      const status = err?.status ?? err?.statusCode ?? err?.response?.status;
-      if (status !== undefined) {
-        console.error("[run_step] DEV: status:", safeString(status));
-      }
-      const code = err?.code ?? err?.response?.data?.code ?? err?.response?.data?.error?.code;
-      if (code !== undefined) {
-        console.error("[run_step] DEV: code:", safeString(code));
-      }
-      console.error("[run_step] DEV: OPENAI_API_KEY present:", Boolean(process.env.OPENAI_API_KEY));
+    );
+    if (debugEnabled && err?.stack) {
+      logStructuredEvent(
+        "error",
+        "run_step_error_stack",
+        {
+          correlation_id: correlationId,
+          session_id: incomingOrdering.sessionId || normalizeBootstrapSessionId((stateForTool as any).bootstrap_session_id),
+          step_id: safeString((stateForTool as any).current_step ?? current_step_id) || "step_0",
+          contract_id: resolveContractIdFromRecord({ state: stateForTool }),
+        },
+        {
+          stack: safeString(err.stack),
+          openai_api_key_present: Boolean(process.env.OPENAI_API_KEY),
+        }
+      );
     }
     
     // Canonicalize fallback state so widget payload never leaks non-CanvasState fields.
@@ -951,7 +1571,7 @@ async function runStepHandler(args: {
         retry_action: "reload"
       },
     };
-    const fallbackResult = attachBootstrapDiagnostics({
+    let fallbackResult = attachBootstrapDiagnostics({
       responseKind: "run_step",
       resultForClient: fallbackResultBase as Record<string, unknown>,
       bootstrapSessionId: incomingOrdering.sessionId,
@@ -959,10 +1579,25 @@ async function runStepHandler(args: {
       responseSeq,
       hostWidgetSessionId: hostWidgetSessionId || incomingOrdering.hostWidgetSessionId,
     });
+    fallbackResult = attachIdempotencyDiagnostics({
+      resultForClient: fallbackResult,
+      idempotencyKey,
+      outcome: "fresh",
+    });
     registerBootstrapSnapshot({
       result: fallbackResult,
       nowMs: Date.now(),
     });
+    if (idempotencyTracker) {
+      markIdempotencyCompleted({
+        registryKey: idempotencyTracker.registryKey,
+        scopeKey: idempotencyTracker.scopeKey,
+        idempotencyKey: idempotencyTracker.idempotencyKey,
+        requestHash: idempotencyTracker.requestHash,
+        resultForClient: fallbackResult,
+        nowMs: Date.now(),
+      });
+    }
     const modelResult = buildModelSafeResult(fallbackResult as Record<string, unknown>);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
@@ -1020,6 +1655,31 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const responseSeq = parsePositiveInt((result as any).response_seq ?? state.response_seq);
   const responseKindRaw = safeString((result as any).response_kind || state.response_kind || "");
   const responseKind = responseKindRaw === "run_step" ? "run_step" : "";
+  const idempotencyKey = normalizeIdempotencyKey(
+    (result as any).idempotency_key ||
+      state.idempotency_key ||
+      flags.idempotency_key ||
+      ""
+  );
+  const idempotencyOutcomeRaw = safeString(
+    (result as any).idempotency_outcome ||
+      state.idempotency_outcome ||
+      flags.idempotency_outcome ||
+      ""
+  );
+  const idempotencyOutcome =
+    idempotencyOutcomeRaw === "fresh" ||
+    idempotencyOutcomeRaw === "replay" ||
+    idempotencyOutcomeRaw === "conflict" ||
+    idempotencyOutcomeRaw === "inflight"
+      ? idempotencyOutcomeRaw
+      : "";
+  const idempotencyErrorCode = safeString(
+    (result as any).idempotency_error_code ||
+      state.idempotency_error_code ||
+      flags.idempotency_error_code ||
+      ""
+  );
   const hostWidgetSessionId = safeString(
     (result as any).host_widget_session_id ||
       state.host_widget_session_id ||
@@ -1048,6 +1708,9 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (bootstrapEpoch > 0) safeState.bootstrap_epoch = bootstrapEpoch;
   if (responseSeq > 0) safeState.response_seq = responseSeq;
   if (responseKind) safeState.response_kind = responseKind;
+  if (idempotencyKey) safeState.idempotency_key = idempotencyKey;
+  if (idempotencyOutcome) safeState.idempotency_outcome = idempotencyOutcome;
+  if (idempotencyErrorCode) safeState.idempotency_error_code = idempotencyErrorCode;
   if (hostWidgetSessionId) safeState.host_widget_session_id = hostWidgetSessionId;
   return {
     model_result_shape_version: "v2_minimal",
@@ -1068,6 +1731,9 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     ...(bootstrapEpoch > 0 ? { bootstrap_epoch: bootstrapEpoch } : {}),
     ...(responseSeq > 0 ? { response_seq: responseSeq } : {}),
     ...(responseKind ? { response_kind: responseKind } : {}),
+    ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+    ...(idempotencyOutcome ? { idempotency_outcome: idempotencyOutcome } : {}),
+    ...(idempotencyErrorCode ? { idempotency_error_code: idempotencyErrorCode } : {}),
     ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
     state: safeState,
   };
@@ -1158,24 +1824,13 @@ function createAppServer(baseUrl: string): McpServer {
     locale_hint_source: z
       .enum(["openai_locale", "webplus_i18n", "request_header", "message_detect", "none"])
       .optional(),
+    idempotency_key: z.string().optional(),
     host_widget_session_id: z.string().optional(),
     // Use CanvasStateZod schema for type safety and validation
     // .partial() makes all fields optional (for empty/partial state)
     // .passthrough() allows extra fields for backwards compatibility (transient fields, etc.)
     state: z.preprocess(canonicalizeStateForToolInput, CanvasStateZod.partial().passthrough().optional()),
   });
-  const ModelSafeResultOutputSchema = z.object({
-    model_result_shape_version: z.literal("v2_minimal"),
-    ok: z.boolean(),
-    tool: z.string(),
-    current_step_id: z.string(),
-    state: z.record(z.string(), z.unknown()),
-  }).passthrough();
-  const ToolStructuredContentOutputSchema = z.object({
-    title: z.string().optional(),
-    meta: z.string().optional(),
-    result: ModelSafeResultOutputSchema,
-  }).passthrough();
 
   server.registerTool(
     "run_step",
@@ -1212,6 +1867,7 @@ function createAppServer(baseUrl: string): McpServer {
         normalizedStepId,
         (args.state ?? {}) as Record<string, unknown>
       );
+      const correlationId = resolveCorrelationIdFromExtra(extra);
       const localeFromExtra = resolveLocaleHintFromExtra(extra);
       const hostWidgetSessionId = normalizeHostWidgetSessionId(
         args.host_widget_session_id ?? resolveHostWidgetSessionIdFromExtra(extra)
@@ -1221,12 +1877,20 @@ function createAppServer(baseUrl: string): McpServer {
         args.locale_hint_source,
         localeFromExtra
       );
+      const idempotencyKey =
+        normalizeIdempotencyKey(args.idempotency_key) ||
+        resolveIdempotencyKeyFromExtra(extra) ||
+        normalizeIdempotencyKey(
+          (args.state as Record<string, unknown> | undefined)?.__client_action_id ?? ""
+        );
       const { structuredContent, meta } = await runStepHandler({
         current_step_id: safeString(args.current_step_id ?? ""),
         user_message: safeString(args.user_message ?? ""),
         input_mode: args.input_mode,
         locale_hint: mergedLocale.locale_hint,
         locale_hint_source: mergedLocale.locale_hint_source,
+        idempotency_key: idempotencyKey,
+        correlation_id: correlationId,
         host_widget_session_id: hostWidgetSessionId,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
@@ -1352,6 +2016,8 @@ const httpServer = async (req: any, res: any) => {
   if (isLocalDev) {
     // POST /run_step — bridge endpoint: same handler as MCP tool, same structuredContent shape.
     if (req.method === "POST" && url.pathname === "/run_step") {
+      const correlationId = getCorrelationId(req);
+      ensureCorrelationHeader(res, correlationId);
       let body = "";
       for await (const chunk of req) body += chunk;
       try {
@@ -1361,22 +2027,46 @@ const httpServer = async (req: any, res: any) => {
           input_mode?: "widget" | "chat";
           locale_hint?: string;
           locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
+          idempotency_key?: string;
           host_widget_session_id?: string;
           state?: Record<string, unknown>;
         };
+        const idempotencyKeyFromHeaders =
+          normalizeIdempotencyKey(getHeader(req, "idempotency-key")) ||
+          normalizeIdempotencyKey(getHeader(req, "x-idempotency-key"));
         const { structuredContent, meta } = await runStepHandler({
           current_step_id: safeString(args.current_step_id ?? "step_0") || "step_0",
           user_message: safeString(args.user_message ?? ""),
           input_mode: args.input_mode,
           locale_hint: safeString(args.locale_hint ?? ""),
           locale_hint_source: args.locale_hint_source ?? "none",
+          idempotency_key:
+            normalizeIdempotencyKey(args.idempotency_key) ||
+            idempotencyKeyFromHeaders ||
+            normalizeIdempotencyKey(
+              (args.state as Record<string, unknown> | undefined)?.__client_action_id ?? ""
+            ),
+          correlation_id: correlationId,
           host_widget_session_id: normalizeHostWidgetSessionId(args.host_widget_session_id),
           state: args.state,
         });
+        const parsedStructuredContent = ToolStructuredContentOutputSchema.parse(structuredContent);
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ structuredContent, ...(meta ? { _meta: meta } : {}) }));
+        res.end(JSON.stringify({ structuredContent: parsedStructuredContent, ...(meta ? { _meta: meta } : {}) }));
       } catch (e) {
-        console.error("[POST /run_step]", e);
+        logStructuredEvent(
+          "error",
+          "post_run_step_error",
+          {
+            correlation_id: correlationId,
+            session_id: "",
+            step_id: "",
+            contract_id: "",
+          },
+          {
+            message: safeString((e as Error)?.message ?? e),
+          }
+        );
         res.writeHead(500, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: safeString((e as Error)?.message ?? e) }));
       }
@@ -1547,18 +2237,24 @@ const httpServer = async (req: any, res: any) => {
         }
         (req as any).__bodySize = raw.length;
         const hashPrefix = createHash("sha256").update(raw.slice(0, 256)).digest("hex");
-        console.warn(
-          "[mcp] request",
-          JSON.stringify({
-            correlationId,
+        logStructuredEvent(
+          "info",
+          "mcp_request_received",
+          {
+            correlation_id: correlationId,
+            session_id: "",
+            step_id: "",
+            contract_id: "",
+          },
+          {
             method: req.method,
             url: req.url,
-            contentType,
+            content_type: contentType,
             accept: acceptHeader,
-            contentLength,
-            bodySize: raw.length,
-            bodyHashPrefix: hashPrefix,
-          })
+            content_length: contentLength,
+            body_size: raw.length,
+            body_hash_prefix: hashPrefix,
+          }
         );
         try {
           parsedBody = JSON.parse(raw.toString("utf-8"));
@@ -1589,7 +2285,19 @@ const httpServer = async (req: any, res: any) => {
       await mcpServer.connect(transport);
       await transport.handleRequest(req, res, parsedBody);
     } catch (error) {
-      console.error("Error handling MCP request:", error);
+      logStructuredEvent(
+        "error",
+        "mcp_request_error",
+        {
+          correlation_id: correlationId,
+          session_id: "",
+          step_id: "",
+          contract_id: "",
+        },
+        {
+          message: safeString((error as Error)?.message ?? error),
+        }
+      );
       if (!res.headersSent) {
         const errPayload = jsonRpcErrorResponse(500, "Internal server error", {
           error_code: "server_error",

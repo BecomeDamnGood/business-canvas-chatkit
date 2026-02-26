@@ -24,6 +24,31 @@ export function isCanonicalStepId(x: unknown): x is CanonicalStepId {
   return typeof x === "string" && (CANONICAL_STEPS as readonly string[]).includes(x);
 }
 
+/**
+ * SSOT: canonical step -> persisted final field.
+ * Keep this map as the single owner for step/final routing.
+ */
+export const STEP_FINAL_FIELD_BY_STEP_ID = {
+  step_0: "step_0_final",
+  dream: "dream_final",
+  purpose: "purpose_final",
+  bigwhy: "bigwhy_final",
+  role: "role_final",
+  entity: "entity_final",
+  strategy: "strategy_final",
+  targetgroup: "targetgroup_final",
+  productsservices: "productsservices_final",
+  rulesofthegame: "rulesofthegame_final",
+  presentation: "presentation_brief_final",
+} as const satisfies Record<CanonicalStepId, string>;
+
+export type StepFinalField = (typeof STEP_FINAL_FIELD_BY_STEP_ID)[CanonicalStepId];
+
+export function getFinalFieldForStepId(stepId: string): StepFinalField | "" {
+  if (!isCanonicalStepId(stepId)) return "";
+  return STEP_FINAL_FIELD_BY_STEP_ID[stepId];
+}
+
 export const BoolStringZod = z.enum(["true", "false"]);
 export type BoolString = z.infer<typeof BoolStringZod>;
 export const DreamRuntimeModeZod = z.enum([
@@ -50,6 +75,9 @@ export const LANGUAGE_SOURCES = [
 ] as const;
 export const LanguageSourceZod = z.enum(LANGUAGE_SOURCES);
 export type LanguageSource = z.infer<typeof LanguageSourceZod>;
+export const IDEMPOTENCY_OUTCOMES = ["", "fresh", "replay", "conflict", "inflight"] as const;
+export const IdempotencyOutcomeZod = z.enum(IDEMPOTENCY_OUTCOMES);
+export type IdempotencyOutcome = z.infer<typeof IdempotencyOutcomeZod>;
 
 export function normalizeStateLanguageSource(raw: unknown): LanguageSource {
   const source = String(raw ?? "").trim();
@@ -103,6 +131,19 @@ function languageFromLocale(raw: unknown): string {
   const locale = normalizeLocaleTag(raw);
   if (!locale) return "";
   return locale.split("-")[0] || "";
+}
+
+function normalizeIdempotencyOutcome(raw: unknown): IdempotencyOutcome {
+  const outcome = String(raw ?? "").trim();
+  if (
+    outcome === "fresh" ||
+    outcome === "replay" ||
+    outcome === "conflict" ||
+    outcome === "inflight"
+  ) {
+    return outcome;
+  }
+  return "";
 }
 export const UI_STRINGS_STATUSES = ["pending", "critical_ready", "ready"] as const;
 export const UiStringsStatusZod = z.enum(UI_STRINGS_STATUSES);
@@ -240,6 +281,9 @@ export const CanvasStateZod = z.object({
   response_seq: z.number().int().nonnegative().optional(),
   response_kind: z.enum(["run_step"]).optional(),
   host_widget_session_id: z.string().optional(),
+  idempotency_key: z.string(),
+  idempotency_outcome: IdempotencyOutcomeZod,
+  idempotency_error_code: z.string(),
 
   // last output (used for proceed triggers / transitions)
   // FIX (Zod v4): record needs key + value schema
@@ -314,6 +358,9 @@ export function getDefaultState(): CanvasState {
     ui_strings_full_ready: "false",
     ui_strings_background_inflight: "true",
     view_contract_version: DEFAULT_VIEW_CONTRACT_VERSION,
+    idempotency_key: "",
+    idempotency_outcome: "",
+    idempotency_error_code: "",
 
     last_specialist_result: {},
 
@@ -477,6 +524,9 @@ export function normalizeState(raw: unknown): CanvasState {
   const response_kind: "run_step" | "" =
     response_kind_raw === "run_step" ? "run_step" : "";
   const host_widget_session_id = String((r as any).host_widget_session_id ?? "").trim();
+  const idempotency_key = String((r as any).idempotency_key ?? "").trim();
+  const idempotency_outcome = normalizeIdempotencyOutcome((r as any).idempotency_outcome);
+  const idempotency_error_code = String((r as any).idempotency_error_code ?? "").trim();
 
   const last_specialist_result =
     typeof r.last_specialist_result === "object" && r.last_specialist_result !== null
@@ -579,6 +629,9 @@ export function normalizeState(raw: unknown): CanvasState {
     ...(response_seq > 0 ? { response_seq } : {}),
     ...(response_kind ? { response_kind } : {}),
     ...(host_widget_session_id ? { host_widget_session_id } : {}),
+    idempotency_key,
+    idempotency_outcome,
+    idempotency_error_code,
 
     last_specialist_result,
 
@@ -925,17 +978,7 @@ export function persistDream(state: CanvasState, dreamLine: string): CanvasState
  */
 export const FINALS_KEYS = [
   "business_name",
-  "step_0_final",
-  "dream_final",
-  "purpose_final",
-  "bigwhy_final",
-  "role_final",
-  "entity_final",
-  "strategy_final",
-  "targetgroup_final",
-  "productsservices_final",
-  "rulesofthegame_final",
-  "presentation_brief_final",
+  ...Object.values(STEP_FINAL_FIELD_BY_STEP_ID),
 ] as const;
 
 export type FinalsKey = (typeof FINALS_KEYS)[number];

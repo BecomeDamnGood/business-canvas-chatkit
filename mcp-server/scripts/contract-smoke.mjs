@@ -191,8 +191,12 @@ async function main() {
     },
   });
   cases.push(["seeded_no_click_start", seededNoClickStart]);
-  assert.equal(String(stateOf(seededNoClickStart).step_0_final || "").includes("Name: Mindd"), true, "seeded_no_click_start: step_0 should be seeded");
-  assert.equal(String(seededNoClickStart.prompt || "").includes("Click Start"), false, "seeded_no_click_start: click-start prompt must be bypassed");
+  const seededNoClickState = stateOf(seededNoClickStart);
+  const seededNoClickStartHint = String((seededNoClickState.ui_strings || {}).startHint || "").trim();
+  assert.equal(String(seededNoClickState.step_0_final || ""), "", "seeded_no_click_start: step_0 must stay unseeded before explicit start");
+  assert.equal(String(seededNoClickState.started || "").toLowerCase(), "false", "seeded_no_click_start: started must remain false before explicit start");
+  assert.equal(seededNoClickStartHint.length > 0, true, "seeded_no_click_start: localized start hint required");
+  assert.equal(String(seededNoClickStart.prompt || "").trim(), seededNoClickStartHint, "seeded_no_click_start: prompt must keep click-start gate");
 
   const poll1 = await run_step({
     current_step_id: "step_0",
