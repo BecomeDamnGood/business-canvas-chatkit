@@ -6,6 +6,8 @@
 | --- | --- | --- | --- |
 | PR1 | Freeze runtime behavior/contracts with runtime goldens and contract tests | completed | pending (set by commit command) |
 | PR2 | Add runtime-first architecture checks and CI gate | completed | pending (set by commit command) |
+| PR3 | Introduce typed run-step context + ports backbone and rewire runtime/pipeline/routes wiring | completed | pending (set by commit command) |
+| PR4 | Enforce DI budget and split runtime helper factories into grouped ports/services | completed | pending (set by commit command) |
 
 ## Entry Template
 
@@ -118,5 +120,41 @@
   - `git diff --numstat -- mcp-server/src/handlers/run_step_modules.ts mcp-server/src/handlers/run_step_pipeline.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_context.ts mcp-server/src/handlers/run_step_ports.ts mcp-server/src/handlers/run_step_runtime_backbone.ts docs/run_step_runtime_refactor_execution_log.md | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}'` => `adds=193 dels=751 total=944`
   - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `20`
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2983`
+  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `300`
+- commit hash: pending (captured after commit command)
+
+### PR4 - 2026-02-26
+- status: completed
+- scope goal: Enforce DI budget and split mega-factory dependencies into grouped typed services/interfaces.
+- completed:
+  - Added `run_step_di_budget_check.mjs` and enforced a hard `<=12` top-level dependency budget per runtime helper factory (`createRunStepRouteHelpers`, `createRunStepPipelineHelpers`) with zero exceptions.
+  - Refactored route/pipeline ports into grouped service bundles in `run_step_ports.ts` to shrink factory DI surfaces.
+  - Added adapter flatteners in `run_step_routes.ts` and `run_step_pipeline.ts` so runtime behavior stays parity-stable while factories consume grouped DI.
+  - Rewired `run_step_runtime.ts` to construct grouped route/pipeline port objects.
+  - Added CI gate to run `arch:run-step:di-budget` in `mcp_server` job.
+  - Kept runtime LOC under phase_R1 limit after wiring (`2979 <= 3000`).
+- pending:
+  - None.
+- changed files:
+  - mcp-server/scripts/arch/run_step_di_budget_check.mjs
+  - mcp-server/package.json
+  - mcp-server/src/handlers/run_step_ports.ts
+  - mcp-server/src/handlers/run_step_routes.ts
+  - mcp-server/src/handlers/run_step_pipeline.ts
+  - mcp-server/src/handlers/run_step_runtime.ts
+  - .github/workflows/ci.yml
+  - docs/run_step_runtime_refactor_execution_log.md
+- tests:
+  - `npm --prefix mcp-server run build` (pass)
+  - `node mcp-server/scripts/ui_artifact_parity_check.mjs` (pass)
+  - `node --loader ts-node/esm scripts/contract-smoke.mjs` (workdir `mcp-server`) (pass)
+  - `npm --prefix mcp-server test` (pass)
+  - `npm --prefix mcp-server run arch:run-step:di-budget` (pass)
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R1 npm --prefix mcp-server run arch:run-step-runtime:check` (pass)
+- metrics:
+  - `git diff --name-only | wc -l` => `8`
+  - `git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}'` => `adds=231 dels=80 total=311`
+  - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `1`
+  - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2979`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `300`
 - commit hash: pending (captured after commit command)

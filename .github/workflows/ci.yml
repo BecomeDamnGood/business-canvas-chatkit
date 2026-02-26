@@ -153,6 +153,10 @@ jobs:
           RUN_STEP_RUNTIME_ARCH_PHASE: phase_R0
         run: npm run arch:run-step-runtime:check
 
+      - name: Run-step DI budget guardrails
+        working-directory: mcp-server
+        run: npm run arch:run-step:di-budget
+
       - name: Test
         working-directory: mcp-server
         run: npm test

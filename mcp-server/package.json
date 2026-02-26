@@ -12,6 +12,7 @@
     "arch:run-step:loc": "node scripts/arch/run_step_loc_check.mjs",
     "arch:run-step:boundary": "node scripts/arch/run_step_boundary_check.mjs",
     "arch:run-step:complexity": "node scripts/arch/run_step_complexity_check.mjs",
+    "arch:run-step:di-budget": "node scripts/arch/run_step_di_budget_check.mjs",
     "arch:run-step:check": "npm run arch:run-step:loc && npm run arch:run-step:boundary && npm run arch:run-step:complexity",
     "arch:run-step-runtime:loc": "node scripts/arch/run_step_runtime_loc_check.mjs",
     "arch:run-step-runtime:boundary": "node scripts/arch/run_step_runtime_boundary_check.mjs",

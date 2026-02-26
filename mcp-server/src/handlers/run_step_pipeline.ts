@@ -8,6 +8,18 @@ import type { RunStepPipelinePorts } from "./run_step_ports.js";
 import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
+type RunStepPipelineFlatPorts<TPayload> =
+  & RunStepPipelinePorts<TPayload>["ids"]
+  & RunStepPipelinePorts<TPayload>["policy"]
+  & RunStepPipelinePorts<TPayload>["specialist"]
+  & RunStepPipelinePorts<TPayload>["normalization"]
+  & RunStepPipelinePorts<TPayload>["state"]
+  & RunStepPipelinePorts<TPayload>["render"]
+  & RunStepPipelinePorts<TPayload>["wording"]
+  & RunStepPipelinePorts<TPayload>["response"]
+  & RunStepPipelinePorts<TPayload>["guard"]
+  & RunStepPipelinePorts<TPayload>["i18n"];
+
 const POST_SPECIALIST_STAGE_ORDER = [
   "pre_guard_normalization",
   "repair_attempts",
@@ -18,7 +30,25 @@ const POST_SPECIALIST_STAGE_ORDER = [
   "contract_propagation",
 ] as const;
 
-export function createRunStepPipelineHelpers<TPayload>(deps: RunStepPipelinePorts<TPayload>) {
+function flattenRunStepPipelinePorts<TPayload>(
+  ports: RunStepPipelinePorts<TPayload>
+): RunStepPipelineFlatPorts<TPayload> {
+  return {
+    ...ports.ids,
+    ...ports.policy,
+    ...ports.specialist,
+    ...ports.normalization,
+    ...ports.state,
+    ...ports.render,
+    ...ports.wording,
+    ...ports.response,
+    ...ports.guard,
+    ...ports.i18n,
+  };
+}
+
+export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePorts<TPayload>) {
+  const deps = flattenRunStepPipelinePorts(ports);
   function buildContractViolationPayload(params: {
     state: CanvasState;
     stepId: string;

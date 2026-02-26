@@ -15,6 +15,19 @@ import {
 export type RenderedRouteOutput = RunStepRenderedRouteOutput;
 export type RouteRegistryContext = RunStepRouteRegistryRequest;
 
+type RunStepRouteFlatPorts<TResponse> =
+  & RunStepRoutePorts<TResponse>["ids"]
+  & RunStepRoutePorts<TResponse>["tokens"]
+  & RunStepRoutePorts<TResponse>["wording"]
+  & RunStepRoutePorts<TResponse>["state"]
+  & RunStepRoutePorts<TResponse>["contracts"]
+  & RunStepRoutePorts<TResponse>["step0"]
+  & RunStepRoutePorts<TResponse>["presentation"]
+  & RunStepRoutePorts<TResponse>["specialist"]
+  & RunStepRoutePorts<TResponse>["response"]
+  & RunStepRoutePorts<TResponse>["suggestions"]
+  & RunStepRoutePorts<TResponse>["i18n"];
+
 type SpecialRouteHandler<TResponse> = {
   id: string;
   canHandle: (context: RouteRegistryContext) => boolean;
@@ -30,6 +43,22 @@ const ROUTE_REGISTRY_ORDER = [
   "start_prestart",
   "dream_start_exercise",
 ] as const;
+
+function flattenRunStepRoutePorts<TResponse>(ports: RunStepRoutePorts<TResponse>): RunStepRouteFlatPorts<TResponse> {
+  return {
+    ...ports.ids,
+    ...ports.tokens,
+    ...ports.wording,
+    ...ports.state,
+    ...ports.contracts,
+    ...ports.step0,
+    ...ports.presentation,
+    ...ports.specialist,
+    ...ports.response,
+    ...ports.suggestions,
+    ...ports.i18n,
+  };
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") return {};
@@ -56,7 +85,7 @@ function parseSubmitScoresPayload(
 }
 
 function buildRenderedContractViolationResponse<TResponse>(params: {
-  deps: RunStepRoutePorts<TResponse>;
+  deps: RunStepRouteFlatPorts<TResponse>;
   state: CanvasState;
   currentStepId: string;
   activeSpecialist: string;
@@ -87,7 +116,7 @@ function buildRenderedContractViolationResponse<TResponse>(params: {
 }
 
 function updateRenderedState(
-  deps: RunStepRoutePorts<unknown>,
+  deps: RunStepRouteFlatPorts<unknown>,
   state: CanvasState,
   rendered: RenderedRouteOutput
 ): CanvasState {
@@ -96,7 +125,8 @@ function updateRenderedState(
   return state;
 }
 
-export function createRunStepRouteHelpers<TResponse>(deps: RunStepRoutePorts<TResponse>) {
+export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TResponse>) {
+  const deps = flattenRunStepRoutePorts(ports);
   const registryById: Record<string, SpecialRouteHandler<TResponse>> = {
     synthetic_dream_pick: {
       id: "synthetic_dream_pick",
@@ -174,7 +204,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RunStepRoutePorts<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextState, rendered);
+        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextState, rendered);
         const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
 
         const payload = deps.attachRegistryPayload(
@@ -277,7 +307,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RunStepRoutePorts<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextState, rendered);
+        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextState, rendered);
         const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
 
         const payload = deps.attachRegistryPayload(
@@ -566,7 +596,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RunStepRoutePorts<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextStateFormulation, rendered);
+        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextStateFormulation, rendered);
 
         const nextStateWithUi = await deps.ensureUiStrings(nextStateFormulation, context.userMessage);
         const payload = deps.attachRegistryPayload(
@@ -676,7 +706,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RunStepRoutePorts<TRe
             });
           }
 
-          updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextState, rendered);
+          updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextState, rendered);
           const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
 
           const payload = deps.attachRegistryPayload(
@@ -769,7 +799,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RunStepRoutePorts<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextState, rendered);
+        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextState, rendered);
 
         const nextStateWithUi = await deps.ensureUiStrings(nextState, context.userMessage);
         const payload = deps.attachRegistryPayload(
@@ -1069,7 +1099,7 @@ export function createRunStepRouteHelpers<TResponse>(deps: RunStepRoutePorts<TRe
           });
         }
 
-        updateRenderedState(deps as unknown as RunStepRoutePorts<unknown>, nextStateDream, rendered);
+        updateRenderedState(deps as unknown as RunStepRouteFlatPorts<unknown>, nextStateDream, rendered);
 
         const payload = deps.attachRegistryPayload(
           {

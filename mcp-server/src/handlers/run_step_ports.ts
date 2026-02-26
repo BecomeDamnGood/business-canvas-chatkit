@@ -56,7 +56,13 @@ export type RunStepCallSpecialistFailure<TPayload> = {
   payload: TPayload;
 };
 
-export type RunStepRoutePorts<TResponse> = {
+type RunStepCallSpecialist<TPayload> = (
+  params: { model: string; state: CanvasState; decision: OrchestratorOutput; userMessage: string },
+  routing: RunStepSpecialistRouting,
+  stateForError: CanvasState
+) => Promise<RunStepCallSpecialistSuccess | RunStepCallSpecialistFailure<TPayload>>;
+
+export type RunStepRouteIdPorts = {
   step0Id: string;
   step0Specialist: string;
   dreamStepId: string;
@@ -66,30 +72,50 @@ export type RunStepRoutePorts<TResponse> = {
   roleSpecialist: string;
   presentationStepId: string;
   presentationSpecialist: string;
+};
+
+export type RunStepRouteTokenPorts = {
   dreamPickOneRouteToken: string;
   roleChooseForMeRouteToken: string;
   presentationMakeRouteToken: string;
   switchToSelfDreamToken: string;
   dreamStartExerciseRouteToken: string;
+};
+
+export type RunStepRouteWordingPorts = {
   wordingSelectionMessage: (stepId: string, state: CanvasState, activeSpecialist?: string) => string;
   pickPrompt: (specialist: any) => string;
   buildTextForWidget: (params: { specialist: any }) => string;
+};
+
+export type RunStepRouteStatePorts = {
   applyStateUpdate: (params: any) => CanvasState;
   setDreamRuntimeMode: (state: CanvasState, mode: RunStepDreamRuntimeMode) => void;
   getDreamRuntimeMode: (state: CanvasState) => RunStepDreamRuntimeMode;
+  isUiStateHygieneSwitchV1Enabled: () => boolean;
+  clearStepInteractiveState: (state: CanvasState, stepId: string) => CanvasState;
+};
+
+export type RunStepRouteContractPorts = {
   renderFreeTextTurnPolicy: (params: any) => any;
   validateRenderedContractOrRecover: (params: any) => RunStepValidatedRenderedResult;
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
   ensureUiStrings: (state: CanvasState, routeOrText: string) => Promise<CanvasState>;
+  buildContractId: (...args: any[]) => string;
+};
+
+export type RunStepRouteStep0Ports = {
   ensureStartState: (
     state: CanvasState,
     routeOrText: string
   ) => Promise<{ state: CanvasState; interactiveReady: boolean }>;
-  attachRegistryPayload: (...args: any[]) => any;
-  finalizeResponse: (response: TResponse) => TResponse;
-  pickDreamSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
-  pickDreamCandidateFromState: (state: CanvasState) => string;
-  pickRoleSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
+  parseStep0Final: (...args: any[]) => any;
+  step0ReadinessQuestion: (...args: any[]) => string;
+  step0CardDescForState: (state: CanvasState | null | undefined) => string;
+  step0QuestionForState: (state: CanvasState | null | undefined) => string;
+};
+
+export type RunStepRoutePresentationPorts = {
   hasPresentationTemplate: () => boolean;
   generatePresentationPptx: (state: CanvasState) => { fileName: string; filePath: string };
   convertPptxToPdf: (pptxPath: string, outDir: string) => string;
@@ -98,24 +124,44 @@ export type RunStepRoutePorts<TResponse> = {
   baseUrlFromEnv: () => string;
   uiStringFromStateMap: (state: CanvasState | null | undefined, key: string, fallback: string) => string;
   uiDefaultString: (key: string, fallback?: string) => string;
-  buildContractId: (...args: any[]) => string;
-  parseStep0Final: (...args: any[]) => any;
-  step0ReadinessQuestion: (...args: any[]) => string;
-  step0CardDescForState: (state: CanvasState | null | undefined) => string;
-  step0QuestionForState: (state: CanvasState | null | undefined) => string;
-  callSpecialistStrictSafe: (
-    params: { model: string; state: CanvasState; decision: OrchestratorOutput; userMessage: string },
-    routing: RunStepSpecialistRouting,
-    stateForError: CanvasState
-  ) => Promise<RunStepCallSpecialistSuccess | RunStepCallSpecialistFailure<TResponse>>;
+};
+
+export type RunStepRouteSpecialistPorts<TResponse> = {
+  callSpecialistStrictSafe: RunStepCallSpecialist<TResponse>;
   buildRoutingContext: (routeOrText: string) => RunStepSpecialistRouting;
   rememberLlmCall: (value: { attempts: number; usage: any; model: string }) => void;
-  isUiStateHygieneSwitchV1Enabled: () => boolean;
-  clearStepInteractiveState: (state: CanvasState, stepId: string) => CanvasState;
+};
+
+export type RunStepRouteResponsePorts<TResponse> = {
+  attachRegistryPayload: (...args: any[]) => any;
+  finalizeResponse: (response: TResponse) => TResponse;
+};
+
+export type RunStepRouteSuggestionPorts = {
+  pickDreamSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
+  pickDreamCandidateFromState: (state: CanvasState) => string;
+  pickRoleSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
+};
+
+export type RunStepRouteI18nPorts = {
   bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
 };
 
-export type RunStepPipelinePorts<TPayload> = {
+export type RunStepRoutePorts<TResponse> = {
+  ids: RunStepRouteIdPorts;
+  tokens: RunStepRouteTokenPorts;
+  wording: RunStepRouteWordingPorts;
+  state: RunStepRouteStatePorts;
+  contracts: RunStepRouteContractPorts;
+  step0: RunStepRouteStep0Ports;
+  presentation: RunStepRoutePresentationPorts;
+  specialist: RunStepRouteSpecialistPorts<TResponse>;
+  response: RunStepRouteResponsePorts<TResponse>;
+  suggestions: RunStepRouteSuggestionPorts;
+  i18n: RunStepRouteI18nPorts;
+};
+
+export type RunStepPipelineIdPorts = {
   step0Id: string;
   dreamStepId: string;
   bigwhyStepId: string;
@@ -124,17 +170,21 @@ export type RunStepPipelinePorts<TPayload> = {
   dreamExplainerSpecialist: string;
   strategySpecialist: string;
   dreamExplainerSwitchSelfMenuId: string;
+};
+
+export type RunStepPipelinePolicyPorts = {
   dreamForceRefineRoutePrefix: string;
   strategyConsolidateRouteToken: string;
   bigwhyMaxWords: number;
   uiContractVersion: string;
+};
+
+export type RunStepPipelineSpecialistPorts<TPayload> = {
   buildRoutingContext: (routeOrText: string) => RunStepSpecialistRouting;
-  callSpecialistStrictSafe: (
-    params: { model: string; state: CanvasState; decision: OrchestratorOutput; userMessage: string },
-    routing: RunStepSpecialistRouting,
-    stateForError: CanvasState
-  ) => Promise<RunStepCallSpecialistSuccess | RunStepCallSpecialistFailure<TPayload>>;
-  attachRegistryPayload: (...args: any[]) => TPayload;
+  callSpecialistStrictSafe: RunStepCallSpecialist<TPayload>;
+};
+
+export type RunStepPipelineNormalizationPorts = {
   normalizeEntitySpecialistResult: (stepId: string, specialist: any) => any;
   applyCentralMetaTopicRouter: (params: {
     stepId: string;
@@ -157,6 +207,9 @@ export type RunStepPipelinePorts<TPayload> = {
     userInput?: string
   ) => any;
   hasValidStep0Final: (value: string) => boolean;
+};
+
+export type RunStepPipelineStatePorts = {
   applyPostSpecialistStateMutations: (params: {
     prevState: CanvasState;
     decision: OrchestratorOutput;
@@ -176,10 +229,30 @@ export type RunStepPipelinePorts<TPayload> = {
   pickBigWhyCandidate: (result: any) => string;
   countWords: (text: string) => number;
   buildBigWhyTooLongFeedback: (stateForText: CanvasState) => any;
+  enforceDreamBuilderQuestionProgress: (
+    specialistResult: any,
+    params: {
+      currentStepId: string;
+      activeSpecialist: string;
+      canonicalStatementCount: number;
+      wordingChoicePending: boolean;
+      state: CanvasState;
+    }
+  ) => any;
+  applyMotivationQuotesContractV11: (params: any) => {
+    specialistResult: Record<string, unknown>;
+    suppressChoices: boolean;
+  };
+};
+
+export type RunStepPipelineRenderPorts = {
   renderFreeTextTurnPolicy: (params: any) => RunStepRenderedPolicyResult;
   validateRenderedContractOrRecover: (params: any) => RunStepValidatedRenderedResult;
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
   buildContractId: (stepId: string, status: any, menuId: string) => string;
+};
+
+export type RunStepPipelineWordingPorts = {
   isWordingChoiceEligibleContext: (
     stepId: string,
     activeSpecialist: string,
@@ -207,24 +280,33 @@ export type RunStepPipelinePorts<TPayload> = {
     stepId: string,
     dreamRuntimeModeRaw?: unknown
   ) => WordingChoiceUiPayload | null;
-  enforceDreamBuilderQuestionProgress: (
-    specialistResult: any,
-    params: {
-      currentStepId: string;
-      activeSpecialist: string;
-      canonicalStatementCount: number;
-      wordingChoicePending: boolean;
-      state: CanvasState;
-    }
-  ) => any;
-  applyMotivationQuotesContractV11: (params: any) => {
-    specialistResult: Record<string, unknown>;
-    suppressChoices: boolean;
-  };
+};
+
+export type RunStepPipelineResponsePorts<TPayload> = {
+  attachRegistryPayload: (...args: any[]) => TPayload;
   buildTextForWidget: (params: { specialist: any }) => string;
   pickPrompt: (specialist: any) => string;
+};
+
+export type RunStepPipelineGuardPorts = {
   looksLikeMetaInstruction: (userMessage: string) => boolean;
+};
+
+export type RunStepPipelineI18nPorts = {
   bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
+};
+
+export type RunStepPipelinePorts<TPayload> = {
+  ids: RunStepPipelineIdPorts;
+  policy: RunStepPipelinePolicyPorts;
+  specialist: RunStepPipelineSpecialistPorts<TPayload>;
+  normalization: RunStepPipelineNormalizationPorts;
+  state: RunStepPipelineStatePorts;
+  render: RunStepPipelineRenderPorts;
+  wording: RunStepPipelineWordingPorts;
+  response: RunStepPipelineResponsePorts<TPayload>;
+  guard: RunStepPipelineGuardPorts;
+  i18n: RunStepPipelineI18nPorts;
 };
 
 export type { UiContractMeta };

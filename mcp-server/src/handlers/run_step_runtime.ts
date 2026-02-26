@@ -2928,41 +2928,37 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   state = await ensureLanguage(state, userMessage);
   languageResolvedThisTurn = true;
   const lang = langFromState(state);
-  const pipelinePorts: RunStepPipelinePorts<RunStepSuccess | RunStepError> = {
-    step0Id: STEP_0_ID, dreamStepId: DREAM_STEP_ID, bigwhyStepId: BIGWHY_STEP_ID, strategyStepId: STRATEGY_STEP_ID,
-    dreamSpecialist: DREAM_SPECIALIST, dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST, strategySpecialist: STRATEGY_SPECIALIST,
-    dreamExplainerSwitchSelfMenuId: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID, dreamForceRefineRoutePrefix: DREAM_FORCE_REFINE_ROUTE_PREFIX,
-    strategyConsolidateRouteToken: STRATEGY_CONSOLIDATE_ROUTE_TOKEN, bigwhyMaxWords: BIGWHY_MAX_WORDS, uiContractVersion: UI_CONTRACT_VERSION,
-    buildRoutingContext, callSpecialistStrictSafe, attachRegistryPayload, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
-    normalizeNonStep0OfftopicSpecialist, normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
-    getDreamRuntimeMode, isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate,
-    buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, pickBigWhyCandidate, countWords, buildBigWhyTooLongFeedback,
-    renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, buildContractId, isWordingChoiceEligibleContext,
-    buildWordingChoiceFromTurn, buildWordingChoiceFromPendingSpecialist, enforceDreamBuilderQuestionProgress, applyMotivationQuotesContractV11,
-    buildTextForWidget, pickPrompt, looksLikeMetaInstruction,
-    bumpUiI18nCounter: (telemetry, key) => bumpUiI18nCounter(
+  const uiI18nCounterPort = (telemetry: unknown, key: string) =>
+    bumpUiI18nCounter(
       telemetry as UiI18nTelemetryCounters | null | undefined,
       key as keyof UiI18nTelemetryCounters
-    ),
+    );
+  const pipelinePorts: RunStepPipelinePorts<RunStepSuccess | RunStepError> = {
+    ids: { step0Id: STEP_0_ID, dreamStepId: DREAM_STEP_ID, bigwhyStepId: BIGWHY_STEP_ID, strategyStepId: STRATEGY_STEP_ID, dreamSpecialist: DREAM_SPECIALIST, dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST, strategySpecialist: STRATEGY_SPECIALIST, dreamExplainerSwitchSelfMenuId: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID },
+    policy: { dreamForceRefineRoutePrefix: DREAM_FORCE_REFINE_ROUTE_PREFIX, strategyConsolidateRouteToken: STRATEGY_CONSOLIDATE_ROUTE_TOKEN, bigwhyMaxWords: BIGWHY_MAX_WORDS, uiContractVersion: UI_CONTRACT_VERSION },
+    specialist: { buildRoutingContext, callSpecialistStrictSafe },
+    normalization: { normalizeEntitySpecialistResult, applyCentralMetaTopicRouter, normalizeNonStep0OfftopicSpecialist, normalizeStep0AskDisplayContract, hasValidStep0Final },
+    state: { applyPostSpecialistStateMutations, getDreamRuntimeMode, isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate, buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, pickBigWhyCandidate, countWords, buildBigWhyTooLongFeedback, enforceDreamBuilderQuestionProgress, applyMotivationQuotesContractV11 },
+    render: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, buildContractId },
+    wording: { isWordingChoiceEligibleContext, buildWordingChoiceFromTurn, buildWordingChoiceFromPendingSpecialist },
+    response: { attachRegistryPayload, buildTextForWidget, pickPrompt },
+    guard: { looksLikeMetaInstruction },
+    i18n: { bumpUiI18nCounter: uiI18nCounterPort },
   };
   const pipelineHelpers = createRunStepPipelineHelpers<RunStepSuccess | RunStepError>(pipelinePorts);
 
   const routePorts: RunStepRoutePorts<RunStepSuccess | RunStepError> = {
-    step0Id: STEP_0_ID, step0Specialist: STEP_0_SPECIALIST, dreamStepId: DREAM_STEP_ID, dreamSpecialist: DREAM_SPECIALIST,
-    dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST, roleStepId: ROLE_STEP_ID, roleSpecialist: ROLE_SPECIALIST,
-    presentationStepId: PRESENTATION_STEP_ID, presentationSpecialist: PRESENTATION_SPECIALIST, dreamPickOneRouteToken: DREAM_PICK_ONE_ROUTE_TOKEN,
-    roleChooseForMeRouteToken: ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, presentationMakeRouteToken: PRESENTATION_MAKE_ROUTE_TOKEN,
-    switchToSelfDreamToken: SWITCH_TO_SELF_DREAM_TOKEN, dreamStartExerciseRouteToken: DREAM_START_EXERCISE_ROUTE_TOKEN, wordingSelectionMessage,
-    pickPrompt, buildTextForWidget, applyStateUpdate, setDreamRuntimeMode, getDreamRuntimeMode, renderFreeTextTurnPolicy,
-    validateRenderedContractOrRecover, applyUiPhaseByStep, ensureUiStrings, ensureStartState, attachRegistryPayload, finalizeResponse,
-    pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState, hasPresentationTemplate,
-    generatePresentationPptx, convertPptxToPdf, convertPdfToPng, cleanupOldPresentationFiles, baseUrlFromEnv, uiStringFromStateMap,
-    uiDefaultString, buildContractId, parseStep0Final, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState,
-    callSpecialistStrictSafe, buildRoutingContext, rememberLlmCall, isUiStateHygieneSwitchV1Enabled, clearStepInteractiveState,
-    bumpUiI18nCounter: (telemetry, key) => bumpUiI18nCounter(
-      telemetry as UiI18nTelemetryCounters | null | undefined,
-      key as keyof UiI18nTelemetryCounters
-    ),
+    ids: { step0Id: STEP_0_ID, step0Specialist: STEP_0_SPECIALIST, dreamStepId: DREAM_STEP_ID, dreamSpecialist: DREAM_SPECIALIST, dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST, roleStepId: ROLE_STEP_ID, roleSpecialist: ROLE_SPECIALIST, presentationStepId: PRESENTATION_STEP_ID, presentationSpecialist: PRESENTATION_SPECIALIST },
+    tokens: { dreamPickOneRouteToken: DREAM_PICK_ONE_ROUTE_TOKEN, roleChooseForMeRouteToken: ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, presentationMakeRouteToken: PRESENTATION_MAKE_ROUTE_TOKEN, switchToSelfDreamToken: SWITCH_TO_SELF_DREAM_TOKEN, dreamStartExerciseRouteToken: DREAM_START_EXERCISE_ROUTE_TOKEN },
+    wording: { wordingSelectionMessage, pickPrompt, buildTextForWidget },
+    state: { applyStateUpdate, setDreamRuntimeMode, getDreamRuntimeMode, isUiStateHygieneSwitchV1Enabled, clearStepInteractiveState },
+    contracts: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, ensureUiStrings, buildContractId },
+    step0: { ensureStartState, parseStep0Final, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState },
+    presentation: { hasPresentationTemplate, generatePresentationPptx, convertPptxToPdf, convertPdfToPng, cleanupOldPresentationFiles, baseUrlFromEnv, uiStringFromStateMap, uiDefaultString },
+    specialist: { callSpecialistStrictSafe, buildRoutingContext, rememberLlmCall },
+    response: { attachRegistryPayload, finalizeResponse },
+    suggestions: { pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState },
+    i18n: { bumpUiI18nCounter: uiI18nCounterPort },
   };
   const routeHelpers = createRunStepRouteHelpers<RunStepSuccess | RunStepError>(routePorts);
 
