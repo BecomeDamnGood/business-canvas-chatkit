@@ -29,6 +29,19 @@ function resolveRuntimePath() {
   return path.join(mcpServerRoot, "src", "handlers", "run_step_runtime.ts");
 }
 
+function resolveLayerPaths() {
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  const mcpServerRoot = path.resolve(scriptDir, "..", "..");
+  const handlersRoot = path.join(mcpServerRoot, "src", "handlers");
+  return [
+    path.join(handlersRoot, "run_step_runtime_preflight.ts"),
+    path.join(handlersRoot, "run_step_runtime_action_routing.ts"),
+    path.join(handlersRoot, "run_step_runtime_special_routes.ts"),
+    path.join(handlersRoot, "run_step_runtime_post_pipeline.ts"),
+    path.join(handlersRoot, "run_step_runtime_finalize.ts"),
+  ];
+}
+
 function countLines(raw) {
   if (!raw) return 0;
   const normalized = raw.replace(/\r\n/g, "\n");
@@ -63,9 +76,29 @@ function main() {
 
   const lineCount = countLines(fs.readFileSync(runtimePath, "utf8"));
   const delta = lineCount - budget.maxLines;
+  const layerPaths = resolveLayerPaths();
+  const layerMetrics = layerPaths.map((layerPath) => ({
+    file: path.basename(layerPath),
+    exists: fs.existsSync(layerPath),
+    lines: fs.existsSync(layerPath) ? countLines(fs.readFileSync(layerPath, "utf8")) : 0,
+  }));
+  const missingLayers = layerMetrics.filter((entry) => !entry.exists);
+  const layerTotalLines = layerMetrics.reduce((sum, entry) => sum + entry.lines, 0);
 
   console.log(`[run_step_runtime_loc_check] phase=${phase} (${budget.label})`);
   console.log(`[run_step_runtime_loc_check] run_step_runtime.ts lines=${lineCount}, limit=${budget.maxLines}`);
+  console.log(`[run_step_runtime_loc_check] layered_runtime_total_lines=${layerTotalLines}`);
+  for (const metric of layerMetrics) {
+    console.log(`[run_step_runtime_loc_check] ${metric.file}: lines=${metric.lines}, exists=${metric.exists ? "yes" : "no"}`);
+  }
+
+  if (missingLayers.length > 0) {
+    console.error("[run_step_runtime_loc_check] FAIL: missing runtime layer modules.");
+    for (const missing of missingLayers) {
+      console.error(`- missing: ${missing.file}`);
+    }
+    process.exit(1);
+  }
 
   if (delta > 0) {
     console.error(`[run_step_runtime_loc_check] FAIL: run_step_runtime.ts exceeds phase budget by ${delta} lines.`);

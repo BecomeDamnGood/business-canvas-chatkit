@@ -78,20 +78,22 @@ import {
   createRunStepUiPayloadHelpers,
   createRunStepWordingHelpers,
   createRunStepWordingHeuristicHelpers,
-  createRunStepRouteHelpers,
   createRunStepStateUpdateHelpers,
-  createRunStepPipelineHelpers,
   createRunStepPolicyMetaHelpers,
   createRunStepStep0DisplayHelpers,
   createRunStepPresentationHelpers,
   createRunStepPreflightHelpers,
-  createTurnResponseEngine,
+  createRunStepRuntimeFinalizeLayer,
+  createRunStepRuntimeTextHelpers,
+  runStepRuntimePreflightLayer,
+  runStepRuntimeActionRoutingLayer,
+  runStepRuntimeSpecialRoutesLayer,
+  runStepRuntimePostPipelineLayer,
 } from "./run_step_modules.js";
 import {
   createRunStepI18nRuntimeHelpers,
   type UiI18nTelemetryCounters,
 } from "./run_step_i18n_runtime.js";
-import { createRunStepResponseHelpers } from "./run_step_response.js";
 import { parseSpecialistOutputById } from "./run_step_specialist_types.js";
 import {
   parseStep0Final,
@@ -168,7 +170,6 @@ import {
   syncDreamRuntimeMode as syncDreamRuntimeModeState,
   turnUsageFromAccumulator,
 } from "./run_step_runtime_backbone.js";
-import type { RunStepContext } from "./run_step_context.js";
 import type { RunStepPipelinePorts, RunStepRoutePorts } from "./run_step_ports.js";
 import {
   createRunStepRuntimeStateHelpers,
@@ -686,287 +687,26 @@ function step0ReadinessQuestion(state: CanvasState | null | undefined, parsed: {
   return `1) ${readyLabel}\n\n${statement} ${suffix}`.trim();
 }
 
-/**
- * Render order (strict):
- * message -> refined_formulation; if both empty, fallback to question.
- * Only append refined_formulation if it is not already contained in message (prevents duplicate display e.g. Rules REFINE).
- */
-export function buildTextForWidget(params: {
-  specialist: Record<string, unknown>;
-  hasWidgetActions?: boolean;
-  questionTextOverride?: string;
-}): string {
-  const { specialist } = params;
-  const parts: string[] = [];
+const runtimeTextHelpers = createRunStepRuntimeTextHelpers({
+  dreamStepId: DREAM_STEP_ID,
+  parseMenuFromContractIdForStep: (contractIdRaw, stepId) =>
+    parseMenuFromContractIdForStep(contractIdRaw, stepId),
+  canonicalizeComparableText,
+  mergeListItems: (userItems, suggestionItems) => mergeListItems(userItems, suggestionItems),
+  splitSentenceItems,
+  sanitizePendingListMessage: (message, fallbackItems) =>
+    sanitizePendingListMessage(message, fallbackItems),
+  isWordingPanelCleanBodyV1Enabled,
+  fieldForStep,
+  stripUnsupportedReformulationClaims: (message) =>
+    stripUnsupportedReformulationClaims(message),
+  tokenizeWords,
+  compactWordingPanelBody,
+});
 
-  const wordingPending = String(specialist?.wording_choice_pending || "") === "true";
-  const wordingMode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
-  const wordingSuggestion = String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim();
-  const normalizeLine = (value: string): string =>
-    String(value || "")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .replace(/[.!?]+$/g, "")
-      .trim();
-  const suggestionNorm = normalizeLine(wordingSuggestion);
-  const contractId = String((specialist as Record<string, unknown>)?.ui_contract_id || "").trim();
-  const contractStepId = contractId.split(":")[0] || "";
-  const menuId = parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
-  const statementLines = Array.isArray(specialist?.statements)
-    ? (specialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-    : [];
-  const dreamBuilderRenderContext =
-    statementLines.length > 0 &&
-    contractStepId === DREAM_STEP_ID &&
-    (
-      String(specialist?.suggest_dreambuilder || "").trim() === "true" ||
-      menuId.startsWith("DREAM_EXPLAINER_MENU_")
-    );
-
-  let msg = String(specialist?.message ?? "").trim();
-  if (dreamBuilderRenderContext && msg) {
-    const statementKeys = new Set(
-      statementLines
-        .map((line) => canonicalizeComparableText(String(line || "")))
-        .filter(Boolean)
-    );
-    const stripMarkers = (line: string): string =>
-      String(line || "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "")
-        .trim();
-    const cleanedLines = msg
-      .replace(/\r/g, "\n")
-      .split("\n")
-      .filter((lineRaw) => {
-        const line = String(lineRaw || "").trim();
-        if (!line) return true;
-        const stripped = stripMarkers(line);
-        const lineKey = canonicalizeComparableText(stripped);
-        if (lineKey && statementKeys.has(lineKey)) return false;
-        if (/^your dream statements$/i.test(stripped)) return false;
-        if (/^your current dream for\b.*\bis:?$/i.test(stripped)) return false;
-        if (
-          /^\d+\s+statements?\b/i.test(stripped) &&
-          /(minimum|so far|out of|at least)/i.test(stripped)
-        ) {
-          return false;
-        }
-        const colonIdx = line.indexOf(":");
-        if (colonIdx <= 0) return true;
-        const prefix = stripMarkers(line.slice(0, colonIdx));
-        const suffix = stripMarkers(line.slice(colonIdx + 1));
-        const suffixKey = canonicalizeComparableText(suffix);
-        if (!suffixKey || !statementKeys.has(suffixKey)) return true;
-        return tokenizeWords(prefix).length > 8;
-      });
-    msg = cleanedLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  }
-  if (wordingPending && wordingMode === "text" && suggestionNorm) {
-    const paragraphs = msg
-      .split(/\n{2,}/)
-      .map((p) => p.trim())
-      .filter(Boolean);
-    const filtered = paragraphs.filter((p) => normalizeLine(p) !== suggestionNorm);
-    msg = filtered.join("\n\n").trim();
-  }
-  if (wordingPending && wordingMode === "list" && msg) {
-    const userItems = Array.isArray(specialist?.wording_choice_user_items)
-      ? (specialist.wording_choice_user_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-      : [];
-    const suggestionItems = Array.isArray(specialist?.wording_choice_suggestion_items)
-      ? (specialist.wording_choice_suggestion_items as string[]).map((line) => String(line || "").trim()).filter(Boolean)
-      : [];
-    const knownItems = mergeListItems(userItems, suggestionItems);
-    const fallbackItems = knownItems.length > 0 ? knownItems : splitSentenceItems(wordingSuggestion);
-    msg = sanitizePendingListMessage(msg, fallbackItems);
-  }
-  if (wordingPending && isWordingPanelCleanBodyV1Enabled()) {
-    msg = compactWordingPanelBody(msg);
-  }
-  const promptFromSpecialist = String(specialist?.question ?? "").trim();
-  const promptOverride = String(params.questionTextOverride || "").trim();
-  const prompt = promptOverride || promptFromSpecialist;
-  let refined = String(specialist?.refined_formulation ?? "").trim();
-  if (!wordingPending) {
-    const field = fieldForStep(contractStepId);
-    const fieldValue = field ? String((specialist as Record<string, unknown>)?.[field] || "").trim() : "";
-    if (!fieldValue && !refined && statementLines.length === 0) {
-      msg = stripUnsupportedReformulationClaims(msg);
-    }
-  }
-  if (msg) msg = stripChoiceInstructionNoise(msg);
-  if (msg && prompt) msg = stripPromptEchoFromMessage(msg, prompt);
-  if (refined) {
-    refined = stripChoiceInstructionNoise(refined);
-    if (prompt) refined = stripPromptEchoFromMessage(refined, prompt);
-  }
-  const normalizeForDedupe = (value: string): string =>
-    String(value || "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\r/g, "\n")
-      .replace(/^\s*(?:[-*•]|\d+[\).])\s*/gm, "")
-      .replace(/[^a-z0-9\s]/gi, " ")
-      .replace(/\s+/g, " ")
-      .toLowerCase()
-      .trim();
-  const normalizedLines = (value: string): string[] =>
-    String(value || "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\r/g, "\n")
-      .split(/\n+/)
-      .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
-      .filter(Boolean)
-      .map((line) => normalizeForDedupe(line))
-      .filter(Boolean);
-  if (msg) parts.push(msg);
-  if (refined && !wordingPending) {
-    const statementComparable = statementLines
-      .map((line) => canonicalizeComparableText(line))
-      .filter(Boolean);
-    const refinedComparableLines = normalizedLines(refined)
-      .map((line) => canonicalizeComparableText(line))
-      .filter(Boolean);
-    const refinedMatchesStatements =
-      statementComparable.length > 0 &&
-      refinedComparableLines.length === statementComparable.length &&
-      refinedComparableLines.every((line, idx) => line === statementComparable[idx]);
-    const refinedNormalized = canonicalizeComparableText(refined);
-    const messageNormalized = canonicalizeComparableText(msg);
-    const messageLineSet = new Set(normalizedLines(msg).map((line) => canonicalizeComparableText(line)).filter(Boolean));
-    const refinedLineSet = normalizedLines(refined);
-    const duplicateByWhole = Boolean(refinedNormalized) && messageNormalized.includes(refinedNormalized);
-    const duplicateByLines =
-      refinedLineSet.length > 0 &&
-      refinedLineSet.every((line) => {
-        const normalized = canonicalizeComparableText(line);
-        return Boolean(normalized) && messageLineSet.has(normalized);
-      });
-    if (!(dreamBuilderRenderContext && refinedMatchesStatements) && !duplicateByWhole && !duplicateByLines) {
-      parts.push(refined);
-    }
-  }
-  return parts.join("\n\n").trim();
-}
-
-function stripChoiceInstructionNoise(value: string): string {
-  const fullLineChoicePatterns = [
-    /^(please\s+)?(choose|pick|select)\s+(one|an?)\s+option(s)?(\s+below)?\.?$/i,
-    /^(please\s+)?(choose|pick|select)\s+\d+(?:\s*(?:,|\/|or|and)\s*\d+)*\.?$/i,
-    /^(please\s+)?(choose|pick|select)\s+between\s+\d+\s+and\s+\d+\.?$/i,
-    /^(please\s+)?(choose|pick|select)\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
-    /^(please\s+)?(choose|pick|select)\s+an?\s+option(\s+below)?(\s+by\s+typing\s+\d+(?:\s*(?:or|\/|,|and)\s*\d+)*)?\.?$/i,
-    /^choose\s+an?\s+option\s+by\s+typing\s+.+$/i,
-    /^.+\s+or\s+choose\s+an?\s+option(s)?(\s+below)?\.?$/i,
-    /^.+\s+or\s+choose\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
-  ];
-  const inlineNoisePatterns = [
-    /\s*choose\s+an?\s+option\s+below\.?/gi,
-    /\s*choose\s+an?\s+option\.?/gi,
-    /\s*choose\s+one\s+of\s+the\s+options(\s+below)?\.?/gi,
-    /\s*choose\s+\d+(?:\s*(?:,|\/|or|and)\s*\d+)*\.?/gi,
-    /\s*choose\s+between\s+\d+\s+and\s+\d+\.?/gi,
-    /\s*choose\s+an?\s+option\s+by\s+typing\s+\d+(?:\s*(?:or|\/|,|and)\s*\d+)*(?:,\s*or\s*write\s+your\s+own\s+statement)?\.?/gi,
-  ];
-  const lines = String(value || "").replace(/\r/g, "\n").split("\n");
-  const transformed = lines.map((line) => {
-    const normalized = String(line || "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/[*_`~]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!normalized) return "";
-    if (fullLineChoicePatterns.some((pattern) => pattern.test(normalized))) return null;
-    if (/\bor\s+choose\s+an?\s+option(s)?(\s+below)?\.?$/i.test(normalized)) return null;
-    if (/\bor\s+choose\s+one\s+of\s+the\s+options(\s+below)?\.?$/i.test(normalized)) return null;
-    let candidate = String(line || "");
-    for (const pattern of inlineNoisePatterns) {
-      candidate = candidate.replace(pattern, "");
-    }
-    return candidate
-      .replace(/\s{2,}/g, " ")
-      .replace(/\s+([,.!?;:])/g, "$1")
-      .trim();
-  });
-  const kept: string[] = [];
-  for (const line of transformed) {
-    if (line === null) continue;
-    const trimmed = String(line || "").trim();
-    if (!trimmed) {
-      if (kept.length === 0) continue;
-      if (kept[kept.length - 1] === "") continue;
-      kept.push("");
-      continue;
-    }
-    kept.push(trimmed);
-  }
-  while (kept.length > 0 && kept[0] === "") kept.shift();
-  while (kept.length > 0 && kept[kept.length - 1] === "") kept.pop();
-  return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-
-function stripPromptEchoFromMessage(messageRaw: string, promptRaw: string): string {
-  const message = String(messageRaw || "").replace(/\r/g, "\n");
-  const prompt = String(promptRaw || "").replace(/\r/g, "\n");
-  if (!message.trim() || !prompt.trim()) return message.trim();
-
-  const normalizeComparableLine = (lineRaw: string): string => {
-    const plain = String(lineRaw || "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/[*_`~]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-    return canonicalizeComparableText(plain);
-  };
-
-  const optionLabels = new Set<string>();
-  const promptLines = prompt
-    .split("\n")
-    .map((line) => String(line || "").trim())
-    .filter(Boolean);
-  for (const line of promptLines) {
-    const numbered = line.match(/^[1-9][\)\.]\s*(.+)$/);
-    if (!numbered) continue;
-    const label = normalizeComparableLine(String(numbered[1] || ""));
-    if (label) optionLabels.add(label);
-  }
-
-  const promptTextLines = new Set<string>(
-    promptLines
-      .filter((line) => !/^[1-9][\)\.]\s*/.test(line))
-      .map((line) => normalizeComparableLine(line))
-      .filter(Boolean)
-  );
-
-  const stripped = message
-    .split("\n")
-    .map((line) => String(line || ""))
-    .filter((lineRaw) => {
-      const line = String(lineRaw || "").trim();
-      if (!line) return true;
-      const plainLine = String(lineRaw || "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/[*_`~]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-      const withoutNumbering = plainLine.replace(/^[1-9][\)\.]\s*/, "").trim();
-      const normalized = normalizeComparableLine(withoutNumbering);
-      if (!normalized) return true;
-      if (optionLabels.has(normalized)) return false;
-      if (promptTextLines.has(normalized)) return false;
-      return true;
-    })
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  return stripped;
-}
-
-export function pickPrompt(specialist: Record<string, unknown>): string {
-  const q = String(specialist?.question ?? "").trim();
-  return q || "";
-}
+export const buildTextForWidget = runtimeTextHelpers.buildTextForWidget;
+const stripChoiceInstructionNoise = runtimeTextHelpers.stripChoiceInstructionNoise;
+export const pickPrompt = runtimeTextHelpers.pickPrompt;
 
 function countNumberedOptions(prompt: string): number {
   const lines = String(prompt || "")
@@ -1738,710 +1478,216 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
   const isBootstrapPollCall = preflight.isBootstrapPollCall;
   const pristineAtEntry = preflight.pristineAtEntry;
   const rawNormalized = preflight.rawNormalized;
-  const userMessageCandidate = preflight.userMessageCandidate;
-  const lastSpecialistResult = preflight.lastSpecialistResult;
+  const lastSpecialistResult =
+    (preflight.lastSpecialistResult as Record<string, unknown> | null | undefined) || {};
   let actionCodeRaw = preflight.actionCodeRaw;
-  const isActionCodeTurnForPolicy = preflight.isActionCodeTurnForPolicy;
   let userMessage = preflight.userMessage;
   let submittedUserText = preflight.submittedUserText;
   let clickedLabelForNoRepeat = preflight.clickedLabelForNoRepeat;
   let clickedActionCodeForNoRepeat = preflight.clickedActionCodeForNoRepeat;
   let languageResolvedThisTurn = false;
-
-  const buildRoutingContext = (routeOrText: string) => {
-    return {
-      enabled: modelRoutingEnabled,
-      shadow: modelRoutingShadow,
-      actionCode: actionCodeRaw,
-      intentType: runStepPreflightHelpers.deriveIntentTypeForRouting(actionCodeRaw, routeOrText),
-    };
-  };
-
-  const resolveTranslationModel = (routeOrText: string): string => {
-    const explicitTranslationModel = String(process.env.UI_TRANSLATION_MODEL || "").trim();
-    if (explicitTranslationModel) return explicitTranslationModel;
-    if (!isUiTranslationFastModelV1Enabled()) return baselineModel;
-    const routing = buildRoutingContext(routeOrText);
-    const decision = resolveModelForCall({
-      fallbackModel: baselineModel,
-      routingEnabled: routing.enabled,
-      actionCode: routing.actionCode,
-      intentType: routing.intentType,
-      purpose: "translation",
-    });
-    if (
-      !decision.applied &&
-      routing.shadow &&
-      (shouldLogLocalDevDiagnostics() || process.env.BSC_MODEL_ROUTING_SHADOW_LOG === "1") &&
-      decision.candidate_model &&
-      decision.candidate_model !== baselineModel
-    ) {
-      console.log("[model_routing_shadow]", {
-        specialist: "UiStrings",
-        current_step: String((state as Record<string, unknown>).current_step || ""),
-        baseline_model: baselineModel,
-        shadow_model: decision.candidate_model,
-        source: decision.source,
-        config_version: decision.config_version,
-        request_id: String((state as Record<string, unknown>).__request_id ?? ""),
-        client_action_id: String((state as Record<string, unknown>).__client_action_id ?? ""),
-      });
-    }
-    if (decision.source === "translation_model" && String(decision.model || "").trim()) {
-      return String(decision.model || "").trim();
-    }
-    const candidate = String(decision.candidate_model || "").trim();
-    if (decision.applied && candidate) return candidate;
-    return "gpt-4o-mini";
-  };
-
-  const applyUiClientActionContract = (targetState: CanvasState | null | undefined): void => {
-    if (!targetState || typeof targetState !== "object") return;
-    const stateRef = targetState as Record<string, unknown>;
-    const currentStep = String(stateRef.current_step || "").trim();
-    const activeSpecialist = String(stateRef.active_specialist || "").trim();
-    const lastSpecialist =
-      stateRef.last_specialist_result && typeof stateRef.last_specialist_result === "object"
-        ? (stateRef.last_specialist_result as Record<string, unknown>)
-        : {};
-    const scoringPhase = String(lastSpecialist.scoring_phase || "").trim().toLowerCase() === "true";
-    const dreamRuntimeMode = getDreamRuntimeMode(targetState);
-    const textSubmitUsesScores =
-      currentStep === DREAM_STEP_ID &&
-      activeSpecialist === DREAM_EXPLAINER_SPECIALIST &&
-      (dreamRuntimeMode === "builder_scoring" || scoringPhase);
-    stateRef.ui_action_start = "ACTION_START";
-    stateRef.ui_action_text_submit = textSubmitUsesScores
-      ? "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES"
-      : "ACTION_TEXT_SUBMIT";
-    stateRef.ui_action_text_submit_payload_mode = textSubmitUsesScores ? "scores" : "text";
-    stateRef.ui_action_wording_pick_user = "ACTION_WORDING_PICK_USER";
-    stateRef.ui_action_wording_pick_suggestion = "ACTION_WORDING_PICK_SUGGESTION";
-    stateRef.ui_action_dream_start_exercise = "ACTION_DREAM_INTRO_START_EXERCISE";
-    stateRef.ui_action_dream_switch_to_self = "ACTION_DREAM_SWITCH_TO_SELF";
-  };
-
-  const { finalizeResponse } = createRunStepResponseHelpers({
-    applyUiClientActionContract,
-    parseMenuFromContractIdForStep,
-    labelKeysForMenuActionCodes,
-    onUiParityError: () => bumpUiI18nCounter(uiI18nTelemetry, "parity_errors"),
-    attachRegistryPayload: (payload, specialist, flagsOverride) =>
-      attachRegistryPayload(payload, specialist, flagsOverride),
-    uiI18nTelemetry,
-    tokenLoggingEnabled,
-    baselineModel,
-    getMigrationApplied: () => migrationApplied,
-    getMigrationFromVersion: () => migrationFromVersion,
-    getBlockingMarkerClass: () => blockingMarkerClass,
-    resolveTurnTokenUsage: () => ({
-      usage: turnUsageFromAccumulator(llmTurnAccumulator),
-      attempts: llmTurnAccumulator.attempts,
-      models: [...llmTurnAccumulator.models.values()],
-    }),
-  });
-  const turnResponseEngine = createTurnResponseEngine<RunStepSuccess | RunStepError>({
-    renderFreeTextTurnPolicy,
-    validateRenderedContractOrRecover,
-    applyUiPhaseByStep,
-    buildTextForWidget: ({ specialist }) => buildTextForWidget({ specialist }),
-    pickPrompt: (specialist) => pickPrompt(specialist),
-    attachRegistryPayload: (payload, specialist, flagsOverride, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride) =>
-      attachRegistryPayload(
-        payload,
-        specialist,
-        flagsOverride,
-        actionCodesOverride,
-        renderedActionsOverride,
-        wordingChoiceOverride,
-        contractMetaOverride
-      ) as RunStepSuccess | RunStepError,
-    finalizeResponse: (payload) => finalizeResponse(payload),
-  });
-
-  const ensureUiStrings = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
-    const translationModel = resolveTranslationModel(routeOrText);
-    return ensureUiStringsForState(targetState, translationModel, uiI18nTelemetry, {
-      allowBackgroundFull: isBootstrapPollCall,
-    });
-  };
-
-  const ensureLanguage = async (targetState: CanvasState, routeOrText: string): Promise<CanvasState> => {
-    const translationModel = resolveTranslationModel(routeOrText);
-    const allowBackgroundFull = isBootstrapPollCall || inputMode === "chat";
-    if (!isUiI18nV3LangBootstrapEnabled()) {
-      return ensureUiStringsForState(targetState, translationModel, uiI18nTelemetry, {
-        allowBackgroundFull,
-      });
-    }
-    return resolveLanguageForTurn(
-      targetState,
-      routeOrText,
+  const finalizeLayer = createRunStepRuntimeFinalizeLayer<RunStepSuccess | RunStepError>({
+    routing: {
+      baselineModel,
+      modelRoutingEnabled,
+      modelRoutingShadow,
+      getState: () => state,
+      getActionCodeRaw: () => actionCodeRaw,
+      deriveIntentTypeForRouting: runStepPreflightHelpers.deriveIntentTypeForRouting,
+      resolveModelForCall,
+      shouldLogLocalDevDiagnostics,
+      isUiTranslationFastModelV1Enabled,
+    },
+    i18n: {
       localeHint,
       localeHintSource,
-      inputMode,
-      translationModel,
+      inputMode: inputMode === "widget" ? "widget" : "chat",
+      isBootstrapPollCall,
       uiI18nTelemetry,
-      { allowBackgroundFull }
-    );
-  };
-
-  const resolveLocaleAndUiStringsReady = async (
-    targetState: CanvasState,
-    routeOrText: string
-  ): Promise<{ state: CanvasState; interactiveReady: boolean }> => {
-    const nextState = await ensureLanguage(targetState, routeOrText);
-    return {
-      state: nextState,
-      interactiveReady: isInteractiveLocaleReady(nextState),
-    };
-  };
-
-  const ensureStartState = async (
-    targetState: CanvasState,
-    routeOrText: string
-  ): Promise<{ state: CanvasState; interactiveReady: boolean }> => {
-    const hasResolvedLanguage = Boolean(normalizeLangCode(String((targetState as Record<string, unknown>).language || "")));
-    if (languageResolvedThisTurn && hasResolvedLanguage) {
-      return {
-        state: targetState,
-        interactiveReady: isInteractiveLocaleReady(targetState),
-      };
-    }
-    if (!isUiStartTriggerLangResolveV1Enabled()) {
-      const stateWithUi = await ensureUiStrings(targetState, routeOrText);
-      return {
-        state: stateWithUi,
-        interactiveReady: isInteractiveLocaleReady(stateWithUi),
-      };
-    }
-    return resolveLocaleAndUiStringsReady(targetState, routeOrText);
-  };
-
-  const bootstrapPreflight = await runStepPreflightHelpers.preprocessBootstrapPoll<RunStepSuccess | RunStepError>({
-    state,
-    isBootstrapPollCall,
-    actionCodeRaw,
-    userMessage,
-    clickedLabelForNoRepeat,
-    clickedActionCodeForNoRepeat,
-    step0Specialist: STEP_0_SPECIALIST,
-    isUiLocaleReadyGateV1Enabled,
-    resolveLocaleAndUiStringsReady,
-    hasUsableSpecialistForRetry,
-    buildTransientFallbackSpecialist,
-    deriveBootstrapContract,
-    buildTextForWidget,
-    pickPrompt,
-    attachRegistryPayload: (payload, specialist, flagsOverride) =>
-      attachRegistryPayload(payload, specialist, flagsOverride),
-    finalizeResponse: (payload) => finalizeResponse(payload),
+      isUiI18nV3LangBootstrapEnabled,
+      isUiStartTriggerLangResolveV1Enabled,
+      isInteractiveLocaleReady,
+      normalizeLangCode,
+      ensureUiStringsForState,
+      resolveLanguageForTurn,
+      isLanguageResolvedThisTurn: () => languageResolvedThisTurn,
+    },
+    response: {
+      tokenLoggingEnabled,
+      baselineModel,
+      parseMenuFromContractIdForStep,
+      labelKeysForMenuActionCodes,
+      onUiParityError: () => bumpUiI18nCounter(uiI18nTelemetry, "parity_errors"),
+      attachRegistryPayload: (payload, specialist, flagsOverride, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride) =>
+        attachRegistryPayload(
+          payload,
+          specialist,
+          flagsOverride,
+          actionCodesOverride,
+          renderedActionsOverride,
+          wordingChoiceOverride,
+          contractMetaOverride
+        ) as RunStepSuccess | RunStepError,
+      uiI18nTelemetry,
+      getMigrationApplied: () => migrationApplied,
+      getMigrationFromVersion: () => migrationFromVersion,
+      getBlockingMarkerClass: () => blockingMarkerClass,
+      resolveTurnTokenUsage: () => ({
+        usage: turnUsageFromAccumulator(llmTurnAccumulator),
+        attempts: llmTurnAccumulator.attempts,
+        models: [...llmTurnAccumulator.models.values()],
+      }),
+      getDreamRuntimeMode,
+      getDreamStepId: () => DREAM_STEP_ID,
+      getDreamExplainerSpecialist: () => DREAM_EXPLAINER_SPECIALIST,
+      buildTextForWidget,
+      pickPrompt,
+      renderFreeTextTurnPolicy,
+      validateRenderedContractOrRecover,
+      applyUiPhaseByStep,
+    },
   });
-  if (bootstrapPreflight.response) return bootstrapPreflight.response;
-  state = bootstrapPreflight.state;
-  actionCodeRaw = bootstrapPreflight.actionCodeRaw;
-  userMessage = bootstrapPreflight.userMessage;
-  clickedActionCodeForNoRepeat = bootstrapPreflight.clickedActionCodeForNoRepeat;
-  clickedLabelForNoRepeat = bootstrapPreflight.clickedLabelForNoRepeat;
 
-  const legacyPreflight = runStepPreflightHelpers.handleLegacyPreflight<RunStepSuccess | RunStepError>({
-    state,
-    rawLegacyMarkers,
-    localeHint,
-    buildFailClosedState,
-    attachRegistryPayload: (payload, specialist, flagsOverride) =>
-      attachRegistryPayload(payload, specialist, flagsOverride),
-    finalizeResponse: (payload) => finalizeResponse(payload),
-  });
-  blockingMarkerClass = legacyPreflight.blockingMarkerClass;
-  if (legacyPreflight.response) return legacyPreflight.response;
-
-  const actionCodePreflight = runStepPreflightHelpers.applyActionCodeNormalization({
-    state,
-    actionCodeRaw,
-    userMessage,
-    submittedUserText,
-    clickedLabelForNoRepeat,
-    clickedActionCodeForNoRepeat,
-    transientTextSubmit,
-    inputMode,
-    inferCurrentMenuForStep,
-    labelForActionInMenu,
-  });
-  state = actionCodePreflight.state;
-  actionCodeRaw = actionCodePreflight.actionCodeRaw;
-  userMessage = actionCodePreflight.userMessage;
-  submittedUserText = actionCodePreflight.submittedUserText;
-  clickedActionCodeForNoRepeat = actionCodePreflight.clickedActionCodeForNoRepeat;
-  clickedLabelForNoRepeat = actionCodePreflight.clickedLabelForNoRepeat;
-
-  // If we're at Step 0 with no final yet and the user just typed real text,
-  // reset stale language from previous sessions so language is determined
-  // by this first message (not by old widget/browser state).
-  const msgForLang = String(userMessage ?? "").trim();
-  const isUserTextForLang =
-    msgForLang &&
-    !/^[0-9]+$/.test(msgForLang) &&
-    !msgForLang.startsWith("ACTION_") &&
-    !msgForLang.startsWith("__ROUTE__") &&
-    !msgForLang.startsWith("choice:");
-  if (
-    String(state.current_step) === STEP_0_ID &&
-    String((state as Record<string, unknown>).step_0_final ?? "").trim() === "" &&
-    isUserTextForLang
-  ) {
-    const hasOverride = String((state as Record<string, unknown>).language_override ?? "false") === "true";
-    const stateLanguage = normalizeLangCode(String((state as Record<string, unknown>).language ?? ""));
-    const stateLanguageSource = normalizeLanguageSource((state as Record<string, unknown>).language_source);
-    const localeHintTrustedSource =
-      localeHintSource === "openai_locale" ||
-      localeHintSource === "webplus_i18n" ||
-      localeHintSource === "request_header" ||
-      localeHintSource === "message_detect";
-    const skipResetForChatLocaleHint =
-      isUiStep0LangResetGuardV1Enabled() &&
-      inputMode === "chat" &&
-      Boolean(localeHint) &&
-      (localeHintTrustedSource || stateLanguageSource === "locale_hint" || stateLanguage === localeHint);
-    if (!hasOverride && !skipResetForChatLocaleHint) {
-      (state as Record<string, unknown>).language = "";
-      (state as Record<string, unknown>).language_locked = "false";
-      (state as Record<string, unknown>).language_override = "false";
-      (state as Record<string, unknown>).language_source = "";
-    }
-  }
-
-  let forcedProceed = false;
-
-  function pickFirstNonEmpty(...vals: Array<unknown>): string {
-    for (const v of vals) {
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
-    return "";
-  }
-
-  const BIGWHY_MAX_WORDS = 28;
-
-  function countWords(text: string): number {
-    const trimmed = text.trim();
-    if (!trimmed) return 0;
-    return trimmed.split(/\s+/).filter(Boolean).length;
-  }
-
-  function pickBigWhyCandidate(result: Record<string, unknown> | null | undefined): string {
-    const fromFinal = typeof result?.bigwhy === "string" ? result.bigwhy.trim() : "";
-    if (fromFinal) return fromFinal;
-    const fromRefine = typeof result?.refined_formulation === "string" ? result.refined_formulation.trim() : "";
-    return fromRefine;
-  }
-
-  function buildBigWhyTooLongFeedback(stateForText: CanvasState): Record<string, unknown> {
-    const message = uiStringFromStateMap(
-      stateForText,
-      "bigwhy.tooLong.message",
-      uiDefaultString(
-        "bigwhy.tooLong.message",
-        "Your formulation is longer than 28 words. Short and clear is better, so please provide a compact version."
-      )
-    );
-    const question = uiStringFromStateMap(
-      stateForText,
-      "bigwhy.tooLong.question",
-      uiDefaultString("bigwhy.tooLong.question", "Can you rewrite it in 28 words or fewer?")
-    );
-    return {
-      action: "REFINE",
-      message,
-      question,
-      refined_formulation: "",
-      bigwhy: "",
-      wants_recap: false,
-      is_offtopic: false,
-      user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-    };
-  }
-
-  function requireFinalValue(
-    stepId: string,
-    prev: Record<string, unknown>,
-    stateObj: CanvasState
-  ): { field: string; value: string } {
-    const provisional = provisionalValueForStep(stateObj, stepId);
-    if (stepId === STEP_0_ID) {
-      return { field: "step_0_final", value: pickFirstNonEmpty(provisional, prev.step_0, (stateObj as Record<string, unknown>).step_0_final) };
-    }
-    if (stepId === DREAM_STEP_ID) {
-      return { field: "dream_final", value: pickFirstNonEmpty(provisional, prev.dream, prev.refined_formulation, (stateObj as Record<string, unknown>).dream_final) };
-    }
-    if (stepId === PURPOSE_STEP_ID) {
-      return { field: "purpose_final", value: pickFirstNonEmpty(provisional, prev.purpose, prev.refined_formulation, (stateObj as Record<string, unknown>).purpose_final) };
-    }
-    if (stepId === BIGWHY_STEP_ID) {
-      return { field: "bigwhy_final", value: pickFirstNonEmpty(provisional, prev.bigwhy, prev.refined_formulation, (stateObj as Record<string, unknown>).bigwhy_final) };
-    }
-    if (stepId === ROLE_STEP_ID) {
-      return { field: "role_final", value: pickFirstNonEmpty(provisional, prev.role, prev.refined_formulation, (stateObj as Record<string, unknown>).role_final) };
-    }
-    if (stepId === ENTITY_STEP_ID) {
-      return { field: "entity_final", value: pickFirstNonEmpty(provisional, prev.entity, prev.refined_formulation, (stateObj as Record<string, unknown>).entity_final) };
-    }
-    if (stepId === STRATEGY_STEP_ID) {
-      return { field: "strategy_final", value: pickFirstNonEmpty(provisional, prev.strategy, prev.refined_formulation, (stateObj as Record<string, unknown>).strategy_final) };
-    }
-    if (stepId === TARGETGROUP_STEP_ID) {
-      return { field: "targetgroup_final", value: pickFirstNonEmpty(provisional, prev.targetgroup, prev.refined_formulation, (stateObj as Record<string, unknown>).targetgroup_final) };
-    }
-    if (stepId === PRODUCTSSERVICES_STEP_ID) {
-      return { field: "productsservices_final", value: pickFirstNonEmpty(provisional, prev.productsservices, prev.refined_formulation, (stateObj as Record<string, unknown>).productsservices_final) };
-    }
-    if (stepId === RULESOFTHEGAME_STEP_ID) {
-      return { field: "rulesofthegame_final", value: pickFirstNonEmpty(provisional, prev.rulesofthegame, prev.refined_formulation, (stateObj as Record<string, unknown>).rulesofthegame_final) };
-    }
-    if (stepId === PRESENTATION_STEP_ID) {
-      return { field: "presentation_brief_final", value: pickFirstNonEmpty(provisional, prev.presentation_brief, prev.refined_formulation, (stateObj as Record<string, unknown>).presentation_brief_final) };
-    }
-    return { field: "", value: "" };
-  }
-
-  const ACTIONCODE_STEP_TRANSITIONS: Record<string, string> = {
-    ACTION_STEP0_READY_START: DREAM_STEP_ID,
-    ACTION_DREAM_REFINE_CONFIRM: PURPOSE_STEP_ID,
-    ACTION_DREAM_EXPLAINER_REFINE_CONFIRM: PURPOSE_STEP_ID,
-    ACTION_PURPOSE_REFINE_CONFIRM: BIGWHY_STEP_ID,
-    ACTION_PURPOSE_CONFIRM_SINGLE: BIGWHY_STEP_ID,
-    ACTION_BIGWHY_REFINE_CONFIRM: ROLE_STEP_ID,
-    ACTION_ROLE_REFINE_CONFIRM: ENTITY_STEP_ID,
-    ACTION_ENTITY_EXAMPLE_CONFIRM: STRATEGY_STEP_ID,
-    ACTION_STRATEGY_CONFIRM_SATISFIED: TARGETGROUP_STEP_ID,
-    ACTION_STRATEGY_FINAL_CONTINUE: TARGETGROUP_STEP_ID,
-    ACTION_TARGETGROUP_POSTREFINE_CONFIRM: PRODUCTSSERVICES_STEP_ID,
-    ACTION_PRODUCTSSERVICES_CONFIRM: RULESOFTHEGAME_STEP_ID,
-    ACTION_RULES_CONFIRM_ALL: PRESENTATION_STEP_ID,
-  };
-
-  if (actionCodeRaw && ACTIONCODE_STEP_TRANSITIONS[actionCodeRaw]) {
-    const stepId = String(state.current_step ?? "");
-    const prev = ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
-    if (
-      wordingChoiceEnabled &&
-      String(prev.wording_choice_pending || "") === "true" &&
-      isWordingChoiceEligibleContext(
-        stepId,
-        String((state as Record<string, unknown>).active_specialist || ""),
-        prev,
-        prev,
-        getDreamRuntimeMode(state)
-      )
-    ) {
-      const pendingSpecialist = { ...prev };
-      const pendingChoice = buildWordingChoiceFromPendingSpecialist(
-        pendingSpecialist,
-        String((state as Record<string, unknown>).active_specialist || ""),
-        prev,
-        stepId,
-        getDreamRuntimeMode(state)
-      );
-      const stateWithUi = await ensureUiStrings(state, userMessage);
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-        text: buildTextForWidget({ specialist: pendingSpecialist }),
-        prompt: pickPrompt(pendingSpecialist),
-        specialist: pendingSpecialist,
-        state: stateWithUi,
-      }, pendingSpecialist, { require_wording_pick: true }, [], [], pendingChoice));
-    }
-    if (
-      wordingChoiceEnabled &&
-      String(prev.wording_choice_pending || "") === "true" &&
-      !isWordingChoiceEligibleContext(
-        stepId,
-        String((state as Record<string, unknown>).active_specialist || ""),
-        prev,
-        prev,
-        getDreamRuntimeMode(state)
-      )
-    ) {
-      state = clearStepInteractiveState(state, stepId);
-      bumpUiI18nCounter(uiI18nTelemetry, "state_hygiene_resets_count");
-    }
-    const finalInfo = requireFinalValue(stepId, prev, state);
-    const sourceMenuForTransition = inferCurrentMenuForStep(state, stepId);
-    const resolvedTransition = resolveActionCodeTransition(
-      actionCodeRaw,
-      stepId,
-      sourceMenuForTransition
-    );
-    // If we cannot find a required value, fall back to regular actioncode routing.
-    if (finalInfo.field && !finalInfo.value) {
-    } else {
-      if (finalInfo.field && finalInfo.value) {
-        (state as Record<string, unknown>)[finalInfo.field] = finalInfo.value;
-        state = isUiStateHygieneSwitchV1Enabled()
-          ? clearStepInteractiveState(state, stepId)
-          : clearProvisionalValue(state, stepId);
-      }
-      const nextStepForProceed = resolvedTransition?.targetStepId || String(ACTIONCODE_STEP_TRANSITIONS[actionCodeRaw] || stepId);
-      (state as Record<string, unknown>).current_step = String(nextStepForProceed || stepId);
-      if (resolvedTransition) {
-        setUiRenderModeByStep(
-          state,
-          resolvedTransition.targetStepId,
-          resolvedTransition.renderMode
-        );
-        applyUiPhaseByStep(
-          state,
-          resolvedTransition.targetStepId,
-          buildContractId(
-            resolvedTransition.targetStepId,
-            "incomplete_output",
-            resolvedTransition.renderMode === "no_buttons"
-              ? "NO_MENU"
-              : resolvedTransition.targetMenuId
-          )
-        );
-      } else {
-        setUiRenderModeByStep(state, String((state as Record<string, unknown>).current_step || stepId), "menu");
-      }
-      (state as Record<string, unknown>).active_specialist = "";
-      (state as Record<string, unknown>).last_specialist_result = {};
-      if (String((state as Record<string, unknown>).current_step || "") !== DREAM_STEP_ID) {
-        setDreamRuntimeMode(state, "self");
-      }
-      userMessage = "";
-      forcedProceed = true;
-    }
-  }
-  // NEW SYSTEM: Check if message is an ActionCode (starts with "ACTION_")
-  if (!forcedProceed && userMessage.startsWith("ACTION_")) {
-    const actionCodeInput = userMessage;
-    const safeActionCodeInput = String(actionCodeInput || "").trim().toUpperCase();
-    const currentStepForMenuTransition = String(state.current_step || "").trim();
-    const sourceMenuForTransition = inferCurrentMenuForStep(state, currentStepForMenuTransition);
-    const transitionSpec = NEXT_MENU_BY_ACTIONCODE[safeActionCodeInput];
-    const resolvedTransition = resolveActionCodeTransition(
-      safeActionCodeInput,
-      currentStepForMenuTransition,
-      sourceMenuForTransition
-    );
-    if (transitionSpec && !resolvedTransition) {
-      const specialistSnapshot = (lastSpecialistResult || {}) as Record<string, unknown>;
-      return finalizeResponse(attachRegistryPayload({
-        ok: false as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-        text: "",
-        prompt: "",
-        specialist: specialistSnapshot,
-        state,
-        error: {
-          type: "contract_violation",
-          message: "ActionCode transition violates menu contract.",
-          reason: "missing_or_invalid_transition_for_actioncode",
-          action_code: safeActionCodeInput,
-          step: currentStepForMenuTransition,
-          source_menu_id: sourceMenuForTransition || "",
-        },
-      }, specialistSnapshot));
-    }
-    if (resolvedTransition) {
-      setUiRenderModeByStep(
-        state,
-        resolvedTransition.targetStepId,
-        resolvedTransition.renderMode
-      );
-      applyUiPhaseByStep(
-        state,
-        resolvedTransition.targetStepId,
-        buildContractId(
-          resolvedTransition.targetStepId,
-          "incomplete_output",
-          resolvedTransition.renderMode === "no_buttons"
-            ? "NO_MENU"
-            : resolvedTransition.targetMenuId
-        )
-      );
-    }
-    if (currentStepForMenuTransition === DREAM_STEP_ID) {
-      if (DREAM_START_EXERCISE_ACTION_CODES.has(safeActionCodeInput)) {
-        setDreamRuntimeMode(state, "builder_collect");
-      } else if (safeActionCodeInput === "ACTION_DREAM_EXPLAINER_REFINE_ADJUST") {
-        setDreamRuntimeMode(state, "builder_refine");
-      } else if (safeActionCodeInput === "ACTION_DREAM_SWITCH_TO_SELF") {
-        setDreamRuntimeMode(state, "self");
-      } else if (safeActionCodeInput === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES") {
-        setDreamRuntimeMode(state, "builder_scoring");
-      }
-    }
-    const routed = processActionCode(actionCodeInput, state.current_step, state, lastSpecialistResult);
-    if (inputMode === "widget" && routed === actionCodeInput) {
-      const errorPayload = {
-        ok: false as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-        text: uiStringFromStateMap(
-          state,
-          "error.unknownAction",
-          uiDefaultString("error.unknownAction", "We could not process this choice. Please refresh and try again.")
-        ),
-        prompt: "",
-        specialist: lastSpecialistResult || {},
-        state,
-        error: {
-          type: "unknown_actioncode",
-          action_code: actionCodeInput,
-          strict: true,
-        },
-      };
-      return finalizeResponse(attachRegistryPayload(errorPayload, lastSpecialistResult));
-    }
-    userMessage = routed;
-  }
-  const pendingBeforeTurn = ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
-  const isGeneralOfftopicInput = isClearlyGeneralOfftopicInput(userMessage);
-  const shouldKeepPendingOnOfftopic =
-    String(state.current_step || "") === DREAM_STEP_ID && isGeneralOfftopicInput;
-  if (
-    wordingChoiceEnabled &&
-    inputMode === "widget" &&
-    String(pendingBeforeTurn.wording_choice_pending || "") === "true" &&
-    isWordingChoiceEligibleContext(
-      String(state.current_step || ""),
-      String((state as Record<string, unknown>).active_specialist || ""),
-      pendingBeforeTurn,
-      pendingBeforeTurn,
-      getDreamRuntimeMode(state)
-    ) &&
-    !isWordingPickRouteToken(userMessage) &&
-    (!isGeneralOfftopicInput || shouldKeepPendingOnOfftopic)
-  ) {
-    const stateWithUi = await ensureUiStrings(state, userMessage);
-    let pendingSpecialist = {
-      ...pendingBeforeTurn,
-      ...(isGeneralOfftopicInput ? { is_offtopic: true } : {}),
-    };
-    if (isGeneralOfftopicInput && String(state.current_step || "") !== STEP_0_ID) {
-      pendingSpecialist = normalizeNonStep0OfftopicSpecialist({
-        stepId: String(state.current_step || ""),
-        activeSpecialist: String((state as Record<string, unknown>).active_specialist || ""),
-        userMessage,
-        specialistResult: pendingSpecialist,
-        previousSpecialist: pendingBeforeTurn,
-        state: stateWithUi,
-      });
-      if (shouldKeepPendingOnOfftopic) {
-        pendingSpecialist = copyPendingWordingChoiceState(pendingSpecialist, pendingBeforeTurn);
-      }
-    }
-    const pendingChoice = buildWordingChoiceFromPendingSpecialist(
-      pendingSpecialist,
-      String((state as Record<string, unknown>).active_specialist || ""),
-      pendingBeforeTurn,
-      String(state.current_step || ""),
-      getDreamRuntimeMode(state)
-    );
-    console.log("[wording_choice_pending_blocked]", {
-      step: String(state.current_step || ""),
-      request_id: String((state as Record<string, unknown>).__request_id ?? ""),
-      client_action_id: String((state as Record<string, unknown>).__client_action_id ?? ""),
-    });
-    return finalizeResponse(attachRegistryPayload({
-      ok: true as const,
-      tool: "run_step" as const,
-      current_step_id: String(state.current_step),
-      active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-      text: buildTextForWidget({ specialist: pendingSpecialist }),
-      prompt: pickPrompt(pendingSpecialist),
-      specialist: pendingSpecialist,
-      state: stateWithUi,
-    }, pendingSpecialist, { require_wording_pick: true }, [], [], pendingChoice));
-  }
-  const wordingSelection = wordingChoiceEnabled
-    ? applyWordingPickSelection({
-      stepId: String(state.current_step ?? ""),
-      routeToken: userMessage,
+  const preflightLayer = await runStepRuntimePreflightLayer<RunStepSuccess | RunStepError>({
+    ports: runStepPreflightHelpers,
+    runtime: {
       state,
-      telemetry: uiI18nTelemetry,
-    })
-    : ({
-      handled: false,
-      specialist: ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {},
-      nextState: state,
-    } as const);
-  if (wordingSelection.handled) {
-    const stateWithUi = await ensureUiStrings(wordingSelection.nextState, userMessage);
-    return finalizeResponse(attachRegistryPayload({
-      ok: true as const,
-      tool: "run_step" as const,
-      current_step_id: String(stateWithUi.current_step),
-      active_specialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-      text: buildTextForWidget({ specialist: wordingSelection.specialist }),
-      prompt: pickPrompt(wordingSelection.specialist),
-      specialist: wordingSelection.specialist,
-      state: stateWithUi,
-    }, wordingSelection.specialist));
-  }
-  const refineAdjustTurn = isRefineAdjustRouteToken(userMessage);
-  if (refineAdjustTurn && wordingChoiceEnabled && inputMode === "widget") {
-    const prev = ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
-    const rebuilt = buildWordingChoiceFromTurn({
-      stepId: String(state.current_step || ""),
-      activeSpecialist: String((state as Record<string, unknown>).active_specialist || ""),
-      previousSpecialist: prev,
-      specialistResult: prev,
-      userTextRaw: String(prev.wording_choice_user_raw || prev.wording_choice_user_normalized || "").trim(),
-      isOfftopic: false,
-      forcePending: true,
-    });
-    if (rebuilt.wordingChoice) {
-      const pendingSpecialist = {
-        ...rebuilt.specialist,
-      };
-      (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
-      const stateWithUi = await ensureUiStrings(state, userMessage);
-      return finalizeResponse(attachRegistryPayload({
-        ok: true as const,
-        tool: "run_step" as const,
-        current_step_id: String(state.current_step),
-        active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-        text: buildTextForWidget({ specialist: pendingSpecialist }),
-        prompt: pickPrompt(pendingSpecialist),
-        specialist: pendingSpecialist,
-        state: stateWithUi,
-      }, pendingSpecialist, { require_wording_pick: true }, [], [], rebuilt.wordingChoice));
-    }
-  }
-  if (refineAdjustTurn) {
-    const prev = ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
-    const agentBase = pickWordingAgentBase(prev);
-    if (agentBase) {
-      const nextPrev = {
-        ...prev,
-        refined_formulation: agentBase,
-        wording_choice_agent_current: agentBase,
-      };
-      (state as Record<string, unknown>).last_specialist_result = nextPrev;
-    }
-  }
-  const responseUiFlags = ACTIONCODE_REGISTRY.ui_flags[userMessage] || null;
-  // Backend fallback: if Start arrives with empty input, reuse the captured initial message so Step 0 can extract Venture + Name.
-  const initialUserMessage = String((state as Record<string, unknown>).initial_user_message ?? "").trim();
-  if (
-    userMessage.trim() === "" &&
-    initialUserMessage &&
-    state.current_step === STEP_0_ID &&
-    String((state as Record<string, unknown>).step_0_final ?? "").trim() === "" &&
-    Object.keys((state as Record<string, unknown>).last_specialist_result ?? {}).length === 0
-  ) {
-    userMessage = initialUserMessage;
-  }
-  // Lock language once we see a meaningful user message (prevents mid-flow flips).
-  state = await ensureLanguage(state, userMessage);
+      rawLegacyMarkers,
+      isBootstrapPollCall,
+      actionCodeRaw,
+      userMessage,
+      submittedUserText,
+      clickedLabelForNoRepeat,
+      clickedActionCodeForNoRepeat,
+      transientTextSubmit,
+    },
+    constants: {
+      step0Id: STEP_0_ID,
+      step0Specialist: STEP_0_SPECIALIST,
+      localeHint,
+      localeHintSource,
+      inputMode: inputMode === "widget" ? "widget" : "chat",
+    },
+    finalize: {
+      isUiLocaleReadyGateV1Enabled,
+      resolveLocaleAndUiStringsReady: finalizeLayer.resolveLocaleAndUiStringsReady,
+      ensureUiStrings: finalizeLayer.ensureUiStrings,
+      finalizeResponse: finalizeLayer.finalizeResponse,
+      attachRegistryPayload: (payload, specialist, flagsOverride) =>
+        attachRegistryPayload(payload, specialist, flagsOverride) as RunStepSuccess | RunStepError,
+    },
+    behavior: {
+      hasUsableSpecialistForRetry,
+      buildTransientFallbackSpecialist,
+      deriveBootstrapContract,
+      buildTextForWidget,
+      pickPrompt,
+      buildFailClosedState,
+      inferCurrentMenuForStep,
+      labelForActionInMenu,
+    },
+    language: {
+      normalizeLangCode,
+      normalizeLanguageSource,
+      isUiStep0LangResetGuardV1Enabled,
+    },
+  });
+  if (preflightLayer.response) return preflightLayer.response as RunStepSuccess | RunStepError;
+
+  state = preflightLayer.state;
+  actionCodeRaw = preflightLayer.actionCodeRaw;
+  userMessage = preflightLayer.userMessage;
+  submittedUserText = preflightLayer.submittedUserText;
+  clickedLabelForNoRepeat = preflightLayer.clickedLabelForNoRepeat;
+  clickedActionCodeForNoRepeat = preflightLayer.clickedActionCodeForNoRepeat;
+  blockingMarkerClass = preflightLayer.blockingMarkerClass;
+
+  const actionRoutingLayer = await runStepRuntimeActionRoutingLayer<RunStepSuccess | RunStepError>({
+    runtime: {
+      state,
+      userMessage,
+      actionCodeRaw,
+      lastSpecialistResult,
+      inputMode: inputMode === "widget" ? "widget" : "chat",
+      wordingChoiceEnabled,
+      uiI18nTelemetry,
+    },
+    ids: {
+      step0Id: STEP_0_ID,
+      dreamStepId: DREAM_STEP_ID,
+      purposeStepId: PURPOSE_STEP_ID,
+      bigwhyStepId: BIGWHY_STEP_ID,
+      roleStepId: ROLE_STEP_ID,
+      entityStepId: ENTITY_STEP_ID,
+      strategyStepId: STRATEGY_STEP_ID,
+      targetgroupStepId: TARGETGROUP_STEP_ID,
+      productsservicesStepId: PRODUCTSSERVICES_STEP_ID,
+      rulesofthegameStepId: RULESOFTHEGAME_STEP_ID,
+      presentationStepId: PRESENTATION_STEP_ID,
+      dreamExplainerSwitchSelfMenuId: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
+    },
+    action: {
+      nextMenuByActionCode: NEXT_MENU_BY_ACTIONCODE as unknown as Record<string, unknown>,
+      dreamStartExerciseActionCodes: DREAM_START_EXERCISE_ACTION_CODES,
+      resolveActionCodeTransition,
+      inferCurrentMenuForStep,
+      setUiRenderModeByStep,
+      applyUiPhaseByStep,
+      buildContractId,
+      processActionCode,
+      setDreamRuntimeMode,
+      getDreamRuntimeMode,
+    },
+    state: {
+      provisionalValueForStep,
+      clearProvisionalValue,
+      clearStepInteractiveState,
+      isUiStateHygieneSwitchV1Enabled,
+      isClearlyGeneralOfftopicInput,
+      bumpUiI18nCounter: (telemetry, key) =>
+        bumpUiI18nCounter(
+          telemetry as UiI18nTelemetryCounters | null | undefined,
+          key as keyof UiI18nTelemetryCounters
+        ),
+    },
+    wording: {
+      isWordingChoiceEligibleContext,
+      buildWordingChoiceFromPendingSpecialist,
+      applyWordingPickSelection,
+      isWordingPickRouteToken,
+      isRefineAdjustRouteToken,
+      buildWordingChoiceFromTurn,
+      pickWordingAgentBase,
+      copyPendingWordingChoiceState,
+    },
+    behavior: {
+      ensureUiStrings: finalizeLayer.ensureUiStrings,
+      normalizeNonStep0OfftopicSpecialist,
+      buildTextForWidget,
+      pickPrompt,
+      uiStringFromStateMap,
+      uiDefaultString,
+      finalizeResponse: finalizeLayer.finalizeResponse,
+      attachRegistryPayload: (payload, specialist, flagsOverride, actionCodesOverride, renderedActionsOverride, wordingChoiceOverride, contractMetaOverride) =>
+        attachRegistryPayload(
+          payload,
+          specialist,
+          flagsOverride,
+          actionCodesOverride,
+          renderedActionsOverride,
+          wordingChoiceOverride,
+          contractMetaOverride
+        ) as RunStepSuccess | RunStepError,
+      resolveResponseUiFlags: (routeToken) => ACTIONCODE_REGISTRY.ui_flags[routeToken] || null,
+    },
+  });
+  if (actionRoutingLayer.response) return actionRoutingLayer.response as RunStepSuccess | RunStepError;
+
+  state = actionRoutingLayer.state;
+  userMessage = actionRoutingLayer.userMessage;
+  const responseUiFlags = actionRoutingLayer.responseUiFlags;
+
+  state = await finalizeLayer.ensureLanguage(state, userMessage);
   languageResolvedThisTurn = true;
   const lang = langFromState(state);
   const uiI18nCounterPort = (telemetry: unknown, key: string) =>
@@ -2451,10 +1697,10 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
     );
   const pipelinePorts: RunStepPipelinePorts<RunStepSuccess | RunStepError> = {
     ids: { step0Id: STEP_0_ID, dreamStepId: DREAM_STEP_ID, bigwhyStepId: BIGWHY_STEP_ID, strategyStepId: STRATEGY_STEP_ID, dreamSpecialist: DREAM_SPECIALIST, dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST, strategySpecialist: STRATEGY_SPECIALIST, dreamExplainerSwitchSelfMenuId: DREAM_EXPLAINER_SWITCH_SELF_MENU_ID },
-    policy: { dreamForceRefineRoutePrefix: DREAM_FORCE_REFINE_ROUTE_PREFIX, strategyConsolidateRouteToken: STRATEGY_CONSOLIDATE_ROUTE_TOKEN, bigwhyMaxWords: BIGWHY_MAX_WORDS, uiContractVersion: UI_CONTRACT_VERSION },
-    specialist: { buildRoutingContext, callSpecialistStrictSafe },
+    policy: { dreamForceRefineRoutePrefix: DREAM_FORCE_REFINE_ROUTE_PREFIX, strategyConsolidateRouteToken: STRATEGY_CONSOLIDATE_ROUTE_TOKEN, bigwhyMaxWords: actionRoutingLayer.bigwhyMaxWords, uiContractVersion: UI_CONTRACT_VERSION },
+    specialist: { buildRoutingContext: finalizeLayer.buildRoutingContext, callSpecialistStrictSafe },
     normalization: { normalizeEntitySpecialistResult, applyCentralMetaTopicRouter, normalizeNonStep0OfftopicSpecialist, normalizeStep0AskDisplayContract, hasValidStep0Final },
-    state: { applyPostSpecialistStateMutations, getDreamRuntimeMode, isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate, buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, pickBigWhyCandidate, countWords, buildBigWhyTooLongFeedback, enforceDreamBuilderQuestionProgress, applyMotivationQuotesContractV11 },
+    state: { applyPostSpecialistStateMutations, getDreamRuntimeMode, isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate, buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, pickBigWhyCandidate: actionRoutingLayer.pickBigWhyCandidate, countWords: actionRoutingLayer.countWords, buildBigWhyTooLongFeedback: actionRoutingLayer.buildBigWhyTooLongFeedback, enforceDreamBuilderQuestionProgress, applyMotivationQuotesContractV11 },
     render: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, buildContractId },
     wording: { isWordingChoiceEligibleContext, buildWordingChoiceFromTurn, buildWordingChoiceFromPendingSpecialist },
     response: {
@@ -2468,40 +1714,52 @@ export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunSt
           wordingChoiceOverride,
           contractMetaOverride
         ) as RunStepSuccess | RunStepError,
-      turnResponseEngine,
+      turnResponseEngine: finalizeLayer.turnResponseEngine,
     },
     guard: { looksLikeMetaInstruction },
     i18n: { bumpUiI18nCounter: uiI18nCounterPort },
   };
-  const pipelineHelpers = createRunStepPipelineHelpers<RunStepSuccess | RunStepError>(pipelinePorts);
 
   const routePorts: RunStepRoutePorts<RunStepSuccess | RunStepError> = {
     ids: { step0Id: STEP_0_ID, step0Specialist: STEP_0_SPECIALIST, dreamStepId: DREAM_STEP_ID, dreamSpecialist: DREAM_SPECIALIST, dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST, roleStepId: ROLE_STEP_ID, roleSpecialist: ROLE_SPECIALIST, presentationStepId: PRESENTATION_STEP_ID, presentationSpecialist: PRESENTATION_SPECIALIST },
     tokens: { dreamPickOneRouteToken: DREAM_PICK_ONE_ROUTE_TOKEN, roleChooseForMeRouteToken: ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, presentationMakeRouteToken: PRESENTATION_MAKE_ROUTE_TOKEN, switchToSelfDreamToken: SWITCH_TO_SELF_DREAM_TOKEN, dreamStartExerciseRouteToken: DREAM_START_EXERCISE_ROUTE_TOKEN },
     wording: { wordingSelectionMessage, pickPrompt, buildTextForWidget },
     state: { applyStateUpdate, setDreamRuntimeMode, getDreamRuntimeMode, isUiStateHygieneSwitchV1Enabled, clearStepInteractiveState },
-    contracts: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, ensureUiStrings, buildContractId },
-    step0: { ensureStartState, parseStep0Final, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState },
+    contracts: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, ensureUiStrings: finalizeLayer.ensureUiStrings, buildContractId },
+    step0: { ensureStartState: finalizeLayer.ensureStartState, parseStep0Final, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState },
     presentation: { hasPresentationTemplate, generatePresentationPptx, convertPptxToPdf, convertPdfToPng, cleanupOldPresentationFiles, baseUrlFromEnv, uiStringFromStateMap, uiDefaultString },
-    specialist: { callSpecialistStrictSafe, buildRoutingContext, rememberLlmCall },
-    response: { attachRegistryPayload, finalizeResponse, turnResponseEngine },
+    specialist: { callSpecialistStrictSafe, buildRoutingContext: finalizeLayer.buildRoutingContext, rememberLlmCall },
+    response: { attachRegistryPayload, finalizeResponse: finalizeLayer.finalizeResponse, turnResponseEngine: finalizeLayer.turnResponseEngine },
     suggestions: { pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState },
     i18n: { bumpUiI18nCounter: uiI18nCounterPort },
   };
-  const routeHelpers = createRunStepRouteHelpers<RunStepSuccess | RunStepError>(routePorts);
 
-  const runStepContext: RunStepContext = {
-    routing: {
-      userMessage, actionCodeRaw, responseUiFlags, inputMode: inputMode === "widget" ? "widget" : "chat",
-      wordingChoiceEnabled, languageResolvedThisTurn, isBootstrapPollCall, motivationQuotesEnabled,
+  const specialRoutesLayer = await runStepRuntimeSpecialRoutesLayer<RunStepSuccess | RunStepError>({
+    runtime: {
+      state,
+      userMessage,
+      actionCodeRaw,
+      responseUiFlags,
+      inputMode: inputMode === "widget" ? "widget" : "chat",
+      wordingChoiceEnabled,
+      languageResolvedThisTurn,
+      isBootstrapPollCall,
+      motivationQuotesEnabled,
+      uiI18nTelemetry,
+      transientPendingScores: transientPendingScores as number[][] | null,
+      submittedUserText,
+      rawNormalized,
+      pristineAtEntry,
+      lang,
+      model,
     },
-    rendering: { uiI18nTelemetry, lang, ensureUiStrings },
-    state: { state, transientPendingScores: transientPendingScores as number[][] | null, submittedUserText, rawNormalized, pristineAtEntry },
-    specialist: { model, decideOrchestration, rememberLlmCall },
-  };
+    specialist: { decideOrchestration, rememberLlmCall },
+    routePorts,
+  });
+  if (specialRoutesLayer.response) return specialRoutesLayer.response as RunStepSuccess | RunStepError;
 
-  const specialRouteResponse = await routeHelpers.handleSpecialRouteRegistry(runStepContext);
-  if (specialRouteResponse) return specialRouteResponse;
-  const pipelinePayload = await pipelineHelpers.runPostSpecialistPipeline(runStepContext);
-  return pipelinePayload;
+  return runStepRuntimePostPipelineLayer<RunStepSuccess | RunStepError>({
+    context: specialRoutesLayer.context,
+    pipelinePorts,
+  });
 }

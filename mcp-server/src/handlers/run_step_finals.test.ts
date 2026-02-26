@@ -2468,10 +2468,13 @@ test("wording choice: pending list mode does not repeat suggestion paragraph in 
 });
 
 test("step transition fast-path is actioncode-driven (no legacy confirm gate)", () => {
-  const source = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
-  assert.match(source, /const ACTIONCODE_STEP_TRANSITIONS:\s*Record<string,\s*string>/);
-  assert.match(source, /ACTION_STEP0_READY_START:\s*DREAM_STEP_ID/);
-  assert.match(source, /if \(actionCodeRaw && ACTIONCODE_STEP_TRANSITIONS\[actionCodeRaw\]\)/);
+  const source = fs.readFileSync(
+    new URL("./run_step_runtime_action_routing.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(source, /const actionCodeStepTransitions:\s*Record<string,\s*string>/);
+  assert.match(source, /ACTION_STEP0_READY_START:\s*ids\.dreamStepId/);
+  assert.match(source, /runtime\.actionCodeRaw && actionCodeStepTransitions\[runtime\.actionCodeRaw\]/);
 });
 
 test("step transition commits staged value and clears provisional state", async () => {
@@ -2508,9 +2511,14 @@ test("step transition commits staged value and clears provisional state", async 
 
 test("Dream readiness guard accepts explicit start-exercise route in widget mode", () => {
   const runStepSource = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
+  const specialRoutesSource = fs.readFileSync(
+    new URL("./run_step_runtime_special_routes.ts", import.meta.url),
+    "utf8"
+  );
   const routesSource = fs.readFileSync(new URL("./run_step_routes.ts", import.meta.url), "utf8");
-  assert.match(runStepSource, /createRunStepRouteHelpers/);
-  assert.match(runStepSource, /handleSpecialRouteRegistry\(/);
+  assert.match(runStepSource, /runStepRuntimeSpecialRoutesLayer/);
+  assert.match(specialRoutesSource, /createRunStepRouteHelpers/);
+  assert.match(specialRoutesSource, /handleSpecialRouteRegistry/);
   assert.match(routesSource, /dream_start_exercise/);
   assert.match(routesSource, /context\.userMessage === deps\.dreamStartExerciseRouteToken/);
   assert.match(
@@ -2522,8 +2530,16 @@ test("Dream readiness guard accepts explicit start-exercise route in widget mode
 
 test("special route assembly uses TurnResponseEngine path", () => {
   const runStepSource = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
+  const specialRoutesSource = fs.readFileSync(
+    new URL("./run_step_runtime_special_routes.ts", import.meta.url),
+    "utf8"
+  );
   const routesSource = fs.readFileSync(new URL("./run_step_routes.ts", import.meta.url), "utf8");
-  assert.match(runStepSource, /response:\s*\{\s*attachRegistryPayload,\s*finalizeResponse,\s*turnResponseEngine\s*\}/);
+  assert.match(
+    runStepSource,
+    /response:\s*\{\s*attachRegistryPayload,\s*finalizeResponse:\s*finalizeLayer\.finalizeResponse,\s*turnResponseEngine:\s*finalizeLayer\.turnResponseEngine\s*\}/
+  );
+  assert.match(specialRoutesSource, /handleSpecialRouteRegistry/);
   assert.match(routesSource, /deps\.turnResponseEngine\.renderValidateRecover/);
   assert.match(routesSource, /deps\.turnResponseEngine\.attachAndFinalize/);
   assert.doesNotMatch(routesSource, /deps\.validateRenderedContractOrRecover\(/);

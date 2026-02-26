@@ -27,6 +27,11 @@ function resolveTargetPaths() {
   const mcpServerRoot = path.resolve(scriptDir, "..", "..");
   return [
     path.join(mcpServerRoot, "src", "handlers", "run_step_runtime.ts"),
+    path.join(mcpServerRoot, "src", "handlers", "run_step_runtime_preflight.ts"),
+    path.join(mcpServerRoot, "src", "handlers", "run_step_runtime_action_routing.ts"),
+    path.join(mcpServerRoot, "src", "handlers", "run_step_runtime_special_routes.ts"),
+    path.join(mcpServerRoot, "src", "handlers", "run_step_runtime_post_pipeline.ts"),
+    path.join(mcpServerRoot, "src", "handlers", "run_step_runtime_finalize.ts"),
     path.join(mcpServerRoot, "src", "handlers", "run_step_routes.ts"),
     path.join(mcpServerRoot, "src", "handlers", "run_step_pipeline.ts"),
   ];

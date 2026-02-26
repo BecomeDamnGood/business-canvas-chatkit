@@ -66,6 +66,17 @@ function parseImports(filePath) {
     });
 }
 
+function assertLayerOrchestrationMarkers(source) {
+  const requiredMarkers = [
+    "runStepRuntimePreflightLayer",
+    "runStepRuntimeActionRoutingLayer",
+    "runStepRuntimeSpecialRoutesLayer",
+    "runStepRuntimePostPipelineLayer",
+    "createRunStepRuntimeFinalizeLayer",
+  ];
+  return requiredMarkers.filter((marker) => !source.includes(marker));
+}
+
 function classifyImport(spec) {
   if (spec.startsWith("node:")) return "node";
   if (!spec.startsWith(".")) return "external";
@@ -90,6 +101,7 @@ function main() {
   }
 
   const imports = parseImports(runtimePath);
+  const source = fs.readFileSync(runtimePath, "utf8");
   const counts = { total: imports.length, external: 0, local_handlers: 0 };
   const violations = [];
 
@@ -127,6 +139,11 @@ function main() {
   }
   if (counts.local_handlers < budget.minLocalHandlerImports) {
     budgetViolations.push(`local runtime imports ${counts.local_handlers} < ${budget.minLocalHandlerImports}`);
+  }
+
+  const missingMarkers = assertLayerOrchestrationMarkers(source);
+  for (const marker of missingMarkers) {
+    violations.push(`runtime owner missing orchestration layer marker "${marker}"`);
   }
 
   console.log(`[run_step_runtime_boundary_check] phase=${phase}`);

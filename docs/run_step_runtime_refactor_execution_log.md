@@ -11,6 +11,7 @@
 | PR5 | Introduce TurnResponseEngine for pipeline path and complete phase_R2 runtime extraction gate | completed | pending (set by commit command) |
 | PR6 | Migrate route response assembly to TurnResponseEngine and remove duplicated route-side render/validate/finalize blocks | completed | pending (set by commit command) |
 | PR7 | Eliminate any at ingress/LLM/output boundaries with specialist schema typing + CI ratchet | completed | pending (set by commit command) |
+| PR8 | Runtime orchestration layering, KPI convergence, and phase_R4 runtime gates | completed | pending (set by commit command) |
 
 ## Entry Template
 
@@ -290,4 +291,65 @@
   - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `2507`
   - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `0`
   - `rg -n "\\bany\\b" mcp-server/src/handlers --glob '*.ts' | wc -l` => `580` (from `706`, script baseline `HEAD~1`)
+- commit hash: pending (captured after commit command)
+
+### PR8 - 2026-02-26
+- status: completed
+- capacity budget:
+  - target: 70%
+  - observed: 70%
+- scope goal: Split runtime into explicit orchestration layers, converge to final KPI gates, and pass phase_R4 runtime architecture checks.
+- completed:
+  - Split runtime flow into explicit 5-layer modules and rewired runtime owner orchestration:
+    - `run_step_runtime_preflight.ts`
+    - `run_step_runtime_action_routing.ts`
+    - `run_step_runtime_special_routes.ts`
+    - `run_step_runtime_post_pipeline.ts`
+    - `run_step_runtime_finalize.ts`
+  - Reduced `run_step_runtime.ts` to orchestration + wiring with layer-level routing/finalization handoff.
+  - Extracted runtime text/render helper ownership from runtime orchestrator into finalize layer helper factory.
+  - Updated runtime architecture scripts for layered checks and phase_R4 convergence.
+  - Updated source-contract tests to assert new runtime layer wiring and shared response-engine path.
+  - Passed hard KPI gates:
+    - runtime LOC `1765` (`<1800`)
+    - runtime/routes/pipeline aggregate `any` lines `0` (`<=74`)
+    - DI budget max deps `12` with zero offenders
+    - shared response engine path active for routes + pipeline
+- pending:
+  - None.
+- changed files:
+  - mcp-server/src/handlers/run_step_runtime.ts
+  - mcp-server/src/handlers/run_step_runtime_preflight.ts
+  - mcp-server/src/handlers/run_step_runtime_action_routing.ts
+  - mcp-server/src/handlers/run_step_runtime_special_routes.ts
+  - mcp-server/src/handlers/run_step_runtime_post_pipeline.ts
+  - mcp-server/src/handlers/run_step_runtime_finalize.ts
+  - mcp-server/src/handlers/run_step_modules.ts
+  - mcp-server/src/handlers/run_step_finals.test.ts
+  - mcp-server/scripts/arch/run_step_runtime_loc_check.mjs
+  - mcp-server/scripts/arch/run_step_runtime_boundary_check.mjs
+  - mcp-server/scripts/arch/run_step_runtime_complexity_check.mjs
+  - mcp-server/scripts/arch/run_step_any_budget_check.mjs
+  - docs/run_step_runtime_refactor_execution_log.md
+- tests:
+  - `npm --prefix mcp-server run build` (pass)
+  - `node mcp-server/scripts/ui_artifact_parity_check.mjs` (pass)
+  - `node --loader ts-node/esm scripts/contract-smoke.mjs` (workdir `mcp-server`) (pass)
+  - `npm --prefix mcp-server test` (pass)
+  - `RUN_STEP_RUNTIME_ARCH_PHASE=phase_R4 npm --prefix mcp-server run arch:run-step-runtime:check` (pass)
+  - `RUN_STEP_RUNTIME_ANY_MAX=74 npm --prefix mcp-server run arch:run-step:any-budget` (pass)
+  - `npm --prefix mcp-server run arch:run-step:di-budget` (pass)
+- metrics:
+  - `run_step_runtime.ts LOC before` => `2507`
+  - `run_step_runtime.ts LOC after` => `1765`
+  - `any runtime/routes/pipeline before` => `0`
+  - `any runtime/routes/pipeline after` => `0`
+  - `DI factories >12 deps` => `0`
+  - `git diff --name-only | wc -l` => `10`
+  - `git diff --numstat | awk '{a+=$1; d+=$2} END {print "adds="a,"dels="d,"total="a+d}'` => `adds=415 dels=1006 total=1421`
+  - `git diff -- mcp-server/src/handlers/run_step_runtime.ts | rg '^@@' | wc -l` => `6`
+  - `wc -l mcp-server/src/handlers/run_step_runtime.ts` => `1765`
+  - `rg -n "\\bany\\b" mcp-server/src/handlers/run_step_runtime.ts mcp-server/src/handlers/run_step_routes.ts mcp-server/src/handlers/run_step_pipeline.ts | wc -l` => `0`
+  - `scoped changed files count` => `12`
+  - `note` => `global git diff counts include pre-existing local edits outside PR8 scope`
 - commit hash: pending (captured after commit command)

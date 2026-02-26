@@ -7,6 +7,11 @@ import { fileURLToPath } from "node:url";
 const TARGET_DIR_RELATIVE = "mcp-server/src/handlers";
 const RUNTIME_TARGETS_RELATIVE = [
   "mcp-server/src/handlers/run_step_runtime.ts",
+  "mcp-server/src/handlers/run_step_runtime_preflight.ts",
+  "mcp-server/src/handlers/run_step_runtime_action_routing.ts",
+  "mcp-server/src/handlers/run_step_runtime_special_routes.ts",
+  "mcp-server/src/handlers/run_step_runtime_post_pipeline.ts",
+  "mcp-server/src/handlers/run_step_runtime_finalize.ts",
   "mcp-server/src/handlers/run_step_routes.ts",
   "mcp-server/src/handlers/run_step_pipeline.ts",
 ];
