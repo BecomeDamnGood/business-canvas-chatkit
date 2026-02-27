@@ -1,4 +1,28 @@
-export type PayloadSource = "meta.widget_result" | "root.result" | "none";
+export type PayloadSource =
+  | "meta.widget_result"
+  | "root.result"
+  | "structuredContent.result"
+  | "none";
+
+export type PayloadReasonCode =
+  | "meta_widget_result_root"
+  | "meta_widget_result_root_result"
+  | "meta_widget_result_tool_output"
+  | "result_wrapper_root"
+  | "result_wrapper_tool_output"
+  | "direct_widget_result_root"
+  | "direct_widget_result_tool_output"
+  | "structured_content_result_root"
+  | "structured_content_result_root_result"
+  | "structured_content_result_tool_output"
+  | "none";
+
+export type CanonicalWidgetEnvelope = {
+  envelope: Record<string, unknown>;
+  result: Record<string, unknown>;
+  source: PayloadSource;
+  reason_code: PayloadReasonCode;
+};
 
 export type WaitingReason = "missing_state" | "i18n_pending" | "none";
 export type BootstrapPhase = "waiting_locale" | "ready" | "recovery" | "failed";
@@ -7,6 +31,7 @@ export type BootstrapRenderMode = "wait_shell" | "interactive" | "recovery";
 export type ResolvedWidgetPayload = {
   result: Record<string, unknown>;
   source: PayloadSource;
+  source_reason_code: PayloadReasonCode;
   has_state: boolean;
   resolved_language: string;
   resolved_language_source:
@@ -56,6 +81,14 @@ const WIDGET_RESULT_KEYS = new Set([
   "ui_strings_lang",
   "language",
 ]);
+
+type CandidateContext = "root" | "root.result" | "toolOutput";
+
+type WidgetPick = {
+  result: Record<string, unknown>;
+  source: PayloadSource;
+  reason_code: PayloadReasonCode;
+};
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -169,35 +202,128 @@ export function mergeToolOutputWithResponseMetadata(
   return merged;
 }
 
-function pickWidgetResultFromKnownShapes(raw: unknown): {
-  result: Record<string, unknown>;
-  source: PayloadSource;
-} {
-  const root = toRecord(raw);
-  const meta = toRecord(root._meta);
+function reasonCodeForMeta(context: CandidateContext): PayloadReasonCode {
+  if (context === "root") return "meta_widget_result_root";
+  if (context === "root.result") return "meta_widget_result_root_result";
+  return "meta_widget_result_tool_output";
+}
+
+function reasonCodeForResultWrapper(context: CandidateContext): PayloadReasonCode {
+  if (context === "toolOutput") return "result_wrapper_tool_output";
+  return "result_wrapper_root";
+}
+
+function reasonCodeForDirect(context: CandidateContext): PayloadReasonCode {
+  if (context === "toolOutput") return "direct_widget_result_tool_output";
+  return "direct_widget_result_root";
+}
+
+function reasonCodeForStructured(context: CandidateContext): PayloadReasonCode {
+  if (context === "root") return "structured_content_result_root";
+  if (context === "root.result") return "structured_content_result_root_result";
+  return "structured_content_result_tool_output";
+}
+
+function pickMetaWidgetResult(
+  container: Record<string, unknown>,
+  context: CandidateContext
+): WidgetPick | null {
+  const meta = toRecord(container._meta);
   const candidate = meta.widget_result;
-  if (isWidgetResultLike(candidate)) {
+  if (!isWidgetResultLike(candidate)) return null;
+  return {
+    result: candidate as Record<string, unknown>,
+    source: "meta.widget_result",
+    reason_code: reasonCodeForMeta(context),
+  };
+}
+
+function pickNonMetaWidgetResult(
+  container: Record<string, unknown>,
+  context: CandidateContext
+): WidgetPick | null {
+  const wrapperResult = toRecord(container.result);
+  if (isWidgetResultLike(wrapperResult)) {
     return {
-      result: candidate as Record<string, unknown>,
-      source: "meta.widget_result",
+      result: wrapperResult,
+      source: "root.result",
+      reason_code: reasonCodeForResultWrapper(context),
     };
   }
+  const directCandidate: unknown = container;
+  if (isWidgetResultLike(directCandidate)) {
+    return {
+      result: directCandidate,
+      source: "root.result",
+      reason_code: reasonCodeForDirect(context),
+    };
+  }
+  const structuredContent = toRecord(container.structuredContent);
+  const structuredResult = toRecord(structuredContent.result);
+  if (isWidgetResultLike(structuredResult)) {
+    return {
+      result: structuredResult,
+      source: "structuredContent.result",
+      reason_code: reasonCodeForStructured(context),
+    };
+  }
+  return null;
+}
+
+function resolveWidgetResultFromKnownShapes(raw: unknown): WidgetPick {
+  const root = toRecord(raw);
   const rootResult = toRecord(root.result);
-  if (isWidgetResultLike(rootResult)) {
-    return {
-      result: rootResult,
-      source: "root.result",
-    };
+  const mergedToolOutput = mergeToolOutputWithResponseMetadata(
+    root.toolOutput,
+    root.toolResponseMetadata
+  );
+
+  const candidates: Array<{ context: CandidateContext; payload: Record<string, unknown> }> = [
+    { context: "root", payload: root },
+  ];
+  if (Object.keys(rootResult).length) {
+    candidates.push({ context: "root.result", payload: rootResult });
   }
-  if (isWidgetResultLike(root)) {
-    return {
-      result: root,
-      source: "root.result",
-    };
+  if (Object.keys(mergedToolOutput).length) {
+    candidates.push({ context: "toolOutput", payload: mergedToolOutput });
   }
+
+  for (const candidate of candidates) {
+    const pickedMeta = pickMetaWidgetResult(candidate.payload, candidate.context);
+    if (pickedMeta) return pickedMeta;
+  }
+
+  for (const candidate of candidates) {
+    const picked = pickNonMetaWidgetResult(candidate.payload, candidate.context);
+    if (picked) return picked;
+  }
+
   return {
     result: {},
     source: "none",
+    reason_code: "none",
+  };
+}
+
+export function canonicalizeWidgetPayload(raw: unknown): CanonicalWidgetEnvelope {
+  const selected = resolveWidgetResultFromKnownShapes(raw);
+  if (!Object.keys(selected.result).length) {
+    return {
+      envelope: {},
+      result: {},
+      source: "none",
+      reason_code: "none",
+    };
+  }
+  return {
+    envelope: {
+      _meta: {
+        widget_result: selected.result,
+      },
+    },
+    result: selected.result,
+    source: selected.source,
+    reason_code: selected.reason_code,
   };
 }
 
@@ -244,9 +370,9 @@ export function computeHydrationState(resolved: ResolvedWidgetPayload): Hydratio
 }
 
 export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
-  const primary = pickWidgetResultFromKnownShapes(raw);
-  const result = primary.result;
-  const payloadSource: PayloadSource = Object.keys(primary.result).length ? primary.source : "none";
+  const canonical = canonicalizeWidgetPayload(raw);
+  const result = canonical.result;
+  const payloadSource: PayloadSource = canonical.source;
   const sessionInfo = sessionInfoForResult(result);
   const state = toRecord(result.state);
   const hasState = Object.keys(state).length > 0;
@@ -256,6 +382,7 @@ export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
   const temp: ResolvedWidgetPayload = {
     result,
     source: payloadSource,
+    source_reason_code: canonical.reason_code,
     has_state: hasState,
     resolved_language: language,
     resolved_language_source: languageSource,

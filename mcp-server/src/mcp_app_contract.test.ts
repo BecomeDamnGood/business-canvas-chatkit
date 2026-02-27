@@ -67,7 +67,9 @@ test("MCP wrapper parity: structuredContent.result is always model-safe and _met
 });
 
 test("MCP app contract: widget render-state resolves _meta.widget_result first with compatible fallback paths", () => {
+  assert.match(widgetRuntimeSource, /export function canonicalizeWidgetPayload\(/);
   assert.match(widgetRuntimeSource, /const candidate = meta\.widget_result/);
+  assert.match(widgetRuntimeSource, /const mergedToolOutput = mergeToolOutputWithResponseMetadata\(/);
   assert.match(widgetRuntimeSource, /bootstrap_session_id/);
   assert.match(widgetRuntimeSource, /bootstrap_epoch/);
   assert.match(widgetRuntimeSource, /response_seq/);
@@ -75,6 +77,8 @@ test("MCP app contract: widget render-state resolves _meta.widget_result first w
   assert.match(widgetRuntimeSource, /const rootResult = toRecord\(root\.result\)/);
   assert.match(widgetRuntimeSource, /source:\s*"meta\.widget_result"/);
   assert.match(widgetRuntimeSource, /source:\s*"root\.result"/);
+  assert.match(widgetRuntimeSource, /source:\s*"structuredContent\.result"/);
+  assert.match(widgetRuntimeSource, /reason_code:\s*selected\.reason_code/);
 });
 
 test("MCP wrapper parity: model-safe result contract remains minimal in buildModelSafeResult", () => {

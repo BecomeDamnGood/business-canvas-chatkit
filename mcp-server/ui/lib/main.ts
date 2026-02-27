@@ -5,12 +5,12 @@
 import { t } from "./ui_constants.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 import {
+  applyToolResult,
   initActionsConfig,
   callRunStep,
   handleToolResultAndMaybeScheduleBootstrapRetry,
   handleBridgeResponse,
   isTrustedBridgeMessageEvent,
-  mergeToolOutputWithResponseMetadata,
   notifyHostTransportSignal,
   resolveAllowedHostOrigin,
   setBridgeEnabled,
@@ -23,12 +23,6 @@ import { render } from "./ui_render.js";
 initActionsConfig({ render, t });
 
 const isLocalDev = (globalThis as Record<string, unknown>).LOCAL_DEV === "1";
-
-function toRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
 
 function latestWidgetState(): Record<string, unknown> {
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown>; lang?: string } }).__BSC_LATEST__;
@@ -51,65 +45,6 @@ function uiStringFromContract(key: string): string {
 function actionCodeFromState(stateKey: string): string {
   const state = latestWidgetState();
   return String(state[stateKey] || "").trim();
-}
-
-function isWidgetResultLike(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const rec = value as Record<string, unknown>;
-  const keys = Object.keys(rec);
-  if (!keys.length) return false;
-  const state = rec.state;
-  if (state !== undefined && (typeof state !== "object" || state === null || Array.isArray(state))) {
-    return false;
-  }
-  const widgetLikeKeys = new Set([
-    "state",
-    "ui",
-    "prompt",
-    "text",
-    "specialist",
-    "current_step_id",
-    "model_result_shape_version",
-    "ui_strings",
-    "ui_strings_lang",
-    "language",
-  ]);
-  return keys.some((key) => widgetLikeKeys.has(key));
-}
-
-function normalizeHostToolResultNotification(paramsRaw: unknown): Record<string, unknown> {
-  const params = toRecord(paramsRaw);
-  const directCandidate = params;
-  const resultCandidate = toRecord(params.result);
-  const toolOutputCandidate = params.toolOutput;
-  const metadata = toRecord(params.toolResponseMetadata);
-  if (isWidgetResultLike(directCandidate)) {
-    if (Object.keys(resultCandidate).length > 0 || Object.keys(toRecord(toolOutputCandidate)).length > 0) {
-      console.warn("[host_tool_result_mixed_shape_used]", {
-        has_direct_result: true,
-        has_result_wrapper: Object.keys(resultCandidate).length > 0,
-        has_tool_output: Object.keys(toRecord(toolOutputCandidate)).length > 0,
-      });
-    }
-    return mergeToolOutputWithResponseMetadata(directCandidate, metadata);
-  }
-  if (Object.keys(resultCandidate).length > 0) {
-    if (Object.keys(toRecord(toolOutputCandidate)).length > 0) {
-      console.warn("[host_tool_result_mixed_shape_used]", {
-        has_result: true,
-        has_tool_output: true,
-      });
-    }
-    return mergeToolOutputWithResponseMetadata(resultCandidate, metadata);
-  }
-  if (Object.keys(metadata).length > 0 || Object.keys(toRecord(toolOutputCandidate)).length > 0) {
-    console.warn("[host_tool_result_legacy_shape_used]", {
-      has_result: false,
-      has_tool_output: Object.keys(toRecord(toolOutputCandidate)).length > 0,
-      has_tool_response_metadata: Object.keys(metadata).length > 0,
-    });
-  }
-  return mergeToolOutputWithResponseMetadata(toolOutputCandidate, metadata);
 }
 
 function ingestHostPayload(
@@ -167,7 +102,10 @@ function readSetGlobalsPayloadFromHost(): Record<string, unknown> {
   const host = (globalThis as Record<string, unknown>).openai as
     | { toolOutput?: unknown; toolResponseMetadata?: unknown }
     | undefined;
-  return mergeToolOutputWithResponseMetadata(host?.toolOutput, host?.toolResponseMetadata);
+  return applyToolResult({
+    toolOutput: host?.toolOutput,
+    toolResponseMetadata: host?.toolResponseMetadata,
+  });
 }
 
 function tryInitialIngestFromHost(source: "set_globals" | "host_notification"): boolean {
@@ -259,9 +197,8 @@ if (typeof window !== "undefined") {
       notifyHostTransportSignal("bridge_message");
     }
     if (method === "ui/notifications/tool-result") {
-      const payload = normalizeHostToolResultNotification(data.params);
       try {
-        ingestHostPayload(payload, "host_notification");
+        ingestHostPayload(data.params, "host_notification");
         notifyHostTransportSignal("host_notification");
       } catch (err) {
         console.error(err);

@@ -10,6 +10,7 @@ import {
   setRateLimitUntil,
 } from "./ui_state.js";
 import {
+  canonicalizeWidgetPayload,
   computeBootstrapRenderState as computeBootstrapRenderStateCore,
   computeHydrationState as computeHydrationStateCore,
   extractBootstrapOrdering as extractBootstrapOrderingCore,
@@ -20,10 +21,13 @@ export type {
   BootstrapOrdering,
   BootstrapRenderState,
   HydrationStatus,
+  PayloadReasonCode,
+  PayloadSource,
   ResolvedWidgetPayload,
   WaitingReason,
 } from "./locale_bootstrap_runtime.js";
 import type { HydrationStatus, ResolvedWidgetPayload } from "./locale_bootstrap_runtime.js";
+import type { PayloadReasonCode, PayloadSource } from "./locale_bootstrap_runtime.js";
 export { mergeToolOutputWithResponseMetadata };
 
 // Injected by main during init
@@ -328,17 +332,26 @@ export function computeBootstrapRenderState(params: {
 }
 
 function hydrateWidgetResultEnvelope(raw: unknown): Record<string, unknown> {
-  const resolved = resolveWidgetPayloadCore(raw);
-  if (!Object.keys(resolved.result).length) return {};
+  return canonicalizeWidgetPayload(raw).envelope;
+}
+
+type ToolResultNormalization = {
+  normalized: Record<string, unknown>;
+  source: PayloadSource;
+  reasonCode: PayloadReasonCode;
+};
+
+function normalizeToolResult(raw: unknown): ToolResultNormalization {
+  const canonical = canonicalizeWidgetPayload(raw);
   return {
-    _meta: {
-      widget_result: resolved.result,
-    },
+    normalized: canonical.envelope,
+    source: canonical.source,
+    reasonCode: canonical.reason_code,
   };
 }
 
 export function applyToolResult(raw: unknown): Record<string, unknown> {
-  return hydrateWidgetResultEnvelope(raw);
+  return normalizeToolResult(raw).normalized;
 }
 
 export function setLastToolOutput(raw: unknown): void {
@@ -497,9 +510,14 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   }
 ): Record<string, unknown> {
   const source = String(opts?.source || "unknown");
-  const normalized = applyToolResult(raw);
+  const normalizedResult = normalizeToolResult(raw);
+  const normalized = normalizedResult.normalized;
   if (!Object.keys(normalized).length) {
-    console.warn("[ui_ingest_dropped_no_widget_result]", { source });
+    console.warn("[ui_ingest_dropped_no_widget_result]", {
+      source,
+      payload_source: normalizedResult.source,
+      payload_reason_code: normalizedResult.reasonCode,
+    });
     return {};
   }
   const resolved = resolveWidgetPayload(normalized);
@@ -518,6 +536,8 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     console.warn("[ui_ordering_dropped_stale]", {
       source,
       reason: orderingDecision.reason,
+      payload_source: resolved.source,
+      payload_reason_code: resolved.source_reason_code,
       incoming_tuple: describeBootstrapOrdering(incomingOrdering),
       current_tuple: describeBootstrapOrdering(currentOrdering),
     });
@@ -527,6 +547,8 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     console.warn("[ui_ordering_dropped_stale]", {
       source,
       reason: "incoming_missing_tuple",
+      payload_source: resolved.source,
+      payload_reason_code: resolved.source_reason_code,
       incoming_tuple: describeBootstrapOrdering(incomingOrdering),
       current_tuple: describeBootstrapOrdering(currentOrdering),
     });
@@ -542,6 +564,8 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     console.log("[ui_ordering_applied]", {
       source,
       reason: orderingDecision.reason,
+      payload_source: resolved.source,
+      payload_reason_code: resolved.source_reason_code,
       incoming_tuple: describeBootstrapOrdering(incomingOrdering),
       current_tuple: describeBootstrapOrdering(currentOrdering),
     });
@@ -553,6 +577,7 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     console.log("[ui_bootstrap_state]", {
       source,
       payload_source: resolved.source,
+      payload_reason_code: resolved.source_reason_code,
       has_state: resolved.has_state,
       waiting_hydration: hydration.waiting_reason !== "none",
       waiting_reason: hydration.waiting_reason,
@@ -898,19 +923,38 @@ function normalizeLocaleHintCandidate(raw: unknown): string {
   return [language, ...rest].join("-");
 }
 
+function languageFromLocale(locale: string): string {
+  const candidate = String(locale || "").trim();
+  if (!candidate) return "";
+  const language = candidate.split("-")[0] || "";
+  return language.toLowerCase();
+}
+
 function resolveLocaleHintForPayload(state: Record<string, unknown>): {
   localeHint: string;
-  localeHintSource: "message_detect" | "none";
+  localeHintSource: "message_detect" | "webplus_i18n" | "none";
 } {
   const explicitLocale =
     normalizeLocaleHintCandidate(state.locale) ||
     normalizeLocaleHintCandidate(state.ui_strings_requested_lang) ||
     normalizeLocaleHintCandidate(state.ui_strings_lang);
+  const normalizedLanguage = normalizeLocaleHintCandidate(state.language);
   const languageSource = String(state.language_source || "").trim().toLowerCase();
   if (languageSource === "message_detect") {
-    const detectedLocale = normalizeLocaleHintCandidate(state.language) || explicitLocale;
+    const detectedLocale = normalizedLanguage || explicitLocale;
     if (detectedLocale) {
       return { localeHint: detectedLocale, localeHintSource: "message_detect" };
+    }
+  }
+  const explicitLanguage = languageFromLocale(explicitLocale);
+  const resolvedLanguage = languageFromLocale(normalizedLanguage);
+  const nonEnglishKnown =
+    (explicitLanguage && explicitLanguage !== "en") ||
+    (resolvedLanguage && resolvedLanguage !== "en");
+  if (nonEnglishKnown) {
+    const localeToSend = explicitLocale || normalizedLanguage;
+    if (localeToSend) {
+      return { localeHint: localeToSend, localeHintSource: "webplus_i18n" };
     }
   }
   // Avoid sending a synthetic/default locale hint (especially EN) from startup fallback state.
@@ -1082,6 +1126,7 @@ export async function callRunStep(
         elapsed_ms: Date.now() - startedAt,
       });
     }
+    const orderingBeforeIngest = readBootstrapOrderingState(widgetState());
     const normalizedRaw = toRecord(resp);
     const resolvedResponse = resolveWidgetPayload(normalizedRaw);
     const directResult = resolvedResponse.result;
@@ -1089,6 +1134,9 @@ export async function callRunStep(
       source: "call_run_step",
     });
     const hasIngestedResult = Object.keys(ingestedResult).length > 0;
+    const orderingAfterIngest = readBootstrapOrderingState(widgetState());
+    const orderingAdvanceDecision = decideOrderingPatch(orderingBeforeIngest, orderingAfterIngest);
+    const orderingAdvanced = hasValidBootstrapOrdering(orderingAfterIngest) && orderingAdvanceDecision.apply;
     const result = hasIngestedResult ? ingestedResult : directResult;
     const errorObj = result?.error as
       | { type?: string; user_message?: string; retry_after_ms?: number; retry_action?: string }
@@ -1118,15 +1166,46 @@ export async function callRunStep(
         request_id: requestId,
         client_action_id: clientActionId,
         current_step: String(nextState.current_step || ""),
-        has_widget_result: resolvedResponse.source === "meta.widget_result",
+        has_widget_result: resolvedResponse.source !== "none",
+        payload_source: resolvedResponse.source,
+        payload_reason_code: resolvedResponse.source_reason_code,
+        ordering_advanced: orderingAdvanced,
         response_ingested: hasIngestedResult,
       });
     }
     if (isStartAction) {
-      setWidgetStateSafe({
-        start_dispatch_state: "ready",
-        transport_ready: "true",
-      });
+      const responseViewMode = String(
+        (
+          toRecord(
+            toRecord(
+              result?.ui
+            ).view
+          ).mode || ""
+        )
+      )
+        .trim()
+        .toLowerCase();
+      const startAdvanced = hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart");
+      if (!startAdvanced) {
+        console.warn("[ui_start_dispatch_ack_without_state_advance]", {
+          response_ingested: hasIngestedResult,
+          ordering_advanced: orderingAdvanced,
+          payload_source: resolvedResponse.source,
+          payload_reason_code: resolvedResponse.source_reason_code,
+          response_view_mode: responseViewMode,
+          ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
+          ordering_after: describeBootstrapOrdering(orderingAfterIngest),
+        });
+        setWidgetStateSafe({
+          start_dispatch_state: "failed",
+          transport_ready: "true",
+        });
+      } else {
+        setWidgetStateSafe({
+          start_dispatch_state: "ready",
+          transport_ready: "true",
+        });
+      }
     }
   } catch (e) {
     if (didTimeout) return;

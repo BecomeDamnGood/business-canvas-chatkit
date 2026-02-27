@@ -138,7 +138,7 @@ function parsePositiveInt(value: unknown): number {
 }
 
 function envFlagEnabled(name: string, fallback: boolean): boolean {
-  const raw = String(process.env[name] ?? "").trim().toLowerCase();
+  const raw = safeString(process.env[name] ?? "").trim().toLowerCase();
   if (!raw) return fallback;
   return !["0", "false", "off", "no"].includes(raw);
 }

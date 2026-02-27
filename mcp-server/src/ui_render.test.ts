@@ -1143,31 +1143,23 @@ test("computeBootstrapRenderState honors explicit waiting_locale mode over clien
 
 test("main source handles host tool-result via shared bootstrap scheduler", () => {
   const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
-  assert.match(source, /function normalizeHostToolResultNotification\(/);
+  assert.match(source, /applyToolResult/);
   assert.match(source, /function ingestHostPayload\(/);
   assert.match(source, /const STARTUP_WAITING_VIEW_MODE = "waiting_locale";/);
   assert.match(source, /function buildStartupInitState\(\): Record<string, unknown> \{/);
   assert.match(source, /const startupInitState = buildStartupInitState\(\);/);
   assert.match(source, /render\(startupInitState\);/);
-  assert.match(source, /const payload = normalizeHostToolResultNotification\(data\.params\);/);
-  assert.match(source, /const directCandidate = params;/);
-  assert.match(source, /if \(isWidgetResultLike\(directCandidate\)\) \{/);
-  assert.match(source, /mergeToolOutputWithResponseMetadata\(directCandidate, metadata\)/);
-  assert.match(source, /const resultCandidate = toRecord\(params\.result\);/);
-  assert.match(source, /if \(Object\.keys\(resultCandidate\)\.length > 0\) \{[\s\S]*mergeToolOutputWithResponseMetadata\(resultCandidate, metadata\)/);
-  assert.match(source, /const toolOutputCandidate = params\.toolOutput;/);
-  assert.match(source, /\[host_tool_result_mixed_shape_used\]/);
-  assert.match(source, /\[host_tool_result_legacy_shape_used\]/);
-  assert.match(source, /mergeToolOutputWithResponseMetadata\(toolOutputCandidate, metadata\)/);
+  assert.match(source, /return applyToolResult\(\{\s*toolOutput: host\?\.toolOutput,\s*toolResponseMetadata: host\?\.toolResponseMetadata,\s*\}\);/);
   assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
   assert.match(source, /notifyHostTransportSignal\("bridge_message"\)/);
   assert.match(source, /notifyHostTransportSignal\("host_notification"\)/);
   assert.match(source, /notifyHostTransportSignal\("set_globals"\)/);
-  assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*ingestHostPayload\(payload, "host_notification"\)/);
+  assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*ingestHostPayload\(data\.params, "host_notification"\)/);
   assert.match(source, /openai:set_globals[\s\S]*ingestHostPayload\(payload, "set_globals"\)/);
-  assert.match(source, /mergeToolOutputWithResponseMetadata\(\s*host\?\.toolOutput,\s*host\?\.toolResponseMetadata\s*\)/);
   assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*const actionCode = actionCodeFromState\("ui_action_start"\);[\s\S]*callRunStep\(actionCode, \{ started: "true" \}\)/);
   assert.match(source, /\[ui_action_missing\]/);
+  assert.doesNotMatch(source, /function normalizeHostToolResultNotification\(/);
+  assert.doesNotMatch(source, /mergeToolOutputWithResponseMetadata\(/);
   assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
   assert.doesNotMatch(source, /function shouldAcceptBootstrapPayload\(/);
 });
@@ -1831,7 +1823,10 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.match(source, /\[ui_dispatch_ack_only\]/);
   assert.match(source, /ui_transport_unavailable/);
   assert.match(source, /ui_start_dispatch_failed/);
+  assert.match(source, /ui_start_dispatch_ack_without_state_advance/);
   assert.match(source, /ui_ordering_patch_dropped/);
+  assert.match(source, /const startAdvanced = hasIngestedResult && \(orderingAdvanced \|\| responseViewMode !== "prestart"\);/);
+  assert.match(source, /payload_reason_code: resolvedResponse\.source_reason_code/);
   assert.match(source, /notifyHostTransportSignal/);
   assert.match(source, /function canUseBridge\(\): boolean \{[\s\S]*return bridgeEnabled;/);
   assert.match(source, /const transportPrimary: "callTool" \| "bridge" = hasCallTool \? "callTool" : "bridge";/);
@@ -1893,7 +1888,7 @@ test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result
   assert.equal(resolved.needs_hydration, false);
 });
 
-test("resolveWidgetPayload ignores structuredContent candidates without _meta.widget_result", () => {
+test("resolveWidgetPayload accepts structuredContent.result fallback when _meta.widget_result is absent", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -1927,11 +1922,14 @@ test("resolveWidgetPayload ignores structuredContent candidates without _meta.wi
     },
   });
 
-  assert.equal(resolved.source, "none");
-  assert.equal(Object.keys(resolved.result).length, 0);
+  assert.equal(resolved.source, "structuredContent.result");
+  assert.equal(String((resolved.result.current_step_id || "")), "step_0");
+  assert.equal(resolved.bootstrap_session_id, "session_x");
+  assert.equal(resolved.bootstrap_epoch, 1);
+  assert.equal(resolved.response_seq, 2);
 });
 
-test("resolveWidgetPayload ignores structured.ui envelope as a widget result candidate", () => {
+test("resolveWidgetPayload ignores structured.ui envelope and keeps structuredContent.result fallback", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -1950,12 +1948,12 @@ test("resolveWidgetPayload ignores structured.ui envelope as a widget result can
     },
   });
 
-  assert.equal(resolved.source, "none");
-  assert.equal(Object.keys(resolved.result).length, 0);
-  assert.equal(resolved.resolved_language, "");
+  assert.equal(resolved.source, "structuredContent.result");
+  assert.equal(String((resolved.result.current_step_id || "")), "step_0");
+  assert.equal(resolved.resolved_language, "nl");
 });
 
-test("resolveWidgetPayload does not hydrate from toolResponseMetadata widget_result when _meta is absent", () => {
+test("resolveWidgetPayload hydrates from toolResponseMetadata widget_result when canonical metadata wrapper is provided", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -1971,9 +1969,9 @@ test("resolveWidgetPayload does not hydrate from toolResponseMetadata widget_res
     },
   });
 
-  assert.equal(resolved.source, "none");
-  assert.equal(Object.keys(resolved.result).length, 0);
-  assert.equal(resolved.needs_hydration, true);
+  assert.equal(resolved.source, "meta.widget_result");
+  assert.equal(String(((resolved.result.state as Record<string, unknown>)?.current_step || "")), "step_0");
+  assert.equal(resolved.needs_hydration, false);
 });
 
 test("mergeToolOutputWithResponseMetadata accepts flat metadata object shape", () => {
@@ -2020,7 +2018,7 @@ test("resolveWidgetPayload applies freshness override when metadata is available
   );
 });
 
-test("resolveWidgetPayload ignores legacy fallbackRaw/structuredContent when root _meta.widget_result is absent", () => {
+test("resolveWidgetPayload prefers structuredContent.result over legacy fallbackRaw when root _meta.widget_result is absent", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -2050,11 +2048,11 @@ test("resolveWidgetPayload ignores legacy fallbackRaw/structuredContent when roo
     },
   });
 
-  assert.equal(resolved.source, "none");
-  assert.equal(Object.keys(resolved.result).length, 0);
-  assert.equal(resolved.bootstrap_session_id, "");
-  assert.equal(resolved.bootstrap_epoch, 0);
-  assert.equal(resolved.response_seq, 0);
+  assert.equal(resolved.source, "structuredContent.result");
+  assert.equal(String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""), "StructuredShouldNotWin");
+  assert.equal(resolved.bootstrap_session_id, "session_structured");
+  assert.equal(resolved.bootstrap_epoch, 2);
+  assert.equal(resolved.response_seq, 20);
 });
 
 test("resolveWidgetPayload uses only root _meta.widget_result even when fallbackRaw has richer ordering", () => {
