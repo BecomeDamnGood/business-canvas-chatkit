@@ -1,7 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { callStrictJson, __setTestClient } from "./llm.js";
+import { callStrictJson, __normalizeOpenAIApiKeyForTest, __setTestClient } from "./llm.js";
+
+test("normalize OpenAI key accepts raw and JSON secret formats", () => {
+  assert.equal(__normalizeOpenAIApiKeyForTest("sk-test-raw"), "sk-test-raw");
+  assert.equal(
+    __normalizeOpenAIApiKeyForTest('{"OPENAI_API_KEY":"sk-test-json"}'),
+    "sk-test-json"
+  );
+  assert.equal(__normalizeOpenAIApiKeyForTest('{"apiKey":"sk-test-alt"}'), "sk-test-alt");
+  assert.equal(__normalizeOpenAIApiKeyForTest('"sk-test-quoted"'), "sk-test-quoted");
+});
+
+test("normalize OpenAI key rejects invalid JSON secret format", () => {
+  assert.throws(
+    () => __normalizeOpenAIApiKeyForTest('{"SOMETHING_ELSE":"x"}'),
+    /JSON secret missing OPENAI_API_KEY/
+  );
+  assert.throws(
+    () => __normalizeOpenAIApiKeyForTest('{"OPENAI_API_KEY":"sk-bad"'),
+    /expected raw key or JSON object/
+  );
+});
 
 test("callStrictJson times out for never-resolving OpenAI call", async () => {
   const prevKey = process.env.OPENAI_API_KEY;

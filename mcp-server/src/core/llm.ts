@@ -5,6 +5,7 @@ import { composeInstructionsWithGlossary } from "./glossary.js";
 
 /** Instance type to avoid "Cannot use namespace 'OpenAI' as a type" (OpenAI is class + namespace). */
 type OpenAIClient = InstanceType<typeof OpenAI>;
+const OPENAI_API_KEY_JSON_FIELDS = ["OPENAI_API_KEY", "apiKey", "openai_api_key"] as const;
 
 export type StrictJsonSchema = {
   type: "object";
@@ -58,10 +59,59 @@ export type LLMUsage = {
   provider_available: boolean;
 };
 
+function stripMatchingQuotes(value: string): string {
+  if (
+    (value.startsWith("\"") && value.endsWith("\"")) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1).trim();
+  }
+  return value;
+}
+
+function extractApiKeyFromObject(value: Record<string, unknown>): string | null {
+  for (const field of OPENAI_API_KEY_JSON_FIELDS) {
+    const candidate = value[field];
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
+function normalizeOpenAIApiKey(rawValue: string | undefined): string {
+  const value = typeof rawValue === "string" ? stripMatchingQuotes(rawValue.trim()) : "";
+  if (!value) throw new Error("Missing env OPENAI_API_KEY");
+
+  if (value.startsWith("{")) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      throw new Error(
+        "Invalid env OPENAI_API_KEY: expected raw key or JSON object containing OPENAI_API_KEY"
+      );
+    }
+
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const apiKey = extractApiKeyFromObject(parsed as Record<string, unknown>);
+      if (apiKey) return apiKey;
+    }
+
+    throw new Error(
+      "Invalid env OPENAI_API_KEY: JSON secret missing OPENAI_API_KEY (or apiKey) field"
+    );
+  }
+
+  return value;
+}
+
+export function __normalizeOpenAIApiKeyForTest(rawValue: string | undefined): string {
+  return normalizeOpenAIApiKey(rawValue);
+}
+
 function getApiKey(): string {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("Missing env OPENAI_API_KEY");
-  return apiKey;
+  return normalizeOpenAIApiKey(process.env.OPENAI_API_KEY);
 }
 
 let _client: OpenAIClient | null = null;
