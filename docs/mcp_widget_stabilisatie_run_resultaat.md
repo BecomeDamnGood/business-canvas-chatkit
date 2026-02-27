@@ -81,3 +81,87 @@ Lokaal uitgevoerd (verplicht):
   - `mcp-server/ui/lib/ui_actions.ts`
   - `mcp-server/src/ui_render.test.ts`
 - Herbouw UI bundle na rollback: `cd mcp-server && node scripts/build-ui.mjs`.
+
+---
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-27 14:32 CET, ketenfix pass 2)
+
+## 1) Hypothese en falsificatie
+- Werkhypothese uit live-fail v200:
+  - Inconsistentie tussen top-level run_step output en `_meta.widget_result` op ordering tuple (met nadruk op `host_widget_session_id`) veroorzaakt lifecycle-race.
+- Falsificatie-uitkomst in deze pass:
+  - **Gedeeltelijk weerlegd** voor het specifieke bewijs uit `run_step_render_source_selected`.
+  - Root-cause observatie: het veld `host_widget_session_id_present` in `run_step_render_source_selected` werd gelogd vanuit request-context i.p.v. de daadwerkelijk gekozen render-source payload.
+  - Dat verklaart het patroon `run_step_response:true` + `run_step_render_source_selected:false` zonder dat `_meta.widget_result` per se fout was.
+- Nieuwe aanpak in code:
+  - Tuple-pariteit wordt nu server-side expliciet afgedwongen tussen `structuredContent.result` en `_meta.widget_result`.
+  - Observability logt nu beide tuple-niveaus plus parity-status per response.
+
+## 2) Wijzigingen per bestand
+1. `mcp-server/server.ts`
+- Toegevoegd:
+  - `ensureRunStepOutputTupleParity(...)` om ordering tuple pariteit af te dwingen.
+  - `run_step_ordering_tuple_parity` structured log met:
+    - top-level tuple compleet ja/nee,
+    - `_meta.widget_result` tuple compleet ja/nee,
+    - parity match ja/nee.
+  - `run_step_output_tuple_parity_patched` structured log wanneer patching nodig is.
+- Aangepast:
+  - `run_step_render_source_selected.host_widget_session_id_present` baseert nu op geselecteerde render-source tuple i.p.v. request-arg.
+  - Zelfde parity-normalisatie toegepast op MCP toolpad en `POST /run_step` bridgepad.
+
+2. `mcp-server/ui/lib/ui_actions.ts`
+- Toegevoegd:
+  - `buildTupleFailClosedEnvelope(...)`.
+- Aangepast ingestpad:
+  - Bij tuple-incomplete render-authority payload: logmarker `[ui_ingest_tuple_incomplete_fail_closed]`.
+  - Als er al valide tuple-state bestaat: payload wordt gedropt zonder bestaande state te overschrijven.
+  - Als er nog geen valide tuple-state bestaat: fail-closed recovery envelope wordt gerenderd (geen stille lege UI).
+
+3. `mcp-server/src/ui_render.test.ts`
+- Nieuwe test:
+  - `handleToolResultAndMaybeScheduleBootstrapRetry fail-closes tupleless payload before ordering is established`.
+
+4. `mcp-server/src/mcp_app_contract.test.ts`
+- Contract/assertion uitbreiding op:
+  - render-source tuple-completeness logging,
+  - render-source host-session logging uit geselecteerde payload,
+  - tuple parity observability en parity-patch helper gebruik.
+
+## 3) Testresultaten
+1. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- Resultaat: **pass** (103 pass, 0 fail).
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- Resultaat: **pass** (164 pass, 0 fail, 1 skipped).
+
+3. `cd mcp-server && node scripts/build-ui.mjs`
+- Resultaat: bundle succesvol opgebouwd.
+
+## 4) Ketenbewijs (startup -> start -> tweede scherm)
+1. Startup / ingest:
+- Tuple-incomplete payloads gaan nu fail-closed met zichtbare recovery-state en logmarker.
+- Bestaande valide state wordt niet weggegooid.
+
+2. Start click / dispatch:
+- Bestaande single-dispatch + begrensde start-recovery bleef intact (geen oneindige retry-loop).
+
+3. Server response -> ingest -> volgende render:
+- Server pad publiceert nu expliciet tuple-pariteit logs voor top-level vs `_meta.widget_result`.
+- Bij mismatch wordt tuple gepatcht voordat response teruggaat naar host/client.
+
+## 5) Live bewijs en blockerstatus
+- Live verificatie op gedeployde App Runner en CloudWatch in deze run: **niet uitvoerbaar** binnen huidige omgeving (externe toegang ontbreekt).
+- Daardoor is einduitkomst voor UX-definition of done nog **onbeslist**.
+
+## 6) Restrisico en rollback
+- Restrisico:
+  - Zonder live herhaalruns blijft onzeker of de resterende UX-regressie volledig verdwijnt.
+  - Als regressie blijft bestaan ondanks tuple-pariteit, is een nieuwe hypothese nodig rond host event-sequencing/dubbele open lifecycle.
+- Rollback:
+  - Terugzetten van:
+    - `mcp-server/server.ts`
+    - `mcp-server/ui/lib/ui_actions.ts`
+    - `mcp-server/src/ui_render.test.ts`
+    - `mcp-server/src/mcp_app_contract.test.ts`
+  - Daarna `cd mcp-server && node scripts/build-ui.mjs`.

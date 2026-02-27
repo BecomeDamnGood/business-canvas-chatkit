@@ -449,6 +449,291 @@ function readBootstrapOrdering(result: Record<string, unknown> | null | undefine
   return { sessionId, hostWidgetSessionId, epoch, responseSeq };
 }
 
+function hasCompleteOrderingTuple(ordering: {
+  sessionId: string;
+  hostWidgetSessionId: string;
+  epoch: number;
+  responseSeq: number;
+}): boolean {
+  return Boolean(ordering.sessionId && ordering.hostWidgetSessionId) && ordering.epoch > 0 && ordering.responseSeq > 0;
+}
+
+function describeBootstrapOrdering(ordering: {
+  sessionId: string;
+  hostWidgetSessionId: string;
+  epoch: number;
+  responseSeq: number;
+}): {
+  bootstrap_session_id: string;
+  bootstrap_epoch: number;
+  response_seq: number;
+  host_widget_session_id: string;
+} {
+  return {
+    bootstrap_session_id: ordering.sessionId,
+    bootstrap_epoch: ordering.epoch,
+    response_seq: ordering.responseSeq,
+    host_widget_session_id: ordering.hostWidgetSessionId,
+  };
+}
+
+function orderingTupleEquals(
+  left: {
+    sessionId: string;
+    hostWidgetSessionId: string;
+    epoch: number;
+    responseSeq: number;
+  },
+  right: {
+    sessionId: string;
+    hostWidgetSessionId: string;
+    epoch: number;
+    responseSeq: number;
+  }
+): boolean {
+  return (
+    left.sessionId === right.sessionId &&
+    left.hostWidgetSessionId === right.hostWidgetSessionId &&
+    left.epoch === right.epoch &&
+    left.responseSeq === right.responseSeq
+  );
+}
+
+function patchOrderingTupleOnResult(params: {
+  result: Record<string, unknown>;
+  ordering: {
+    sessionId: string;
+    hostWidgetSessionId: string;
+    epoch: number;
+    responseSeq: number;
+  };
+  includeUiFlags?: boolean;
+}): Record<string, unknown> {
+  const root = params.result && typeof params.result === "object" ? params.result : {};
+  const stateRaw =
+    root.state && typeof root.state === "object"
+      ? (root.state as Record<string, unknown>)
+      : {};
+  const patchedState: Record<string, unknown> = {
+    ...stateRaw,
+    bootstrap_session_id: params.ordering.sessionId,
+    bootstrap_epoch: params.ordering.epoch,
+    response_seq: params.ordering.responseSeq,
+    host_widget_session_id: params.ordering.hostWidgetSessionId,
+  };
+  const patchedResult: Record<string, unknown> = {
+    ...root,
+    bootstrap_session_id: params.ordering.sessionId,
+    bootstrap_epoch: params.ordering.epoch,
+    response_seq: params.ordering.responseSeq,
+    host_widget_session_id: params.ordering.hostWidgetSessionId,
+    state: patchedState,
+  };
+  if (params.includeUiFlags) {
+    const uiRaw =
+      root.ui && typeof root.ui === "object"
+        ? (root.ui as Record<string, unknown>)
+        : {};
+    const flagsRaw =
+      uiRaw.flags && typeof uiRaw.flags === "object"
+        ? (uiRaw.flags as Record<string, unknown>)
+        : {};
+    patchedResult.ui = {
+      ...uiRaw,
+      flags: {
+        ...flagsRaw,
+        bootstrap_session_id: params.ordering.sessionId,
+        bootstrap_epoch: params.ordering.epoch,
+        response_seq: params.ordering.responseSeq,
+        host_widget_session_id: params.ordering.hostWidgetSessionId,
+      },
+    };
+  }
+  return patchedResult;
+}
+
+function resolveOrderingTupleParityCandidate(params: {
+  metaOrdering: {
+    sessionId: string;
+    hostWidgetSessionId: string;
+    epoch: number;
+    responseSeq: number;
+  };
+  topLevelOrdering: {
+    sessionId: string;
+    hostWidgetSessionId: string;
+    epoch: number;
+    responseSeq: number;
+  };
+  requestOrdering: {
+    sessionId: string;
+    hostWidgetSessionId: string;
+    epoch: number;
+    responseSeq: number;
+  };
+}): {
+  ordering: {
+    sessionId: string;
+    hostWidgetSessionId: string;
+    epoch: number;
+    responseSeq: number;
+  };
+  source: string;
+  complete: boolean;
+} {
+  const candidates = [
+    { source: "meta_widget_result", ordering: params.metaOrdering },
+    { source: "structured_content_result", ordering: params.topLevelOrdering },
+    { source: "request_state", ordering: params.requestOrdering },
+  ];
+  const firstComplete = candidates.find((candidate) => hasCompleteOrderingTuple(candidate.ordering));
+  if (firstComplete) {
+    return {
+      ordering: firstComplete.ordering,
+      source: firstComplete.source,
+      complete: true,
+    };
+  }
+  const sessionEpochSeqCandidate = candidates.find((candidate) => {
+    const ordering = candidate.ordering;
+    return Boolean(ordering.sessionId) && ordering.epoch > 0 && ordering.responseSeq > 0;
+  });
+  if (!sessionEpochSeqCandidate) {
+    return {
+      ordering: {
+        sessionId: "",
+        hostWidgetSessionId: "",
+        epoch: 0,
+        responseSeq: 0,
+      },
+      source: "none",
+      complete: false,
+    };
+  }
+  const hostWidgetSessionId =
+    sessionEpochSeqCandidate.ordering.hostWidgetSessionId ||
+    params.requestOrdering.hostWidgetSessionId ||
+    buildInternalHostWidgetSessionId(sessionEpochSeqCandidate.ordering.sessionId);
+  return {
+    ordering: {
+      sessionId: sessionEpochSeqCandidate.ordering.sessionId,
+      epoch: sessionEpochSeqCandidate.ordering.epoch,
+      responseSeq: sessionEpochSeqCandidate.ordering.responseSeq,
+      hostWidgetSessionId,
+    },
+    source: `${sessionEpochSeqCandidate.source}_host_backfilled`,
+    complete: Boolean(hostWidgetSessionId),
+  };
+}
+
+function ensureRunStepOutputTupleParity(params: {
+  structuredContent: Record<string, unknown>;
+  meta?: Record<string, unknown>;
+  requestState: Record<string, unknown>;
+  requestHostWidgetSessionId: string;
+  correlationId: string;
+  traceId: string;
+  defaultStepId: string;
+}): { structuredContent: Record<string, unknown>; meta?: Record<string, unknown> } {
+  const metaRecord =
+    params.meta && typeof params.meta === "object"
+      ? (params.meta as Record<string, unknown>)
+      : undefined;
+  const structuredContent = params.structuredContent;
+  const structuredResult =
+    structuredContent &&
+    typeof structuredContent === "object" &&
+    structuredContent.result &&
+    typeof structuredContent.result === "object"
+      ? (structuredContent.result as Record<string, unknown>)
+      : null;
+  const metaWidgetResult =
+    metaRecord &&
+    metaRecord.widget_result &&
+    typeof metaRecord.widget_result === "object"
+      ? (metaRecord.widget_result as Record<string, unknown>)
+      : null;
+  if (!structuredResult && !metaWidgetResult) {
+    return {
+      structuredContent,
+      ...(metaRecord ? { meta: metaRecord } : {}),
+    };
+  }
+
+  const topLevelOrdering = readBootstrapOrdering(structuredResult);
+  const metaOrdering = readBootstrapOrdering(metaWidgetResult);
+  const requestOrdering = readBootstrapOrdering({
+    state: params.requestState,
+    host_widget_session_id: params.requestHostWidgetSessionId,
+  });
+  const candidate = resolveOrderingTupleParityCandidate({
+    metaOrdering,
+    topLevelOrdering,
+    requestOrdering,
+  });
+  if (!candidate.complete) {
+    return {
+      structuredContent,
+      ...(metaRecord ? { meta: metaRecord } : {}),
+    };
+  }
+
+  let nextStructuredContent = structuredContent;
+  let nextMeta = metaRecord;
+  let patchedTopLevel = false;
+  let patchedMeta = false;
+
+  if (structuredResult && !orderingTupleEquals(topLevelOrdering, candidate.ordering)) {
+    patchedTopLevel = true;
+    nextStructuredContent = {
+      ...structuredContent,
+      result: patchOrderingTupleOnResult({
+        result: structuredResult,
+        ordering: candidate.ordering,
+        includeUiFlags: false,
+      }),
+    };
+  }
+  if (metaWidgetResult && !orderingTupleEquals(metaOrdering, candidate.ordering)) {
+    patchedMeta = true;
+    nextMeta = {
+      ...(metaRecord || {}),
+      widget_result: patchOrderingTupleOnResult({
+        result: metaWidgetResult,
+        ordering: candidate.ordering,
+        includeUiFlags: true,
+      }),
+    };
+  }
+
+  if (patchedTopLevel || patchedMeta) {
+    logStructuredEvent(
+      "warn",
+      "run_step_output_tuple_parity_patched",
+      {
+        correlation_id: params.correlationId,
+        trace_id: params.traceId,
+        session_id: candidate.ordering.sessionId,
+        step_id: params.defaultStepId || "step_0",
+        contract_id: resolveContractIdFromRecord(metaWidgetResult || structuredResult || { state: params.requestState }),
+      },
+      {
+        patched_top_level: patchedTopLevel,
+        patched_meta_widget_result: patchedMeta,
+        tuple_source: candidate.source,
+        top_level_tuple_before: describeBootstrapOrdering(topLevelOrdering),
+        meta_widget_result_tuple_before: describeBootstrapOrdering(metaOrdering),
+        tuple_after: describeBootstrapOrdering(candidate.ordering),
+      }
+    );
+  }
+
+  return {
+    structuredContent: nextStructuredContent,
+    ...(nextMeta ? { meta: nextMeta } : {}),
+  };
+}
+
 function registerBootstrapSnapshot(params: {
   result: Record<string, unknown>;
   nowMs: number;
@@ -2170,7 +2455,7 @@ function createAppServer(baseUrl: string): McpServer {
         normalizeIdempotencyKey(
           (args.state as Record<string, unknown> | undefined)?.__client_action_id ?? ""
         );
-      const { structuredContent, meta } = await runStepHandler({
+      const handlerOutput = await runStepHandler({
         current_step_id: safeString(args.current_step_id ?? ""),
         user_message: safeString(args.user_message ?? ""),
         input_mode: args.input_mode,
@@ -2182,17 +2467,45 @@ function createAppServer(baseUrl: string): McpServer {
         host_widget_session_id: hostWidgetSessionId,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
+      const parityOutput = ensureRunStepOutputTupleParity({
+        structuredContent: handlerOutput.structuredContent,
+        meta: handlerOutput.meta,
+        requestState: (args.state ?? {}) as Record<string, unknown>,
+        requestHostWidgetSessionId: hostWidgetSessionId,
+        correlationId,
+        traceId,
+        defaultStepId: normalizedStepId || "step_0",
+      });
+      const structuredContent = parityOutput.structuredContent;
+      const meta = parityOutput.meta;
       const hasMetaWidgetResult =
         meta &&
         typeof meta === "object" &&
         (meta as any).widget_result &&
         typeof (meta as any).widget_result === "object";
+      const topLevelResult =
+        structuredContent &&
+        typeof structuredContent === "object" &&
+        (structuredContent as any).result &&
+        typeof (structuredContent as any).result === "object"
+          ? ((structuredContent as any).result as Record<string, unknown>)
+          : null;
+      const topLevelOrdering = readBootstrapOrdering(topLevelResult);
+      const metaOrdering = hasMetaWidgetResult
+        ? readBootstrapOrdering((meta as any).widget_result as Record<string, unknown>)
+        : {
+            sessionId: "",
+            hostWidgetSessionId: "",
+            epoch: 0,
+            responseSeq: 0,
+          };
       const contentSource =
         hasMetaWidgetResult
           ? ((meta as any).widget_result as Record<string, unknown>)
           : ((structuredContent && (structuredContent as any).result)
             ? ((structuredContent as any).result as Record<string, unknown>)
             : null);
+      const renderSourceOrdering = readBootstrapOrdering(contentSource);
       const contentSourceState =
         contentSource && typeof contentSource === "object" && contentSource.state && typeof contentSource.state === "object"
           ? (contentSource.state as Record<string, unknown>)
@@ -2210,20 +2523,58 @@ function createAppServer(baseUrl: string): McpServer {
           normalizedStepId ??
           "step_0"
         ) || "step_0";
+      const tupleParityMatch =
+        hasCompleteOrderingTuple(topLevelOrdering) &&
+        hasCompleteOrderingTuple(metaOrdering) &&
+        orderingTupleEquals(topLevelOrdering, metaOrdering);
+      logStructuredEvent(
+        hasMetaWidgetResult && !tupleParityMatch ? "warn" : "info",
+        "run_step_ordering_tuple_parity",
+        {
+          correlation_id: correlationId,
+          trace_id: traceId,
+          session_id: renderSourceOrdering.sessionId || topLevelOrdering.sessionId || metaOrdering.sessionId,
+          step_id: renderSourceStepId,
+          contract_id: resolveContractIdFromRecord(contentSource || { state: args.state ?? {} }),
+        },
+        {
+          top_level_tuple_complete: hasCompleteOrderingTuple(topLevelOrdering),
+          meta_widget_result_tuple_complete: hasCompleteOrderingTuple(metaOrdering),
+          tuple_parity_match: tupleParityMatch,
+          parity_reason_code: !hasMetaWidgetResult
+            ? "meta_widget_result_missing"
+            : tupleParityMatch
+              ? "tuple_parity_ok"
+              : "tuple_parity_mismatch",
+          top_level_tuple: {
+            bootstrap_session_id: topLevelOrdering.sessionId,
+            bootstrap_epoch: topLevelOrdering.epoch,
+            response_seq: topLevelOrdering.responseSeq,
+            host_widget_session_id: topLevelOrdering.hostWidgetSessionId,
+          },
+          meta_widget_result_tuple: {
+            bootstrap_session_id: metaOrdering.sessionId,
+            bootstrap_epoch: metaOrdering.epoch,
+            response_seq: metaOrdering.responseSeq,
+            host_widget_session_id: metaOrdering.hostWidgetSessionId,
+          },
+        }
+      );
       logStructuredEvent(
         contentSource ? "info" : "warn",
         "run_step_render_source_selected",
         {
           correlation_id: correlationId,
           trace_id: traceId,
-          session_id: normalizeBootstrapSessionId(contentSourceState.bootstrap_session_id),
+          session_id: renderSourceOrdering.sessionId || normalizeBootstrapSessionId(contentSourceState.bootstrap_session_id),
           step_id: renderSourceStepId,
           contract_id: resolveContractIdFromRecord(contentSource || { state: args.state ?? {} }),
         },
         {
           render_source: renderSource,
           render_source_reason_code: renderSourceReasonCode,
-          host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
+          render_source_tuple_complete: hasCompleteOrderingTuple(renderSourceOrdering),
+          host_widget_session_id_present: renderSourceOrdering.hostWidgetSessionId ? "true" : "false",
         }
       );
       const contentText = buildContentFromResult(contentSource, { isFirstStart });
@@ -2577,7 +2928,7 @@ const httpServer = async (req: any, res: any) => {
         const idempotencyKeyFromHeaders =
           normalizeIdempotencyKey(getHeader(req, "idempotency-key")) ||
           normalizeIdempotencyKey(getHeader(req, "x-idempotency-key"));
-        const { structuredContent, meta } = await runStepHandler({
+        const handlerOutput = await runStepHandler({
           current_step_id: safeString(args.current_step_id ?? "step_0") || "step_0",
           user_message: safeString(args.user_message ?? ""),
           input_mode: args.input_mode,
@@ -2594,6 +2945,17 @@ const httpServer = async (req: any, res: any) => {
           host_widget_session_id: normalizeHostWidgetSessionId(args.host_widget_session_id),
           state: parsedState,
         });
+        const parityOutput = ensureRunStepOutputTupleParity({
+          structuredContent: handlerOutput.structuredContent,
+          meta: handlerOutput.meta,
+          requestState: parsedState,
+          requestHostWidgetSessionId: normalizeHostWidgetSessionId(args.host_widget_session_id),
+          correlationId,
+          traceId,
+          defaultStepId: safeString(args.current_step_id ?? "step_0") || "step_0",
+        });
+        const structuredContent = parityOutput.structuredContent;
+        const meta = parityOutput.meta;
         const parsedStructuredContent = RunStepToolStructuredContentOutputSchema.parse(structuredContent);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ structuredContent: parsedStructuredContent, ...(meta ? { _meta: meta } : {}) }));

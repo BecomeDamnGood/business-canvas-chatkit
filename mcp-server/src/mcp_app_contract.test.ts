@@ -160,7 +160,19 @@ test("MCP app contract: run_step wrapper logs render-source lifecycle", () => {
   assert.match(source, /"run_step_render_source_selected"/);
   assert.match(source, /render_source:\s*renderSource/);
   assert.match(source, /render_source_reason_code:\s*renderSourceReasonCode/);
+  assert.match(source, /render_source_tuple_complete:\s*hasCompleteOrderingTuple\(renderSourceOrdering\)/);
+  assert.match(source, /host_widget_session_id_present:\s*renderSourceOrdering\.hostWidgetSessionId \? "true" : "false"/);
   assert.match(source, /meta_widget_result_authoritative/);
+});
+
+test("MCP app contract: run_step wrapper enforces and logs top-level vs meta ordering tuple parity", () => {
+  assert.match(source, /ensureRunStepOutputTupleParity\(/);
+  assert.match(source, /"run_step_output_tuple_parity_patched"/);
+  assert.match(source, /"run_step_ordering_tuple_parity"/);
+  assert.match(source, /top_level_tuple_complete:/);
+  assert.match(source, /meta_widget_result_tuple_complete:/);
+  assert.match(source, /tuple_parity_match:/);
+  assert.match(source, /parity_reason_code:/);
 });
 
 test("MCP app contract: ready endpoint includes correlation tracing + diagnostics reference", () => {

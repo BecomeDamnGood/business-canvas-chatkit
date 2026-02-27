@@ -214,3 +214,90 @@ Kopieer dit blok voor elke volgende run:
   - [ ] Stoppen en hypothese verwerpen
   - [x] Externe review nodig
   - Toelichting: lokale ketenlogica en tests zijn verbeterd; productie/live validatie blijft geblokkeerd door externe toegang.
+
+### Poging 2026-02-27 12:59 (versie: v200, live App Runner handtest)
+
+- Hypothese:
+  - De v200-fix (lege `set_globals` guard + begrensde start-recovery) maakt startup + startklik end-to-end stabiel.
+- Waarom deze hypothese (bewijs vooraf):
+  - Lokale tests waren groen.
+  - Historisch serverlogbeeld liet `ACTION_START` acceptatie zien.
+- Exacte wijziging(en):
+  - Geen nieuwe code in deze poging; dit is een live validatie van commit `6e90fe6` op `v200`.
+- Verwachte uitkomst:
+  - Geen leeg eerste scherm.
+  - Geen dubbele open.
+  - Startknop brengt direct naar volgende renderbare state.
+- Testresultaten lokaal:
+  - Ongewijzigd t.o.v. vorige poging: groen.
+- Live observatie:
+  - Eerste run startte leeg/half (geen bruikbare content zichtbaar als eerste eindtoestand).
+  - Widget lijkt 2x te openen/renderen.
+  - Startknop leidde in UX niet deterministisch tot zichtbare voortgang.
+  - Aangeleverde user-observatie: Request 1 zonder zichtbare respons; pas Request 2 gaf content.
+- AWS logbewijs (event + timestamp):
+  - `1772193174646` (`2026-02-27T11:52:54.646Z`): `run_step_request` (`input_mode:"chat"`, sessie `bs_d1c0422a-6edd-435d-9e31-3a4f194bfa7c`).
+  - `1772193174664` (`2026-02-27T11:52:54.664Z`): `run_step_response` met `ui_view_mode:"prestart"`, `accept_reason_code:"accepted_fresh_dispatch"`.
+  - `1772193181225` (`2026-02-27T11:53:01.225Z`): `run_step_request` met `input_mode:"widget"`, `action:"ACTION_START"`.
+  - `1772193181231` (`2026-02-27T11:53:01.231Z`): `run_step_response` met `ui_view_mode:"interactive"`, `accept_reason_code:"accepted_fresh_dispatch"`.
+  - `1772193181232` (`2026-02-27T11:53:01.232Z`): `run_step_render_source_selected` op `meta.widget_result`, maar `host_widget_session_id_present:"false"`.
+  - In hetzelfde venster geen hits op `ui_ingest_dropped_no_widget_result`, `stale_bootstrap_payload_dropped`, `ui_start_dispatch_ack_without_state_advance`.
+  - Breder patroon in recente `run_step_render_source_selected` events: `host_widget_session_id_present` is vaak `false` (met name op/na start-events), terwijl request/response logs wel `host_widget_session_id_present:"true"` tonen.
+- Uitkomst:
+  - [ ] Bevestigd
+  - [x] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - De v200-fix was niet integraal; hij repareerde twee races, maar niet de keten-eis dat ordering-tuple velden consistent in de render-authority payload blijven.
+- Wat was gemist / over het hoofd gezien:
+  - Validatie focuste te veel op `run_step_response` en te weinig op pariteit tussen top-level response en `_meta.widget_result` orderingvelden.
+  - In deze live run blijft `host_widget_session_id` ontbreken in de geselecteerde render-source payload, wat direct botst met de afgesproken ordering tuple en racegedrag kan verklaren (dubbele open/niet-zichtbare advance).
+- Besluit:
+  - [ ] Doorgaan op deze lijn
+  - [x] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: deze poging bewijst dat de fix niet integraal was; eerst tuple-consistentie in render-authority + betere ingest-sequence observability vastleggen, pas daarna nieuwe code.
+
+### Poging 2026-02-27 14:32 (versie: lokale workspace, ketenfix pass 2)
+
+- Hypothese:
+  - Het live-signaal `run_step_render_source_selected.host_widget_session_id_present:false` kan deels observability-fout zijn (log gebruikt verkeerde bron), en niet per se bewijs dat `_meta.widget_result` tuple ontbreekt.
+  - Tegelijk moet tuple-pariteit hard afgedwongen worden tussen top-level result en `_meta.widget_result` om regressiepad uit te sluiten.
+- Waarom deze hypothese (bewijs vooraf):
+  - In code stond `run_step_render_source_selected` host-session logging op request-arg i.p.v. geselecteerde render-source payload.
+  - `run_step_response` en `run_step_request` lieten in dezelfde flow al `host_widget_session_id_present:"true"` zien.
+- Exacte wijziging(en):
+  - `mcp-server/server.ts`:
+    - tuple-parity helper toegevoegd (`ensureRunStepOutputTupleParity`),
+    - parity-log toegevoegd (`run_step_ordering_tuple_parity`),
+    - patch-log toegevoegd (`run_step_output_tuple_parity_patched`),
+    - render-source host-session logging gefixt naar geselecteerde payload tuple.
+  - `mcp-server/ui/lib/ui_actions.ts`:
+    - tuple-incomplete ingest fail-closed met herstelbare recovery envelope en logmarker `[ui_ingest_tuple_incomplete_fail_closed]`.
+  - Tests:
+    - `mcp-server/src/ui_render.test.ts` nieuwe tuple-incomplete fail-closed test,
+    - `mcp-server/src/mcp_app_contract.test.ts` parity + logging assertions.
+- Verwachte uitkomst:
+  - Geen false-negative host-session observability in render-source events.
+  - Server-output bewaart tuple-pariteit over top-level en `_meta.widget_result`.
+  - UI toont geen stille lege toestand bij tuple-incomplete ingest.
+- Testresultaten lokaal:
+  - `ui_render.test.ts + mcp_app_contract.test.ts + server_safe_string.test.ts`: **103 pass, 0 fail**.
+  - `run_step.test.ts + run_step_finals.test.ts`: **164 pass, 0 fail, 1 skipped**.
+- Live observatie:
+  - Niet uitgevoerd in deze run (geen App Runner/CloudWatch toegang in omgeving).
+- AWS logbewijs (event + timestamp):
+  - Niet beschikbaar in deze run (blocker).
+- Uitkomst:
+  - [ ] Bevestigd
+  - [ ] Weerlegd
+  - [x] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Aanname dat `run_step_render_source_selected.host_widget_session_id_present:false` direct bewees dat `_meta.widget_result` tuple ontbrak.
+- Wat was gemist / over het hoofd gezien:
+  - Observability gebruikte andere bron dan de geselecteerde render-source payload.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: eerst live verifieren of nieuwe parity-events + gefixte render-source logging het patroon op vNext bevestigen/ontkrachten.

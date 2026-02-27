@@ -1316,6 +1316,41 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry drops tupleless payload aft
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
+test("handleToolResultAndMaybeScheduleBootstrapRetry fail-closes tupleless payload before ordering is established", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: {},
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = {};
+
+  const tuplelessPayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      language: "nl",
+      ui_strings_status: "pending",
+    },
+  });
+  const result = handleToolResultAndMaybeScheduleBootstrapRetry(tuplelessPayload, { source: "host_notification" });
+  assert.equal(Object.keys(result).length, 0);
+  const recovered = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
+  const recoveredState = ((recovered.state as Record<string, unknown>) || {});
+  const recoveredUi = ((recovered.ui as Record<string, unknown>) || {});
+  const recoveredFlags = ((recoveredUi.flags as Record<string, unknown>) || {});
+  const recoveredView = ((recoveredUi.view as Record<string, unknown>) || {});
+  assert.equal(String(recoveredState.ui_gate_status || ""), "waiting_locale");
+  assert.equal(String(recoveredState.bootstrap_phase || ""), "waiting_locale");
+  assert.equal(String(recoveredFlags.tuple_incomplete_fail_closed || ""), "true");
+  assert.equal(String(recoveredView.mode || ""), "recovery");
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
 test("handleToolResultAndMaybeScheduleBootstrapRetry drops duplicate payload with same ordering tuple", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;

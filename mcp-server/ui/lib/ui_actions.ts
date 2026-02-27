@@ -358,6 +358,53 @@ function shouldAcceptSameTupleUpgrade(params: {
   return params.incoming.score > params.current.score;
 }
 
+function buildTupleFailClosedEnvelope(params: {
+  currentResult: Record<string, unknown>;
+  incomingResult: Record<string, unknown>;
+}): Record<string, unknown> {
+  const currentState = toRecord(params.currentResult.state);
+  const incomingState = toRecord(params.incomingResult.state);
+  const stateSource = Object.keys(currentState).length > 0 ? currentState : incomingState;
+  const currentStep = String(stateSource.current_step || "step_0").trim() || "step_0";
+  const language = String(
+    stateSource.language || stateSource.ui_strings_lang || stateSource.ui_strings_requested_lang || "en"
+  )
+    .trim()
+    .toLowerCase() || "en";
+  const uiStringsRequestedLang = String(
+    stateSource.ui_strings_requested_lang || stateSource.ui_strings_lang || language
+  ).trim() || language;
+  return {
+    result: {
+      current_step_id: currentStep,
+      state: {
+        current_step: currentStep,
+        started: String(stateSource.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
+        language,
+        ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
+        ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
+        ui_strings_requested_lang: uiStringsRequestedLang,
+        ui_gate_status: "waiting_locale",
+        ui_gate_reason: "translation_pending",
+        bootstrap_phase: "waiting_locale",
+      },
+      ui: {
+        flags: {
+          bootstrap_waiting_locale: true,
+          bootstrap_interactive_ready: false,
+          interactive_fallback_active: true,
+          tuple_incomplete_fail_closed: true,
+          tuple_fail_closed_reason: "incoming_missing_tuple",
+        },
+        view: {
+          mode: "recovery",
+          waiting_locale: true,
+        },
+      },
+    },
+  };
+}
+
 function shouldUpdateRenderCache(params: {
   currentHasPayload: boolean;
   incoming: PayloadQuality;
@@ -704,15 +751,25 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       return {};
     }
   }
-  if (!incomingHasOrdering && currentHasOrdering) {
-    console.warn("[ui_ordering_dropped_stale]", {
+  if (!incomingHasOrdering) {
+    console.warn("[ui_ingest_tuple_incomplete_fail_closed]", {
       source,
       reason: "incoming_missing_tuple",
       payload_source: resolved.source,
       payload_reason_code: resolved.source_reason_code,
       incoming_tuple: describeBootstrapOrdering(incomingOrdering),
       current_tuple: describeBootstrapOrdering(currentOrdering),
+      current_tuple_present: currentHasOrdering,
     });
+    if (currentHasOrdering) {
+      return {};
+    }
+    const failClosedEnvelope = buildTupleFailClosedEnvelope({
+      currentResult: currentCachedResult,
+      incomingResult: result,
+    });
+    setLastToolOutput(failClosedEnvelope);
+    if (_render) _render(failClosedEnvelope);
     return {};
   }
   if (incomingHasOrdering && orderingDecision.apply) {
