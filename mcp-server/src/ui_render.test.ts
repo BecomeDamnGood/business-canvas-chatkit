@@ -1175,6 +1175,10 @@ test("render source fail-closes missing server view mode and enforces start acti
   assert.match(source, /const startActionCode = String\(\(state\?\.ui_action_start \|\| ""\)\)\.trim\(\);/);
   assert.match(source, /const hasStartAction = startActionCode\.length > 0;/);
   assert.match(source, /\[ui_contract_missing_start_action\]/);
+  assert.match(source, /\[ui_contract_interactive_missing_content\]/);
+  assert.match(source, /const recoverToPrestart = current === "step_0" && hasStartAction;/);
+  assert.match(source, /recovery_mode: recoverToPrestart \? "prestart" : "blocked"/);
+  assert.match(source, /if \(recoverToPrestart\) \{/);
   assert.match(source, /\(btnStart as HTMLButtonElement\)\.disabled = getIsLoading\(\) \|\| !hasStartAction;/);
 });
 
@@ -1911,6 +1915,119 @@ test("render follows explicit server prestart mode during startup grace", () => 
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
   (globalThis as any).openai = originalOpenai;
+});
+
+test("render recovers interactive-without-content on step_0 to actionable prestart", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const btnStart = (fakeDocument as any).getElementById("btnStart");
+  const cardDesc = (fakeDocument as any).getElementById("cardDesc");
+  const prompt = (fakeDocument as any).getElementById("prompt");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: {}, setWidgetState() {} };
+
+  render(toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      started: "false",
+      language: "en",
+      ui_action_start: "ACTION_START",
+      ui_strings_status: "ready",
+      ui_gate_status: "ready",
+    },
+    ui: {
+      view: {
+        mode: "interactive",
+        waiting_locale: false,
+      },
+      actions: [],
+    },
+  }));
+
+  assert.equal(String(btnStart.style.display || ""), "inline-flex");
+  assert.equal((btnStart as any).disabled, false);
+  assert.equal(String(prompt.textContent || ""), "");
+  assert.ok((cardDesc.childNodes || []).length > 0);
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
+test("callRunStep dispatches ACTION_START exactly once from step_0 fallback-prestart recovery", async () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalLatest = (globalThis as any).__BSC_LATEST__;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+
+  const baseState = {
+    current_step: "step_0",
+    started: "false",
+    bootstrap_session_id: "bs_demo",
+    bootstrap_epoch: 1,
+    response_seq: 9,
+    host_widget_session_id: "internal:demo",
+    ui_action_start: "ACTION_START",
+    ui_strings_status: "ready",
+    ui_gate_status: "ready",
+  };
+  (globalThis as any).__BSC_LATEST__ = { state: { ...baseState }, lang: "en" };
+  const fallbackPayload = toolOutputFromWidgetResult({
+    state: { ...baseState },
+    ui: { view: { mode: "interactive", waiting_locale: false }, actions: [] },
+  });
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = fallbackPayload;
+  render(fallbackPayload);
+
+  const dispatchedMessages: string[] = [];
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: { ...baseState },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+    async callTool(_toolName: string, payload: Record<string, unknown>) {
+      const actionCode = String(payload?.user_message || "").trim();
+      dispatchedMessages.push(actionCode);
+      return toolOutputFromWidgetResult({
+        state: {
+          ...baseState,
+          started: "true",
+          response_seq: 10,
+        },
+        ui: {
+          view: { mode: "interactive", waiting_locale: false },
+          questionText: "What type of business are you building?",
+          actions: [{ id: "a1", label: "Continue", action_code: "ACTION_STEP0_READY_START" }],
+        },
+      });
+    },
+  };
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await callRunStep("ACTION_START", { started: "true" });
+  assert.equal(dispatchedMessages.filter((action) => action === "ACTION_START").length, 1);
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LATEST__ = originalLatest;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
 test("render shows startup wait shell when payload is absent", () => {

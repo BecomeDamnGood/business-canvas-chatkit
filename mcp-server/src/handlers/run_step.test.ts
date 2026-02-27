@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { run_step } from "./run_step.js";
+import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
+import { finalizeResponseContractInternals } from "./turn_contract.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RUNTIME_GOLDEN_DIR = path.join(__dirname, "__golden__", "runtime");
@@ -76,6 +78,72 @@ test("Start gating: empty state without started yields Click Start (no advance)"
   const result = await run_step({ user_message: "", state: {} });
   assert.equal(result?.ok, true);
   assert.ok(result?.prompt?.includes("Click Start"), "prompt tells user to click Start");
+});
+
+test("view contract invariant: step_0 with started=false always renders prestart with ACTION_START", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      started: "false",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(String(result?.state?.current_step || ""), "step_0");
+  assert.equal(String(result?.state?.started || "").toLowerCase(), "false");
+  assert.equal(String(result?.ui?.view?.mode || ""), "prestart");
+  assert.equal(String(result?.state?.ui_action_start || ""), "ACTION_START");
+});
+
+test("view contract guard: server repairs interactive-without-content on step_0 to prestart", () => {
+  const response = {
+    ok: true,
+    tool: "run_step",
+    current_step_id: "step_0",
+    active_specialist: "ValidationAndBusinessName",
+    prompt: "",
+    text: "",
+    specialist: {},
+    state: {
+      current_step: "step_0",
+      started: "false",
+      bootstrap_phase: "ready",
+      ui_gate_status: "ready",
+      ui_gate_reason: "",
+      ui_strings_status: "ready",
+      ui_strings_requested_lang: "en",
+      ui_strings_lang: "en",
+      ui_strings: { startHint: "Click Start" },
+      locale: "en",
+      language: "en",
+      ui_strings_fallback_applied: "false",
+      ui_strings_fallback_reason: "",
+      view_contract_version: LOCALE_START_VIEW_CONTRACT_VERSION,
+    },
+    ui: {
+      view: {
+        mode: "interactive",
+        waiting_locale: false,
+      },
+      actions: [],
+    },
+  } as Record<string, unknown>;
+
+  const final = finalizeResponseContractInternals(response, {
+    applyUiClientActionContract: () => {},
+    parseMenuFromContractIdForStep: () => "",
+    labelKeysForMenuActionCodes: () => [],
+    onUiParityError: () => {},
+    attachRegistryPayload: (payload) => payload,
+  });
+  assert.equal(String((final.ui as any)?.view?.mode || ""), "prestart");
+  assert.equal(String((final.state as any)?.ui_action_start || ""), "ACTION_START");
+  const guard = (final as any).__view_contract_guard || {};
+  assert.equal(String(guard.invariant_ok), "false");
+  assert.equal(String(guard.violation_reason_code || ""), "step0_not_started_forced_prestart");
 });
 
 test("Start gating: seedable non-empty first message keeps Click Start gate and does not auto-advance", async () => {

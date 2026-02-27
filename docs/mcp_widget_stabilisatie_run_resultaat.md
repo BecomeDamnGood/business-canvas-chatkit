@@ -1,3 +1,91 @@
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-27 16:05 CET, v203 target)
+
+## 1) Hypothese en falsificatie
+- Hypothese: regressie zit in view-contract inconsistentie tussen `started/current_step`, `ui.view.mode` en echte renderbare content.
+- Falsificatiebewijs:
+  - Guard-event toegevoegd per response: `run_step_view_contract_guard`.
+  - Server corrigeert nu inconsistenties deterministisch voor contractcheck.
+  - UI heeft laatste fail-safe voor `interactive` zonder content op `step_0`.
+- Uitkomst: hypothese **bevestigd** voor lokaal reproduceerbare keten (contractniveau + renderfallback). Live falsificatie vereist nog cloud/logtoegang.
+
+## 2) 70%-contextbudget
+- Eerste pass: 10/15 bestanden (verplichte subset).
+- Uitbreiding wegens harde blokkade (response-opbouw locatie): +2 bestanden
+  - `mcp-server/src/handlers/run_step_response.ts`
+  - `mcp-server/src/handlers/run_step_runtime_action_helpers.ts`
+
+## 3) Exacte wijzigingen per bestand
+1. `mcp-server/src/handlers/turn_contract.ts`
+- Nieuwe serverguard: `enforceRunStepViewContractGuard(...)`.
+- Invarianten:
+  - `step_0 && started=false` => `ui.view.mode="prestart"` + `ui_action_start="ACTION_START"`.
+  - `ui.view.mode="interactive"` vereist renderbare content.
+- Recovery:
+  - `interactive` zonder content op `step_0` + start-action => force `prestart`.
+  - anders force `blocked` + fail-closed statusvelden.
+- Guard snapshot wordt aan response gehangen als `__view_contract_guard`.
+
+2. `mcp-server/src/handlers/run_step_response.ts`
+- Nieuw structured event per response: `run_step_view_contract_guard` met:
+  - `correlation_id`, `session_id`, `step_id` (via log context),
+  - `started`, `ui_view_mode`, `has_renderable_content`,
+  - `has_start_action`, `invariant_ok`, `violation_reason_code`,
+  - `guard_patch_applied`.
+- Interne guard metadata wordt na logging verwijderd uit response.
+
+3. `mcp-server/ui/lib/ui_render.ts`
+- UI fail-safe toegevoegd:
+  - bij `interactive` zonder renderbare content op `step_0` met start-action => render prestart i.p.v. blocked/blank.
+  - startknop blijft actief zichtbaar.
+  - buiten dit pad blijft blocked recovery-state actief.
+- Observability uitgebreid met `recovery_mode` op `ui_contract_interactive_missing_content`.
+
+4. Tests
+- `mcp-server/src/handlers/run_step.test.ts`
+  - test voor invariant `step_0 + started=false => prestart + ACTION_START`.
+  - test voor serverguard patch van interactive-zonder-content.
+- `mcp-server/src/ui_render.test.ts`
+  - bronassertions voor nieuwe fallback branch.
+  - gedragstest: interactive-no-content op `step_0` rendert actionable prestart.
+  - gedragstest: start-dispatch vanaf fallback blijft exact 1x.
+- `mcp-server/src/mcp_app_contract.test.ts`
+  - nieuwe assertions op `run_step_view_contract_guard` event en view-guard contract.
+- `mcp-server/src/server_safe_string.test.ts`
+  - assertions geactualiseerd naar nieuwe guard/invariant strings.
+
+## 4) Testresultaten
+1. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- Resultaat: **pass** (107 pass, 0 fail).
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- Resultaat: **pass** (166 pass, 0 fail, 1 skipped).
+
+## 5) Ketenbewijs startup -> start -> tweede scherm
+1. Startup / first paint:
+- Server forceert nu prestart-contract voor `step_0 + started=false`; UI krijgt geen interactieve lege eindstaat.
+
+2. Start click:
+- Bestaande single-dispatch + ack-recovery bleef intact; extra test bevestigt 1x `ACTION_START` dispatch vanuit fallback-prestart.
+
+3. Tweede scherm:
+- Bij valide interactieve payload blijft render normaal.
+- Bij interactieve payload zonder content converteert keten nu deterministisch naar herstelbare prestart/blocked i.p.v. blank state.
+
+## 6) Live ketenbewijs / blocker
+- Live validatie (5 volledige flows + CloudWatch correlatie) is in deze omgeving niet uitvoerbaar door ontbrekende endpoint/AWS toegang.
+- Status: **externe blocker**, handoff vereist voor productieverificatie.
+
+## 7) Restrisico en rollback
+- Restrisico:
+  - productiehost lifecycle kan nog afwijkend gedrag tonen ondanks lokale contractstabiliteit.
+  - `guard_patch_applied` events moeten in steady state naar 0 of incidenteel herstelbaar gaan.
+- Rollback:
+  - revert wijzigingen in:
+    - `mcp-server/src/handlers/turn_contract.ts`
+    - `mcp-server/src/handlers/run_step_response.ts`
+    - `mcp-server/ui/lib/ui_render.ts`
+    - bijbehorende testbestanden.
+
 # MCP Widget Stabilisatie - Run Resultaat (2026-02-27 12:35 CET)
 
 ## 1) Hypothese en falsificatie

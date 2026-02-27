@@ -32,6 +32,139 @@ type FinalizeContractInternalsOptions = UiParityDeps & {
   ) => Record<string, unknown>;
 };
 
+export type ViewContractGuardSnapshot = {
+  started: boolean;
+  ui_view_mode: string;
+  has_renderable_content: boolean;
+  has_start_action: boolean;
+  invariant_ok: boolean;
+  violation_reason_code: string;
+  patched: boolean;
+};
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function normalizeUiViewMode(value: unknown): string {
+  const mode = String(value || "").trim().toLowerCase();
+  return CONTRACT_UI_VIEW_MODES.has(mode) ? mode : "";
+}
+
+function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
+  const uiPayload = toRecord(response.ui);
+  const uiPrompt = toRecord(uiPayload.prompt);
+  const specialist = toRecord(response.specialist);
+  const hasActions = Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
+  const prompt = String(response.prompt || "").trim();
+  const body =
+    String(response.text || "").trim() ||
+    String(uiPrompt.body || "").trim() ||
+    String(specialist.message || "").trim() ||
+    String(specialist.refined_formulation || "").trim();
+  const question =
+    String(uiPayload.questionText || "").trim() ||
+    String(specialist.question || "").trim();
+  return hasActions || Boolean(prompt) || Boolean(body) || Boolean(question);
+}
+
+function hasStartAction(response: RunStepContractResponse, state: Record<string, unknown>): boolean {
+  if (String(state.ui_action_start || "").trim() === "ACTION_START") return true;
+  const uiPayload = toRecord(response.ui);
+  const actionCodes = Array.isArray(uiPayload.action_codes)
+    ? (uiPayload.action_codes as unknown[]).map((code) => String(code || "").trim())
+    : [];
+  if (actionCodes.includes("ACTION_START")) return true;
+  const actions = Array.isArray(uiPayload.actions) ? (uiPayload.actions as Array<Record<string, unknown>>) : [];
+  return actions.some((action) => String(action?.action_code || "").trim() === "ACTION_START");
+}
+
+export function enforceRunStepViewContractGuard(
+  response: RunStepContractResponse
+): ViewContractGuardSnapshot {
+  let patched = false;
+  let violationReasonCode = "";
+  const nextResponse = response;
+  const state =
+    response.state && typeof response.state === "object"
+      ? (response.state as Record<string, unknown>)
+      : {};
+  if (!response.state || typeof response.state !== "object") {
+    nextResponse.state = state;
+  }
+  const ui =
+    response.ui && typeof response.ui === "object"
+      ? (response.ui as Record<string, unknown>)
+      : {};
+  if (!response.ui || typeof response.ui !== "object") {
+    nextResponse.ui = ui;
+  }
+  const uiView =
+    ui.view && typeof ui.view === "object"
+      ? (ui.view as Record<string, unknown>)
+      : {};
+  if (!ui.view || typeof ui.view !== "object") {
+    ui.view = uiView;
+  }
+
+  const currentStep = String(nextResponse.current_step_id || state.current_step || STEP_0_ID).trim() || STEP_0_ID;
+  const started = String(state.started || "").trim().toLowerCase() === "true";
+  let uiViewMode = normalizeUiViewMode(uiView.mode);
+  let startActionAvailable = hasStartAction(nextResponse, state);
+  const interactiveHasRenderableContent = hasRenderableResponseContent(nextResponse);
+
+  if (currentStep === STEP_0_ID && !started) {
+    if (uiViewMode !== "prestart") {
+      uiViewMode = "prestart";
+      uiView.mode = "prestart";
+      uiView.waiting_locale = false;
+      patched = true;
+      if (!violationReasonCode) violationReasonCode = "step0_not_started_forced_prestart";
+    }
+    if (!startActionAvailable) {
+      state.ui_action_start = "ACTION_START";
+      startActionAvailable = true;
+      patched = true;
+      if (!violationReasonCode) violationReasonCode = "step0_missing_start_action_patched";
+    }
+  }
+
+  if (uiViewMode === "interactive" && !interactiveHasRenderableContent) {
+    if (currentStep === STEP_0_ID && startActionAvailable) {
+      uiViewMode = "prestart";
+      uiView.mode = "prestart";
+      uiView.waiting_locale = false;
+      patched = true;
+      if (!violationReasonCode) violationReasonCode = "interactive_missing_content_forced_prestart";
+    } else {
+      uiViewMode = "blocked";
+      uiView.mode = "blocked";
+      uiView.waiting_locale = false;
+      state.ui_gate_status = "blocked";
+      state.ui_gate_reason = String(state.ui_gate_reason || "").trim() || "contract_violation";
+      state.bootstrap_phase = "failed";
+      patched = true;
+      if (!violationReasonCode) violationReasonCode = "interactive_missing_content_forced_blocked";
+    }
+  }
+
+  uiViewMode = normalizeUiViewMode(uiView.mode);
+  const invariantStep0PrestartOk =
+    !(currentStep === STEP_0_ID && !started) || (uiViewMode === "prestart" && startActionAvailable);
+  const invariantInteractiveContentOk = uiViewMode !== "interactive" || interactiveHasRenderableContent;
+  return {
+    started,
+    ui_view_mode: uiViewMode,
+    has_renderable_content: interactiveHasRenderableContent,
+    has_start_action: startActionAvailable,
+    invariant_ok: invariantStep0PrestartOk && invariantInteractiveContentOk && !violationReasonCode,
+    violation_reason_code: violationReasonCode,
+    patched,
+  };
+}
+
 export function validateUiPayloadContractParity(
   response: RunStepContractResponse,
   deps: UiParityDeps
@@ -105,6 +238,7 @@ export function assertRunStepContractOrThrow(response: RunStepContractResponse):
   const currentStep = String(state.current_step || STEP_0_ID).trim() || STEP_0_ID;
   const started = String(state.started || "").trim().toLowerCase() === "true";
   const uiActionStart = String(state.ui_action_start || "").trim();
+  const hasRenderableContent = hasRenderableResponseContent(response);
 
   if (!CONTRACT_BOOTSTRAP_PHASES.has(bootstrapPhase)) {
     throw new Error("invalid_bootstrap_phase");
@@ -174,16 +308,19 @@ export function assertRunStepContractOrThrow(response: RunStepContractResponse):
       throw new Error("session_upgrade_requires_blocked_failed_state");
     }
   }
-  if (currentStep === STEP_0_ID && !started && uiGateStatus === "ready") {
+  if (currentStep === STEP_0_ID && !started) {
     if (!uiPayload || !uiView || uiViewMode !== "prestart") {
-      throw new Error("prestart_ready_requires_prestart_mode");
-    }
-    if (Object.keys(uiStringsMap).length === 0) {
-      throw new Error("prestart_ready_requires_ui_strings");
+      throw new Error("step0_not_started_requires_prestart_mode");
     }
     if (uiActionStart !== "ACTION_START") {
-      throw new Error("prestart_ready_requires_start_action");
+      throw new Error("step0_not_started_requires_start_action");
     }
+    if (uiGateStatus === "ready" && Object.keys(uiStringsMap).length === 0) {
+      throw new Error("prestart_ready_requires_ui_strings");
+    }
+  }
+  if (uiViewMode === "interactive" && !hasRenderableContent) {
+    throw new Error("interactive_requires_renderable_content");
   }
 }
 
@@ -275,6 +412,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       };
     }
   }
+  const guardBeforeAssert = enforceRunStepViewContractGuard(finalResponse);
   try {
     assertRunStepContractOrThrow(finalResponse);
   } catch (error: any) {
@@ -288,6 +426,11 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       bootstrap_phase: "failed",
     });
   }
+  const guardAfterAssert = enforceRunStepViewContractGuard(finalResponse);
+  (finalResponse as Record<string, unknown>).__view_contract_guard =
+    guardBeforeAssert.patched || !guardBeforeAssert.invariant_ok
+      ? guardBeforeAssert
+      : guardAfterAssert;
 
   return finalResponse as T;
 }

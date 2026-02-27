@@ -301,3 +301,48 @@ Kopieer dit blok voor elke volgende run:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: eerst live verifieren of nieuwe parity-events + gefixte render-source logging het patroon op vNext bevestigen/ontkrachten.
+
+### Poging 2026-02-27 16:05 (versie: lokale workspace, v203 target view-contract guard)
+
+- Hypothese:
+  - De resterende regressie komt uit view-contract inconsistentie:
+    - `step_0 + started=false` kan toch als `interactive` landen,
+    - of `interactive` payload zonder renderbare content kan blank/blocked UX triggeren.
+- Waarom deze hypothese (bewijs vooraf):
+  - Tuple-parity en secret-key issues waren al afgevangen.
+  - UX-signaal bleef: leeg/half first paint + niet-deterministische start.
+  - Servercontract had nog geen harde invariant op interactieve content.
+- Exacte wijziging(en):
+  - `turn_contract.ts`: serverguard toegevoegd die invarianten afdwingt en patcht (prestart/blocked) + `__view_contract_guard` snapshot.
+  - `run_step_response.ts`: nieuw event `run_step_view_contract_guard` per response met verplichte guardvelden.
+  - `ui_render.ts`: UI fail-safe toegevoegd: interactive-zonder-content op `step_0` met start-action herstelt naar actionable prestart (geen blank eindstaat).
+  - Tests bijgewerkt/toegevoegd in:
+    - `run_step.test.ts`
+    - `ui_render.test.ts`
+    - `mcp_app_contract.test.ts`
+    - `server_safe_string.test.ts`
+- Verwachte uitkomst:
+  - Geen blank/half eindtoestand door interactive-no-content op step_0.
+  - Startknop blijft bruikbaar in fallback.
+  - Server logt expliciet of invarianten geschonden/gepatcht zijn.
+- Testresultaten lokaal:
+  - `ui_render + mcp_app_contract + server_safe_string`: **107 pass, 0 fail**.
+  - `run_step + run_step_finals`: **166 pass, 0 fail, 1 skipped**.
+- Live observatie:
+  - Niet uitgevoerd (geen cloud endpoint/logtoegang in huidige omgeving).
+- AWS logbewijs (event + timestamp):
+  - Niet beschikbaar in deze run (blocker).
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Aanname dat existing contractchecks voldoende waren zonder expliciete interactieve-content invariant.
+- Wat was gemist / over het hoofd gezien:
+  - Ontbrekende server-side guard op `interactive` zonder renderbare content.
+  - UI fallback op dit scenario was te hard blocked i.p.v. prestart herstel op `step_0`.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: volgende stap is live correlatie van `run_step_view_contract_guard` en UX-gedrag over minimaal 5 flows.

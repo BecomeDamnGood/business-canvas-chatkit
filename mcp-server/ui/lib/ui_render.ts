@@ -752,15 +752,42 @@ export function render(overrideToolOutput?: unknown): void {
   const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
   const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
   if (!hasRenderableInteractiveContent) {
+    const recoverToPrestart = current === "step_0" && hasStartAction;
     console.warn("[ui_contract_interactive_missing_content]", {
       current_step: current,
       view_mode: viewMode || "",
       payload_source: resolved.source,
+      recovery_mode: recoverToPrestart ? "prestart" : "blocked",
     });
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    inputWrap.style.display = "none";
+    const prompt = document.getElementById("prompt");
+    if (prompt) prompt.textContent = "";
+    setSendEnabled(false);
+    if (recoverToPrestart) {
+      if (cardDescEl) {
+        cardDescEl.classList.remove("has-grid");
+        cardDescEl.classList.remove("is-step0-ask-layout");
+        const hasPrestartContent = hasPrestartContentForLang(lang);
+        const showSkeleton = uiStringsStatus !== "ready" || !hasPrestartContent;
+        if (showSkeleton) renderPrestartSkeleton(cardDescEl, lang);
+        else renderPrestartContent(cardDescEl, lang);
+      }
+      (btnStart as HTMLElement).style.display = "inline-flex";
+      (btnStart as HTMLButtonElement).disabled = getIsLoading() || !hasStartAction;
+      startHint.textContent = "";
+      (startHint as HTMLElement).style.display = "none";
+      setSessionStarted(false);
+      setSessionWelcomeShown(false);
+      if (isLoading) setLoading(false);
+      return;
+    }
+    (btnStart as HTMLElement).style.display = "none";
+    startHint.textContent = "";
+    (startHint as HTMLElement).style.display = "none";
     if (cardDescEl) {
       cardDescEl.classList.remove("has-grid");
       cardDescEl.classList.remove("is-step0-ask-layout");
@@ -771,10 +798,6 @@ export function render(overrideToolOutput?: unknown): void {
       );
       renderBlockedState(cardDescEl, lang, blockedCopy.title, blockedCopy.body);
     }
-    const prompt = document.getElementById("prompt");
-    if (prompt) prompt.textContent = "";
-    inputWrap.style.display = "none";
-    setSendEnabled(false);
     if (isLoading) setLoading(false);
     return;
   }

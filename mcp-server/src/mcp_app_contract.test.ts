@@ -7,6 +7,14 @@ const widgetRuntimeSource = fs.readFileSync(
   new URL("../ui/lib/locale_bootstrap_runtime.ts", import.meta.url),
   "utf8"
 );
+const runStepResponseSource = fs.readFileSync(
+  new URL("./handlers/run_step_response.ts", import.meta.url),
+  "utf8"
+);
+const turnContractSource = fs.readFileSync(
+  new URL("./handlers/turn_contract.ts", import.meta.url),
+  "utf8"
+);
 
 test("MCP app contract: server initializes MCP capabilities for tools/resources", () => {
   assert.match(source, /new McpServer\([\s\S]*capabilities:\s*\{[\s\S]*tools:\s*\{\}[\s\S]*resources:\s*\{\}/);
@@ -173,6 +181,25 @@ test("MCP app contract: run_step wrapper enforces and logs top-level vs meta ord
   assert.match(source, /meta_widget_result_tuple_complete:/);
   assert.match(source, /tuple_parity_match:/);
   assert.match(source, /parity_reason_code:/);
+});
+
+test("MCP app contract: run_step response logs view-contract guard observability event", () => {
+  assert.match(runStepResponseSource, /"run_step_view_contract_guard"/);
+  assert.match(runStepResponseSource, /started,/);
+  assert.match(runStepResponseSource, /ui_view_mode:/);
+  assert.match(runStepResponseSource, /has_renderable_content:/);
+  assert.match(runStepResponseSource, /has_start_action:/);
+  assert.match(runStepResponseSource, /invariant_ok:/);
+  assert.match(runStepResponseSource, /violation_reason_code:/);
+  assert.match(runStepResponseSource, /guard_patch_applied:/);
+});
+
+test("MCP app contract: turn contract enforces and repairs step_0\/interactive view invariants", () => {
+  assert.match(turnContractSource, /export function enforceRunStepViewContractGuard\(/);
+  assert.match(turnContractSource, /step0_not_started_forced_prestart/);
+  assert.match(turnContractSource, /interactive_missing_content_forced_prestart/);
+  assert.match(turnContractSource, /interactive_missing_content_forced_blocked/);
+  assert.match(turnContractSource, /interactive_requires_renderable_content/);
 });
 
 test("MCP app contract: ready endpoint includes correlation tracing + diagnostics reference", () => {
