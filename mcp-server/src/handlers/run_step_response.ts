@@ -186,11 +186,11 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
         attachRegistryPayload: deps.attachRegistryPayload,
       }
     ) as Record<string, unknown>;
-    const viewContractGuardRaw =
-      finalResponse.__view_contract_guard &&
-      typeof finalResponse.__view_contract_guard === "object" &&
-      !Array.isArray(finalResponse.__view_contract_guard)
-        ? (finalResponse.__view_contract_guard as Record<string, unknown>)
+    const canonicalViewDecisionRaw =
+      finalResponse.__canonical_view_decision &&
+      typeof finalResponse.__canonical_view_decision === "object" &&
+      !Array.isArray(finalResponse.__canonical_view_decision)
+        ? (finalResponse.__canonical_view_decision as Record<string, unknown>)
         : null;
 
     const telemetryTotal = Object.values(deps.uiI18nTelemetry).reduce<number>(
@@ -222,30 +222,22 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       if (errorMarkers.some((marker) => marker.startsWith("invalid_"))) return "invalid_state";
       return "none";
     })();
-    const fallbackStarted = String(stateForDecision.started || "").trim().toLowerCase() === "true";
-    const started =
-      typeof viewContractGuardRaw?.started === "boolean"
-        ? viewContractGuardRaw.started
-        : fallbackStarted;
-    const hasRenderableContent = String(viewContractGuardRaw?.has_renderable_content || "false") === "true";
-    const hasStartAction = String(viewContractGuardRaw?.has_start_action || "false") === "true";
-    const invariantOk = String(viewContractGuardRaw?.invariant_ok || "false") === "true";
-    const guardPatchApplied = String(viewContractGuardRaw?.patched || "false") === "true";
+    const started = String(stateForDecision.started || "").trim().toLowerCase() === "true";
+    const hasRenderableContent = String(canonicalViewDecisionRaw?.has_renderable_content || "false") === "true";
+    const hasStartAction = String(canonicalViewDecisionRaw?.has_start_action || "false") === "true";
+    const invariantOk = String(canonicalViewDecisionRaw?.invariant_ok || "false") === "true";
     const decisionContext = createLogContext(finalResponse, stateForDecision);
-    logStructuredEvent("info", "run_step_view_contract_guard", decisionContext, {
+    logStructuredEvent("info", "run_step_canonical_view_emitted", decisionContext, {
       started,
       ui_view_mode: String(
-        viewContractGuardRaw?.ui_view_mode ||
+        canonicalViewDecisionRaw?.ui_view_mode ||
           ((finalResponse?.ui as Record<string, unknown> | undefined)?.view as Record<string, unknown> | undefined)?.mode ||
           ""
       ).trim().toLowerCase(),
       has_renderable_content: hasRenderableContent,
       has_start_action: hasStartAction,
       invariant_ok: invariantOk,
-      violation_reason_code: String(viewContractGuardRaw?.violation_reason_code || "").trim(),
-      guard_patch_applied: guardPatchApplied,
-    });
-    logStructuredEvent("info", "contract_decision", decisionContext, {
+      reason_code: String(canonicalViewDecisionRaw?.reason_code || "").trim(),
       host_widget_session_id_present: String(stateForDecision.host_widget_session_id || "") ? "true" : "false",
       epoch: Number(stateForDecision.bootstrap_epoch || 0),
       seq: Number(stateForDecision.response_seq || 0),
@@ -264,8 +256,8 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       migration_from_version: deps.getMigrationFromVersion(),
       blocking_marker_class: markerClass,
     });
-    if (Object.prototype.hasOwnProperty.call(finalResponse, "__view_contract_guard")) {
-      delete finalResponse.__view_contract_guard;
+    if (Object.prototype.hasOwnProperty.call(finalResponse, "__canonical_view_decision")) {
+      delete finalResponse.__canonical_view_decision;
     }
 
     if (!deps.tokenLoggingEnabled) return finalResponse as unknown as T;

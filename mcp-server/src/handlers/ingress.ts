@@ -145,12 +145,9 @@ export const CONTRACT_UI_GATE_REASONS = new Set([
 ]);
 export const CONTRACT_UI_STRINGS_STATUSES = new Set(["pending", "critical_ready", "ready"]);
 export const CONTRACT_UI_VIEW_MODES = new Set([
-  "waiting_locale",
   "prestart",
   "interactive",
-  "recovery",
   "blocked",
-  "failed",
 ]);
 export const CONTRACT_UI_FALLBACK_REASONS = new Set([
   "",

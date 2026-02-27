@@ -51,51 +51,11 @@ function ingestHostPayload(
   payload: unknown,
   source: "set_globals" | "host_notification"
 ): void {
-  clearStartupGrace();
   if (source === "set_globals") {
     handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
     return;
   }
   handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
-}
-
-const STARTUP_GRACE_MS_DEFAULT = 320;
-const STARTUP_WAITING_VIEW_MODE = "waiting_locale";
-
-function startupGraceMs(): number {
-  const raw = Number((globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_MS ?? STARTUP_GRACE_MS_DEFAULT);
-  if (!Number.isFinite(raw) || raw <= 0) return 0;
-  return Math.max(0, Math.min(1500, Math.trunc(raw)));
-}
-
-function setStartupGraceUntil(untilMs: number): void {
-  (globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_UNTIL_MS = untilMs;
-}
-
-function clearStartupGrace(): void {
-  (globalThis as Record<string, unknown>).__BSC_STARTUP_GRACE_UNTIL_MS = 0;
-}
-
-function buildStartupInitState(): Record<string, unknown> {
-  return {
-    state: {
-      current_step: "step_0",
-      started: "false",
-      ui_gate_status: STARTUP_WAITING_VIEW_MODE,
-      ui_strings_status: "pending",
-    },
-    ui: {
-      flags: {
-        bootstrap_waiting_locale: true,
-        bootstrap_interactive_ready: false,
-        interactive_fallback_active: false,
-      },
-      view: {
-        mode: STARTUP_WAITING_VIEW_MODE,
-        waiting_locale: true,
-      },
-    },
-  };
 }
 
 function readSetGlobalsPayloadFromHost(): Record<string, unknown> {
@@ -108,46 +68,12 @@ function readSetGlobalsPayloadFromHost(): Record<string, unknown> {
   });
 }
 
-function hasRenderedStateSnapshot(): boolean {
-  const state = latestWidgetState();
-  if (!state || typeof state !== "object" || Object.keys(state).length === 0) return false;
-  const currentStep = String(state.current_step || "").trim();
-  const gateStatus = String(state.ui_gate_status || "").trim().toLowerCase();
-  return Boolean(currentStep || gateStatus);
-}
-
 function tryInitialIngestFromHost(source: "set_globals" | "host_notification"): boolean {
   const payload = readSetGlobalsPayloadFromHost();
   if (!payload || typeof payload !== "object" || Object.keys(payload).length === 0) return false;
   ingestHostPayload(payload, source);
   notifyHostTransportSignal("set_globals");
   return true;
-}
-
-function renderStartupWaitShell(reason: string): void {
-  const graceMs = startupGraceMs();
-  const startupInitState = buildStartupInitState();
-  if (graceMs <= 0) {
-    render(startupInitState);
-    return;
-  }
-  const untilMs = Date.now() + graceMs;
-  setStartupGraceUntil(untilMs);
-  console.log("[startup_first_render_wait_shell]", {
-    reason,
-    grace_ms: graceMs,
-  });
-  render(startupInitState);
-  setTimeout(() => {
-    if (Date.now() < untilMs) return;
-    clearStartupGrace();
-    if (!tryInitialIngestFromHost("set_globals")) {
-      console.log("[startup_payload_missing_after_grace]", {
-        grace_ms: graceMs,
-      });
-      render(startupInitState);
-    }
-  }, graceMs);
 }
 
 if (isLocalDev && typeof window !== "undefined") {
@@ -390,15 +316,6 @@ if (typeof window !== "undefined") {
       if (payload && typeof payload === "object" && Object.keys(payload).length > 0) {
         ingestHostPayload(payload, "set_globals");
         notifyHostTransportSignal("set_globals");
-      } else {
-        if (hasRenderedStateSnapshot()) {
-          console.log("[startup_set_globals_empty_payload_ignored]", {
-            reason: "cached_state_available",
-            current_step: String(latestWidgetState().current_step || ""),
-          });
-        } else {
-          renderStartupWaitShell("set_globals_empty_payload");
-        }
       }
     } catch (e) {
       console.error(e);
@@ -408,6 +325,4 @@ if (typeof window !== "undefined") {
   });
 }
 
-if (!tryInitialIngestFromHost("set_globals")) {
-  renderStartupWaitShell("initial_bootstrap_probe");
-}
+void tryInitialIngestFromHost("set_globals");

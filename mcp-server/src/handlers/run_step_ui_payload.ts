@@ -27,16 +27,13 @@ export type UiViewVariant =
   | "dream_builder_refine";
 
 type UiViewModeRoute =
-  | "waiting_locale"
   | "prestart"
   | "interactive"
-  | "recovery"
-  | "blocked"
-  | "failed";
+  | "blocked";
 
 export type UiViewPayload = {
-  mode: UiViewModeRoute;
-  waiting_locale: boolean;
+  mode?: UiViewModeRoute;
+  waiting_locale?: false;
   variant?: Exclude<UiViewVariant, "default">;
 };
 
@@ -78,10 +75,7 @@ type UiPayloadHelperDeps = {
     questionTextOverride?: string;
   }) => string;
   deriveBootstrapContract: (state: CanvasState | null | undefined) => BootstrapContractState;
-  deriveUiViewPayload: (
-    state: CanvasState | null | undefined,
-    variant: UiViewVariant
-  ) => UiViewPayload | null;
+  deriveUiViewPayload: (variant: UiViewVariant) => UiViewPayload | null;
   sanitizeWidgetActionCodes: (actionCodes: string[]) => string[];
   buildRenderedActionsFromMenu: (
     menuId: string,
@@ -388,7 +382,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_collect") {
       viewVariant = "dream_builder_collect";
     }
-    const view = deps.deriveUiViewPayload(effectiveState, viewVariant);
+    const view = deps.deriveUiViewPayload(viewVariant);
     if (Array.isArray(actionCodesOverride)) {
       const safeOverrideCodes = deps.sanitizeWidgetActionCodes(
         actionCodesOverride.map((code) => String(code || "").trim()).filter(Boolean)

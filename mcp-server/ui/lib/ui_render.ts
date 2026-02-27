@@ -24,7 +24,6 @@ import {
   setLastToolOutput,
   uiLang,
   resolveWidgetPayload,
-  resetHydrationRetryCycle,
 } from "./ui_actions.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 
@@ -165,64 +164,6 @@ function renderPrestartSkeleton(cardDesc: HTMLElement, lang: string): void {
   cardDesc.appendChild(skeleton);
 }
 
-function renderBootstrapWaitShell(cardDesc: HTMLElement, lang: string): void {
-  clearElement(cardDesc);
-  const shell = appendTextNode("div", "bootstrap-wait-shell", "");
-  (shell as HTMLElement).style.display = "grid";
-  (shell as HTMLElement).style.gap = "14px";
-  const waitTitle = uiText(lang, "prestart.loading", "");
-  if (waitTitle) {
-    shell.appendChild(
-      appendTextNode(
-        "div",
-        "bootstrap-wait-title",
-        waitTitle
-      )
-    );
-  }
-
-  for (const width of ["68%", "92%", "84%", "56%"]) {
-    const line = appendTextNode("div", "skeleton-line", "");
-    (line as HTMLElement).style.width = width;
-    (line as HTMLElement).style.height = "12px";
-    (line as HTMLElement).style.borderRadius = "999px";
-    (line as HTMLElement).style.opacity = "0.9";
-    shell.appendChild(line);
-  }
-
-  cardDesc.appendChild(shell);
-}
-
-function renderHydrationRecovery(cardDesc: HTMLElement, lang: string): void {
-  clearElement(cardDesc);
-  const shell = appendTextNode("div", "bootstrap-wait-shell", "");
-  (shell as HTMLElement).style.display = "grid";
-  (shell as HTMLElement).style.gap = "12px";
-  shell.appendChild(
-    appendTextNode(
-      "div",
-      "bootstrap-recovery-title",
-      uiText(lang, "hydration.retry.title", "")
-    )
-  );
-  shell.appendChild(
-    appendTextNode(
-      "div",
-      "bootstrap-recovery-copy",
-      uiText(lang, "hydration.retry.body", "")
-    )
-  );
-  const btn = appendTextNode(
-    "button",
-    "choiceBtn",
-    uiText(lang, "hydration.retry.action", "")
-  ) as HTMLButtonElement;
-  btn.id = "btnHydrationRetry";
-  btn.type = "button";
-  shell.appendChild(btn);
-  cardDesc.appendChild(shell);
-}
-
 function blockedMessageForReason(
   lang: string,
   reason: string,
@@ -251,8 +192,8 @@ function renderBlockedState(cardDesc: HTMLElement, lang: string, title: string, 
   const shell = appendTextNode("div", "bootstrap-wait-shell", "");
   (shell as HTMLElement).style.display = "grid";
   (shell as HTMLElement).style.gap = "12px";
-  shell.appendChild(appendTextNode("div", "bootstrap-recovery-title", title));
-  shell.appendChild(appendTextNode("div", "bootstrap-recovery-copy", body));
+  shell.appendChild(appendTextNode("div", "bootstrap-blocked-title", title));
+  shell.appendChild(appendTextNode("div", "bootstrap-blocked-copy", body));
   cardDesc.appendChild(shell);
 }
 
@@ -453,79 +394,24 @@ export function render(overrideToolOutput?: unknown): void {
       ? (uiPayload.view as Record<string, unknown>)
       : {};
   const uiStringsStatus = String((state?.ui_strings_status || "")).trim().toLowerCase();
-  const viewMode = String(uiView.mode || "").trim().toLowerCase();
+  const rawViewMode = String(uiView.mode || "").trim().toLowerCase();
+  const viewMode =
+    rawViewMode === "prestart" || rawViewMode === "interactive" || rawViewMode === "blocked"
+      ? rawViewMode
+      : "blocked";
   const uiGateReason = String((state?.ui_gate_reason || "")).trim().toLowerCase();
-  const serverExplicitWaiting = viewMode === "waiting_locale";
   const serverExplicitPrestart = viewMode === "prestart";
-  const serverExplicitInteractive = viewMode === "interactive";
-  const serverExplicitRecovery = viewMode === "recovery";
   const serverExplicitBlocked = viewMode === "blocked";
-  const serverExplicitFailed = viewMode === "failed";
-  const hasExplicitServerRouting =
-    serverExplicitWaiting ||
-    serverExplicitPrestart ||
-    serverExplicitInteractive ||
-    serverExplicitRecovery ||
-    serverExplicitBlocked ||
-    serverExplicitFailed;
-  const bootstrapWaitingLocale = serverExplicitWaiting;
-  const waitingGateActive = bootstrapWaitingLocale;
-  const startupPayloadMissing =
-    Object.keys(result || {}).length === 0 &&
-    Object.keys(state).length === 0;
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
   if (hasOverrideStrings) setRuntimeUiStrings(overrideStringsMap);
-  if (!hasExplicitServerRouting) {
-    console.warn("[ui_contract_missing_view_mode]", {
+  if (viewMode !== rawViewMode) {
+    console.warn("[ui_contract_invalid_view_mode]", {
       payload_source: resolved.source,
-      view_mode: viewMode || "",
+      view_mode: rawViewMode || "",
       ui_gate_status: String((state?.ui_gate_status || "")).trim().toLowerCase(),
       bootstrap_phase: String((state?.bootstrap_phase || "")).trim().toLowerCase(),
     });
-    const inputWrap = document.getElementById("inputWrap");
-    const btnStart = document.getElementById("btnStart");
-    const startHint = document.getElementById("startHint");
-    const choiceWrap = document.getElementById("choiceWrap");
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    const cardDesc = document.getElementById("cardDesc");
-    const prompt = document.getElementById("prompt");
-    const sectionTitleEl = document.getElementById("sectionTitle");
-    const uiSubtitle = document.getElementById("uiSubtitle");
-    const badge = document.getElementById("badge");
-    if (inputWrap) (inputWrap as HTMLElement).style.display = "none";
-    if (choiceWrap) (choiceWrap as HTMLElement).style.display = "none";
-    if (wordingChoiceWrap) (wordingChoiceWrap as HTMLElement).style.display = "none";
-    if (btnStart) (btnStart as HTMLElement).style.display = "none";
-    if (startHint) {
-      startHint.textContent = "";
-      (startHint as HTMLElement).style.display = "none";
-    }
-    if (prompt) prompt.textContent = "";
-    if (sectionTitleEl) sectionTitleEl.textContent = "";
-    if (uiSubtitle) uiSubtitle.textContent = "";
-    if (badge) {
-      badge.textContent = "";
-      (badge as HTMLElement).style.display = "none";
-    }
-    buildStepper(0, "", lang);
-    if (cardDesc) {
-      const prestartEl = cardDesc as HTMLElement;
-      prestartEl.classList.remove("has-grid");
-      prestartEl.classList.remove("is-step0-ask-layout");
-      if (startupPayloadMissing) {
-        renderBootstrapWaitShell(prestartEl, lang);
-      } else {
-        const blockedCopy = blockedMessageForReason(
-          lang,
-          "contract_violation",
-          uiText(lang, "error.contract.body", "")
-        );
-        renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
-      }
-    }
-    if (getIsLoading()) setLoading(false);
-    return;
   }
 
   if (transientError) {
@@ -546,21 +432,11 @@ export function render(overrideToolOutput?: unknown): void {
     clearInlineNotice();
   }
 
-  const showPreStart =
-    serverExplicitPrestart &&
-    !waitingGateActive &&
-    !serverExplicitBlocked &&
-    !serverExplicitFailed &&
-    !serverExplicitRecovery;
+  const showPreStart = serverExplicitPrestart;
 
-  const current =
-    !showPreStart ? (state.current_step as string) || "step_0" : "step_0";
+  const current = !showPreStart ? (state.current_step as string) || "step_0" : "step_0";
   const idx = stepIndex(current);
-  const stepTitle = bootstrapWaitingLocale
-    ? ""
-    : current === "step_0"
-      ? uiText(lang, "stepLabel.validation", "")
-      : extractStepTitle(current, lang);
+  const stepTitle = current === "step_0" ? uiText(lang, "stepLabel.validation", "") : extractStepTitle(current, lang);
   buildStepper(idx, stepTitle, lang);
 
   const badge = document.getElementById("badge");
@@ -574,12 +450,7 @@ export function render(overrideToolOutput?: unknown): void {
   const startActionCode = String((state?.ui_action_start || "")).trim();
   const hasStartAction = startActionCode.length > 0;
 
-  if (
-    waitingGateActive ||
-    serverExplicitBlocked ||
-    serverExplicitFailed ||
-    serverExplicitRecovery
-  ) {
+  if (serverExplicitBlocked) {
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
@@ -592,32 +463,17 @@ export function render(overrideToolOutput?: unknown): void {
       badge.textContent = "";
       (badge as HTMLElement).style.display = "none";
     }
-    const waitingSectionTitle = document.getElementById("sectionTitle");
-    if (waitingSectionTitle) waitingSectionTitle.textContent = "";
+    const blockedSectionTitle = document.getElementById("sectionTitle");
+    if (blockedSectionTitle) blockedSectionTitle.textContent = "";
     if (cardDesc) {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      if (serverExplicitBlocked || serverExplicitFailed) {
-        const errorMessage =
-          String((result?.error as Record<string, unknown> | undefined)?.message || "").trim() ||
-          String((result?.error as Record<string, unknown> | undefined)?.user_message || "").trim();
-        const blockedCopy = blockedMessageForReason(lang, uiGateReason, errorMessage);
-        renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
-      } else if (serverExplicitRecovery) {
-        renderHydrationRecovery(prestartEl, lang);
-        const retryBtn = document.getElementById("btnHydrationRetry") as HTMLButtonElement | null;
-        if (retryBtn) {
-          retryBtn.disabled = getIsLoading();
-          retryBtn.onclick = () => {
-            if (getIsLoading()) return;
-            setLoading(true);
-            resetHydrationRetryCycle({ trigger_poll: true, source: "render_retry_button" });
-          };
-        }
-      } else {
-        renderBootstrapWaitShell(prestartEl, lang);
-      }
+      const errorMessage =
+        String((result?.error as Record<string, unknown> | undefined)?.message || "").trim() ||
+        String((result?.error as Record<string, unknown> | undefined)?.user_message || "").trim();
+      const blockedCopy = blockedMessageForReason(lang, uiGateReason, errorMessage);
+      renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
     }
     if (prompt) prompt.textContent = "";
     if (uiSubtitle) uiSubtitle.textContent = "";
@@ -752,12 +608,10 @@ export function render(overrideToolOutput?: unknown): void {
   const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
   const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
   if (!hasRenderableInteractiveContent) {
-    const recoverToPrestart = current === "step_0" && hasStartAction;
-    console.warn("[ui_contract_interactive_missing_content]", {
+    console.warn("[ui_contract_interactive_content_absent]", {
       current_step: current,
       view_mode: viewMode || "",
       payload_source: resolved.source,
-      recovery_mode: recoverToPrestart ? "prestart" : "blocked",
     });
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
@@ -767,24 +621,6 @@ export function render(overrideToolOutput?: unknown): void {
     const prompt = document.getElementById("prompt");
     if (prompt) prompt.textContent = "";
     setSendEnabled(false);
-    if (recoverToPrestart) {
-      if (cardDescEl) {
-        cardDescEl.classList.remove("has-grid");
-        cardDescEl.classList.remove("is-step0-ask-layout");
-        const hasPrestartContent = hasPrestartContentForLang(lang);
-        const showSkeleton = uiStringsStatus !== "ready" || !hasPrestartContent;
-        if (showSkeleton) renderPrestartSkeleton(cardDescEl, lang);
-        else renderPrestartContent(cardDescEl, lang);
-      }
-      (btnStart as HTMLElement).style.display = "inline-flex";
-      (btnStart as HTMLButtonElement).disabled = getIsLoading() || !hasStartAction;
-      startHint.textContent = "";
-      (startHint as HTMLElement).style.display = "none";
-      setSessionStarted(false);
-      setSessionWelcomeShown(false);
-      if (isLoading) setLoading(false);
-      return;
-    }
     (btnStart as HTMLElement).style.display = "none";
     startHint.textContent = "";
     (startHint as HTMLElement).style.display = "none";

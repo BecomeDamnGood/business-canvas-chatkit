@@ -98,7 +98,7 @@ test("view contract invariant: step_0 with started=false always renders prestart
   assert.equal(String(result?.state?.ui_action_start || ""), "ACTION_START");
 });
 
-test("view contract guard: server repairs interactive-without-content on step_0 to prestart", () => {
+test("canonical view decision: step_0 not-started always emits prestart with ACTION_START", () => {
   const response = {
     ok: true,
     tool: "run_step",
@@ -141,9 +141,9 @@ test("view contract guard: server repairs interactive-without-content on step_0 
   });
   assert.equal(String((final.ui as any)?.view?.mode || ""), "prestart");
   assert.equal(String((final.state as any)?.ui_action_start || ""), "ACTION_START");
-  const guard = (final as any).__view_contract_guard || {};
-  assert.equal(String(guard.invariant_ok), "false");
-  assert.equal(String(guard.violation_reason_code || ""), "step0_not_started_forced_prestart");
+  const guard = (final as any).__canonical_view_decision || {};
+  assert.equal(String(guard.invariant_ok), "true");
+  assert.equal(String(guard.reason_code || ""), "");
 });
 
 test("Start gating: seedable non-empty first message keeps Click Start gate and does not auto-advance", async () => {

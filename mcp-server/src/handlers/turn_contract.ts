@@ -3,6 +3,7 @@ import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../
 import type { CanvasState } from "../core/state.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
 import { STEP_0_ID } from "../steps/step_0_validation.js";
+import { buildCanonicalWidgetState } from "./run_step_canonical_widget_state.js";
 import {
   CONTRACT_BOOTSTRAP_PHASES,
   CONTRACT_UI_FALLBACK_REASONS,
@@ -32,25 +33,19 @@ type FinalizeContractInternalsOptions = UiParityDeps & {
   ) => Record<string, unknown>;
 };
 
-export type ViewContractGuardSnapshot = {
+export type CanonicalViewDecisionSnapshot = {
   started: boolean;
   ui_view_mode: string;
   has_renderable_content: boolean;
   has_start_action: boolean;
   invariant_ok: boolean;
-  violation_reason_code: string;
-  patched: boolean;
+  reason_code: string;
 };
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function normalizeUiViewMode(value: unknown): string {
-  const mode = String(value || "").trim().toLowerCase();
-  return CONTRACT_UI_VIEW_MODES.has(mode) ? mode : "";
 }
 
 function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
@@ -81,11 +76,9 @@ function hasStartAction(response: RunStepContractResponse, state: Record<string,
   return actions.some((action) => String(action?.action_code || "").trim() === "ACTION_START");
 }
 
-export function enforceRunStepViewContractGuard(
+function applyCanonicalWidgetState(
   response: RunStepContractResponse
-): ViewContractGuardSnapshot {
-  let patched = false;
-  let violationReasonCode = "";
+): CanonicalViewDecisionSnapshot {
   const nextResponse = response;
   const state =
     response.state && typeof response.state === "object"
@@ -111,58 +104,53 @@ export function enforceRunStepViewContractGuard(
 
   const currentStep = String(nextResponse.current_step_id || state.current_step || STEP_0_ID).trim() || STEP_0_ID;
   const started = String(state.started || "").trim().toLowerCase() === "true";
-  let uiViewMode = normalizeUiViewMode(uiView.mode);
-  let startActionAvailable = hasStartAction(nextResponse, state);
   const interactiveHasRenderableContent = hasRenderableResponseContent(nextResponse);
-
-  if (currentStep === STEP_0_ID && !started) {
-    if (uiViewMode !== "prestart") {
-      uiViewMode = "prestart";
-      uiView.mode = "prestart";
-      uiView.waiting_locale = false;
-      patched = true;
-      if (!violationReasonCode) violationReasonCode = "step0_not_started_forced_prestart";
-    }
-    if (!startActionAvailable) {
-      state.ui_action_start = "ACTION_START";
-      startActionAvailable = true;
-      patched = true;
-      if (!violationReasonCode) violationReasonCode = "step0_missing_start_action_patched";
-    }
+  let startActionAvailable = hasStartAction(nextResponse, state);
+  if (currentStep === STEP_0_ID && !started && !startActionAvailable) {
+    state.ui_action_start = "ACTION_START";
+    startActionAvailable = true;
   }
 
-  if (uiViewMode === "interactive" && !interactiveHasRenderableContent) {
-    if (currentStep === STEP_0_ID && startActionAvailable) {
-      uiViewMode = "prestart";
-      uiView.mode = "prestart";
-      uiView.waiting_locale = false;
-      patched = true;
-      if (!violationReasonCode) violationReasonCode = "interactive_missing_content_forced_prestart";
-    } else {
-      uiViewMode = "blocked";
-      uiView.mode = "blocked";
-      uiView.waiting_locale = false;
-      state.ui_gate_status = "blocked";
-      state.ui_gate_reason = String(state.ui_gate_reason || "").trim() || "contract_violation";
-      state.bootstrap_phase = "failed";
-      patched = true;
-      if (!violationReasonCode) violationReasonCode = "interactive_missing_content_forced_blocked";
-    }
+  const canonical = buildCanonicalWidgetState({
+    step0Id: STEP_0_ID,
+    currentStepId: currentStep,
+    started,
+    hasRenderableContent: interactiveHasRenderableContent,
+    hasStartAction: startActionAvailable,
+    uiGateStatus: String(state.ui_gate_status || ""),
+    bootstrapPhase: String(state.bootstrap_phase || ""),
+    variant: String(uiView.variant || "").trim(),
+  });
+
+  ui.view = {
+    mode: canonical.mode,
+    waiting_locale: false,
+    ...(canonical.variant ? { variant: canonical.variant } : {}),
+  };
+  if (canonical.mode === "blocked") {
+    state.ui_gate_status = "blocked";
+    state.ui_gate_reason = String(state.ui_gate_reason || "").trim() || "contract_violation";
+    state.bootstrap_phase = "failed";
+  } else if (String(state.ui_gate_status || "").trim().toLowerCase() === "failed") {
+    state.ui_gate_status = "ready";
+    state.ui_gate_reason = "";
+    state.bootstrap_phase = "ready";
   }
 
-  uiViewMode = normalizeUiViewMode(uiView.mode);
-  const invariantStep0PrestartOk =
-    !(currentStep === STEP_0_ID && !started) || (uiViewMode === "prestart" && startActionAvailable);
-  const invariantInteractiveContentOk = uiViewMode !== "interactive" || interactiveHasRenderableContent;
   return {
     started,
-    ui_view_mode: uiViewMode,
-    has_renderable_content: interactiveHasRenderableContent,
-    has_start_action: startActionAvailable,
-    invariant_ok: invariantStep0PrestartOk && invariantInteractiveContentOk && !violationReasonCode,
-    violation_reason_code: violationReasonCode,
-    patched,
+    ui_view_mode: canonical.mode,
+    has_renderable_content: canonical.has_renderable_content,
+    has_start_action: canonical.has_start_action,
+    invariant_ok: canonical.invariant_ok,
+    reason_code: canonical.reason_code,
   };
+}
+
+export function enforceRunStepViewContractGuard(
+  response: RunStepContractResponse
+): CanonicalViewDecisionSnapshot {
+  return applyCanonicalWidgetState(response);
 }
 
 export function validateUiPayloadContractParity(
@@ -412,7 +400,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       };
     }
   }
-  const guardBeforeAssert = enforceRunStepViewContractGuard(finalResponse);
+  let canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   try {
     assertRunStepContractOrThrow(finalResponse);
   } catch (error: any) {
@@ -425,12 +413,9 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       locale_pending_background: false,
       bootstrap_phase: "failed",
     });
+    canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   }
-  const guardAfterAssert = enforceRunStepViewContractGuard(finalResponse);
-  (finalResponse as Record<string, unknown>).__view_contract_guard =
-    guardBeforeAssert.patched || !guardBeforeAssert.invariant_ok
-      ? guardBeforeAssert
-      : guardAfterAssert;
+  (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;
 
   return finalResponse as T;
 }

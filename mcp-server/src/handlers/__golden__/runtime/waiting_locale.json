@@ -18,7 +18,7 @@
     "snapshot": {
       "ok": true,
       "current_step_id": "step_0",
-      "ui_view_mode": "waiting_locale",
+      "ui_view_mode": "interactive",
       "ui_gate_status": "waiting_locale",
       "bootstrap_phase": "waiting_locale",
       "has_ui_actions": false,

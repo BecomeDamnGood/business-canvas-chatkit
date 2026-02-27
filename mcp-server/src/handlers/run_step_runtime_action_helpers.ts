@@ -39,17 +39,9 @@ type UiViewVariant =
   | "dream_builder_scoring"
   | "dream_builder_refine";
 
-type UiViewModeRoute =
-  | "waiting_locale"
-  | "prestart"
-  | "interactive"
-  | "recovery"
-  | "blocked"
-  | "failed";
-
 export type UiViewPayload = {
-  mode: UiViewModeRoute;
-  waiting_locale: boolean;
+  mode?: "prestart" | "interactive" | "blocked";
+  waiting_locale?: false;
   variant?: Exclude<UiViewVariant, "default">;
 };
 
@@ -79,26 +71,9 @@ export function createRunStepRuntimeActionHelpers(deps: CreateRunStepRuntimeActi
     return actionCode;
   }
 
-  function deriveUiViewPayload(
-    state: CanvasState | null | undefined,
-    variant: UiViewVariant
-  ): UiViewPayload | null {
-    if (!state || typeof state !== "object") return null;
-    const gateStatus = String((state as any).ui_gate_status || "").trim().toLowerCase();
-    const phase = String((state as any).bootstrap_phase || "").trim().toLowerCase();
-    const currentStep = String((state as any).current_step || deps.step0Id).trim() || deps.step0Id;
-    const started = String((state as any).started || "").trim().toLowerCase() === "true";
-    let mode: UiViewModeRoute = "interactive";
-    if (gateStatus === "waiting_locale" || phase === "waiting_locale") mode = "waiting_locale";
-    else if (gateStatus === "blocked") mode = "blocked";
-    else if (gateStatus === "failed" || phase === "failed") mode = "failed";
-    else if (phase === "recovery") mode = "recovery";
-    else if (currentStep === deps.step0Id && !started) mode = "prestart";
-    return {
-      mode,
-      waiting_locale: mode === "waiting_locale",
-      ...(variant !== "default" ? { variant } : {}),
-    };
+  function deriveUiViewPayload(variant: UiViewVariant): UiViewPayload | null {
+    if (variant === "default") return null;
+    return { variant };
   }
 
   function isConfirmActionCode(actionCode: string): boolean {

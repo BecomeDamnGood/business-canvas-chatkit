@@ -1,4 +1,59 @@
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-27 CORE hard-refactor run)
+
+## 0) Samenvatting
+- Primary instructie gebruikt: `docs/hard_refactoring_2026-02-27.md`.
+- Server geconsolideerd naar 1 canonical mode-beslisser via `buildCanonicalWidgetState(...)`.
+- UI gestript naar canonical ingest/renderpad op `_meta.widget_result`; client-side startup/recovery mode-fallbacks verwijderd.
+- Observability gecentraliseerd op event `run_step_canonical_view_emitted`.
+- Verplicht artefact geleverd: `docs/hard_refactoring_sweep_manifest_2026-02-27.md` (volledige inventory met status per bestand).
+
+## 1) Kernwijzigingen
+1. Server canonical mode
+- Nieuw: `mcp-server/src/handlers/run_step_canonical_widget_state.ts`.
+- `turn_contract.ts` gebruikt canonical builder als enige mode-authority en zet `ui.view.mode` canonical op `prestart|interactive|blocked`.
+- Contractfinalisatie schrijft intern `__canonical_view_decision` i.p.v. legacy guard-patch metadata.
+
+2. Response observability
+- `run_step_response.ts` logt nu 1 canonical decision event:
+  - `run_step_canonical_view_emitted`
+  - inclusief mode/invariant/reason + tuple/context velden.
+
+3. UI stripdown
+- `ui/lib/locale_bootstrap_runtime.ts` accepteert alleen `_meta.widget_result` als render-authority.
+- `ui/lib/main.ts` verwijdert client-side startup wait-shell/recovery bootstrap pad.
+- `ui/lib/ui_render.ts` ondersteunt alleen canonical modes (`prestart|interactive|blocked`) en verwijdert client mode-routing op `waiting_locale/recovery/failed`.
+- `ui/lib/ui_actions.ts` verwijdert start-ack recovery polling en tuple fail-closed recovery-mode rendering; fail-closed gaat naar blocked.
+
+## 2) Gates en checks
+- `cd mcp-server && npm run typecheck` -> PASS.
+- `cd mcp-server && npm run gate:hard-refactor` -> PASS.
+  - output:
+    - `[hard_refactor_gate] passed`
+    - `scope files: 115`
+    - `manifest entries: 145`
+
+## 3) Openstaand
+- Live 5/5 flow-validatie is nog niet in deze omgeving uitgevoerd (geen live host-interactie in deze run).
+- `src/ui_render.test.ts` bevat nog legacy fallback/recovery assertions die functioneel niet meer overeenkomen met de nieuwe CORE-only client; aparte testrefactor nodig.
+
 # MCP Widget Stabilisatie - Run Resultaat (2026-02-27 16:05 CET, v203 target)
+
+## 0) Live Update Na Deploy (2026-02-27 13:59 UTC, App Runner v203)
+- Live `VERSION` check:
+  - `https://xp8hpu4mmw.us-east-1.awsapprunner.com/version` => `VERSION=v203`.
+- Geobserveerde failure in productieflow (zelfde sessie `bs_0a77d687-c60b-4767-b3e3-34d219836af9`):
+  1. `02d290be-bb5c-4159-82d0-09bd05538767`: `run_step_response` op `step_0` met `ui_view_mode:"prestart"` (verwacht).
+  2. `2f39eef2-ba52-4423-9a6f-2a913877436a`: `ACTION_START` accepted, daarna `run_step_response` op `step_0` met `ui_view_mode:"interactive"` (geen step advance).
+  3. `fdeabe34-4a51-4813-be36-96b18c340dcc`: opnieuw `ACTION_START` accepted, weer `step_0 + interactive`.
+  4. In alle genoemde responses: tuple parity `ok`, render source `meta.widget_result`.
+- Nieuwe guard event aanwezig, maar met lege correlation/trace velden:
+  - `run_step_view_contract_guard` toont `started:true`, `ui_view_mode:"interactive"`, `has_renderable_content:true`, `invariant_ok:true`, `guard_patch_applied:false`.
+- Live UX observatie uit handtest:
+  - first paint toont tijdelijk lege/halve card;
+  - daarna pas gevuld scherm met startknop.
+- Conclusie:
+  - De v203 guard-fix is **niet voldoende** voor stabiele end-to-end UX.
+  - Eerdere conclusie "bevestigd" is bij live bewijs deels weerlegd.
 
 ## 1) Hypothese en falsificatie
 - Hypothese: regressie zit in view-contract inconsistentie tussen `started/current_step`, `ui.view.mode` en echte renderbare content.
@@ -6,7 +61,9 @@
   - Guard-event toegevoegd per response: `run_step_view_contract_guard`.
   - Server corrigeert nu inconsistenties deterministisch voor contractcheck.
   - UI heeft laatste fail-safe voor `interactive` zonder content op `step_0`.
-- Uitkomst: hypothese **bevestigd** voor lokaal reproduceerbare keten (contractniveau + renderfallback). Live falsificatie vereist nog cloud/logtoegang.
+- Uitkomst:
+  - lokaal contractmatig: **bevestigd**;
+  - live UX-stabiliteit: **niet bevestigd / onvolledig** (blank-first-paint blijft reproduceerbaar).
 
 ## 2) 70%-contextbudget
 - Eerste pass: 10/15 bestanden (verplichte subset).
@@ -71,9 +128,14 @@
 - Bij valide interactieve payload blijft render normaal.
 - Bij interactieve payload zonder content converteert keten nu deterministisch naar herstelbare prestart/blocked i.p.v. blank state.
 
-## 6) Live ketenbewijs / blocker
-- Live validatie (5 volledige flows + CloudWatch correlatie) is in deze omgeving niet uitvoerbaar door ontbrekende endpoint/AWS toegang.
-- Status: **externe blocker**, handoff vereist voor productieverificatie.
+## 6) Live ketenbewijs
+- Live validatie is nu deels uitgevoerd op App Runner `v203` (minimaal 1 volledige flow met correlaties).
+- Bevinding:
+  - geen tuple/parity regressie zichtbaar;
+  - geen render-source autoriteitsbreuk zichtbaar;
+  - UX breekt nog steeds in first-paint fase (blank/half transient met late herstelrender).
+- Openstaand:
+  - nog 5-flow matrix nodig met expliciete UI-side events (`ui_contract_interactive_missing_content`, ingest markers) om definitieve root cause te isoleren.
 
 ## 7) Restrisico en rollback
 - Restrisico:

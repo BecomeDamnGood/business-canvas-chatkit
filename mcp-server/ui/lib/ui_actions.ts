@@ -326,10 +326,7 @@ function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality
   const renderable =
     (viewMode === "prestart" && hasUiStrings) ||
     (viewMode === "interactive" && hasInteractiveContent) ||
-    viewMode === "waiting_locale" ||
-    viewMode === "recovery" ||
-    viewMode === "blocked" ||
-    viewMode === "failed";
+    viewMode === "blocked";
 
   let score = 0;
   if (viewMode) score += 40;
@@ -384,21 +381,20 @@ function buildTupleFailClosedEnvelope(params: {
         ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
         ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
         ui_strings_requested_lang: uiStringsRequestedLang,
-        ui_gate_status: "waiting_locale",
-        ui_gate_reason: "translation_pending",
-        bootstrap_phase: "waiting_locale",
+        ui_gate_status: "blocked",
+        ui_gate_reason: "contract_violation",
+        bootstrap_phase: "failed",
       },
       ui: {
         flags: {
-          bootstrap_waiting_locale: true,
+          bootstrap_waiting_locale: false,
           bootstrap_interactive_ready: false,
-          interactive_fallback_active: true,
           tuple_incomplete_fail_closed: true,
           tuple_fail_closed_reason: "incoming_missing_tuple",
         },
         view: {
-          mode: "recovery",
-          waiting_locale: true,
+          mode: "blocked",
+          waiting_locale: false,
         },
       },
     },
@@ -587,11 +583,8 @@ const CLICK_DEBOUNCE_MS = 250;
 const RUN_STEP_TIMEOUT_MS = 25000;
 const BRIDGE_RESPONSE_TIMEOUT_MS = 6000;
 const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
-const START_ACK_RECOVERY_DELAY_MS = CLICK_DEBOUNCE_MS + 80;
 let bootstrapPollInFlight = false;
 let bootstrapPollInFlightSignature = "";
-let startAckRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
-let startAckRecoverySignature = "";
 
 function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   const raw = (globalThis as Record<string, unknown>)[name];
@@ -599,54 +592,6 @@ function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   const normalized = String(raw ?? "").trim().toLowerCase();
   if (!normalized) return defaultValue;
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
-}
-
-function clearStartAckRecoveryTimer(): void {
-  if (startAckRecoveryTimer) {
-    clearTimeout(startAckRecoveryTimer);
-    startAckRecoveryTimer = null;
-  }
-  startAckRecoverySignature = "";
-}
-
-function scheduleStartAckRecoveryPoll(nextState: Record<string, unknown>): void {
-  const signature = bootstrapPollSignatureFromState(nextState);
-  if (startAckRecoveryTimer && startAckRecoverySignature === signature) {
-    if (isDevEnv()) {
-      console.log("[ui_start_ack_recovery_poll_deduped]", {
-        poll_signature: signature,
-      });
-    }
-    return;
-  }
-  clearStartAckRecoveryTimer();
-  startAckRecoverySignature = signature;
-  startAckRecoveryTimer = setTimeout(() => {
-    startAckRecoveryTimer = null;
-    const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
-    const latestState = toRecord(latest.state);
-    const recoveryState = Object.keys(latestState).length > 0 ? { ...latestState } : { ...nextState };
-    const mergedOrdering = mergeOutboundOrdering({ nextState: recoveryState, widgetState: widgetState() });
-    if (hasValidBootstrapOrdering(mergedOrdering)) {
-      recoveryState.bootstrap_session_id = mergedOrdering.sessionId;
-      recoveryState.bootstrap_epoch = mergedOrdering.epoch;
-      recoveryState.response_seq = mergedOrdering.responseSeq;
-      recoveryState.host_widget_session_id = mergedOrdering.hostWidgetSessionId;
-    }
-    if (isDevEnv()) {
-      console.log("[ui_start_ack_recovery_poll_dispatch]", {
-        poll_signature: startAckRecoverySignature,
-        ordering_tuple: describeBootstrapOrdering(readBootstrapOrderingState(recoveryState)),
-      });
-    }
-    void callRunStep(ACTION_BOOTSTRAP_POLL, {
-      ...recoveryState,
-      __bootstrap_poll: "true",
-      __hydrate_poll: "true",
-      __start_ack_recovery: "true",
-    });
-    startAckRecoverySignature = "";
-  }, START_ACK_RECOVERY_DELAY_MS);
 }
 
 function maybeScheduleBootstrapRetry(
@@ -660,12 +605,7 @@ export function resetHydrationRetryCycle(opts?: { trigger_poll?: boolean; source
   const source = String(opts?.source || "manual");
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
   const latestState = toRecord(latest.state);
-  if (isDevEnv()) {
-    console.log("[recovery_retry_clicked]", {
-      source,
-      has_state: Object.keys(latestState).length > 0,
-    });
-  }
+  if (isDevEnv()) console.log("[bootstrap_retry_clicked]", { source, has_state: Object.keys(latestState).length > 0 });
   void callRunStep(ACTION_BOOTSTRAP_POLL, {
     ...latestState,
     __bootstrap_poll: "true",
@@ -1437,9 +1377,7 @@ export async function callRunStep(
           start_dispatch_state: "failed",
           transport_ready: "true",
         });
-        scheduleStartAckRecoveryPoll(nextState as Record<string, unknown>);
       } else {
-        clearStartAckRecoveryTimer();
         setWidgetStateSafe({
           start_dispatch_state: "ready",
           transport_ready: "true",
