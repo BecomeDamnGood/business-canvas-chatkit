@@ -292,6 +292,90 @@ function mergeOutboundOrdering(params: {
   return fromNext;
 }
 
+type PayloadQuality = {
+  viewMode: string;
+  hasUiStrings: boolean;
+  hasInteractiveContent: boolean;
+  renderable: boolean;
+  score: number;
+};
+
+function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality {
+  const state = toRecord(result.state);
+  const uiPayload = toRecord(result.ui);
+  const uiView = toRecord(uiPayload.view);
+  const promptObj = toRecord(uiPayload.prompt);
+  const specialist = toRecord(result.specialist);
+  const viewMode = String(uiView.mode || "").trim().toLowerCase();
+  const uiStrings = toRecord(state.ui_strings);
+  const hasUiStrings = Object.keys(uiStrings).length > 0;
+  const hasInteractiveContent =
+    String(result.text || "").trim().length > 0 ||
+    String(result.prompt || "").trim().length > 0 ||
+    String(promptObj.body || "").trim().length > 0 ||
+    String(uiPayload.questionText || "").trim().length > 0 ||
+    String(specialist.message || "").trim().length > 0 ||
+    String(specialist.question || "").trim().length > 0 ||
+    String(specialist.refined_formulation || "").trim().length > 0 ||
+    (Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0);
+  const hasState = Object.keys(state).length > 0;
+  const hasCurrentStep =
+    String(state.current_step || "").trim().length > 0 ||
+    String(result.current_step_id || "").trim().length > 0;
+
+  const renderable =
+    (viewMode === "prestart" && hasUiStrings) ||
+    (viewMode === "interactive" && hasInteractiveContent) ||
+    viewMode === "waiting_locale" ||
+    viewMode === "recovery" ||
+    viewMode === "blocked" ||
+    viewMode === "failed";
+
+  let score = 0;
+  if (viewMode) score += 40;
+  if (hasState) score += 10;
+  if (hasCurrentStep) score += 10;
+  if (hasUiStrings) score += 30;
+  if (hasInteractiveContent) score += 20;
+  if (renderable) score += 50;
+
+  return {
+    viewMode,
+    hasUiStrings,
+    hasInteractiveContent,
+    renderable,
+    score,
+  };
+}
+
+function shouldAcceptSameTupleUpgrade(params: {
+  incoming: PayloadQuality;
+  current: PayloadQuality;
+}): boolean {
+  if (params.incoming.renderable && !params.current.renderable) return true;
+  if (params.incoming.hasUiStrings && !params.current.hasUiStrings) return true;
+  if (params.incoming.hasInteractiveContent && !params.current.hasInteractiveContent) return true;
+  return params.incoming.score > params.current.score;
+}
+
+function shouldUpdateRenderCache(params: {
+  currentHasPayload: boolean;
+  incoming: PayloadQuality;
+  current: PayloadQuality;
+  sameTupleUpgradeAccepted: boolean;
+  orderingReason: string;
+}): boolean {
+  if (params.sameTupleUpgradeAccepted) return true;
+  if (!params.currentHasPayload) return true;
+  if (params.orderingReason === "new_session" || params.orderingReason === "new_epoch") return true;
+  if (params.current.renderable && !params.incoming.renderable) return false;
+  if (params.incoming.renderable && !params.current.renderable) return true;
+  if (params.incoming.renderable && params.current.renderable) {
+    return params.incoming.score >= params.current.score;
+  }
+  return params.incoming.score >= params.current.score;
+}
+
 function bootstrapPollSignatureFromState(state: Record<string, unknown> | null | undefined): string {
   const s = state && typeof state === "object" ? state : {};
   return [
@@ -522,6 +606,10 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   }
   const resolved = resolveWidgetPayload(normalized);
   const result = resolved.result;
+  const currentCachedResolved = resolveWidgetPayload(getLastToolOutput());
+  const currentCachedResult = currentCachedResolved.result;
+  const currentQuality = evaluatePayloadQuality(currentCachedResult);
+  const incomingQuality = evaluatePayloadQuality(result);
   const currentOrdering = readBootstrapOrderingState(widgetState());
   const incomingOrdering: BootstrapOrderingState = {
     sessionId: resolved.bootstrap_session_id,
@@ -532,16 +620,38 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
   const currentHasOrdering = hasValidBootstrapOrdering(currentOrdering);
   const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
+  let sameTupleUpgradeAccepted = false;
   if (incomingHasOrdering && !orderingDecision.apply) {
-    console.warn("[ui_ordering_dropped_stale]", {
-      source,
-      reason: orderingDecision.reason,
-      payload_source: resolved.source,
-      payload_reason_code: resolved.source_reason_code,
-      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-      current_tuple: describeBootstrapOrdering(currentOrdering),
-    });
-    return {};
+    if (
+      orderingDecision.reason === "same_response_seq" &&
+      shouldAcceptSameTupleUpgrade({
+        incoming: incomingQuality,
+        current: currentQuality,
+      })
+    ) {
+      sameTupleUpgradeAccepted = true;
+      console.log("[ui_ordering_same_seq_upgrade_accepted]", {
+        source,
+        payload_source: resolved.source,
+        payload_reason_code: resolved.source_reason_code,
+        incoming_quality_score: incomingQuality.score,
+        current_quality_score: currentQuality.score,
+        incoming_renderable: incomingQuality.renderable,
+        current_renderable: currentQuality.renderable,
+        incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+        current_tuple: describeBootstrapOrdering(currentOrdering),
+      });
+    } else {
+      console.warn("[ui_ordering_dropped_stale]", {
+        source,
+        reason: orderingDecision.reason,
+        payload_source: resolved.source,
+        payload_reason_code: resolved.source_reason_code,
+        incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+        current_tuple: describeBootstrapOrdering(currentOrdering),
+      });
+      return {};
+    }
   }
   if (!incomingHasOrdering && currentHasOrdering) {
     console.warn("[ui_ordering_dropped_stale]", {
@@ -570,8 +680,27 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       current_tuple: describeBootstrapOrdering(currentOrdering),
     });
   }
-  setLastToolOutput(normalized);
-  if (_render) _render(normalized);
+  const shouldPersistToRenderCache = shouldUpdateRenderCache({
+    currentHasPayload: Object.keys(currentCachedResult).length > 0,
+    incoming: incomingQuality,
+    current: currentQuality,
+    sameTupleUpgradeAccepted,
+    orderingReason: orderingDecision.reason,
+  });
+  if (shouldPersistToRenderCache) {
+    setLastToolOutput(normalized);
+    if (_render) _render(normalized);
+  } else {
+    console.warn("[ui_ingest_ack_cache_preserved]", {
+      source,
+      payload_source: resolved.source,
+      payload_reason_code: resolved.source_reason_code,
+      incoming_quality_score: incomingQuality.score,
+      current_quality_score: currentQuality.score,
+      incoming_renderable: incomingQuality.renderable,
+      current_renderable: currentQuality.renderable,
+    });
+  }
   const hydration = maybeScheduleBootstrapRetry(resolved);
   if (isDevEnv()) {
     console.log("[ui_bootstrap_state]", {

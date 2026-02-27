@@ -7,6 +7,7 @@ import {
   renderChoiceButtons,
   stripStructuredChoiceLines,
 } from "../ui/lib/ui_render.ts";
+import { setRuntimeUiStrings } from "../ui/lib/ui_constants.ts";
 import {
   callRunStep,
   computeBootstrapRenderState,
@@ -25,6 +26,7 @@ test.beforeEach(() => {
   setSessionStarted(false);
   setSessionWelcomeShown(false);
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = {};
+  setRuntimeUiStrings({});
 });
 
 function makeElement(tag: string) {
@@ -1089,7 +1091,8 @@ test("computeBootstrapRenderState returns waiting_locale phase for non-EN pendin
 test("render source ignores empty or mismatched locale override maps", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /const hasOverrideStrings = Boolean\(overrideStringsMap\) && Object\.keys\(overrideStringsMap \|\| \{\}\)\.length > 0;/);
-  assert.match(source, /setRuntimeUiStrings\(hasOverrideStrings \? overrideStringsMap : \{\}\);/);
+  assert.match(source, /if \(hasOverrideStrings\) setRuntimeUiStrings\(overrideStringsMap\);/);
+  assert.doesNotMatch(source, /setRuntimeUiStrings\(hasOverrideStrings \? overrideStringsMap : \{\}\);/);
 });
 
 test("computeBootstrapRenderState ignores interactive_fallback marker and stays waiting_locale", () => {
@@ -1353,6 +1356,111 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry drops duplicate payload wit
   assert.equal(Object.keys(result).length, 0);
   const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
   assert.equal(String((((cachedResult.ui as Record<string, unknown>) || {}).questionText) || ""), "current");
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry accepts richer same-seq payload and refreshes cache", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: {
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    ui: { view: { mode: "prestart" } },
+  });
+
+  const richerSameSeqPayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+      ui_strings: {
+        "prestart.headline": "Welkom",
+        "prestart.proven.title": "Bewezen",
+      },
+    },
+    ui: { view: { mode: "prestart" } },
+  });
+
+  const result = handleToolResultAndMaybeScheduleBootstrapRetry(richerSameSeqPayload, {
+    source: "host_notification",
+  });
+  assert.equal(Object.keys(result).length > 0, true);
+  const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
+  const cachedState = (cachedResult.state as Record<string, unknown>) || {};
+  const cachedUiStrings = (cachedState.ui_strings as Record<string, unknown>) || {};
+  assert.equal(String(cachedUiStrings["prestart.headline"] || ""), "Welkom");
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry advances ordering but preserves stronger cached payload", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: {
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    ui: { view: { mode: "interactive" }, questionText: "strong-cached" },
+  });
+
+  const weakNewerPayload = {
+    result: {
+      state: {
+        current_step: "step_0",
+        bootstrap_session_id: "bs_demo",
+        bootstrap_epoch: 1,
+        response_seq: 7,
+        host_widget_session_id: "internal:demo",
+      },
+    },
+  };
+
+  const result = handleToolResultAndMaybeScheduleBootstrapRetry(weakNewerPayload, {
+    source: "host_notification",
+  });
+  assert.equal(Object.keys(result).length > 0, true);
+  const stateAfter = (globalThis as any).openai.widgetState as Record<string, unknown>;
+  assert.equal(Number(stateAfter.response_seq || 0), 7);
+  const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
+  assert.equal(String((((cachedResult.ui as Record<string, unknown>) || {}).questionText) || ""), "strong-cached");
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
@@ -1819,6 +1927,8 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.match(source, /\[ui_ordering_applied\]/);
   assert.match(source, /\[ui_ordering_dropped_stale\]/);
   assert.match(source, /\[ui_ingest_dropped_no_widget_result\]/);
+  assert.match(source, /\[ui_ordering_same_seq_upgrade_accepted\]/);
+  assert.match(source, /\[ui_ingest_ack_cache_preserved\]/);
   assert.match(source, /incoming_missing_tuple/);
   assert.match(source, /\[ui_dispatch_ack_only\]/);
   assert.match(source, /ui_transport_unavailable/);

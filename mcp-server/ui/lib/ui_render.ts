@@ -475,7 +475,7 @@ export function render(overrideToolOutput?: unknown): void {
     Object.keys(state).length === 0;
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
-  setRuntimeUiStrings(hasOverrideStrings ? overrideStringsMap : {});
+  if (hasOverrideStrings) setRuntimeUiStrings(overrideStringsMap);
   if (!hasExplicitServerRouting) {
     console.warn("[ui_contract_missing_view_mode]", {
       payload_source: resolved.source,
