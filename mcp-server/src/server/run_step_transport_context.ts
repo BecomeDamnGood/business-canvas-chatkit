@@ -1,0 +1,254 @@
+import { randomUUID } from "node:crypto";
+
+import { safeString } from "../server_safe_string.js";
+
+import {
+  classifyStaleInteractiveActionPolicy,
+  normalizeStepId,
+  resolveEffectiveHostWidgetSessionId,
+} from "./locale_resolution.js";
+import {
+  createBootstrapSessionId,
+  normalizeBootstrapSessionId,
+  readBootstrapOrdering,
+} from "./ordering_parity.js";
+import {
+  logStructuredEvent,
+  normalizeLogField,
+  resolveContractIdFromRecord,
+} from "./observability.js";
+import {
+  RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED,
+  RUN_STEP_STALE_REBASE_V1_ENABLED,
+  normalizeIdempotencyKey,
+  parsePositiveInt,
+} from "./server_config.js";
+
+export type RunStepHandlerArgs = {
+  current_step_id: string;
+  user_message: string;
+  input_mode?: "widget" | "chat";
+  locale_hint?: string;
+  locale_hint_source?: "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
+  idempotency_key?: string;
+  correlation_id?: string;
+  trace_id?: string;
+  host_widget_session_id?: string;
+  state?: Record<string, unknown>;
+};
+
+type LocaleHintSource = "openai_locale" | "webplus_i18n" | "request_header" | "message_detect" | "none";
+
+type StaleInteractiveActionPolicy = {
+  normalizedAction: string;
+  isInteractiveAction: boolean;
+  rebaseEligible: boolean;
+  reasonCode: "text_input" | "interactive_action_not_rebase_eligible" | "interactive_action_rebase_eligible";
+};
+
+export type RunStepContext = {
+  correlationId: string;
+  traceId: string;
+  currentStepId: string;
+  stepIdStr: string;
+  stateForTool: Record<string, unknown>;
+  userMessage: string;
+  userMessageRaw: string;
+  normalizedMessage: string;
+  localeHint: string;
+  localeHintSource: LocaleHintSource;
+  inputMode: string;
+  action: string;
+  hostWidgetSessionId: string;
+  staleIngestGuardEnabled: boolean;
+  staleRebaseEnabled: boolean;
+  staleInteractiveActionPolicy: StaleInteractiveActionPolicy;
+  idempotencyKey: string;
+  normalizedBootstrapSessionId: string;
+  normalizedBootstrapEpoch: number;
+  hasInitiator: boolean;
+  shouldSeedInitialUserMessage: boolean;
+  shouldMarkStarted: boolean;
+};
+
+export type BootstrapOrdering = {
+  sessionId: string;
+  hostWidgetSessionId: string;
+  epoch: number;
+  responseSeq: number;
+};
+
+function normalizeLocaleHintSource(raw: unknown): LocaleHintSource {
+  const localeHintSourceRaw = safeString(raw ?? "none");
+  return localeHintSourceRaw === "openai_locale" ||
+    localeHintSourceRaw === "webplus_i18n" ||
+    localeHintSourceRaw === "request_header" ||
+    localeHintSourceRaw === "message_detect"
+    ? localeHintSourceRaw
+    : "none";
+}
+
+export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
+  const correlationId = normalizeLogField(args.correlation_id, 512) || randomUUID();
+  const traceId = normalizeLogField(args.trace_id, 512) || correlationId;
+  const currentStepId = normalizeStepId(args.current_step_id ?? "");
+  const state = (args.state ?? {}) as Record<string, unknown>;
+  const userMessageRaw = safeString(args.user_message ?? "");
+  const localeHintSource = normalizeLocaleHintSource(args.locale_hint_source);
+
+  const isStart = currentStepId === "step_0";
+  const stateStarted = safeString((state as { started?: unknown }).started ?? "").trim().toLowerCase() === "true";
+  const requiresExplicitStart = isStart && !stateStarted;
+  const normalizedMessage = userMessageRaw.trim();
+  const upperMessage = normalizedMessage.toUpperCase();
+  const isActionMessage = upperMessage.startsWith("ACTION_");
+  const isBootstrapPollAction = upperMessage === "ACTION_BOOTSTRAP_POLL";
+  const isStartAction = upperMessage === "ACTION_START";
+  const isTechnicalRouteMessage =
+    normalizedMessage.startsWith("__ROUTE__") || normalizedMessage.startsWith("choice:");
+  const shouldMarkStarted = isStart && isStartAction;
+  const shouldSeedInitialUserMessage =
+    Boolean(normalizedMessage) &&
+    !isActionMessage &&
+    !isBootstrapPollAction &&
+    !isTechnicalRouteMessage;
+  const holdForExplicitStart = requiresExplicitStart && !isStartAction && !isBootstrapPollAction;
+  const userMessage =
+    holdForExplicitStart
+      ? ""
+      : isStart && !userMessageRaw.trim()
+        ? ""
+        : userMessageRaw;
+
+  const hasInitiator = safeString(state.initial_user_message ?? "").trim() !== "";
+  const hostWidgetSessionId = resolveEffectiveHostWidgetSessionId({
+    provided: args.host_widget_session_id,
+    state,
+    bootstrapSessionId: state.bootstrap_session_id,
+  });
+
+  let stateForTool: Record<string, unknown> = {
+    ...state,
+    ...(hasInitiator || !shouldSeedInitialUserMessage ? {} : { initial_user_message: normalizedMessage }),
+    ...(shouldMarkStarted ? { started: "true" } : {}),
+    __request_id: correlationId,
+    ...(traceId ? { __trace_id: traceId } : {}),
+  };
+  if (requiresExplicitStart && !shouldMarkStarted) {
+    stateForTool = { ...stateForTool, started: "false" };
+  }
+
+  const incomingBootstrapSessionRaw = safeString(stateForTool.bootstrap_session_id ?? "").trim();
+  const incomingBootstrapSession = normalizeBootstrapSessionId(incomingBootstrapSessionRaw);
+  if (incomingBootstrapSessionRaw && !incomingBootstrapSession) {
+    logStructuredEvent(
+      "warn",
+      "bootstrap_session_id_rejected",
+      {
+        correlation_id: correlationId,
+        trace_id: traceId,
+        session_id: "",
+        step_id: currentStepId,
+        contract_id: resolveContractIdFromRecord({ state: stateForTool }),
+      },
+      {
+        source: "run_step_state",
+        provided_length: incomingBootstrapSessionRaw.length,
+      }
+    );
+  }
+
+  const normalizedBootstrapSessionId = incomingBootstrapSession || createBootstrapSessionId();
+  const normalizedBootstrapEpoch = incomingBootstrapSession
+    ? parsePositiveInt(stateForTool.bootstrap_epoch) || 1
+    : 1;
+  stateForTool = {
+    ...stateForTool,
+    bootstrap_session_id: normalizedBootstrapSessionId,
+    bootstrap_epoch: normalizedBootstrapEpoch,
+    host_widget_session_id: hostWidgetSessionId,
+    __idempotency_registry_owner: "server",
+  };
+
+  logStructuredEvent(
+    "info",
+    "host_session_id_seen",
+    {
+      correlation_id: correlationId,
+      trace_id: traceId,
+      session_id: normalizeBootstrapSessionId(state.bootstrap_session_id),
+      step_id: currentStepId,
+      contract_id: resolveContractIdFromRecord({ state }),
+    },
+    {
+      source: hostWidgetSessionId.startsWith("internal:") ? "run_step_internal" : "run_step_args",
+      host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
+    }
+  );
+
+  const stepIdStr = safeString(currentStepId ?? "");
+  const msgLen = typeof userMessageRaw === "string" ? userMessageRaw.length : 0;
+  const stateKeysCount = Object.keys(stateForTool).length;
+  const localeHint = safeString(args.locale_hint ?? "");
+  const inputMode = safeString(args.input_mode ?? "chat");
+  const action = upperMessage.startsWith("ACTION_") ? upperMessage : "text_input";
+  const staleIngestGuardEnabled = RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED;
+  const staleRebaseEnabled = staleIngestGuardEnabled && RUN_STEP_STALE_REBASE_V1_ENABLED;
+  const staleInteractiveActionPolicy = classifyStaleInteractiveActionPolicy(action);
+  const idempotencyKey = normalizeIdempotencyKey(
+    args.idempotency_key ?? safeString((stateForTool as { __client_action_id?: unknown }).__client_action_id ?? "")
+  );
+
+  logStructuredEvent(
+    "info",
+    "run_step_request",
+    {
+      correlation_id: correlationId,
+      trace_id: traceId,
+      session_id: normalizedBootstrapSessionId,
+      step_id: stepIdStr || "step_0",
+      contract_id: resolveContractIdFromRecord({ state: stateForTool }),
+    },
+    {
+      input_mode: inputMode || "chat",
+      action,
+      user_message_len: msgLen,
+      state_keys: stateKeysCount,
+      locale_hint: localeHint,
+      locale_hint_source: localeHintSource,
+      host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
+      idempotency_key_present: idempotencyKey ? "true" : "false",
+      stale_ingest_guard_enabled: staleIngestGuardEnabled,
+      stale_rebase_enabled: staleRebaseEnabled,
+    }
+  );
+
+  return {
+    correlationId,
+    traceId,
+    currentStepId,
+    stepIdStr,
+    stateForTool,
+    userMessage,
+    userMessageRaw,
+    normalizedMessage,
+    localeHint,
+    localeHintSource,
+    inputMode,
+    action,
+    hostWidgetSessionId,
+    staleIngestGuardEnabled,
+    staleRebaseEnabled,
+    staleInteractiveActionPolicy,
+    idempotencyKey,
+    normalizedBootstrapSessionId,
+    normalizedBootstrapEpoch,
+    hasInitiator,
+    shouldSeedInitialUserMessage,
+    shouldMarkStarted,
+  };
+}
+
+export function readIncomingOrdering(stateForTool: Record<string, unknown>): BootstrapOrdering {
+  return readBootstrapOrdering({ state: stateForTool });
+}

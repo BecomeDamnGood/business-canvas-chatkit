@@ -2,7 +2,23 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+const serverSourceFiles = [
+  "./server/server_config.ts",
+  "./server/idempotency_registry.ts",
+  "./server/ordering_parity.ts",
+  "./server/observability.ts",
+  "./server/locale_resolution.ts",
+  "./server/run_step_model_result.ts",
+  "./server/run_step_transport.ts",
+  "./server/run_step_transport_context.ts",
+  "./server/run_step_transport_idempotency.ts",
+  "./server/run_step_transport_stale.ts",
+  "./server/mcp_registration.ts",
+  "./server/http_routes.ts",
+];
+const source = serverSourceFiles
+  .map((relativePath) => fs.readFileSync(new URL(relativePath, import.meta.url), "utf8"))
+  .join("\n");
 const widgetRuntimeSource = fs.readFileSync(
   new URL("../ui/lib/locale_bootstrap_runtime.ts", import.meta.url),
   "utf8"
@@ -13,6 +29,10 @@ const runStepResponseSource = fs.readFileSync(
 );
 const turnContractSource = fs.readFileSync(
   new URL("./handlers/turn_contract.ts", import.meta.url),
+  "utf8"
+);
+const canonicalWidgetStateSource = fs.readFileSync(
+  new URL("./handlers/run_step_canonical_widget_state.ts", import.meta.url),
   "utf8"
 );
 
@@ -66,27 +86,27 @@ test("MCP app contract: run_step declares invocation status strings", () => {
 });
 
 test("MCP wrapper parity: structuredContent.result is always model-safe and _meta.widget_result keeps full payload", () => {
-  assert.match(source, /const modelResult = buildModelSafeResult\(staleResult\)/);
-  assert.match(source, /const modelResult = buildModelSafeResult\(resultForClient\)/);
-  assert.match(source, /const modelResult = buildModelSafeResult\(fallbackResult as Record<string, unknown>\)/);
+  assert.match(source, /buildModelSafeResult\(staleResult\)/);
+  assert.match(source, /buildModelSafeResult\(resultForClient\)/);
+  assert.match(source, /buildModelSafeResult\(fallbackResult/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*staleResult\s*\}/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient\s*,?\s*\}/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*fallbackResult\s*,?\s*\}/);
 });
 
-test("MCP app contract: widget render-state resolves _meta.widget_result first with compatible fallback paths", () => {
+test("MCP app contract: widget render-state resolves only _meta.widget_result", () => {
   assert.match(widgetRuntimeSource, /export function canonicalizeWidgetPayload\(/);
-  assert.match(widgetRuntimeSource, /const candidate = meta\.widget_result/);
-  assert.match(widgetRuntimeSource, /const mergedToolOutput = mergeToolOutputWithResponseMetadata\(/);
+  assert.match(widgetRuntimeSource, /const candidate = toRecord\(meta\.widget_result\)/);
+  assert.match(widgetRuntimeSource, /mergeToolOutputWithResponseMetadata\(/);
   assert.match(widgetRuntimeSource, /bootstrap_session_id/);
   assert.match(widgetRuntimeSource, /bootstrap_epoch/);
   assert.match(widgetRuntimeSource, /response_seq/);
   assert.match(widgetRuntimeSource, /host_widget_session_id/);
-  assert.match(widgetRuntimeSource, /const rootResult = toRecord\(root\.result\)/);
   assert.match(widgetRuntimeSource, /source:\s*"meta\.widget_result"/);
-  assert.match(widgetRuntimeSource, /source:\s*"root\.result"/);
-  assert.match(widgetRuntimeSource, /source:\s*"structuredContent\.result"/);
-  assert.match(widgetRuntimeSource, /reason_code:\s*selected\.reason_code/);
+  assert.doesNotMatch(widgetRuntimeSource, /root\.result/);
+  assert.doesNotMatch(widgetRuntimeSource, /source:\s*"root\.result"/);
+  assert.doesNotMatch(widgetRuntimeSource, /source:\s*"structuredContent\.result"/);
+  assert.match(widgetRuntimeSource, /reason_code:\s*"meta_widget_result"/);
 });
 
 test("MCP wrapper parity: model-safe result contract remains minimal in buildModelSafeResult", () => {
@@ -142,14 +162,14 @@ test("MCP app contract: lifecycle logs expose explicit accept/drop/rebase reason
 test("MCP app contract: stale interactive rebase policy is explicitly limited to ACTION_START", () => {
   assert.match(source, /const REBASE_ELIGIBLE_INTERACTIVE_ACTIONS = new Set<string>\(\["ACTION_START"\]\);/);
   assert.match(source, /staleInteractiveActionPolicy\.rebaseEligible/);
-  assert.match(source, /stale_policy_reason_code:\s*staleInteractiveActionPolicy\.reasonCode/);
+  assert.match(source, /stale_policy_reason_code:\s*context\.staleInteractiveActionPolicy\.reasonCode/);
 });
 
 test("MCP app contract: stale ingest/rebase rollout flags are explicit and default-safe", () => {
   assert.match(source, /const RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED = envFlagEnabled\("RUN_STEP_STALE_INGEST_GUARD_V1", false\);/);
   assert.match(source, /const RUN_STEP_STALE_REBASE_V1_ENABLED = envFlagEnabled\("RUN_STEP_STALE_REBASE_V1", false\);/);
-  assert.match(source, /if \(incomingOrdering\.sessionId && incomingOrdering\.epoch > 0 && staleIngestGuardEnabled\)/);
-  assert.match(source, /staleCheck\.reason !== "host_session" &&[\s\S]*staleRebaseEnabled[\s\S]*staleInteractiveActionPolicy\.rebaseEligible/);
+  assert.match(source, /if \(incomingOrdering\.sessionId && incomingOrdering\.epoch > 0 && context\.staleIngestGuardEnabled\)/);
+  assert.match(source, /staleCheck\.reason !== "host_session" &&[\s\S]*context\.staleRebaseEnabled[\s\S]*context\.staleInteractiveActionPolicy\.rebaseEligible/);
   assert.match(source, /drop_reason_code:\s*dropReasonCode/);
   assert.match(source, /stale_rebase_flag_disabled/);
 });
@@ -183,22 +203,21 @@ test("MCP app contract: run_step wrapper enforces and logs top-level vs meta ord
   assert.match(source, /parity_reason_code:/);
 });
 
-test("MCP app contract: run_step response logs view-contract guard observability event", () => {
-  assert.match(runStepResponseSource, /"run_step_view_contract_guard"/);
+test("MCP app contract: run_step response logs canonical-view observability event", () => {
+  assert.match(runStepResponseSource, /"run_step_canonical_view_emitted"/);
   assert.match(runStepResponseSource, /started,/);
   assert.match(runStepResponseSource, /ui_view_mode:/);
   assert.match(runStepResponseSource, /has_renderable_content:/);
   assert.match(runStepResponseSource, /has_start_action:/);
   assert.match(runStepResponseSource, /invariant_ok:/);
-  assert.match(runStepResponseSource, /violation_reason_code:/);
-  assert.match(runStepResponseSource, /guard_patch_applied:/);
+  assert.match(runStepResponseSource, /reason_code:/);
 });
 
-test("MCP app contract: turn contract enforces and repairs step_0\/interactive view invariants", () => {
+test("MCP app contract: turn contract enforces canonical step_0\/interactive view invariants", () => {
   assert.match(turnContractSource, /export function enforceRunStepViewContractGuard\(/);
-  assert.match(turnContractSource, /step0_not_started_forced_prestart/);
-  assert.match(turnContractSource, /interactive_missing_content_forced_prestart/);
-  assert.match(turnContractSource, /interactive_missing_content_forced_blocked/);
+  assert.match(turnContractSource, /buildCanonicalWidgetState/);
+  assert.match(canonicalWidgetStateSource, /step0_start_action_missing/);
+  assert.match(canonicalWidgetStateSource, /interactive_content_absent/);
   assert.match(turnContractSource, /interactive_requires_renderable_content/);
 });
 

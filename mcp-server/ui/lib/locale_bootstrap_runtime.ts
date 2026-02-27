@@ -1,21 +1,6 @@
-export type PayloadSource =
-  | "meta.widget_result"
-  | "root.result"
-  | "structuredContent.result"
-  | "none";
+export type PayloadSource = "meta.widget_result" | "none";
 
-export type PayloadReasonCode =
-  | "meta_widget_result_root"
-  | "meta_widget_result_root_result"
-  | "meta_widget_result_tool_output"
-  | "result_wrapper_root"
-  | "result_wrapper_tool_output"
-  | "direct_widget_result_root"
-  | "direct_widget_result_tool_output"
-  | "structured_content_result_root"
-  | "structured_content_result_root_result"
-  | "structured_content_result_tool_output"
-  | "none";
+export type PayloadReasonCode = "meta_widget_result" | "none";
 
 export type CanonicalWidgetEnvelope = {
   envelope: Record<string, unknown>;
@@ -24,9 +9,9 @@ export type CanonicalWidgetEnvelope = {
   reason_code: PayloadReasonCode;
 };
 
-export type WaitingReason = "missing_state" | "i18n_pending" | "none";
-export type BootstrapPhase = "waiting_locale" | "ready" | "recovery" | "failed";
-export type BootstrapRenderMode = "wait_shell" | "interactive" | "recovery";
+export type WaitingReason = "none";
+export type BootstrapPhase = "ready" | "failed";
+export type BootstrapRenderMode = "interactive" | "blocked";
 
 export type ResolvedWidgetPayload = {
   result: Record<string, unknown>;
@@ -52,7 +37,7 @@ export type ResolvedWidgetPayload = {
 };
 
 export type HydrationStatus = {
-  needs_hydration: boolean;
+  needs_hydration: false;
   retry_count: number;
   retry_exhausted: boolean;
   waiting_reason: WaitingReason;
@@ -61,33 +46,22 @@ export type HydrationStatus = {
 export type BootstrapRenderState = {
   phase: BootstrapPhase;
   render_mode: BootstrapRenderMode;
-  waitingForMissingState: boolean;
-  waitingForI18n: boolean;
-  serverExplicitWaiting: boolean;
-  forceLocaleWait: boolean;
-  bootstrapWaitingLocale: boolean;
-  interactiveFallbackActive: boolean;
+  waitingForMissingState: false;
+  waitingForI18n: false;
+  serverExplicitWaiting: false;
+  forceLocaleWait: false;
+  bootstrapWaitingLocale: false;
+  interactiveFallbackActive: false;
 };
 
-const WIDGET_RESULT_KEYS = new Set([
-  "state",
-  "ui",
-  "prompt",
-  "text",
-  "specialist",
-  "current_step_id",
-  "model_result_shape_version",
-  "ui_strings",
-  "ui_strings_lang",
-  "language",
-]);
+type CandidateContext = "root" | "toolOutput";
 
-type CandidateContext = "root" | "root.result" | "toolOutput";
-
-type WidgetPick = {
-  result: Record<string, unknown>;
-  source: PayloadSource;
-  reason_code: PayloadReasonCode;
+export type BootstrapOrdering = {
+  bootstrap_session_id: string;
+  bootstrap_epoch: number;
+  response_seq: number;
+  response_kind: "run_step" | "";
+  host_widget_session_id: string;
 };
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -100,88 +74,37 @@ function toLower(value: unknown): string {
   return String(value || "").trim().toLowerCase();
 }
 
-function normalizeBootstrapPhase(raw: unknown): BootstrapPhase | "" {
-  const phase = toLower(raw);
-  if (
-    phase === "waiting_locale" ||
-    phase === "ready" ||
-    phase === "recovery" ||
-    phase === "failed"
-  ) {
-    return phase;
-  }
-  return "";
+function parsePositiveInt(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.trunc(n);
 }
 
-function normalizeUiStringsStatus(
-  raw: unknown
-): "ready" | "pending" | "critical_ready" | "unknown" {
+function normalizeUiStringsStatus(raw: unknown): "ready" | "pending" | "critical_ready" | "unknown" {
   const status = toLower(raw);
-  if (status === "ready" || status === "pending" || status === "critical_ready") {
-    return status;
-  }
+  if (status === "ready" || status === "pending" || status === "critical_ready") return status;
   if (status === "full_ready") return "critical_ready";
   if (status === "error") return "pending";
   return "unknown";
 }
 
-function phaseFromViewMode(raw: unknown): BootstrapPhase | "" {
-  const mode = toLower(raw);
-  if (mode === "waiting_locale") return "waiting_locale";
-  if (mode === "recovery") return "recovery";
-  if (mode === "blocked" || mode === "failed") return "failed";
-  if (mode === "interactive" || mode === "prestart") return "ready";
+function normalizeBootstrapPhase(raw: unknown): BootstrapPhase | "" {
+  const phase = toLower(raw);
+  if (phase === "ready") return "ready";
+  if (phase === "failed") return "failed";
   return "";
 }
 
-function renderModeFromPhase(phase: BootstrapPhase): BootstrapRenderMode {
-  if (phase === "recovery" || phase === "failed") return "recovery";
-  if (phase === "waiting_locale") return "wait_shell";
-  return "interactive";
-}
-
-export function isWidgetResultLike(value: unknown): value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const rec = value as Record<string, unknown>;
-  const keys = Object.keys(rec);
-  if (!keys.length) return false;
-  if (typeof (rec as { html?: unknown }).html === "string" && keys.length <= 2) return false;
-  const state = rec.state;
-  if (
-    state !== undefined &&
-    (typeof state !== "object" || state === null || Array.isArray(state))
-  ) {
-    return false;
-  }
-  for (const key of keys) {
-    if (WIDGET_RESULT_KEYS.has(key)) return true;
-  }
-  return false;
-}
-
-function parsePositiveInt(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
-  if (typeof value === "string") {
-    const n = Number(value);
-    if (Number.isFinite(n) && n > 0) return Math.trunc(n);
-  }
-  return 0;
-}
-
-function sessionInfoForResult(result: Record<string, unknown>): {
-  bootstrap_session_id: string;
-  bootstrap_epoch: number;
-  response_seq: number;
-  host_widget_session_id: string;
-} {
-  const state = toRecord(result.state);
+function mergeMeta(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
+  const targetMeta = toRecord(target._meta);
+  const sourceWrappedMeta = toRecord(source._meta);
+  const sourceMeta = Object.keys(sourceWrappedMeta).length > 0 ? sourceWrappedMeta : source;
   return {
-    bootstrap_session_id: String(state.bootstrap_session_id || "").trim(),
-    bootstrap_epoch: parsePositiveInt(state.bootstrap_epoch),
-    response_seq: parsePositiveInt(state.response_seq),
-    host_widget_session_id: String(
-      state.host_widget_session_id || ""
-    ).trim(),
+    ...target,
+    _meta: {
+      ...targetMeta,
+      ...sourceMeta,
+    },
   };
 }
 
@@ -190,123 +113,33 @@ export function mergeToolOutputWithResponseMetadata(
   toolResponseMetadataRaw: unknown
 ): Record<string, unknown> {
   const toolOutput = toRecord(toolOutputRaw);
-  const metadata = toRecord(toolResponseMetadataRaw);
-  const merged: Record<string, unknown> = Object.keys(toolOutput).length ? { ...toolOutput } : {};
-  if (!Object.keys(metadata).length) return merged;
-
-  const mergedMeta = toRecord(merged._meta);
-  // OpenAI host metadata may be either the _meta object itself or wrapped in {_meta: ...}.
-  const wrappedMetadataMeta = toRecord(metadata._meta);
-  const metadataMeta = Object.keys(wrappedMetadataMeta).length ? wrappedMetadataMeta : metadata;
-  merged._meta = { ...mergedMeta, ...metadataMeta };
-  return merged;
+  const toolResponseMetadata = toRecord(toolResponseMetadataRaw);
+  if (!Object.keys(toolOutput).length && !Object.keys(toolResponseMetadata).length) return {};
+  return mergeMeta(toolOutput, toolResponseMetadata);
 }
 
-function reasonCodeForMeta(context: CandidateContext): PayloadReasonCode {
-  if (context === "root") return "meta_widget_result_root";
-  if (context === "root.result") return "meta_widget_result_root_result";
-  return "meta_widget_result_tool_output";
-}
-
-function reasonCodeForResultWrapper(context: CandidateContext): PayloadReasonCode {
-  if (context === "toolOutput") return "result_wrapper_tool_output";
-  return "result_wrapper_root";
-}
-
-function reasonCodeForDirect(context: CandidateContext): PayloadReasonCode {
-  if (context === "toolOutput") return "direct_widget_result_tool_output";
-  return "direct_widget_result_root";
-}
-
-function reasonCodeForStructured(context: CandidateContext): PayloadReasonCode {
-  if (context === "root") return "structured_content_result_root";
-  if (context === "root.result") return "structured_content_result_root_result";
-  return "structured_content_result_tool_output";
-}
-
-function pickMetaWidgetResult(
-  container: Record<string, unknown>,
-  context: CandidateContext
-): WidgetPick | null {
+function pickMetaWidgetResult(container: Record<string, unknown>): Record<string, unknown> {
   const meta = toRecord(container._meta);
-  const candidate = meta.widget_result;
-  if (!isWidgetResultLike(candidate)) return null;
-  return {
-    result: candidate as Record<string, unknown>,
-    source: "meta.widget_result",
-    reason_code: reasonCodeForMeta(context),
-  };
+  const candidate = toRecord(meta.widget_result);
+  return candidate;
 }
 
-function pickNonMetaWidgetResult(
-  container: Record<string, unknown>,
-  context: CandidateContext
-): WidgetPick | null {
-  const wrapperResult = toRecord(container.result);
-  if (isWidgetResultLike(wrapperResult)) {
-    return {
-      result: wrapperResult,
-      source: "root.result",
-      reason_code: reasonCodeForResultWrapper(context),
-    };
-  }
-  const directCandidate: unknown = container;
-  if (isWidgetResultLike(directCandidate)) {
-    return {
-      result: directCandidate,
-      source: "root.result",
-      reason_code: reasonCodeForDirect(context),
-    };
-  }
-  const structuredContent = toRecord(container.structuredContent);
-  const structuredResult = toRecord(structuredContent.result);
-  if (isWidgetResultLike(structuredResult)) {
-    return {
-      result: structuredResult,
-      source: "structuredContent.result",
-      reason_code: reasonCodeForStructured(context),
-    };
-  }
-  return null;
-}
-
-function resolveWidgetResultFromKnownShapes(raw: unknown): WidgetPick {
+function resolveMetaWidgetResult(raw: unknown): { result: Record<string, unknown>; source: PayloadSource } {
   const root = toRecord(raw);
-  const rootResult = toRecord(root.result);
-  const mergedToolOutput = mergeToolOutputWithResponseMetadata(
-    root.toolOutput,
-    root.toolResponseMetadata
-  );
-
+  const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
   const candidates: Array<{ context: CandidateContext; payload: Record<string, unknown> }> = [
     { context: "root", payload: root },
   ];
-  if (Object.keys(rootResult).length) {
-    candidates.push({ context: "root.result", payload: rootResult });
-  }
-  if (Object.keys(mergedToolOutput).length) {
-    candidates.push({ context: "toolOutput", payload: mergedToolOutput });
-  }
-
+  if (Object.keys(toolOutput).length > 0) candidates.push({ context: "toolOutput", payload: toolOutput });
   for (const candidate of candidates) {
-    const pickedMeta = pickMetaWidgetResult(candidate.payload, candidate.context);
-    if (pickedMeta) return pickedMeta;
+    const widgetResult = pickMetaWidgetResult(candidate.payload);
+    if (Object.keys(widgetResult).length > 0) return { result: widgetResult, source: "meta.widget_result" };
   }
-
-  for (const candidate of candidates) {
-    const picked = pickNonMetaWidgetResult(candidate.payload, candidate.context);
-    if (picked) return picked;
-  }
-
-  return {
-    result: {},
-    source: "none",
-    reason_code: "none",
-  };
+  return { result: {}, source: "none" };
 }
 
 export function canonicalizeWidgetPayload(raw: unknown): CanonicalWidgetEnvelope {
-  const selected = resolveWidgetResultFromKnownShapes(raw);
+  const selected = resolveMetaWidgetResult(raw);
   if (!Object.keys(selected.result).length) {
     return {
       envelope: {},
@@ -323,7 +156,7 @@ export function canonicalizeWidgetPayload(raw: unknown): CanonicalWidgetEnvelope
     },
     result: selected.result,
     source: selected.source,
-    reason_code: selected.reason_code,
+    reason_code: "meta_widget_result",
   };
 }
 
@@ -334,86 +167,59 @@ function resolveLanguageForPayload(result: Record<string, unknown>): {
   const state = toRecord(result.state);
   const fromStateLanguage = toLower(state.language);
   if (fromStateLanguage) return { language: fromStateLanguage, source: "state.language" };
-  const fromStateRequestedLang = toLower(state.ui_strings_requested_lang);
-  if (fromStateRequestedLang) {
-    return { language: fromStateRequestedLang, source: "state.ui_strings_requested_lang" };
-  }
-  const fromStateUiLang = toLower(state.ui_strings_lang);
-  if (fromStateUiLang) return { language: fromStateUiLang, source: "state.ui_strings_lang" };
+  const fromRequested = toLower(state.ui_strings_requested_lang);
+  if (fromRequested) return { language: fromRequested, source: "state.ui_strings_requested_lang" };
+  const fromUiLang = toLower(state.ui_strings_lang);
+  if (fromUiLang) return { language: fromUiLang, source: "state.ui_strings_lang" };
   return { language: "", source: "none" };
 }
 
-function normalizeUiStringsStatusFromResult(
-  result: Record<string, unknown>
-): ResolvedWidgetPayload["ui_strings_status"] {
+function sessionInfoForResult(result: Record<string, unknown>): BootstrapOrdering {
   const state = toRecord(result.state);
-  return normalizeUiStringsStatus(state.ui_strings_status);
-}
-
-export function computeHydrationState(resolved: ResolvedWidgetPayload): HydrationStatus {
-  const state = toRecord(resolved.result.state);
-  const hasState = Object.keys(state).length > 0;
-  const currentStep = hasState ? String(state.current_step || "").trim() : "";
-  const needsHydration = !hasState || !currentStep;
-  const uiGateStatus = toLower(state.ui_gate_status);
-  const terminalGate = uiGateStatus === "blocked" || uiGateStatus === "failed";
-  const i18nPending = !terminalGate && uiGateStatus === "waiting_locale";
-  let waitingReason: WaitingReason = "none";
-  if (!terminalGate && needsHydration) waitingReason = "missing_state";
-  if (!terminalGate && i18nPending) waitingReason = "i18n_pending";
+  const responseKind = String(state.response_kind || result.response_kind || "").trim();
   return {
-    needs_hydration: needsHydration,
-    retry_count: 0,
-    retry_exhausted: false,
-    waiting_reason: waitingReason,
+    bootstrap_session_id: String(state.bootstrap_session_id || "").trim(),
+    bootstrap_epoch: parsePositiveInt(state.bootstrap_epoch),
+    response_seq: parsePositiveInt(state.response_seq),
+    response_kind: responseKind === "run_step" ? "run_step" : "",
+    host_widget_session_id: String(state.host_widget_session_id || "").trim(),
   };
 }
 
 export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
   const canonical = canonicalizeWidgetPayload(raw);
   const result = canonical.result;
-  const payloadSource: PayloadSource = canonical.source;
-  const sessionInfo = sessionInfoForResult(result);
   const state = toRecord(result.state);
-  const hasState = Object.keys(state).length > 0;
-  const { language, source: languageSource } = resolveLanguageForPayload(result);
-  const shapeVersion = String(result.model_result_shape_version || "").trim();
-  const bootstrapPhase = normalizeBootstrapPhase(state.bootstrap_phase || result.bootstrap_phase);
-  const temp: ResolvedWidgetPayload = {
+  const language = resolveLanguageForPayload(result);
+  const ordering = sessionInfoForResult(result);
+  return {
     result,
-    source: payloadSource,
+    source: canonical.source,
     source_reason_code: canonical.reason_code,
-    has_state: hasState,
-    resolved_language: language,
-    resolved_language_source: languageSource,
-    ui_strings_status: normalizeUiStringsStatusFromResult(result),
-    shape_version: shapeVersion,
+    has_state: Object.keys(state).length > 0,
+    resolved_language: language.language,
+    resolved_language_source: language.source,
+    ui_strings_status: normalizeUiStringsStatus(state.ui_strings_status),
+    shape_version: String(result.model_result_shape_version || "").trim(),
     needs_hydration: false,
     waiting_reason: "none",
-    bootstrap_phase: bootstrapPhase,
-    bootstrap_session_id: sessionInfo.bootstrap_session_id,
-    bootstrap_epoch: sessionInfo.bootstrap_epoch,
-    response_seq: sessionInfo.response_seq,
-    response_kind: (() => {
-      const kind = String(state.response_kind || result.response_kind || "").trim();
-      if (kind === "run_step") return kind;
-      return "";
-    })(),
-    host_widget_session_id: sessionInfo.host_widget_session_id,
+    bootstrap_phase: normalizeBootstrapPhase(state.bootstrap_phase || result.bootstrap_phase),
+    bootstrap_session_id: ordering.bootstrap_session_id,
+    bootstrap_epoch: ordering.bootstrap_epoch,
+    response_seq: ordering.response_seq,
+    response_kind: ordering.response_kind,
+    host_widget_session_id: ordering.host_widget_session_id,
   };
-  const hydration = computeHydrationState(temp);
-  temp.needs_hydration = hydration.needs_hydration;
-  temp.waiting_reason = hydration.waiting_reason;
-  return temp;
 }
 
-export type BootstrapOrdering = {
-  bootstrap_session_id: string;
-  bootstrap_epoch: number;
-  response_seq: number;
-  response_kind: "run_step" | "";
-  host_widget_session_id: string;
-};
+export function computeHydrationState(_resolved: ResolvedWidgetPayload): HydrationStatus {
+  return {
+    needs_hydration: false,
+    retry_count: 0,
+    retry_exhausted: false,
+    waiting_reason: "none",
+  };
+}
 
 export function extractBootstrapOrdering(raw: unknown): BootstrapOrdering {
   const resolved = resolveWidgetPayload(raw);
@@ -428,8 +234,8 @@ export function extractBootstrapOrdering(raw: unknown): BootstrapOrdering {
 
 export function normalizeToolOutput(raw: unknown): Record<string, unknown> {
   const resolved = resolveWidgetPayload(raw);
-  if (Object.keys(resolved.result).length) return { result: resolved.result };
-  return {};
+  if (!Object.keys(resolved.result).length) return {};
+  return { result: resolved.result };
 }
 
 export function computeBootstrapRenderState(params: {
@@ -441,28 +247,16 @@ export function computeBootstrapRenderState(params: {
   hasState?: boolean;
   hasCurrentStep?: boolean;
 }): BootstrapRenderState {
-  void params.hydration;
-  void params.uiStringsStatus;
-  void params.uiFlags;
-  void params.localeKnownNonEn;
-  void params.hasState;
-  void params.hasCurrentStep;
-  const mode = toLower(params.uiView.mode);
-  const serverExplicitWaiting = mode === "waiting_locale" || params.uiView.waiting_locale === true;
-  const phaseFromMode = phaseFromViewMode(params.uiView.mode);
-  const finalPhase: BootstrapPhase = phaseFromMode || "waiting_locale";
-
-  const waitingForI18n = finalPhase === "waiting_locale";
-  const bootstrapWaitingLocale = finalPhase !== "failed" && waitingForI18n;
-
+  const mode = String(params.uiView.mode || "").trim().toLowerCase();
+  const isBlocked = mode === "blocked";
   return {
-    phase: finalPhase,
-    render_mode: renderModeFromPhase(finalPhase),
+    phase: isBlocked ? "failed" : "ready",
+    render_mode: isBlocked ? "blocked" : "interactive",
     waitingForMissingState: false,
-    waitingForI18n,
-    serverExplicitWaiting,
+    waitingForI18n: false,
+    serverExplicitWaiting: false,
     forceLocaleWait: false,
-    bootstrapWaitingLocale,
+    bootstrapWaitingLocale: false,
     interactiveFallbackActive: false,
   };
 }

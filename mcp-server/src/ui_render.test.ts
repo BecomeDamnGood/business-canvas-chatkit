@@ -1175,7 +1175,7 @@ test("render source fail-closes missing server view mode and enforces start acti
   assert.match(source, /const startActionCode = String\(\(state\?\.ui_action_start \|\| ""\)\)\.trim\(\);/);
   assert.match(source, /const hasStartAction = startActionCode\.length > 0;/);
   assert.match(source, /\[ui_contract_missing_start_action\]/);
-  assert.match(source, /\[ui_contract_interactive_missing_content\]/);
+  assert.match(source, /\[ui_contract_interactive_content_absent\]/);
   assert.match(source, /const recoverToPrestart = current === "step_0" && hasStartAction;/);
   assert.match(source, /recovery_mode: recoverToPrestart \? "prestart" : "blocked"/);
   assert.match(source, /if \(recoverToPrestart\) \{/);
@@ -2062,18 +2062,8 @@ test("render shows startup wait shell when payload is absent", () => {
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("resolveWidgetPayload prefers _meta.widget_result over root.result", () => {
+test("resolveWidgetPayload reads canonical _meta.widget_result from root envelope", () => {
   const resolved = resolveWidgetPayload({
-    result: {
-      current_step_id: "step_0",
-      state: {
-        current_step: "step_0",
-        bootstrap_session_id: "session_root",
-        bootstrap_epoch: 3,
-        response_seq: 3,
-        host_widget_session_id: "host_root",
-      },
-    },
     _meta: {
       widget_result: {
         current_step_id: "step_0",
@@ -2105,7 +2095,7 @@ test("resolveWidgetPayload prefers _meta.widget_result over root.result", () => 
   assert.equal(resolved.bootstrap_epoch, 1);
 });
 
-test("resolveWidgetPayload accepts root.result when _meta.widget_result is absent", () => {
+test("resolveWidgetPayload fail-closes when _meta.widget_result is absent", () => {
   const resolved = resolveWidgetPayload({
     title: "The Business Strategy Canvas Builder",
     meta: "step: step_0 | specialist: ValidationAndBusinessName",
@@ -2131,12 +2121,12 @@ test("resolveWidgetPayload accepts root.result when _meta.widget_result is absen
     },
   });
 
-  assert.equal(resolved.source, "root.result");
-  assert.equal(String((resolved.result.current_step_id || "")), "step_0");
-  assert.equal(resolved.bootstrap_session_id, "session_root_only");
-  assert.equal(resolved.bootstrap_epoch, 1);
-  assert.equal(resolved.response_seq, 2);
-  assert.equal(resolved.host_widget_session_id, "host_root_only");
+  assert.equal(resolved.source, "none");
+  assert.equal(String((resolved.result.current_step_id || "")), "");
+  assert.equal(resolved.bootstrap_session_id, "");
+  assert.equal(resolved.bootstrap_epoch, 0);
+  assert.equal(resolved.response_seq, 0);
+  assert.equal(resolved.host_widget_session_id, "");
   assert.equal(resolved.needs_hydration, false);
 });
 
@@ -2278,7 +2268,7 @@ test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result
   assert.equal(resolved.needs_hydration, false);
 });
 
-test("resolveWidgetPayload accepts structuredContent.result fallback when _meta.widget_result is absent", () => {
+test("resolveWidgetPayload fail-closes when only non-meta envelopes are present", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -2312,14 +2302,14 @@ test("resolveWidgetPayload accepts structuredContent.result fallback when _meta.
     },
   });
 
-  assert.equal(resolved.source, "structuredContent.result");
-  assert.equal(String((resolved.result.current_step_id || "")), "step_0");
-  assert.equal(resolved.bootstrap_session_id, "session_x");
-  assert.equal(resolved.bootstrap_epoch, 1);
-  assert.equal(resolved.response_seq, 2);
+  assert.equal(resolved.source, "none");
+  assert.equal(String((resolved.result.current_step_id || "")), "");
+  assert.equal(resolved.bootstrap_session_id, "");
+  assert.equal(resolved.bootstrap_epoch, 0);
+  assert.equal(resolved.response_seq, 0);
 });
 
-test("resolveWidgetPayload ignores structured.ui envelope and keeps structuredContent.result fallback", () => {
+test("resolveWidgetPayload ignores structured.ui envelope and fail-closes without _meta.widget_result", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -2338,9 +2328,9 @@ test("resolveWidgetPayload ignores structured.ui envelope and keeps structuredCo
     },
   });
 
-  assert.equal(resolved.source, "structuredContent.result");
-  assert.equal(String((resolved.result.current_step_id || "")), "step_0");
-  assert.equal(resolved.resolved_language, "nl");
+  assert.equal(resolved.source, "none");
+  assert.equal(String((resolved.result.current_step_id || "")), "");
+  assert.equal(resolved.resolved_language, "");
 });
 
 test("resolveWidgetPayload hydrates from toolResponseMetadata widget_result when canonical metadata wrapper is provided", () => {
@@ -2408,85 +2398,6 @@ test("resolveWidgetPayload applies freshness override when metadata is available
   );
 });
 
-test("resolveWidgetPayload prefers structuredContent.result over legacy fallbackRaw when root _meta.widget_result is absent", () => {
-  const resolved = resolveWidgetPayload({
-    structuredContent: {
-      result: {
-        state: {
-          current_step: "step_0",
-          bootstrap_session_id: "session_structured",
-          bootstrap_epoch: 2,
-          response_seq: 20,
-        },
-        ui: { questionText: "StructuredShouldNotWin" },
-      },
-    },
-    fallbackRaw: {
-      _meta: {
-        widget_result: {
-          state: {
-            current_step: "step_0",
-            bootstrap_session_id: "session_fallback",
-            bootstrap_epoch: 1,
-            response_seq: 999,
-          },
-          ui: {
-            questionText: "FallbackShouldNotWin",
-          },
-        },
-      },
-    },
-  });
-
-  assert.equal(resolved.source, "structuredContent.result");
-  assert.equal(String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""), "StructuredShouldNotWin");
-  assert.equal(resolved.bootstrap_session_id, "session_structured");
-  assert.equal(resolved.bootstrap_epoch, 2);
-  assert.equal(resolved.response_seq, 20);
-});
-
-test("resolveWidgetPayload uses only root _meta.widget_result even when fallbackRaw has richer ordering", () => {
-  const resolved = resolveWidgetPayload({
-    _meta: {
-      widget_result: {
-        state: {
-          current_step: "step_0",
-          bootstrap_session_id: "session_root",
-          bootstrap_epoch: 3,
-          response_seq: 12,
-          host_widget_session_id: "host_root",
-        },
-        ui: {
-          questionText: "RootWins",
-        },
-      },
-    },
-    fallbackRaw: {
-      _meta: {
-        widget_result: {
-          state: {
-            current_step: "step_0",
-            bootstrap_session_id: "session_fallback",
-            bootstrap_epoch: 9,
-            response_seq: 999,
-            host_widget_session_id: "host_fallback",
-          },
-          ui: {
-            questionText: "FallbackIgnored",
-          },
-        },
-      },
-    },
-  });
-
-  assert.equal(resolved.source, "meta.widget_result");
-  assert.equal(resolved.bootstrap_session_id, "session_root");
-  assert.equal(resolved.bootstrap_epoch, 3);
-  assert.equal(resolved.response_seq, 12);
-  assert.equal(resolved.host_widget_session_id, "host_root");
-  assert.equal(String((((resolved.result.ui as Record<string, unknown>) || {}).questionText) || ""), "RootWins");
-});
-
 test("computeHydrationState uses shared v2_minimal missing-state rule", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
@@ -2533,7 +2444,7 @@ test("computeHydrationState treats non-EN language/ui_strings_lang mismatch as i
   assert.equal(hydration.waiting_reason, "none");
 });
 
-test("resolveWidgetPayload accepts direct widget-result shape from host notification params", () => {
+test("resolveWidgetPayload ignores direct widget-result shape from host notification params", () => {
   const resolved = resolveWidgetPayload({
     current_step_id: "step_0",
     state: {
@@ -2551,11 +2462,11 @@ test("resolveWidgetPayload accepts direct widget-result shape from host notifica
       },
     },
   });
-  assert.equal(resolved.source, "root.result");
-  assert.equal(resolved.bootstrap_session_id, "session_direct");
-  assert.equal(resolved.bootstrap_epoch, 2);
-  assert.equal(resolved.response_seq, 11);
-  assert.equal(resolved.host_widget_session_id, "host_direct");
+  assert.equal(resolved.source, "none");
+  assert.equal(resolved.bootstrap_session_id, "");
+  assert.equal(resolved.bootstrap_epoch, 0);
+  assert.equal(resolved.response_seq, 0);
+  assert.equal(resolved.host_widget_session_id, "");
 });
 
 test("render fail-closes interactive mode with missing content into blocked shell", () => {

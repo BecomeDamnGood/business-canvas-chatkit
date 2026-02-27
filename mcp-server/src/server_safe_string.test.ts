@@ -3,6 +3,27 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { safeString } from "./server_safe_string.js";
 
+const serverSourceFiles = [
+  "./server/server_config.ts",
+  "./server/idempotency_registry.ts",
+  "./server/ordering_parity.ts",
+  "./server/observability.ts",
+  "./server/locale_resolution.ts",
+  "./server/run_step_model_result.ts",
+  "./server/run_step_transport.ts",
+  "./server/run_step_transport_context.ts",
+  "./server/run_step_transport_idempotency.ts",
+  "./server/run_step_transport_stale.ts",
+  "./server/mcp_registration.ts",
+  "./server/http_routes.ts",
+];
+
+function readServerSource(): string {
+  return serverSourceFiles
+    .map((relativePath) => fs.readFileSync(new URL(relativePath, import.meta.url), "utf8"))
+    .join("\n");
+}
+
 test("safeString handles unstringifiable objects without throwing", () => {
   const bad = Object.create(null) as Record<string, unknown>;
   bad.x = 1;
@@ -11,14 +32,14 @@ test("safeString handles unstringifiable objects without throwing", () => {
 });
 
 test("local /run_step bridge forwards input_mode to runStepHandler", () => {
-  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const source = readServerSource();
   assert.match(source, /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)/);
   assert.match(source, /input_mode\?: "widget" \| "chat";/);
   assert.match(source, /input_mode: args\.input_mode,/);
 });
 
 test("run_step MCP handler derives locale hint from request metadata and forwards it", () => {
-  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const source = readServerSource();
   assert.match(source, /resolveLocaleHintFromExtra\(extra\)/);
   assert.match(
     source,
@@ -27,21 +48,21 @@ test("run_step MCP handler derives locale hint from request metadata and forward
 });
 
 test("run_step handler enforces explicit ACTION_START before step_0 can mark started", () => {
-  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const source = readServerSource();
   assert.match(source, /const shouldMarkStarted = isStart && isStartAction;/);
   assert.match(source, /const holdForExplicitStart = requiresExplicitStart && !isStartAction && !isBootstrapPollAction;/);
-  assert.match(source, /if \(holdForExplicitStart\) user_message = "";/);
+  assert.match(source, /const userMessage =[\s\S]*holdForExplicitStart[\s\S]*\? ""/);
   assert.match(source, /if \(requiresExplicitStart && !shouldMarkStarted\) \{[\s\S]*started: "false"/);
 });
 
 test("tool input schema canonicalizes legacy state.language_source before zod enum validation", () => {
-  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const source = readServerSource();
   assert.match(source, /canonicalizeStateForRunStepArgs as canonicalizeStateForToolInput/);
   assert.match(source, /state: canonicalizeStateForToolInput\(args\.state\),/);
 });
 
 test("bootstrap session/epoch guards drop stale payloads and keep monotone sequencing", () => {
-  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const source = readServerSource();
   assert.match(source, /const bootstrapSessionRegistry = new Map/);
   assert.match(source, /function isStaleBootstrapPayload\(/);
   assert.match(source, /function registerBootstrapSnapshot\(/);
@@ -59,7 +80,7 @@ test("bootstrap session/epoch guards drop stale payloads and keep monotone seque
 });
 
 test("run_step handler logs locale + language readiness in request/response lines", () => {
-  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const source = readServerSource();
   assert.match(source, /"run_step_request"[\s\S]*locale_hint[\s\S]*locale_hint_source/);
   assert.match(
     source,
@@ -78,9 +99,9 @@ test("run_step contract emits server-authoritative ui.view payload", () => {
   const turnContractSource = fs.readFileSync(new URL("./handlers/turn_contract.ts", import.meta.url), "utf8");
   assert.match(
     actionHelpersSource,
-    /export type UiViewPayload = \{[\s\S]*mode: UiViewModeRoute;[\s\S]*waiting_locale: boolean;/
+    /export type UiViewPayload = \{[\s\S]*mode\?: "prestart" \| "interactive" \| "blocked";[\s\S]*waiting_locale\?: false;/
   );
-  assert.match(actionHelpersSource, /function deriveUiViewPayload\(/);
+  assert.match(actionHelpersSource, /function deriveUiViewPayload\(variant: UiViewVariant\): UiViewPayload \| null/);
   assert.match(runStepSource, /createRunStepRuntimeActionHelpers\(/);
   assert.match(ingressSource, /CONTRACT_UI_VIEW_MODES = new Set\(\[/);
   assert.match(
@@ -105,14 +126,14 @@ test("ui actions do not optimistically mutate started or state.language before r
 });
 
 test("run_step handler always emits model-safe result and keeps full payload widget-only", () => {
-  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const source = readServerSource();
   assert.match(source, /const modelResult = buildModelSafeResult\(resultForClient\);/);
   assert.match(source, /result: modelResult,/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient,\s*\}/);
 });
 
 test("single tool contract: run_step owns output template and model+app visibility", () => {
-  const source = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const source = readServerSource();
   assert.match(source, /server\.registerTool\(\s*"run_step"/);
   assert.doesNotMatch(source, /server\.registerTool\(\s*"open_canvas"/);
   assert.match(source, /visibility:\s*\["model",\s*"app"\]/);
@@ -139,7 +160,7 @@ test("runtime golden fixtures exist for prestart/waiting_locale/interactive/bloc
 });
 
 test("structured logging redacts token-like values in both server and runtime layers", () => {
-  const serverSource = fs.readFileSync(new URL("../server.ts", import.meta.url), "utf8");
+  const serverSource = readServerSource();
   const runtimeResponseSource = fs.readFileSync(new URL("./handlers/run_step_response.ts", import.meta.url), "utf8");
   assert.match(serverSource, /const LOG_REDACT_VALUE_RE =/);
   assert.match(runtimeResponseSource, /const LOG_REDACT_VALUE_RE =/);

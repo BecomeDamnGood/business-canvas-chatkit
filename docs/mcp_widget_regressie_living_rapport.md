@@ -346,3 +346,149 @@ Kopieer dit blok voor elke volgende run:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: volgende stap is live correlatie van `run_step_view_contract_guard` en UX-gedrag over minimaal 5 flows.
+
+### Poging 2026-02-27 13:59 UTC (versie: v203 live App Runner handtest)
+
+- Hypothese:
+  - v203 view-contract guard elimineert blank/half first paint en maakt startflow deterministisch.
+- Waarom deze hypothese (bewijs vooraf):
+  - Lokale tests waren groen.
+  - Serverguard + UI fail-safe was toegevoegd voor interactive-no-content scenario.
+- Exacte wijziging(en):
+  - Geen nieuwe codewijziging in deze stap; dit is live validatie na deploy van commit `8cb70ff`.
+- Verwachte uitkomst:
+  - Step 0 direct bruikbaar zonder lege card.
+  - Startklik werkt op eerste keer zonder herhaaltrigger.
+  - Tweede scherm direct renderbaar.
+- Testresultaten lokaal:
+  - N.v.t. in deze stap (alleen live observatie).
+- Live observatie:
+  - Service draait op `VERSION=v203` (endpoint `/version`).
+  - UX bleef breken: eerst lege/halve card, daarna pas gevuld scherm.
+  - Zelfde sessie (`bs_0a77d687-c60b-4767-b3e3-34d219836af9`) toont:
+    - prestart response (`02d290be-bb5c-4159-82d0-09bd05538767`),
+    - daarna twee `ACTION_START` requests (`2f39eef2-ba52-4423-9a6f-2a913877436a`, `fdeabe34-4a51-4813-be36-96b18c340dcc`) met `accepted_fresh_dispatch`.
+    - beide keren `run_step_response` op `step_0` met `ui_view_mode:"interactive"`.
+  - `run_step_ordering_tuple_parity`: `tuple_parity_ok`.
+  - `run_step_render_source_selected`: `meta.widget_result_authoritative`.
+  - `run_step_view_contract_guard` bestaat, maar logt met lege `correlation_id/trace_id`; inhoud meldt `invariant_ok:true`.
+- AWS logbewijs (event + timestamp):
+  - `1772200673205` (`2026-02-27T13:57:53.205Z`): `run_step_response` prestart.
+  - `1772200684115` (`2026-02-27T13:58:04.115Z`): `run_step_view_contract_guard` (`started:true`, `interactive`, `invariant_ok:true`).
+  - `1772200684115` (`2026-02-27T13:58:04.115Z`): `run_step_response` (`ui_view_mode:"interactive"`).
+  - `1772200690242` (`2026-02-27T13:58:10.242Z`): tweede `run_step_response` (`ui_view_mode:"interactive"`).
+- Uitkomst:
+  - [ ] Bevestigd
+  - [x] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Aanname dat huidige guard-conditie (`has_renderable_content`) voldoende correleert met wat de UI daadwerkelijk boven de vouw rendert.
+- Wat was gemist / over het hoofd gezien:
+  - Guard-event heeft nu lege correlatievelden, waardoor directe per-request koppeling zwakker is.
+  - `step_0 + started=true + interactive` kan nog steeds UX-matig blank starten ondanks contractmatig `invariant_ok:true`.
+- Besluit:
+  - [ ] Doorgaan op deze lijn
+  - [x] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: nieuwe hypothese nodig rond mismatch tussen server "renderable" definitie en client renderbeslissing/lifecycle timing.
+
+### Poging 2026-02-27 14:21 UTC (versie: hard refactoring governance hardening)
+
+- Hypothese:
+  - Zonder afdwingbare auto-gates blijft "alles bekeken" een intentie i.p.v. hard bewijs, waardoor legacy paden kunnen blijven lekken.
+- Waarom deze hypothese (bewijs vooraf):
+  - Historie toont meerdere iteraties met partiele fixes en achterblijvende alternatieve paden.
+  - Er was nog geen mechanische fail-fast check op ALLE bestanden + manifest + living doc rapportage.
+- Exacte wijziging(en):
+  - Nieuw gate script: `mcp-server/scripts/hard_refactor_gate.mjs`.
+  - Nieuw npm script: `mcp-server/package.json` -> `gate:hard-refactor`.
+  - Nieuw manifest-template: `docs/hard_refactoring_sweep_manifest_2026-02-27.md`.
+  - Briefing aangescherpt: `docs/hard_refactoring_2026-02-27.md` met:
+    - ALL FILES sweep protocol,
+    - zero-tolerance auto-fail gates,
+    - verplicht gate-commando,
+    - verplichte living-doc rapportageverwijzing.
+- Verwachte uitkomst:
+  - Geen ruimte meer voor impliciete "vergeten" bestanden, helpers of testpaden.
+  - Refactor-run kan alleen slagen met expliciet sweep-bewijs en gate PASS.
+- Testresultaten lokaal:
+  - Niet uitgevoerd in deze stap (governance/hardening setup).
+- Live observatie:
+  - N.v.t. voor deze stap.
+- AWS logbewijs (event + timestamp):
+  - N.v.t. voor deze stap.
+- Uitkomst:
+  - [ ] Bevestigd
+  - [ ] Weerlegd
+  - [x] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - N.v.t.
+- Wat was gemist / over het hoofd gezien:
+  - De noodzaak van een expliciete mechanische gate op sweep-compleetheid en living-documentvermelding.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: deze governance-hardening ondersteunt de volgende agent-run; functionele stabiliteit moet nog door de refactor-run worden bewezen.
+### Poging 2026-02-27 17:xx UTC (CORE hard-refactor run, local gates)
+
+- Hypothese:
+  - Patch-gedreven multi-mode UI/server logica is de primaire regressiebron; 1 canonical server mode-beslisser + dumb UI-pad stabiliseert contractgedrag.
+- Exacte wijziging(en):
+  - Nieuwe canonical builder: `mcp-server/src/handlers/run_step_canonical_widget_state.ts`.
+  - `turn_contract.ts` beslist mode exclusief via canonical builder.
+  - `run_step_response.ts` emit alleen `run_step_canonical_view_emitted`.
+  - UI ingest/routing gestript naar `_meta.widget_result` + canonical modes.
+  - Sweep-manifest ingevuld: `docs/hard_refactoring_sweep_manifest_2026-02-27.md`.
+- Verificatie:
+  - `npm run typecheck` PASS.
+  - `npm run gate:hard-refactor` PASS.
+- Uitkomst:
+  - [x] Bevestigd (voor lokale contract/gate doelen)
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Open:
+  - Nog geen live 5/5 flow-bewijs (startup -> startklik -> tweede scherm) in deze run.
+  - `src/ui_render.test.ts` bevat legacy fallback/recovery testverwachtingen en moet in volgende pass worden geherijkt.
+- Verwijzing briefing:
+  - Deze poging volgt primair `docs/hard_refactoring_2026-02-27.md`.
+
+### Poging 2026-02-27 19:xx UTC (server-refactor + UI fallback purge, local gates)
+
+- Hypothese:
+  - `run_step_transport.ts` was nog te monolithisch; verdere opsplitsing + hardere UI fallback-gates verkleinen regressierisico en maken SSOT afdwingbaar.
+- Exacte wijziging(en):
+  - `mcp-server/src/server/run_step_transport.ts` opgesplitst in:
+    - `run_step_transport_context.ts`
+    - `run_step_transport_idempotency.ts`
+    - `run_step_transport_stale.ts`
+  - `mcp-server/ui/lib/locale_bootstrap_runtime.ts` verwijderd:
+    - `root.result` candidate in render-source selectie.
+  - `mcp-server/src/ui_render.test.ts` opgeschoond:
+    - fallback-gerelateerde fixtures/assertions (`fallbackRaw`, `root.result`, `structuredContent.result`) verwijderd of hernoemd naar fail-closed gedrag.
+  - `mcp-server/scripts/server_refactor_gate.mjs` verhard met extra zero-tolerance checks:
+    - alle `src/server/*.ts` <= 1000 regels,
+    - verplichte nieuwe servermodules aanwezig,
+    - geen legacy fallback tokens in `ui_render.test.ts`,
+    - geen legacy fallback tokens in `locale_bootstrap_runtime.ts` en `ui/step-card.bundled.html`.
+  - UI bundle opnieuw gegenereerd via `node scripts/build-ui.mjs`.
+  - Sweep artefacten bijgewerkt:
+    - `docs/server_refactor_sweep_manifest_2026-02-27.md`
+    - `docs/server_refactor_delete_map_2026-02-27.md`
+- Verificatie:
+  - `cd mcp-server && npm run typecheck` -> PASS.
+  - `cd mcp-server && npm run gate:server-refactor` -> PASS.
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS.
+  - `server.ts` linecount: **3**.
+  - alle `mcp-server/src/server/*.ts` linecount: **< 1000**.
+- Uitkomst:
+  - [x] Bevestigd (voor server-refactor scope + gates)
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat was gemist / over het hoofd gezien:
+  - Volledige `src/ui_render.test.ts` suite bevat nog oudere, niet-scopegebonden failing assertions; dat is separaat van deze server-refactor gate.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: server-refactor-criteria zijn lokaal afgedicht; volgende stap is aparte UI-testsuite normalisatie buiten deze refactor-gate.

@@ -23,7 +23,9 @@
     "arch:run-step:any-budget": "node scripts/arch/run_step_any_budget_check.mjs",
     "compliance:mcp-app": "node scripts/mcp_app_compliance_gate.mjs",
     "contract:inventory:snapshot": "node scripts/contract_inventory_snapshot_check.mjs",
-    "verify:release-proof": "node scripts/release_proof_verification.mjs"
+    "verify:release-proof": "node scripts/release_proof_verification.mjs",
+    "gate:hard-refactor": "node scripts/hard_refactor_gate.mjs",
+    "gate:server-refactor": "node scripts/server_refactor_gate.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",
