@@ -1147,6 +1147,7 @@ test("computeBootstrapRenderState honors explicit waiting_locale mode over clien
 test("main source handles host tool-result via shared bootstrap scheduler", () => {
   const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
   assert.match(source, /applyToolResult/);
+  assert.match(source, /function hasRenderedStateSnapshot\(\): boolean \{/);
   assert.match(source, /function ingestHostPayload\(/);
   assert.match(source, /const STARTUP_WAITING_VIEW_MODE = "waiting_locale";/);
   assert.match(source, /function buildStartupInitState\(\): Record<string, unknown> \{/);
@@ -1159,6 +1160,7 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /notifyHostTransportSignal\("set_globals"\)/);
   assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*ingestHostPayload\(data\.params, "host_notification"\)/);
   assert.match(source, /openai:set_globals[\s\S]*ingestHostPayload\(payload, "set_globals"\)/);
+  assert.match(source, /startup_set_globals_empty_payload_ignored/);
   assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*const actionCode = actionCodeFromState\("ui_action_start"\);[\s\S]*callRunStep\(actionCode, \{ started: "true" \}\)/);
   assert.match(source, /\[ui_action_missing\]/);
   assert.doesNotMatch(source, /function normalizeHostToolResultNotification\(/);
@@ -1356,6 +1358,46 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry drops duplicate payload wit
   assert.equal(Object.keys(result).length, 0);
   const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
   assert.equal(String((((cachedResult.ui as Record<string, unknown>) || {}).questionText) || ""), "current");
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry converges after empty init payload followed by host payload", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: {},
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = {};
+
+  const emptyInitResult = handleToolResultAndMaybeScheduleBootstrapRetry({}, { source: "set_globals" });
+  assert.equal(Object.keys(emptyInitResult).length, 0);
+  assert.equal(Object.keys((globalThis as any).__BSC_LAST_TOOL_OUTPUT__ || {}).length, 0);
+
+  const hostPayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 1,
+      host_widget_session_id: "internal:demo",
+      ui_action_start: "ACTION_START",
+    },
+    ui: {
+      view: { mode: "prestart" },
+    },
+  });
+
+  const hostResult = handleToolResultAndMaybeScheduleBootstrapRetry(hostPayload, { source: "host_notification" });
+  assert.equal(String(((hostResult.state as Record<string, unknown> | undefined) || {}).current_step || ""), "step_0");
+  const cachedResolved = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__);
+  assert.equal(cachedResolved.response_seq, 1);
+  assert.equal(cachedResolved.bootstrap_session_id, "bs_demo");
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
@@ -1580,6 +1622,92 @@ test("callRunStep ingests callTool response immediately and updates render state
   assert.equal(
     resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).response_seq,
     7
+  );
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LATEST__ = originalLatest;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("callRunStep schedules one bootstrap poll when ACTION_START ack has no state advance", async () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalLatest = (globalThis as any).__BSC_LATEST__;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+
+  const baseState = {
+    current_step: "step_0",
+    started: "false",
+    bootstrap_session_id: "bs_demo",
+    bootstrap_epoch: 1,
+    response_seq: 6,
+    host_widget_session_id: "internal:demo",
+    ui_action_start: "ACTION_START",
+  };
+  (globalThis as any).__BSC_LATEST__ = { state: { ...baseState }, lang: "nl" };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: { ...baseState },
+    ui: { view: { mode: "prestart" } },
+  });
+
+  const dispatchedMessages: string[] = [];
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: { ...baseState },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+    async callTool(_toolName: string, payload: Record<string, unknown>) {
+      const actionCode = String(payload?.user_message || "").trim();
+      dispatchedMessages.push(actionCode);
+      if (actionCode === "ACTION_START") {
+        return toolOutputFromWidgetResult({
+          state: {
+            ...baseState,
+            started: "true",
+          },
+          ui: { view: { mode: "prestart" } },
+        });
+      }
+      if (actionCode === "ACTION_BOOTSTRAP_POLL") {
+        return toolOutputFromWidgetResult({
+          state: {
+            ...baseState,
+            started: "true",
+            current_step: "purpose",
+            response_seq: 7,
+          },
+          ui: {
+            view: { mode: "interactive" },
+            questionText: "Wat is je belangrijkste doel?",
+          },
+        });
+      }
+      return {};
+    },
+  };
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await callRunStep("ACTION_START", { started: "true" });
+  await new Promise((resolve) => setTimeout(resolve, 900));
+
+  assert.equal(dispatchedMessages.filter((action) => action === "ACTION_START").length, 1);
+  assert.equal(dispatchedMessages.filter((action) => action === "ACTION_BOOTSTRAP_POLL").length, 1);
+  const cachedResolved = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__);
+  assert.equal(cachedResolved.response_seq, 7);
+  assert.equal(
+    String(((cachedResolved.result.state as Record<string, unknown> | undefined) || {}).current_step || ""),
+    "purpose"
   );
 
   (globalThis as any).document = originalDocument;

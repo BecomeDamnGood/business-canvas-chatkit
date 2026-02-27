@@ -108,6 +108,14 @@ function readSetGlobalsPayloadFromHost(): Record<string, unknown> {
   });
 }
 
+function hasRenderedStateSnapshot(): boolean {
+  const state = latestWidgetState();
+  if (!state || typeof state !== "object" || Object.keys(state).length === 0) return false;
+  const currentStep = String(state.current_step || "").trim();
+  const gateStatus = String(state.ui_gate_status || "").trim().toLowerCase();
+  return Boolean(currentStep || gateStatus);
+}
+
 function tryInitialIngestFromHost(source: "set_globals" | "host_notification"): boolean {
   const payload = readSetGlobalsPayloadFromHost();
   if (!payload || typeof payload !== "object" || Object.keys(payload).length === 0) return false;
@@ -383,7 +391,14 @@ if (typeof window !== "undefined") {
         ingestHostPayload(payload, "set_globals");
         notifyHostTransportSignal("set_globals");
       } else {
-        renderStartupWaitShell("set_globals_empty_payload");
+        if (hasRenderedStateSnapshot()) {
+          console.log("[startup_set_globals_empty_payload_ignored]", {
+            reason: "cached_state_available",
+            current_step: String(latestWidgetState().current_step || ""),
+          });
+        } else {
+          renderStartupWaitShell("set_globals_empty_payload");
+        }
       }
     } catch (e) {
       console.error(e);

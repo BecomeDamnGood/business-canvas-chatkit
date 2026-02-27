@@ -540,8 +540,11 @@ const CLICK_DEBOUNCE_MS = 250;
 const RUN_STEP_TIMEOUT_MS = 25000;
 const BRIDGE_RESPONSE_TIMEOUT_MS = 6000;
 const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
+const START_ACK_RECOVERY_DELAY_MS = CLICK_DEBOUNCE_MS + 80;
 let bootstrapPollInFlight = false;
 let bootstrapPollInFlightSignature = "";
+let startAckRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+let startAckRecoverySignature = "";
 
 function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   const raw = (globalThis as Record<string, unknown>)[name];
@@ -549,6 +552,54 @@ function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   const normalized = String(raw ?? "").trim().toLowerCase();
   if (!normalized) return defaultValue;
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+function clearStartAckRecoveryTimer(): void {
+  if (startAckRecoveryTimer) {
+    clearTimeout(startAckRecoveryTimer);
+    startAckRecoveryTimer = null;
+  }
+  startAckRecoverySignature = "";
+}
+
+function scheduleStartAckRecoveryPoll(nextState: Record<string, unknown>): void {
+  const signature = bootstrapPollSignatureFromState(nextState);
+  if (startAckRecoveryTimer && startAckRecoverySignature === signature) {
+    if (isDevEnv()) {
+      console.log("[ui_start_ack_recovery_poll_deduped]", {
+        poll_signature: signature,
+      });
+    }
+    return;
+  }
+  clearStartAckRecoveryTimer();
+  startAckRecoverySignature = signature;
+  startAckRecoveryTimer = setTimeout(() => {
+    startAckRecoveryTimer = null;
+    const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
+    const latestState = toRecord(latest.state);
+    const recoveryState = Object.keys(latestState).length > 0 ? { ...latestState } : { ...nextState };
+    const mergedOrdering = mergeOutboundOrdering({ nextState: recoveryState, widgetState: widgetState() });
+    if (hasValidBootstrapOrdering(mergedOrdering)) {
+      recoveryState.bootstrap_session_id = mergedOrdering.sessionId;
+      recoveryState.bootstrap_epoch = mergedOrdering.epoch;
+      recoveryState.response_seq = mergedOrdering.responseSeq;
+      recoveryState.host_widget_session_id = mergedOrdering.hostWidgetSessionId;
+    }
+    if (isDevEnv()) {
+      console.log("[ui_start_ack_recovery_poll_dispatch]", {
+        poll_signature: startAckRecoverySignature,
+        ordering_tuple: describeBootstrapOrdering(readBootstrapOrderingState(recoveryState)),
+      });
+    }
+    void callRunStep(ACTION_BOOTSTRAP_POLL, {
+      ...recoveryState,
+      __bootstrap_poll: "true",
+      __hydrate_poll: "true",
+      __start_ack_recovery: "true",
+    });
+    startAckRecoverySignature = "";
+  }, START_ACK_RECOVERY_DELAY_MS);
 }
 
 function maybeScheduleBootstrapRetry(
@@ -1329,7 +1380,9 @@ export async function callRunStep(
           start_dispatch_state: "failed",
           transport_ready: "true",
         });
+        scheduleStartAckRecoveryPoll(nextState as Record<string, unknown>);
       } else {
+        clearStartAckRecoveryTimer();
         setWidgetStateSafe({
           start_dispatch_state: "ready",
           transport_ready: "true",
