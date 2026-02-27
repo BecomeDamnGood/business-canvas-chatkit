@@ -32,12 +32,12 @@ deleted = verwijderd in deze run
 - [reviewed] mcp-server/scripts/runtime-smoke.mjs
 - [reviewed] mcp-server/scripts/ui_artifact_parity_check.mjs
 - [reviewed] mcp-server/server.ts
-- [reviewed] mcp-server/src/adapters/actioncode_to_intent.ts
-- [reviewed] mcp-server/src/adapters/intent_to_actioncode.ts
-- [reviewed] mcp-server/src/contracts/adapters.test.ts
+- [deleted] mcp-server/src/adapters/actioncode_to_intent.ts
+- [deleted] mcp-server/src/adapters/intent_to_actioncode.ts
+- [deleted] mcp-server/src/contracts/adapters.test.ts
 - [reviewed] mcp-server/src/contracts/contract_inventory_snapshot.test.ts
 - [reviewed] mcp-server/src/contracts/intents.ts
-- [reviewed] mcp-server/src/contracts/legacy_actioncodes.ts
+- [deleted] mcp-server/src/contracts/legacy_actioncodes.ts
 - [reviewed] mcp-server/src/contracts/mcp_tool_contract.ts
 - [reviewed] mcp-server/src/contracts/step_ids.ts
 - [reviewed] mcp-server/src/contracts/transitions.ts

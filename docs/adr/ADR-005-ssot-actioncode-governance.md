@@ -41,4 +41,3 @@ Betere traceability en minder drift tussen UI menus, action codes en final field
   - `mcp-server/src/core/actioncode_registry.ts`
   - `mcp-server/src/core/ui_contract_matrix.ts`
   - `mcp-server/src/core/state.ts`
-  - `mcp-server/src/contracts/legacy_actioncodes.ts`

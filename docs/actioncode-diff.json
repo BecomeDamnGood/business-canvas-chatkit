@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-02-26T15:10:18.477Z",
+  "generated_at": "2026-02-27T15:25:40.646Z",
   "sources": {
     "ui": [
       "mcp-server/ui/step-card.template.html"
@@ -44,6 +44,7 @@
       "mcp-server/docs/contracts/contract-purity-inventory.md",
       "mcp-server/docs/contracts/cross-step-dependencies.md",
       "mcp-server/docs/contracts/language-contract.md",
+      "mcp-server/docs/contracts/mcp_app_compliance_checklist.md",
       "mcp-server/docs/contracts/menu-contract-audit-matrix.md",
       "mcp-server/docs/contracts/offtopic-contract.md",
       "mcp-server/docs/contracts/step-contract-matrix.md",
@@ -55,13 +56,12 @@
     ],
     "dist": [
       "mcp-server/dist/server.js",
-      "mcp-server/dist/src/adapters/actioncode_to_intent.js",
-      "mcp-server/dist/src/adapters/intent_to_actioncode.js",
       "mcp-server/dist/src/contracts/intents.js",
-      "mcp-server/dist/src/contracts/legacy_actioncodes.js",
+      "mcp-server/dist/src/contracts/mcp_tool_contract.js",
       "mcp-server/dist/src/contracts/step_ids.js",
       "mcp-server/dist/src/contracts/transitions.js",
       "mcp-server/dist/src/contracts/ui_actions.js",
+      "mcp-server/dist/src/core/actioncode_intent.js",
       "mcp-server/dist/src/core/actioncode_registry.js",
       "mcp-server/dist/src/core/bootstrap_runtime.js",
       "mcp-server/dist/src/core/glossary.js",

@@ -44,12 +44,25 @@ function main() {
   }
 
   const serverPath = path.resolve(projectRoot, "server.ts");
+  const serverSrcDir = path.resolve(projectRoot, "src/server");
   const routePath = path.resolve(projectRoot, "src/handlers/run_step_routes.ts");
   const presentationPath = path.resolve(projectRoot, "src/handlers/run_step_presentation.ts");
   const responsePath = path.resolve(projectRoot, "src/handlers/run_step_response.ts");
   const contractPath = path.resolve(projectRoot, "src/contracts/mcp_tool_contract.ts");
 
-  const serverSource = fs.readFileSync(serverPath, "utf8");
+  const serverSourceFiles = [serverPath];
+  if (fs.existsSync(serverSrcDir)) {
+    const serverModules = fs
+      .readdirSync(serverSrcDir)
+      .filter((entry) => entry.endsWith(".ts"))
+      .sort()
+      .map((entry) => path.resolve(serverSrcDir, entry));
+    serverSourceFiles.push(...serverModules);
+  }
+  const serverSource = serverSourceFiles
+    .filter((filePath) => fs.existsSync(filePath))
+    .map((filePath) => fs.readFileSync(filePath, "utf8"))
+    .join("\n");
   const routeSource = fs.readFileSync(routePath, "utf8");
   const presentationSource = fs.readFileSync(presentationPath, "utf8");
   const responseSource = fs.readFileSync(responsePath, "utf8");

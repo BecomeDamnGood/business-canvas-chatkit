@@ -13,7 +13,6 @@ jobs:
       fail-fast: false
       matrix:
         project:
-          - chatkit/backend
           - managed-chatkit/backend
     steps:
       - name: Checkout
@@ -61,7 +60,6 @@ jobs:
       matrix:
         project:
           - managed-chatkit/frontend
-          - chatkit/frontend
 
     steps:
       - name: Checkout repository
