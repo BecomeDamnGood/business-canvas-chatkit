@@ -162,7 +162,26 @@ Bewust te behouden:
     - `specialist_dispatch_safe.ts`
   - `src/handlers/run_step_runtime.ts` idempotency extract:
     - `run_step_runtime_idempotency.ts`
-- [todo] Slice C
+- [done] Slice C
+  - `src/core/turn_policy_renderer.ts` verlaagd naar `<1000` via extract:
+    - `src/core/turn_policy/strategy_helpers.ts`
+  - `src/handlers/run_step_runtime.ts` text/UI helpers opnieuw uitgepakt:
+    - `run_step_runtime_text_ui_helpers.ts` geïntegreerd in runtime.
+  - `src/handlers/run_step_runtime.ts` semantic helper extract:
+    - `run_step_runtime_semantic_helpers.ts` geïntegreerd in runtime.
+  - `src/handlers/run_step_runtime.ts` specialist helper extract:
+    - `run_step_runtime_specialist_helpers.ts` geïntegreerd in runtime.
+  - `src/handlers/run_step_runtime.ts` orchestrator extract:
+    - hoofd `run_step(...)` flow verplaatst naar `run_step_runtime_execute.ts`
+    - `run_step_runtime.ts` houdt compositie/wiring + execute-deps map.
+  - cleanup:
+    - ongebruikte tijdelijke helper `run_step_runtime_specialist_gateway.ts` verwijderd.
+  - status:
+    - `run_step_runtime.ts` linecount: `933`
+    - `run_step_runtime_execute.ts` linecount: `591`
+    - `npm run typecheck`: PASS
+    - `npm run gate:server-refactor`: PASS
+    - productiecode >1000 check: PASS (geen matches)
 - [todo] Slice D
 - [todo] Slice E
 
@@ -171,6 +190,9 @@ Bewust te behouden:
   - `cd mcp-server && npm run typecheck`
 - Server-refactor gate:
   - `cd mcp-server && npm run gate:server-refactor`
+- Strict agent checkpoint gate (server-refactor scope):
+  - `cd mcp-server && npm run gate:agent-strict`
+  - bevat: `typecheck` + `gate:server-refactor` + productie `<=1000` check voor `server.ts` + `src/**/*.ts` (excl. tests) + fallback-token sweep.
 - Productiecode >1000 check:
   - `rg --files mcp-server -g '*.ts' -g '!**/node_modules/**' | rg -v '\\.test\\.ts$' | xargs wc -l | awk '$1>1000 {print $1\" \"$2}'`
 - Tiny-wrapper check (anti-glue):

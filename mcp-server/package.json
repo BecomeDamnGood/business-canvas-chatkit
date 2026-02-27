@@ -25,7 +25,8 @@
     "contract:inventory:snapshot": "node scripts/contract_inventory_snapshot_check.mjs",
     "verify:release-proof": "node scripts/release_proof_verification.mjs",
     "gate:hard-refactor": "node scripts/hard_refactor_gate.mjs",
-    "gate:server-refactor": "node scripts/server_refactor_gate.mjs"
+    "gate:server-refactor": "node scripts/server_refactor_gate.mjs",
+    "gate:agent-strict": "node scripts/agent_strict_guard.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",
