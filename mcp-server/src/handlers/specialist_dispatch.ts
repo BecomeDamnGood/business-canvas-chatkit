@@ -1,10 +1,8 @@
 import { callStrictJson, type LLMUsage } from "../core/llm.js";
-import { resolveModelForCall } from "../core/model_routing.js";
 import type { CanvasState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 
 import {
-  STEP_0_ID,
   STEP_0_SPECIALIST,
   VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS,
   ValidationAndBusinessNameJsonSchema,
@@ -174,7 +172,7 @@ type CallSpecialistStrictDeps = {
   getDreamRuntimeMode: (state: CanvasState) => DreamRuntimeMode;
 };
 
-type BuildTransientFallbackDeps = {
+export type BuildTransientFallbackDeps = {
   step0CardDescForState: (state: CanvasState | null | undefined) => string;
   step0QuestionForState: (state: CanvasState | null | undefined) => string;
   pickPrompt: (specialist: any) => string;
@@ -186,7 +184,7 @@ type BuildTransientFallbackDeps = {
   }) => { specialist: Record<string, unknown> };
 };
 
-type ErrorPayloadDeps = {
+export type ErrorPayloadDeps = {
   resolveHolisticPolicyFlags: () => { timeoutGuardV2: boolean };
   buildTransientFallbackSpecialist: (state: CanvasState) => Record<string, unknown>;
   attachRegistryPayload: <T extends Record<string, unknown>>(
@@ -205,7 +203,7 @@ type ErrorPayloadDeps = {
   }) => void;
 };
 
-type CallSpecialistStrictSafeDeps = {
+export type CallSpecialistStrictSafeDeps = {
   callSpecialistStrict: (params: SpecialistCallParams) => Promise<SpecialistCallResult>;
   shouldLogLocalDevDiagnostics: () => boolean;
   buildRateLimitErrorPayload: (state: CanvasState, err: any) => RunStepErrorLike;
@@ -711,309 +709,24 @@ export async function callSpecialistStrict(
   };
 }
 
-export function isRateLimitError(err: any): boolean {
-  return Boolean(
-    err &&
-    (err.rate_limited === true ||
-      err.code === "rate_limit_exceeded" ||
-      err.type === "rate_limit_exceeded" ||
-      err.status === 429)
-  );
-}
-
-export function isTimeoutError(err: any): boolean {
-  return Boolean(err && err.type === "timeout");
-}
-
-export function hasUsableSpecialistForRetry(
-  specialist: any,
-  pickPrompt: (specialist: any) => string
-): boolean {
-  if (!specialist || typeof specialist !== "object") return false;
-  const action = String(specialist.action || "").trim().toUpperCase();
-  if (action !== "ASK") return false;
-  const prompt = pickPrompt(specialist);
-  const message = String(specialist.message || "").trim();
-  const refined = String(specialist.refined_formulation || "").trim();
-  return Boolean(prompt || message || refined);
-}
-
-export function buildTransientFallbackSpecialist(
-  state: CanvasState,
-  deps: BuildTransientFallbackDeps
-): Record<string, unknown> {
-  const last = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-  if (hasUsableSpecialistForRetry(last, deps.pickPrompt)) return last;
-
-  const stepId = String((state as any).current_step || STEP_0_ID);
-  if (stepId === STEP_0_ID) {
-    return {
-      action: "ASK",
-      message: deps.step0CardDescForState(state),
-      question: deps.step0QuestionForState(state),
-      refined_formulation: "",
-      business_name: String((state as any).business_name || "TBD"),
-      step_0: "",
-      wants_recap: false,
-      is_offtopic: false,
-      user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-    };
-  }
-
-  const rendered = deps.renderFreeTextTurnPolicy({
-    stepId,
-    state,
-    specialist: {
-      action: "ASK",
-      message: "",
-      question: "",
-      refined_formulation: "",
-      wants_recap: false,
-      is_offtopic: false,
-      user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
-    },
-    previousSpecialist: last,
-  });
-  return rendered.specialist;
-}
-
-export function buildRateLimitErrorPayload(
-  state: CanvasState,
-  err: any,
-  deps: ErrorPayloadDeps
-): RunStepErrorLike {
-  const retryAfterMs = Number(err?.retry_after_ms) > 0 ? Number(err.retry_after_ms) : 1500;
-  const timeoutGuardEnabled = deps.resolveHolisticPolicyFlags().timeoutGuardV2;
-  const last = timeoutGuardEnabled
-    ? deps.buildTransientFallbackSpecialist(state)
-    : ((state as any).last_specialist_result || {});
-  if (timeoutGuardEnabled) {
-    deps.logFromState?.({
-      severity: "warn",
-      event: "transient_fallback_returned",
-      state,
-      step_id: String(state.current_step || "step_0"),
-      details: {
-        type: "rate_limited",
-        retry_after_ms: retryAfterMs,
-        client_action_id: String((state as any).__client_action_id ?? ""),
-      },
-    });
-  }
-  return deps.attachRegistryPayload({
-    ok: false as const,
-    tool: "run_step" as const,
-    current_step_id: String(state.current_step || "step_0"),
-    active_specialist: String((state as any).active_specialist || ""),
-    text: "",
-    prompt: "",
-    specialist: last,
-    state,
-    error: {
-      type: "rate_limited",
-      category: "infra",
-      severity: "transient",
-      retryable: true,
-      retry_after_ms: retryAfterMs,
-      user_message: deps.uiStringFromStateMap(
-        state,
-        "transient.rate_limited",
-        deps.uiDefaultString("transient.rate_limited", "Please wait a moment and try again.")
-      ),
-      retry_action: "retry_same_action",
-    },
-  }, last) as RunStepErrorLike;
-}
-
-export function buildTimeoutErrorPayload(
-  state: CanvasState,
-  err: any,
-  deps: ErrorPayloadDeps
-): RunStepErrorLike {
-  void err;
-  const timeoutGuardEnabled = deps.resolveHolisticPolicyFlags().timeoutGuardV2;
-  const last = timeoutGuardEnabled
-    ? deps.buildTransientFallbackSpecialist(state)
-    : ((state as any).last_specialist_result || {});
-  if (timeoutGuardEnabled) {
-    deps.logFromState?.({
-      severity: "warn",
-      event: "transient_fallback_returned",
-      state,
-      step_id: String(state.current_step || "step_0"),
-      details: {
-        type: "timeout",
-        client_action_id: String((state as any).__client_action_id ?? ""),
-      },
-    });
-  }
-  return deps.attachRegistryPayload({
-    ok: false as const,
-    tool: "run_step" as const,
-    current_step_id: String(state.current_step || "step_0"),
-    active_specialist: String((state as any).active_specialist || ""),
-    text: "",
-    prompt: "",
-    specialist: last,
-    state,
-    error: {
-      type: "timeout",
-      category: "infra",
-      severity: "transient",
-      retryable: true,
-      user_message: deps.uiStringFromStateMap(
-        state,
-        "transient.timeout",
-        deps.uiDefaultString("transient.timeout", "This is taking longer than usual. Please try again.")
-      ),
-      retry_action: "retry_same_action",
-    },
-  }, last) as RunStepErrorLike;
-}
-
-export async function callSpecialistStrictSafe(
-  params: SpecialistCallParams,
-  routing: {
-    enabled: boolean;
-    shadow: boolean;
-    actionCode?: string;
-    intentType?: string;
-  },
-  stateForError: CanvasState,
-  deps: CallSpecialistStrictSafeDeps
-): Promise<
-  { ok: true; value: SpecialistCallResult }
-  | { ok: false; payload: RunStepErrorLike }
-> {
-  const startedAt = Date.now();
-  const logDiagnostics = deps.shouldLogLocalDevDiagnostics();
-  const routeDecision = resolveModelForCall({
-    fallbackModel: params.model,
-    routingEnabled: routing.enabled,
-    actionCode: routing.actionCode,
-    intentType: routing.intentType,
-    specialist: String(params.decision?.specialist_to_call ?? ""),
-    purpose: "specialist",
-  });
-  if (
-    !routeDecision.applied &&
-    routing.shadow &&
-    (deps.shouldLogLocalDevDiagnostics() || process.env.BSC_MODEL_ROUTING_SHADOW_LOG === "1") &&
-    routeDecision.candidate_model &&
-    routeDecision.candidate_model !== params.model
-  ) {
-    deps.logFromState?.({
-      severity: "info",
-      event: "model_routing_shadow",
-      state: stateForError,
-      step_id: String(params.decision?.current_step ?? ""),
-      details: {
-        specialist: String(params.decision?.specialist_to_call ?? ""),
-        baseline_model: params.model,
-        shadow_model: routeDecision.candidate_model,
-        source: routeDecision.source,
-        config_version: routeDecision.config_version,
-        client_action_id: String((stateForError as any).__client_action_id ?? ""),
-      },
-    });
-  }
-  const callParams = {
-    ...params,
-    model: routeDecision.model,
-  };
-  try {
-    const value = await deps.callSpecialistStrict(callParams);
-    if (logDiagnostics) {
-      deps.logFromState?.({
-        severity: "info",
-        event: "run_step_llm_call",
-        state: stateForError,
-        step_id: String(params.decision?.current_step ?? ""),
-        details: {
-          ok: true,
-          specialist: String(params.decision?.specialist_to_call ?? ""),
-          model: String(value.model || routeDecision.model || ""),
-          model_source: routeDecision.source,
-          elapsed_ms: Date.now() - startedAt,
-          client_action_id: String((stateForError as any).__client_action_id ?? ""),
-        },
-      });
-    }
-    return { ok: true as const, value };
-  } catch (err: any) {
-    if (logDiagnostics) {
-      deps.logFromState?.({
-        severity: "warn",
-        event: "run_step_llm_call",
-        state: stateForError,
-        step_id: String(params.decision?.current_step ?? ""),
-        details: {
-          ok: false,
-          specialist: String(params.decision?.specialist_to_call ?? ""),
-          model: String(routeDecision.model || ""),
-          model_source: routeDecision.source,
-          elapsed_ms: Date.now() - startedAt,
-          client_action_id: String((stateForError as any).__client_action_id ?? ""),
-          error_type: String(err?.type ?? err?.code ?? err?.name ?? "unknown"),
-        },
-      });
-    }
-    if (isRateLimitError(err)) {
-      return { ok: false as const, payload: deps.buildRateLimitErrorPayload(stateForError, err) };
-    }
-    if (isTimeoutError(err)) {
-      return { ok: false as const, payload: deps.buildTimeoutErrorPayload(stateForError, err) };
-    }
-    throw err;
-  }
-}
-
 export function createCallSpecialistStrict(
   deps: CallSpecialistStrictDeps
 ): (params: SpecialistCallParams) => Promise<SpecialistCallResult> {
   return (params: SpecialistCallParams) => callSpecialistStrict(params, deps);
 }
 
-export function createBuildTransientFallbackSpecialist(
-  deps: BuildTransientFallbackDeps
-): (state: CanvasState) => Record<string, unknown> {
-  return (state: CanvasState) => buildTransientFallbackSpecialist(state, deps);
-}
-
-export function createBuildRateLimitErrorPayload(
-  deps: ErrorPayloadDeps
-): (state: CanvasState, err: any) => RunStepErrorLike {
-  return (state: CanvasState, err: any) => buildRateLimitErrorPayload(state, err, deps);
-}
-
-export function createBuildTimeoutErrorPayload(
-  deps: ErrorPayloadDeps
-): (state: CanvasState, err: any) => RunStepErrorLike {
-  return (state: CanvasState, err: any) => buildTimeoutErrorPayload(state, err, deps);
-}
-
-export function createCallSpecialistStrictSafe(
-  deps: CallSpecialistStrictSafeDeps
-): (
-  params: SpecialistCallParams,
-  routing: {
-    enabled: boolean;
-    shadow: boolean;
-    actionCode?: string;
-    intentType?: string;
-  },
-  stateForError: CanvasState
-) => Promise<{ ok: true; value: SpecialistCallResult } | { ok: false; payload: RunStepErrorLike }> {
-  return (
-    params: SpecialistCallParams,
-    routing: {
-      enabled: boolean;
-      shadow: boolean;
-      actionCode?: string;
-      intentType?: string;
-    },
-    stateForError: CanvasState
-  ) => callSpecialistStrictSafe(params, routing, stateForError, deps);
-}
+export {
+  isRateLimitError,
+  isTimeoutError,
+  hasUsableSpecialistForRetry,
+  buildTransientFallbackSpecialist,
+  buildRateLimitErrorPayload,
+  buildTimeoutErrorPayload,
+  createBuildTransientFallbackSpecialist,
+  createBuildRateLimitErrorPayload,
+  createBuildTimeoutErrorPayload,
+} from "./specialist_dispatch_fallbacks.js";
+export {
+  callSpecialistStrictSafe,
+  createCallSpecialistStrictSafe,
+} from "./specialist_dispatch_safe.js";

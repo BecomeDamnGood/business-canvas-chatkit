@@ -153,6 +153,19 @@ Bewust te behouden:
 4. Slice D: `ui_actions` split (transport/ingest/dispatch/feedback).
 5. Slice E: `ui_render` + `turn_policy_renderer` split.
 
+## 5.1) Voortgang
+- [done] Slice A
+  - `src/i18n/ui_strings_catalog.ts` -> locale modules opgesplitst.
+- [done] Slice B
+  - `src/handlers/specialist_dispatch.ts` opgesplitst met:
+    - `specialist_dispatch_fallbacks.ts`
+    - `specialist_dispatch_safe.ts`
+  - `src/handlers/run_step_runtime.ts` idempotency extract:
+    - `run_step_runtime_idempotency.ts`
+- [todo] Slice C
+- [todo] Slice D
+- [todo] Slice E
+
 ## 6) Gates voor deze split-run
 - Typecheck:
   - `cd mcp-server && npm run typecheck`
