@@ -88,9 +88,9 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       }
     }
 
-    const stageFieldValue = (stepId: string, raw: unknown, fallbackRaw?: unknown): void => {
+    const stageFieldValue = (stepId: string, raw: unknown, secondaryRaw?: unknown): void => {
       const primary = typeof raw === "string" ? raw.trim() : "";
-      const fallback = typeof fallbackRaw === "string" ? fallbackRaw.trim() : "";
+      const fallback = typeof secondaryRaw === "string" ? secondaryRaw.trim() : "";
       const value = primary || fallback;
       if (!value) return;
       nextState = deps.withProvisionalValue(nextState, stepId, value, provisionalSource);

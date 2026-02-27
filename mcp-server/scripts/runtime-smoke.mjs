@@ -16,7 +16,7 @@ function sleep(ms) {
 
 function extractResult(payload) {
   const result = payload?.structuredContent?.result;
-  assert.equal(Boolean(result && typeof result === "object"), true, "structuredContent.result ontbreekt");
+  assert.equal(Boolean(result && typeof result === "object"), true, "model result payload ontbreekt");
   return result;
 }
 

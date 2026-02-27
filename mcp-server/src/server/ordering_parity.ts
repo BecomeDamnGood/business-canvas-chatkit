@@ -404,12 +404,14 @@ function ensureRunStepOutputTupleParity(params: {
       ? (params.meta as Record<string, unknown>)
       : undefined;
   const structuredContent = params.structuredContent;
+  const structuredRecord =
+    structuredContent && typeof structuredContent === "object"
+      ? (structuredContent as Record<string, unknown>)
+      : null;
+  const structuredResultCandidate = structuredRecord ? structuredRecord["result"] : undefined;
   const structuredResult =
-    structuredContent &&
-    typeof structuredContent === "object" &&
-    structuredContent.result &&
-    typeof structuredContent.result === "object"
-      ? (structuredContent.result as Record<string, unknown>)
+    structuredResultCandidate && typeof structuredResultCandidate === "object"
+      ? (structuredResultCandidate as Record<string, unknown>)
       : null;
   const metaWidgetResult =
     metaRecord &&

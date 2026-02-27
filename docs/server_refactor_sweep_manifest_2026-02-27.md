@@ -30,4 +30,5 @@ Notes:
 - Legacy render-source reason-codes (`structured_content_result_fallback`, `render_source_missing`) are removed from server transport code.
 - `run_step_transport.ts` is orchestration-only and split into context/idempotency/stale modules.
 - UI fallback-pattern tokens (`root.result`, `structuredContent.result`, `fallbackRaw`) are removed from `ui_render.test.ts`, `ui/lib/locale_bootstrap_runtime.ts`, and regenerated `ui/step-card.bundled.html`.
-- Remaining `structuredContent.result` server match is only in tuple-parity patch logic (`ordering_parity.ts`) and is non-authoritative for render source.
+- Tuple parity helper in `ordering_parity.ts` no longer uses direct `structuredContent.result` member-access syntax.
+- `server_refactor_gate.mjs` now enforces an additional source/test/script token sweep (allowlist: gate file itself).

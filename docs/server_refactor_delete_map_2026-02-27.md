@@ -28,6 +28,14 @@
 - Removed from bundled runtime (`mcp-server/ui/step-card.bundled.html` via rebuild):
   - legacy fallback selector tokens for `root.result` / `structuredContent.result`.
 
+5. Legacy fallback token residue outside transport scope
+- Removed/renamed in non-authoritative sources:
+  - `mcp-server/src/handlers/run_step_state_update.ts`: `fallbackRaw` -> `secondaryRaw`.
+  - `mcp-server/src/mcp_app_contract.test.ts`: test title wording no longer encodes legacy fallback path.
+  - `mcp-server/scripts/runtime-smoke.mjs`: assert message no longer references legacy render-source wording.
+- Gate hardening:
+  - `mcp-server/scripts/server_refactor_gate.mjs` now fails on legacy fallback tokens across `src`, `ui/lib`, `scripts`, and `server.ts` (explicit allowlist for gate source itself).
+
 ## Files Introduced For Composition Boundary
 - `mcp-server/src/server/run_step_transport.ts`
 - `mcp-server/src/server/run_step_transport_context.ts`

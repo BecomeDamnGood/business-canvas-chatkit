@@ -85,7 +85,7 @@ test("MCP app contract: run_step declares invocation status strings", () => {
   assert.match(source, /server\.registerTool\(\s*"run_step"[\s\S]*"openai\/toolInvocation\/invoked":\s*"Updated"/);
 });
 
-test("MCP wrapper parity: structuredContent.result is always model-safe and _meta.widget_result keeps full payload", () => {
+test("MCP wrapper parity: model result stays safe and _meta.widget_result keeps full payload", () => {
   assert.match(source, /buildModelSafeResult\(staleResult\)/);
   assert.match(source, /buildModelSafeResult\(resultForClient\)/);
   assert.match(source, /buildModelSafeResult\(fallbackResult/);

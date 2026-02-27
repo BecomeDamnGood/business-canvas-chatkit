@@ -492,3 +492,34 @@ Kopieer dit blok voor elke volgende run:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: server-refactor-criteria zijn lokaal afgedicht; volgende stap is aparte UI-testsuite normalisatie buiten deze refactor-gate.
+
+### Poging 2026-02-27 20:xx UTC (legacy token purge + gate-hardening follow-up)
+
+- Hypothese:
+  - Er bleven nog losse legacy fallback-termen in tests/scripts/helpers; die veroorzaken verwarring en maken SSOT-audits minder scherp.
+- Exacte wijziging(en):
+  - `mcp-server/src/server/ordering_parity.ts`:
+    - directe `structuredContent.result` member access vervangen door neutrale record-access.
+  - `mcp-server/src/handlers/run_step_state_update.ts`:
+    - `fallbackRaw` hernoemd naar `secondaryRaw`.
+  - `mcp-server/scripts/runtime-smoke.mjs`:
+    - assert-tekst opgeschoond naar neutrale contracttekst.
+  - `mcp-server/src/mcp_app_contract.test.ts`:
+    - testtitel geherformuleerd zonder legacy fallback-term.
+  - `mcp-server/scripts/server_refactor_gate.mjs`:
+    - extra repo-brede token-sweep toegevoegd voor `src`, `ui/lib`, `scripts`, `server.ts` met expliciete allowlist voor het gatebestand zelf.
+  - `docs/server_refactor_sweep_manifest_2026-02-27.md` en `docs/server_refactor_delete_map_2026-02-27.md` bijgewerkt.
+- Verificatie:
+  - `cd mcp-server && npm run typecheck` -> PASS.
+  - `cd mcp-server && npm run gate:server-refactor` -> PASS.
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/mcp_app_contract.test.ts src/handlers/run_step.test.ts` -> PASS.
+  - Extra brede run met `src/ui_render.test.ts` bevat bestaande, niet-scopegebonden failures (13); dit stond al buiten server-refactor gate-scope.
+- Uitkomst:
+  - [x] Bevestigd (legacy token purge + gate-hardening geslaagd)
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: SSOT-audit is nu strikter afgedwongen in code + gate; resterende `ui_render` suiteproblemen zijn separaat testnormalisatiewerk.

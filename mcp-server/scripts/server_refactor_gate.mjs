@@ -25,18 +25,22 @@ function readText(filePath) {
 }
 
 function rgCount(pattern, targets) {
+  return rgLines(pattern, targets).length;
+}
+
+function rgLines(pattern, targets) {
   try {
     const output = execFileSync("rg", ["-n", pattern, ...targets], {
       cwd: repoRoot,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
-    if (!output) return 0;
-    return output.split(/\r?\n/).filter(Boolean).length;
+    if (!output) return [];
+    return output.split(/\r?\n/).filter(Boolean);
   } catch (err) {
     const stderr = String(err?.stderr ?? "");
-    if (/No such file or directory/i.test(stderr) || /code 2/i.test(stderr)) return 0;
-    if (err?.status === 1) return 0;
+    if (/No such file or directory/i.test(stderr) || /code 2/i.test(stderr)) return [];
+    if (err?.status === 1) return [];
     throw err;
   }
 }
@@ -154,6 +158,22 @@ const uiLegacyRuntimeFallbackHits = rgCount(
 if (uiLegacyRuntimeFallbackHits > 0) {
   fail("ui runtime artifacts still contain legacy fallback tokens", [
     "Purge root.result/structuredContent.result/fallbackRaw fallback paths from UI runtime source and bundle.",
+  ]);
+}
+
+const legacyTokenPattern =
+  "structuredContent\\.result|root\\.result|fallbackRaw|structured_content_result_fallback|render_source_missing";
+const legacyTokenSweepHits = rgLines(legacyTokenPattern, [
+  "mcp-server/src",
+  "mcp-server/ui/lib",
+  "mcp-server/scripts",
+  "mcp-server/server.ts",
+]).filter((line) => !line.startsWith("mcp-server/scripts/server_refactor_gate.mjs:"));
+if (legacyTokenSweepHits.length > 0) {
+  fail("legacy fallback tokens remain outside gate allowlist", [
+    "Remove these matches from source/tests/scripts or move explanatory text to docs.",
+    ...legacyTokenSweepHits.slice(0, 20),
+    ...(legacyTokenSweepHits.length > 20 ? [`... +${legacyTokenSweepHits.length - 20} more`] : []),
   ]);
 }
 
