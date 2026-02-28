@@ -23,6 +23,7 @@ import { render } from "./ui_render.js";
 initActionsConfig({ render, t });
 
 const isLocalDev = (globalThis as Record<string, unknown>).LOCAL_DEV === "1";
+const STARTUP_WAITING_VIEW_MODE = "waiting_locale";
 
 function latestWidgetState(): Record<string, unknown> {
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown>; lang?: string } }).__BSC_LATEST__;
@@ -74,6 +75,46 @@ function tryInitialIngestFromHost(source: "set_globals" | "host_notification"): 
   ingestHostPayload(payload, source);
   notifyHostTransportSignal("set_globals");
   return true;
+}
+
+function hasRenderedStateSnapshot(): boolean {
+  const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
+  const state = latest?.state;
+  return Boolean(state && typeof state === "object" && Object.keys(state).length > 0);
+}
+
+function buildStartupInitState(): Record<string, unknown> {
+  return {
+    _meta: {
+      widget_result: {
+        current_step_id: "step_0",
+        state: {
+          current_step: "step_0",
+          started: "false",
+          ui_gate_status: STARTUP_WAITING_VIEW_MODE,
+          ui_strings_status: "pending",
+          bootstrap_phase: STARTUP_WAITING_VIEW_MODE,
+        },
+        ui: {
+          flags: {
+            bootstrap_waiting_locale: true,
+            bootstrap_interactive_ready: false,
+          },
+          view: {
+            mode: STARTUP_WAITING_VIEW_MODE,
+            waiting_locale: true,
+          },
+        },
+      },
+    },
+  };
+}
+
+function renderStartupWaitState(reason: string): void {
+  if (hasRenderedStateSnapshot()) return;
+  const startupInitState = buildStartupInitState();
+  console.log("[startup_first_render_wait_shell]", { reason });
+  render(startupInitState);
 }
 
 if (isLocalDev && typeof window !== "undefined") {
@@ -316,6 +357,9 @@ if (typeof window !== "undefined") {
       if (payload && typeof payload === "object" && Object.keys(payload).length > 0) {
         ingestHostPayload(payload, "set_globals");
         notifyHostTransportSignal("set_globals");
+      } else {
+        console.log("[startup_set_globals_empty_payload_ignored]");
+        renderStartupWaitState("set_globals_empty_payload");
       }
     } catch (e) {
       console.error(e);
@@ -325,4 +369,6 @@ if (typeof window !== "undefined") {
   });
 }
 
-void tryInitialIngestFromHost("set_globals");
+if (!tryInitialIngestFromHost("set_globals")) {
+  renderStartupWaitState("initial_bootstrap_probe");
+}

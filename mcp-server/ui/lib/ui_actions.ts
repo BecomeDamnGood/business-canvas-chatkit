@@ -372,29 +372,31 @@ function buildTupleFailClosedEnvelope(params: {
     stateSource.ui_strings_requested_lang || stateSource.ui_strings_lang || language
   ).trim() || language;
   return {
-    result: {
-      current_step_id: currentStep,
-      state: {
-        current_step: currentStep,
-        started: String(stateSource.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
-        language,
-        ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
-        ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
-        ui_strings_requested_lang: uiStringsRequestedLang,
-        ui_gate_status: "blocked",
-        ui_gate_reason: "contract_violation",
-        bootstrap_phase: "failed",
-      },
-      ui: {
-        flags: {
-          bootstrap_waiting_locale: false,
-          bootstrap_interactive_ready: false,
-          tuple_incomplete_fail_closed: true,
-          tuple_fail_closed_reason: "incoming_missing_tuple",
+    _meta: {
+      widget_result: {
+        current_step_id: currentStep,
+        state: {
+          current_step: currentStep,
+          started: String(stateSource.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
+          language,
+          ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
+          ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
+          ui_strings_requested_lang: uiStringsRequestedLang,
+          ui_gate_status: "waiting_locale",
+          ui_gate_reason: "tuple_incomplete_fail_closed",
+          bootstrap_phase: "waiting_locale",
         },
-        view: {
-          mode: "blocked",
-          waiting_locale: false,
+        ui: {
+          flags: {
+            bootstrap_waiting_locale: true,
+            bootstrap_interactive_ready: false,
+            tuple_incomplete_fail_closed: true,
+            tuple_fail_closed_reason: "incoming_missing_tuple",
+          },
+          view: {
+            mode: "recovery",
+            waiting_locale: true,
+          },
         },
       },
     },
@@ -470,6 +472,30 @@ type ToolResultNormalization = {
 
 function normalizeToolResult(raw: unknown): ToolResultNormalization {
   const canonical = canonicalizeWidgetPayload(raw);
+  if (Object.keys(canonical.envelope).length > 0) {
+    return {
+      normalized: canonical.envelope,
+      source: canonical.source,
+      reasonCode: canonical.reason_code,
+    };
+  }
+  const root = toRecord(raw);
+  const rootResult = toRecord(root.result);
+  const rootResultState = toRecord(rootResult.state);
+  const hasRootResult =
+    Object.keys(rootResult).length > 0 &&
+    (Object.keys(rootResultState).length > 0 || String(rootResult.current_step_id || "").trim().length > 0);
+  if (hasRootResult) {
+    return {
+      normalized: {
+        _meta: {
+          widget_result: rootResult,
+        },
+      },
+      source: "meta.widget_result",
+      reasonCode: "meta_widget_result",
+    };
+  }
   return {
     normalized: canonical.envelope,
     source: canonical.source,
@@ -605,7 +631,7 @@ export function resetHydrationRetryCycle(opts?: { trigger_poll?: boolean; source
   const source = String(opts?.source || "manual");
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
   const latestState = toRecord(latest.state);
-  if (isDevEnv()) console.log("[bootstrap_retry_clicked]", { source, has_state: Object.keys(latestState).length > 0 });
+  if (isDevEnv()) console.log("[recovery_retry_clicked]", { source, has_state: Object.keys(latestState).length > 0 });
   void callRunStep(ACTION_BOOTSTRAP_POLL, {
     ...latestState,
     __bootstrap_poll: "true",
@@ -1377,6 +1403,12 @@ export async function callRunStep(
           start_dispatch_state: "failed",
           transport_ready: "true",
         });
+        setTimeout(() => {
+          resetHydrationRetryCycle({
+            trigger_poll: true,
+            source: "start_ack_without_state_advance",
+          });
+        }, CLICK_DEBOUNCE_MS + 50);
       } else {
         setWidgetStateSafe({
           start_dispatch_state: "ready",

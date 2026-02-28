@@ -9,9 +9,9 @@ export type CanonicalWidgetEnvelope = {
   reason_code: PayloadReasonCode;
 };
 
-export type WaitingReason = "none";
-export type BootstrapPhase = "ready" | "failed";
-export type BootstrapRenderMode = "interactive" | "blocked";
+export type WaitingReason = "missing_state" | "i18n_pending" | "none";
+export type BootstrapPhase = "waiting_locale" | "ready" | "recovery" | "failed";
+export type BootstrapRenderMode = "wait_shell" | "interactive" | "recovery";
 
 export type ResolvedWidgetPayload = {
   result: Record<string, unknown>;
@@ -37,7 +37,7 @@ export type ResolvedWidgetPayload = {
 };
 
 export type HydrationStatus = {
-  needs_hydration: false;
+  needs_hydration: boolean;
   retry_count: number;
   retry_exhausted: boolean;
   waiting_reason: WaitingReason;
@@ -46,12 +46,12 @@ export type HydrationStatus = {
 export type BootstrapRenderState = {
   phase: BootstrapPhase;
   render_mode: BootstrapRenderMode;
-  waitingForMissingState: false;
-  waitingForI18n: false;
-  serverExplicitWaiting: false;
-  forceLocaleWait: false;
-  bootstrapWaitingLocale: false;
-  interactiveFallbackActive: false;
+  waitingForMissingState: boolean;
+  waitingForI18n: boolean;
+  serverExplicitWaiting: boolean;
+  forceLocaleWait: boolean;
+  bootstrapWaitingLocale: boolean;
+  interactiveFallbackActive: boolean;
 };
 
 type CandidateContext = "root" | "toolOutput";
@@ -90,9 +90,30 @@ function normalizeUiStringsStatus(raw: unknown): "ready" | "pending" | "critical
 
 function normalizeBootstrapPhase(raw: unknown): BootstrapPhase | "" {
   const phase = toLower(raw);
-  if (phase === "ready") return "ready";
-  if (phase === "failed") return "failed";
+  if (
+    phase === "waiting_locale" ||
+    phase === "ready" ||
+    phase === "recovery" ||
+    phase === "failed"
+  ) {
+    return phase;
+  }
   return "";
+}
+
+function phaseFromViewMode(raw: unknown): BootstrapPhase | "" {
+  const mode = toLower(raw);
+  if (mode === "waiting_locale") return "waiting_locale";
+  if (mode === "recovery") return "recovery";
+  if (mode === "blocked" || mode === "failed") return "failed";
+  if (mode === "interactive" || mode === "prestart") return "ready";
+  return "";
+}
+
+function renderModeFromPhase(phase: BootstrapPhase): BootstrapRenderMode {
+  if (phase === "recovery" || phase === "failed") return "recovery";
+  if (phase === "waiting_locale") return "wait_shell";
+  return "interactive";
 }
 
 function mergeMeta(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {
@@ -192,7 +213,7 @@ export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
   const state = toRecord(result.state);
   const language = resolveLanguageForPayload(result);
   const ordering = sessionInfoForResult(result);
-  return {
+  const resolvedBase: ResolvedWidgetPayload = {
     result,
     source: canonical.source,
     source_reason_code: canonical.reason_code,
@@ -210,14 +231,25 @@ export function resolveWidgetPayload(raw: unknown): ResolvedWidgetPayload {
     response_kind: ordering.response_kind,
     host_widget_session_id: ordering.host_widget_session_id,
   };
+  return resolvedBase;
 }
 
-export function computeHydrationState(_resolved: ResolvedWidgetPayload): HydrationStatus {
+export function computeHydrationState(resolved: ResolvedWidgetPayload): HydrationStatus {
+  const state = toRecord(resolved.result.state);
+  const hasState = Object.keys(state).length > 0;
+  const currentStep = hasState ? String(state.current_step || "").trim() : "";
+  const needsHydration = !hasState || !currentStep;
+  const uiGateStatus = toLower(state.ui_gate_status);
+  const terminalGate = uiGateStatus === "blocked" || uiGateStatus === "failed";
+  const i18nPending = !terminalGate && uiGateStatus === "waiting_locale";
+  let waitingReason: WaitingReason = "none";
+  if (!terminalGate && needsHydration) waitingReason = "missing_state";
+  if (!terminalGate && i18nPending) waitingReason = "i18n_pending";
   return {
-    needs_hydration: false,
+    needs_hydration: needsHydration,
     retry_count: 0,
     retry_exhausted: false,
-    waiting_reason: "none",
+    waiting_reason: waitingReason,
   };
 }
 
@@ -247,16 +279,34 @@ export function computeBootstrapRenderState(params: {
   hasState?: boolean;
   hasCurrentStep?: boolean;
 }): BootstrapRenderState {
-  const mode = String(params.uiView.mode || "").trim().toLowerCase();
-  const isBlocked = mode === "blocked";
+  const mode = toLower(params.uiView.mode);
+  const serverExplicitWaiting = mode === "waiting_locale" || params.uiView.waiting_locale === true;
+  const phaseFromMode = phaseFromViewMode(params.uiView.mode);
+
+  const uiStringsPending = params.uiStringsStatus === "pending";
+  const localePendingByHydration =
+    params.hydration.waiting_reason === "i18n_pending" ||
+    params.hydration.waiting_reason === "missing_state";
+  const waitingFlag = params.uiFlags.bootstrap_waiting_locale === true;
+  const shouldDefaultWaiting =
+    !phaseFromMode &&
+    (serverExplicitWaiting ||
+      waitingFlag ||
+      localePendingByHydration ||
+      (params.localeKnownNonEn && uiStringsPending));
+
+  const finalPhase: BootstrapPhase = phaseFromMode || (shouldDefaultWaiting ? "waiting_locale" : "ready");
+  const waitingForI18n = finalPhase === "waiting_locale";
+  const bootstrapWaitingLocale = finalPhase !== "failed" && waitingForI18n;
+
   return {
-    phase: isBlocked ? "failed" : "ready",
-    render_mode: isBlocked ? "blocked" : "interactive",
+    phase: finalPhase,
+    render_mode: renderModeFromPhase(finalPhase),
     waitingForMissingState: false,
-    waitingForI18n: false,
-    serverExplicitWaiting: false,
+    waitingForI18n,
+    serverExplicitWaiting,
     forceLocaleWait: false,
-    bootstrapWaitingLocale: false,
+    bootstrapWaitingLocale,
     interactiveFallbackActive: false,
   };
 }

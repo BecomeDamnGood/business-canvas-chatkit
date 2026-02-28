@@ -1883,8 +1883,9 @@
   }
   function normalizeBootstrapPhase(raw) {
     const phase = toLower(raw);
-    if (phase === "ready") return "ready";
-    if (phase === "failed") return "failed";
+    if (phase === "waiting_locale" || phase === "ready" || phase === "recovery" || phase === "failed") {
+      return phase;
+    }
     return "";
   }
   function mergeMeta(target, source) {
@@ -1971,7 +1972,7 @@
     const state = toRecord(result.state);
     const language = resolveLanguageForPayload(result);
     const ordering = sessionInfoForResult(result);
-    return {
+    const resolvedBase = {
       result,
       source: canonical.source,
       source_reason_code: canonical.reason_code,
@@ -1989,13 +1990,24 @@
       response_kind: ordering.response_kind,
       host_widget_session_id: ordering.host_widget_session_id
     };
+    return resolvedBase;
   }
-  function computeHydrationState(_resolved) {
+  function computeHydrationState(resolved) {
+    const state = toRecord(resolved.result.state);
+    const hasState = Object.keys(state).length > 0;
+    const currentStep = hasState ? String(state.current_step || "").trim() : "";
+    const needsHydration = !hasState || !currentStep;
+    const uiGateStatus = toLower(state.ui_gate_status);
+    const terminalGate = uiGateStatus === "blocked" || uiGateStatus === "failed";
+    const i18nPending = !terminalGate && uiGateStatus === "waiting_locale";
+    let waitingReason = "none";
+    if (!terminalGate && needsHydration) waitingReason = "missing_state";
+    if (!terminalGate && i18nPending) waitingReason = "i18n_pending";
     return {
-      needs_hydration: false,
+      needs_hydration: needsHydration,
       retry_count: 0,
       retry_exhausted: false,
-      waiting_reason: "none"
+      waiting_reason: waitingReason
     };
   }
 
@@ -2244,29 +2256,31 @@
       stateSource.ui_strings_requested_lang || stateSource.ui_strings_lang || language
     ).trim() || language;
     return {
-      result: {
-        current_step_id: currentStep,
-        state: {
-          current_step: currentStep,
-          started: String(stateSource.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
-          language,
-          ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
-          ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
-          ui_strings_requested_lang: uiStringsRequestedLang,
-          ui_gate_status: "blocked",
-          ui_gate_reason: "contract_violation",
-          bootstrap_phase: "failed"
-        },
-        ui: {
-          flags: {
-            bootstrap_waiting_locale: false,
-            bootstrap_interactive_ready: false,
-            tuple_incomplete_fail_closed: true,
-            tuple_fail_closed_reason: "incoming_missing_tuple"
+      _meta: {
+        widget_result: {
+          current_step_id: currentStep,
+          state: {
+            current_step: currentStep,
+            started: String(stateSource.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
+            language,
+            ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
+            ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
+            ui_strings_requested_lang: uiStringsRequestedLang,
+            ui_gate_status: "waiting_locale",
+            ui_gate_reason: "tuple_incomplete_fail_closed",
+            bootstrap_phase: "waiting_locale"
           },
-          view: {
-            mode: "blocked",
-            waiting_locale: false
+          ui: {
+            flags: {
+              bootstrap_waiting_locale: true,
+              bootstrap_interactive_ready: false,
+              tuple_incomplete_fail_closed: true,
+              tuple_fail_closed_reason: "incoming_missing_tuple"
+            },
+            view: {
+              mode: "recovery",
+              waiting_locale: true
+            }
           }
         }
       }
@@ -2304,6 +2318,28 @@
   }
   function normalizeToolResult(raw) {
     const canonical = canonicalizeWidgetPayload(raw);
+    if (Object.keys(canonical.envelope).length > 0) {
+      return {
+        normalized: canonical.envelope,
+        source: canonical.source,
+        reasonCode: canonical.reason_code
+      };
+    }
+    const root = toRecord2(raw);
+    const rootResult = toRecord2(root.result);
+    const rootResultState = toRecord2(rootResult.state);
+    const hasRootResult = Object.keys(rootResult).length > 0 && (Object.keys(rootResultState).length > 0 || String(rootResult.current_step_id || "").trim().length > 0);
+    if (hasRootResult) {
+      return {
+        normalized: {
+          _meta: {
+            widget_result: rootResult
+          }
+        },
+        source: "meta.widget_result",
+        reasonCode: "meta_widget_result"
+      };
+    }
     return {
       normalized: canonical.envelope,
       source: canonical.source,
@@ -2406,6 +2442,19 @@
   }
   function maybeScheduleBootstrapRetry(resolved) {
     return computeHydrationState2(resolved);
+  }
+  function resetHydrationRetryCycle(opts) {
+    if (opts?.trigger_poll !== true) return;
+    const source = String(opts?.source || "manual");
+    const latest = globalThis.__BSC_LATEST__ || {};
+    const latestState = toRecord2(latest.state);
+    if (isDevEnv()) console.log("[recovery_retry_clicked]", { source, has_state: Object.keys(latestState).length > 0 });
+    void callRunStep(ACTION_BOOTSTRAP_POLL, {
+      ...latestState,
+      __bootstrap_poll: "true",
+      __hydrate_poll: "true",
+      __manual_retry: "true"
+    });
   }
   function handleToolResultAndMaybeScheduleBootstrapRetry(raw, opts) {
     const source = String(opts?.source || "unknown");
@@ -3048,6 +3097,12 @@
             start_dispatch_state: "failed",
             transport_ready: "true"
           });
+          setTimeout(() => {
+            resetHydrationRetryCycle({
+              trigger_poll: true,
+              source: "start_ack_without_state_advance"
+            });
+          }, CLICK_DEBOUNCE_MS + 50);
         } else {
           setWidgetStateSafe({
             start_dispatch_state: "ready",
@@ -3452,6 +3507,38 @@
     skeleton.appendChild(appendTextNode("div", "skeleton-line", ""));
     cardDesc.appendChild(skeleton);
   }
+  function renderBootstrapWaitShell(cardDesc, lang) {
+    clearElement(cardDesc);
+    const shell = appendTextNode("div", "bootstrap-wait-shell", "");
+    shell.style.display = "grid";
+    shell.style.gap = "14px";
+    const waitTitle = uiText2(lang, "prestart.loading", "");
+    if (waitTitle) {
+      shell.appendChild(appendTextNode("div", "bootstrap-wait-title", waitTitle));
+    }
+    for (const width of ["68%", "92%", "84%", "56%"]) {
+      const line = appendTextNode("div", "skeleton-line", "");
+      line.style.width = width;
+      line.style.height = "12px";
+      line.style.borderRadius = "999px";
+      line.style.opacity = "0.9";
+      shell.appendChild(line);
+    }
+    cardDesc.appendChild(shell);
+  }
+  function renderHydrationRecovery(cardDesc, lang) {
+    clearElement(cardDesc);
+    const shell = appendTextNode("div", "bootstrap-wait-shell", "");
+    shell.style.display = "grid";
+    shell.style.gap = "12px";
+    shell.appendChild(appendTextNode("div", "bootstrap-recovery-title", uiText2(lang, "hydration.retry.title", "")));
+    shell.appendChild(appendTextNode("div", "bootstrap-recovery-copy", uiText2(lang, "hydration.retry.body", "")));
+    const btn = appendTextNode("button", "choiceBtn", uiText2(lang, "hydration.retry.action", ""));
+    btn.id = "btnHydrationRetry";
+    btn.type = "button";
+    shell.appendChild(btn);
+    cardDesc.appendChild(shell);
+  }
   function blockedMessageForReason(lang, reason, fallbackMessage) {
     if (reason === "session_upgrade_required") {
       return {
@@ -3615,21 +3702,71 @@
     };
     const uiView = uiPayload && typeof uiPayload.view === "object" && uiPayload.view ? uiPayload.view : {};
     const uiStringsStatus = String(state?.ui_strings_status || "").trim().toLowerCase();
-    const rawViewMode = String(uiView.mode || "").trim().toLowerCase();
-    const viewMode = rawViewMode === "prestart" || rawViewMode === "interactive" || rawViewMode === "blocked" ? rawViewMode : "blocked";
+    const viewMode = String(uiView.mode || "").trim().toLowerCase();
     const uiGateReason = String(state?.ui_gate_reason || "").trim().toLowerCase();
+    const serverExplicitWaiting = viewMode === "waiting_locale";
     const serverExplicitPrestart = viewMode === "prestart";
+    const serverExplicitInteractive = viewMode === "interactive";
+    const serverExplicitRecovery = viewMode === "recovery";
     const serverExplicitBlocked = viewMode === "blocked";
+    const serverExplicitFailed = viewMode === "failed";
+    const hasExplicitServerRouting = serverExplicitWaiting || serverExplicitPrestart || serverExplicitInteractive || serverExplicitRecovery || serverExplicitBlocked || serverExplicitFailed;
+    const startupPayloadMissing = Object.keys(result || {}).length === 0 && Object.keys(state).length === 0;
     const overrideStringsMap = overrideStrings;
     const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
     if (hasOverrideStrings) setRuntimeUiStrings(overrideStringsMap);
-    if (viewMode !== rawViewMode) {
-      console.warn("[ui_contract_invalid_view_mode]", {
+    const badge = document.getElementById("badge");
+    const inputWrap = document.getElementById("inputWrap");
+    const btnStart2 = document.getElementById("btnStart");
+    const startHint = document.getElementById("startHint");
+    if (!inputWrap || !btnStart2 || !startHint) return;
+    const isLoading = getIsLoading();
+    const startActionCode = String(state?.ui_action_start || "").trim();
+    const hasStartAction = startActionCode.length > 0;
+    if (!hasExplicitServerRouting) {
+      console.warn("[ui_contract_missing_view_mode]", {
         payload_source: resolved.source,
-        view_mode: rawViewMode || "",
+        view_mode: viewMode || "",
         ui_gate_status: String(state?.ui_gate_status || "").trim().toLowerCase(),
         bootstrap_phase: String(state?.bootstrap_phase || "").trim().toLowerCase()
       });
+      const choiceWrap = document.getElementById("choiceWrap");
+      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+      const cardDesc = document.getElementById("cardDesc");
+      const prompt = document.getElementById("prompt");
+      const uiSubtitle = document.getElementById("uiSubtitle");
+      const sectionTitleEl2 = document.getElementById("sectionTitle");
+      inputWrap.style.display = "none";
+      if (choiceWrap) choiceWrap.style.display = "none";
+      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      if (prompt) prompt.textContent = "";
+      if (uiSubtitle) uiSubtitle.textContent = "";
+      if (sectionTitleEl2) sectionTitleEl2.textContent = "";
+      btnStart2.style.display = "none";
+      startHint.textContent = "";
+      startHint.style.display = "none";
+      buildStepper(0, "", lang);
+      if (badge) {
+        badge.textContent = "";
+        badge.style.display = "none";
+      }
+      if (cardDesc) {
+        const prestartEl = cardDesc;
+        prestartEl.classList.remove("has-grid");
+        prestartEl.classList.remove("is-step0-ask-layout");
+        if (startupPayloadMissing) {
+          renderBootstrapWaitShell(prestartEl, lang);
+        } else {
+          const blockedCopy = blockedMessageForReason(
+            lang,
+            "contract_violation",
+            uiText2(lang, "error.contract.body", "")
+          );
+          renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
+        }
+      }
+      if (isLoading) setLoading(false);
+      return;
     }
     if (transientError) {
       if (errorObj.type === "rate_limited") {
@@ -3649,18 +3786,10 @@
     const showPreStart = serverExplicitPrestart;
     const current = !showPreStart ? state.current_step || "step_0" : "step_0";
     const idx = stepIndex(current);
-    const stepTitle = current === "step_0" ? uiText2(lang, "stepLabel.validation", "") : extractStepTitle(current, lang);
+    const stepTitle = serverExplicitWaiting ? "" : current === "step_0" ? uiText2(lang, "stepLabel.validation", "") : extractStepTitle(current, lang);
     buildStepper(idx, stepTitle, lang);
-    const badge = document.getElementById("badge");
     if (badge) badge.textContent = String(idx + 1).padStart(2, "0");
-    const inputWrap = document.getElementById("inputWrap");
-    const btnStart2 = document.getElementById("btnStart");
-    const startHint = document.getElementById("startHint");
-    if (!inputWrap || !btnStart2 || !startHint) return;
-    const isLoading = getIsLoading();
-    const startActionCode = String(state?.ui_action_start || "").trim();
-    const hasStartAction = startActionCode.length > 0;
-    if (serverExplicitBlocked) {
+    if (serverExplicitWaiting || serverExplicitRecovery || serverExplicitBlocked || serverExplicitFailed) {
       inputWrap.style.display = "none";
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
@@ -3673,15 +3802,30 @@
         badge.textContent = "";
         badge.style.display = "none";
       }
-      const blockedSectionTitle = document.getElementById("sectionTitle");
-      if (blockedSectionTitle) blockedSectionTitle.textContent = "";
+      const waitingSectionTitle = document.getElementById("sectionTitle");
+      if (waitingSectionTitle) waitingSectionTitle.textContent = "";
       if (cardDesc) {
         const prestartEl = cardDesc;
         prestartEl.classList.remove("has-grid");
         prestartEl.classList.remove("is-step0-ask-layout");
-        const errorMessage = String(result?.error?.message || "").trim() || String(result?.error?.user_message || "").trim();
-        const blockedCopy = blockedMessageForReason(lang, uiGateReason, errorMessage);
-        renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
+        if (serverExplicitWaiting) {
+          renderBootstrapWaitShell(prestartEl, lang);
+        } else if (serverExplicitRecovery) {
+          renderHydrationRecovery(prestartEl, lang);
+          const retryBtn = document.getElementById("btnHydrationRetry");
+          if (retryBtn) {
+            retryBtn.disabled = getIsLoading();
+            retryBtn.onclick = () => {
+              if (getIsLoading()) return;
+              setLoading(true);
+              resetHydrationRetryCycle({ trigger_poll: true, source: "render_retry_button" });
+            };
+          }
+        } else {
+          const errorMessage = String(result?.error?.message || "").trim() || String(result?.error?.user_message || "").trim();
+          const blockedCopy = blockedMessageForReason(lang, uiGateReason, errorMessage);
+          renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
+        }
       }
       if (prompt) prompt.textContent = "";
       if (uiSubtitle) uiSubtitle.textContent = "";
@@ -3794,10 +3938,12 @@
     const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
     const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
     if (!hasRenderableInteractiveContent) {
+      const recoverToPrestart = current === "step_0" && hasStartAction;
       console.warn("[ui_contract_interactive_content_absent]", {
         current_step: current,
         view_mode: viewMode || "",
-        payload_source: resolved.source
+        payload_source: resolved.source,
+        recovery_mode: recoverToPrestart ? "prestart" : "blocked"
       });
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
@@ -3807,6 +3953,22 @@
       const prompt = document.getElementById("prompt");
       if (prompt) prompt.textContent = "";
       setSendEnabled(false);
+      if (recoverToPrestart) {
+        btnStart2.style.display = "inline-flex";
+        startHint.textContent = "";
+        startHint.style.display = "none";
+        if (cardDescEl) {
+          cardDescEl.classList.remove("has-grid");
+          cardDescEl.classList.remove("is-step0-ask-layout");
+          const hasPrestartContent = hasPrestartContentForLang(lang);
+          const showSkeleton = uiStringsStatus !== "ready" || !hasPrestartContent;
+          if (showSkeleton) renderPrestartSkeleton(cardDescEl, lang);
+          else renderPrestartContent(cardDescEl, lang);
+        }
+        if (isLoading) setLoading(false);
+        btnStart2.disabled = getIsLoading() || !hasStartAction;
+        return;
+      }
       btnStart2.style.display = "none";
       startHint.textContent = "";
       startHint.style.display = "none";
@@ -4224,6 +4386,7 @@
   // ui/lib/main.ts
   initActionsConfig({ render, t });
   var isLocalDev = globalThis.LOCAL_DEV === "1";
+  var STARTUP_WAITING_VIEW_MODE = "waiting_locale";
   function latestWidgetState() {
     const latest = globalThis.__BSC_LATEST__;
     const state = latest?.state;
@@ -4261,6 +4424,43 @@
     ingestHostPayload(payload, source);
     notifyHostTransportSignal("set_globals");
     return true;
+  }
+  function hasRenderedStateSnapshot() {
+    const latest = globalThis.__BSC_LATEST__;
+    const state = latest?.state;
+    return Boolean(state && typeof state === "object" && Object.keys(state).length > 0);
+  }
+  function buildStartupInitState() {
+    return {
+      _meta: {
+        widget_result: {
+          current_step_id: "step_0",
+          state: {
+            current_step: "step_0",
+            started: "false",
+            ui_gate_status: STARTUP_WAITING_VIEW_MODE,
+            ui_strings_status: "pending",
+            bootstrap_phase: STARTUP_WAITING_VIEW_MODE
+          },
+          ui: {
+            flags: {
+              bootstrap_waiting_locale: true,
+              bootstrap_interactive_ready: false
+            },
+            view: {
+              mode: STARTUP_WAITING_VIEW_MODE,
+              waiting_locale: true
+            }
+          }
+        }
+      }
+    };
+  }
+  function renderStartupWaitState(reason) {
+    if (hasRenderedStateSnapshot()) return;
+    const startupInitState = buildStartupInitState();
+    console.log("[startup_first_render_wait_shell]", { reason });
+    render(startupInitState);
   }
   if (isLocalDev && typeof window !== "undefined") {
     const reportDevError = (message, file, line, col) => {
@@ -4477,6 +4677,9 @@
         if (payload && typeof payload === "object" && Object.keys(payload).length > 0) {
           ingestHostPayload(payload, "set_globals");
           notifyHostTransportSignal("set_globals");
+        } else {
+          console.log("[startup_set_globals_empty_payload_ignored]");
+          renderStartupWaitState("set_globals_empty_payload");
         }
       } catch (e) {
         console.error(e);
@@ -4485,7 +4688,9 @@
       }
     });
   }
-  void tryInitialIngestFromHost("set_globals");
+  if (!tryInitialIngestFromHost("set_globals")) {
+    renderStartupWaitState("initial_bootstrap_probe");
+  }
 })();
 
 </script>

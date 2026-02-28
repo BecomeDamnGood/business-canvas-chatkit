@@ -2575,7 +2575,7 @@ test("Dream readiness guard accepts explicit start-exercise route in widget mode
 });
 
 test("special route assembly uses TurnResponseEngine path", () => {
-  const runStepSource = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
+  const runStepSource = fs.readFileSync(new URL("./run_step_runtime_execute.ts", import.meta.url), "utf8");
   const specialRoutesSource = fs.readFileSync(
     new URL("./run_step_runtime_special_routes.ts", import.meta.url),
     "utf8"
@@ -2593,7 +2593,7 @@ test("special route assembly uses TurnResponseEngine path", () => {
 });
 
 test("single-path flags: only wording-choice runtime flag remains active", () => {
-  const source = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
+  const source = fs.readFileSync(new URL("./run_step_runtime_execute.ts", import.meta.url), "utf8");
   assert.match(source, /BSC_WORDING_CHOICE_V2/);
   assert.match(source, /policyFlags\.wordingChoiceV2/);
   assert.doesNotMatch(source, /policyFlags\.offtopicV2/);
@@ -2602,7 +2602,10 @@ test("single-path flags: only wording-choice runtime flag remains active", () =>
 });
 
 test("DreamBuilder follow-up wording is contract-side (run_step), not ui-side overlay", () => {
-  const runStepSource = fs.readFileSync(new URL("./run_step_runtime.ts", import.meta.url), "utf8");
+  const runStepSource = fs.readFileSync(
+    new URL("./run_step_runtime_specialist_helpers.ts", import.meta.url),
+    "utf8"
+  );
   const uiRenderSource = fs.readFileSync(new URL("../../ui/lib/ui_render.ts", import.meta.url), "utf8");
 
   assert.match(runStepSource, /function enforceDreamBuilderQuestionProgress\(/);
