@@ -149,21 +149,19 @@ function resolveMetaWidgetResult(raw: unknown): { result: Record<string, unknown
   const root = toRecord(raw);
   const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
 
-  // Zoekpad 1: toolOutput.result._widget_result
-  // De OpenAI host zet structuredContent in window.openai.toolOutput.
-  // De server embedt _widget_result in structuredContent.result.
-  // Dus: window.openai.toolOutput.result._widget_result
-  const toolOutputResult = toRecord(toolOutput.result);
-  const fromToolOutputResult = toRecord(toolOutputResult._widget_result);
-  if (Object.keys(fromToolOutputResult).length > 0) {
-    return { result: fromToolOutputResult, source: "meta.widget_result" };
+  // Zoekpad 1: toolOutput._widget_result
+  // structuredContent = { title, meta, result, _widget_result }
+  // window.openai.toolOutput = structuredContent
+  // merged toolOutput = structuredContent -> _widget_result zit direct op dit object
+  const fromToolOutput = toRecord(toolOutput._widget_result);
+  if (Object.keys(fromToolOutput).length > 0) {
+    return { result: fromToolOutput, source: "meta.widget_result" };
   }
 
-  // Zoekpad 2: root.result._widget_result (als raw direct structuredContent is)
-  const rootResult = toRecord(root.result);
-  const fromRootResult = toRecord(rootResult._widget_result);
-  if (Object.keys(fromRootResult).length > 0) {
-    return { result: fromRootResult, source: "meta.widget_result" };
+  // Zoekpad 2: root._widget_result (als raw direct structuredContent is, zonder toolOutput wrapper)
+  const fromRoot = toRecord(root._widget_result);
+  if (Object.keys(fromRoot).length > 0) {
+    return { result: fromRoot, source: "meta.widget_result" };
   }
 
   // Zoekpad 3: originele _meta.widget_result paden (bridge / lokale dev / toekomstige hosts)

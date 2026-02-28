@@ -99,10 +99,8 @@ test("MCP wrapper parity: model result stays safe and _meta.widget_result keeps 
 test("MCP app contract: widget render-state resolves _widget_result from structured content or metadata wrapper", () => {
   assert.match(widgetRuntimeSource, /export function canonicalizeWidgetPayload\(/);
   assert.match(widgetRuntimeSource, /const candidate = toRecord\(meta\.widget_result\)/);
-  assert.match(widgetRuntimeSource, /const toolOutputResult = toRecord\(toolOutput\.result\)/);
-  assert.match(widgetRuntimeSource, /const fromToolOutputResult = toRecord\(toolOutputResult\._widget_result\)/);
-  assert.match(widgetRuntimeSource, /const rootResult = toRecord\(root\.result\)/);
-  assert.match(widgetRuntimeSource, /const fromRootResult = toRecord\(rootResult\._widget_result\)/);
+  assert.match(widgetRuntimeSource, /const fromToolOutput = toRecord\(toolOutput\._widget_result\)/);
+  assert.match(widgetRuntimeSource, /const fromRoot = toRecord\(root\._widget_result\)/);
   assert.match(widgetRuntimeSource, /mergeToolOutputWithResponseMetadata\(/);
   assert.match(widgetRuntimeSource, /bootstrap_session_id/);
   assert.match(widgetRuntimeSource, /bootstrap_epoch/);

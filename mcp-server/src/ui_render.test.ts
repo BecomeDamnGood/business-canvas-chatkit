@@ -2532,22 +2532,20 @@ test("resolveWidgetPayload hydrates from toolResponseMetadata widget_result when
   assert.equal(resolved.needs_hydration, false);
 });
 
-test("resolveWidgetPayload hydrates from toolOutput.result._widget_result embed", () => {
+test("resolveWidgetPayload hydrates from flat toolOutput._widget_result embed", () => {
   const resolved = resolveWidgetPayload({
     toolOutput: {
-      result: {
-        _widget_result: {
-          state: {
-            current_step: "step_0",
-            language: "nl",
-            ui_strings_status: "ready",
-            bootstrap_session_id: "session_flat",
-            bootstrap_epoch: 1,
-            response_seq: 3,
-            host_widget_session_id: "host_flat",
-          },
-          ui: { questionText: "Vraag" },
+      _widget_result: {
+        state: {
+          current_step: "step_0",
+          language: "nl",
+          ui_strings_status: "ready",
+          bootstrap_session_id: "session_flat",
+          bootstrap_epoch: 1,
+          response_seq: 3,
+          host_widget_session_id: "host_flat",
         },
+        ui: { questionText: "Vraag" },
       },
     },
   });

@@ -1914,15 +1914,13 @@
   function resolveMetaWidgetResult(raw) {
     const root = toRecord(raw);
     const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
-    const toolOutputResult = toRecord(toolOutput.result);
-    const fromToolOutputResult = toRecord(toolOutputResult._widget_result);
-    if (Object.keys(fromToolOutputResult).length > 0) {
-      return { result: fromToolOutputResult, source: "meta.widget_result" };
+    const fromToolOutput = toRecord(toolOutput._widget_result);
+    if (Object.keys(fromToolOutput).length > 0) {
+      return { result: fromToolOutput, source: "meta.widget_result" };
     }
-    const rootResult = toRecord(root.result);
-    const fromRootResult = toRecord(rootResult._widget_result);
-    if (Object.keys(fromRootResult).length > 0) {
-      return { result: fromRootResult, source: "meta.widget_result" };
+    const fromRoot = toRecord(root._widget_result);
+    if (Object.keys(fromRoot).length > 0) {
+      return { result: fromRoot, source: "meta.widget_result" };
     }
     const candidates = [
       { context: "root", payload: root }
