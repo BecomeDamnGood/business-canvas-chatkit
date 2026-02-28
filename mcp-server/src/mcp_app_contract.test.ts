@@ -96,18 +96,19 @@ test("MCP wrapper parity: model result stays safe and _meta.widget_result keeps 
   assert.match(source, /Object\.assign\(\{\}, parsedStructuredContent, \{ _widget_result: widgetResultForClient \}\)/);
 });
 
-test("MCP app contract: widget render-state resolves only _meta.widget_result", () => {
+test("MCP app contract: widget render-state resolves _widget_result from structured content or metadata wrapper", () => {
   assert.match(widgetRuntimeSource, /export function canonicalizeWidgetPayload\(/);
   assert.match(widgetRuntimeSource, /const candidate = toRecord\(meta\.widget_result\)/);
-  assert.match(widgetRuntimeSource, /const flatFromRoot = toRecord\(root\._widget_result\)/);
-  assert.match(widgetRuntimeSource, /const flatFromToolOutput = toRecord\(toolOutput\._widget_result\)/);
+  assert.match(widgetRuntimeSource, /const toolOutputResult = toRecord\(toolOutput\.result\)/);
+  assert.match(widgetRuntimeSource, /const fromToolOutputResult = toRecord\(toolOutputResult\._widget_result\)/);
+  assert.match(widgetRuntimeSource, /const rootResult = toRecord\(root\.result\)/);
+  assert.match(widgetRuntimeSource, /const fromRootResult = toRecord\(rootResult\._widget_result\)/);
   assert.match(widgetRuntimeSource, /mergeToolOutputWithResponseMetadata\(/);
   assert.match(widgetRuntimeSource, /bootstrap_session_id/);
   assert.match(widgetRuntimeSource, /bootstrap_epoch/);
   assert.match(widgetRuntimeSource, /response_seq/);
   assert.match(widgetRuntimeSource, /host_widget_session_id/);
   assert.match(widgetRuntimeSource, /source:\s*"meta\.widget_result"/);
-  assert.doesNotMatch(widgetRuntimeSource, /root\.result/);
   assert.doesNotMatch(widgetRuntimeSource, /source:\s*"root\.result"/);
   assert.doesNotMatch(widgetRuntimeSource, /source:\s*"structuredContent\.result"/);
   assert.match(widgetRuntimeSource, /reason_code:\s*"meta_widget_result"/);

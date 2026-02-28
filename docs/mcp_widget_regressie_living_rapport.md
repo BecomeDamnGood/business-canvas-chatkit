@@ -1387,3 +1387,85 @@ Kopieer dit blok voor elke volgende run:
 - [ ] Stoppen en hypothese verwerpen
 - [ ] Externe review nodig
 - Toelichting: codepad is nu structureel aangepast op transport + ordering state-persist i.p.v. timingworkarounds.
+
+### Poging 2026-02-28 18:26 UTC (exacte client-fix: nested `_widget_result` lookup)
+
+1. Hypothese
+- Het resterende startup-probleem zit client-side in de diepte van payload lookup:
+  - host levert `window.openai.toolOutput = structuredContent`,
+  - server zet `_widget_result` in `structuredContent.result`,
+  - client zocht nog niet op `toolOutput.result._widget_result`.
+
+2. Waarom deze hypothese
+- Bevestigde data liet zien dat `_widget_result` aanwezig was, maar genest onder `result`.
+- De bestaande resolver keek vooral naar flat/top-level varianten en `_meta.widget_result`.
+
+3. Exacte wijziging(en)
+- `mcp-server/ui/lib/locale_bootstrap_runtime.ts`
+  - `resolveMetaWidgetResult(...)` vervangen met zoekvolgorde:
+    1) `toolOutput.result._widget_result`
+    2) `root.result._widget_result`
+    3) fallback: bestaande `_meta.widget_result` paden.
+- `mcp-server/src/mcp_app_contract.test.ts`
+  - contractassertions bijgewerkt naar nested lookup-paden.
+- `mcp-server/src/ui_render.test.ts`
+  - hydrationtest geactualiseerd naar `toolOutput.result._widget_result`.
+- `mcp-server/ui/lib/main.ts`
+  - gecontroleerd: stond al op enkelvoudige startup ingest; geen wijziging nodig.
+- UI bundel opnieuw gegenereerd:
+  - `mcp-server/ui/step-card.bundled.html`.
+
+4. Verwachte uitkomst
+- `startup_canonical_payload_missing` verdwijnt in het normale startup-pad.
+- Canonical payload wordt direct gevonden via host `toolOutput` route.
+- Startup watchdog hoeft niet meer te eindigen op lege/half shell door lookup-mismatch.
+
+5. Testresultaten lokaal
+- `cd mcp-server && npm run build:ui && node scripts/build-ui.mjs` -> PASS.
+- `cd mcp-server && npm run typecheck` -> PASS.
+- `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS (`110 pass`, `0 fail`).
+- `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (`170 tests`, `169 pass`, `0 fail`, `1 skipped`).
+
+6. Live observatie
+- Niet uitgevoerd in deze run.
+- Status: `evidence_gap`.
+
+7. AWS/logbewijs met timestamps
+- Geen nieuwe CloudWatch-run in deze iteratie.
+- Status: `evidence_gap`.
+
+8. Uitkomst
+- [ ] Bevestigd
+- [ ] Weerlegd
+- [x] Onbeslist
+
+9. Wat bleek achteraf onjuist
+- De eerdere aanname dat flat lookup (`toolOutput._widget_result`) voldoende was voor host-transport.
+
+10. Wat was gemist
+- Dat de host-route in deze keten effectief `structuredContent` als `toolOutput` zet en dat `_widget_result` daarin onder `result` zit.
+
+11. Besluit
+- [x] Doorgaan op deze lijn
+- [ ] Stoppen en hypothese verwerpen
+- [ ] Externe review nodig
+- Toelichting: implementatiegap voor nested lookup is gesloten; live-validatie van startup/actieflow staat nog open.
+
+12. OpenAI zero-diff compliance matrix (status na deze fix)
+
+| Punt | OpenAI doc uitspraak (kort) | Bron | Huidige code-locatie | Gap | Fix-commit / fix-bestand | Bewijs |
+|---|---|---|---|---|---|---|
+| 1. Tool descriptor metadata + template wiring | Tool descriptor moet output template + widget accessibility correct declareren | https://developers.openai.com/apps-sdk/reference | `mcp-server/src/server/mcp_registration.ts` | Nee | n.v.t. in deze iteratie | `src/mcp_app_contract.test.ts` PASS |
+| 2. Scheiding model-data vs component-data | UI-specifieke payload via metadata/componentkanaal, model-safe output gescheiden | https://developers.openai.com/apps-sdk/mcp-apps-in-chatgpt | `mcp-server/src/server/mcp_registration.ts`, `mcp-server/ui/lib/locale_bootstrap_runtime.ts` | Nee | `locale_bootstrap_runtime.ts` (deze iteratie) | contract + render tests PASS |
+| 3. Transport/bridge flow | Host bridge payload moet deterministisch convergeren op 1 canonical ingest | https://developers.openai.com/apps-sdk/build/state-management | `mcp-server/ui/lib/main.ts`, `mcp-server/ui/lib/locale_bootstrap_runtime.ts` | Nee (code), Ja (`evidence_gap` live) | `locale_bootstrap_runtime.ts` | lokale tests PASS; live nog open |
+| 4. Deterministische ingest/render authority | Component rendert op autoritatieve serverpayload, geen ambiguity | https://developers.openai.com/apps-sdk/build/state-management | `mcp-server/ui/lib/locale_bootstrap_runtime.ts`, `mcp-server/ui/lib/ui_actions.ts` | Nee (code), Ja (`evidence_gap` live) | `locale_bootstrap_runtime.ts` | `ui_render.test.ts` PASS |
+| 5. Uniform action lifecycle velden | Acties moeten eenduidige lifecycle + echo velden hebben | https://developers.openai.com/apps-sdk/deploy/testing | `mcp-server/src/server/run_step_transport_context.ts`, `mcp-server/ui/lib/ui_actions.ts` | Nee | n.v.t. in deze iteratie | handler tests PASS |
+| 6. Fail-closed met expliciete reason codes | Fouten mogen niet stil falen; expliciete status/reason vereist | https://developers.openai.com/apps-sdk/deploy/troubleshooting | `mcp-server/ui/lib/ui_actions.ts`, `mcp-server/ui/lib/ui_render.ts` | Nee | n.v.t. in deze iteratie | render + handler tests PASS |
+| 7. Testing/deploy/troubleshooting discipline | Verifieer via typecheck/tests/live troubleshooting | https://developers.openai.com/apps-sdk/deploy/testing | repo test/gate scripts + docs | Ja (`evidence_gap`: live/AWS in deze run ontbreekt) | docs update (deze iteratie) | lokale verificatie volledig, live open |
+
+13. Waarom vorige aanpak niet zero-diff was
+- De client-resolver sloot niet exact aan op de daadwerkelijke host-transportvorm (`toolOutput.result._widget_result`), waardoor canonical payload soms niet gevonden werd ondanks correcte serverresponse.
+
+14. Welke laatste verschillen zijn verwijderd
+- Verwijderd: mismatch tussen host payload-diepte en client canonical lookup.
+- Toegevoegd: expliciete nested lookup op `toolOutput.result._widget_result` (plus `root.result._widget_result` fallback) met behoud van `_meta.widget_result` compatibiliteit.

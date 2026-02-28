@@ -149,14 +149,24 @@ function resolveMetaWidgetResult(raw: unknown): { result: Record<string, unknown
   const root = toRecord(raw);
   const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
 
-  const flatFromRoot = toRecord(root._widget_result);
-  if (Object.keys(flatFromRoot).length > 0) return { result: flatFromRoot, source: "meta.widget_result" };
-
-  const flatFromToolOutput = toRecord(toolOutput._widget_result);
-  if (Object.keys(flatFromToolOutput).length > 0) {
-    return { result: flatFromToolOutput, source: "meta.widget_result" };
+  // Zoekpad 1: toolOutput.result._widget_result
+  // De OpenAI host zet structuredContent in window.openai.toolOutput.
+  // De server embedt _widget_result in structuredContent.result.
+  // Dus: window.openai.toolOutput.result._widget_result
+  const toolOutputResult = toRecord(toolOutput.result);
+  const fromToolOutputResult = toRecord(toolOutputResult._widget_result);
+  if (Object.keys(fromToolOutputResult).length > 0) {
+    return { result: fromToolOutputResult, source: "meta.widget_result" };
   }
 
+  // Zoekpad 2: root.result._widget_result (als raw direct structuredContent is)
+  const rootResult = toRecord(root.result);
+  const fromRootResult = toRecord(rootResult._widget_result);
+  if (Object.keys(fromRootResult).length > 0) {
+    return { result: fromRootResult, source: "meta.widget_result" };
+  }
+
+  // Zoekpad 3: originele _meta.widget_result paden (bridge / lokale dev / toekomstige hosts)
   const candidates: Array<{ context: CandidateContext; payload: Record<string, unknown> }> = [
     { context: "root", payload: root },
   ];

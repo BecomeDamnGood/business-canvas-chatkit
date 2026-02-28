@@ -1914,11 +1914,15 @@
   function resolveMetaWidgetResult(raw) {
     const root = toRecord(raw);
     const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
-    const flatFromRoot = toRecord(root._widget_result);
-    if (Object.keys(flatFromRoot).length > 0) return { result: flatFromRoot, source: "meta.widget_result" };
-    const flatFromToolOutput = toRecord(toolOutput._widget_result);
-    if (Object.keys(flatFromToolOutput).length > 0) {
-      return { result: flatFromToolOutput, source: "meta.widget_result" };
+    const toolOutputResult = toRecord(toolOutput.result);
+    const fromToolOutputResult = toRecord(toolOutputResult._widget_result);
+    if (Object.keys(fromToolOutputResult).length > 0) {
+      return { result: fromToolOutputResult, source: "meta.widget_result" };
+    }
+    const rootResult = toRecord(root.result);
+    const fromRootResult = toRecord(rootResult._widget_result);
+    if (Object.keys(fromRootResult).length > 0) {
+      return { result: fromRootResult, source: "meta.widget_result" };
     }
     const candidates = [
       { context: "root", payload: root }
@@ -2490,6 +2494,20 @@
     const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
     const currentHasOrdering = hasValidBootstrapOrdering(currentOrdering);
     const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
+    const hwidFromResult = String(
+      result?.state?.host_widget_session_id || result?.host_widget_session_id || incomingOrdering.hostWidgetSessionId || ""
+    ).trim();
+    const currentHwid = String(widgetState().host_widget_session_id || "").trim();
+    if (hwidFromResult && !currentHwid) {
+      setWidgetStateSafe({ host_widget_session_id: hwidFromResult });
+      console.log("[ui_hwid_persisted_without_full_ordering]", {
+        source,
+        host_widget_session_id: hwidFromResult,
+        incoming_tuple_valid: incomingHasOrdering,
+        ordering_apply: orderingDecision.apply,
+        ordering_reason: orderingDecision.reason
+      });
+    }
     let sameTupleUpgradeAccepted = false;
     if (incomingHasOrdering && !orderingDecision.apply) {
       if (orderingDecision.reason === "same_response_seq" && shouldAcceptSameTupleUpgrade({
@@ -2556,23 +2574,6 @@
         incoming_tuple: describeBootstrapOrdering(incomingOrdering),
         current_tuple: describeBootstrapOrdering(currentOrdering)
       });
-    }
-    if (!incomingHasOrdering || !orderingDecision.apply) {
-      const hwidFromResult = String(
-        result?.state?.host_widget_session_id || result?.host_widget_session_id || incomingOrdering.hostWidgetSessionId || ""
-      ).trim();
-      if (hwidFromResult) {
-        const currentHwid = String(widgetState().host_widget_session_id || "").trim();
-        if (!currentHwid) {
-          setWidgetStateSafe({ host_widget_session_id: hwidFromResult });
-          console.log("[ui_hwid_persisted_without_full_ordering]", {
-            source,
-            host_widget_session_id: hwidFromResult,
-            incoming_tuple_valid: incomingHasOrdering,
-            ordering_apply: orderingDecision.apply
-          });
-        }
-      }
     }
     const shouldPersistToRenderCache = shouldUpdateRenderCache({
       currentHasPayload: Object.keys(currentCachedResult).length > 0,
