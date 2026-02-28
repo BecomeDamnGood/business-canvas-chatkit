@@ -43,14 +43,13 @@ function actionContractActionsForResult(resultData: Record<string, unknown>): Ar
       .filter((entry) => String(entry.action_code || "").trim().length > 0);
   }
   const legacyActions = Array.isArray(uiPayload.actions) ? (uiPayload.actions as unknown[]) : [];
-  return legacyActions
-    .map((entry) => toRecord(entry))
-    .filter((entry) => String(entry.action_code || "").trim().length > 0)
-    .map((entry) => ({
-      ...entry,
-      role: "choice",
-      surface: "choice",
-    }));
+  if (legacyActions.length > 0) {
+    console.warn("[ui_action_contract_missing_actions]", {
+      legacy_actions_count: legacyActions.length,
+      current_step: String((resultData.state as Record<string, unknown> | undefined)?.current_step || ""),
+    });
+  }
+  return [];
 }
 
 function actionCodeForRole(resultData: Record<string, unknown>, role: string): string {
@@ -347,11 +346,16 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   wrap.innerHTML = "";
 
   const state = (resultData?.state as Record<string, unknown>) || {};
+  const uiPayload = toRecord(resultData?.ui);
   const structuredActions = choiceActionsForResult(resultData);
   const _unusedChoices = Array.isArray(choices) ? choices : [];
   void _unusedChoices;
   const lang = uiLang(state);
   if (structuredActions.length === 0) {
+    const hasLegacyActions = Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
+    if (hasLegacyActions) {
+      setInlineNotice(uiText(lang, "error.contract.body", "") || "Please refresh and try again.");
+    }
     wrap.style.display = "none";
     return;
   }

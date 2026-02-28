@@ -175,8 +175,11 @@ test("MCP app contract: action liveness contract fields are emitted and logged",
   assert.match(source, /client_action_id_echo:/);
 });
 
-test("MCP app contract: stale interactive rebase policy is explicitly limited to ACTION_START", () => {
-  assert.match(source, /const REBASE_ELIGIBLE_INTERACTIVE_ACTIONS = new Set<string>\(\["ACTION_START"\]\);/);
+test("MCP app contract: stale interactive rebase policy is generic for all ACTION_ dispatches", () => {
+  assert.match(source, /const isInteractiveAction = normalizedAction\.startsWith\("ACTION_"\);/);
+  assert.match(source, /rebaseEligible:\s*true/);
+  assert.match(source, /reasonCode:\s*"interactive_action"/);
+  assert.doesNotMatch(source, /REBASE_ELIGIBLE_INTERACTIVE_ACTIONS/);
   assert.match(source, /staleInteractiveActionPolicy\.rebaseEligible/);
   assert.match(source, /stale_policy_reason_code:\s*context\.staleInteractiveActionPolicy\.reasonCode/);
 });

@@ -43,7 +43,7 @@ type StaleInteractiveActionPolicy = {
   normalizedAction: string;
   isInteractiveAction: boolean;
   rebaseEligible: boolean;
-  reasonCode: "text_input" | "interactive_action_not_rebase_eligible" | "interactive_action_rebase_eligible";
+  reasonCode: "text_input" | "interactive_action";
 };
 
 export type RunStepContext = {

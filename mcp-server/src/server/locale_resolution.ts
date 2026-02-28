@@ -202,16 +202,13 @@ function isFirstStartStep(stepId: string, state: Record<string, unknown> | null 
   return stepId === "step_0" && !hasNonBusinessFinals(state);
 }
 
-const REBASE_ELIGIBLE_INTERACTIVE_ACTIONS = new Set<string>(["ACTION_START"]);
-
 type StaleInteractiveActionPolicy = {
   normalizedAction: string;
   isInteractiveAction: boolean;
   rebaseEligible: boolean;
   reasonCode:
     | "text_input"
-    | "interactive_action_not_rebase_eligible"
-    | "interactive_action_rebase_eligible";
+    | "interactive_action";
 };
 
 function classifyStaleInteractiveActionPolicy(actionRaw: unknown): StaleInteractiveActionPolicy {
@@ -225,14 +222,11 @@ function classifyStaleInteractiveActionPolicy(actionRaw: unknown): StaleInteract
       reasonCode: "text_input",
     };
   }
-  const rebaseEligible = REBASE_ELIGIBLE_INTERACTIVE_ACTIONS.has(normalizedAction);
   return {
     normalizedAction,
     isInteractiveAction: true,
-    rebaseEligible,
-    reasonCode: rebaseEligible
-      ? "interactive_action_rebase_eligible"
-      : "interactive_action_not_rebase_eligible",
+    rebaseEligible: true,
+    reasonCode: "interactive_action",
   };
 }
 

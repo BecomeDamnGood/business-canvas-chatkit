@@ -705,3 +705,60 @@ Kopieer dit blok voor elke volgende run:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: vervolgfix moet architecturaal zijn (producer-side canonical payload-garantie + tuple-pariteit), niet een UI-workaround.
+
+### Poging 2026-02-28 09:59 CET (actie-liveness hardening pass 2, generiek en zonder start-excepties)
+
+- Hypothese:
+  - De resterende dead-end risico’s zitten in twee gaten:
+    1) UI gebruikte nog legacy action fallback buiten `ui.action_contract.actions[]`.
+    2) stale-rebase beleid was nog `ACTION_START`-specifiek i.p.v. generiek voor alle `ACTION_*`.
+- Waarom deze hypothese:
+  - De contractinstructie eist 1 uniforme action source en geen start-specifieke uitzonderingslogica.
+  - In code stond nog fallback naar `ui.actions` in renderpad, plus `REBASE_ELIGIBLE_INTERACTIVE_ACTIONS=["ACTION_START"]`.
+- Exacte wijziging(en):
+  1. `mcp-server/ui/lib/ui_render.ts`
+     - keuze/rendering leest nu alleen `ui.action_contract.actions[]`;
+     - legacy `ui.actions` pad verwijderd uit action-resolutie;
+     - bij legacy-actions zonder action-contract: expliciete contract-notice + marker `[ui_action_contract_missing_actions]`.
+  2. `mcp-server/ui/lib/ui_actions.ts`
+     - no-advance logging generiek gemaakt: `[ui_action_dispatch_ack_without_state_advance]`;
+     - fallback `state_advanced` generiek bepaald (ordering of step-change), geen start-specifieke branch;
+     - tuple-incomplete fail-closed payload wordt nu expliciet `blocked/failed` met reason `incoming_missing_tuple` (geen recovery-shell als eindtoestand).
+  3. `mcp-server/src/server/locale_resolution.ts`
+     - stale-rebase policy generiek gemaakt voor alle `ACTION_*` (start-only whitelist verwijderd).
+  4. `mcp-server/src/server/run_step_transport_context.ts`
+     - stale policy reason-code type aangepast naar generiek `interactive_action`.
+  5. Tests geactualiseerd:
+     - `mcp-server/src/ui_render.test.ts`
+     - `mcp-server/src/mcp_app_contract.test.ts`
+     - nieuwe sequence-matrix test voor `start/menu/confirm/text-submit` (dispatch -> ack -> advance).
+- Verwachte uitkomst:
+  - Geen mixed legacy dispatchbron meer.
+  - Geen start-only rebase-exceptie meer.
+  - Elke actionflow eindigt aantoonbaar in `state_advanced` of expliciete foutstatus.
+- Testresultaten lokaal:
+  1. `cd mcp-server && npm run typecheck` -> PASS.
+  2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS (108 pass, 0 fail).
+  3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (168 pass, 0 fail, 1 skipped).
+- Live observatie:
+  - Niet uitgevoerd in deze run.
+- AWS/logbewijs met timestamps:
+  - Geen nieuwe AWS-query in deze run.
+  - Lokaal markerbewijs aanwezig in testoutput:
+    - `[ui_action_liveness_ack]`
+    - `[ui_action_liveness_explicit_error]`
+    - `[ui_action_dispatch_ack_without_state_advance]`
+    - `run_step_action_liveness_dispatch|ack|advance|explicit_error`.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf onjuist:
+  - Dat de eerdere action-liveness pass al volledig “uniform” was; er zat nog legacy source-mix en start-specifieke serverpolicy in.
+- Wat was gemist:
+  - De client fallback van action source (`ui.actions`) en start-only stale rebase policy.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: volgende stap is live 5-flow verificatie met CloudWatch-correlation IDs per action lifecycle.

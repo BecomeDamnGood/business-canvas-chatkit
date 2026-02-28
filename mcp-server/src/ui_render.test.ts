@@ -132,7 +132,7 @@ test("renderChoiceButtons handles missing ui without throwing", () => {
   (globalThis as any).document = originalDocument;
 });
 
-test("renderChoiceButtons renders buttons when ui.actions exist for action_codes", () => {
+test("renderChoiceButtons renders buttons from ui.action_contract.actions", () => {
   const originalDocument = (globalThis as any).document;
   const fakeDocument = makeDocument();
   const wrap = (fakeDocument as any).getElementById("choiceWrap");
@@ -150,10 +150,12 @@ test("renderChoiceButtons renders buttons when ui.actions exist for action_codes
     ui: {
       action_codes: ["ACTION_ONE", "ACTION_TWO"],
       expected_choice_count: 2,
-      actions: [
-        { id: "a1", label: "Alpha", action_code: "ACTION_ONE", intent: { type: "ROUTE", route: "__ROUTE__ONE__" } },
-        { id: "a2", label: "Beta", action_code: "ACTION_TWO", intent: { type: "ROUTE", route: "__ROUTE__TWO__" } },
-      ],
+      action_contract: {
+        actions: [
+          { id: "a1", label: "Alpha", action_code: "ACTION_ONE", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__ONE__" } },
+          { id: "a2", label: "Beta", action_code: "ACTION_TWO", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__TWO__" } },
+        ],
+      },
     },
   });
 
@@ -163,7 +165,7 @@ test("renderChoiceButtons renders buttons when ui.actions exist for action_codes
   (globalThis as any).document = originalDocument;
 });
 
-test("renderChoiceButtons renders structured ui.actions without numbered prompt choices", () => {
+test("renderChoiceButtons renders structured action-contract choices without numbered prompt choices", () => {
   const originalDocument = (globalThis as any).document;
   const fakeDocument = makeDocument();
   const wrap = (fakeDocument as any).getElementById("choiceWrap");
@@ -174,10 +176,12 @@ test("renderChoiceButtons renders structured ui.actions without numbered prompt 
     state: { current_step: "dream" },
     registry_version: "test",
     ui: {
-      actions: [
-        { id: "a1", label: "Action one", action_code: "ACTION_ONE", intent: { type: "ROUTE", route: "__ROUTE__ONE__" } },
-        { id: "a2", label: "Action two", action_code: "ACTION_TWO", intent: { type: "ROUTE", route: "__ROUTE__TWO__" } },
-      ],
+      action_contract: {
+        actions: [
+          { id: "a1", label: "Action one", action_code: "ACTION_ONE", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__ONE__" } },
+          { id: "a2", label: "Action two", action_code: "ACTION_TWO", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__TWO__" } },
+        ],
+      },
     },
   });
 
@@ -247,10 +251,12 @@ test("render keeps structured actions visible even when prompt has no numbered o
       ui: {
         view: { mode: "interactive" },
         questionText: "Please share your thoughts.",
-        actions: [
-          { id: "a1", label: "Confirm wording", action_code: "ACTION_PURPOSE_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__PURPOSE_REFINE_CONFIRM__" } },
-          { id: "a2", label: "Adjust wording", action_code: "ACTION_PURPOSE_REFINE_ADJUST", intent: { type: "ROUTE", route: "__ROUTE__PURPOSE_REFINE_ADJUST__" } },
-        ],
+        action_contract: {
+          actions: [
+            { id: "a1", label: "Confirm wording", action_code: "ACTION_PURPOSE_REFINE_CONFIRM", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__PURPOSE_REFINE_CONFIRM__" } },
+            { id: "a2", label: "Adjust wording", action_code: "ACTION_PURPOSE_REFINE_ADJUST", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__PURPOSE_REFINE_ADJUST__" } },
+          ],
+        },
       },
     }));
 
@@ -281,10 +287,12 @@ test("renderChoiceButtons keeps both ROLE_MENU_REFINE choices", () => {
     ui: {
       action_codes: ["ACTION_ROLE_REFINE_CONFIRM", "ACTION_ROLE_REFINE_ADJUST"],
       expected_choice_count: 2,
-      actions: [
-        { id: "a1", label: "I'm happy with this wording, continue to step 6 Entity.", action_code: "ACTION_ROLE_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__ROLE_REFINE_CONFIRM__" } },
-        { id: "a2", label: "Refine this wording for me", action_code: "ACTION_ROLE_REFINE_ADJUST", intent: { type: "ROUTE", route: "__ROUTE__ROLE_REFINE_ADJUST__" } },
-      ],
+      action_contract: {
+        actions: [
+          { id: "a1", label: "I'm happy with this wording, continue to step 6 Entity.", action_code: "ACTION_ROLE_REFINE_CONFIRM", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__ROLE_REFINE_CONFIRM__" } },
+          { id: "a2", label: "Refine this wording for me", action_code: "ACTION_ROLE_REFINE_ADJUST", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__ROLE_REFINE_ADJUST__" } },
+        ],
+      },
     },
   });
 
@@ -378,10 +386,12 @@ test("render shows both Dream REFINE contract buttons when prompt/menu/action_co
         "ACTION_DREAM_REFINE_START_EXERCISE",
       ],
       expected_choice_count: 2,
-      actions: [
-        { id: "a1", label: "I'm happy with this wording, please continue to step 3 Purpose", action_code: "ACTION_DREAM_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__DREAM_REFINE_CONFIRM__" } },
-        { id: "a2", label: "Do a small exercise that helps to define your dream.", action_code: "ACTION_DREAM_REFINE_START_EXERCISE", intent: { type: "ROUTE", route: "__ROUTE__DREAM_START_EXERCISE__" } },
-      ],
+      action_contract: {
+        actions: [
+          { id: "a1", label: "I'm happy with this wording, please continue to step 3 Purpose", action_code: "ACTION_DREAM_REFINE_CONFIRM", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__DREAM_REFINE_CONFIRM__" } },
+          { id: "a2", label: "Do a small exercise that helps to define your dream.", action_code: "ACTION_DREAM_REFINE_START_EXERCISE", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__DREAM_START_EXERCISE__" } },
+        ],
+      },
     },
   }));
 
@@ -993,10 +1003,12 @@ test("render ignores transient timeout payload and keeps previous visible view",
           "ACTION_DREAM_REFINE_START_EXERCISE",
         ],
         expected_choice_count: 2,
-        actions: [
-          { id: "a1", label: "Confirm wording", action_code: "ACTION_DREAM_REFINE_CONFIRM", intent: { type: "ROUTE", route: "__ROUTE__DREAM_REFINE_CONFIRM__" } },
-          { id: "a2", label: "Start exercise", action_code: "ACTION_DREAM_REFINE_START_EXERCISE", intent: { type: "ROUTE", route: "__ROUTE__DREAM_START_EXERCISE__" } },
-        ],
+        action_contract: {
+          actions: [
+            { id: "a1", label: "Confirm wording", action_code: "ACTION_DREAM_REFINE_CONFIRM", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__DREAM_REFINE_CONFIRM__" } },
+            { id: "a2", label: "Start exercise", action_code: "ACTION_DREAM_REFINE_START_EXERCISE", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__DREAM_START_EXERCISE__" } },
+          ],
+        },
       },
     }));
   assert.equal(String(wrap.style.display || ""), "flex");
@@ -1346,10 +1358,11 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry fail-closes tupleless paylo
   const recoveredUi = ((recovered.ui as Record<string, unknown>) || {});
   const recoveredFlags = ((recoveredUi.flags as Record<string, unknown>) || {});
   const recoveredView = ((recoveredUi.view as Record<string, unknown>) || {});
-  assert.equal(String(recoveredState.ui_gate_status || ""), "waiting_locale");
-  assert.equal(String(recoveredState.bootstrap_phase || ""), "waiting_locale");
+  assert.equal(String(recoveredState.ui_gate_status || ""), "blocked");
+  assert.equal(String(recoveredState.bootstrap_phase || ""), "failed");
+  assert.equal(String(recoveredState.reason_code || ""), "incoming_missing_tuple");
   assert.equal(String(recoveredFlags.tuple_incomplete_fail_closed || ""), "true");
-  assert.equal(String(recoveredView.mode || ""), "recovery");
+  assert.equal(String(recoveredView.mode || ""), "blocked");
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
@@ -1662,6 +1675,175 @@ test("callRunStep ingests callTool response immediately and updates render state
     resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).response_seq,
     7
   );
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LATEST__ = originalLatest;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("callRunStep emits explicit liveness error when transport is unavailable", async () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalLatest = (globalThis as any).__BSC_LATEST__;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    parent: null,
+    addEventListener() {},
+  };
+  const widgetState: Record<string, unknown> = {
+    current_step: "purpose",
+    bootstrap_session_id: "bs_transport",
+    bootstrap_epoch: 1,
+    response_seq: 3,
+    host_widget_session_id: "internal:transport",
+  };
+  (globalThis as any).openai = {
+    widgetState,
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LATEST__ = { state: { ...widgetState }, lang: "en" };
+
+  await callRunStep("ACTION_PURPOSE_INTRO_DEFINE");
+
+  const afterState = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
+  assert.equal(String(afterState.ui_action_liveness_ack_status || ""), "rejected");
+  assert.equal(String(afterState.ui_action_liveness_state_advanced || ""), "false");
+  assert.equal(String(afterState.ui_action_liveness_reason_code || ""), "transport_unavailable");
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LATEST__ = originalLatest;
+});
+
+test("callRunStep sequence matrix proves dispatch -> ack -> advance for start/menu/confirm/text-submit", async () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalLatest = (globalThis as any).__BSC_LATEST__;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+
+  const cases = [
+    {
+      label: "start",
+      action: "ACTION_START",
+      current_step: "step_0",
+      started: "false",
+      extraState: { started: "true" },
+      expected_step_after: "step_0",
+      extraAssertion: (_payload: Record<string, unknown>) => {},
+    },
+    {
+      label: "menu_choice",
+      action: "ACTION_PURPOSE_INTRO_DEFINE",
+      current_step: "purpose",
+      started: "true",
+      extraState: undefined,
+      expected_step_after: "purpose",
+      extraAssertion: (_payload: Record<string, unknown>) => {},
+    },
+    {
+      label: "confirm",
+      action: "ACTION_PURPOSE_REFINE_CONFIRM",
+      current_step: "purpose",
+      started: "true",
+      extraState: undefined,
+      expected_step_after: "bigwhy",
+      extraAssertion: (_payload: Record<string, unknown>) => {},
+    },
+    {
+      label: "text_submit",
+      action: "ACTION_PURPOSE_TEXT_SUBMIT",
+      current_step: "purpose",
+      started: "true",
+      extraState: { __text_submit: "Mijn purpose input" },
+      expected_step_after: "purpose",
+      extraAssertion: (payload: Record<string, unknown>) => {
+        const payloadState = (payload.state as Record<string, unknown> | undefined) || {};
+        assert.equal(String(payloadState.__text_submit || ""), "Mijn purpose input");
+      },
+    },
+  ] as const;
+
+  for (let i = 0; i < cases.length; i += 1) {
+    const testCase = cases[i];
+    const baseState = {
+      current_step: testCase.current_step,
+      started: testCase.started,
+      bootstrap_session_id: `bs_seq_${testCase.label}`,
+      bootstrap_epoch: 1,
+      response_seq: 10 + i,
+      host_widget_session_id: `internal:seq:${testCase.label}`,
+    };
+    const startAction =
+      testCase.label === "start"
+        ? [{ id: "start", action_code: "ACTION_START", role: "start", surface: "primary", label_key: "btnStart" }]
+        : [];
+    (globalThis as any).__BSC_LATEST__ = { state: { ...baseState }, lang: "en" };
+    (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+      state: { ...baseState },
+      ui: {
+        view: { mode: testCase.label === "start" ? "prestart" : "interactive" },
+        action_contract: { actions: startAction },
+      },
+    });
+
+    const dispatched: string[] = [];
+    let capturedPayload: Record<string, unknown> = {};
+    (globalThis as any).openai = {
+      toolOutput: null,
+      widgetState: { ...baseState },
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+      async callTool(_toolName: string, payload: Record<string, unknown>) {
+        capturedPayload = payload;
+        dispatched.push(String(payload?.user_message || ""));
+        return toolOutputFromWidgetResult({
+          ok: true,
+          state: {
+            ...baseState,
+            started: "true",
+            current_step: testCase.expected_step_after,
+            response_seq: 11 + i,
+          },
+          ui: {
+            view: { mode: "interactive" },
+            questionText: `${testCase.label} advanced`,
+            action_contract: { actions: [] },
+          },
+        });
+      },
+    };
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await callRunStep(testCase.action, testCase.extraState as Record<string, unknown> | undefined);
+
+    assert.equal(dispatched.length, 1, `${testCase.label}: expected exactly one dispatch`);
+    assert.equal(dispatched[0], testCase.action, `${testCase.label}: dispatched action mismatch`);
+    testCase.extraAssertion(capturedPayload);
+    const widgetAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
+    assert.equal(String(widgetAfter.ui_action_liveness_ack_status || ""), "accepted", `${testCase.label}: ack status`);
+    assert.equal(String(widgetAfter.ui_action_liveness_state_advanced || ""), "true", `${testCase.label}: state advanced`);
+    assert.equal(String(widgetAfter.ui_action_liveness_action_code || ""), testCase.action, `${testCase.label}: action echo`);
+    const cached = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__);
+    assert.equal(cached.response_seq, 11 + i, `${testCase.label}: response seq advanced`);
+  }
 
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
@@ -2036,7 +2218,11 @@ test("callRunStep dispatches ACTION_START exactly once from step_0 fallback-pres
         ui: {
           view: { mode: "interactive", waiting_locale: false },
           questionText: "What type of business are you building?",
-          actions: [{ id: "a1", label: "Continue", action_code: "ACTION_STEP0_READY_START" }],
+          action_contract: {
+            actions: [
+              { id: "a1", label: "Continue", action_code: "ACTION_STEP0_READY_START", role: "choice", surface: "choice" },
+            ],
+          },
         },
       });
     },
@@ -2231,7 +2417,7 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.match(source, /\[ui_action_liveness_ack\]/);
   assert.match(source, /\[ui_action_liveness_explicit_error\]/);
   assert.match(source, /scheduleActionLivenessRecoveryPoll\(/);
-  assert.match(source, /ui_start_dispatch_ack_without_state_advance/);
+  assert.match(source, /ui_action_dispatch_ack_without_state_advance/);
   assert.match(source, /ui_ordering_patch_dropped/);
   assert.match(source, /payload_reason_code: resolvedResponse\.source_reason_code/);
   assert.match(source, /notifyHostTransportSignal/);

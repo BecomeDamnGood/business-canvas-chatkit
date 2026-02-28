@@ -395,3 +395,67 @@ Lokaal uitgevoerd (verplicht):
 
 ## 4) Openstaand
 - Live 5-flow bewijs (start/menu/confirm/text-submit) met CloudWatch timestamps is nog niet uitgevoerd in deze run.
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 09:59 CET, action-liveness pass 2)
+
+## 0) Samenvatting
+- Deze pass sluit resterende contractgaten:
+  1) UI gebruikt nu 1 uniforme action source (`ui.action_contract.actions[]`).
+  2) stale rebase policy is niet langer `ACTION_START`-specifiek.
+  3) tuple-incomplete ingest fail-closed eindigt expliciet in `blocked` met reason-code.
+
+## 1) Exacte wijzigingen
+1. `mcp-server/ui/lib/ui_render.ts`
+- Legacy fallback naar `ui.actions` verwijderd uit action-resolutie.
+- Choice rendering leest alleen `ui.action_contract.actions[]`.
+- Bij legacy actions zonder action-contract: marker `[ui_action_contract_missing_actions]` + expliciete contract-notice.
+
+2. `mcp-server/ui/lib/ui_actions.ts`
+- `fallbackStateAdvanced` generiek gemaakt (ordering advance of step-change), zonder start-specifieke uitzondering.
+- Marker hernoemd/generaliseerd naar `[ui_action_dispatch_ack_without_state_advance]`.
+- Tuple-incomplete fail-close envelope aangepast:
+  - `ui_gate_status: "blocked"`,
+  - `bootstrap_phase: "failed"`,
+  - `reason_code: "incoming_missing_tuple"`,
+  - `ui.view.mode: "blocked"`.
+
+3. `mcp-server/src/server/locale_resolution.ts`
+- `ACTION_START`-only rebase whitelist verwijderd.
+- Rebase policy nu generiek voor alle `ACTION_*`.
+- Reason-code genormaliseerd naar `interactive_action`.
+
+4. `mcp-server/src/server/run_step_transport_context.ts`
+- Type voor stale policy reason-code aangepast naar `text_input | interactive_action`.
+
+5. Tests
+- `mcp-server/src/ui_render.test.ts`
+  - asserties aangepast voor generieke marker + blocked tuple-fail-close;
+  - legacy action-source tests omgezet naar `ui.action_contract.actions[]`;
+  - nieuwe sequence-matrix test: `start/menu/confirm/text-submit` bewijst `dispatch -> ack -> advance`;
+  - nieuwe test: `transport_unavailable -> explicit liveness error`.
+- `mcp-server/src/mcp_app_contract.test.ts`
+  - stale rebase contractassertie aangepast van start-only naar generieke `ACTION_*` policy.
+
+## 2) Verplichte testcommando's
+1. `cd mcp-server && npm run typecheck`
+- Resultaat: PASS.
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- Resultaat: PASS (`108 pass`, `0 fail`).
+
+3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- Resultaat: PASS (`168 pass`, `0 fail`, `1 skipped`).
+
+## 3) Ketenbewijs
+- UI sequence test dekt nu expliciet:
+  - `start`,
+  - `menu-choice`,
+  - `confirm`,
+  - `text-submit`.
+- Voor elk type wordt bewezen:
+  1. action wordt gedispatched (exact 1x),
+  2. ack wordt ontvangen met livenessvelden,
+  3. `state_advanced=true` of expliciete errorstatus.
+
+## 4) Live/AWS bewijsstatus
+- Live hostvalidatie en CloudWatch timestamps zijn in deze run niet uitgevoerd (omgeving zonder live endpoint/AWS toegang).

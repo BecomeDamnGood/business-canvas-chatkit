@@ -375,6 +375,12 @@ function buildTupleFailClosedEnvelope(params: {
     _meta: {
       widget_result: {
         current_step_id: currentStep,
+        ok: false,
+        error: {
+          type: "contract_violation",
+          message: "Tuple metadata is missing in widget payload.",
+          reason: "incoming_missing_tuple",
+        },
         state: {
           current_step: currentStep,
           started: String(stateSource.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
@@ -382,9 +388,10 @@ function buildTupleFailClosedEnvelope(params: {
           ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
           ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
           ui_strings_requested_lang: uiStringsRequestedLang,
-          ui_gate_status: "waiting_locale",
-          ui_gate_reason: "tuple_incomplete_fail_closed",
-          bootstrap_phase: "waiting_locale",
+          ui_gate_status: "blocked",
+          ui_gate_reason: "contract_violation",
+          bootstrap_phase: "failed",
+          reason_code: "incoming_missing_tuple",
         },
         ui: {
           flags: {
@@ -394,8 +401,8 @@ function buildTupleFailClosedEnvelope(params: {
             tuple_fail_closed_reason: "incoming_missing_tuple",
           },
           view: {
-            mode: "recovery",
-            waiting_locale: true,
+            mode: "blocked",
+            waiting_locale: false,
           },
         },
       },
@@ -1526,9 +1533,11 @@ export async function callRunStep(
       String((result as any).ack_status || "").trim() !== "" ||
       String((toRecord(result?.state).ack_status || "")).trim() !== "" ||
       String((toRecord(toRecord(result?.state).ui_action_liveness).ack_status || "")).trim() !== "";
-    const fallbackStateAdvanced = isStartAction
-      ? hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart")
-      : hasIngestedResult && (orderingAdvanced || result?.ok === true);
+    const resultState = toRecord(result?.state);
+    const responseCurrentStep = String(resultState.current_step || result?.current_step_id || "").trim();
+    const requestCurrentStep = String((nextState as Record<string, unknown>).current_step || "").trim();
+    const stepAdvanced = Boolean(responseCurrentStep) && responseCurrentStep !== requestCurrentStep;
+    const fallbackStateAdvanced = hasIngestedResult && (orderingAdvanced || stepAdvanced);
     const fallbackAckStatus: ActionAckStatus =
       result?.ok !== false
         ? "accepted"
@@ -1540,7 +1549,7 @@ export async function callRunStep(
           state_advanced: fallbackStateAdvanced,
           reason_code: fallbackStateAdvanced
             ? ""
-            : (errorObj?.type || (isStartAction ? "start_ack_without_state_advance" : "state_not_advanced")),
+            : (errorObj?.type || "state_not_advanced"),
           action_code_echo: String(messageText || "").trim().toUpperCase(),
           client_action_id_echo: clientActionId,
         };
@@ -1572,17 +1581,16 @@ export async function callRunStep(
       });
       setInlineNotice(livenessMessageForReason(nextState as Record<string, unknown>, liveness));
       if (liveness.ack_status === "accepted" && !liveness.state_advanced) {
-        if (isStartAction) {
-          console.warn("[ui_start_dispatch_ack_without_state_advance]", {
-            response_ingested: hasIngestedResult,
-            ordering_advanced: orderingAdvanced,
-            payload_source: resolvedResponse.source,
-            payload_reason_code: resolvedResponse.source_reason_code,
-            response_view_mode: responseViewMode,
-            ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
-            ordering_after: describeBootstrapOrdering(orderingAfterIngest),
-          });
-        }
+        console.warn("[ui_action_dispatch_ack_without_state_advance]", {
+          action_code: String(messageText || "").trim().toUpperCase(),
+          response_ingested: hasIngestedResult,
+          ordering_advanced: orderingAdvanced,
+          payload_source: resolvedResponse.source,
+          payload_reason_code: resolvedResponse.source_reason_code,
+          response_view_mode: responseViewMode,
+          ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
+          ordering_after: describeBootstrapOrdering(orderingAfterIngest),
+        });
         scheduleActionLivenessRecoveryPoll({
           actionCode: liveness.action_code_echo || String(messageText || "").trim().toUpperCase(),
           clientActionId: liveness.client_action_id_echo || clientActionId,
