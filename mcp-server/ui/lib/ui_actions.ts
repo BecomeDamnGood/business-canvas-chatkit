@@ -486,23 +486,6 @@ function normalizeToolResult(raw: unknown): ToolResultNormalization {
       reasonCode: canonical.reason_code,
     };
   }
-  const root = toRecord(raw);
-  const rootResult = toRecord(root.result);
-  const rootResultState = toRecord(rootResult.state);
-  const hasRootResult =
-    Object.keys(rootResult).length > 0 &&
-    (Object.keys(rootResultState).length > 0 || String(rootResult.current_step_id || "").trim().length > 0);
-  if (hasRootResult) {
-    return {
-      normalized: {
-        _meta: {
-          widget_result: rootResult,
-        },
-      },
-      source: "meta.widget_result",
-      reasonCode: "meta_widget_result",
-    };
-  }
   return {
     normalized: canonical.envelope,
     source: canonical.source,
@@ -618,9 +601,6 @@ const BRIDGE_RESPONSE_TIMEOUT_MS = 6000;
 const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
 let bootstrapPollInFlight = false;
 let bootstrapPollInFlightSignature = "";
-const ACTION_LIVENESS_RECOVERY_DELAY_MS = 300;
-let actionLivenessRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
-let actionLivenessRecoverySignature = "";
 
 type ActionAckStatus = "accepted" | "rejected" | "timeout" | "dropped";
 
@@ -1266,33 +1246,6 @@ function livenessMessageForReason(
   return "";
 }
 
-function clearActionLivenessRecoveryTimer(): void {
-  if (actionLivenessRecoveryTimer) {
-    clearTimeout(actionLivenessRecoveryTimer);
-    actionLivenessRecoveryTimer = null;
-  }
-  actionLivenessRecoverySignature = "";
-}
-
-function scheduleActionLivenessRecoveryPoll(params: {
-  actionCode: string;
-  clientActionId: string;
-  reasonCode: string;
-}): void {
-  const signature = `${params.actionCode}|${params.clientActionId}|${params.reasonCode}`;
-  if (actionLivenessRecoverySignature === signature && actionLivenessRecoveryTimer) return;
-  clearActionLivenessRecoveryTimer();
-  actionLivenessRecoverySignature = signature;
-  actionLivenessRecoveryTimer = setTimeout(() => {
-    actionLivenessRecoveryTimer = null;
-    actionLivenessRecoverySignature = "";
-    resetHydrationRetryCycle({
-      trigger_poll: true,
-      source: "action_liveness_no_advance",
-    });
-  }, ACTION_LIVENESS_RECOVERY_DELAY_MS);
-}
-
 export async function callRunStep(
   message: string | number,
   extraState?: Record<string, unknown>
@@ -1438,7 +1391,6 @@ export async function callRunStep(
 
   try {
     const transportPrimary: "callTool" | "bridge" = hasCallTool ? "callTool" : "bridge";
-    clearActionLivenessRecoveryTimer();
     if (isStartAction) clearInlineNotice();
     if (isStartAction) {
       setWidgetStateSafe({
@@ -1591,11 +1543,6 @@ export async function callRunStep(
           ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
           ordering_after: describeBootstrapOrdering(orderingAfterIngest),
         });
-        scheduleActionLivenessRecoveryPoll({
-          actionCode: liveness.action_code_echo || String(messageText || "").trim().toUpperCase(),
-          clientActionId: liveness.client_action_id_echo || clientActionId,
-          reasonCode: liveness.reason_code || "state_not_advanced",
-        });
       }
       if (isStartAction) {
         setWidgetStateSafe({
@@ -1604,7 +1551,6 @@ export async function callRunStep(
         });
       }
     } else {
-      clearActionLivenessRecoveryTimer();
       if (isStartAction) {
         setWidgetStateSafe({
           start_dispatch_state: "ready",

@@ -1541,17 +1541,15 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry advances ordering but prese
     ui: { view: { mode: "interactive" }, questionText: "strong-cached" },
   });
 
-  const weakNewerPayload = {
-    result: {
-      state: {
-        current_step: "step_0",
-        bootstrap_session_id: "bs_demo",
-        bootstrap_epoch: 1,
-        response_seq: 7,
-        host_widget_session_id: "internal:demo",
-      },
+  const weakNewerPayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 7,
+      host_widget_session_id: "internal:demo",
     },
-  };
+  });
 
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(weakNewerPayload, {
     source: "host_notification",
@@ -1858,7 +1856,7 @@ test("callRunStep sequence matrix proves dispatch -> ack -> advance for start/me
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("callRunStep schedules one bootstrap poll when ACTION_START ack has no state advance", async () => {
+test("callRunStep does not auto-dispatch bootstrap poll when ACTION_START ack has no state advance", async () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -1929,13 +1927,17 @@ test("callRunStep schedules one bootstrap poll when ACTION_START ack has no stat
   await new Promise((resolve) => setTimeout(resolve, 900));
 
   assert.equal(dispatchedMessages.filter((action) => action === "ACTION_START").length, 1);
-  assert.equal(dispatchedMessages.filter((action) => action === "ACTION_BOOTSTRAP_POLL").length, 1);
+  assert.equal(dispatchedMessages.filter((action) => action === "ACTION_BOOTSTRAP_POLL").length, 0);
   const cachedResolved = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__);
-  assert.equal(cachedResolved.response_seq, 7);
+  assert.equal(cachedResolved.response_seq, 6);
   assert.equal(
     String(((cachedResolved.result.state as Record<string, unknown> | undefined) || {}).current_step || ""),
-    "purpose"
+    "step_0"
   );
+  const widgetAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
+  assert.equal(String(widgetAfter.ui_action_liveness_ack_status || ""), "accepted");
+  assert.equal(String(widgetAfter.ui_action_liveness_state_advanced || ""), "false");
+  assert.equal(String(widgetAfter.ui_action_liveness_reason_code || ""), "state_not_advanced");
 
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
@@ -2344,8 +2346,11 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.match(source, /function extractActionLiveness\(/);
   assert.match(source, /\[ui_action_liveness_ack\]/);
   assert.match(source, /\[ui_action_liveness_explicit_error\]/);
-  assert.match(source, /scheduleActionLivenessRecoveryPoll\(/);
   assert.match(source, /ui_action_dispatch_ack_without_state_advance/);
+  assert.doesNotMatch(source, /scheduleActionLivenessRecoveryPoll\(/);
+  assert.doesNotMatch(source, /action_liveness_no_advance/);
+  assert.doesNotMatch(source, /const rootResult = toRecord\(root\.result\);/);
+  assert.doesNotMatch(source, /widget_result:\s*rootResult/);
   assert.match(source, /ui_ordering_patch_dropped/);
   assert.match(source, /payload_reason_code: resolvedResponse\.source_reason_code/);
   assert.match(source, /notifyHostTransportSignal/);

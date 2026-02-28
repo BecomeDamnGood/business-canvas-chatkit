@@ -532,3 +532,76 @@ Lokaal uitgevoerd (verplicht):
 - Beide queries faalden met:
   - `Could not connect to the endpoint URL: "https://logs.us-east-1.amazonaws.com/"`
 - Conclusie: live timestampbewijs blijft in deze omgeving geblokkeerd door endpointconnectiviteit; lokaal ketenbewijs is volledig geleverd via tests en markers.
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 11:20 UTC, OpenAI zero-diff sluitingspass)
+
+## 0) Samenvatting
+- Scope uitgevoerd over de volledige widget-keten (descriptor -> transport -> ingest -> render -> liveness -> observability).
+- Structurele sluiting gedaan op 3 resterende verschillen:
+  1. niet-canonieke ingest fallback verwijderd,
+  2. impliciete liveness recoverylaag verwijderd,
+  3. server `client_action_id` fallback gegeneraliseerd.
+- Finale status voor deze pass: compliance-matrix op **0 open gaps** (zie living rapport).
+
+## 1) Exacte wijzigingen
+1. `mcp-server/ui/lib/ui_actions.ts`
+- Canonical ingest-only afgedwongen via `canonicalizeWidgetPayload` zonder `root.result` fallback.
+- Auto-recovery bij `accepted + !state_advanced` verwijderd.
+- Fail-closed gedrag op missing widget payload blijft expliciet (`ui_ingest_dropped_no_widget_result`, tuple-fail-closed).
+
+2. `mcp-server/src/server/run_step_transport_context.ts`
+- Fallback `__client_action_id` nu generiek bij ontbrekende bestaande id:
+  - `!existingClientActionId -> buildServerClientActionId({ action, correlationId })`.
+
+3. Testupdates
+- `mcp-server/src/mcp_app_contract.test.ts`
+  - assertie aangepast naar generieke fallback-match.
+- `mcp-server/src/ui_render.test.ts`
+  - no-auto-poll verwachting op start no-advance scenario.
+  - stronger-cache testcase omgezet naar canonical `_meta.widget_result` envelope.
+
+## 2) Verplichte testcommando's
+1. `cd mcp-server && npm run typecheck`
+- Resultaat: PASS.
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- Resultaat: PASS (`108 pass`, `0 fail`).
+
+3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- Resultaat: PASS (`170 tests`, `169 pass`, `0 fail`, `1 skipped`).
+
+## 3) Live/AWS observability bewijs (beschikbaar in deze run)
+- Loggroep: `/aws/apprunner/business-canvas-mcp/197c45cb9b3541f6b650a24162e706b3/application`.
+- Bevestigde timestamps:
+  - `2026-02-27T11:52:54Z` (`1772193174646`): `run_step_request` met `action:"text_input"`.
+  - `2026-02-27T11:53:01Z` (`1772193181225`): `run_step_request` met `action:"ACTION_START"`.
+  - `2026-02-27T11:53:01Z` (`1772193181231`): `run_step_response`.
+  - `2026-02-27T11:53:01Z` (`1772193181232`): `run_step_render_source_selected` met `meta_widget_result_authoritative`.
+- Queries zonder hits in deze serverloggroep/window:
+  - `run_step_action_liveness_dispatch/ack/advance/explicit_error`
+  - `startup_canonical`
+- Conclusie:
+  - serverzijde request/response/render-source is traceerbaar;
+  - client-side markers zitten niet in deze loggroep en zijn lokaal via tests afgedekt.
+
+## 4) DoD status
+1. Startup hangt niet meer in lege/half eindtoestand
+- Gedekt door fail-closed startup/ingest pad + tests.
+
+2. Geen silent no-op voor acties
+- Gedekt door expliciete liveness no-advance/error UX; geen impliciete auto-recovery meer.
+
+3. Elke actie eindigt in `state_advanced` of `explicit_error`
+- Contractueel afgedwongen en regressietests groen.
+
+4. `client_action_id_echo` non-empty op interactieve paden
+- Server fallback gegeneraliseerd en contracttest aangepast.
+
+5. Verplichte tests groen
+- Ja (alle 3 commando’s PASS).
+
+6. Compliance matrix op 0 open gaps
+- Ja (uitgewerkt in `docs/mcp_widget_regressie_living_rapport.md`, sectie "Poging 2026-02-28 11:20 UTC").
+
+7. Antwoord op "wat doen we nog anders dan OpenAI?"
+- Binnen deze scope en codebasis: **0 functionele/contractuele verschillen**.

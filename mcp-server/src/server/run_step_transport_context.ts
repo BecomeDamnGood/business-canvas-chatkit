@@ -300,7 +300,7 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
     safeString((stateForTool as { __client_action_id?: unknown }).__client_action_id ?? "")
   );
   const fallbackClientActionId =
-    action.startsWith("ACTION_") && !existingClientActionId
+    !existingClientActionId
       ? buildServerClientActionId({ action, correlationId })
       : "";
   const clientActionId = existingClientActionId || fallbackClientActionId;

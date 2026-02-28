@@ -245,7 +245,7 @@ test("MCP app contract: turn contract enforces canonical step_0\/interactive vie
 
 test("MCP app contract: interactive actions get non-empty client_action_id echo server-side", () => {
   assert.match(source, /function buildServerClientActionId\(/);
-  assert.match(source, /action\.startsWith\("ACTION_"\) && !existingClientActionId/);
+  assert.match(source, /!existingClientActionId[\s\S]*buildServerClientActionId\(\{ action, correlationId \}\)/);
   assert.match(source, /__client_action_id:\s*clientActionId/);
   assert.match(source, /client_action_id_present:\s*clientActionId \? "true" : "false"/);
 });
