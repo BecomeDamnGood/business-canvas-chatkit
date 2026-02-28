@@ -692,6 +692,23 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
   const currentHasOrdering = hasValidBootstrapOrdering(currentOrdering);
   const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
+  const hwidFromResult = String(
+    (result?.state as Record<string, unknown> | undefined)?.host_widget_session_id ||
+      (result as Record<string, unknown> | undefined)?.host_widget_session_id ||
+      incomingOrdering.hostWidgetSessionId ||
+      ""
+  ).trim();
+  const currentHwid = String(widgetState().host_widget_session_id || "").trim();
+  if (hwidFromResult && !currentHwid) {
+    setWidgetStateSafe({ host_widget_session_id: hwidFromResult });
+    console.log("[ui_hwid_persisted_without_full_ordering]", {
+      source,
+      host_widget_session_id: hwidFromResult,
+      incoming_tuple_valid: incomingHasOrdering,
+      ordering_apply: orderingDecision.apply,
+      ordering_reason: orderingDecision.reason,
+    });
+  }
   let sameTupleUpgradeAccepted = false;
   if (incomingHasOrdering && !orderingDecision.apply) {
     if (

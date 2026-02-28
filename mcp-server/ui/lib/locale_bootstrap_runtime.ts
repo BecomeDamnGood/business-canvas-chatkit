@@ -148,6 +148,15 @@ function pickMetaWidgetResult(container: Record<string, unknown>): Record<string
 function resolveMetaWidgetResult(raw: unknown): { result: Record<string, unknown>; source: PayloadSource } {
   const root = toRecord(raw);
   const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
+
+  const flatFromRoot = toRecord(root._widget_result);
+  if (Object.keys(flatFromRoot).length > 0) return { result: flatFromRoot, source: "meta.widget_result" };
+
+  const flatFromToolOutput = toRecord(toolOutput._widget_result);
+  if (Object.keys(flatFromToolOutput).length > 0) {
+    return { result: flatFromToolOutput, source: "meta.widget_result" };
+  }
+
   const candidates: Array<{ context: CandidateContext; payload: Record<string, unknown> }> = [
     { context: "root", payload: root },
   ];

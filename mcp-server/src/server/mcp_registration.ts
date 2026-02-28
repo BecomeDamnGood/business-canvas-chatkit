@@ -265,9 +265,13 @@ function createAppServer(baseUrl: string): McpServer {
       );
       const contentText = buildContentFromResult(contentSource, { isFirstStart });
       const parsedStructuredContent = RunStepToolStructuredContentOutputSchema.parse(structuredContent);
+      const widgetResultForClient = (meta as Record<string, unknown> | undefined)?.widget_result;
+      const enrichedStructuredContent = widgetResultForClient
+        ? Object.assign({}, parsedStructuredContent, { _widget_result: widgetResultForClient })
+        : parsedStructuredContent;
       return {
         content: [{ type: "text", text: contentText }],
-        structuredContent: parsedStructuredContent,
+        structuredContent: enrichedStructuredContent,
         ...(meta ? { _meta: meta } : {}),
       };
     }

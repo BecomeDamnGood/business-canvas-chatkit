@@ -557,10 +557,6 @@ if (typeof window !== "undefined") {
   });
 }
 
-renderStartupWaitState("initial_bootstrap_probe");
-setTimeout(() => {
-  if (startupCanonicalResolved) return;
-  if (tryInitialIngestFromHost("set_globals")) {
-    notifyHostTransportSignal("set_globals");
-  }
-}, 300);
+if (!tryInitialIngestFromHost("set_globals")) {
+  renderStartupWaitState("initial_bootstrap_probe");
+}

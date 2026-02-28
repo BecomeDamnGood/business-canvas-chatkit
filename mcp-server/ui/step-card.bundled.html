@@ -1914,6 +1914,12 @@
   function resolveMetaWidgetResult(raw) {
     const root = toRecord(raw);
     const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
+    const flatFromRoot = toRecord(root._widget_result);
+    if (Object.keys(flatFromRoot).length > 0) return { result: flatFromRoot, source: "meta.widget_result" };
+    const flatFromToolOutput = toRecord(toolOutput._widget_result);
+    if (Object.keys(flatFromToolOutput).length > 0) {
+      return { result: flatFromToolOutput, source: "meta.widget_result" };
+    }
     const candidates = [
       { context: "root", payload: root }
     ];
@@ -2550,6 +2556,23 @@
         incoming_tuple: describeBootstrapOrdering(incomingOrdering),
         current_tuple: describeBootstrapOrdering(currentOrdering)
       });
+    }
+    if (!incomingHasOrdering || !orderingDecision.apply) {
+      const hwidFromResult = String(
+        result?.state?.host_widget_session_id || result?.host_widget_session_id || incomingOrdering.hostWidgetSessionId || ""
+      ).trim();
+      if (hwidFromResult) {
+        const currentHwid = String(widgetState().host_widget_session_id || "").trim();
+        if (!currentHwid) {
+          setWidgetStateSafe({ host_widget_session_id: hwidFromResult });
+          console.log("[ui_hwid_persisted_without_full_ordering]", {
+            source,
+            host_widget_session_id: hwidFromResult,
+            incoming_tuple_valid: incomingHasOrdering,
+            ordering_apply: orderingDecision.apply
+          });
+        }
+      }
     }
     const shouldPersistToRenderCache = shouldUpdateRenderCache({
       currentHasPayload: Object.keys(currentCachedResult).length > 0,
@@ -5031,13 +5054,9 @@
       }
     });
   }
-  renderStartupWaitState("initial_bootstrap_probe");
-  setTimeout(() => {
-    if (startupCanonicalResolved) return;
-    if (tryInitialIngestFromHost("set_globals")) {
-      notifyHostTransportSignal("set_globals");
-    }
-  }, 300);
+  if (!tryInitialIngestFromHost("set_globals")) {
+    renderStartupWaitState("initial_bootstrap_probe");
+  }
 })();
 
 </script>

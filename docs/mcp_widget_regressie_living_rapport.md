@@ -1205,3 +1205,185 @@ Kopieer dit blok voor elke volgende run:
 #### Finale zero-diff conclusie (deze pass)
 - Op code-/contractniveau is de MCP-widget keten nu zonder functionele afwijkingen t.o.v. de relevante OpenAI Apps SDK-richtlijnen in deze scope.
 - Openstaande gaps in de compliance-matrix: **0**.
+
+### Poging 2026-02-28 11:35 UTC (live incident: eerst leeg scherm, daarna gevuld, `ACTION_START` lijkt no-op)
+
+1. Hypothese
+- De server verwerkt `ACTION_START` correct (`accepted + state_advanced=true`), maar de UI ingest-route gebruikt in de kritieke stap een payload zonder canonical `_meta.widget_result`, waardoor de response lokaal niet renderbaar wordt geclassificeerd en de prestart-cache zichtbaar blijft.
+- Daardoor ervaart de gebruiker:
+  - eerst lege/half shell,
+  - daarna alsnog gevulde prestartkaart,
+  - startknop die visueel "niets doet".
+
+2. Waarom deze hypothese
+- Aangeleverde serverlogs tonen expliciet een succesvolle action-lifecycle voor `ACTION_START`:
+  - `run_step_action_liveness_ack` (`accepted`, `state_advanced:true`)
+  - `run_step_action_liveness_advance`
+  - `run_step_render_source_selected` (`meta.widget_result_authoritative`).
+- Tegelijk toont de aangeleverde response die aan de clientkant zichtbaar is alleen `structuredContent.result`-achtige velden (zonder `_meta.widget_result`).
+- Dat patroon past exact op het clientpad waar canonical ingest faalt en rendercache behouden blijft.
+
+3. Exacte wijziging(en)
+- Geen codewijziging in deze poging.
+- Alleen forensische vastlegging van deze nieuwe live-incidentset met code/line bewijs.
+
+4. Verwachte uitkomst
+- Als hypothese klopt, dan geldt:
+  - serverkant blijft "gezond" (ack/advance aanwezig),
+  - clientkant toont mismatch tussen action-liveness en zichtbare voortgang.
+- Vervolgfix moet dan in client ingest/cache/transport-convergentie zitten, niet in server run_step dispatch.
+
+5. Testresultaten lokaal
+- Niet uitgevoerd (incidentanalyse zonder implementatie in deze poging).
+
+6. Live observatie
+- Gebruiker rapporteert:
+  - "eerst leeg scherm, dan gevuld",
+  - start button werkt niet.
+- Screenshot 1: initieel lege/half shell perceptie gevolgd door gevulde prestartkaart.
+- Screenshot 2: prestartkaart blijft zichtbaar inclusief herstelhint ("Ververs of start een nieuwe sessie.").
+
+7. AWS/logbewijs met timestamps
+- Uit aangeleverde logs (zelfde correlatie/session):
+  - `run_step_action_liveness_ack`:
+    - `action_code:"ACTION_START"`
+    - `client_action_id:"ca_1772278247872_action_start_2tbikg42"`
+    - `ack_status:"accepted"`
+    - `state_advanced:true`
+    - `response_seq:2`
+    - `bootstrap_session_id:"bs_6e925c1b-8d4a-4472-871a-bf397d32f170"`
+  - `run_step_action_liveness_advance`:
+    - idem `ACTION_START`, `accepted`, `state_advanced:true`, `response_seq:2`
+  - `run_step_ordering_tuple_parity`:
+    - `tuple_parity_match:true`
+  - `run_step_render_source_selected`:
+    - `render_source:"meta.widget_result"`
+    - `render_source_reason_code:"meta_widget_result_authoritative"`
+- Aanvullende CloudWatch-query vanuit deze omgeving faalde op `2026-02-28 11:35:34 UTC` met:
+  - `Could not connect to the endpoint URL: "https://logs.us-east-1.amazonaws.com/"`
+  - daarom hier gemarkeerd als `evidence_gap` voor extra serverqueries buiten de aangeleverde set.
+
+8. Uitkomst
+- [x] Bevestigd
+- [ ] Weerlegd
+- [ ] Onbeslist
+
+9. Wat bleek achteraf onjuist
+- De aanname dat "server `accepted+advanced` betekent automatisch zichtbare client advance" is onjuist zolang de client ingest/cache-beslissing een canonical payload kan missen of afwijzen.
+
+10. Wat was gemist
+- Dat de response die client-side geconsumeerd wordt in deze incidentset geen `_meta.widget_result` liet zien, terwijl de server die canonical bron wel logt.
+- Dat UI-cachebeleid expliciet "houd huidige render" doet bij `current.renderable && !incoming.renderable`.
+
+11. Besluit
+- [x] Doorgaan op deze lijn
+- [ ] Stoppen en hypothese verwerpen
+- [ ] Externe review nodig
+- Toelichting: root cause zit client-side in transport/ingest/cache-convergentie; server action-liveness is in deze incidentset aantoonbaar niet de bottleneck.
+
+12. OpenAI zero-diff compliance matrix (eindstatus, incident-herbeoordeling)
+
+| Checklistpunt | Herbeoordeling op basis van dit incident | Gaptype |
+|---|---|---|
+| Transport/bridge flow conform MCP apps patroon | **Nog gap-indicatie**: responsevorm op clientpad lijkt niet altijd dezelfde canonical envelope te leveren aan ingest, ondanks server `meta.widget_result` authority. | `implementation_gap` |
+| Deterministische ingest + render authority | **Nog gap-indicatie**: ingest-drop/cache-preserve pad kan zichtbare state-advance maskeren. | `implementation_gap` |
+| Uniform action lifecycle contract | Servercontract is in deze incidentset wel consistent (`accepted + state_advanced:true` + non-empty `client_action_id`). | `geen gap` |
+
+13. Waarom vorige aanpak niet zero-diff was
+- Eerdere conclusie "0 gaps" was te absoluut zonder dit specifieke live scenario te toetsen waarin server- en client-waarneming uit elkaar lopen.
+- Deze incidentset toont dat canonical authority server-side wel klopt, maar client ingest/render nog niet volledig deterministisch dezelfde autoriteit volgt in alle paden.
+
+14. Welke laatste verschillen zijn verwijderd
+- Geen in deze poging (analyse-only).
+- Geïdentificeerd restverschil dat nog verwijderd moet worden:
+  - client moet elk actiepad strikt renderen op één canonical ingest-resultaat, zonder cache-preserve pad dat server-advance onzichtbaar maakt.
+
+#### Bewijs-koppeling code -> incident (hard references)
+1. Canonical ingest accepteert uitsluitend `_meta.widget_result`:
+   - `mcp-server/ui/lib/locale_bootstrap_runtime.ts:162-181`.
+2. Als canonical payload ontbreekt, wordt ingest direct gedropt:
+   - `mcp-server/ui/lib/ui_actions.ts:661-670`.
+3. Cache kan bewust oude render behouden ondanks nieuwere action-ack:
+   - `mcp-server/ui/lib/ui_actions.ts:413-429` (kernregel: `:423`),
+   - logging marker: `mcp-server/ui/lib/ui_actions.ts:768-777`.
+4. Bij niet-ingestbare response valt liveness terug op client-fallback en kan expliciete no-advance UX ontstaan:
+   - `mcp-server/ui/lib/ui_actions.ts:1497-1507`,
+   - `mcp-server/ui/lib/ui_actions.ts:1527-1536`.
+5. Startup/lege-shell gedrag bij ontbrekende expliciete server-routing:
+   - `mcp-server/ui/lib/ui_render.ts:572-615`.
+6. Er bestaan twee host ingestingangen die timing/race-variatie introduceren:
+   - bridge notification: `mcp-server/ui/lib/main.ts:333-360`,
+   - `openai:set_globals`: `mcp-server/ui/lib/main.ts:505-510`.
+
+### Poging 2026-02-28 13:40 UTC (root-cause fix: startup canonical payload + state_not_advanced)
+
+1. Hypothese
+- De startup-fout `startup_canonical_payload_missing` ontstond niet door timing, maar door transportvorm:
+  - server zette `widget_result` alleen in root `_meta`,
+  - host geeft aan iframe via `window.openai.toolOutput` alleen `structuredContent` door.
+- De `state_not_advanced` na eerste klik ontstond doordat `host_widget_session_id` niet altijd vroeg genoeg in `widgetState` werd vastgelegd bij tuple-incomplete ingest, waardoor vervolgruns sessiecontext konden verliezen.
+
+2. Waarom deze hypothese
+- In `mcp_registration.ts` werd `_meta.widget_result` wel geretourneerd, maar niet plat in `structuredContent`.
+- In `resolveMetaWidgetResult` werd alleen `_meta.widget_result` gelezen; geen flat `_widget_result` pad.
+- In `ui_actions.ts` zat host-session persist na return-gevoelige takken; tuple-incomplete paden konden vroeg returnen zonder persist.
+
+3. Exacte wijziging(en)
+- `mcp-server/src/server/mcp_registration.ts`
+  - `_widget_result` embedded in `structuredContent` na schema-parse:
+    - `const widgetResultForClient = ...meta?.widget_result`
+    - `structuredContent: Object.assign({}, parsedStructuredContent, { _widget_result: widgetResultForClient })`.
+- `mcp-server/ui/lib/locale_bootstrap_runtime.ts`
+  - `resolveMetaWidgetResult` zoekt nu eerst:
+    - `root._widget_result`
+    - `toolOutput._widget_result`
+  - daarna pas fallback naar `_meta.widget_result`.
+- `mcp-server/ui/lib/ui_actions.ts`
+  - `host_widget_session_id` persist gebeurt nu direct na `incomingOrdering`/`orderingDecision` berekening, dus vóór stale/tuple early-return paden.
+  - marker toegevoegd: `[ui_hwid_persisted_without_full_ordering]`.
+- `mcp-server/ui/lib/main.ts`
+  - dubbele startup render/timer rollback:
+    - terug naar enkel `if (!tryInitialIngestFromHost("set_globals")) renderStartupWaitState("initial_bootstrap_probe");`.
+- UI bundle opnieuw gegenereerd:
+  - `mcp-server/ui/step-card.bundled.html`.
+- Testuitbreiding:
+  - `mcp-server/src/ui_render.test.ts`
+    - test voor tuple-incomplete payload met persist van `host_widget_session_id`,
+    - test voor flat `toolOutput._widget_result` hydration.
+  - `mcp-server/src/mcp_app_contract.test.ts`
+    - assertions voor server-side `_widget_result` embed en runtime flat-lookup.
+
+4. Verwachte uitkomst
+- Startup canonical payload wordt direct vindbaar via `toolOutput._widget_result`; watchdog-miss verdwijnt in normale flow.
+- Eerste interactieve response bewaart `host_widget_session_id` ook zonder volledige ordering-tuple.
+- Geen dubbele lege startup render meer door client-timer workaround.
+
+5. Testresultaten lokaal
+- `cd mcp-server && node scripts/build-ui.mjs` -> PASS.
+- `cd mcp-server && npm run typecheck` -> PASS.
+- `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS (`110 pass`, `0 fail`).
+- `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (`170 tests`, `169 pass`, `0 fail`, `1 skipped`).
+
+6. Live observatie
+- Niet uitgevoerd in deze run.
+
+7. AWS/logbewijs met timestamps
+- Niet beschikbaar in deze run (`evidence_gap`): geen nieuwe CloudWatch-sessie uitgevoerd.
+
+8. Uitkomst
+- [x] Bevestigd
+- [ ] Weerlegd
+- [ ] Onbeslist
+
+9. Wat bleek achteraf onjuist
+- Aanname dat startup-probleem primair een timing-window issue was.
+
+10. Wat was gemist
+- Dat root `_meta` van tool-return niet dezelfde route heeft als `window.openai.toolOutput` in host-iframe transport.
+- Dat `host_widget_session_id` persist semantisch eerder moet gebeuren dan fail-closed early returns.
+
+11. Besluit
+- [x] Doorgaan op deze lijn
+- [ ] Stoppen en hypothese verwerpen
+- [ ] Externe review nodig
+- Toelichting: codepad is nu structureel aangepast op transport + ordering state-persist i.p.v. timingworkarounds.

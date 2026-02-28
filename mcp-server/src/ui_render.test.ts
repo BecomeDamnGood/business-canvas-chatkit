@@ -1374,6 +1374,37 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry fail-closes tupleless paylo
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
+test("handleToolResultAndMaybeScheduleBootstrapRetry persists host_widget_session_id on tuple-incomplete payload", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: {},
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = {};
+
+  const tuplelessPayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      language: "nl",
+      ui_strings_status: "pending",
+      host_widget_session_id: "internal:new-session",
+    },
+  });
+  const result = handleToolResultAndMaybeScheduleBootstrapRetry(tuplelessPayload, { source: "host_notification" });
+  assert.equal(Object.keys(result).length, 0);
+  assert.equal(
+    String((((globalThis as any).openai.widgetState as Record<string, unknown>) || {}).host_widget_session_id || ""),
+    "internal:new-session"
+  );
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
 test("handleToolResultAndMaybeScheduleBootstrapRetry drops duplicate payload with same ordering tuple", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
@@ -2338,6 +2369,7 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.match(source, /\[ui_ingest_dropped_no_widget_result\]/);
   assert.match(source, /\[ui_ordering_same_seq_upgrade_accepted\]/);
   assert.match(source, /\[ui_ingest_ack_cache_preserved\]/);
+  assert.match(source, /\[ui_hwid_persisted_without_full_ordering\]/);
   assert.match(source, /incoming_missing_tuple/);
   assert.match(source, /\[ui_dispatch_ack_only\]/);
   assert.match(source, /ui_transport_unavailable/);
@@ -2497,6 +2529,31 @@ test("resolveWidgetPayload hydrates from toolResponseMetadata widget_result when
 
   assert.equal(resolved.source, "meta.widget_result");
   assert.equal(String(((resolved.result.state as Record<string, unknown>)?.current_step || "")), "step_0");
+  assert.equal(resolved.needs_hydration, false);
+});
+
+test("resolveWidgetPayload hydrates from flat toolOutput _widget_result embed", () => {
+  const resolved = resolveWidgetPayload({
+    toolOutput: {
+      _widget_result: {
+        state: {
+          current_step: "step_0",
+          language: "nl",
+          ui_strings_status: "ready",
+          bootstrap_session_id: "session_flat",
+          bootstrap_epoch: 1,
+          response_seq: 3,
+          host_widget_session_id: "host_flat",
+        },
+        ui: { questionText: "Vraag" },
+      },
+    },
+  });
+
+  assert.equal(resolved.source, "meta.widget_result");
+  assert.equal(String(((resolved.result.state as Record<string, unknown>)?.current_step || "")), "step_0");
+  assert.equal(resolved.bootstrap_session_id, "session_flat");
+  assert.equal(resolved.host_widget_session_id, "host_flat");
   assert.equal(resolved.needs_hydration, false);
 });
 
