@@ -102,6 +102,24 @@ function normalizeReasonCode(raw: unknown): string {
   return safeString(raw).trim().toLowerCase();
 }
 
+function buildServerClientActionId(params: {
+  action: string;
+  correlationId: string;
+}): string {
+  const normalizedAction = safeString(params.action || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._:-]/g, "_")
+    .slice(0, 32);
+  const normalizedCorrelation = safeString(params.correlationId || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._:-]/g, "")
+    .slice(0, 48);
+  const candidate = `ca_srv_${normalizedAction || "action"}_${normalizedCorrelation || "req"}`;
+  return normalizeIdempotencyKey(candidate);
+}
+
 export function buildActionLivenessContract(
   context: RunStepContext,
   params: {
@@ -272,19 +290,30 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
 
   const stepIdStr = safeString(currentStepId ?? "");
   const msgLen = typeof userMessageRaw === "string" ? userMessageRaw.length : 0;
-  const stateKeysCount = Object.keys(stateForTool).length;
   const localeHint = safeString(args.locale_hint ?? "");
   const inputMode = safeString(args.input_mode ?? "chat");
   const action = upperMessage.startsWith("ACTION_") ? upperMessage : "text_input";
   const staleIngestGuardEnabled = RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED;
   const staleRebaseEnabled = staleIngestGuardEnabled && RUN_STEP_STALE_REBASE_V1_ENABLED;
   const staleInteractiveActionPolicy = classifyStaleInteractiveActionPolicy(action);
-  const idempotencyKey = normalizeIdempotencyKey(
-    args.idempotency_key ?? safeString((stateForTool as { __client_action_id?: unknown }).__client_action_id ?? "")
-  );
-  const clientActionId = normalizeIdempotencyKey(
+  const existingClientActionId = normalizeIdempotencyKey(
     safeString((stateForTool as { __client_action_id?: unknown }).__client_action_id ?? "")
   );
+  const fallbackClientActionId =
+    action.startsWith("ACTION_") && !existingClientActionId
+      ? buildServerClientActionId({ action, correlationId })
+      : "";
+  const clientActionId = existingClientActionId || fallbackClientActionId;
+  if (clientActionId) {
+    stateForTool = {
+      ...stateForTool,
+      __client_action_id: clientActionId,
+    };
+  }
+  const idempotencyKey =
+    normalizeIdempotencyKey(args.idempotency_key) ||
+    clientActionId;
+  const stateKeysCount = Object.keys(stateForTool).length;
 
   logStructuredEvent(
     "info",

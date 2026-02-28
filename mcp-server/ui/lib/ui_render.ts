@@ -820,13 +820,16 @@ export function render(overrideToolOutput?: unknown): void {
   const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
   const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
   if (!hasRenderableInteractiveContent) {
-    const recoverToPrestart = current === "step_0" && hasStartAction;
+    const failClosedReasonCode = "interactive_content_absent";
     console.warn("[ui_contract_interactive_content_absent]", {
       current_step: current,
       view_mode: viewMode || "",
       payload_source: resolved.source,
-      recovery_mode: recoverToPrestart ? "prestart" : "blocked",
+      recovery_mode: "blocked",
+      reason_code: failClosedReasonCode,
     });
+    const baseNotice = uiText(lang, "error.contract.body", "") || "Action could not be applied.";
+    setInlineNotice(`${baseNotice} (${failClosedReasonCode})`);
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
@@ -835,22 +838,6 @@ export function render(overrideToolOutput?: unknown): void {
     const prompt = document.getElementById("prompt");
     if (prompt) prompt.textContent = "";
     setSendEnabled(false);
-    if (recoverToPrestart) {
-      (btnStart as HTMLElement).style.display = "inline-flex";
-      startHint.textContent = "";
-      (startHint as HTMLElement).style.display = "none";
-      if (cardDescEl) {
-        cardDescEl.classList.remove("has-grid");
-        cardDescEl.classList.remove("is-step0-ask-layout");
-        const hasPrestartContent = hasPrestartContentForLang(lang);
-        const showSkeleton = uiStringsStatus !== "ready" || !hasPrestartContent;
-        if (showSkeleton) renderPrestartSkeleton(cardDescEl, lang);
-        else renderPrestartContent(cardDescEl, lang);
-      }
-      if (isLoading) setLoading(false);
-      (btnStart as HTMLButtonElement).disabled = getIsLoading() || !hasStartAction;
-      return;
-    }
     (btnStart as HTMLElement).style.display = "none";
     startHint.textContent = "";
     (startHint as HTMLElement).style.display = "none";

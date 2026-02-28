@@ -18,6 +18,7 @@ import {
   setSendEnabled,
   setInlineNotice,
   setLoading,
+  setLastToolOutput,
   toolData,
 } from "./ui_actions.js";
 import { render } from "./ui_render.js";
@@ -26,6 +27,10 @@ initActionsConfig({ render, t });
 
 const isLocalDev = (globalThis as Record<string, unknown>).LOCAL_DEV === "1";
 const STARTUP_WAITING_VIEW_MODE = "waiting_locale";
+const STARTUP_CANONICAL_WINDOW_MS = 4000;
+const STARTUP_CANONICAL_MISS_REASON = "startup_canonical_payload_missing";
+let startupCanonicalResolved = false;
+let startupCanonicalWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
 
 function latestWidgetState(): Record<string, unknown> {
   const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown>; lang?: string } }).__BSC_LATEST__;
@@ -95,10 +100,128 @@ function guardMissingActionRole(role: string, elementToDisable?: HTMLButtonEleme
   return false;
 }
 
+function clearStartupCanonicalWatchdog(): void {
+  if (!startupCanonicalWatchdogTimer) return;
+  clearTimeout(startupCanonicalWatchdogTimer);
+  startupCanonicalWatchdogTimer = null;
+}
+
+function markStartupCanonicalResolved(params: {
+  source: "set_globals" | "host_notification";
+  payload_source: string;
+  payload_reason_code: string;
+}): void {
+  if (startupCanonicalResolved) return;
+  startupCanonicalResolved = true;
+  clearStartupCanonicalWatchdog();
+  console.log("[startup_canonical_payload_observed]", {
+    source: params.source,
+    payload_source: params.payload_source,
+    payload_reason_code: params.payload_reason_code,
+  });
+}
+
+function buildStartupExplicitErrorState(reasonCode: string): Record<string, unknown> {
+  const stateReasonCode = String(reasonCode || STARTUP_CANONICAL_MISS_REASON).trim().toLowerCase() || STARTUP_CANONICAL_MISS_REASON;
+  return {
+    _meta: {
+      widget_result: {
+        ok: false,
+        tool: "run_step",
+        current_step_id: "step_0",
+        ack_status: "rejected",
+        state_advanced: false,
+        reason_code: stateReasonCode,
+        action_code_echo: "ACTION_BOOTSTRAP_POLL",
+        client_action_id_echo: "startup_canonical_watchdog",
+        error: {
+          type: "explicit_error",
+          message: "Startup canonical payload did not arrive in time.",
+          reason: stateReasonCode,
+          retry_action: "retry_same_action",
+          user_message: uiStringFromContract("error.contract.body") || "Please refresh and try again.",
+        },
+        state: {
+          current_step: "step_0",
+          started: "false",
+          ui_gate_status: "blocked",
+          ui_gate_reason: "contract_violation",
+          bootstrap_phase: "failed",
+          ui_strings_status: "pending",
+          reason_code: stateReasonCode,
+          ack_status: "rejected",
+          state_advanced: "false",
+          action_code_echo: "ACTION_BOOTSTRAP_POLL",
+          client_action_id_echo: "startup_canonical_watchdog",
+          ui_action_liveness: {
+            ack_status: "rejected",
+            state_advanced: false,
+            reason_code: stateReasonCode,
+            action_code_echo: "ACTION_BOOTSTRAP_POLL",
+            client_action_id_echo: "startup_canonical_watchdog",
+          },
+        },
+        ui: {
+          flags: {
+            bootstrap_waiting_locale: false,
+            bootstrap_interactive_ready: false,
+            startup_canonical_miss: true,
+          },
+          view: {
+            mode: "blocked",
+            waiting_locale: false,
+          },
+          action_contract: {
+            version: "2026-02-28.action_liveness.v1",
+            source: "client_startup_watchdog",
+            actions: [],
+          },
+        },
+      },
+    },
+  };
+}
+
+function renderStartupExplicitError(params: { reason_code: string; source: string }): void {
+  if (startupCanonicalResolved) return;
+  const explicitErrorState = buildStartupExplicitErrorState(params.reason_code);
+  console.warn("[startup_explicit_error_path]", {
+    source: params.source,
+    reason_code: params.reason_code,
+  });
+  setLastToolOutput(explicitErrorState);
+  render(explicitErrorState);
+}
+
+function scheduleStartupCanonicalWatchdog(trigger: string): void {
+  if (startupCanonicalResolved || startupCanonicalWatchdogTimer) return;
+  startupCanonicalWatchdogTimer = setTimeout(() => {
+    startupCanonicalWatchdogTimer = null;
+    if (startupCanonicalResolved) return;
+    console.warn("[startup_canonical_miss]", {
+      trigger,
+      reason_code: STARTUP_CANONICAL_MISS_REASON,
+      bootstrap_window_ms: STARTUP_CANONICAL_WINDOW_MS,
+    });
+    renderStartupExplicitError({
+      reason_code: STARTUP_CANONICAL_MISS_REASON,
+      source: trigger,
+    });
+  }, STARTUP_CANONICAL_WINDOW_MS);
+}
+
 function ingestHostPayload(
   payload: unknown,
   source: "set_globals" | "host_notification"
 ): void {
+  const resolved = resolveWidgetPayload(payload);
+  if (resolved.source === "meta.widget_result" && Object.keys(resolved.result).length > 0) {
+    markStartupCanonicalResolved({
+      source,
+      payload_source: resolved.source,
+      payload_reason_code: resolved.source_reason_code,
+    });
+  }
   if (source === "set_globals") {
     handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
     return;
@@ -158,6 +281,7 @@ function buildStartupInitState(): Record<string, unknown> {
 }
 
 function renderStartupWaitState(reason: string): void {
+  scheduleStartupCanonicalWatchdog(reason);
   if (hasRenderedStateSnapshot()) return;
   const startupInitState = buildStartupInitState();
   console.log("[startup_first_render_wait_shell]", { reason });

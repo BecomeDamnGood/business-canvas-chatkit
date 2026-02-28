@@ -193,6 +193,62 @@ test("canonical view decision: step_0 not-started always emits prestart with ACT
   assert.equal(String(guard.reason_code || ""), "");
 });
 
+test("contract invariant: step_0 started=true cannot be successful with no_output:NO_MENU", () => {
+  const response = {
+    ok: true,
+    tool: "run_step",
+    current_step_id: "step_0",
+    active_specialist: "ValidationAndBusinessName",
+    prompt: "What type of business are you building?",
+    text: "",
+    specialist: {},
+    state: {
+      current_step: "step_0",
+      started: "true",
+      __client_action_id: "ca_test_invariant_001",
+      bootstrap_phase: "ready",
+      ui_gate_status: "ready",
+      ui_gate_reason: "",
+      ui_strings_status: "ready",
+      ui_strings_requested_lang: "en",
+      ui_strings_lang: "en",
+      ui_strings: { startHint: "Click Start" },
+      locale: "en",
+      language: "en",
+      ui_strings_fallback_applied: "false",
+      ui_strings_fallback_reason: "",
+      view_contract_version: LOCALE_START_VIEW_CONTRACT_VERSION,
+    },
+    ui: {
+      view: {
+        mode: "interactive",
+        waiting_locale: false,
+      },
+      questionText: "What type of business are you building?",
+      contract_id: "step_0:no_output:NO_MENU",
+      actions: [],
+    },
+  } as Record<string, unknown>;
+
+  const final = finalizeResponseContractInternals(response, {
+    applyUiClientActionContract: () => {},
+    parseMenuFromContractIdForStep: () => "",
+    labelKeysForMenuActionCodes: () => [],
+    onUiParityError: () => {},
+    attachRegistryPayload: (payload) => payload,
+  });
+
+  assert.equal(final.ok, false);
+  assert.equal(String((final.error as Record<string, unknown> | undefined)?.type || ""), "contract_violation");
+  assert.equal(
+    String((final.error as Record<string, unknown> | undefined)?.reason || ""),
+    "step0_started_no_output_no_menu_forbidden"
+  );
+  assert.equal(String((final as Record<string, unknown>).ack_status || ""), "rejected");
+  assert.equal(Boolean((final as Record<string, unknown>).state_advanced), false);
+  assert.equal(String((final as Record<string, unknown>).reason_code || ""), "step0_started_no_output_no_menu_forbidden");
+});
+
 test("Start gating: seedable non-empty first message keeps Click Start gate and does not auto-advance", async () => {
   const localeHints = ["nl-NL", "fr-FR", "zh-CN", "ja-JP"];
   for (const localeHint of localeHints) {

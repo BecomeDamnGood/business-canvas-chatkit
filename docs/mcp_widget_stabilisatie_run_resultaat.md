@@ -459,3 +459,76 @@ Lokaal uitgevoerd (verplicht):
 
 ## 4) Live/AWS bewijsstatus
 - Live hostvalidatie en CloudWatch timestamps zijn in deze run niet uitgevoerd (omgeving zonder live endpoint/AWS toegang).
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 10:13 UTC, startup + action-liveness invarianten)
+
+## 0) Samenvatting
+- Doorgevoerd: structurele ketenfix voor beide regressies:
+  1) startup mag niet eindigen in lege/half waiting eindtoestand,
+  2) startactie kan niet meer stil "accepted" blijven op `step_0:no_output:NO_MENU`.
+- Kernprincipe behouden:
+  - SSOT blijft `_meta.widget_result`,
+  - ordering tuple blijft leidend,
+  - UI blijft dumb (server action-contract + fail-closed rendering).
+
+## 1) Exacte wijzigingen
+1. `mcp-server/ui/lib/main.ts`
+- Startup canonical watchdog toegevoegd (`STARTUP_CANONICAL_WINDOW_MS=4000`).
+- Bij canonical miss: expliciete startup error-state met `reason_code=startup_canonical_payload_missing`.
+- Nieuwe observability markers:
+  - `[startup_canonical_miss]`
+  - `[startup_explicit_error_path]`
+  - `[startup_canonical_payload_observed]`
+
+2. `mcp-server/ui/lib/ui_render.ts`
+- Interactive-zonder-renderbare-content valt niet meer terug naar prestart masking.
+- Fail-closed pad forceert blocked expliciete fout met `reason_code=interactive_content_absent`.
+
+3. `mcp-server/src/server/run_step_transport_context.ts`
+- Server-side fallback `client_action_id` toegevoegd voor interactieve actions.
+- `client_action_id_echo` wordt non-empty afgedwongen in transport/liveness keten.
+
+4. `mcp-server/src/server/run_step_transport.ts`
+- Liveness `reason_code` prioriteert nu `error.reason` boven `error.type` voor explicietere foutreden.
+
+5. `mcp-server/src/handlers/turn_contract.ts`
+- Invariant afgedwongen:
+  - `step_0 + started=true + contract_id=step_0:no_output:NO_MENU` is contract violation in interactieve client-action context.
+- Contract failure payload zet nu consistente `reason_code` in error en state (fail-closed zonder ambiguiteit).
+
+6. Testaanpassingen
+- `mcp-server/src/ui_render.test.ts`
+- `mcp-server/src/handlers/run_step.test.ts`
+- `mcp-server/src/mcp_app_contract.test.ts`
+- Nieuwe/gewijzigde assertions dekken startup explicit-error pad, step_0 contract violation pad en non-empty client action echo.
+
+## 2) Verplichte testcommando's
+1. `cd mcp-server && npm run typecheck`
+- Resultaat: PASS.
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- Resultaat: PASS (`108 pass`, `0 fail`).
+
+3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- Resultaat: PASS (`170 tests`, `169 pass`, `0 fail`, `1 skipped`).
+
+## 3) Ketenbewijs tegen de twee regressies
+1. Lege/half startup eindtoestand
+- Startup zonder canonical payload blijft niet oneindig in wait shell.
+- Binnen watchdog-window volgt deterministisch een expliciete error-state met reason-code.
+
+2. Schijnbaar inactieve startknop
+- `step_0 started=true` kan niet meer als succesvolle interactieve no-output respons doorlopen.
+- Dit wordt contractueel explicit-error i.p.v. verborgen prestart-herhaling.
+
+3. Uniforme action-liveness
+- Interactieve actions hebben non-empty `client_action_id_echo`.
+- Foutreden loopt consistent via `reason_code` (incl. `error.reason`).
+
+## 4) Live/AWS bewijsstatus
+- CloudWatch queries zijn geprobeerd op `2026-02-28 10:13:55 UTC` voor:
+  1) `run_step_request` + `ACTION_START`
+  2) `run_step_action_liveness_ack`
+- Beide queries faalden met:
+  - `Could not connect to the endpoint URL: "https://logs.us-east-1.amazonaws.com/"`
+- Conclusie: live timestampbewijs blijft in deze omgeving geblokkeerd door endpointconnectiviteit; lokaal ketenbewijs is volledig geleverd via tests en markers.

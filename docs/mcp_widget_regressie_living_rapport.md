@@ -762,3 +762,82 @@ Kopieer dit blok voor elke volgende run:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: volgende stap is live 5-flow verificatie met CloudWatch-correlation IDs per action lifecycle.
+
+### Poging 2026-02-28 10:13 UTC (startup + step_0 invarianten structureel afgedwongen)
+
+- Hypothese:
+  - De resterende regressies komen uit ontbrekende keten-invarianten:
+    1) startup zonder canonieke payload had geen harde eindtoestand,
+    2) `step_0 + started=true` kon nog als "succes" eindigen met `no_output:NO_MENU`,
+    3) `client_action_id_echo` kon leeg blijven bij interactieve actions.
+- Waarom deze hypothese:
+  - Live feiten toonden al `ACTION_START accepted`, maar ook `step_0:no_output:NO_MENU` en UX die terugvalt naar prestart-gevoel.
+  - Dat duidt op contract-invariant gaten, niet op enkel transport of cosmetische UI.
+- Exacte wijziging(en):
+  1. `mcp-server/ui/lib/main.ts`
+     - startup canonical watchdog toegevoegd (`STARTUP_CANONICAL_WINDOW_MS=4000`);
+     - bij miss: expliciete fail-closed startup state met `reason_code=startup_canonical_payload_missing`;
+     - markers: `[startup_canonical_miss]`, `[startup_explicit_error_path]`, `[startup_canonical_payload_observed]`.
+  2. `mcp-server/ui/lib/ui_render.ts`
+     - interactieve payload zonder renderbare content valt niet meer terug naar prestart;
+     - nu altijd blocked explicit-error pad (`reason_code=interactive_content_absent`).
+  3. `mcp-server/src/server/run_step_transport_context.ts`
+     - server-side fallback voor ontbrekende `client_action_id` toegevoegd voor interactieve actions;
+     - non-empty `client_action_id_echo` end-to-end afgedwongen.
+  4. `mcp-server/src/server/run_step_transport.ts`
+     - `reason_code` prioriteert nu `error.reason` boven `error.type`.
+  5. `mcp-server/src/handlers/turn_contract.ts`
+     - invariant toegevoegd: `step_0 + started=true + contract_id=step_0:no_output:NO_MENU` is contract violation bij interactieve client-action context;
+     - contract failure payload draagt nu expliciet dezelfde `reason_code` door in state + error.
+  6. Tests aangepast:
+     - `mcp-server/src/ui_render.test.ts`
+     - `mcp-server/src/handlers/run_step.test.ts`
+     - `mcp-server/src/mcp_app_contract.test.ts`
+- Verwachte uitkomst:
+  - Startup eindigt niet meer in eindeloze waiting shell.
+  - Startflow kan niet meer stil als "accepted" eindigen op `step_0:no_output:NO_MENU`.
+  - Elke interactieve action heeft non-empty `client_action_id_echo` en eindigt in `state_advanced` of `explicit_error`.
+- Testresultaten lokaal:
+  1. `cd mcp-server && npm run typecheck` -> PASS.
+  2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS (108 pass, 0 fail).
+  3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (170 tests, 169 pass, 0 fail, 1 skipped).
+- Live observatie:
+  - CloudWatch live-verificatie geprobeerd, maar AWS endpoint niet bereikbaar vanuit deze omgeving.
+- AWS/logbewijs met timestamps:
+  - `2026-02-28 10:13:55 UTC`: query `run_step_request + ACTION_START` -> `Could not connect to the endpoint URL: "https://logs.us-east-1.amazonaws.com/"`.
+  - `2026-02-28 10:13:55 UTC`: query `run_step_action_liveness_ack` -> dezelfde endpoint-fout.
+  - Lokaal markerbewijs uit tests aanwezig:
+    - `[ui_action_liveness_ack]`
+    - `[ui_action_liveness_explicit_error]`
+    - `[ui_action_dispatch_ack_without_state_advance]`
+    - `[startup_canonical_miss]` (source contract/assertions aanwezig in testset).
+- Uitkomst:
+  - [ ] Bevestigd
+  - [ ] Weerlegd
+  - [x] Onbeslist
+- Wat bleek achteraf onjuist:
+  - Dat startup-recovery en action-liveness op zichzelf genoeg waren zonder harde startup/step_0 contractinvariant.
+- Wat was gemist:
+  - Een harde timeout-eindtoestand voor startup zonder canonical payload.
+  - Contractbreukdetectie voor `step_0 started=true` met `no_output:NO_MENU`.
+  - Server-side fallback voor lege `client_action_id` bij interactieve dispatches.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: code en tests zijn structureel op invarianten gebracht; live AWS-validatie volgt zodra endpointtoegang beschikbaar is.
+
+#### Waarom eerdere oplossing onvoldoende was
+- Eerdere pass liet startup toe om te blijven hangen in wait-state zonder harde fout-eindtoestand.
+- Eerdere pass liet semantisch inconsistente "success" toe voor `step_0 started=true` met `no_output:NO_MENU` in interactieve context.
+- Daardoor bleef de UX regressie voelbaar als "klik doet niets", ondanks accepted-ack.
+
+#### Welke invariant ontbrak toen
+- Startup invariant: binnen bootstrap-window moet canonical `_meta.widget_result` verschijnen, anders `explicit_error`.
+- Step_0-start invariant: `started=true` mag niet succesvol eindigen op `step_0:no_output:NO_MENU`.
+- Interactive liveness invariant: `client_action_id_echo` moet non-empty zijn.
+
+#### Waarom deze nieuwe fix structureel is en geen workaround
+- Fix zit op ketenniveau (transport + contract + UI fail-closed), niet op cosmetische UI-fallback.
+- Invarianten zijn afgedwongen met reason-coded explicit-error paden en testdekking.
+- SSOT `_meta.widget_result` en ordering tuple blijven leidend; UI blijft dumb en reconstrueert geen business-state.

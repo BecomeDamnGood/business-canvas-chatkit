@@ -318,14 +318,16 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       outcome: "fresh",
     });
     const stateAdvanced = hasStateAdvancedByResponseSeq(incomingOrdering, responseSeq);
-    const resultErrorType = safeString((toRecord(resultForClient.error).type as string | undefined) ?? "").trim().toLowerCase();
+    const resultError = toRecord(resultForClient.error);
+    const resultErrorType = safeString((resultError.type as string | undefined) ?? "").trim().toLowerCase();
+    const resultErrorReason = safeString((resultError.reason as string | undefined) ?? "").trim().toLowerCase();
     const livenessContract = buildActionLivenessContract(context, {
       ack_status: resultForClient.ok === true ? "accepted" : (resultErrorType === "timeout" ? "timeout" : "rejected"),
       state_advanced: resultForClient.ok === true ? stateAdvanced : false,
       reason_code:
         resultForClient.ok === true
           ? (stateAdvanced ? "" : "state_not_advanced")
-          : (resultErrorType || "explicit_error"),
+          : (resultErrorReason || resultErrorType || "explicit_error"),
     });
     resultForClient = attachActionLivenessToResult(resultForClient, livenessContract);
 

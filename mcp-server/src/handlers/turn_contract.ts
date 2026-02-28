@@ -1,4 +1,5 @@
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
+import { parseUiContractId, UI_CONTRACT_NO_MENU } from "../core/ui_contract_id.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
 import type { CanvasState } from "../core/state.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
@@ -91,6 +92,35 @@ function hasStartAction(response: RunStepContractResponse, state: Record<string,
   return actions.some((action) => String(action?.action_code || "").trim() === "ACTION_START");
 }
 
+function isForbiddenStep0StartedNoOutputNoMenu(
+  response: RunStepContractResponse,
+  step0Id: string
+): boolean {
+  const state = toRecord(response.state);
+  const clientActionId = String(
+    state.__client_action_id ||
+      state.client_action_id_echo ||
+      toRecord(state.ui_action_liveness).client_action_id_echo ||
+      ""
+  ).trim();
+  if (!clientActionId) return false;
+  const started = String(state.started || "").trim().toLowerCase() === "true";
+  if (!started) return false;
+  const currentStep =
+    String(response.current_step_id || state.current_step || step0Id).trim() || step0Id;
+  if (currentStep !== step0Id) return false;
+  const uiPayload = toRecord(response.ui);
+  const contractId = String(uiPayload.contract_id || "").trim();
+  if (!contractId) return false;
+  const parsed = parseUiContractId(contractId);
+  if (!parsed) return false;
+  return (
+    parsed.stepId === step0Id &&
+    parsed.status === "no_output" &&
+    parsed.menuId === UI_CONTRACT_NO_MENU
+  );
+}
+
 function ensureActionLivenessContract(response: RunStepContractResponse): void {
   const state = toRecord(response.state);
   const fromState = toRecord(state.ui_action_liveness);
@@ -125,6 +155,7 @@ function ensureActionLivenessContract(response: RunStepContractResponse): void {
         response.reason_code ||
           state.reason_code ||
           fromState.reason_code ||
+          toRecord(response.error).reason ||
           toRecord(response.error).type ||
           "explicit_error"
       )
@@ -480,6 +511,10 @@ export function assertRunStepContractOrThrow(response: RunStepContractResponse):
     ? (actionContract.actions as Array<Record<string, unknown>>)
     : [];
   const hasRenderableContent = hasRenderableResponseContent(response);
+  const forbiddenStep0StartedNoOutputNoMenu = isForbiddenStep0StartedNoOutputNoMenu(
+    response,
+    STEP_0_ID
+  );
 
   if (!CONTRACT_BOOTSTRAP_PHASES.has(bootstrapPhase)) {
     throw new Error("invalid_bootstrap_phase");
@@ -584,6 +619,9 @@ export function assertRunStepContractOrThrow(response: RunStepContractResponse):
   if (uiViewMode === "interactive" && !hasRenderableContent) {
     throw new Error("interactive_requires_renderable_content");
   }
+  if (response?.ok === true && forbiddenStep0StartedNoOutputNoMenu) {
+    throw new Error("step0_started_no_output_no_menu_forbidden");
+  }
 }
 
 export function buildContractFailurePayload(
@@ -592,7 +630,9 @@ export function buildContractFailurePayload(
 ): Record<string, unknown> {
   const currentStep = String(response?.current_step_id || (response?.state as any)?.current_step || "step_0");
   const specialist = ((response?.specialist || {}) as Record<string, unknown>) || {};
+  const reasonCode = String(reason || "unknown_contract_violation").trim().toLowerCase();
   const state = buildFailClosedState((response?.state as CanvasState | undefined) || null, "contract_violation");
+  (state as Record<string, unknown>).reason_code = reasonCode;
   return {
     ok: false,
     tool: "run_step",
@@ -606,7 +646,7 @@ export function buildContractFailurePayload(
     error: {
       type: "contract_violation",
       message: "RunStep response violated the strict startup/i18n contract.",
-      reason: String(reason || "unknown_contract_violation"),
+      reason: reasonCode,
       required_action: "restart_session",
     },
   };

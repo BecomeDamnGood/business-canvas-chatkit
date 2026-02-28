@@ -237,9 +237,17 @@ test("MCP app contract: turn contract enforces canonical step_0\/interactive vie
   assert.match(turnContractSource, /buildCanonicalWidgetState/);
   assert.match(turnContractSource, /ensureUnifiedUiActionContract/);
   assert.match(turnContractSource, /action_contract/);
+  assert.match(turnContractSource, /step0_started_no_output_no_menu_forbidden/);
   assert.match(canonicalWidgetStateSource, /step0_start_action_missing/);
   assert.match(canonicalWidgetStateSource, /interactive_content_absent/);
   assert.match(turnContractSource, /interactive_requires_renderable_content/);
+});
+
+test("MCP app contract: interactive actions get non-empty client_action_id echo server-side", () => {
+  assert.match(source, /function buildServerClientActionId\(/);
+  assert.match(source, /action\.startsWith\("ACTION_"\) && !existingClientActionId/);
+  assert.match(source, /__client_action_id:\s*clientActionId/);
+  assert.match(source, /client_action_id_present:\s*clientActionId \? "true" : "false"/);
 });
 
 test("MCP app contract: ready endpoint includes correlation tracing + diagnostics reference", () => {
