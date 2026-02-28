@@ -89,6 +89,13 @@ export type ActionLivenessContract = {
   client_action_id_echo: string;
 };
 
+export type ActionLivenessFailureClass =
+  | "none"
+  | "timeout"
+  | "rejected"
+  | "dropped"
+  | "accepted_no_advance";
+
 function normalizeAckStatus(raw: unknown): ActionAckStatus {
   const normalized = safeString(raw).trim().toLowerCase();
   if (normalized === "accepted") return "accepted";
@@ -120,6 +127,24 @@ function buildServerClientActionId(params: {
   return normalizeIdempotencyKey(candidate);
 }
 
+function alignInternalHostWidgetSessionId(params: {
+  hostWidgetSessionId: string;
+  bootstrapSessionId: string;
+}): string {
+  const normalizedHost = safeString(params.hostWidgetSessionId ?? "").trim();
+  const normalizedBootstrap = normalizeBootstrapSessionId(params.bootstrapSessionId);
+  if (!normalizedBootstrap) return normalizedHost;
+  if (!normalizedHost) return `internal:${normalizedBootstrap}`;
+  if (!normalizedHost.startsWith("internal:")) return normalizedHost;
+  const internalSuffix = normalizeBootstrapSessionId(
+    normalizedHost.slice("internal:".length)
+  );
+  if (!internalSuffix || internalSuffix !== normalizedBootstrap) {
+    return `internal:${normalizedBootstrap}`;
+  }
+  return normalizedHost;
+}
+
 export function buildActionLivenessContract(
   context: RunStepContext,
   params: {
@@ -140,10 +165,22 @@ export function buildActionLivenessContract(
   };
 }
 
+export function classifyActionLivenessFailureClass(
+  contract: ActionLivenessContract
+): ActionLivenessFailureClass {
+  const ackStatus = normalizeAckStatus(contract.ack_status);
+  if (ackStatus === "timeout") return "timeout";
+  if (ackStatus === "dropped") return "dropped";
+  if (ackStatus === "rejected") return "rejected";
+  if (ackStatus === "accepted" && contract.state_advanced !== true) return "accepted_no_advance";
+  return "none";
+}
+
 export function attachActionLivenessToResult(
   resultForClient: Record<string, unknown>,
   contract: ActionLivenessContract
 ): Record<string, unknown> {
+  const failureClass = classifyActionLivenessFailureClass(contract);
   const state =
     resultForClient && typeof resultForClient.state === "object" && resultForClient.state
       ? (resultForClient.state as Record<string, unknown>)
@@ -154,6 +191,7 @@ export function attachActionLivenessToResult(
       ack_status: contract.ack_status,
       state_advanced: contract.state_advanced,
       reason_code: contract.reason_code,
+      failure_class: failureClass,
       action_code_echo: contract.action_code_echo,
       client_action_id_echo: contract.client_action_id_echo,
     },
@@ -164,6 +202,7 @@ export function attachActionLivenessToResult(
     ack_status: contract.ack_status,
     state_advanced: contract.state_advanced,
     reason_code: contract.reason_code,
+    failure_class: failureClass,
     action_code_echo: contract.action_code_echo,
     client_action_id_echo: contract.client_action_id_echo,
   };
@@ -223,7 +262,7 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
         : userMessageRaw;
 
   const hasInitiator = safeString(state.initial_user_message ?? "").trim() !== "";
-  const hostWidgetSessionId = resolveEffectiveHostWidgetSessionId({
+  const resolvedHostWidgetSessionId = resolveEffectiveHostWidgetSessionId({
     provided: args.host_widget_session_id,
     state,
     bootstrapSessionId: state.bootstrap_session_id,
@@ -270,6 +309,10 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
   const normalizedResponseSeq = incomingBootstrapSession
     ? parsePositiveInt(stateForTool.response_seq) // bestaande sessie: bewaar waarde
     : 0; // nieuwe sessie: altijd 0
+  const hostWidgetSessionId = alignInternalHostWidgetSessionId({
+    hostWidgetSessionId: resolvedHostWidgetSessionId,
+    bootstrapSessionId: normalizedBootstrapSessionId,
+  });
   stateForTool = {
     ...stateForTool,
     bootstrap_session_id: normalizedBootstrapSessionId,
@@ -278,6 +321,25 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
     host_widget_session_id: hostWidgetSessionId,
     __idempotency_registry_owner: "server",
   };
+
+  if (hostWidgetSessionId !== resolvedHostWidgetSessionId) {
+    logStructuredEvent(
+      "warn",
+      "host_session_id_realigned_to_bootstrap",
+      {
+        correlation_id: correlationId,
+        trace_id: traceId,
+        session_id: normalizedBootstrapSessionId,
+        step_id: currentStepId,
+        contract_id: resolveContractIdFromRecord({ state: stateForTool }),
+      },
+      {
+        previous_host_widget_session_id: resolvedHostWidgetSessionId,
+        next_host_widget_session_id: hostWidgetSessionId,
+        realign_reason: "internal_host_mismatch",
+      }
+    );
+  }
 
   logStructuredEvent(
     "info",

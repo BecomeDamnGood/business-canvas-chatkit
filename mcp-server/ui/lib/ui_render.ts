@@ -22,6 +22,7 @@ import {
   lockRateLimit,
   toolData,
   setLastToolOutput,
+  resolveActionLivenessNotice,
   uiLang,
   resolveWidgetPayload,
   resetHydrationRetryCycle,
@@ -300,34 +301,6 @@ function readActionLiveness(
       result.client_action_id_echo || state.client_action_id_echo || stateLiveness.client_action_id_echo || ""
     ).trim(),
   };
-}
-
-function livenessNoticeMessage(
-  lang: string,
-  liveness: {
-    ack_status: string;
-    state_advanced: boolean;
-    reason_code: string;
-    action_code_echo: string;
-    client_action_id_echo: string;
-  }
-): string {
-  if (liveness.ack_status === "timeout") {
-    return uiText(lang, "transient.timeout", "") || "The action timed out. Please retry.";
-  }
-  if (liveness.ack_status === "dropped") {
-    const base = uiText(lang, "error.contract.body", "") || "Action could not be applied.";
-    return `${base} (${liveness.reason_code || "dropped"})`;
-  }
-  if (liveness.ack_status === "rejected") {
-    const base = uiText(lang, "error.contract.body", "") || "Action was rejected.";
-    return `${base} (${liveness.reason_code || "rejected"})`;
-  }
-  if (!liveness.state_advanced) {
-    const base = uiText(lang, "error.contract.body", "") || "No state update was applied.";
-    return `${base} (${liveness.reason_code || "state_not_advanced"})`;
-  }
-  return "";
 }
 
 function renderBlockedState(cardDesc: HTMLElement, lang: string, title: string, body: string): void {
@@ -631,7 +604,8 @@ export function render(overrideToolOutput?: unknown): void {
     if (result?.ok === false) return;
   } else {
     if (hasExplicitActionError && actionLiveness) {
-      setInlineNotice(livenessNoticeMessage(lang, actionLiveness));
+      const livenessNotice = resolveActionLivenessNotice(state, actionLiveness);
+      setInlineNotice(livenessNotice.message);
     } else {
       clearInlineNotice();
     }

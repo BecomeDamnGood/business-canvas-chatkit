@@ -1176,6 +1176,11 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /notifyHostTransportSignal\("bridge_message"\)/);
   assert.match(source, /notifyHostTransportSignal\("host_notification"\)/);
   assert.match(source, /notifyHostTransportSignal\("set_globals"\)/);
+  assert.match(source, /logWidgetStateRehydrateMarker/);
+  assert.match(source, /phase: "before_reload_probe"/);
+  assert.match(source, /phase: "after_reload_probe"/);
+  assert.match(source, /phase: "before_host_ingest"/);
+  assert.match(source, /phase: "after_host_ingest"/);
   assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*ingestHostPayload\(data\.params, "host_notification"\)/);
   assert.match(source, /openai:set_globals[\s\S]*ingestHostPayload\(payload, "set_globals"\)/);
   assert.match(source, /startup_set_globals_empty_payload_ignored/);
@@ -1247,6 +1252,51 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry keeps widget ordering monot
   );
 
   (globalThis as any).openai = originalOpenai;
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry rehydrates missing host_widget_session_id from current tuple", () => {
+  const originalOpenai = (globalThis as any).openai;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+  const hostState: Record<string, unknown> = {
+    bootstrap_session_id: "bs_demo",
+    bootstrap_epoch: 1,
+    response_seq: 6,
+    host_widget_session_id: "internal:demo",
+  };
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: { ...hostState },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+  };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 6,
+      host_widget_session_id: "internal:demo",
+    },
+    ui: { view: { mode: "interactive" } },
+  });
+
+  const missingHostPayload = toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 7,
+    },
+    ui: { view: { mode: "interactive" } },
+  });
+  handleToolResultAndMaybeScheduleBootstrapRetry(missingHostPayload, { source: "host_notification" });
+  const stateAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
+  assert.equal(Number(stateAfter.response_seq || 0), 7);
+  assert.equal(String(stateAfter.host_widget_session_id || ""), "internal:demo");
+
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
 test("handleToolResultAndMaybeScheduleBootstrapRetry drops stale payload before cache update", () => {
@@ -1718,6 +1768,74 @@ test("callRunStep ingests callTool response immediately and updates render state
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
+test("callRunStep rehydrates outbound tuple from persisted widgetState after reload/resume", async () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalLatest = (globalThis as any).__BSC_LATEST__;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = {};
+  (globalThis as any).__BSC_LATEST__ = {
+    state: {
+      current_step: "step_0",
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 4,
+      host_widget_session_id: "internal:demo",
+    },
+    lang: "en",
+  };
+
+  let payloadStateSeen: Record<string, unknown> = {};
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: {
+      bootstrap_session_id: "bs_demo",
+      bootstrap_epoch: 1,
+      response_seq: 8,
+      host_widget_session_id: "internal:demo",
+    },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+    async callTool(_toolName: string, args: Record<string, unknown>) {
+      payloadStateSeen = ((args.state as Record<string, unknown>) || {});
+      return toolOutputFromWidgetResult({
+        state: {
+          current_step: "step_0",
+          bootstrap_session_id: "bs_demo",
+          bootstrap_epoch: 1,
+          response_seq: 9,
+          host_widget_session_id: "internal:demo",
+        },
+        ui: { view: { mode: "interactive" } },
+      });
+    },
+  };
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await callRunStep("ACTION_TEST_RELOAD_RESUME");
+
+  assert.equal(Number(payloadStateSeen.response_seq || 0), 8);
+  assert.equal(Number(payloadStateSeen.bootstrap_epoch || 0), 1);
+  assert.equal(String(payloadStateSeen.bootstrap_session_id || ""), "bs_demo");
+  assert.equal(String(payloadStateSeen.host_widget_session_id || ""), "internal:demo");
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LATEST__ = originalLatest;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
 test("callRunStep emits explicit liveness error when transport is unavailable", async () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
@@ -1969,6 +2087,93 @@ test("callRunStep does not auto-dispatch bootstrap poll when ACTION_START ack ha
   assert.equal(String(widgetAfter.ui_action_liveness_ack_status || ""), "accepted");
   assert.equal(String(widgetAfter.ui_action_liveness_state_advanced || ""), "false");
   assert.equal(String(widgetAfter.ui_action_liveness_reason_code || ""), "state_not_advanced");
+  assert.equal(String(widgetAfter.ui_action_liveness_failure_class || ""), "accepted_no_advance");
+  const inlineNotice = (fakeDocument as any).getElementById("inlineNotice");
+  assert.equal(String(inlineNotice.style.display || ""), "block");
+  assert.match(String(inlineNotice.textContent || ""), /\(state_not_advanced\)$/i);
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+  (globalThis as any).__BSC_LATEST__ = originalLatest;
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("callRunStep timeout response sets explicit timeout liveness and bypasses unsafe cache preserve", async () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+  const originalLatest = (globalThis as any).__BSC_LATEST__;
+  const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
+
+  const fakeDocument = makeDocument();
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+
+  const baseState = {
+    current_step: "purpose",
+    started: "true",
+    bootstrap_session_id: "bs_timeout",
+    bootstrap_epoch: 1,
+    response_seq: 6,
+    host_widget_session_id: "internal:timeout",
+  };
+  (globalThis as any).__BSC_LATEST__ = { state: { ...baseState }, lang: "en" };
+  (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = toolOutputFromWidgetResult({
+    state: { ...baseState },
+    specialist: { question: "What is your purpose?" },
+    ui: {
+      view: { mode: "interactive" },
+      questionText: "What is your purpose?",
+      action_contract: {
+        actions: [
+          { id: "a1", label: "Define purpose", action_code: "ACTION_PURPOSE_INTRO_DEFINE", role: "choice", surface: "choice", intent: { type: "ROUTE", route: "__ROUTE__PURPOSE_INTRO_DEFINE__" } },
+        ],
+      },
+    },
+  });
+
+  (globalThis as any).openai = {
+    toolOutput: null,
+    widgetState: { ...baseState },
+    setWidgetState(next: Record<string, unknown>) {
+      this.widgetState = next;
+    },
+    async callTool() {
+      return toolOutputFromWidgetResult({
+        ok: false,
+        state: {
+          ...baseState,
+          response_seq: 7,
+        },
+        ui: { view: { mode: "interactive" } },
+        error: {
+          type: "timeout",
+          user_message: "This is taking longer than usual. Please try again.",
+          retry_action: "retry_same_action",
+        },
+      });
+    },
+  };
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await callRunStep("ACTION_PURPOSE_INTRO_DEFINE");
+
+  const widgetAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
+  assert.equal(String(widgetAfter.ui_action_liveness_ack_status || ""), "timeout");
+  assert.equal(String(widgetAfter.ui_action_liveness_state_advanced || ""), "false");
+  assert.equal(String(widgetAfter.ui_action_liveness_reason_code || ""), "timeout");
+  assert.equal(String(widgetAfter.ui_action_liveness_failure_class || ""), "timeout");
+
+  const inlineNotice = (fakeDocument as any).getElementById("inlineNotice");
+  assert.equal(String(inlineNotice.style.display || ""), "block");
+  assert.equal(String(inlineNotice.textContent || ""), "This is taking longer than usual. Please try again.");
+
+  const cachedResolved = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__);
+  assert.equal(cachedResolved.response_seq, 7);
 
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
@@ -2385,6 +2590,10 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.doesNotMatch(source, /widget_result:\s*rootResult/);
   assert.match(source, /ui_ordering_patch_dropped/);
   assert.match(source, /payload_reason_code: resolvedResponse\.source_reason_code/);
+  assert.match(source, /\[ui_widgetstate_rehydrate\]/);
+  assert.match(source, /\[ui_widgetstate_persist_attempt\]/);
+  assert.match(source, /\[ui_widgetstate_persist_applied\]/);
+  assert.match(source, /\[ui_widgetstate_persist_skipped_no_change\]/);
   assert.match(source, /notifyHostTransportSignal/);
   assert.match(source, /function canUseBridge\(\): boolean \{[\s\S]*return bridgeEnabled;/);
   assert.match(source, /const transportPrimary: "callTool" \| "bridge" = hasCallTool \? "callTool" : "bridge";/);

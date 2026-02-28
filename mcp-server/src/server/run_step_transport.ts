@@ -28,6 +28,7 @@ import {
   attachActionLivenessToResult,
   buildActionLivenessContract,
   buildRunStepContext,
+  classifyActionLivenessFailureClass,
   hasStateAdvancedByResponseSeq,
   type RunStepHandlerArgs,
   readIncomingOrdering,
@@ -62,6 +63,7 @@ function applyActionLivenessToTransportResult(
   transportResult: RunStepTransportResult,
   contract: ActionLivenessContract
 ): RunStepTransportResult {
+  const failureClass = classifyActionLivenessFailureClass(contract);
   const meta = toRecord(transportResult.meta);
   const widgetResult = toRecord(meta.widget_result);
   if (Object.keys(widgetResult).length === 0) return transportResult;
@@ -77,6 +79,7 @@ function applyActionLivenessToTransportResult(
         ack_status: contract.ack_status,
         state_advanced: contract.state_advanced,
         reason_code: contract.reason_code,
+        failure_class: failureClass,
         action_code_echo: contract.action_code_echo,
         client_action_id_echo: contract.client_action_id_echo,
       },
@@ -84,6 +87,7 @@ function applyActionLivenessToTransportResult(
     ack_status: contract.ack_status,
     state_advanced: contract.state_advanced,
     reason_code: contract.reason_code,
+    failure_class: failureClass,
     action_code_echo: contract.action_code_echo,
     client_action_id_echo: contract.client_action_id_echo,
   };
@@ -166,12 +170,14 @@ function logActionLivenessOutcome(params: {
   liveness: ActionLivenessContract;
 }): void {
   const { context, liveness, incomingOrdering, outgoingOrdering } = params;
+  const failureClass = classifyActionLivenessFailureClass(liveness);
   const shared = {
     action_code: liveness.action_code_echo,
     client_action_id: liveness.client_action_id_echo,
     ack_status: liveness.ack_status,
     state_advanced: liveness.state_advanced,
     reason_code: liveness.reason_code,
+    failure_class: failureClass,
     bootstrap_session_id: outgoingOrdering?.sessionId || incomingOrdering.sessionId || context.normalizedBootstrapSessionId,
     bootstrap_epoch: outgoingOrdering?.epoch || incomingOrdering.epoch || context.normalizedBootstrapEpoch,
     response_seq: outgoingOrdering?.responseSeq || incomingOrdering.responseSeq,
@@ -390,10 +396,11 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
         stale_rebase_enabled: context.staleRebaseEnabled,
         ack_status: livenessContract.ack_status,
         state_advanced: livenessContract.state_advanced,
-        reason_code: livenessContract.reason_code,
-        action_code_echo: livenessContract.action_code_echo,
-        client_action_id_echo: livenessContract.client_action_id_echo,
-      }
+      reason_code: livenessContract.reason_code,
+      failure_class: classifyActionLivenessFailureClass(livenessContract),
+      action_code_echo: livenessContract.action_code_echo,
+      client_action_id_echo: livenessContract.client_action_id_echo,
+    }
     );
     logActionLivenessOutcome({
       context,

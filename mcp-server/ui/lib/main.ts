@@ -11,6 +11,8 @@ import {
   handleToolResultAndMaybeScheduleBootstrapRetry,
   handleBridgeResponse,
   isTrustedBridgeMessageEvent,
+  logClientIngestProbe,
+  logWidgetStateRehydrateMarker,
   notifyHostTransportSignal,
   resolveAllowedHostOrigin,
   resolveWidgetPayload,
@@ -214,6 +216,11 @@ function ingestHostPayload(
   payload: unknown,
   source: "set_globals" | "host_notification"
 ): void {
+  logWidgetStateRehydrateMarker({
+    phase: "before_host_ingest",
+    source,
+    event: "ingest_start",
+  });
   const resolved = resolveWidgetPayload(payload);
   if (resolved.source === "meta.widget_result" && Object.keys(resolved.result).length > 0) {
     markStartupCanonicalResolved({
@@ -224,9 +231,19 @@ function ingestHostPayload(
   }
   if (source === "set_globals") {
     handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
+    logWidgetStateRehydrateMarker({
+      phase: "after_host_ingest",
+      source,
+      event: "ingest_complete",
+    });
     return;
   }
   handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
+  logWidgetStateRehydrateMarker({
+    phase: "after_host_ingest",
+    source,
+    event: "ingest_complete",
+  });
 }
 
 function readSetGlobalsPayloadFromHost(): Record<string, unknown> {
@@ -546,7 +563,21 @@ if (typeof window !== "undefined") {
         ingestHostPayload(payload, "set_globals");
         notifyHostTransportSignal("set_globals");
       } else {
-        console.log("[startup_set_globals_empty_payload_ignored]");
+        const ingestContext = logClientIngestProbe({
+          source: "set_globals",
+          phase: "set_globals_empty_payload",
+          raw: payload,
+        });
+        console.log("[startup_set_globals_empty_payload_ignored]", {
+          payload_source: ingestContext.payload_source,
+          payload_reason_code: ingestContext.payload_reason_code,
+          payload_shape_fingerprint: ingestContext.payload_shape_fingerprint,
+          correlation_id: ingestContext.correlation_id,
+          client_action_id: ingestContext.client_action_id,
+          request_id: ingestContext.request_id,
+          client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
+          client_ingest_seq: ingestContext.client_ingest_seq,
+        });
         renderStartupWaitState("set_globals_empty_payload");
       }
     } catch (e) {
@@ -557,6 +588,19 @@ if (typeof window !== "undefined") {
   });
 }
 
-if (!tryInitialIngestFromHost("set_globals")) {
+const startupTupleBeforeReload = logWidgetStateRehydrateMarker({
+  phase: "before_reload_probe",
+  source: "startup",
+  event: "startup_probe",
+});
+const startupInitialIngestApplied = tryInitialIngestFromHost("set_globals");
+if (!startupInitialIngestApplied) {
   renderStartupWaitState("initial_bootstrap_probe");
 }
+logWidgetStateRehydrateMarker({
+  phase: "after_reload_probe",
+  source: "startup",
+  event: startupInitialIngestApplied
+    ? "startup_probe_ingested"
+    : (startupTupleBeforeReload.tuple_complete ? "startup_probe_no_payload_tuple_present" : "startup_probe_wait_shell"),
+});

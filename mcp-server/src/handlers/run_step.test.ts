@@ -142,6 +142,22 @@ test("action liveness defaults exist on direct run_step responses", async () => 
   assert.equal(typeof String((result as any)?.client_action_id_echo || ""), "string");
 });
 
+test("transport liveness contract emits failure_class in server result/log path", () => {
+  const transportContextSource = fs.readFileSync(
+    new URL("../server/run_step_transport_context.ts", import.meta.url),
+    "utf8"
+  );
+  const transportSource = fs.readFileSync(
+    new URL("../server/run_step_transport.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(transportContextSource, /export type ActionLivenessFailureClass =/);
+  assert.match(transportContextSource, /failure_class: failureClass,/);
+  assert.match(transportSource, /classifyActionLivenessFailureClass/);
+  assert.match(transportSource, /run_step_action_liveness_explicit_error/);
+  assert.match(transportSource, /failure_class: classifyActionLivenessFailureClass\(livenessContract\),/);
+});
+
 test("canonical view decision: step_0 not-started always emits prestart with ACTION_START", () => {
   const response = {
     ok: true,
@@ -779,6 +795,19 @@ test("legacy widget state auto-upgrades instead of blocking and pre-fills busine
   assert.equal(String(widgetTurn?.state?.business_name || ""), "Mindd");
   assert.equal(String(widgetTurn?.state?.step_0_final || ""), "");
   assert.equal(String(widgetTurn?.state?.state_version || ""), "12");
+});
+
+test("transport context realigns internal host_widget_session_id when bootstrap tuple is normalized", () => {
+  const transportContextSource = fs.readFileSync(
+    new URL("../server/run_step_transport_context.ts", import.meta.url),
+    "utf8"
+  );
+  assert.match(transportContextSource, /function alignInternalHostWidgetSessionId\(/);
+  assert.match(transportContextSource, /host_session_id_realigned_to_bootstrap/);
+  assert.match(
+    transportContextSource,
+    /stateForTool = \{[\s\S]*host_widget_session_id: hostWidgetSessionId,[\s\S]*\}/
+  );
 });
 
 test("language policy: action-only follow-up keeps locale-hinted language", async () => {

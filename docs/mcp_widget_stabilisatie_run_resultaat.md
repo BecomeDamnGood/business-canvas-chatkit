@@ -533,7 +533,7 @@ Lokaal uitgevoerd (verplicht):
   - `Could not connect to the endpoint URL: "https://logs.us-east-1.amazonaws.com/"`
 - Conclusie: live timestampbewijs blijft in deze omgeving geblokkeerd door endpointconnectiviteit; lokaal ketenbewijs is volledig geleverd via tests en markers.
 
-# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 11:20 UTC, OpenAI zero-diff sluitingspass)
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 11:20 UTC, OpenAI zero-diff sluitingspass, HISTORISCH SUPERSEDED)
 
 ## 0) Samenvatting
 - Scope uitgevoerd over de volledige widget-keten (descriptor -> transport -> ingest -> render -> liveness -> observability).
@@ -541,7 +541,11 @@ Lokaal uitgevoerd (verplicht):
   1. niet-canonieke ingest fallback verwijderd,
   2. impliciete liveness recoverylaag verwijderd,
   3. server `client_action_id` fallback gegeneraliseerd.
-- Finale status voor deze pass: compliance-matrix op **0 open gaps** (zie living rapport).
+- Historische momentopname in deze pass: compliance-matrix op **0 open gaps**.
+- Status is **superseded** door latere runs met aanvullende bewijsvereisten:
+  - PR-6 closure gate (`2026-02-28 21:38 UTC`)
+  - PR-7 audit (`2026-02-28 21:45 UTC`)
+  - PR-8 failsluitingsstatus (`2026-02-28 21:52 UTC`)
 
 ## 1) Exacte wijzigingen
 1. `mcp-server/ui/lib/ui_actions.ts`
@@ -600,8 +604,424 @@ Lokaal uitgevoerd (verplicht):
 5. Verplichte tests groen
 - Ja (alle 3 commando’s PASS).
 
-6. Compliance matrix op 0 open gaps
-- Ja (uitgewerkt in `docs/mcp_widget_regressie_living_rapport.md`, sectie "Poging 2026-02-28 11:20 UTC").
+6. Historische claim "0 open gaps" in deze pass
+- Ja, maar **superseded** door latere runs met strengere audit/evidence-eisen.
+- Actuele status staat in:
+  - `docs/mcp_widget_regressie_living_rapport.md`, sectie `### Poging 2026-02-28 21:52 UTC (PR-8 structurele failsluiting)`
+  - deze file, sectie `## PR-8 failsluitingsstatus`
 
 7. Antwoord op "wat doen we nog anders dan OpenAI?"
 - Binnen deze scope en codebasis: **0 functionele/contractuele verschillen**.
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 20:19 UTC, single-agent onderzoeksrun)
+
+## 0) Scope
+- Volledige draaiboekrun uitgevoerd:
+  - `3.1.1` t/m `3.3.5` in vaste volgorde.
+  - Per item: codebewijs, testbewijs, live/logbewijs of expliciete `evidence_gap`, uitkomst, kansscore, gaplabel.
+- Deze sectie is leidend voor actuele status en vervangt eerdere tussenconclusies met `0 open gaps`.
+
+## 1) Verplichte verificatiecommando's
+1. `cd mcp-server && npm run typecheck`
+- Resultaat: **PASS** (`tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.ui.json --noEmit`).
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- Resultaat: **PASS** (`110 pass`, `0 fail`).
+
+3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- Resultaat: **PASS** (`170 tests`, `169 pass`, `0 fail`, `1 skipped`).
+
+## 2) Aanvullend reproduceerbaar shape-bewijs
+- Commando:
+  - `cd mcp-server && node --loader ts-node/esm -e "<resolveWidgetPayload cases>"`
+- Uitkomst:
+  - `root_structuredContent_widget_result` => `source:"none"`.
+  - `root_toolOutput_widget_result` => `source:"meta.widget_result"`.
+  - `root_meta_widget_result` => `source:"meta.widget_result"`.
+- Relevantie:
+  - Bewijst item `3.1.1` (shape-mismatchpad) reproduceerbaar op code-niveau.
+
+## 3) Live/logstatus in deze run
+- Timestamp: `2026-02-28T20:19:29Z`.
+- AWS queryresultaat:
+  - `Could not connect to the endpoint URL: "https://logs.us-east-1.amazonaws.com/"`
+- Conclusie:
+  - Nieuwe CloudWatch-verificatie in deze omgeving geblokkeerd.
+  - Items zonder bruikbaar timestamp-event uit eerdere incidentsets zijn expliciet als `evidence_gap` gelabeld.
+
+## 4) Resultaatsamenvatting
+- Totaal items: `15`
+- Bevestigd: `2` (`3.1.1`, `3.1.5`)
+- Weerlegd: `3` (`3.1.4`, `3.3.2`, `3.3.4`)
+- Onbeslist: `10`
+- Gapverdeling:
+  - `implementation_gap`: `2`
+  - `evidence_gap`: `10`
+  - `geen gap`: `3`
+
+## 5) Definitieve rapportlocatie
+- Matrix + alle 15 detailblokken:
+  - `docs/mcp_widget_agents_onderzoeksdraaiboek_en_rapport.md` sectie `4`.
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 20:50 UTC, PR-1 observability baseline)
+
+## 0) Scope
+- Doel van deze run: alleen bewijsinfrastructuur toevoegen voor correlatie/shape/tijdlijn, zonder functionele business-logica wijziging.
+- In scope:
+  - `mcp-server/ui/lib/ui_actions.ts`
+  - `mcp-server/ui/lib/main.ts`
+  - docs writeback in living + stabilisatie rapport.
+
+## 1) Exacte observability-wijzigingen
+- `mcp-server/ui/lib/ui_actions.ts`
+  - Monotone ingest-klok toegevoegd (`client_ingest_ts_ms`, `client_ingest_seq`, `client_ingest_delta_ms`) via `nextClientIngestClock` (`mcp-server/ui/lib/ui_actions.ts:234-245`).
+  - Deterministische payload-shape fingerprint toegevoegd (`shapeFingerprint`) (`mcp-server/ui/lib/ui_actions.ts:263-282`).
+  - Uniforme correlatievelden toegevoegd (`correlation_id`, `client_action_id`, `request_id`) via `resolveClientCorrelation` (`mcp-server/ui/lib/ui_actions.ts:335-357`).
+  - Baseline ingest-marker toegevoegd: `[ui_ingest_event]` (`mcp-server/ui/lib/ui_actions.ts:381-390`, toegepast in `866-915`).
+  - Focusmarkers uitgebreid met correlatie-/ingestvelden:
+    - `[ui_ingest_dropped_no_widget_result]` (`mcp-server/ui/lib/ui_actions.ts:891-901`)
+    - `[ui_ingest_ack_cache_preserved]` (`mcp-server/ui/lib/ui_actions.ts:1039-1049`)
+    - `[ui_action_dispatch_ack_without_state_advance]` (`mcp-server/ui/lib/ui_actions.ts:1850-1855`)
+  - `callTool` request/response shape logs toegevoegd:
+    - `[ui_calltool_request_shape]` (`mcp-server/ui/lib/ui_actions.ts:1646-1655`)
+    - `[ui_calltool_response_shape]` (`mcp-server/ui/lib/ui_actions.ts:1730-1738`)
+- `mcp-server/ui/lib/main.ts`
+  - `openai:set_globals` empty payload pad gebruikt nu gedeelde ingest-probe en logt dezelfde contextvelden (`mcp-server/ui/lib/main.ts:550-564`).
+
+## 2) Testresultaten
+1. `cd mcp-server && npm run typecheck`
+- Resultaat: PASS.
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- Resultaat: PASS (`110 pass`, `0 fail`).
+
+3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- Resultaat: PASS (`170 tests`, `169 pass`, `0 fail`, `1 skipped`).
+
+## 3) Live/logstatus
+- Geen nieuwe live hostrun uitgevoerd in deze iteratie.
+- Geen nieuwe CloudWatch-query uitgevoerd in deze iteratie.
+- Status: `evidence_gap` voor live/AWS correlatievalidatie.
+
+## 4) Openstaande evidence_gaps
+- `evidence_gap`: live correlatieketen op echte incidentflow met de nieuwe markers ontbreekt nog (met name voor `ui_ingest_dropped_no_widget_result`, `ui_ingest_ack_cache_preserved`, `ui_action_dispatch_ack_without_state_advance`).
+- `evidence_gap`: host-context vergelijking (chat/projects/pinned) met dezelfde shape-fingerprint velden ontbreekt nog.
+- `evidence_gap`: timestamped A/B volgorde tussen `ui/notifications/tool-result` en `openai:set_globals` in dezelfde failing sessie ontbreekt nog.
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 21:10 UTC, PR-3 cache+liveness consistency)
+
+## 0) Scope
+- PR-3 uitgevoerd op cache/liveness consistentie.
+- In scope:
+  - `mcp-server/ui/lib/ui_actions.ts`
+  - `mcp-server/ui/lib/ui_render.ts`
+  - `mcp-server/src/server/run_step_transport.ts`
+  - `mcp-server/src/server/run_step_transport_context.ts`
+  - regressietests in `src/ui_render.test.ts` en `src/handlers/run_step.test.ts`.
+
+## 1) Contract-/ketenbewijs dispatch -> ack -> advance/error
+1. Dispatch
+- `callRunStep` logt dispatch met correlatievelden (`[ui_action_dispatched]`, `[ui_calltool_request_shape]`).
+
+2. Ack
+- Elke response gaat nu door uniforme liveness-evaluatie:
+  - `[ui_action_liveness_ack]` bevat `ack_status`, `state_advanced`, `reason_code`, `failure_class`.
+  - Widgetstate krijgt dezelfde terminale velden (`ui_action_liveness_*`, incl. `ui_action_liveness_failure_class`).
+
+3. Advance/error eindstatus
+- Success pad: `failure_class:"none"` + `state_advanced:true`.
+- Error pad: altijd expliciet marker + notice:
+  - `[ui_action_liveness_explicit_error]` met `failure_class`.
+  - no-advance guard blijft expliciet via `[ui_action_dispatch_ack_without_state_advance]`.
+- Cache-preserve kan deze errorstatus niet meer maskeren op actieve dispatch:
+  - preserve denial marker: `[ui_ingest_cache_preserve_denied]`.
+
+4. Servercontract-pariteit
+- Server-side transportcontext en transportlogs bevatten nu ook `failure_class` zodat keten server->client semantisch consistent is.
+
+## 2) Zichtbare eindstatus per failure class (huidig)
+- `timeout`:
+  - inline notice: timeout-tekst,
+  - widgetstate: `ack_status=timeout`, `state_advanced=false`, `failure_class=timeout`.
+- `rejected`:
+  - inline notice: contract notice met reason-code suffix,
+  - widgetstate: `ack_status=rejected`, `state_advanced=false`, `failure_class=rejected`.
+- `dropped`:
+  - inline notice: contract notice met reason-code suffix,
+  - widgetstate: `ack_status=dropped`, `state_advanced=false`, `failure_class=dropped`.
+- `accepted + !state_advanced`:
+  - inline notice: contract notice met `state_not_advanced` (of server reason),
+  - marker: `[ui_action_dispatch_ack_without_state_advance]`,
+  - widgetstate: `failure_class=accepted_no_advance`.
+
+## 3) Expliciete status op no-op perceptie risico
+- Status: **verlaagd op code+testniveau**.
+- Reden:
+  - actieve dispatch kan foutuitkomst niet meer stil laten verdwijnen door preserve,
+  - no-advance pad krijgt gegarandeerd zichtbare notice + marker + widgetstate.
+- Restant: **live evidence_gap** (geen nieuwe host/AWS capture in deze run).
+
+## 4) Verificatie (verplicht)
+1. `cd mcp-server && npm run typecheck`
+- PASS.
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- PASS (`111 tests`, `111 pass`, `0 fail`).
+
+3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- PASS (`171 tests`, `170 pass`, `0 fail`, `1 skipped`).
+
+## 5) Open bewijs-gap
+- `evidence_gap`: live correlatie op echte incidentflow met de nieuwe PR-3 markers (`ui_ingest_cache_preserve_denied`, `ui_action_dispatch_ack_without_state_advance`, `ui_action_liveness_explicit_error`) ontbreekt nog.
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 21:22 UTC, PR-4 widgetState rehydrate invariants)
+
+## 0) Scope
+- PR-4 uitgevoerd op persist/rehydrate hardening van `widgetState` bij reload/resume.
+- In scope:
+  - `mcp-server/ui/lib/ui_actions.ts`
+  - `mcp-server/ui/lib/main.ts`
+  - `mcp-server/src/server/run_step_transport_context.ts` (tuple-consistentie)
+  - regressietests rond ordering/rehydrate
+  - docs writeback.
+
+## 1) Bewijs reload/resume gedrag
+1. Reload-probe markers voor/na ingest
+- `before_reload_probe` en `after_reload_probe` worden expliciet gelogd op startup (`mcp-server/ui/lib/main.ts:591-606`).
+- Host-ingest markers `before_host_ingest` en `after_host_ingest` worden expliciet gelogd rond ingest (`mcp-server/ui/lib/main.ts:215-247`).
+
+2. Persist/rehydrate markers en ordering snapshots
+- Rehydrate snapshot API + marker:
+  - `readWidgetStateOrderingSnapshot` (`mcp-server/ui/lib/ui_actions.ts:887-896`),
+  - `[ui_widgetstate_rehydrate]` (`mcp-server/ui/lib/ui_actions.ts:898-911`).
+- Persist markers op ordering patch lifecycle:
+  - `[ui_widgetstate_persist_attempt]` (`mcp-server/ui/lib/ui_actions.ts:943-947`),
+  - `[ui_widgetstate_persist_skipped_no_change]` (`mcp-server/ui/lib/ui_actions.ts:970-975`),
+  - `[ui_widgetstate_persist_applied]` (`mcp-server/ui/lib/ui_actions.ts:982-986`).
+
+3. Rehydrate bij missing host binnen dezelfde sessie
+- Same-session rehydrate helper:
+  - `rehydrateIncomingOrderingAgainstCurrent(...)` (`mcp-server/ui/lib/ui_actions.ts:461-478`).
+- Toegepast vóór ordering beslissing in ingest:
+  - `handleToolResultAndMaybeScheduleBootstrapRetry` (`mcp-server/ui/lib/ui_actions.ts:1140-1163`).
+
+4. Reproduceerbare testbewijzen
+- Ingest rehydrate bewijs:
+  - `handleToolResultAndMaybeScheduleBootstrapRetry rehydrates missing host_widget_session_id from current tuple` (`mcp-server/src/ui_render.test.ts:1257-1300`).
+- Reload/resume outbound tuple bewijs:
+  - `callRunStep rehydrates outbound tuple from persisted widgetState after reload/resume` (`mcp-server/src/ui_render.test.ts:1771-1837`).
+
+## 2) Harde invarianten die nu afgedwongen zijn
+1. Tuple-validiteit is 4-veld verplicht
+- `bootstrap_session_id`, `bootstrap_epoch`, `response_seq`, `host_widget_session_id` moeten compleet zijn (`mcp-server/ui/lib/ui_actions.ts:440-445`).
+
+2. Geen overwriting met oudere tuple
+- Ordering patch-beslissing blijft monotone tuple-ordering afdwingen (`mcp-server/ui/lib/ui_actions.ts:480-504`).
+
+3. Geen same-session host mismatch overwrite op outbound
+- `mergeOutboundOrdering(...)` kiest persisted tuple bij same-session host mismatch (`mcp-server/ui/lib/ui_actions.ts:517-523`).
+
+4. Geen early-return pad dat host-session persist omzeilt
+- Bij tuple-incomplete ingest wordt `host_widget_session_id` alsnog vroeg gepersist (`mcp-server/ui/lib/ui_actions.ts:1171-1183`).
+
+5. Server-side tuple-consistentie voor internal host id
+- Internal host id wordt op bootstrap-sessie genormaliseerd:
+  - `alignInternalHostWidgetSessionId` (`mcp-server/src/server/run_step_transport_context.ts:130-146`, toegepast `312-315`).
+- Realignment wordt expliciet gelogd:
+  - `host_session_id_realigned_to_bootstrap` (`mcp-server/src/server/run_step_transport_context.ts:325-342`).
+
+## 3) Verificatie (verplicht)
+1. `cd mcp-server && npm run typecheck`
+- PASS.
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- PASS (`114 pass`, `0 fail`).
+
+3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- PASS (`172 tests`, `171 pass`, `0 fail`, `1 skipped`).
+
+## 4) Resterende live evidence_gaps
+- `evidence_gap`: geen nieuwe live host reload/resume sessie met timestampmarkers in deze run.
+- `evidence_gap`: geen nieuwe CloudWatch correlatiecapture voor PR-4 markers in deze run.
+- `evidence_gap`: end-to-end bevestiging in echte host-context (chat/projects/pinned) ontbreekt nog.
+
+## 5) PR-4 conclusie
+- Bewezen op code/testniveau:
+  - reload/resume persist/rehydrate markers bestaan en zijn afgedwongen,
+  - tuple-invarianten zijn harder gemaakt op alle 4 velden,
+  - same-session host rehydrate/merge regressiepaden zijn afgesloten,
+  - transportcontext realignment op internal host tuple is afgedwongen.
+- Niet bewezen in deze run:
+  - live hostbewijs met timestamps (`evidence_gap`).
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 21:36 UTC, PR-5 surface matrix evidence)
+
+## 0) Scope
+- PR-5 surface matrix evidence uitgevoerd met nadruk op reproduceerbare capture en rapportage.
+- **no code change**.
+- In scope:
+  - `docs/mcp_widget_regressie_living_rapport.md`
+  - `docs/mcp_widget_stabilisatie_run_resultaat.md`
+  - lokale/CloudWatch evidence runs.
+
+## 1) Live matrix bewijs
+- Run-ID `pr5-local-1772314306386`
+  - Start: `2026-02-28T21:31:46.383Z`
+  - Einde: `2026-02-28T21:32:00.853Z`
+  - Artefact: `/tmp/pr5_local_matrix_1772314321154.json`
+- Timeout-run (`verify:release-proof`)
+  - Start: `2026-02-28T21:35:56.731Z`
+  - Einde: `2026-02-28T21:36:03.412Z`
+  - Relevante checks:
+    - `chaos_simulated_timeout_fail_closed`: PASS (`408`, `timeout`)
+    - `chaos_simulated_timeout_structured_event`: PASS (`mcp_request_timeout`)
+- CloudWatch-poging:
+  - `2026-02-28T21:35:16Z`
+  - Uitkomst: `Could not connect to the endpoint URL: "https://logs.us-east-1.amazonaws.com/"`
+
+| surface | run-id/timestamp | flow | uitslag | markers/status |
+|---|---|---|---|---|
+| Normale chat (local proxy) | `pr5-local-1772314306386` (`21:31:49Z` start surface) | startup -> start -> vervolgactie | geblokkeerd (start disabled) | server: `run_step_request/response` aanwezig; client/event-order niet sluitend |
+| Projects | n.v.t. in deze omgeving | startup -> start -> vervolgactie | niet uitgevoerd | `evidence_gap`: geen host Projects toegang |
+| Pinned app | n.v.t. in deze omgeving | startup -> start -> vervolgactie | niet uitgevoerd | `evidence_gap`: surface niet beschikbaar |
+| Mobile viewport (local proxy) | `pr5-local-1772314306386` (`21:31:55Z` start surface) | startup -> start -> vervolgactie | geblokkeerd (start disabled) | client markers 0 hits; event-order niet sluitend |
+| Timeout scenario (controlled) | `verify:release-proof` (`21:35:56Z` -> `21:36:03Z`) | gecontroleerde vertraging + timeout | serverzijde bevestigd | `mcp_request_timeout` bevestigd; UX correlatie blijft open |
+
+## 2) Per-surface conclusie
+- Normale chat (local proxy): gedeeltelijke servercapture, geen complete user-flow capture.
+- Projects: open.
+- Pinned: open.
+- Mobile: open.
+- Timeout: serverpad bevestigd, maar no-op perceptie correlatie met client/event-order blijft open.
+
+## 3) Status van verplichte open items
+- `3.2.5` (Projects vs chat): **onbeslist**, `evidence_gap`.
+- `3.3.5` (mobile viewport): **onbeslist**, `evidence_gap`.
+- `3.2.4` (timeout/no-op): **gedeeltelijk bevestigd (server)**, `evidence_gap` op host-UI correlatie.
+- `3.3.1` (platform rollout): **onbeslist**, `evidence_gap`.
+- `3.3.3` (request `_meta` hints): **onbeslist**, `evidence_gap`.
+
+## 4) PR-5 samenvatting
+- Verworpen hypothese:
+  - "Server timeout-signalen ontbreken" -> verworpen (timeout marker aanwezig in gecontroleerde run).
+- Open hypotheses:
+  - Surface-specifieke contextverschillen (`Projects`/`Pinned`),
+  - Mobile-specifieke leeg/schijnbaar inactief gedrag,
+  - Volledige client/event-order correlatie op echte hostincidenten.
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 21:38 UTC, PR-6 final closure gate)
+
+## 0) Scope
+- PR-6 closure-gate uitgevoerd op bestaande bewijsset.
+- **docs-only** (`no code change`).
+- Doel: beslissen of finale root-cause claim toegestaan is.
+
+## 1) Finale statusblok
+
+### 1.1 Gesloten gaps (geen blocker voor root-cause claim)
+- `3.1.4` -> verworpen (geen gap).
+- `3.3.2` -> verworpen (geen gap).
+- `3.3.4` -> verworpen (geen gap).
+
+### 1.2 Open gaps (blockers)
+- `implementation_gap`:
+  - `3.1.1` response-shape mismatch.
+  - `3.1.5` cache-preserve/liveness masking.
+- `evidence_gap`:
+  - `3.1.2`, `3.1.3`, `3.2.1`, `3.2.2`, `3.2.3`, `3.2.4`, `3.2.5`, `3.3.1`, `3.3.3`, `3.3.5`.
+
+### 1.3 Finale gap-telling
+- `implementation_gap`: 2
+- `evidence_gap`: 10
+- `spec_gap`: 0
+- `geen gap`: 3
+- Open totaal: **12**
+
+## 2) Root-cause claim gate
+- Root-cause claim toegestaan: **nee**.
+- Reden:
+  - relevante P0 blockers zijn niet dicht (`3.1.1`, `3.1.5`);
+  - live correlatie voor winnend pad is niet sluitend (`3.2.2`, `3.2.5`, `3.3.5`).
+
+## 3) Expliciete next-step trigger
+- Trigger: pas opnieuw een finale claim-run starten zodra onderstaande 3 voorwaarden zijn gehaald:
+  1. Host-surface A/B capture beschikbaar voor normale chat + Projects + pinned (zelfde flow, dezelfde markers, timestamped).
+  2. Event-order capture sluitend voor `ui/notifications/tool-result` versus `openai:set_globals` in minimaal 1 representatieve failing/successful vergelijking.
+  3. Mobile run bevat complete flow (startup -> start -> vervolgactie) met screenshot/timestamp en client markers.
+
+## 4) PR-6 conclusie
+- De closure-gate is uitgevoerd en documenteert alle open blockers.
+- Er is bewust geen "0 gaps" claim gedaan.
+
+## PR-7 auditstatus
+- Historische auditmomentopname; status is superseded door `## PR-8 failsluitingsstatus`.
+- Scope: docs-only completeness audit op PR-1 t/m PR-6.
+- Verdict: **FAIL**.
+- Open auditgaps: **6**.
+  - `audit_gap`: 3
+  - `evidence_gap`: 2
+  - `consistency_gap`: 1
+- Referentie living poging:
+  - `docs/mcp_widget_regressie_living_rapport.md` -> `### Poging 2026-02-28 21:45 UTC (PR-7 completeness audit)`.
+- no code change.
+
+## PR-2 canonical transport convergence status (PR-8)
+- Run timestamp: `2026-02-28 21:52 UTC`.
+- Doelstatus: **inhoudelijk gesloten op code+testbewijs**.
+- Code change in PR-8 zelf: **nee** (validatie van bestaande structurele implementatie).
+
+Canonical normalize+ingest pad (1 pad voor 3 ingangen):
+- `mcp-server/ui/lib/main.ts:215` (`ingestHostPayload`)
+- `mcp-server/ui/lib/main.ts:233` (`set_globals` -> `handleToolResultAndMaybeScheduleBootstrapRetry`)
+- `mcp-server/ui/lib/main.ts:241` (`host_notification` -> `handleToolResultAndMaybeScheduleBootstrapRetry`)
+- `mcp-server/ui/lib/main.ts:363` (`ui/notifications/tool-result` route)
+- `mcp-server/ui/lib/main.ts:559` (`openai:set_globals` route)
+- `mcp-server/ui/lib/ui_actions.ts:829` (`normalizeToolResult`)
+- `mcp-server/ui/lib/ui_actions.ts:1084` (`handleToolResultAndMaybeScheduleBootstrapRetry`)
+
+Shape-matrix status (runbaar bewijs):
+- Runtime matrix smoke-check (`node --loader ts-node/esm -e "<shape-cases via resolveWidgetPayload>"`):
+  - `root._widget_result` -> `source=meta.widget_result` (ACCEPT)
+  - `root._meta.widget_result` -> `source=meta.widget_result` (ACCEPT)
+  - `toolOutput._widget_result` -> `source=meta.widget_result` (ACCEPT)
+  - `host_notification_direct` -> `source=none` (DROP, fail-closed)
+  - `structuredContent._widget_result` -> `source=none` (DROP, fail-closed)
+- Regressietests:
+  - `mcp-server/src/ui_render.test.ts:2440`
+  - `mcp-server/src/ui_render.test.ts:2473`
+  - `mcp-server/src/ui_render.test.ts:2744`
+  - `mcp-server/src/ui_render.test.ts:2859`
+
+Event-order determinisme (zelfde correlatieveld + monotone client-ingest markers):
+- Correlatie + ingest context:
+  - `mcp-server/ui/lib/ui_actions.ts:359` (`buildClientIngestContext`)
+  - `mcp-server/ui/lib/ui_actions.ts:241` (`client_ingest_ts_ms`, `client_ingest_seq`)
+- Marker logging voor beide ingress-bronnen:
+  - `mcp-server/ui/lib/ui_actions.ts:386` (`[ui_ingest_event]`)
+  - `mcp-server/ui/lib/main.ts:233` / `mcp-server/ui/lib/main.ts:241`
+- Monotone ordering regressie:
+  - `mcp-server/src/ui_render.test.ts:1208`
+
+Verificatie (verplicht, PR-8 run):
+1. `cd mcp-server && npm run typecheck` -> PASS
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS (`114 pass`, `0 fail`)
+3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (`172 tests`, `171 pass`, `0 fail`, `1 skipped`)
+
+## PR-8 failsluitingsstatus
+- Referentie living poging:
+  - `docs/mcp_widget_regressie_living_rapport.md` -> `### Poging 2026-02-28 21:52 UTC (PR-8 structurele failsluiting)`
+
+| fail-id | type | status | bewijs | codewijziging in PR-8 |
+|---|---|---|---|---|
+| PR2-G1 | `evidence_gap` | PASS | Canonical ingest + shape-matrix + monotone ingest markers aantoonbaar (`mcp-server/ui/lib/main.ts:215,233,241,363,559`; `mcp-server/ui/lib/ui_actions.ts:829,1084`; `mcp-server/src/ui_render.test.ts:1208,2440,2473,2744,2859`) | nee |
+| PR2-G2 | `audit_gap` | PASS | PR-8 verplichte verificatie traceerbaar in PR-2 statusblok (deze sectie) + living PR-8 poging | nee |
+| PR2-G3 | `audit_gap` | PASS | Verplichte living kop aanwezig: `### Poging 2026-02-28 21:52 UTC (PR-8 structurele failsluiting)` | nee |
+| PR2-G4 | `audit_gap` | PASS | Verplichte stabilisatie writeback aanwezig: `## PR-2 canonical transport convergence status (PR-8)` | nee |
+| PR5-G1 | `evidence_gap` | FAIL | Echte host-surface 5-run matrix niet sluitend uitvoerbaar in deze omgeving (Projects, pinned, mobile) | nee |
+| CROSS-G1 | `consistency_gap` | PASS | Oude `0 open gaps` claim expliciet als historisch/superseded gemarkeerd in deze file | nee |
+
+- Actuele open-gaptelling (PR-7 auditfails): **1**
+  - `audit_gap`: 0
+  - `evidence_gap`: 1 (`PR5-G1`)
+  - `consistency_gap`: 0
+- PR-8 verdict: **FAIL** (alleen door open `PR5-G1`).

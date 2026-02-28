@@ -1,8 +1,1 @@
-{
-  "scripts": {
-    "e2e:smoke": "npx playwright test tests/step-0-validation.spec.ts --grep \"Happy path\" --reporter=line"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.58.1"
-  }
-}
+{}

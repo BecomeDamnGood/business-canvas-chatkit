@@ -207,11 +207,224 @@ function parsePositiveInt(value: unknown): number {
   return Math.trunc(n);
 }
 
+type IngestSource = "call_run_step" | "host_notification" | "set_globals" | "unknown";
+
+type ClientIngestClock = {
+  client_ingest_ts_ms: number;
+  client_ingest_seq: number;
+  client_ingest_delta_ms: number;
+};
+
+type ClientCorrelation = {
+  correlation_id: string;
+  client_action_id: string;
+  request_id: string;
+};
+
+type ClientIngestContext = ClientIngestClock &
+  ClientCorrelation & {
+    payload_shape_fingerprint: string;
+    payload_source: PayloadSource;
+    payload_reason_code: PayloadReasonCode;
+  };
+
+let clientIngestSeq = 0;
+let clientIngestLastTsMs = 0;
+
+function nextClientIngestClock(): ClientIngestClock {
+  const nowMs = Date.now();
+  const tsMs = nowMs > clientIngestLastTsMs ? nowMs : clientIngestLastTsMs + 1;
+  const deltaMs = clientIngestLastTsMs > 0 ? tsMs - clientIngestLastTsMs : 0;
+  clientIngestLastTsMs = tsMs;
+  clientIngestSeq += 1;
+  return {
+    client_ingest_ts_ms: tsMs,
+    client_ingest_seq: clientIngestSeq,
+    client_ingest_delta_ms: deltaMs,
+  };
+}
+
+function stableKeyFingerprint(record: Record<string, unknown>, maxKeys = 8): string {
+  const keys = Object.keys(record).sort();
+  if (keys.length === 0) return "-";
+  const clipped = keys.slice(0, maxKeys).join(",");
+  if (keys.length <= maxKeys) return clipped;
+  return `${clipped},+${keys.length - maxKeys}`;
+}
+
+function boolFlag(value: boolean): "1" | "0" {
+  return value ? "1" : "0";
+}
+
+function isNonEmptyRecord(value: unknown): boolean {
+  return Object.keys(toRecord(value)).length > 0;
+}
+
+function shapeFingerprint(raw: unknown): string {
+  const root = toRecord(raw);
+  const rootToolOutput = toRecord(root.toolOutput);
+  const rootStructured = toRecord(root.structuredContent);
+  const toolStructured = toRecord(rootToolOutput.structuredContent);
+  const rootMeta = toRecord(root._meta);
+  const toolMeta = toRecord(rootToolOutput._meta);
+  return [
+    `rk:${stableKeyFingerprint(root)}`,
+    `tk:${stableKeyFingerprint(rootToolOutput)}`,
+    `sk:${stableKeyFingerprint(rootStructured)}`,
+    `tsk:${stableKeyFingerprint(toolStructured)}`,
+    `rwr:${boolFlag(isNonEmptyRecord(root._widget_result))}`,
+    `twr:${boolFlag(isNonEmptyRecord(rootToolOutput._widget_result))}`,
+    `swr:${boolFlag(isNonEmptyRecord(rootStructured._widget_result))}`,
+    `tswr:${boolFlag(isNonEmptyRecord(toolStructured._widget_result))}`,
+    `rmwr:${boolFlag(isNonEmptyRecord(rootMeta.widget_result))}`,
+    `tmwr:${boolFlag(isNonEmptyRecord(toolMeta.widget_result))}`,
+  ].join("|");
+}
+
+function coalesceString(...values: unknown[]): string {
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function readCorrelationFromRaw(raw: unknown): string {
+  const root = toRecord(raw);
+  const meta = toRecord(root._meta);
+  const requestInfo = toRecord((root as { requestInfo?: unknown }).requestInfo);
+  const headers = toRecord(requestInfo.headers);
+  const state = toRecord(resolveWidgetPayload(raw).result.state);
+  return coalesceString(
+    root.correlation_id,
+    meta.correlation_id,
+    meta["x-correlation-id"],
+    meta["x-request-id"],
+    headers["x-correlation-id"],
+    headers["x-request-id"],
+    state.correlation_id,
+    state["x-correlation-id"]
+  );
+}
+
+function readRequestIdFromRaw(raw: unknown): string {
+  const root = toRecord(raw);
+  const meta = toRecord(root._meta);
+  const state = toRecord(resolveWidgetPayload(raw).result.state);
+  return coalesceString(
+    root.request_id,
+    root.__request_id,
+    meta.request_id,
+    meta["x-request-id"],
+    state.request_id,
+    state.__request_id
+  );
+}
+
+function readClientActionIdFromResult(result: Record<string, unknown>): string {
+  const state = toRecord(result.state);
+  const stateLiveness = toRecord(state.ui_action_liveness);
+  return coalesceString(
+    result.client_action_id_echo,
+    state.client_action_id_echo,
+    stateLiveness.client_action_id_echo,
+    state.__client_action_id
+  );
+}
+
+function resolveClientCorrelation(params: {
+  raw: unknown;
+  result: Record<string, unknown>;
+  fallbackClientActionId?: string;
+  fallbackRequestId?: string;
+}): ClientCorrelation {
+  const correlationFromResult = coalesceString(
+    params.result.correlation_id,
+    toRecord(params.result.state).correlation_id
+  );
+  return {
+    correlation_id: coalesceString(correlationFromResult, readCorrelationFromRaw(params.raw)),
+    client_action_id: coalesceString(
+      readClientActionIdFromResult(params.result),
+      params.fallbackClientActionId
+    ),
+    request_id: coalesceString(
+      params.fallbackRequestId,
+      readRequestIdFromRaw(params.raw),
+      toRecord(params.result.state).request_id
+    ),
+  };
+}
+
+function buildClientIngestContext(params: {
+  raw: unknown;
+  resolved: ResolvedWidgetPayload;
+  fallbackClientActionId?: string;
+  fallbackRequestId?: string;
+}): ClientIngestContext {
+  const clock = nextClientIngestClock();
+  const correlation = resolveClientCorrelation({
+    raw: params.raw,
+    result: params.resolved.result,
+    fallbackClientActionId: params.fallbackClientActionId,
+    fallbackRequestId: params.fallbackRequestId,
+  });
+  return {
+    ...clock,
+    ...correlation,
+    payload_shape_fingerprint: shapeFingerprint(params.raw),
+    payload_source: params.resolved.source,
+    payload_reason_code: params.resolved.source_reason_code,
+  };
+}
+
+function logClientIngestObservation(params: {
+  source: IngestSource;
+  phase: "received" | "dropped_no_widget_result" | "set_globals_empty_payload";
+  context: ClientIngestContext;
+}): void {
+  console.log("[ui_ingest_event]", {
+    source: params.source,
+    phase: params.phase,
+    ...params.context,
+  });
+}
+
+export function logClientIngestProbe(params: {
+  source: IngestSource;
+  phase: "set_globals_empty_payload";
+  raw: unknown;
+  client_action_id?: string;
+  request_id?: string;
+}): ClientIngestContext {
+  const resolved = resolveWidgetPayload(params.raw);
+  const context = buildClientIngestContext({
+    raw: params.raw,
+    resolved,
+    fallbackClientActionId: params.client_action_id,
+    fallbackRequestId: params.request_id,
+  });
+  logClientIngestObservation({
+    source: params.source,
+    phase: params.phase,
+    context,
+  });
+  return context;
+}
+
 type BootstrapOrderingState = {
   sessionId: string;
   epoch: number;
   responseSeq: number;
   hostWidgetSessionId: string;
+};
+
+export type WidgetStateOrderingSnapshot = {
+  bootstrap_session_id: string;
+  bootstrap_epoch: number;
+  response_seq: number;
+  host_widget_session_id: string;
+  tuple_complete: boolean;
 };
 
 function readBootstrapOrderingState(raw: unknown): BootstrapOrderingState {
@@ -225,7 +438,10 @@ function readBootstrapOrderingState(raw: unknown): BootstrapOrderingState {
 }
 
 function hasValidBootstrapOrdering(ordering: BootstrapOrderingState): boolean {
-  return Boolean(ordering.sessionId) && ordering.epoch > 0 && ordering.responseSeq > 0;
+  return Boolean(ordering.sessionId) &&
+    ordering.epoch > 0 &&
+    ordering.responseSeq > 0 &&
+    Boolean(ordering.hostWidgetSessionId);
 }
 
 function describeBootstrapOrdering(ordering: BootstrapOrderingState): {
@@ -240,6 +456,25 @@ function describeBootstrapOrdering(ordering: BootstrapOrderingState): {
     response_seq: ordering.responseSeq,
     host_widget_session_id: ordering.hostWidgetSessionId,
   };
+}
+
+function rehydrateIncomingOrderingAgainstCurrent(params: {
+  current: BootstrapOrderingState;
+  incoming: BootstrapOrderingState;
+}): { ordering: BootstrapOrderingState; rehydrated: boolean; reason: string } {
+  const current = params.current;
+  const incoming = { ...params.incoming };
+  if (!incoming.sessionId || incoming.sessionId !== current.sessionId) {
+    return { ordering: incoming, rehydrated: false, reason: "session_scope_changed" };
+  }
+  if (incoming.hostWidgetSessionId) {
+    return { ordering: incoming, rehydrated: false, reason: "incoming_host_present" };
+  }
+  if (!current.hostWidgetSessionId) {
+    return { ordering: incoming, rehydrated: false, reason: "current_host_missing" };
+  }
+  incoming.hostWidgetSessionId = current.hostWidgetSessionId;
+  return { ordering: incoming, rehydrated: true, reason: "same_session_host_rehydrated" };
 }
 
 function decideOrderingPatch(
@@ -284,7 +519,7 @@ function mergeOutboundOrdering(params: {
     fromWidget.hostWidgetSessionId &&
     fromNext.hostWidgetSessionId !== fromWidget.hostWidgetSessionId
   ) {
-    return fromNext;
+    return fromWidget;
   }
   if (fromWidget.epoch > fromNext.epoch) return fromWidget;
   if (fromWidget.epoch < fromNext.epoch) return fromNext;
@@ -298,6 +533,21 @@ type PayloadQuality = {
   hasInteractiveContent: boolean;
   renderable: boolean;
   score: number;
+};
+
+type IncomingLivenessSignal = {
+  has_liveness: boolean;
+  ack_status: ActionAckStatus;
+  state_advanced: boolean;
+  reason_code: string;
+  has_error_object: boolean;
+  explicit_error: boolean;
+};
+
+type RenderCacheDecision = {
+  should_persist: boolean;
+  decision_reason: string;
+  preserve_safety_reason: string;
 };
 
 function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality {
@@ -410,22 +660,121 @@ function buildTupleFailClosedEnvelope(params: {
   };
 }
 
+function readIncomingLivenessSignal(result: Record<string, unknown>): IncomingLivenessSignal {
+  const state = toRecord(result.state);
+  const stateLiveness = toRecord(state.ui_action_liveness);
+  const ackRaw = coalesceString(result.ack_status, state.ack_status, stateLiveness.ack_status);
+  const hasLiveness = ackRaw.length > 0;
+  const ackStatus = hasLiveness ? normalizeActionAckStatus(ackRaw) : "rejected";
+  const stateAdvanced = parseBool(
+    result.state_advanced ?? state.state_advanced ?? stateLiveness.state_advanced ?? false
+  );
+  const reasonCode = coalesceString(
+    result.reason_code,
+    state.reason_code,
+    stateLiveness.reason_code
+  )
+    .trim()
+    .toLowerCase();
+  const hasErrorObject = Object.keys(toRecord(result.error)).length > 0;
+  const explicitError =
+    hasErrorObject ||
+    (hasLiveness && (ackStatus !== "accepted" || !stateAdvanced));
+  return {
+    has_liveness: hasLiveness,
+    ack_status: ackStatus,
+    state_advanced: stateAdvanced,
+    reason_code: hasLiveness ? (stateAdvanced ? "" : (reasonCode || "state_not_advanced")) : "",
+    has_error_object: hasErrorObject,
+    explicit_error: explicitError,
+  };
+}
+
+function resolveCachePreserveSafety(params: {
+  source: IngestSource;
+  orderingReason: string;
+  incoming: PayloadQuality;
+  incomingSignal: IncomingLivenessSignal;
+}): { allowPreserve: boolean; reason: string } {
+  if (params.source === "call_run_step") {
+    return { allowPreserve: false, reason: "unsafe_active_dispatch" };
+  }
+  if (params.orderingReason === "new_session" || params.orderingReason === "new_epoch") {
+    return { allowPreserve: false, reason: "unsafe_new_scope" };
+  }
+  if (params.incomingSignal.explicit_error) {
+    return { allowPreserve: false, reason: "unsafe_explicit_error" };
+  }
+  if (params.incoming.viewMode === "blocked" || params.incoming.viewMode === "failed") {
+    return { allowPreserve: false, reason: "unsafe_terminal_view" };
+  }
+  return { allowPreserve: true, reason: "safe_passive_non_renderable" };
+}
+
 function shouldUpdateRenderCache(params: {
+  source: IngestSource;
   currentHasPayload: boolean;
   incoming: PayloadQuality;
   current: PayloadQuality;
+  incomingSignal: IncomingLivenessSignal;
   sameTupleUpgradeAccepted: boolean;
   orderingReason: string;
-}): boolean {
-  if (params.sameTupleUpgradeAccepted) return true;
-  if (!params.currentHasPayload) return true;
-  if (params.orderingReason === "new_session" || params.orderingReason === "new_epoch") return true;
-  if (params.current.renderable && !params.incoming.renderable) return false;
-  if (params.incoming.renderable && !params.current.renderable) return true;
-  if (params.incoming.renderable && params.current.renderable) {
-    return params.incoming.score >= params.current.score;
+}): RenderCacheDecision {
+  if (params.sameTupleUpgradeAccepted) {
+    return {
+      should_persist: true,
+      decision_reason: "same_tuple_upgrade",
+      preserve_safety_reason: "not_applicable",
+    };
   }
-  return params.incoming.score >= params.current.score;
+  if (!params.currentHasPayload) {
+    return {
+      should_persist: true,
+      decision_reason: "no_current_cache",
+      preserve_safety_reason: "not_applicable",
+    };
+  }
+  if (params.orderingReason === "new_session" || params.orderingReason === "new_epoch") {
+    return {
+      should_persist: true,
+      decision_reason: params.orderingReason,
+      preserve_safety_reason: "not_applicable",
+    };
+  }
+  if (params.current.renderable && !params.incoming.renderable) {
+    const preserveSafety = resolveCachePreserveSafety({
+      source: params.source,
+      orderingReason: params.orderingReason,
+      incoming: params.incoming,
+      incomingSignal: params.incomingSignal,
+    });
+    return {
+      should_persist: !preserveSafety.allowPreserve,
+      decision_reason: preserveSafety.allowPreserve ? "preserve_cache" : "force_persist_non_renderable",
+      preserve_safety_reason: preserveSafety.reason,
+    };
+  }
+  if (params.incoming.renderable && !params.current.renderable) {
+    return {
+      should_persist: true,
+      decision_reason: "incoming_renderable_upgrade",
+      preserve_safety_reason: "not_applicable",
+    };
+  }
+  if (params.incoming.renderable && params.current.renderable) {
+    return {
+      should_persist: params.incoming.score >= params.current.score,
+      decision_reason:
+        params.incoming.score >= params.current.score ? "incoming_score_not_lower" : "incoming_score_lower",
+      preserve_safety_reason: "not_applicable",
+    };
+  }
+  return {
+    should_persist: params.incoming.score >= params.current.score,
+    decision_reason:
+      params.incoming.score >= params.current.score ? "incoming_score_not_lower" : "incoming_score_lower",
+    preserve_safety_reason: "not_applicable",
+  };
 }
 
 function bootstrapPollSignatureFromState(state: Record<string, unknown> | null | undefined): string {
@@ -535,6 +884,32 @@ export function widgetState(): Record<string, unknown> {
   return o?.widgetState && typeof o.widgetState === "object" ? (o.widgetState as Record<string, unknown>) : {};
 }
 
+export function readWidgetStateOrderingSnapshot(): WidgetStateOrderingSnapshot {
+  const ordering = readBootstrapOrderingState(widgetState());
+  return {
+    bootstrap_session_id: ordering.sessionId,
+    bootstrap_epoch: ordering.epoch,
+    response_seq: ordering.responseSeq,
+    host_widget_session_id: ordering.hostWidgetSessionId,
+    tuple_complete: hasValidBootstrapOrdering(ordering),
+  };
+}
+
+export function logWidgetStateRehydrateMarker(params: {
+  phase: "before_reload_probe" | "after_reload_probe" | "before_host_ingest" | "after_host_ingest";
+  source: "startup" | "set_globals" | "host_notification";
+  event?: string;
+}): WidgetStateOrderingSnapshot {
+  const snapshot = readWidgetStateOrderingSnapshot();
+  console.log("[ui_widgetstate_rehydrate]", {
+    phase: params.phase,
+    source: params.source,
+    event: String(params.event || ""),
+    ...snapshot,
+  });
+  return snapshot;
+}
+
 export function setWidgetStateSafe(patch: Record<string, unknown> | null): void {
   const o = oa();
   if (!o || typeof (o as { setWidgetState?: (s: Record<string, unknown>) => void }).setWidgetState !== "function")
@@ -543,10 +918,34 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
   const next = { ...ws, ...(patch || {}) };
   const orderingKeys = ["bootstrap_session_id", "bootstrap_epoch", "response_seq", "host_widget_session_id"];
   const includesOrderingPatch = orderingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch || {}, key));
+  let orderingDecisionReason = "not_applicable";
+  let orderingBefore = readBootstrapOrderingState(ws);
+  let orderingAfter = readBootstrapOrderingState(next);
   if (includesOrderingPatch) {
     const currentOrdering = readBootstrapOrderingState(ws);
-    const incomingOrdering = readBootstrapOrderingState(next);
+    const incomingOrderingRaw = readBootstrapOrderingState(next);
+    const incomingOrderingRehydrated = rehydrateIncomingOrderingAgainstCurrent({
+      current: currentOrdering,
+      incoming: incomingOrderingRaw,
+    });
+    const incomingOrdering = incomingOrderingRehydrated.ordering;
+    orderingBefore = currentOrdering;
+    orderingAfter = incomingOrdering;
+    if (incomingOrderingRehydrated.rehydrated) {
+      next.host_widget_session_id = incomingOrdering.hostWidgetSessionId;
+      console.log("[ui_widgetstate_rehydrate_host_session]", {
+        reason: incomingOrderingRehydrated.reason,
+        current_tuple: describeBootstrapOrdering(currentOrdering),
+        incoming_tuple_before: describeBootstrapOrdering(incomingOrderingRaw),
+        incoming_tuple_after: describeBootstrapOrdering(incomingOrdering),
+      });
+    }
+    console.log("[ui_widgetstate_persist_attempt]", {
+      patch_tuple: describeBootstrapOrdering(incomingOrdering),
+      current_tuple: describeBootstrapOrdering(currentOrdering),
+    });
     const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
+    orderingDecisionReason = orderingDecision.reason;
     if (!orderingDecision.apply && hasValidBootstrapOrdering(incomingOrdering)) {
       for (const key of orderingKeys) {
         next[key] = ws[key];
@@ -566,9 +965,26 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
       break;
     }
   }
-  if (!changed) return;
+  if (!changed) {
+    if (includesOrderingPatch) {
+      console.log("[ui_widgetstate_persist_skipped_no_change]", {
+        reason: orderingDecisionReason,
+        current_tuple: describeBootstrapOrdering(orderingBefore),
+        incoming_tuple: describeBootstrapOrdering(orderingAfter),
+      });
+    }
+    return;
+  }
   try {
     (o as { setWidgetState: (s: Record<string, unknown>) => void }).setWidgetState(next);
+    if (includesOrderingPatch) {
+      const finalOrdering = readBootstrapOrderingState(next);
+      console.log("[ui_widgetstate_persist_applied]", {
+        reason: orderingDecisionReason,
+        previous_tuple: describeBootstrapOrdering(orderingBefore),
+        next_tuple: describeBootstrapOrdering(finalOrdering),
+      });
+    }
   } catch {}
 }
 
@@ -620,6 +1036,13 @@ type ActionLiveness = {
   client_action_id_echo: string;
 };
 
+export type ActionLivenessFailureClass =
+  | "none"
+  | "timeout"
+  | "rejected"
+  | "dropped"
+  | "accepted_no_advance";
+
 function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   const raw = (globalThis as Record<string, unknown>)[name];
   if (typeof raw === "boolean") return raw;
@@ -661,34 +1084,80 @@ export function ensureBootstrapRetryForResult(
 export function handleToolResultAndMaybeScheduleBootstrapRetry(
   raw: unknown,
   opts?: {
-    source?: "call_run_step" | "host_notification" | "set_globals" | "unknown";
+    source?: IngestSource;
     is_poll_response?: boolean;
+    client_action_id?: string;
+    request_id?: string;
   }
 ): Record<string, unknown> {
-  const source = String(opts?.source || "unknown");
+  const source: IngestSource = opts?.source || "unknown";
   const normalizedResult = normalizeToolResult(raw);
   const normalized = normalizedResult.normalized;
   if (!Object.keys(normalized).length) {
+    const resolvedForDrop = resolveWidgetPayload(raw);
+    const ingestContext = buildClientIngestContext({
+      raw,
+      resolved: resolvedForDrop,
+      fallbackClientActionId: opts?.client_action_id,
+      fallbackRequestId: opts?.request_id,
+    });
+    logClientIngestObservation({
+      source,
+      phase: "dropped_no_widget_result",
+      context: ingestContext,
+    });
     console.warn("[ui_ingest_dropped_no_widget_result]", {
       source,
       payload_source: normalizedResult.source,
       payload_reason_code: normalizedResult.reasonCode,
+      correlation_id: ingestContext.correlation_id,
+      client_action_id: ingestContext.client_action_id,
+      request_id: ingestContext.request_id,
+      client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
+      client_ingest_seq: ingestContext.client_ingest_seq,
+      payload_shape_fingerprint: ingestContext.payload_shape_fingerprint,
     });
     return {};
   }
   const resolved = resolveWidgetPayload(normalized);
+  const ingestContext = buildClientIngestContext({
+    raw,
+    resolved,
+    fallbackClientActionId: opts?.client_action_id,
+    fallbackRequestId: opts?.request_id,
+  });
+  logClientIngestObservation({
+    source,
+    phase: "received",
+    context: ingestContext,
+  });
   const result = resolved.result;
   const currentCachedResolved = resolveWidgetPayload(getLastToolOutput());
   const currentCachedResult = currentCachedResolved.result;
   const currentQuality = evaluatePayloadQuality(currentCachedResult);
   const incomingQuality = evaluatePayloadQuality(result);
+  const incomingSignal = readIncomingLivenessSignal(result);
   const currentOrdering = readBootstrapOrderingState(widgetState());
-  const incomingOrdering: BootstrapOrderingState = {
+  const incomingOrderingRaw: BootstrapOrderingState = {
     sessionId: resolved.bootstrap_session_id,
     epoch: resolved.bootstrap_epoch,
     responseSeq: resolved.response_seq,
     hostWidgetSessionId: resolved.host_widget_session_id,
   };
+  const incomingOrderingRehydrated = rehydrateIncomingOrderingAgainstCurrent({
+    current: currentOrdering,
+    incoming: incomingOrderingRaw,
+  });
+  const incomingOrdering = incomingOrderingRehydrated.ordering;
+  if (incomingOrderingRehydrated.rehydrated) {
+    console.log("[ui_widgetstate_rehydrate_host_session]", {
+      source,
+      reason: incomingOrderingRehydrated.reason,
+      current_tuple: describeBootstrapOrdering(currentOrdering),
+      incoming_tuple_before: describeBootstrapOrdering(incomingOrderingRaw),
+      incoming_tuple_after: describeBootstrapOrdering(incomingOrdering),
+    });
+  }
   const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
   const currentHasOrdering = hasValidBootstrapOrdering(currentOrdering);
   const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
@@ -699,12 +1168,16 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       ""
   ).trim();
   const currentHwid = String(widgetState().host_widget_session_id || "").trim();
-  if (hwidFromResult && !currentHwid) {
+  const shouldPersistHostWithoutFullTuple =
+    Boolean(hwidFromResult) && (!currentHwid || (!currentHasOrdering && currentHwid !== hwidFromResult));
+  if (shouldPersistHostWithoutFullTuple) {
     setWidgetStateSafe({ host_widget_session_id: hwidFromResult });
     console.log("[ui_hwid_persisted_without_full_ordering]", {
       source,
       host_widget_session_id: hwidFromResult,
+      previous_host_widget_session_id: currentHwid,
       incoming_tuple_valid: incomingHasOrdering,
+      current_tuple_valid: currentHasOrdering,
       ordering_apply: orderingDecision.apply,
       ordering_reason: orderingDecision.reason,
     });
@@ -736,6 +1209,11 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
         reason: orderingDecision.reason,
         payload_source: resolved.source,
         payload_reason_code: resolved.source_reason_code,
+        correlation_id: ingestContext.correlation_id,
+        client_action_id: ingestContext.client_action_id,
+        request_id: ingestContext.request_id,
+        client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
+        client_ingest_seq: ingestContext.client_ingest_seq,
         incoming_tuple: describeBootstrapOrdering(incomingOrdering),
         current_tuple: describeBootstrapOrdering(currentOrdering),
       });
@@ -748,6 +1226,11 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       reason: "incoming_missing_tuple",
       payload_source: resolved.source,
       payload_reason_code: resolved.source_reason_code,
+      correlation_id: ingestContext.correlation_id,
+      client_action_id: ingestContext.client_action_id,
+      request_id: ingestContext.request_id,
+      client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
+      client_ingest_seq: ingestContext.client_ingest_seq,
       incoming_tuple: describeBootstrapOrdering(incomingOrdering),
       current_tuple: describeBootstrapOrdering(currentOrdering),
       current_tuple_present: currentHasOrdering,
@@ -779,14 +1262,34 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       current_tuple: describeBootstrapOrdering(currentOrdering),
     });
   }
-  const shouldPersistToRenderCache = shouldUpdateRenderCache({
+  const renderCacheDecision = shouldUpdateRenderCache({
+    source,
     currentHasPayload: Object.keys(currentCachedResult).length > 0,
     incoming: incomingQuality,
     current: currentQuality,
+    incomingSignal,
     sameTupleUpgradeAccepted,
     orderingReason: orderingDecision.reason,
   });
+  const shouldPersistToRenderCache = renderCacheDecision.should_persist;
   if (shouldPersistToRenderCache) {
+    if (renderCacheDecision.decision_reason === "force_persist_non_renderable") {
+      console.warn("[ui_ingest_cache_preserve_denied]", {
+        source,
+        payload_source: resolved.source,
+        payload_reason_code: resolved.source_reason_code,
+        preserve_safety_reason: renderCacheDecision.preserve_safety_reason,
+        decision_reason: renderCacheDecision.decision_reason,
+        action_ack_status: incomingSignal.has_liveness ? incomingSignal.ack_status : "",
+        action_state_advanced: incomingSignal.state_advanced,
+        action_reason_code: incomingSignal.reason_code,
+        correlation_id: ingestContext.correlation_id,
+        client_action_id: ingestContext.client_action_id,
+        request_id: ingestContext.request_id,
+        client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
+        client_ingest_seq: ingestContext.client_ingest_seq,
+      });
+    }
     setLastToolOutput(normalized);
     if (_render) _render(normalized);
   } else {
@@ -794,6 +1297,17 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       source,
       payload_source: resolved.source,
       payload_reason_code: resolved.source_reason_code,
+      preserve_safety_reason: renderCacheDecision.preserve_safety_reason,
+      decision_reason: renderCacheDecision.decision_reason,
+      action_ack_status: incomingSignal.has_liveness ? incomingSignal.ack_status : "",
+      action_state_advanced: incomingSignal.state_advanced,
+      action_reason_code: incomingSignal.reason_code,
+      correlation_id: ingestContext.correlation_id,
+      client_action_id: ingestContext.client_action_id,
+      request_id: ingestContext.request_id,
+      client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
+      client_ingest_seq: ingestContext.client_ingest_seq,
+      payload_shape_fingerprint: ingestContext.payload_shape_fingerprint,
       incoming_quality_score: incomingQuality.score,
       current_quality_score: currentQuality.score,
       incoming_renderable: incomingQuality.renderable,
@@ -1252,23 +1766,55 @@ function extractActionLiveness(result: Record<string, unknown>, fallback: {
   };
 }
 
-function livenessMessageForReason(
-  state: Record<string, unknown>,
-  liveness: ActionLiveness
-): string {
-  if (liveness.ack_status === "timeout") {
-    return uiText(state, "transient.timeout", "") || "The action timed out. Please retry.";
+function actionLivenessFailureClass(liveness: {
+  ack_status: string;
+  state_advanced: boolean;
+}): ActionLivenessFailureClass {
+  const ackStatus = normalizeActionAckStatus(liveness.ack_status);
+  if (ackStatus === "timeout") return "timeout";
+  if (ackStatus === "dropped") return "dropped";
+  if (ackStatus === "rejected") return "rejected";
+  if (ackStatus === "accepted" && !liveness.state_advanced) return "accepted_no_advance";
+  return "none";
+}
+
+export function resolveActionLivenessNotice(
+  state: Record<string, unknown> | null | undefined,
+  liveness: {
+    ack_status: string;
+    state_advanced: boolean;
+    reason_code: string;
   }
-  if (liveness.ack_status === "dropped") {
-    return uiText(state, "error.contract.body", "") || `Action was dropped (${liveness.reason_code}).`;
+): {
+  failure_class: ActionLivenessFailureClass;
+  reason_code: string;
+  message: string;
+} {
+  const failureClass = actionLivenessFailureClass(liveness);
+  const reasonCode = String(liveness.reason_code || "").trim().toLowerCase() || "state_not_advanced";
+  if (failureClass === "timeout") {
+    return {
+      failure_class: failureClass,
+      reason_code: reasonCode || "timeout",
+      message: uiText(state || {}, "transient.timeout", "") || "The action timed out. Please retry.",
+    };
   }
-  if (liveness.ack_status === "rejected") {
-    return uiText(state, "error.contract.body", "") || `Action was rejected (${liveness.reason_code}).`;
+  if (failureClass === "rejected" && reasonCode.includes("rate_limit")) {
+    return {
+      failure_class: failureClass,
+      reason_code: reasonCode,
+      message: uiText(state || {}, "transient.rate_limited", "") || "Please wait a moment and try again.",
+    };
   }
-  if (!liveness.state_advanced) {
-    return uiText(state, "error.contract.body", "") || `No state update received (${liveness.reason_code}).`;
+  if (failureClass === "dropped" || failureClass === "rejected" || failureClass === "accepted_no_advance") {
+    const base = uiText(state || {}, "error.contract.body", "") || "Action could not be applied.";
+    return {
+      failure_class: failureClass,
+      reason_code: reasonCode,
+      message: `${base} (${reasonCode})`,
+    };
   }
-  return "";
+  return { failure_class: "none", reason_code: "", message: "" };
 }
 
 export async function callRunStep(
@@ -1292,6 +1838,7 @@ export async function callRunStep(
       ui_action_liveness_ack_status: "rejected",
       ui_action_liveness_state_advanced: "false",
       ui_action_liveness_reason_code: "transport_unavailable",
+      ui_action_liveness_failure_class: "rejected",
       ui_action_liveness_action_code: fallbackActionCode,
       ui_action_liveness_client_action_id: "",
     });
@@ -1383,16 +1930,33 @@ export async function callRunStep(
   );
   const requestId = String((nextState as any).__request_id || "");
   const clientActionId = ensuredClientActionId;
+  const requestCorrelationId = coalesceString(
+    (nextState as Record<string, unknown>).correlation_id,
+    (nextState as Record<string, unknown>).__correlation_id,
+    requestId
+  );
+  const requestTransport = hasCallTool ? "callTool" : "bridge";
   const startedAt = Date.now();
   const debugCalls = isDevEnv();
-    if (debugCalls) {
-      console.log("[ui_run_step_request]", {
-        request_id: requestId,
-        client_action_id: clientActionId,
-        current_step: String(nextState.current_step || ""),
-        user_message: messageText,
-      });
-    }
+  console.log("[ui_calltool_request_shape]", {
+    correlation_id: requestCorrelationId,
+    client_action_id: clientActionId,
+    request_id: requestId,
+    action_code: String(messageText || "").trim().toUpperCase(),
+    transport_status: transportStatus,
+    transport_primary: requestTransport,
+    request_shape_fingerprint: shapeFingerprint(payload),
+    payload_source: "pre_resolve",
+    payload_reason_code: "pre_resolve",
+  });
+  if (debugCalls) {
+    console.log("[ui_run_step_request]", {
+      request_id: requestId,
+      client_action_id: clientActionId,
+      current_step: String(nextState.current_step || ""),
+      user_message: messageText,
+    });
+  }
 
   setLoading(true);
 
@@ -1411,6 +1975,27 @@ export async function callRunStep(
       });
     }
     setInlineNotice(uiText(nextState, "transient.timeout", ""));
+    setWidgetStateSafe({
+      ui_action_liveness_ack_status: "timeout",
+      ui_action_liveness_state_advanced: "false",
+      ui_action_liveness_reason_code: "timeout",
+      ui_action_liveness_failure_class: "timeout",
+      ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
+      ui_action_liveness_client_action_id: clientActionId,
+    });
+    console.warn("[ui_action_liveness_explicit_error]", {
+      action_code: String(messageText || "").trim().toUpperCase(),
+      client_action_id: clientActionId,
+      ack_status: "timeout",
+      reason_code: "timeout",
+      failure_class: "timeout",
+    });
+    if (isStartAction) {
+      setWidgetStateSafe({
+        start_dispatch_state: "failed",
+        transport_ready: "true",
+      });
+    }
     setLoading(false);
   }, timeoutMs);
 
@@ -1452,8 +2037,26 @@ export async function callRunStep(
     const normalizedRaw = toRecord(resp);
     const resolvedResponse = resolveWidgetPayload(normalizedRaw);
     const directResult = resolvedResponse.result;
+    const responseCorrelation = resolveClientCorrelation({
+      raw: normalizedRaw,
+      result: directResult,
+      fallbackClientActionId: clientActionId,
+      fallbackRequestId: requestId,
+    });
+    console.log("[ui_calltool_response_shape]", {
+      correlation_id: responseCorrelation.correlation_id,
+      client_action_id: responseCorrelation.client_action_id,
+      request_id: responseCorrelation.request_id,
+      action_code: String(messageText || "").trim().toUpperCase(),
+      transport_used: transportUsed,
+      response_shape_fingerprint: shapeFingerprint(normalizedRaw),
+      payload_source: resolvedResponse.source,
+      payload_reason_code: resolvedResponse.source_reason_code,
+    });
     const ingestedResult = handleToolResultAndMaybeScheduleBootstrapRetry(normalizedRaw, {
       source: "call_run_step",
+      client_action_id: clientActionId,
+      request_id: requestId,
     });
     const hasIngestedResult = Object.keys(ingestedResult).length > 0;
     const orderingAfterIngest = readBootstrapOrderingState(widgetState());
@@ -1468,21 +2071,6 @@ export async function callRunStep(
       errorObj &&
       (errorObj.type === "timeout" || errorObj.type === "rate_limited") &&
       (errorObj.retry_action === "retry_same_action" || errorObj.type === "rate_limited");
-    if (transientRetryError) {
-      if (errorObj.type === "rate_limited") {
-        setInlineNotice(
-          errorObj.user_message ||
-            uiText(nextState, "transient.rate_limited", "")
-        );
-        lockRateLimit(errorObj.retry_after_ms ?? 1500);
-      } else {
-        setInlineNotice(
-          errorObj.user_message ||
-            uiText(nextState, "transient.timeout", "")
-        );
-      }
-      return;
-    }
     if (debugCalls) {
       console.log("[ui_dispatch_ack_only]", {
         request_id: requestId,
@@ -1514,7 +2102,10 @@ export async function callRunStep(
     const responseCurrentStep = String(resultState.current_step || result?.current_step_id || "").trim();
     const requestCurrentStep = String((nextState as Record<string, unknown>).current_step || "").trim();
     const stepAdvanced = Boolean(responseCurrentStep) && responseCurrentStep !== requestCurrentStep;
-    const fallbackStateAdvanced = hasIngestedResult && (orderingAdvanced || stepAdvanced);
+    const fallbackStateAdvanced =
+      result?.ok === false
+        ? false
+        : (hasIngestedResult && (orderingAdvanced || stepAdvanced));
     const fallbackAckStatus: ActionAckStatus =
       result?.ok !== false
         ? "accepted"
@@ -1530,13 +2121,17 @@ export async function callRunStep(
           action_code_echo: String(messageText || "").trim().toUpperCase(),
           client_action_id_echo: clientActionId,
         };
-    const hasExplicitError = liveness.ack_status !== "accepted" || liveness.state_advanced !== true;
+    const livenessNotice = resolveActionLivenessNotice(nextState as Record<string, unknown>, liveness);
+    const hasExplicitError = livenessNotice.failure_class !== "none";
     console.log("[ui_action_liveness_ack]", {
       action_code: liveness.action_code_echo,
       client_action_id: liveness.client_action_id_echo,
+      correlation_id: responseCorrelation.correlation_id,
+      request_id: responseCorrelation.request_id,
       ack_status: liveness.ack_status,
       state_advanced: liveness.state_advanced,
       reason_code: liveness.reason_code,
+      failure_class: livenessNotice.failure_class,
       payload_source: resolvedResponse.source,
       payload_reason_code: resolvedResponse.source_reason_code,
       ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
@@ -1546,6 +2141,7 @@ export async function callRunStep(
       ui_action_liveness_ack_status: liveness.ack_status,
       ui_action_liveness_state_advanced: liveness.state_advanced ? "true" : "false",
       ui_action_liveness_reason_code: liveness.reason_code,
+      ui_action_liveness_failure_class: livenessNotice.failure_class,
       ui_action_liveness_action_code: liveness.action_code_echo,
       ui_action_liveness_client_action_id: liveness.client_action_id_echo,
     });
@@ -1555,16 +2151,29 @@ export async function callRunStep(
         client_action_id: liveness.client_action_id_echo,
         ack_status: liveness.ack_status,
         reason_code: liveness.reason_code,
+        failure_class: livenessNotice.failure_class,
       });
-      setInlineNotice(livenessMessageForReason(nextState as Record<string, unknown>, liveness));
+      if (transientRetryError && errorObj?.type === "rate_limited") {
+        setInlineNotice(errorObj.user_message || uiText(nextState, "transient.rate_limited", ""));
+        lockRateLimit(errorObj.retry_after_ms ?? 1500);
+      } else if (transientRetryError && errorObj?.type === "timeout") {
+        setInlineNotice(errorObj.user_message || uiText(nextState, "transient.timeout", ""));
+      } else {
+        setInlineNotice(livenessNotice.message);
+      }
       if (liveness.ack_status === "accepted" && !liveness.state_advanced) {
         console.warn("[ui_action_dispatch_ack_without_state_advance]", {
           action_code: String(messageText || "").trim().toUpperCase(),
+          correlation_id: responseCorrelation.correlation_id,
+          client_action_id: liveness.client_action_id_echo,
+          request_id: responseCorrelation.request_id,
           response_ingested: hasIngestedResult,
           ordering_advanced: orderingAdvanced,
           payload_source: resolvedResponse.source,
           payload_reason_code: resolvedResponse.source_reason_code,
           response_view_mode: responseViewMode,
+          failure_class: livenessNotice.failure_class,
+          preserve_expected_visible_error: true,
           ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
           ordering_after: describeBootstrapOrdering(orderingAfterIngest),
         });
@@ -1575,6 +2184,7 @@ export async function callRunStep(
           transport_ready: "true",
         });
       }
+      if (transientRetryError) return;
     } else {
       if (isStartAction) {
         setWidgetStateSafe({
@@ -1602,6 +2212,7 @@ export async function callRunStep(
         ui_action_liveness_ack_status: "rejected",
         ui_action_liveness_state_advanced: "false",
         ui_action_liveness_reason_code: "transport_error",
+        ui_action_liveness_failure_class: "rejected",
         ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
         ui_action_liveness_client_action_id: clientActionId,
       });
@@ -1626,8 +2237,16 @@ export async function callRunStep(
         ui_action_liveness_ack_status: "timeout",
         ui_action_liveness_state_advanced: "false",
         ui_action_liveness_reason_code: "timeout",
+        ui_action_liveness_failure_class: "timeout",
         ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
         ui_action_liveness_client_action_id: clientActionId,
+      });
+      console.warn("[ui_action_liveness_explicit_error]", {
+        action_code: String(messageText || "").trim().toUpperCase(),
+        client_action_id: clientActionId,
+        ack_status: "timeout",
+        reason_code: "timeout",
+        failure_class: "timeout",
       });
       return;
     }

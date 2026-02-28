@@ -253,6 +253,12 @@ test("MCP app contract: interactive actions get non-empty client_action_id echo 
   assert.match(source, /client_action_id_present:\s*clientActionId \? "true" : "false"/);
 });
 
+test("MCP app contract: transport context realigns internal host session id to bootstrap tuple", () => {
+  assert.match(source, /function alignInternalHostWidgetSessionId\(/);
+  assert.match(source, /host_session_id_realigned_to_bootstrap/);
+  assert.match(source, /realign_reason:\s*"internal_host_mismatch"/);
+});
+
 test("MCP app contract: ready endpoint includes correlation tracing + diagnostics reference", () => {
   assert.match(source, /"ready_endpoint_read"/);
   assert.match(source, /run_step_compatibility:\s*RUN_STEP_TOOL_COMPAT_POLICY,/);
