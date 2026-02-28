@@ -264,10 +264,17 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
   const normalizedBootstrapEpoch = incomingBootstrapSession
     ? parsePositiveInt(stateForTool.bootstrap_epoch) || 1
     : 1;
+  // Als het incoming session ID afgewezen was (niet geldig formaat), is dit een
+  // volledig nieuwe sessie. Reset response_seq naar 0 zodat de eerste server-response
+  // (seq=1) altijd > 0 is en state_advanced correct true wordt.
+  const normalizedResponseSeq = incomingBootstrapSession
+    ? parsePositiveInt(stateForTool.response_seq) // bestaande sessie: bewaar waarde
+    : 0; // nieuwe sessie: altijd 0
   stateForTool = {
     ...stateForTool,
     bootstrap_session_id: normalizedBootstrapSessionId,
     bootstrap_epoch: normalizedBootstrapEpoch,
+    response_seq: normalizedResponseSeq,
     host_widget_session_id: hostWidgetSessionId,
     __idempotency_registry_owner: "server",
   };

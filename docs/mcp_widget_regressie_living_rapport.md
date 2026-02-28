@@ -1550,3 +1550,73 @@ Kopieer dit blok voor elke volgende run:
 14. Welke laatste verschillen zijn verwijderd
 - Verwijderd: onjuiste nested lookup (`toolOutput.result._widget_result`, `root.result._widget_result`).
 - Hersteld: flat canonical lookup (`toolOutput._widget_result`, `root._widget_result`) met fallback naar `_meta.widget_result`.
+
+### Poging 2026-02-28 20:29 UTC (server-side `state_advanced=false` bij afgekeurde bootstrap session id)
+
+1. Hypothese
+- `state_advanced:false` werd server-side veroorzaakt doordat een afgekeurd `bootstrap_session_id` wel een nieuwe sessie forceerde, maar `response_seq` uit inkomende state liet staan.
+
+2. Waarom deze hypothese
+- Loganalyse liet `bootstrap_session_id` in foutformaat zien (`bsw_001`) samen met `response_seq:1`.
+- In dat pad werd de eerste uitgaande server-sequence ook `1`, waardoor vergelijking `outgoing > incoming` faalde (`1 > 1` = false).
+
+3. Exacte wijziging(en)
+- `mcp-server/src/server/run_step_transport_context.ts`:
+  - in `buildRunStepContext` is `normalizedResponseSeq` toegevoegd en in `stateForTool` gezet.
+  - gedrag:
+    - geldige inkomende sessie: bestaande `response_seq` behouden;
+    - nieuwe sessie (incl. afgekeurde inkomende id): `response_seq` reset naar `0`.
+  - relevante locatie: blok rond `normalizedBootstrapSessionId` / `normalizedBootstrapEpoch` / `response_seq`.
+
+4. Verwachte uitkomst
+- Bij afgekeurd inkomend session-id start de nieuwe sessie altijd met baseline `response_seq=0`.
+- De eerstvolgende serverresponse (`response_seq>=1`) resulteert dan deterministisch in `state_advanced=true`.
+
+5. Testresultaten lokaal
+- `cd mcp-server && npm run typecheck` -> PASS.
+- `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS (`110 pass`, `0 fail`).
+- `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (`170 tests`, `169 pass`, `0 fail`, `1 skipped`).
+
+6. Live observatie
+- Niet uitgevoerd in deze iteratie.
+- Status: `evidence_gap`.
+
+7. AWS/logbewijs met timestamps
+- Geen nieuwe CloudWatch-query in deze iteratie.
+- Status: `evidence_gap`.
+
+8. Uitkomst
+- [ ] Bevestigd
+- [ ] Weerlegd
+- [x] Onbeslist
+
+9. Wat bleek achteraf onjuist
+- De aanname dat het resterende `state_not_advanced`-probleem nog client-ingest gerelateerd was.
+
+10. Wat was gemist
+- Dat de servercontext bij sessie-normalisatie niet tegelijk de sequence-baseline corrigeerde.
+
+11. Besluit
+- [x] Doorgaan op deze lijn
+- [ ] Stoppen en hypothese verwerpen
+- [ ] Externe review nodig
+- Toelichting: structurele serverfix staat; live-validatie volgt na handmatige App Runner deploy.
+
+12. OpenAI zero-diff compliance matrix (status na deze fix)
+
+| Punt | OpenAI doc uitspraak (kort) | Bron | Huidige code-locatie | Gap | Fix-commit / fix-bestand | Bewijs |
+|---|---|---|---|---|---|---|
+| 1. Tool descriptor metadata + template wiring | Tool descriptor + template moeten eenduidig gekoppeld zijn | https://developers.openai.com/apps-sdk/reference | `mcp-server/src/server/mcp_registration.ts` | Nee | n.v.t. in deze iteratie | `src/mcp_app_contract.test.ts` PASS |
+| 2. Scheiding model-data vs component-data | Component-only data niet in model-safe pad | https://developers.openai.com/apps-sdk/mcp-apps-in-chatgpt | `mcp-server/src/server/mcp_registration.ts` | Nee | n.v.t. in deze iteratie | contract tests PASS |
+| 3. Transport/bridge flow conform MCP patroon | 1 canonical transportflow, geen ambigu statepad | https://developers.openai.com/apps-sdk/build/state-management | `mcp-server/src/server/run_step_transport_context.ts` | Nee (code), Ja (`evidence_gap` live) | `run_step_transport_context.ts` | lokale tests PASS |
+| 4. Deterministische ingest/render authority | Server ordering/sequencing is leidend | https://developers.openai.com/apps-sdk/build/state-management | `mcp-server/src/server/run_step_transport_context.ts` | Nee (code), Ja (`evidence_gap` live) | `run_step_transport_context.ts` | handler tests PASS |
+| 5. Uniform action lifecycle contract | acties eindigen in advance of expliciete error | https://developers.openai.com/apps-sdk/deploy/testing | `mcp-server/src/server/run_step_transport.ts` + context | Nee | indirect via context fix | handler tests PASS |
+| 6. Fail-closed foutpaden met reason codes | silent no-op vermijden, expliciete reden verplicht | https://developers.openai.com/apps-sdk/deploy/troubleshooting | `mcp-server/src/server/run_step_transport.ts` | Nee | n.v.t. in deze iteratie | handler tests PASS |
+| 7. Test/deploy/troubleshooting gedrag | verplichte verificatie + live bewijs | https://developers.openai.com/apps-sdk/deploy/testing | test scripts + docs | Ja (`evidence_gap`: live/AWS in deze run ontbreekt) | docs update | lokale verificatie volledig |
+
+13. Waarom vorige aanpak niet zero-diff was
+- De vorige iteraties corrigeerden vooral ingest/renderdiepte, maar lieten een server-side ordering edge-case open bij afgekeurde bootstrap session id.
+
+14. Welke laatste verschillen zijn verwijderd
+- Verwijderd: mismatch tussen nieuwe sessie en oude `response_seq` baseline in transportcontext.
+- Hersteld: baseline-reset naar `response_seq=0` bij nieuwe/afgekeurde bootstrap sessies.
