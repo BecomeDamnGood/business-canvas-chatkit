@@ -841,3 +841,214 @@ Kopieer dit blok voor elke volgende run:
 - Fix zit op ketenniveau (transport + contract + UI fail-closed), niet op cosmetische UI-fallback.
 - Invarianten zijn afgedwongen met reason-coded explicit-error paden en testdekking.
 - SSOT `_meta.widget_result` en ordering tuple blijven leidend; UI blijft dumb en reconstrueert geen business-state.
+
+### Poging 2026-02-28 10:37 UTC (live incident: leeg scherm -> payload missing -> foutkaart)
+
+- Hypothese:
+  - Er spelen in deze run twee aparte problemen:
+    1) een transient ingest/canonical payload-miss vroeg in startup (door gebruiker gezien als "payload is missing"),
+    2) een contract/liveness uitkomst op `step_0` waarbij `TEXT_INPUT` wel `accepted` wordt maar niet advance't, waardoor expliciete foutkaart (`state_not_advanced`) zichtbaar wordt.
+- Waarom deze hypothese:
+  - Aangeleverde request toont `current_step=step_0`, `input_mode=chat`, `started` initieel false.
+  - Aangeleverde response toont:
+    - `ack_status:"accepted"`
+    - `state_advanced:false`
+    - `reason_code:"state_not_advanced"`
+    - `action_code_echo:"TEXT_INPUT"`.
+  - Aangeleverde serverlogs tonen:
+    - `run_step_action_liveness_explicit_error` met `TEXT_INPUT`, `ack_status:"accepted"`, `state_advanced:false`, `reason_code:"state_not_advanced"`.
+  - Screenshot toont exact dezelfde zichtbare fout (`state_not_advanced`) in de kaart.
+- Exacte wijziging(en):
+  - Geen codewijziging in deze poging.
+  - Dit is een live-incidentanalyse met bewijsconclusie voor het living rapport.
+- Verwachte uitkomst:
+  - Als hypothese klopt, is minimaal 1 fout hard bewijsbaar:
+    - `TEXT_INPUT` op `step_0` eindigt in expliciete no-advance status (geen silent no-op, maar wel user-facing foutkaart).
+  - Voor "payload missing" moet aanvullend bewijs bestaan in UI-ingest markers (niet meegeleverd in deze snippetset).
+- Testresultaten lokaal:
+  - Niet uitgevoerd (analyse-only, geen codepad aangepast).
+- Live observatie:
+  - Gebruikersvolgorde: leeg scherm -> melding "payload is missing" -> foutkaart.
+  - Eindscherm toont prestartkaart met melding:
+    - `Ververs of start een nieuwe sessie. (state_not_advanced)`.
+- AWS/logbewijs met timestamps:
+  - Correlation-id in alle aangeleverde logevents: `fb8e0151-5b0a-400f-a504-ee87ba30a86b`.
+  - Hard bewijs event 1:
+    - `run_step_action_liveness_explicit_error`
+    - `action_code:"TEXT_INPUT"`, `ack_status:"accepted"`, `state_advanced:false`, `reason_code:"state_not_advanced"`, `client_action_id:""`.
+  - Hard bewijs event 2:
+    - `run_step_ordering_tuple_parity` = `tuple_parity_ok` (tuple niet de oorzaak in deze run).
+  - Hard bewijs event 3:
+    - `run_step_render_source_selected` = `meta.widget_result_authoritative`, `render_source_tuple_complete:true`.
+  - Beperking bewijs:
+    - In aangeleverde snippet ontbreken expliciete event-timestamps en ontbreekt een UI-marker als `ui_ingest_dropped_no_widget_result` met dezelfde correlatie.
+- Uitkomst:
+  - [ ] Bevestigd
+  - [ ] Weerlegd
+  - [x] Onbeslist
+- Wat bleek achteraf onjuist:
+  - Aanname dat deze incidentset primair tuple-/orderinggedreven zou zijn; parity en render-source zijn hier juist OK.
+- Wat was gemist:
+  - UI-ingest bronmarkers rond de fase "payload missing" zijn niet meegecaptured in hetzelfde bewijsblok.
+  - `client_action_id` is leeg voor dit `TEXT_INPUT` pad, wat live correlatie/foutdiagnose verzwakt.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: eerst aanvullend bewijs verzamelen op UI-ingestmoment (marker + timestamp) rond de payload-missing fase; daarna pas nieuwe implementatiekeuze.
+
+#### Bewezen fout(en) in deze run
+1. `TEXT_INPUT` op `step_0` levert explicit-error (`state_not_advanced`) i.p.v. vooruitgang.
+   - Bewijs: responsevelden + `run_step_action_liveness_explicit_error` + screenshotmelding.
+2. Traceability is incompleet in dit pad (`client_action_id` leeg).
+   - Bewijs: `client_action_id:""` in explicit-error event.
+
+#### Nog niet hard bewezen in deze run
+1. Exacte technische oorzaak van de "payload is missing" fase.
+   - Reden: relevante UI-ingest marker (`ui_ingest_dropped_no_widget_result` / startup canonical miss marker) met dezelfde correlatie/timestamp ontbreekt in aangeleverde logs.
+
+### Poging 2026-02-28 10:45 UTC (forensische reconstructie zonder aannames, met timestampbewijs)
+
+- Hypothese:
+  - De zichtbare foutkaart `state_not_advanced` in dit incident ontstaat doordat de liveness-berekening strikt `outgoing_response_seq > incoming_response_seq` vereist, terwijl in deze run beide `=1` zijn.
+- Waarom deze hypothese:
+  - Serverevent-keten met dezelfde correlatie-id (`fb8e0151-5b0a-400f-a504-ee87ba30a86b`) toont:
+    - request/dispatch op `response_seq=1`,
+    - response ook op `response_seq=1`,
+    - daarna `ack` + `explicit_error` met `state_not_advanced`.
+  - Codepad bevestigt exact die vergelijking:
+    - `stateAdvanced = hasStateAdvancedByResponseSeq(incomingOrdering, responseSeq)` in `run_step_transport.ts`.
+    - `hasStateAdvancedByResponseSeq` retourneert alleen `true` als `outgoing > incoming`.
+- Exacte wijziging(en):
+  - Geen codewijziging.
+  - Alleen forensische analyse met live logbewijs en code-trace.
+- Verwachte uitkomst:
+  - Als hypothese klopt, moet de keten eindigen in:
+    - `run_step_action_liveness_ack` met `accepted + state_advanced:false`,
+    - `run_step_action_liveness_explicit_error` met `reason_code=state_not_advanced`,
+    - en géén `run_step_action_liveness_advance`.
+- Testresultaten lokaal:
+  - Niet uitgevoerd (incidentanalyse zonder implementatie).
+- Live observatie:
+  - User flow: leeg scherm -> "payload is missing" -> foutkaart met `state_not_advanced`.
+  - Screenshot-eindtoestand: prestartkaart blijft zichtbaar met fouthint `(... state_not_advanced)`.
+- AWS/logbewijs met timestamps:
+  - `2026-02-28T10:33:54.105Z` (`1772274834105`)
+    - `run_step_request`: `input_mode:"chat"`, `action:"text_input"`, `client_action_id_present:"false"`.
+    - `run_step_action_liveness_dispatch`: `action_code:"text_input"`, `response_seq:1`.
+  - `2026-02-28T10:33:54.167Z` (`1772274834167`)
+    - `run_step_response`: `ack_status:"accepted"`, `state_advanced:false`, `reason_code:"state_not_advanced"`, `action_code_echo:"TEXT_INPUT"`, `client_action_id_echo:""`, `ui_view_mode:"prestart"`.
+  - `2026-02-28T10:33:54.169Z` (`1772274834169`)
+    - `run_step_action_liveness_ack`: `accepted + state_advanced:false`.
+    - `run_step_action_liveness_explicit_error`: `reason_code:"state_not_advanced"`.
+  - `2026-02-28T10:33:54.172Z` (`1772274834172`)
+    - `run_step_ordering_tuple_parity`: `tuple_parity_ok`.
+    - `run_step_render_source_selected`: `meta_widget_result_authoritative`, tuple complete.
+  - Negatief bewijs in dezelfde incident-window:
+    - Geen `run_step_action_liveness_advance` event.
+    - Geen serverevent `ui_ingest_dropped_no_widget_result`.
+    - Geen serverevent `startup_canonical_miss`.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf onjuist:
+  - Aanname dat tuple/parity in deze run de primaire oorzaak zou zijn; die zijn aantoonbaar OK.
+- Wat was gemist:
+  - `TEXT_INPUT` valt buiten de server-side fallback voor `client_action_id` (alleen `ACTION_*` krijgt fallback), waardoor correlatie leeg blijft op dit pad.
+  - In deze correlatie ontbreken client-side ingest logs, dus "payload is missing"-oorzaak is met serverlogs alleen niet volledig te bewijzen.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: fout `state_not_advanced` is hard bewezen als gevolg van seq-vergelijking in deze run; payload-missing root-cause vraagt aanvullend client-side bewijs (browser/host logstream).
+
+#### Bewijs-koppeling code -> incident
+1. Liveness-foutpad wordt geactiveerd als `stateAdvanced=false`:
+   - `mcp-server/src/server/run_step_transport.ts` (regels 320-330).
+2. `stateAdvanced` is strict `outgoing > incoming`:
+   - `mcp-server/src/server/run_step_transport_context.ts` (regels 172-180).
+3. In dit incident zijn beide seq's `1`:
+   - bewezen door `run_step_action_liveness_dispatch` (`response_seq:1`) + `run_step_ordering_tuple_parity` (`response_seq:1`).
+4. Daarom volgt deterministisch `reason_code=state_not_advanced`:
+   - bewezen door `run_step_response` + `run_step_action_liveness_explicit_error` events.
+
+### Poging 2026-02-28 10:54 UTC (vergelijking met officiele OpenAI Apps SDK documentatie)
+
+- Hypothese:
+  - De resterende regressie komt niet alleen uit runtime-data, maar ook uit een gedeeltelijke afwijking van de door OpenAI beschreven MCP app-patronen (met name gemengde host-ingest paden en dubbele outputkanalen).
+- Waarom deze hypothese:
+  - In productie zien we `meta.widget_result` als render-authority, maar tegelijk user-facing fouten en startup-miss symptomen.
+  - Dat patroon past bij een keten waarin de transport/ingest flow niet 1 eenduidig pad volgt.
+- Exacte wijziging(en):
+  - Geen codewijziging.
+  - Wel een documentatie-audit toegevoegd: OpenAI docs versus huidige implementatie.
+- Verwachte uitkomst:
+  - Duidelijk onderscheid tussen:
+    1) wat al conform docs is,
+    2) wat afwijkt en waarom dat fout/riskant is.
+- Testresultaten lokaal:
+  - Niet uitgevoerd (analyse-only).
+- Live observatie:
+  - N.v.t. voor deze poging (forensische documentatievergelijking).
+- AWS/logbewijs met timestamps:
+  - N.v.t. in deze poging; bewijs bestaat uit code-trace + officiële documentatie.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf onjuist:
+  - Aanname dat alleen server contract/liveness regels voldoende waren zonder transportpad-convergentie.
+- Wat was gemist:
+  - Dat de UI tegelijk vertrouwt op:
+    - host bridge notifications (`ui/notifications/tool-result`),
+    - en custom `openai:set_globals` + `window.openai.toolOutput`.
+  - Dat dit gemengde model startup gedrag fragiel maakt.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: eerst ingest/transportpad harmoniseren op 1 primair contractpad en daarna pas extra liveness-tuning.
+
+#### OpenAI docs: wat is conform
+1. Tool/resource metadata voor widget-koppeling staat goed:
+   - `_meta.ui.resourceUri`, `openai/outputTemplate`, `openai/widgetAccessible`.
+   - Code: `mcp-server/src/server/mcp_registration.ts` (regels 101-108).
+2. Resource MIME/profiel staat in lijn met MCP app model:
+   - `text/html;profile=mcp-app`.
+   - Code: `mcp-server/src/server/mcp_registration.ts` (regel 68).
+3. Render-authority server-side is expliciet vastgezet op `_meta.widget_result`:
+   - marker `run_step_render_source_selected` met reason `meta_widget_result_authoritative`.
+   - Code: `mcp-server/src/server/mcp_registration.ts` (regels 207-262).
+
+#### OpenAI docs: waar we afwijken (en dus fout/riskant zitten)
+1. Gemengde ingestpaden in de UI:
+   - Pad A: JSON-RPC host bridge (`ui/notifications/tool-result`).
+     - Code: `mcp-server/ui/lib/main.ts` (regels 335-348).
+   - Pad B: custom global event + globale host state (`openai:set_globals`, `window.openai.toolOutput`).
+     - Code: `mcp-server/ui/lib/main.ts` (regels 232-239, 505-514).
+   - Risico:
+     - race/ordering verschillen tussen paden,
+     - transient "payload missing" gedrag ondanks server-side canonical output.
+2. Dubbele outputbron richting model/component:
+   - Naast `_meta.widget_result` wordt ook een uitgebreide `structuredContent.result` meegegeven.
+   - Code: `mcp-server/src/server/run_step_transport.ts` (regels 413-439).
+   - Risico:
+     - onnodige duplicatie,
+     - potentiële drift tussen model-zichtbare en component-zichtbare data.
+3. Liveness-contract inconsistent op interactieve `TEXT_INPUT`:
+   - Incidentbewijs toont `ack_status=accepted`, `state_advanced=false`, `reason_code=state_not_advanced`, `client_action_id_echo=""`.
+   - Risico:
+     - user krijgt directe foutkaart zonder state-advance,
+     - traceability verslechtert door lege `client_action_id`.
+
+#### Bronnen (officiele docs + lokale code)
+- OpenAI Apps SDK:
+  - https://developers.openai.com/apps-sdk/reference
+  - https://developers.openai.com/apps-sdk/mcp-apps-in-chatgpt
+  - https://developers.openai.com/apps-sdk/build/state-management
+  - https://developers.openai.com/apps-sdk/deploy/troubleshooting
+- Lokale code:
+  - `mcp-server/src/server/mcp_registration.ts`
+  - `mcp-server/src/server/run_step_transport.ts`
+  - `mcp-server/ui/lib/main.ts`
