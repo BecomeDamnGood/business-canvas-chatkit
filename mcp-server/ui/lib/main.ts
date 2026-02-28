@@ -285,6 +285,7 @@ function renderStartupWaitState(reason: string): void {
   if (hasRenderedStateSnapshot()) return;
   const startupInitState = buildStartupInitState();
   console.log("[startup_first_render_wait_shell]", { reason });
+  setLastToolOutput(startupInitState);
   render(startupInitState);
 }
 
@@ -434,6 +435,34 @@ if (sendEl) {
   });
 }
 
+/**
+ * Keep action buttons disabled until the action contract is hydrated.
+ */
+function guardButtonUntilContractReady(
+  buttonId: string,
+  role: string
+): void {
+  if (typeof window === "undefined") return;
+  const btn = document.getElementById(buttonId) as HTMLButtonElement | null;
+  if (!btn) return;
+
+  const checkAndEnable = (_event?: Event): void => {
+    const code = actionCodeFromRole(role);
+    if (!code) return;
+    btn.disabled = false;
+    window.removeEventListener("bsc:action_contract_ready", checkAndEnable);
+  };
+
+  const immediate = actionCodeFromRole(role);
+  if (immediate) {
+    btn.disabled = false;
+    return;
+  }
+
+  btn.disabled = true;
+  window.addEventListener("bsc:action_contract_ready", checkAndEnable);
+}
+
 const wordingChoicePickUser = document.getElementById("wordingChoicePickUser");
 if (wordingChoicePickUser) {
   wordingChoicePickUser.addEventListener("click", () => {
@@ -502,6 +531,14 @@ if (btnSwitchToSelfDream) {
 }
 
 if (typeof window !== "undefined") {
+  guardButtonUntilContractReady("btnStart", "start");
+  guardButtonUntilContractReady("btnStartDreamExercise", "dream_start_exercise");
+  guardButtonUntilContractReady("btnSwitchToSelfDream", "dream_switch_to_self");
+  guardButtonUntilContractReady("wordingChoicePickUser", "wording_pick_user");
+  guardButtonUntilContractReady("wordingChoicePickSuggestion", "wording_pick_suggestion");
+}
+
+if (typeof window !== "undefined") {
   window.addEventListener("openai:set_globals", () => {
     try {
       const payload = readSetGlobalsPayloadFromHost();
@@ -520,6 +557,10 @@ if (typeof window !== "undefined") {
   });
 }
 
-if (!tryInitialIngestFromHost("set_globals")) {
-  renderStartupWaitState("initial_bootstrap_probe");
-}
+renderStartupWaitState("initial_bootstrap_probe");
+setTimeout(() => {
+  if (startupCanonicalResolved) return;
+  if (tryInitialIngestFromHost("set_globals")) {
+    notifyHostTransportSignal("set_globals");
+  }
+}, 300);

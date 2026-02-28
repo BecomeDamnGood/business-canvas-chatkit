@@ -503,6 +503,14 @@ export function setLastToolOutput(raw: unknown): void {
   try {
     (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = normalized;
   } catch {}
+  dispatchActionContractReady();
+}
+
+function dispatchActionContractReady(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent("bsc:action_contract_ready"));
+  } catch {}
 }
 
 function getLastToolOutput(): Record<string, unknown> {

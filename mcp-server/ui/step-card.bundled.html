@@ -2259,6 +2259,12 @@
       _meta: {
         widget_result: {
           current_step_id: currentStep,
+          ok: false,
+          error: {
+            type: "contract_violation",
+            message: "Tuple metadata is missing in widget payload.",
+            reason: "incoming_missing_tuple"
+          },
           state: {
             current_step: currentStep,
             started: String(stateSource.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
@@ -2266,9 +2272,10 @@
             ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
             ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
             ui_strings_requested_lang: uiStringsRequestedLang,
-            ui_gate_status: "waiting_locale",
-            ui_gate_reason: "tuple_incomplete_fail_closed",
-            bootstrap_phase: "waiting_locale"
+            ui_gate_status: "blocked",
+            ui_gate_reason: "contract_violation",
+            bootstrap_phase: "failed",
+            reason_code: "incoming_missing_tuple"
           },
           ui: {
             flags: {
@@ -2278,8 +2285,8 @@
               tuple_fail_closed_reason: "incoming_missing_tuple"
             },
             view: {
-              mode: "recovery",
-              waiting_locale: true
+              mode: "blocked",
+              waiting_locale: false
             }
           }
         }
@@ -2325,21 +2332,6 @@
         reasonCode: canonical.reason_code
       };
     }
-    const root = toRecord2(raw);
-    const rootResult = toRecord2(root.result);
-    const rootResultState = toRecord2(rootResult.state);
-    const hasRootResult = Object.keys(rootResult).length > 0 && (Object.keys(rootResultState).length > 0 || String(rootResult.current_step_id || "").trim().length > 0);
-    if (hasRootResult) {
-      return {
-        normalized: {
-          _meta: {
-            widget_result: rootResult
-          }
-        },
-        source: "meta.widget_result",
-        reasonCode: "meta_widget_result"
-      };
-    }
     return {
       normalized: canonical.envelope,
       source: canonical.source,
@@ -2354,6 +2346,14 @@
     if (!Object.keys(normalized).length) return;
     try {
       globalThis.__BSC_LAST_TOOL_OUTPUT__ = normalized;
+    } catch {
+    }
+    dispatchActionContractReady();
+  }
+  function dispatchActionContractReady() {
+    if (typeof window === "undefined") return;
+    try {
+      window.dispatchEvent(new CustomEvent("bsc:action_contract_ready"));
     } catch {
     }
   }
@@ -2892,6 +2892,69 @@
     }
     return { localeHint: "", localeHintSource: "none" };
   }
+  function normalizeActionAckStatus(raw) {
+    const normalized = String(raw || "").trim().toLowerCase();
+    if (normalized === "accepted") return "accepted";
+    if (normalized === "rejected") return "rejected";
+    if (normalized === "timeout") return "timeout";
+    if (normalized === "dropped") return "dropped";
+    return "rejected";
+  }
+  function parseBool(value) {
+    return value === true || String(value || "").trim().toLowerCase() === "true";
+  }
+  function generateClientActionId(actionCode) {
+    const suffix = Math.random().toString(36).slice(2, 10);
+    return `ca_${Date.now()}_${String(actionCode || "ACTION").trim().toLowerCase()}_${suffix}`;
+  }
+  function ensureClientActionIdOnState(state, actionCode) {
+    const existing = String(state.__client_action_id || "").trim();
+    if (existing) return existing;
+    const generated = generateClientActionId(actionCode);
+    state.__client_action_id = generated;
+    return generated;
+  }
+  function extractActionLiveness(result, fallback) {
+    const state = toRecord2(result.state);
+    const stateLiveness = toRecord2(state.ui_action_liveness);
+    const ackStatus = normalizeActionAckStatus(
+      result.ack_status || state.ack_status || stateLiveness.ack_status || "rejected"
+    );
+    const stateAdvanced = parseBool(
+      result.state_advanced ?? state.state_advanced ?? stateLiveness.state_advanced ?? false
+    );
+    const reasonCode = String(
+      result.reason_code || state.reason_code || stateLiveness.reason_code || ""
+    ).trim().toLowerCase();
+    const actionCodeEcho = String(
+      result.action_code_echo || state.action_code_echo || stateLiveness.action_code_echo || fallback.action_code
+    ).trim().toUpperCase();
+    const clientActionIdEcho = String(
+      result.client_action_id_echo || state.client_action_id_echo || stateLiveness.client_action_id_echo || fallback.client_action_id
+    ).trim();
+    return {
+      ack_status: ackStatus,
+      state_advanced: stateAdvanced,
+      reason_code: stateAdvanced ? "" : reasonCode || "state_not_advanced",
+      action_code_echo: actionCodeEcho,
+      client_action_id_echo: clientActionIdEcho
+    };
+  }
+  function livenessMessageForReason(state, liveness) {
+    if (liveness.ack_status === "timeout") {
+      return uiText(state, "transient.timeout", "") || "The action timed out. Please retry.";
+    }
+    if (liveness.ack_status === "dropped") {
+      return uiText(state, "error.contract.body", "") || `Action was dropped (${liveness.reason_code}).`;
+    }
+    if (liveness.ack_status === "rejected") {
+      return uiText(state, "error.contract.body", "") || `Action was rejected (${liveness.reason_code}).`;
+    }
+    if (!liveness.state_advanced) {
+      return uiText(state, "error.contract.body", "") || `No state update received (${liveness.reason_code}).`;
+    }
+    return "";
+  }
   async function callRunStep(message, extraState) {
     const o = oa();
     const messageText = String(message || "").trim();
@@ -2901,6 +2964,14 @@
     const hasCallTool = transportStatus === "ready_callTool";
     const hasBridgePath = transportStatus === "ready_bridge" || transportStatus === "unknown";
     if (!hasCallTool && !hasBridgePath) {
+      const fallbackActionCode = String(messageText || "").trim().toUpperCase();
+      setWidgetStateSafe({
+        ui_action_liveness_ack_status: "rejected",
+        ui_action_liveness_state_advanced: "false",
+        ui_action_liveness_reason_code: "transport_unavailable",
+        ui_action_liveness_action_code: fallbackActionCode,
+        ui_action_liveness_client_action_id: ""
+      });
       if (isStartAction) {
         setWidgetStateSafe({
           start_dispatch_state: "failed",
@@ -2971,8 +3042,12 @@
       bootstrapPollInFlight = true;
       bootstrapPollInFlightSignature = bootstrapPollSignature;
     }
+    const ensuredClientActionId = ensureClientActionIdOnState(
+      nextState,
+      messageText || "TEXT_INPUT"
+    );
     const requestId = String(nextState.__request_id || "");
-    const clientActionId = String(nextState.__client_action_id || "");
+    const clientActionId = ensuredClientActionId;
     const startedAt = Date.now();
     const debugCalls = isDevEnv();
     if (debugCalls) {
@@ -3074,17 +3149,57 @@
           response_ingested: hasIngestedResult
         });
       }
-      if (isStartAction) {
-        const responseViewMode = String(
+      const responseViewMode = String(
+        toRecord2(
           toRecord2(
-            toRecord2(
-              result?.ui
-            ).view
-          ).mode || ""
-        ).trim().toLowerCase();
-        const startAdvanced = hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart");
-        if (!startAdvanced) {
-          console.warn("[ui_start_dispatch_ack_without_state_advance]", {
+            result?.ui
+          ).view
+        ).mode || ""
+      ).trim().toLowerCase();
+      const hasServerLiveness = String(result.ack_status || "").trim() !== "" || String(toRecord2(result?.state).ack_status || "").trim() !== "" || String(toRecord2(toRecord2(result?.state).ui_action_liveness).ack_status || "").trim() !== "";
+      const resultState = toRecord2(result?.state);
+      const responseCurrentStep = String(resultState.current_step || result?.current_step_id || "").trim();
+      const requestCurrentStep = String(nextState.current_step || "").trim();
+      const stepAdvanced = Boolean(responseCurrentStep) && responseCurrentStep !== requestCurrentStep;
+      const fallbackStateAdvanced = hasIngestedResult && (orderingAdvanced || stepAdvanced);
+      const fallbackAckStatus = result?.ok !== false ? "accepted" : (errorObj?.type || "").toLowerCase() === "timeout" ? "timeout" : "rejected";
+      const liveness = hasServerLiveness ? extractActionLiveness(result, { action_code: messageText, client_action_id: clientActionId }) : {
+        ack_status: fallbackAckStatus,
+        state_advanced: fallbackStateAdvanced,
+        reason_code: fallbackStateAdvanced ? "" : errorObj?.type || "state_not_advanced",
+        action_code_echo: String(messageText || "").trim().toUpperCase(),
+        client_action_id_echo: clientActionId
+      };
+      const hasExplicitError = liveness.ack_status !== "accepted" || liveness.state_advanced !== true;
+      console.log("[ui_action_liveness_ack]", {
+        action_code: liveness.action_code_echo,
+        client_action_id: liveness.client_action_id_echo,
+        ack_status: liveness.ack_status,
+        state_advanced: liveness.state_advanced,
+        reason_code: liveness.reason_code,
+        payload_source: resolvedResponse.source,
+        payload_reason_code: resolvedResponse.source_reason_code,
+        ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
+        ordering_after: describeBootstrapOrdering(orderingAfterIngest)
+      });
+      setWidgetStateSafe({
+        ui_action_liveness_ack_status: liveness.ack_status,
+        ui_action_liveness_state_advanced: liveness.state_advanced ? "true" : "false",
+        ui_action_liveness_reason_code: liveness.reason_code,
+        ui_action_liveness_action_code: liveness.action_code_echo,
+        ui_action_liveness_client_action_id: liveness.client_action_id_echo
+      });
+      if (hasExplicitError) {
+        console.warn("[ui_action_liveness_explicit_error]", {
+          action_code: liveness.action_code_echo,
+          client_action_id: liveness.client_action_id_echo,
+          ack_status: liveness.ack_status,
+          reason_code: liveness.reason_code
+        });
+        setInlineNotice(livenessMessageForReason(nextState, liveness));
+        if (liveness.ack_status === "accepted" && !liveness.state_advanced) {
+          console.warn("[ui_action_dispatch_ack_without_state_advance]", {
+            action_code: String(messageText || "").trim().toUpperCase(),
             response_ingested: hasIngestedResult,
             ordering_advanced: orderingAdvanced,
             payload_source: resolvedResponse.source,
@@ -3093,17 +3208,15 @@
             ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
             ordering_after: describeBootstrapOrdering(orderingAfterIngest)
           });
+        }
+        if (isStartAction) {
           setWidgetStateSafe({
             start_dispatch_state: "failed",
             transport_ready: "true"
           });
-          setTimeout(() => {
-            resetHydrationRetryCycle({
-              trigger_poll: true,
-              source: "start_ack_without_state_advance"
-            });
-          }, CLICK_DEBOUNCE_MS + 50);
-        } else {
+        }
+      } else {
+        if (isStartAction) {
           setWidgetStateSafe({
             start_dispatch_state: "ready",
             transport_ready: "true"
@@ -3122,7 +3235,12 @@
         });
         setWidgetStateSafe({
           start_dispatch_state: "failed",
-          transport_ready: "false"
+          transport_ready: "false",
+          ui_action_liveness_ack_status: "rejected",
+          ui_action_liveness_state_advanced: "false",
+          ui_action_liveness_reason_code: "transport_error",
+          ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
+          ui_action_liveness_client_action_id: clientActionId
         });
         setInlineNotice(uiText(nextState, "transient.connection_failed", ""));
         return;
@@ -3138,6 +3256,13 @@
           });
         }
         setInlineNotice(uiText(nextState, "transient.timeout", ""));
+        setWidgetStateSafe({
+          ui_action_liveness_ack_status: "timeout",
+          ui_action_liveness_state_advanced: "false",
+          ui_action_liveness_reason_code: "timeout",
+          ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
+          ui_action_liveness_client_action_id: clientActionId
+        });
         return;
       }
       console.error("run_step failed", e);
@@ -3406,6 +3531,40 @@
   }
 
   // ui/lib/ui_render.ts
+  function toRecord3(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  }
+  function actionContractActionsForResult(resultData) {
+    const uiPayload = toRecord3(resultData.ui);
+    const actionContract = toRecord3(uiPayload.action_contract);
+    if (Array.isArray(actionContract.actions)) {
+      return actionContract.actions.map((entry) => toRecord3(entry)).filter((entry) => String(entry.action_code || "").trim().length > 0);
+    }
+    const legacyActions = Array.isArray(uiPayload.actions) ? uiPayload.actions : [];
+    if (legacyActions.length > 0) {
+      console.warn("[ui_action_contract_missing_actions]", {
+        legacy_actions_count: legacyActions.length,
+        current_step: String(resultData.state?.current_step || "")
+      });
+    }
+    return [];
+  }
+  function actionCodeForRole(resultData, role) {
+    const roleNorm = String(role || "").trim().toLowerCase();
+    if (!roleNorm) return "";
+    const actions = actionContractActionsForResult(resultData);
+    for (const action of actions) {
+      if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
+      const actionCode = String(action.action_code || "").trim();
+      if (actionCode) return actionCode;
+    }
+    return "";
+  }
+  function choiceActionsForResult(resultData) {
+    return actionContractActionsForResult(resultData).filter(
+      (action) => String(action.role || "").trim().toLowerCase() === "choice"
+    );
+  }
   function stepIndex(stepId) {
     const idx = ORDER.indexOf(stepId);
     return idx >= 0 ? idx : 0;
@@ -3557,6 +3716,40 @@
       body: uiText2(lang, "error.generic.body", "") || fallbackMessage || ""
     };
   }
+  function readActionLiveness(result, state) {
+    const stateLiveness = toRecord3(state.ui_action_liveness);
+    const ackStatus = String(result.ack_status || state.ack_status || stateLiveness.ack_status || "").trim().toLowerCase();
+    if (!ackStatus) return null;
+    const stateAdvancedRaw = result.state_advanced ?? state.state_advanced ?? stateLiveness.state_advanced ?? true;
+    const stateAdvanced = stateAdvancedRaw === true || String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
+    return {
+      ack_status: ackStatus,
+      state_advanced: stateAdvanced,
+      reason_code: String(result.reason_code || state.reason_code || stateLiveness.reason_code || "").trim().toLowerCase(),
+      action_code_echo: String(result.action_code_echo || state.action_code_echo || stateLiveness.action_code_echo || "").trim().toUpperCase(),
+      client_action_id_echo: String(
+        result.client_action_id_echo || state.client_action_id_echo || stateLiveness.client_action_id_echo || ""
+      ).trim()
+    };
+  }
+  function livenessNoticeMessage(lang, liveness) {
+    if (liveness.ack_status === "timeout") {
+      return uiText2(lang, "transient.timeout", "") || "The action timed out. Please retry.";
+    }
+    if (liveness.ack_status === "dropped") {
+      const base = uiText2(lang, "error.contract.body", "") || "Action could not be applied.";
+      return `${base} (${liveness.reason_code || "dropped"})`;
+    }
+    if (liveness.ack_status === "rejected") {
+      const base = uiText2(lang, "error.contract.body", "") || "Action was rejected.";
+      return `${base} (${liveness.reason_code || "rejected"})`;
+    }
+    if (!liveness.state_advanced) {
+      const base = uiText2(lang, "error.contract.body", "") || "No state update was applied.";
+      return `${base} (${liveness.reason_code || "state_not_advanced"})`;
+    }
+    return "";
+  }
   function renderBlockedState(cardDesc, lang, title, body) {
     clearElement(cardDesc);
     const shell = appendTextNode("div", "bootstrap-wait-shell", "");
@@ -3571,11 +3764,15 @@
     if (!wrap) return;
     wrap.innerHTML = "";
     const state = resultData?.state || {};
-    const uiPayload = resultData && typeof resultData.ui === "object" && resultData.ui ? resultData.ui : {};
-    const structuredActions = Array.isArray(uiPayload.actions) ? uiPayload.actions : [];
+    const uiPayload = toRecord3(resultData?.ui);
+    const structuredActions = choiceActionsForResult(resultData);
     const _unusedChoices = Array.isArray(choices) ? choices : [];
     const lang = uiLang(state);
     if (structuredActions.length === 0) {
+      const hasLegacyActions = Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
+      if (hasLegacyActions) {
+        setInlineNotice(uiText2(lang, "error.contract.body", "") || "Please refresh and try again.");
+      }
       wrap.style.display = "none";
       return;
     }
@@ -3702,6 +3899,8 @@
     };
     const uiView = uiPayload && typeof uiPayload.view === "object" && uiPayload.view ? uiPayload.view : {};
     const uiStringsStatus = String(state?.ui_strings_status || "").trim().toLowerCase();
+    const actionLiveness = readActionLiveness(result, state);
+    const hasExplicitActionError = Boolean(actionLiveness) && (String(actionLiveness?.ack_status || "") !== "accepted" || actionLiveness?.state_advanced !== true);
     const viewMode = String(uiView.mode || "").trim().toLowerCase();
     const uiGateReason = String(state?.ui_gate_reason || "").trim().toLowerCase();
     const serverExplicitWaiting = viewMode === "waiting_locale";
@@ -3721,7 +3920,7 @@
     const startHint = document.getElementById("startHint");
     if (!inputWrap || !btnStart2 || !startHint) return;
     const isLoading = getIsLoading();
-    const startActionCode = String(state?.ui_action_start || "").trim();
+    const startActionCode = actionCodeForRole(result, "start");
     const hasStartAction = startActionCode.length > 0;
     if (!hasExplicitServerRouting) {
       console.warn("[ui_contract_missing_view_mode]", {
@@ -3781,7 +3980,11 @@
       }
       if (result?.ok === false) return;
     } else {
-      clearInlineNotice();
+      if (hasExplicitActionError && actionLiveness) {
+        setInlineNotice(livenessNoticeMessage(lang, actionLiveness));
+      } else {
+        clearInlineNotice();
+      }
     }
     const showPreStart = serverExplicitPrestart;
     const current = !showPreStart ? state.current_step || "step_0" : "step_0";
@@ -3923,7 +4126,7 @@
     const isViewModeDreamBuilderRefine = uiViewVariant === "dream_builder_refine";
     const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
     const uiQuestionText = String(uiPayload.questionText || "").trim();
-    const structuredActions = Array.isArray(uiPayload.actions) ? uiPayload.actions : [];
+    const structuredActions = choiceActionsForResult(result);
     const hasStructuredActions = structuredActions.length > 0;
     const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") || (uiPayload.prompt && typeof uiPayload.prompt.body === "string" ? String(uiPayload.prompt.body || "") : "");
     const promptSource = uiQuestionText || promptRaw;
@@ -3938,13 +4141,16 @@
     const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
     const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
     if (!hasRenderableInteractiveContent) {
-      const recoverToPrestart = current === "step_0" && hasStartAction;
+      const failClosedReasonCode = "interactive_content_absent";
       console.warn("[ui_contract_interactive_content_absent]", {
         current_step: current,
         view_mode: viewMode || "",
         payload_source: resolved.source,
-        recovery_mode: recoverToPrestart ? "prestart" : "blocked"
+        recovery_mode: "blocked",
+        reason_code: failClosedReasonCode
       });
+      const baseNotice = uiText2(lang, "error.contract.body", "") || "Action could not be applied.";
+      setInlineNotice(`${baseNotice} (${failClosedReasonCode})`);
       const choiceWrap = document.getElementById("choiceWrap");
       if (choiceWrap) choiceWrap.style.display = "none";
       const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
@@ -3953,22 +4159,6 @@
       const prompt = document.getElementById("prompt");
       if (prompt) prompt.textContent = "";
       setSendEnabled(false);
-      if (recoverToPrestart) {
-        btnStart2.style.display = "inline-flex";
-        startHint.textContent = "";
-        startHint.style.display = "none";
-        if (cardDescEl) {
-          cardDescEl.classList.remove("has-grid");
-          cardDescEl.classList.remove("is-step0-ask-layout");
-          const hasPrestartContent = hasPrestartContentForLang(lang);
-          const showSkeleton = uiStringsStatus !== "ready" || !hasPrestartContent;
-          if (showSkeleton) renderPrestartSkeleton(cardDescEl, lang);
-          else renderPrestartContent(cardDescEl, lang);
-        }
-        if (isLoading) setLoading(false);
-        btnStart2.disabled = getIsLoading() || !hasStartAction;
-        return;
-      }
       btnStart2.style.display = "none";
       startHint.textContent = "";
       startHint.style.display = "none";
@@ -4212,7 +4402,7 @@
             }
             payload.push(row);
           }
-          const actionCode = String(state.ui_action_text_submit || "").trim();
+          const actionCode = actionCodeForRole(result, "text_submit");
           if (!actionCode) return;
           win.__dreamScoringScores = [];
           callRunStep(actionCode, { __pending_scores: payload });
@@ -4306,7 +4496,7 @@
       return choiceWrap.childNodes.length > 0;
     })();
     const choiceMode = !requireWordingPick && (renderedChoiceButtons || hasStructuredActions);
-    const textSubmitActionCode = String(state.ui_action_text_submit || "").trim();
+    const textSubmitActionCode = actionCodeForRole(result, "text_submit");
     const textSubmitAvailable = textSubmitActionCode.length > 0;
     inputWrap.style.display = choiceMode || !textSubmitAvailable ? "none" : "flex";
     if (!textSubmitAvailable) setSendEnabled(false);
@@ -4387,6 +4577,10 @@
   initActionsConfig({ render, t });
   var isLocalDev = globalThis.LOCAL_DEV === "1";
   var STARTUP_WAITING_VIEW_MODE = "waiting_locale";
+  var STARTUP_CANONICAL_WINDOW_MS = 4e3;
+  var STARTUP_CANONICAL_MISS_REASON = "startup_canonical_payload_missing";
+  var startupCanonicalResolved = false;
+  var startupCanonicalWatchdogTimer = null;
   function latestWidgetState() {
     const latest = globalThis.__BSC_LATEST__;
     const state = latest?.state;
@@ -4400,11 +4594,153 @@
   function uiStringFromContract(key) {
     return String(t(latestWidgetLang(), key) || "").trim();
   }
-  function actionCodeFromState(stateKey) {
-    const state = latestWidgetState();
-    return String(state[stateKey] || "").trim();
+  function latestActionContractActions() {
+    const resolved = resolveWidgetPayload2(toolData());
+    const result = resolved.result;
+    const uiPayload = result && typeof result.ui === "object" && result.ui ? result.ui : {};
+    const actionContract = uiPayload && typeof uiPayload.action_contract === "object" && uiPayload.action_contract ? uiPayload.action_contract : {};
+    if (!Array.isArray(actionContract.actions)) return [];
+    return actionContract.actions.filter((entry) => entry && typeof entry === "object").map((entry) => entry);
+  }
+  function actionByRole(role) {
+    const roleNorm = String(role || "").trim().toLowerCase();
+    if (!roleNorm) return null;
+    const actions = latestActionContractActions();
+    for (const action of actions) {
+      if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
+      const actionCode = String(action.action_code || "").trim();
+      if (!actionCode) continue;
+      return action;
+    }
+    return null;
+  }
+  function actionCodeFromRole(role) {
+    const action = actionByRole(role);
+    return action ? String(action.action_code || "").trim() : "";
+  }
+  function payloadModeFromRole(role) {
+    const action = actionByRole(role);
+    if (!action) return "text";
+    return String(action.payload_mode || "").trim().toLowerCase() === "scores" ? "scores" : "text";
+  }
+  function guardMissingActionRole(role, elementToDisable) {
+    console.warn("[ui_action_contract_missing]", { role });
+    setInlineNotice(
+      uiStringFromContract("error.contract.body") || "Please refresh and try again."
+    );
+    if (elementToDisable) elementToDisable.disabled = true;
+    return false;
+  }
+  function clearStartupCanonicalWatchdog() {
+    if (!startupCanonicalWatchdogTimer) return;
+    clearTimeout(startupCanonicalWatchdogTimer);
+    startupCanonicalWatchdogTimer = null;
+  }
+  function markStartupCanonicalResolved(params) {
+    if (startupCanonicalResolved) return;
+    startupCanonicalResolved = true;
+    clearStartupCanonicalWatchdog();
+    console.log("[startup_canonical_payload_observed]", {
+      source: params.source,
+      payload_source: params.payload_source,
+      payload_reason_code: params.payload_reason_code
+    });
+  }
+  function buildStartupExplicitErrorState(reasonCode) {
+    const stateReasonCode = String(reasonCode || STARTUP_CANONICAL_MISS_REASON).trim().toLowerCase() || STARTUP_CANONICAL_MISS_REASON;
+    return {
+      _meta: {
+        widget_result: {
+          ok: false,
+          tool: "run_step",
+          current_step_id: "step_0",
+          ack_status: "rejected",
+          state_advanced: false,
+          reason_code: stateReasonCode,
+          action_code_echo: "ACTION_BOOTSTRAP_POLL",
+          client_action_id_echo: "startup_canonical_watchdog",
+          error: {
+            type: "explicit_error",
+            message: "Startup canonical payload did not arrive in time.",
+            reason: stateReasonCode,
+            retry_action: "retry_same_action",
+            user_message: uiStringFromContract("error.contract.body") || "Please refresh and try again."
+          },
+          state: {
+            current_step: "step_0",
+            started: "false",
+            ui_gate_status: "blocked",
+            ui_gate_reason: "contract_violation",
+            bootstrap_phase: "failed",
+            ui_strings_status: "pending",
+            reason_code: stateReasonCode,
+            ack_status: "rejected",
+            state_advanced: "false",
+            action_code_echo: "ACTION_BOOTSTRAP_POLL",
+            client_action_id_echo: "startup_canonical_watchdog",
+            ui_action_liveness: {
+              ack_status: "rejected",
+              state_advanced: false,
+              reason_code: stateReasonCode,
+              action_code_echo: "ACTION_BOOTSTRAP_POLL",
+              client_action_id_echo: "startup_canonical_watchdog"
+            }
+          },
+          ui: {
+            flags: {
+              bootstrap_waiting_locale: false,
+              bootstrap_interactive_ready: false,
+              startup_canonical_miss: true
+            },
+            view: {
+              mode: "blocked",
+              waiting_locale: false
+            },
+            action_contract: {
+              version: "2026-02-28.action_liveness.v1",
+              source: "client_startup_watchdog",
+              actions: []
+            }
+          }
+        }
+      }
+    };
+  }
+  function renderStartupExplicitError(params) {
+    if (startupCanonicalResolved) return;
+    const explicitErrorState = buildStartupExplicitErrorState(params.reason_code);
+    console.warn("[startup_explicit_error_path]", {
+      source: params.source,
+      reason_code: params.reason_code
+    });
+    setLastToolOutput(explicitErrorState);
+    render(explicitErrorState);
+  }
+  function scheduleStartupCanonicalWatchdog(trigger) {
+    if (startupCanonicalResolved || startupCanonicalWatchdogTimer) return;
+    startupCanonicalWatchdogTimer = setTimeout(() => {
+      startupCanonicalWatchdogTimer = null;
+      if (startupCanonicalResolved) return;
+      console.warn("[startup_canonical_miss]", {
+        trigger,
+        reason_code: STARTUP_CANONICAL_MISS_REASON,
+        bootstrap_window_ms: STARTUP_CANONICAL_WINDOW_MS
+      });
+      renderStartupExplicitError({
+        reason_code: STARTUP_CANONICAL_MISS_REASON,
+        source: trigger
+      });
+    }, STARTUP_CANONICAL_WINDOW_MS);
   }
   function ingestHostPayload(payload, source) {
+    const resolved = resolveWidgetPayload2(payload);
+    if (resolved.source === "meta.widget_result" && Object.keys(resolved.result).length > 0) {
+      markStartupCanonicalResolved({
+        source,
+        payload_source: resolved.source,
+        payload_reason_code: resolved.source_reason_code
+      });
+    }
     if (source === "set_globals") {
       handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "set_globals" });
       return;
@@ -4457,9 +4793,11 @@
     };
   }
   function renderStartupWaitState(reason) {
+    scheduleStartupCanonicalWatchdog(reason);
     if (hasRenderedStateSnapshot()) return;
     const startupInitState = buildStartupInitState();
     console.log("[startup_first_render_wait_shell]", { reason });
+    setLastToolOutput(startupInitState);
     render(startupInitState);
   }
   if (isLocalDev && typeof window !== "undefined") {
@@ -4538,14 +4876,10 @@
     const input = document.getElementById("input");
     const inputVal = (input?.value || "").trim();
     if (!inputVal) return;
-    const st = latestWidgetState();
-    const submitActionCode = String(st.ui_action_text_submit || "").trim();
-    const submitPayloadMode = String(st.ui_action_text_submit_payload_mode || "text").trim().toLowerCase();
+    const submitActionCode = actionCodeFromRole("text_submit");
+    const submitPayloadMode = payloadModeFromRole("text_submit");
     if (!submitActionCode) {
-      console.warn("[ui_action_missing]", { state_key: "ui_action_text_submit" });
-      setInlineNotice(
-        uiStringFromContract("error.contract.body") || "Please refresh and try again."
-      );
+      guardMissingActionRole("text_submit");
       return;
     }
     const win = globalThis;
@@ -4592,16 +4926,31 @@
       submitWidgetInput();
     });
   }
+  function guardButtonUntilContractReady(buttonId, role) {
+    if (typeof window === "undefined") return;
+    const btn = document.getElementById(buttonId);
+    if (!btn) return;
+    const checkAndEnable = (_event) => {
+      const code = actionCodeFromRole(role);
+      if (!code) return;
+      btn.disabled = false;
+      window.removeEventListener("bsc:action_contract_ready", checkAndEnable);
+    };
+    const immediate = actionCodeFromRole(role);
+    if (immediate) {
+      btn.disabled = false;
+      return;
+    }
+    btn.disabled = true;
+    window.addEventListener("bsc:action_contract_ready", checkAndEnable);
+  }
   var wordingChoicePickUser = document.getElementById("wordingChoicePickUser");
   if (wordingChoicePickUser) {
     wordingChoicePickUser.addEventListener("click", () => {
       if (getIsLoading()) return;
-      const actionCode = actionCodeFromState("ui_action_wording_pick_user");
+      const actionCode = actionCodeFromRole("wording_pick_user");
       if (!actionCode) {
-        console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_user" });
-        setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
-        );
+        guardMissingActionRole("wording_pick_user");
         return;
       }
       callRunStep(actionCode);
@@ -4611,12 +4960,9 @@
   if (wordingChoicePickSuggestion) {
     wordingChoicePickSuggestion.addEventListener("click", () => {
       if (getIsLoading()) return;
-      const actionCode = actionCodeFromState("ui_action_wording_pick_suggestion");
+      const actionCode = actionCodeFromRole("wording_pick_suggestion");
       if (!actionCode) {
-        console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_suggestion" });
-        setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
-        );
+        guardMissingActionRole("wording_pick_suggestion");
         return;
       }
       callRunStep(actionCode);
@@ -4626,13 +4972,9 @@
   if (btnStart) {
     btnStart.addEventListener("click", () => {
       if (getIsLoading()) return;
-      const actionCode = actionCodeFromState("ui_action_start");
+      const actionCode = actionCodeFromRole("start");
       if (!actionCode) {
-        console.warn("[ui_action_missing]", { state_key: "ui_action_start" });
-        setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
-        );
-        btnStart.disabled = true;
+        guardMissingActionRole("start", btnStart);
         return;
       }
       setSessionStarted(true);
@@ -4644,12 +4986,9 @@
   if (btnStartDreamExercise) {
     btnStartDreamExercise.addEventListener("click", () => {
       if (getIsLoading()) return;
-      const actionCode = actionCodeFromState("ui_action_dream_start_exercise");
+      const actionCode = actionCodeFromRole("dream_start_exercise");
       if (!actionCode) {
-        console.warn("[ui_action_missing]", { state_key: "ui_action_dream_start_exercise" });
-        setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
-        );
+        guardMissingActionRole("dream_start_exercise");
         return;
       }
       callRunStep(actionCode);
@@ -4659,16 +4998,20 @@
   if (btnSwitchToSelfDream) {
     btnSwitchToSelfDream.addEventListener("click", () => {
       if (getIsLoading()) return;
-      const actionCode = actionCodeFromState("ui_action_dream_switch_to_self");
+      const actionCode = actionCodeFromRole("dream_switch_to_self");
       if (!actionCode) {
-        console.warn("[ui_action_missing]", { state_key: "ui_action_dream_switch_to_self" });
-        setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
-        );
+        guardMissingActionRole("dream_switch_to_self");
         return;
       }
       callRunStep(actionCode);
     });
+  }
+  if (typeof window !== "undefined") {
+    guardButtonUntilContractReady("btnStart", "start");
+    guardButtonUntilContractReady("btnStartDreamExercise", "dream_start_exercise");
+    guardButtonUntilContractReady("btnSwitchToSelfDream", "dream_switch_to_self");
+    guardButtonUntilContractReady("wordingChoicePickUser", "wording_pick_user");
+    guardButtonUntilContractReady("wordingChoicePickSuggestion", "wording_pick_suggestion");
   }
   if (typeof window !== "undefined") {
     window.addEventListener("openai:set_globals", () => {
@@ -4688,9 +5031,13 @@
       }
     });
   }
-  if (!tryInitialIngestFromHost("set_globals")) {
-    renderStartupWaitState("initial_bootstrap_probe");
-  }
+  renderStartupWaitState("initial_bootstrap_probe");
+  setTimeout(() => {
+    if (startupCanonicalResolved) return;
+    if (tryInitialIngestFromHost("set_globals")) {
+      notifyHostTransportSignal("set_globals");
+    }
+  }, 300);
 })();
 
 </script>
