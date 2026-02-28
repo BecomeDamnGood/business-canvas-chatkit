@@ -98,6 +98,50 @@ test("view contract invariant: step_0 with started=false always renders prestart
   assert.equal(String(result?.state?.ui_action_start || ""), "ACTION_START");
 });
 
+test("action contract: step_0 prestart includes server action_contract start role", async () => {
+  const result = await run_step({
+    user_message: "",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      started: "false",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+    },
+  });
+  const actionContract = (result?.ui as Record<string, unknown> | undefined)?.action_contract as
+    | Record<string, unknown>
+    | undefined;
+  const actions = Array.isArray(actionContract?.actions)
+    ? (actionContract?.actions as Array<Record<string, unknown>>)
+    : [];
+  assert.ok(actions.length > 0);
+  const startAction = actions.find(
+    (action) =>
+      String(action.role || "").trim() === "start" &&
+      String(action.action_code || "").trim() === "ACTION_START"
+  );
+  assert.ok(startAction);
+});
+
+test("action liveness defaults exist on direct run_step responses", async () => {
+  const result = await run_step({
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "true",
+      __client_action_id: "ca_test_001",
+    },
+  });
+  assert.equal(String((result as any)?.ack_status || ""), "accepted");
+  assert.equal(Boolean((result as any)?.state_advanced), true);
+  assert.equal(String((result as any)?.reason_code || ""), "");
+  assert.equal(typeof String((result as any)?.client_action_id_echo || ""), "string");
+});
+
 test("canonical view decision: step_0 not-started always emits prestart with ACTION_START", () => {
   const response = {
     ok: true,
@@ -133,7 +177,10 @@ test("canonical view decision: step_0 not-started always emits prestart with ACT
   } as Record<string, unknown>;
 
   const final = finalizeResponseContractInternals(response, {
-    applyUiClientActionContract: () => {},
+    applyUiClientActionContract: (targetState) => {
+      if (!targetState || typeof targetState !== "object") return;
+      (targetState as Record<string, unknown>).ui_action_start = "ACTION_START";
+    },
     parseMenuFromContractIdForStep: () => "",
     labelKeysForMenuActionCodes: () => [],
     onUiParityError: () => {},

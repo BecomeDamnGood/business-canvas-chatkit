@@ -13,10 +13,12 @@ import {
   isTrustedBridgeMessageEvent,
   notifyHostTransportSignal,
   resolveAllowedHostOrigin,
+  resolveWidgetPayload,
   setBridgeEnabled,
   setSendEnabled,
   setInlineNotice,
   setLoading,
+  toolData,
 } from "./ui_actions.js";
 import { render } from "./ui_render.js";
 
@@ -43,9 +45,54 @@ function uiStringFromContract(key: string): string {
   return String(t(latestWidgetLang(), key) || "").trim();
 }
 
-function actionCodeFromState(stateKey: string): string {
-  const state = latestWidgetState();
-  return String(state[stateKey] || "").trim();
+function latestActionContractActions(): Array<Record<string, unknown>> {
+  const resolved = resolveWidgetPayload(toolData());
+  const result = resolved.result;
+  const uiPayload =
+    result && typeof result.ui === "object" && result.ui
+      ? (result.ui as Record<string, unknown>)
+      : {};
+  const actionContract =
+    uiPayload && typeof uiPayload.action_contract === "object" && uiPayload.action_contract
+      ? (uiPayload.action_contract as Record<string, unknown>)
+      : {};
+  if (!Array.isArray(actionContract.actions)) return [];
+  return (actionContract.actions as unknown[])
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => entry as Record<string, unknown>);
+}
+
+function actionByRole(role: string): Record<string, unknown> | null {
+  const roleNorm = String(role || "").trim().toLowerCase();
+  if (!roleNorm) return null;
+  const actions = latestActionContractActions();
+  for (const action of actions) {
+    if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
+    const actionCode = String(action.action_code || "").trim();
+    if (!actionCode) continue;
+    return action;
+  }
+  return null;
+}
+
+function actionCodeFromRole(role: string): string {
+  const action = actionByRole(role);
+  return action ? String(action.action_code || "").trim() : "";
+}
+
+function payloadModeFromRole(role: string): "text" | "scores" {
+  const action = actionByRole(role);
+  if (!action) return "text";
+  return String(action.payload_mode || "").trim().toLowerCase() === "scores" ? "scores" : "text";
+}
+
+function guardMissingActionRole(role: string, elementToDisable?: HTMLButtonElement | null): boolean {
+  console.warn("[ui_action_contract_missing]", { role });
+  setInlineNotice(
+    uiStringFromContract("error.contract.body") || "Please refresh and try again."
+  );
+  if (elementToDisable) elementToDisable.disabled = true;
+  return false;
 }
 
 function ingestHostPayload(
@@ -201,14 +248,10 @@ function submitWidgetInput(): void {
   const inputVal = (input?.value || "").trim();
   if (!inputVal) return;
 
-  const st = latestWidgetState();
-  const submitActionCode = String(st.ui_action_text_submit || "").trim();
-  const submitPayloadMode = String(st.ui_action_text_submit_payload_mode || "text").trim().toLowerCase();
+  const submitActionCode = actionCodeFromRole("text_submit");
+  const submitPayloadMode = payloadModeFromRole("text_submit");
   if (!submitActionCode) {
-    console.warn("[ui_action_missing]", { state_key: "ui_action_text_submit" });
-    setInlineNotice(
-      uiStringFromContract("error.contract.body") || "Please refresh and try again."
-    );
+    guardMissingActionRole("text_submit");
     return;
   }
 
@@ -271,12 +314,9 @@ const wordingChoicePickUser = document.getElementById("wordingChoicePickUser");
 if (wordingChoicePickUser) {
   wordingChoicePickUser.addEventListener("click", () => {
     if (getIsLoading()) return;
-    const actionCode = actionCodeFromState("ui_action_wording_pick_user");
+    const actionCode = actionCodeFromRole("wording_pick_user");
     if (!actionCode) {
-      console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_user" });
-      setInlineNotice(
-        uiStringFromContract("error.contract.body") || "Please refresh and try again."
-      );
+      guardMissingActionRole("wording_pick_user");
       return;
     }
     callRunStep(actionCode);
@@ -287,12 +327,9 @@ const wordingChoicePickSuggestion = document.getElementById("wordingChoicePickSu
 if (wordingChoicePickSuggestion) {
   wordingChoicePickSuggestion.addEventListener("click", () => {
     if (getIsLoading()) return;
-    const actionCode = actionCodeFromState("ui_action_wording_pick_suggestion");
+    const actionCode = actionCodeFromRole("wording_pick_suggestion");
     if (!actionCode) {
-      console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_suggestion" });
-      setInlineNotice(
-        uiStringFromContract("error.contract.body") || "Please refresh and try again."
-      );
+      guardMissingActionRole("wording_pick_suggestion");
       return;
     }
     callRunStep(actionCode);
@@ -303,13 +340,9 @@ const btnStart = document.getElementById("btnStart");
 if (btnStart) {
   btnStart.addEventListener("click", () => {
     if (getIsLoading()) return;
-    const actionCode = actionCodeFromState("ui_action_start");
+    const actionCode = actionCodeFromRole("start");
     if (!actionCode) {
-      console.warn("[ui_action_missing]", { state_key: "ui_action_start" });
-      setInlineNotice(
-        uiStringFromContract("error.contract.body") || "Please refresh and try again."
-      );
-      (btnStart as HTMLButtonElement).disabled = true;
+      guardMissingActionRole("start", btnStart as HTMLButtonElement);
       return;
     }
     setSessionStarted(true);
@@ -322,12 +355,9 @@ const btnStartDreamExercise = document.getElementById("btnStartDreamExercise");
 if (btnStartDreamExercise) {
   btnStartDreamExercise.addEventListener("click", () => {
     if (getIsLoading()) return;
-    const actionCode = actionCodeFromState("ui_action_dream_start_exercise");
+    const actionCode = actionCodeFromRole("dream_start_exercise");
     if (!actionCode) {
-      console.warn("[ui_action_missing]", { state_key: "ui_action_dream_start_exercise" });
-      setInlineNotice(
-        uiStringFromContract("error.contract.body") || "Please refresh and try again."
-      );
+      guardMissingActionRole("dream_start_exercise");
       return;
     }
     callRunStep(actionCode);
@@ -338,12 +368,9 @@ const btnSwitchToSelfDream = document.getElementById("btnSwitchToSelfDream");
 if (btnSwitchToSelfDream) {
   btnSwitchToSelfDream.addEventListener("click", () => {
     if (getIsLoading()) return;
-    const actionCode = actionCodeFromState("ui_action_dream_switch_to_self");
+    const actionCode = actionCodeFromRole("dream_switch_to_self");
     if (!actionCode) {
-      console.warn("[ui_action_missing]", { state_key: "ui_action_dream_switch_to_self" });
-      setInlineNotice(
-        uiStringFromContract("error.contract.body") || "Please refresh and try again."
-      );
+      guardMissingActionRole("dream_switch_to_self");
       return;
     }
     callRunStep(actionCode);

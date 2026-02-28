@@ -17,6 +17,21 @@ import {
 } from "./ingress.js";
 
 type RunStepContractResponse = Record<string, unknown>;
+type UiActionRole =
+  | "choice"
+  | "start"
+  | "text_submit"
+  | "wording_pick_user"
+  | "wording_pick_suggestion"
+  | "dream_start_exercise"
+  | "dream_switch_to_self";
+
+type UiActionSurface =
+  | "choice"
+  | "primary"
+  | "text_input"
+  | "wording_choice"
+  | "auxiliary";
 
 type UiParityDeps = {
   parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
@@ -74,6 +89,237 @@ function hasStartAction(response: RunStepContractResponse, state: Record<string,
   if (actionCodes.includes("ACTION_START")) return true;
   const actions = Array.isArray(uiPayload.actions) ? (uiPayload.actions as Array<Record<string, unknown>>) : [];
   return actions.some((action) => String(action?.action_code || "").trim() === "ACTION_START");
+}
+
+function ensureActionLivenessContract(response: RunStepContractResponse): void {
+  const state = toRecord(response.state);
+  const fromState = toRecord(state.ui_action_liveness);
+  const responseIsOk = response.ok === true;
+  const defaultAckStatus = responseIsOk ? "accepted" : "rejected";
+  const ackStatusRaw = String(
+    response.ack_status ||
+      state.ack_status ||
+      fromState.ack_status ||
+      defaultAckStatus
+  )
+    .trim()
+    .toLowerCase();
+  const ackStatus =
+    ackStatusRaw === "accepted" ||
+    ackStatusRaw === "rejected" ||
+    ackStatusRaw === "timeout" ||
+    ackStatusRaw === "dropped"
+      ? ackStatusRaw
+      : "accepted";
+  const stateAdvancedRaw =
+    response.state_advanced ??
+    state.state_advanced ??
+    fromState.state_advanced ??
+    (responseIsOk ? true : false);
+  const stateAdvanced =
+    stateAdvancedRaw === true ||
+    String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
+  const reasonCode = stateAdvanced
+    ? ""
+    : String(
+        response.reason_code ||
+          state.reason_code ||
+          fromState.reason_code ||
+          toRecord(response.error).type ||
+          "explicit_error"
+      )
+        .trim()
+        .toLowerCase();
+  const actionCodeEcho = String(
+    response.action_code_echo ||
+      state.action_code_echo ||
+      fromState.action_code_echo ||
+      state.__last_clicked_action_for_contract ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+  const clientActionIdEcho = String(
+    response.client_action_id_echo ||
+      state.client_action_id_echo ||
+      fromState.client_action_id_echo ||
+      state.__client_action_id ||
+      ""
+  ).trim();
+
+  state.ui_action_liveness = {
+    ack_status: ackStatus,
+    state_advanced: stateAdvanced,
+    reason_code: reasonCode,
+    action_code_echo: actionCodeEcho,
+    client_action_id_echo: clientActionIdEcho,
+  };
+  state.ack_status = ackStatus;
+  state.state_advanced = stateAdvanced ? "true" : "false";
+  state.reason_code = reasonCode;
+  state.action_code_echo = actionCodeEcho;
+  state.client_action_id_echo = clientActionIdEcho;
+
+  response.state = state;
+  response.ack_status = ackStatus;
+  response.state_advanced = stateAdvanced;
+  response.reason_code = reasonCode;
+  response.action_code_echo = actionCodeEcho;
+  response.client_action_id_echo = clientActionIdEcho;
+}
+
+function buildStateActionDescriptor(
+  state: Record<string, unknown>,
+  role: UiActionRole
+): {
+  actionCode: string;
+  labelKey: string;
+  surface: UiActionSurface;
+  intent: Record<string, unknown>;
+  primary: boolean;
+  payloadMode?: string;
+} | null {
+  if (role === "start") {
+    const actionCode = String(state.ui_action_start || "").trim();
+    if (!actionCode) return null;
+    return {
+      actionCode,
+      labelKey: "btnStart",
+      surface: "primary",
+      intent: { type: "CONTINUE" },
+      primary: true,
+    };
+  }
+  if (role === "text_submit") {
+    const actionCode = String(state.ui_action_text_submit || "").trim();
+    if (!actionCode) return null;
+    const payloadMode = String(state.ui_action_text_submit_payload_mode || "text").trim().toLowerCase();
+    return {
+      actionCode,
+      labelKey: payloadMode === "scores" ? "btnScoringContinue" : "sendTitle",
+      surface: "text_input",
+      intent: payloadMode === "scores" ? { type: "SUBMIT_SCORES", scores: [] } : { type: "SUBMIT_TEXT", text: "" },
+      primary: true,
+      payloadMode: payloadMode === "scores" ? "scores" : "text",
+    };
+  }
+  if (role === "wording_pick_user") {
+    const actionCode = String(state.ui_action_wording_pick_user || "").trim();
+    if (!actionCode) return null;
+    return {
+      actionCode,
+      labelKey: "wordingChoice.chooseVersion",
+      surface: "wording_choice",
+      intent: { type: "WORDING_PICK", choice: "user" },
+      primary: false,
+    };
+  }
+  if (role === "wording_pick_suggestion") {
+    const actionCode = String(state.ui_action_wording_pick_suggestion || "").trim();
+    if (!actionCode) return null;
+    return {
+      actionCode,
+      labelKey: "wordingChoice.chooseVersion",
+      surface: "wording_choice",
+      intent: { type: "WORDING_PICK", choice: "suggestion" },
+      primary: false,
+    };
+  }
+  if (role === "dream_start_exercise") {
+    const actionCode = String(state.ui_action_dream_start_exercise || "").trim();
+    if (!actionCode) return null;
+    return {
+      actionCode,
+      labelKey: "dreamBuilder.startExercise",
+      surface: "auxiliary",
+      intent: { type: "START_EXERCISE", exerciseType: "dream_builder" },
+      primary: false,
+    };
+  }
+  if (role === "dream_switch_to_self") {
+    const actionCode = String(state.ui_action_dream_switch_to_self || "").trim();
+    if (!actionCode) return null;
+    return {
+      actionCode,
+      labelKey: "btnSwitchToSelfDream",
+      surface: "auxiliary",
+      intent: { type: "ROUTE", route: "__ROUTE__DREAM_SWITCH_TO_SELF__" },
+      primary: false,
+    };
+  }
+  return null;
+}
+
+function ensureUnifiedUiActionContract(response: RunStepContractResponse): void {
+  const state = toRecord(response.state);
+  const ui = toRecord(response.ui);
+  const existingActions = Array.isArray(ui.actions) ? (ui.actions as Array<Record<string, unknown>>) : [];
+  const seenByActionCode = new Set<string>();
+  const unifiedActions: Array<Record<string, unknown>> = [];
+
+  for (let i = 0; i < existingActions.length; i += 1) {
+    const action = toRecord(existingActions[i]);
+    const actionCode = String(action.action_code || "").trim();
+    if (!actionCode || seenByActionCode.has(actionCode)) continue;
+    seenByActionCode.add(actionCode);
+    unifiedActions.push({
+      ...action,
+      id: String(action.id || `choice_${i + 1}`),
+      action_code: actionCode,
+      label: String(action.label || "").trim(),
+      label_key: String(action.label_key || "").trim(),
+      role: "choice",
+      surface: "choice",
+      source: "ui.actions",
+    });
+  }
+
+  const stateRoles: UiActionRole[] = [
+    "start",
+    "text_submit",
+    "wording_pick_user",
+    "wording_pick_suggestion",
+    "dream_start_exercise",
+    "dream_switch_to_self",
+  ];
+  for (const role of stateRoles) {
+    const descriptor = buildStateActionDescriptor(state, role);
+    if (!descriptor) continue;
+    const normalizedCode = String(descriptor.actionCode || "").trim();
+    if (!normalizedCode) continue;
+    if (seenByActionCode.has(normalizedCode)) {
+      for (const entry of unifiedActions) {
+        if (String(entry.action_code || "").trim() !== normalizedCode) continue;
+        entry.role = role;
+        entry.surface = descriptor.surface;
+        if (!String(entry.label_key || "").trim()) entry.label_key = descriptor.labelKey;
+        if (role === "text_submit" && descriptor.payloadMode) {
+          entry.payload_mode = descriptor.payloadMode;
+        }
+      }
+      continue;
+    }
+    seenByActionCode.add(normalizedCode);
+    unifiedActions.push({
+      id: `state_${role}`,
+      label: "",
+      label_key: descriptor.labelKey,
+      action_code: normalizedCode,
+      intent: descriptor.intent,
+      primary: descriptor.primary,
+      role,
+      surface: descriptor.surface,
+      ...(descriptor.payloadMode ? { payload_mode: descriptor.payloadMode } : {}),
+      source: "state_action_contract",
+    });
+  }
+
+  ui.action_contract = {
+    version: "2026-02-28.action_liveness.v1",
+    source: "server_contract",
+    actions: unifiedActions,
+  };
+  response.ui = ui;
 }
 
 function applyCanonicalWidgetState(
@@ -226,6 +472,13 @@ export function assertRunStepContractOrThrow(response: RunStepContractResponse):
   const currentStep = String(state.current_step || STEP_0_ID).trim() || STEP_0_ID;
   const started = String(state.started || "").trim().toLowerCase() === "true";
   const uiActionStart = String(state.ui_action_start || "").trim();
+  const actionContract =
+    uiPayload && typeof (uiPayload as Record<string, unknown>).action_contract === "object"
+      ? ((uiPayload as Record<string, unknown>).action_contract as Record<string, unknown>)
+      : {};
+  const actionContractActions = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as Array<Record<string, unknown>>)
+    : [];
   const hasRenderableContent = hasRenderableResponseContent(response);
 
   if (!CONTRACT_BOOTSTRAP_PHASES.has(bootstrapPhase)) {
@@ -303,8 +556,29 @@ export function assertRunStepContractOrThrow(response: RunStepContractResponse):
     if (uiActionStart !== "ACTION_START") {
       throw new Error("step0_not_started_requires_start_action");
     }
+    const hasContractStart = actionContractActions.some(
+      (action) =>
+        String(action.action_code || "").trim() === "ACTION_START" &&
+        String(action.role || "").trim() === "start"
+    );
+    if (!hasContractStart) {
+      throw new Error("step0_not_started_requires_action_contract_start");
+    }
     if (uiGateStatus === "ready" && Object.keys(uiStringsMap).length === 0) {
       throw new Error("prestart_ready_requires_ui_strings");
+    }
+  }
+  const ackStatus = String(response.ack_status || state.ack_status || "").trim().toLowerCase();
+  const stateAdvancedRaw = response.state_advanced ?? state.state_advanced;
+  const stateAdvanced =
+    stateAdvancedRaw === true || String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
+  const reasonCode = String(response.reason_code || state.reason_code || "").trim().toLowerCase();
+  if (ackStatus) {
+    if (ackStatus !== "accepted" && ackStatus !== "rejected" && ackStatus !== "timeout" && ackStatus !== "dropped") {
+      throw new Error("invalid_ack_status");
+    }
+    if (!stateAdvanced && !reasonCode) {
+      throw new Error("missing_reason_code_for_non_advanced_action");
     }
   }
   if (uiViewMode === "interactive" && !hasRenderableContent) {
@@ -400,6 +674,8 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       };
     }
   }
+  ensureActionLivenessContract(finalResponse);
+  ensureUnifiedUiActionContract(finalResponse);
   let canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   try {
     assertRunStepContractOrThrow(finalResponse);
@@ -413,6 +689,8 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       locale_pending_background: false,
       bootstrap_phase: "failed",
     });
+    ensureActionLivenessContract(finalResponse);
+    ensureUnifiedUiActionContract(finalResponse);
     canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   }
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;

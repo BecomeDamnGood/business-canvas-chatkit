@@ -523,3 +523,185 @@ Kopieer dit blok voor elke volgende run:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: SSOT-audit is nu strikter afgedwongen in code + gate; resterende `ui_render` suiteproblemen zijn separaat testnormalisatiewerk.
+
+### Poging 2026-02-28 00:xx UTC (forensische bewijsketen: startklik vs stale-poll)
+
+- Hypothese:
+  - De logregel `stale_bootstrap_payload_dropped` met `interactive_action_not_rebase_eligible` bewijst **niet** dat `ACTION_START` is afgekeurd; dit kan volledig verklaard worden door een stale `ACTION_BOOTSTRAP_POLL`.
+  - "Knop doet niets" heeft meerdere client-side failurepaden die apart bewezen moeten worden.
+- Waarom deze hypothese (bewijs vooraf):
+  - Live incident bevatte o.a. `stale_bootstrap_payload_dropped` op `response_seq`.
+  - In code is stale-rebase eligibility expliciet verschillend per action-type.
+  - Eerdere analyses misten harde 1-op-1 runtime-reproductie van zowel server- als client-paden.
+- Exacte wijziging(en):
+  - Geen runtime-codewijziging voor deze poging.
+  - Wel toegevoegd voor opvolgende uitvoering:
+    - `docs/mcp_widget_action_liveness_agent_instructie.md` (structurele instructie voor action-liveness contractlaag).
+  - Forensische reproduceer-run uitgevoerd met gerichte commando's op:
+    - `run_step` runtime output,
+    - `runStepHandler` transport/output pad,
+    - stale-policy classificatie,
+    - client transport/no-action/no-advance scenario's.
+- Verwachte uitkomst:
+  - Hard onderscheidbaar bewijs tussen:
+    1) server-side startacceptatie,
+    2) stale poll-drop gedrag,
+    3) client-side no-op paden.
+- Testresultaten lokaal:
+  - Gerichte test run:
+    - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test --test-name-pattern "callRunStep schedules one bootstrap poll when ACTION_START ack has no state advance" src/ui_render.test.ts`
+    - Resultaat: **PASS** (1/1), met logs:
+      - `[ui_start_dispatch_ack_without_state_advance]`
+      - vervolgens 1x `ACTION_BOOTSTRAP_POLL`
+      - daarna ordering advance (`response_seq` omhoog).
+  - Extra runtime-bewijs (synthetisch):
+    - `run_step` op aangeleverde request: `ui_view_mode:"prestart"`, `state.ui_action_start:"ACTION_START"`.
+    - `runStepHandler` opzelfde input: `_meta.widget_result.state` bevat `ui_action_start:"ACTION_START"` + complete tuple (`bootstrap_session_id`, `bootstrap_epoch`, `response_seq`, `host_widget_session_id`).
+    - Top-level model-safe state bevat minder velden dan `_meta.widget_result.state` (verwacht contractgedrag).
+- Live observatie:
+  - Niet opnieuw uitgevoerd in deze run.
+  - Focus van deze poging was bewijs-reconstructie op code + runtimeharnas.
+- AWS/logbewijs (event + timestamp):
+  - Geen nieuwe AWS CloudWatch-call in deze run.
+  - Wel lokaal reproduceerbaar server-eventbewijs met stale-flags aan:
+    - `RUN_STEP_STALE_INGEST_GUARD_V1=1 RUN_STEP_STALE_REBASE_V1=1`.
+    - Sequentie:
+      1. init request -> `response_seq:1`.
+      2. `ACTION_START` -> `response_seq:2`, `ui_view_mode:"interactive"`.
+      3. stale `ACTION_BOOTSTRAP_POLL` met oudere seq -> event:
+         - `stale_bootstrap_payload_dropped`
+         - `action:"ACTION_BOOTSTRAP_POLL"`
+         - `stale_reason_code:"response_seq"`
+         - `stale_policy_reason_code:"interactive_action_not_rebase_eligible"`
+         - `payload_response_seq:1`, `latest_response_seq:2`.
+  - Client-side no-op bewijsrun:
+    - Zonder host transport:
+      - event `[ui_transport_unavailable]`
+      - widget state `start_dispatch_state:"failed"`, `transport_ready:"false"`
+      - inline notice zichtbaar.
+    - Prestart zonder `ui_action_start`:
+      - event `[ui_contract_missing_start_action]`
+      - startknop `display:none`, disabled.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Impliciete aanname dat een stale-drop event direct de startklikfout verklaart.
+  - Impliciete aanname dat top-level `structuredContent.result.state` volledig gelijk is aan widgetstate.
+- Wat was gemist / over het hoofd gezien:
+  - `buildModelSafeResult` is bewust gestript; `_meta.widget_result.state` is de juiste client-authority voor actievelden.
+  - "Knop doet niets" bestaat uit meerdere expliciete client-guards:
+    - missing action,
+    - transport unavailable,
+    - ack zonder advance.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: volgende stap is de structurele Action-Liveness Contractimplementatie over alle buttons (instructie staat klaar in `docs/mcp_widget_action_liveness_agent_instructie.md`) en daarna live 5-flow bewijs.
+
+### Poging 2026-02-28 09:40 UTC (Action-Liveness contractlaag, generiek over alle actions)
+
+- Hypothese:
+  - De resterende "klik doet niets" regressie komt door het ontbreken van 1 uniforme action-liveness laag over UI + transport + contract, niet door SSOT tuple-authority zelf.
+- Waarom deze hypothese:
+  - Eerdere pogingen toonden al stabiele `_meta.widget_result` + ordering tuple paden, maar nog geen uniforme ack/advance/error semantiek per action.
+  - UI gebruikte nog gemixte action-bronnen (state keys + `ui.actions`) waardoor no-op paden niet uniform traceerbaar waren.
+- Exacte wijziging(en):
+  1. Uniforme server action source:
+     - `mcp-server/src/handlers/turn_contract.ts`
+     - nieuw `ui.action_contract.actions[]` opgebouwd uit server-contract acties + gestandaardiseerde state-actions (roles/surfaces), incl. `start`, `text_submit`, wording-picks en dream-controls.
+  2. Uniforme action-liveness responsevelden:
+     - `mcp-server/src/server/run_step_transport_context.ts`
+     - `mcp-server/src/server/run_step_transport.ts`
+     - `mcp-server/src/server/run_step_transport_stale.ts`
+     - `mcp-server/src/server/run_step_model_result.ts`
+     - velden toegevoegd/gepropagated: `ack_status`, `state_advanced`, `reason_code`, `action_code_echo`, `client_action_id_echo` (+ state mirror `ui_action_liveness`).
+  3. Observability/SLO markers + tellers:
+     - transport logs met vaste markers:
+       - `run_step_action_liveness_dispatch` (`dispatch_count:1`)
+       - `run_step_action_liveness_ack` (`ack_count:1`)
+       - `run_step_action_liveness_advance` (`advance_count:1`)
+       - `run_step_action_liveness_explicit_error` (`explicit_error_count:1`)
+     - alle markers bevatten action_code + client_action_id + ordering tuple.
+  4. UI fail-closed zonder silent no-op:
+     - `mcp-server/ui/lib/ui_actions.ts`
+     - generieke liveness-evaluatie voor alle actions (niet alleen start), expliciete inline notice op `rejected|timeout|dropped|no_advance`.
+     - begrensde herstelpoll voor `ack_status=accepted` + `state_advanced=false`.
+  5. UI gebruikt uniforme action source:
+     - `mcp-server/ui/lib/main.ts`
+     - `mcp-server/ui/lib/ui_render.ts`
+     - dispatch/routing leest nu roles uit `ui.action_contract.actions[]` i.p.v. statekey-magic.
+- Verwachte uitkomst:
+  - Elke action eindigt zichtbaar in `state_advanced=true` of expliciete foutstatus met reason-code.
+  - Geen silent no-op meer bij transport/stale/no-advance paden.
+- Testresultaten lokaal:
+  1. `cd mcp-server && npm run typecheck` -> PASS.
+  2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS (106 pass, 0 fail).
+  3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (168 pass, 0 fail, 1 skipped).
+- Live observatie (indien beschikbaar):
+  - Niet uitgevoerd in deze run (geen live host-run in deze omgeving).
+- AWS/logbewijs met timestamps:
+  - Geen nieuwe AWS CloudWatch-call in deze run.
+  - Wel lokaal bewijs in test-output van liveness-markers (`run_step_action_liveness_*`, `[ui_action_liveness_ack]`, `[ui_action_liveness_explicit_error]`).
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf onjuist:
+  - Aanname dat start-specifieke no-advance mitigatie voldoende was; dit moest generiek voor alle action codes.
+- Wat was gemist:
+  - Uniforme action source (`ui.action_contract`) ontbrak nog als enige dispatch-authority in de UI.
+  - `client_action_id_echo` was niet end-to-end hard gemaakt in transportobservability.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: volgende stap is live 5-flow validatie (start/menu/confirm/text-submit) met CloudWatch-correlaties per action-lifecycle marker.
+
+### Poging 2026-02-28 08:47 UTC (bewijs-update lege eerste render + architectuurfix i.p.v. workaround)
+
+- Hypothese:
+  - Het lege/half eerste scherm ontstaat wanneer de UI een payload ontvangt zonder canonieke `_meta.widget_result` en daardoor fail-closed in waiting/recovery blijft zonder renderbare interactieve state.
+- Waarom deze hypothese (bewijs vooraf):
+  - Canonicalisatie accepteert alleen `_meta.widget_result` als render-authority:
+    - `mcp-server/ui/lib/locale_bootstrap_runtime.ts` (`resolveMetaWidgetResult`, regels 148-170).
+    - `mcp-server/docs/ui-interface-contract.md` (regels 78-85).
+  - Als canonical payload leeg is, wordt ingest expliciet gedropt:
+    - `mcp-server/ui/lib/ui_actions.ts` (`[ui_ingest_dropped_no_widget_result]`, regels 676-683).
+  - Startup-pad rendert wait shell bij lege bootstrap payload:
+    - `mcp-server/ui/lib/main.ts` (regels 388-390, 399-400).
+  - Waiting/recovery modus verbergt start/input-controls:
+    - `mcp-server/ui/lib/ui_render.ts` (regels 648-693).
+- Exacte wijziging(en):
+  - Geen codewijziging in deze poging; dit is een bewijspoging met code-trace + gerichte tests om de oorzaak hard te maken.
+- Verwachte uitkomst:
+  - Als deze hypothese klopt, moeten tests aantonen dat payloads zonder `_meta.widget_result` fail-close gedrag geven en dat startup een wait shell toont.
+- Testresultaten lokaal:
+  - Commando:
+    - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts --test-name-pattern "render shows startup wait shell when payload is absent|resolveWidgetPayload fail-closes when _meta.widget_result is absent|resolveWidgetPayload ignores direct widget-result shape from host notification params"`
+  - Resultaat: **PASS** (`64 pass`, `0 fail`).
+  - Relevante tests:
+    - `mcp-server/src/ui_render.test.ts` regel 2056: startup wait shell bij afwezige payload.
+    - `mcp-server/src/ui_render.test.ts` regel 2121: fail-close zonder `_meta.widget_result`.
+    - `mcp-server/src/ui_render.test.ts` regel 2474: direct host-shape zonder `_meta.widget_result` wordt genegeerd.
+  - Relevante runtime marker in testoutput:
+    - `[ui_ingest_dropped_no_widget_result] { source: 'set_globals', payload_source: 'none' }`
+- Live observatie:
+  - Niet opnieuw uitgevoerd in deze poging.
+- AWS/logbewijs (event + timestamp):
+  - Niet beschikbaar in deze poging.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Dat "contract groen" automatisch betekent dat producer-shape altijd canoniek is op runtime.
+- Wat was gemist / over het hoofd gezien:
+  - Dit gedrag is geen puur UI-bug; het is een ketenprobleem in producer->ingest->render waarin niet-canonieke payloads deterministisch in fail-closed eindigen.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: vervolgfix moet architecturaal zijn (producer-side canonical payload-garantie + tuple-pariteit), niet een UI-workaround.

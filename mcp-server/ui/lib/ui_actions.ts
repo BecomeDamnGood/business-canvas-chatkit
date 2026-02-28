@@ -611,6 +611,19 @@ const BRIDGE_RESPONSE_TIMEOUT_MS = 6000;
 const ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
 let bootstrapPollInFlight = false;
 let bootstrapPollInFlightSignature = "";
+const ACTION_LIVENESS_RECOVERY_DELAY_MS = 300;
+let actionLivenessRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+let actionLivenessRecoverySignature = "";
+
+type ActionAckStatus = "accepted" | "rejected" | "timeout" | "dropped";
+
+type ActionLiveness = {
+  ack_status: ActionAckStatus;
+  state_advanced: boolean;
+  reason_code: string;
+  action_code_echo: string;
+  client_action_id_echo: string;
+};
 
 function uiFlagEnabled(name: string, defaultValue: boolean): boolean {
   const raw = (globalThis as Record<string, unknown>)[name];
@@ -1164,6 +1177,115 @@ function resolveLocaleHintForPayload(state: Record<string, unknown>): {
   return { localeHint: "", localeHintSource: "none" };
 }
 
+function normalizeActionAckStatus(raw: unknown): ActionAckStatus {
+  const normalized = String(raw || "").trim().toLowerCase();
+  if (normalized === "accepted") return "accepted";
+  if (normalized === "rejected") return "rejected";
+  if (normalized === "timeout") return "timeout";
+  if (normalized === "dropped") return "dropped";
+  return "rejected";
+}
+
+function parseBool(value: unknown): boolean {
+  return value === true || String(value || "").trim().toLowerCase() === "true";
+}
+
+function generateClientActionId(actionCode: string): string {
+  const suffix = Math.random().toString(36).slice(2, 10);
+  return `ca_${Date.now()}_${String(actionCode || "ACTION").trim().toLowerCase()}_${suffix}`;
+}
+
+function ensureClientActionIdOnState(state: Record<string, unknown>, actionCode: string): string {
+  const existing = String((state as { __client_action_id?: unknown }).__client_action_id || "").trim();
+  if (existing) return existing;
+  const generated = generateClientActionId(actionCode);
+  (state as { __client_action_id?: string }).__client_action_id = generated;
+  return generated;
+}
+
+function extractActionLiveness(result: Record<string, unknown>, fallback: {
+  action_code: string;
+  client_action_id: string;
+}): ActionLiveness {
+  const state = toRecord(result.state);
+  const stateLiveness = toRecord(state.ui_action_liveness);
+  const ackStatus = normalizeActionAckStatus(
+    result.ack_status || state.ack_status || stateLiveness.ack_status || "rejected"
+  );
+  const stateAdvanced = parseBool(
+    result.state_advanced ?? state.state_advanced ?? stateLiveness.state_advanced ?? false
+  );
+  const reasonCode = String(
+    result.reason_code || state.reason_code || stateLiveness.reason_code || ""
+  )
+    .trim()
+    .toLowerCase();
+  const actionCodeEcho = String(
+    result.action_code_echo || state.action_code_echo || stateLiveness.action_code_echo || fallback.action_code
+  )
+    .trim()
+    .toUpperCase();
+  const clientActionIdEcho = String(
+    result.client_action_id_echo ||
+      state.client_action_id_echo ||
+      stateLiveness.client_action_id_echo ||
+      fallback.client_action_id
+  ).trim();
+  return {
+    ack_status: ackStatus,
+    state_advanced: stateAdvanced,
+    reason_code: stateAdvanced ? "" : (reasonCode || "state_not_advanced"),
+    action_code_echo: actionCodeEcho,
+    client_action_id_echo: clientActionIdEcho,
+  };
+}
+
+function livenessMessageForReason(
+  state: Record<string, unknown>,
+  liveness: ActionLiveness
+): string {
+  if (liveness.ack_status === "timeout") {
+    return uiText(state, "transient.timeout", "") || "The action timed out. Please retry.";
+  }
+  if (liveness.ack_status === "dropped") {
+    return uiText(state, "error.contract.body", "") || `Action was dropped (${liveness.reason_code}).`;
+  }
+  if (liveness.ack_status === "rejected") {
+    return uiText(state, "error.contract.body", "") || `Action was rejected (${liveness.reason_code}).`;
+  }
+  if (!liveness.state_advanced) {
+    return uiText(state, "error.contract.body", "") || `No state update received (${liveness.reason_code}).`;
+  }
+  return "";
+}
+
+function clearActionLivenessRecoveryTimer(): void {
+  if (actionLivenessRecoveryTimer) {
+    clearTimeout(actionLivenessRecoveryTimer);
+    actionLivenessRecoveryTimer = null;
+  }
+  actionLivenessRecoverySignature = "";
+}
+
+function scheduleActionLivenessRecoveryPoll(params: {
+  actionCode: string;
+  clientActionId: string;
+  reasonCode: string;
+}): void {
+  const signature = `${params.actionCode}|${params.clientActionId}|${params.reasonCode}`;
+  if (actionLivenessRecoverySignature === signature && actionLivenessRecoveryTimer) return;
+  clearActionLivenessRecoveryTimer();
+  actionLivenessRecoverySignature = signature;
+  actionLivenessRecoveryTimer = setTimeout(() => {
+    actionLivenessRecoveryTimer = null;
+    actionLivenessRecoverySignature = "";
+    resetHydrationRetryCycle({
+      trigger_poll: true,
+      source: "action_liveness_no_advance",
+    });
+  }, ACTION_LIVENESS_RECOVERY_DELAY_MS);
+}
+
 export async function callRunStep(
   message: string | number,
   extraState?: Record<string, unknown>
@@ -1180,6 +1302,14 @@ export async function callRunStep(
   const hasBridgePath =
     transportStatus === "ready_bridge" || transportStatus === "unknown";
   if (!hasCallTool && !hasBridgePath) {
+    const fallbackActionCode = String(messageText || "").trim().toUpperCase();
+    setWidgetStateSafe({
+      ui_action_liveness_ack_status: "rejected",
+      ui_action_liveness_state_advanced: "false",
+      ui_action_liveness_reason_code: "transport_unavailable",
+      ui_action_liveness_action_code: fallbackActionCode,
+      ui_action_liveness_client_action_id: "",
+    });
     if (isStartAction) {
       setWidgetStateSafe({
         start_dispatch_state: "failed",
@@ -1262,8 +1392,12 @@ export async function callRunStep(
     bootstrapPollInFlightSignature = bootstrapPollSignature;
   }
 
+  const ensuredClientActionId = ensureClientActionIdOnState(
+    nextState as Record<string, unknown>,
+    messageText || "TEXT_INPUT"
+  );
   const requestId = String((nextState as any).__request_id || "");
-  const clientActionId = String((nextState as any).__client_action_id || "");
+  const clientActionId = ensuredClientActionId;
   const startedAt = Date.now();
   const debugCalls = isDevEnv();
     if (debugCalls) {
@@ -1297,6 +1431,7 @@ export async function callRunStep(
 
   try {
     const transportPrimary: "callTool" | "bridge" = hasCallTool ? "callTool" : "bridge";
+    clearActionLivenessRecoveryTimer();
     if (isStartAction) clearInlineNotice();
     if (isStartAction) {
       setWidgetStateSafe({
@@ -1376,40 +1511,93 @@ export async function callRunStep(
         response_ingested: hasIngestedResult,
       });
     }
-    if (isStartAction) {
-      const responseViewMode = String(
-        (
+    const responseViewMode = String(
+      (
+        toRecord(
           toRecord(
-            toRecord(
-              result?.ui
-            ).view
-          ).mode || ""
-        )
+            result?.ui
+          ).view
+        ).mode || ""
       )
-        .trim()
-        .toLowerCase();
-      const startAdvanced = hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart");
-      if (!startAdvanced) {
-        console.warn("[ui_start_dispatch_ack_without_state_advance]", {
-          response_ingested: hasIngestedResult,
-          ordering_advanced: orderingAdvanced,
-          payload_source: resolvedResponse.source,
-          payload_reason_code: resolvedResponse.source_reason_code,
-          response_view_mode: responseViewMode,
-          ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
-          ordering_after: describeBootstrapOrdering(orderingAfterIngest),
+    )
+      .trim()
+      .toLowerCase();
+    const hasServerLiveness =
+      String((result as any).ack_status || "").trim() !== "" ||
+      String((toRecord(result?.state).ack_status || "")).trim() !== "" ||
+      String((toRecord(toRecord(result?.state).ui_action_liveness).ack_status || "")).trim() !== "";
+    const fallbackStateAdvanced = isStartAction
+      ? hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart")
+      : hasIngestedResult && (orderingAdvanced || result?.ok === true);
+    const fallbackAckStatus: ActionAckStatus =
+      result?.ok !== false
+        ? "accepted"
+        : ((errorObj?.type || "").toLowerCase() === "timeout" ? "timeout" : "rejected");
+    const liveness = hasServerLiveness
+      ? extractActionLiveness(result, { action_code: messageText, client_action_id: clientActionId })
+      : {
+          ack_status: fallbackAckStatus,
+          state_advanced: fallbackStateAdvanced,
+          reason_code: fallbackStateAdvanced
+            ? ""
+            : (errorObj?.type || (isStartAction ? "start_ack_without_state_advance" : "state_not_advanced")),
+          action_code_echo: String(messageText || "").trim().toUpperCase(),
+          client_action_id_echo: clientActionId,
+        };
+    const hasExplicitError = liveness.ack_status !== "accepted" || liveness.state_advanced !== true;
+    console.log("[ui_action_liveness_ack]", {
+      action_code: liveness.action_code_echo,
+      client_action_id: liveness.client_action_id_echo,
+      ack_status: liveness.ack_status,
+      state_advanced: liveness.state_advanced,
+      reason_code: liveness.reason_code,
+      payload_source: resolvedResponse.source,
+      payload_reason_code: resolvedResponse.source_reason_code,
+      ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
+      ordering_after: describeBootstrapOrdering(orderingAfterIngest),
+    });
+    setWidgetStateSafe({
+      ui_action_liveness_ack_status: liveness.ack_status,
+      ui_action_liveness_state_advanced: liveness.state_advanced ? "true" : "false",
+      ui_action_liveness_reason_code: liveness.reason_code,
+      ui_action_liveness_action_code: liveness.action_code_echo,
+      ui_action_liveness_client_action_id: liveness.client_action_id_echo,
+    });
+    if (hasExplicitError) {
+      console.warn("[ui_action_liveness_explicit_error]", {
+        action_code: liveness.action_code_echo,
+        client_action_id: liveness.client_action_id_echo,
+        ack_status: liveness.ack_status,
+        reason_code: liveness.reason_code,
+      });
+      setInlineNotice(livenessMessageForReason(nextState as Record<string, unknown>, liveness));
+      if (liveness.ack_status === "accepted" && !liveness.state_advanced) {
+        if (isStartAction) {
+          console.warn("[ui_start_dispatch_ack_without_state_advance]", {
+            response_ingested: hasIngestedResult,
+            ordering_advanced: orderingAdvanced,
+            payload_source: resolvedResponse.source,
+            payload_reason_code: resolvedResponse.source_reason_code,
+            response_view_mode: responseViewMode,
+            ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
+            ordering_after: describeBootstrapOrdering(orderingAfterIngest),
+          });
+        }
+        scheduleActionLivenessRecoveryPoll({
+          actionCode: liveness.action_code_echo || String(messageText || "").trim().toUpperCase(),
+          clientActionId: liveness.client_action_id_echo || clientActionId,
+          reasonCode: liveness.reason_code || "state_not_advanced",
         });
+      }
+      if (isStartAction) {
         setWidgetStateSafe({
           start_dispatch_state: "failed",
           transport_ready: "true",
         });
-        setTimeout(() => {
-          resetHydrationRetryCycle({
-            trigger_poll: true,
-            source: "start_ack_without_state_advance",
-          });
-        }, CLICK_DEBOUNCE_MS + 50);
-      } else {
+      }
+    } else {
+      clearActionLivenessRecoveryTimer();
+      if (isStartAction) {
         setWidgetStateSafe({
           start_dispatch_state: "ready",
           transport_ready: "true",
@@ -1432,6 +1620,11 @@ export async function callRunStep(
       setWidgetStateSafe({
         start_dispatch_state: "failed",
         transport_ready: "false",
+        ui_action_liveness_ack_status: "rejected",
+        ui_action_liveness_state_advanced: "false",
+        ui_action_liveness_reason_code: "transport_error",
+        ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
+        ui_action_liveness_client_action_id: clientActionId,
       });
       setInlineNotice(uiText(nextState, "transient.connection_failed", ""));
       return;
@@ -1450,6 +1643,13 @@ export async function callRunStep(
         });
       }
       setInlineNotice(uiText(nextState, "transient.timeout", ""));
+      setWidgetStateSafe({
+        ui_action_liveness_ack_status: "timeout",
+        ui_action_liveness_state_advanced: "false",
+        ui_action_liveness_reason_code: "timeout",
+        ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
+        ui_action_liveness_client_action_id: clientActionId,
+      });
       return;
     }
     console.error("run_step failed", e);

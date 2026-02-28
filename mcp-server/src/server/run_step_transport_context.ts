@@ -64,6 +64,7 @@ export type RunStepContext = {
   staleRebaseEnabled: boolean;
   staleInteractiveActionPolicy: StaleInteractiveActionPolicy;
   idempotencyKey: string;
+  clientActionId: string;
   normalizedBootstrapSessionId: string;
   normalizedBootstrapEpoch: number;
   hasInitiator: boolean;
@@ -77,6 +78,89 @@ export type BootstrapOrdering = {
   epoch: number;
   responseSeq: number;
 };
+
+export type ActionAckStatus = "accepted" | "rejected" | "timeout" | "dropped";
+
+export type ActionLivenessContract = {
+  ack_status: ActionAckStatus;
+  state_advanced: boolean;
+  reason_code: string;
+  action_code_echo: string;
+  client_action_id_echo: string;
+};
+
+function normalizeAckStatus(raw: unknown): ActionAckStatus {
+  const normalized = safeString(raw).trim().toLowerCase();
+  if (normalized === "accepted") return "accepted";
+  if (normalized === "rejected") return "rejected";
+  if (normalized === "timeout") return "timeout";
+  if (normalized === "dropped") return "dropped";
+  return "rejected";
+}
+
+function normalizeReasonCode(raw: unknown): string {
+  return safeString(raw).trim().toLowerCase();
+}
+
+export function buildActionLivenessContract(
+  context: RunStepContext,
+  params: {
+    ack_status: ActionAckStatus;
+    state_advanced: boolean;
+    reason_code?: string;
+  }
+): ActionLivenessContract {
+  const ackStatus = normalizeAckStatus(params.ack_status);
+  const stateAdvanced = params.state_advanced === true;
+  const reasonCode = normalizeReasonCode(params.reason_code);
+  return {
+    ack_status: ackStatus,
+    state_advanced: stateAdvanced,
+    reason_code: stateAdvanced ? "" : (reasonCode || "state_not_advanced"),
+    action_code_echo: safeString(context.action || "").trim().toUpperCase() || "TEXT_INPUT",
+    client_action_id_echo: safeString(context.clientActionId || "").trim(),
+  };
+}
+
+export function attachActionLivenessToResult(
+  resultForClient: Record<string, unknown>,
+  contract: ActionLivenessContract
+): Record<string, unknown> {
+  const state =
+    resultForClient && typeof resultForClient.state === "object" && resultForClient.state
+      ? (resultForClient.state as Record<string, unknown>)
+      : {};
+  const nextState = {
+    ...state,
+    ui_action_liveness: {
+      ack_status: contract.ack_status,
+      state_advanced: contract.state_advanced,
+      reason_code: contract.reason_code,
+      action_code_echo: contract.action_code_echo,
+      client_action_id_echo: contract.client_action_id_echo,
+    },
+  };
+  return {
+    ...resultForClient,
+    state: nextState,
+    ack_status: contract.ack_status,
+    state_advanced: contract.state_advanced,
+    reason_code: contract.reason_code,
+    action_code_echo: contract.action_code_echo,
+    client_action_id_echo: contract.client_action_id_echo,
+  };
+}
+
+export function hasStateAdvancedByResponseSeq(
+  incomingOrdering: BootstrapOrdering,
+  outgoingResponseSeq: number
+): boolean {
+  const outgoing = Number(outgoingResponseSeq);
+  if (!Number.isFinite(outgoing) || outgoing <= 0) return false;
+  const incoming = Number(incomingOrdering.responseSeq || 0);
+  if (!Number.isFinite(incoming) || incoming <= 0) return true;
+  return outgoing > incoming;
+}
 
 function normalizeLocaleHintSource(raw: unknown): LocaleHintSource {
   const localeHintSourceRaw = safeString(raw ?? "none");
@@ -198,6 +282,9 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
   const idempotencyKey = normalizeIdempotencyKey(
     args.idempotency_key ?? safeString((stateForTool as { __client_action_id?: unknown }).__client_action_id ?? "")
   );
+  const clientActionId = normalizeIdempotencyKey(
+    safeString((stateForTool as { __client_action_id?: unknown }).__client_action_id ?? "")
+  );
 
   logStructuredEvent(
     "info",
@@ -218,6 +305,7 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
       locale_hint_source: localeHintSource,
       host_widget_session_id_present: hostWidgetSessionId ? "true" : "false",
       idempotency_key_present: idempotencyKey ? "true" : "false",
+      client_action_id_present: clientActionId ? "true" : "false",
       stale_ingest_guard_enabled: staleIngestGuardEnabled,
       stale_rebase_enabled: staleRebaseEnabled,
     }
@@ -241,6 +329,7 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
     staleRebaseEnabled,
     staleInteractiveActionPolicy,
     idempotencyKey,
+    clientActionId,
     normalizedBootstrapSessionId,
     normalizedBootstrapEpoch,
     hasInitiator,

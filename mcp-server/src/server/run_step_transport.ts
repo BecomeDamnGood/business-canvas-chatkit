@@ -25,13 +25,19 @@ import {
 import { markIdempotencyCompleted } from "./idempotency_registry.js";
 import { buildModelSafeResult } from "./run_step_model_result.js";
 import {
+  attachActionLivenessToResult,
+  buildActionLivenessContract,
   buildRunStepContext,
+  hasStateAdvancedByResponseSeq,
   type RunStepHandlerArgs,
   readIncomingOrdering,
+  type ActionAckStatus,
+  type ActionLivenessContract,
 } from "./run_step_transport_context.js";
 import {
   createIdempotencyTracker,
   preflightIdempotency,
+  type RunStepTransportResult,
 } from "./run_step_transport_idempotency.js";
 import { preflightStalePayload } from "./run_step_transport_stale.js";
 import { injectUiVersion } from "./locale_resolution.js";
@@ -46,12 +52,162 @@ function loadUiHtml(): string {
   }
 }
 
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function applyActionLivenessToTransportResult(
+  transportResult: RunStepTransportResult,
+  contract: ActionLivenessContract
+): RunStepTransportResult {
+  const meta = toRecord(transportResult.meta);
+  const widgetResult = toRecord(meta.widget_result);
+  if (Object.keys(widgetResult).length === 0) return transportResult;
+  const nextWidgetResult = attachActionLivenessToResult(widgetResult, contract);
+  const structuredContent = toRecord(transportResult.structuredContent);
+  const structuredResult = toRecord(structuredContent.result);
+  const structuredState = toRecord(structuredResult.state);
+  const nextStructuredResult = {
+    ...structuredResult,
+    state: {
+      ...structuredState,
+      ui_action_liveness: {
+        ack_status: contract.ack_status,
+        state_advanced: contract.state_advanced,
+        reason_code: contract.reason_code,
+        action_code_echo: contract.action_code_echo,
+        client_action_id_echo: contract.client_action_id_echo,
+      },
+    },
+    ack_status: contract.ack_status,
+    state_advanced: contract.state_advanced,
+    reason_code: contract.reason_code,
+    action_code_echo: contract.action_code_echo,
+    client_action_id_echo: contract.client_action_id_echo,
+  };
+  return {
+    structuredContent: {
+      ...(transportResult.structuredContent && typeof transportResult.structuredContent === "object"
+        ? transportResult.structuredContent
+        : {}),
+      ...structuredContent,
+      result: nextStructuredResult,
+    },
+    meta: {
+      ...(transportResult.meta && typeof transportResult.meta === "object" ? transportResult.meta : {}),
+      ...meta,
+      widget_result: nextWidgetResult,
+    },
+  };
+}
+
+function resolveIdempotencyEarlyLiveness(
+  widgetResult: Record<string, unknown>
+): { ack_status: ActionAckStatus; reason_code: string } {
+  const state = toRecord(widgetResult.state);
+  const error = toRecord(widgetResult.error);
+  const outcome = safeString(state.idempotency_outcome || widgetResult.idempotency_outcome).trim().toLowerCase();
+  const errorType = safeString(error.type).trim().toLowerCase();
+  if (outcome === "replay") {
+    return { ack_status: "dropped", reason_code: "idempotency_replay" };
+  }
+  if (errorType === "idempotency_inflight") {
+    return { ack_status: "rejected", reason_code: "idempotency_inflight" };
+  }
+  if (errorType === "idempotency_conflict") {
+    return { ack_status: "rejected", reason_code: "idempotency_conflict" };
+  }
+  return {
+    ack_status: "rejected",
+    reason_code: errorType || "idempotency_preflight_rejected",
+  };
+}
+
+function logActionLivenessDispatch(params: {
+  context: ReturnType<typeof buildRunStepContext>;
+  incomingOrdering: ReturnType<typeof readIncomingOrdering>;
+}): void {
+  const { context, incomingOrdering } = params;
+  logStructuredEvent(
+    "info",
+    "run_step_action_liveness_dispatch",
+    {
+      correlation_id: context.correlationId,
+      trace_id: context.traceId,
+      session_id: incomingOrdering.sessionId || context.normalizedBootstrapSessionId,
+      step_id: context.stepIdStr || "step_0",
+      contract_id: resolveContractIdFromRecord({ state: context.stateForTool }),
+    },
+    {
+      action_code: context.action,
+      client_action_id: context.clientActionId,
+      dispatch_count: 1,
+      bootstrap_session_id: incomingOrdering.sessionId || context.normalizedBootstrapSessionId,
+      bootstrap_epoch: incomingOrdering.epoch || context.normalizedBootstrapEpoch,
+      response_seq: incomingOrdering.responseSeq,
+      host_widget_session_id: incomingOrdering.hostWidgetSessionId || context.hostWidgetSessionId,
+    }
+  );
+}
+
+function logActionLivenessOutcome(params: {
+  context: ReturnType<typeof buildRunStepContext>;
+  stepId: string;
+  contractId: string;
+  incomingOrdering: ReturnType<typeof readIncomingOrdering>;
+  outgoingOrdering?: {
+    sessionId: string;
+    epoch: number;
+    responseSeq: number;
+    hostWidgetSessionId: string;
+  };
+  liveness: ActionLivenessContract;
+}): void {
+  const { context, liveness, incomingOrdering, outgoingOrdering } = params;
+  const shared = {
+    action_code: liveness.action_code_echo,
+    client_action_id: liveness.client_action_id_echo,
+    ack_status: liveness.ack_status,
+    state_advanced: liveness.state_advanced,
+    reason_code: liveness.reason_code,
+    bootstrap_session_id: outgoingOrdering?.sessionId || incomingOrdering.sessionId || context.normalizedBootstrapSessionId,
+    bootstrap_epoch: outgoingOrdering?.epoch || incomingOrdering.epoch || context.normalizedBootstrapEpoch,
+    response_seq: outgoingOrdering?.responseSeq || incomingOrdering.responseSeq,
+    host_widget_session_id: outgoingOrdering?.hostWidgetSessionId || incomingOrdering.hostWidgetSessionId || context.hostWidgetSessionId,
+  };
+  const baseContext = {
+    correlation_id: context.correlationId,
+    trace_id: context.traceId,
+    session_id: shared.bootstrap_session_id,
+    step_id: params.stepId || "step_0",
+    contract_id: params.contractId,
+  };
+  logStructuredEvent("info", "run_step_action_liveness_ack", baseContext, {
+    ...shared,
+    ack_count: 1,
+  });
+  if (liveness.state_advanced) {
+    logStructuredEvent("info", "run_step_action_liveness_advance", baseContext, {
+      ...shared,
+      advance_count: 1,
+    });
+  } else {
+    logStructuredEvent("warn", "run_step_action_liveness_explicit_error", baseContext, {
+      ...shared,
+      explicit_error_count: 1,
+    });
+  }
+}
+
 /** Shared run_step logic for MCP tool and POST /run_step (local testing). */
 async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredContent: Record<string, unknown>; meta?: Record<string, unknown> }> {
   const context = buildRunStepContext(args);
   let incomingOrdering = readIncomingOrdering(context.stateForTool);
   const idempotencyTracker = createIdempotencyTracker(context);
   const nowMs = Date.now();
+  logActionLivenessDispatch({ context, incomingOrdering });
 
   const idempotencyPreflight = preflightIdempotency({
     context,
@@ -60,7 +216,32 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
     tracker: idempotencyTracker,
   });
   if (idempotencyPreflight) {
-    return idempotencyPreflight;
+    const preflightWidgetResult = toRecord(toRecord(idempotencyPreflight.meta).widget_result);
+    const preflightLiveness = resolveIdempotencyEarlyLiveness(preflightWidgetResult);
+    const livenessContract = buildActionLivenessContract(context, {
+      ack_status: preflightLiveness.ack_status,
+      state_advanced: false,
+      reason_code: preflightLiveness.reason_code,
+    });
+    const enriched = applyActionLivenessToTransportResult(idempotencyPreflight, livenessContract);
+    logActionLivenessOutcome({
+      context,
+      stepId: safeString(preflightWidgetResult.current_step_id || context.currentStepId) || "step_0",
+      contractId: resolveContractIdFromRecord(preflightWidgetResult),
+      incomingOrdering,
+      liveness: livenessContract,
+      outgoingOrdering: {
+        sessionId: safeString((preflightWidgetResult.state as Record<string, unknown> | undefined)?.bootstrap_session_id || incomingOrdering.sessionId),
+        epoch: parsePositiveInt((preflightWidgetResult.state as Record<string, unknown> | undefined)?.bootstrap_epoch || incomingOrdering.epoch),
+        responseSeq: parsePositiveInt((preflightWidgetResult.state as Record<string, unknown> | undefined)?.response_seq || incomingOrdering.responseSeq),
+        hostWidgetSessionId: safeString(
+          (preflightWidgetResult.state as Record<string, unknown> | undefined)?.host_widget_session_id ||
+            incomingOrdering.hostWidgetSessionId ||
+            context.hostWidgetSessionId
+        ),
+      },
+    });
+    return enriched;
   }
 
   const stalePreflight = preflightStalePayload({
@@ -70,7 +251,31 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
     tracker: idempotencyTracker,
   });
   if (stalePreflight.earlyResponse) {
-    return stalePreflight.earlyResponse;
+    const staleWidgetResult = toRecord(toRecord(stalePreflight.earlyResponse.meta).widget_result);
+    const staleLiveness = buildActionLivenessContract(context, {
+      ack_status: "dropped",
+      state_advanced: false,
+      reason_code: stalePreflight.earlyDropReasonCode || "stale_payload_dropped",
+    });
+    const enriched = applyActionLivenessToTransportResult(stalePreflight.earlyResponse, staleLiveness);
+    logActionLivenessOutcome({
+      context,
+      stepId: safeString(staleWidgetResult.current_step_id || context.currentStepId) || "step_0",
+      contractId: resolveContractIdFromRecord(staleWidgetResult),
+      incomingOrdering,
+      liveness: staleLiveness,
+      outgoingOrdering: {
+        sessionId: safeString((staleWidgetResult.state as Record<string, unknown> | undefined)?.bootstrap_session_id || incomingOrdering.sessionId),
+        epoch: parsePositiveInt((staleWidgetResult.state as Record<string, unknown> | undefined)?.bootstrap_epoch || incomingOrdering.epoch),
+        responseSeq: parsePositiveInt((staleWidgetResult.state as Record<string, unknown> | undefined)?.response_seq || incomingOrdering.responseSeq),
+        hostWidgetSessionId: safeString(
+          (staleWidgetResult.state as Record<string, unknown> | undefined)?.host_widget_session_id ||
+            incomingOrdering.hostWidgetSessionId ||
+            context.hostWidgetSessionId
+        ),
+      },
+    });
+    return enriched;
   }
 
   context.stateForTool = stalePreflight.stateForTool;
@@ -112,6 +317,17 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       idempotencyKey: context.idempotencyKey,
       outcome: "fresh",
     });
+    const stateAdvanced = hasStateAdvancedByResponseSeq(incomingOrdering, responseSeq);
+    const resultErrorType = safeString((toRecord(resultForClient.error).type as string | undefined) ?? "").trim().toLowerCase();
+    const livenessContract = buildActionLivenessContract(context, {
+      ack_status: resultForClient.ok === true ? "accepted" : (resultErrorType === "timeout" ? "timeout" : "rejected"),
+      state_advanced: resultForClient.ok === true ? stateAdvanced : false,
+      reason_code:
+        resultForClient.ok === true
+          ? (stateAdvanced ? "" : "state_not_advanced")
+          : (resultErrorType || "explicit_error"),
+    });
+    resultForClient = attachActionLivenessToResult(resultForClient, livenessContract);
 
     const stepMeta = safeString((result as { state?: { current_step?: string } }).state?.current_step ?? "unknown") || "unknown";
     const specialistMeta = safeString((result as { active_specialist?: string }).active_specialist ?? "unknown") || "unknown";
@@ -170,8 +386,26 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
         rebase_reason_code: staleRebaseReasonCode,
         stale_ingest_guard_enabled: context.staleIngestGuardEnabled,
         stale_rebase_enabled: context.staleRebaseEnabled,
+        ack_status: livenessContract.ack_status,
+        state_advanced: livenessContract.state_advanced,
+        reason_code: livenessContract.reason_code,
+        action_code_echo: livenessContract.action_code_echo,
+        client_action_id_echo: livenessContract.client_action_id_echo,
       }
     );
+    logActionLivenessOutcome({
+      context,
+      stepId: safeString(resultState.current_step || stepMeta) || "unknown",
+      contractId: resolveContractIdFromRecord(resultForClient),
+      incomingOrdering,
+      outgoingOrdering: {
+        sessionId: safeString(resultState.bootstrap_session_id || sessionId),
+        epoch: parsePositiveInt(resultState.bootstrap_epoch || epoch),
+        responseSeq: parsePositiveInt(resultState.response_seq || responseSeq),
+        hostWidgetSessionId: safeString(resultState.host_widget_session_id || context.hostWidgetSessionId),
+      },
+      liveness: livenessContract,
+    });
 
     const modelResult = buildModelSafeResult(resultForClient);
     const structuredContent: Record<string, unknown> = {
@@ -299,6 +533,29 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       resultForClient: fallbackResult,
       idempotencyKey: context.idempotencyKey,
       outcome: "fresh",
+    });
+    const fallbackLiveness = buildActionLivenessContract(context, {
+      ack_status: classification.severity === "transient" ? "timeout" : "rejected",
+      state_advanced: false,
+      reason_code: safeString(classification.type || classification.code || "run_step_error"),
+    });
+    fallbackResult = attachActionLivenessToResult(fallbackResult, fallbackLiveness);
+    logActionLivenessOutcome({
+      context,
+      stepId: currentStep,
+      contractId: resolveContractIdFromRecord(fallbackResult),
+      incomingOrdering,
+      outgoingOrdering: {
+        sessionId: safeString((fallbackResult.state as Record<string, unknown> | undefined)?.bootstrap_session_id || incomingOrdering.sessionId),
+        epoch: parsePositiveInt((fallbackResult.state as Record<string, unknown> | undefined)?.bootstrap_epoch || incomingOrdering.epoch),
+        responseSeq: parsePositiveInt((fallbackResult.state as Record<string, unknown> | undefined)?.response_seq || responseSeq),
+        hostWidgetSessionId: safeString(
+          (fallbackResult.state as Record<string, unknown> | undefined)?.host_widget_session_id ||
+            incomingOrdering.hostWidgetSessionId ||
+            context.hostWidgetSessionId
+        ),
+      },
+      liveness: fallbackLiveness,
     });
 
     registerBootstrapSnapshot({

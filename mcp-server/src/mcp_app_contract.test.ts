@@ -159,6 +159,22 @@ test("MCP app contract: lifecycle logs expose explicit accept/drop/rebase reason
   assert.match(source, /rebase_reason_code:\s*"stale_interactive_action_rebased"/);
 });
 
+test("MCP app contract: action liveness contract fields are emitted and logged", () => {
+  assert.match(source, /run_step_action_liveness_dispatch/);
+  assert.match(source, /run_step_action_liveness_ack/);
+  assert.match(source, /run_step_action_liveness_advance/);
+  assert.match(source, /run_step_action_liveness_explicit_error/);
+  assert.match(source, /dispatch_count:\s*1/);
+  assert.match(source, /ack_count:\s*1/);
+  assert.match(source, /advance_count:\s*1/);
+  assert.match(source, /explicit_error_count:\s*1/);
+  assert.match(source, /ack_status:/);
+  assert.match(source, /state_advanced:/);
+  assert.match(source, /reason_code:/);
+  assert.match(source, /action_code_echo:/);
+  assert.match(source, /client_action_id_echo:/);
+});
+
 test("MCP app contract: stale interactive rebase policy is explicitly limited to ACTION_START", () => {
   assert.match(source, /const REBASE_ELIGIBLE_INTERACTIVE_ACTIONS = new Set<string>\(\["ACTION_START"\]\);/);
   assert.match(source, /staleInteractiveActionPolicy\.rebaseEligible/);
@@ -216,6 +232,8 @@ test("MCP app contract: run_step response logs canonical-view observability even
 test("MCP app contract: turn contract enforces canonical step_0\/interactive view invariants", () => {
   assert.match(turnContractSource, /export function enforceRunStepViewContractGuard\(/);
   assert.match(turnContractSource, /buildCanonicalWidgetState/);
+  assert.match(turnContractSource, /ensureUnifiedUiActionContract/);
+  assert.match(turnContractSource, /action_contract/);
   assert.match(canonicalWidgetStateSource, /step0_start_action_missing/);
   assert.match(canonicalWidgetStateSource, /interactive_content_absent/);
   assert.match(turnContractSource, /interactive_requires_renderable_content/);

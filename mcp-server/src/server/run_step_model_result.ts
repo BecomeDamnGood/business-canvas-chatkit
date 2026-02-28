@@ -88,6 +88,39 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
       flags.host_widget_session_id ||
       ""
   );
+  const ackStatusRaw = safeString((result as any).ack_status || (state as any).ack_status || "");
+  const ackStatus =
+    ackStatusRaw === "accepted" ||
+    ackStatusRaw === "rejected" ||
+    ackStatusRaw === "timeout" ||
+    ackStatusRaw === "dropped"
+      ? ackStatusRaw
+      : "";
+  const stateAdvancedRaw =
+    (result as any).state_advanced ??
+    (state as any).state_advanced ??
+    ((state as any).ui_action_liveness as Record<string, unknown> | undefined)?.state_advanced;
+  const stateAdvanced =
+    stateAdvancedRaw === true ||
+    String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
+  const reasonCode = safeString(
+    (result as any).reason_code ||
+      (state as any).reason_code ||
+      ((state as any).ui_action_liveness as Record<string, unknown> | undefined)?.reason_code ||
+      ""
+  );
+  const actionCodeEcho = safeString(
+    (result as any).action_code_echo ||
+      (state as any).action_code_echo ||
+      ((state as any).ui_action_liveness as Record<string, unknown> | undefined)?.action_code_echo ||
+      ""
+  );
+  const clientActionIdEcho = safeString(
+    (result as any).client_action_id_echo ||
+      (state as any).client_action_id_echo ||
+      ((state as any).ui_action_liveness as Record<string, unknown> | undefined)?.client_action_id_echo ||
+      ""
+  );
   const toolContractFamilyVersion = safeString(
     (result as any).tool_contract_family_version ||
       state.tool_contract_family_version ||
@@ -132,6 +165,20 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (idempotencyOutcome) safeState.idempotency_outcome = idempotencyOutcome;
   if (idempotencyErrorCode) safeState.idempotency_error_code = idempotencyErrorCode;
   if (hostWidgetSessionId) safeState.host_widget_session_id = hostWidgetSessionId;
+  if (ackStatus) safeState.ack_status = ackStatus;
+  if (ackStatus) safeState.state_advanced = stateAdvanced ? "true" : "false";
+  if (reasonCode) safeState.reason_code = reasonCode;
+  if (actionCodeEcho) safeState.action_code_echo = actionCodeEcho;
+  if (clientActionIdEcho) safeState.client_action_id_echo = clientActionIdEcho;
+  if (ackStatus) {
+    safeState.ui_action_liveness = {
+      ack_status: ackStatus,
+      state_advanced: stateAdvanced,
+      reason_code: stateAdvanced ? "" : reasonCode,
+      action_code_echo: actionCodeEcho,
+      client_action_id_echo: clientActionIdEcho,
+    };
+  }
   if (toolContractFamilyVersion) safeState.tool_contract_family_version = toolContractFamilyVersion;
   if (runStepInputSchemaVersion) safeState.run_step_input_schema_version = runStepInputSchemaVersion;
   if (runStepOutputSchemaVersion) safeState.run_step_output_schema_version = runStepOutputSchemaVersion;
@@ -158,6 +205,11 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
     ...(idempotencyOutcome ? { idempotency_outcome: idempotencyOutcome } : {}),
     ...(idempotencyErrorCode ? { idempotency_error_code: idempotencyErrorCode } : {}),
     ...(hostWidgetSessionId ? { host_widget_session_id: hostWidgetSessionId } : {}),
+    ...(ackStatus ? { ack_status: ackStatus } : {}),
+    ...(ackStatus ? { state_advanced: stateAdvanced } : {}),
+    ...(reasonCode ? { reason_code: reasonCode } : {}),
+    ...(actionCodeEcho ? { action_code_echo: actionCodeEcho } : {}),
+    ...(clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {}),
     ...(toolContractFamilyVersion ? { tool_contract_family_version: toolContractFamilyVersion } : {}),
     ...(runStepInputSchemaVersion ? { run_step_input_schema_version: runStepInputSchemaVersion } : {}),
     ...(runStepOutputSchemaVersion ? { run_step_output_schema_version: runStepOutputSchemaVersion } : {}),

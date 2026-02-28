@@ -26,6 +26,7 @@ export type StalePreflightResult = {
   incomingOrdering: BootstrapOrdering;
   staleRebaseApplied: boolean;
   staleRebaseReasonCode: string;
+  earlyDropReasonCode: string;
   earlyResponse: RunStepTransportResult | null;
 };
 
@@ -40,6 +41,7 @@ export function preflightStalePayload(params: {
   let incomingOrdering = params.incomingOrdering;
   let staleRebaseApplied = false;
   let staleRebaseReasonCode = "";
+  let earlyDropReasonCode = "";
 
   if (incomingOrdering.sessionId && incomingOrdering.epoch > 0 && context.staleIngestGuardEnabled) {
     const staleCheck = isStaleBootstrapPayload({
@@ -231,6 +233,7 @@ export function preflightStalePayload(params: {
           incomingOrdering,
           staleRebaseApplied,
           staleRebaseReasonCode,
+          earlyDropReasonCode: dropReasonCode,
           earlyResponse: {
             structuredContent,
             meta: { widget_result: staleResult },
@@ -245,6 +248,7 @@ export function preflightStalePayload(params: {
     incomingOrdering,
     staleRebaseApplied,
     staleRebaseReasonCode,
+    earlyDropReasonCode,
     earlyResponse: null,
   };
 }

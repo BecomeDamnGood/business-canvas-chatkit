@@ -28,6 +28,49 @@ import {
 } from "./ui_actions.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function actionContractActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
+  const uiPayload = toRecord(resultData.ui);
+  const actionContract = toRecord(uiPayload.action_contract);
+  if (Array.isArray(actionContract.actions)) {
+    return (actionContract.actions as unknown[])
+      .map((entry) => toRecord(entry))
+      .filter((entry) => String(entry.action_code || "").trim().length > 0);
+  }
+  const legacyActions = Array.isArray(uiPayload.actions) ? (uiPayload.actions as unknown[]) : [];
+  return legacyActions
+    .map((entry) => toRecord(entry))
+    .filter((entry) => String(entry.action_code || "").trim().length > 0)
+    .map((entry) => ({
+      ...entry,
+      role: "choice",
+      surface: "choice",
+    }));
+}
+
+function actionCodeForRole(resultData: Record<string, unknown>, role: string): string {
+  const roleNorm = String(role || "").trim().toLowerCase();
+  if (!roleNorm) return "";
+  const actions = actionContractActionsForResult(resultData);
+  for (const action of actions) {
+    if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
+    const actionCode = String(action.action_code || "").trim();
+    if (actionCode) return actionCode;
+  }
+  return "";
+}
+
+function choiceActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
+  return actionContractActionsForResult(resultData).filter(
+    (action) => String(action.role || "").trim().toLowerCase() === "choice"
+  );
+}
+
 function stepIndex(stepId: string): number {
   const idx = ORDER.indexOf(stepId);
   return idx >= 0 ? idx : 0;
@@ -222,6 +265,72 @@ function blockedMessageForReason(
   };
 }
 
+function readActionLiveness(
+  result: Record<string, unknown>,
+  state: Record<string, unknown>
+): {
+  ack_status: string;
+  state_advanced: boolean;
+  reason_code: string;
+  action_code_echo: string;
+  client_action_id_echo: string;
+} | null {
+  const stateLiveness = toRecord(state.ui_action_liveness);
+  const ackStatus = String(result.ack_status || state.ack_status || stateLiveness.ack_status || "")
+    .trim()
+    .toLowerCase();
+  if (!ackStatus) return null;
+  const stateAdvancedRaw =
+    result.state_advanced ??
+    state.state_advanced ??
+    stateLiveness.state_advanced ??
+    true;
+  const stateAdvanced =
+    stateAdvancedRaw === true ||
+    String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
+  return {
+    ack_status: ackStatus,
+    state_advanced: stateAdvanced,
+    reason_code: String(result.reason_code || state.reason_code || stateLiveness.reason_code || "")
+      .trim()
+      .toLowerCase(),
+    action_code_echo: String(result.action_code_echo || state.action_code_echo || stateLiveness.action_code_echo || "")
+      .trim()
+      .toUpperCase(),
+    client_action_id_echo: String(
+      result.client_action_id_echo || state.client_action_id_echo || stateLiveness.client_action_id_echo || ""
+    ).trim(),
+  };
+}
+
+function livenessNoticeMessage(
+  lang: string,
+  liveness: {
+    ack_status: string;
+    state_advanced: boolean;
+    reason_code: string;
+    action_code_echo: string;
+    client_action_id_echo: string;
+  }
+): string {
+  if (liveness.ack_status === "timeout") {
+    return uiText(lang, "transient.timeout", "") || "The action timed out. Please retry.";
+  }
+  if (liveness.ack_status === "dropped") {
+    const base = uiText(lang, "error.contract.body", "") || "Action could not be applied.";
+    return `${base} (${liveness.reason_code || "dropped"})`;
+  }
+  if (liveness.ack_status === "rejected") {
+    const base = uiText(lang, "error.contract.body", "") || "Action was rejected.";
+    return `${base} (${liveness.reason_code || "rejected"})`;
+  }
+  if (!liveness.state_advanced) {
+    const base = uiText(lang, "error.contract.body", "") || "No state update was applied.";
+    return `${base} (${liveness.reason_code || "state_not_advanced"})`;
+  }
+  return "";
+}
+
 function renderBlockedState(cardDesc: HTMLElement, lang: string, title: string, body: string): void {
   clearElement(cardDesc);
   const shell = appendTextNode("div", "bootstrap-wait-shell", "");
@@ -238,13 +347,7 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   wrap.innerHTML = "";
 
   const state = (resultData?.state as Record<string, unknown>) || {};
-  const uiPayload =
-    resultData && typeof resultData.ui === "object" && resultData.ui
-      ? (resultData.ui as Record<string, unknown>)
-      : {};
-  const structuredActions = Array.isArray(uiPayload.actions)
-    ? (uiPayload.actions as Array<Record<string, unknown>>)
-    : [];
+  const structuredActions = choiceActionsForResult(resultData);
   const _unusedChoices = Array.isArray(choices) ? choices : [];
   void _unusedChoices;
   const lang = uiLang(state);
@@ -429,6 +532,10 @@ export function render(overrideToolOutput?: unknown): void {
       ? (uiPayload.view as Record<string, unknown>)
       : {};
   const uiStringsStatus = String((state?.ui_strings_status || "")).trim().toLowerCase();
+  const actionLiveness = readActionLiveness(result, state);
+  const hasExplicitActionError =
+    Boolean(actionLiveness) &&
+    (String(actionLiveness?.ack_status || "") !== "accepted" || actionLiveness?.state_advanced !== true);
   const viewMode = String(uiView.mode || "").trim().toLowerCase();
   const uiGateReason = String((state?.ui_gate_reason || "")).trim().toLowerCase();
   const serverExplicitWaiting = viewMode === "waiting_locale";
@@ -456,7 +563,7 @@ export function render(overrideToolOutput?: unknown): void {
   const startHint = document.getElementById("startHint");
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
-  const startActionCode = String((state?.ui_action_start || "")).trim();
+  const startActionCode = actionCodeForRole(result, "start");
   const hasStartAction = startActionCode.length > 0;
   if (!hasExplicitServerRouting) {
     console.warn("[ui_contract_missing_view_mode]", {
@@ -519,7 +626,11 @@ export function render(overrideToolOutput?: unknown): void {
     }
     if (result?.ok === false) return;
   } else {
-    clearInlineNotice();
+    if (hasExplicitActionError && actionLiveness) {
+      setInlineNotice(livenessNoticeMessage(lang, actionLiveness));
+    } else {
+      clearInlineNotice();
+    }
   }
 
   const showPreStart = serverExplicitPrestart;
@@ -684,9 +795,7 @@ export function render(overrideToolOutput?: unknown): void {
   const isViewModeDreamBuilderRefine = uiViewVariant === "dream_builder_refine";
   const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
   const uiQuestionText = String(uiPayload.questionText || "").trim();
-  const structuredActions = Array.isArray(uiPayload.actions)
-    ? (uiPayload.actions as Array<Record<string, unknown>>)
-    : [];
+  const structuredActions = choiceActionsForResult(result);
   const hasStructuredActions = structuredActions.length > 0;
   const promptRaw = (
     (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") ||
@@ -1038,7 +1147,7 @@ export function render(overrideToolOutput?: unknown): void {
           }
           payload.push(row);
         }
-        const actionCode = String((state as Record<string, unknown>).ui_action_text_submit || "").trim();
+        const actionCode = actionCodeForRole(result, "text_submit");
         if (!actionCode) return;
         win.__dreamScoringScores = [];
         callRunStep(actionCode, { __pending_scores: payload });
@@ -1154,7 +1263,7 @@ export function render(overrideToolOutput?: unknown): void {
   const choiceMode =
     !requireWordingPick && (renderedChoiceButtons || hasStructuredActions);
 
-  const textSubmitActionCode = String((state as Record<string, unknown>).ui_action_text_submit || "").trim();
+  const textSubmitActionCode = actionCodeForRole(result, "text_submit");
   const textSubmitAvailable = textSubmitActionCode.length > 0;
   inputWrap.style.display = choiceMode || !textSubmitAvailable ? "none" : "flex";
   if (!textSubmitAvailable) setSendEnabled(false);

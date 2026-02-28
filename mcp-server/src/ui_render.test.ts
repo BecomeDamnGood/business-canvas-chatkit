@@ -1040,7 +1040,7 @@ test("btnStartDreamExercise sends Dream start-exercise actioncode", () => {
   );
   assert.ok(blockMatch, "Expected btnStartDreamExercise handler block in ui/lib/main.ts");
   const block = blockMatch[0];
-  assert.match(block, /const actionCode = actionCodeFromState\("ui_action_dream_start_exercise"\);/);
+  assert.match(block, /const actionCode = actionCodeFromRole\("dream_start_exercise"\);/);
   assert.match(block, /callRunStep\(actionCode\)/);
 });
 
@@ -1161,8 +1161,8 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
   assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*ingestHostPayload\(data\.params, "host_notification"\)/);
   assert.match(source, /openai:set_globals[\s\S]*ingestHostPayload\(payload, "set_globals"\)/);
   assert.match(source, /startup_set_globals_empty_payload_ignored/);
-  assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*const actionCode = actionCodeFromState\("ui_action_start"\);[\s\S]*callRunStep\(actionCode, \{ started: "true" \}\)/);
-  assert.match(source, /\[ui_action_missing\]/);
+  assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*const actionCode = actionCodeFromRole\("start"\);[\s\S]*callRunStep\(actionCode, \{ started: "true" \}\)/);
+  assert.match(source, /\[ui_action_contract_missing\]/);
   assert.doesNotMatch(source, /function normalizeHostToolResultNotification\(/);
   assert.doesNotMatch(source, /mergeToolOutputWithResponseMetadata\(/);
   assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
@@ -1172,7 +1172,7 @@ test("main source handles host tool-result via shared bootstrap scheduler", () =
 test("render source fail-closes missing server view mode and enforces start action in prestart", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /\[ui_contract_missing_view_mode\]/);
-  assert.match(source, /const startActionCode = String\(\(state\?\.ui_action_start \|\| ""\)\)\.trim\(\);/);
+  assert.match(source, /const startActionCode = actionCodeForRole\(result, "start"\);/);
   assert.match(source, /const hasStartAction = startActionCode\.length > 0;/);
   assert.match(source, /\[ui_contract_missing_start_action\]/);
   assert.match(source, /\[ui_contract_interactive_content_absent\]/);
@@ -1857,6 +1857,11 @@ test("render keeps non-EN pending locale in explicit wait view without EN presta
         mode: "waiting_locale",
         waiting_locale: true,
       },
+      action_contract: {
+        actions: [
+          { id: "start", action_code: "ACTION_START", role: "start", surface: "primary", label_key: "btnStart" },
+        ],
+      },
     },
   }));
 
@@ -1905,6 +1910,11 @@ test("render follows explicit server prestart mode during startup grace", () => 
         mode: "prestart",
         waiting_locale: false,
       },
+      action_contract: {
+        actions: [
+          { id: "start", action_code: "ACTION_START", role: "start", surface: "primary", label_key: "btnStart" },
+        ],
+      },
     },
   }));
 
@@ -1948,6 +1958,11 @@ test("render recovers interactive-without-content on step_0 to actionable presta
         waiting_locale: false,
       },
       actions: [],
+      action_contract: {
+        actions: [
+          { id: "start", action_code: "ACTION_START", role: "start", surface: "primary", label_key: "btnStart" },
+        ],
+      },
     },
   }));
 
@@ -1989,7 +2004,15 @@ test("callRunStep dispatches ACTION_START exactly once from step_0 fallback-pres
   (globalThis as any).__BSC_LATEST__ = { state: { ...baseState }, lang: "en" };
   const fallbackPayload = toolOutputFromWidgetResult({
     state: { ...baseState },
-    ui: { view: { mode: "interactive", waiting_locale: false }, actions: [] },
+    ui: {
+      view: { mode: "interactive", waiting_locale: false },
+      actions: [],
+      action_contract: {
+        actions: [
+          { id: "start", action_code: "ACTION_START", role: "start", surface: "primary", label_key: "btnStart" },
+        ],
+      },
+    },
   });
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = fallbackPayload;
   render(fallbackPayload);
@@ -2203,9 +2226,13 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.match(source, /\[ui_dispatch_ack_only\]/);
   assert.match(source, /ui_transport_unavailable/);
   assert.match(source, /ui_start_dispatch_failed/);
+  assert.match(source, /type ActionAckStatus = "accepted" \| "rejected" \| "timeout" \| "dropped";/);
+  assert.match(source, /function extractActionLiveness\(/);
+  assert.match(source, /\[ui_action_liveness_ack\]/);
+  assert.match(source, /\[ui_action_liveness_explicit_error\]/);
+  assert.match(source, /scheduleActionLivenessRecoveryPoll\(/);
   assert.match(source, /ui_start_dispatch_ack_without_state_advance/);
   assert.match(source, /ui_ordering_patch_dropped/);
-  assert.match(source, /const startAdvanced = hasIngestedResult && \(orderingAdvanced \|\| responseViewMode !== "prestart"\);/);
   assert.match(source, /payload_reason_code: resolvedResponse\.source_reason_code/);
   assert.match(source, /notifyHostTransportSignal/);
   assert.match(source, /function canUseBridge\(\): boolean \{[\s\S]*return bridgeEnabled;/);

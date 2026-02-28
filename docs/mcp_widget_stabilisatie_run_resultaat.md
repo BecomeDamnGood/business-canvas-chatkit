@@ -315,3 +315,83 @@ Lokaal uitgevoerd (verplicht):
     - `mcp-server/src/ui_render.test.ts`
     - `mcp-server/src/mcp_app_contract.test.ts`
   - Daarna `cd mcp-server && node scripts/build-ui.mjs`.
+
+# MCP Widget Stabilisatie - Run Resultaat (2026-02-28 09:40 UTC, action-liveness contractlaag)
+
+## 0) Samenvatting
+- Geimplementeerd: structurele Action-Liveness Contractlaag over transport + contract + UI.
+- Doel gehaald op code/testniveau:
+  - uniforme action lifecycle handling,
+  - uniforme server action source voor UI dispatch,
+  - expliciete liveness responsevelden,
+  - fail-closed UX zonder silent no-op,
+  - observability markers/tellers per action.
+
+## 1) Exacte wijzigingen
+1. `mcp-server/src/server/run_step_transport_context.ts`
+- Nieuwe liveness-types en helpers:
+  - `ActionAckStatus`, `ActionLivenessContract`
+  - `buildActionLivenessContract(...)`
+  - `attachActionLivenessToResult(...)`
+  - `hasStateAdvancedByResponseSeq(...)`
+- `RunStepContext` uitgebreid met `clientActionId`.
+
+2. `mcp-server/src/server/run_step_transport.ts`
+- Liveness-instrumentatie toegevoegd op alle paden:
+  - dispatch marker: `run_step_action_liveness_dispatch`
+  - ack/advance/error markers: `run_step_action_liveness_ack`, `run_step_action_liveness_advance`, `run_step_action_liveness_explicit_error`
+- Counters per marker toegevoegd (`dispatch_count`, `ack_count`, `advance_count`, `explicit_error_count`).
+- Early-return paden (idempotency/stale) verrijkt met expliciete livenessvelden.
+- Succes/foutpad verrijkt met `ack_status/state_advanced/reason_code/action_code_echo/client_action_id_echo`.
+
+3. `mcp-server/src/server/run_step_transport_stale.ts`
+- `StalePreflightResult` uitgebreid met `earlyDropReasonCode` zodat dropped-path expliciete reason-code teruggeeft.
+
+4. `mcp-server/src/server/run_step_model_result.ts`
+- Model-safe response verrijkt met livenessvelden (top-level + state mirror `ui_action_liveness`) wanneer aanwezig.
+
+5. `mcp-server/src/handlers/turn_contract.ts`
+- `ensureActionLivenessContract(...)` toegevoegd: default/normalisatie van livenessvelden op response/state.
+- `ensureUnifiedUiActionContract(...)` toegevoegd:
+  - bouwt `ui.action_contract.actions[]` als uniforme server action source met rollen/surfaces.
+- Contractassertions uitgebreid:
+  - validatie van ack-status domein,
+  - reason-code verplicht bij `state_advanced=false`,
+  - prestart vereist start-action in action_contract.
+
+6. `mcp-server/ui/lib/main.ts`
+- Client dispatch voor knoppen/text submit leest nu roles uit `ui.action_contract.actions[]` via `actionCodeFromRole(...)`.
+- Legacy state-key dispatchpad verwijderd uit main-flow.
+
+7. `mcp-server/ui/lib/ui_render.ts`
+- Rendering leest choice/start/text-submit acties via action-contract helpers.
+- Expliciete liveness-notice rendering toegevoegd (`readActionLiveness(...)`, `livenessNoticeMessage(...)`).
+
+8. `mcp-server/ui/lib/ui_actions.ts`
+- Generieke liveness-evaluatie voor alle action dispatches toegevoegd.
+- `client_action_id` wordt nu altijd gegenereerd als die ontbreekt.
+- Explicit-error handling en begrensde recovery-poll voor no-advance toegevoegd.
+
+9. Testupdates
+- `mcp-server/src/ui_render.test.ts`
+- `mcp-server/src/mcp_app_contract.test.ts`
+- `mcp-server/src/handlers/run_step.test.ts`
+- Assertions en scenario's aangepast voor action-contract + livenessvelden.
+
+## 2) Verplichte testcommando's
+1. `cd mcp-server && npm run typecheck`
+- Resultaat: PASS.
+
+2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts`
+- Resultaat: PASS (106 pass, 0 fail).
+
+3. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
+- Resultaat: PASS (168 pass, 0 fail, 1 skipped).
+
+## 3) Contract-/ketenbewijs
+- Dispatch -> Ack -> Advance/Error is nu expliciet traceerbaar via vaste liveness-markers.
+- `ack_status/state_advanced/reason_code/action_code_echo/client_action_id_echo` komt nu structureel mee in response/state.
+- UI toont expliciete foutstatus op rejected/timeout/dropped/no-advance en laat geen stille disable/no-op als eindstatus staan.
+
+## 4) Openstaand
+- Live 5-flow bewijs (start/menu/confirm/text-submit) met CloudWatch timestamps is nog niet uitgevoerd in deze run.
