@@ -107,6 +107,8 @@ test("MCP wrapper parity: model result stays safe and _meta.widget_result keeps 
 test("MCP app contract: bundled render-state resolves only _meta.widget_result sources", () => {
   assert.match(bundledRuntimeSource, /function extractWidgetResult\(raw\) \{/);
   assert.match(bundledRuntimeSource, /toRecord\(toRecord\(root\._meta\)\.widget_result\)/);
+  assert.match(bundledRuntimeSource, /toRecord\(root\.toolResponseMetadata\)/);
+  assert.match(bundledRuntimeSource, /toRecord\(toolResponseMetadata\.widget_result\)/);
   assert.match(bundledRuntimeSource, /toRecord\(toRecord\(structured\._meta\)\.widget_result\)/);
   assert.match(bundledRuntimeSource, /toRecord\(toRecord\(toolOutput\._meta\)\.widget_result\)/);
   assert.doesNotMatch(bundledRuntimeSource, /toolOutput\._widget_result/);
@@ -114,6 +116,11 @@ test("MCP app contract: bundled render-state resolves only _meta.widget_result s
   assert.doesNotMatch(bundledRuntimeSource, /structuredContent\._widget_result/);
   assert.doesNotMatch(bundledRuntimeSource, /root\.result/);
   assert.doesNotMatch(bundledRuntimeSource, /structuredContent\.result/);
+  assert.match(bundledRuntimeSource, /var toolResponseMetadata = toRecord\(openai\.toolResponseMetadata\);/);
+  assert.match(
+    bundledRuntimeSource,
+    /return\s*\{\s*toolOutput:\s*toolOutput,\s*toolResponseMetadata:\s*toolResponseMetadata,\s*\};/
+  );
   assert.match(bundledRuntimeSource, /window\.addEventListener\("openai:set_globals"/);
   assert.match(bundledRuntimeSource, /window\.addEventListener\("openai:notification"/);
   assert.match(bundledRuntimeSource, /if \(method !== "ui\/notifications\/tool-result"\) \{/);

@@ -801,8 +801,10 @@
           var root = toRecord(raw);
           var structured = toRecord(root.structuredContent);
           var toolOutput = toRecord(root.toolOutput);
+          var toolResponseMetadata = toRecord(root.toolResponseMetadata);
           var candidates = [
             toRecord(toRecord(root._meta).widget_result),
+            toRecord(toolResponseMetadata.widget_result),
             toRecord(toRecord(structured._meta).widget_result),
             toRecord(toRecord(toolOutput._meta).widget_result),
           ];
@@ -1060,7 +1062,13 @@
 
         function readInitialToolOutput() {
           var openai = openAiApi();
-          return openai.toolOutput || {};
+          var toolOutput = toRecord(openai.toolOutput);
+          var toolResponseMetadata = toRecord(openai.toolResponseMetadata);
+          if (Object.keys(toolResponseMetadata).length === 0) return toolOutput;
+          return {
+            toolOutput: toolOutput,
+            toolResponseMetadata: toolResponseMetadata,
+          };
         }
 
         function ingestSetGlobalsPayload() {

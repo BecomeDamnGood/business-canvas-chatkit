@@ -1166,6 +1166,17 @@ test("bundled source is the sole event ingest owner for host updates", () => {
   assert.doesNotMatch(source, /notifyHostTransportSignal/);
 });
 
+test("bundled source reads canonical widget_result from host toolResponseMetadata envelope", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /var toolResponseMetadata = toRecord\(root\.toolResponseMetadata\);/);
+  assert.match(source, /toRecord\(toolResponseMetadata\.widget_result\)/);
+  assert.match(source, /var toolResponseMetadata = toRecord\(openai\.toolResponseMetadata\);/);
+  assert.match(
+    source,
+    /return\s*\{\s*toolOutput:\s*toolOutput,\s*toolResponseMetadata:\s*toolResponseMetadata,\s*\};/
+  );
+});
+
 test("render source fail-closes missing server view mode and enforces start action in prestart", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /\[ui_contract_missing_view_mode\]/);

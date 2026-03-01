@@ -37,6 +37,15 @@ Success (JSON-RPC `result`):
   - `action_contract.actions[]`: canonical action descriptors
 - `result._meta.widget_result`: volledige widget payload (authoritative render source)
 
+Host envelope note (ChatGPT/OpenAI runtime):
+- The widget runtime ingests only canonical `widget_result` metadata wrappers.
+- Accepted wrappers are:
+  - root `_meta.widget_result`
+  - root `toolResponseMetadata.widget_result`
+  - `structuredContent._meta.widget_result`
+  - `toolOutput._meta.widget_result`
+- Non-metadata aliases (`_widget_result`, `root.result`, `structuredContent.result`) are never authoritative render sources.
+
 Error:
 - Transport/JSON-RPC failures: top-level `error` object.
 - Tool-level failures: `result.structuredContent.result.ok = false` met `error` object (`type`, `user_message`, optional retry metadata).
