@@ -98,62 +98,52 @@
       }
 
       .page-header {
-        margin-bottom: 12px;
+        margin-bottom: 18px;
       }
 
-      .page-head-shell {
-        border: 1px solid var(--line);
-        border-radius: var(--radius-lg);
-        padding: 12px 14px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.52));
-        box-shadow: var(--shadow-md);
-        backdrop-filter: blur(12px);
+      .page-header .wrap {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px 18px;
+        align-items: end;
       }
 
-      .brand-row {
+      .title {
+        font-family: "DM Serif Display", Georgia, serif;
+        font-size: 34px;
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+        color: #2d2118;
+        margin: 0;
+      }
+
+      .byline {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 12px;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+        white-space: nowrap;
       }
 
-      .brand-pill {
+      .byMark {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        border: 1px solid rgba(232, 116, 42, 0.32);
-        background: var(--brand-soft);
+        padding: 3px 9px;
         border-radius: 999px;
-        padding: 6px 10px;
-      }
-
-      .brand-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--brand);
-      }
-
-      .brand-stroke {
-        width: 82px;
-        height: 2px;
-        border-radius: 99px;
-        background: linear-gradient(90deg, rgba(232, 116, 42, 0.75), rgba(232, 116, 42, 0.18));
-      }
-
-      .mode-chip {
-        min-width: 72px;
-        text-align: right;
+        border: 1px solid rgba(232, 116, 42, 0.35);
+        background: rgba(232, 116, 42, 0.09);
+        color: #7d471f;
+        font-weight: 600;
         font-size: 11px;
-        color: var(--muted);
-        letter-spacing: 0.08em;
+        letter-spacing: 0.03em;
         text-transform: uppercase;
       }
 
-      .stepper-row {
-        margin-top: 10px;
-        padding-top: 10px;
-        border-top: 1px dashed rgba(96, 66, 43, 0.18);
+      .stepperRow {
+        grid-column: 1 / -1;
+        border-top: 1px dashed rgba(96, 66, 43, 0.2);
+        padding-top: 8px;
       }
 
       .stepper {
@@ -164,14 +154,14 @@
 
       .stepper i {
         display: block;
-        width: 20px;
+        width: 24px;
         height: 4px;
         border-radius: 999px;
-        background: rgba(35, 25, 18, 0.12);
+        background: rgba(35, 25, 18, 0.14);
       }
 
       .stepper i:nth-child(-n + 2) {
-        background: rgba(232, 116, 42, 0.35);
+        background: rgba(232, 116, 42, 0.44);
       }
 
       .card-stage {
@@ -213,9 +203,9 @@
       }
 
       .status {
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
-        letter-spacing: 0.07em;
+        letter-spacing: 0.08em;
         text-transform: none;
         color: #5d3821;
         background: rgba(232, 116, 42, 0.1);
@@ -232,6 +222,27 @@
         letter-spacing: 0.04em;
         text-transform: uppercase;
         min-height: 20px;
+      }
+
+      .cardInner {
+        display: grid;
+        gap: 10px;
+      }
+
+      .badge {
+        font-family: "DM Serif Display", Georgia, serif;
+        font-size: 40px;
+        line-height: 1;
+        color: rgba(232, 116, 42, 0.92);
+        letter-spacing: -0.015em;
+      }
+
+      .sectionTitle {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #8a7a6d;
       }
 
       .body {
@@ -262,7 +273,7 @@
         border-top: 1px dashed rgba(96, 66, 43, 0.26);
         padding-top: 12px;
         font-family: "DM Serif Display", Georgia, serif;
-        font-size: 24px;
+        font-size: 40px;
         line-height: 1.32;
         letter-spacing: 0;
         color: var(--ink);
@@ -337,6 +348,176 @@
         background: color-mix(in srgb, var(--danger) 6%, #fff);
       }
 
+      .subtitle {
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .legacy-panels {
+        display: grid;
+        gap: 10px;
+        margin-top: 2px;
+      }
+
+      .cardTitle {
+        font-family: "DM Serif Display", Georgia, serif;
+        font-size: 26px;
+        color: var(--ink);
+        line-height: 1.25;
+      }
+
+      .cardDesc {
+        font-size: 14px;
+        color: #66574c;
+        line-height: 1.6;
+      }
+
+      .inlineNotice {
+        padding: 9px 12px;
+        border: 1px solid rgba(232, 116, 42, 0.32);
+        background: rgba(232, 116, 42, 0.09);
+        border-radius: var(--radius-md);
+        color: #7d481f;
+        font-size: 13px;
+      }
+
+      .presentationPreview,
+      .statementsPanel,
+      .scoringPanel,
+      .wordingChoiceWrap {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.54);
+        padding: 10px;
+      }
+
+      .presentationActions {
+        margin-top: 10px;
+      }
+
+      .presentationThumb {
+        display: block;
+        width: 100%;
+        border-radius: 10px;
+        min-height: 90px;
+        object-fit: cover;
+        border: 1px solid var(--line);
+      }
+
+      .presentationDownload {
+        display: inline-block;
+        border: 1px solid rgba(232, 116, 42, 0.48);
+        border-radius: 999px;
+        padding: 7px 12px;
+        color: #6f401c;
+        text-decoration: none;
+        font-size: 13px;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .btn {
+        border: 1px solid rgba(232, 116, 42, 0.45);
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 14px;
+        color: #5d3418;
+        background: rgba(232, 116, 42, 0.1);
+      }
+
+      .btn.primary {
+        background: linear-gradient(180deg, rgba(241, 204, 178, 0.3), rgba(232, 116, 42, 0.26));
+      }
+
+      .inputWrap {
+        display: grid;
+        gap: 8px;
+      }
+
+      .send {
+        border-radius: 12px;
+        justify-self: end;
+        padding: 6px 10px;
+      }
+
+      .startHint,
+      .purposeInstructionHint,
+      .statementsTitle,
+      .statementsCount,
+      .scoringIntro,
+      .wordingChoiceHeading,
+      .wordingChoiceInstruction {
+        font-size: 12px;
+        color: #7a6d62;
+      }
+
+      .statementsList,
+      .wordingChoiceList {
+        margin: 0;
+        padding-left: 18px;
+        color: #6c5e52;
+        font-size: 13px;
+      }
+
+      .wordingChoiceCard {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .wordingChoiceText {
+        font-size: 13px;
+        color: #6a5c50;
+      }
+
+      .choiceBtn.wordingChoiceSelectBtn {
+        margin-top: 8px;
+      }
+
+      .scoringContinueWrap {
+        margin-top: 8px;
+      }
+
+      .scoringClusterHeader {
+        font-size: 12px;
+        color: #7b6e62;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .scoringClusterRows {
+        display: grid;
+        gap: 6px;
+      }
+
+      .avgScore,
+      .themeName {
+        font-size: 12px;
+        color: #7b6e62;
+      }
+
+      .bootstrap-wait-shell {
+        display: grid;
+        gap: 8px;
+      }
+
+      .bootstrap-wait-title {
+        font-size: 13px;
+        color: #76695f;
+      }
+
+      .skeleton-line {
+        height: 11px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.07);
+      }
+
       .is-hidden {
         display: none !important;
       }
@@ -353,13 +534,18 @@
           padding: 10px 6px 16px;
         }
 
-        .page-head-shell {
-          padding: 10px;
-          border-radius: 16px;
+        .title {
+          font-size: 28px;
+        }
+
+        .page-header .wrap {
+          grid-template-columns: 1fr;
+          gap: 8px;
+          align-items: start;
         }
 
         .stepper i {
-          width: 15px;
+          width: 16px;
           height: 3px;
         }
 
@@ -381,8 +567,12 @@
           font-size: 11px;
         }
 
+        .badge {
+          font-size: 30px;
+        }
+
         .prompt {
-          font-size: 20px;
+          font-size: 28px;
         }
       }
     </style>
@@ -390,18 +580,15 @@
   <body>
     <header class="page-header">
       <div class="wrap">
-        <div class="page-head-shell">
-          <div class="brand-row">
-            <div class="brand-pill" aria-hidden="true">
-              <span class="brand-dot"></span>
-              <span class="brand-stroke"></span>
-            </div>
-            <div class="mode-chip" id="meta"></div>
-          </div>
-          <div class="stepper-row" aria-hidden="true">
-            <div class="stepper">
-              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-            </div>
+        <h1 class="title" id="uiTitle">Business Strategy Canvas Builder</h1>
+        <div class="byline">
+          <span id="byText">A business model by</span>
+          <span class="byMark">Ben Steenstra</span>
+          <span class="meta" id="meta"></span>
+        </div>
+        <div class="stepperRow" aria-hidden="true">
+          <div class="stepper" id="stepper">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
           </div>
         </div>
       </div>
@@ -414,17 +601,96 @@
             <div class="status" id="status"></div>
           </header>
           <main class="body">
-            <p class="card" id="card"></p>
+            <div class="cardInner">
+              <div class="badge" id="badge"></div>
+              <div class="sectionTitle" id="sectionTitle"></div>
+              <div class="cardTitle is-hidden" id="cardTitle"></div>
+              <p class="card" id="card"></p>
+              <div class="cardDesc is-hidden" id="cardDesc"></div>
+            </div>
             <p class="prompt" id="prompt"></p>
             <div class="actions" id="actions"></div>
-            <form class="input" id="inputForm">
-              <textarea id="inputText"></textarea>
-              <button type="submit" id="inputSend"></button>
-            </form>
+            <div class="inputWrap" id="inputWrap">
+              <form class="input" id="inputForm">
+                <textarea id="inputText"></textarea>
+                <button type="submit" id="inputSend"></button>
+              </form>
+              <textarea id="input" class="is-hidden" aria-hidden="true"></textarea>
+              <button class="send is-hidden" id="send" type="button" aria-hidden="true">Send</button>
+            </div>
             <p class="error" id="error"></p>
+
+            <div class="legacy-panels is-hidden">
+              <div class="bootstrap-wait-shell is-hidden">
+                <div class="bootstrap-wait-title">Loading…</div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+                <div class="skeleton-line"></div>
+              </div>
+
+              <div class="inlineNotice is-hidden" id="inlineNotice"></div>
+
+              <div class="presentationPreview is-hidden" id="presentationPreview">
+                <a class="presentationThumbLink" id="presentationThumbLink" target="_blank" rel="noopener noreferrer">
+                  <img class="presentationThumb" id="presentationThumb" alt="Presentation preview" />
+                </a>
+                <div class="presentationActions">
+                  <a class="presentationDownload" id="presentationDownload" target="_blank" rel="noopener noreferrer">Download PDF</a>
+                </div>
+              </div>
+
+              <div class="purposeInstructionHint is-hidden" id="purposeInstructionHint"></div>
+
+              <div class="statementsPanel is-hidden" id="statementsPanel">
+                <div class="statementsTitle" id="statementsTitle"></div>
+                <div class="statementsCount" id="statementsCount"></div>
+                <div class="statementsList" id="statementsList"></div>
+              </div>
+
+              <div class="scoringPanel is-hidden" id="scoringPanel">
+                <div class="scoringIntro" id="scoringIntro"></div>
+                <div id="scoringClusters">
+                  <div class="scoringClusterHeader">Scoring</div>
+                  <div class="scoringClusterRows">
+                    <div class="themeName">Theme</div>
+                    <div class="avgScore">0.0</div>
+                  </div>
+                </div>
+                <div class="scoringContinueWrap">
+                  <button type="button" class="btn primary" id="btnScoringContinue">Continue</button>
+                </div>
+              </div>
+
+              <div class="wordingChoiceWrap is-hidden" id="wordingChoiceWrap">
+                <div class="wordingChoiceHeading" id="wordingChoiceHeading"></div>
+                <div class="wordingChoiceCard" id="wordingChoiceUserCard">
+                  <div class="wordingChoiceText" id="wordingChoiceUserText"></div>
+                  <ul class="wordingChoiceList" id="wordingChoiceUserList"></ul>
+                  <button class="choiceBtn wordingChoiceSelectBtn" id="wordingChoicePickUser" type="button">Choose</button>
+                </div>
+                <div class="wordingChoiceCard" id="wordingChoiceSuggestionCard">
+                  <div class="wordingChoiceText" id="wordingChoiceSuggestionText"></div>
+                  <ul class="wordingChoiceList" id="wordingChoiceSuggestionList"></ul>
+                  <button class="choiceBtn wordingChoiceSelectBtn" id="wordingChoicePickSuggestion" type="button">Choose</button>
+                </div>
+                <div class="wordingChoiceInstruction" id="wordingChoiceInstruction"></div>
+              </div>
+
+              <div class="choiceWrap is-hidden" id="choiceWrap"></div>
+              <div class="row is-hidden" id="controls">
+                <button class="btn primary" id="btnStart" type="button"><span id="btnStartText">Start</span><span class="cta-arrow">-></span></button>
+                <div class="startHint" id="startHint"></div>
+                <button class="btn primary" id="btnGoToNextStep" type="button">Next step</button>
+                <button class="btn primary" id="btnStartDreamExercise" type="button">Start exercise</button>
+                <button class="btn" id="btnSwitchToSelfDream" type="button">Switch to self dream</button>
+                <button class="btn primary" id="btnDreamConfirm" type="button">Confirm dream</button>
+              </div>
+            </div>
           </main>
         </div>
       </section>
+      <div class="subtitle is-hidden" id="uiSubtitle"></div>
+      <div id="debugOverlay" class="is-hidden" aria-hidden="true"></div>
     </div>
 
     <script>
@@ -441,6 +707,10 @@
         var ui = {
           status: byId("status"),
           meta: byId("meta"),
+          uiTitle: byId("uiTitle"),
+          byText: byId("byText"),
+          badge: byId("badge"),
+          sectionTitle: byId("sectionTitle"),
           card: byId("card"),
           prompt: byId("prompt"),
           actions: byId("actions"),
@@ -448,6 +718,7 @@
           inputText: byId("inputText"),
           inputSend: byId("inputSend"),
           error: byId("error"),
+          uiSubtitle: byId("uiSubtitle"),
         };
 
         var runtime = {
@@ -470,6 +741,15 @@
         function uiString(state, key) {
           var strings = toRecord(state.ui_strings);
           return asText(strings[key]);
+        }
+
+        function deriveStepBadge(stepId) {
+          var normalized = asText(stepId);
+          var match = /^step_(\d+)$/i.exec(normalized);
+          if (!match) return "";
+          var index = Number(match[1]);
+          if (!Number.isFinite(index)) return "";
+          return String(index + 1).padStart(2, "0");
         }
 
         function setHidden(el, hidden) {
@@ -500,10 +780,16 @@
           if (ui.meta) ui.meta.textContent = "";
           if (ui.card) ui.card.textContent = "";
           if (ui.prompt) ui.prompt.textContent = "";
+          if (ui.badge) ui.badge.textContent = "";
+          if (ui.sectionTitle) ui.sectionTitle.textContent = "";
+          if (ui.uiSubtitle) ui.uiSubtitle.textContent = "";
           if (ui.actions) ui.actions.innerHTML = "";
           if (ui.inputText) ui.inputText.value = "";
           if (ui.error) ui.error.textContent = CONTRACT_FAIL_TEXT + " [" + reason + "]";
           setHidden(ui.error, false);
+          setHidden(ui.badge, true);
+          setHidden(ui.sectionTitle, true);
+          setHidden(ui.uiSubtitle, true);
           setHidden(ui.card, true);
           setHidden(ui.prompt, true);
           setHidden(ui.actions, true);
@@ -645,8 +931,24 @@
           runtime.mode = mode;
           runtime.actions = parseActions(result);
 
-          if (ui.status) ui.status.textContent = asText(state.current_step) || "";
+          var stepText = asText(state.current_step) || "";
+          if (ui.status) ui.status.textContent = stepText;
           if (ui.meta) ui.meta.textContent = mode;
+          if (ui.sectionTitle) ui.sectionTitle.textContent = stepText;
+          setHidden(ui.sectionTitle, stepText.length === 0);
+
+          var badgeText = deriveStepBadge(stepText);
+          if (ui.badge) ui.badge.textContent = badgeText;
+          setHidden(ui.badge, badgeText.length === 0);
+
+          var subtitle = uiString(state, "uiSubtitle") || uiString(state, "uiUseWidgetToContinue");
+          if (ui.uiSubtitle) ui.uiSubtitle.textContent = subtitle;
+          setHidden(ui.uiSubtitle, subtitle.length === 0);
+
+          var titleText = uiString(state, "uiTitle");
+          if (titleText && ui.uiTitle) ui.uiTitle.textContent = titleText;
+          var byText = uiString(state, "uiBylinePrefix");
+          if (byText && ui.byText) ui.byText.textContent = byText;
 
           var bodyText = asText(result.text);
           var promptText = asText(result.prompt);

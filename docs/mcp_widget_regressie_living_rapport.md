@@ -2757,3 +2757,46 @@ Status van deze poging:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: volledige presentatie is hersteld zonder logica-drift ten opzichte van de dumb-renderer architectuur.
+
+### Poging 2026-03-01 07:02 UTC (Legacy UI-elementen volledig terug als pure presentatie)
+
+- Hypothese:
+  - Ook de resterende legacy interface-elementen (panel-IDs/classes) kunnen teruggezet worden zonder oude client-intelligentie te reactiveren.
+- Waarom deze hypothese (bewijs vooraf):
+  - Na de vorige visual restore bleken nog meerdere oude visuele componenten afwezig (o.a. presentation/scoring/wording panels en control shells).
+  - Contractflow was al stabiel en testgroen; tekort zat in structurele UI-pariteit.
+- Exacte wijziging(en):
+  - `mcp-server/ui/step-card.bundled.html` uitgebreid met de ontbrekende legacy UI-structuren:
+    - teruggeplaatste IDs voor oude panelen/controls (`presentation*`, `scoring*`, `statements*`, `wordingChoice*`, `controls`, `inputWrap`, `send`, `debugOverlay`, etc.),
+    - teruggeplaatste class-structuren inclusief `bootstrap-wait-shell`, `bootstrap-wait-title`, `skeleton-line`,
+    - bijbehorende CSS voor visuele rendering.
+  - Scopegrens:
+    - elementen staan als presentatie-shells in de DOM,
+    - geen herintroductie van oude client-side heuristiek/fallback/i18n-flow,
+    - huidige contract-first ingest/render/fail-closed JS-pad blijft leidend.
+- Verwachte uitkomst:
+  - Volledige grafische interface (legacy surface) weer aanwezig.
+  - Geen regressie naar “slimme UI”; servercontract blijft owner.
+- Testresultaten lokaal:
+  - Parity checks:
+    - `id`-pariteit t.o.v. pre-dumbdown snapshot: geen missende IDs.
+    - class-token pariteit t.o.v. pre-dumbdown snapshot: geen missende class-tokens.
+  - Contract/UI tests:
+    - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts` -> PASS (`99 pass, 0 fail`).
+- Live observatie:
+  - Nog geen App Runner rollout in deze poging; handmatige rollout door gebruiker.
+- AWS logbewijs (event + timestamp):
+  - Niet van toepassing in deze poging.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Aanname dat “volledige presentatie terug” al bereikt was in de vorige poging.
+- Wat was gemist / over het hoofd gezien:
+  - Dat parity op losse visual blocks/IDs/classes nog niet volledig was.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: legacy interface-surface is teruggezet als visual shell, terwijl de UI contractueel dom blijft.
