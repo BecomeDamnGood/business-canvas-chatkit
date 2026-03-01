@@ -15,9 +15,6 @@ COPY . .
 # Prepare presentation template + fonts from source ZIP into assets/presentation/
 RUN node scripts/prepare-presentation-assets.mjs
 
-# Fail fast if ui/ template is missing from build context (prevents App Runner rollback from missing dist/ui at runtime)
-RUN test -f ui/step-card.template.html || (echo "Missing ui/step-card.template.html in build context" && exit 1)
-
 # Compile TS -> dist/
 RUN npm run build
 RUN test -f ui/step-card.bundled.html || (echo "Missing ui/step-card.bundled.html after build" && exit 1)

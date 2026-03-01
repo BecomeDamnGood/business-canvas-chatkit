@@ -2602,3 +2602,83 @@ Als niet alles sluit:
   - eerstvolgende concrete stap
   - copy-paste vervolgprompt.
 ```
+
+### Poging 2026-03-01 05:39 UTC (Voorbereiding resolute UI-dumbdown)
+
+Reeds gedaan:
+- Vastgesteld dat OpenAI runtime-surface `/ui/step-card` de file `mcp-server/ui/step-card.bundled.html` serveert.
+- Vastgesteld dat `mcp-server/ui/step-card.template.html` + `scripts/build-ui.mjs` een extra buildlaag vormen die drift en onderhoudslast verhoogt.
+- Besloten op architectuurniveau: UI wordt 100% dom, servercontract wordt enige intelligence-bron.
+
+Gaan doen:
+1. Template + bundled samenbrengen naar 1 actieve runtime-source.
+2. Alle client-side intelligentie verwijderen:
+   - hardcoded user-facing teksten,
+   - fallback-teksten/flow,
+   - heuristiek/interpretatie/beslislogica,
+   - client-side i18n-beslissingen buiten servercontract.
+3. UI reduceren tot domme renderer van server-output met fail-closed bij ontbrekende contractvelden.
+4. Build/deploy flow opschonen zodat dual-source UI niet meer kan terugkomen.
+5. Volledige verificatie draaien en regressies expliciet rapporteren.
+
+Waarom deze koers:
+- Voorkomt contractdrift tussen server en widget.
+- Verlaagt complexiteit en foutoppervlak in de client.
+- Dwingt strikte server-side verantwoordelijkheid af voor tekst, flow, taal en besluitvorming.
+
+Status van deze poging:
+- Docs-update + uitvoerinstructie voorbereid.
+- Nog geen functionele codewijziging in UI/runtime in deze poging.
+
+### Poging 2026-03-01 06:40 UTC (Resolute UI-dumbdown uitgevoerd)
+
+- Hypothese:
+  - Dual-source UI + client-intelligence veroorzaken regressierisico en drift; single-source + domme renderer maakt gedrag deterministischer en contract-afhankelijk.
+- Waarom deze hypothese (bewijs vooraf):
+  - Runtime liep op `ui/step-card.bundled.html`, terwijl template/build-laag parallel bleef bestaan.
+  - Client bevatte nog beslis/fallbackpaden die server-ownership ondermijnen.
+- Exacte wijziging(en):
+  - Single-source geforceerd op `mcp-server/ui/step-card.bundled.html`.
+  - `mcp-server/ui/step-card.template.html` verwijderd.
+  - `mcp-server/scripts/build-ui.mjs` verwijderd.
+  - `mcp-server/scripts/ui_artifact_parity_check.mjs` verwijderd.
+  - Build/deploy scripts opgeschoond:
+    - `mcp-server/package.json` (`dev`/`build` zonder template->bundle stap).
+    - `mcp-server/Dockerfile` (template presence check verwijderd).
+  - Runtime route hardening:
+    - `mcp-server/src/server/http_routes.ts` blokkeert `step-card.template.html` direct.
+  - Actioncode tooling afgestemd op bundled bron:
+    - `mcp-server/scripts/actioncode-diff.mjs` gebruikt `step-card.bundled.html`.
+  - Docs geharmoniseerd:
+    - `mcp-server/README.md`
+    - `mcp-server/docs/ui-interface-contract.md`
+  - Bundled UI vervangen door contract-first dumb renderer met fail-closed gedrag:
+    - render op `_meta.widget_result` + `ui.action_contract.actions`,
+    - geen client-side flow/i18n/fallback narratief.
+- Verwachte uitkomst:
+  - Geen actieve template runtime/build dependency.
+  - UI rendert alleen servercontract; ontbrekende velden geven fail-closed marker.
+  - `/ui/step-card` blijft intact.
+- Testresultaten lokaal:
+  - `cd mcp-server && npm run build` -> PASS.
+  - `cd mcp-server && npm run typecheck` -> PASS.
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS (`114 pass, 0 fail`).
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (`171 pass, 0 fail, 1 skipped`).
+  - `rg -n "step-card.template.html|build-ui.mjs" mcp-server docs` -> alleen historische/documentaire verwijzingen + expliciete template-block guard.
+- Live observatie:
+  - Geen App Runner live validatie in deze poging (deploy/rollout buiten scope van deze run).
+- AWS logbewijs (event + timestamp):
+  - Niet van toepassing in deze poging.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Aanname dat dual-source nog veilig te onderhouden was zonder drift.
+- Wat was gemist / over het hoofd gezien:
+  - De aanwezigheid van template endpoint-path als mogelijke ongewenste surface (`/ui/*`), nu hard-geblokkeerd.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: architectuur vereenvoudigd naar server-owned contractrendering met fail-closed gedrag.

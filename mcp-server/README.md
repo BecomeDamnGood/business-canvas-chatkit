@@ -4,4 +4,4 @@
 
 **Start dev:** run `npm run dev`.
 
-The UI (step-card) is served as a single bundled HTML file (`ui/step-card.bundled.html`) with inline JS and data-URI assets; the server serves files under `/ui/*` from the filesystem. The bundle is generated from `ui/lib/*.ts` via `scripts/build-ui.mjs` (TS-first, no JS runtime source of truth).
+The UI (step-card) is served as a single bundled HTML file (`ui/step-card.bundled.html`); the server serves files under `/ui/*` from the filesystem. Runtime rendering is contract-first and fail-closed: the widget only consumes server-emitted `_meta.widget_result` + `ui.action_contract`.

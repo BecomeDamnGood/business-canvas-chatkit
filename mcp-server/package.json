@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run build:ui && node scripts/build-ui.mjs && node scripts/dev-start.mjs",
-    "build": "node scripts/prepare-presentation-assets.mjs && npm run build:ui && node scripts/build-ui.mjs && tsc -p tsconfig.build.json && node scripts/copy-ui-dist.mjs",
+    "dev": "npm run build:ui && node scripts/dev-start.mjs",
+    "build": "node scripts/prepare-presentation-assets.mjs && npm run build:ui && tsc -p tsconfig.build.json && node scripts/copy-ui-dist.mjs",
     "build:ui": "tsc -p tsconfig.ui.json --noEmit",
     "typecheck": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.ui.json --noEmit",
     "start": "node dist/server.js",

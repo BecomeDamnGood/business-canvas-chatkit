@@ -501,6 +501,13 @@ const httpServer = async (req: any, res: any) => {
         res.end("Not found");
         return;
       }
+      const fileName = path.basename(resolved);
+      if (fileName === "step-card.template.html") {
+        res.writeHead(404, { "content-type": "text/plain" });
+        res.end("Not found");
+        return;
+      }
+
       const ext = path.extname(resolved).toLowerCase();
       const contentType =
         ext === ".html" ? "text/html;profile=mcp-app" :
@@ -511,7 +518,7 @@ const httpServer = async (req: any, res: any) => {
         ext === ".webp" ? "image/webp" :
         ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
         "application/octet-stream";
-      if (path.basename(resolved) === "step-card.bundled.html") {
+      if (fileName === "step-card.bundled.html") {
         const withVersion = loadUiHtml();
         res.writeHead(200, {
           "content-type": contentType,
