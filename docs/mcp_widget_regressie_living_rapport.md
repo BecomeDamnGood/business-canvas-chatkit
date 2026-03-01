@@ -2718,3 +2718,42 @@ Status van deze poging:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: presentatie hersteld met behoud van server-owned contractgedrag en fail-closed discipline.
+
+### Poging 2026-03-01 06:33 UTC (Volledige UI-presentatie terug, logic-free)
+
+- Hypothese:
+  - De volledige rijke visuele UI kan worden teruggebracht binnen `step-card.bundled.html` zonder herintroductie van client-side flow/intelligence.
+- Waarom deze hypothese (bewijs vooraf):
+  - In live UX was de kaart nog te sober vergeleken met de eerdere branding/layout.
+  - Functioneel werkte de contractflow al; het gat zat in ontbrekende presentatieblokken en stylingtaal.
+- Exacte wijziging(en):
+  - `mcp-server/ui/step-card.bundled.html` visueel uitgebreid met:
+    - page header shell (`wrap`, branded top row, stepper-ornament),
+    - rijkere card-stage compositie (glass/paper layers, depth, gradients),
+    - typography-herstel (DM Sans + DM Serif Display),
+    - uitgebreidere responsive/motion styling.
+  - Scopegrens:
+    - bestaande JS-contractlogica behouden (geen nieuwe heuristiek, geen fallback-semantiek, geen i18n-beslislogica client-side),
+    - fail-closed contractmarkers ongewijzigd.
+- Verwachte uitkomst:
+  - Volledige visuele identiteit terug in widget.
+  - Gedrag blijft strict server-owned en contract-first.
+- Testresultaten lokaal:
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts` -> PASS (`99 pass, 0 fail`).
+- Live observatie:
+  - Nog geen App Runner rollout in deze poging; handmatige rollout door gebruiker.
+- AWS logbewijs (event + timestamp):
+  - Niet van toepassing in deze poging.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Aanname dat een “lichte visual restore” voldoende was voor volledige UI-herstelverwachting.
+- Wat was gemist / over het hoofd gezien:
+  - Dat meerdere legacy-presentatie-elementen (header/stage/composition) ontbraken ondanks verbeterde kleuren/knoppen.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: volledige presentatie is hersteld zonder logica-drift ten opzichte van de dumb-renderer architectuur.
