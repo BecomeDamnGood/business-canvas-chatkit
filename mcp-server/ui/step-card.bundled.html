@@ -848,12 +848,25 @@
           return toRecord(globalThis.openai);
         }
 
-        async function callRunStep(message, extraState) {
-          var openai = openAiApi();
-          if (typeof openai.callTool !== "function") {
-            failClosed("transport_unavailable", {});
-            return;
-          }
+          async function callRunStep(message, extraState) {
+            var openai = openAiApi();
+            if (typeof openai.callTool !== "function") {
+              var actionCodeEcho = asText(message).trim().toUpperCase() || "TEXT_INPUT";
+              var livenessState = Object.assign({}, runtime.state, toRecord(extraState), {
+                ui_action_liveness_ack_status: "rejected",
+                ui_action_liveness_state_advanced: "false",
+                ui_action_liveness_reason_code: "transport_unavailable",
+                ui_action_liveness_failure_class: "rejected",
+                ui_action_liveness_action_code: actionCodeEcho,
+                ui_action_liveness_client_action_id: "",
+              });
+              runtime.state = livenessState;
+              if (typeof openai.setWidgetState === "function") {
+                openai.setWidgetState(livenessState);
+              }
+              failClosed("transport_unavailable", {});
+              return;
+            }
           var nextState = Object.assign({}, runtime.state, toRecord(extraState));
           var payload = {
             current_step_id: asText(nextState.current_step) || "step_0",
@@ -1103,8 +1116,8 @@
           ui.inputForm.addEventListener("submit", onSubmit);
         }
 
-        ingest(readInitialToolOutput(), "initial");
-      })();
-    </script>
-  </body>
-</html>
+          ingestSetGlobalsPayload();
+        })();
+      </script>
+    </body>
+  </html>

@@ -1230,7 +1230,7 @@ export function render(overrideToolOutput?: unknown): void {
 
   const textSubmitActionCode = actionCodeForRole(result, "text_submit");
   const textSubmitAvailable = textSubmitActionCode.length > 0;
-  inputWrap.style.display = choiceMode || !textSubmitAvailable ? "none" : "flex";
+  inputWrap.style.display = textSubmitAvailable ? "flex" : "none";
   if (!textSubmitAvailable) setSendEnabled(false);
   const sde = document.getElementById("btnStartDreamExercise");
   const sb = document.getElementById("btnSwitchToSelfDream");

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { finalizeResponseContractInternals } from "./handlers/turn_contract.js";
+import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "./core/bootstrap_runtime.js";
 
 const serverSourceFiles = [
   "./server/server_config.ts",
@@ -35,6 +37,38 @@ const canonicalWidgetStateSource = fs.readFileSync(
   new URL("./handlers/run_step_canonical_widget_state.ts", import.meta.url),
   "utf8"
 );
+
+function buildContractBaseState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    current_step: "step_0",
+    started: "false",
+    bootstrap_phase: "ready",
+    ui_gate_status: "ready",
+    ui_gate_reason: "",
+    ui_strings_status: "ready",
+    ui_strings_requested_lang: "en",
+    ui_strings_lang: "en",
+    ui_strings: { btnStart: "Start" },
+    locale: "en",
+    language: "en",
+    ui_strings_fallback_applied: "false",
+    ui_strings_fallback_reason: "",
+    view_contract_version: LOCALE_START_VIEW_CONTRACT_VERSION,
+    ...overrides,
+  };
+}
+
+function finalizeForContractActionSet(
+  response: Record<string, unknown>
+): Record<string, unknown> {
+  return finalizeResponseContractInternals(response, {
+    applyUiClientActionContract: () => {},
+    parseMenuFromContractIdForStep: () => "",
+    labelKeysForMenuActionCodes: () => [],
+    onUiParityError: () => {},
+    attachRegistryPayload: (payload) => payload,
+  }) as Record<string, unknown>;
+}
 
 test("MCP app contract: server initializes MCP capabilities for tools/resources", () => {
   assert.match(source, /new McpServer\([\s\S]*capabilities:\s*\{[\s\S]*tools:\s*\{\}[\s\S]*resources:\s*\{\}/);
@@ -256,6 +290,90 @@ test("MCP app contract: turn contract enforces canonical step_0\/interactive vie
   assert.match(canonicalWidgetStateSource, /step0_start_action_missing/);
   assert.match(canonicalWidgetStateSource, /interactive_content_absent/);
   assert.match(turnContractSource, /interactive_requires_renderable_content/);
+});
+
+test("MCP app contract: prestart action contract is deterministic start-only", () => {
+  const finalized = finalizeForContractActionSet({
+    ok: true,
+    tool: "run_step",
+    current_step_id: "step_0",
+    active_specialist: "ValidationAndBusinessName",
+    text: "Welcome",
+    prompt: "Click Start",
+    specialist: {},
+    state: buildContractBaseState({
+      ui_action_start: "ACTION_START",
+      ui_action_text_submit: "ACTION_TEXT_SUBMIT",
+      ui_action_text_submit_payload_mode: "text",
+    }),
+    ui: {
+      view: { mode: "prestart", waiting_locale: false },
+      actions: [
+        { id: "menu", action_code: "ACTION_STEP0_MENU", label: "Menu", label_key: "menu.step0" },
+      ],
+    },
+  });
+
+  const actionContract = ((finalized.ui as Record<string, unknown> | undefined)?.action_contract ||
+    {}) as Record<string, unknown>;
+  const actions = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as Array<Record<string, unknown>>)
+    : [];
+  assert.equal(actions.length, 1);
+  assert.equal(String(actions[0]?.role || ""), "start");
+  assert.equal(String(actions[0]?.action_code || ""), "ACTION_START");
+});
+
+test("MCP app contract: interactive contract keeps choices+text_submit and drops mixed state-only button roles", () => {
+  const finalized = finalizeForContractActionSet({
+    ok: true,
+    tool: "run_step",
+    current_step_id: "purpose",
+    active_specialist: "Purpose",
+    text: "Let's define your purpose.",
+    prompt: "Choose or type your own answer.",
+    specialist: {},
+    state: buildContractBaseState({
+      current_step: "purpose",
+      started: "true",
+      ui_action_start: "ACTION_START",
+      ui_action_text_submit: "ACTION_TEXT_SUBMIT",
+      ui_action_text_submit_payload_mode: "text",
+      ui_action_dream_switch_to_self: "ACTION_DREAM_SWITCH_TO_SELF",
+    }),
+    ui: {
+      view: { mode: "interactive", waiting_locale: false },
+      actions: [
+        {
+          id: "choice_1",
+          action_code: "ACTION_PURPOSE_INTRO_DEFINE",
+          label: "Define purpose",
+          label_key: "purpose.define",
+        },
+        {
+          id: "choice_2",
+          action_code: "ACTION_PURPOSE_INTRO_EXAMPLE",
+          label: "Show example",
+          label_key: "purpose.example",
+        },
+      ],
+    },
+  });
+
+  const actionContract = ((finalized.ui as Record<string, unknown> | undefined)?.action_contract ||
+    {}) as Record<string, unknown>;
+  const actions = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as Array<Record<string, unknown>>)
+    : [];
+  const actionCodes = new Set(actions.map((entry) => String(entry.action_code || "").trim()));
+  const roleSet = new Set(actions.map((entry) => String(entry.role || "").trim()));
+  assert.equal(actionCodes.has("ACTION_PURPOSE_INTRO_DEFINE"), true);
+  assert.equal(actionCodes.has("ACTION_PURPOSE_INTRO_EXAMPLE"), true);
+  assert.equal(actionCodes.has("ACTION_TEXT_SUBMIT"), true);
+  assert.equal(actionCodes.has("ACTION_START"), false);
+  assert.equal(actionCodes.has("ACTION_DREAM_SWITCH_TO_SELF"), false);
+  assert.equal(roleSet.has("choice"), true);
+  assert.equal(roleSet.has("text_submit"), true);
 });
 
 test("MCP app contract: interactive actions get non-empty client_action_id echo server-side", () => {

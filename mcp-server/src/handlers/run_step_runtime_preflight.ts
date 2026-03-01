@@ -278,6 +278,9 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
     isUserTextForLang
   ) {
     const hasOverride = String((state as Record<string, unknown>).language_override ?? "false") === "true";
+    const hasLockedLanguage =
+      String((state as Record<string, unknown>).language_locked ?? "false") === "true" &&
+      language.normalizeLangCode(String((state as Record<string, unknown>).language ?? "")) !== "";
     const stateLanguage = language.normalizeLangCode(String((state as Record<string, unknown>).language ?? ""));
     const stateLanguageSource = language.normalizeLanguageSource(
       (state as Record<string, unknown>).language_source
@@ -290,7 +293,8 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
       stateLanguageSource,
       stateLanguage,
     });
-    if (!hasOverride && !skipResetForChatLocaleHint) {
+    const shouldPreserveChatLanguage = constants.inputMode === "chat";
+    if (!hasOverride && !hasLockedLanguage && !skipResetForChatLocaleHint && !shouldPreserveChatLanguage) {
       (state as Record<string, unknown>).language = "";
       (state as Record<string, unknown>).language_locked = "false";
       (state as Record<string, unknown>).language_override = "false";

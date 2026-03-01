@@ -64,6 +64,44 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+const UI_ACTION_ROLES = new Set<UiActionRole>([
+  "choice",
+  "start",
+  "text_submit",
+  "wording_pick_user",
+  "wording_pick_suggestion",
+  "dream_start_exercise",
+  "dream_switch_to_self",
+]);
+
+const UI_ACTION_SURFACES = new Set<UiActionSurface>([
+  "choice",
+  "primary",
+  "text_input",
+  "wording_choice",
+  "auxiliary",
+]);
+
+function defaultSurfaceForRole(role: UiActionRole): UiActionSurface {
+  if (role === "start") return "primary";
+  if (role === "text_submit") return "text_input";
+  if (role === "wording_pick_user" || role === "wording_pick_suggestion") return "wording_choice";
+  if (role === "dream_start_exercise" || role === "dream_switch_to_self") return "auxiliary";
+  return "choice";
+}
+
+function normalizeUiActionRole(rawRole: unknown, fallback: UiActionRole = "choice"): UiActionRole {
+  const normalized = String(rawRole || "").trim();
+  if (UI_ACTION_ROLES.has(normalized as UiActionRole)) return normalized as UiActionRole;
+  return fallback;
+}
+
+function normalizeUiActionSurface(rawSurface: unknown, fallback: UiActionSurface): UiActionSurface {
+  const normalized = String(rawSurface || "").trim();
+  if (UI_ACTION_SURFACES.has(normalized as UiActionSurface)) return normalized as UiActionSurface;
+  return fallback;
+}
+
 function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
   const uiPayload = toRecord(response.ui);
   const uiPrompt = toRecord(uiPayload.prompt);
@@ -214,6 +252,8 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
     const action = toRecord(existingActions[i]);
     const actionCode = String(action.action_code || "").trim();
     if (!actionCode || seenByActionCode.has(actionCode)) continue;
+    const role = normalizeUiActionRole(action.role, "choice");
+    const surface = normalizeUiActionSurface(action.surface, defaultSurfaceForRole(role));
     seenByActionCode.add(actionCode);
     unifiedActions.push({
       ...action,
@@ -221,8 +261,8 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
       action_code: actionCode,
       label: String(action.label || "").trim(),
       label_key: String(action.label_key || "").trim(),
-      role: "choice",
-      surface: "choice",
+      role,
+      surface,
       source: "ui.actions",
     });
   }
@@ -272,6 +312,59 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
     source: "server_contract",
     actions: unifiedActions,
   };
+  response.ui = ui;
+}
+
+function applyDeterministicUiActionRenderPolicy(response: RunStepContractResponse): void {
+  const ui = toRecord(response.ui);
+  const actionContract = toRecord(ui.action_contract);
+  const actions = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as Array<Record<string, unknown>>)
+    : [];
+  if (actions.length === 0) return;
+
+  const view = toRecord(ui.view);
+  const mode = String(view.mode || "").trim().toLowerCase();
+  const variant = String(view.variant || "").trim().toLowerCase();
+  const hasChoiceActions = actions.some(
+    (action) => normalizeUiActionRole(action.role, "choice") === "choice"
+  );
+
+  const allowedRoles = new Set<UiActionRole>();
+  if (mode === "prestart") {
+    allowedRoles.add("start");
+  } else if (mode === "interactive") {
+    allowedRoles.add("text_submit");
+    if (hasChoiceActions) {
+      allowedRoles.add("choice");
+    } else if (variant === "wording_choice") {
+      allowedRoles.add("wording_pick_user");
+      allowedRoles.add("wording_pick_suggestion");
+    } else {
+      allowedRoles.add("choice");
+      allowedRoles.add("dream_start_exercise");
+      allowedRoles.add("dream_switch_to_self");
+    }
+  }
+
+  const filteredActions: Array<Record<string, unknown>> = [];
+  const seenByActionCode = new Set<string>();
+  for (const action of actions) {
+    const actionCode = String(action.action_code || "").trim();
+    if (!actionCode || seenByActionCode.has(actionCode)) continue;
+    const role = normalizeUiActionRole(action.role, "choice");
+    if (!allowedRoles.has(role)) continue;
+    seenByActionCode.add(actionCode);
+    filteredActions.push({
+      ...action,
+      action_code: actionCode,
+      role,
+      surface: normalizeUiActionSurface(action.surface, defaultSurfaceForRole(role)),
+    });
+  }
+
+  actionContract.actions = filteredActions;
+  ui.action_contract = actionContract;
   response.ui = ui;
 }
 
@@ -638,6 +731,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
   }
   ensureUnifiedUiActionContract(finalResponse);
   let canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
+  applyDeterministicUiActionRenderPolicy(finalResponse);
   try {
     assertRunStepContractOrThrow(finalResponse);
   } catch (error: any) {
@@ -652,6 +746,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
     });
     ensureUnifiedUiActionContract(finalResponse);
     canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
+    applyDeterministicUiActionRenderPolicy(finalResponse);
   }
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;
 

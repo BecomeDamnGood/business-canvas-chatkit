@@ -843,12 +843,19 @@ export function migrateState(raw: unknown): CanvasState {
 
   // v3 -> v4: hard reset legacy confirm/proceed sessions (no compatibility layer).
   if (s.state_version === "3") {
+    const preservedLocale = normalizeLocaleTag(
+      (s as any).locale || (s as any).ui_strings_requested_lang || (s as any).language || ""
+    );
+    const preservedLanguageSource = normalizeStateLanguageSource((s as any).language_source ?? "");
     const fresh = getDefaultState();
     s = {
       ...fresh,
+      locale: preservedLocale,
       language: String((s as any).language ?? "").trim().toLowerCase(),
       language_locked: String((s as any).language_locked ?? "false") === "true" ? "true" : "false",
       language_override: String((s as any).language_override ?? "false") === "true" ? "true" : "false",
+      language_source: preservedLanguageSource,
+      ui_strings_requested_lang: preservedLocale,
       quote_last_by_step:
         typeof (s as any).quote_last_by_step === "object" && (s as any).quote_last_by_step !== null
           ? Object.fromEntries(

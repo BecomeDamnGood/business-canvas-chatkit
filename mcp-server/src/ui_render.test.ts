@@ -1161,7 +1161,8 @@ test("bundled source is the sole event ingest owner for host updates", () => {
   assert.match(source, /window\.addEventListener\("openai:notification", function \(event\) \{/);
   assert.match(source, /if \(method !== "ui\/notifications\/tool-result"\) \{/);
   assert.match(source, /ingest\(resolved\.payload, resolved\.source\);/);
-  assert.match(source, /ingest\(readInitialToolOutput\(\), "initial"\);/);
+  assert.match(source, /ingestSetGlobalsPayload\(\);/);
+  assert.doesNotMatch(source, /ingest\(readInitialToolOutput\(\), "initial"\);/);
   assert.doesNotMatch(source, /window\.addEventListener\("message"/);
   assert.doesNotMatch(source, /notifyHostTransportSignal/);
 });
@@ -2424,6 +2425,117 @@ test("render shows startup wait shell when payload is absent", () => {
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LATEST__ = originalLatest;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
+});
+
+test("render prestart keeps interaction start-only even when action_contract contains extra actions", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const btnStart = (fakeDocument as any).getElementById("btnStart");
+  const inputWrap = (fakeDocument as any).getElementById("inputWrap");
+  const choiceWrap = (fakeDocument as any).getElementById("choiceWrap");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: { language: "en" }, setWidgetState() {} };
+
+  render(toolOutputFromWidgetResult({
+    state: {
+      current_step: "step_0",
+      started: "false",
+      language: "en",
+      ui_strings_status: "ready",
+      ui_gate_status: "ready",
+    },
+    ui: {
+      view: { mode: "prestart" },
+      action_contract: {
+        actions: [
+          { id: "start", action_code: "ACTION_START", role: "start", surface: "primary", label_key: "btnStart" },
+          { id: "menu", action_code: "ACTION_STEP0_MENU", role: "choice", surface: "choice", label: "Menu" },
+          {
+            id: "text",
+            action_code: "ACTION_TEXT_SUBMIT",
+            role: "text_submit",
+            surface: "text_input",
+            payload_mode: "text",
+            label: "Send",
+          },
+        ],
+      },
+    },
+    prompt: "Click Start",
+    text: "Welcome",
+  }));
+
+  assert.equal(String(btnStart.style.display || ""), "inline-flex");
+  assert.equal(String(choiceWrap.style.display || ""), "none");
+  assert.equal(String(inputWrap.style.display || ""), "none");
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
+});
+
+test("render interactive keeps text input visible when choices and text_submit coexist", () => {
+  const originalDocument = (globalThis as any).document;
+  const originalWindow = (globalThis as any).window;
+  const originalOpenai = (globalThis as any).openai;
+
+  const fakeDocument = makeDocument();
+  const inputWrap = (fakeDocument as any).getElementById("inputWrap");
+  const choiceWrap = (fakeDocument as any).getElementById("choiceWrap");
+  (globalThis as any).document = fakeDocument;
+  (globalThis as any).window = {
+    location: { search: "" },
+    addEventListener() {},
+  };
+  (globalThis as any).openai = { toolOutput: null, widgetState: { language: "en" }, setWidgetState() {} };
+
+  render(toolOutputFromWidgetResult({
+    state: {
+      current_step: "purpose",
+      started: "true",
+      language: "en",
+      ui_strings_status: "ready",
+      ui_gate_status: "ready",
+    },
+    ui: {
+      view: { mode: "interactive" },
+      action_contract: {
+        actions: [
+          {
+            id: "choice_1",
+            action_code: "ACTION_PURPOSE_INTRO_DEFINE",
+            role: "choice",
+            surface: "choice",
+            label: "Define purpose",
+          },
+          {
+            id: "text_submit",
+            action_code: "ACTION_TEXT_SUBMIT",
+            role: "text_submit",
+            surface: "text_input",
+            payload_mode: "text",
+            label: "Send",
+          },
+        ],
+      },
+    },
+    prompt: "Choose an option or type your own answer",
+    text: "Let's define your purpose.",
+  }));
+
+  assert.equal(String(choiceWrap.style.display || ""), "flex");
+  assert.equal(String(inputWrap.style.display || ""), "flex");
+
+  (globalThis as any).document = originalDocument;
+  (globalThis as any).window = originalWindow;
+  (globalThis as any).openai = originalOpenai;
 });
 
 test("resolveWidgetPayload reads canonical _meta.widget_result from root envelope", () => {

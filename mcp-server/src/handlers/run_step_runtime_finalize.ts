@@ -500,27 +500,70 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     if (!targetState || typeof targetState !== "object") return;
     const stateRef = targetState as Record<string, unknown>;
     const currentStep = String(stateRef.current_step || "").trim();
+    const started = String(stateRef.started || "").trim().toLowerCase() === "true";
     const activeSpecialist = String(stateRef.active_specialist || "").trim();
     const lastSpecialist =
       stateRef.last_specialist_result && typeof stateRef.last_specialist_result === "object"
         ? (stateRef.last_specialist_result as Record<string, unknown>)
         : {};
     const scoringPhase = String(lastSpecialist.scoring_phase || "").trim().toLowerCase() === "true";
+    const wordingPending = String(lastSpecialist.wording_choice_pending || "").trim().toLowerCase() === "true";
     const dreamRuntimeMode = String(response.getDreamRuntimeMode(targetState) || "").trim();
+    const dreamStepId = response.getDreamStepId();
+    const dreamExplainerSpecialist = response.getDreamExplainerSpecialist();
+    const isDreamStep = currentStep === dreamStepId;
+    const isDreamExplainer = activeSpecialist === dreamExplainerSpecialist;
+    const isDreamSpecialist = isDreamStep && !isDreamExplainer;
+    const dreamBuilderModeActive =
+      dreamRuntimeMode === "builder_collect" ||
+      dreamRuntimeMode === "builder_scoring" ||
+      dreamRuntimeMode === "builder_refine";
+    const suggestDreamBuilder = String(lastSpecialist.suggest_dreambuilder || "").trim().toLowerCase() === "true";
+    const interactiveSession = started;
     const textSubmitUsesScores =
-      currentStep === response.getDreamStepId() &&
-      activeSpecialist === response.getDreamExplainerSpecialist() &&
+      interactiveSession &&
+      isDreamStep &&
+      isDreamExplainer &&
       (dreamRuntimeMode === "builder_scoring" || scoringPhase);
+    const setStateAction = (key: string, value: string): void => {
+      if (value) {
+        stateRef[key] = value;
+        return;
+      }
+      delete stateRef[key];
+    };
 
-    stateRef.ui_action_start = "ACTION_START";
-    stateRef.ui_action_text_submit = textSubmitUsesScores
-      ? "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES"
-      : "ACTION_TEXT_SUBMIT";
-    stateRef.ui_action_text_submit_payload_mode = textSubmitUsesScores ? "scores" : "text";
-    stateRef.ui_action_wording_pick_user = "ACTION_WORDING_PICK_USER";
-    stateRef.ui_action_wording_pick_suggestion = "ACTION_WORDING_PICK_SUGGESTION";
-    stateRef.ui_action_dream_start_exercise = "ACTION_DREAM_INTRO_START_EXERCISE";
-    stateRef.ui_action_dream_switch_to_self = "ACTION_DREAM_SWITCH_TO_SELF";
+    setStateAction("ui_action_start", currentStep === "step_0" && !started ? "ACTION_START" : "");
+    setStateAction(
+      "ui_action_text_submit",
+      interactiveSession
+        ? (textSubmitUsesScores ? "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" : "ACTION_TEXT_SUBMIT")
+        : ""
+    );
+    setStateAction(
+      "ui_action_text_submit_payload_mode",
+      interactiveSession ? (textSubmitUsesScores ? "scores" : "text") : ""
+    );
+    setStateAction(
+      "ui_action_wording_pick_user",
+      interactiveSession && wordingPending ? "ACTION_WORDING_PICK_USER" : ""
+    );
+    setStateAction(
+      "ui_action_wording_pick_suggestion",
+      interactiveSession && wordingPending ? "ACTION_WORDING_PICK_SUGGESTION" : ""
+    );
+    setStateAction(
+      "ui_action_dream_start_exercise",
+      interactiveSession && isDreamStep && !textSubmitUsesScores && (isDreamSpecialist || suggestDreamBuilder)
+        ? "ACTION_DREAM_INTRO_START_EXERCISE"
+        : ""
+    );
+    setStateAction(
+      "ui_action_dream_switch_to_self",
+      interactiveSession && isDreamStep && (isDreamExplainer || dreamBuilderModeActive)
+        ? "ACTION_DREAM_SWITCH_TO_SELF"
+        : ""
+    );
   };
 
   const { finalizeResponse } = createRunStepResponseHelpers({

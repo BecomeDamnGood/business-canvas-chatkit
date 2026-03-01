@@ -3510,3 +3510,83 @@ Status van deze poging:
   - [ ] Weerlegd
   - [ ] Onbeslist
   - Toelichting: beide PR-10 blockers zijn lokaal contractueel opgelost en volledige verplichte lokale verificatie is groen.
+
+
+### Poging 2026-03-01T20:32:42Z (PR-11 UX-pariteit schermen/velden/buttons structureel)
+
+- Doel:
+  - UX-pariteit herstellen voor prestart/interactive knoppen en inputgedrag zonder fallback/workaround-lagen, met server-contract als SSOT.
+
+- Uitgevoerd (stap 1 t/m 8):
+  - Stap 1:
+    - Prestart-pariteit server-side afgedwongen: alleen `start` blijft renderbaar in prestart action-contract.
+    - bewijs:
+      - `mcp-server/src/handlers/turn_contract.ts:332-356`
+      - `mcp-server/src/handlers/turn_contract.ts:731-747`
+      - `mcp-server/src/mcp_app_contract.test.ts:295-324`
+  - Stap 2:
+    - Interactive button-policy expliciet per view/role gemaakt: bij aanwezige menu-keuzes blijven alleen `choice` + `text_submit`; gemixte state-only button-rollen worden dan niet als extra keuze-set gerenderd.
+    - bewijs:
+      - `mcp-server/src/handlers/turn_contract.ts:332-356`
+      - `mcp-server/src/handlers/turn_contract.ts:357-374`
+      - `mcp-server/src/mcp_app_contract.test.ts:326-378`
+  - Stap 3:
+    - Inputgedrag na start hersteld: text input blijft zichtbaar wanneer `text_submit` beschikbaar is, ook bij choices.
+    - bewijs:
+      - `mcp-server/ui/lib/ui_render.ts:1231-1234`
+      - `mcp-server/src/ui_render.test.ts:2484-2538`
+  - Stap 4:
+    - Contract-determinisme versterkt: rol/surface normalisatie en render-policy toegepast ná canonical view-bepaling, inclusief failure-pad.
+    - bewijs:
+      - `mcp-server/src/handlers/turn_contract.ts:67-107`
+      - `mcp-server/src/handlers/turn_contract.ts:252-270`
+      - `mcp-server/src/handlers/turn_contract.ts:731-749`
+  - Stap 5:
+    - Regressietests toegevoegd voor:
+      - prestart start-only interactie,
+      - interactieve knopset-filtering,
+      - input-zichtbaarheid bij choice + text_submit.
+    - bewijs:
+      - `mcp-server/src/ui_render.test.ts:2429-2538`
+      - `mcp-server/src/mcp_app_contract.test.ts:295-378`
+  - Stap 6:
+    - Typecheck + contract smoke opnieuw gedraaid op gewijzigde contract- en renderlogica.
+    - kernoutput:
+      - `[contract_smoke] PASS { cases: 11, version: 'v12' }`
+  - Stap 7:
+    - Gerichte UI render-testset opnieuw gedraaid met nieuwe regressietests.
+    - kernoutput:
+      - `# tests 73`
+      - `# pass 73`
+      - `# fail 0`
+  - Stap 8:
+    - Volledige lokale rerun (gate + volledige testset) succesvol afgerond.
+    - kernoutput:
+      - `[agent_strict_guard] passed`
+      - `# tests 418`
+      - `# pass 417`
+      - `# fail 0`
+
+- Verificatie:
+  - `cd mcp-server && npm run typecheck` -> PASS
+    - kernregel: `tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.ui.json --noEmit`
+  - `cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs` -> PASS
+    - kernregel: `[contract_smoke] PASS { cases: 11, version: 'v12' }`
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts` -> PASS
+    - kernregel: `# pass 73` / `# fail 0`
+  - `cd mcp-server && npm run gate:ci` -> PASS
+    - kernregel: `[agent_strict_guard] passed`
+  - `cd mcp-server && npm test` -> PASS
+    - kernregel: `# pass 417` / `# fail 0` / `# skipped 1`
+
+- Open / TODO:
+  - [ ] Geen open TODO binnen PR-11 scope op lokale contract/render regressies.
+
+- Volgende eerste actie:
+  - PR-11 naar review met focus op runtime-UX validatie van prestart + interactive buttonset op de actieve `/ui/step-card` surface.
+
+- Besluit (Bevestigd/Weerlegd/Onbeslist):
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: server-contract levert nu deterministische renderbare actie-sets per view en lokale regressie/gates blijven volledig groen.

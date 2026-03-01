@@ -122,6 +122,91 @@ test("action contract: step_0 prestart includes server action_contract start rol
       String(action.action_code || "").trim() === "ACTION_START"
   );
   assert.ok(startAction);
+  const roleSet = new Set(actions.map((action) => String(action.role || "").trim()));
+  assert.equal(roleSet.has("wording_pick_user"), false);
+  assert.equal(roleSet.has("wording_pick_suggestion"), false);
+  assert.equal(roleSet.has("dream_start_exercise"), false);
+  assert.equal(roleSet.has("dream_switch_to_self"), false);
+});
+
+test("language policy: legacy v1 chat state keeps nl locale hint and excludes non-step0 auxiliary actions", async () => {
+  const result = await run_step({
+    current_step_id: "step_0",
+    user_message: "Help met een businessplan voor mijn agency Mindd",
+    input_mode: "chat",
+    locale_hint: "nl-NL",
+    locale_hint_source: "message_detect",
+    state: {
+      state_version: "1",
+      current_step: "step_0",
+      active_specialist: "canvas_builder",
+      intro_shown_for_step: "",
+      intro_shown_session: "false",
+      language: "nl",
+      locale: "nl-NL",
+      language_locked: "true",
+      language_override: "false",
+      language_source: "message_detect",
+      ui_strings: {},
+      ui_strings_lang: "nl",
+      ui_strings_version: "1",
+      ui_strings_status: "pending",
+      ui_strings_requested_lang: "nl",
+      ui_strings_fallback_applied: "false",
+      ui_strings_fallback_reason: "",
+      ui_bootstrap_status: "init",
+      ui_gate_status: "waiting_locale",
+      ui_gate_reason: "translation_pending",
+      ui_gate_since_ms: 0,
+      ui_translation_mode: "critical_first",
+      ui_strings_critical_ready: "false",
+      ui_strings_full_ready: "false",
+      ui_strings_background_inflight: "false",
+      bootstrap_phase: "waiting_locale",
+      bootstrap_session_id: "mindd_session",
+      bootstrap_epoch: 1,
+      view_contract_version: "1",
+      response_seq: 1,
+      response_kind: "run_step",
+      host_widget_session_id: "mindd_session",
+      idempotency_key: "mindd-00001",
+      idempotency_outcome: "fresh",
+      idempotency_error_code: "",
+      last_specialist_result: {},
+      step_0_final: "",
+      dream_final: "",
+      purpose_final: "",
+      bigwhy_final: "",
+      role_final: "",
+      entity_final: "",
+      strategy_final: "",
+      targetgroup_final: "",
+      productsservices_final: "",
+      rulesofthegame_final: "",
+      presentation_brief_final: "",
+      provisional_by_step: {},
+      provisional_source_by_step: {},
+      __dream_runtime_mode: "builder_collect",
+      dream_builder_statements: [],
+      business_name: "Mindd",
+      quote_last_by_step: {},
+      summary_target: "businessplan",
+    },
+  });
+  assert.equal(String(result?.state?.language || ""), "nl");
+  assert.equal(String(result?.state?.locale || ""), "nl-NL");
+  assert.ok(String(result?.state?.ui_strings_lang || "").startsWith("nl"));
+  const actionContract = (result?.ui as Record<string, unknown> | undefined)?.action_contract as
+    | Record<string, unknown>
+    | undefined;
+  const actions = Array.isArray(actionContract?.actions)
+    ? (actionContract?.actions as Array<Record<string, unknown>>)
+    : [];
+  const roleSet = new Set(actions.map((action) => String(action.role || "").trim()));
+  assert.equal(roleSet.has("wording_pick_user"), false);
+  assert.equal(roleSet.has("wording_pick_suggestion"), false);
+  assert.equal(roleSet.has("dream_start_exercise"), false);
+  assert.equal(roleSet.has("dream_switch_to_self"), false);
 });
 
 test("action liveness defaults are transport-owned (direct run_step keeps fields empty)", async () => {
