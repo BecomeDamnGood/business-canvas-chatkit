@@ -1017,6 +1017,37 @@
           renderResult(result, source);
         }
 
+        function resolveNotificationEvent(detailRaw) {
+          var detail = toRecord(detailRaw);
+          var method = asText(detail.method);
+          if (method && method !== "ui/notifications/tool-result") {
+            return {
+              renderable: false,
+              reason: "notification_method_not_tool_result",
+              source: "openai_notification_method",
+              payload: {},
+            };
+          }
+
+          var payload = detail.params || detail.toolOutput || detail.payload || detail.data || {};
+          var hasResult = Object.keys(extractWidgetResult(payload)).length > 0;
+          if (!hasResult) {
+            return {
+              renderable: false,
+              reason: "notification_widget_result_missing",
+              source: method ? "openai_notification_method" : "openai_notification_legacy",
+              payload: {},
+            };
+          }
+
+          return {
+            renderable: true,
+            reason: method ? "tool_result_method" : "tool_result_legacy",
+            source: method ? "notification_tool_result_method" : "notification_tool_result_legacy",
+            payload: payload,
+          };
+        }
+
         function onSubmit(event) {
           event.preventDefault();
           if (runtime.loading) return;
@@ -1035,14 +1066,32 @@
           return openai.toolOutput || {};
         }
 
+        function ingestSetGlobalsPayload() {
+          var payload = readInitialToolOutput();
+          if (Object.keys(extractWidgetResult(payload)).length === 0) {
+            document.body.setAttribute("data-ui-marker", "set_globals_no_widget_result");
+            console.warn("[ui_set_globals_ignored]", { reason: "set_globals_no_widget_result" });
+            return;
+          }
+          ingest(payload, "set_globals");
+        }
+
         window.addEventListener("openai:set_globals", function () {
-          ingest(readInitialToolOutput(), "set_globals");
+          ingestSetGlobalsPayload();
         });
 
         window.addEventListener("openai:notification", function (event) {
           var detail = toRecord(event && event.detail);
-          var payload = detail.toolOutput || detail.payload || detail.data || {};
-          ingest(payload, "notification");
+          var resolved = resolveNotificationEvent(detail);
+          if (!resolved.renderable) {
+            document.body.setAttribute("data-ui-marker", resolved.reason);
+            console.warn("[ui_notification_ignored]", {
+              reason: resolved.reason,
+              source: resolved.source,
+            });
+            return;
+          }
+          ingest(resolved.payload, resolved.source);
         });
 
         if (ui.inputForm) {

@@ -2800,3 +2800,47 @@ Status van deze poging:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: legacy interface-surface is teruggezet als visual shell, terwijl de UI contractueel dom blijft.
+
+### Poging 2026-03-01 07:25 UTC (Architectural root fix: eventtype-contract scheiding)
+
+- Hypothese:
+  - De `widget_result_missing` regressie wordt structureel opgelost door expliciete scheiding tussen render-events en niet-render events in de UI-ingestlaag, zonder client-intelligence terug te brengen.
+- Waarom deze hypothese (bewijs vooraf):
+  - Fail-closed werd getriggerd door gemengde `openai:notification` payloads die niet altijd renderbare `_widget_result` data bevatten.
+  - Het core-probleem zat in eventcontract-classificatie, niet in styling of action-flow.
+- Exacte wijziging(en):
+  - `mcp-server/ui/step-card.bundled.html`:
+    - `resolveNotificationEvent(...)` toegevoegd:
+      - accepteert alleen render-notificaties (`ui/notifications/tool-result` of legacy payload met echte widget result),
+      - classificeert overige notificaties als non-render en negeert die met observability marker/log.
+    - `openai:notification` listener omgezet naar contract-first event filtering via `resolveNotificationEvent`.
+    - `openai:set_globals` pad aangescherpt:
+      - alleen ingest als `_widget_result` aanwezig is,
+      - geen fail-closed op niet-renderbaar set_globals-signaal.
+    - `ingest(...)` blijft strict fail-closed voor bronnen die als render-event geclassificeerd zijn.
+- Verwachte uitkomst:
+  - Geen onterechte UI-crash op niet-render host-events.
+  - Fail-closed discipline blijft intact voor echte contractschendingen op render-events.
+  - UI blijft dom (geen heuristieken/fallback-content/i18n-beslislogica client-side).
+- Testresultaten lokaal:
+  - `cd mcp-server && npm run build` -> PASS.
+  - `cd mcp-server && npm run typecheck` -> PASS.
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts src/server_safe_string.test.ts` -> PASS (`114 pass, 0 fail`).
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (`171 pass, 0 fail, 1 skipped`).
+- Live observatie:
+  - Nog geen App Runner live-validatie in deze poging; deploy/rollout volgt separaat.
+- AWS logbewijs (event + timestamp):
+  - Niet van toepassing in deze poging.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Aanname dat een notification-bypass op zichzelf voldoende “core fix” was.
+- Wat was gemist / over het hoofd gezien:
+  - Dat `set_globals` contractueel dezelfde render/non-render scheiding nodig had.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: eventtype-contract is nu expliciet gescheiden; non-render host-events veroorzaken geen UI-fail-closed meer.
