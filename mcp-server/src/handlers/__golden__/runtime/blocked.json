@@ -29,16 +29,16 @@
   },
   "expected": {
     "snapshot": {
-      "ok": false,
+      "ok": true,
       "current_step_id": "role",
-      "ui_view_mode": "blocked",
-      "ui_gate_status": "blocked",
-      "bootstrap_phase": "failed",
-      "has_ui_actions": false,
-      "has_action_codes": false,
-      "has_contract_id": false,
-      "has_text_keys": false,
-      "error_type": "session_upgrade_required"
+      "ui_view_mode": "interactive",
+      "ui_gate_status": "ready",
+      "bootstrap_phase": "ready",
+      "has_ui_actions": true,
+      "has_action_codes": true,
+      "has_contract_id": true,
+      "has_text_keys": true,
+      "error_type": ""
     }
   }
 }

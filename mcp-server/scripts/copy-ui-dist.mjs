@@ -6,21 +6,31 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const uiDir = path.join(repoRoot, "ui");
 const distUiDir = path.join(repoRoot, "dist", "ui");
-const bundledPath = path.join(uiDir, "step-card.bundled.html");
+const runtimeUiFiles = ["step-card.bundled.html"];
 
 if (!fs.existsSync(uiDir)) {
   throw new Error(`Missing ui directory: ${uiDir}`);
 }
-if (!fs.existsSync(bundledPath)) {
-  throw new Error(`Missing bundled UI: ${bundledPath}`);
+for (const fileName of runtimeUiFiles) {
+  const sourcePath = path.join(uiDir, fileName);
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`Missing runtime UI artifact: ${sourcePath}`);
+  }
 }
 
+// Delete-first to avoid stale UI ballast surviving incremental builds.
+fs.rmSync(distUiDir, { recursive: true, force: true });
 fs.mkdirSync(distUiDir, { recursive: true });
-fs.cpSync(uiDir, distUiDir, { recursive: true });
 
-const distBundledPath = path.join(distUiDir, "step-card.bundled.html");
-if (!fs.existsSync(distBundledPath)) {
-  throw new Error(`Failed to copy bundled UI to ${distBundledPath}`);
+for (const fileName of runtimeUiFiles) {
+  const sourcePath = path.join(uiDir, fileName);
+  const targetPath = path.join(distUiDir, fileName);
+  fs.copyFileSync(sourcePath, targetPath);
+  if (!fs.existsSync(targetPath)) {
+    throw new Error(`Failed to copy runtime UI artifact to ${targetPath}`);
+  }
 }
 
-console.log(`[copy-ui-dist] Copied ${uiDir} -> ${distUiDir}`);
+console.log(
+  `[copy-ui-dist] Copied runtime UI artifacts (${runtimeUiFiles.join(", ")}) to ${distUiDir}`
+);

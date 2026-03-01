@@ -5,11 +5,8 @@ export async function runStepRuntimeExecute(
   deps: any
 ): Promise<RunStepSuccess | RunStepError> {
   const {
-    parseRunStepIngressArgs, STEP_0_ID, ACTIONCODE_REGISTRY, normalizeState, normalizeLocaleHint,
-    buildRuntimeIdempotencyScopeKey, createRuntimeIdempotencyRequestHash, buildRuntimeIdempotencyRegistryKey,
-    attachRuntimeIdempotencyDiagnostics, markRuntimeIdempotencyCompleted, purgeExpiredRuntimeIdempotencyEntries,
-    getRuntimeIdempotencyEntry, RUNTIME_IDEMPOTENCY_ERROR_CODES, cloneRuntimeIdempotencyResult,
-    markRuntimeIdempotencyInFlight, runtimeIdempotencyDelayMs, resolveHolisticPolicyFlags,
+    parseRunStepIngressArgs, STEP_0_ID, ACTIONCODE_REGISTRY, normalizeLocaleHint,
+    resolveHolisticPolicyFlags,
     normalizeStateLanguageSource, logStructuredEvent, createStructuredLogContextFromState,
     deriveTransitionEventFromLegacy, orchestrateFromTransition, envFlagEnabled, createTurnLlmAccumulator,
     registerTurnLlmCall, normalizeUsage, runStepPreflightHelpers, createRunStepRuntimeFinalizeLayer,
@@ -39,7 +36,7 @@ export async function runStepRuntimeExecute(
     applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
     step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
     pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState,
-    runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer, deleteRuntimeIdempotencyEntry,
+    runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer,
     looksLikeMetaInstruction, ROLE_SPECIALIST, PRESENTATION_SPECIALIST, DREAM_PICK_ONE_ROUTE_TOKEN,
     ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
     DREAM_START_EXERCISE_ROUTE_TOKEN,
@@ -80,154 +77,6 @@ export async function runStepRuntimeExecute(
   localeHintSourceRaw === "message_detect"
     ? localeHintSourceRaw
     : "none";
-  const rawStateForIdempotency =
-    args.state && typeof args.state === "object" && !Array.isArray(args.state)
-      ? (args.state as Record<string, unknown>)
-      : {};
-  // SSOT ownership: server path owns idempotency registry and signals this via transient marker.
-  const idempotencyRegistryOwner = String(rawStateForIdempotency.__idempotency_registry_owner || "")
-    .trim()
-    .toLowerCase();
-  const runtimeOwnsIdempotency = idempotencyRegistryOwner !== "server";
-  const idempotencyKey = String(args.idempotency_key || "").trim();
-  const idempotencyScopeKey = runtimeOwnsIdempotency && idempotencyKey
-    ? buildRuntimeIdempotencyScopeKey(rawStateForIdempotency)
-    : "";
-  const idempotencyRequestHash = runtimeOwnsIdempotency && idempotencyKey
-    ? createRuntimeIdempotencyRequestHash({
-        currentStepId: String(args.current_step_id || STEP_0_ID),
-        defaultStepId: STEP_0_ID,
-        userMessage: String(args.user_message || ""),
-        inputMode: String(inputMode || "chat"),
-        localeHint: String(localeHint || ""),
-        localeHintSource: String(localeHintSource || "none"),
-        state: rawStateForIdempotency,
-      })
-    : "";
-  const idempotencyRecordKey =
-    runtimeOwnsIdempotency && idempotencyKey && idempotencyRequestHash
-      ? buildRuntimeIdempotencyRegistryKey(idempotencyScopeKey, idempotencyKey)
-      : "";
-  const idempotencyTracker =
-    runtimeOwnsIdempotency && idempotencyKey && idempotencyRequestHash && idempotencyRecordKey
-      ? {
-          idempotencyKey,
-          scopeKey: idempotencyScopeKey,
-          requestHash: idempotencyRequestHash,
-          registryKey: idempotencyRecordKey,
-        }
-      : null;
-  const finalizeIdempotencyResult = (
-    result: RunStepSuccess | RunStepError,
-    options?: {
-      outcome?: "fresh" | "replay" | "conflict" | "inflight";
-      errorCode?: string;
-      persist?: boolean;
-    }
-  ): RunStepSuccess | RunStepError => {
-    if (!idempotencyTracker) return result;
-    const outcome = options?.outcome || "fresh";
-    const withDiagnostics = attachRuntimeIdempotencyDiagnostics({
-      resultForClient: result as unknown as Record<string, unknown>,
-      idempotencyKey,
-      outcome,
-      ...(options?.errorCode ? { errorCode: options.errorCode } : {}),
-    }) as RunStepSuccess | RunStepError;
-    if (options?.persist === false) return withDiagnostics;
-    markRuntimeIdempotencyCompleted({
-      registryKey: idempotencyTracker.registryKey,
-      scopeKey: idempotencyTracker.scopeKey,
-      idempotencyKey: idempotencyTracker.idempotencyKey,
-      requestHash: idempotencyTracker.requestHash,
-      resultForClient: withDiagnostics as unknown as Record<string, unknown>,
-      nowMs: Date.now(),
-    });
-    return withDiagnostics;
-  };
-  const buildIdempotencyErrorResult = (params: {
-    errorType: "idempotency_conflict" | "idempotency_inflight";
-    errorCode: string;
-    message: string;
-    retryAction: "retry_same_key" | "regenerate_key";
-  }): RunStepError => {
-    const normalizedState = normalizeState(args.state ?? {});
-    return {
-      ok: false,
-      tool: "run_step",
-      current_step_id: String(args.current_step_id || normalizedState.current_step || STEP_0_ID),
-      active_specialist: String((normalizedState as Record<string, unknown>).active_specialist || ""),
-      text: "",
-      prompt: "",
-      specialist: {},
-      registry_version: ACTIONCODE_REGISTRY.version,
-      state: normalizedState,
-      error: {
-        type: params.errorType,
-        category: "contract",
-        severity: params.errorType === "idempotency_inflight" ? "transient" : "fatal",
-        retryable: params.errorType === "idempotency_inflight",
-        code: params.errorCode,
-        message: params.message,
-        retry_action: params.retryAction,
-      },
-    };
-  };
-  if (idempotencyTracker) {
-    purgeExpiredRuntimeIdempotencyEntries(Date.now());
-    const existing = getRuntimeIdempotencyEntry(idempotencyTracker.registryKey);
-    if (existing) {
-      if (existing.requestHash !== idempotencyTracker.requestHash) {
-        return finalizeIdempotencyResult(
-          buildIdempotencyErrorResult({
-            errorType: "idempotency_conflict",
-            errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.CONFLICT,
-            message: "Deze idempotency key is al gebruikt met een ander request.",
-            retryAction: "regenerate_key",
-          }),
-          {
-            outcome: "conflict",
-            errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.CONFLICT,
-            persist: false,
-          }
-        );
-      }
-      if (existing.status === "completed" && existing.resultForClient) {
-        return finalizeIdempotencyResult(
-          cloneRuntimeIdempotencyResult(existing.resultForClient) as unknown as RunStepSuccess | RunStepError,
-          {
-            outcome: "replay",
-            errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.REPLAY,
-            persist: false,
-          }
-        );
-      }
-      return finalizeIdempotencyResult(
-        buildIdempotencyErrorResult({
-          errorType: "idempotency_inflight",
-          errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.INFLIGHT,
-          message: "Een request met dezelfde idempotency key wordt al verwerkt.",
-          retryAction: "retry_same_key",
-        }),
-        {
-          outcome: "inflight",
-          errorCode: RUNTIME_IDEMPOTENCY_ERROR_CODES.INFLIGHT,
-          persist: false,
-        }
-      );
-    }
-    markRuntimeIdempotencyInFlight({
-      registryKey: idempotencyTracker.registryKey,
-      scopeKey: idempotencyTracker.scopeKey,
-      idempotencyKey: idempotencyTracker.idempotencyKey,
-      requestHash: idempotencyTracker.requestHash,
-      nowMs: Date.now(),
-    });
-    const delayMs = runtimeIdempotencyDelayMs();
-    if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-  }
-  try {
   // Runtime contract marker: BSC_WORDING_CHOICE_V2 remains the single-path runtime flag.
   const policyFlags = resolveHolisticPolicyFlags();
   const wordingChoiceEnabled = policyFlags.wordingChoiceV2;
@@ -424,7 +273,7 @@ export async function runStepRuntimeExecute(
     },
   });
   if (preflightLayer.response) {
-    return finalizeIdempotencyResult(preflightLayer.response as RunStepSuccess | RunStepError);
+    return preflightLayer.response as RunStepSuccess | RunStepError;
   }
 
   state = preflightLayer.state;
@@ -506,7 +355,7 @@ export async function runStepRuntimeExecute(
     },
   });
   if (actionRoutingLayer.response) {
-    return finalizeIdempotencyResult(actionRoutingLayer.response as RunStepSuccess | RunStepError);
+    return actionRoutingLayer.response as RunStepSuccess | RunStepError;
   }
 
   state = actionRoutingLayer.state;
@@ -574,18 +423,12 @@ export async function runStepRuntimeExecute(
     routePorts,
   });
   if (specialRoutesLayer.response) {
-    return finalizeIdempotencyResult(specialRoutesLayer.response as RunStepSuccess | RunStepError);
+    return specialRoutesLayer.response as RunStepSuccess | RunStepError;
   }
 
   const postPipelineResult = await runStepRuntimePostPipelineLayer({
     context: specialRoutesLayer.context,
     pipelinePorts,
   });
-  return finalizeIdempotencyResult(postPipelineResult);
-  } catch (error) {
-    if (idempotencyTracker) {
-      deleteRuntimeIdempotencyEntry(idempotencyTracker.registryKey);
-    }
-    throw error;
-  }
+  return postPipelineResult;
 }

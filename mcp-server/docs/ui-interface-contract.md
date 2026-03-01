@@ -1,8 +1,20 @@
 # UI Interface & Button Contract (Canonical)
 
-This document is the canonical source of truth for the widget ↔ backend contract.
+Status: Active (normatief, 2026-03-01 alignment)
 
-## 1) Widget → /run_step Request
+This document is the single canonical source of truth for the widget ↔ backend contract.
+Historical runlogs and rollout journals are explicitly archival and non-normative.
+
+## 1) Widget → /mcp Request (tools/call: run_step)
+
+Transport envelope:
+- `POST /mcp`
+- Headers: `accept: application/json, text/event-stream` and `content-type: application/json`
+- JSON-RPC body:
+  - `jsonrpc`: `"2.0"`
+  - `method`: `"tools/call"`
+  - `params.name`: `"run_step"`
+  - `params.arguments`: run_step input payload
 
 Required fields (widget mode):
 - `input_mode`: "widget" (chat clients use "chat").
@@ -14,20 +26,20 @@ Notes:
 - Button/choice/start dispatches must send ActionCodes.
 - Free-text submits send plain text in `user_message`.
 
-## 2) /run_step Response Contract
+## 2) /mcp Response Contract (tools/call result)
 
-Success (`ok: true`):
-- `ok`: `true`
-- `tool`: `"run_step"`
-- `state`: canonical session state
-- `ui`: canonical UI payload
+Success (JSON-RPC `result`):
+- `result.structuredContent.result.ok`: `true`
+- `result.structuredContent.result.tool`: `"run_step"`
+- `result.structuredContent.result.state`: canonical session state
+- `result.structuredContent.result.ui`: canonical UI payload
   - `view.mode`: one of `prestart | interactive | waiting_locale | recovery | blocked | failed`
   - `action_contract.actions[]`: canonical action descriptors
+- `result._meta.widget_result`: volledige widget payload (authoritative render source)
 
-Error (`ok: false`):
-- `ok`: `false`
-- `tool`: `"run_step"`
-- `error`: object with `type`, `user_message`, optional retry metadata
+Error:
+- Transport/JSON-RPC failures: top-level `error` object.
+- Tool-level failures: `result.structuredContent.result.ok = false` met `error` object (`type`, `user_message`, optional retry metadata).
 
 ## 3) Static Serving & Ownership
 

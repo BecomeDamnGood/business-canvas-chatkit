@@ -186,20 +186,6 @@ import { createRunStepRuntimeTextUiHelpers } from "./run_step_runtime_text_ui_he
 import { createRunStepRuntimeSemanticHelpers } from "./run_step_runtime_semantic_helpers.js";
 import { createRunStepRuntimeSpecialistHelpers } from "./run_step_runtime_specialist_helpers.js";
 import { runStepRuntimeExecute } from "./run_step_runtime_execute.js";
-import {
-  RUNTIME_IDEMPOTENCY_ERROR_CODES,
-  attachRuntimeIdempotencyDiagnostics,
-  buildRuntimeIdempotencyRegistryKey,
-  buildRuntimeIdempotencyScopeKey,
-  cloneRuntimeIdempotencyResult,
-  createRuntimeIdempotencyRequestHash,
-  deleteRuntimeIdempotencyEntry,
-  getRuntimeIdempotencyEntry,
-  markRuntimeIdempotencyCompleted,
-  markRuntimeIdempotencyInFlight,
-  purgeExpiredRuntimeIdempotencyEntries,
-  runtimeIdempotencyDelayMs,
-} from "./run_step_runtime_idempotency.js";
 export {
   LANGUAGE_LOCK_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
@@ -889,10 +875,7 @@ type RunStepError = RunStepBase & { ok: false; error: Record<string, unknown> };
 
 const runStepRuntimeExecuteDeps = {
   parseRunStepIngressArgs, STEP_0_ID, ACTIONCODE_REGISTRY, normalizeState, normalizeLocaleHint,
-  buildRuntimeIdempotencyScopeKey, createRuntimeIdempotencyRequestHash, buildRuntimeIdempotencyRegistryKey,
-  attachRuntimeIdempotencyDiagnostics, markRuntimeIdempotencyCompleted, purgeExpiredRuntimeIdempotencyEntries,
-  getRuntimeIdempotencyEntry, RUNTIME_IDEMPOTENCY_ERROR_CODES, cloneRuntimeIdempotencyResult,
-  markRuntimeIdempotencyInFlight, runtimeIdempotencyDelayMs, resolveHolisticPolicyFlags,
+  resolveHolisticPolicyFlags,
   normalizeStateLanguageSource, logStructuredEvent, createStructuredLogContextFromState,
   deriveTransitionEventFromLegacy, orchestrateFromTransition, envFlagEnabled, createTurnLlmAccumulator,
   registerTurnLlmCall, normalizeUsage, runStepPreflightHelpers, createRunStepRuntimeFinalizeLayer,
@@ -922,7 +905,7 @@ const runStepRuntimeExecuteDeps = {
   applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
   step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
   pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState,
-  runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer, deleteRuntimeIdempotencyEntry,
+  runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer,
   looksLikeMetaInstruction, ROLE_SPECIALIST, PRESENTATION_SPECIALIST, DREAM_PICK_ONE_ROUTE_TOKEN,
   ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
   DREAM_START_EXERCISE_ROUTE_TOKEN,

@@ -3302,13 +3302,22 @@ test("wording choice: generic Purpose acknowledgement is replaced with step-spec
     },
   });
 
-  assert.equal(result.ok, false);
-  assert.equal(String(result.error?.type || ""), "session_upgrade_required");
-  assert.equal(String((result.state as any)?.ui_gate_status || ""), "blocked");
-  assert.equal(String((result.state as any)?.ui_gate_reason || ""), "session_upgrade_required");
-  assert.equal(String((result.state as any)?.bootstrap_phase || ""), "failed");
-  assert.ok(Array.isArray((result.error as any)?.markers));
-  assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
+  assert.equal(result.ok, true);
+  assert.equal(String(result.error?.type || ""), "");
+  assert.equal(String((result.state as any)?.ui_gate_status || ""), "ready");
+  assert.equal(String((result.state as any)?.ui_gate_reason || ""), "");
+  assert.equal(String((result.state as any)?.bootstrap_phase || ""), "ready");
+  assert.equal(menuIdFromTurn(result), "PURPOSE_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes || [], [
+    "ACTION_PURPOSE_REFINE_CONFIRM",
+    "ACTION_PURPOSE_REFINE_ADJUST",
+  ]);
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "false");
+  assert.equal(String(result.specialist?.wording_choice_selected || ""), "user");
+  assert.equal(
+    String(result.specialist?.message || "").includes("Your current Purpose for Mindd is:"),
+    true
+  );
 });
 
 test("informational context policy scope excludes presentation step", () => {
@@ -3425,13 +3434,18 @@ test("wording choice: Big Why user pick downgrades generic confirm to contract r
     },
   });
 
-  assert.equal(result.ok, false);
-  assert.equal(String(result.error?.type || ""), "session_upgrade_required");
-  assert.equal(String((result.state as any)?.ui_gate_status || ""), "blocked");
-  assert.equal(String((result.state as any)?.ui_gate_reason || ""), "session_upgrade_required");
-  assert.equal(String((result.state as any)?.bootstrap_phase || ""), "failed");
-  assert.ok(Array.isArray((result.error as any)?.markers));
-  assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
+  assert.equal(result.ok, true);
+  assert.equal(String(result.error?.type || ""), "");
+  assert.equal(String((result.state as any)?.ui_gate_status || ""), "ready");
+  assert.equal(String((result.state as any)?.ui_gate_reason || ""), "");
+  assert.equal(String((result.state as any)?.bootstrap_phase || ""), "ready");
+  assert.equal(menuIdFromTurn(result), "BIGWHY_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes || [], [
+    "ACTION_BIGWHY_REFINE_CONFIRM",
+    "ACTION_BIGWHY_REFINE_ADJUST",
+  ]);
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "false");
+  assert.equal(String(result.specialist?.wording_choice_selected || ""), "user");
 });
 
 test("wording choice: Role user pick restores contract refine menu instead of generic continue", async () => {
@@ -3463,13 +3477,18 @@ test("wording choice: Role user pick restores contract refine menu instead of ge
     },
   });
 
-  assert.equal(result.ok, false);
-  assert.equal(String(result.error?.type || ""), "session_upgrade_required");
-  assert.equal(String((result.state as any)?.ui_gate_status || ""), "blocked");
-  assert.equal(String((result.state as any)?.ui_gate_reason || ""), "session_upgrade_required");
-  assert.equal(String((result.state as any)?.bootstrap_phase || ""), "failed");
-  assert.ok(Array.isArray((result.error as any)?.markers));
-  assert.equal(((result.error as any)?.markers || []).includes("legacy_action_confirm"), true);
+  assert.equal(result.ok, true);
+  assert.equal(String(result.error?.type || ""), "");
+  assert.equal(String((result.state as any)?.ui_gate_status || ""), "ready");
+  assert.equal(String((result.state as any)?.ui_gate_reason || ""), "");
+  assert.equal(String((result.state as any)?.bootstrap_phase || ""), "ready");
+  assert.equal(menuIdFromTurn(result), "ROLE_MENU_REFINE");
+  assert.deepEqual(result.ui?.action_codes || [], [
+    "ACTION_ROLE_REFINE_CONFIRM",
+    "ACTION_ROLE_REFINE_ADJUST",
+  ]);
+  assert.equal(String(result.specialist?.wording_choice_pending || ""), "false");
+  assert.equal(String(result.specialist?.wording_choice_selected || ""), "user");
 });
 
 test("wording choice: Rules user pick restores confirm-capable menu buttons", async () => {
@@ -3804,7 +3823,7 @@ test("wording choice: DreamExplainer pick does not prepend generic current-dream
   );
 });
 
-test("runtime golden fail-closed paths preserve blocked/failed owner contract", async () => {
+test("runtime golden blocked/failed fixtures keep deterministic owner contract outputs", async () => {
   const fixtures = [
     loadRuntimeGoldenFixture("blocked.json"),
     loadRuntimeGoldenFixture("failed.json"),

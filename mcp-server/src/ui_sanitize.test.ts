@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { renderInlineText, renderStructuredText } from "../ui/lib/ui_text.ts";
 import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.ts";
 import { renderChoiceButtons } from "../ui/lib/ui_render.ts";
@@ -206,6 +207,12 @@ test("extractChoicesFromPrompt stays inert while structured ui.actions still ren
     ui: {
       action_codes: ["ACTION_ONE", "ACTION_TWO"],
       expected_choice_count: 2,
+      action_contract: {
+        actions: [
+          { id: "a1", label: "Alpha", action_code: "ACTION_ONE", role: "choice" },
+          { id: "a2", label: "Beta", action_code: "ACTION_TWO", role: "choice" },
+        ],
+      },
       actions: [
         { id: "a1", label: "Alpha", action_code: "ACTION_ONE", intent: { type: "ROUTE", route: "__ROUTE__ONE__" } },
         { id: "a2", label: "Beta", action_code: "ACTION_TWO", intent: { type: "ROUTE", route: "__ROUTE__TWO__" } },
@@ -368,4 +375,15 @@ test("renderStructuredText renders markdown image lines as card images", { concu
   } finally {
     (globalThis as unknown as { document: unknown }).document = originalDocument;
   }
+});
+
+test("bundled runtime renders payload text through textContent and keeps actions innerHTML reset-only", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /if \(ui\.card\) ui\.card\.textContent = bodyText;/);
+  assert.match(source, /if \(ui\.prompt\) ui\.prompt\.textContent = promptText;/);
+  assert.match(source, /if \(ui\.error\) ui\.error\.textContent = errorText;/);
+  assert.match(source, /if \(ui\.actions\) ui\.actions\.innerHTML = "";/);
+  assert.doesNotMatch(source, /ui\.card\.innerHTML\s*=/);
+  assert.doesNotMatch(source, /ui\.prompt\.innerHTML\s*=/);
+  assert.doesNotMatch(source, /ui\.error\.innerHTML\s*=/);
 });

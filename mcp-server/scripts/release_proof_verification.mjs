@@ -114,6 +114,14 @@ function unwrapJsonRpcError(payload) {
     : null;
 }
 
+const MCP_ACCEPT_HEADER = "application/json, text/event-stream";
+let jsonRpcIdCounter = 0;
+
+function nextJsonRpcId(prefix = "rpc") {
+  jsonRpcIdCounter += 1;
+  return `${prefix}-${jsonRpcIdCounter}`;
+}
+
 async function postJson(url, body, headers = {}) {
   const res = await fetch(url, {
     method: "POST",
@@ -128,6 +136,65 @@ async function postJson(url, body, headers = {}) {
     // keep raw text
   }
   return { status: res.status, headers: res.headers, text, json };
+}
+
+async function callRunStepViaMcp(baseUrl, args, headers = {}) {
+  const initResp = await postJson(
+    `${baseUrl}/mcp`,
+    {
+      jsonrpc: "2.0",
+      id: nextJsonRpcId("init"),
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "release-proof", version: "1.0.0" },
+      },
+    },
+    {
+      accept: MCP_ACCEPT_HEADER,
+      ...headers,
+    }
+  );
+  const sessionId = String(initResp.headers.get("mcp-session-id") || "").trim();
+  const callResp = await postJson(
+    `${baseUrl}/mcp`,
+    {
+      jsonrpc: "2.0",
+      id: nextJsonRpcId("call"),
+      method: "tools/call",
+      params: {
+        name: "run_step",
+        arguments: args,
+      },
+    },
+    {
+      accept: MCP_ACCEPT_HEADER,
+      ...(sessionId ? { "mcp-session-id": sessionId } : {}),
+      ...headers,
+    }
+  );
+  const rpcError = unwrapJsonRpcError(callResp.json);
+  const rpcResult =
+    callResp.json && typeof callResp.json === "object" && callResp.json.result && typeof callResp.json.result === "object"
+      ? callResp.json.result
+      : {};
+  const structuredContent =
+    rpcResult.structuredContent && typeof rpcResult.structuredContent === "object"
+      ? rpcResult.structuredContent
+      : {};
+  const modelResult =
+    structuredContent.result && typeof structuredContent.result === "object"
+      ? structuredContent.result
+      : {};
+  const widgetResult =
+    rpcResult._meta &&
+    typeof rpcResult._meta === "object" &&
+    rpcResult._meta.widget_result &&
+    typeof rpcResult._meta.widget_result === "object"
+      ? rpcResult._meta.widget_result
+      : {};
+  return { initResp, callResp, sessionId, rpcError, modelResult, widgetResult };
 }
 
 function ensureNoPii(logs, piiTokens) {
@@ -192,8 +259,8 @@ async function runMainPhase() {
     });
 
     const corrRunStep = "corr-release-e2e-001";
-    const runStepResp = await postJson(
-      `${harness.baseUrl}/run_step`,
+    const runStepResp = await callRunStepViaMcp(
+      harness.baseUrl,
       {
         current_step_id: "step_0",
         user_message:
@@ -203,19 +270,22 @@ async function runMainPhase() {
       },
       {
         "x-correlation-id": corrRunStep,
+        "x-forwarded-for": "203.0.113.11",
       }
     );
     const runStepE2EOk =
-      runStepResp.status === 200 &&
-      readHeader(runStepResp, "x-correlation-id") === corrRunStep;
-    pushCheck(checks, "correlation_id_header_e2e_run_step", runStepE2EOk, {
-      status: runStepResp.status,
+      runStepResp.callResp.status === 200 &&
+      readHeader(runStepResp.callResp, "x-correlation-id") === corrRunStep &&
+      !runStepResp.rpcError;
+    pushCheck(checks, "correlation_id_header_e2e_mcp_run_step", runStepE2EOk, {
+      status: runStepResp.callResp.status,
+      has_rpc_error: Boolean(runStepResp.rpcError),
     });
 
     await sleep(120);
     const runStepReqEvent = findStructuredEvent(harness.logs, "run_step_request", corrRunStep);
     const runStepRespEvent = findStructuredEvent(harness.logs, "run_step_response", corrRunStep);
-    pushCheck(checks, "correlation_id_structured_events_e2e_run_step", Boolean(runStepReqEvent && runStepRespEvent), {
+    pushCheck(checks, "correlation_id_structured_events_e2e_mcp_run_step", Boolean(runStepReqEvent && runStepRespEvent), {
       request_event: Boolean(runStepReqEvent),
       response_event: Boolean(runStepRespEvent),
     });
@@ -225,7 +295,7 @@ async function runMainPhase() {
       `${harness.baseUrl}/mcp`,
       "{not-json",
       {
-        accept: "application/json, text/event-stream",
+        accept: MCP_ACCEPT_HEADER,
         "x-correlation-id": invalidJsonCorr,
         "x-forwarded-for": "198.51.100.10",
       }
@@ -250,7 +320,7 @@ async function runMainPhase() {
         blob: "x".repeat(4096),
       },
       {
-        accept: "application/json, text/event-stream",
+        accept: MCP_ACCEPT_HEADER,
         "x-correlation-id": tooLargeCorr,
         "x-forwarded-for": "198.51.100.11",
       }
@@ -267,8 +337,8 @@ async function runMainPhase() {
     });
 
     const wrongContractCorr = "corr-chaos-wrong-contract";
-    const wrongContractResp = await postJson(
-      `${harness.baseUrl}/run_step`,
+    const wrongContractResp = await callRunStepViaMcp(
+      harness.baseUrl,
       {
         current_step_id: "purpose",
         user_message: "ACTION_WORDING_PICK_USER",
@@ -283,20 +353,26 @@ async function runMainPhase() {
       },
       {
         "x-correlation-id": wrongContractCorr,
+        "x-forwarded-for": "203.0.113.12",
       }
     );
-    const wrongWidgetResult = wrongContractResp.json?._meta?.widget_result || {};
-    const wrongErrorCode = String(wrongContractResp.json?.error_code || "");
+    const wrongWidgetResult = wrongContractResp.widgetResult || {};
+    const wrongModelResult = wrongContractResp.modelResult || {};
+    const wrongErrorType = String(wrongModelResult.error?.type || wrongWidgetResult.error?.type || "");
+    const wrongGateReason = String(wrongWidgetResult.state?.ui_gate_reason || wrongModelResult.state?.ui_gate_reason || "");
     const wrongContractOk =
-      wrongContractResp.status === 400 &&
-      wrongErrorCode === "invalid_run_step_payload";
-    pushCheck(checks, "chaos_wrong_contract_version_fail_closed", wrongContractOk, {
-      status: wrongContractResp.status,
-      error_code: wrongErrorCode,
+      wrongContractResp.callResp.status === 200 &&
+      !wrongContractResp.rpcError &&
+      (wrongErrorType === "invalid_state" || wrongGateReason === "invalid_state" || wrongGateReason === "contract_violation");
+    pushCheck(checks, "chaos_wrong_contract_version_fail_closed_mcp", wrongContractOk, {
+      status: wrongContractResp.callResp.status,
+      error_type: wrongErrorType,
+      gate_reason: wrongGateReason,
+      has_rpc_error: Boolean(wrongContractResp.rpcError),
     });
-    const wrongContractEvent = findStructuredEvent(harness.logs, "post_run_step_invalid_payload", wrongContractCorr);
-    pushCheck(checks, "chaos_wrong_contract_version_structured_event", Boolean(wrongContractEvent), {
-      event: wrongContractEvent ? "post_run_step_invalid_payload" : "missing",
+    const wrongContractEvent = findStructuredEvent(harness.logs, "run_step_response", wrongContractCorr);
+    pushCheck(checks, "chaos_wrong_contract_version_structured_event_mcp", Boolean(wrongContractEvent), {
+      event: wrongContractEvent ? "run_step_response" : "missing",
     });
 
     const idemBaseBody = {
@@ -311,33 +387,37 @@ async function runMainPhase() {
         started: "false",
       },
     };
-    const idem1 = await postJson(
-      `${harness.baseUrl}/run_step`,
+    const idem1 = await callRunStepViaMcp(
+      harness.baseUrl,
       idemBaseBody,
-      { "x-correlation-id": "corr-chaos-idem-1" }
+      { "x-correlation-id": "corr-chaos-idem-1", "x-forwarded-for": "203.0.113.21" }
     );
-    const idem2 = await postJson(
-      `${harness.baseUrl}/run_step`,
+    const idem2 = await callRunStepViaMcp(
+      harness.baseUrl,
       idemBaseBody,
-      { "x-correlation-id": "corr-chaos-idem-2" }
+      { "x-correlation-id": "corr-chaos-idem-2", "x-forwarded-for": "203.0.113.22" }
     );
-    const idem2Widget = idem2.json?._meta?.widget_result || {};
+    const idem2Widget = idem2.widgetResult || {};
     const idempotencyOk =
-      idem1.status === 200 &&
-      idem2.status === 200 &&
+      idem1.callResp.status === 200 &&
+      idem2.callResp.status === 200 &&
+      !idem1.rpcError &&
+      !idem2.rpcError &&
       String(idem2Widget.idempotency_outcome || idem2Widget.state?.idempotency_outcome || "") === "replay";
-    pushCheck(checks, "chaos_idempotency_replay_fail_closed", idempotencyOk, {
-      first_status: idem1.status,
-      second_status: idem2.status,
+    pushCheck(checks, "chaos_idempotency_replay_fail_closed_mcp", idempotencyOk, {
+      first_status: idem1.callResp.status,
+      second_status: idem2.callResp.status,
+      first_rpc_error: Boolean(idem1.rpcError),
+      second_rpc_error: Boolean(idem2.rpcError),
       second_outcome: String(idem2Widget.idempotency_outcome || idem2Widget.state?.idempotency_outcome || ""),
     });
     const replayEvent = findStructuredEvent(harness.logs, "idempotency_replay_served", "corr-chaos-idem-2");
-    pushCheck(checks, "chaos_idempotency_replay_structured_event", Boolean(replayEvent), {
+    pushCheck(checks, "chaos_idempotency_replay_structured_event_mcp", Boolean(replayEvent), {
       event: replayEvent ? "idempotency_replay_served" : "missing",
     });
 
     const rateHeaders = {
-      accept: "application/json, text/event-stream",
+      accept: MCP_ACCEPT_HEADER,
       "x-forwarded-for": "203.0.113.60",
     };
     const rateReq1 = await postJson(
@@ -406,7 +486,7 @@ async function runTimeoutPhase() {
         },
       },
       {
-        accept: "application/json, text/event-stream",
+        accept: MCP_ACCEPT_HEADER,
         "x-correlation-id": timeoutCorr,
         "x-forwarded-for": "203.0.113.99",
       }

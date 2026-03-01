@@ -15,9 +15,13 @@ function sleep(ms) {
 }
 
 function extractResult(payload) {
-  const result = payload?.structuredContent?.result;
+  const result = payload?.result?.structuredContent?.result ?? payload?.structuredContent?.result;
   assert.equal(Boolean(result && typeof result === "object"), true, "model result payload ontbreekt");
   return result;
+}
+
+function extractJsonRpcError(payload) {
+  return payload?.error && typeof payload.error === "object" ? payload.error : null;
 }
 
 async function waitForReady(maxMs = 30000, isServerAlive = () => true) {
@@ -37,14 +41,73 @@ async function waitForReady(maxMs = 30000, isServerAlive = () => true) {
   throw new Error(`Server niet ready binnen ${maxMs}ms`);
 }
 
-async function postRunStep(body) {
-  const res = await fetch(`${baseUrl}/run_step`, {
+let mcpSessionId = "";
+let rpcId = 0;
+let mcpInitialized = false;
+
+async function postMcp(body, headers = {}) {
+  const reqHeaders = {
+    accept: "application/json, text/event-stream",
+    "content-type": "application/json",
+    ...headers,
+  };
+  if (mcpSessionId && !reqHeaders["mcp-session-id"]) {
+    reqHeaders["mcp-session-id"] = mcpSessionId;
+  }
+  const res = await fetch(`${baseUrl}/mcp`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    headers: reqHeaders,
+    body: typeof body === "string" ? body : JSON.stringify(body),
   });
-  const json = await res.json();
-  return { status: res.status, json, result: extractResult(json) };
+  const sessionFromHeader = String(res.headers.get("mcp-session-id") || "").trim();
+  if (sessionFromHeader) {
+    mcpSessionId = sessionFromHeader;
+  }
+  const text = await res.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+  return { status: res.status, headers: res.headers, text, json };
+}
+
+async function ensureMcpInitialized() {
+  if (mcpInitialized) return;
+  const init = await postMcp({
+    jsonrpc: "2.0",
+    id: `init-${++rpcId}`,
+    method: "initialize",
+    params: {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "runtime-smoke", version: "1.0.0" },
+    },
+  });
+  assert.equal(init.status, 200, "MCP initialize moet 200 geven");
+  assert.equal(Boolean(extractJsonRpcError(init.json)), false, "MCP initialize mag geen JSON-RPC error geven");
+  mcpInitialized = true;
+}
+
+async function callRunStep(body) {
+  await ensureMcpInitialized();
+  const res = await postMcp({
+    jsonrpc: "2.0",
+    id: `call-${++rpcId}`,
+    method: "tools/call",
+    params: {
+      name: "run_step",
+      arguments: body,
+    },
+  });
+  const rpcError = extractJsonRpcError(res.json);
+  assert.equal(
+    Boolean(rpcError),
+    false,
+    `run_step tools/call JSON-RPC error: ${String(rpcError?.message || "unknown")}`
+  );
+  return { status: res.status, json: res.json, result: extractResult(res.json) };
 }
 
 async function main() {
@@ -94,7 +157,7 @@ async function main() {
     const readyJson = await readyRes.json();
     assert.equal(readyJson?.ready, true, "/ready payload mist ready=true");
 
-    const first = await postRunStep({
+    const first = await callRunStep({
       current_step_id: "step_0",
       user_message: "Marketing agency Mindd",
       input_mode: "chat",
@@ -112,8 +175,8 @@ async function main() {
       idempotency_key: idempotencyKey,
       state: first.result.state,
     };
-    const duplicate1 = await postRunStep(duplicatePayload);
-    const duplicate2 = await postRunStep(duplicatePayload);
+    const duplicate1 = await callRunStep(duplicatePayload);
+    const duplicate2 = await callRunStep(duplicatePayload);
 
     const duplicateSeq1 = Number(duplicate1.result.response_seq || 0);
     const duplicateSeq2 = Number(duplicate2.result.response_seq || 0);
@@ -124,7 +187,7 @@ async function main() {
       duplicateSeq2 === duplicateSeq1 ? "replay" : duplicateSeq2 > duplicateSeq1 ? "fresh" : "invalid";
     assert.notEqual(duplicateBehavior, "invalid", "duplicate request gedrag ongeldig");
 
-    const conflictCandidate = await postRunStep({
+    const conflictCandidate = await callRunStep({
       ...duplicatePayload,
       user_message: "Different payload",
     });

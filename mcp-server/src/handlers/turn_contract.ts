@@ -121,84 +121,6 @@ function isForbiddenStep0StartedNoOutputNoMenu(
   );
 }
 
-function ensureActionLivenessContract(response: RunStepContractResponse): void {
-  const state = toRecord(response.state);
-  const fromState = toRecord(state.ui_action_liveness);
-  const responseIsOk = response.ok === true;
-  const defaultAckStatus = responseIsOk ? "accepted" : "rejected";
-  const ackStatusRaw = String(
-    response.ack_status ||
-      state.ack_status ||
-      fromState.ack_status ||
-      defaultAckStatus
-  )
-    .trim()
-    .toLowerCase();
-  const ackStatus =
-    ackStatusRaw === "accepted" ||
-    ackStatusRaw === "rejected" ||
-    ackStatusRaw === "timeout" ||
-    ackStatusRaw === "dropped"
-      ? ackStatusRaw
-      : "accepted";
-  const stateAdvancedRaw =
-    response.state_advanced ??
-    state.state_advanced ??
-    fromState.state_advanced ??
-    (responseIsOk ? true : false);
-  const stateAdvanced =
-    stateAdvancedRaw === true ||
-    String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
-  const reasonCode = stateAdvanced
-    ? ""
-    : String(
-        response.reason_code ||
-          state.reason_code ||
-          fromState.reason_code ||
-          toRecord(response.error).reason ||
-          toRecord(response.error).type ||
-          "explicit_error"
-      )
-        .trim()
-        .toLowerCase();
-  const actionCodeEcho = String(
-    response.action_code_echo ||
-      state.action_code_echo ||
-      fromState.action_code_echo ||
-      state.__last_clicked_action_for_contract ||
-      ""
-  )
-    .trim()
-    .toUpperCase();
-  const clientActionIdEcho = String(
-    response.client_action_id_echo ||
-      state.client_action_id_echo ||
-      fromState.client_action_id_echo ||
-      state.__client_action_id ||
-      ""
-  ).trim();
-
-  state.ui_action_liveness = {
-    ack_status: ackStatus,
-    state_advanced: stateAdvanced,
-    reason_code: reasonCode,
-    action_code_echo: actionCodeEcho,
-    client_action_id_echo: clientActionIdEcho,
-  };
-  state.ack_status = ackStatus;
-  state.state_advanced = stateAdvanced ? "true" : "false";
-  state.reason_code = reasonCode;
-  state.action_code_echo = actionCodeEcho;
-  state.client_action_id_echo = clientActionIdEcho;
-
-  response.state = state;
-  response.ack_status = ackStatus;
-  response.state_advanced = stateAdvanced;
-  response.reason_code = reasonCode;
-  response.action_code_echo = actionCodeEcho;
-  response.client_action_id_echo = clientActionIdEcho;
-}
-
 function buildStateActionDescriptor(
   state: Record<string, unknown>,
   role: UiActionRole
@@ -714,7 +636,6 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       };
     }
   }
-  ensureActionLivenessContract(finalResponse);
   ensureUnifiedUiActionContract(finalResponse);
   let canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   try {
@@ -729,7 +650,6 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       locale_pending_background: false,
       bootstrap_phase: "failed",
     });
-    ensureActionLivenessContract(finalResponse);
     ensureUnifiedUiActionContract(finalResponse);
     canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   }

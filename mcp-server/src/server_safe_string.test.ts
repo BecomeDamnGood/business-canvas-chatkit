@@ -31,9 +31,10 @@ test("safeString handles unstringifiable objects without throwing", () => {
   assert.equal(typeof value, "string");
 });
 
-test("local /run_step bridge forwards input_mode to runStepHandler", () => {
+test("MCP-only ingress forwards input_mode to runStepHandler and removes local bridge routes", () => {
   const source = readServerSource();
-  assert.match(source, /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)/);
+  assert.doesNotMatch(source, /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)/);
+  assert.doesNotMatch(source, /if \(req\.method === "GET" && \(url\.pathname === "\/test" \|\| url\.pathname === "\/test\/"\)\)/);
   assert.match(source, /input_mode\?: "widget" \| "chat";/);
   assert.match(source, /input_mode: args\.input_mode,/);
 });
@@ -116,13 +117,13 @@ test("run_step contract emits server-authoritative ui.view payload", () => {
   assert.match(turnContractSource, /interactive_requires_renderable_content/);
 });
 
-test("ui actions do not optimistically mutate started or state.language before run_step response", () => {
-  const source = fs.readFileSync(new URL("../ui/lib/ui_actions.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /widgetPatch\.started = "true"/);
-  assert.doesNotMatch(
-    source,
-    /if \(!String\(\(nextState as Record<string, unknown>\)\.language \|\| ""\)\.trim\(\) && localeHint\)/
-  );
+test("bundled ui runtime does not optimistically mutate started or state.language before run_step response", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /var nextState = Object\.assign\(\{\}, runtime\.state, toRecord\(extraState\)\);/);
+  assert.match(source, /callRunStep\(action\.actionCode, \{\}\);/);
+  assert.match(source, /callRunStep\(message, \{\}\);/);
+  assert.doesNotMatch(source, /runtime\.state\.started\s*=/);
+  assert.doesNotMatch(source, /runtime\.state\.language\s*=/);
 });
 
 test("run_step handler always emits model-safe result and keeps full payload widget-only", () => {

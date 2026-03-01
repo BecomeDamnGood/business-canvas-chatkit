@@ -12,8 +12,6 @@ import {
   RUN_STEP_TOOL_COMPAT_POLICY,
   RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
   RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
-  RunStepToolInputSchema,
-  RunStepToolStructuredContentOutputSchema,
 } from "../contracts/mcp_tool_contract.js";
 import { CURRENT_STATE_VERSION } from "../core/state.js";
 import { VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
@@ -22,8 +20,6 @@ import { createRateLimitMiddleware } from "../middleware/rateLimit.js";
 import { applySecurityHeaders } from "../middleware/security.js";
 import { safeString } from "../server_safe_string.js";
 
-import { normalizeHostWidgetSessionId } from "./locale_resolution.js";
-import { ensureRunStepOutputTupleParity } from "./ordering_parity.js";
 import {
   ensureCorrelationHeader,
   getCorrelationId,
@@ -50,14 +46,13 @@ import {
   getRunStep,
   host,
   isLocalDev,
-  normalizeIdempotencyKey,
   port,
 } from "./server_config.js";
 import { summarizeBootstrapSessions } from "./ordering_parity.js";
 import { summarizeIdempotencyRegistry } from "./idempotency_registry.js";
 import { createAppServer } from "./mcp_registration.js";
 import { resolveBaseUrl } from "./run_step_model_result.js";
-import { loadUiHtml, runStepHandler } from "./run_step_transport.js";
+import { loadUiHtml } from "./run_step_transport.js";
 
 const httpServer = async (req: any, res: any) => {
   const hostHeader = safeString(req?.headers?.host ?? "localhost");
@@ -275,212 +270,9 @@ const httpServer = async (req: any, res: any) => {
     return;
   }
 
-  // --- Local dev only: /test and /run_step (no impact on production / MCP) ---
-  if (isLocalDev) {
-    // POST /run_step — bridge endpoint: same handler as MCP tool, same structuredContent shape.
-    if (req.method === "POST" && url.pathname === "/run_step") {
-      const correlationId = getCorrelationId(req);
-      const traceId = getTraceId(req) || correlationId;
-      ensureCorrelationHeader(res, correlationId);
-      let raw: Buffer;
-      try {
-        raw = await readBodyWithLimit(req, MAX_REQUEST_SIZE_BYTES);
-      } catch (e: any) {
-        const code = safeString(e?.code ?? "");
-        if (code === "body_too_large") {
-          logStructuredEvent(
-            "warn",
-            "post_run_step_body_too_large",
-            {
-              correlation_id: correlationId,
-              trace_id: traceId,
-              session_id: "",
-              step_id: "",
-              contract_id: "",
-            },
-            {
-              method: req.method,
-              max_size: MAX_REQUEST_SIZE_BYTES,
-            }
-          );
-          res.writeHead(413, { "content-type": "application/json" });
-          res.end(JSON.stringify({
-            error: "body_too_large",
-            error_code: "body_too_large",
-            max_size: MAX_REQUEST_SIZE_BYTES,
-          }));
-          return;
-        }
-        logStructuredEvent(
-          "warn",
-          "post_run_step_request_aborted",
-          {
-            correlation_id: correlationId,
-            trace_id: traceId,
-            session_id: "",
-            step_id: "",
-            contract_id: "",
-          },
-          {
-            method: req.method,
-            code: code || "request_aborted",
-          }
-        );
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "request_aborted", error_code: "request_aborted" }));
-        return;
-      }
-      let parsedBody: unknown = {};
-      try {
-        parsedBody = JSON.parse(raw.toString("utf-8") || "{}");
-      } catch {
-        logStructuredEvent(
-          "warn",
-          "post_run_step_invalid_json",
-          {
-            correlation_id: correlationId,
-            trace_id: traceId,
-            session_id: "",
-            step_id: "",
-            contract_id: "",
-          },
-          {
-            method: req.method,
-          }
-        );
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_json", error_code: "invalid_json" }));
-        return;
-      }
-      const parsedArgsResult = RunStepToolInputSchema.safeParse(parsedBody);
-      if (!parsedArgsResult.success) {
-        logStructuredEvent(
-          "warn",
-          "post_run_step_invalid_payload",
-          {
-            correlation_id: correlationId,
-            trace_id: traceId,
-            session_id: "",
-            step_id: "",
-            contract_id: "",
-          },
-          {
-            method: req.method,
-            issue_count: parsedArgsResult.error.issues.length,
-          }
-        );
-        res.writeHead(400, { "content-type": "application/json" });
-        res.end(
-          JSON.stringify({
-            error: "invalid_run_step_payload",
-            error_code: "invalid_run_step_payload",
-            issues: parsedArgsResult.error.issues,
-          })
-        );
-        return;
-      }
-      try {
-        const args = parsedArgsResult.data;
-        const parsedState =
-          args.state && typeof args.state === "object" && !Array.isArray(args.state)
-            ? (args.state as Record<string, unknown>)
-            : {};
-        const idempotencyKeyFromHeaders =
-          normalizeIdempotencyKey(getHeader(req, "idempotency-key")) ||
-          normalizeIdempotencyKey(getHeader(req, "x-idempotency-key"));
-        const handlerOutput = await runStepHandler({
-          current_step_id: safeString(args.current_step_id ?? "step_0") || "step_0",
-          user_message: safeString(args.user_message ?? ""),
-          input_mode: args.input_mode,
-          locale_hint: safeString(args.locale_hint ?? ""),
-          locale_hint_source: args.locale_hint_source ?? "none",
-          idempotency_key:
-            normalizeIdempotencyKey(args.idempotency_key) ||
-            idempotencyKeyFromHeaders ||
-            normalizeIdempotencyKey(
-              parsedState.__client_action_id ?? ""
-            ),
-          correlation_id: correlationId,
-          trace_id: traceId,
-          host_widget_session_id: normalizeHostWidgetSessionId(args.host_widget_session_id),
-          state: parsedState,
-        });
-        const parityOutput = ensureRunStepOutputTupleParity({
-          structuredContent: handlerOutput.structuredContent,
-          meta: handlerOutput.meta,
-          requestState: parsedState,
-          requestHostWidgetSessionId: normalizeHostWidgetSessionId(args.host_widget_session_id),
-          correlationId,
-          traceId,
-          defaultStepId: safeString(args.current_step_id ?? "step_0") || "step_0",
-        });
-        const structuredContent = parityOutput.structuredContent;
-        const meta = parityOutput.meta;
-        const hasMetaWidgetResult =
-          meta &&
-          typeof meta === "object" &&
-          (meta as any).widget_result &&
-          typeof (meta as any).widget_result === "object";
-        if (!hasMetaWidgetResult) {
-          throw new Error("meta_widget_result_missing");
-        }
-        const parsedStructuredContent = RunStepToolStructuredContentOutputSchema.parse(structuredContent);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ structuredContent: parsedStructuredContent, ...(meta ? { _meta: meta } : {}) }));
-      } catch (e) {
-        logStructuredEvent(
-          "error",
-          "post_run_step_error",
-          {
-            correlation_id: correlationId,
-            trace_id: traceId,
-            session_id: "",
-            step_id: "",
-            contract_id: "",
-          },
-          {
-            message: safeString((e as Error)?.message ?? e),
-          }
-        );
-        res.writeHead(500, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: safeString((e as Error)?.message ?? e) }));
-      }
-      return;
-    }
-
-    // GET /test — step-card HTML + injected openai bridge (callTool → fetch /run_step, set toolOutput, dispatch openai:set_globals).
-    if (req.method === "GET" && (url.pathname === "/test" || url.pathname === "/test/")) {
-      const widgetHtml = loadUiHtml();
-      const OPENAI_BRIDGE = `
-  <script>
-    (function() {
-      if (typeof globalThis.openai !== "undefined") return;
-      globalThis.openai = {
-        callTool: async function(name, args) {
-          const resp = await fetch("/run_step", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(args),
-          });
-          const data = await resp.json();
-          return data;
-        },
-        toolOutput: null,
-      };
-      window.dispatchEvent(new Event("openai:set_globals"));
-    })();
-  </script>
-`;
-      const withBridge = widgetHtml.replace("<body>", "<body>" + OPENAI_BRIDGE);
-      res.writeHead(200, { "content-type": "text/html" });
-      res.end(withBridge);
-      return;
-    }
-  }
-
-  // Static root for /ui/* – serve step-card.bundled.html, lib/*.js, assets, etc.
+  // Static root for /ui/* – runtime only requires step-card.bundled.html.
   if (req.method === "GET" && url.pathname.startsWith("/ui/")) {
-    const uiDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "ui");
+    const uiDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ui");
     let filePath: string;
     if (url.pathname === "/ui/step-card" || url.pathname === "/ui/step-card/") {
       filePath = path.join(uiDir, "step-card.bundled.html");
@@ -799,7 +591,7 @@ async function startServer(): Promise<void> {
       `Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`
     );
     if (isLocalDev) {
-      console.log(`Local dev: GET http://localhost:${port}/test  POST http://localhost:${port}/run_step`);
+      console.log(`Local dev: MCP http://localhost:${port}${MCP_PATH}  UI http://localhost:${port}/ui/step-card`);
     }
   });
 }

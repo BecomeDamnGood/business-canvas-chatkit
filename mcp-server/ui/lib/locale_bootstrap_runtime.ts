@@ -54,8 +54,6 @@ export type BootstrapRenderState = {
   interactiveFallbackActive: boolean;
 };
 
-type CandidateContext = "root" | "toolOutput";
-
 export type BootstrapOrdering = {
   bootstrap_session_id: string;
   bootstrap_epoch: number;
@@ -149,30 +147,14 @@ function resolveMetaWidgetResult(raw: unknown): { result: Record<string, unknown
   const root = toRecord(raw);
   const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
 
-  // Zoekpad 1: toolOutput._widget_result
-  // structuredContent = { title, meta, result, _widget_result }
-  // window.openai.toolOutput = structuredContent
-  // merged toolOutput = structuredContent -> _widget_result zit direct op dit object
-  const fromToolOutput = toRecord(toolOutput._widget_result);
-  if (Object.keys(fromToolOutput).length > 0) {
-    return { result: fromToolOutput, source: "meta.widget_result" };
+  const fromRootMeta = pickMetaWidgetResult(root);
+  if (Object.keys(fromRootMeta).length > 0) return { result: fromRootMeta, source: "meta.widget_result" };
+
+  const fromToolOutputMeta = pickMetaWidgetResult(toolOutput);
+  if (Object.keys(fromToolOutputMeta).length > 0) {
+    return { result: fromToolOutputMeta, source: "meta.widget_result" };
   }
 
-  // Zoekpad 2: root._widget_result (als raw direct structuredContent is, zonder toolOutput wrapper)
-  const fromRoot = toRecord(root._widget_result);
-  if (Object.keys(fromRoot).length > 0) {
-    return { result: fromRoot, source: "meta.widget_result" };
-  }
-
-  // Zoekpad 3: originele _meta.widget_result paden (bridge / lokale dev / toekomstige hosts)
-  const candidates: Array<{ context: CandidateContext; payload: Record<string, unknown> }> = [
-    { context: "root", payload: root },
-  ];
-  if (Object.keys(toolOutput).length > 0) candidates.push({ context: "toolOutput", payload: toolOutput });
-  for (const candidate of candidates) {
-    const widgetResult = pickMetaWidgetResult(candidate.payload);
-    if (Object.keys(widgetResult).length > 0) return { result: widgetResult, source: "meta.widget_result" };
-  }
   return { result: {}, source: "none" };
 }
 

@@ -17,7 +17,7 @@ RUN node scripts/prepare-presentation-assets.mjs
 
 # Compile TS -> dist/
 RUN npm run build
-RUN test -f ui/step-card.bundled.html || (echo "Missing ui/step-card.bundled.html after build" && exit 1)
+RUN test -f dist/ui/step-card.bundled.html || (echo "Missing dist/ui/step-card.bundled.html after build" && exit 1)
 
 
 FROM node:20-slim AS runtime
@@ -41,6 +41,7 @@ RUN npm ci --omit=dev
 
 # Copy compiled output
 COPY --from=build /app/dist ./dist
+RUN test -f dist/ui/step-card.bundled.html || (echo "Missing dist/ui/step-card.bundled.html in runtime image" && exit 1)
 
 # Copy assets needed at runtime (presentation template)
 COPY --from=build /app/assets ./assets
@@ -54,10 +55,6 @@ RUN if [ -d "assets/presentation/fonts" ]; then \
     else \
       echo "No custom fonts found at assets/presentation/fonts; skipping font install"; \
     fi
-
-# IMPORTANT: put UI next to dist/server.js so `new URL("./ui/step-card.bundled.html", import.meta.url)` works
-COPY --from=build /app/ui ./dist/ui
-RUN test -f dist/ui/step-card.bundled.html || (echo "Missing dist/ui/step-card.bundled.html in runtime image" && exit 1)
 
 ENV PORT=8787
 EXPOSE 8787

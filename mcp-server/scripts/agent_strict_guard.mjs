@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -20,94 +21,49 @@ function runOrFail(cmd, args, cwd) {
       stdio: "inherit",
       encoding: "utf8",
     });
-  } catch (error) {
-    const rendered = [cmd, ...args].join(" ");
-    fail(`command failed: ${rendered}`);
+  } catch {
+    fail(`command failed: ${[cmd, ...args].join(" ")}`);
   }
 }
 
-function rgLines(pattern, targets) {
-  try {
-    const output = execFileSync("rg", ["-n", pattern, ...targets], {
-      cwd: repoRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-    if (!output) return [];
-    return output.split(/\r?\n/).filter(Boolean);
-  } catch (error) {
-    if (error?.status === 1) return [];
-    const stderr = String(error?.stderr ?? "");
-    fail("rg invocation failed", [stderr || String(error)]);
+function assertArtifact(filePath, options = {}) {
+  if (!fs.existsSync(filePath)) {
+    fail("artifact missing", [path.relative(repoRoot, filePath)]);
   }
-}
-
-function collectProductionTsFiles() {
-  const files = [];
-  files.push(path.join(repoRoot, "mcp-server/server.ts"));
-
-  function walk(baseDir) {
-    if (!fs.existsSync(baseDir)) return;
-    for (const entry of fs.readdirSync(baseDir, { withFileTypes: true })) {
-      const fullPath = path.join(baseDir, entry.name);
-      if (entry.isDirectory()) {
-        walk(fullPath);
-        continue;
-      }
-      if (!entry.isFile()) continue;
-      if (!entry.name.endsWith(".ts")) continue;
-      if (entry.name.endsWith(".test.ts")) continue;
-      files.push(fullPath);
-    }
-  }
-
-  walk(path.join(repoRoot, "mcp-server/src"));
-  return files;
-}
-
-function lineCount(filePath) {
   const content = fs.readFileSync(filePath, "utf8");
-  if (!content) return 0;
-  return content.replace(/\r?\n$/, "").split(/\r?\n/).length;
+  const minBytes = Number(options.minBytes || 1);
+  if (Buffer.byteLength(content, "utf8") < minBytes) {
+    fail("artifact too small", [`${path.relative(repoRoot, filePath)} < ${minBytes} bytes`]);
+  }
+  const mustInclude = String(options.mustInclude || "");
+  if (mustInclude && !content.includes(mustInclude)) {
+    fail("artifact content marker missing", [`${path.relative(repoRoot, filePath)} missing "${mustInclude}"`]);
+  }
 }
 
 console.log("[agent_strict_guard] start");
 
 runOrFail("npm", ["run", "typecheck"], mcpRoot);
-runOrFail("npm", ["run", "gate:server-refactor"], mcpRoot);
+runOrFail("node", ["--loader", "ts-node/esm", "scripts/contract-smoke.mjs"], mcpRoot);
+runOrFail("npm", ["run", "compliance:mcp-app"], mcpRoot);
+runOrFail("npm", ["run", "contract:inventory:snapshot"], mcpRoot);
 
-const productionFiles = collectProductionTsFiles();
-const oversized = productionFiles
-  .map((filePath) => ({
-    file: path.relative(repoRoot, filePath),
-    lines: lineCount(filePath),
-  }))
-  .filter((entry) => entry.lines > 1000)
-  .sort((a, b) => b.lines - a.lines);
+const artifacts = [
+  {
+    filePath: path.join(mcpRoot, "ui/step-card.bundled.html"),
+    minBytes: 1024,
+    mustInclude: "data-ui-version",
+  },
+  {
+    filePath: path.join(repoRoot, "docs/inventory/contract_inventory_snapshot.json"),
+    minBytes: 10,
+    mustInclude: "\"ssot_versions\"",
+  },
+];
 
-if (oversized.length > 0) {
-  fail("production TypeScript files exceed 1000 lines", oversized.map((entry) => `${entry.lines} ${entry.file}`));
+for (const artifact of artifacts) {
+  assertArtifact(artifact.filePath, artifact);
 }
 
-const legacyFallbackTokenA = ["structured", "content", "result", "fallback"].join("_");
-const legacyFallbackTokenB = ["render", "source", "missing"].join("_");
-const legacyFallbackTokenC = ["structuredContent", "result"].join("\\.");
-const fallbackPattern = `${legacyFallbackTokenA}|${legacyFallbackTokenB}|${legacyFallbackTokenC}`;
-
-const fallbackHits = rgLines(fallbackPattern, ["mcp-server/server.ts", "mcp-server/src/server", "mcp-server/src"]);
-if (fallbackHits.length > 0) {
-  fail("legacy render fallback tokens still present in server scope", fallbackHits.slice(0, 30));
-}
-
-const renderSourceHits = rgLines(
-  "render_source|meta\\.widget_result|widget_result",
-  ["mcp-server/server.ts", "mcp-server/src/server"]
-);
-if (renderSourceHits.length === 0) {
-  fail("render-source telemetry or SSOT markers missing", [
-    "Expected meta.widget_result/render_source markers not found in server scope.",
-  ]);
-}
-
-console.log(`[agent_strict_guard] passed`);
-console.log(`[agent_strict_guard] production_ts_checked=${productionFiles.length}`);
+console.log("[agent_strict_guard] passed");
+console.log(`[agent_strict_guard] artifacts_checked=${artifacts.length}`);

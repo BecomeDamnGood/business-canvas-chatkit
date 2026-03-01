@@ -1,5 +1,9 @@
 # MCP Widget Stabilisatie - Run Resultaat (2026-02-27 CORE hard-refactor run)
 
+> Status: ARCHIEF (niet normerend sinds 2026-03-01).
+> Actieve normbron voor runtime/build-contract: `mcp-server/docs/ui-interface-contract.md`.
+> Dit document blijft uitsluitend een historische runlog.
+
 ## 0) Samenvatting
 - Primary instructie gebruikt: `docs/hard_refactoring_2026-02-27.md`.
 - Server geconsolideerd naar 1 canonical mode-beslisser via `buildCanonicalWidgetState(...)`.
@@ -194,7 +198,7 @@
 - Main-source contracttest uitgebreid met assertions op nieuwe startup-empty guard.
 
 4. `mcp-server/ui/step-card.bundled.html`
-- UI buildscript uitgevoerd (`node scripts/build-ui.mjs`) om runtime-bundle te synchroniseren met library-code.
+- UI buildpad uitgevoerd (`npm run build`) zodat alleen het minimale runtime artifact (`dist/ui/step-card.bundled.html`) wordt gesynchroniseerd.
 
 ## 4) Testresultaten
 Lokaal uitgevoerd (verplicht):
@@ -230,7 +234,7 @@ Lokaal uitgevoerd (verplicht):
   - `mcp-server/ui/lib/main.ts`
   - `mcp-server/ui/lib/ui_actions.ts`
   - `mcp-server/src/ui_render.test.ts`
-- Herbouw UI bundle na rollback: `cd mcp-server && node scripts/build-ui.mjs`.
+- Herbouw runtime artifacts na rollback: `cd mcp-server && npm run build`.
 
 ---
 
@@ -285,7 +289,7 @@ Lokaal uitgevoerd (verplicht):
 2. `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts`
 - Resultaat: **pass** (164 pass, 0 fail, 1 skipped).
 
-3. `cd mcp-server && node scripts/build-ui.mjs`
+3. `cd mcp-server && npm run build`
 - Resultaat: bundle succesvol opgebouwd.
 
 ## 4) Ketenbewijs (startup -> start -> tweede scherm)
@@ -314,7 +318,7 @@ Lokaal uitgevoerd (verplicht):
     - `mcp-server/ui/lib/ui_actions.ts`
     - `mcp-server/src/ui_render.test.ts`
     - `mcp-server/src/mcp_app_contract.test.ts`
-  - Daarna `cd mcp-server && node scripts/build-ui.mjs`.
+  - Daarna `cd mcp-server && npm run build`.
 
 # MCP Widget Stabilisatie - Run Resultaat (2026-02-28 09:40 UTC, action-liveness contractlaag)
 

@@ -129,49 +129,9 @@ jobs:
         working-directory: mcp-server
         run: npm run typecheck
 
-      - name: UI artifact parity check
+      - name: Consolidated gate
         working-directory: mcp-server
-        run: node scripts/ui_artifact_parity_check.mjs
-
-      - name: Predeploy checklist gate
-        working-directory: mcp-server
-        run: node scripts/predeploy_checklist_gate.mjs
-
-      - name: Contract smoke gate
-        working-directory: mcp-server
-        run: node --loader ts-node/esm scripts/contract-smoke.mjs
-
-      - name: MCP app compliance gate
-        working-directory: mcp-server
-        run: npm run compliance:mcp-app
-
-      - name: Contract inventory snapshot gate
-        working-directory: mcp-server
-        run: npm run contract:inventory:snapshot
-
-      - name: Run-step architecture guardrails
-        working-directory: mcp-server
-        env:
-          RUN_STEP_ARCH_PHASE: phase_20
-        run: npm run arch:run-step:check
-
-      - name: Run-step layer boundary guardrails
-        working-directory: mcp-server
-        run: npm run arch:run-step:layer-boundary
-
-      - name: Run-step runtime architecture guardrails
-        working-directory: mcp-server
-        env:
-          RUN_STEP_RUNTIME_ARCH_PHASE: phase_R0
-        run: npm run arch:run-step-runtime:check
-
-      - name: Run-step DI budget guardrails
-        working-directory: mcp-server
-        run: npm run arch:run-step:di-budget
-
-      - name: Run-step any budget guardrails
-        working-directory: mcp-server
-        run: npm run arch:run-step:any-budget
+        run: npm run gate:ci
 
       - name: Test
         working-directory: mcp-server

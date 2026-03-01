@@ -802,11 +802,8 @@
           var structured = toRecord(root.structuredContent);
           var toolOutput = toRecord(root.toolOutput);
           var candidates = [
-            toRecord(root._widget_result),
             toRecord(toRecord(root._meta).widget_result),
-            toRecord(structured._widget_result),
             toRecord(toRecord(structured._meta).widget_result),
-            toRecord(toolOutput._widget_result),
             toRecord(toRecord(toolOutput._meta).widget_result),
           ];
           for (var i = 0; i < candidates.length; i += 1) {
@@ -1020,30 +1017,30 @@
         function resolveNotificationEvent(detailRaw) {
           var detail = toRecord(detailRaw);
           var method = asText(detail.method);
-          if (method && method !== "ui/notifications/tool-result") {
+          if (method !== "ui/notifications/tool-result") {
             return {
               renderable: false,
-              reason: "notification_method_not_tool_result",
+              reason: method ? "notification_method_not_tool_result" : "notification_method_missing",
               source: "openai_notification_method",
               payload: {},
             };
           }
 
-          var payload = detail.params || detail.toolOutput || detail.payload || detail.data || {};
+          var payload = detail.params || {};
           var hasResult = Object.keys(extractWidgetResult(payload)).length > 0;
           if (!hasResult) {
             return {
               renderable: false,
               reason: "notification_widget_result_missing",
-              source: method ? "openai_notification_method" : "openai_notification_legacy",
+              source: "openai_notification_method",
               payload: {},
             };
           }
 
           return {
             renderable: true,
-            reason: method ? "tool_result_method" : "tool_result_legacy",
-            source: method ? "notification_tool_result_method" : "notification_tool_result_legacy",
+            reason: "tool_result_method",
+            source: "notification_tool_result_method",
             payload: payload,
           };
         }

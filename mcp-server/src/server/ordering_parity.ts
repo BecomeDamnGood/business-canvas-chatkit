@@ -13,7 +13,6 @@ import {
   BOOTSTRAP_SESSION_REGISTRY_TTL_MS,
   parsePositiveInt,
 } from "./server_config.js";
-import { logStructuredEvent, resolveContractIdFromRecord } from "./observability.js";
 
 type BootstrapSessionSnapshot = {
   sessionId: string;
@@ -26,11 +25,6 @@ type BootstrapSessionSnapshot = {
 
 const bootstrapSessionRegistry = new Map<string, BootstrapSessionSnapshot>();
 let bootstrapResponseSeqCounter = 0;
-
-function buildInternalHostWidgetSessionId(seed: unknown): string {
-  const normalizedSeed = normalizeBootstrapSessionId(seed) || createBootstrapSessionId();
-  return `internal:${normalizedSeed}`;
-}
 
 function isUuidV4(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -241,265 +235,6 @@ function describeBootstrapOrdering(ordering: {
   };
 }
 
-function orderingTupleEquals(
-  left: {
-    sessionId: string;
-    hostWidgetSessionId: string;
-    epoch: number;
-    responseSeq: number;
-  },
-  right: {
-    sessionId: string;
-    hostWidgetSessionId: string;
-    epoch: number;
-    responseSeq: number;
-  }
-): boolean {
-  return (
-    left.sessionId === right.sessionId &&
-    left.hostWidgetSessionId === right.hostWidgetSessionId &&
-    left.epoch === right.epoch &&
-    left.responseSeq === right.responseSeq
-  );
-}
-
-function patchOrderingTupleOnResult(params: {
-  result: Record<string, unknown>;
-  ordering: {
-    sessionId: string;
-    hostWidgetSessionId: string;
-    epoch: number;
-    responseSeq: number;
-  };
-  includeUiFlags?: boolean;
-}): Record<string, unknown> {
-  const root = params.result && typeof params.result === "object" ? params.result : {};
-  const stateRaw =
-    root.state && typeof root.state === "object"
-      ? (root.state as Record<string, unknown>)
-      : {};
-  const patchedState: Record<string, unknown> = {
-    ...stateRaw,
-    bootstrap_session_id: params.ordering.sessionId,
-    bootstrap_epoch: params.ordering.epoch,
-    response_seq: params.ordering.responseSeq,
-    host_widget_session_id: params.ordering.hostWidgetSessionId,
-  };
-  const patchedResult: Record<string, unknown> = {
-    ...root,
-    bootstrap_session_id: params.ordering.sessionId,
-    bootstrap_epoch: params.ordering.epoch,
-    response_seq: params.ordering.responseSeq,
-    host_widget_session_id: params.ordering.hostWidgetSessionId,
-    state: patchedState,
-  };
-  if (params.includeUiFlags) {
-    const uiRaw =
-      root.ui && typeof root.ui === "object"
-        ? (root.ui as Record<string, unknown>)
-        : {};
-    const flagsRaw =
-      uiRaw.flags && typeof uiRaw.flags === "object"
-        ? (uiRaw.flags as Record<string, unknown>)
-        : {};
-    patchedResult.ui = {
-      ...uiRaw,
-      flags: {
-        ...flagsRaw,
-        bootstrap_session_id: params.ordering.sessionId,
-        bootstrap_epoch: params.ordering.epoch,
-        response_seq: params.ordering.responseSeq,
-        host_widget_session_id: params.ordering.hostWidgetSessionId,
-      },
-    };
-  }
-  return patchedResult;
-}
-
-function resolveOrderingTupleParityCandidate(params: {
-  metaOrdering: {
-    sessionId: string;
-    hostWidgetSessionId: string;
-    epoch: number;
-    responseSeq: number;
-  };
-  topLevelOrdering: {
-    sessionId: string;
-    hostWidgetSessionId: string;
-    epoch: number;
-    responseSeq: number;
-  };
-  requestOrdering: {
-    sessionId: string;
-    hostWidgetSessionId: string;
-    epoch: number;
-    responseSeq: number;
-  };
-}): {
-  ordering: {
-    sessionId: string;
-    hostWidgetSessionId: string;
-    epoch: number;
-    responseSeq: number;
-  };
-  source: string;
-  complete: boolean;
-} {
-  const candidates = [
-    { source: "meta_widget_result", ordering: params.metaOrdering },
-    { source: "structured_content_result", ordering: params.topLevelOrdering },
-    { source: "request_state", ordering: params.requestOrdering },
-  ];
-  const firstComplete = candidates.find((candidate) => hasCompleteOrderingTuple(candidate.ordering));
-  if (firstComplete) {
-    return {
-      ordering: firstComplete.ordering,
-      source: firstComplete.source,
-      complete: true,
-    };
-  }
-  const sessionEpochSeqCandidate = candidates.find((candidate) => {
-    const ordering = candidate.ordering;
-    return Boolean(ordering.sessionId) && ordering.epoch > 0 && ordering.responseSeq > 0;
-  });
-  if (!sessionEpochSeqCandidate) {
-    return {
-      ordering: {
-        sessionId: "",
-        hostWidgetSessionId: "",
-        epoch: 0,
-        responseSeq: 0,
-      },
-      source: "none",
-      complete: false,
-    };
-  }
-  const hostWidgetSessionId =
-    sessionEpochSeqCandidate.ordering.hostWidgetSessionId ||
-    params.requestOrdering.hostWidgetSessionId ||
-    buildInternalHostWidgetSessionId(sessionEpochSeqCandidate.ordering.sessionId);
-  return {
-    ordering: {
-      sessionId: sessionEpochSeqCandidate.ordering.sessionId,
-      epoch: sessionEpochSeqCandidate.ordering.epoch,
-      responseSeq: sessionEpochSeqCandidate.ordering.responseSeq,
-      hostWidgetSessionId,
-    },
-    source: `${sessionEpochSeqCandidate.source}_host_backfilled`,
-    complete: Boolean(hostWidgetSessionId),
-  };
-}
-
-function ensureRunStepOutputTupleParity(params: {
-  structuredContent: Record<string, unknown>;
-  meta?: Record<string, unknown>;
-  requestState: Record<string, unknown>;
-  requestHostWidgetSessionId: string;
-  correlationId: string;
-  traceId: string;
-  defaultStepId: string;
-}): { structuredContent: Record<string, unknown>; meta?: Record<string, unknown> } {
-  const metaRecord =
-    params.meta && typeof params.meta === "object"
-      ? (params.meta as Record<string, unknown>)
-      : undefined;
-  const structuredContent = params.structuredContent;
-  const structuredRecord =
-    structuredContent && typeof structuredContent === "object"
-      ? (structuredContent as Record<string, unknown>)
-      : null;
-  const structuredResultCandidate = structuredRecord ? structuredRecord["result"] : undefined;
-  const structuredResult =
-    structuredResultCandidate && typeof structuredResultCandidate === "object"
-      ? (structuredResultCandidate as Record<string, unknown>)
-      : null;
-  const metaWidgetResult =
-    metaRecord &&
-    metaRecord.widget_result &&
-    typeof metaRecord.widget_result === "object"
-      ? (metaRecord.widget_result as Record<string, unknown>)
-      : null;
-  if (!structuredResult && !metaWidgetResult) {
-    return {
-      structuredContent,
-      ...(metaRecord ? { meta: metaRecord } : {}),
-    };
-  }
-
-  const topLevelOrdering = readBootstrapOrdering(structuredResult);
-  const metaOrdering = readBootstrapOrdering(metaWidgetResult);
-  const requestOrdering = readBootstrapOrdering({
-    state: params.requestState,
-    host_widget_session_id: params.requestHostWidgetSessionId,
-  });
-  const candidate = resolveOrderingTupleParityCandidate({
-    metaOrdering,
-    topLevelOrdering,
-    requestOrdering,
-  });
-  if (!candidate.complete) {
-    return {
-      structuredContent,
-      ...(metaRecord ? { meta: metaRecord } : {}),
-    };
-  }
-
-  let nextStructuredContent = structuredContent;
-  let nextMeta = metaRecord;
-  let patchedTopLevel = false;
-  let patchedMeta = false;
-
-  if (structuredResult && !orderingTupleEquals(topLevelOrdering, candidate.ordering)) {
-    patchedTopLevel = true;
-    nextStructuredContent = {
-      ...structuredContent,
-      result: patchOrderingTupleOnResult({
-        result: structuredResult,
-        ordering: candidate.ordering,
-        includeUiFlags: false,
-      }),
-    };
-  }
-  if (metaWidgetResult && !orderingTupleEquals(metaOrdering, candidate.ordering)) {
-    patchedMeta = true;
-    nextMeta = {
-      ...(metaRecord || {}),
-      widget_result: patchOrderingTupleOnResult({
-        result: metaWidgetResult,
-        ordering: candidate.ordering,
-        includeUiFlags: true,
-      }),
-    };
-  }
-
-  if (patchedTopLevel || patchedMeta) {
-    logStructuredEvent(
-      "warn",
-      "run_step_output_tuple_parity_patched",
-      {
-        correlation_id: params.correlationId,
-        trace_id: params.traceId,
-        session_id: candidate.ordering.sessionId,
-        step_id: params.defaultStepId || "step_0",
-        contract_id: resolveContractIdFromRecord(metaWidgetResult || structuredResult || { state: params.requestState }),
-      },
-      {
-        patched_top_level: patchedTopLevel,
-        patched_meta_widget_result: patchedMeta,
-        tuple_source: candidate.source,
-        top_level_tuple_before: describeBootstrapOrdering(topLevelOrdering),
-        meta_widget_result_tuple_before: describeBootstrapOrdering(metaOrdering),
-        tuple_after: describeBootstrapOrdering(candidate.ordering),
-      }
-    );
-  }
-
-  return {
-    structuredContent: nextStructuredContent,
-    ...(nextMeta ? { meta: nextMeta } : {}),
-  };
-}
-
 function registerBootstrapSnapshot(params: {
   result: Record<string, unknown>;
   nowMs: number;
@@ -558,15 +293,12 @@ function isStaleBootstrapPayload(params: {
 export {
   attachBootstrapDiagnostics,
   attachIdempotencyDiagnostics,
-  buildInternalHostWidgetSessionId,
   createBootstrapSessionId,
   describeBootstrapOrdering,
-  ensureRunStepOutputTupleParity,
   hasCompleteOrderingTuple,
   isStaleBootstrapPayload,
   nextBootstrapResponseSeq,
   normalizeBootstrapSessionId,
-  orderingTupleEquals,
   readBootstrapOrdering,
   registerBootstrapSnapshot,
   summarizeBootstrapSessions,

@@ -19,10 +19,8 @@ import {
   resolveLocaleHintFromExtra,
 } from "./locale_resolution.js";
 import {
-  ensureRunStepOutputTupleParity,
   hasCompleteOrderingTuple,
   normalizeBootstrapSessionId,
-  orderingTupleEquals,
   readBootstrapOrdering,
 } from "./ordering_parity.js";
 import {
@@ -146,17 +144,8 @@ function createAppServer(baseUrl: string): McpServer {
         host_widget_session_id: hostWidgetSessionId,
         state: (args.state ?? {}) as Record<string, unknown>,
       });
-      const parityOutput = ensureRunStepOutputTupleParity({
-        structuredContent: handlerOutput.structuredContent,
-        meta: handlerOutput.meta,
-        requestState: (args.state ?? {}) as Record<string, unknown>,
-        requestHostWidgetSessionId: hostWidgetSessionId,
-        correlationId,
-        traceId,
-        defaultStepId: normalizedStepId || "step_0",
-      });
-      const structuredContent = parityOutput.structuredContent;
-      const meta = parityOutput.meta;
+      const structuredContent = handlerOutput.structuredContent;
+      const meta = handlerOutput.meta;
       const hasMetaWidgetResult =
         meta &&
         typeof meta === "object" &&
@@ -182,22 +171,6 @@ function createAppServer(baseUrl: string): McpServer {
         );
         throw new Error("meta_widget_result_missing");
       }
-      const topLevelResult =
-        structuredContent &&
-        typeof structuredContent === "object" &&
-        (structuredContent as any).result &&
-        typeof (structuredContent as any).result === "object"
-          ? ((structuredContent as any).result as Record<string, unknown>)
-          : null;
-      const topLevelOrdering = readBootstrapOrdering(topLevelResult);
-      const metaOrdering = hasMetaWidgetResult
-        ? readBootstrapOrdering((meta as any).widget_result as Record<string, unknown>)
-        : {
-            sessionId: "",
-            hostWidgetSessionId: "",
-            epoch: 0,
-            responseSeq: 0,
-          };
       const contentSource = (meta as any).widget_result as Record<string, unknown>;
       const renderSourceOrdering = readBootstrapOrdering(contentSource);
       const contentSourceState =
@@ -213,39 +186,6 @@ function createAppServer(baseUrl: string): McpServer {
           normalizedStepId ??
           "step_0"
         ) || "step_0";
-      const tupleParityMatch =
-        hasCompleteOrderingTuple(topLevelOrdering) &&
-        hasCompleteOrderingTuple(metaOrdering) &&
-        orderingTupleEquals(topLevelOrdering, metaOrdering);
-      logStructuredEvent(
-        !tupleParityMatch ? "warn" : "info",
-        "run_step_ordering_tuple_parity",
-        {
-          correlation_id: correlationId,
-          trace_id: traceId,
-          session_id: renderSourceOrdering.sessionId || topLevelOrdering.sessionId || metaOrdering.sessionId,
-          step_id: renderSourceStepId,
-          contract_id: resolveContractIdFromRecord(contentSource || { state: args.state ?? {} }),
-        },
-        {
-          top_level_tuple_complete: hasCompleteOrderingTuple(topLevelOrdering),
-          meta_widget_result_tuple_complete: hasCompleteOrderingTuple(metaOrdering),
-          tuple_parity_match: tupleParityMatch,
-          parity_reason_code: tupleParityMatch ? "tuple_parity_ok" : "tuple_parity_mismatch",
-          top_level_tuple: {
-            bootstrap_session_id: topLevelOrdering.sessionId,
-            bootstrap_epoch: topLevelOrdering.epoch,
-            response_seq: topLevelOrdering.responseSeq,
-            host_widget_session_id: topLevelOrdering.hostWidgetSessionId,
-          },
-          meta_widget_result_tuple: {
-            bootstrap_session_id: metaOrdering.sessionId,
-            bootstrap_epoch: metaOrdering.epoch,
-            response_seq: metaOrdering.responseSeq,
-            host_widget_session_id: metaOrdering.hostWidgetSessionId,
-          },
-        }
-      );
       logStructuredEvent(
         "info",
         "run_step_render_source_selected",
@@ -265,13 +205,9 @@ function createAppServer(baseUrl: string): McpServer {
       );
       const contentText = buildContentFromResult(contentSource, { isFirstStart });
       const parsedStructuredContent = RunStepToolStructuredContentOutputSchema.parse(structuredContent);
-      const widgetResultForClient = (meta as Record<string, unknown> | undefined)?.widget_result;
-      const enrichedStructuredContent = widgetResultForClient
-        ? Object.assign({}, parsedStructuredContent, { _widget_result: widgetResultForClient })
-        : parsedStructuredContent;
       return {
         content: [{ type: "text", text: contentText }],
-        structuredContent: enrichedStructuredContent,
+        structuredContent: parsedStructuredContent,
         ...(meta ? { _meta: meta } : {}),
       };
     }

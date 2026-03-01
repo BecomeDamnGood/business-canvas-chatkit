@@ -19,8 +19,8 @@ const serverSourceFiles = [
 const source = serverSourceFiles
   .map((relativePath) => fs.readFileSync(new URL(relativePath, import.meta.url), "utf8"))
   .join("\n");
-const widgetRuntimeSource = fs.readFileSync(
-  new URL("../ui/lib/locale_bootstrap_runtime.ts", import.meta.url),
+const bundledRuntimeSource = fs.readFileSync(
+  new URL("../ui/step-card.bundled.html", import.meta.url),
   "utf8"
 );
 const runStepResponseSource = fs.readFileSync(
@@ -60,10 +60,18 @@ test("MCP app contract: run_step exposes explicit outputSchema", () => {
   );
 });
 
-test("MCP app contract: local /run_step bridge enforces ToolStructuredContentOutputSchema", () => {
-  assert.match(source, /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)/);
+test("MCP app contract: runtime ingress is MCP-only and keeps output schema enforcement", () => {
+  assert.doesNotMatch(source, /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)/);
+  assert.doesNotMatch(source, /if \(req\.method === "GET" && \(url\.pathname === "\/test" \|\| url\.pathname === "\/test\/"\)\)/);
   assert.match(source, /const parsedStructuredContent = RunStepToolStructuredContentOutputSchema\.parse\(structuredContent\)/);
-  assert.match(source, /JSON\.stringify\(\{ structuredContent: parsedStructuredContent, \.\.\.\(meta \? \{ _meta: meta \} : \{\}\) \}\)/);
+  assert.match(source, /return \{[\s\S]*structuredContent: parsedStructuredContent,[\s\S]*\.\.\.\(meta \? \{ _meta: meta \} : \{\}\),[\s\S]*\}/);
+});
+
+test("MCP app contract: /ui/step-card route and run_step transport keep bundled owner path", () => {
+  assert.match(source, /readFileSync\(new URL\("\.\.\/\.\.\/ui\/step-card\.bundled\.html", import\.meta\.url\), "utf-8"\)/);
+  assert.match(source, /if \(url\.pathname === "\/ui\/step-card" \|\| url\.pathname === "\/ui\/step-card\/"\) \{/);
+  assert.match(source, /filePath = path\.join\(uiDir, "step-card\.bundled\.html"\);/);
+  assert.match(source, /if \(fileName === "step-card\.bundled\.html"\) \{/);
 });
 
 test("MCP app contract: run_step is not idempotent-hinted", () => {
@@ -92,24 +100,23 @@ test("MCP wrapper parity: model result stays safe and _meta.widget_result keeps 
   assert.match(source, /meta:\s*\{\s*widget_result:\s*staleResult\s*\}/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient\s*,?\s*\}/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*fallbackResult\s*,?\s*\}/);
-  assert.match(source, /const widgetResultForClient = \(meta as Record<string, unknown> \| undefined\)\?\.widget_result/);
-  assert.match(source, /Object\.assign\(\{\}, parsedStructuredContent, \{ _widget_result: widgetResultForClient \}\)/);
+  assert.doesNotMatch(source, /const widgetResultForClient = \(meta as Record<string, unknown> \| undefined\)\?\.widget_result/);
+  assert.doesNotMatch(source, /Object\.assign\(\{\}, parsedStructuredContent, \{ _widget_result: widgetResultForClient \}\)/);
 });
 
-test("MCP app contract: widget render-state resolves _widget_result from structured content or metadata wrapper", () => {
-  assert.match(widgetRuntimeSource, /export function canonicalizeWidgetPayload\(/);
-  assert.match(widgetRuntimeSource, /const candidate = toRecord\(meta\.widget_result\)/);
-  assert.match(widgetRuntimeSource, /const fromToolOutput = toRecord\(toolOutput\._widget_result\)/);
-  assert.match(widgetRuntimeSource, /const fromRoot = toRecord\(root\._widget_result\)/);
-  assert.match(widgetRuntimeSource, /mergeToolOutputWithResponseMetadata\(/);
-  assert.match(widgetRuntimeSource, /bootstrap_session_id/);
-  assert.match(widgetRuntimeSource, /bootstrap_epoch/);
-  assert.match(widgetRuntimeSource, /response_seq/);
-  assert.match(widgetRuntimeSource, /host_widget_session_id/);
-  assert.match(widgetRuntimeSource, /source:\s*"meta\.widget_result"/);
-  assert.doesNotMatch(widgetRuntimeSource, /source:\s*"root\.result"/);
-  assert.doesNotMatch(widgetRuntimeSource, /source:\s*"structuredContent\.result"/);
-  assert.match(widgetRuntimeSource, /reason_code:\s*"meta_widget_result"/);
+test("MCP app contract: bundled render-state resolves only _meta.widget_result sources", () => {
+  assert.match(bundledRuntimeSource, /function extractWidgetResult\(raw\) \{/);
+  assert.match(bundledRuntimeSource, /toRecord\(toRecord\(root\._meta\)\.widget_result\)/);
+  assert.match(bundledRuntimeSource, /toRecord\(toRecord\(structured\._meta\)\.widget_result\)/);
+  assert.match(bundledRuntimeSource, /toRecord\(toRecord\(toolOutput\._meta\)\.widget_result\)/);
+  assert.doesNotMatch(bundledRuntimeSource, /toolOutput\._widget_result/);
+  assert.doesNotMatch(bundledRuntimeSource, /root\._widget_result/);
+  assert.doesNotMatch(bundledRuntimeSource, /structuredContent\._widget_result/);
+  assert.doesNotMatch(bundledRuntimeSource, /root\.result/);
+  assert.doesNotMatch(bundledRuntimeSource, /structuredContent\.result/);
+  assert.match(bundledRuntimeSource, /window\.addEventListener\("openai:set_globals"/);
+  assert.match(bundledRuntimeSource, /window\.addEventListener\("openai:notification"/);
+  assert.match(bundledRuntimeSource, /if \(method !== "ui\/notifications\/tool-result"\) \{/);
 });
 
 test("MCP wrapper parity: model-safe result contract remains minimal in buildModelSafeResult", () => {
@@ -215,14 +222,12 @@ test("MCP app contract: run_step wrapper logs render-source lifecycle", () => {
   assert.match(source, /meta_widget_result_authoritative/);
 });
 
-test("MCP app contract: run_step wrapper enforces and logs top-level vs meta ordering tuple parity", () => {
-  assert.match(source, /ensureRunStepOutputTupleParity\(/);
-  assert.match(source, /"run_step_output_tuple_parity_patched"/);
-  assert.match(source, /"run_step_ordering_tuple_parity"/);
-  assert.match(source, /top_level_tuple_complete:/);
-  assert.match(source, /meta_widget_result_tuple_complete:/);
-  assert.match(source, /tuple_parity_match:/);
-  assert.match(source, /parity_reason_code:/);
+test("MCP app contract: run_step wrapper has no tuple parity patch/backfill layer", () => {
+  assert.doesNotMatch(source, /ensureRunStepOutputTupleParity\(/);
+  assert.doesNotMatch(source, /"run_step_output_tuple_parity_patched"/);
+  assert.doesNotMatch(source, /"run_step_ordering_tuple_parity"/);
+  assert.match(source, /const contentSource = \(meta as any\)\.widget_result as Record<string, unknown>;/);
+  assert.match(source, /const renderSourceReasonCode = "meta_widget_result_authoritative";/);
 });
 
 test("MCP app contract: run_step response logs canonical-view observability event", () => {

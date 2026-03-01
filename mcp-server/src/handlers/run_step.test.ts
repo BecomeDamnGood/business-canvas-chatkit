@@ -124,7 +124,7 @@ test("action contract: step_0 prestart includes server action_contract start rol
   assert.ok(startAction);
 });
 
-test("action liveness defaults exist on direct run_step responses", async () => {
+test("action liveness defaults are transport-owned (direct run_step keeps fields empty)", async () => {
   const result = await run_step({
     user_message: "ACTION_START",
     input_mode: "widget",
@@ -136,10 +136,10 @@ test("action liveness defaults exist on direct run_step responses", async () => 
       __client_action_id: "ca_test_001",
     },
   });
-  assert.equal(String((result as any)?.ack_status || ""), "accepted");
-  assert.equal(Boolean((result as any)?.state_advanced), true);
+  assert.equal(String((result as any)?.ack_status || ""), "");
+  assert.equal((result as any)?.state_advanced, undefined);
   assert.equal(String((result as any)?.reason_code || ""), "");
-  assert.equal(typeof String((result as any)?.client_action_id_echo || ""), "string");
+  assert.equal(String((result as any)?.client_action_id_echo || ""), "");
 });
 
 test("transport liveness contract emits failure_class in server result/log path", () => {
@@ -260,9 +260,9 @@ test("contract invariant: step_0 started=true cannot be successful with no_outpu
     String((final.error as Record<string, unknown> | undefined)?.reason || ""),
     "step0_started_no_output_no_menu_forbidden"
   );
-  assert.equal(String((final as Record<string, unknown>).ack_status || ""), "rejected");
-  assert.equal(Boolean((final as Record<string, unknown>).state_advanced), false);
-  assert.equal(String((final as Record<string, unknown>).reason_code || ""), "step0_started_no_output_no_menu_forbidden");
+  assert.equal(String((final as Record<string, unknown>).ack_status || ""), "");
+  assert.equal((final as Record<string, unknown>).state_advanced, undefined);
+  assert.equal(String((final as Record<string, unknown>).reason_code || ""), "");
 });
 
 test("Start gating: seedable non-empty first message keeps Click Start gate and does not auto-advance", async () => {
@@ -1279,7 +1279,7 @@ test("fail-closed: invalid contract markers are surfaced and block the turn", as
   }
 });
 
-test("fail-closed: legacy markers force session upgrade when confirmation_question is present", async () => {
+test("legacy confirmation markers no longer preflight-block and keep contract-ready response", async () => {
   const result = await run_step({
     user_message: "ACTION_WORDING_PICK_USER",
     input_mode: "widget",
@@ -1290,101 +1290,32 @@ test("fail-closed: legacy markers force session upgrade when confirmation_questi
       started: "true",
       business_name: "Mindd",
       last_specialist_result: {
-        action: "ASK",
+        action: "CONFIRM",
         menu_id: "",
         confirmation_question: "Do you want to continue?",
+        message: "I think I understand what you mean.",
+        refined_formulation: "Mindd exists to restore focus and meaning in work.",
         wording_choice_pending: "true",
         wording_choice_mode: "text",
         wording_choice_target_field: "purpose",
+        wording_choice_user_raw: "Mindd helps teams with clarity",
+        wording_choice_user_normalized: "Mindd helps teams with clarity.",
+        wording_choice_agent_current: "Mindd exists to restore focus and meaning in work.",
       },
     },
   });
-  assert.equal(result?.ok, false);
-  assert.equal(String(result?.error?.type || ""), "session_upgrade_required");
-  assert.equal(String(result?.state?.ui_gate_status || ""), "blocked");
-  assert.equal(String(result?.state?.ui_gate_reason || ""), "session_upgrade_required");
-  assert.equal(String(result?.state?.bootstrap_phase || ""), "failed");
-  assert.equal((result?.error?.markers || []).includes("legacy_confirmation_question"), true);
+  assert.equal(result?.ok, true);
+  assert.equal(String(result?.error?.type || ""), "");
+  assert.equal(String(result?.state?.ui_gate_status || ""), "ready");
+  assert.equal(String(result?.state?.ui_gate_reason || ""), "");
+  assert.equal(String(result?.state?.bootstrap_phase || ""), "ready");
+  assert.notEqual(String(result?.ui?.view?.mode || ""), "blocked");
+  assert.ok(Array.isArray(result?.ui?.action_codes));
+  assert.ok((result?.ui?.action_codes || []).length >= 1);
 });
 
-test("idempotency runtime: duplicate request met zelfde key en payload retourneert replay deterministisch", async () => {
-  const idempotencyKey = `runtime-replay-${Date.now()}`;
-  const first = await run_step({
-    idempotency_key: idempotencyKey,
-    user_message: "ACTION_START",
-    input_mode: "widget",
-    state: {
-      current_step: "step_0",
-      intro_shown_session: "false",
-      last_specialist_result: {},
-      started: "true",
-    },
-  });
-  const second = await run_step({
-    idempotency_key: idempotencyKey,
-    user_message: "ACTION_START",
-    input_mode: "widget",
-    state: {
-      current_step: "step_0",
-      intro_shown_session: "false",
-      last_specialist_result: {},
-      started: "true",
-    },
-  });
-  assert.equal(first?.ok, true);
-  assert.equal(second?.ok, true);
-  const firstResult = (first || {}) as Record<string, unknown>;
-  const secondResult = (second || {}) as Record<string, unknown>;
-  assert.equal(String(firstResult.idempotency_outcome || ""), "fresh");
-  assert.equal(String(secondResult.idempotency_outcome || ""), "replay");
-  assert.equal(String(secondResult.idempotency_error_code || ""), "idempotency_replay");
-  assert.equal(String(second?.prompt || ""), String(first?.prompt || ""));
-  assert.equal(String(second?.text || ""), String(first?.text || ""));
-  assert.equal(String(second?.current_step_id || ""), String(first?.current_step_id || ""));
-  assert.equal(String(second?.active_specialist || ""), String(first?.active_specialist || ""));
-  assert.deepEqual(second?.specialist || {}, first?.specialist || {});
-  assert.equal(
-    String((second?.state as Record<string, unknown> | undefined)?.__session_turn_id || ""),
-    String((first?.state as Record<string, unknown> | undefined)?.__session_turn_id || "")
-  );
-});
-
-test("idempotency runtime: zelfde key met ander payload mapped naar conflict fout", async () => {
-  const idempotencyKey = `runtime-conflict-${Date.now()}`;
-  const baseState = {
-    current_step: "step_0",
-    intro_shown_session: "false",
-    last_specialist_result: {},
-    started: "true",
-  };
-  const first = await run_step({
-    idempotency_key: idempotencyKey,
-    user_message: "ACTION_START",
-    input_mode: "widget",
-    state: baseState,
-  });
-  const conflict = await run_step({
-    idempotency_key: idempotencyKey,
-    user_message: "",
-    input_mode: "chat",
-    state: baseState,
-  });
-  assert.equal(first?.ok, true);
-  assert.equal(conflict?.ok, false);
-  assert.equal(String(conflict?.error?.type || ""), "idempotency_conflict");
-  assert.equal(String(conflict?.error?.code || ""), "idempotency_key_conflict");
-  assert.equal(String(conflict?.error?.retry_action || ""), "regenerate_key");
-  const conflictResult = (conflict || {}) as Record<string, unknown>;
-  const conflictState = (conflict?.state || {}) as Record<string, unknown>;
-  assert.equal(String(conflictResult.idempotency_outcome || ""), "conflict");
-  assert.equal(String(conflictResult.idempotency_error_code || ""), "idempotency_key_conflict");
-  assert.equal(String(conflictState.idempotency_outcome || ""), "conflict");
-});
-
-test("idempotency runtime: parallel duplicate request mapped naar inflight fout", async () => {
-  const prevDelay = process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS;
-  process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS = "120";
-  const idempotencyKey = `runtime-inflight-${Date.now()}`;
+test("idempotency server-only: runtime duplicate request houdt idempotency metadata leeg", async () => {
+  const idempotencyKey = `server-owned-runtime-direct-${Date.now()}`;
   const input = {
     idempotency_key: idempotencyKey,
     user_message: "ACTION_START",
@@ -1396,25 +1327,53 @@ test("idempotency runtime: parallel duplicate request mapped naar inflight fout"
       started: "true",
     },
   };
-  try {
-    const firstPromise = run_step(input);
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    const second = await run_step(input);
-    const first = await firstPromise;
-    assert.equal(first?.ok, true);
-    assert.equal(second?.ok, false);
-    assert.equal(String(second?.error?.type || ""), "idempotency_inflight");
-    assert.equal(String(second?.error?.code || ""), "idempotency_replay_inflight");
-    assert.equal(String(second?.error?.retry_action || ""), "retry_same_key");
-    const secondResult = (second || {}) as Record<string, unknown>;
-    const secondState = (second?.state || {}) as Record<string, unknown>;
-    assert.equal(String(secondResult.idempotency_outcome || ""), "inflight");
-    assert.equal(String(secondResult.idempotency_error_code || ""), "idempotency_replay_inflight");
-    assert.equal(String(secondState.idempotency_outcome || ""), "inflight");
-  } finally {
-    if (prevDelay === undefined) delete process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS;
-    else process.env.TEST_RUNTIME_IDEMPOTENCY_DELAY_MS = prevDelay;
-  }
+
+  const first = await run_step(input);
+  const second = await run_step(input);
+
+  assert.equal(first?.ok, true);
+  assert.equal(second?.ok, true);
+  const firstResult = (first || {}) as Record<string, unknown>;
+  const secondResult = (second || {}) as Record<string, unknown>;
+  assert.equal(String(firstResult.idempotency_outcome || ""), "");
+  assert.equal(String(firstResult.idempotency_error_code || ""), "");
+  assert.equal(String(secondResult.idempotency_outcome || ""), "");
+  assert.equal(String(secondResult.idempotency_error_code || ""), "");
+  assert.equal(String((first?.state as Record<string, unknown> | undefined)?.idempotency_outcome || ""), "");
+  assert.equal(String((second?.state as Record<string, unknown> | undefined)?.idempotency_outcome || ""), "");
+});
+
+test("idempotency server-only: runtime direct call mapt niet naar conflict/inflight branches", async () => {
+  const idempotencyKey = `server-owned-no-runtime-branches-${Date.now()}`;
+  const baseState = {
+    current_step: "step_0",
+    intro_shown_session: "false",
+    last_specialist_result: {},
+    started: "true",
+  };
+
+  const firstPromise = run_step({
+    idempotency_key: idempotencyKey,
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    state: { ...baseState },
+  });
+  const secondPromise = run_step({
+    idempotency_key: idempotencyKey,
+    user_message: "",
+    input_mode: "chat",
+    state: { ...baseState },
+  });
+
+  const first = await firstPromise;
+  const second = await secondPromise;
+  assert.equal(first?.ok, true);
+  assert.notEqual(String(second?.error?.type || ""), "idempotency_conflict");
+  assert.notEqual(String(second?.error?.type || ""), "idempotency_inflight");
+  const secondResult = (second || {}) as Record<string, unknown>;
+  assert.equal(String(secondResult.idempotency_outcome || ""), "");
+  assert.equal(String(secondResult.idempotency_error_code || ""), "");
+  assert.equal(String((second?.state as Record<string, unknown> | undefined)?.idempotency_outcome || ""), "");
 });
 
 // Meta-filter: first message is never dropped (pristineAtEntry ? rawNormalized : ...) in run_step.ts.

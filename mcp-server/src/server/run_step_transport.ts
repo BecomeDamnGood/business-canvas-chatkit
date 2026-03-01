@@ -59,54 +59,6 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function applyActionLivenessToTransportResult(
-  transportResult: RunStepTransportResult,
-  contract: ActionLivenessContract
-): RunStepTransportResult {
-  const failureClass = classifyActionLivenessFailureClass(contract);
-  const meta = toRecord(transportResult.meta);
-  const widgetResult = toRecord(meta.widget_result);
-  if (Object.keys(widgetResult).length === 0) return transportResult;
-  const nextWidgetResult = attachActionLivenessToResult(widgetResult, contract);
-  const structuredContent = toRecord(transportResult.structuredContent);
-  const structuredResult = toRecord(structuredContent.result);
-  const structuredState = toRecord(structuredResult.state);
-  const nextStructuredResult = {
-    ...structuredResult,
-    state: {
-      ...structuredState,
-      ui_action_liveness: {
-        ack_status: contract.ack_status,
-        state_advanced: contract.state_advanced,
-        reason_code: contract.reason_code,
-        failure_class: failureClass,
-        action_code_echo: contract.action_code_echo,
-        client_action_id_echo: contract.client_action_id_echo,
-      },
-    },
-    ack_status: contract.ack_status,
-    state_advanced: contract.state_advanced,
-    reason_code: contract.reason_code,
-    failure_class: failureClass,
-    action_code_echo: contract.action_code_echo,
-    client_action_id_echo: contract.client_action_id_echo,
-  };
-  return {
-    structuredContent: {
-      ...(transportResult.structuredContent && typeof transportResult.structuredContent === "object"
-        ? transportResult.structuredContent
-        : {}),
-      ...structuredContent,
-      result: nextStructuredResult,
-    },
-    meta: {
-      ...(transportResult.meta && typeof transportResult.meta === "object" ? transportResult.meta : {}),
-      ...meta,
-      widget_result: nextWidgetResult,
-    },
-  };
-}
-
 function resolveIdempotencyEarlyLiveness(
   widgetResult: Record<string, unknown>
 ): { ack_status: ActionAckStatus; reason_code: string } {
@@ -229,7 +181,20 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       state_advanced: false,
       reason_code: preflightLiveness.reason_code,
     });
-    const enriched = applyActionLivenessToTransportResult(idempotencyPreflight, livenessContract);
+    const enrichedWidgetResult =
+      Object.keys(preflightWidgetResult).length > 0
+        ? attachActionLivenessToResult(preflightWidgetResult, livenessContract)
+        : preflightWidgetResult;
+    const enriched = {
+      structuredContent: {
+        ...toRecord(idempotencyPreflight.structuredContent),
+        result: buildModelSafeResult(enrichedWidgetResult),
+      },
+      meta: {
+        ...toRecord(idempotencyPreflight.meta),
+        widget_result: enrichedWidgetResult,
+      },
+    };
     logActionLivenessOutcome({
       context,
       stepId: safeString(preflightWidgetResult.current_step_id || context.currentStepId) || "step_0",
@@ -263,7 +228,20 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       state_advanced: false,
       reason_code: stalePreflight.earlyDropReasonCode || "stale_payload_dropped",
     });
-    const enriched = applyActionLivenessToTransportResult(stalePreflight.earlyResponse, staleLiveness);
+    const enrichedWidgetResult =
+      Object.keys(staleWidgetResult).length > 0
+        ? attachActionLivenessToResult(staleWidgetResult, staleLiveness)
+        : staleWidgetResult;
+    const enriched = {
+      structuredContent: {
+        ...toRecord(stalePreflight.earlyResponse.structuredContent),
+        result: buildModelSafeResult(enrichedWidgetResult),
+      },
+      meta: {
+        ...toRecord(stalePreflight.earlyResponse.meta),
+        widget_result: enrichedWidgetResult,
+      },
+    };
     logActionLivenessOutcome({
       context,
       stepId: safeString(staleWidgetResult.current_step_id || context.currentStepId) || "step_0",
