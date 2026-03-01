@@ -458,25 +458,6 @@ function describeBootstrapOrdering(ordering: BootstrapOrderingState): {
   };
 }
 
-function rehydrateIncomingOrderingAgainstCurrent(params: {
-  current: BootstrapOrderingState;
-  incoming: BootstrapOrderingState;
-}): { ordering: BootstrapOrderingState; rehydrated: boolean; reason: string } {
-  const current = params.current;
-  const incoming = { ...params.incoming };
-  if (!incoming.sessionId || incoming.sessionId !== current.sessionId) {
-    return { ordering: incoming, rehydrated: false, reason: "session_scope_changed" };
-  }
-  if (incoming.hostWidgetSessionId) {
-    return { ordering: incoming, rehydrated: false, reason: "incoming_host_present" };
-  }
-  if (!current.hostWidgetSessionId) {
-    return { ordering: incoming, rehydrated: false, reason: "current_host_missing" };
-  }
-  incoming.hostWidgetSessionId = current.hostWidgetSessionId;
-  return { ordering: incoming, rehydrated: true, reason: "same_session_host_rehydrated" };
-}
-
 function decideOrderingPatch(
   current: BootstrapOrderingState,
   incoming: BootstrapOrderingState
@@ -595,16 +576,6 @@ function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality
   };
 }
 
-function shouldAcceptSameTupleUpgrade(params: {
-  incoming: PayloadQuality;
-  current: PayloadQuality;
-}): boolean {
-  if (params.incoming.renderable && !params.current.renderable) return true;
-  if (params.incoming.hasUiStrings && !params.current.hasUiStrings) return true;
-  if (params.incoming.hasInteractiveContent && !params.current.hasInteractiveContent) return true;
-  return params.incoming.score > params.current.score;
-}
-
 function buildTupleFailClosedEnvelope(params: {
   currentResult: Record<string, unknown>;
   incomingResult: Record<string, unknown>;
@@ -717,16 +688,8 @@ function shouldUpdateRenderCache(params: {
   incoming: PayloadQuality;
   current: PayloadQuality;
   incomingSignal: IncomingLivenessSignal;
-  sameTupleUpgradeAccepted: boolean;
   orderingReason: string;
 }): RenderCacheDecision {
-  if (params.sameTupleUpgradeAccepted) {
-    return {
-      should_persist: true,
-      decision_reason: "same_tuple_upgrade",
-      preserve_safety_reason: "not_applicable",
-    };
-  }
   if (!params.currentHasPayload) {
     return {
       should_persist: true,
@@ -923,30 +886,16 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
   let orderingAfter = readBootstrapOrderingState(next);
   if (includesOrderingPatch) {
     const currentOrdering = readBootstrapOrderingState(ws);
-    const incomingOrderingRaw = readBootstrapOrderingState(next);
-    const incomingOrderingRehydrated = rehydrateIncomingOrderingAgainstCurrent({
-      current: currentOrdering,
-      incoming: incomingOrderingRaw,
-    });
-    const incomingOrdering = incomingOrderingRehydrated.ordering;
+    const incomingOrdering = readBootstrapOrderingState(next);
     orderingBefore = currentOrdering;
     orderingAfter = incomingOrdering;
-    if (incomingOrderingRehydrated.rehydrated) {
-      next.host_widget_session_id = incomingOrdering.hostWidgetSessionId;
-      console.log("[ui_widgetstate_rehydrate_host_session]", {
-        reason: incomingOrderingRehydrated.reason,
-        current_tuple: describeBootstrapOrdering(currentOrdering),
-        incoming_tuple_before: describeBootstrapOrdering(incomingOrderingRaw),
-        incoming_tuple_after: describeBootstrapOrdering(incomingOrdering),
-      });
-    }
     console.log("[ui_widgetstate_persist_attempt]", {
       patch_tuple: describeBootstrapOrdering(incomingOrdering),
       current_tuple: describeBootstrapOrdering(currentOrdering),
     });
     const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
     orderingDecisionReason = orderingDecision.reason;
-    if (!orderingDecision.apply && hasValidBootstrapOrdering(incomingOrdering)) {
+    if (!orderingDecision.apply) {
       for (const key of orderingKeys) {
         next[key] = ws[key];
       }
@@ -1144,81 +1093,25 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     responseSeq: resolved.response_seq,
     hostWidgetSessionId: resolved.host_widget_session_id,
   };
-  const incomingOrderingRehydrated = rehydrateIncomingOrderingAgainstCurrent({
-    current: currentOrdering,
-    incoming: incomingOrderingRaw,
-  });
-  const incomingOrdering = incomingOrderingRehydrated.ordering;
-  if (incomingOrderingRehydrated.rehydrated) {
-    console.log("[ui_widgetstate_rehydrate_host_session]", {
-      source,
-      reason: incomingOrderingRehydrated.reason,
-      current_tuple: describeBootstrapOrdering(currentOrdering),
-      incoming_tuple_before: describeBootstrapOrdering(incomingOrderingRaw),
-      incoming_tuple_after: describeBootstrapOrdering(incomingOrdering),
-    });
-  }
+  const incomingOrdering = incomingOrderingRaw;
   const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
   const currentHasOrdering = hasValidBootstrapOrdering(currentOrdering);
   const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
-  const hwidFromResult = String(
-    (result?.state as Record<string, unknown> | undefined)?.host_widget_session_id ||
-      (result as Record<string, unknown> | undefined)?.host_widget_session_id ||
-      incomingOrdering.hostWidgetSessionId ||
-      ""
-  ).trim();
-  const currentHwid = String(widgetState().host_widget_session_id || "").trim();
-  const shouldPersistHostWithoutFullTuple =
-    Boolean(hwidFromResult) && (!currentHwid || (!currentHasOrdering && currentHwid !== hwidFromResult));
-  if (shouldPersistHostWithoutFullTuple) {
-    setWidgetStateSafe({ host_widget_session_id: hwidFromResult });
-    console.log("[ui_hwid_persisted_without_full_ordering]", {
-      source,
-      host_widget_session_id: hwidFromResult,
-      previous_host_widget_session_id: currentHwid,
-      incoming_tuple_valid: incomingHasOrdering,
-      current_tuple_valid: currentHasOrdering,
-      ordering_apply: orderingDecision.apply,
-      ordering_reason: orderingDecision.reason,
-    });
-  }
-  let sameTupleUpgradeAccepted = false;
   if (incomingHasOrdering && !orderingDecision.apply) {
-    if (
-      orderingDecision.reason === "same_response_seq" &&
-      shouldAcceptSameTupleUpgrade({
-        incoming: incomingQuality,
-        current: currentQuality,
-      })
-    ) {
-      sameTupleUpgradeAccepted = true;
-      console.log("[ui_ordering_same_seq_upgrade_accepted]", {
-        source,
-        payload_source: resolved.source,
-        payload_reason_code: resolved.source_reason_code,
-        incoming_quality_score: incomingQuality.score,
-        current_quality_score: currentQuality.score,
-        incoming_renderable: incomingQuality.renderable,
-        current_renderable: currentQuality.renderable,
-        incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-        current_tuple: describeBootstrapOrdering(currentOrdering),
-      });
-    } else {
-      console.warn("[ui_ordering_dropped_stale]", {
-        source,
-        reason: orderingDecision.reason,
-        payload_source: resolved.source,
-        payload_reason_code: resolved.source_reason_code,
-        correlation_id: ingestContext.correlation_id,
-        client_action_id: ingestContext.client_action_id,
-        request_id: ingestContext.request_id,
-        client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
-        client_ingest_seq: ingestContext.client_ingest_seq,
-        incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-        current_tuple: describeBootstrapOrdering(currentOrdering),
-      });
-      return {};
-    }
+    console.warn("[ui_ordering_dropped_stale]", {
+      source,
+      reason: orderingDecision.reason,
+      payload_source: resolved.source,
+      payload_reason_code: resolved.source_reason_code,
+      correlation_id: ingestContext.correlation_id,
+      client_action_id: ingestContext.client_action_id,
+      request_id: ingestContext.request_id,
+      client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
+      client_ingest_seq: ingestContext.client_ingest_seq,
+      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+      current_tuple: describeBootstrapOrdering(currentOrdering),
+    });
+    return {};
   }
   if (!incomingHasOrdering) {
     console.warn("[ui_ingest_tuple_incomplete_fail_closed]", {
@@ -1268,7 +1161,6 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     incoming: incomingQuality,
     current: currentQuality,
     incomingSignal,
-    sameTupleUpgradeAccepted,
     orderingReason: orderingDecision.reason,
   });
   const shouldPersistToRenderCache = renderCacheDecision.should_persist;
@@ -1828,26 +1720,41 @@ export async function callRunStep(
     extraState && typeof extraState === "object"
       ? { ...extraState }
       : undefined;
+  const latestSnapshot = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
+  const latestState = latestSnapshot.state || {};
   const transportStatus = resolveTransportStatus();
   const hasCallTool = transportStatus === "ready_callTool";
   const hasBridgePath =
     transportStatus === "ready_bridge" || transportStatus === "unknown";
   if (!hasCallTool && !hasBridgePath) {
-    const fallbackActionCode = String(messageText || "").trim().toUpperCase();
-    setWidgetStateSafe({
+    const livenessState = Object.assign({}, latestState, widgetState());
+    if (cleanExtraState && typeof cleanExtraState === "object") {
+      Object.assign(livenessState, cleanExtraState);
+    }
+    const clientActionId = ensureClientActionIdOnState(
+      livenessState as Record<string, unknown>,
+      messageText || "TEXT_INPUT"
+    );
+    const actionCodeEcho = String(messageText || "TEXT_INPUT").trim().toUpperCase();
+    const livenessNotice = resolveActionLivenessNotice(livenessState as Record<string, unknown>, {
+      ack_status: "rejected",
+      state_advanced: false,
+      reason_code: "transport_unavailable",
+    });
+    const unavailablePatch: Record<string, unknown> = {
+      __client_action_id: clientActionId,
       ui_action_liveness_ack_status: "rejected",
       ui_action_liveness_state_advanced: "false",
       ui_action_liveness_reason_code: "transport_unavailable",
-      ui_action_liveness_failure_class: "rejected",
-      ui_action_liveness_action_code: fallbackActionCode,
-      ui_action_liveness_client_action_id: "",
-    });
+      ui_action_liveness_failure_class: livenessNotice.failure_class,
+      ui_action_liveness_action_code: actionCodeEcho,
+      ui_action_liveness_client_action_id: clientActionId,
+    };
     if (isStartAction) {
-      setWidgetStateSafe({
-        start_dispatch_state: "failed",
-        transport_ready: "false",
-      });
+      unavailablePatch.start_dispatch_state = "failed";
+      unavailablePatch.transport_ready = "false";
     }
+    setWidgetStateSafe(unavailablePatch);
     console.warn("[ui_transport_unavailable]", {
       action_code: messageText,
       transport_status: transportStatus,
@@ -1858,8 +1765,7 @@ export async function callRunStep(
     );
     console.warn("run_step: host did not provide callTool or MCP bridge");
     const errEl = document.getElementById("cardDesc");
-    const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__;
-    const state = latest?.state || {};
+    const state = latestState;
     if (errEl && _t) errEl.textContent = _t(uiLang(state), "errorMessage");
     return;
   }
@@ -1881,8 +1787,7 @@ export async function callRunStep(
     if (!persistedStarted && !isBootstrapPollCall) return;
   }
 
-  const latest = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
-  const state = latest.state || { current_step: "step_0" };
+  const state = latestSnapshot.state || { current_step: "step_0" };
 
   const baseState = state;
   const ws = widgetState();
@@ -1975,21 +1880,6 @@ export async function callRunStep(
       });
     }
     setInlineNotice(uiText(nextState, "transient.timeout", ""));
-    setWidgetStateSafe({
-      ui_action_liveness_ack_status: "timeout",
-      ui_action_liveness_state_advanced: "false",
-      ui_action_liveness_reason_code: "timeout",
-      ui_action_liveness_failure_class: "timeout",
-      ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
-      ui_action_liveness_client_action_id: clientActionId,
-    });
-    console.warn("[ui_action_liveness_explicit_error]", {
-      action_code: String(messageText || "").trim().toUpperCase(),
-      client_action_id: clientActionId,
-      ack_status: "timeout",
-      reason_code: "timeout",
-      failure_class: "timeout",
-    });
     if (isStartAction) {
       setWidgetStateSafe({
         start_dispatch_state: "failed",
@@ -2209,12 +2099,6 @@ export async function callRunStep(
       setWidgetStateSafe({
         start_dispatch_state: "failed",
         transport_ready: "false",
-        ui_action_liveness_ack_status: "rejected",
-        ui_action_liveness_state_advanced: "false",
-        ui_action_liveness_reason_code: "transport_error",
-        ui_action_liveness_failure_class: "rejected",
-        ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
-        ui_action_liveness_client_action_id: clientActionId,
       });
       setInlineNotice(uiText(nextState, "transient.connection_failed", ""));
       return;
@@ -2233,21 +2117,6 @@ export async function callRunStep(
         });
       }
       setInlineNotice(uiText(nextState, "transient.timeout", ""));
-      setWidgetStateSafe({
-        ui_action_liveness_ack_status: "timeout",
-        ui_action_liveness_state_advanced: "false",
-        ui_action_liveness_reason_code: "timeout",
-        ui_action_liveness_failure_class: "timeout",
-        ui_action_liveness_action_code: String(messageText || "").trim().toUpperCase(),
-        ui_action_liveness_client_action_id: clientActionId,
-      });
-      console.warn("[ui_action_liveness_explicit_error]", {
-        action_code: String(messageText || "").trim().toUpperCase(),
-        client_action_id: clientActionId,
-        ack_status: "timeout",
-        reason_code: "timeout",
-        failure_class: "timeout",
-      });
       return;
     }
     console.error("run_step failed", e);

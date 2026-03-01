@@ -1,5 +1,8 @@
 # MCP Widget Regressie - Living Rapport
 
+Status: Living archieflog (niet normerend voor runtime/build-contract sinds 2026-03-01).  
+Actieve normbron: `mcp-server/docs/ui-interface-contract.md`.
+
 ## 0) Officiele OpenAI MCP/App richtlijnen (samenvatting)
 
 ### 0.1 Hoe het volgens OpenAI hoort te werken
@@ -2844,3 +2847,666 @@ Status van deze poging:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: eventtype-contract is nu expliciet gescheiden; non-render host-events veroorzaken geen UI-fail-closed meer.
+
+### Poging 2026-03-01 09:05 UTC (Extreme simplificering: basis-herijking + agent onderzoeksplan)
+
+- Hypothese:
+  - Het huidige regressiepatroon blijft terugkeren door overmatige lagen en dubbele runtime-paden; structurele stabiliteit vereist delete-first simplificering naar 1 UI-runtimepad, 1 server-outputpad en 1 render-contractpad.
+- Waarom deze hypothese (bewijs vooraf):
+  - Runtime-UI draait op `step-card.bundled.html` met inline JS-eventing (`openai:set_globals` + `openai:notification`) en eigen ingest/fail-closed pad:
+    - `mcp-server/ui/step-card.bundled.html:800-816`, `1011-1018`, `1079-1095`, `1101`.
+  - Parallel bestaat een tweede UI-logicalaag in `ui/lib/*` met vergelijkbare canonicalize/ingest-semantiek, maar deze wordt niet direct vanuit bundled runtime geladen:
+    - `mcp-server/ui/lib/locale_bootstrap_runtime.ts:148-177`,
+    - `mcp-server/ui/lib/main.ts:559-600`,
+    - `mcp-server/ui/step-card.bundled.html` bevat geen `script src` naar `ui/lib/*` (alleen inline `<script>` rond regel `696`).
+  - Server voert output-/tuple-verrijking in meerdere paden uit (MCP-tool + local bridge):
+    - `mcp-server/src/server/mcp_registration.ts:149-183`,
+    - `mcp-server/src/server/http_routes.ts:408-425`,
+    - gedeelde paritylaag `mcp-server/src/server/ordering_parity.ts`.
+  - Omvang-indicatie (complexiteitsdruk):
+    - `ui/lib/*` totaal ~`5054` regels,
+    - server ondersteunende transport/parity-contextlagen ~`1535` regels (`ordering_parity + run_step_transport_*`).
+- Exacte bevindingen (analyse-only, geen codewijziging):
+  - Er is 1 actieve UI-file voor runtime (`step-card.bundled.html`), maar niet 1 actieve UI-logicalaag in de repo (door parallelle `ui/lib` test-/gate-afhankelijkheden).
+  - De huidige “contract-first” intentie is technisch aanwezig, maar praktisch verspreid over meerdere ingest- en guardlocaties.
+  - Symptoom `widget_result_missing` past bij te veel event-/payload-oppervlakken i.p.v. één strak render-eventcontract.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+
+#### High-level Agent Onderzoeksplan (doel: complete simplificering, minimale lagen)
+
+- Doelstelling:
+  - Terug naar basis met expliciete minimal architecture: 1 runtime UI-pad, 1 server render-contract, 0 onnodige afvanglagen.
+
+- Onderzoeksprincipes (hard):
+  - Geen aannames; elke claim met file/line bewijs.
+  - Delete-first: eerst bewijzen wat weg kan, dan pas behouden wat absoluut nodig is.
+  - Geen workaround-paden toevoegen tijdens onderzoek.
+  - Elke “compat”-laag krijgt expliciet verdict: houden of verwijderen, met reden.
+
+- Fase 1: Runtime waarheid hard vastleggen
+  - Bewijsmatrix maken: welke code draait daadwerkelijk bij echte ChatGPT-host events.
+  - Expliciet scheiden:
+    - runtime-executed,
+    - build/test-only,
+    - historisch/documentair.
+  - Output: tabel `component -> runtime ja/nee -> bewijs`.
+
+- Fase 2: Lageninventaris + delete-kandidaten
+  - Volledige ketenkaart opstellen:
+    - Host event -> UI ingest -> render,
+    - Tool call -> server transport -> meta.widget_result -> host.
+  - Per schakel classificeren:
+    - essentieel,
+    - duplicaat,
+    - defensieve ballast,
+    - legacy compat.
+  - Output: delete-lijst met impact/risico per item.
+
+- Fase 3: Root-cause verificatie zonder pleisters
+  - Voor elke regressie (`widget_result_missing`, UI-verschraling, contract drift):
+    - triggerconditie,
+    - exacte code-locatie,
+    - minimaal structureel fixprincipe.
+  - Alternatieve oorzaken verplicht toetsen en weerleggen/bevestigen met bewijs.
+  - Output: oorzaakmatrix (bewezen/verworpen/onbeslist).
+
+- Fase 4: Target minimal architecture (beslisdocument)
+  - Definieer “to-be” met harde grenzen:
+    - UI: pure renderer, 1 ingest-pad, 1 payloadshape.
+    - Server: 1 authoritatief outputpad voor widget_result.
+    - Geen dubbele parity/patch-routines op meerdere paden.
+  - Output: korte architectuur-spec + expliciete non-goals.
+
+- Fase 5: Simplificatievolgorde (delete plan)
+  - Volgorde ontwerpen die risico minimaliseert:
+    1. stop onderhoud van dode paden,
+    2. verwijder duplicaatlogica,
+    3. verwijder compat/afvang die niet meer nodig is,
+    4. consolideer tests naar nieuwe minimale waarheid.
+  - Elke delete-stap met rollback-criterium en verificatiecommandos.
+  - Output: uitvoerbaar stappenplan per PR-wave.
+
+- Fase 6: Gate-herbouw op eenvoud
+  - Bestaande gates die complexiteit conserveren herzien/verwijderen.
+  - Nieuwe gates alleen op kerninvarianten:
+    - single UI runtime source,
+    - single render source,
+    - geen legacy ingest-tokens/paden.
+  - Output: klein, scherp gatepakket dat simplificering borgt.
+
+- Verplichte agent-output (na onderzoek):
+  - 1. Definitieve lijst “houden vs verwijderen” met bewijs per bestand.
+  - 2. Top-5 root causes met bewezen causaliteit.
+  - 3. Minimal target architecture (1 pagina).
+  - 4. Gefaseerd delete-plan met risico’s en verificatie per fase.
+  - 5. Eindverdict: “kan naar complete eenvoud” ja/nee + blokkades.
+
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: eerst volledig onderzoek met bewijs, daarna pas implementatie; doel blijft structurele vereenvoudiging zonder pleisters.
+
+### Poging 2026-03-01 10:40 UTC (PR-1 Transport convergentie naar `/mcp`)
+
+- Doel:
+  - Parallel runtime transport verwijderen (`POST /run_step` + `GET /test`) zodat `/mcp` het enige actieve runtime ingress-pad is.
+
+- Uitgevoerd (klaar):
+  - Runtime routes verwijderd in server:
+    - `mcp-server/src/server/http_routes.ts:273` (blok met `/run_step` + `/test` verwijderd; volgende actieve runtime-pad is `/mcp` op `:336`).
+    - `mcp-server/src/server/http_routes.ts:594` (local-dev startup log aangepast naar MCP + UI endpoint, geen `/run_step` of `/test` meer).
+  - Runtime smoke gemigreerd naar MCP JSON-RPC (`initialize` + `tools/call`):
+    - `mcp-server/scripts/runtime-smoke.mjs:76`
+    - `mcp-server/scripts/runtime-smoke.mjs:93`
+  - Release proof checks gemigreerd van `/run_step` naar MCP tool-calls:
+    - helper + callpad: `mcp-server/scripts/release_proof_verification.mjs:141`, `:262`
+    - idem/replay checks via MCP: `mcp-server/scripts/release_proof_verification.mjs:390`
+  - Contracttests aangepast zodat local bridge geen runtime-eis meer is:
+    - `mcp-server/src/mcp_app_contract.test.ts:63-67`
+    - `mcp-server/src/server_safe_string.test.ts:34-39`
+  - UI-interface contractdocument geactualiseerd naar MCP ingress werkelijkheid:
+    - `mcp-server/docs/ui-interface-contract.md:5`
+    - `mcp-server/docs/ui-interface-contract.md:26`
+
+- Verificatie (gedraaid in deze poging):
+  - `cd mcp-server && npm run typecheck` -> PASS
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/mcp_app_contract.test.ts src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS
+  - `cd mcp-server && npm test` -> PASS
+  - Resultaatacceptatie:
+    - Geen actieve `/run_step` route in `http_routes.ts` (runtime pad gaat direct van `/ui/*` naar `/mcp`): `mcp-server/src/server/http_routes.ts:273`, `:336`
+    - Geen actieve `/test` route in `http_routes.ts`: `mcp-server/src/server/http_routes.ts:273`
+
+- Open / TODO (na PR-1):
+  - [ ] Tekstuele opschoning comment in transportlaag: comment noemt nog “POST /run_step (local testing)” terwijl route verwijderd is.
+    - `mcp-server/src/server/run_step_transport.ts:210`
+  - [ ] Onbeslist: release-proof “wrong contract” check is inhoudelijk verschoven van bridge-validatiefoutcode naar tool-level fail-closed check; mogelijk gewenst om 1 expliciete foutcode-afspraak te maken.
+    - `mcp-server/scripts/release_proof_verification.mjs:363-371`
+  - [ ] Scope-note: extra testfix buiten originele PR-1 scope was nodig om `npm test` volledig groen te houden (renderer verwacht nu `ui.action_contract.actions`).
+    - `mcp-server/src/ui_sanitize.test.ts:209-214`
+
+- Besluit:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: PR-1 convergentie is functioneel afgerond en geverifieerd; resterende punten zijn documentair/contractafspraak of follow-up hygiene.
+
+### Poging 2026-03-01 11:20 UTC (PR-2 Idempotency SSOT server-only ownership)
+
+- Doel:
+  - Runtime idempotency registry/branches verwijderen uit handlers en server transport als enige idempotency owner houden.
+
+- Uitgevoerd (klaar):
+  - Runtime idempotency module verwijderd:
+    - `mcp-server/src/handlers/run_step_runtime_idempotency.ts` (verwijderd).
+  - Runtime execute opgeschoond naar server-only ownership (geen runtime replay/conflict/inflight pad meer):
+    - `mcp-server/src/handlers/run_step_runtime_execute.ts:8` (runtime idempotency deps verwijderd uit destructuring).
+    - `mcp-server/src/handlers/run_step_runtime_execute.ts:275` (preflight response direct return, geen runtime idempotency finalize).
+    - `mcp-server/src/handlers/run_step_runtime_execute.ts:357` (action-routing response direct return).
+    - `mcp-server/src/handlers/run_step_runtime_execute.ts:425` (special-routes response direct return).
+    - `mcp-server/src/handlers/run_step_runtime_execute.ts:429` (post-pipeline direct return).
+  - Runtime facade imports/deps opgeschoond:
+    - `mcp-server/src/handlers/run_step_runtime.ts:188` (runtime idempotency importblok verwijderd).
+    - `mcp-server/src/handlers/run_step_runtime.ts:876` (runtime execute deps zonder runtime idempotency ports).
+  - Tests genormaliseerd naar server ownership:
+    - `mcp-server/src/handlers/run_step.test.ts:1310` (runtime duplicate test verwacht nu geen runtime idempotency metadata).
+    - `mcp-server/src/handlers/run_step.test.ts:1339` (runtime direct call mapt niet naar runtime conflict/inflight branches).
+  - Server idempotency ownership expliciet behouden:
+    - `mcp-server/src/server/idempotency_registry.ts:21` (server registry SSOT map).
+    - `mcp-server/src/server/run_step_transport_idempotency.ts:139` (server preflight conflict/replay/inflight).
+    - `mcp-server/src/server/run_step_transport.ts:214` (server tracker creatie) en `:431` (server completion persist).
+
+- Verificatie (gedraaid in deze poging):
+  - `cd mcp-server && npm run typecheck` -> PASS
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts src/mcp_app_contract.test.ts` -> PASS
+  - Resultaatacceptatie:
+    - Geen runtime registry map in `src/handlers/*`:
+      - `mcp-server/src/handlers/run_step_runtime_idempotency.ts` verwijderd.
+    - Handler-runtime bevat geen runtime idempotency branches/imports meer:
+      - `mcp-server/src/handlers/run_step_runtime_execute.ts:8`
+      - `mcp-server/src/handlers/run_step_runtime.ts:188`
+    - Idempotency outcome blijft server-gedreven:
+      - `mcp-server/src/server/run_step_transport_idempotency.ts:139`
+      - `mcp-server/src/server/run_step_transport.ts:214`
+
+- Open / TODO (na PR-2):
+  - [ ] Onbeslist: in deze poging is geen aparte transport-level integratietest toegevoegd die replay/conflict/inflight via het `/mcp` pad end-to-end simuleert; huidige checks dekken typecheck + bestaande suites.
+    - Bestaande server-eigenaarschapspaden: `mcp-server/src/server/run_step_transport_idempotency.ts:139-265`, `mcp-server/src/server/run_step_transport.ts:214-223`.
+  - [ ] Geen functionele blokkers gevonden voor PR-2 acceptance in scope.
+
+- Besluit:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: PR-2 is delete-first uitgevoerd; runtime ownership is verwijderd en server transport blijft de enige idempotency owner met geslaagde verplichte verificatie.
+
+### Poging 2026-03-01 12:05 UTC (PR-3 Output envelope SSOT `_meta.widget_result` authority)
+
+- Doel:
+  - Parallelle `_widget_result` alias/compat ingestpaden verwijderen en `_meta.widget_result` als enige UI render authority afdwingen.
+
+- Uitgevoerd (klaar):
+  - MCP output alias-injectie verwijderd:
+    - `mcp-server/src/server/mcp_registration.ts:267-271` (geen `_widget_result` verrijking meer; alleen `parsedStructuredContent` + `_meta` passthrough).
+  - Bundled runtime extractie versmald naar alleen meta-authority:
+    - `mcp-server/ui/step-card.bundled.html:804-808` (alleen `_meta.widget_result` candidates; geen `root/structured/toolOutput._widget_result` meer).
+  - Legacy notification compat verwijderd:
+    - `mcp-server/ui/step-card.bundled.html:1020-1026` (method verplicht `ui/notifications/tool-result`).
+    - `mcp-server/ui/step-card.bundled.html:1029` (payload alleen `detail.params`).
+    - `mcp-server/ui/step-card.bundled.html:1042-1044` (geen legacy `tool_result_legacy` source/reason).
+  - Locale bootstrap runtime compat zoekpaden verwijderd:
+    - `mcp-server/ui/lib/locale_bootstrap_runtime.ts:150-158` (alleen root/toolOutput `_meta.widget_result` selectie).
+  - Tests aangescherpt op strict authority:
+    - `mcp-server/src/mcp_app_contract.test.ts:63-67` (runtime ingress assert op `structuredContent: parsedStructuredContent`).
+    - `mcp-server/src/mcp_app_contract.test.ts:96-104` (expliciet geen `_widget_result` aliaspaden).
+    - `mcp-server/src/ui_render.test.ts:2744-2766` (`toolOutput._widget_result` alias wordt fail-closed).
+
+- Verificatie (gedraaid in deze poging):
+  - `cd mcp-server && npm run typecheck` -> PASS
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts` -> PASS
+  - Resultaatacceptatie:
+    - Geen actief `_widget_result` aliaspad als render truth in scope-in bestanden:
+      - `mcp-server/src/server/mcp_registration.ts:267-271`
+      - `mcp-server/ui/lib/locale_bootstrap_runtime.ts:150-158`
+      - `mcp-server/ui/step-card.bundled.html:804-808`
+    - UI authority blijft uitsluitend `_meta.widget_result`:
+      - `mcp-server/ui/step-card.bundled.html:805-807`
+      - `mcp-server/ui/lib/locale_bootstrap_runtime.ts:150-155`
+
+- Open / TODO (na PR-3):
+  - [ ] Onbeslist (buiten PR-3 scope): diagnostische payload-shape fingerprint in ui_actions bevat nog `_widget_result` flags (`rwr/twr/swr/tswr`), wat geen render-authority is maar wel legacy-shape observability.
+    - `mcp-server/ui/lib/ui_actions.ts:275-278`
+  - [ ] Geen functionele blokkers gevonden voor PR-3 acceptance in scope.
+
+- Besluit:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: PR-3 is delete-first uitgevoerd; `_meta.widget_result` is de enige render-authority in de scope-in runtimepaden met geslaagde verplichte verificatie.
+
+### Poging 2026-03-01 12:45 UTC (PR-4 Ordering authority simplificatie)
+
+- Doel:
+  - Multi-layer tuple parity patch/backfill/repair verwijderen en client reduceren naar monotonic accept/drop zonder semantische tuple-repair.
+
+- Uitgevoerd (klaar):
+  - Server tuple parity repairlaag verwijderd:
+    - `mcp-server/src/server/ordering_parity.ts:219-304` (directe overgang van tuple helpers naar snapshot/stale registry; parity patch/backfill functies en exports verwijderd).
+  - MCP wrapper vereenvoudigd naar directe server-output zonder wrapper parity-repair:
+    - `mcp-server/src/server/mcp_registration.ts:147-148` (direct `handlerOutput.structuredContent` en `handlerOutput.meta`).
+    - `mcp-server/src/server/mcp_registration.ts:174-205` (render-source observability blijft op `meta.widget_result`, parity-log/event verwijderd).
+  - Client tuple-repair semantiek verwijderd, monotonic drop/apply behouden:
+    - `mcp-server/ui/lib/ui_actions.ts:461-485` (`decideOrderingPatch` blijft monotonic autoriteit).
+    - `mcp-server/ui/lib/ui_actions.ts:887-907` (`setWidgetStateSafe` dropt elke niet-toepasbare ordering patch, geen rehydrate-pad).
+    - `mcp-server/ui/lib/ui_actions.ts:1100-1141` (stale/same-seq/incomplete payloads worden gedropt of fail-closed; geen same-seq-upgrade of host-only persist).
+  - Relevante tests geactualiseerd op single-authority gedrag:
+    - `mcp-server/src/mcp_app_contract.test.ts:219-225`
+    - `mcp-server/src/ui_render.test.ts:1257-1301`
+    - `mcp-server/src/ui_render.test.ts:1428-1457`
+    - `mcp-server/src/ui_render.test.ts:1546-1598`
+    - `mcp-server/src/ui_render.test.ts:2566-2600`
+
+- Verificatie (gedraaid in deze poging):
+  - `cd mcp-server && npm run typecheck` -> PASS
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/mcp_app_contract.test.ts src/ui_render.test.ts src/handlers/run_step.test.ts` -> PASS
+  - Resultaatacceptatie:
+    - Geen multi-layer tuple parity repairlaag in scope-in server/client paden.
+    - Client ingest/updatepad houdt monotonic drop/apply aan.
+    - Stale guard/drop/rebase server-transport ongewijzigd actief:
+      - `mcp-server/src/server/run_step_transport_stale.ts:33-153`
+    - MCP request guards in `http_routes` ongewijzigd:
+      - `mcp-server/src/server/http_routes.ts:396-416`
+
+- Open / TODO (na PR-4):
+  - [ ] Onbeslist (buiten PR-4 scope): `run_step.test.ts` bevat geen expliciete source-assert op verwijderde wrapper parity markers; huidige regressiedekking zit in `mcp_app_contract` en `ui_render`.
+  - [ ] Geen functionele blokkers gevonden voor PR-4 acceptance in scope.
+
+- Besluit:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: PR-4 is delete-first uitgevoerd; ordering-authority blijft server-gedreven en clientpad is teruggebracht naar monotonic accept/drop zonder tuple-repair laag.
+
+### Poging 2026-03-01 13:20 UTC (PR-5 UI ownership hard-cut)
+
+- Doel:
+  - `ui/step-card.bundled.html` als enige actieve UI runtime owner afdwingen.
+  - Parallelle runtime-ownership via `ui/lib` verwijderen uit ownership tests/contracts/gates.
+
+- Uitgevoerd (stap 1 t/m 4):
+  - Stap 1 (delete-first): parallel runtime owner verwijderd.
+    - `mcp-server/ui/lib/main.ts` verwijderd (runtime event/transport entrypoint uit `ui/lib`).
+  - Stap 2 (bundled owner houden): bundled runtime blijft ingest-owner.
+    - `mcp-server/ui/step-card.bundled.html` ongewijzigd als actieve owner voor `openai:set_globals` + `openai:notification`.
+  - Stap 3 (tests/contracts update): ownership-asserts verplaatst naar bundled runtime.
+    - `mcp-server/src/ui_render.test.ts`: source-asserts op `ui/lib/main.ts` vervangen door bundled ownership/asserts.
+    - `mcp-server/src/mcp_app_contract.test.ts`: render-source ownership assertions verschoven van `ui/lib/locale_bootstrap_runtime.ts` naar `ui/step-card.bundled.html`; extra assert toegevoegd voor `/ui/step-card` + bundled transportpad.
+    - `mcp-server/src/server_safe_string.test.ts`: optimistic-mutation guard nu tegen bundled runtime source.
+    - `mcp-server/src/ui_sanitize.test.ts`: bundled runtime sanitize-assert toegevoegd (`textContent` + geen payload-`innerHTML` injectie).
+  - Stap 4 (route/load behouden): route en load-contract blijven intact.
+    - `mcp-server/src/server/run_step_transport.ts` blijft `ui/step-card.bundled.html` laden.
+    - `mcp-server/src/server/http_routes.ts` blijft `/ui/step-card` naar `step-card.bundled.html` mappen.
+
+- Verificatie (gedraaid in deze poging):
+  - `cd mcp-server && npm run typecheck` -> PASS
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/ui_sanitize.test.ts src/mcp_app_contract.test.ts` -> PASS (106 pass, 0 fail)
+
+- Open / TODO (na PR-5):
+  - [ ] Geen functionele blockers in scope gevonden.
+  - [ ] Buiten scope: overige `ui/lib` unit-tests blijven bestaan voor niet-entrypoint modules (`ui_actions`, `ui_render`, `ui_text`) als library-level regressiedekking.
+  - [ ] Volgende eerste actie: beslissen of `/ui/lib/*` public serving in `http_routes` beperkt moet worden (alleen nog bundled runtime-oppervlak), en bij keuze direct contracttest toevoegen.
+
+- Besluit:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: PR-5 hard-cut is uitgevoerd met delete-first; bundled runtime is nu de enige actieve owner in scope en verplichte verificatie is groen.
+
+### Poging 2026-03-01 14:40 UTC (PR-6 Contract/finalize overlap)
+
+- Doel:
+  - Dubbele contract/liveness mutaties tussen handler, transport en client reduceren.
+  - Legacy preflight-branch zonder actuele waarde verwijderen.
+  - Een centrale fail-closed contractguard behouden.
+
+- Uitgevoerd (stap 1 t/m 4):
+  - Stap 1 (delete-first liveness overlap):
+    - Handler-liveness mutatielaag verwijderd:
+      - `mcp-server/src/handlers/turn_contract.ts:124-200` (functie `ensureActionLivenessContract` verwijderd).
+      - `mcp-server/src/handlers/turn_contract.ts:647` en `mcp-server/src/handlers/turn_contract.ts:661` (finalize-calls naar verwijderde laag weg).
+    - Transport dubbelmutatie verwijderd:
+      - `mcp-server/src/server/run_step_transport.ts:62-108` (helper `applyActionLivenessToTransportResult` verwijderd).
+      - Early idempotency/stale pad bouwt nu `structuredContent.result` opnieuw uit `meta.widget_result` via `buildModelSafeResult`:
+        - `mcp-server/src/server/run_step_transport.ts:189-200`
+        - `mcp-server/src/server/run_step_transport.ts:231-242`
+    - Client fallback liveness writes verwijderd buiten server-response ingest:
+      - `mcp-server/ui/lib/ui_actions.ts:1728-1736` (transport-unavailable fallback write verwijderd).
+      - `mcp-server/ui/lib/ui_actions.ts:1869-1884` (timeout callback fallback write verwijderd).
+      - `mcp-server/ui/lib/ui_actions.ts:2085-2091` (transport-error catch fallback write verwijderd).
+      - `mcp-server/ui/lib/ui_actions.ts:2109-2123` (timeout catch fallback write verwijderd).
+  - Stap 2 (legacy preflight branch verwijderen):
+    - `mcp-server/src/handlers/run_step_runtime_preflight.ts:201-221` (call + early return van `handleLegacyPreflight` verwijderd).
+    - `mcp-server/src/handlers/run_step_runtime_preflight.ts:284` (`blockingMarkerClass` hard op `"none"` in dit pad).
+  - Stap 3 (1 centrale fail-closed guard houden):
+    - Contractguard blijft centraal via:
+      - `mcp-server/src/handlers/turn_contract.ts:396` (`assertRunStepContractOrThrow`).
+      - `mcp-server/src/handlers/turn_contract.ts:651-666` (catch -> `buildContractFailurePayload(...)` fail-closed pad).
+  - Stap 4 (tests conflictvrij bijgewerkt):
+    - `mcp-server/src/handlers/run_step.test.ts`:
+      - direct `run_step` liveness expectations aangepast naar transport-owned (`:127-143`).
+      - contract-violation liveness expectations verwijderd (`:257-266`).
+      - legacy confirmation preflight test bijgewerkt naar contract-ready gedrag (`:1282-1313`).
+    - `mcp-server/src/handlers/run_step_finals.test.ts`:
+      - drie wording-choice legacy confirm tests bijgewerkt naar refine-menu success pad (`:3269-3479`).
+      - golden blocked/failed testtitel en intent gealigneerd (`:3811`).
+    - `mcp-server/src/handlers/__golden__/runtime/blocked.json`:
+      - expected snapshot gealigneerd naar `interactive/ready` owner-uitkomst.
+
+- Verificatie (gedraaid in deze poging):
+  - `cd mcp-server && npm run typecheck` -> PASS
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/handlers/step_contracts.test.ts src/handlers/run_step.test.ts src/handlers/run_step_finals.test.ts` -> PASS (172 pass, 0 fail, 1 skipped)
+
+- Open / TODO (na PR-6):
+  - [ ] Buiten scope PR-6: er is geen nieuwe integratietest toegevoegd op het client-timeout pad voor pure UI-notice zonder lokale liveness state-write; huidige dekking blijft contract-/handlergericht.
+  - [ ] Geen functionele blockers in scope gevonden.
+
+- Besluit:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: PR-6 delete-first reductie is uitgevoerd; overlappunten zijn verwijderd, legacy preflight-branch is weg, en fail-closed guard blijft centraal in `turn_contract`.
+
+### Poging 2026-03-01 15:05 UTC (PR-7 Build/artifact minimalisatie)
+
+- Doel:
+  - Runtime artifacts beperken tot alleen wat nodig is voor `/ui/step-card`.
+  - Build/deploy ballast verwijderen zonder nieuwe artifactlaag.
+
+- Uitgevoerd (stap 1 t/m 6):
+  - Stap 1 (runtime artifactset versmald, delete-first):
+    - `mcp-server/scripts/copy-ui-dist.mjs`
+      - volledige `ui`-tree copy verwijderd;
+      - runtime set beperkt tot `step-card.bundled.html`;
+      - `dist/ui` wordt eerst verwijderd (`rmSync`) en daarna opnieuw opgebouwd.
+  - Stap 2 (Dockerfile gealigneerd op minimale set):
+    - `mcp-server/Dockerfile`
+      - build-check van `ui/step-card.bundled.html` vervangen door `dist/ui/step-card.bundled.html`;
+      - runtime check op `dist/ui/step-card.bundled.html` direct na `COPY --from=build /app/dist ./dist`;
+      - extra ballast-copy `COPY --from=build /app/ui ./dist/ui` verwijderd.
+  - Stap 3 (artifactpad voor route-resolutie versmald/gecorrigeerd):
+    - `mcp-server/src/server/http_routes.ts`
+      - `/ui/*` static root aangepast naar `../../ui` zodat source-run en dist-run hetzelfde runtime artifactpad gebruiken (`dist/ui` na build).
+  - Stap 4 (actieve docs opgeschoond):
+    - `docs/mcp_widget_stabilisatie_run_resultaat.md`
+      - verwijzingen naar losse `node scripts/build-ui.mjs` vervangen door `npm run build`;
+      - runtime artifact expliciet benoemd als `dist/ui/step-card.bundled.html`.
+  - Stap 5 (verificatie uitgevoerd, verplicht):
+    - `cd mcp-server && npm run build` -> PASS
+    - `cd mcp-server && npm run typecheck` -> PASS
+    - `cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs` -> FAIL
+      - fout: `unhealable_legacy: expected hard block` (actual: lege string i.p.v. `session_upgrade_required`).
+  - Stap 6 (rollback-pad vastgelegd):
+    - `git checkout -- mcp-server/scripts/copy-ui-dist.mjs mcp-server/Dockerfile mcp-server/src/server/http_routes.ts docs/mcp_widget_stabilisatie_run_resultaat.md`
+    - daarna `cd mcp-server && npm run build`
+
+- Aanvullende runtime-check `/ui/step-card`:
+  - Live HTTP-check met lokaal listenen was in deze sandbox niet mogelijk (`listen EPERM`).
+  - Statische check op build-output uitgevoerd:
+    - runtime ui-dir resolveert naar `mcp-server/dist/ui`;
+    - `dist/ui/step-card.bundled.html` bestaat;
+    - `loadUiHtml()` geeft geldige HTML terug.
+
+- Open / TODO (na PR-7):
+  - [ ] `scripts/contract-smoke.mjs` failing case `unhealable_legacy` herstellen (verwachte hard-block marker `session_upgrade_required` ontbreekt in huidige output).
+  - [ ] Na fix verplichte verificatie opnieuw volledig draaien:
+    - `cd mcp-server && npm run build`
+    - `cd mcp-server && npm run typecheck`
+    - `cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs`
+  - [ ] Bij volledige PASS: PR-7 status in stabilisatiedoc op PASS zetten en runtime-check opnieuw bevestigen in deploy-omgeving.
+
+- Besluit:
+  - [ ] Bevestigd
+  - [ ] Weerlegd
+  - [x] Onbeslist
+  - Toelichting: artifact-minimalisatie is technisch doorgevoerd en build/typecheck zijn groen; PR-7 kan pas sluiten na groene verplichte `contract-smoke`.
+
+### Poging 2026-03-01 10:46 UTC (PR-7 Build/artifact minimalisatie - vervolg 2)
+
+- Doel:
+  - PR-7 afronden met minimale runtime artifacts en harde verificatie-uitkomst.
+
+- Uitgevoerd (stap 1 t/m 6):
+  - Stap 1 (verplichte verificatie exact herhaald):
+    - `cd mcp-server && npm run build` -> PASS
+    - `cd mcp-server && npm run typecheck` -> PASS
+    - `cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs` -> FAIL
+      - foutsignaal: `unhealable_legacy: expected hard block` met actual `''` en expected `'session_upgrade_required'`.
+  - Stap 2 (minimaal-invasieve diagnose via gevraagde zoekpatronen):
+    - `rg -n "unhealable_legacy|session_upgrade_required|hard block|hard_block|contract-smoke" mcp-server/scripts mcp-server/src`
+    - relevante case blijft in `mcp-server/scripts/contract-smoke.mjs:106-121`.
+  - Stap 3 (beslispad fix vs blocker):
+    - `unhealable_legacy` verwacht hard block op legacy marker (`mcp-server/scripts/contract-smoke.mjs:121`).
+    - Runtime preflight bevat wel een `handleLegacyPreflight` port-contract maar geen actieve aanroep meer:
+      - alleen declaratie: `mcp-server/src/handlers/run_step_runtime_preflight.ts:45`
+      - geen call-site in functiebody `:96-265` (laag returnt zonder legacy hard-block pad).
+    - Conclusie: gevraagde smoke-fix vereist contract/preflight-logica wijziging buiten PR-7 scope (`contract/finalize` scope-out), dus niet geforceerd in deze poging.
+  - Stap 4 (artifact-minimalisatie opnieuw gevalideerd):
+    - delete-first copy-script en minimale runtime set bevestigd:
+      - `mcp-server/scripts/copy-ui-dist.mjs:9`
+      - `mcp-server/scripts/copy-ui-dist.mjs:21-23`
+      - `mcp-server/scripts/copy-ui-dist.mjs:25-31`
+    - Docker build/runtime checks blijven op alleen bundled artifact:
+      - `mcp-server/Dockerfile:20`
+      - `mcp-server/Dockerfile:44`
+    - Runtime build-output bevat alleen noodzakelijk UI artifact:
+      - `mcp-server/dist/ui/step-card.bundled.html` (enkel bestand aanwezig na `npm run build`).
+  - Stap 5 (docs writeback):
+    - living rapport bijgewerkt met harde blocker + bewijs (deze sectie).
+    - stabilisatiedoc niet aangepast; claims/status buiten deze blocker-diagnose onveranderd.
+  - Stap 6 (rollback-pad):
+    - `git checkout -- mcp-server/scripts/copy-ui-dist.mjs mcp-server/Dockerfile mcp-server/src/server/http_routes.ts docs/mcp_widget_regressie_living_rapport.md`
+    - daarna: `cd mcp-server && npm run build`
+
+- Open / TODO (na PR-7 vervolg 2):
+  - [ ] Blocker buiten PR-7 scope oplossen in contract/preflight ownerlaag:
+    - herstel van legacy hard-block pad zodat `session_upgrade_required` weer wordt gezet voor `unhealable_legacy`.
+  - [ ] Na out-of-scope fix verplichte verificatie opnieuw volledig draaien:
+    - `cd mcp-server && npm run build`
+    - `cd mcp-server && npm run typecheck`
+    - `cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs`
+  - [ ] Bij volledige PASS: PR-7 status finaliseren als gesloten in dit living rapport.
+
+- Besluit:
+  - [ ] Bevestigd
+  - [ ] Weerlegd
+  - [x] Onbeslist
+  - Toelichting: artifact-minimalisatie blijft aantoonbaar actief en ballast-onafhankelijk binnen scope; verplichte `contract-smoke` blijft rood door een buiten-PR-7 contract/preflight blocker.
+
+### Poging 2026-03-01 10:52 UTC (PR-8 Gate + CI consolidatie)
+
+- Doel:
+  - Overlap tussen `hard/server/agent/arch` gates verwijderen.
+  - CI op 1 geconsolideerde gate zetten met minimale kwaliteitsset.
+  - CI-referentie naar niet-bestaand script herstellen.
+
+- Uitgevoerd (stap 1 t/m 4):
+  - Stap 1 (1 geconsolideerde gate-entrypoint):
+    - `mcp-server/package.json` gate-scripts geconsolideerd naar:
+      - `gate:ci -> node scripts/agent_strict_guard.mjs`
+      - bewijs: `mcp-server/package.json:27`
+  - Stap 2 (delete-first overlap verwijderen/deactiveren):
+    - NPM commands verwijderd:
+      - `gate:hard-refactor`, `gate:server-refactor`, `gate:agent-strict`
+      - bewijs: `mcp-server/package.json:27`
+    - Legacy scripts gedeactiveerd met expliciete deprecation + `exit(1)`:
+      - `mcp-server/scripts/hard_refactor_gate.mjs:3-6`
+      - `mcp-server/scripts/server_refactor_gate.mjs:3-6`
+  - Stap 3 (CI referentie fix + consolidatie):
+    - Verwijderd uit `mcp_server` job:
+      - losse UI parity/predeploy/contract/arch guardrail stappen.
+    - Vervangen door 1 stap:
+      - `Consolidated gate` -> `npm run gate:ci`
+      - bewijs: `.github/workflows/ci.yml:132-134`
+    - `Typecheck` en `Test` expliciet behouden:
+      - bewijs: `.github/workflows/ci.yml:128-130`, `.github/workflows/ci.yml:136-138`
+    - Oorspronkelijke dode referentie `node scripts/ui_artifact_parity_check.mjs` is verwijderd uit workflowpad (script bestaat niet in repo).
+  - Stap 4 (minimale set in geconsolideerde gate):
+    - `mcp-server/scripts/agent_strict_guard.mjs` voert uit:
+      - `npm run typecheck` (`:46`)
+      - `node --loader ts-node/esm scripts/contract-smoke.mjs` (`:47`)
+      - `npm run compliance:mcp-app` (`:48`)
+      - `npm run contract:inventory:snapshot` (`:49`)
+      - minimale artifact checks op:
+        - `ui/step-card.bundled.html` (`:53-56`)
+        - `docs/inventory/contract_inventory_snapshot.json` (`:58-61`)
+
+- Verificatie (gedraaid in deze poging):
+  - `cd mcp-server && npm run typecheck` -> PASS
+  - `cd mcp-server && npm test` -> FAIL
+    - failing test:
+      - `mcp-server/src/ui_render.test.ts:1611`
+      - assert-regel: `mcp-server/src/ui_render.test.ts:1639`
+      - expected `'rejected'`, actual `''`
+  - `cd mcp-server && npm run gate:ci` -> FAIL
+    - blocker in smoke:
+      - `mcp-server/scripts/contract-smoke.mjs:121`
+      - expected `session_upgrade_required`, actual `''` (`unhealable_legacy`)
+  - Workflowvalidatie:
+    - YAML parse -> OK (`.github/workflows/ci.yml`)
+    - scriptreferenties in workflow -> geen missende `scripts/*.mjs` targets
+
+- Open / TODO (na PR-8):
+  - [ ] Beslis of `contract-smoke` blocker (`unhealable_legacy`) direct in ownerlaag wordt gefixt of als aparte follow-up PR wordt afgehandeld.
+  - [ ] Herstel failing UI testpad voor liveness reject-contract:
+    - `mcp-server/src/ui_render.test.ts:1611-1639`
+  - [ ] Na fix, verplichte verificatie opnieuw volledig draaien:
+    - `cd mcp-server && npm run typecheck`
+    - `cd mcp-server && npm test`
+    - `cd mcp-server && npm run gate:ci`
+
+- Volgende eerste actie:
+  - Start met de contract-smoke blocker fix in de runtime/preflight ownerlaag zodat `unhealable_legacy` weer `session_upgrade_required` zet, en her-run direct daarna `npm run gate:ci`.
+
+- Besluit:
+  - [ ] Bevestigd
+  - [ ] Weerlegd
+  - [x] Onbeslist
+  - Toelichting: consolidatie en CI-opschoning zijn doorgevoerd; acceptatie blijft onbeslist door bestaande test/smoke failures in de huidige werkboom.
+
+### Poging 2026-03-01 10:55 UTC (PR-9 Docs hard alignment + archivering)
+
+- Doel:
+  - Actieve docs hard alignen op minimale architectuur.
+  - Historie expliciet als archief labelen.
+  - 1 leidende normbron vastzetten.
+
+- Uitgevoerd (stap 1 t/m 8):
+  - Stap 1 (delete-first op actieve instructies):
+    - `docs/mcp_widget_ui_dumbdown_resoluut_execution_plan.dm` omgezet van actieve uitvoerinstructie naar archiefdocument.
+    - Verwijzingen naar vervallen actieve paden/artifacts verwijderd uit de actieve tekstlaag.
+  - Stap 2 (1 leidende normbron):
+    - `mcp-server/docs/ui-interface-contract.md` expliciet gemarkeerd als single actieve normbron.
+  - Stap 3 (historie labelen als archief):
+    - `docs/mcp_widget_stabilisatie_run_resultaat.md` voorzien van expliciet archieflabel.
+    - `docs/mcp_widget_regressie_living_rapport.md` bovenaan gemarkeerd als living archieflog (niet normatief).
+  - Stap 4 (rollout status/afsluiting):
+    - `docs/simplicity_pr_rollout_2026-03-01.md` aangevuld met `PR-9 status en afsluiting`.
+  - Stap 5 (actief vs archief scheiding):
+    - In rolloutbestand vastgelegd welke bron actief normatief is en welke documenten uitsluitend archief zijn.
+  - Stap 6 (verplichte drift-scan exact gedraaid):
+    - `rg -n "step-card.template.html|build-ui.mjs|ui_artifact_parity_check.mjs|/run_step|/test" docs mcp-server .github/workflows`
+    - Uitkomst: hits aanwezig, primair in historische/archiefdocumenten en legacy backupbestanden; geen nieuwe actieve norminstructie toegevoegd die oude runtime/build paden herintroduceert.
+  - Stap 7 (risico-afbakening):
+    - Resthits kunnen verwarring geven als archiefdocs zonder statuslabel worden gelezen; mitigatie is expliciete statusbanners in de aangepaste docs.
+  - Stap 8 (rollback-pad):
+    - `git checkout -- docs/mcp_widget_ui_dumbdown_resoluut_execution_plan.dm docs/mcp_widget_stabilisatie_run_resultaat.md docs/mcp_widget_regressie_living_rapport.md docs/simplicity_pr_rollout_2026-03-01.md mcp-server/docs/ui-interface-contract.md`
+
+- Open / TODO (na PR-9):
+  - [ ] Optioneel: repository-brede opschoning van overige historische docs buiten deze scope om drift-scan output verder te reduceren.
+  - [ ] Optioneel: backupdocs onder `mcp-server/docs/BACKUP-*` groeperen onder expliciete archiefmap met index.
+
+- Volgende eerste actie:
+  - Indien gewenst: start met out-of-scope historische docs sweep (backup + oude execution logs) zodat de globale drift-scan richting low-noise gaat.
+
+- Besluit:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: binnen PR-9 scope zijn actieve norm en historische archieflaag gescheiden en is de leidende normbron expliciet vastgelegd.
+
+### Poging 2026-03-01 11:08 UTC (PR-10 lokale blockersluiting: legacy hard-block + transport-unavailable liveness)
+
+- Doel:
+  - Sluit de 2 lokale blockers: `unhealable_legacy` hard-block herstellen en transport-unavailable liveness contract expliciet zetten.
+  - Verifieer met volledige verplichte lokale command-set.
+
+- Uitgevoerd (stap 1 t/m 8):
+  - Stap 1:
+    - Root-cause `unhealable_legacy` bevestigd: runtime preflightlaag had geen actieve `handleLegacyPreflight(...)` callpad meer.
+    - bewijs:
+      - `mcp-server/src/handlers/run_step_runtime_preflight.ts:45`
+      - `mcp-server/src/handlers/run_step_runtime_preflight.ts:96-265` (voor fix zonder call-site)
+      - `mcp-server/scripts/contract-smoke.mjs:121`
+  - Stap 2:
+    - `handleLegacyPreflight(...)` call + early-return hersteld in runtime preflight ownerlaag.
+    - bewijs:
+      - `mcp-server/src/handlers/run_step_runtime_preflight.ts:221-261`
+  - Stap 3:
+    - Contractuele nuance toegevoegd: wording-choice pending states (`wording_choice_pending=true` + target field) krijgen geen valse legacy-confirm hard-block; onhealable legacy blijft hard-blocked.
+    - bewijs:
+      - `mcp-server/src/handlers/run_step_runtime_preflight.ts:201-220`
+      - `mcp-server/src/handlers/run_step_runtime_preflight.ts:221-239`
+  - Stap 4:
+    - Transport-unavailable pad in `callRunStep(...)` zet expliciet liveness tuple:
+      - `ui_action_liveness_ack_status = rejected`
+      - `ui_action_liveness_state_advanced = false`
+      - `ui_action_liveness_reason_code = transport_unavailable`
+      - inclusief `failure_class`, `action_code`, `client_action_id`.
+    - bewijs:
+      - `mcp-server/ui/lib/ui_actions.ts:1729-1766`
+  - Stap 5:
+    - Transport-unavailable test aangescherpt op volledige liveness contractvelden (geen verzwakking).
+    - bewijs:
+      - `mcp-server/src/ui_render.test.ts:1845-1850`
+  - Stap 6:
+    - Legacy hard-block contract-smoke geverifieerd (`unhealable_legacy` -> `session_upgrade_required`).
+    - kernoutput:
+      - `legacy_preflight_blocked ... "error_type":"session_upgrade_required"`
+      - `[contract_smoke] PASS { cases: 11, version: 'v12' }`
+  - Stap 7:
+    - UI liveness contract geverifieerd op transport-unavailable via volledige `ui_render.test.ts` run.
+    - kernoutput:
+      - `# pass 70`
+      - `# fail 0`
+  - Stap 8:
+    - Volledige verplichte rerun afgemaakt inclusief gates en volledige testset.
+    - kernoutput:
+      - `npm run gate:ci` -> `[agent_strict_guard] passed`
+      - `npm test` -> `# pass 411` / `# fail 0`
+
+- Verificatie:
+  - `cd mcp-server && npm run typecheck` -> PASS
+    - kernregel: `tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.ui.json --noEmit`
+  - `cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs` -> PASS
+    - kernregel: `[contract_smoke] PASS { cases: 11, version: 'v12' }`
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts` -> PASS
+    - kernregel: `# pass 70` / `# fail 0`
+  - `cd mcp-server && npm run gate:ci` -> PASS
+    - kernregel: `[agent_strict_guard] passed`
+  - `cd mcp-server && npm test` -> PASS
+    - kernregel: `# pass 411` / `# fail 0`
+
+- Open / TODO:
+  - [ ] Geen open lokale blocker binnen PR-10 scope.
+
+- Volgende eerste actie:
+  - PR-10 kan door naar review/merge met deze lokale bewijsset.
+
+- Besluit (Bevestigd/Weerlegd/Onbeslist):
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: beide PR-10 blockers zijn lokaal contractueel opgelost en volledige verplichte lokale verificatie is groen.

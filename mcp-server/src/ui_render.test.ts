@@ -1045,15 +1045,14 @@ test("render ignores transient timeout payload and keeps previous visible view",
   (globalThis as any).openai = originalOpenai;
 });
 
-test("btnStartDreamExercise sends Dream start-exercise actioncode", () => {
-  const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
-  const blockMatch = source.match(
-    /const btnStartDreamExercise = document\.getElementById\("btnStartDreamExercise"\);[\s\S]*?if \(btnStartDreamExercise\) \{[\s\S]*?\n\}/
-  );
-  assert.ok(blockMatch, "Expected btnStartDreamExercise handler block in ui/lib/main.ts");
-  const block = blockMatch[0];
-  assert.match(block, /const actionCode = actionCodeFromRole\("dream_start_exercise"\);/);
-  assert.match(block, /callRunStep\(actionCode\)/);
+test("bundled source dispatches non-text actions through action_contract action_code", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /function parseActions\(result\) \{/);
+  assert.match(source, /var actionContract = toRecord\(uiPayload\.action_contract\);/);
+  assert.match(source, /if \(!Array\.isArray\(actionContract\.actions\)\) return \[\];/);
+  assert.match(source, /if \(action\.role === "text_submit"\) \{/);
+  assert.match(source, /callRunStep\(action\.actionCode, \{\}\);/);
+  assert.match(source, /callRunStep\(message, \{\}\);/);
 });
 
 test("prestart render uses deterministic DOM builders and no HTML injection", () => {
@@ -1156,40 +1155,15 @@ test("computeBootstrapRenderState honors explicit waiting_locale mode over clien
   assert.equal(state.bootstrapWaitingLocale, true);
 });
 
-test("main source handles host tool-result via shared bootstrap scheduler", () => {
-  const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
-  assert.match(source, /applyToolResult/);
-  assert.match(source, /function hasRenderedStateSnapshot\(\): boolean \{/);
-  assert.match(source, /function ingestHostPayload\(/);
-  assert.match(source, /const STARTUP_WAITING_VIEW_MODE = "waiting_locale";/);
-  assert.match(source, /const STARTUP_CANONICAL_WINDOW_MS = 4000;/);
-  assert.match(source, /function scheduleStartupCanonicalWatchdog\(trigger: string\): void \{/);
-  assert.match(source, /function buildStartupExplicitErrorState\(reasonCode: string\): Record<string, unknown> \{/);
-  assert.match(source, /function buildStartupInitState\(\): Record<string, unknown> \{/);
-  assert.match(source, /const startupInitState = buildStartupInitState\(\);/);
-  assert.match(source, /render\(startupInitState\);/);
-  assert.match(source, /\[startup_canonical_payload_observed\]/);
-  assert.match(source, /\[startup_canonical_miss\]/);
-  assert.match(source, /\[startup_explicit_error_path\]/);
-  assert.match(source, /return applyToolResult\(\{\s*toolOutput: host\?\.toolOutput,\s*toolResponseMetadata: host\?\.toolResponseMetadata,\s*\}\);/);
-  assert.match(source, /handleToolResultAndMaybeScheduleBootstrapRetry/);
-  assert.match(source, /notifyHostTransportSignal\("bridge_message"\)/);
-  assert.match(source, /notifyHostTransportSignal\("host_notification"\)/);
-  assert.match(source, /notifyHostTransportSignal\("set_globals"\)/);
-  assert.match(source, /logWidgetStateRehydrateMarker/);
-  assert.match(source, /phase: "before_reload_probe"/);
-  assert.match(source, /phase: "after_reload_probe"/);
-  assert.match(source, /phase: "before_host_ingest"/);
-  assert.match(source, /phase: "after_host_ingest"/);
-  assert.match(source, /if \(method === "ui\/notifications\/tool-result"\) \{[\s\S]*ingestHostPayload\(data\.params, "host_notification"\)/);
-  assert.match(source, /openai:set_globals[\s\S]*ingestHostPayload\(payload, "set_globals"\)/);
-  assert.match(source, /startup_set_globals_empty_payload_ignored/);
-  assert.match(source, /btnStart\.addEventListener\("click",[\s\S]*const actionCode = actionCodeFromRole\("start"\);[\s\S]*callRunStep\(actionCode, \{ started: "true" \}\)/);
-  assert.match(source, /\[ui_action_contract_missing\]/);
-  assert.doesNotMatch(source, /function normalizeHostToolResultNotification\(/);
-  assert.doesNotMatch(source, /mergeToolOutputWithResponseMetadata\(/);
-  assert.doesNotMatch(source, /if \(hasToolOutput\(\)\)/);
-  assert.doesNotMatch(source, /function shouldAcceptBootstrapPayload\(/);
+test("bundled source is the sole event ingest owner for host updates", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /window\.addEventListener\("openai:set_globals", function \(\) \{[\s\S]*ingestSetGlobalsPayload\(\);[\s\S]*\}\);/);
+  assert.match(source, /window\.addEventListener\("openai:notification", function \(event\) \{/);
+  assert.match(source, /if \(method !== "ui\/notifications\/tool-result"\) \{/);
+  assert.match(source, /ingest\(resolved\.payload, resolved\.source\);/);
+  assert.match(source, /ingest\(readInitialToolOutput\(\), "initial"\);/);
+  assert.doesNotMatch(source, /window\.addEventListener\("message"/);
+  assert.doesNotMatch(source, /notifyHostTransportSignal/);
 });
 
 test("render source fail-closes missing server view mode and enforces start action in prestart", () => {
@@ -1254,7 +1228,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry keeps widget ordering monot
   (globalThis as any).openai = originalOpenai;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry rehydrates missing host_widget_session_id from current tuple", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry drops payloads with incomplete ordering tuple", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   const hostState: Record<string, unknown> = {
@@ -1290,9 +1264,10 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry rehydrates missing host_wid
     },
     ui: { view: { mode: "interactive" } },
   });
-  handleToolResultAndMaybeScheduleBootstrapRetry(missingHostPayload, { source: "host_notification" });
+  const result = handleToolResultAndMaybeScheduleBootstrapRetry(missingHostPayload, { source: "host_notification" });
+  assert.equal(Object.keys(result).length, 0);
   const stateAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
-  assert.equal(Number(stateAfter.response_seq || 0), 7);
+  assert.equal(Number(stateAfter.response_seq || 0), 6);
   assert.equal(String(stateAfter.host_widget_session_id || ""), "internal:demo");
 
   (globalThis as any).openai = originalOpenai;
@@ -1424,7 +1399,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry fail-closes tupleless paylo
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry persists host_widget_session_id on tuple-incomplete payload", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry does not persist host_widget_session_id without full tuple", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   (globalThis as any).openai = {
@@ -1448,7 +1423,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry persists host_widget_sessio
   assert.equal(Object.keys(result).length, 0);
   assert.equal(
     String((((globalThis as any).openai.widgetState as Record<string, unknown>) || {}).host_widget_session_id || ""),
-    "internal:new-session"
+    ""
   );
 
   (globalThis as any).openai = originalOpenai;
@@ -1542,7 +1517,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry converges after empty init 
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry accepts richer same-seq payload and refreshes cache", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry drops richer same-seq payload and keeps cache", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   (globalThis as any).openai = {
@@ -1586,11 +1561,11 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry accepts richer same-seq pay
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(richerSameSeqPayload, {
     source: "host_notification",
   });
-  assert.equal(Object.keys(result).length > 0, true);
+  assert.equal(Object.keys(result).length, 0);
   const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
   const cachedState = (cachedResult.state as Record<string, unknown>) || {};
   const cachedUiStrings = (cachedState.ui_strings as Record<string, unknown>) || {};
-  assert.equal(String(cachedUiStrings["prestart.headline"] || ""), "Welkom");
+  assert.equal(String(cachedUiStrings["prestart.headline"] || ""), "");
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
@@ -1870,6 +1845,9 @@ test("callRunStep emits explicit liveness error when transport is unavailable", 
   assert.equal(String(afterState.ui_action_liveness_ack_status || ""), "rejected");
   assert.equal(String(afterState.ui_action_liveness_state_advanced || ""), "false");
   assert.equal(String(afterState.ui_action_liveness_reason_code || ""), "transport_unavailable");
+  assert.equal(String(afterState.ui_action_liveness_failure_class || ""), "rejected");
+  assert.equal(String(afterState.ui_action_liveness_action_code || ""), "ACTION_PURPOSE_INTRO_DEFINE");
+  assert.match(String(afterState.ui_action_liveness_client_action_id || ""), /^ca_/);
 
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
@@ -2572,9 +2550,11 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.match(source, /\[ui_ordering_applied\]/);
   assert.match(source, /\[ui_ordering_dropped_stale\]/);
   assert.match(source, /\[ui_ingest_dropped_no_widget_result\]/);
-  assert.match(source, /\[ui_ordering_same_seq_upgrade_accepted\]/);
   assert.match(source, /\[ui_ingest_ack_cache_preserved\]/);
-  assert.match(source, /\[ui_hwid_persisted_without_full_ordering\]/);
+  assert.doesNotMatch(source, /function rehydrateIncomingOrderingAgainstCurrent\(/);
+  assert.doesNotMatch(source, /function shouldAcceptSameTupleUpgrade\(/);
+  assert.doesNotMatch(source, /\[ui_ordering_same_seq_upgrade_accepted\]/);
+  assert.doesNotMatch(source, /\[ui_hwid_persisted_without_full_ordering\]/);
   assert.match(source, /incoming_missing_tuple/);
   assert.match(source, /\[ui_dispatch_ack_only\]/);
   assert.match(source, /ui_transport_unavailable/);
@@ -2741,7 +2721,7 @@ test("resolveWidgetPayload hydrates from toolResponseMetadata widget_result when
   assert.equal(resolved.needs_hydration, false);
 });
 
-test("resolveWidgetPayload hydrates from flat toolOutput._widget_result embed", () => {
+test("resolveWidgetPayload fail-closes when only flat toolOutput._widget_result alias is present", () => {
   const resolved = resolveWidgetPayload({
     toolOutput: {
       _widget_result: {
@@ -2759,10 +2739,10 @@ test("resolveWidgetPayload hydrates from flat toolOutput._widget_result embed", 
     },
   });
 
-  assert.equal(resolved.source, "meta.widget_result");
-  assert.equal(String(((resolved.result.state as Record<string, unknown>)?.current_step || "")), "step_0");
-  assert.equal(resolved.bootstrap_session_id, "session_flat");
-  assert.equal(resolved.host_widget_session_id, "host_flat");
+  assert.equal(resolved.source, "none");
+  assert.equal(String(((resolved.result.state as Record<string, unknown>)?.current_step || "")), "");
+  assert.equal(resolved.bootstrap_session_id, "");
+  assert.equal(resolved.host_widget_session_id, "");
   assert.equal(resolved.needs_hydration, false);
 });
 

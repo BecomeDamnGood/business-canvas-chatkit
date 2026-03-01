@@ -197,16 +197,39 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
   userMessage = bootstrapPreflight.userMessage;
   clickedActionCodeForNoRepeat = bootstrapPreflight.clickedActionCodeForNoRepeat;
   clickedLabelForNoRepeat = bootstrapPreflight.clickedLabelForNoRepeat;
-
+  const legacySpecialistSeed = ((state as Record<string, unknown>).last_specialist_result ||
+    {}) as Record<string, unknown>;
+  const wordingChoicePending = String(legacySpecialistSeed.wording_choice_pending || "").trim().toLowerCase() === "true";
+  const wordingChoiceTargetField = String(legacySpecialistSeed.wording_choice_target_field || "").trim().toLowerCase();
+  const shouldTolerateWordingChoiceConfirmShape =
+    wordingChoicePending && Boolean(wordingChoiceTargetField);
+  const legacyMarkersForPreflight = shouldTolerateWordingChoiceConfirmShape
+    ? runtime.rawLegacyMarkers.filter(
+        (marker) => marker !== "legacy_action_confirm" && marker !== "legacy_confirmation_question"
+      )
+    : runtime.rawLegacyMarkers;
+  let legacyStateForPreflight = state;
+  if (shouldTolerateWordingChoiceConfirmShape) {
+    const specialistForPreflight = {
+      ...legacySpecialistSeed,
+      action: String(legacySpecialistSeed.action || "").trim().toUpperCase() === "CONFIRM"
+        ? "REFINE"
+        : legacySpecialistSeed.action,
+      confirmation_question: "",
+    };
+    legacyStateForPreflight = {
+      ...(state as unknown as Record<string, unknown>),
+      last_specialist_result: specialistForPreflight,
+    } as unknown as CanvasState;
+  }
   const legacyPreflight = ports.handleLegacyPreflight({
-    state,
-    rawLegacyMarkers: runtime.rawLegacyMarkers,
+    state: legacyStateForPreflight,
+    rawLegacyMarkers: legacyMarkersForPreflight,
     localeHint: constants.localeHint,
     buildFailClosedState: behavior.buildFailClosedState,
     attachRegistryPayload: finalize.attachRegistryPayload,
     finalizeResponse: finalize.finalizeResponse,
   });
-
   if (legacyPreflight.response) {
     return {
       state,
@@ -219,6 +242,7 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
       response: legacyPreflight.response,
     };
   }
+  const blockingMarkerClass = legacyPreflight.blockingMarkerClass;
 
   const actionCodePreflight = ports.applyActionCodeNormalization({
     state,
@@ -281,7 +305,7 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
     submittedUserText,
     clickedLabelForNoRepeat,
     clickedActionCodeForNoRepeat,
-    blockingMarkerClass: legacyPreflight.blockingMarkerClass,
+    blockingMarkerClass,
     response: null,
   };
 }
