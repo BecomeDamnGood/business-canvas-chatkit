@@ -2682,3 +2682,39 @@ Status van deze poging:
   - [ ] Stoppen en hypothese verwerpen
   - [ ] Externe review nodig
   - Toelichting: architectuur vereenvoudigd naar server-owned contractrendering met fail-closed gedrag.
+
+### Poging 2026-03-01 06:15 UTC (Visual restore zonder client-intelligence)
+
+- Hypothese:
+  - De verloren grafische laag kan teruggezet worden als pure presentatie in `step-card.bundled.html`, zonder herintroductie van client-side beslislogica/fallbacks.
+- Waarom deze hypothese (bewijs vooraf):
+  - Na de dumbdown werkte de interactieflow (buttons/doorstap), maar de UI voelde visueel te kaal.
+  - De regressie zat in styling/markup-perceptie, niet in servercontract of transport-flow.
+- Exacte wijziging(en):
+  - Alleen visuele laag aangepast in `mcp-server/ui/step-card.bundled.html`:
+    - rijkere achtergrond, panel/kaart styling, typografie, button/input polish, mobile afwerking.
+  - Geen wijziging in JS-contractpad:
+    - fail-closed markers blijven actief (`widget_result_missing`, etc.),
+    - render en action-flow blijven contract-first op `_meta.widget_result`.
+- Verwachte uitkomst:
+  - Visuele kwaliteit terug op acceptabel niveau.
+  - Eenvoudige, strikte contractgedreven UI blijft intact.
+- Testresultaten lokaal:
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts src/mcp_app_contract.test.ts` -> PASS (`99 pass, 0 fail`).
+- Live observatie:
+  - Nog geen nieuwe App Runner rollout in deze poging; gebruiker doet handmatige deploy.
+- AWS logbewijs (event + timestamp):
+  - Niet van toepassing in deze poging.
+- Uitkomst:
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+- Wat bleek achteraf niet te kloppen:
+  - Aanname dat "dumb UI" per definitie ook "minimalistische/kaal ogende UI" moest betekenen.
+- Wat was gemist / over het hoofd gezien:
+  - UX-impact van te harde visuele versobering, ondanks functionele contractwinst.
+- Besluit:
+  - [x] Doorgaan op deze lijn
+  - [ ] Stoppen en hypothese verwerpen
+  - [ ] Externe review nodig
+  - Toelichting: presentatie hersteld met behoud van server-owned contractgedrag en fail-closed discipline.

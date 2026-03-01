@@ -7,13 +7,16 @@
     <style>
       :root {
         color-scheme: light;
-        --bg: #f6f4ef;
-        --panel: #ffffff;
-        --ink: #1a1816;
-        --muted: #6d665e;
-        --line: #ded8cf;
+        --bg: #f3ece2;
+        --paper: #faf7f2;
+        --panel: rgba(255, 255, 255, 0.8);
+        --ink: #221c17;
+        --muted: #7b6d61;
+        --line: rgba(72, 49, 31, 0.13);
         --brand: #e8742a;
-        --danger: #9b2d30;
+        --brand-soft: rgba(232, 116, 42, 0.14);
+        --danger: #a33335;
+        --shadow: 0 22px 52px rgba(73, 47, 27, 0.16);
       }
 
       * {
@@ -23,45 +26,87 @@
       body {
         margin: 0;
         min-height: 100vh;
-        background: radial-gradient(circle at 15% 0%, #f3dfd1, transparent 44%), var(--bg);
+        background: linear-gradient(175deg, #f6eee3 0%, #efe4d8 100%);
         color: var(--ink);
-        font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        font: 15px/1.5 "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+        padding: 28px 12px;
+        position: relative;
+      }
+
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        pointer-events: none;
+        z-index: -1;
+        filter: blur(1px);
+      }
+
+      body::before {
+        width: 520px;
+        height: 520px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(232, 116, 42, 0.25) 0%, rgba(232, 116, 42, 0) 68%);
+        top: -140px;
+        right: -120px;
+      }
+
+      body::after {
+        width: 360px;
+        height: 360px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(184, 110, 61, 0.2) 0%, rgba(184, 110, 61, 0) 70%);
+        left: -120px;
+        bottom: -120px;
       }
 
       .shell {
-        width: min(720px, 100% - 24px);
-        margin: 18px auto;
-        background: color-mix(in srgb, var(--panel) 86%, transparent);
+        width: min(760px, 100%);
+        margin: 0 auto;
+        background: color-mix(in srgb, var(--panel) 88%, transparent);
         border: 1px solid var(--line);
-        border-radius: 16px;
-        box-shadow: 0 12px 36px rgba(37, 28, 22, 0.08);
+        border-radius: 24px;
+        box-shadow: var(--shadow);
         overflow: hidden;
+        backdrop-filter: blur(8px);
       }
 
       .bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
-        padding: 14px 16px;
+        gap: 10px;
+        padding: 15px 18px;
         border-bottom: 1px solid var(--line);
-        background: #fff;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 242, 235, 0.9));
       }
 
       .status {
-        font-weight: 600;
-        letter-spacing: 0.02em;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: lowercase;
+        color: #5d3a20;
+        background: var(--brand-soft);
+        border: 1px solid rgba(232, 116, 42, 0.32);
+        border-radius: 999px;
+        padding: 4px 10px;
       }
 
       .meta {
         color: var(--muted);
         font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: lowercase;
       }
 
       .body {
-        padding: 16px;
+        padding: 18px;
         display: grid;
         gap: 14px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.45)),
+          linear-gradient(120deg, rgba(255, 240, 227, 0.5) 0%, rgba(255, 255, 255, 0.2) 60%);
       }
 
       .card,
@@ -71,8 +116,16 @@
         white-space: pre-wrap;
       }
 
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px 14px;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      }
+
       .prompt {
-        border-top: 1px dashed var(--line);
+        border-top: 1px dashed rgba(96, 66, 43, 0.26);
         padding-top: 12px;
       }
 
@@ -83,19 +136,28 @@
       }
 
       button {
-        border: 1px solid color-mix(in srgb, var(--brand) 35%, #0000);
+        border: 1px solid rgba(232, 116, 42, 0.55);
         border-radius: 999px;
         background: color-mix(in srgb, var(--brand) 14%, #fff);
-        color: #4d2208;
+        color: #4e2910;
         font: inherit;
         font-weight: 600;
         padding: 8px 14px;
         cursor: pointer;
+        transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 7px 14px rgba(152, 83, 41, 0.2);
+        background: color-mix(in srgb, var(--brand) 19%, #fff);
       }
 
       button[disabled] {
         opacity: 0.5;
         cursor: default;
+        box-shadow: none;
+        transform: none;
       }
 
       .input {
@@ -111,12 +173,26 @@
         border-radius: 12px;
         padding: 10px 12px;
         font: inherit;
-        background: #fff;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.84);
+      }
+
+      textarea:focus-visible {
+        outline: 2px solid rgba(232, 116, 42, 0.38);
+        outline-offset: 0;
+        border-color: rgba(232, 116, 42, 0.48);
+      }
+
+      #inputSend {
+        justify-self: stretch;
+        border-radius: 12px;
+        padding: 10px 14px;
+        background: linear-gradient(180deg, rgba(236, 191, 160, 0.28), rgba(232, 116, 42, 0.24));
       }
 
       .error {
         color: var(--danger);
-        border: 1px solid color-mix(in srgb, var(--danger) 30%, #0000);
+        border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
         border-radius: 12px;
         padding: 10px 12px;
         background: color-mix(in srgb, var(--danger) 6%, #fff);
@@ -127,10 +203,26 @@
       }
 
       @media (max-width: 640px) {
+        body {
+          padding: 12px 6px;
+        }
+
         .shell {
-          width: calc(100% - 16px);
-          margin: 10px auto;
-          border-radius: 12px;
+          border-radius: 16px;
+        }
+
+        .bar {
+          padding: 12px 12px;
+        }
+
+        .body {
+          padding: 12px;
+          gap: 12px;
+        }
+
+        .status,
+        .meta {
+          font-size: 11px;
         }
       }
     </style>
