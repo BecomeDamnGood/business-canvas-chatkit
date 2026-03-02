@@ -151,10 +151,14 @@ test("MCP app contract: run_step declares invocation status strings", () => {
 });
 
 test("MCP wrapper parity: model result stays safe and _meta.widget_result keeps full payload", () => {
-  assert.match(source, /buildModelSafeResult\(staleResult\)/);
-  assert.match(source, /buildModelSafeResult\(resultForClient\)/);
-  assert.match(source, /buildModelSafeResult\(fallbackResult/);
-  assert.match(source, /meta:\s*\{\s*widget_result:\s*staleResult\s*\}/);
+  assert.match(
+    source,
+    /function buildStructuredContentResult\(widgetResult: Record<string, unknown>\): Record<string, unknown> \{[\s\S]*buildModelSafeResult\(widgetResult\)/
+  );
+  assert.match(source, /result:\s*buildStructuredContentResult\(enrichedWidgetResult\),/);
+  assert.match(source, /result:\s*buildStructuredContentResult\(resultForClient\),/);
+  assert.match(source, /result:\s*buildStructuredContentResult\(fallbackResult as Record<string, unknown>\),/);
+  assert.match(source, /meta:\s*\{[\s\S]*widget_result:\s*enrichedWidgetResult,[\s\S]*\}/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient\s*,?\s*\}/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*fallbackResult\s*,?\s*\}/);
   assert.doesNotMatch(source, /const widgetResultForClient = \(meta as Record<string, unknown> \| undefined\)\?\.widget_result/);
@@ -294,8 +298,14 @@ test("MCP app contract: run_step wrapper has no tuple parity patch/backfill laye
   assert.doesNotMatch(source, /ensureRunStepOutputTupleParity\(/);
   assert.doesNotMatch(source, /"run_step_output_tuple_parity_patched"/);
   assert.doesNotMatch(source, /"run_step_ordering_tuple_parity"/);
-  assert.match(source, /const contentSource = \(meta as any\)\.widget_result as Record<string, unknown>;/);
-  assert.match(source, /const renderSourceReasonCode = "meta_widget_result_authoritative";/);
+  assert.match(
+    source,
+    /const contentSource = hasMetaWidgetResult[\s\S]*\?\s*\(\(meta as any\)\.widget_result as Record<string, unknown>\)[\s\S]*:\s*structuredResult;/
+  );
+  assert.match(
+    source,
+    /const renderSourceReasonCode = hasMetaWidgetResult[\s\S]*\?\s*"meta_widget_result_authoritative"[\s\S]*:\s*\(hasStructuredResult \? "structured_content_result_fallback" : "render_source_missing"\);/
+  );
 });
 
 test("MCP app contract: run_step response logs canonical-view observability event", () => {

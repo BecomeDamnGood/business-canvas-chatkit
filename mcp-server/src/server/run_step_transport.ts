@@ -79,6 +79,16 @@ function resolveStructuredContentMetaFromWidgetResult(
   });
 }
 
+function buildStructuredContentResult(widgetResult: Record<string, unknown>): Record<string, unknown> {
+  const modelSafeResult = buildModelSafeResult(widgetResult);
+  const richState = toRecord(widgetResult.state);
+  return {
+    ...toRecord(widgetResult),
+    ...modelSafeResult,
+    state: Object.keys(richState).length > 0 ? richState : toRecord(modelSafeResult.state),
+  };
+}
+
 function resolveIdempotencyEarlyLiveness(
   widgetResult: Record<string, unknown>
 ): { ack_status: ActionAckStatus; reason_code: string } {
@@ -213,7 +223,7 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       structuredContent: {
         ...toRecord(idempotencyPreflight.structuredContent),
         meta: structuredMeta,
-        result: buildModelSafeResult(enrichedWidgetResult),
+        result: buildStructuredContentResult(enrichedWidgetResult),
       },
       meta: {
         ...toRecord(idempotencyPreflight.meta),
@@ -265,7 +275,7 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       structuredContent: {
         ...toRecord(stalePreflight.earlyResponse.structuredContent),
         meta: structuredMeta,
-        result: buildModelSafeResult(enrichedWidgetResult),
+        result: buildStructuredContentResult(enrichedWidgetResult),
       },
       meta: {
         ...toRecord(stalePreflight.earlyResponse.meta),
@@ -424,11 +434,10 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       liveness: livenessContract,
     });
 
-    const modelResult = buildModelSafeResult(resultForClient);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
       meta: normalizeStructuredContentMeta({ step: stepMeta, specialist: specialistMeta }),
-      result: modelResult,
+      result: buildStructuredContentResult(resultForClient),
     };
 
     registerBootstrapSnapshot({
@@ -591,14 +600,13 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       });
     }
 
-    const modelResult = buildModelSafeResult(fallbackResult as Record<string, unknown>);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
       meta: resolveStructuredContentMetaFromWidgetResult(fallbackResult as Record<string, unknown>, {
         step: currentStep,
         specialist: "error",
       }),
-      result: modelResult,
+      result: buildStructuredContentResult(fallbackResult as Record<string, unknown>),
     };
     return {
       structuredContent,

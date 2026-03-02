@@ -146,39 +146,33 @@ function createAppServer(baseUrl: string): McpServer {
       });
       const structuredContent = handlerOutput.structuredContent;
       const meta = handlerOutput.meta;
+      const structuredResult =
+        structuredContent &&
+        typeof structuredContent === "object" &&
+        (structuredContent as any).result &&
+        typeof (structuredContent as any).result === "object"
+          ? ((structuredContent as any).result as Record<string, unknown>)
+          : {};
       const hasMetaWidgetResult =
         meta &&
         typeof meta === "object" &&
         (meta as any).widget_result &&
         typeof (meta as any).widget_result === "object";
-      if (!hasMetaWidgetResult) {
-        logStructuredEvent(
-          "error",
-          "run_step_render_source_selected",
-          {
-            correlation_id: correlationId,
-            trace_id: traceId,
-            session_id: "",
-            step_id: normalizedStepId || "step_0",
-            contract_id: resolveContractIdFromRecord({ state: args.state ?? {} }),
-          },
-          {
-            render_source: "none",
-            render_source_reason_code: "meta_widget_result_missing",
-            render_source_tuple_complete: false,
-            host_widget_session_id_present: "false",
-          }
-        );
-        throw new Error("meta_widget_result_missing");
-      }
-      const contentSource = (meta as any).widget_result as Record<string, unknown>;
+      const hasStructuredResult = Object.keys(structuredResult).length > 0;
+      const contentSource = hasMetaWidgetResult
+        ? ((meta as any).widget_result as Record<string, unknown>)
+        : structuredResult;
       const renderSourceOrdering = readBootstrapOrdering(contentSource);
       const contentSourceState =
         contentSource && typeof contentSource === "object" && contentSource.state && typeof contentSource.state === "object"
           ? (contentSource.state as Record<string, unknown>)
           : {};
-      const renderSource = "meta.widget_result";
-      const renderSourceReasonCode = "meta_widget_result_authoritative";
+      const renderSource = hasMetaWidgetResult
+        ? "meta.widget_result"
+        : (hasStructuredResult ? "structuredContent.result" : "none");
+      const renderSourceReasonCode = hasMetaWidgetResult
+        ? "meta_widget_result_authoritative"
+        : (hasStructuredResult ? "structured_content_result_fallback" : "render_source_missing");
       const renderSourceStepId =
         safeString(
           (contentSource as any)?.current_step_id ??
@@ -187,7 +181,7 @@ function createAppServer(baseUrl: string): McpServer {
           "step_0"
         ) || "step_0";
       logStructuredEvent(
-        "info",
+        hasMetaWidgetResult || hasStructuredResult ? "info" : "error",
         "run_step_render_source_selected",
         {
           correlation_id: correlationId,
