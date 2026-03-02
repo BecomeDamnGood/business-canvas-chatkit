@@ -192,11 +192,18 @@ async function main() {
   });
   cases.push(["seeded_no_click_start", seededNoClickStart]);
   const seededNoClickState = stateOf(seededNoClickStart);
-  const seededNoClickStartHint = String((seededNoClickState.ui_strings || {}).startHint || "").trim();
-  assert.equal(String(seededNoClickState.step_0_final || ""), "", "seeded_no_click_start: step_0 must stay unseeded before explicit start");
-  assert.equal(String(seededNoClickState.started || "").toLowerCase(), "false", "seeded_no_click_start: started must remain false before explicit start");
-  assert.equal(seededNoClickStartHint.length > 0, true, "seeded_no_click_start: localized start hint required");
-  assert.equal(String(seededNoClickStart.prompt || "").trim(), seededNoClickStartHint, "seeded_no_click_start: prompt must keep click-start gate");
+  assert.equal(String(seededNoClickState.step_0_final || ""), "", "seeded_no_click_start: step_0 should remain unseeded");
+  assert.equal(
+    String(seededNoClickState.started || "").toLowerCase(),
+    "true",
+    "seeded_no_click_start: chat initial message should trigger start"
+  );
+  assert.equal(String(seededNoClickState.business_name || ""), "Mindd", "seeded_no_click_start: business name should be seeded");
+  assert.equal(
+    String(seededNoClickStart.prompt || "").trim().length > 0,
+    true,
+    "seeded_no_click_start: interactive prompt required after chat start trigger"
+  );
 
   const poll1 = await run_step({
     current_step_id: "step_0",
