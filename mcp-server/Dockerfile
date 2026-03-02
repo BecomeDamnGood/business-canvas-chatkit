@@ -18,6 +18,7 @@ RUN node scripts/prepare-presentation-assets.mjs
 # Compile TS -> dist/
 RUN npm run build
 RUN test -f dist/ui/step-card.bundled.html || (echo "Missing dist/ui/step-card.bundled.html after build" && exit 1)
+RUN test -f dist/ui/assets/business-model_by_ben-steenstra.svg || (echo "Missing dist/ui/assets/business-model_by_ben-steenstra.svg after build" && exit 1)
 
 
 FROM node:20-slim AS runtime
@@ -42,6 +43,7 @@ RUN npm ci --omit=dev
 # Copy compiled output
 COPY --from=build /app/dist ./dist
 RUN test -f dist/ui/step-card.bundled.html || (echo "Missing dist/ui/step-card.bundled.html in runtime image" && exit 1)
+RUN test -f dist/ui/assets/business-model_by_ben-steenstra.svg || (echo "Missing dist/ui/assets/business-model_by_ben-steenstra.svg in runtime image" && exit 1)
 
 # Copy assets needed at runtime (presentation template)
 COPY --from=build /app/assets ./assets
