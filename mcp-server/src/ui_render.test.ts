@@ -1167,10 +1167,13 @@ test("bundled source is the sole event ingest owner for host updates", () => {
   assert.doesNotMatch(source, /notifyHostTransportSignal/);
 });
 
-test("bundled source reads canonical widget_result from host toolResponseMetadata envelope", () => {
+test("bundled source reads canonical widget_result and supports standard result fallbacks", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /var toolResponseMetadata = toRecord\(root\.toolResponseMetadata\);/);
   assert.match(source, /toRecord\(toolResponseMetadata\.widget_result\)/);
+  assert.match(source, /toRecord\(root\.result\)/);
+  assert.match(source, /toRecord\(structured\.result\)/);
+  assert.match(source, /toRecord\(toolOutput\.result\)/);
   assert.match(source, /var toolResponseMetadata = toRecord\(openai\.toolResponseMetadata\);/);
   assert.match(
     source,
@@ -2571,7 +2574,7 @@ test("resolveWidgetPayload reads canonical _meta.widget_result from root envelop
   assert.equal(resolved.bootstrap_epoch, 1);
 });
 
-test("resolveWidgetPayload fail-closes when _meta.widget_result is absent", () => {
+test("resolveWidgetPayload falls back to root result when _meta.widget_result is absent", () => {
   const resolved = resolveWidgetPayload({
     title: "The Business Strategy Canvas Builder",
     meta: "step: step_0 | specialist: ValidationAndBusinessName",
@@ -2597,12 +2600,12 @@ test("resolveWidgetPayload fail-closes when _meta.widget_result is absent", () =
     },
   });
 
-  assert.equal(resolved.source, "none");
-  assert.equal(String((resolved.result.current_step_id || "")), "");
-  assert.equal(resolved.bootstrap_session_id, "");
-  assert.equal(resolved.bootstrap_epoch, 0);
-  assert.equal(resolved.response_seq, 0);
-  assert.equal(resolved.host_widget_session_id, "");
+  assert.equal(resolved.source, "result");
+  assert.equal(String((resolved.result.current_step_id || "")), "step_0");
+  assert.equal(resolved.bootstrap_session_id, "session_root_only");
+  assert.equal(resolved.bootstrap_epoch, 1);
+  assert.equal(resolved.response_seq, 2);
+  assert.equal(resolved.host_widget_session_id, "host_root_only");
   assert.equal(resolved.needs_hydration, false);
 });
 
@@ -2758,7 +2761,7 @@ test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result
   assert.equal(resolved.needs_hydration, false);
 });
 
-test("resolveWidgetPayload fail-closes when only non-meta envelopes are present", () => {
+test("resolveWidgetPayload falls back to structuredContent.result when non-meta envelopes are present", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -2792,14 +2795,14 @@ test("resolveWidgetPayload fail-closes when only non-meta envelopes are present"
     },
   });
 
-  assert.equal(resolved.source, "none");
-  assert.equal(String((resolved.result.current_step_id || "")), "");
-  assert.equal(resolved.bootstrap_session_id, "");
-  assert.equal(resolved.bootstrap_epoch, 0);
-  assert.equal(resolved.response_seq, 0);
+  assert.equal(resolved.source, "structured_content.result");
+  assert.equal(String((resolved.result.current_step_id || "")), "step_0");
+  assert.equal(resolved.bootstrap_session_id, "session_x");
+  assert.equal(resolved.bootstrap_epoch, 1);
+  assert.equal(resolved.response_seq, 2);
 });
 
-test("resolveWidgetPayload ignores structured.ui envelope and fail-closes without _meta.widget_result", () => {
+test("resolveWidgetPayload hydrates from structuredContent.result when _meta.widget_result is absent", () => {
   const resolved = resolveWidgetPayload({
     structuredContent: {
       result: {
@@ -2818,9 +2821,9 @@ test("resolveWidgetPayload ignores structured.ui envelope and fail-closes withou
     },
   });
 
-  assert.equal(resolved.source, "none");
-  assert.equal(String((resolved.result.current_step_id || "")), "");
-  assert.equal(resolved.resolved_language, "");
+  assert.equal(resolved.source, "structured_content.result");
+  assert.equal(String((resolved.result.current_step_id || "")), "step_0");
+  assert.equal(resolved.resolved_language, "nl");
 });
 
 test("resolveWidgetPayload hydrates from toolResponseMetadata widget_result when canonical metadata wrapper is provided", () => {

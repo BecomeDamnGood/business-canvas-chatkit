@@ -1,6 +1,6 @@
-export type PayloadSource = "meta.widget_result" | "none";
+export type PayloadSource = "meta.widget_result" | "structured_content.result" | "result" | "none";
 
-export type PayloadReasonCode = "meta_widget_result" | "none";
+export type PayloadReasonCode = "meta_widget_result" | "structured_content_result" | "result_fallback" | "none";
 
 export type CanonicalWidgetEnvelope = {
   envelope: Record<string, unknown>;
@@ -143,19 +143,56 @@ function pickMetaWidgetResult(container: Record<string, unknown>): Record<string
   return candidate;
 }
 
-function resolveMetaWidgetResult(raw: unknown): { result: Record<string, unknown>; source: PayloadSource } {
+function looksLikeWidgetResult(candidateRaw: unknown): boolean {
+  const candidate = toRecord(candidateRaw);
+  if (!Object.keys(candidate).length) return false;
+  if (Object.keys(toRecord(candidate.state)).length > 0) return true;
+  if (String(candidate.current_step_id || "").trim()) return true;
+  if (Object.keys(toRecord(candidate.ui)).length > 0) return true;
+  if (String(candidate.prompt || "").trim()) return true;
+  if (String(candidate.text || "").trim()) return true;
+  return false;
+}
+
+function resolveMetaWidgetResult(raw: unknown): {
+  result: Record<string, unknown>;
+  source: PayloadSource;
+  reason_code: PayloadReasonCode;
+} {
   const root = toRecord(raw);
+  const structured = toRecord(root.structuredContent);
   const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
 
   const fromRootMeta = pickMetaWidgetResult(root);
-  if (Object.keys(fromRootMeta).length > 0) return { result: fromRootMeta, source: "meta.widget_result" };
-
-  const fromToolOutputMeta = pickMetaWidgetResult(toolOutput);
-  if (Object.keys(fromToolOutputMeta).length > 0) {
-    return { result: fromToolOutputMeta, source: "meta.widget_result" };
+  if (looksLikeWidgetResult(fromRootMeta)) {
+    return { result: fromRootMeta, source: "meta.widget_result", reason_code: "meta_widget_result" };
   }
 
-  return { result: {}, source: "none" };
+  const fromToolOutputMeta = pickMetaWidgetResult(toolOutput);
+  if (looksLikeWidgetResult(fromToolOutputMeta)) {
+    return { result: fromToolOutputMeta, source: "meta.widget_result", reason_code: "meta_widget_result" };
+  }
+
+  const fromStructuredResult = toRecord(structured.result);
+  if (looksLikeWidgetResult(fromStructuredResult)) {
+    return {
+      result: fromStructuredResult,
+      source: "structured_content.result",
+      reason_code: "structured_content_result",
+    };
+  }
+
+  const fromRootResult = toRecord(root.result);
+  if (looksLikeWidgetResult(fromRootResult)) {
+    return { result: fromRootResult, source: "result", reason_code: "result_fallback" };
+  }
+
+  const fromToolOutputResult = toRecord(toRecord(root.toolOutput).result);
+  if (looksLikeWidgetResult(fromToolOutputResult)) {
+    return { result: fromToolOutputResult, source: "result", reason_code: "result_fallback" };
+  }
+
+  return { result: {}, source: "none", reason_code: "none" };
 }
 
 export function canonicalizeWidgetPayload(raw: unknown): CanonicalWidgetEnvelope {
@@ -176,7 +213,7 @@ export function canonicalizeWidgetPayload(raw: unknown): CanonicalWidgetEnvelope
     },
     result: selected.result,
     source: selected.source,
-    reason_code: "meta_widget_result",
+    reason_code: selected.reason_code,
   };
 }
 

@@ -797,6 +797,17 @@
           setLoading(false);
         }
 
+        function looksLikeWidgetResult(candidateRaw) {
+          var candidate = toRecord(candidateRaw);
+          if (Object.keys(candidate).length === 0) return false;
+          if (Object.keys(toRecord(candidate.state)).length > 0) return true;
+          if (asText(candidate.current_step_id).length > 0) return true;
+          if (Object.keys(toRecord(candidate.ui)).length > 0) return true;
+          if (asText(candidate.prompt).length > 0) return true;
+          if (asText(candidate.text).length > 0) return true;
+          return false;
+        }
+
         function extractWidgetResult(raw) {
           var root = toRecord(raw);
           var structured = toRecord(root.structuredContent);
@@ -805,11 +816,15 @@
           var candidates = [
             toRecord(toRecord(root._meta).widget_result),
             toRecord(toolResponseMetadata.widget_result),
+            toRecord(toRecord(toolResponseMetadata._meta).widget_result),
             toRecord(toRecord(structured._meta).widget_result),
             toRecord(toRecord(toolOutput._meta).widget_result),
+            toRecord(root.result),
+            toRecord(structured.result),
+            toRecord(toolOutput.result),
           ];
           for (var i = 0; i < candidates.length; i += 1) {
-            if (Object.keys(candidates[i]).length > 0) return candidates[i];
+            if (looksLikeWidgetResult(candidates[i])) return toRecord(candidates[i]);
           }
           return {};
         }

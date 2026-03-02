@@ -3590,3 +3590,39 @@ Status van deze poging:
   - [ ] Weerlegd
   - [ ] Onbeslist
   - Toelichting: server-contract levert nu deterministische renderbare actie-sets per view en lokale regressie/gates blijven volledig groen.
+
+### Analyse 2026-03-01T21:08:29Z (postmortem: grijze lege widget ondanks server PASS-signalen)
+
+- Doel:
+  - Vastleggen waarom de eerdere "werkt" conclusie onvoldoende was en waarom de gemelde productie-fout nog steeds kan optreden.
+
+- Analyse en bewijs:
+  - Server-signalen in de aangeleverde logs zijn intern consistent met `prestart`:
+    - `ui_view_mode: "prestart"`, `ui_action_start_present: true`, `ui_gate_status: "ready"`, `ui_strings_status: "ready"`.
+    - `run_step_render_source_selected` toont `render_source: "meta.widget_result"` en `render_source_tuple_complete: true`.
+  - Die signalen bewijzen alléén server-contractcorrectheid, niet dat de widget-DOM effectief rendert in ChatGPT host.
+  - Runtime die werkelijk voor `/ui/step-card` wordt geserveerd is de gebundelde HTML:
+    - `mcp-server/src/server/http_routes.ts:277-279` serveert expliciet `step-card.bundled.html`.
+  - In de gebundelde runtime blijft UI leeg wanneer er bij `set_globals` geen parsebare `widget_result` wordt gevonden:
+    - `mcp-server/ui/step-card.bundled.html:1087-1093` zet alleen marker `set_globals_no_widget_result` en rendert niets.
+    - Er wordt in dat pad geen zichtbare fail-closed fouttekst afgedwongen.
+  - Dat verklaart een "grijze lege kaart" zonder knoppen/tekst ondanks server-PASS.
+  - Extra aanwijzing dat eerdere bewijsset incompleet was:
+    - Test- en gatebewijs zat primair op servercontract en `ui/lib` testpad, niet op host-runtime ingest-gedrag van de gebundelde outputTemplate met echte OpenAI eventvolgorde.
+    - Dus: bewijs toonde contract-determinisme, maar niet end-to-end host render-sucess.
+
+- Wat eerdere analyse miste (hard):
+  - Er is onderscheid tussen:
+    - "server levert correcte `meta.widget_result`" en
+    - "host levert die payload ook in een vorm die de gebundelde runtime effectief inneemt".
+  - De screenshot (grijze lege surface) past bij "render niet gehydrateerd" en niet bij normale gebundelde UI-output met prestart-controls.
+
+- Open / TODO:
+  - [ ] Correlatie-query op App Runner access logs voor dezelfde tijd om te bevestigen of `GET /ui/step-card` succesvol is geladen in die sessie.
+  - [ ] Browser/host runtime marker verzamelen (`data-ui-marker`) om te bevestigen welk niet-render pad is geraakt (`set_globals_no_widget_result` vs ander pad).
+
+- Besluit (Bevestigd/Weerlegd/Onbeslist):
+  - [ ] Bevestigd
+  - [x] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: eerdere conclusie was te sterk; bewezen was server-contractpariteit, niet host end-to-end renderpariteit.
