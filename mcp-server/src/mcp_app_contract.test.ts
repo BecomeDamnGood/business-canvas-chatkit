@@ -298,6 +298,7 @@ test("MCP app contract: run_step wrapper has no tuple parity patch/backfill laye
   assert.doesNotMatch(source, /ensureRunStepOutputTupleParity\(/);
   assert.doesNotMatch(source, /"run_step_output_tuple_parity_patched"/);
   assert.doesNotMatch(source, /"run_step_ordering_tuple_parity"/);
+  assert.doesNotMatch(source, /throw new Error\("meta_widget_result_missing"\)/);
   assert.match(
     source,
     /const contentSource = hasMetaWidgetResult[\s\S]*\?\s*\(\(meta as any\)\.widget_result as Record<string, unknown>\)[\s\S]*:\s*structuredResult;/
@@ -306,6 +307,7 @@ test("MCP app contract: run_step wrapper has no tuple parity patch/backfill laye
     source,
     /const renderSourceReasonCode = hasMetaWidgetResult[\s\S]*\?\s*"meta_widget_result_authoritative"[\s\S]*:\s*\(hasStructuredResult \? "structured_content_result_fallback" : "render_source_missing"\);/
   );
+  assert.match(source, /hasMetaWidgetResult \|\| hasStructuredResult \? "info" : "error"/);
 });
 
 test("MCP app contract: run_step response logs canonical-view observability event", () => {

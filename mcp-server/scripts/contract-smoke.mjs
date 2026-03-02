@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import { run_step } from "../src/handlers/run_step.ts";
 import { CURRENT_STATE_VERSION, getDefaultState } from "../src/core/state.ts";
+import { RunStepToolStructuredContentOutputSchema } from "../src/contracts/mcp_tool_contract.ts";
+import { runStepHandler } from "../src/server/run_step_transport.ts";
 
 process.env.TS_NODE_TRANSPILE_ONLY = process.env.TS_NODE_TRANSPILE_ONLY || "true";
 process.env.UI_LOCALE_READY_GATE_V1 = process.env.UI_LOCALE_READY_GATE_V1 || "1";
@@ -205,6 +207,66 @@ async function main() {
   assert.equal(seededNoClickStartHint.length > 0, true, "seeded_no_click_start: localized start hint required");
   assert.equal(String(seededNoClickStart.prompt || "").trim(), seededNoClickStartHint, "seeded_no_click_start: prompt must keep click-start gate");
 
+  const transportSeedInput = "Help mij met mijn businessplan voor mijn reclamebureau genaamd Mindd";
+  const transportSeeded = await runStepHandler({
+    current_step_id: "step_0",
+    user_message: transportSeedInput,
+    input_mode: "chat",
+    locale_hint: "nl",
+    locale_hint_source: "message_detect",
+    state: {
+      ...getDefaultState(),
+      started: "false",
+      intro_shown_session: "false",
+      response_seq: 0,
+    },
+  });
+  const parsedTransportStructured = RunStepToolStructuredContentOutputSchema.parse(transportSeeded.structuredContent);
+  const transportMeta = transportSeeded.meta && typeof transportSeeded.meta === "object"
+    ? transportSeeded.meta
+    : {};
+  const transportWidgetResult = transportMeta.widget_result && typeof transportMeta.widget_result === "object"
+    ? transportMeta.widget_result
+    : {};
+  const transportStructuredResult =
+    parsedTransportStructured.result && typeof parsedTransportStructured.result === "object"
+      ? parsedTransportStructured.result
+      : {};
+  const transportWidgetState = stateOf(transportWidgetResult);
+  const transportStructuredState = stateOf(transportStructuredResult);
+  assert.equal(
+    String(transportWidgetState.started || "").toLowerCase(),
+    "false",
+    "transport_seeded_no_click_start: started must remain false before explicit start"
+  );
+  assert.equal(
+    String(transportWidgetState.initial_user_message || "").includes("Mindd"),
+    true,
+    "transport_seeded_no_click_start: initial_user_message must preserve chat input"
+  );
+  assert.equal(typeof parsedTransportStructured.meta?.step, "string", "transport_seeded_no_click_start: meta.step string required");
+  assert.equal(
+    typeof parsedTransportStructured.meta?.specialist,
+    "string",
+    "transport_seeded_no_click_start: meta.specialist string required"
+  );
+  assert.equal(
+    String(transportStructuredResult.current_step_id || ""),
+    String(transportWidgetResult.current_step_id || ""),
+    "transport_seeded_no_click_start: structured result must mirror widget_result step id"
+  );
+  assert.equal(
+    String(transportStructuredState.current_step || ""),
+    String(transportWidgetState.current_step || ""),
+    "transport_seeded_no_click_start: structured state must mirror widget_result state step"
+  );
+  assert.equal(
+    String(transportStructuredResult.prompt || "").trim().length > 0 ||
+      String(transportStructuredResult.text || "").trim().length > 0,
+    true,
+    "transport_seeded_no_click_start: structured result must stay renderable for fallback paths"
+  );
+
   const poll1 = await run_step({
     current_step_id: "step_0",
     user_message: "ACTION_BOOTSTRAP_POLL",
@@ -243,6 +305,7 @@ async function main() {
 
   console.log("[contract_smoke] PASS", {
     cases: cases.length,
+    transport_schema_parse: "OK",
     version: `v${CURRENT_STATE_VERSION}`,
   });
 }
