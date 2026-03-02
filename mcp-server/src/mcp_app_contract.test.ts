@@ -41,6 +41,14 @@ const canonicalWidgetStateSource = fs.readFileSync(
   new URL("./handlers/run_step_canonical_widget_state.ts", import.meta.url),
   "utf8"
 );
+const staleSource = fs.readFileSync(
+  new URL("./server/run_step_transport_stale.ts", import.meta.url),
+  "utf8"
+);
+const transportContextSource = fs.readFileSync(
+  new URL("./server/run_step_transport_context.ts", import.meta.url),
+  "utf8"
+);
 
 function buildContractBaseState(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -238,10 +246,9 @@ test("MCP app contract: diagnostics endpoint is exposed with operational registr
   assert.match(source, /idempotency,/);
 });
 
-test("MCP app contract: lifecycle logs expose explicit accept/drop/rebase reason-codes", () => {
+test("MCP app contract: lifecycle logs expose accepted dispatch reason-code", () => {
   assert.match(source, /accept_reason_code:\s*staleRebaseApplied \? "accepted_after_stale_rebase" : "accepted_fresh_dispatch"/);
-  assert.match(source, /drop_reason_code:\s*"host_session_mismatch"/);
-  assert.match(source, /rebase_reason_code:\s*"stale_interactive_action_rebased"/);
+  assert.match(source, /accepted_fresh_dispatch/);
 });
 
 test("MCP app contract: action liveness contract fields are emitted and logged", () => {
@@ -260,22 +267,15 @@ test("MCP app contract: action liveness contract fields are emitted and logged",
   assert.match(source, /client_action_id_echo:/);
 });
 
-test("MCP app contract: stale interactive rebase policy is generic for all ACTION_ dispatches", () => {
-  assert.match(source, /const isInteractiveAction = normalizedAction\.startsWith\("ACTION_"\);/);
-  assert.match(source, /rebaseEligible:\s*true/);
-  assert.match(source, /reasonCode:\s*"interactive_action"/);
-  assert.doesNotMatch(source, /REBASE_ELIGIBLE_INTERACTIVE_ACTIONS/);
-  assert.match(source, /staleInteractiveActionPolicy\.rebaseEligible/);
-  assert.match(source, /stale_policy_reason_code:\s*context\.staleInteractiveActionPolicy\.reasonCode/);
+test("MCP app contract: stale payload preflight is neutralized for robust startup flow", () => {
+  assert.match(source, /const stalePreflight = preflightStalePayload\(/);
+  assert.match(source, /stalePreflight\.earlyResponse/);
+  assert.match(staleSource, /return \{[\s\S]*staleRebaseApplied:\s*false,[\s\S]*earlyResponse:\s*null,[\s\S]*\};/);
 });
 
-test("MCP app contract: stale ingest/rebase rollout flags are explicit and default-safe", () => {
-  assert.match(source, /const RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED = envFlagEnabled\("RUN_STEP_STALE_INGEST_GUARD_V1", false\);/);
-  assert.match(source, /const RUN_STEP_STALE_REBASE_V1_ENABLED = envFlagEnabled\("RUN_STEP_STALE_REBASE_V1", false\);/);
-  assert.match(source, /if \(incomingOrdering\.sessionId && incomingOrdering\.epoch > 0 && context\.staleIngestGuardEnabled\)/);
-  assert.match(source, /staleCheck\.reason !== "host_session" &&[\s\S]*context\.staleRebaseEnabled[\s\S]*context\.staleInteractiveActionPolicy\.rebaseEligible/);
-  assert.match(source, /drop_reason_code:\s*dropReasonCode/);
-  assert.match(source, /stale_rebase_flag_disabled/);
+test("MCP app contract: stale ingest/rebase flags are hard-disabled in transport context", () => {
+  assert.match(transportContextSource, /const staleIngestGuardEnabled = false;/);
+  assert.match(transportContextSource, /const staleRebaseEnabled = false;/);
 });
 
 test("MCP app contract: diagnostics publishes rollout flag states for canary checks", () => {
@@ -323,15 +323,15 @@ test("MCP app contract: run_step response logs canonical-view observability even
   assert.match(runStepResponseSource, /reason_code:/);
 });
 
-test("MCP app contract: turn contract enforces canonical step_0\/interactive view invariants", () => {
+test("MCP app contract: turn contract keeps canonical non-blocking view invariants", () => {
   assert.match(turnContractSource, /export function enforceRunStepViewContractGuard\(/);
   assert.match(turnContractSource, /buildCanonicalWidgetState/);
   assert.match(turnContractSource, /ensureUnifiedUiActionContract/);
   assert.match(turnContractSource, /action_contract/);
-  assert.match(turnContractSource, /step0_started_no_output_no_menu_forbidden/);
   assert.match(canonicalWidgetStateSource, /step0_start_action_missing/);
   assert.doesNotMatch(canonicalWidgetStateSource, /interactive_content_absent/);
   assert.doesNotMatch(turnContractSource, /interactive_requires_renderable_content/);
+  assert.match(turnContractSource, /export function assertRunStepContractOrThrow/);
 });
 
 test("MCP app contract: prestart action contract is deterministic start-only", () => {

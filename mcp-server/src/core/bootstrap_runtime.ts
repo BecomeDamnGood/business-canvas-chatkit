@@ -109,35 +109,13 @@ export function enforceUiStringsReadinessInvariant(params: {
   state: CanvasState;
   criticalKeys: string[];
 }): CanvasState {
-  const { state, criticalKeys } = params;
-  const lang = normalizeLangCode(
-    String((state as any)?.language || (state as any)?.ui_strings_requested_lang || (state as any)?.ui_strings_lang || "")
-  );
-  if (!lang || lang === "en") return state;
-  const uiStringsLang = normalizeLangCode(String((state as any)?.ui_strings_lang || ""));
-  const requestedLang = normalizeLangCode(String((state as any)?.ui_strings_requested_lang || ""));
-  const fallbackApplied = String((state as any)?.ui_strings_fallback_applied ?? "false") === "true";
-  const uiLanguageAligned = uiStringsLang ? uiStringsLang === lang : requestedLang === lang;
-  const uiStatus = uiStringsRequestedStatusFromRaw((state as any)?.ui_strings_status ?? "pending");
-  if (uiStatus !== "ready") return state;
-  if (fallbackApplied) return state;
-  if (uiLanguageAligned && hasRenderableUiStringsForState(state, criticalKeys)) return state;
-  return {
-    ...(state as any),
-    ui_strings_status: "pending",
-    ui_bootstrap_status: "awaiting_locale",
-    ui_translation_mode: "critical_first",
-    ui_strings_critical_ready: "false",
-    ui_strings_full_ready: "false",
-    ui_strings_background_inflight: "true",
-    bootstrap_phase: "waiting_locale",
-  } as CanvasState;
+  void params.criticalKeys;
+  return params.state;
 }
 
 export function isNonEnglishPendingUiStringsState(state: CanvasState | null | undefined): boolean {
-  const lang = normalizeLangCode(String((state as any)?.language ?? ""));
-  const uiStatus = uiStringsRequestedStatusFromRaw((state as any)?.ui_strings_status ?? "pending");
-  return Boolean(lang) && lang !== "en" && uiStatus !== "ready";
+  void state;
+  return false;
 }
 
 export function isInteractiveFallbackState(params: {
@@ -154,15 +132,8 @@ export function isInteractiveLocaleReady(params: {
   uiLocaleReadyGateV1: boolean;
   criticalKeys: string[];
 }): boolean {
-  const { state, uiLocaleReadyGateV1, criticalKeys } = params;
-  if (!uiLocaleReadyGateV1) return true;
-  const lang = normalizeLangCode(
-    String((state as any)?.language || (state as any)?.ui_strings_requested_lang || (state as any)?.ui_strings_lang || "")
-  );
-  if (!lang || lang === "en") return true;
-  const uiStatus = uiStringsRequestedStatusFromRaw((state as any)?.ui_strings_status ?? "pending");
-  if (uiStatus !== "ready") return false;
-  return hasRenderableUiStringsForState(state, criticalKeys);
+  void params;
+  return true;
 }
 
 function mapReasonFromStatus(state: CanvasState): UiGateReason {
@@ -203,39 +174,17 @@ export function deriveBootstrapContract(params: {
   criticalKeys: string[];
   nowMs: number;
 }): BootstrapContractState {
-  const { state, flags, criticalKeys, nowMs } = params;
-  if (!state || !flags.uiLocaleReadyGateV1) {
-    return { phase: "ready", waiting: false, ready: true, reason: "", since_ms: 0, retry_hint: "" };
-  }
-  const normalized = enforceUiStringsReadinessInvariant({ state, criticalKeys });
-  const phase = String((normalized as any)?.bootstrap_phase ?? "").trim().toLowerCase();
-  const gateStatus = normalizeGateStatus((normalized as any)?.ui_gate_status);
-  const gateReason = normalizeGateReason((normalized as any)?.ui_gate_reason);
-  if (gateStatus === "blocked" || gateStatus === "failed" || phase === "failed") {
-    return {
-      phase: "failed",
-      waiting: false,
-      ready: false,
-      reason: gateReason || "invalid_state",
-      since_ms: 0,
-      retry_hint: "",
-    };
-  }
-  if (phase === "recovery") {
-    return { phase: "recovery", waiting: false, ready: true, reason: "", since_ms: 0, retry_hint: "" };
-  }
-  const waiting = isNonEnglishPendingUiStringsState(normalized);
-  const reason = waiting ? mapReasonFromStatus(normalized) : "";
-  const rawSince = Number((normalized as any)?.ui_gate_since_ms ?? 0);
-  const since_ms = waiting && Number.isFinite(rawSince) && rawSince > 0 ? Math.trunc(rawSince) : (waiting ? nowMs : 0);
-  const retry_hint = waiting && flags.uiBootstrapPollActionV1 ? "poll" : "";
+  void params.state;
+  void params.flags;
+  void params.criticalKeys;
+  void params.nowMs;
   return {
-    phase: waiting ? "waiting_locale" : "ready",
-    waiting,
-    ready: !waiting,
-    reason,
-    since_ms,
-    retry_hint,
+    phase: "ready",
+    waiting: false,
+    ready: true,
+    reason: "",
+    since_ms: 0,
+    retry_hint: "",
   };
 }
 
@@ -247,106 +196,18 @@ export function applyUiGateState(params: {
   criticalKeys: string[];
   nowMs: number;
 }): CanvasState {
-  const { previousState, nextState, forceRecoverMs, flags, criticalKeys, nowMs } = params;
-  const normalizedNextState = enforceUiStringsReadinessInvariant({ state: nextState, criticalKeys });
-  const currentGateStatus = normalizeGateStatus((normalizedNextState as any)?.ui_gate_status);
-  const currentGateReason = normalizeGateReason((normalizedNextState as any)?.ui_gate_reason);
-  const currentPhase = String((normalizedNextState as any)?.bootstrap_phase ?? "").trim().toLowerCase();
-  if (currentGateStatus === "blocked" || currentGateStatus === "failed" || currentPhase === "failed") {
-    return {
-      ...(normalizedNextState as any),
-      ui_gate_status: currentGateStatus === "failed" ? "failed" : "blocked",
-      ui_gate_reason: currentGateReason || "invalid_state",
-      ui_gate_since_ms: 0,
-      bootstrap_phase: "failed",
-      bootstrap_retry_hint: "",
-    } as CanvasState;
-  }
-  if (!flags.uiLocaleReadyGateV1) {
-    return {
-      ...(normalizedNextState as any),
-      ui_gate_status: "ready",
-      ui_gate_reason: "",
-      ui_gate_since_ms: 0,
-      bootstrap_phase: "ready",
-      bootstrap_retry_hint: "",
-    } as CanvasState;
-  }
-  const waiting = isNonEnglishPendingUiStringsState(normalizedNextState);
-  if (!waiting) {
-    return {
-      ...(normalizedNextState as any),
-      ui_gate_status: "ready",
-      ui_gate_reason: "",
-      ui_gate_since_ms: 0,
-      bootstrap_phase: "ready",
-      bootstrap_retry_hint: "",
-    } as CanvasState;
-  }
-  const prevStatus = String((previousState as any)?.ui_gate_status ?? "").trim();
-  const prevSinceRaw = Number((previousState as any)?.ui_gate_since_ms ?? 0);
-  const sinceMs =
-    prevStatus === "waiting_locale" && Number.isFinite(prevSinceRaw) && prevSinceRaw > 0
-      ? Math.trunc(prevSinceRaw)
-      : nowMs;
-  if (nowMs - sinceMs > forceRecoverMs) {
-    const uiStatus = uiStringsRequestedStatusFromRaw((normalizedNextState as any)?.ui_strings_status);
-    const criticalRenderable = hasRenderableUiStringsForState(normalizedNextState, criticalKeys);
-    const targetLang = normalizeLangCode(
-      String(
-        (normalizedNextState as any)?.language ||
-          (normalizedNextState as any)?.ui_strings_requested_lang ||
-          (normalizedNextState as any)?.ui_strings_lang ||
-          ""
-      )
-    );
-    const resolvedUiStringsLang = normalizeLangCode(String((normalizedNextState as any)?.ui_strings_lang || ""));
-    const requestedUiStringsLang = normalizeLangCode(
-      String((normalizedNextState as any)?.ui_strings_requested_lang || "")
-    );
-    const uiLanguageAligned =
-      !targetLang ||
-      targetLang === "en" ||
-      (resolvedUiStringsLang ? resolvedUiStringsLang === targetLang : requestedUiStringsLang === targetLang);
-    const canReady = criticalRenderable && uiLanguageAligned && uiStatus === "ready";
-    if (canReady) {
-      return {
-        ...(normalizedNextState as any),
-        ui_strings_status: "ready",
-        ui_bootstrap_status: "ready",
-        ui_strings_critical_ready: "true",
-        ui_strings_full_ready: "true",
-        ui_strings_background_inflight: "false",
-        ui_gate_status: "ready",
-        ui_gate_reason: "",
-        ui_gate_since_ms: 0,
-        bootstrap_phase: "ready",
-        bootstrap_retry_hint: "",
-      } as CanvasState;
-    }
-
-    // Timeout must not silently flip to EN-ready. Keep locale unresolved and poll/recover explicitly.
-    return {
-      ...(normalizedNextState as any),
-      ui_strings_status: criticalRenderable ? "critical_ready" : "pending",
-      ui_bootstrap_status: "awaiting_locale",
-      ui_strings_critical_ready: criticalRenderable ? "true" : "false",
-      ui_strings_full_ready: "false",
-      ui_strings_background_inflight: "true",
-      ui_gate_status: "waiting_locale",
-      ui_gate_reason: "translation_retry",
-      ui_gate_since_ms: sinceMs,
-      bootstrap_phase: "waiting_locale",
-      bootstrap_retry_hint: flags.uiBootstrapPollActionV1 ? "poll" : "",
-    } as CanvasState;
-  }
+  void params.previousState;
+  void params.forceRecoverMs;
+  void params.flags;
+  void params.criticalKeys;
+  void params.nowMs;
   return {
-    ...(normalizedNextState as any),
-    ui_gate_status: "waiting_locale",
-    ui_gate_reason: mapReasonFromStatus(normalizedNextState),
-    ui_gate_since_ms: sinceMs,
-    bootstrap_phase: "waiting_locale",
-    bootstrap_retry_hint: flags.uiBootstrapPollActionV1 ? "poll" : "",
+    ...(params.nextState as any),
+    ui_gate_status: "ready",
+    ui_gate_reason: "",
+    ui_gate_since_ms: 0,
+    bootstrap_phase: "ready",
+    bootstrap_retry_hint: "",
   } as CanvasState;
 }
 
@@ -355,16 +216,8 @@ export function computeUiBootstrapStatus(params: {
   uiStatusRaw: string;
   uiBootstrapStateV1: boolean;
 }): "init" | "awaiting_locale" | "ready" {
-  const { state, uiStatusRaw, uiBootstrapStateV1 } = params;
-  if (!uiBootstrapStateV1) return "ready";
-  const phaseRaw = String((state as any)?.bootstrap_phase ?? "").trim().toLowerCase();
-  if (phaseRaw === "ready") return "ready";
-  if (phaseRaw === "failed") return "ready";
-  if (phaseRaw === "recovery" || phaseRaw === "waiting_locale") return "awaiting_locale";
-  const status = uiStringsRequestedStatusFromRaw(uiStatusRaw);
-  if (status === "ready") return "ready";
-  const lang = normalizeLangCode(String((state as any)?.language ?? ""));
-  return lang ? "awaiting_locale" : "init";
+  void params;
+  return "ready";
 }
 
 export function parseExplicitLanguageOverride(message: string): string {

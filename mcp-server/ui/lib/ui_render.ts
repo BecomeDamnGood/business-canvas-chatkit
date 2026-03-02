@@ -513,14 +513,21 @@ export function render(overrideToolOutput?: unknown): void {
   const hasExplicitActionError =
     Boolean(actionLiveness) &&
     (String(actionLiveness?.ack_status || "") !== "accepted" || actionLiveness?.state_advanced !== true);
-  const viewMode = String(uiView.mode || "").trim().toLowerCase();
+  const viewModeRaw = String(uiView.mode || "").trim().toLowerCase();
+  const viewMode =
+    viewModeRaw === "waiting_locale" ||
+    viewModeRaw === "recovery" ||
+    viewModeRaw === "blocked" ||
+    viewModeRaw === "failed"
+      ? "prestart"
+      : viewModeRaw;
   const uiGateReason = String((state?.ui_gate_reason || "")).trim().toLowerCase();
-  const serverExplicitWaiting = viewMode === "waiting_locale";
+  const serverExplicitWaiting = false;
   const serverExplicitPrestart = viewMode === "prestart";
   const serverExplicitInteractive = viewMode === "interactive";
-  const serverExplicitRecovery = viewMode === "recovery";
-  const serverExplicitBlocked = viewMode === "blocked";
-  const serverExplicitFailed = viewMode === "failed";
+  const serverExplicitRecovery = false;
+  const serverExplicitBlocked = false;
+  const serverExplicitFailed = false;
   const hasExplicitServerRouting =
     serverExplicitWaiting ||
     serverExplicitPrestart ||
@@ -543,7 +550,7 @@ export function render(overrideToolOutput?: unknown): void {
   const startActionCode = actionCodeForRole(result, "start");
   const hasStartAction = startActionCode.length > 0;
   if (!hasExplicitServerRouting) {
-    console.warn("[ui_contract_missing_view_mode]", {
+    console.warn("[ui_contract_missing_view_mode_tolerated]", {
       payload_source: resolved.source,
       view_mode: viewMode || "",
       ui_gate_status: String((state?.ui_gate_status || "")).trim().toLowerCase(),
@@ -559,30 +566,26 @@ export function render(overrideToolOutput?: unknown): void {
     if (choiceWrap) choiceWrap.style.display = "none";
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
     if (prompt) prompt.textContent = "";
-    if (uiSubtitle) uiSubtitle.textContent = "";
-    if (sectionTitleEl) sectionTitleEl.textContent = "";
-    (btnStart as HTMLElement).style.display = "none";
-    startHint.textContent = "";
-    (startHint as HTMLElement).style.display = "none";
+    if (uiSubtitle) {
+      uiSubtitle.textContent =
+        uiText(lang, "uiUseWidgetToContinue", "") ||
+        uiText(lang, "uiSubtitle", "");
+    }
+    if (sectionTitleEl) sectionTitleEl.textContent = uiText(lang, "sectionTitle.step_0", "");
+    (btnStart as HTMLElement).style.display = "inline-flex";
+    startHint.textContent = uiText(lang, "startHint", "");
+    (startHint as HTMLElement).style.display = startHint.textContent ? "block" : "none";
     buildStepper(0, "", lang);
     if (badge) {
-      badge.textContent = "";
-      (badge as HTMLElement).style.display = "none";
+      badge.textContent = "01";
+      (badge as HTMLElement).style.display = "block";
     }
     if (cardDesc) {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      if (startupPayloadMissing) {
-        renderBootstrapWaitShell(prestartEl, lang);
-      } else {
-        const blockedCopy = blockedMessageForReason(
-          lang,
-          "contract_violation",
-          uiText(lang, "error.contract.body", "")
-        );
-        renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
-      }
+      if (startupPayloadMissing) renderPrestartContent(prestartEl, lang);
+      else renderPrestartContent(prestartEl, lang);
     }
     if (isLoading) setLoading(false);
     return;
@@ -642,26 +645,7 @@ export function render(overrideToolOutput?: unknown): void {
       const prestartEl = cardDesc as HTMLElement;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      if (serverExplicitWaiting) {
-        renderBootstrapWaitShell(prestartEl, lang);
-      } else if (serverExplicitRecovery) {
-        renderHydrationRecovery(prestartEl, lang);
-        const retryBtn = document.getElementById("btnHydrationRetry") as HTMLButtonElement | null;
-        if (retryBtn) {
-          retryBtn.disabled = getIsLoading();
-          retryBtn.onclick = () => {
-            if (getIsLoading()) return;
-            setLoading(true);
-            resetHydrationRetryCycle({ trigger_poll: true, source: "render_retry_button" });
-          };
-        }
-      } else {
-        const errorMessage =
-          String((result?.error as Record<string, unknown> | undefined)?.message || "").trim() ||
-          String((result?.error as Record<string, unknown> | undefined)?.user_message || "").trim();
-        const blockedCopy = blockedMessageForReason(lang, uiGateReason, errorMessage);
-        renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
-      }
+      renderPrestartContent(prestartEl, lang);
     }
     if (prompt) prompt.textContent = "";
     if (uiSubtitle) uiSubtitle.textContent = "";
@@ -722,12 +706,9 @@ export function render(overrideToolOutput?: unknown): void {
     const prompt = document.getElementById("prompt");
     if (cardDesc) {
       const prestartEl = cardDesc as HTMLElement;
-      const hasPrestartContent = hasPrestartContentForLang(lang);
-      const showSkeleton = uiStringsStatus !== "ready" || !hasPrestartContent;
       prestartEl.classList.remove("has-grid");
       prestartEl.classList.remove("is-step0-ask-layout");
-      if (showSkeleton) renderPrestartSkeleton(prestartEl, lang);
-      else renderPrestartContent(prestartEl, lang);
+      renderPrestartContent(prestartEl, lang);
     }
     if (prompt) prompt.textContent = "";
     if (!hasStartAction) {

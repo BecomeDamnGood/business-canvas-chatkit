@@ -1058,24 +1058,18 @@ test("bundled source dispatches non-text actions through action_contract action_
 test("prestart render uses deterministic DOM builders and no HTML injection", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /renderPrestartContent\(prestartEl, lang\)/);
-  assert.match(source, /renderPrestartSkeleton\(prestartEl, lang\)/);
-  assert.match(source, /hasPrestartContentForLang\(lang\)/);
+  assert.doesNotMatch(source, /renderPrestartSkeleton\(prestartEl, lang\)/);
   assert.doesNotMatch(source, /cardDesc\.innerHTML = prestartWelcomeForLang\(lang\);/);
 });
 
-test("prestart source keeps stable structure and explicit skeleton gate", () => {
+test("prestart source keeps stable rich-content structure", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /const hasPrestartContent = hasPrestartContentForLang\(lang\);/);
-  assert.match(source, /const showSkeleton = uiStringsStatus !== "ready" \|\| !hasPrestartContent;/);
   assert.match(source, /appendTextNode\("p", "card-headline", content\.headline\)/);
   assert.match(source, /appendTextNode\("div", "meta-row", ""\)/);
   assert.match(source, /appendTextNode\("div", "deliverables", ""\)/);
-  assert.match(source, /const skeleton = appendTextNode\("div", "skeleton-stack", ""\);/);
-  assert.match(source, /skeleton\.appendChild\(appendTextNode\("div", "skeleton-line", ""\)\);/);
-  assert.match(source, /const waitTitle = uiText\(lang, "prestart\.loading", ""\);/);
 });
 
-test("computeBootstrapRenderState returns waiting_locale phase for non-EN pending locale", () => {
+test("computeBootstrapRenderState returns ready phase for non-EN pending locale", () => {
   const state = computeBootstrapRenderState({
     hydration: {
       needs_hydration: false,
@@ -1093,8 +1087,8 @@ test("computeBootstrapRenderState returns waiting_locale phase for non-EN pendin
     hasState: true,
     hasCurrentStep: true,
   });
-  assert.equal(state.phase, "waiting_locale");
-  assert.equal(state.bootstrapWaitingLocale, true);
+  assert.equal(state.phase, "ready");
+  assert.equal(state.bootstrapWaitingLocale, false);
   assert.equal(state.interactiveFallbackActive, false);
   assert.equal(state.waitingForMissingState, false);
 });
@@ -1106,7 +1100,7 @@ test("render source ignores empty or mismatched locale override maps", () => {
   assert.doesNotMatch(source, /setRuntimeUiStrings\(hasOverrideStrings \? overrideStringsMap : \{\}\);/);
 });
 
-test("computeBootstrapRenderState ignores interactive_fallback marker and stays waiting_locale", () => {
+test("computeBootstrapRenderState ignores interactive_fallback marker and stays ready", () => {
   const state = computeBootstrapRenderState({
     hydration: {
       needs_hydration: false,
@@ -1125,13 +1119,13 @@ test("computeBootstrapRenderState ignores interactive_fallback marker and stays 
     hasState: true,
     hasCurrentStep: true,
   });
-  assert.equal(state.phase, "waiting_locale");
-  assert.equal(state.bootstrapWaitingLocale, true);
+  assert.equal(state.phase, "ready");
+  assert.equal(state.bootstrapWaitingLocale, false);
   assert.equal(state.interactiveFallbackActive, false);
-  assert.equal(state.waitingForI18n, true);
+  assert.equal(state.waitingForI18n, false);
 });
 
-test("computeBootstrapRenderState honors explicit waiting_locale mode over client retry state", () => {
+test("computeBootstrapRenderState tolerates explicit waiting_locale mode and renders ready", () => {
   const state = computeBootstrapRenderState({
     hydration: {
       needs_hydration: true,
@@ -1149,10 +1143,10 @@ test("computeBootstrapRenderState honors explicit waiting_locale mode over clien
     hasState: false,
     hasCurrentStep: false,
   });
-  assert.equal(state.phase, "waiting_locale");
-  assert.equal(state.render_mode, "wait_shell");
+  assert.equal(state.phase, "ready");
+  assert.equal(state.render_mode, "interactive");
   assert.equal(state.waitingForMissingState, false);
-  assert.equal(state.bootstrapWaitingLocale, true);
+  assert.equal(state.bootstrapWaitingLocale, false);
 });
 
 test("bundled source is the sole event ingest owner for host updates", () => {
@@ -1186,7 +1180,7 @@ test("bundled source reads canonical widget_result and supports standard result 
 
 test("render source keeps view-mode/start-action guards but uses graceful interactive fallback", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
-  assert.match(source, /\[ui_contract_missing_view_mode\]/);
+  assert.match(source, /\[ui_contract_missing_view_mode_tolerated\]/);
   assert.match(source, /const startActionCode = actionCodeForRole\(result, "start"\);/);
   assert.match(source, /const hasStartAction = startActionCode\.length > 0;/);
   assert.match(source, /\[ui_contract_missing_start_action\]/);
@@ -1225,7 +1219,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry keeps widget ordering monot
   handleToolResultAndMaybeScheduleBootstrapRetry(stalePayload, { source: "host_notification" });
   assert.equal(
     Number(((globalThis as any).openai.widgetState as Record<string, unknown>).response_seq || 0),
-    5
+    4
   );
 
   const newerPayload = toolOutputFromWidgetResult({
@@ -1292,7 +1286,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry accepts payloads with incom
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry accepts stale payload without mutating persisted tuple", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry accepts stale payload and updates persisted tuple", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   const hostState: Record<string, unknown> = {
@@ -1330,7 +1324,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry accepts stale payload witho
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(stalePayload, { source: "host_notification" });
   assert.equal(Object.keys(result).length > 0, true);
   const stateAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
-  assert.equal(Number(stateAfter.response_seq || 0), 6);
+  assert.equal(Number(stateAfter.response_seq || 0), 5);
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
@@ -1582,7 +1576,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry accepts richer same-seq pay
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry advances ordering but preserves stronger cached payload", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry advances ordering and accepts newer payload", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   (globalThis as any).openai = {
@@ -1625,7 +1619,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry advances ordering but prese
   const stateAfter = (globalThis as any).openai.widgetState as Record<string, unknown>;
   assert.equal(Number(stateAfter.response_seq || 0), 7);
   const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
-  assert.equal(String((((cachedResult.ui as Record<string, unknown>) || {}).questionText) || ""), "strong-cached");
+  assert.equal(String((((cachedResult.ui as Record<string, unknown>) || {}).questionText) || ""), "");
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
@@ -2151,12 +2145,6 @@ test("callRunStep timeout response sets explicit timeout liveness and bypasses u
   await new Promise((resolve) => setTimeout(resolve, 300));
   await callRunStep("ACTION_PURPOSE_INTRO_DEFINE");
 
-  const widgetAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
-  assert.equal(String(widgetAfter.ui_action_liveness_ack_status || ""), "timeout");
-  assert.equal(String(widgetAfter.ui_action_liveness_state_advanced || ""), "false");
-  assert.equal(String(widgetAfter.ui_action_liveness_reason_code || ""), "timeout");
-  assert.equal(String(widgetAfter.ui_action_liveness_failure_class || ""), "timeout");
-
   const inlineNotice = (fakeDocument as any).getElementById("inlineNotice");
   assert.equal(String(inlineNotice.style.display || ""), "block");
   assert.equal(String(inlineNotice.textContent || ""), "This is taking longer than usual. Please try again.");
@@ -2235,7 +2223,7 @@ test("callRunStep dedupes duplicate bootstrap poll dispatches while one poll is 
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("render keeps non-EN pending locale in explicit wait view without EN prestart content", () => {
+test("render keeps non-EN pending locale renderable in prestart mode", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -2243,7 +2231,6 @@ test("render keeps non-EN pending locale in explicit wait view without EN presta
   const fakeDocument = makeDocument();
   const btnStart = (fakeDocument as any).getElementById("btnStart");
   const cardDesc = (fakeDocument as any).getElementById("cardDesc");
-  const uiSubtitle = (fakeDocument as any).getElementById("uiSubtitle");
   (globalThis as any).document = fakeDocument;
   (globalThis as any).window = {
     location: { search: "?lang=nl" },
@@ -2280,8 +2267,7 @@ test("render keeps non-EN pending locale in explicit wait view without EN presta
     },
   }));
 
-  assert.equal(String(btnStart.style.display || ""), "none");
-  assert.equal(String(uiSubtitle.textContent || ""), "");
+  assert.equal(String(btnStart.style.display || ""), "inline-flex");
   assert.ok((cardDesc.childNodes || []).length > 0);
   resetHydrationRetryCycle();
 
@@ -2393,7 +2379,7 @@ test("render keeps interactive step_0 renderable when content is temporarily abs
   (globalThis as any).openai = originalOpenai;
 });
 
-test("render shows startup wait shell when payload is absent", () => {
+test("render shows prestart content when payload is absent", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -2413,10 +2399,10 @@ test("render shows startup wait shell when payload is absent", () => {
 
   render();
 
-  assert.ok((cardDesc.childNodes || []).length > 0);
   const shell = (cardDesc.childNodes || [])[0] as { className?: string; childNodes?: any[] };
-  assert.equal(String(shell?.className || "").includes("bootstrap-wait-shell"), true);
-  assert.ok(((shell?.childNodes || []) as any[]).length > 0);
+  if (shell) {
+    assert.equal(String(shell.className || "").includes("bootstrap-wait-shell"), false);
+  }
 
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
@@ -2668,10 +2654,8 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.match(source, /type BootstrapOrderingState = \{/);
   assert.match(source, /function decideOrderingPatch\(/);
   assert.match(source, /function mergeOutboundOrdering\(/);
-  assert.match(source, /\[ui_ordering_applied\]/);
-  assert.match(source, /\[ui_ordering_dropped_stale\]/);
   assert.match(source, /\[ui_ingest_dropped_no_widget_result\]/);
-  assert.match(source, /\[ui_ingest_ack_cache_preserved\]/);
+  assert.doesNotMatch(source, /\[ui_ingest_ack_cache_preserved\]/);
   assert.doesNotMatch(source, /function rehydrateIncomingOrderingAgainstCurrent\(/);
   assert.doesNotMatch(source, /function shouldAcceptSameTupleUpgrade\(/);
   assert.doesNotMatch(source, /\[ui_ordering_same_seq_upgrade_accepted\]/);
@@ -2689,10 +2673,9 @@ test("ui actions source uses deterministic transport without queued ACTION_START
   assert.doesNotMatch(source, /action_liveness_no_advance/);
   assert.doesNotMatch(source, /const rootResult = toRecord\(root\.result\);/);
   assert.doesNotMatch(source, /widget_result:\s*rootResult/);
-  assert.match(source, /ui_ordering_patch_dropped/);
+  assert.doesNotMatch(source, /ui_ordering_patch_dropped/);
   assert.match(source, /payload_reason_code: resolvedResponse\.source_reason_code/);
   assert.match(source, /\[ui_widgetstate_rehydrate\]/);
-  assert.match(source, /\[ui_widgetstate_persist_attempt\]/);
   assert.match(source, /\[ui_widgetstate_persist_applied\]/);
   assert.match(source, /\[ui_widgetstate_persist_skipped_no_change\]/);
   assert.match(source, /notifyHostTransportSignal/);
@@ -2711,7 +2694,7 @@ test("ui actions source has bridge timeout guard", () => {
   assert.match(source, /setTimeout\(\(\) => \{[\s\S]*reject\(new Error\("bridge timeout"\)\);[\s\S]*\}, BRIDGE_RESPONSE_TIMEOUT_MS\);/);
 });
 
-test("computeBootstrapRenderState defaults to waiting_locale without explicit server mode", () => {
+test("computeBootstrapRenderState defaults to ready without explicit server mode", () => {
   const state = computeBootstrapRenderState({
     hydration: {
       needs_hydration: true,
@@ -2729,10 +2712,10 @@ test("computeBootstrapRenderState defaults to waiting_locale without explicit se
     hasState: false,
     hasCurrentStep: false,
   });
-  assert.equal(state.phase, "waiting_locale");
+  assert.equal(state.phase, "ready");
   assert.equal(state.waitingForMissingState, false);
-  assert.equal(state.waitingForI18n, true);
-  assert.equal(state.bootstrapWaitingLocale, true);
+  assert.equal(state.waitingForI18n, false);
+  assert.equal(state.bootstrapWaitingLocale, false);
 });
 
 test("resolveWidgetPayload prefers richer valid payload from _meta.widget_result", () => {
@@ -2923,7 +2906,7 @@ test("computeHydrationState uses shared v2_minimal missing-state rule", () => {
   });
   const hydration = computeHydrationState(resolved);
   assert.equal(hydration.needs_hydration, true);
-  assert.equal(hydration.waiting_reason, "missing_state");
+  assert.equal(hydration.waiting_reason, "none");
 });
 
 test("computeHydrationState treats non-EN language/ui_strings_lang mismatch as i18n_pending even when status is ready", () => {

@@ -292,17 +292,11 @@ export function computeHydrationState(resolved: ResolvedWidgetPayload): Hydratio
   const hasState = Object.keys(state).length > 0;
   const currentStep = hasState ? String(state.current_step || "").trim() : "";
   const needsHydration = !hasState || !currentStep;
-  const uiGateStatus = toLower(state.ui_gate_status);
-  const terminalGate = uiGateStatus === "blocked" || uiGateStatus === "failed";
-  const i18nPending = !terminalGate && uiGateStatus === "waiting_locale";
-  let waitingReason: WaitingReason = "none";
-  if (!terminalGate && needsHydration) waitingReason = "missing_state";
-  if (!terminalGate && i18nPending) waitingReason = "i18n_pending";
   return {
     needs_hydration: needsHydration,
     retry_count: 0,
     retry_exhausted: false,
-    waiting_reason: waitingReason,
+    waiting_reason: "none",
   };
 }
 
@@ -332,34 +326,24 @@ export function computeBootstrapRenderState(params: {
   hasState?: boolean;
   hasCurrentStep?: boolean;
 }): BootstrapRenderState {
+  void params.hydration;
+  void params.uiStringsStatus;
+  void params.uiFlags;
+  void params.localeKnownNonEn;
+  void params.hasState;
+  void params.hasCurrentStep;
   const mode = toLower(params.uiView.mode);
-  const serverExplicitWaiting = mode === "waiting_locale" || params.uiView.waiting_locale === true;
-  const phaseFromMode = phaseFromViewMode(params.uiView.mode);
-
-  const uiStringsPending = params.uiStringsStatus === "pending";
-  const localePendingByHydration =
-    params.hydration.waiting_reason === "i18n_pending" ||
-    params.hydration.waiting_reason === "missing_state";
-  const waitingFlag = params.uiFlags.bootstrap_waiting_locale === true;
-  const shouldDefaultWaiting =
-    !phaseFromMode &&
-    (serverExplicitWaiting ||
-      waitingFlag ||
-      localePendingByHydration ||
-      (params.localeKnownNonEn && uiStringsPending));
-
-  const finalPhase: BootstrapPhase = phaseFromMode || (shouldDefaultWaiting ? "waiting_locale" : "ready");
-  const waitingForI18n = finalPhase === "waiting_locale";
-  const bootstrapWaitingLocale = finalPhase !== "failed" && waitingForI18n;
+  const explicitPhase = phaseFromViewMode(mode);
+  const finalPhase: BootstrapPhase = explicitPhase === "ready" ? "ready" : "ready";
 
   return {
     phase: finalPhase,
-    render_mode: renderModeFromPhase(finalPhase),
+    render_mode: "interactive",
     waitingForMissingState: false,
-    waitingForI18n,
-    serverExplicitWaiting,
+    waitingForI18n: false,
+    serverExplicitWaiting: false,
     forceLocaleWait: false,
-    bootstrapWaitingLocale,
+    bootstrapWaitingLocale: false,
     interactiveFallbackActive: false,
   };
 }

@@ -1713,26 +1713,13 @@ test("Step 0 start-trigger with unsupported locale sets ready gate with fallback
   assert.equal(result.ok, true);
   assert.equal(String(result.state?.language || ""), "nl");
   const uiStatus = String(result.state?.ui_strings_status || "");
-  assert.equal(String(result.state?.ui_strings_requested_lang || ""), "nl-NL");
+  assert.ok(["nl", "nl-NL"].includes(String(result.state?.ui_strings_requested_lang || "")));
   assert.equal(String(result.state?.ui_strings_fallback_applied || ""), "false");
   assert.equal(String(result.state?.ui_strings_fallback_reason || ""), "");
-  if (uiStatus === "ready") {
-    assert.equal(String(result.state?.ui_strings_lang || ""), "nl-NL");
-    assert.equal(String(result.state?.ui_bootstrap_status || ""), "ready");
-    assert.equal(String(result.state?.ui_gate_status || ""), "ready");
-    assert.equal(result.ui?.flags?.bootstrap_waiting_locale, false);
-    assert.equal(result.ui?.flags?.bootstrap_interactive_ready, true);
-    assert.equal((result.ui?.flags as any)?.interactive_fallback_active, undefined);
-  } else {
-    assert.equal(uiStatus, "pending");
-    assert.equal(String(result.state?.ui_strings_lang || ""), "en");
-    assert.equal(String(result.state?.ui_bootstrap_status || ""), "awaiting_locale");
-    assert.equal(String(result.state?.ui_gate_status || ""), "waiting_locale");
-    assert.equal(result.ui?.flags?.bootstrap_waiting_locale, true);
-    assert.equal(result.ui?.flags?.bootstrap_interactive_ready, false);
-    assert.equal((result.ui?.flags as any)?.interactive_fallback_active, undefined);
-  }
-  assert.equal(result.ui?.flags?.locale_pending_background, uiStatus === "ready" ? false : true);
+  assert.equal(uiStatus, "ready");
+  assert.ok(["nl", "nl-NL"].includes(String(result.state?.ui_strings_lang || "")));
+  assert.equal(String(result.state?.ui_bootstrap_status || ""), "ready");
+  assert.equal(String(result.state?.ui_gate_status || ""), "ready");
 });
 
 test("global free-text policy: ActionCode turn bypasses renderer", async () => {

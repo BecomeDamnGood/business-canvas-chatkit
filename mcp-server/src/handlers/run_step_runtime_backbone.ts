@@ -240,7 +240,7 @@ export function isUiLangSourceResolverV1Enabled(): boolean {
 }
 
 export function isUiStrictNonEnPendingV1Enabled(): boolean {
-  return envFlagEnabled("UI_STRICT_NON_EN_PENDING_V1", true);
+  return false;
 }
 
 export function isUiStep0LangResetGuardV1Enabled(): boolean {
@@ -248,7 +248,7 @@ export function isUiStep0LangResetGuardV1Enabled(): boolean {
 }
 
 export function isUiBootstrapStateV1Enabled(): boolean {
-  return true;
+  return false;
 }
 
 export function isUiPendingNoFallbackTextV1Enabled(): boolean {
@@ -260,7 +260,7 @@ export function isUiStartTriggerLangResolveV1Enabled(): boolean {
 }
 
 export function isUiLocaleReadyGateV1Enabled(): boolean {
-  return true;
+  return false;
 }
 
 export function isUiNoPendingTextSuppressV1Enabled(): boolean {
@@ -268,7 +268,7 @@ export function isUiNoPendingTextSuppressV1Enabled(): boolean {
 }
 
 export function isUiBootstrapWaitRetryV1Enabled(): boolean {
-  return envFlagEnabled("UI_BOOTSTRAP_WAIT_RETRY_V1", true);
+  return false;
 }
 
 export function isUiBootstrapEventParityV1Enabled(): boolean {
@@ -276,11 +276,11 @@ export function isUiBootstrapEventParityV1Enabled(): boolean {
 }
 
 export function isUiBootstrapPollActionV1Enabled(): boolean {
-  return true;
+  return false;
 }
 
 export function isUiWaitShellV2Enabled(): boolean {
-  return envFlagEnabled("UI_WAIT_SHELL_V2", true);
+  return false;
 }
 
 export function isUiTranslationFastModelV1Enabled(): boolean {

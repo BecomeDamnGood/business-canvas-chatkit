@@ -62,22 +62,16 @@ test("tool input schema canonicalizes legacy state.language_source before zod en
   assert.match(source, /state: canonicalizeStateForToolInput\(args\.state\),/);
 });
 
-test("bootstrap session/epoch guards drop stale payloads and keep monotone sequencing", () => {
+test("bootstrap session/epoch metadata keeps monotone sequencing without stale fail-close drops", () => {
   const source = readServerSource();
   assert.match(source, /const bootstrapSessionRegistry = new Map/);
-  assert.match(source, /function isStaleBootstrapPayload\(/);
   assert.match(source, /function registerBootstrapSnapshot\(/);
   assert.match(source, /const responseSeq = nextBootstrapResponseSeq\(\);/);
-  assert.match(source, /"stale_bootstrap_payload_dropped"/);
   assert.match(source, /bootstrap_session_id/);
   assert.match(source, /bootstrap_epoch/);
   assert.match(source, /response_seq/);
-  assert.match(source, /payload_epoch/);
-  assert.match(source, /payload_response_seq/);
-  assert.match(source, /latest_epoch/);
-  assert.match(source, /latest_response_seq/);
-  assert.match(source, /if \(staleCheck\.stale\) \{[\s\S]*const staleSource =/);
-  assert.doesNotMatch(source, /if \(staleCheck\.stale\) \{[\s\S]{0,1000}const responseSeq = nextBootstrapResponseSeq\(\);/);
+  assert.match(source, /const staleIngestGuardEnabled = false;/);
+  assert.match(source, /const staleRebaseEnabled = false;/);
 });
 
 test("run_step handler logs locale + language readiness in request/response lines", () => {
@@ -105,15 +99,10 @@ test("run_step contract emits server-authoritative ui.view payload", () => {
   assert.match(actionHelpersSource, /function deriveUiViewPayload\(variant: UiViewVariant\): UiViewPayload \| null/);
   assert.match(runStepSource, /createRunStepRuntimeActionHelpers\(/);
   assert.match(ingressSource, /CONTRACT_UI_VIEW_MODES = new Set\(\[/);
-  assert.match(
-    turnContractSource,
-    /if \(uiPayload && \(!uiView \|\| !CONTRACT_UI_VIEW_MODES\.has\(uiViewMode\)\)\) \{[\s\S]*invalid_ui_view_mode/
-  );
+  assert.match(turnContractSource, /export function assertRunStepContractOrThrow\(/);
   assert.match(turnContractSource, /export function enforceRunStepViewContractGuard\(/);
-  assert.match(turnContractSource, /if \(currentStep === STEP_0_ID && !started\) \{/);
-  assert.match(turnContractSource, /step0_not_started_requires_prestart_mode/);
-  assert.match(turnContractSource, /prestart_ready_requires_ui_strings/);
-  assert.match(turnContractSource, /step0_not_started_requires_start_action/);
+  assert.match(turnContractSource, /buildCanonicalWidgetState\(/);
+  assert.doesNotMatch(turnContractSource, /step0_start_action_missing/);
   assert.doesNotMatch(turnContractSource, /interactive_requires_renderable_content/);
 });
 

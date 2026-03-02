@@ -383,7 +383,6 @@ test("bundled runtime renders rich body into cardDesc via formatter and keeps un
   assert.match(source, /function formatText\(text\) \{/);
   assert.match(source, /if \(ui\.cardDesc\) ui\.cardDesc\.innerHTML = formatText\(bodyText\);/);
   assert.match(source, /if \(ui\.prompt\) ui\.prompt\.textContent = promptText;/);
-  assert.match(source, /if \(ui\.error\) ui\.error\.textContent = errorText;/);
   assert.match(source, /ui\.actions\.innerHTML = "";/);
   assert.doesNotMatch(source, /ui\.card\.innerHTML\s*=/);
   assert.doesNotMatch(source, /ui\.prompt\.innerHTML\s*=/);

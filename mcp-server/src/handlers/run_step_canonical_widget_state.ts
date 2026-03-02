@@ -29,21 +29,9 @@ export function buildCanonicalWidgetState(
   const started = input.started === true;
   const hasRenderableContent = input.hasRenderableContent === true;
   const hasStartAction = input.hasStartAction === true;
-  const gateStatus = String(input.uiGateStatus || "").trim().toLowerCase();
-  const bootstrapPhase = String(input.bootstrapPhase || "").trim().toLowerCase();
   const variant = String(input.variant || "").trim();
-
-  if (gateStatus === "blocked" || gateStatus === "failed" || bootstrapPhase === "failed") {
-    return {
-      mode: "blocked",
-      waiting_locale: false,
-      has_renderable_content: hasRenderableContent,
-      has_start_action: hasStartAction,
-      invariant_ok: true,
-      reason_code: "",
-      ...(variant ? { variant } : {}),
-    };
-  }
+  void input.uiGateStatus;
+  void input.bootstrapPhase;
 
   if (currentStepId === step0Id && !started) {
     return {

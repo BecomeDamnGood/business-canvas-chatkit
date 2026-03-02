@@ -881,31 +881,7 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
   const next = { ...ws, ...(patch || {}) };
   const orderingKeys = ["bootstrap_session_id", "bootstrap_epoch", "response_seq", "host_widget_session_id"];
   const includesOrderingPatch = orderingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch || {}, key));
-  let orderingDecisionReason = "not_applicable";
-  let orderingBefore = readBootstrapOrderingState(ws);
-  let orderingAfter = readBootstrapOrderingState(next);
-  if (includesOrderingPatch) {
-    const currentOrdering = readBootstrapOrderingState(ws);
-    const incomingOrdering = readBootstrapOrderingState(next);
-    orderingBefore = currentOrdering;
-    orderingAfter = incomingOrdering;
-    console.log("[ui_widgetstate_persist_attempt]", {
-      patch_tuple: describeBootstrapOrdering(incomingOrdering),
-      current_tuple: describeBootstrapOrdering(currentOrdering),
-    });
-    const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
-    orderingDecisionReason = orderingDecision.reason;
-    if (!orderingDecision.apply) {
-      for (const key of orderingKeys) {
-        next[key] = ws[key];
-      }
-      console.warn("[ui_ordering_patch_dropped]", {
-        reason: orderingDecision.reason,
-        incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-        current_tuple: describeBootstrapOrdering(currentOrdering),
-      });
-    }
-  }
+  const orderingBefore = readBootstrapOrderingState(ws);
   const keys = Object.keys(next);
   let changed = false;
   for (const k of keys) {
@@ -917,9 +893,9 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
   if (!changed) {
     if (includesOrderingPatch) {
       console.log("[ui_widgetstate_persist_skipped_no_change]", {
-        reason: orderingDecisionReason,
+        reason: "no_change",
         current_tuple: describeBootstrapOrdering(orderingBefore),
-        incoming_tuple: describeBootstrapOrdering(orderingAfter),
+        incoming_tuple: describeBootstrapOrdering(readBootstrapOrderingState(next)),
       });
     }
     return;
@@ -929,7 +905,7 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
     if (includesOrderingPatch) {
       const finalOrdering = readBootstrapOrderingState(next);
       console.log("[ui_widgetstate_persist_applied]", {
-        reason: orderingDecisionReason,
+        reason: "applied",
         previous_tuple: describeBootstrapOrdering(orderingBefore),
         next_tuple: describeBootstrapOrdering(finalOrdering),
       });
@@ -1041,7 +1017,7 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
 ): Record<string, unknown> {
   const source: IngestSource = opts?.source || "unknown";
   const normalizedResult = normalizeToolResult(raw);
-  const normalized = normalizedResult.normalized;
+  let normalized = normalizedResult.normalized;
   if (!Object.keys(normalized).length) {
     const resolvedForDrop = resolveWidgetPayload(raw);
     const ingestContext = buildClientIngestContext({
@@ -1066,7 +1042,13 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       client_ingest_seq: ingestContext.client_ingest_seq,
       payload_shape_fingerprint: ingestContext.payload_shape_fingerprint,
     });
-    return {};
+    const cached = getLastToolOutput();
+    if (Object.keys(cached).length > 0) {
+      normalized = cached;
+    } else {
+      if (_render) _render(raw);
+      return resolvedForDrop.result;
+    }
   }
   const resolved = resolveWidgetPayload(normalized);
   const ingestContext = buildClientIngestContext({
@@ -1081,11 +1063,6 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     context: ingestContext,
   });
   const result = resolved.result;
-  const currentCachedResolved = resolveWidgetPayload(getLastToolOutput());
-  const currentCachedResult = currentCachedResolved.result;
-  const currentQuality = evaluatePayloadQuality(currentCachedResult);
-  const incomingQuality = evaluatePayloadQuality(result);
-  const incomingSignal = readIncomingLivenessSignal(result);
   const currentOrdering = readBootstrapOrderingState(widgetState());
   const incomingOrderingRaw: BootstrapOrderingState = {
     sessionId: resolved.bootstrap_session_id,
@@ -1095,106 +1072,16 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   };
   const incomingOrdering = incomingOrderingRaw;
   const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
-  const currentHasOrdering = hasValidBootstrapOrdering(currentOrdering);
-  const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
-  if (incomingHasOrdering && !orderingDecision.apply) {
-    console.warn("[ui_ordering_dropped_stale]", {
-      source,
-      reason: orderingDecision.reason,
-      payload_source: resolved.source,
-      payload_reason_code: resolved.source_reason_code,
-      correlation_id: ingestContext.correlation_id,
-      client_action_id: ingestContext.client_action_id,
-      request_id: ingestContext.request_id,
-      client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
-      client_ingest_seq: ingestContext.client_ingest_seq,
-      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-      current_tuple: describeBootstrapOrdering(currentOrdering),
-    });
-  }
-  if (!incomingHasOrdering) {
-    console.warn("[ui_ingest_tuple_incomplete_fail_closed]", {
-      source,
-      reason: "incoming_missing_tuple",
-      payload_source: resolved.source,
-      payload_reason_code: resolved.source_reason_code,
-      correlation_id: ingestContext.correlation_id,
-      client_action_id: ingestContext.client_action_id,
-      request_id: ingestContext.request_id,
-      client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
-      client_ingest_seq: ingestContext.client_ingest_seq,
-      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-      current_tuple: describeBootstrapOrdering(currentOrdering),
-      current_tuple_present: currentHasOrdering,
-    });
-  }
-  if (incomingHasOrdering && orderingDecision.apply) {
+  if (incomingHasOrdering) {
     setWidgetStateSafe({
       bootstrap_session_id: incomingOrdering.sessionId,
       bootstrap_epoch: incomingOrdering.epoch,
       response_seq: incomingOrdering.responseSeq,
       host_widget_session_id: incomingOrdering.hostWidgetSessionId,
     });
-    console.log("[ui_ordering_applied]", {
-      source,
-      reason: orderingDecision.reason,
-      payload_source: resolved.source,
-      payload_reason_code: resolved.source_reason_code,
-      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-      current_tuple: describeBootstrapOrdering(currentOrdering),
-    });
   }
-  const renderCacheDecision = shouldUpdateRenderCache({
-    source,
-    currentHasPayload: Object.keys(currentCachedResult).length > 0,
-    incoming: incomingQuality,
-    current: currentQuality,
-    incomingSignal,
-    orderingReason: orderingDecision.reason,
-  });
-  const shouldPersistToRenderCache = renderCacheDecision.should_persist;
-  if (shouldPersistToRenderCache) {
-    if (renderCacheDecision.decision_reason === "force_persist_non_renderable") {
-      console.warn("[ui_ingest_cache_preserve_denied]", {
-        source,
-        payload_source: resolved.source,
-        payload_reason_code: resolved.source_reason_code,
-        preserve_safety_reason: renderCacheDecision.preserve_safety_reason,
-        decision_reason: renderCacheDecision.decision_reason,
-        action_ack_status: incomingSignal.has_liveness ? incomingSignal.ack_status : "",
-        action_state_advanced: incomingSignal.state_advanced,
-        action_reason_code: incomingSignal.reason_code,
-        correlation_id: ingestContext.correlation_id,
-        client_action_id: ingestContext.client_action_id,
-        request_id: ingestContext.request_id,
-        client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
-        client_ingest_seq: ingestContext.client_ingest_seq,
-      });
-    }
-    setLastToolOutput(normalized);
-    if (_render) _render(normalized);
-  } else {
-    console.warn("[ui_ingest_ack_cache_preserved]", {
-      source,
-      payload_source: resolved.source,
-      payload_reason_code: resolved.source_reason_code,
-      preserve_safety_reason: renderCacheDecision.preserve_safety_reason,
-      decision_reason: renderCacheDecision.decision_reason,
-      action_ack_status: incomingSignal.has_liveness ? incomingSignal.ack_status : "",
-      action_state_advanced: incomingSignal.state_advanced,
-      action_reason_code: incomingSignal.reason_code,
-      correlation_id: ingestContext.correlation_id,
-      client_action_id: ingestContext.client_action_id,
-      request_id: ingestContext.request_id,
-      client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
-      client_ingest_seq: ingestContext.client_ingest_seq,
-      payload_shape_fingerprint: ingestContext.payload_shape_fingerprint,
-      incoming_quality_score: incomingQuality.score,
-      current_quality_score: currentQuality.score,
-      incoming_renderable: incomingQuality.renderable,
-      current_renderable: currentQuality.renderable,
-    });
-  }
+  setLastToolOutput(normalized);
+  if (_render) _render(normalized);
   const hydration = maybeScheduleBootstrapRetry(resolved);
   if (isDevEnv()) {
     console.log("[ui_bootstrap_state]", {
@@ -1212,6 +1099,8 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       ui_strings_status: resolved.ui_strings_status,
       bootstrap_phase: resolved.bootstrap_phase,
       gate_status: String(((result?.state as Record<string, unknown>) || {}).ui_gate_status || ""),
+      current_tuple: describeBootstrapOrdering(currentOrdering),
+      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
     });
   }
   return result;

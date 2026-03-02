@@ -18,8 +18,6 @@ import {
   resolveContractIdFromRecord,
 } from "./observability.js";
 import {
-  RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED,
-  RUN_STEP_STALE_REBASE_V1_ENABLED,
   normalizeIdempotencyKey,
   parsePositiveInt,
 } from "./server_config.js";
@@ -351,8 +349,8 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
   const localeHint = safeString(args.locale_hint ?? "");
   const inputMode = safeString(args.input_mode ?? "chat");
   const action = upperMessage.startsWith("ACTION_") ? upperMessage : "text_input";
-  const staleIngestGuardEnabled = RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED;
-  const staleRebaseEnabled = staleIngestGuardEnabled && RUN_STEP_STALE_REBASE_V1_ENABLED;
+  const staleIngestGuardEnabled = false;
+  const staleRebaseEnabled = false;
   const staleInteractiveActionPolicy = classifyStaleInteractiveActionPolicy(action);
   const existingClientActionId = normalizeIdempotencyKey(
     safeString((stateForTool as { __client_action_id?: unknown }).__client_action_id ?? "")

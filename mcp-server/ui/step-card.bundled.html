@@ -697,7 +697,7 @@
       (function () {
         "use strict";
 
-        var MODE_SET = new Set(["prestart", "interactive", "waiting_locale", "recovery", "blocked", "failed"]);
+        var MODE_SET = new Set(["prestart", "interactive"]);
 
         function byId(id) {
           return document.getElementById(id);
@@ -1156,7 +1156,11 @@
           var state = toRecord(result.state);
           var uiPayload = toRecord(result.ui);
           var view = toRecord(uiPayload.view);
-          var mode = asText(view.mode).toLowerCase();
+          var modeRaw = asText(view.mode).toLowerCase();
+          var mode =
+            modeRaw === "waiting_locale" || modeRaw === "recovery" || modeRaw === "blocked" || modeRaw === "failed"
+              ? "prestart"
+              : modeRaw;
           if (!MODE_SET.has(mode)) mode = "prestart";
           var localUi = fallbackStringsFromLang(
             asText(state.language || state.ui_strings_lang || state.ui_strings_requested_lang || preferredLanguage())
@@ -1195,8 +1199,11 @@
             asText(specialist.question) ||
             asText(result.prompt) ||
             asText(toRecord(uiPayload.prompt).body);
-          if (mode === "prestart" && bodyText.length === 0 && promptText.length === 0) {
+          if (mode === "prestart") {
             bodyText = localUi.prestartText;
+            if (promptText.length === 0) {
+              promptText = asText(uiString(state, "startHint") || localUi.startHint);
+            }
           }
           if (mode === "interactive" && bodyText.length === 0 && promptText.length === 0) {
             promptText = uiString(state, "step0.question.initial") || "Share your thoughts or choose an option.";
@@ -1210,15 +1217,6 @@
 
           var errorPayload = toRecord(result.error);
           var errorText = asText(errorPayload.user_message) || asText(errorPayload.message);
-          if (mode === "blocked" || mode === "failed") {
-            if (!errorText) errorText = localUi.errorMessage;
-            if (ui.error) ui.error.textContent = errorText;
-            setHidden(ui.error, false);
-            setHidden(ui.actions, true);
-            setHidden(ui.inputForm, true);
-            setLoading(false);
-            return;
-          }
 
           if (mode === "prestart") {
             var hasStartAction = false;
@@ -1240,12 +1238,7 @@
 
           setHidden(ui.error, true);
 
-          if (mode === "waiting_locale" || mode === "recovery") {
-            setHidden(ui.actions, true);
-            setHidden(ui.inputForm, true);
-          } else {
-            renderActions(mode);
-          }
+          renderActions(mode);
 
           setLoading(false);
         }
@@ -1254,7 +1247,7 @@
           var result = extractWidgetResult(rawPayload);
           if (Object.keys(result).length === 0) {
             console.warn("[ui_ingest_payload_missing_widget_result]", { source: source });
-            return;
+            result = buildFallbackPrestartResult();
           }
           renderResult(result, source);
         }
@@ -1312,6 +1305,7 @@
           var payload = readInitialToolOutput();
           if (Object.keys(extractWidgetResult(payload)).length === 0) {
             console.warn("[ui_set_globals_payload_missing_widget_result]");
+            renderResult(buildFallbackPrestartResult(), "set_globals_fallback");
             return;
           }
           ingest(payload, "set_globals");
