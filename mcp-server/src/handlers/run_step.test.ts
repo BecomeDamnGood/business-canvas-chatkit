@@ -78,7 +78,7 @@ test("Start gating: empty state without started yields Click Start (no advance)"
   assert.ok(result?.prompt?.includes("Click Start"), "prompt tells user to click Start");
 });
 
-test("view contract invariant: step_0 with started=false always renders prestart with ACTION_START", async () => {
+test("prestart parity: step_0 started=false stays directly usable without blocked fail-close", async () => {
   const result = await run_step({
     user_message: "",
     input_mode: "widget",
@@ -93,6 +93,9 @@ test("view contract invariant: step_0 with started=false always renders prestart
   assert.equal(String(result?.state?.current_step || ""), "step_0");
   assert.equal(String(result?.state?.started || "").toLowerCase(), "false");
   assert.equal(String(result?.ui?.view?.mode || ""), "prestart");
+  assert.notEqual(String(result?.ui?.view?.mode || ""), "blocked");
+  assert.notEqual(String(result?.state?.ui_gate_status || ""), "blocked");
+  assert.ok(String(result?.prompt || "").trim().length > 0);
   assert.equal(String(result?.state?.ui_action_start || ""), "ACTION_START");
 });
 
@@ -350,7 +353,7 @@ test("contract invariant telemetry: step_0 started=true with no_output:NO_MENU s
   assert.equal(String((final as Record<string, unknown>).reason_code || ""), "");
 });
 
-test("Start gating: seedable non-empty first message keeps Click Start gate and does not auto-advance", async () => {
+test("start parity: seedable first message keeps started=false before start and preserves initial_user_message", async () => {
   const localeHints = ["nl-NL", "fr-FR", "zh-CN", "ja-JP"];
   for (const localeHint of localeHints) {
     const result = await run_step({
@@ -370,6 +373,7 @@ test("Start gating: seedable non-empty first message keeps Click Start gate and 
     assert.equal(String(result?.state?.step_0_final || ""), "");
     assert.equal(String(result?.state?.business_name || ""), "Mindd");
     assert.equal(String(result?.state?.initial_user_message || "").includes("Mindd"), true);
+    assert.equal(String(result?.state?.initial_user_message || "").trim().length > 0, true);
     const startHint = String((result?.state?.ui_strings || {})["startHint"] || "").trim();
     assert.ok(startHint.length > 0, "localized startHint must exist");
     assert.equal(String(result?.prompt || "").trim(), startHint);
@@ -408,7 +412,7 @@ test("Start gating regression: migrated legacy state_version does not auto-start
   assert.equal(String(result?.state?.locale || "").toLowerCase().startsWith("nl"), true);
 });
 
-test("ACTION_START smoke: widget start returns first Step 0 question", async () => {
+test("start parity: ACTION_START transitions to interactive step_0 with renderable content", async () => {
   const result = await run_step({
     user_message: "ACTION_START",
     input_mode: "widget",
@@ -422,7 +426,14 @@ test("ACTION_START smoke: widget start returns first Step 0 question", async () 
   assert.equal(result?.ok, true);
   assert.equal(result?.current_step_id, "step_0");
   assert.equal(result?.active_specialist, "ValidationAndBusinessName");
+  assert.equal(String(result?.ui?.view?.mode || ""), "interactive");
   assert.equal(String(result?.state?.started || "").toLowerCase(), "true");
+  const hasRenderableContent = [
+    String(result?.prompt || "").trim(),
+    String(result?.text || "").trim(),
+    String(result?.ui?.questionText || "").trim(),
+  ].some((value) => value.length > 0);
+  assert.equal(hasRenderableContent, true);
   const prompt = String(result?.prompt || "").toLowerCase();
   assert.ok(
     prompt.includes("to get started") || prompt.includes("what type of business"),

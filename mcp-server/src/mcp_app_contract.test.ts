@@ -106,7 +106,7 @@ test("MCP app contract: run_step exposes explicit outputSchema", () => {
   );
 });
 
-test("MCP app contract: structuredContent schema accepteert object meta met step/specialist", () => {
+test("MCP app contract parity: structuredContent schema accepts object meta with step/specialist", () => {
   const parsed = RunStepToolStructuredContentOutputSchema.parse({
     title: "The Business Strategy Canvas Builder",
     meta: {
@@ -176,7 +176,7 @@ test("MCP wrapper parity: model result stays safe and _meta.widget_result keeps 
   assert.doesNotMatch(source, /Object\.assign\(\{\}, parsedStructuredContent, \{ _widget_result: widgetResultForClient \}\)/);
 });
 
-test("MCP app contract: bundled render-state prefers _meta.widget_result and accepts standard result fallbacks", () => {
+test("MCP app contract parity: bundled render-state prefers _meta.widget_result with standard result fallback", () => {
   assert.match(bundledRuntimeSource, /function extractWidgetResult\(raw\) \{/);
   assert.match(bundledRuntimeSource, /toRecord\(toRecord\(root\._meta\)\.widget_result\)/);
   assert.match(bundledRuntimeSource, /toRecord\(root\.toolResponseMetadata\)/);

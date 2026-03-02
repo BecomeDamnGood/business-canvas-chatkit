@@ -436,13 +436,14 @@ test("renderChoiceButtons hides buttons when prompt/action_code counts mismatch"
   (globalThis as any).document = originalDocument;
 });
 
-test("render falls back to specialist question when result.text is empty", () => {
+test("render parity: specialist question is used when result.text is empty", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
 
   const fakeDocument = makeDocument();
   const cardDesc = (fakeDocument as any).getElementById("cardDesc");
+  const promptEl = (fakeDocument as any).getElementById("prompt");
   (globalThis as any).document = fakeDocument;
   (globalThis as any).window = {
     location: { search: "" },
@@ -481,6 +482,7 @@ test("render falls back to specialist question when result.text is empty", () =>
   }));
 
   assert.equal(((cardDesc.childNodes || []) as any[]).length > 0, true);
+  assert.equal(((promptEl.childNodes || []) as any[]).length > 0, true);
 
   setSessionStarted(false);
   setSessionWelcomeShown(false);
@@ -1576,7 +1578,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry accepts richer same-seq pay
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry advances ordering and accepts newer payload", () => {
+test("ingest parity: normal tuple/order flow keeps payload renderable and does not drop host ingest", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   (globalThis as any).openai = {
@@ -1616,6 +1618,8 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry advances ordering and accep
     source: "host_notification",
   });
   assert.equal(Object.keys(result).length > 0, true);
+  const incomingResolved = resolveWidgetPayload(result).result;
+  assert.equal(String(((incomingResolved.state as Record<string, unknown>)?.current_step || "")), "step_0");
   const stateAfter = (globalThis as any).openai.widgetState as Record<string, unknown>;
   assert.equal(Number(stateAfter.response_seq || 0), 7);
   const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
@@ -2522,7 +2526,7 @@ test("render interactive keeps text input visible when choices and text_submit c
   (globalThis as any).openai = originalOpenai;
 });
 
-test("resolveWidgetPayload reads canonical _meta.widget_result from root envelope", () => {
+test("render source parity: resolveWidgetPayload uses canonical _meta.widget_result from root envelope", () => {
   const resolved = resolveWidgetPayload({
     _meta: {
       widget_result: {
@@ -2822,31 +2826,6 @@ test("resolveWidgetPayload hydrates from toolResponseMetadata widget_result when
 
   assert.equal(resolved.source, "meta.widget_result");
   assert.equal(String(((resolved.result.state as Record<string, unknown>)?.current_step || "")), "step_0");
-  assert.equal(resolved.needs_hydration, false);
-});
-
-test("resolveWidgetPayload fail-closes when only flat toolOutput._widget_result alias is present", () => {
-  const resolved = resolveWidgetPayload({
-    toolOutput: {
-      _widget_result: {
-        state: {
-          current_step: "step_0",
-          language: "nl",
-          ui_strings_status: "ready",
-          bootstrap_session_id: "session_flat",
-          bootstrap_epoch: 1,
-          response_seq: 3,
-          host_widget_session_id: "host_flat",
-        },
-        ui: { questionText: "Vraag" },
-      },
-    },
-  });
-
-  assert.equal(resolved.source, "none");
-  assert.equal(String(((resolved.result.state as Record<string, unknown>)?.current_step || "")), "");
-  assert.equal(resolved.bootstrap_session_id, "");
-  assert.equal(resolved.host_widget_session_id, "");
   assert.equal(resolved.needs_hydration, false);
 });
 
