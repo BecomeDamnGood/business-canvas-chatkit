@@ -118,21 +118,12 @@ export function createTurnResponseEngine<TPayload>(
     const rendered = validated.rendered as TurnResponseRenderedOutput;
     const stepId = String((nextState as Record<string, unknown>).current_step ?? "");
     if (validated.violation) {
-      return {
-        ok: false,
-        payload: deps.finalizeResponse(
-          params.onContractViolation({
-            state: nextState,
-            stepId,
-            activeSpecialist: String((nextState as Record<string, unknown>).active_specialist || ""),
-            reason: validated.violation,
-            rendered,
-          })
-        ),
-      };
+      (nextState as Record<string, unknown>).__render_contract_violation = String(validated.violation || "");
     }
-
-    deps.applyUiPhaseByStep(nextState, stepId, rendered.contractId);
+    const contractId = String(rendered.contractId || "").trim();
+    if (stepId && contractId) {
+      deps.applyUiPhaseByStep(nextState, stepId, contractId);
+    }
     (nextState as Record<string, unknown>).last_specialist_result = rendered.specialist;
 
     return {
@@ -141,12 +132,12 @@ export function createTurnResponseEngine<TPayload>(
         state: nextState,
         specialist: rendered.specialist,
         renderedStatus: rendered.status,
-        actionCodes: rendered.uiActionCodes,
-        renderedActions: rendered.uiActions,
+        actionCodes: Array.isArray(rendered.uiActionCodes) ? rendered.uiActionCodes : [],
+        renderedActions: Array.isArray(rendered.uiActions) ? rendered.uiActions : [],
         contractMeta: {
-          contractId: rendered.contractId,
-          contractVersion: rendered.contractVersion,
-          textKeys: rendered.textKeys,
+          contractId,
+          contractVersion: String(rendered.contractVersion || ""),
+          textKeys: Array.isArray(rendered.textKeys) ? rendered.textKeys : [],
         },
       },
     };

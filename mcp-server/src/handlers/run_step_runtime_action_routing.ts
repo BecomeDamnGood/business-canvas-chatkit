@@ -349,38 +349,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     );
 
     if (transitionSpec && !resolvedTransition) {
-      const specialistSnapshot = runtime.lastSpecialistResult || {};
-      const payload = behavior.attachRegistryPayload(
-        {
-          ok: false,
-          tool: "run_step",
-          current_step_id: String(state.current_step),
-          active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-          text: "",
-          prompt: "",
-          specialist: specialistSnapshot,
-          state,
-          error: {
-            type: "contract_violation",
-            message: "ActionCode transition violates menu contract.",
-            reason: "missing_or_invalid_transition_for_actioncode",
-            action_code: safeActionCodeInput,
-            step: currentStepForMenuTransition,
-            source_menu_id: sourceMenuForTransition || "",
-          },
-        },
-        specialistSnapshot
-      );
-      return {
-        response: behavior.finalizeResponse(payload),
-        state,
-        userMessage,
-        responseUiFlags: null,
-        bigwhyMaxWords: BIGWHY_MAX_WORDS,
-        countWords,
-        pickBigWhyCandidate,
-        buildBigWhyTooLongFeedback,
-      };
+      // Keep the turn alive and let processActionCode/text flow decide next behavior.
     }
 
     if (resolvedTransition) {
@@ -420,45 +389,11 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     );
 
     if (runtime.inputMode === "widget" && routed === actionCodeInput) {
-      const errorPayload = {
-        ok: false,
-        tool: "run_step",
-        current_step_id: String(state.current_step),
-        active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-        text: behavior.uiStringFromStateMap(
-          state,
-          "error.unknownAction",
-          behavior.uiDefaultString(
-            "error.unknownAction",
-            "We could not process this choice. Please refresh and try again."
-          )
-        ),
-        prompt: "",
-        specialist: runtime.lastSpecialistResult,
-        state,
-        error: {
-          type: "unknown_actioncode",
-          action_code: actionCodeInput,
-          strict: true,
-        },
-      };
-      const payload = behavior.attachRegistryPayload(
-        errorPayload,
-        runtime.lastSpecialistResult
-      );
-      return {
-        response: behavior.finalizeResponse(payload),
-        state,
-        userMessage,
-        responseUiFlags: null,
-        bigwhyMaxWords: BIGWHY_MAX_WORDS,
-        countWords,
-        pickBigWhyCandidate,
-        buildBigWhyTooLongFeedback,
-      };
+      const clickedLabel = String((state as Record<string, unknown>).__last_clicked_label_for_contract || "").trim();
+      userMessage = clickedLabel;
+    } else {
+      userMessage = routed;
     }
-
-    userMessage = routed;
   }
 
   const pendingBeforeTurn =

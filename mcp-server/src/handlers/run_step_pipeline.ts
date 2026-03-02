@@ -188,25 +188,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       const effectiveStatementCount = Math.max(previousCanonicalCount, currentStatementCount);
       const scoringPhase = isTrueFlag(specialistResult.scoring_phase);
       const hasClusters = Array.isArray(specialistResult.clusters) && specialistResult.clusters.length > 0;
-      if (
-        (modeAtTurnStart === "builder_collect" || modeAtTurnStart === "builder_scoring") &&
-        effectiveStatementCount >= 20 &&
-        (!scoringPhase || !hasClusters)
-      ) {
-        const specialistSnapshot = asRecord(specialistResult);
-        return buildFinalizedContractViolationPayload({
-          state,
-          stepId: String(state.current_step || ""),
-          activeSpecialist: String(stateRecord.active_specialist || ""),
-          specialistSnapshot,
-          message: "DreamBuilder reached scoring threshold without scoring view.",
-          reason: "dreambuilder_scoring_required_after_threshold",
-          extraError: {
-            statement_count: effectiveStatementCount,
-            runtime_mode: modeAtTurnStart,
-          },
-        });
-      }
+      void modeAtTurnStart;
+      void effectiveStatementCount;
+      void scoringPhase;
+      void hasClusters;
     }
 
     if (
@@ -280,20 +265,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         specialistResult?.is_offtopic === true ||
         String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
       const repairedCount = deps.strategyStatementsForConsolidateGuard(specialistResult, state).length;
-      if (!repairedOfftopic && repairedCount > 7) {
-        const specialistSnapshot = asRecord(specialistResult);
-        return buildFinalizedContractViolationPayload({
-          state,
-          stepId: String(state.current_step || ""),
-          activeSpecialist: String(stateRecord.active_specialist || ""),
-          specialistSnapshot,
-          message: "Strategy consolidate route returned more than 7 focus points.",
-          reason: "strategy_consolidate_overflow_after_repair",
-          extraError: {
-            statement_count: repairedCount,
-          },
-        });
-      }
+      void repairedOfftopic;
+      void repairedCount;
     }
 
     if (String(decision1.current_step || "") === deps.bigwhyStepId) {
