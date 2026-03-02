@@ -1,5 +1,4 @@
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
-import { parseUiContractId, UI_CONTRACT_NO_MENU } from "../core/ui_contract_id.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
 import type { CanvasState } from "../core/state.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
@@ -127,35 +126,6 @@ function hasStartAction(response: RunStepContractResponse, state: Record<string,
   if (actionCodes.includes("ACTION_START")) return true;
   const actions = Array.isArray(uiPayload.actions) ? (uiPayload.actions as Array<Record<string, unknown>>) : [];
   return actions.some((action) => String(action?.action_code || "").trim() === "ACTION_START");
-}
-
-function isForbiddenStep0StartedNoOutputNoMenu(
-  response: RunStepContractResponse,
-  step0Id: string
-): boolean {
-  const state = toRecord(response.state);
-  const clientActionId = String(
-    state.__client_action_id ||
-      state.client_action_id_echo ||
-      toRecord(state.ui_action_liveness).client_action_id_echo ||
-      ""
-  ).trim();
-  if (!clientActionId) return false;
-  const started = String(state.started || "").trim().toLowerCase() === "true";
-  if (!started) return false;
-  const currentStep =
-    String(response.current_step_id || state.current_step || step0Id).trim() || step0Id;
-  if (currentStep !== step0Id) return false;
-  const uiPayload = toRecord(response.ui);
-  const contractId = String(uiPayload.contract_id || "").trim();
-  if (!contractId) return false;
-  const parsed = parseUiContractId(contractId);
-  if (!parsed) return false;
-  return (
-    parsed.stepId === step0Id &&
-    parsed.status === "no_output" &&
-    parsed.menuId === UI_CONTRACT_NO_MENU
-  );
 }
 
 function buildStateActionDescriptor(
@@ -315,6 +285,7 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
 }
 
 function applyDeterministicUiActionRenderPolicy(response: RunStepContractResponse): void {
+  const state = toRecord(response.state);
   const ui = toRecord(response.ui);
   const actionContract = toRecord(ui.action_contract);
   const actions = Array.isArray(actionContract.actions)
@@ -325,6 +296,8 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
   const view = toRecord(ui.view);
   const mode = String(view.mode || "").trim().toLowerCase();
   const variant = String(view.variant || "").trim().toLowerCase();
+  const currentStep = String(response.current_step_id || state.current_step || "").trim();
+  const bypassInteractiveStep0RoleGate = mode === "interactive" && currentStep === STEP_0_ID;
   const hasChoiceActions = actions.some(
     (action) => normalizeUiActionRole(action.role, "choice") === "choice"
   );
@@ -352,7 +325,7 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
     const actionCode = String(action.action_code || "").trim();
     if (!actionCode || seenByActionCode.has(actionCode)) continue;
     const role = normalizeUiActionRole(action.role, "choice");
-    if (!allowedRoles.has(role)) continue;
+    if (!bypassInteractiveStep0RoleGate && !allowedRoles.has(role)) continue;
     seenByActionCode.add(actionCode);
     filteredActions.push({
       ...action,

@@ -1,6 +1,5 @@
 import type { CanvasState } from "../core/state.js";
 import {
-  shouldSkipStep0LanguageReset,
   type RunStepRuntimePreflightLocaleHintSource,
 } from "./run_step_runtime_preflight_policy.js";
 
@@ -218,33 +217,6 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
   submittedUserText = actionCodePreflight.submittedUserText;
   clickedActionCodeForNoRepeat = actionCodePreflight.clickedActionCodeForNoRepeat;
   clickedLabelForNoRepeat = actionCodePreflight.clickedLabelForNoRepeat;
-
-  const msgForLang = String(userMessage ?? "").trim();
-  const isUserTextForLang =
-    msgForLang &&
-    !/^[0-9]+$/.test(msgForLang) &&
-    !msgForLang.startsWith("ACTION_") &&
-    !msgForLang.startsWith("__ROUTE__") &&
-    !msgForLang.startsWith("choice:");
-
-  if (
-    String(state.current_step) === constants.step0Id &&
-    String((state as Record<string, unknown>).step_0_final ?? "").trim() === "" &&
-    isUserTextForLang
-  ) {
-    const stateLanguage = language.normalizeLangCode(String((state as Record<string, unknown>).language ?? ""));
-    const stateLanguageSource = language.normalizeLanguageSource(
-      (state as Record<string, unknown>).language_source
-    );
-    void shouldSkipStep0LanguageReset({
-      guardEnabled: language.isUiStep0LangResetGuardV1Enabled(),
-      inputMode: constants.inputMode,
-      localeHint: constants.localeHint,
-      localeHintSource: constants.localeHintSource,
-      stateLanguageSource,
-      stateLanguage,
-    });
-  }
 
   return {
     state,

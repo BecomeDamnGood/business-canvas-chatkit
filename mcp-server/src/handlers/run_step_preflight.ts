@@ -332,49 +332,7 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
     const languageSeed = String((state as any).initial_user_message || "").trim();
     const localeResolution = await params.resolveLocaleAndUiStringsReady(state, languageSeed);
     state = localeResolution.state;
-    const retrySpecialistSeed = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
-    const retrySpecialist = params.hasUsableSpecialistForRetry(retrySpecialistSeed)
-      ? retrySpecialistSeed
-      : params.buildTransientFallbackSpecialist(state);
-    const retryStepId = String((state as any).current_step || deps.step0Id);
-    const retryActiveSpecialist = String((state as any).active_specialist || "").trim() ||
-      (retryStepId === deps.step0Id ? params.step0Specialist : "");
-    const retryState = {
-      ...(state as any),
-      active_specialist: retryActiveSpecialist,
-      last_specialist_result: retrySpecialist,
-    } as CanvasState;
-    const bootstrapContract = params.deriveBootstrapContract(state);
-    if (bootstrapContract.waiting) {
-      const payload = params.attachRegistryPayload(
-        {
-          ok: true as const,
-          tool: "run_step" as const,
-          current_step_id: String((retryState as any).current_step || deps.step0Id),
-          active_specialist: String((retryState as any).active_specialist || ""),
-          text: params.buildTextForWidget({ specialist: retrySpecialist }),
-          prompt: params.pickPrompt(retrySpecialist),
-          specialist: retrySpecialist,
-          state: retryState,
-        },
-        retrySpecialist,
-        {
-          bootstrap_waiting_locale: bootstrapContract.waiting,
-          bootstrap_interactive_ready: bootstrapContract.ready,
-          bootstrap_retry_hint: bootstrapContract.retry_hint,
-          locale_pending_background: bootstrapContract.waiting,
-          bootstrap_phase: String(bootstrapContract.phase || ""),
-        }
-      );
-      return {
-        state,
-        actionCodeRaw,
-        userMessage,
-        clickedActionCodeForNoRepeat,
-        clickedLabelForNoRepeat,
-        response: params.finalizeResponse(payload),
-      };
-    }
+    void params.deriveBootstrapContract(state);
     actionCodeRaw = "";
     userMessage = "";
     clickedActionCodeForNoRepeat = "";
