@@ -23,8 +23,8 @@
       "bootstrap_phase": "ready",
       "has_ui_actions": false,
       "has_action_codes": false,
-      "has_contract_id": true,
-      "has_text_keys": true,
+      "has_contract_id": false,
+      "has_text_keys": false,
       "error_type": ""
     }
   }

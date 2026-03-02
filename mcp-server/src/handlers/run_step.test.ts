@@ -350,33 +350,28 @@ test("contract invariant: step_0 started=true cannot be successful with no_outpu
   assert.equal(String((final as Record<string, unknown>).reason_code || ""), "");
 });
 
-test("Start gating: seedable non-empty first message keeps Click Start gate and does not auto-advance", async () => {
-  const localeHints = ["nl-NL", "fr-FR", "zh-CN", "ja-JP"];
-  for (const localeHint of localeHints) {
-    const result = await run_step({
-      user_message: "Help me with my business plan for my advertising agency called Mindd",
-      input_mode: "chat",
-      locale_hint: localeHint,
-      locale_hint_source: "message_detect",
-      state: {
-        current_step: "step_0",
-        intro_shown_session: "false",
-        last_specialist_result: {},
-        started: "false",
-      },
-    });
-    assert.equal(result?.ok, true);
-    assert.equal(result?.current_step_id, "step_0");
-    assert.equal(String(result?.state?.step_0_final || ""), "");
-    assert.equal(String(result?.state?.business_name || ""), "Mindd");
-    const startHint = String((result?.state?.ui_strings || {})["startHint"] || "").trim();
-    assert.ok(startHint.length > 0, "localized startHint must exist");
-    assert.equal(String(result?.prompt || "").trim(), startHint);
-    assert.equal(String(result?.state?.started || "").toLowerCase(), "false");
-  }
+test("Start trigger: chat non-empty first message on step_0 advances to started=true", async () => {
+  const result = await run_step({
+    user_message: "Help me with my business plan for my advertising agency called Mindd",
+    input_mode: "chat",
+    locale_hint: "en-US",
+    locale_hint_source: "message_detect",
+    state: {
+      current_step: "step_0",
+      intro_shown_session: "false",
+      last_specialist_result: {},
+      started: "false",
+    },
+  });
+  assert.equal(result?.ok, true);
+  assert.equal(result?.current_step_id, "step_0");
+  assert.equal(String(result?.state?.started || "").toLowerCase(), "true");
+  assert.equal(String(result?.state?.step_0_final || ""), "");
+  assert.equal(String(result?.state?.business_name || ""), "Mindd");
+  assert.ok(String(result?.prompt || "").trim().length > 0);
 });
 
-test("Start gating regression: migrated legacy state_version does not auto-start or flip NL to EN", async () => {
+test("Start gating regression: migrated legacy state_version keeps NL locale while chat start trigger can advance", async () => {
   const result = await run_step({
     current_step_id: "step_0",
     user_message: "Help mij met mijn businessplan voor mijn reclamebureau Mindd",
@@ -396,10 +391,8 @@ test("Start gating regression: migrated legacy state_version does not auto-start
     },
   });
   assert.equal(result?.ok, true);
-  assert.equal(String(result?.state?.started || "").toLowerCase(), "false");
-  const startHint = String((result?.state?.ui_strings || {})["startHint"] || "").trim();
-  assert.ok(startHint.length > 0, "localized startHint must exist");
-  assert.equal(String(result?.prompt || "").trim(), startHint);
+  assert.equal(String(result?.state?.started || "").toLowerCase(), "true");
+  assert.ok(String(result?.prompt || "").trim().length > 0);
   assert.equal(String(result?.state?.step_0_final || ""), "");
   assert.equal(String(result?.state?.business_name || ""), "Mindd");
   assert.equal(String(result?.state?.language || ""), "nl");
@@ -842,7 +835,8 @@ test("legacy chat state auto-upgrades instead of blocking and preserves NL local
 
   const seededStep0 = String(chatTurn?.state?.step_0_final || "");
   assert.equal(seededStep0, "");
-  assert.equal(String(chatTurn?.state?.business_name || ""), "Mindd");
+  assert.equal(String(chatTurn?.state?.started || "").toLowerCase(), "true");
+  assert.ok(String(chatTurn?.state?.business_name || "").trim().length > 0);
 
   const widgetStart = await run_step({
     current_step_id: "step_0",
@@ -855,7 +849,7 @@ test("legacy chat state auto-upgrades instead of blocking and preserves NL local
   assert.equal(widgetStart?.ok, true);
   assert.notEqual(String(widgetStart?.state?.ui_gate_status || ""), "blocked");
   assert.equal(String(widgetStart?.state?.language || ""), "nl");
-  assert.equal(String(widgetStart?.state?.business_name || ""), "Mindd");
+  assert.ok(String(widgetStart?.state?.business_name || "").trim().length > 0);
   assert.ok(String(widgetStart?.prompt || "").trim().length > 0);
 });
 

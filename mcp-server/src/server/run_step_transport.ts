@@ -397,7 +397,7 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
     const modelResult = buildModelSafeResult(resultForClient);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
-      meta: `step: ${stepMeta} | specialist: ${specialistMeta}`,
+      meta: { step: stepMeta, specialist: specialistMeta },
       result: modelResult,
     };
 

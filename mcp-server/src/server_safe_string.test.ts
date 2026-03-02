@@ -129,8 +129,22 @@ test("bundled ui runtime does not optimistically mutate started or state.languag
 test("run_step handler always emits model-safe result and keeps full payload widget-only", () => {
   const source = readServerSource();
   assert.match(source, /const modelResult = buildModelSafeResult\(resultForClient\);/);
+  assert.match(source, /meta:\s*\{\s*step:\s*stepMeta,\s*specialist:\s*specialistMeta\s*\},/);
   assert.match(source, /result: modelResult,/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient,\s*\}/);
+});
+
+test("run_step handler return paths keep canonical _meta.widget_result", () => {
+  const transportSource = fs.readFileSync(new URL("./server/run_step_transport.ts", import.meta.url), "utf8");
+  const handlerStart = transportSource.indexOf("async function runStepHandler");
+  const handlerEnd = transportSource.indexOf("\nexport {", handlerStart);
+  const handlerSource = transportSource.slice(handlerStart, handlerEnd);
+
+  const enrichedMetaMatches = handlerSource.match(/widget_result:\s*enrichedWidgetResult/g) || [];
+  assert.equal(enrichedMetaMatches.length, 2);
+  assert.match(handlerSource, /meta:\s*\{\s*widget_result:\s*resultForClient,\s*\}/);
+  assert.match(handlerSource, /meta:\s*\{\s*widget_result:\s*fallbackResult,\s*\}/);
+  assert.doesNotMatch(handlerSource, /return\s+\{\s*structuredContent,\s*\};/);
 });
 
 test("single tool contract: run_step owns output template and model+app visibility", () => {
