@@ -945,6 +945,50 @@
           return asText(strings[key]);
         }
 
+        function buildPrestartBodyText(state, localUi) {
+          var headline = asText(uiString(state, "prestart.headline") || localUi.prestartText);
+          var provenTitle = asText(uiString(state, "prestart.proven.title"));
+          var provenBody = asText(uiString(state, "prestart.proven.body"));
+          var outcomesTitle = asText(uiString(state, "prestart.outcomes.title"));
+          var outcome1 = asText(uiString(state, "prestart.outcomes.item1"));
+          var outcome2 = asText(uiString(state, "prestart.outcomes.item2"));
+          var outcome3 = asText(uiString(state, "prestart.outcomes.item3"));
+          var howLabel = asText(uiString(state, "prestart.meta.how.label"));
+          var howValue = asText(uiString(state, "prestart.meta.how.value"));
+          var timeLabel = asText(uiString(state, "prestart.meta.time.label"));
+          var timeValue = asText(uiString(state, "prestart.meta.time.value"));
+
+          var lines = [];
+          if (headline) lines.push(headline);
+          if (provenTitle) {
+            lines.push("");
+            lines.push("**" + provenTitle + "**");
+          }
+          if (provenBody) lines.push(provenBody);
+          if (outcomesTitle) {
+            lines.push("");
+            lines.push("**" + outcomesTitle + "**");
+          }
+          if (outcome1) lines.push("- " + outcome1);
+          if (outcome2) lines.push("- " + outcome2);
+          if (outcome3) lines.push("- " + outcome3);
+
+          var metaPairs = [];
+          if (howLabel || howValue) {
+            metaPairs.push((howLabel || "How") + ": " + (howValue || ""));
+          }
+          if (timeLabel || timeValue) {
+            metaPairs.push((timeLabel || "Time") + ": " + (timeValue || ""));
+          }
+          if (metaPairs.length > 0) {
+            lines.push("");
+            lines.push(metaPairs.join(" | "));
+          }
+
+          var body = lines.join("\n").trim();
+          return body || localUi.prestartText;
+        }
+
         function deriveStepBadge(stepId) {
           var normalized = asText(stepId);
           var match = /^step_(\d+)$/i.exec(normalized);
@@ -997,10 +1041,12 @@
           var actionContract = toRecord(uiPayload.action_contract);
           var hasStep = asText(candidate.current_step_id || state.current_step).length > 0;
           var hasPromptText = asText(candidate.prompt).length > 0 || asText(candidate.text).length > 0;
+          var hasUiStrings = Object.keys(toRecord(state.ui_strings)).length > 0;
           var errorPayload = toRecord(candidate.error);
           var hasErrorText = asText(errorPayload.user_message).length > 0 || asText(errorPayload.message).length > 0;
           if (MODE_SET.has(mode)) return true;
           if (hasStep && hasPromptText) return true;
+          if (hasStep && hasUiStrings) return true;
           if (hasStep && Object.keys(actionContract).length > 0) return true;
           if (hasStep && hasErrorText) return true;
           return false;
@@ -1171,10 +1217,14 @@
           runtime.actions = parseActions(result);
 
           var stepText = asText(state.current_step || result.current_step_id) || "step_0";
+          var sectionTitleText =
+            stepText === "step_0"
+              ? asText(uiString(state, "sectionTitle.step_0") || uiString(state, "stepLabel.validation") || stepText)
+              : stepText;
           if (ui.status) ui.status.textContent = stepText;
           if (ui.meta) ui.meta.textContent = mode;
-          if (ui.sectionTitle) ui.sectionTitle.textContent = stepText;
-          setHidden(ui.sectionTitle, stepText.length === 0);
+          if (ui.sectionTitle) ui.sectionTitle.textContent = sectionTitleText;
+          setHidden(ui.sectionTitle, sectionTitleText.length === 0);
 
           var badgeText = deriveStepBadge(stepText);
           if (ui.badge) ui.badge.textContent = badgeText;
@@ -1200,10 +1250,8 @@
             asText(result.prompt) ||
             asText(toRecord(uiPayload.prompt).body);
           if (mode === "prestart") {
-            bodyText = localUi.prestartText;
-            if (promptText.length === 0) {
-              promptText = asText(uiString(state, "startHint") || localUi.startHint);
-            }
+            bodyText = buildPrestartBodyText(state, localUi);
+            promptText = asText(uiString(state, "startHint") || localUi.startHint);
           }
           if (mode === "interactive" && bodyText.length === 0 && promptText.length === 0) {
             promptText = uiString(state, "step0.question.initial") || "Share your thoughts or choose an option.";
@@ -1247,7 +1295,7 @@
           var result = extractWidgetResult(rawPayload);
           if (Object.keys(result).length === 0) {
             console.warn("[ui_ingest_payload_missing_widget_result]", { source: source });
-            result = buildFallbackPrestartResult();
+            return;
           }
           renderResult(result, source);
         }
@@ -1305,7 +1353,6 @@
           var payload = readInitialToolOutput();
           if (Object.keys(extractWidgetResult(payload)).length === 0) {
             console.warn("[ui_set_globals_payload_missing_widget_result]");
-            renderResult(buildFallbackPrestartResult(), "set_globals_fallback");
             return;
           }
           ingest(payload, "set_globals");
