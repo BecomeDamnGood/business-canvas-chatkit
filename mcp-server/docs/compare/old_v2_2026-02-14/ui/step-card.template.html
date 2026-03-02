@@ -1,0 +1,1249 @@
+<!doctype html>
+<html data-ui-version="__UI_VERSION__">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230071e3'/></svg>" type="image/svg+xml" />
+    <title>The Business Strategy Canvas Builder</title>
+    <style>
+      /**
+       * Redesign tokens – light only, 768px base.
+       * Legacy names (--text, --muted, --line, --bg, --card, --shadow, --blue, --stepOff)
+       * match mcp-server/ui/step-card.template.html for drop-in replacement.
+       */
+      
+      :root {
+        /* Legacy (widget compatibility) */
+        --text: #1d1d1f;
+        --muted: #6e6e73;
+        --line: #e5e5ea;
+        --bg: #f5f5f7;
+        --card: #ffffff;
+        --shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+        --blue: #2b83e6;
+        --stepOff: #e8e8ed;
+      
+        /* Color */
+        --color-bg-page: #f5f5f7;
+        --color-bg-surface: #ffffff;
+        --color-brand-primary: #2b83e6;
+        --color-brand-primary-soft: rgba(43, 131, 230, 0.9);
+        --color-brand-primary-muted: rgba(43, 131, 230, 0.18);
+        --color-brand-primary-subtle: rgba(43, 131, 230, 0.06);
+        --color-brand-primary-border: rgba(43, 131, 230, 0.28);
+        --color-brand-gradient-start: #63acff;
+        --color-brand-gradient-end: #2b83e6;
+        --color-text-primary: #1d1d1f;
+        --color-text-secondary: #424245;
+        --color-text-muted: #6e6e73;
+        --color-text-placeholder: #86868b;
+        --color-border-default: #e5e5ea;
+        --color-ui-step-inactive-bg: #ffffff;
+        --color-ui-step-inactive-text: #86868b;
+        --color-ui-step-active-bg: #2b83e6;
+        --color-ui-step-active-text: #ffffff;
+        --color-ui-disabled-bg: #f5f5f7;
+        --color-ui-disabled-text: #86868b;
+        --color-placeholder-image-border: rgba(200, 150, 150, 0.6);
+      
+        /* Typography */
+        --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --font-size-xs: 12px;
+        --font-size-sm: 13px;
+        --font-size-5: 14px;
+        --font-size-base: 15px;
+        --font-size-md: 16px;
+        --font-size-lg: 17px;
+        --font-size-xl: 18px;
+        --font-size-2xl: 22px;
+        --font-size-3xl: 26px;
+        --font-size-4xl: 28px;
+        --font-size-5xl: 40px;
+        --font-weight-normal: 400;
+        --font-weight-medium: 600;
+        --font-weight-bold: 700;
+        --font-weight-heavy: 800;
+        --letter-spacing-tighter: -0.025em;
+        --letter-spacing-tight: -0.015em;
+        --letter-spacing-wide: 0.02em;
+        --line-height-normal: 1.47;
+        --line-height-relaxed: 1.5;
+        --line-height-title: 1.2;
+      
+        /* Spacing */
+        --space-0: 0;
+        --space-1: 2px;
+        --space-2: 4px;
+        --space-3: 8px;
+        --space-4: 12px;
+        --space-5: 14px;
+        --space-6: 16px;
+        --space-8: 20px;
+        --space-10: 24px;
+        --space-12: 28px;
+        --space-15: 32px;
+        --space-16: 40px;
+        --space-20: 64px;
+      
+        /* Radius */
+        --radius-sm: 8px;
+        --radius-md: 10px;
+        --radius-lg: 14px;
+        --radius-xl: 18px;
+        --radius-2xl: 20px;
+        --radius-full: 50%;
+      
+        /* Card overlay (light theme: white at 55% over background) */
+        --card-overlay-opacity: 0.55;
+      
+        /* Layout – 768px base, full-bleed background */
+        --layout-base-width: 768px;
+        --layout-wrap-max-width: 768px;
+        --layout-wrap-padding: 0 24px 15px;
+        --layout-container-max-width: 720px;
+      
+        /* Component */
+        --component-step-size: 36px;
+        --component-step-line-width: 12px;
+        --component-step-line-height: 2px;
+        --component-badge-size: 52px;
+        --component-card-padding: 28px 24px 26px;
+        --component-card-gap: 20px;
+        --component-input-min-height: 96px;
+        --component-input-padding: 18px;
+        --component-send-size: 48px;
+        --component-send-radius: 12px;
+        --component-choice-padding: 14px 18px;
+        --component-thinking-bar-height: 48px;
+      
+        /* Motion */
+        --duration-fast: 0.15s;
+        --ease-default: ease;
+      
+        /* Breakpoints (for reference in media queries) */
+        --breakpoint-mobile: 480px;
+        --breakpoint-tablet: 768px;
+      }
+      
+      /* Wider viewports: allow content to grow slightly, background still full bleed */
+      @media (min-width: 900px) {
+        :root {
+          --layout-wrap-max-width: 860px;
+          --layout-container-max-width: 820px;
+        }
+      }
+      
+      @media (min-width: 1100px) {
+        :root {
+          --layout-wrap-max-width: 960px;
+          --layout-container-max-width: 920px;
+        }
+      }
+      
+      /* Mobile: comfortable text and touch, no shrinking */
+      @media (max-width: 480px) {
+        :root {
+          --layout-wrap-padding: 20px 16px 15px;
+          --font-size-5xl: 28px;
+          --font-size-3xl: 22px;
+          --font-size-2xl: 18px;
+          --font-size-xl: 16px;
+          --component-step-size: 32px;
+          --component-step-line-width: 8px;
+          --component-badge-size: 44px;
+          --component-card-padding: 20px 16px 20px;
+          --component-send-size: 48px;
+        }
+      }
+      /**
+       * Base styles – full-bleed background, body, layout.
+       * Background always stretches to outer canvas; content in max-width container.
+       */
+      
+      * {
+        box-sizing: border-box;
+      }
+      
+      /* Form elements: inherit font from page so <button>/<input> don't fall back
+         to the browser's UA stylesheet (which defaults to ~13.3px). */
+      button, input, select, textarea {
+        font: inherit;
+      }
+      
+      html {
+        min-height: 100%;
+      }
+      
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font-sans);
+        font-weight: var(--font-weight-normal);
+        color: var(--text);
+        line-height: var(--line-height-normal);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        /* Full-bleed: background covers entire viewport */
+        background-color: var(--color-bg-page);
+        background-image: url("__ASSET_BG__");
+        background-size: cover;
+        background-position: center;
+        background-attachment: scroll;
+      }
+      
+      @media (min-width: 769px) {
+        body {
+          background-attachment: fixed;
+        }
+      }
+      
+      :focus {
+        outline: none;
+      }
+      :focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 2px;
+      }
+      
+      /* Content wrapper – max-width, centered; background extends behind it */
+      .wrap {
+        max-width: var(--layout-wrap-max-width);
+        margin: 0 auto;
+        padding: var(--layout-wrap-padding);
+        position: relative;
+      }
+      
+      @media print {
+        body {
+          background: #fff;
+          color: #000;
+        }
+        .wrap {
+          max-width: none;
+          padding: 0;
+        }
+      }
+      /**
+       * Redesign components – same selectors/IDs as step-card.template.html.
+       * Light-only; 768px base; full-bleed header and thinking bar.
+       */
+      
+      /* ─── Page header (full-bleed; same background as body, no dark strip) ─── */
+      .page-header {
+        width: 100%;
+        background: transparent;
+        color: var(--text);
+        padding: 0;
+        margin-bottom: 10px;
+        position: relative;
+      }
+      
+      .page-header .wrap {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        padding: 20px 24px 20px;
+        max-width: var(--layout-container-max-width);
+        margin: 0 auto;
+        background: rgba(255, 255, 255, var(--card-overlay-opacity, 0.55));
+        border-radius: 0 0 var(--radius-2xl) var(--radius-2xl);
+        box-shadow: var(--shadow);
+        border: 1px solid var(--color-border-default);
+        border-top: none;
+      }
+      
+      .page-header .title,
+      .page-header .subtitle,
+      .page-header .byline {
+        color: inherit;
+      }
+      
+      /* Title – flows in grid row 1, pushes stepper down naturally when wrapping */
+      .page-header .title {
+        grid-column: 1;
+        grid-row: 1;
+        font-size: var(--font-size-3xl);
+        font-weight: var(--font-weight-medium);
+        letter-spacing: var(--letter-spacing-tighter);
+        line-height: var(--line-height-title);
+        margin: 0;
+        padding-right: 16px;
+      }
+      
+      .title {
+        font-size: var(--font-size-3xl);
+        font-weight: var(--font-weight-medium);
+        letter-spacing: var(--letter-spacing-tighter);
+        line-height: var(--line-height-title);
+        margin: 0 0 var(--space-2);
+        max-width: 100%;
+      }
+      
+      .subtitle {
+        font-size: var(--font-size-sm);
+        color: var(--color-text-muted);
+        margin: 0 0 var(--space-6);
+        font-weight: var(--font-weight-medium);
+      }
+      
+      /* Subtitle placed after card in .wrap container */
+      .subtitle {
+        text-align: center;
+        color: #2b83e6;
+        font-size: var(--font-size-sm);
+        font-weight: var(--font-weight-medium);
+        margin: 13px 0 0;
+        padding: 0;
+        display: block;
+      }
+      
+      /* Byline – flows in grid row 1 col 2 (right of title) */
+      .page-header .byline {
+        grid-column: 2;
+        grid-row: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--space-1);
+        margin: 0;
+        font-size: var(--font-size-5);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-text-secondary);
+      }
+      
+      .byline {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--space-1);
+        margin: 0;
+        font-size: var(--font-size-5);
+        font-weight: var(--font-weight-medium);
+        color: var(--color-text-secondary);
+      }
+      
+      /* "A business model by" is in the SVG; hide the separate text in redesign */
+      .byline #byText {
+        display: none;
+      }
+      
+      .page-header .byline img,
+      .page-header .byline svg {
+        width: 126px;
+        height: auto;
+        display: block;
+        margin-top: 5px;
+      }
+      
+      .byline img,
+      .byline svg {
+        width: 126px;
+        height: auto;
+        display: block;
+      }
+      
+      .byline .bylineName {
+        font-size: var(--font-size-md);
+        font-weight: var(--font-weight-medium);
+        color: var(--text);
+      }
+      
+      .byline .bylineTagline {
+        font-size: var(--font-size-xs);
+        letter-spacing: var(--letter-spacing-wide);
+        color: var(--muted);
+      }
+      
+      /* ─── Stepper row: step title above + 11 steps; in header, inside 55% rounded block, no connecting lines ─── */
+      .stepperRow {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0;
+      }
+      
+      /* Header stepper row – visual container is now .page-header .wrap */
+      .page-header .stepperRow {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        width: 100%;
+        padding: 0;
+        margin: 0;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      
+      .page-header .stepper {
+        justify-content: space-between;
+        width: 100%;
+        gap: 4px;
+        margin-top: 32px; /* room for stepperTitle label above active step */
+      }
+      
+      .page-header .stepLine {
+        display: none;
+      }
+      
+      .stepperTitle {
+        font-size: var(--font-size-sm);
+        font-weight: var(--font-weight-normal);
+        color: var(--text);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+        margin: 0 0 6px 0;
+        white-space: nowrap;
+        width: auto;
+        min-width: max-content;
+        pointer-events: none; /* Prevent interfering with clicks if it overlaps */
+      }
+      
+      .stepperTitle.align-left {
+        left: 0;
+        transform: none;
+        text-align: left;
+      }
+      
+      .stepperTitle.align-right {
+        left: auto;
+        right: 0;
+        transform: none;
+        text-align: right;
+      }
+      
+      .stepper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        flex-wrap: nowrap;
+      }
+      
+      /* Step: number only + 5px bar underneath; no circles */
+      .step {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: auto;
+        min-width: 1.6em;
+        font-weight: var(--font-weight-normal);
+        font-size: var(--font-size-sm);
+        font-variant-numeric: tabular-nums;
+        color: #6e6e73;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }
+      
+      .step::before {
+        content: "";
+        display: block;
+        width: 56px;
+        height: 5px;
+        margin-bottom: 6px;
+        border-radius: 3px;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      }
+      
+      .step.active {
+        font-weight: var(--font-weight-medium);
+        color: #1d1d20;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+      }
+      
+      .step.active::before {
+        background: #2b83e6;
+        border-color: #2b83e6;
+      }
+      
+      .step.completed::before {
+        background: #2b83e6;
+        border-color: #2b83e6;
+      }
+      
+      .stepLine {
+        width: var(--component-step-line-width);
+        height: var(--component-step-line-height);
+        min-width: var(--component-step-line-width);
+        background: var(--line);
+      }
+      
+      /* Steps: flex to fill equal space so bars scale down on narrow viewports */
+      .page-header .step {
+        flex: 1 1 0;
+        min-width: 0;
+        font-weight: var(--font-weight-normal);
+        color: #6e6e73;
+      }
+      
+      .page-header .step.active {
+        font-weight: var(--font-weight-medium);
+        color: #1d1d20;
+      }
+      
+      .page-header .step::before {
+        width: 100%;
+        max-width: 56px;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      }
+      
+      .page-header .step.active::before {
+        background: #2b83e6;
+        border-color: #2b83e6;
+      }
+      
+      .page-header .step.completed::before {
+        background: #2b83e6;
+        border-color: #2b83e6;
+      }
+      
+      .page-header .stepLine {
+        display: none;
+      }
+      
+      /* ─── Section title (inside card, next to badge) ─── */
+      /* Visible when a main step starts. Hidden during substeps so cardDesc moves up. */
+      .sectionTitle {
+        font-size: var(--font-size-3xl);
+        font-weight: var(--font-weight-medium);
+        margin: 0 0 var(--space-3);
+        color: var(--text);
+        line-height: 1;
+      }
+      
+      /* Collapse when empty (substep) – content below shifts up naturally */
+      .sectionTitle:empty {
+        display: none;
+      }
+      
+      /* Programmatic hide via hidden attribute */
+      .sectionTitle[hidden] {
+        display: none !important;
+        margin: 0;
+      }
+      
+      /* ─── Card ─── */
+      .card {
+        max-width: var(--layout-container-max-width);
+        margin: 0 auto;
+        padding: var(--component-card-padding);
+        background: rgba(255, 255, 255, var(--card-overlay-opacity, 0.55));
+        border-radius: var(--radius-2xl);
+        box-shadow: var(--shadow);
+        border: 1px solid var(--color-border-default);
+      }
+      
+      .cardInner {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--component-card-gap);
+      }
+      
+      .cardInner > div:last-child {
+        flex: 1;
+        min-width: 0;
+      }
+      
+      /* Badge: step number only + 5px blue bar underneath; no circle */
+      .badge {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: auto;
+        min-width: 50px;
+        font-variant-numeric: tabular-nums;
+        color: var(--text);
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        font-weight: var(--font-weight-medium);
+        font-size: var(--font-size-3xl);
+        line-height: 1;
+        flex: 0 0 auto;
+        position: relative;
+      }
+      
+      .badge::after {
+        content: "";
+        display: block;
+        width: 50px;
+        height: 5px;
+        margin-top: 4px;
+        border-radius: 3px;
+        background: #2b83e6;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      /* Knight Rider animation for thinking state */
+      .badge.loading::after {
+        background: rgba(43, 131, 230, 0.2);
+      }
+      
+      .badge.loading::before {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 50px;
+        height: 5px;
+        border-radius: 3px;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      
+      .badge.loading::before {
+        background: linear-gradient(90deg, transparent, transparent 0px, var(--blue) 13px, transparent 37px, transparent);
+        background-size: 50px 5px;
+        background-position: -24px 0;
+        background-repeat: no-repeat;
+        animation: badgeKnightRider 2s ease-in-out infinite;
+      }
+      
+      @keyframes badgeKnightRider {
+        0% { background-position: -24px 0; }
+        50% { background-position: 24px 0; }
+        100% { background-position: -24px 0; }
+      }
+      
+      @media (prefers-reduced-motion: reduce) {
+        .badge.loading::before {
+          animation: none;
+          background-position: 0 0;
+        }
+      }
+      
+      .cardTitle {
+        display: none;
+      }
+      
+      .presentationPreview {
+        display: none;
+        margin-top: var(--space-4);
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+      }
+      
+      .presentationPreview.visible {
+        display: block;
+      }
+      
+      .presentationThumbLink {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+      }
+      
+      .presentationThumb {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        border-radius: var(--radius-md);
+        object-fit: contain;
+      }
+      
+      .presentationActions {
+        margin-top: var(--space-4);
+      }
+      
+      .presentationDownload {
+        display: inline-block;
+        border: 1px solid var(--color-brand-primary-border);
+        background: var(--color-brand-primary-subtle);
+        color: #2b83e6;
+        border-radius: 999px;
+        padding: var(--space-4) var(--space-5);
+        font-size: var(--font-size-md);
+        font-weight: var(--font-weight-medium);
+        cursor: pointer;
+        font-family: var(--font-sans);
+        text-decoration: none;
+        transition: background-color var(--duration-fast) var(--ease-default), 
+                    border-color var(--duration-fast) var(--ease-default), 
+                    color var(--duration-fast) var(--ease-default);
+      }
+      
+      .presentationDownload:hover {
+        opacity: 0.9;
+      }
+      
+      .cardDesc {
+        margin: 0;
+        padding: 0;
+        font-size: var(--font-size-lg);
+        line-height: var(--line-height-relaxed);
+        color: var(--color-text-secondary);
+        max-width: 100%;
+        white-space: pre-line;
+      }
+
+      .inlineNotice {
+        margin-top: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        font-size: var(--font-size-md);
+        line-height: var(--line-height-relaxed);
+        color: #6b4f00;
+        background: #fff3cd;
+        border: 1px solid #ffe08a;
+        border-radius: var(--radius-md);
+        display: none;
+      }
+      
+      .cardDesc ul {
+        margin: 0;
+        padding-left: 0;
+        list-style-position: inside;
+      }
+      
+      .cardDesc ul br:first-child {
+        display: none;
+      }
+      
+      .cardDesc li {
+        margin: 0;
+        padding-left: 0;
+      }
+      
+      /* ─── Image placeholder (OPTIONAL) ─── */
+      /* Design-time placeholder between cardDesc paragraphs.
+         Safe to omit entirely – content flows normally without it.
+         When present, shows a dashed outline where a future image will go. */
+      .cardDesc-image-placeholder {
+        min-height: 90px;
+        margin: var(--space-4) 0 var(--space-6);
+        border: 2px dashed var(--color-placeholder-image-border);
+        border-radius: var(--radius-md);
+        background: none;
+      }
+      
+      /* Hide placeholder programmatically without removing from DOM */
+      .cardDesc-image-placeholder[hidden] {
+        display: none !important;
+        margin: 0;
+      }
+      
+      /* Actual image in cardDesc after first paragraph (see IMAGE-INSERTION-IMPLEMENTATION.md) */
+      .cardDesc-image {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin: var(--space-4) 0;
+        border-radius: var(--radius-md);
+        object-fit: cover;
+      }
+      
+      /* Paragraph styling when cardDesc uses innerHTML with images */
+      .cardDesc-para {
+        margin: 0 0 var(--space-4);
+        font-size: var(--font-size-lg);
+        line-height: var(--line-height-relaxed);
+        color: var(--color-text-secondary);
+        white-space: pre-wrap;
+      }
+      
+      .cardDesc-para:last-child {
+        margin-bottom: 0;
+      }
+      
+      /* ─── Statements panel ─── */
+      .statementsPanel {
+        margin-top: var(--space-5);
+        margin-bottom: var(--space-5);
+      }
+      
+      .statementsTitle {
+        font-weight: var(--font-weight-medium);
+        font-size: var(--font-size-md);
+        color: var(--text);
+        margin-bottom: var(--space-2);
+      }
+      
+      .statementsCount {
+        font-size: var(--font-size-5);
+        color: var(--muted);
+        margin-bottom: var(--space-3);
+      }
+      
+      .statementsList {
+        font-size: var(--font-size-base);
+        line-height: var(--line-height-normal);
+        color: var(--text);
+        white-space: pre-wrap;
+      }
+      
+      /* ─── Scoring panel ─── */
+      .scoringPanel {
+        display: none;
+        margin-top: var(--space-5);
+        margin-bottom: var(--space-5);
+        max-width: 100%;
+      }
+      
+      .scoringPanel.visible {
+        display: block;
+      }
+      
+      .scoringIntro {
+        font-size: var(--font-size-xl);
+        line-height: var(--line-height-relaxed);
+        color: var(--muted);
+        margin-bottom: var(--space-8);
+        white-space: pre-wrap;
+      }
+      
+      .scoringCluster {
+        margin-bottom: var(--space-10);
+      }
+      
+      .scoringClusterHeader {
+        font-weight: var(--font-weight-medium);
+        font-size: var(--font-size-md);
+        color: var(--text);
+        margin-bottom: var(--space-3);
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+        flex-wrap: wrap;
+      }
+      
+      .scoringClusterHeader .themeName {
+        flex: 1 1 auto;
+      }
+      
+      .scoringClusterHeader .avgScore,
+      .scoringClusterHeader .filledCount {
+        color: var(--muted);
+        font-size: var(--font-size-5);
+        font-weight: var(--font-weight-medium);
+      }
+      
+      .scoringClusterRows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      
+      .scoringRow {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+      }
+      
+      .scoringRow .statementText {
+        flex: 1 1 auto;
+        font-size: var(--font-size-base);
+        line-height: 1.4;
+        color: var(--text);
+      }
+      
+      .scoringRow input.scoreInput {
+        width: 56px;
+        min-width: 56px;
+        padding: var(--space-3) var(--space-4);
+        font-size: var(--font-size-md);
+        text-align: center;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+      }
+      
+      .scoringRow input.scoreInput:focus {
+        outline: none;
+        border-color: var(--blue);
+      }
+      
+      .scoringContinueWrap {
+        margin-top: var(--space-10);
+      }
+      
+      .scoringContinueWrap .btn {
+        min-width: 140px;
+      }
+      
+      .scoringContinueWrap .btn:disabled {
+        opacity: 1;
+        cursor: not-allowed;
+      }
+      
+      /* ─── Prompt ─── */
+      .prompt {
+        font-size: var(--font-size-2xl);
+        font-weight: var(--font-weight-medium);
+        margin: var(--space-4) 0 var(--space-4);
+        letter-spacing: var(--letter-spacing-tight);
+        white-space: pre-wrap;
+        color: var(--text);
+      }
+      
+      /* ─── Input + Send (textbox background: top-right, no scale) ─── */
+      .inputWrap {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--space-4);
+        margin-top: var(--space-4);
+      }
+      
+      .inputWrap textarea {
+        width: 100%;
+        min-height: var(--component-input-min-height);
+        padding: var(--component-input-padding);
+        font-size: var(--font-size-lg);
+        color: #000000;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        resize: vertical;
+        outline: none;
+        font-family: var(--font-sans);
+        transition: border-color var(--duration-fast) var(--ease-default);
+        background-color: var(--card);
+        background-image: url("__ASSET_TEXTBOX_BG__");
+        background-repeat: no-repeat;
+        background-position: top right;
+        background-size: auto;
+        -webkit-font-smoothing: subpixel-antialiased;
+        -moz-osx-font-smoothing: unset;
+        text-rendering: optimizeLegibility;
+        opacity: 1;
+      }
+      
+      .inputWrap textarea::placeholder {
+        color: var(--color-text-placeholder);
+      }
+      
+      .inputWrap textarea:disabled {
+        background-color: var(--color-ui-disabled-bg);
+        background-image: none;
+        color: var(--color-text-placeholder);
+        cursor: not-allowed;
+      }
+      
+      /* Send button – blue gradient + icon from assets */
+      .send {
+        width: var(--component-send-size);
+        height: var(--component-send-size);
+        min-width: var(--component-send-size);
+        min-height: var(--component-send-size);
+        border: none;
+        border-radius: var(--component-send-radius);
+        background: linear-gradient(180deg, var(--color-brand-gradient-start), var(--color-brand-gradient-end));
+        color: #fff;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: opacity var(--duration-fast) var(--ease-default);
+      }
+      
+      .send:hover:not(:disabled) {
+        opacity: 0.95;
+      }
+      
+      .send img,
+      .send svg {
+        width: 24px;
+        height: 24px;
+        object-fit: contain;
+      }
+      
+      .send:disabled {
+        background: var(--stepOff);
+        color: var(--color-ui-disabled-text);
+        cursor: not-allowed;
+      }
+      
+      /* ─── Choice buttons (light blue bg, blue text, fully rounded, semi-bold) ─── */
+      .choiceWrap {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        margin-top: var(--space-4);
+      }
+      
+      .choiceBtn {
+        width: 100%;
+        padding: var(--space-4) var(--space-5);
+        font-size: var(--font-size-md);
+        font-weight: var(--font-weight-medium);
+        text-align: left;
+        border: 1px solid var(--color-brand-primary-border);
+        border-radius: 999px; /* Fully rounded pill shape */
+        background: var(--color-brand-primary-subtle);
+        color: #2b83e6;
+        cursor: pointer;
+        font-family: var(--font-sans);
+        transition: background-color var(--duration-fast) var(--ease-default), border-color var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default);
+      }
+      
+      .choiceBtn:disabled {
+        background: var(--color-ui-disabled-bg);
+        border-color: var(--line);
+        color: var(--color-ui-disabled-text);
+        cursor: not-allowed;
+      }
+      
+      .choiceError {
+        padding: var(--space-4) var(--space-5);
+        font-size: var(--font-size-sm);
+        color: var(--color-text-muted);
+      }
+      
+      /* ─── Thinking (in-card text, for widget) ─── */
+      .thinking {
+        margin: 0;
+        color: var(--muted);
+        font-weight: var(--font-weight-medium);
+      }
+      
+      /* ─── Thinking bar (hidden – animation lives on .badge.loading instead) ─── */
+      /* HTML kept for widget compatibility; visually replaced by badge animation. */
+      .thinking-bar {
+        display: none;
+      }
+      
+      body.has-thinking-bar {
+        padding-bottom: 0;
+      }
+      
+      /* ─── Controls row ─── */
+      .row {
+        display: flex;
+        justify-content: flex-start;
+        gap: var(--space-4);
+        margin-top: var(--space-4);
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+      
+      .btn {
+        display: inline-flex;
+        justify-content: flex-start;
+        text-align: left;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--text);
+        border-radius: 999px;
+        padding: var(--space-4) var(--space-5);
+        font-size: var(--font-size-md);          /* 16px – explicit to avoid UA default */
+        font-weight: var(--font-weight-medium);
+        cursor: pointer;
+        font-family: var(--font-sans);
+        transition: background-color var(--duration-fast) var(--ease-default), border-color var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default);
+      }
+      
+      .btn.primary {
+        border-color: var(--color-brand-primary-border);
+        background: var(--color-brand-primary-subtle);
+        color: #2b83e6;
+      }
+      
+      .btn:disabled {
+        background: var(--color-ui-disabled-bg);
+        border-color: var(--line);
+        color: var(--color-ui-disabled-text);
+        cursor: not-allowed;
+      }
+      
+      #btnStart {
+        border-radius: 23px;
+        width: fit-content;
+        max-width: 100%;
+      }
+      
+      .startHint {
+        color: var(--muted);
+        font-weight: var(--font-weight-medium);
+        margin-left: var(--space-1);
+      }
+      
+      /* ─── Status (hidden) ─── */
+      .status {
+        display: none;
+      }
+      
+      /* ─── Debug overlay ─── */
+      #debugOverlay {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        max-height: 220px;
+        overflow: auto;
+        background: rgba(28, 28, 31, 0.94);
+        color: #e8e8ed;
+        font-family: ui-monospace, monospace;
+        font-size: var(--font-size-xs);
+        line-height: 1.35;
+        padding: var(--space-4);
+        border-top: 1px solid var(--line);
+        white-space: pre-wrap;
+        word-break: break-word;
+        z-index: 100;
+      }
+      
+      #debugOverlay.visible {
+        display: block;
+      }
+      
+      /* ─── Tablet: tighten header padding, scale down byline logo ─── */
+      @media (max-width: 600px) {
+        .page-header .wrap {
+          padding: 16px 16px 16px;
+        }
+      
+        .page-header .byline img,
+        .page-header .byline svg {
+          width: 100px;
+        }
+      }
+      
+      /* ─── Mobile: reflow, no shrinking text ─── */
+      @media (max-width: 480px) {
+        .page-header .wrap {
+          grid-template-columns: 1fr;
+          padding: 16px 16px 16px;
+        }
+      
+        .page-header .title {
+          padding-right: 0;
+        }
+      
+        .page-header .byline {
+          grid-column: 1;
+          grid-row: 2;
+          align-items: flex-start;
+          margin-top: var(--space-2);
+        }
+      
+        .page-header .stepperRow {
+          grid-row: 3;
+        }
+      
+        .page-header .stepper {
+          margin-top: 28px;
+        }
+      
+        .page-header .byline img,
+        .page-header .byline svg {
+          width: 100px;
+        }
+      
+        .stepper {
+          gap: 0;
+        }
+      
+        .cardInner {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+      
+        .inputWrap {
+          flex-direction: column;
+          align-items: stretch;
+        }
+      
+        .send {
+          align-self: flex-end;
+        }
+      }
+      
+    </style>
+  </head>
+
+  <body>
+    <header class="page-header">
+      <div class="wrap">
+        <div class="title" id="uiTitle">Business Strategy Canvas Builder</div>
+        <div class="byline">
+          <span id="byText">A business model by</span>
+          <img
+            src="__ASSET_HERO_SVG__"
+            alt="Ben Steenstra – When it feels right it works"
+            width="126"
+            height="50"
+          />
+        </div>
+        <div class="stepperRow">
+          <div class="stepper" id="stepper"></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div class="card">
+        <div class="cardInner">
+          <div class="badge" id="badge">1</div>
+          <div style="flex:1">
+            <div class="sectionTitle" id="sectionTitle"></div>
+            <div class="cardTitle" id="cardTitle"></div>
+
+          <div class="cardDesc" id="cardDesc"></div>
+          <div class="inlineNotice" id="inlineNotice"></div>
+          <div class="presentationPreview" id="presentationPreview">
+            <a class="presentationThumbLink" id="presentationThumbLink" target="_blank" rel="noopener noreferrer">
+              <img class="presentationThumb" id="presentationThumb" alt="Presentation preview" />
+            </a>
+            <div class="presentationActions">
+              <a class="presentationDownload" id="presentationDownload" target="_blank" rel="noopener noreferrer">Download PDF</a>
+            </div>
+          </div>
+            <div class="purposeInstructionHint" id="purposeInstructionHint" style="display: none;"></div>
+            <div id="statementsPanel" class="statementsPanel" style="display:none">
+              <div class="statementsTitle" id="statementsTitle"></div>
+              <div class="statementsCount" id="statementsCount"></div>
+              <div class="statementsList" id="statementsList"></div>
+            </div>
+            <div id="scoringPanel" class="scoringPanel">
+              <div class="scoringIntro" id="scoringIntro"></div>
+              <div id="scoringClusters"></div>
+              <div class="scoringContinueWrap">
+                <button type="button" class="btn primary" id="btnScoringContinue" disabled>Formulate my dream based on what I find important.</button>
+              </div>
+            </div>
+            <div class="prompt" id="prompt"></div>
+
+            <div class="inputWrap" id="inputWrap" style="display:none">
+              <textarea id="input" placeholder=""></textarea>
+              <button class="send" id="send" title="Send" disabled>
+                <img src="__ASSET_SEND_ICON__" alt="">
+              </button>
+            </div>
+
+            <div class="choiceWrap" id="choiceWrap" style="display:none"></div>
+
+            <div class="row" id="controls">
+              <button class="btn primary" id="btnStart">Start</button>
+              <div class="startHint" id="startHint"></div>
+              <button class="btn primary" id="btnOk" style="display:none">Continue</button>
+              <button class="btn primary" id="btnGoToNextStep" style="display:none">Go to next step</button>
+              <button class="btn primary" id="btnStartDreamExercise" style="display:none">Start the exercise</button>
+              <button class="btn" id="btnSwitchToSelfDream" style="display:none">Switch back to self-formulate the dream</button>
+              <button class="btn primary" id="btnDreamConfirm" style="display:none">I'm happy with this formulation, continue to the Purpose step</button>
+            </div>
+
+            <div class="status" id="status"></div>
+          </div>
+        </div>
+      </div>
+      <div class="subtitle" id="uiSubtitle"></div>
+      <div id="debugOverlay" class="" aria-hidden="true"></div>
+    </div>
+
+    <!-- INLINE_BUNDLE -->
+  </body>
+</html>

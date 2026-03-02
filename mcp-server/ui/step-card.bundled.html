@@ -126,6 +126,12 @@
         white-space: nowrap;
       }
 
+      .bylineLogo {
+        width: 126px;
+        height: auto;
+        display: inline-block;
+      }
+
       .byMark {
         display: inline-flex;
         align-items: center;
@@ -373,6 +379,64 @@
         line-height: 1.6;
       }
 
+      .prestartWelcome {
+        display: grid;
+        gap: 10px;
+      }
+
+      .prestartHeadline {
+        margin: 0;
+      }
+
+      .prestartBlockTitle {
+        margin: 0 0 4px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #3b2a20;
+        letter-spacing: 0.02em;
+      }
+
+      .prestartBlockBody {
+        margin: 0;
+      }
+
+      .prestartOutcomes {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .prestartOutcomes li {
+        margin: 4px 0 0;
+      }
+
+      .prestartMetaGrid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 14px;
+      }
+
+      .prestartMetaItem {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.55);
+        padding: 8px 10px;
+      }
+
+      .prestartMetaLabel {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: #8a7a6d;
+      }
+
+      .prestartMetaValue {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #4f3b2d;
+      }
+
       .inlineNotice {
         padding: 9px 12px;
         border: 1px solid rgba(232, 116, 42, 0.32);
@@ -549,6 +613,10 @@
           height: 3px;
         }
 
+        .bylineLogo {
+          width: 100px;
+        }
+
         .shell {
           border-radius: 18px;
         }
@@ -574,6 +642,10 @@
         .prompt {
           font-size: 28px;
         }
+
+        .prestartMetaGrid {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
@@ -583,7 +655,14 @@
         <h1 class="title" id="uiTitle">Business Strategy Canvas Builder</h1>
         <div class="byline">
           <span id="byText">A business model by</span>
-          <span class="byMark">Ben Steenstra</span>
+          <img
+            id="bylineLogo"
+            class="bylineLogo"
+            src="/ui/assets/business-model_by_ben-steenstra.svg"
+            alt="Ben Steenstra"
+            width="126"
+            height="50"
+          />
           <span class="meta" id="meta"></span>
         </div>
         <div class="stepperRow" aria-hidden="true">
@@ -726,6 +805,7 @@
           mode: "",
           loading: false,
           actions: [],
+          fallbackChoices: [],
           textSubmit: null,
         };
 
@@ -878,7 +958,16 @@
 
         function preferredLanguage() {
           var state = toRecord(runtime.state);
-          var explicit = normalizeLocaleTag(state.language || state.ui_strings_lang || state.ui_strings_requested_lang);
+          var hostState = toRecord(toRecord(openAiApi()).widgetState);
+          var explicit = normalizeLocaleTag(
+            state.language ||
+            state.ui_strings_lang ||
+            state.ui_strings_requested_lang ||
+            hostState.language ||
+            hostState.locale ||
+            hostState.ui_strings_lang ||
+            hostState.ui_strings_requested_lang
+          );
           if (explicit) return explicit;
           var navigatorLanguage = normalizeLocaleTag(asText(globalThis.navigator && globalThis.navigator.language));
           return navigatorLanguage || "en";
@@ -989,6 +1078,74 @@
           return body || localUi.prestartText;
         }
 
+        function buildPrestartBodyMarkup(state, localUi) {
+          var headline = asText(uiString(state, "prestart.headline") || localUi.prestartText);
+          var provenTitle = asText(uiString(state, "prestart.proven.title"));
+          var provenBody = asText(uiString(state, "prestart.proven.body"));
+          var outcomesTitle = asText(uiString(state, "prestart.outcomes.title"));
+          var outcome1 = asText(uiString(state, "prestart.outcomes.item1"));
+          var outcome2 = asText(uiString(state, "prestart.outcomes.item2"));
+          var outcome3 = asText(uiString(state, "prestart.outcomes.item3"));
+          var howLabel = asText(uiString(state, "prestart.meta.how.label"));
+          var howValue = asText(uiString(state, "prestart.meta.how.value"));
+          var timeLabel = asText(uiString(state, "prestart.meta.time.label"));
+          var timeValue = asText(uiString(state, "prestart.meta.time.value"));
+
+          var hasRich =
+            provenTitle.length > 0 ||
+            provenBody.length > 0 ||
+            outcomesTitle.length > 0 ||
+            outcome1.length > 0 ||
+            outcome2.length > 0 ||
+            outcome3.length > 0 ||
+            howLabel.length > 0 ||
+            howValue.length > 0 ||
+            timeLabel.length > 0 ||
+            timeValue.length > 0;
+          if (!hasRich) return "";
+
+          var html = '<div class="prestartWelcome">';
+          if (headline) {
+            html += '<p class="prestartHeadline">' + escapeHtml(headline) + "</p>";
+          }
+          if (provenTitle || provenBody) {
+            html += '<section class="prestartBlock">';
+            if (provenTitle) {
+              html += '<h3 class="prestartBlockTitle">' + escapeHtml(provenTitle) + "</h3>";
+            }
+            if (provenBody) {
+              html += '<p class="prestartBlockBody">' + escapeHtml(provenBody) + "</p>";
+            }
+            html += "</section>";
+          }
+          if (outcomesTitle || outcome1 || outcome2 || outcome3) {
+            html += '<section class="prestartBlock">';
+            if (outcomesTitle) {
+              html += '<h3 class="prestartBlockTitle">' + escapeHtml(outcomesTitle) + "</h3>";
+            }
+            html += '<ul class="prestartOutcomes">';
+            if (outcome1) html += "<li>" + escapeHtml(outcome1) + "</li>";
+            if (outcome2) html += "<li>" + escapeHtml(outcome2) + "</li>";
+            if (outcome3) html += "<li>" + escapeHtml(outcome3) + "</li>";
+            html += "</ul>";
+            html += "</section>";
+          }
+          if (howLabel || howValue || timeLabel || timeValue) {
+            html += '<div class="prestartMetaGrid">';
+            if (howLabel || howValue) {
+              html += '<div class="prestartMetaItem"><span class="prestartMetaLabel">' + escapeHtml(howLabel || "How") + "</span>";
+              html += '<span class="prestartMetaValue">' + escapeHtml(howValue || "") + "</span></div>";
+            }
+            if (timeLabel || timeValue) {
+              html += '<div class="prestartMetaItem"><span class="prestartMetaLabel">' + escapeHtml(timeLabel || "Time") + "</span>";
+              html += '<span class="prestartMetaValue">' + escapeHtml(timeValue || "") + "</span></div>";
+            }
+            html += "</div>";
+          }
+          html += "</div>";
+          return html;
+        }
+
         function deriveStepBadge(stepId) {
           var normalized = asText(stepId);
           var match = /^step_(\d+)$/i.exec(normalized);
@@ -1029,6 +1186,36 @@
           var escaped = escapeHtml(text);
           var bolded = escaped.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
           return bolded.replace(/\r?\n/g, "<br>");
+        }
+
+        function parseNumberedChoices(text) {
+          var raw = String(text || "");
+          if (!raw) return [];
+          var lines = raw.split(/\r?\n/);
+          var choices = [];
+          for (var i = 0; i < lines.length; i += 1) {
+            var line = asText(lines[i]);
+            if (!line) continue;
+            var match = /^\s*(\d+)[\)\.\-:]\s*(.+?)\s*$/.exec(line);
+            if (!match) continue;
+            var label = asText(match[2]);
+            if (!label) continue;
+            choices.push({ label: label, ordinal: Number(match[1]) || choices.length + 1 });
+          }
+          return choices;
+        }
+
+        function stripNumberedChoiceLines(text) {
+          var raw = String(text || "");
+          if (!raw) return "";
+          var lines = raw.split(/\r?\n/);
+          var kept = [];
+          for (var i = 0; i < lines.length; i += 1) {
+            var line = lines[i];
+            if (/^\s*\d+[\)\.\-:]\s+\S/.test(line)) continue;
+            kept.push(line);
+          }
+          return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
         }
 
         function looksLikeWidgetResult(candidateRaw) {
@@ -1186,7 +1373,26 @@
             })(nonText[j]);
           }
 
+          if (nonText.length === 0 && mode === "interactive" && Array.isArray(runtime.fallbackChoices) && runtime.fallbackChoices.length > 0) {
+            for (var k = 0; k < runtime.fallbackChoices.length; k += 1) {
+              (function (choiceLabel) {
+                var button = document.createElement("button");
+                button.type = "button";
+                button.textContent = choiceLabel;
+                button.disabled = runtime.loading;
+                button.addEventListener("click", function () {
+                  if (runtime.loading) return;
+                  callRunStep(choiceLabel, {});
+                });
+                ui.actions.appendChild(button);
+              })(runtime.fallbackChoices[k].label);
+            }
+          }
+
           var showActionButtons = nonText.length > 0;
+          if (!showActionButtons && mode === "interactive" && Array.isArray(runtime.fallbackChoices) && runtime.fallbackChoices.length > 0) {
+            showActionButtons = true;
+          }
           setHidden(ui.actions, !showActionButtons);
 
           var showInput = mode === "interactive" && runtime.textSubmit && runtime.textSubmit.payloadMode !== "scores";
@@ -1215,6 +1421,7 @@
           runtime.state = state;
           runtime.mode = mode;
           runtime.actions = parseActions(result);
+          runtime.fallbackChoices = [];
 
           var stepText = asText(state.current_step || result.current_step_id) || "step_0";
           var sectionTitleText =
@@ -1253,10 +1460,31 @@
             bodyText = buildPrestartBodyText(state, localUi);
             promptText = asText(uiString(state, "startHint") || localUi.startHint);
           }
+
+          var nonTextActionCount = 0;
+          for (var actionIndex = 0; actionIndex < runtime.actions.length; actionIndex += 1) {
+            if (runtime.actions[actionIndex].role !== "text_submit") nonTextActionCount += 1;
+          }
+          if (mode === "interactive" && nonTextActionCount === 0) {
+            var parsedChoices = parseNumberedChoices(promptText);
+            if (parsedChoices.length === 0) {
+              parsedChoices = parseNumberedChoices(bodyText);
+            }
+            if (parsedChoices.length > 0) {
+              runtime.fallbackChoices = parsedChoices;
+              bodyText = stripNumberedChoiceLines(bodyText);
+              promptText = stripNumberedChoiceLines(promptText);
+            }
+          }
+
           if (mode === "interactive" && bodyText.length === 0 && promptText.length === 0) {
             promptText = uiString(state, "step0.question.initial") || "Share your thoughts or choose an option.";
           }
           if (ui.cardDesc) ui.cardDesc.innerHTML = formatText(bodyText);
+          if (mode === "prestart" && ui.cardDesc) {
+            var prestartMarkup = buildPrestartBodyMarkup(state, localUi);
+            if (prestartMarkup) ui.cardDesc.innerHTML = prestartMarkup;
+          }
           if (ui.card) ui.card.textContent = "";
           if (ui.prompt) ui.prompt.textContent = promptText;
           setHidden(ui.cardDesc, bodyText.length === 0);
@@ -1353,6 +1581,7 @@
           var payload = readInitialToolOutput();
           if (Object.keys(extractWidgetResult(payload)).length === 0) {
             console.warn("[ui_set_globals_payload_missing_widget_result]");
+            ingest(buildFallbackPrestartResult(), "set_globals_fallback");
             return;
           }
           ingest(payload, "set_globals");
