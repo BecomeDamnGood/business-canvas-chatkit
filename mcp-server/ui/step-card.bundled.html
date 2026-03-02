@@ -3,397 +3,339 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap"
-      rel="stylesheet"
-    />
-    <title>Business Canvas Widget</title>
+    <title>The Business Strategy Canvas Builder</title>
     <style>
       :root {
-        color-scheme: light;
-        --cream: #f5efe7;
-        --cream-soft: #fbf7f2;
-        --paper: rgba(255, 255, 255, 0.64);
-        --paper-strong: rgba(255, 255, 255, 0.82);
-        --ink: #231912;
-        --muted: #7f7064;
-        --line: rgba(88, 60, 40, 0.13);
-        --brand: #e8742a;
-        --brand-soft: rgba(232, 116, 42, 0.16);
-        --danger: #a13235;
-        --shadow-lg: 0 24px 60px rgba(58, 37, 22, 0.18);
-        --shadow-md: 0 12px 28px rgba(58, 37, 22, 0.11);
-        --radius-xl: 28px;
-        --radius-lg: 20px;
-        --radius-md: 14px;
+        --text: #1d1d1f;
+        --muted: #6e6e73;
+        --line: #e5e5ea;
+        --bg: #f5f5f7;
+        --card: #ffffff;
+        --shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+        --blue: #2b83e6;
+        --stepOff: #e8e8ed;
       }
 
       * {
         box-sizing: border-box;
       }
 
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      html {
+        min-height: 100%;
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
-        background: linear-gradient(170deg, var(--cream-soft) 0%, var(--cream) 100%);
-        color: var(--ink);
-        font: 15px/1.5 "DM Sans", "Segoe UI", "Helvetica Neue", sans-serif;
-        padding: 20px 10px 30px;
-        position: relative;
-        overflow-x: hidden;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-size: 15px;
+        color: var(--text);
+        line-height: 1.47;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background-color: var(--bg);
+        background-image: url("/ui/assets/background.jpg");
+        background-size: cover;
+        background-position: center;
+        background-attachment: scroll;
       }
 
-      body::before,
-      body::after {
-        content: "";
-        position: fixed;
-        pointer-events: none;
-        z-index: -1;
-        filter: blur(1px);
-      }
-
-      body::before {
-        width: 560px;
-        height: 560px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(232, 116, 42, 0.25) 0%, rgba(232, 116, 42, 0) 70%);
-        top: -150px;
-        right: -150px;
-        animation: floatA 8s ease-in-out infinite alternate;
-      }
-
-      body::after {
-        width: 380px;
-        height: 380px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(184, 110, 61, 0.2) 0%, rgba(184, 110, 61, 0) 70%);
-        left: -120px;
-        bottom: -120px;
-        animation: floatB 10s ease-in-out infinite alternate;
-      }
-
-      @keyframes floatA {
-        from {
-          transform: translate(0, 0) scale(1);
-        }
-        to {
-          transform: translate(18px, 24px) scale(1.06);
+      @media (min-width: 769px) {
+        body {
+          background-attachment: fixed;
         }
       }
 
-      @keyframes floatB {
-        from {
-          transform: translate(0, 0) scale(1);
-        }
-        to {
-          transform: translate(-12px, -16px) scale(1.08);
-        }
+      :focus {
+        outline: none;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 2px;
       }
 
       .wrap {
-        width: min(760px, 100%);
+        max-width: 768px;
         margin: 0 auto;
+        padding: 0 24px 15px;
+        position: relative;
       }
 
       .page-header {
-        margin-bottom: 18px;
+        width: 100%;
+        background: transparent;
+        color: var(--text);
+        padding: 0;
+        margin-bottom: 10px;
+        position: relative;
       }
 
       .page-header .wrap {
         display: grid;
         grid-template-columns: 1fr auto;
-        gap: 8px 18px;
-        align-items: end;
+        align-items: start;
+        padding: 20px 24px 20px;
+        max-width: 720px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.55);
+        border-radius: 0 0 20px 20px;
+        box-shadow: var(--shadow);
+        border: 1px solid var(--line);
+        border-top: none;
       }
 
       .title {
-        font-family: "DM Serif Display", Georgia, serif;
-        font-size: 34px;
-        line-height: 1.1;
-        letter-spacing: -0.01em;
-        color: #2d2118;
+        grid-column: 1;
+        grid-row: 1;
+        font-size: 26px;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+        line-height: 1.2;
         margin: 0;
+        padding-right: 16px;
       }
 
       .byline {
+        grid-column: 2;
+        grid-row: 1;
         display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        color: var(--muted);
-        white-space: nowrap;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #424245;
+      }
+
+      .byline #byText {
+        display: none;
       }
 
       .bylineLogo {
         width: 126px;
         height: auto;
-        display: inline-block;
+        display: block;
+        margin-top: 5px;
       }
 
-      .byMark {
-        display: inline-flex;
-        align-items: center;
-        padding: 3px 9px;
-        border-radius: 999px;
-        border: 1px solid rgba(232, 116, 42, 0.35);
-        background: rgba(232, 116, 42, 0.09);
-        color: #7d471f;
-        font-weight: 600;
-        font-size: 11px;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
+      .meta {
+        display: none;
       }
 
       .stepperRow {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0;
+      }
+
+      .page-header .stepperRow {
         grid-column: 1 / -1;
-        border-top: 1px dashed rgba(96, 66, 43, 0.2);
-        padding-top: 8px;
+        grid-row: 2;
+        width: 100%;
+        padding: 0;
+        margin: 0;
       }
 
       .stepper {
         display: flex;
         align-items: center;
-        gap: 6px;
+        justify-content: center;
+        gap: 0;
+        flex-wrap: nowrap;
       }
 
-      .stepper i {
+      .page-header .stepper {
+        justify-content: space-between;
+        width: 100%;
+        gap: 4px;
+        margin-top: 32px;
+      }
+
+      .step {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: auto;
+        min-width: 1.6em;
+        font-weight: 400;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        color: #6e6e73;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        flex: 1 1 0;
+      }
+
+      .step::before {
+        content: "";
         display: block;
-        width: 24px;
-        height: 4px;
-        border-radius: 999px;
-        background: rgba(35, 25, 18, 0.14);
+        width: 100%;
+        max-width: 56px;
+        height: 5px;
+        margin-bottom: 6px;
+        border-radius: 3px;
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
       }
 
-      .stepper i:nth-child(-n + 2) {
-        background: rgba(232, 116, 42, 0.44);
+      .step.active {
+        font-weight: 600;
+        color: #1d1d20;
+      }
+
+      .step.active::before,
+      .step.completed::before {
+        background: var(--blue);
+        border-color: var(--blue);
+      }
+
+      .stepperTitle {
+        font-size: 13px;
+        font-weight: 400;
+        color: var(--text);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+        margin: 0 0 6px;
+        white-space: nowrap;
+        width: auto;
+        min-width: max-content;
+        pointer-events: none;
+      }
+
+      .stepperTitle.align-left {
+        left: 0;
+        transform: none;
+        text-align: left;
+      }
+
+      .stepperTitle.align-right {
+        left: auto;
+        right: 0;
+        transform: none;
+        text-align: right;
+      }
+
+      .stepLine {
+        display: none;
       }
 
       .card-stage {
-        position: relative;
-      }
-
-      .card-stage::before {
-        content: "";
-        position: absolute;
-        inset: 16px 14px auto 14px;
-        height: 68px;
-        border-radius: var(--radius-xl);
-        background: rgba(232, 116, 42, 0.11);
-        filter: blur(10px);
-        z-index: 0;
+        max-width: 720px;
+        margin: 0 auto;
       }
 
       .shell {
-        position: relative;
-        z-index: 1;
         width: 100%;
         margin: 0;
-        background: linear-gradient(180deg, var(--paper-strong), var(--paper));
+        background: rgba(255, 255, 255, 0.55);
+        border-radius: 20px;
+        box-shadow: var(--shadow);
         border: 1px solid var(--line);
-        border-radius: var(--radius-xl);
-        box-shadow: var(--shadow-lg);
-        overflow: hidden;
-        backdrop-filter: blur(14px);
       }
 
-      .bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 16px 18px;
-        border-bottom: 1px solid var(--line);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 243, 237, 0.88));
-      }
-
+      .bar,
       .status {
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: none;
-        color: #5d3821;
-        background: rgba(232, 116, 42, 0.1);
-        border: 1px solid rgba(232, 116, 42, 0.42);
-        border-radius: 999px;
-        padding: 5px 10px;
-        min-width: 58px;
-        min-height: 26px;
-      }
-
-      .meta {
-        color: var(--muted);
-        font-size: 12px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        min-height: 20px;
-      }
-
-      .cardInner {
-        display: grid;
-        gap: 10px;
-      }
-
-      .badge {
-        font-family: "DM Serif Display", Georgia, serif;
-        font-size: 40px;
-        line-height: 1;
-        color: rgba(232, 116, 42, 0.92);
-        letter-spacing: -0.015em;
-      }
-
-      .sectionTitle {
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: #8a7a6d;
+        display: none;
       }
 
       .body {
-        padding: 16px 18px 18px;
-        display: grid;
-        gap: 14px;
-        background:
-          linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0.44)),
-          linear-gradient(120deg, rgba(255, 243, 230, 0.53) 0%, rgba(255, 255, 255, 0.2) 62%);
+        padding: 28px 24px 26px;
       }
 
-      .card,
-      .prompt,
-      .error {
-        margin: 0;
-        white-space: pre-wrap;
+      .cardInner {
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+      }
+
+      .badge {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: auto;
+        min-width: 50px;
+        font-variant-numeric: tabular-nums;
+        color: var(--text);
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        font-weight: 600;
+        font-size: 26px;
+        line-height: 1;
+        flex: 0 0 auto;
+      }
+
+      .badge::after {
+        content: "";
+        display: block;
+        width: 50px;
+        height: 5px;
+        margin-top: 4px;
+        border-radius: 3px;
+        background: var(--blue);
+      }
+
+      .sectionTitle {
+        font-size: 26px;
+        font-weight: 600;
+        margin: 0 0 8px;
+        color: var(--text);
+        line-height: 1;
       }
 
       .card {
-        background: rgba(252, 248, 242, 0.9);
-        border: 1px solid var(--line);
-        border-radius: var(--radius-md);
-        padding: 12px 14px 11px;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-      }
-
-      .prompt {
-        border-top: 1px dashed rgba(96, 66, 43, 0.26);
-        padding-top: 12px;
-        font-family: "DM Serif Display", Georgia, serif;
-        font-size: 40px;
-        line-height: 1.32;
-        letter-spacing: 0;
-        color: var(--ink);
-      }
-
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-
-      button {
-        border: 1px solid rgba(232, 116, 42, 0.55);
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--brand) 13%, #fff);
-        color: #4e2910;
-        font: inherit;
-        font-weight: 600;
-        padding: 9px 14px;
-        cursor: pointer;
-        transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
-      }
-
-      button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 7px 14px rgba(152, 83, 41, 0.2);
-        background: color-mix(in srgb, var(--brand) 19%, #fff);
-      }
-
-      button[disabled] {
-        opacity: 0.5;
-        cursor: default;
-        box-shadow: none;
-        transform: none;
-      }
-
-      .input {
-        display: grid;
-        gap: 8px;
-      }
-
-      textarea {
-        width: 100%;
-        min-height: 98px;
-        resize: vertical;
-        border: 1px solid var(--line);
-        border-radius: var(--radius-md);
-        padding: 12px 13px;
-        font: inherit;
-        color: var(--ink);
-        background: rgba(255, 255, 255, 0.86);
-      }
-
-      textarea:focus-visible {
-        outline: 2px solid rgba(232, 116, 42, 0.38);
-        outline-offset: 0;
-        border-color: rgba(232, 116, 42, 0.48);
-      }
-
-      #inputSend {
-        justify-self: stretch;
-        border-radius: var(--radius-md);
-        padding: 10px 14px;
-        background: linear-gradient(180deg, rgba(241, 204, 178, 0.3), rgba(232, 116, 42, 0.24));
-      }
-
-      .error {
-        color: var(--danger);
-        border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
-        border-radius: var(--radius-md);
-        padding: 10px 12px;
-        background: color-mix(in srgb, var(--danger) 6%, #fff);
-      }
-
-      .subtitle {
-        margin-top: 12px;
-        font-size: 13px;
-        color: var(--muted);
-      }
-
-      .legacy-panels {
-        display: grid;
-        gap: 10px;
-        margin-top: 2px;
+        display: none;
       }
 
       .cardTitle {
-        font-family: "DM Serif Display", Georgia, serif;
-        font-size: 26px;
-        color: var(--ink);
-        line-height: 1.25;
+        display: none;
       }
 
       .cardDesc {
-        font-size: 14px;
-        color: #66574c;
-        line-height: 1.6;
+        margin: 0;
+        padding: 0;
+        font-size: 17px;
+        line-height: 1.5;
+        color: #424245;
+        max-width: 100%;
+        white-space: pre-line;
       }
 
       .prestartWelcome {
         display: grid;
-        gap: 10px;
+        gap: 12px;
       }
 
       .prestartHeadline {
         margin: 0;
       }
 
+      .prestartBlock {
+        margin: 0;
+      }
+
       .prestartBlockTitle {
         margin: 0 0 4px;
-        font-size: 13px;
-        font-weight: 700;
-        color: #3b2a20;
-        letter-spacing: 0.02em;
+        font-size: 17px;
+        font-weight: 600;
+        color: var(--text);
       }
 
       .prestartBlockBody {
@@ -402,11 +344,13 @@
 
       .prestartOutcomes {
         margin: 0;
-        padding-left: 18px;
+        padding-left: 0;
+        list-style-position: inside;
       }
 
       .prestartOutcomes li {
-        margin: 4px 0 0;
+        margin: 0;
+        padding-left: 0;
       }
 
       .prestartMetaGrid {
@@ -417,230 +361,209 @@
 
       .prestartMetaItem {
         border: 1px solid var(--line);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.55);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.8);
         padding: 8px 10px;
       }
 
       .prestartMetaLabel {
         display: block;
-        font-size: 11px;
-        letter-spacing: 0.09em;
-        text-transform: uppercase;
-        color: #8a7a6d;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
       }
 
       .prestartMetaValue {
         display: block;
-        font-size: 13px;
+        font-size: 16px;
         font-weight: 600;
-        color: #4f3b2d;
+        color: var(--text);
       }
 
-      .inlineNotice {
-        padding: 9px 12px;
-        border: 1px solid rgba(232, 116, 42, 0.32);
-        background: rgba(232, 116, 42, 0.09);
-        border-radius: var(--radius-md);
-        color: #7d481f;
-        font-size: 13px;
+      .prompt {
+        font-size: 22px;
+        font-weight: 600;
+        margin: 12px 0;
+        letter-spacing: -0.015em;
+        white-space: pre-wrap;
+        color: var(--text);
       }
 
-      .presentationPreview,
-      .statementsPanel,
-      .scoringPanel,
-      .wordingChoiceWrap {
-        border: 1px solid var(--line);
-        border-radius: var(--radius-md);
-        background: rgba(255, 255, 255, 0.54);
-        padding: 10px;
-      }
-
-      .presentationActions {
-        margin-top: 10px;
-      }
-
-      .presentationThumb {
-        display: block;
-        width: 100%;
-        border-radius: 10px;
-        min-height: 90px;
-        object-fit: cover;
-        border: 1px solid var(--line);
-      }
-
-      .presentationDownload {
-        display: inline-block;
-        border: 1px solid rgba(232, 116, 42, 0.48);
-        border-radius: 999px;
-        padding: 7px 12px;
-        color: #6f401c;
-        text-decoration: none;
-        font-size: 13px;
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 12px;
       }
 
       .row {
         display: flex;
+        justify-content: flex-start;
+        gap: 12px;
+        margin-top: 12px;
         flex-wrap: wrap;
-        gap: 8px;
+        align-items: flex-start;
       }
 
+      button,
       .btn {
-        border: 1px solid rgba(232, 116, 42, 0.45);
+        display: inline-flex;
+        justify-content: flex-start;
+        text-align: left;
+        border: 1px solid rgba(43, 131, 230, 0.28);
+        background: rgba(43, 131, 230, 0.06);
+        color: var(--blue);
         border-radius: 999px;
-        padding: 8px 12px;
-        font-size: 14px;
-        color: #5d3418;
-        background: rgba(232, 116, 42, 0.1);
+        padding: 12px 14px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
       }
 
       .btn.primary {
-        background: linear-gradient(180deg, rgba(241, 204, 178, 0.3), rgba(232, 116, 42, 0.26));
+        border-color: rgba(43, 131, 230, 0.28);
+        background: rgba(43, 131, 230, 0.06);
+        color: var(--blue);
+      }
+
+      button:disabled,
+      .btn:disabled {
+        background: #f5f5f7;
+        border-color: var(--line);
+        color: #86868b;
+        cursor: not-allowed;
       }
 
       .inputWrap {
-        display: grid;
-        gap: 8px;
+        margin-top: 12px;
       }
 
-      .send {
-        border-radius: 12px;
-        justify-self: end;
-        padding: 6px 10px;
+      .input {
+        display: flex;
+        align-items: flex-end;
+        gap: 12px;
       }
 
-      .startHint,
-      .purposeInstructionHint,
-      .statementsTitle,
-      .statementsCount,
-      .scoringIntro,
-      .wordingChoiceHeading,
-      .wordingChoiceInstruction {
-        font-size: 12px;
-        color: #7a6d62;
-      }
-
-      .statementsList,
-      .wordingChoiceList {
-        margin: 0;
-        padding-left: 18px;
-        color: #6c5e52;
-        font-size: 13px;
-      }
-
-      .wordingChoiceCard {
+      textarea,
+      .inputWrap textarea {
+        width: 100%;
+        min-height: 96px;
+        padding: 18px;
+        font-size: 17px;
+        color: #000000;
         border: 1px solid var(--line);
+        border-radius: 18px;
+        resize: vertical;
+        outline: none;
+        background-color: var(--card);
+        background-image: url("/ui/assets/textbox_background.jpg");
+        background-repeat: no-repeat;
+        background-position: top right;
+        background-size: auto;
+      }
+
+      textarea::placeholder {
+        color: #86868b;
+      }
+
+      textarea:disabled {
+        background-color: #f5f5f7;
+        background-image: none;
+        color: #86868b;
+        cursor: not-allowed;
+      }
+
+      #inputSend {
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
+        min-height: 48px;
+        border: none;
         border-radius: 12px;
-        padding: 8px;
-        background: rgba(255, 255, 255, 0.72);
+        background: linear-gradient(180deg, #63acff, #2b83e6);
+        color: transparent;
+        font-size: 0;
+        padding: 0;
+        align-items: center;
+        justify-content: center;
       }
 
-      .wordingChoiceText {
+      #inputSend::before {
+        content: "";
+        width: 24px;
+        height: 24px;
+        background: center / contain no-repeat url("/ui/assets/send_icon.svg");
+      }
+
+      #inputSend:disabled {
+        background: var(--stepOff);
+      }
+
+      .error {
+        margin-top: 12px;
+        color: #8b1e1e;
+        border: 1px solid rgba(139, 30, 30, 0.2);
+        border-radius: 10px;
+        padding: 10px 12px;
+        background: #fff5f5;
+      }
+
+      .subtitle {
+        text-align: center;
+        color: var(--blue);
         font-size: 13px;
-        color: #6a5c50;
-      }
-
-      .choiceBtn.wordingChoiceSelectBtn {
-        margin-top: 8px;
-      }
-
-      .scoringContinueWrap {
-        margin-top: 8px;
-      }
-
-      .scoringClusterHeader {
-        font-size: 12px;
-        color: #7b6e62;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }
-
-      .scoringClusterRows {
-        display: grid;
-        gap: 6px;
-      }
-
-      .avgScore,
-      .themeName {
-        font-size: 12px;
-        color: #7b6e62;
-      }
-
-      .bootstrap-wait-shell {
-        display: grid;
-        gap: 8px;
-      }
-
-      .bootstrap-wait-title {
-        font-size: 13px;
-        color: #76695f;
-      }
-
-      .skeleton-line {
-        height: 11px;
-        border-radius: 999px;
-        background: rgba(0, 0, 0, 0.07);
+        font-weight: 600;
+        margin: 13px 0 0;
+        padding: 0;
+        display: block;
       }
 
       .is-hidden {
         display: none !important;
       }
 
-      @media (prefers-reduced-motion: reduce) {
-        body::before,
-        body::after {
-          animation: none;
-        }
-      }
-
-      @media (max-width: 640px) {
-        body {
-          padding: 10px 6px 16px;
-        }
-
-        .title {
-          font-size: 28px;
+      @media (max-width: 768px) {
+        .wrap {
+          padding: 20px 16px 15px;
         }
 
         .page-header .wrap {
           grid-template-columns: 1fr;
-          gap: 8px;
-          align-items: start;
+          row-gap: 8px;
         }
 
-        .stepper i {
-          width: 16px;
-          height: 3px;
+        .title {
+          padding-right: 0;
         }
 
-        .bylineLogo {
-          width: 100px;
+        .byline {
+          grid-column: 1;
+          grid-row: 2;
+          align-items: flex-start;
+          margin-top: 2px;
         }
 
-        .shell {
-          border-radius: 18px;
+        .stepperRow {
+          grid-row: 3;
         }
 
-        .bar {
-          padding: 12px;
+        .page-header .stepper {
+          margin-top: 24px;
         }
 
-        .body {
-          padding: 12px;
-          gap: 12px;
+        .cardInner {
+          flex-direction: column;
+          align-items: flex-start;
         }
 
-        .meta,
-        .status {
-          font-size: 11px;
+        .input {
+          flex-direction: column;
+          align-items: stretch;
         }
 
-        .badge {
-          font-size: 30px;
-        }
-
-        .prompt {
-          font-size: 28px;
+        #inputSend {
+          align-self: flex-end;
         }
 
         .prestartMetaGrid {
@@ -658,17 +581,15 @@
           <img
             id="bylineLogo"
             class="bylineLogo"
-            src="/ui/assets/business-model_by_ben-steenstra.svg"
-            alt="Ben Steenstra"
+            src="data:image/svg+xml;base64,"
+            alt="Ben Steenstra - When it feels right it works"
             width="126"
             height="50"
           />
           <span class="meta" id="meta"></span>
         </div>
         <div class="stepperRow" aria-hidden="true">
-          <div class="stepper" id="stepper">
-            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-          </div>
+          <div class="stepper" id="stepper"></div>
         </div>
       </div>
     </header>
@@ -682,101 +603,49 @@
           <main class="body">
             <div class="cardInner">
               <div class="badge" id="badge"></div>
-              <div class="sectionTitle" id="sectionTitle"></div>
-              <div class="cardTitle is-hidden" id="cardTitle"></div>
-              <p class="card" id="card"></p>
-              <div class="cardDesc is-hidden" id="cardDesc"></div>
+              <div>
+                <div class="sectionTitle" id="sectionTitle"></div>
+                <div class="cardTitle is-hidden" id="cardTitle"></div>
+                <p class="card" id="card"></p>
+                <div class="cardDesc is-hidden" id="cardDesc"></div>
+              </div>
             </div>
             <p class="prompt" id="prompt"></p>
             <div class="actions" id="actions"></div>
+            <div class="row is-hidden" id="confirmActions">
+              <button class="btn primary" id="btnOk" type="button">Continue</button>
+            </div>
             <div class="inputWrap" id="inputWrap">
               <form class="input" id="inputForm">
                 <textarea id="inputText"></textarea>
                 <button type="submit" id="inputSend"></button>
               </form>
-              <textarea id="input" class="is-hidden" aria-hidden="true"></textarea>
-              <button class="send is-hidden" id="send" type="button" aria-hidden="true">Send</button>
             </div>
             <p class="error" id="error"></p>
-
-            <div class="legacy-panels is-hidden">
-              <div class="bootstrap-wait-shell is-hidden">
-                <div class="bootstrap-wait-title">Loading…</div>
-                <div class="skeleton-line"></div>
-                <div class="skeleton-line"></div>
-                <div class="skeleton-line"></div>
-              </div>
-
-              <div class="inlineNotice is-hidden" id="inlineNotice"></div>
-
-              <div class="presentationPreview is-hidden" id="presentationPreview">
-                <a class="presentationThumbLink" id="presentationThumbLink" target="_blank" rel="noopener noreferrer">
-                  <img class="presentationThumb" id="presentationThumb" alt="Presentation preview" />
-                </a>
-                <div class="presentationActions">
-                  <a class="presentationDownload" id="presentationDownload" target="_blank" rel="noopener noreferrer">Download PDF</a>
-                </div>
-              </div>
-
-              <div class="purposeInstructionHint is-hidden" id="purposeInstructionHint"></div>
-
-              <div class="statementsPanel is-hidden" id="statementsPanel">
-                <div class="statementsTitle" id="statementsTitle"></div>
-                <div class="statementsCount" id="statementsCount"></div>
-                <div class="statementsList" id="statementsList"></div>
-              </div>
-
-              <div class="scoringPanel is-hidden" id="scoringPanel">
-                <div class="scoringIntro" id="scoringIntro"></div>
-                <div id="scoringClusters">
-                  <div class="scoringClusterHeader">Scoring</div>
-                  <div class="scoringClusterRows">
-                    <div class="themeName">Theme</div>
-                    <div class="avgScore">0.0</div>
-                  </div>
-                </div>
-                <div class="scoringContinueWrap">
-                  <button type="button" class="btn primary" id="btnScoringContinue">Continue</button>
-                </div>
-              </div>
-
-              <div class="wordingChoiceWrap is-hidden" id="wordingChoiceWrap">
-                <div class="wordingChoiceHeading" id="wordingChoiceHeading"></div>
-                <div class="wordingChoiceCard" id="wordingChoiceUserCard">
-                  <div class="wordingChoiceText" id="wordingChoiceUserText"></div>
-                  <ul class="wordingChoiceList" id="wordingChoiceUserList"></ul>
-                  <button class="choiceBtn wordingChoiceSelectBtn" id="wordingChoicePickUser" type="button">Choose</button>
-                </div>
-                <div class="wordingChoiceCard" id="wordingChoiceSuggestionCard">
-                  <div class="wordingChoiceText" id="wordingChoiceSuggestionText"></div>
-                  <ul class="wordingChoiceList" id="wordingChoiceSuggestionList"></ul>
-                  <button class="choiceBtn wordingChoiceSelectBtn" id="wordingChoicePickSuggestion" type="button">Choose</button>
-                </div>
-                <div class="wordingChoiceInstruction" id="wordingChoiceInstruction"></div>
-              </div>
-
-              <div class="choiceWrap is-hidden" id="choiceWrap"></div>
-              <div class="row is-hidden" id="controls">
-                <button class="btn primary" id="btnStart" type="button"><span id="btnStartText">Start</span><span class="cta-arrow">-></span></button>
-                <div class="startHint" id="startHint"></div>
-                <button class="btn primary" id="btnGoToNextStep" type="button">Next step</button>
-                <button class="btn primary" id="btnStartDreamExercise" type="button">Start exercise</button>
-                <button class="btn" id="btnSwitchToSelfDream" type="button">Switch to self dream</button>
-                <button class="btn primary" id="btnDreamConfirm" type="button">Confirm dream</button>
-              </div>
-            </div>
           </main>
         </div>
       </section>
       <div class="subtitle is-hidden" id="uiSubtitle"></div>
       <div id="debugOverlay" class="is-hidden" aria-hidden="true"></div>
     </div>
-
     <script>
       (function () {
         "use strict";
 
         var MODE_SET = new Set(["prestart", "interactive"]);
+        var ORDER = [
+          "step_0",
+          "dream",
+          "purpose",
+          "bigwhy",
+          "role",
+          "entity",
+          "strategy",
+          "targetgroup",
+          "productsservices",
+          "rulesofthegame",
+          "presentation",
+        ];
 
         function byId(id) {
           return document.getElementById(id);
@@ -792,7 +661,10 @@
           card: byId("card"),
           cardDesc: byId("cardDesc"),
           prompt: byId("prompt"),
+          stepper: byId("stepper"),
           actions: byId("actions"),
+          confirmActions: byId("confirmActions"),
+          btnOk: byId("btnOk"),
           inputForm: byId("inputForm"),
           inputText: byId("inputText"),
           inputSend: byId("inputSend"),
@@ -805,7 +677,7 @@
           mode: "",
           loading: false,
           actions: [],
-          fallbackChoices: [],
+          step0ReadyActionCode: "",
           textSubmit: null,
         };
 
@@ -1001,6 +873,15 @@
           return asText(strings[key]);
         }
 
+        function specialistBodyByPriority(rawSpecialist) {
+          var specialist = toRecord(rawSpecialist);
+          return (
+            asText(specialist.message) ||
+            asText(specialist.refined_formulation) ||
+            asText(specialist.question)
+          );
+        }
+
         function buildPrestartBodyText(state, localUi) {
           var headline = asText(uiString(state, "prestart.headline") || localUi.prestartText);
           var provenTitle = asText(uiString(state, "prestart.proven.title"));
@@ -1122,6 +1003,56 @@
           return String(index + 1).padStart(2, "0");
         }
 
+        function stepIndex(stepId) {
+          var idx = ORDER.indexOf(asText(stepId));
+          return idx >= 0 ? idx : 0;
+        }
+
+        function stripStepPrefix(label) {
+          return asText(label)
+            .replace(/^Step\s+\d+\s*:\s*/i, "")
+            .replace(/^Stap\s+\d+\s*:\s*/i, "");
+        }
+
+        function resolveStepperTitle(stepId, state, sectionTitleText) {
+          if (stepId === "step_0") {
+            return stripStepPrefix(
+              sectionTitleText ||
+              uiString(state, "sectionTitle.step_0") ||
+              uiString(state, "stepLabel.validation")
+            );
+          }
+          return stripStepPrefix(
+            uiString(state, "title." + stepId) ||
+            uiString(state, "sectionTitle." + stepId) ||
+            stepId
+          );
+        }
+
+        function buildStepper(stepId, state, sectionTitleText) {
+          if (!ui.stepper) return;
+          var activeIdx = stepIndex(stepId);
+          var stepTitle = resolveStepperTitle(stepId, state, sectionTitleText);
+          ui.stepper.innerHTML = "";
+          for (var i = 0; i < ORDER.length; i += 1) {
+            var node = document.createElement("div");
+            var className = "step";
+            if (i < activeIdx) className += " completed";
+            if (i === activeIdx) className += " active";
+            node.className = className;
+            if (i === activeIdx && stepTitle) {
+              var titleNode = document.createElement("div");
+              titleNode.className = "stepperTitle";
+              titleNode.textContent = stepTitle;
+              if (i === 0) titleNode.classList.add("align-left");
+              if (i === ORDER.length - 1) titleNode.classList.add("align-right");
+              node.appendChild(titleNode);
+            }
+            node.appendChild(document.createTextNode(String(i + 1).padStart(2, "0")));
+            ui.stepper.appendChild(node);
+          }
+        }
+
         function setHidden(el, hidden) {
           if (!el) return;
           el.classList.toggle("is-hidden", Boolean(hidden));
@@ -1132,6 +1063,7 @@
           var disabled = runtime.loading;
           if (ui.inputText) ui.inputText.disabled = disabled;
           if (ui.inputSend) ui.inputSend.disabled = disabled;
+          if (ui.btnOk) ui.btnOk.disabled = disabled;
           if (ui.actions) {
             var buttons = ui.actions.querySelectorAll("button");
             for (var i = 0; i < buttons.length; i += 1) {
@@ -1153,36 +1085,6 @@
           var escaped = escapeHtml(text);
           var bolded = escaped.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
           return bolded.replace(/\r?\n/g, "<br>");
-        }
-
-        function parseNumberedChoices(text) {
-          var raw = String(text || "");
-          if (!raw) return [];
-          var lines = raw.split(/\r?\n/);
-          var choices = [];
-          for (var i = 0; i < lines.length; i += 1) {
-            var line = asText(lines[i]);
-            if (!line) continue;
-            var match = /^\s*(\d+)[\)\.\-:]\s*(.+?)\s*$/.exec(line);
-            if (!match) continue;
-            var label = asText(match[2]);
-            if (!label) continue;
-            choices.push({ label: label, ordinal: Number(match[1]) || choices.length + 1 });
-          }
-          return choices;
-        }
-
-        function stripNumberedChoiceLines(text) {
-          var raw = String(text || "");
-          if (!raw) return "";
-          var lines = raw.split(/\r?\n/);
-          var kept = [];
-          for (var i = 0; i < lines.length; i += 1) {
-            var line = lines[i];
-            if (/^\s*\d+[\)\.\-:]\s+\S/.test(line)) continue;
-            kept.push(line);
-          }
-          return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
         }
 
         function looksLikeWidgetResult(candidateRaw) {
@@ -1312,11 +1214,21 @@
           }
         }
 
-        function renderActions(mode) {
-          if (!ui.actions) return;
-          ui.actions.innerHTML = "";
+        function step0ReadyLabel(state, action) {
+          var label = asText(toRecord(action).label);
+          if (label) return label;
+          return asText(
+            uiString(state, "menuLabel.STEP0_MENU_READY_START.ACTION_STEP0_READY_START") ||
+            uiString(state, "btnOk_step0_ready") ||
+            "Yes, I'm ready. Let's start!"
+          );
+        }
+
+        function renderActions(mode, stepId, state) {
+          if (ui.actions) ui.actions.innerHTML = "";
           var nonText = [];
           runtime.textSubmit = null;
+          runtime.step0ReadyActionCode = "";
           for (var i = 0; i < runtime.actions.length; i += 1) {
             var action = runtime.actions[i];
             if (action.role === "text_submit") {
@@ -1326,40 +1238,42 @@
             nonText.push(action);
           }
 
-          for (var j = 0; j < nonText.length; j += 1) {
-            (function (action) {
-              var button = document.createElement("button");
-              button.type = "button";
-              button.textContent = action.label;
-              button.disabled = runtime.loading;
-              button.addEventListener("click", function () {
-                if (runtime.loading) return;
-                callRunStep(action.actionCode, {});
-              });
-              ui.actions.appendChild(button);
-            })(nonText[j]);
-          }
-
-          if (nonText.length === 0 && mode === "interactive" && Array.isArray(runtime.fallbackChoices) && runtime.fallbackChoices.length > 0) {
-            for (var k = 0; k < runtime.fallbackChoices.length; k += 1) {
-              (function (choiceLabel) {
-                var button = document.createElement("button");
-                button.type = "button";
-                button.textContent = choiceLabel;
-                button.disabled = runtime.loading;
-                button.addEventListener("click", function () {
-                  if (runtime.loading) return;
-                  callRunStep(choiceLabel, {});
-                });
-                ui.actions.appendChild(button);
-              })(runtime.fallbackChoices[k].label);
+          var step0ReadyAction = null;
+          if (mode === "interactive" && stepId === "step_0") {
+            for (var j = 0; j < nonText.length; j += 1) {
+              if (nonText[j].actionCode === "ACTION_STEP0_READY_START") {
+                step0ReadyAction = nonText[j];
+                break;
+              }
             }
           }
 
-          var showActionButtons = nonText.length > 0;
-          if (!showActionButtons && mode === "interactive" && Array.isArray(runtime.fallbackChoices) && runtime.fallbackChoices.length > 0) {
-            showActionButtons = true;
+          var useStep0ReadyPath = Boolean(step0ReadyAction && nonText.length === 1);
+          if (useStep0ReadyPath) {
+            runtime.step0ReadyActionCode = asText(step0ReadyAction.actionCode);
+            if (ui.btnOk) {
+              ui.btnOk.textContent = step0ReadyLabel(state, step0ReadyAction);
+              ui.btnOk.disabled = runtime.loading;
+            }
+          } else if (ui.actions) {
+            for (var k = 0; k < nonText.length; k += 1) {
+              (function (action) {
+                var button = document.createElement("button");
+                button.type = "button";
+                button.textContent = action.label;
+                button.disabled = runtime.loading;
+                button.addEventListener("click", function () {
+                  if (runtime.loading) return;
+                  callRunStep(action.actionCode, {});
+                });
+                ui.actions.appendChild(button);
+              })(nonText[k]);
+            }
           }
+
+          setHidden(ui.confirmActions, !useStep0ReadyPath);
+
+          var showActionButtons = !useStep0ReadyPath && nonText.length > 0;
           setHidden(ui.actions, !showActionButtons);
 
           var showInput = mode === "interactive" && runtime.textSubmit && runtime.textSubmit.payloadMode !== "scores";
@@ -1367,12 +1281,26 @@
 
           setHidden(ui.inputForm, !showInput);
           if (ui.inputSend) {
-            ui.inputSend.textContent = runtime.textSubmit ? runtime.textSubmit.label : "";
+            var submitLabel = runtime.textSubmit ? runtime.textSubmit.label : "";
+            ui.inputSend.textContent = "";
+            if (submitLabel) {
+              ui.inputSend.setAttribute("title", submitLabel);
+              ui.inputSend.setAttribute("aria-label", submitLabel);
+            } else {
+              ui.inputSend.removeAttribute("title");
+              ui.inputSend.removeAttribute("aria-label");
+            }
           }
         }
 
         function renderResult(result, source) {
           var state = toRecord(result.state);
+          var resultStrings = toRecord(result.ui_strings);
+          if (Object.keys(resultStrings).length > 0) {
+            state = Object.assign({}, state, {
+              ui_strings: Object.assign({}, resultStrings, toRecord(state.ui_strings)),
+            });
+          }
           var uiPayload = toRecord(result.ui);
           var view = toRecord(uiPayload.view);
           var modeRaw = asText(view.mode).toLowerCase();
@@ -1388,7 +1316,6 @@
           runtime.state = state;
           runtime.mode = mode;
           runtime.actions = parseActions(result);
-          runtime.fallbackChoices = [];
 
           var stepText = asText(state.current_step || result.current_step_id) || "step_0";
           var sectionTitleText =
@@ -1399,6 +1326,7 @@
           if (ui.meta) ui.meta.textContent = mode;
           if (ui.sectionTitle) ui.sectionTitle.textContent = sectionTitleText;
           setHidden(ui.sectionTitle, sectionTitleText.length === 0);
+          buildStepper(stepText, state, sectionTitleText);
 
           var badgeText = deriveStepBadge(stepText);
           if (ui.badge) ui.badge.textContent = badgeText;
@@ -1414,47 +1342,30 @@
           if (byText && ui.byText) ui.byText.textContent = byText;
 
           var specialist = toRecord(result.specialist);
-          var bodyText =
-            asText(specialist.message) ||
-            asText(specialist.refined_formulation) ||
-            asText(specialist.question) ||
-            asText(result.text);
+          var specialistBodyText = specialistBodyByPriority(specialist);
+          var bodyText = specialistBodyText || asText(result.text);
           var promptText =
             asText(specialist.question) ||
             asText(result.prompt) ||
             asText(toRecord(uiPayload.prompt).body);
+          var prestartMarkup = "";
           if (mode === "prestart") {
-            bodyText = buildPrestartBodyText(state, localUi);
+            prestartMarkup = buildPrestartBodyMarkup(state, localUi);
+            var prestartBodyText = buildPrestartBodyText(state, localUi);
+            bodyText = prestartMarkup ? prestartBodyText : (specialistBodyText || asText(result.text) || prestartBodyText);
             promptText = asText(uiString(state, "startHint") || localUi.startHint);
-          }
-
-          var nonTextActionCount = 0;
-          for (var actionIndex = 0; actionIndex < runtime.actions.length; actionIndex += 1) {
-            if (runtime.actions[actionIndex].role !== "text_submit") nonTextActionCount += 1;
-          }
-          if (mode === "interactive" && nonTextActionCount === 0) {
-            var parsedChoices = parseNumberedChoices(promptText);
-            if (parsedChoices.length === 0) {
-              parsedChoices = parseNumberedChoices(bodyText);
-            }
-            if (parsedChoices.length > 0) {
-              runtime.fallbackChoices = parsedChoices;
-              bodyText = stripNumberedChoiceLines(bodyText);
-              promptText = stripNumberedChoiceLines(promptText);
-            }
           }
 
           if (mode === "interactive" && bodyText.length === 0 && promptText.length === 0) {
             promptText = uiString(state, "step0.question.initial") || "Share your thoughts or choose an option.";
           }
           if (ui.cardDesc) ui.cardDesc.innerHTML = formatText(bodyText);
-          if (mode === "prestart" && ui.cardDesc) {
-            var prestartMarkup = buildPrestartBodyMarkup(state, localUi);
-            if (prestartMarkup) ui.cardDesc.innerHTML = prestartMarkup;
+          if (mode === "prestart" && ui.cardDesc && prestartMarkup) {
+            ui.cardDesc.innerHTML = prestartMarkup;
           }
           if (ui.card) ui.card.textContent = "";
           if (ui.prompt) ui.prompt.textContent = promptText;
-          setHidden(ui.cardDesc, bodyText.length === 0);
+          setHidden(ui.cardDesc, bodyText.length === 0 && prestartMarkup.length === 0);
           setHidden(ui.card, true);
           setHidden(ui.prompt, promptText.length === 0);
 
@@ -1481,7 +1392,7 @@
 
           setHidden(ui.error, true);
 
-          renderActions(mode);
+          renderActions(mode, stepText, state);
 
           setLoading(false);
         }
@@ -1533,6 +1444,13 @@
           callRunStep(message, {});
         }
 
+        function onConfirmReadyClick() {
+          if (runtime.loading) return;
+          var actionCode = asText(runtime.step0ReadyActionCode);
+          if (!actionCode) return;
+          callRunStep(actionCode, {});
+        }
+
         function readInitialToolOutput() {
           var openai = openAiApi();
           var toolOutput = toRecord(openai.toolOutput);
@@ -1564,6 +1482,9 @@
 
         if (ui.inputForm) {
           ui.inputForm.addEventListener("submit", onSubmit);
+        }
+        if (ui.btnOk) {
+          ui.btnOk.addEventListener("click", onConfirmReadyClick);
         }
 
           ingestSetGlobalsPayload();
