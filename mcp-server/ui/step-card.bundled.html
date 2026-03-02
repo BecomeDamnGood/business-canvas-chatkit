@@ -581,7 +581,7 @@
           <img
             id="bylineLogo"
             class="bylineLogo"
-            src="data:image/svg+xml;base64,"
+            src="/ui/assets/business-model_by_ben-steenstra.svg"
             alt="Ben Steenstra - When it feels right it works"
             width="126"
             height="50"
@@ -679,6 +679,7 @@
           actions: [],
           step0ReadyActionCode: "",
           textSubmit: null,
+          hasRendered: false,
         };
 
         var LOCAL_UI_STRINGS_BY_LOCALE = {
@@ -880,6 +881,56 @@
             asText(specialist.refined_formulation) ||
             asText(specialist.question)
           );
+        }
+
+        function dedupeBodyAgainstPrompt(bodyRaw, promptRaw) {
+          var body = String(bodyRaw || "");
+          var prompt = String(promptRaw || "").trim();
+          if (!body.trim() || !prompt) return body;
+          var bodyTrimmed = body.trim();
+          if (bodyTrimmed === prompt) return "";
+          var bodyLeadingTrimmed = body.trimStart();
+          if (!bodyLeadingTrimmed.startsWith(prompt)) return body;
+          var rest = bodyLeadingTrimmed.slice(prompt.length);
+          if (!/^\s+/.test(rest)) return body;
+          return rest.replace(/^\s+/, "");
+        }
+
+        function extractChoicesFromPrompt(promptText) {
+          var raw = String(promptText || "");
+          var lines = raw.split(/\r?\n/).filter(function (line) {
+            return String(line || "").trim().length > 0;
+          });
+          var found = {};
+          var kept = [];
+          for (var i = 0; i < lines.length; i += 1) {
+            var line = lines[i];
+            var match = line.match(/^\s*([1-9])[\)\.]\s*(.+?)\s*$/);
+            if (match && match[1] && match[2]) {
+              found[match[1]] = match[2].trim();
+              continue;
+            }
+            kept.push(line);
+          }
+          var keys = Object.keys(found).sort(function (a, b) {
+            return Number(a) - Number(b);
+          });
+          var consecutive = keys.length > 0;
+          for (var j = 0; j < keys.length; j += 1) {
+            if (Number(keys[j]) !== j + 1) {
+              consecutive = false;
+              break;
+            }
+          }
+          var choices = consecutive
+            ? keys.map(function (key) {
+                return { value: String(key), label: String(found[key] || "") };
+              })
+            : [];
+          return {
+            promptShown: consecutive ? kept.join("\n").trim() : raw.trim(),
+            choices: choices,
+          };
         }
 
         function buildPrestartBodyText(state, localUi) {
@@ -1156,11 +1207,35 @@
           var strings = toRecord(state.ui_strings);
           var uiPayload = toRecord(result.ui);
           var actionContract = toRecord(uiPayload.action_contract);
-          if (!Array.isArray(actionContract.actions)) return [];
+          var sourceActions = Array.isArray(actionContract.actions)
+            ? actionContract.actions
+            : (Array.isArray(uiPayload.actions) ? uiPayload.actions : []);
           var out = [];
-          for (var i = 0; i < actionContract.actions.length; i += 1) {
-            var normalized = normalizeAction(actionContract.actions[i], strings);
+          for (var i = 0; i < sourceActions.length; i += 1) {
+            var normalized = normalizeAction(sourceActions[i], strings);
             if (normalized) out.push(normalized);
+          }
+          if (out.length === 0 && Array.isArray(uiPayload.action_codes)) {
+            for (var j = 0; j < uiPayload.action_codes.length; j += 1) {
+              var actionCode = asText(uiPayload.action_codes[j]).toUpperCase();
+              if (!actionCode) continue;
+              var label = "";
+              if (actionCode === "ACTION_START") {
+                label = fallbackStringsFromLang(preferredLanguage()).btnStart;
+              } else if (actionCode === "ACTION_STEP0_READY_START") {
+                label = asText(
+                  strings["menuLabel.STEP0_MENU_READY_START.ACTION_STEP0_READY_START"] ||
+                    strings.btnOk_step0_ready ||
+                    "Yes, I'm ready. Let's start!"
+                );
+              }
+              out.push({
+                actionCode: actionCode,
+                role: actionCode === "ACTION_START" ? "start" : "choice",
+                payloadMode: "none",
+                label: label || actionCode,
+              });
+            }
           }
           return out;
         }
@@ -1348,12 +1423,56 @@
             asText(specialist.question) ||
             asText(result.prompt) ||
             asText(toRecord(uiPayload.prompt).body);
+          if (mode === "interactive") {
+            bodyText = dedupeBodyAgainstPrompt(bodyText, promptText);
+          }
           var prestartMarkup = "";
           if (mode === "prestart") {
             prestartMarkup = buildPrestartBodyMarkup(state, localUi);
             var prestartBodyText = buildPrestartBodyText(state, localUi);
             bodyText = prestartMarkup ? prestartBodyText : (specialistBodyText || asText(result.text) || prestartBodyText);
             promptText = asText(uiString(state, "startHint") || localUi.startHint);
+          }
+
+          if (mode === "interactive") {
+            var hasNonTextAction = false;
+            for (var ai = 0; ai < runtime.actions.length; ai += 1) {
+              if (runtime.actions[ai].role !== "text_submit") {
+                hasNonTextAction = true;
+                break;
+              }
+            }
+            if (!hasNonTextAction) {
+              var parsedChoices = extractChoicesFromPrompt(promptText);
+              var promptChoices = Array.isArray(parsedChoices.choices) ? parsedChoices.choices : [];
+              var uiActionCodes = Array.isArray(uiPayload.action_codes) ? uiPayload.action_codes : [];
+              var synthesizedChoices = [];
+              if (promptChoices.length > 0 && uiActionCodes.length === promptChoices.length) {
+                for (var pc = 0; pc < promptChoices.length; pc += 1) {
+                  var mappedCode = asText(uiActionCodes[pc]).toUpperCase();
+                  if (!mappedCode) continue;
+                  synthesizedChoices.push({
+                    actionCode: mappedCode,
+                    role: "choice",
+                    payloadMode: "none",
+                    label: asText(promptChoices[pc].label) || mappedCode,
+                  });
+                }
+              } else if (stepText === "step_0" && promptChoices.length === 1) {
+                synthesizedChoices.push({
+                  actionCode: "ACTION_STEP0_READY_START",
+                  role: "choice",
+                  payloadMode: "none",
+                  label: asText(promptChoices[0].label) || step0ReadyLabel(state, {}),
+                });
+              }
+              if (synthesizedChoices.length > 0) {
+                runtime.actions = runtime.actions.filter(function (action) {
+                  return action.role === "text_submit";
+                }).concat(synthesizedChoices);
+                promptText = asText(parsedChoices.promptShown);
+              }
+            }
           }
 
           if (mode === "interactive" && bodyText.length === 0 && promptText.length === 0) {
@@ -1394,13 +1513,45 @@
 
           renderActions(mode, stepText, state);
 
+          runtime.hasRendered = true;
           setLoading(false);
+        }
+
+        function buildLocalPrestartResult() {
+          var lang = asText(preferredLanguage() || "en").toLowerCase() || "en";
+          return {
+            current_step_id: "step_0",
+            text: "",
+            prompt: "",
+            specialist: {
+              action: "ASK",
+              message: "",
+              question: "",
+              refined_formulation: "",
+            },
+            state: {
+              current_step: "step_0",
+              started: "false",
+              language: lang,
+              ui_strings_requested_lang: lang,
+              ui_strings_lang: lang,
+              ui_strings: {},
+            },
+            ui: {
+              view: {
+                mode: "prestart",
+              },
+            },
+          };
         }
 
         function ingest(rawPayload, source) {
           var result = extractWidgetResult(rawPayload);
           if (Object.keys(result).length === 0) {
             console.warn("[ui_ingest_payload_missing_widget_result]", { source: source });
+            if (!runtime.hasRendered) {
+              renderResult(buildLocalPrestartResult(), source + "_local_prestart");
+            }
             return;
           }
           renderResult(result, source);

@@ -727,27 +727,20 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             meta_topic: "NONE",
           };
 
-          const payload = deps.attachRegistryPayload(
-            {
-              ok: true as const,
-              tool: "run_step" as const,
-              current_step_id: String((context.state as Record<string, unknown>).current_step || ""),
-              active_specialist: deps.step0Specialist,
-              text: "",
-              prompt: specialist.question,
-              specialist,
-              state: {
-                ...(stateWithUi as Record<string, unknown>),
-                started: "true",
-                active_specialist: deps.step0Specialist,
-                last_specialist_result: specialist,
-              },
-            },
-            specialist,
-            context.responseUiFlags
-          );
+          const stateWithUiCanvas = stateWithUi as CanvasState;
+          let nextState: CanvasState = {
+            ...stateWithUiCanvas,
+            active_specialist: deps.step0Specialist,
+            last_specialist_result: specialist,
+          };
+          (nextState as Record<string, unknown>).started = "true";
 
-          return finalizeRoutePayload(payload as unknown as TResponse);
+          return finalizeRouteTurnIntent(context, {
+            state: nextState,
+            specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
+            previousSpecialist: asRecord((context.state as Record<string, unknown>).last_specialist_result || {}),
+            responseUiFlags: context.responseUiFlags,
+          });
         }
 
         const initialMsg = String((context.state as Record<string, unknown>).initial_user_message ?? "").trim();
@@ -768,27 +761,20 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           meta_topic: "NONE",
         };
 
-        const payload = deps.attachRegistryPayload(
-          {
-            ok: true as const,
-            tool: "run_step" as const,
-            current_step_id: String((stateWithUi as Record<string, unknown>).current_step || ""),
-            active_specialist: deps.step0Specialist,
-            text: specialist.message,
-            prompt: specialist.question,
-            specialist,
-            state: {
-              ...(stateWithUi as Record<string, unknown>),
-              started: "true",
-              active_specialist: deps.step0Specialist,
-              last_specialist_result: specialist,
-            },
-          },
-          specialist,
-          context.responseUiFlags
-        );
+        const stateWithUiCanvas = stateWithUi as CanvasState;
+        let nextState: CanvasState = {
+          ...stateWithUiCanvas,
+          active_specialist: deps.step0Specialist,
+          last_specialist_result: specialist,
+        };
+        (nextState as Record<string, unknown>).started = "true";
 
-        return finalizeRoutePayload(payload as unknown as TResponse);
+        return finalizeRouteTurnIntent(context, {
+          state: nextState,
+          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
+          previousSpecialist: asRecord((context.state as Record<string, unknown>).last_specialist_result || {}),
+          responseUiFlags: context.responseUiFlags,
+        });
       },
     },
 
