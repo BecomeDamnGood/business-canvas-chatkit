@@ -12,7 +12,6 @@ import {
   CONTRACT_UI_GATE_STATUSES,
   CONTRACT_UI_STRINGS_STATUSES,
   CONTRACT_UI_VIEW_MODES,
-  buildFailClosedState,
   normalizeContractLang,
   normalizeContractLocale,
 } from "./ingress.js";
@@ -491,8 +490,15 @@ export function buildContractFailurePayload(
   const currentStep = String(response?.current_step_id || (response?.state as any)?.current_step || "step_0");
   const specialist = ((response?.specialist || {}) as Record<string, unknown>) || {};
   const reasonCode = String(reason || "unknown_contract_violation").trim().toLowerCase();
-  const state = buildFailClosedState((response?.state as CanvasState | undefined) || null, "contract_violation");
-  (state as Record<string, unknown>).reason_code = reasonCode;
+  const state = {
+    ...(((response?.state as CanvasState | undefined) || {}) as Record<string, unknown>),
+  } as Record<string, unknown>;
+  state.reason_code = reasonCode;
+  state.ui_gate_status = "ready";
+  state.ui_gate_reason = "";
+  if (String(state.current_step || "").trim() === STEP_0_ID && String(state.started || "").trim().toLowerCase() !== "true") {
+    state.ui_action_start = "ACTION_START";
+  }
   return {
     ok: false,
     tool: "run_step",
@@ -504,10 +510,10 @@ export function buildContractFailurePayload(
     registry_version: ACTIONCODE_REGISTRY.version,
     state,
     error: {
-      type: "contract_violation",
-      message: "RunStep response violated the strict startup/i18n contract.",
+      type: "contract_warning",
+      message: "RunStep response contract warning.",
       reason: reasonCode,
-      required_action: "restart_session",
+      required_action: "continue_session",
     },
   };
 }

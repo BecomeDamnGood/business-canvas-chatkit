@@ -401,43 +401,21 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
         ...deps.detectInvalidContractStateMarkers(params.state as unknown as Record<string, unknown>),
       ])
     );
-    if (legacyMarkers.length === 0) {
-      return {
-        response: null,
-        blockingMarkerClass: "none",
-      };
+    if (legacyMarkers.length > 0) {
+      deps.logStructuredEvent?.({
+        severity: "info",
+        event: "legacy_preflight_ignored",
+        state: params.state,
+        step_id: String((params.state as any).current_step || deps.step0Id),
+        details: {
+          marker_count: legacyMarkers.length,
+          markers: legacyMarkers,
+        },
+      });
     }
-
-    const requiresRestart = legacyMarkers.some((marker) =>
-      marker === "state_version_mismatch" || marker.startsWith("legacy_")
-    );
-
-    let blockingMarkerClass = "invalid_state";
-    if (requiresRestart) {
-      if (legacyMarkers.some((marker) => marker.startsWith("legacy_"))) {
-        blockingMarkerClass = "legacy_marker";
-      } else if (legacyMarkers.includes("state_version_mismatch")) {
-        blockingMarkerClass = "state_version_mismatch";
-      } else {
-        blockingMarkerClass = "legacy_other";
-      }
-    }
-
-    deps.logStructuredEvent?.({
-      severity: "warn",
-      event: "legacy_preflight_tolerated",
-      state: params.state,
-      step_id: String((params.state as any).current_step || deps.step0Id),
-      details: {
-        error_type: requiresRestart ? "session_upgrade_required" : "invalid_state",
-        blocking_marker_class: blockingMarkerClass,
-        marker_count: legacyMarkers.length,
-        markers: legacyMarkers,
-      },
-    });
     return {
       response: null,
-      blockingMarkerClass,
+      blockingMarkerClass: "none",
     };
   }
 

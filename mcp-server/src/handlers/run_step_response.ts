@@ -211,17 +211,7 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       finalResponse.state && typeof finalResponse.state === "object"
         ? (finalResponse.state as Record<string, unknown>)
         : {};
-    const errorMarkers = Array.isArray((finalResponse as any)?.error?.markers)
-      ? ((finalResponse as any)?.error?.markers as unknown[]).map((marker) => String(marker || ""))
-      : [];
-    const markerClass = (() => {
-      const blockingMarkerClass = deps.getBlockingMarkerClass();
-      if (blockingMarkerClass !== "none") return blockingMarkerClass;
-      if (errorMarkers.some((marker) => marker.startsWith("legacy_"))) return "legacy_marker";
-      if (errorMarkers.includes("state_version_mismatch")) return "state_version_mismatch";
-      if (errorMarkers.some((marker) => marker.startsWith("invalid_"))) return "invalid_state";
-      return "none";
-    })();
+    const markerClass = "none";
     const started = String(stateForDecision.started || "").trim().toLowerCase() === "true";
     const hasRenderableContent = String(canonicalViewDecisionRaw?.has_renderable_content || "false") === "true";
     const hasStartAction = String(canonicalViewDecisionRaw?.has_start_action || "false") === "true";

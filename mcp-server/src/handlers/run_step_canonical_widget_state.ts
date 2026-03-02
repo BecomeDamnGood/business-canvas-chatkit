@@ -1,4 +1,4 @@
-export type CanonicalWidgetMode = "prestart" | "interactive" | "blocked";
+export type CanonicalWidgetMode = "prestart" | "interactive";
 
 export type BuildCanonicalWidgetStateInput = {
   step0Id: string;
