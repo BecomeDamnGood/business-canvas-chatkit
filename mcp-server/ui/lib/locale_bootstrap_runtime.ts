@@ -1,6 +1,11 @@
-export type PayloadSource = "meta.widget_result" | "structured_content.result" | "result" | "none";
+export type PayloadSource = "meta.widget_result" | "structured_content.result" | "result" | "direct" | "none";
 
-export type PayloadReasonCode = "meta_widget_result" | "structured_content_result" | "result_fallback" | "none";
+export type PayloadReasonCode =
+  | "meta_widget_result"
+  | "structured_content_result"
+  | "result_fallback"
+  | "direct_payload"
+  | "none";
 
 export type CanonicalWidgetEnvelope = {
   envelope: Record<string, unknown>;
@@ -190,6 +195,18 @@ function resolveMetaWidgetResult(raw: unknown): {
   const fromToolOutputResult = toRecord(toRecord(root.toolOutput).result);
   if (looksLikeWidgetResult(fromToolOutputResult)) {
     return { result: fromToolOutputResult, source: "result", reason_code: "result_fallback" };
+  }
+
+  if (looksLikeWidgetResult(root)) {
+    return { result: root, source: "direct", reason_code: "direct_payload" };
+  }
+
+  if (looksLikeWidgetResult(structured)) {
+    return { result: structured, source: "direct", reason_code: "direct_payload" };
+  }
+
+  if (looksLikeWidgetResult(toolOutput)) {
+    return { result: toolOutput, source: "direct", reason_code: "direct_payload" };
   }
 
   return { result: {}, source: "none", reason_code: "none" };

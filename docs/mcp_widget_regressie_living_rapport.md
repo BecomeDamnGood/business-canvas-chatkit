@@ -3626,3 +3626,71 @@ Status van deze poging:
   - [x] Weerlegd
   - [ ] Onbeslist
   - Toelichting: eerdere conclusie was te sterk; bewezen was server-contractpariteit, niet host end-to-end renderpariteit.
+
+### Poging 2026-03-02 07:13 UTC (PR-11 UX-pariteit schermen/velden/buttons structureel)
+
+- Doel:
+  - Host-runtime renderpariteit herstellen voor variërende OpenAI event-envelopes zonder fallback/workaround-lagen, met behoud van server-contract SSOT en deterministische prestart/interactive UX.
+
+- Uitgevoerd (stap 1 t/m 8):
+  - Stap 1:
+    - Canonical payload-selectie uitgebreid met directe widget-result shapes (zonder legacy alias-herintroductie), met behoud van metadata-prioriteit.
+    - bewijs:
+      - `mcp-server/ui/lib/locale_bootstrap_runtime.ts:1-10`
+      - `mcp-server/ui/lib/locale_bootstrap_runtime.ts:153-211`
+  - Stap 2:
+    - Bundled extractor uitgebreid met directe root/structured/toolOutput candidates als laatste-resort achter metadata/result-fallbacks.
+    - bewijs:
+      - `mcp-server/ui/step-card.bundled.html:811-836`
+  - Stap 3:
+    - Notification-ingest in bundled runtime structureel robuuster gemaakt: renderbare payloads worden niet meer hard gedropt als `method !== ui/notifications/tool-result`.
+    - bewijs:
+      - `mcp-server/ui/step-card.bundled.html:1054-1098`
+  - Stap 4:
+    - SSOT guard aangescherpt op nieuwe ingest-invarianten (direct-candidates + renderable notification fallback markers).
+    - bewijs:
+      - `mcp-server/scripts/ui_runtime_ssot_guard.mjs:62-94`
+  - Stap 5:
+    - Contracttests bijgewerkt zodat nieuwe runtime-invarianten regressievast zijn.
+    - bewijs:
+      - `mcp-server/src/mcp_app_contract.test.ts:141-166`
+  - Stap 6:
+    - UI render-tests uitgebreid op nieuwe ingestpaden en directe payloadacceptatie.
+    - bewijs:
+      - `mcp-server/src/ui_render.test.ts:1158-1185`
+      - `mcp-server/src/ui_render.test.ts:2965-2988`
+  - Stap 7:
+    - Volledige verplichte lokale rerun uitgevoerd (typecheck, contract-smoke, ui_render, gate:ci, npm test).
+    - kernoutput:
+      - `[contract_smoke] PASS { cases: 11, version: 'v12' }`
+      - `[agent_strict_guard] passed`
+      - `# pass 417` / `# fail 0`
+  - Stap 8:
+    - Resultaat geconsolideerd: runtime accepteert nu zowel canonical `_meta.widget_result` als renderbare directe host payloads zonder legacy `_widget_result` alias.
+    - bewijs:
+      - `mcp-server/ui/step-card.bundled.html:817-836`
+      - `mcp-server/ui/step-card.bundled.html:1054-1098`
+
+- Verificatie:
+  - `cd mcp-server && npm run typecheck` -> PASS
+    - kernregel: `tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.ui.json --noEmit`
+  - `cd mcp-server && node --loader ts-node/esm scripts/contract-smoke.mjs` -> PASS
+    - kernregel: `[contract_smoke] PASS { cases: 11, version: 'v12' }`
+  - `cd mcp-server && TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test src/ui_render.test.ts` -> PASS
+    - kernregel: `# pass 73` / `# fail 0`
+  - `cd mcp-server && npm run gate:ci` -> PASS
+    - kernregel: `[agent_strict_guard] passed`
+  - `cd mcp-server && npm test` -> PASS
+    - kernregel: `# pass 417` / `# fail 0` / `# skipped 1`
+
+- Open / TODO:
+  - [ ] Live host-validatie op precies dezelfde falende surface/sessie opnieuw uitvoeren om te bevestigen dat `widget_result_missing` en lege-shell scenario niet meer optreedt.
+
+- Volgende eerste actie:
+  - Nieuwe versie deployen en 1-op-1 reproducerun doen met capture van request + screenshot + `data-ui-marker`.
+
+- Besluit (Bevestigd/Weerlegd/Onbeslist):
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: ingestlaag accepteert nu renderbare host-envelopes structureel en regressiegates blijven volledig groen.

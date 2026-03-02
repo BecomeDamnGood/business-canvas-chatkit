@@ -800,11 +800,19 @@
         function looksLikeWidgetResult(candidateRaw) {
           var candidate = toRecord(candidateRaw);
           if (Object.keys(candidate).length === 0) return false;
-          if (Object.keys(toRecord(candidate.state)).length > 0) return true;
-          if (asText(candidate.current_step_id).length > 0) return true;
-          if (Object.keys(toRecord(candidate.ui)).length > 0) return true;
-          if (asText(candidate.prompt).length > 0) return true;
-          if (asText(candidate.text).length > 0) return true;
+          var state = toRecord(candidate.state);
+          var uiPayload = toRecord(candidate.ui);
+          var view = toRecord(uiPayload.view);
+          var mode = asText(view.mode).toLowerCase();
+          var actionContract = toRecord(uiPayload.action_contract);
+          var hasStep = asText(candidate.current_step_id || state.current_step).length > 0;
+          var hasPromptText = asText(candidate.prompt).length > 0 || asText(candidate.text).length > 0;
+          var errorPayload = toRecord(candidate.error);
+          var hasErrorText = asText(errorPayload.user_message).length > 0 || asText(errorPayload.message).length > 0;
+          if (MODE_SET.has(mode)) return true;
+          if (hasStep && hasPromptText) return true;
+          if (hasStep && Object.keys(actionContract).length > 0) return true;
+          if (hasStep && hasErrorText) return true;
           return false;
         }
 
@@ -822,6 +830,9 @@
             toRecord(root.result),
             toRecord(structured.result),
             toRecord(toolOutput.result),
+            root,
+            structured,
+            toolOutput,
           ];
           for (var i = 0; i < candidates.length; i += 1) {
             if (looksLikeWidgetResult(candidates[i])) return toRecord(candidates[i]);
@@ -1047,7 +1058,25 @@
         function resolveNotificationEvent(detailRaw) {
           var detail = toRecord(detailRaw);
           var method = asText(detail.method);
+          var payload = detail.params || {};
+          var hasResultInParams = Object.keys(extractWidgetResult(payload)).length > 0;
           if (method !== "ui/notifications/tool-result") {
+            if (hasResultInParams) {
+              return {
+                renderable: true,
+                reason: "notification_renderable_params_without_tool_result_method",
+                source: "openai_notification_method",
+                payload: payload,
+              };
+            }
+            if (Object.keys(extractWidgetResult(detail)).length > 0) {
+              return {
+                renderable: true,
+                reason: "notification_renderable_detail_without_tool_result_method",
+                source: "openai_notification_method",
+                payload: detail,
+              };
+            }
             return {
               renderable: false,
               reason: method ? "notification_method_not_tool_result" : "notification_method_missing",
@@ -1056,9 +1085,15 @@
             };
           }
 
-          var payload = detail.params || {};
-          var hasResult = Object.keys(extractWidgetResult(payload)).length > 0;
-          if (!hasResult) {
+          if (!hasResultInParams) {
+            if (Object.keys(extractWidgetResult(detail)).length > 0) {
+              return {
+                renderable: true,
+                reason: "tool_result_method_detail_payload",
+                source: "notification_tool_result_method",
+                payload: detail,
+              };
+            }
             return {
               renderable: false,
               reason: "notification_widget_result_missing",

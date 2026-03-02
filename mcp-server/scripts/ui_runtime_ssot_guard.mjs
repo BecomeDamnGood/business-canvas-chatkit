@@ -72,9 +72,22 @@ assertIncludes(bundled, "toRecord(toRecord(toolOutput._meta).widget_result)", "b
 assertIncludes(bundled, "toRecord(root.result)", "bundled root.result fallback");
 assertIncludes(bundled, "toRecord(structured.result)", "bundled structured.result fallback");
 assertIncludes(bundled, "toRecord(toolOutput.result)", "bundled toolOutput.result fallback");
+assertIncludes(bundled, "root,", "bundled direct root fallback");
+assertIncludes(bundled, "structured,", "bundled direct structured fallback");
+assertIncludes(bundled, "toolOutput,", "bundled direct toolOutput fallback");
 assertIncludes(bundled, 'window.addEventListener("openai:set_globals"', "bundled openai:set_globals owner");
 assertIncludes(bundled, 'window.addEventListener("openai:notification"', "bundled openai:notification owner");
 assertIncludes(bundled, 'if (method !== "ui/notifications/tool-result")', "bundled notification method gate");
+assertIncludes(
+  bundled,
+  "notification_renderable_params_without_tool_result_method",
+  "bundled renderable notification params fallback"
+);
+assertIncludes(
+  bundled,
+  "notification_renderable_detail_without_tool_result_method",
+  "bundled renderable notification detail fallback"
+);
 assertIncludes(bundled, "var toolResponseMetadata = toRecord(openai.toolResponseMetadata);", "bundled initial metadata read");
 assertNotMatch(bundled, /toolOutput\._widget_result/, "bundled legacy toolOutput alias non-authority");
 assertNotMatch(bundled, /root\._widget_result/, "bundled legacy root alias non-authority");

@@ -1160,6 +1160,8 @@ test("bundled source is the sole event ingest owner for host updates", () => {
   assert.match(source, /window\.addEventListener\("openai:set_globals", function \(\) \{[\s\S]*ingestSetGlobalsPayload\(\);[\s\S]*\}\);/);
   assert.match(source, /window\.addEventListener\("openai:notification", function \(event\) \{/);
   assert.match(source, /if \(method !== "ui\/notifications\/tool-result"\) \{/);
+  assert.match(source, /notification_renderable_params_without_tool_result_method/);
+  assert.match(source, /notification_renderable_detail_without_tool_result_method/);
   assert.match(source, /ingest\(resolved\.payload, resolved\.source\);/);
   assert.match(source, /ingestSetGlobalsPayload\(\);/);
   assert.doesNotMatch(source, /ingest\(readInitialToolOutput\(\), "initial"\);/);
@@ -1174,6 +1176,7 @@ test("bundled source reads canonical widget_result and supports standard result 
   assert.match(source, /toRecord\(root\.result\)/);
   assert.match(source, /toRecord\(structured\.result\)/);
   assert.match(source, /toRecord\(toolOutput\.result\)/);
+  assert.match(source, /var candidates = \[[\s\S]*root,[\s\S]*structured,[\s\S]*toolOutput,[\s\S]*\];/);
   assert.match(source, /var toolResponseMetadata = toRecord\(openai\.toolResponseMetadata\);/);
   assert.match(
     source,
@@ -2962,7 +2965,7 @@ test("computeHydrationState treats non-EN language/ui_strings_lang mismatch as i
   assert.equal(hydration.waiting_reason, "none");
 });
 
-test("resolveWidgetPayload ignores direct widget-result shape from host notification params", () => {
+test("resolveWidgetPayload accepts direct widget-result shape from host notification params", () => {
   const resolved = resolveWidgetPayload({
     current_step_id: "step_0",
     state: {
@@ -2980,11 +2983,11 @@ test("resolveWidgetPayload ignores direct widget-result shape from host notifica
       },
     },
   });
-  assert.equal(resolved.source, "none");
-  assert.equal(resolved.bootstrap_session_id, "");
-  assert.equal(resolved.bootstrap_epoch, 0);
-  assert.equal(resolved.response_seq, 0);
-  assert.equal(resolved.host_widget_session_id, "");
+  assert.equal(resolved.source, "direct");
+  assert.equal(resolved.bootstrap_session_id, "session_direct");
+  assert.equal(resolved.bootstrap_epoch, 2);
+  assert.equal(resolved.response_seq, 11);
+  assert.equal(resolved.host_widget_session_id, "host_direct");
 });
 
 test("render fail-closes interactive mode with missing content into blocked shell", () => {

@@ -148,6 +148,7 @@ test("MCP app contract: bundled render-state prefers _meta.widget_result and acc
   assert.match(bundledRuntimeSource, /toRecord\(root\.result\)/);
   assert.match(bundledRuntimeSource, /toRecord\(structured\.result\)/);
   assert.match(bundledRuntimeSource, /toRecord\(toolOutput\.result\)/);
+  assert.match(bundledRuntimeSource, /var candidates = \[[\s\S]*root,[\s\S]*structured,[\s\S]*toolOutput,[\s\S]*\];/);
   assert.doesNotMatch(bundledRuntimeSource, /toolOutput\._widget_result/);
   assert.doesNotMatch(bundledRuntimeSource, /root\._widget_result/);
   assert.doesNotMatch(bundledRuntimeSource, /structuredContent\._widget_result/);
@@ -159,6 +160,8 @@ test("MCP app contract: bundled render-state prefers _meta.widget_result and acc
   assert.match(bundledRuntimeSource, /window\.addEventListener\("openai:set_globals"/);
   assert.match(bundledRuntimeSource, /window\.addEventListener\("openai:notification"/);
   assert.match(bundledRuntimeSource, /if \(method !== "ui\/notifications\/tool-result"\) \{/);
+  assert.match(bundledRuntimeSource, /notification_renderable_params_without_tool_result_method/);
+  assert.match(bundledRuntimeSource, /notification_renderable_detail_without_tool_result_method/);
 });
 
 test("MCP wrapper parity: model-safe result contract remains minimal in buildModelSafeResult", () => {
