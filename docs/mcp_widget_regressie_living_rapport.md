@@ -3694,3 +3694,67 @@ Status van deze poging:
   - [ ] Weerlegd
   - [ ] Onbeslist
   - Toelichting: ingestlaag accepteert nu renderbare host-envelopes structureel en regressiegates blijven volledig groen.
+
+### Poging 2026-03-02 07:24 UTC (PR-11 deploy-writeback: vorige + huidige wijziging)
+
+- Doel:
+  - Vastleggen dat zowel de vorige ingest-fix als de huidige structurele host-envelope hardening zijn gecommit en als `next` amd64 image zijn gepubliceerd.
+
+- Uitgevoerd (stap 1 t/m 8):
+  - Stap 1:
+    - Vorige ingest-fix bevestigd in git historie.
+    - bewijs:
+      - commit `03f3d9b` (`fix(ui): accept standard OpenAI result envelopes in widget ingest`)
+  - Stap 2:
+    - Huidige host-envelope hardening bevestigd in git historie.
+    - bewijs:
+      - commit `1f415ee` (`fix(ui): harden bundled ingest for host envelope variants`)
+  - Stap 3:
+    - Nieuwe wijzigingen gecommit op `main`.
+    - bewijs:
+      - `git log --oneline -n 4` toont `1f415ee` boven `03f3d9b`.
+  - Stap 4:
+    - `next` deploy amd64 uitgevoerd voor vorige set.
+    - bewijs:
+      - `DEPLOY_TAG=v225`
+      - digest: `sha256:6a62c1a95f9e7dbc235f0a0c1aa865afd482828eca7cd4461100cb7005150774`
+  - Stap 5:
+    - `next` deploy amd64 uitgevoerd voor huidige set.
+    - bewijs:
+      - `DEPLOY_TAG=v226`
+      - digest: `sha256:724e4fdfc618e85da8b573bc220ada65786b8dab237f74e9e28380d2e5f1af43`
+  - Stap 6:
+    - ECR publicatie van beide tags geverifieerd.
+    - bewijs:
+      - `aws ecr describe-images ... imageTag=v225 imageTag=v226`
+      - `v225 pushedAt: 2026-03-02T07:40:34.577+01:00`
+      - `v226 pushedAt: 2026-03-02T08:21:15.870+01:00`
+  - Stap 7:
+    - App Runner imagepad expliciet vastgelegd.
+    - bewijs:
+      - `559050238376.dkr.ecr.us-east-1.amazonaws.com/business-canvas-mcp:v225`
+      - `559050238376.dkr.ecr.us-east-1.amazonaws.com/business-canvas-mcp:v226`
+  - Stap 8:
+    - Werkmapstatus geverifieerd als schoon na commit + deploy.
+    - bewijs:
+      - `git status --short` -> leeg
+
+- Verificatie:
+  - `git log --oneline -n 4` -> PASS
+    - kernregel: `1f415ee ...` en `03f3d9b ...` aanwezig in volgorde
+  - `aws ecr describe-images --region us-east-1 --repository-name business-canvas-mcp --image-ids imageTag=v225 imageTag=v226 ...` -> PASS
+    - kernregel: beide tags aanwezig met unieke digests
+  - `git status --short` -> PASS
+    - kernregel: geen lokale wijzigingen
+
+- Open / TODO:
+  - [ ] Live handvalidatie op App Runner moet nog doorlopen met v226 als actieve revision.
+
+- Volgende eerste actie:
+  - App Runner handmatig op `v226` zetten en 1-op-1 runtime-check uitvoeren op dezelfde falende flow.
+
+- Besluit (Bevestigd/Weerlegd/Onbeslist):
+  - [x] Bevestigd
+  - [ ] Weerlegd
+  - [ ] Onbeslist
+  - Toelichting: beide relevante wijzigingssets zijn aantoonbaar gecommit en gepubliceerd als opeenvolgende `next` amd64 images.
