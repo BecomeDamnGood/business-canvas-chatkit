@@ -607,19 +607,12 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const startedAtTrigger = String((context.state as Record<string, unknown>).started ?? "").trim().toLowerCase() === "true";
         const currentStep = String((context.state as Record<string, unknown>).current_step || "");
         const introShown = String((context.state as Record<string, unknown>).intro_shown_session || "");
-        const trimmedUserMessage = String(context.userMessage || "").trim();
         const lastSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
         const hasLastSpecialist = Object.keys(lastSpecialist).length > 0;
-        const isChatInitialMessage =
-          context.inputMode === "chat" &&
-          currentStep === deps.step0Id &&
-          trimmedUserMessage !== "";
         const allowStartActionWithSnapshot =
           context.actionCodeRaw === "ACTION_START" && hasLastSpecialist;
         const isStartTrigger =
-          (isChatInitialMessage ||
-            trimmedUserMessage === "" ||
-            context.actionCodeRaw === "ACTION_START") &&
+          (String(context.userMessage || "").trim() === "" || context.actionCodeRaw === "ACTION_START") &&
           currentStep === deps.step0Id &&
           introShown !== "true" &&
           (!hasLastSpecialist || allowStartActionWithSnapshot);
@@ -628,7 +621,6 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           currentStep === deps.step0Id &&
           introShown !== "true" &&
           context.actionCodeRaw !== "ACTION_START" &&
-          !isChatInitialMessage &&
           !context.isBootstrapPollCall;
         return shouldReturnPrestartGate || isStartTrigger;
       },
@@ -636,13 +628,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const startedAtTrigger = String((context.state as Record<string, unknown>).started ?? "").trim().toLowerCase() === "true";
         const currentStep = String((context.state as Record<string, unknown>).current_step || "");
         const introShown = String((context.state as Record<string, unknown>).intro_shown_session || "");
-        const trimmedUserMessage = String(context.userMessage || "").trim();
         const lastSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
         const hasLastSpecialist = Object.keys(lastSpecialist).length > 0;
-        const isChatInitialMessage =
-          context.inputMode === "chat" &&
-          currentStep === deps.step0Id &&
-          trimmedUserMessage !== "";
         const allowStartActionWithSnapshot =
           context.actionCodeRaw === "ACTION_START" && hasLastSpecialist;
 
@@ -651,13 +638,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           currentStep === deps.step0Id &&
           introShown !== "true" &&
           context.actionCodeRaw !== "ACTION_START" &&
-          !isChatInitialMessage &&
           !context.isBootstrapPollCall;
 
         const isStartTrigger =
-          (isChatInitialMessage ||
-            trimmedUserMessage === "" ||
-            context.actionCodeRaw === "ACTION_START") &&
+          (String(context.userMessage || "").trim() === "" || context.actionCodeRaw === "ACTION_START") &&
           currentStep === deps.step0Id &&
           introShown !== "true" &&
           (!hasLastSpecialist || allowStartActionWithSnapshot);
