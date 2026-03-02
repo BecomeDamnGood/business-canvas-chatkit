@@ -729,34 +729,172 @@
           textSubmit: null,
         };
 
+        var LOCAL_UI_STRINGS_BY_LOCALE = {
+          "en": {
+            uiSubtitle: "Use The Business Strategy Canvas Builder widget to continue (not the chat box)",
+            uiUseWidgetToContinue: "Use The Business Strategy Canvas Builder widget to continue (not the chat box).",
+            byText: "A business model by:",
+            btnStart: "Start the process with Validation & Business Name",
+            startHint: "Click Start to begin.",
+            errorMessage: "Something went wrong while processing your message. Please try again.",
+            prestartWelcome: "Build a complete Business Model and Strategy Canvas step by step.",
+          },
+          "es": {
+            uiSubtitle: "Usa el widget Business Strategy Canvas Builder para continuar (no el cuadro de chat)",
+            uiUseWidgetToContinue: "Usa el widget Business Strategy Canvas Builder para continuar (no el cuadro de chat).",
+            byText: "Un modelo de negocio de:",
+            btnStart: "Inicia el proceso con Validación y nombre del negocio",
+            startHint: "Haz clic en Iniciar para comenzar.",
+            errorMessage: "Algo salió mal al procesar tu mensaje. Por favor, inténtalo de nuevo.",
+            prestartWelcome: "Crea un Modelo de Negocio completo y un Strategy Canvas paso a paso.",
+          },
+          "pt-br": {
+            uiSubtitle: "Use o widget Business Strategy Canvas Builder para continuar (não a caixa de chat)",
+            uiUseWidgetToContinue: "Use o widget Business Strategy Canvas Builder para continuar (não a caixa de chat).",
+            byText: "Um modelo de negócios por:",
+            btnStart: "Inicie o processo com Validação e nome do negócio",
+            startHint: "Clique em Iniciar para começar.",
+            errorMessage: "Algo deu errado ao processar sua mensagem. Por favor, tente novamente.",
+            prestartWelcome: "Construa um Modelo de Negócios completo e um Strategy Canvas passo a passo.",
+          },
+          "fr": {
+            uiSubtitle: "Utilisez le widget Business Strategy Canvas Builder pour continuer (pas la zone de chat)",
+            uiUseWidgetToContinue: "Utilisez le widget Business Strategy Canvas Builder pour continuer (pas la zone de chat).",
+            byText: "Un modèle économique par :",
+            btnStart: "Démarrer le processus avec Validation et nom de l’entreprise",
+            startHint: "Cliquez sur Démarrer pour commencer.",
+            errorMessage: "Une erreur est survenue lors du traitement de ton message. Veuillez réessayer.",
+            prestartWelcome: "Construisez un modèle économique complet et un Strategy Canvas étape par étape.",
+          },
+          "de": {
+            uiSubtitle: "Nutze das Widget Business Strategy Canvas Builder, um fortzufahren (nicht das Chatfeld)",
+            uiUseWidgetToContinue: "Nutze das Widget Business Strategy Canvas Builder, um fortzufahren (nicht das Chatfeld).",
+            byText: "Ein Geschäftsmodell von:",
+            btnStart: "Starte den Prozess mit Validierung & Unternehmensname",
+            startHint: "Klicke auf Start, um zu beginnen.",
+            errorMessage: "Beim Verarbeiten deiner Nachricht ist etwas schiefgelaufen. Bitte versuche es erneut.",
+            prestartWelcome: "Erstelle Schritt für Schritt ein vollständiges Geschäftsmodell und ein Strategy Canvas.",
+          },
+          "hi": {
+            uiSubtitle: "आगे बढ़ने के लिए Business Strategy Canvas Builder विजेट का उपयोग करें (चैट बॉक्स नहीं)",
+            uiUseWidgetToContinue: "आगे बढ़ने के लिए Business Strategy Canvas Builder विजेट का उपयोग करें (चैट बॉक्स नहीं)।",
+            byText: "व्यवसाय मॉडल —",
+            btnStart: "सत्यापन और व्यवसाय का नाम के साथ प्रक्रिया शुरू करें",
+            startHint: "शुरू करने के लिए Start पर क्लिक करें।",
+            errorMessage: "आपके संदेश को प्रोसेस करते समय कुछ गलत हो गया। कृपया फिर प्रयास करें।",
+            prestartWelcome: "कदम-दर-कदम एक पूरा बिज़नेस मॉडल और Strategy Canvas बनाएँ।",
+          },
+          "ja": {
+            uiSubtitle: "続行するには Business Strategy Canvas Builder のウィジェットを使用してください（チャット欄ではありません）",
+            uiUseWidgetToContinue: "続行するには Business Strategy Canvas Builder のウィジェットを使用してください（チャット欄ではありません）。",
+            byText: "ビジネスモデル：",
+            btnStart: "「検証とビジネス名」でプロセスを開始",
+            startHint: "開始するには「Start」をクリックしてください。",
+            errorMessage: "メッセージの処理中に問題が発生しました。もう一度お試しください。",
+            prestartWelcome: "完全なビジネスモデルとStrategy Canvasを、ステップごとに作成します。",
+          },
+          "id": {
+            uiSubtitle: "Gunakan widget Business Strategy Canvas Builder untuk melanjutkan (bukan kotak chat)",
+            uiUseWidgetToContinue: "Gunakan widget Business Strategy Canvas Builder untuk melanjutkan (bukan kotak chat).",
+            byText: "Model bisnis oleh:",
+            btnStart: "Mulai proses dengan Validasi & Nama Bisnis",
+            startHint: "Klik Mulai untuk memulai.",
+            errorMessage: "Terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.",
+            prestartWelcome: "Bangun Model Bisnis lengkap dan Strategy Canvas langkah demi langkah.",
+          },
+          "it": {
+            uiSubtitle: "Usa il widget Business Strategy Canvas Builder per continuare (non la chat)",
+            uiUseWidgetToContinue: "Usa il widget Business Strategy Canvas Builder per continuare (non la chat).",
+            byText: "Un modello di business di:",
+            btnStart: "Avvia il processo con Validazione e nome dell’azienda",
+            startHint: "Clicca su Start per iniziare.",
+            errorMessage: "Si è verificato un errore durante l’elaborazione del tuo messaggio. Riprova.",
+            prestartWelcome: "Costruisci un Modello di Business completo e uno Strategy Canvas passo dopo passo.",
+          },
+          "nl": {
+            uiSubtitle: "Gebruik de Business Strategy Canvas Builder-widget om verder te gaan (niet het chatvenster)",
+            uiUseWidgetToContinue: "Gebruik de Business Strategy Canvas Builder-widget om verder te gaan (niet het chatvenster).",
+            byText: "Een businessmodel door:",
+            btnStart: "Start het proces met Validatie & Bedrijfsnaam",
+            startHint: "Klik op Start om te beginnen.",
+            errorMessage: "Er ging iets mis bij het verwerken van je bericht. Probeer het opnieuw.",
+            prestartWelcome: "Bouw stap voor stap een compleet Business Model en Strategy Canvas.",
+          },
+          "ko": {
+            uiSubtitle: "계속하려면 Business Strategy Canvas Builder 위젯을 사용하세요(채팅창 아님)",
+            uiUseWidgetToContinue: "계속하려면 Business Strategy Canvas Builder 위젯을 사용하세요(채팅창 아님).",
+            byText: "비즈니스 모델:",
+            btnStart: "검증 및 비즈니스 이름으로 프로세스 시작하기",
+            startHint: "시작하려면 Start를 클릭하세요.",
+            errorMessage: "메시지를 처리하는 동안 문제가 발생했습니다. 다시 시도해 주세요.",
+            prestartWelcome: "완전한 비즈니스 모델과 Strategy Canvas를 단계별로 만들어 보세요.",
+          },
+          "zh-hans": {
+            uiSubtitle: "请使用“商业战略画布构建器”小组件继续（不要使用聊天框）",
+            uiUseWidgetToContinue: "请使用“商业战略画布构建器”小组件继续（不要使用聊天框）。",
+            byText: "商业模型作者：",
+            btnStart: "从“验证与企业名称”开始流程",
+            startHint: "点击“开始”以启动。",
+            errorMessage: "处理你的消息时出错。请重试。",
+            prestartWelcome: "逐步构建完整的商业模式与战略画布。",
+          },
+        };
+
+        function normalizeLocaleTag(raw) {
+          var value = asText(raw).replace(/_/g, "-").toLowerCase();
+          if (!value) return "";
+          var parts = value.split("-").filter(Boolean);
+          if (!parts.length) return "";
+          return parts.join("-");
+        }
+
+        function localStringsForLanguage(langRaw) {
+          var fallbackEn = toRecord(LOCAL_UI_STRINGS_BY_LOCALE["en"]);
+          var normalized = normalizeLocaleTag(langRaw);
+          if (!normalized) return Object.assign({ lang: "en" }, fallbackEn);
+          var exact = toRecord(LOCAL_UI_STRINGS_BY_LOCALE[normalized]);
+          if (Object.keys(exact).length > 0) {
+            return Object.assign({ lang: normalized.split("-")[0] || "en" }, fallbackEn, exact);
+          }
+          var base = normalized.split("-")[0] || "";
+          if (!base) return Object.assign({ lang: "en" }, fallbackEn);
+          if (base === "pt") {
+            var ptBr = toRecord(LOCAL_UI_STRINGS_BY_LOCALE["pt-br"]);
+            return Object.assign({ lang: "pt" }, fallbackEn, ptBr);
+          }
+          if (base === "zh") {
+            var zhHans = toRecord(LOCAL_UI_STRINGS_BY_LOCALE["zh-hans"]);
+            return Object.assign({ lang: "zh" }, fallbackEn, zhHans);
+          }
+          var localeKeys = Object.keys(LOCAL_UI_STRINGS_BY_LOCALE);
+          for (var i = 0; i < localeKeys.length; i += 1) {
+            var key = localeKeys[i];
+            if (key.split("-")[0] === base) {
+              return Object.assign({ lang: base }, fallbackEn, toRecord(LOCAL_UI_STRINGS_BY_LOCALE[key]));
+            }
+          }
+          return Object.assign({ lang: "en" }, fallbackEn);
+        }
+
         function preferredLanguage() {
           var state = toRecord(runtime.state);
-          var explicit = asText(state.language || state.ui_strings_lang).toLowerCase();
+          var explicit = normalizeLocaleTag(state.language || state.ui_strings_lang || state.ui_strings_requested_lang);
           if (explicit) return explicit;
-          var navigatorLanguage = asText(globalThis.navigator && globalThis.navigator.language).toLowerCase();
+          var navigatorLanguage = normalizeLocaleTag(asText(globalThis.navigator && globalThis.navigator.language));
           return navigatorLanguage || "en";
         }
 
         function fallbackStringsFromLang(langRaw) {
-          var lang = asText(langRaw).toLowerCase();
-          var isNl = lang.indexOf("nl") === 0;
-          if (isNl) {
-            return {
-              lang: "nl",
-              subtitle: "Gebruik de widget om verder te gaan (niet het chatvenster).",
-              byline: "A business model by",
-              prestartText: "Klik op Start om te beginnen.",
-              btnStart: "Start het proces met Validatie & Bedrijfsnaam",
-              errorMessage: "Er ging iets mis. Probeer opnieuw.",
-            };
-          }
+          var localized = localStringsForLanguage(langRaw);
           return {
-            lang: "en",
-            subtitle: "Use the widget to continue (not the chat box).",
-            byline: "A business model by",
-            prestartText: "Click Start to begin.",
-            btnStart: "Start the process with Validation & Business Name",
-            errorMessage: "Something went wrong. Please try again.",
+            lang: asText(localized.lang).toLowerCase() || "en",
+            subtitle: asText(localized.uiSubtitle || localized.uiUseWidgetToContinue || ""),
+            byline: asText(localized.byText || "A business model by:"),
+            prestartText: asText(localized.prestartWelcome || localized.startHint || "Click Start to begin."),
+            btnStart: asText(localized.btnStart || "Start the process with Validation & Business Name"),
+            errorMessage: asText(localized.errorMessage || "Something went wrong. Please try again."),
+            startHint: asText(localized.startHint || "Click Start to begin."),
+            uiTitle: "Business Strategy Canvas Builder",
           };
         }
 
@@ -899,6 +1037,9 @@
           var label = asText(action.label);
           var labelKey = asText(action.label_key);
           if (!label && labelKey) label = asText(strings[labelKey]);
+          if (!label && actionCode === "ACTION_START") {
+            label = fallbackStringsFromLang(preferredLanguage()).btnStart;
+          }
           if (!label) label = actionCode;
           return {
             actionCode: actionCode,
@@ -1017,6 +1158,9 @@
           var view = toRecord(uiPayload.view);
           var mode = asText(view.mode).toLowerCase();
           if (!MODE_SET.has(mode)) mode = "prestart";
+          var localUi = fallbackStringsFromLang(
+            asText(state.language || state.ui_strings_lang || state.ui_strings_requested_lang || preferredLanguage())
+          );
 
           runtime.state = state;
           runtime.mode = mode;
@@ -1032,19 +1176,19 @@
           if (ui.badge) ui.badge.textContent = badgeText;
           setHidden(ui.badge, badgeText.length === 0);
 
-          var subtitle = uiString(state, "uiSubtitle") || uiString(state, "uiUseWidgetToContinue");
+          var subtitle = uiString(state, "uiSubtitle") || uiString(state, "uiUseWidgetToContinue") || localUi.subtitle;
           if (ui.uiSubtitle) ui.uiSubtitle.textContent = subtitle;
           setHidden(ui.uiSubtitle, subtitle.length === 0);
 
-          var titleText = uiString(state, "uiTitle");
+          var titleText = uiString(state, "uiTitle") || localUi.uiTitle;
           if (titleText && ui.uiTitle) ui.uiTitle.textContent = titleText;
-          var byText = uiString(state, "uiBylinePrefix");
+          var byText = uiString(state, "uiBylinePrefix") || uiString(state, "byText") || localUi.byline;
           if (byText && ui.byText) ui.byText.textContent = byText;
 
           var bodyText = asText(result.text);
           var promptText = asText(result.prompt);
           if ((mode === "interactive" || mode === "prestart") && bodyText.length === 0 && promptText.length === 0) {
-            bodyText = fallbackStringsFromLang(preferredLanguage()).prestartText;
+            bodyText = localUi.prestartText;
           }
           if (ui.cardDesc) ui.cardDesc.innerHTML = formatText(bodyText);
           if (ui.card) ui.card.textContent = "";
@@ -1056,7 +1200,7 @@
           var errorPayload = toRecord(result.error);
           var errorText = asText(errorPayload.user_message) || asText(errorPayload.message);
           if (mode === "blocked" || mode === "failed") {
-            if (!errorText) errorText = fallbackStringsFromLang(preferredLanguage()).errorMessage;
+            if (!errorText) errorText = localUi.errorMessage;
             if (ui.error) ui.error.textContent = errorText;
             setHidden(ui.error, false);
             setHidden(ui.actions, true);
@@ -1078,7 +1222,7 @@
                 actionCode: "ACTION_START",
                 role: "start",
                 payloadMode: "none",
-                label: uiString(state, "btnStart") || fallbackStringsFromLang(preferredLanguage()).btnStart,
+                label: uiString(state, "btnStart") || localUi.btnStart,
               });
             }
           }
