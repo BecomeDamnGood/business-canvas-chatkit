@@ -697,7 +697,6 @@
       (function () {
         "use strict";
 
-        var CONTRACT_FAIL_TEXT = "UI contract violation. Refresh and retry.";
         var MODE_SET = new Set(["prestart", "interactive", "waiting_locale", "recovery", "blocked", "failed"]);
 
         function byId(id) {
@@ -712,6 +711,7 @@
           badge: byId("badge"),
           sectionTitle: byId("sectionTitle"),
           card: byId("card"),
+          cardDesc: byId("cardDesc"),
           prompt: byId("prompt"),
           actions: byId("actions"),
           inputForm: byId("inputForm"),
@@ -728,6 +728,70 @@
           actions: [],
           textSubmit: null,
         };
+
+        function preferredLanguage() {
+          var state = toRecord(runtime.state);
+          var explicit = asText(state.language || state.ui_strings_lang).toLowerCase();
+          if (explicit) return explicit;
+          var navigatorLanguage = asText(globalThis.navigator && globalThis.navigator.language).toLowerCase();
+          return navigatorLanguage || "en";
+        }
+
+        function fallbackStringsFromLang(langRaw) {
+          var lang = asText(langRaw).toLowerCase();
+          var isNl = lang.indexOf("nl") === 0;
+          if (isNl) {
+            return {
+              lang: "nl",
+              subtitle: "Gebruik de widget om verder te gaan (niet het chatvenster).",
+              byline: "A business model by",
+              prestartText: "Klik op Start om te beginnen.",
+              btnStart: "Start het proces met Validatie & Bedrijfsnaam",
+              errorMessage: "Er ging iets mis. Probeer opnieuw.",
+            };
+          }
+          return {
+            lang: "en",
+            subtitle: "Use the widget to continue (not the chat box).",
+            byline: "A business model by",
+            prestartText: "Click Start to begin.",
+            btnStart: "Start the process with Validation & Business Name",
+            errorMessage: "Something went wrong. Please try again.",
+          };
+        }
+
+        function buildFallbackPrestartResult() {
+          var strings = fallbackStringsFromLang(preferredLanguage());
+          return {
+            state: {
+              current_step: "step_0",
+              language: strings.lang,
+              ui_strings_lang: strings.lang,
+              ui_strings: {
+                uiTitle: "Business Strategy Canvas Builder",
+                uiBylinePrefix: strings.byline,
+                uiSubtitle: strings.subtitle,
+                uiUseWidgetToContinue: strings.subtitle,
+                btnStart: strings.btnStart,
+              },
+            },
+            ui: {
+              view: { mode: "prestart" },
+              action_contract: {
+                actions: [
+                  {
+                    action_code: "ACTION_START",
+                    role: "start",
+                    payload_mode: "none",
+                    label: strings.btnStart,
+                  },
+                ],
+              },
+            },
+            text: strings.prestartText,
+            prompt: "",
+          };
+        }
 
         function toRecord(value) {
           if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -770,31 +834,19 @@
           }
         }
 
-        function failClosed(reason, detail) {
-          document.body.setAttribute("data-ui-marker", reason);
-          console.warn("[ui_fail_closed]", {
-            reason: reason,
-            detail: detail || {},
-          });
-          if (ui.status) ui.status.textContent = "";
-          if (ui.meta) ui.meta.textContent = "";
-          if (ui.card) ui.card.textContent = "";
-          if (ui.prompt) ui.prompt.textContent = "";
-          if (ui.badge) ui.badge.textContent = "";
-          if (ui.sectionTitle) ui.sectionTitle.textContent = "";
-          if (ui.uiSubtitle) ui.uiSubtitle.textContent = "";
-          if (ui.actions) ui.actions.innerHTML = "";
-          if (ui.inputText) ui.inputText.value = "";
-          if (ui.error) ui.error.textContent = CONTRACT_FAIL_TEXT + " [" + reason + "]";
-          setHidden(ui.error, false);
-          setHidden(ui.badge, true);
-          setHidden(ui.sectionTitle, true);
-          setHidden(ui.uiSubtitle, true);
-          setHidden(ui.card, true);
-          setHidden(ui.prompt, true);
-          setHidden(ui.actions, true);
-          setHidden(ui.inputForm, true);
-          setLoading(false);
+        function escapeHtml(text) {
+          return String(text || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+
+        function formatText(text) {
+          var escaped = escapeHtml(text);
+          var bolded = escaped.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+          return bolded.replace(/\r?\n/g, "<br>");
         }
 
         function looksLikeWidgetResult(candidateRaw) {
@@ -887,10 +939,14 @@
                 ui_action_liveness_client_action_id: "",
               });
               runtime.state = livenessState;
-              if (typeof openai.setWidgetState === "function") {
+            if (typeof openai.setWidgetState === "function") {
                 openai.setWidgetState(livenessState);
               }
-              failClosed("transport_unavailable", {});
+              if (ui.error) {
+                ui.error.textContent = fallbackStringsFromLang(preferredLanguage()).errorMessage;
+                setHidden(ui.error, false);
+              }
+              setLoading(false);
               return;
             }
           var nextState = Object.assign({}, runtime.state, toRecord(extraState));
@@ -906,7 +962,10 @@
             ingest(response, "call_tool");
           } catch (error) {
             console.warn("[ui_call_failed]", { message: String(error && error.message ? error.message : error) });
-            failClosed("call_failed", {});
+            if (ui.error) {
+              ui.error.textContent = fallbackStringsFromLang(preferredLanguage()).errorMessage;
+              setHidden(ui.error, false);
+            }
           } finally {
             setLoading(false);
           }
@@ -944,10 +1003,7 @@
           setHidden(ui.actions, !showActionButtons);
 
           var showInput = mode === "interactive" && runtime.textSubmit && runtime.textSubmit.payloadMode !== "scores";
-          if (runtime.textSubmit && runtime.textSubmit.payloadMode === "scores") {
-            failClosed("unsupported_payload_mode_scores", { current_step: asText(runtime.state.current_step) || "" });
-            return;
-          }
+          if (runtime.textSubmit && runtime.textSubmit.payloadMode === "scores") showInput = false;
 
           setHidden(ui.inputForm, !showInput);
           if (ui.inputSend) {
@@ -960,16 +1016,13 @@
           var uiPayload = toRecord(result.ui);
           var view = toRecord(uiPayload.view);
           var mode = asText(view.mode).toLowerCase();
-          if (!MODE_SET.has(mode)) {
-            failClosed("view_mode_missing", { source: source });
-            return;
-          }
+          if (!MODE_SET.has(mode)) mode = "prestart";
 
           runtime.state = state;
           runtime.mode = mode;
           runtime.actions = parseActions(result);
 
-          var stepText = asText(state.current_step) || "";
+          var stepText = asText(state.current_step || result.current_step_id) || "step_0";
           if (ui.status) ui.status.textContent = stepText;
           if (ui.meta) ui.meta.textContent = mode;
           if (ui.sectionTitle) ui.sectionTitle.textContent = stepText;
@@ -990,18 +1043,20 @@
 
           var bodyText = asText(result.text);
           var promptText = asText(result.prompt);
-          if (ui.card) ui.card.textContent = bodyText;
+          if ((mode === "interactive" || mode === "prestart") && bodyText.length === 0 && promptText.length === 0) {
+            bodyText = fallbackStringsFromLang(preferredLanguage()).prestartText;
+          }
+          if (ui.cardDesc) ui.cardDesc.innerHTML = formatText(bodyText);
+          if (ui.card) ui.card.textContent = "";
           if (ui.prompt) ui.prompt.textContent = promptText;
-          setHidden(ui.card, bodyText.length === 0);
+          setHidden(ui.cardDesc, bodyText.length === 0);
+          setHidden(ui.card, true);
           setHidden(ui.prompt, promptText.length === 0);
 
           var errorPayload = toRecord(result.error);
           var errorText = asText(errorPayload.user_message) || asText(errorPayload.message);
           if (mode === "blocked" || mode === "failed") {
-            if (!errorText) {
-              failClosed("blocked_without_error_message", { mode: mode });
-              return;
-            }
+            if (!errorText) errorText = fallbackStringsFromLang(preferredLanguage()).errorMessage;
             if (ui.error) ui.error.textContent = errorText;
             setHidden(ui.error, false);
             setHidden(ui.actions, true);
@@ -1019,19 +1074,13 @@
               }
             }
             if (!hasStartAction) {
-              failClosed("prestart_missing_start_action", { current_step: asText(state.current_step) || "" });
-              return;
+              runtime.actions.unshift({
+                actionCode: "ACTION_START",
+                role: "start",
+                payloadMode: "none",
+                label: uiString(state, "btnStart") || fallbackStringsFromLang(preferredLanguage()).btnStart,
+              });
             }
-          }
-
-          if (mode === "interactive" && runtime.actions.length === 0) {
-            failClosed("interactive_missing_actions", { current_step: asText(state.current_step) || "" });
-            return;
-          }
-
-          if ((mode === "interactive" || mode === "prestart") && bodyText.length === 0 && promptText.length === 0) {
-            failClosed("missing_render_text", { mode: mode, current_step: asText(state.current_step) || "" });
-            return;
           }
 
           setHidden(ui.error, true);
@@ -1049,7 +1098,7 @@
         function ingest(rawPayload, source) {
           var result = extractWidgetResult(rawPayload);
           if (Object.keys(result).length === 0) {
-            failClosed("widget_result_missing", { source: source });
+            renderResult(buildFallbackPrestartResult(), source + "_fallback");
             return;
           }
           renderResult(result, source);
@@ -1057,66 +1106,36 @@
 
         function resolveNotificationEvent(detailRaw) {
           var detail = toRecord(detailRaw);
-          var method = asText(detail.method);
           var payload = detail.params || {};
           var hasResultInParams = Object.keys(extractWidgetResult(payload)).length > 0;
-          if (method !== "ui/notifications/tool-result") {
-            if (hasResultInParams) {
-              return {
-                renderable: true,
-                reason: "notification_renderable_params_without_tool_result_method",
-                source: "openai_notification_method",
-                payload: payload,
-              };
-            }
-            if (Object.keys(extractWidgetResult(detail)).length > 0) {
-              return {
-                renderable: true,
-                reason: "notification_renderable_detail_without_tool_result_method",
-                source: "openai_notification_method",
-                payload: detail,
-              };
-            }
+          if (hasResultInParams) {
             return {
-              renderable: false,
-              reason: method ? "notification_method_not_tool_result" : "notification_method_missing",
+              renderable: true,
+              reason: "notification_params_payload",
               source: "openai_notification_method",
-              payload: {},
+              payload: payload,
             };
           }
-
-          if (!hasResultInParams) {
-            if (Object.keys(extractWidgetResult(detail)).length > 0) {
-              return {
-                renderable: true,
-                reason: "tool_result_method_detail_payload",
-                source: "notification_tool_result_method",
-                payload: detail,
-              };
-            }
+          if (Object.keys(extractWidgetResult(detail)).length > 0) {
             return {
-              renderable: false,
-              reason: "notification_widget_result_missing",
+              renderable: true,
+              reason: "notification_detail_payload",
               source: "openai_notification_method",
-              payload: {},
+              payload: detail,
             };
           }
 
           return {
-            renderable: true,
-            reason: "tool_result_method",
-            source: "notification_tool_result_method",
-            payload: payload,
+            renderable: false,
+            reason: "notification_payload_missing",
+            source: "openai_notification_method",
+            payload: {},
           };
         }
 
         function onSubmit(event) {
           event.preventDefault();
           if (runtime.loading) return;
-          if (!runtime.textSubmit) {
-            failClosed("text_submit_missing", { mode: runtime.mode || "" });
-            return;
-          }
           var message = asText(ui.inputText ? ui.inputText.value : "");
           if (!message) return;
           if (ui.inputText) ui.inputText.value = "";
@@ -1137,8 +1156,7 @@
         function ingestSetGlobalsPayload() {
           var payload = readInitialToolOutput();
           if (Object.keys(extractWidgetResult(payload)).length === 0) {
-            document.body.setAttribute("data-ui-marker", "set_globals_no_widget_result");
-            console.warn("[ui_set_globals_ignored]", { reason: "set_globals_no_widget_result" });
+            renderResult(buildFallbackPrestartResult(), "set_globals_fallback");
             return;
           }
           ingest(payload, "set_globals");
@@ -1152,11 +1170,6 @@
           var detail = toRecord(event && event.detail);
           var resolved = resolveNotificationEvent(detail);
           if (!resolved.renderable) {
-            document.body.setAttribute("data-ui-marker", resolved.reason);
-            console.warn("[ui_notification_ignored]", {
-              reason: resolved.reason,
-              source: resolved.source,
-            });
             return;
           }
           ingest(resolved.payload, resolved.source);

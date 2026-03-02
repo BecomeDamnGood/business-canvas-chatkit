@@ -130,6 +130,9 @@ export type RunStepRouteStep0Ports = {
     routeOrText: string
   ) => Promise<{ state: CanvasState; interactiveReady: boolean }>;
   parseStep0Final: (...args: any[]) => any;
+  inferStep0SeedFromInitialMessage: (
+    rawInput: string
+  ) => { venture: string; name: string; status: "existing" | "starting" } | null;
   step0ReadinessQuestion: (...args: any[]) => string;
   step0CardDescForState: (state: CanvasState | null | undefined) => string;
   step0QuestionForState: (state: CanvasState | null | undefined) => string;

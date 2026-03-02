@@ -19,8 +19,6 @@ import {
   resolveLocaleHintFromExtra,
 } from "./locale_resolution.js";
 import {
-  hasCompleteOrderingTuple,
-  normalizeBootstrapSessionId,
   readBootstrapOrdering,
 } from "./ordering_parity.js";
 import {
@@ -153,26 +151,25 @@ function createAppServer(baseUrl: string): McpServer {
         typeof (structuredContent as any).result === "object"
           ? ((structuredContent as any).result as Record<string, unknown>)
           : {};
-      const hasMetaWidgetResult =
+      const metaWidgetResult =
         meta &&
         typeof meta === "object" &&
         (meta as any).widget_result &&
-        typeof (meta as any).widget_result === "object";
-      const hasStructuredResult = Object.keys(structuredResult).length > 0;
-      const contentSource = hasMetaWidgetResult
-        ? ((meta as any).widget_result as Record<string, unknown>)
-        : structuredResult;
+        typeof (meta as any).widget_result === "object"
+          ? ((meta as any).widget_result as Record<string, unknown>)
+          : null;
+      const contentSource = metaWidgetResult || structuredResult;
       const renderSourceOrdering = readBootstrapOrdering(contentSource);
       const contentSourceState =
         contentSource && typeof contentSource === "object" && contentSource.state && typeof contentSource.state === "object"
           ? (contentSource.state as Record<string, unknown>)
           : {};
-      const renderSource = hasMetaWidgetResult
+      const renderSource = metaWidgetResult
         ? "meta.widget_result"
-        : (hasStructuredResult ? "structuredContent.result" : "none");
-      const renderSourceReasonCode = hasMetaWidgetResult
+        : (Object.keys(structuredResult).length > 0 ? "structuredContent.result" : "none");
+      const renderSourceReasonCode = metaWidgetResult
         ? "meta_widget_result_authoritative"
-        : (hasStructuredResult ? "structured_content_result_fallback" : "render_source_missing");
+        : (Object.keys(structuredResult).length > 0 ? "structured_content_result_fallback" : "render_source_missing");
       const renderSourceStepId =
         safeString(
           (contentSource as any)?.current_step_id ??
@@ -181,27 +178,26 @@ function createAppServer(baseUrl: string): McpServer {
           "step_0"
         ) || "step_0";
       logStructuredEvent(
-        hasMetaWidgetResult || hasStructuredResult ? "info" : "error",
+        Object.keys(contentSource).length > 0 ? "info" : "error",
         "run_step_render_source_selected",
         {
           correlation_id: correlationId,
           trace_id: traceId,
-          session_id: renderSourceOrdering.sessionId || normalizeBootstrapSessionId(contentSourceState.bootstrap_session_id),
+          session_id: renderSourceOrdering.sessionId || safeString(contentSourceState.bootstrap_session_id),
           step_id: renderSourceStepId,
           contract_id: resolveContractIdFromRecord(contentSource || { state: args.state ?? {} }),
         },
         {
           render_source: renderSource,
           render_source_reason_code: renderSourceReasonCode,
-          render_source_tuple_complete: hasCompleteOrderingTuple(renderSourceOrdering),
+          render_source_tuple_complete: !!(renderSourceOrdering.sessionId && renderSourceOrdering.epoch > 0),
           host_widget_session_id_present: renderSourceOrdering.hostWidgetSessionId ? "true" : "false",
         }
       );
       const contentText = buildContentFromResult(contentSource, { isFirstStart });
-      const parsedStructuredContent = RunStepToolStructuredContentOutputSchema.parse(structuredContent);
       return {
         content: [{ type: "text", text: contentText }],
-        structuredContent: parsedStructuredContent,
+        structuredContent,
         ...(meta ? { _meta: meta } : {}),
       };
     }

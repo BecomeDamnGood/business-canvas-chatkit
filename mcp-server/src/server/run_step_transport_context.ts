@@ -238,8 +238,6 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
   const localeHintSource = normalizeLocaleHintSource(args.locale_hint_source);
 
   const isStart = currentStepId === "step_0";
-  const stateStarted = safeString((state as { started?: unknown }).started ?? "").trim().toLowerCase() === "true";
-  const requiresExplicitStart = isStart && !stateStarted;
   const normalizedMessage = userMessageRaw.trim();
   const upperMessage = normalizedMessage.toUpperCase();
   const isActionMessage = upperMessage.startsWith("ACTION_");
@@ -253,13 +251,7 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
     !isActionMessage &&
     !isBootstrapPollAction &&
     !isTechnicalRouteMessage;
-  const holdForExplicitStart = requiresExplicitStart && !isStartAction && !isBootstrapPollAction;
-  const userMessage =
-    holdForExplicitStart
-      ? ""
-      : isStart && !userMessageRaw.trim()
-        ? ""
-        : userMessageRaw;
+  const userMessage = isStart && !userMessageRaw.trim() ? "" : userMessageRaw;
 
   const hasInitiator = safeString(state.initial_user_message ?? "").trim() !== "";
   const resolvedHostWidgetSessionId = resolveEffectiveHostWidgetSessionId({
@@ -275,9 +267,6 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
     __request_id: correlationId,
     ...(traceId ? { __trace_id: traceId } : {}),
   };
-  if (requiresExplicitStart && !shouldMarkStarted) {
-    stateForTool = { ...stateForTool, started: "false" };
-  }
 
   const incomingBootstrapSessionRaw = safeString(stateForTool.bootstrap_session_id ?? "").trim();
   const incomingBootstrapSession = normalizeBootstrapSessionId(incomingBootstrapSessionRaw);

@@ -15,8 +15,6 @@ const RUNTIME_GOLDEN_FILES = [
   "prestart.json",
   "waiting_locale.json",
   "interactive.json",
-  "blocked.json",
-  "failed.json",
 ] as const;
 
 type RuntimeGoldenFixture = {
@@ -294,7 +292,7 @@ test("canonical view decision: step_0 not-started always emits prestart with ACT
   assert.equal(String(guard.reason_code || ""), "");
 });
 
-test("contract invariant: step_0 started=true cannot be successful with no_output:NO_MENU", () => {
+test("contract invariant telemetry: step_0 started=true with no_output:NO_MENU stays non-fail-closed", () => {
   const response = {
     ok: true,
     tool: "run_step",
@@ -339,11 +337,13 @@ test("contract invariant: step_0 started=true cannot be successful with no_outpu
     attachRegistryPayload: (payload) => payload,
   });
 
-  assert.equal(final.ok, false);
-  assert.equal(String((final.error as Record<string, unknown> | undefined)?.type || ""), "contract_violation");
+  assert.equal(final.ok, true);
+  assert.equal(String((final.error as Record<string, unknown> | undefined)?.type || ""), "");
+  const guard = (final as any).__canonical_view_decision || {};
   assert.equal(
-    String((final.error as Record<string, unknown> | undefined)?.reason || ""),
-    "step0_started_no_output_no_menu_forbidden"
+    String(guard.reason_code || "") === "" ||
+      String(guard.reason_code || "") === "step0_started_no_output_no_menu_forbidden",
+    true
   );
   assert.equal(String((final as Record<string, unknown>).ack_status || ""), "");
   assert.equal((final as Record<string, unknown>).state_advanced, undefined);
@@ -803,7 +803,7 @@ test("run_step canonicalizes legacy state.language_source transport values", asy
   assert.equal(String(result?.state?.language_source || ""), "locale_hint");
 });
 
-test("run_step blocks invalid incoming contract state instead of silently accepting it", async () => {
+test("run_step tolerates invalid incoming contract state markers and continues", async () => {
   const result = await run_step({
     user_message: "ACTION_START",
     input_mode: "widget",
@@ -815,11 +815,10 @@ test("run_step blocks invalid incoming contract state instead of silently accept
       last_specialist_result: {},
     },
   });
-  assert.equal(result?.ok, false);
-  assert.equal(String(result?.error?.type || ""), "invalid_state");
-  assert.equal(String(result?.state?.ui_gate_status || ""), "failed");
-  assert.equal(String(result?.state?.ui_gate_reason || ""), "invalid_state");
-  assert.equal(String(result?.state?.bootstrap_phase || ""), "failed");
+  assert.equal(result?.ok, true);
+  assert.notEqual(String(result?.error?.type || ""), "invalid_state");
+  assert.notEqual(String(result?.state?.ui_gate_status || ""), "failed");
+  assert.notEqual(String(result?.state?.bootstrap_phase || ""), "failed");
 });
 
 test("legacy chat state auto-upgrades instead of blocking and preserves NL locale", async () => {
@@ -1337,7 +1336,7 @@ test("guardrail snapshot: runtime golden traces stay stable for prestart/waiting
   }
 });
 
-test("fail-closed: invalid contract markers are surfaced and block the turn", async () => {
+test("invalid contract markers are tolerated without turn blocking", async () => {
   const result = await run_step({
     user_message: "ACTION_START",
     input_mode: "widget",
@@ -1352,19 +1351,10 @@ test("fail-closed: invalid contract markers are surfaced and block the turn", as
       last_specialist_result: {},
     },
   });
-  assert.equal(result?.ok, false);
-  assert.equal(String(result?.error?.type || ""), "invalid_state");
-  assert.equal(String(result?.state?.ui_gate_status || ""), "failed");
-  assert.equal(String(result?.state?.ui_gate_reason || ""), "invalid_state");
-  assert.equal(String(result?.state?.bootstrap_phase || ""), "failed");
-  const markers = (result?.error?.markers || []).slice().sort();
-  if (markers.length > 0) {
-    assert.deepEqual(markers, [
-      "invalid_bootstrap_phase",
-      "invalid_ui_gate_reason",
-      "invalid_ui_strings_status",
-    ]);
-  }
+  assert.equal(result?.ok, true);
+  assert.notEqual(String(result?.error?.type || ""), "invalid_state");
+  assert.notEqual(String(result?.state?.ui_gate_status || ""), "failed");
+  assert.notEqual(String(result?.state?.bootstrap_phase || ""), "failed");
 });
 
 test("legacy confirmation markers no longer preflight-block and keep contract-ready response", async () => {

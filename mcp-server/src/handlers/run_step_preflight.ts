@@ -453,7 +453,6 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       };
     }
 
-    const legacySpecialist = ((params.state as any).last_specialist_result || {}) as Record<string, unknown>;
     const requiresRestart = legacyMarkers.some((marker) =>
       marker === "state_version_mismatch" || marker.startsWith("legacy_")
     );
@@ -469,60 +468,20 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       }
     }
 
-    const errorType = requiresRestart ? "session_upgrade_required" : "invalid_state";
     deps.logStructuredEvent?.({
-      severity: requiresRestart ? "warn" : "error",
-      event: "legacy_preflight_blocked",
+      severity: "warn",
+      event: "legacy_preflight_tolerated",
       state: params.state,
       step_id: String((params.state as any).current_step || deps.step0Id),
       details: {
-        error_type: errorType,
+        error_type: requiresRestart ? "session_upgrade_required" : "invalid_state",
         blocking_marker_class: blockingMarkerClass,
         marker_count: legacyMarkers.length,
         markers: legacyMarkers,
       },
     });
-    const blockedState = params.buildFailClosedState(
-      params.state,
-      requiresRestart ? "session_upgrade_required" : "invalid_state",
-      {
-        requestedLang: params.localeHint || String((params.state as any).language || ""),
-      }
-    );
-    const payload = params.attachRegistryPayload(
-      {
-        ok: false as const,
-        tool: "run_step" as const,
-        current_step_id: String(blockedState.current_step),
-        active_specialist: String((blockedState as any).active_specialist || ""),
-        text: "",
-        prompt: "",
-        specialist: legacySpecialist,
-        state: blockedState,
-        error: {
-          type: errorType,
-          category: "contract",
-          severity: "fatal",
-          retryable: false,
-          message: requiresRestart
-            ? "Legacy session state is blocked in strict contract mode."
-            : "Incoming state violates the strict startup/i18n contract.",
-          retry_action: "restart_session",
-          markers: legacyMarkers,
-          required_action: "restart_session",
-        },
-      },
-      legacySpecialist,
-      {
-        bootstrap_waiting_locale: false,
-        bootstrap_interactive_ready: false,
-        bootstrap_retry_hint: "",
-        locale_pending_background: false,
-        bootstrap_phase: "failed",
-      }
-    );
     return {
-      response: params.finalizeResponse(payload),
+      response: null,
       blockingMarkerClass,
     };
   }

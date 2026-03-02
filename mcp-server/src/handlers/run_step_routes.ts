@@ -698,7 +698,15 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
 
         (context.state as Record<string, unknown>).intro_shown_session = "true";
         const step0FinalField = getFinalFieldForStepId(deps.step0Id) || "step_0_final";
-        const step0Final = String((context.state as Record<string, unknown>)[step0FinalField] ?? "").trim();
+        let step0Final = String((context.state as Record<string, unknown>)[step0FinalField] ?? "").trim();
+        if (!step0Final && context.actionCodeRaw === "ACTION_START" && initialUserMessageSeed) {
+          const inferredSeed = deps.inferStep0SeedFromInitialMessage(initialUserMessageSeed);
+          if (inferredSeed) {
+            step0Final = `Venture: ${inferredSeed.venture} | Name: ${inferredSeed.name} | Status: ${inferredSeed.status}`;
+            (context.state as Record<string, unknown>)[step0FinalField] = step0Final;
+            (context.state as Record<string, unknown>).business_name = inferredSeed.name;
+          }
+        }
 
         if (step0Final) {
           const startResolution = await deps.ensureStartState(context.state, startLocaleSeedText);

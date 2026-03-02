@@ -657,8 +657,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     userMessage.trim() === "" &&
     initialUserMessage &&
     state.current_step === ids.step0Id &&
-    String((state as Record<string, unknown>).step_0_final ?? "").trim() === "" &&
-    Object.keys((state as Record<string, unknown>).last_specialist_result ?? {}).length === 0
+    String((state as Record<string, unknown>).step_0_final ?? "").trim() === ""
   ) {
     userMessage = initialUserMessage;
   }

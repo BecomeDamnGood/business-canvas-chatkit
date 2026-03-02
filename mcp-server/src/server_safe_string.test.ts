@@ -48,12 +48,12 @@ test("run_step MCP handler derives locale hint from request metadata and forward
   );
 });
 
-test("run_step handler enforces explicit ACTION_START before step_0 can mark started", () => {
+test("run_step handler keeps step_0 input permissive while ACTION_START can still mark started", () => {
   const source = readServerSource();
   assert.match(source, /const shouldMarkStarted = isStart && isStartAction;/);
-  assert.match(source, /const holdForExplicitStart = requiresExplicitStart && !isStartAction && !isBootstrapPollAction;/);
-  assert.match(source, /const userMessage =[\s\S]*holdForExplicitStart[\s\S]*\? ""/);
-  assert.match(source, /if \(requiresExplicitStart && !shouldMarkStarted\) \{[\s\S]*started: "false"/);
+  assert.match(source, /const userMessage = isStart && !userMessageRaw\.trim\(\) \? "" : userMessageRaw;/);
+  assert.doesNotMatch(source, /holdForExplicitStart/);
+  assert.doesNotMatch(source, /requiresExplicitStart/);
 });
 
 test("tool input schema canonicalizes legacy state.language_source before zod enum validation", () => {

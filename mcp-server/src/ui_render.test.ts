@@ -1159,9 +1159,9 @@ test("bundled source is the sole event ingest owner for host updates", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /window\.addEventListener\("openai:set_globals", function \(\) \{[\s\S]*ingestSetGlobalsPayload\(\);[\s\S]*\}\);/);
   assert.match(source, /window\.addEventListener\("openai:notification", function \(event\) \{/);
-  assert.match(source, /if \(method !== "ui\/notifications\/tool-result"\) \{/);
-  assert.match(source, /notification_renderable_params_without_tool_result_method/);
-  assert.match(source, /notification_renderable_detail_without_tool_result_method/);
+  assert.match(source, /var hasResultInParams = Object\.keys\(extractWidgetResult\(payload\)\)\.length > 0;/);
+  assert.match(source, /reason: "notification_params_payload"/);
+  assert.match(source, /reason: "notification_detail_payload"/);
   assert.match(source, /ingest\(resolved\.payload, resolved\.source\);/);
   assert.match(source, /ingestSetGlobalsPayload\(\);/);
   assert.doesNotMatch(source, /ingest\(readInitialToolOutput\(\), "initial"\);/);

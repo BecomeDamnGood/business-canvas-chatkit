@@ -377,12 +377,14 @@ test("renderStructuredText renders markdown image lines as card images", { concu
   }
 });
 
-test("bundled runtime renders payload text through textContent and keeps actions innerHTML reset-only", () => {
+test("bundled runtime renders rich body into cardDesc via formatter and keeps unsafe targets out of innerHTML", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /if \(ui\.card\) ui\.card\.textContent = bodyText;/);
+  assert.match(source, /function escapeHtml\(text\) \{/);
+  assert.match(source, /function formatText\(text\) \{/);
+  assert.match(source, /if \(ui\.cardDesc\) ui\.cardDesc\.innerHTML = formatText\(bodyText\);/);
   assert.match(source, /if \(ui\.prompt\) ui\.prompt\.textContent = promptText;/);
   assert.match(source, /if \(ui\.error\) ui\.error\.textContent = errorText;/);
-  assert.match(source, /if \(ui\.actions\) ui\.actions\.innerHTML = "";/);
+  assert.match(source, /ui\.actions\.innerHTML = "";/);
   assert.doesNotMatch(source, /ui\.card\.innerHTML\s*=/);
   assert.doesNotMatch(source, /ui\.prompt\.innerHTML\s*=/);
   assert.doesNotMatch(source, /ui\.error\.innerHTML\s*=/);

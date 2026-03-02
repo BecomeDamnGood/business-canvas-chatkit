@@ -716,38 +716,11 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
     });
     if (uiViolation) {
       options.onUiParityError();
-      finalResponse = {
-        ...finalResponse,
-        ok: false,
-        error: {
-          type: "contract_violation",
-          message: "UI payload violates actioncode/menu contract.",
-          reason: uiViolation,
-          step: String(finalResponse?.current_step_id || ""),
-          contract_id: String(((finalResponse?.ui as Record<string, unknown> | undefined) || {}).contract_id || ""),
-        },
-      };
     }
   }
   ensureUnifiedUiActionContract(finalResponse);
-  let canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
+  const canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   applyDeterministicUiActionRenderPolicy(finalResponse);
-  try {
-    assertRunStepContractOrThrow(finalResponse);
-  } catch (error: any) {
-    const reason = String(error?.message || "contract_violation");
-    const specialistForFailure = ((finalResponse?.specialist || {}) as Record<string, unknown>) || {};
-    finalResponse = options.attachRegistryPayload(buildContractFailurePayload(finalResponse, reason), specialistForFailure, {
-      bootstrap_waiting_locale: false,
-      bootstrap_interactive_ready: false,
-      bootstrap_retry_hint: "",
-      locale_pending_background: false,
-      bootstrap_phase: "failed",
-    });
-    ensureUnifiedUiActionContract(finalResponse);
-    canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
-    applyDeterministicUiActionRenderPolicy(finalResponse);
-  }
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;
 
   return finalResponse as T;

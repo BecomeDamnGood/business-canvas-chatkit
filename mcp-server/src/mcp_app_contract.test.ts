@@ -117,16 +117,19 @@ test("MCP app contract: structuredContent schema accepteert object meta met step
   assert.equal(parsed.meta?.specialist, "ValidationAndBusinessName");
 });
 
-test("MCP app contract: runtime ingress is MCP-only and keeps output schema enforcement", () => {
+test("MCP app contract: runtime ingress is MCP-only and keeps direct run_step transport response", () => {
   assert.doesNotMatch(source, /if \(req\.method === "POST" && url\.pathname === "\/run_step"\)/);
   assert.doesNotMatch(source, /if \(req\.method === "GET" && \(url\.pathname === "\/test" \|\| url\.pathname === "\/test\/"\)\)/);
-  assert.match(source, /const parsedStructuredContent = RunStepToolStructuredContentOutputSchema\.parse\(structuredContent\)/);
-  assert.match(source, /return \{[\s\S]*structuredContent: parsedStructuredContent,[\s\S]*\.\.\.\(meta \? \{ _meta: meta \} : \{\}\),[\s\S]*\}/);
+  assert.doesNotMatch(source, /const parsedStructuredContent = RunStepToolStructuredContentOutputSchema\.parse\(structuredContent\)/);
+  assert.match(source, /return \{[\s\S]*structuredContent,[\s\S]*\.\.\.\(meta \? \{ _meta: meta \} : \{\}\),[\s\S]*\}/);
 });
 
 test("MCP app contract: /ui/step-card route and run_step transport keep bundled owner path", () => {
   assert.match(source, /readFileSync\(new URL\("\.\.\/\.\.\/ui\/step-card\.bundled\.html", import\.meta\.url\), "utf-8"\)/);
-  assert.match(source, /if \(url\.pathname === "\/ui\/step-card" \|\| url\.pathname === "\/ui\/step-card\/"\) \{/);
+  assert.match(
+    source,
+    /if \((?:req\.method === "GET" && )?url\.pathname === "\/ui\/step-card" \|\| url\.pathname === "\/ui\/step-card\/"\) \{/
+  );
   assert.match(source, /filePath = path\.join\(uiDir, "step-card\.bundled\.html"\);/);
   assert.match(source, /if \(fileName === "step-card\.bundled\.html"\) \{/);
 });
@@ -186,9 +189,9 @@ test("MCP app contract: bundled render-state prefers _meta.widget_result and acc
   );
   assert.match(bundledRuntimeSource, /window\.addEventListener\("openai:set_globals"/);
   assert.match(bundledRuntimeSource, /window\.addEventListener\("openai:notification"/);
-  assert.match(bundledRuntimeSource, /if \(method !== "ui\/notifications\/tool-result"\) \{/);
-  assert.match(bundledRuntimeSource, /notification_renderable_params_without_tool_result_method/);
-  assert.match(bundledRuntimeSource, /notification_renderable_detail_without_tool_result_method/);
+  assert.match(bundledRuntimeSource, /var hasResultInParams = Object\.keys\(extractWidgetResult\(payload\)\)\.length > 0;/);
+  assert.match(bundledRuntimeSource, /notification_params_payload/);
+  assert.match(bundledRuntimeSource, /notification_detail_payload/);
 });
 
 test("MCP wrapper parity: model-safe result contract remains minimal in buildModelSafeResult", () => {
@@ -289,7 +292,7 @@ test("MCP app contract: run_step wrapper logs render-source lifecycle", () => {
   assert.match(source, /"run_step_render_source_selected"/);
   assert.match(source, /render_source:\s*renderSource/);
   assert.match(source, /render_source_reason_code:\s*renderSourceReasonCode/);
-  assert.match(source, /render_source_tuple_complete:\s*hasCompleteOrderingTuple\(renderSourceOrdering\)/);
+  assert.match(source, /render_source_tuple_complete:\s*!!\(renderSourceOrdering\.sessionId && renderSourceOrdering\.epoch > 0\)/);
   assert.match(source, /host_widget_session_id_present:\s*renderSourceOrdering\.hostWidgetSessionId \? "true" : "false"/);
   assert.match(source, /meta_widget_result_authoritative/);
 });
@@ -301,13 +304,13 @@ test("MCP app contract: run_step wrapper has no tuple parity patch/backfill laye
   assert.doesNotMatch(source, /throw new Error\("meta_widget_result_missing"\)/);
   assert.match(
     source,
-    /const contentSource = hasMetaWidgetResult[\s\S]*\?\s*\(\(meta as any\)\.widget_result as Record<string, unknown>\)[\s\S]*:\s*structuredResult;/
+    /const contentSource = metaWidgetResult \|\| structuredResult;/
   );
   assert.match(
     source,
-    /const renderSourceReasonCode = hasMetaWidgetResult[\s\S]*\?\s*"meta_widget_result_authoritative"[\s\S]*:\s*\(hasStructuredResult \? "structured_content_result_fallback" : "render_source_missing"\);/
+    /const renderSourceReasonCode = metaWidgetResult[\s\S]*\?\s*"meta_widget_result_authoritative"[\s\S]*:\s*\(Object\.keys\(structuredResult\)\.length > 0 \? "structured_content_result_fallback" : "render_source_missing"\);/
   );
-  assert.match(source, /hasMetaWidgetResult \|\| hasStructuredResult \? "info" : "error"/);
+  assert.match(source, /Object\.keys\(contentSource\)\.length > 0 \? "info" : "error"/);
 });
 
 test("MCP app contract: run_step response logs canonical-view observability event", () => {

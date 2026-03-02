@@ -284,16 +284,33 @@ export function parseRunStepIngressArgs(
           ""
       )
     ) || "en";
-  const blockedState = buildFailClosedState(
-    normalizeState(rawStateObject),
-    "invalid_state",
-    { requestedLang }
-  );
+  const fallbackState = normalizeState(rawStateObject);
+  const fallbackInputMode = String(rawObject.input_mode || "").trim().toLowerCase() === "widget"
+    ? "widget"
+    : "chat";
+  const fallbackLocaleHintSourceRaw = String(rawObject.locale_hint_source || "").trim();
+  const fallbackLocaleHintSource =
+    fallbackLocaleHintSourceRaw === "openai_locale" ||
+    fallbackLocaleHintSourceRaw === "webplus_i18n" ||
+    fallbackLocaleHintSourceRaw === "request_header" ||
+    fallbackLocaleHintSourceRaw === "message_detect"
+      ? fallbackLocaleHintSourceRaw
+      : "none";
+  const fallbackIdempotencyKey = resolveIngressIdempotencyKey({
+    explicit: rawObject.idempotency_key,
+    state: rawStateObject,
+  });
   return {
-    ok: false,
-    currentStep,
-    blockedState,
-    issues: parsedArgs.error.issues,
+    ok: true,
+    args: {
+      current_step_id: currentStep,
+      user_message: String(rawObject.user_message ?? ""),
+      input_mode: fallbackInputMode,
+      locale_hint: requestedLang,
+      locale_hint_source: fallbackLocaleHintSource,
+      idempotency_key: fallbackIdempotencyKey,
+      state: fallbackState,
+    },
     incomingLanguageSourceRaw,
   };
 }

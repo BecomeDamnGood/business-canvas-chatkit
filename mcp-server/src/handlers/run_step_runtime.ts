@@ -100,6 +100,7 @@ import {
   parseStep0Final,
   hasValidStep0Final,
   maybeSeedStep0CandidateFromInitialMessage,
+  inferStep0SeedFromInitialMessage,
 } from "./run_step_step0.js";
 import {
   tokenizeWords,
@@ -903,7 +904,7 @@ const runStepRuntimeExecuteDeps = {
   isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate,
   buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,
   applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
-  step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
+  inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
   pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState,
   runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer,
   looksLikeMetaInstruction, ROLE_SPECIALIST, PRESENTATION_SPECIALIST, DREAM_PICK_ONE_ROUTE_TOKEN,
