@@ -987,39 +987,6 @@
           };
         }
 
-        function buildFallbackPrestartResult() {
-          var strings = fallbackStringsFromLang(preferredLanguage());
-          return {
-            state: {
-              current_step: "step_0",
-              language: strings.lang,
-              ui_strings_lang: strings.lang,
-              ui_strings: {
-                uiTitle: "Business Strategy Canvas Builder",
-                uiBylinePrefix: strings.byline,
-                uiSubtitle: strings.subtitle,
-                uiUseWidgetToContinue: strings.subtitle,
-                btnStart: strings.btnStart,
-              },
-            },
-            ui: {
-              view: { mode: "prestart" },
-              action_contract: {
-                actions: [
-                  {
-                    action_code: "ACTION_START",
-                    role: "start",
-                    payload_mode: "none",
-                    label: strings.btnStart,
-                  },
-                ],
-              },
-            },
-            text: strings.prestartText,
-            prompt: "",
-          };
-        }
-
         function toRecord(value) {
           if (!value || typeof value !== "object" || Array.isArray(value)) return {};
           return value;
@@ -1579,11 +1546,6 @@
 
         function ingestSetGlobalsPayload() {
           var payload = readInitialToolOutput();
-          if (Object.keys(extractWidgetResult(payload)).length === 0) {
-            console.warn("[ui_set_globals_payload_missing_widget_result]");
-            ingest(buildFallbackPrestartResult(), "set_globals_fallback");
-            return;
-          }
           ingest(payload, "set_globals");
         }
 
