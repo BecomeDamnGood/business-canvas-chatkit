@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { finalizeResponseContractInternals } from "./handlers/turn_contract.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "./core/bootstrap_runtime.js";
+import {
+  RUN_STEP_MODEL_RESULT_SHAPE_VERSION,
+  RunStepToolStructuredContentOutputSchema,
+} from "./contracts/mcp_tool_contract.js";
 
 const serverSourceFiles = [
   "./server/server_config.ts",
@@ -92,6 +96,25 @@ test("MCP app contract: run_step exposes explicit outputSchema", () => {
     source,
     /server\.registerTool\(\s*"run_step"[\s\S]*outputSchema:\s*RunStepToolStructuredContentOutputSchema/
   );
+});
+
+test("MCP app contract: structuredContent schema accepteert object meta met step/specialist", () => {
+  const parsed = RunStepToolStructuredContentOutputSchema.parse({
+    title: "The Business Strategy Canvas Builder",
+    meta: {
+      step: "step_0",
+      specialist: "ValidationAndBusinessName",
+    },
+    result: {
+      model_result_shape_version: RUN_STEP_MODEL_RESULT_SHAPE_VERSION,
+      ok: true,
+      tool: "run_step",
+      current_step_id: "step_0",
+      state: {},
+    },
+  });
+  assert.equal(parsed.meta?.step, "step_0");
+  assert.equal(parsed.meta?.specialist, "ValidationAndBusinessName");
 });
 
 test("MCP app contract: runtime ingress is MCP-only and keeps output schema enforcement", () => {

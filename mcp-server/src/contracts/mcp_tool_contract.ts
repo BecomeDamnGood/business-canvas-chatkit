@@ -31,7 +31,12 @@ export const RunStepModelSafeResultOutputSchema = z
 export const RunStepToolStructuredContentOutputSchema = z
   .object({
     title: z.string().optional(),
-    meta: z.string().optional(),
+    meta: z
+      .object({
+        step: z.string(),
+        specialist: z.string(),
+      })
+      .optional(),
     result: RunStepModelSafeResultOutputSchema,
   })
   .passthrough();

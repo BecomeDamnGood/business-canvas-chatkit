@@ -129,7 +129,10 @@ test("bundled ui runtime does not optimistically mutate started or state.languag
 test("run_step handler always emits model-safe result and keeps full payload widget-only", () => {
   const source = readServerSource();
   assert.match(source, /const modelResult = buildModelSafeResult\(resultForClient\);/);
-  assert.match(source, /meta:\s*\{\s*step:\s*stepMeta,\s*specialist:\s*specialistMeta\s*\},/);
+  assert.match(
+    source,
+    /meta:\s*normalizeStructuredContentMeta\(\{\s*step:\s*stepMeta,\s*specialist:\s*specialistMeta\s*\}\),/
+  );
   assert.match(source, /result: modelResult,/);
   assert.match(source, /meta:\s*\{\s*widget_result:\s*resultForClient,\s*\}/);
 });

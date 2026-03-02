@@ -59,6 +59,26 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function normalizeStructuredContentMeta(params: {
+  step?: unknown;
+  specialist?: unknown;
+}): { step: string; specialist: string } {
+  const step = safeString(params.step ?? "unknown").trim() || "unknown";
+  const specialist = safeString(params.specialist ?? "unknown").trim() || "unknown";
+  return { step, specialist };
+}
+
+function resolveStructuredContentMetaFromWidgetResult(
+  widgetResult: Record<string, unknown>,
+  fallbacks: { step?: unknown; specialist?: unknown } = {}
+): { step: string; specialist: string } {
+  const state = toRecord(widgetResult.state);
+  return normalizeStructuredContentMeta({
+    step: state.current_step ?? widgetResult.current_step_id ?? fallbacks.step,
+    specialist: widgetResult.active_specialist ?? fallbacks.specialist,
+  });
+}
+
 function resolveIdempotencyEarlyLiveness(
   widgetResult: Record<string, unknown>
 ): { ack_status: ActionAckStatus; reason_code: string } {
@@ -185,9 +205,14 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       Object.keys(preflightWidgetResult).length > 0
         ? attachActionLivenessToResult(preflightWidgetResult, livenessContract)
         : preflightWidgetResult;
+    const structuredMeta = resolveStructuredContentMetaFromWidgetResult(enrichedWidgetResult, {
+      step: context.currentStepId || "step_0",
+      specialist: "",
+    });
     const enriched = {
       structuredContent: {
         ...toRecord(idempotencyPreflight.structuredContent),
+        meta: structuredMeta,
         result: buildModelSafeResult(enrichedWidgetResult),
       },
       meta: {
@@ -232,9 +257,14 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
       Object.keys(staleWidgetResult).length > 0
         ? attachActionLivenessToResult(staleWidgetResult, staleLiveness)
         : staleWidgetResult;
+    const structuredMeta = resolveStructuredContentMetaFromWidgetResult(enrichedWidgetResult, {
+      step: context.currentStepId || "step_0",
+      specialist: "",
+    });
     const enriched = {
       structuredContent: {
         ...toRecord(stalePreflight.earlyResponse.structuredContent),
+        meta: structuredMeta,
         result: buildModelSafeResult(enrichedWidgetResult),
       },
       meta: {
@@ -397,7 +427,7 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
     const modelResult = buildModelSafeResult(resultForClient);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
-      meta: { step: stepMeta, specialist: specialistMeta },
+      meta: normalizeStructuredContentMeta({ step: stepMeta, specialist: specialistMeta }),
       result: modelResult,
     };
 
@@ -564,7 +594,10 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
     const modelResult = buildModelSafeResult(fallbackResult as Record<string, unknown>);
     const structuredContent: Record<string, unknown> = {
       title: `The Business Strategy Canvas Builder (${VERSION})`,
-      meta: "error",
+      meta: resolveStructuredContentMetaFromWidgetResult(fallbackResult as Record<string, unknown>, {
+        step: currentStep,
+        specialist: "error",
+      }),
       result: modelResult,
     };
     return {
