@@ -738,7 +738,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
               specialist,
               state: {
                 ...(stateWithUi as Record<string, unknown>),
-                started: startResolution.interactiveReady ? "true" : "false",
+                started: "true",
                 active_specialist: deps.step0Specialist,
                 last_specialist_result: specialist,
               },
@@ -779,7 +779,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             specialist,
             state: {
               ...(stateWithUi as Record<string, unknown>),
-              started: startResolution.interactiveReady ? "true" : "false",
+              started: "true",
               active_specialist: deps.step0Specialist,
               last_specialist_result: specialist,
             },

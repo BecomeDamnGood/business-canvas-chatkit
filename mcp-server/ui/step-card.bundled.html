@@ -1185,10 +1185,21 @@
           var byText = uiString(state, "uiBylinePrefix") || uiString(state, "byText") || localUi.byline;
           if (byText && ui.byText) ui.byText.textContent = byText;
 
-          var bodyText = asText(result.text);
-          var promptText = asText(result.prompt);
-          if ((mode === "interactive" || mode === "prestart") && bodyText.length === 0 && promptText.length === 0) {
+          var specialist = toRecord(result.specialist);
+          var bodyText =
+            asText(specialist.message) ||
+            asText(specialist.refined_formulation) ||
+            asText(specialist.question) ||
+            asText(result.text);
+          var promptText =
+            asText(specialist.question) ||
+            asText(result.prompt) ||
+            asText(toRecord(uiPayload.prompt).body);
+          if (mode === "prestart" && bodyText.length === 0 && promptText.length === 0) {
             bodyText = localUi.prestartText;
+          }
+          if (mode === "interactive" && bodyText.length === 0 && promptText.length === 0) {
+            promptText = uiString(state, "step0.question.initial") || "Share your thoughts or choose an option.";
           }
           if (ui.cardDesc) ui.cardDesc.innerHTML = formatText(bodyText);
           if (ui.card) ui.card.textContent = "";
@@ -1242,7 +1253,7 @@
         function ingest(rawPayload, source) {
           var result = extractWidgetResult(rawPayload);
           if (Object.keys(result).length === 0) {
-            renderResult(buildFallbackPrestartResult(), source + "_fallback");
+            console.warn("[ui_ingest_payload_missing_widget_result]", { source: source });
             return;
           }
           renderResult(result, source);
@@ -1300,7 +1311,7 @@
         function ingestSetGlobalsPayload() {
           var payload = readInitialToolOutput();
           if (Object.keys(extractWidgetResult(payload)).length === 0) {
-            renderResult(buildFallbackPrestartResult(), "set_globals_fallback");
+            console.warn("[ui_set_globals_payload_missing_widget_result]");
             return;
           }
           ingest(payload, "set_globals");

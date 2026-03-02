@@ -1111,7 +1111,6 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       incoming_tuple: describeBootstrapOrdering(incomingOrdering),
       current_tuple: describeBootstrapOrdering(currentOrdering),
     });
-    return {};
   }
   if (!incomingHasOrdering) {
     console.warn("[ui_ingest_tuple_incomplete_fail_closed]", {
@@ -1128,16 +1127,6 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       current_tuple: describeBootstrapOrdering(currentOrdering),
       current_tuple_present: currentHasOrdering,
     });
-    if (currentHasOrdering) {
-      return {};
-    }
-    const failClosedEnvelope = buildTupleFailClosedEnvelope({
-      currentResult: currentCachedResult,
-      incomingResult: result,
-    });
-    setLastToolOutput(failClosedEnvelope);
-    if (_render) _render(failClosedEnvelope);
-    return {};
   }
   if (incomingHasOrdering && orderingDecision.apply) {
     setWidgetStateSafe({

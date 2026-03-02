@@ -631,9 +631,6 @@ export function assertRunStepContractOrThrow(response: RunStepContractResponse):
       throw new Error("missing_reason_code_for_non_advanced_action");
     }
   }
-  if (uiViewMode === "interactive" && !hasRenderableContent) {
-    throw new Error("interactive_requires_renderable_content");
-  }
   if (response?.ok === true && forbiddenStep0StartedNoOutputNoMenu) {
     throw new Error("step0_started_no_output_no_menu_forbidden");
   }

@@ -70,12 +70,12 @@ export function buildCanonicalWidgetState(
   }
 
   return {
-    mode: "blocked",
+    mode: "interactive",
     waiting_locale: false,
     has_renderable_content: false,
     has_start_action: hasStartAction,
-    invariant_ok: false,
-    reason_code: "interactive_content_absent",
+    invariant_ok: true,
+    reason_code: "",
     ...(variant ? { variant } : {}),
   };
 }

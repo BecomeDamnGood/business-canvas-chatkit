@@ -752,19 +752,18 @@ export function render(overrideToolOutput?: unknown): void {
     current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
 
   const bodyRaw = ((): string => {
-    if (result && typeof result === "object" && Object.prototype.hasOwnProperty.call(result, "text")) {
-      return typeof result.text === "string" ? result.text : "";
-    }
-    if (result?.specialist && typeof result.specialist === "object") {
-      const sp = result.specialist as Record<string, unknown>;
-      return (
-        String(sp.message || "").trim() ||
-        String(sp.refined_formulation || "").trim() ||
-        String(sp.question || "").trim() ||
-        ""
-      );
-    }
-    return "";
+    const resultText = typeof result?.text === "string" ? result.text : "";
+    const specialistText =
+      String(specialist.message || "").trim() ||
+      String(specialist.refined_formulation || "").trim() ||
+      String(specialist.question || "").trim();
+    return (
+      specialistText ||
+      String(resultText || "").trim() ||
+      (uiPayload.prompt && typeof (uiPayload.prompt as Record<string, unknown>).body === "string"
+        ? String((uiPayload.prompt as Record<string, unknown>).body || "")
+        : "")
+    );
   })();
   const uiViewVariant = String((uiView.variant || "")).trim();
   const hasExplicitViewVariant = uiViewVariant.length > 0;
@@ -776,12 +775,14 @@ export function render(overrideToolOutput?: unknown): void {
   const structuredActions = choiceActionsForResult(result);
   const hasStructuredActions = structuredActions.length > 0;
   const promptRaw = (
+    uiQuestionText ||
+    String(specialist.question || "").trim() ||
     (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") ||
     (uiPayload.prompt && typeof (uiPayload.prompt as Record<string, unknown>).body === "string"
       ? String((uiPayload.prompt as Record<string, unknown>).body || "")
       : "")
   ) as string;
-  const promptSource = uiQuestionText || promptRaw;
+  let promptSource = promptRaw;
   let body: string;
   if (isDreamDirectionView && promptSource) {
     body = promptSource;
@@ -790,43 +791,39 @@ export function render(overrideToolOutput?: unknown): void {
   }
   const cardDescEl = document.getElementById("cardDesc");
 
-  const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
-  const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
-  const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
+  let hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
+  let hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
+  let hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
   if (!hasRenderableInteractiveContent) {
-    const failClosedReasonCode = "interactive_content_absent";
+    const fallbackBody = (
+      String(specialist.message || "").trim() ||
+      String(specialist.refined_formulation || "").trim() ||
+      (current === "step_0" ? uiText(lang, "step0.carddesc", "") : "")
+    ).trim();
+    const fallbackPrompt = (
+      String(specialist.question || "").trim() ||
+      (current === "step_0"
+        ? uiText(lang, "step0.question.initial", "")
+        : uiText(lang, "invariant.prompt.ask.default", "")) ||
+      "Share your thoughts or choose an option."
+    ).trim();
+    if (!hasBodyContent && fallbackBody) {
+      body = fallbackBody;
+    }
+    if (!hasPromptContent && fallbackPrompt) {
+      promptSource = fallbackPrompt;
+    }
+    hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
+    hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
+    hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
     console.warn("[ui_contract_interactive_content_absent]", {
       current_step: current,
       view_mode: viewMode || "",
       payload_source: resolved.source,
-      recovery_mode: "blocked",
-      reason_code: failClosedReasonCode,
+      recovery_mode: "graceful_fallback",
+      reason_code: "interactive_content_absent",
+      fallback_applied: hasRenderableInteractiveContent,
     });
-    const baseNotice = uiText(lang, "error.contract.body", "") || "Action could not be applied.";
-    setInlineNotice(`${baseNotice} (${failClosedReasonCode})`);
-    const choiceWrap = document.getElementById("choiceWrap");
-    if (choiceWrap) choiceWrap.style.display = "none";
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
-    inputWrap.style.display = "none";
-    const prompt = document.getElementById("prompt");
-    if (prompt) prompt.textContent = "";
-    setSendEnabled(false);
-    (btnStart as HTMLElement).style.display = "none";
-    startHint.textContent = "";
-    (startHint as HTMLElement).style.display = "none";
-    if (cardDescEl) {
-      cardDescEl.classList.remove("has-grid");
-      cardDescEl.classList.remove("is-step0-ask-layout");
-      const blockedCopy = blockedMessageForReason(
-        lang,
-        "contract_violation",
-        uiText(lang, "error.contract.body", "")
-      );
-      renderBlockedState(cardDescEl, lang, blockedCopy.title, blockedCopy.body);
-    }
-    if (isLoading) setLoading(false);
-    return;
   }
 
   if (cardDescEl) {

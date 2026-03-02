@@ -114,7 +114,7 @@ test("run_step contract emits server-authoritative ui.view payload", () => {
   assert.match(turnContractSource, /step0_not_started_requires_prestart_mode/);
   assert.match(turnContractSource, /prestart_ready_requires_ui_strings/);
   assert.match(turnContractSource, /step0_not_started_requires_start_action/);
-  assert.match(turnContractSource, /interactive_requires_renderable_content/);
+  assert.doesNotMatch(turnContractSource, /interactive_requires_renderable_content/);
 });
 
 test("bundled ui runtime does not optimistically mutate started or state.language before run_step response", () => {

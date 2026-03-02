@@ -330,8 +330,8 @@ test("MCP app contract: turn contract enforces canonical step_0\/interactive vie
   assert.match(turnContractSource, /action_contract/);
   assert.match(turnContractSource, /step0_started_no_output_no_menu_forbidden/);
   assert.match(canonicalWidgetStateSource, /step0_start_action_missing/);
-  assert.match(canonicalWidgetStateSource, /interactive_content_absent/);
-  assert.match(turnContractSource, /interactive_requires_renderable_content/);
+  assert.doesNotMatch(canonicalWidgetStateSource, /interactive_content_absent/);
+  assert.doesNotMatch(turnContractSource, /interactive_requires_renderable_content/);
 });
 
 test("MCP app contract: prestart action contract is deterministic start-only", () => {

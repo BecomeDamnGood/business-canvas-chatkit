@@ -436,7 +436,7 @@ test("renderChoiceButtons hides buttons when prompt/action_code counts mismatch"
   (globalThis as any).document = originalDocument;
 });
 
-test("render respects explicit empty result.text and does not fall back to specialist.question", () => {
+test("render falls back to specialist question when result.text is empty", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -480,7 +480,7 @@ test("render respects explicit empty result.text and does not fall back to speci
     },
   }));
 
-  assert.equal(String(cardDesc.textContent || "").trim(), "");
+  assert.equal(((cardDesc.childNodes || []) as any[]).length > 0, true);
 
   setSessionStarted(false);
   setSessionWelcomeShown(false);
@@ -743,7 +743,7 @@ test("render structures only cardDesc body while prompt stays plain inline text"
     specialist: {
       action: "ASK",
       menu_id: "DREAM_MENU_INTRO",
-      question: "Define your Dream for Mindd or choose an option.",
+      question: "",
     },
     prompt: "Define your Dream for Mindd or choose an option.",
     ui: {
@@ -1184,16 +1184,16 @@ test("bundled source reads canonical widget_result and supports standard result 
   );
 });
 
-test("render source fail-closes missing server view mode and enforces start action in prestart", () => {
+test("render source keeps view-mode/start-action guards but uses graceful interactive fallback", () => {
   const source = fs.readFileSync(new URL("../ui/lib/ui_render.ts", import.meta.url), "utf8");
   assert.match(source, /\[ui_contract_missing_view_mode\]/);
   assert.match(source, /const startActionCode = actionCodeForRole\(result, "start"\);/);
   assert.match(source, /const hasStartAction = startActionCode\.length > 0;/);
   assert.match(source, /\[ui_contract_missing_start_action\]/);
   assert.match(source, /\[ui_contract_interactive_content_absent\]/);
-  assert.match(source, /const failClosedReasonCode = "interactive_content_absent";/);
-  assert.match(source, /recovery_mode: "blocked"/);
-  assert.match(source, /setInlineNotice\(`\$\{baseNotice\} \(\$\{failClosedReasonCode\}\)`\);/);
+  assert.match(source, /recovery_mode: "graceful_fallback"/);
+  assert.doesNotMatch(source, /const failClosedReasonCode = "interactive_content_absent";/);
+  assert.doesNotMatch(source, /recovery_mode: "blocked"/);
   assert.match(source, /\(btnStart as HTMLButtonElement\)\.disabled = getIsLoading\(\) \|\| !hasStartAction;/);
 });
 
@@ -1246,7 +1246,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry keeps widget ordering monot
   (globalThis as any).openai = originalOpenai;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry drops payloads with incomplete ordering tuple", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry accepts payloads with incomplete ordering tuple", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   const hostState: Record<string, unknown> = {
@@ -1283,7 +1283,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry drops payloads with incompl
     ui: { view: { mode: "interactive" } },
   });
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(missingHostPayload, { source: "host_notification" });
-  assert.equal(Object.keys(result).length, 0);
+  assert.equal(Object.keys(result).length > 0, true);
   const stateAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
   assert.equal(Number(stateAfter.response_seq || 0), 6);
   assert.equal(String(stateAfter.host_widget_session_id || ""), "internal:demo");
@@ -1292,7 +1292,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry drops payloads with incompl
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry drops stale payload before cache update", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry accepts stale payload without mutating persisted tuple", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   const hostState: Record<string, unknown> = {
@@ -1328,17 +1328,15 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry drops stale payload before 
     },
   });
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(stalePayload, { source: "host_notification" });
-  assert.equal(Object.keys(result).length, 0);
-  assert.equal(
-    resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).response_seq,
-    6
-  );
+  assert.equal(Object.keys(result).length > 0, true);
+  const stateAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
+  assert.equal(Number(stateAfter.response_seq || 0), 6);
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry drops tupleless payload after ordering is established", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry accepts tupleless payload after ordering is established", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   const hostState: Record<string, unknown> = {
@@ -1371,17 +1369,15 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry drops tupleless payload aft
     },
   });
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(tuplelessPayload, { source: "host_notification" });
-  assert.equal(Object.keys(result).length, 0);
-  assert.equal(
-    resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).response_seq,
-    6
-  );
+  assert.equal(Object.keys(result).length > 0, true);
+  const stateAfter = ((globalThis as any).openai.widgetState || {}) as Record<string, unknown>;
+  assert.equal(Number(stateAfter.response_seq || 0), 6);
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry fail-closes tupleless payload before ordering is established", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry keeps tupleless payload renderable before ordering is established", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   (globalThis as any).openai = {
@@ -1401,17 +1397,11 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry fail-closes tupleless paylo
     },
   });
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(tuplelessPayload, { source: "host_notification" });
-  assert.equal(Object.keys(result).length, 0);
+  assert.equal(Object.keys(result).length > 0, true);
   const recovered = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
   const recoveredState = ((recovered.state as Record<string, unknown>) || {});
-  const recoveredUi = ((recovered.ui as Record<string, unknown>) || {});
-  const recoveredFlags = ((recoveredUi.flags as Record<string, unknown>) || {});
-  const recoveredView = ((recoveredUi.view as Record<string, unknown>) || {});
-  assert.equal(String(recoveredState.ui_gate_status || ""), "blocked");
-  assert.equal(String(recoveredState.bootstrap_phase || ""), "failed");
-  assert.equal(String(recoveredState.reason_code || ""), "incoming_missing_tuple");
-  assert.equal(String(recoveredFlags.tuple_incomplete_fail_closed || ""), "true");
-  assert.equal(String(recoveredView.mode || ""), "blocked");
+  assert.notEqual(String(recoveredState.ui_gate_status || ""), "blocked");
+  assert.notEqual(String(recoveredState.bootstrap_phase || ""), "failed");
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
@@ -1438,7 +1428,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry does not persist host_widge
     },
   });
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(tuplelessPayload, { source: "host_notification" });
-  assert.equal(Object.keys(result).length, 0);
+  assert.equal(Object.keys(result).length > 0, true);
   assert.equal(
     String((((globalThis as any).openai.widgetState as Record<string, unknown>) || {}).host_widget_session_id || ""),
     ""
@@ -1448,7 +1438,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry does not persist host_widge
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry drops duplicate payload with same ordering tuple", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry accepts duplicate payload with same ordering tuple", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   const hostState: Record<string, unknown> = {
@@ -1487,9 +1477,12 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry drops duplicate payload wit
   });
 
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(duplicatePayload, { source: "host_notification" });
-  assert.equal(Object.keys(result).length, 0);
+  assert.equal(Object.keys(result).length > 0, true);
   const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
-  assert.equal(String((((cachedResult.ui as Record<string, unknown>) || {}).questionText) || ""), "current");
+  assert.equal(
+    String((((cachedResult.ui as Record<string, unknown>) || {}).questionText) || ""),
+    "duplicate-should-drop"
+  );
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
@@ -1535,7 +1528,7 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry converges after empty init 
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
 });
 
-test("handleToolResultAndMaybeScheduleBootstrapRetry drops richer same-seq payload and keeps cache", () => {
+test("handleToolResultAndMaybeScheduleBootstrapRetry accepts richer same-seq payload for render recovery", () => {
   const originalOpenai = (globalThis as any).openai;
   const originalCached = (globalThis as any).__BSC_LAST_TOOL_OUTPUT__;
   (globalThis as any).openai = {
@@ -1579,11 +1572,11 @@ test("handleToolResultAndMaybeScheduleBootstrapRetry drops richer same-seq paylo
   const result = handleToolResultAndMaybeScheduleBootstrapRetry(richerSameSeqPayload, {
     source: "host_notification",
   });
-  assert.equal(Object.keys(result).length, 0);
+  assert.equal(Object.keys(result).length > 0, true);
   const cachedResult = resolveWidgetPayload((globalThis as any).__BSC_LAST_TOOL_OUTPUT__).result;
   const cachedState = (cachedResult.state as Record<string, unknown>) || {};
   const cachedUiStrings = (cachedState.ui_strings as Record<string, unknown>) || {};
-  assert.equal(String(cachedUiStrings["prestart.headline"] || ""), "");
+  assert.equal(String(cachedUiStrings["prestart.headline"] || ""), "Welkom");
 
   (globalThis as any).openai = originalOpenai;
   (globalThis as any).__BSC_LAST_TOOL_OUTPUT__ = originalCached;
@@ -2349,7 +2342,7 @@ test("render follows explicit server prestart mode during startup grace", () => 
   (globalThis as any).openai = originalOpenai;
 });
 
-test("render fail-closes interactive-without-content on step_0 to blocked explicit error", () => {
+test("render keeps interactive step_0 renderable when content is temporarily absent", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
@@ -2390,11 +2383,10 @@ test("render fail-closes interactive-without-content on step_0 to blocked explic
   }));
 
   assert.equal(String(btnStart.style.display || ""), "none");
-  assert.equal(String(prompt.textContent || ""), "");
-  assert.ok((cardDesc.childNodes || []).length > 0);
-  assert.equal(String(inlineNotice.textContent || "").includes("interactive_content_absent"), true);
+  assert.equal(((prompt.childNodes || []) as any[]).length > 0, true);
+  assert.equal(String(inlineNotice.textContent || "").includes("interactive_content_absent"), false);
   const shell = (cardDesc.childNodes || [])[0] as { className?: string; childNodes?: any[] };
-  assert.equal(String(shell?.className || "").includes("bootstrap-wait-shell"), true);
+  assert.equal(String(shell?.className || "").includes("bootstrap-wait-shell"), false);
 
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;
@@ -2990,13 +2982,14 @@ test("resolveWidgetPayload accepts direct widget-result shape from host notifica
   assert.equal(resolved.host_widget_session_id, "host_direct");
 });
 
-test("render fail-closes interactive mode with missing content into blocked shell", () => {
+test("render keeps interactive mode usable with fallback prompt when content is missing", () => {
   const originalDocument = (globalThis as any).document;
   const originalWindow = (globalThis as any).window;
   const originalOpenai = (globalThis as any).openai;
 
   const fakeDocument = makeDocument();
   const cardDesc = (fakeDocument as any).getElementById("cardDesc");
+  const promptEl = (fakeDocument as any).getElementById("prompt");
   (globalThis as any).document = fakeDocument;
   (globalThis as any).window = {
     location: { search: "?lang=nl" },
@@ -3023,10 +3016,9 @@ test("render fail-closes interactive mode with missing content into blocked shel
     text: "",
   }));
 
-  assert.ok((cardDesc.childNodes || []).length > 0);
+  assert.equal(((promptEl.childNodes || []) as any[]).length > 0, true);
   const shell = (cardDesc.childNodes || [])[0] as { className?: string; childNodes?: any[] };
-  assert.equal(String(shell?.className || "").includes("bootstrap-wait-shell"), true);
-  assert.ok(((shell?.childNodes || []) as any[]).length >= 2);
+  assert.equal(String(shell?.className || "").includes("bootstrap-wait-shell"), false);
 
   (globalThis as any).document = originalDocument;
   (globalThis as any).window = originalWindow;

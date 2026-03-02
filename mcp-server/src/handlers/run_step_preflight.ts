@@ -274,51 +274,6 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       (state as any).initial_user_message = String(userMessageCandidate).trim();
     }
 
-    const hasRestartLegacyMarkers = rawLegacyMarkers.some((marker) =>
-      marker === "state_version_mismatch" || marker.startsWith("legacy_")
-    );
-    const hasSeedableUserMessageForUpgrade =
-      String(userMessageCandidate || "").trim().length > 0 &&
-      !/^[0-9]+$/.test(String(userMessageCandidate || "").trim()) &&
-      !String(userMessageCandidate || "").trim().startsWith("ACTION_");
-    const shouldAutoUpgradeLegacyState =
-      !isBootstrapPollCall &&
-      hasRestartLegacyMarkers &&
-      hasSeedableUserMessageForUpgrade;
-    if (shouldAutoUpgradeLegacyState) {
-      const preservedHostWidgetSessionId = String((state as any).host_widget_session_id || "").trim();
-      const preservedSessionId = String((state as any).__session_id || "").trim();
-      const preservedSessionStartedAt = String((state as any).__session_started_at || "").trim();
-      const preservedSessionTurnIndex = Number((state as any).__session_turn_index || 0);
-      const preservedSessionTurnId = String((state as any).__session_turn_id || "").trim();
-      state = deps.normalizeState({});
-      if (preservedHostWidgetSessionId) (state as any).host_widget_session_id = preservedHostWidgetSessionId;
-      if (preservedSessionId) (state as any).__session_id = preservedSessionId;
-      if (preservedSessionStartedAt) (state as any).__session_started_at = preservedSessionStartedAt;
-      if (Number.isFinite(preservedSessionTurnIndex) && preservedSessionTurnIndex > 0) {
-        (state as any).__session_turn_index = Math.trunc(preservedSessionTurnIndex);
-      }
-      if (preservedSessionTurnId) (state as any).__session_turn_id = preservedSessionTurnId;
-      if (params.localeHint) {
-        (state as any).language = params.localeHint;
-        (state as any).language_source = deps.normalizeStateLanguageSource(
-          params.localeHintSource === "message_detect" ? "message_detect" : "locale_hint"
-        );
-      }
-      (state as any).initial_user_message = String(userMessageCandidate || "").trim();
-      rawLegacyMarkers = rawLegacyMarkers.filter((marker) =>
-        !(marker === "state_version_mismatch" || marker.startsWith("legacy_"))
-      );
-      deps.bumpUiI18nCounter(params.uiI18nTelemetry, "state_hygiene_resets_count");
-      console.log("[state_auto_upgrade]", {
-        input_mode: params.inputMode,
-        legacy_markers_removed: true,
-        locale_hint: params.localeHint,
-        locale_hint_source: params.localeHintSource,
-        current_step: String((state as any).current_step || deps.step0Id),
-      });
-    }
-
     const initialUserMessageForSeed = String((state as any).initial_user_message || "").trim();
     if (initialUserMessageForSeed) {
       const seededState = deps.maybeSeedStep0CandidateFromInitialMessage(state, initialUserMessageForSeed);
