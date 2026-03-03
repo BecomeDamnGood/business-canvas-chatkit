@@ -224,7 +224,7 @@ function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_but
 
 function companyNameForPrompt(state: CanvasState): string {
   const raw = String((state as any).business_name ?? "").trim();
-  if (!raw || raw === "TBD") return "<your future company>";
+  if (!raw || raw === "TBD") return "<my future company>";
   return raw;
 }
 
@@ -313,7 +313,7 @@ function offTopicCompanyName(state: CanvasState): string {
     const parsedName = String(parsed?.name || "").trim();
     if (parsedName && parsedName !== "TBD") return parsedName;
   }
-  return uiStringFromState(state, "offtopic.companyFallback", "your future company");
+  return uiStringFromState(state, "offtopic.companyFallback", "my future company");
 }
 
 function offTopicCurrentContextHeading(stepId: string, state: CanvasState): string {

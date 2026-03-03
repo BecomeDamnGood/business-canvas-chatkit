@@ -325,7 +325,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       if (parsedName && parsedName !== "TBD") return parsedName;
     }
 
-    return "your future company";
+    return "my future company";
   }
 
   function wordingSelectionMessage(stepId: string, state: CanvasState, activeSpecialist = ""): string {

@@ -158,7 +158,7 @@ Output:
 
 Replace "we offer solutions" with the tailored phrase based on business type.
 
-- question: "Describe what [Company name] offers." (localized; use business_name if known, otherwise "<your future company>")
+- question: "Describe what [Company name] offers." (localized; use business_name if known, otherwise "<my future company>")
 - refined_formulation=""
 - question=""
 - productsservices=""
@@ -181,7 +181,7 @@ Output format:
 - message: Start with the sentence "This is what you offer your clients according to your input:" (localized), then add one empty line, then show the validated/summarized products and services as a bullet list (localized). Format the list as a bullet list with dashes: each item on a new line with "- [item text]". If it is a single statement, show it as one line after the intro sentence. If it is a list, show each item with a dash on a new line after the intro sentence and blank line.
 
 
-Is this everything [Company name] offers or is there more? (localized; use business_name if known, otherwise "<your future company>")
+Is this everything [Company name] offers or is there more? (localized; use business_name if known, otherwise "<my future company>")
 
 - CRITICAL FOR REFINE/ASK OUTPUTS: After showing the products and services list in the message field as a bullet list, you MUST set refined_formulation to an empty string (refined_formulation=""). The list is already displayed in the message field with dashes (bullet list format), so refined_formulation must be empty to prevent duplicate display. The backend function buildTextForWidget() combines both message and refined_formulation, so if both contain the list, they will be shown twice.
 - refined_formulation: "" (empty string to prevent duplication - the list is shown in message only)
@@ -193,7 +193,7 @@ Is this everything [Company name] offers or is there more? (localized; use busin
 
 - action="ASK"
 - message: Show only the intro text (localized), do NOT include the productsservices summary:
-  "The Products and Services of [Company name] are now formulated as follows:" (localized; use business_name if known, otherwise "<your future company>")
+  "The Products and Services of [Company name] are now formulated as follows:" (localized; use business_name if known, otherwise "<my future company>")
 
 
 Refine your Products and Services or go to next step Rules of the Game
@@ -228,7 +228,7 @@ When saving productsservices_final (action="ASK"), enforce:
 - If the user asks something clearly unrelated to Products and Services, use action="ESCAPE" and output message in Step-0 tone:
   Sentence 1: short, friendly, empathetic, non-judgmental boundary.
   Sentence 2 (optional): include only for clearly off-topic/nonsense input.
-  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "your future company".
+  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "my future company".
 - Do not reset to another step. Stay in Products and Services.
 
 END OF INSTRUCTIONS`;

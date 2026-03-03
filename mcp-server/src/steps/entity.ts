@@ -128,7 +128,7 @@ Hard perspective rule (CRITICAL)
 - Never use first-person plural anywhere in examples, suggested formulations, questions, or prompts.
 - When referring to the actor, use:
 1) the company name if known (example: “Mindd ...”), otherwise
-2) “the company / the business / the venture” (localized), otherwise
+2) "my future company" (localized), otherwise
 3) the founder by name only if explicitly known and relevant.
 - Entity content itself must not contain first-person plural.
 Inputs
@@ -153,7 +153,7 @@ Standard ESCAPE output (use the user’s language)
 - message (localized): Step-0 tone structure.
   Sentence 1: short, friendly, empathetic, non-judgmental boundary. Light humor as a small wink is allowed.
   Sentence 2 (optional): include only for clearly off-topic/nonsense input; keep the same tone.
-  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "your future company".
+  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "my future company".
 
 - refined_formulation=""
 - question=""
@@ -220,7 +220,7 @@ Now add the qualifier with discipline. The qualifier should narrow the picture, 
 
 If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE__":
 - action="REFINE"
-- message must be a localized sentence of the form: "Based on what I already know about {company_name} I suggest the following Entity:". Use the company name from the STATE FINALS / business_name context if available; otherwise use "your future company" (or the equivalent in the user's language).
+- message must be a localized sentence of the form: "Based on what I already know about {company_name} I suggest the following Entity:". Use the company name from the STATE FINALS / business_name context if available; otherwise use "my future company" (or the equivalent in the user's language).
 - refined_formulation: formulate ONE Entity phrase as a short noun phrase starting with the correct indefinite article (e.g., "A purpose-driven advertising agency" or "An impact-focused consultancy"). The Entity itself (after the article) should be 2 to 5 words (container + 1-2 qualifiers), making the total length 3-6 words. Base it on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). Do NOT repeat the company name inside the Entity phrase itself. Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. Ensure the article (A/An or the equivalent in the target language) matches the first sound of the Entity.
 
 
@@ -240,7 +240,7 @@ HANDLE FORMULATE MY ENTITY FOR ME (from explain-more choice path)
 
 If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE_FOR_ME__":
 - action="ASK"
-- message: localized sentence of the form: "Based on what I already know about {company_name} I suggest the following Entity:" using the company name from the STATE FINALS / business_name context if available; otherwise "your future company" (or the equivalent in the user's language).
+- message: localized sentence of the form: "Based on what I already know about {company_name} I suggest the following Entity:" using the company name from the STATE FINALS / business_name context if available; otherwise "my future company" (or the equivalent in the user's language).
 - question=""
 - refined_formulation: formulate ONE Entity phrase as a short noun phrase starting with the correct indefinite article (e.g., "A purpose-driven advertising agency" or "An impact-focused consultancy") based on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). Do NOT repeat the company name inside the Entity phrase itself. Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. Ensure the article (A/An or the equivalent in the target language) matches the first sound of the Entity. Target 3-5 words if possible, maximum 5 words.
 - entity: same as refined_formulation
@@ -304,7 +304,7 @@ CRITICAL VARIATION RULE (HARD): You MUST generate a DIFFERENT Entity than the pr
 - Use DIFFERENT qualifiers (e.g., if previous was "strategic execution", use "purpose-driven", "mission-aligned", "values-based", etc.)
 - Example: If the previous was "A strategic execution agency", do NOT use "strategic execution agency" again. Instead try "A purpose-driven consultancy" or "A mission-aligned advisory firm" or "A values-based partnership".
 
-Always base it on the same known information, but explore different ways to express the same concept. Use company name if known, otherwise "the company". Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it.
+Always base it on the same known information, but explore different ways to express the same concept. Use company name if known, otherwise "my future company". Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it.
 
 
 
@@ -319,7 +319,7 @@ When it is good:
 - message=""
 - refined_formulation: the final short phrase.
 - entity: the same final short phrase.
-- question (localized): "Does this capture the Entity of {company_name}, and do you want to continue to the next step?" Use the company name from the STATE FINALS / business_name context if available; otherwise use "your future company" (or the equivalent in the user's language).
+- question (localized): "Does this capture the Entity of {company_name}, and do you want to continue to the next step?" Use the company name from the STATE FINALS / business_name context if available; otherwise use "my future company" (or the equivalent in the user's language).
 
 ${buildSingleValueStepContractBlock("Entity", "entity")}
 `;

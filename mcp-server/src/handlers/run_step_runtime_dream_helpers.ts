@@ -78,7 +78,7 @@ export function createRunStepRuntimeDreamHelpers(deps: CreateRunStepRuntimeDream
   function fallbackDreamCandidateFromUserInput(userInput: string, state: CanvasState): string {
     const raw = String(userInput || "").replace(/\r/g, " ").replace(/\s+/g, " ").trim();
     const fallbackCompany = String((state as any)?.business_name || "").trim();
-    const company = fallbackCompany && fallbackCompany !== "TBD" ? fallbackCompany : "The business";
+    const company = fallbackCompany && fallbackCompany !== "TBD" ? fallbackCompany : "my future company";
     if (!raw) {
       return `${company} dreams of a world in which people experience more meaning and long-term value.`;
     }

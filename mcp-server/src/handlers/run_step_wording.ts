@@ -574,20 +574,26 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       ? parseUserListItemsForStep(stepId, userRaw, suggestionFullItems)
       : [];
     const userItems = mode === "list" ? diffListItems(baseItems, userRawItems) : [];
+    const fallbackUserItems = mode === "list"
+      ? userRawItems.map((line) => String(line || "").trim()).filter(Boolean)
+      : [];
+    const effectiveUserItems = mode === "list" && userItems.length === 0
+      ? fallbackUserItems
+      : userItems;
     const suggestionItems = mode === "list" ? diffListItems(baseItems, suggestionFullItems) : [];
-    if (mode === "list" && !forcePending && userItems.length === 0) {
+    if (mode === "list" && !forcePending && effectiveUserItems.length === 0) {
       return { specialist: specialistResult, wordingChoice: null };
     }
     const equivalent = deps.areEquivalentWordingVariants({
       mode,
       userRaw: normalizedUser,
       suggestionRaw,
-      userItems,
+      userItems: effectiveUserItems,
       suggestionItems,
     });
     if (equivalent) {
       const chosenItems = mode === "list"
-        ? mergeListItems(baseItems, suggestionItems.length > 0 ? suggestionItems : userItems)
+        ? mergeListItems(baseItems, suggestionItems.length > 0 ? suggestionItems : effectiveUserItems)
         : [];
       const chosen = mode === "list"
         ? chosenItems.join("\n")
@@ -632,7 +638,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_selected: "",
       wording_choice_user_raw: userRaw,
       wording_choice_user_normalized: normalizedUser,
-      wording_choice_user_items: userItems,
+      wording_choice_user_items: effectiveUserItems,
       wording_choice_base_items: baseItems,
       wording_choice_agent_current: suggestionRaw,
       wording_choice_suggestion_items: suggestionItems,
@@ -654,7 +660,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       mode,
       user_text: normalizedUser,
       suggestion_text: suggestionRaw,
-      user_items: userItems,
+      user_items: effectiveUserItems,
       suggestion_items: suggestionItems,
       instruction: deps.uiDefaultString("wordingChoiceInstruction", "Please click what suits you best."),
     };

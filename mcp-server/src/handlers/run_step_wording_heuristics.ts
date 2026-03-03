@@ -234,7 +234,7 @@ function extractDreamSuggestionSentences(params: {
       const lower = sentence.toLowerCase();
       if (companyKey && companyName !== "TBD" && lower.includes(companyKey)) score += 10;
       if (/\bdreams?\b.{0,24}\bworld\b/i.test(sentence)) score += 6;
-      if (/^(the business|the company)\b/i.test(lower)) score += 3;
+      if (/^(my future company)\b/i.test(lower)) score += 3;
       return { sentence, idx, score };
     })
     .sort((a, b) => (b.score - a.score) || (a.idx - b.idx));
@@ -293,7 +293,7 @@ function extractRoleSuggestionSentences(params: {
       const lower = sentence.toLowerCase();
       if (companyKey && companyName !== "TBD" && lower.includes(companyKey)) score += 10;
       if (/\bso that\b/i.test(sentence)) score += 4;
-      if (/^(the company|the business)\b/i.test(lower)) score += 2;
+      if (/^(my future company)\b/i.test(lower)) score += 2;
       return { sentence, idx, score };
     })
     .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))

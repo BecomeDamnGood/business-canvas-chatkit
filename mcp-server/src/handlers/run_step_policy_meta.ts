@@ -40,7 +40,7 @@ If the user asks something unrelated to The Business Strategy Canvas Builder or 
 - message must follow this structure (localized):
   Sentence 1: short, friendly, empathetic, non-judgmental boundary. Light humor is allowed as a small wink (never sarcastic, never at the user's expense).
   Sentence 2 (optional): include only for clearly off-topic/nonsense signals; keep the same tone.
-  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If company name is unknown, use the localized equivalent of "your future company".
+  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If company name is unknown, use the localized equivalent of "my future company".
 - Keep question for normal contract-driven next-step continuation; do not output numbered options in message.`;
 
 /** @deprecated Use UNIVERSAL_META_OFFTOPIC_POLICY. Kept for test backward compatibility. */
@@ -289,7 +289,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       const parsedName = String(parsed?.name || "").trim();
       if (parsedName && parsedName !== "TBD") return parsedName;
     }
-    return uiStringFromState(state, "offtopic.companyFallback", "your future company");
+    return uiStringFromState(state, "offtopic.companyFallback", "my future company");
   }
 
   function offTopicCurrentContextLine(stepId: string, state: CanvasState): string {

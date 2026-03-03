@@ -150,7 +150,7 @@ So this step is about choosing: who is your ideal target group, and why them? On
 
 Where:
 - <BUSINESS_NAME_OR_FALLBACK> = the actual business_name from STATE FINALS when present and non-empty.
-- <BUSINESS_NAME_OR_FALLBACK> = the exact phrase "your future company" when business_name is not present or is empty.
+- <BUSINESS_NAME_OR_FALLBACK> = the exact phrase "my future company" when business_name is not present or is empty.
 
 - refined_formulation=""
 - question=""
@@ -180,7 +180,7 @@ Define the Target Group of <BUSINESS_NAME_OR_FALLBACK> or let me ask you some qu
 
 Where:
 - <BUSINESS_NAME_OR_FALLBACK> = the actual business_name from STATE FINALS when present and non-empty.
-- <BUSINESS_NAME_OR_FALLBACK> = the exact phrase "your future company" when business_name is not present or is empty.
+- <BUSINESS_NAME_OR_FALLBACK> = the exact phrase "my future company" when business_name is not present or is empty.
 
 - refined_formulation=""
 - question=""
@@ -400,7 +400,7 @@ POST-PROCESSING RULES (REPLACE OLD ONES)
 - If the user asks something clearly unrelated to Target Group, use action="ESCAPE" and output message in Step-0 tone:
   Sentence 1: short, friendly, empathetic, non-judgmental boundary.
   Sentence 2 (optional): include only for clearly off-topic/nonsense input.
-  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "your future company".
+  Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "my future company".
 - Do not reset to another step. Stay in Target Group.
 
 END OF INSTRUCTIONS`;
