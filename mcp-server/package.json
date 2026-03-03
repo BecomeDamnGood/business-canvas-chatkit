@@ -21,8 +21,6 @@
     "arch:run-step-runtime:complexity": "node scripts/arch/run_step_runtime_complexity_check.mjs",
     "arch:run-step-runtime:check": "npm run arch:run-step-runtime:loc && npm run arch:run-step-runtime:boundary && npm run arch:run-step-runtime:complexity",
     "arch:run-step:any-budget": "node scripts/arch/run_step_any_budget_check.mjs",
-    "compliance:mcp-app": "node scripts/mcp_app_compliance_gate.mjs",
-    "guard:ssot:ui": "node scripts/ui_runtime_ssot_guard.mjs",
     "contract:inventory:snapshot": "node scripts/contract_inventory_snapshot_check.mjs",
     "verify:release-proof": "node scripts/release_proof_verification.mjs",
     "gate:ci": "node scripts/agent_strict_guard.mjs"

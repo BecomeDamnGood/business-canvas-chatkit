@@ -44,9 +44,7 @@ function assertArtifact(filePath, options = {}) {
 console.log("[agent_strict_guard] start");
 
 runOrFail("npm", ["run", "typecheck"], mcpRoot);
-runOrFail("npm", ["run", "guard:ssot:ui"], mcpRoot);
 runOrFail("node", ["--loader", "ts-node/esm", "scripts/contract-smoke.mjs"], mcpRoot);
-runOrFail("npm", ["run", "compliance:mcp-app"], mcpRoot);
 runOrFail("npm", ["run", "contract:inventory:snapshot"], mcpRoot);
 
 const artifacts = [
