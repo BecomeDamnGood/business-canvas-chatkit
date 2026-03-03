@@ -274,18 +274,6 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       (state as any).initial_user_message = String(userMessageCandidate).trim();
     }
 
-    const initialUserMessageForSeed = String((state as any).initial_user_message || "").trim();
-    if (initialUserMessageForSeed) {
-      const seededState = deps.maybeSeedStep0CandidateFromInitialMessage(state, initialUserMessageForSeed);
-      if (seededState !== state) {
-        state = seededState;
-        console.log("[step0_candidate_seed_from_initial_message]", {
-          current_step: String((state as any).current_step || deps.step0Id),
-          business_name: String((state as any).business_name || "").trim(),
-        });
-      }
-    }
-
     const lastSpecialistResult = (state as any)?.last_specialist_result;
     const actionCodeRaw = userMessageCandidate.startsWith("ACTION_") ? userMessageCandidate : "";
     return {

@@ -65,7 +65,11 @@ async function main() {
   cases.push(["legacy_widget", legacyWidget]);
   assert.equal(legacyWidget.ok, true, "legacy_widget: expected non-blocked success");
   assert.equal(String(stateOf(legacyWidget).state_version || ""), CURRENT_STATE_VERSION, "legacy_widget: migrated");
-  assert.equal(String(stateOf(legacyWidget).business_name || ""), "Mindd", "legacy_widget: seeded business name");
+  assert.equal(
+    String(stateOf(legacyWidget).initial_user_message || "").includes("Mindd"),
+    true,
+    "legacy_widget: initial_user_message must preserve chat input"
+  );
 
   const legacyWidgetStart = await run_step({
     current_step_id: "step_0",
@@ -77,7 +81,11 @@ async function main() {
   });
   cases.push(["legacy_widget_start", legacyWidgetStart]);
   assert.equal(legacyWidgetStart.ok, true, "legacy_widget_start: expected success");
-  assert.equal(String(stateOf(legacyWidgetStart).business_name || ""), "Mindd", "legacy_widget_start: business name retained");
+  assert.equal(
+    String(stateOf(legacyWidgetStart).initial_user_message || "").includes("Mindd"),
+    true,
+    "legacy_widget_start: initial_user_message must remain available after start"
+  );
 
   const legacyChat = await run_step({
     current_step_id: "step_0",
@@ -211,7 +219,11 @@ async function main() {
     true,
     "seeded_no_click_start: initial_user_message must preserve chat input for later start"
   );
-  assert.equal(String(seededNoClickState.business_name || ""), "Mindd", "seeded_no_click_start: business name should still be seeded");
+  assert.equal(
+    String(seededNoClickState.business_name || "").trim().length > 0,
+    true,
+    "seeded_no_click_start: business_name field must remain present"
+  );
   assert.equal(seededNoClickStartHint.length > 0, true, "seeded_no_click_start: localized start hint required");
   assert.equal(String(seededNoClickStart.prompt || "").trim(), seededNoClickStartHint, "seeded_no_click_start: prompt must keep click-start gate");
 
