@@ -540,19 +540,8 @@
           padding-right: 0;
         }
 
-        .byline {
-          grid-column: 1;
-          grid-row: 2;
-          align-items: flex-start;
-          margin-top: 2px;
-        }
-
-        .stepperRow {
-          grid-row: 3;
-        }
-
         .page-header .stepper {
-          margin-top: 24px;
+          margin-top: 32px;
         }
 
         .cardInner {
@@ -649,20 +638,6 @@
           "rulesofthegame",
           "presentation",
         ];
-        var SECTION_TITLE_FALLBACK = {
-          step_0: "Validation & Business Name",
-          dream: "Dream",
-          purpose: "Purpose",
-          bigwhy: "Big Why",
-          role: "Role",
-          entity: "Entity",
-          strategy: "Strategy",
-          targetgroup: "Target Group",
-          productsservices: "Products and Services",
-          rulesofthegame: "Rules of the game",
-          presentation: "Presentation",
-        };
-
         function byId(id) {
           return document.getElementById(id);
         }
@@ -950,7 +925,11 @@
         }
 
         function buildPrestartBodyText(state, localUi) {
-          var headline = asText(uiString(state, "prestart.headline") || localUi.prestartText);
+          var headline = asText(
+            uiString(state, "prestartWelcome") ||
+            uiString(state, "prestart.headline") ||
+            localUi.prestartText
+          );
           var provenTitle = asText(uiString(state, "prestart.proven.title"));
           var provenBody = asText(uiString(state, "prestart.proven.body"));
           var outcomesTitle = asText(uiString(state, "prestart.outcomes.title"));
@@ -990,11 +969,15 @@
           }
 
           var body = lines.join("\n").trim();
-          return body || localUi.prestartText;
+          return body || headline || localUi.prestartText;
         }
 
         function buildPrestartBodyMarkup(state, localUi) {
-          var headline = asText(uiString(state, "prestart.headline") || localUi.prestartText);
+          var headline = asText(
+            uiString(state, "prestartWelcome") ||
+            uiString(state, "prestart.headline") ||
+            localUi.prestartText
+          );
           var provenTitle = asText(uiString(state, "prestart.proven.title"));
           var provenBody = asText(uiString(state, "prestart.proven.body"));
           var outcomesTitle = asText(uiString(state, "prestart.outcomes.title"));
@@ -1086,8 +1069,9 @@
             sectionTitleText ||
             uiString(state, "title." + stepId) ||
             uiString(state, "sectionTitle." + stepId) ||
-            uiString(state, "stepLabel." + stepId) ||
-            SECTION_TITLE_FALLBACK[stepId] ||
+            (stepId === "step_0"
+              ? uiString(state, "stepLabel.validation")
+              : uiString(state, "stepLabel." + stepId)) ||
             stepId
           );
         }
@@ -1407,10 +1391,11 @@
           var stepText = asText(state.current_step || result.current_step_id) || "step_0";
           var sectionTitleText =
             asText(
-              uiString(state, "sectionTitle." + stepText) ||
               uiString(state, "title." + stepText) ||
-              uiString(state, "stepLabel." + stepText) ||
-              SECTION_TITLE_FALLBACK[stepText] ||
+              uiString(state, "sectionTitle." + stepText) ||
+              (stepText === "step_0"
+                ? uiString(state, "stepLabel.validation")
+                : uiString(state, "stepLabel." + stepText)) ||
               stepText
             );
           if (ui.status) ui.status.textContent = stepText;
@@ -1429,7 +1414,7 @@
 
           var titleText = uiString(state, "uiTitle") || localUi.uiTitle;
           if (titleText && ui.uiTitle) ui.uiTitle.textContent = titleText;
-          var byText = uiString(state, "uiBylinePrefix") || uiString(state, "byText") || localUi.byline;
+          var byText = uiString(state, "byText") || uiString(state, "uiBylinePrefix") || localUi.byline;
           if (byText && ui.byText) ui.byText.textContent = byText;
 
           var specialist = toRecord(result.specialist);
@@ -1492,7 +1477,10 @@
           }
 
           if (mode === "interactive" && bodyText.length === 0 && promptText.length === 0) {
-            promptText = uiString(state, "step0.question.initial") || "Share your thoughts or choose an option.";
+            promptText =
+              uiString(state, "generic.choicePrompt.shareOrOption") ||
+              uiString(state, "step0.question.initial") ||
+              "Share your thoughts or choose an option.";
           }
           if (ui.cardDesc) ui.cardDesc.innerHTML = formatText(bodyText);
           if (mode === "prestart" && ui.cardDesc && prestartMarkup) {
