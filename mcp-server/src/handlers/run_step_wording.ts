@@ -57,6 +57,7 @@ type RunStepWordingDeps = {
   splitSentenceItems: (input: string) => string[];
   normalizeListUserInput: (input: string) => string;
   normalizeLightUserInput: (input: string) => string;
+  normalizeUserInputAgainstSuggestion: (userRaw: string, suggestionRaw: string) => string;
   canonicalizeComparableText: (input: string) => string;
   stripChoiceInstructionNoise: (input: string) => string;
   tokenizeWords: (input: string) => string[];
@@ -85,7 +86,12 @@ type RunStepWordingDeps = {
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
   isUiWordingFeedbackKeyedV1Enabled: () => boolean;
   bumpUiI18nCounter: (telemetry: unknown, key: string, amount?: number) => void;
-  wordingSelectionMessage: (stepId: string, state: CanvasState, activeSpecialist?: string) => string;
+  wordingSelectionMessage: (
+    stepId: string,
+    state: CanvasState,
+    activeSpecialist?: string,
+    selectedValue?: string
+  ) => string;
 };
 
 function toTrimmedStringArray(input: unknown): string[] {
@@ -446,33 +452,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       }
     }
     const feedback = `${acknowledgment} ${reason}`.trim();
-    const selection = deps.wordingSelectionMessage(stepId, state, activeSpecialist);
+    const selectedValue = String(
+      prev.wording_choice_user_normalized || prev.wording_choice_user_raw || prev.refined_formulation || ""
+    ).trim();
+    const selection = deps.wordingSelectionMessage(stepId, state, activeSpecialist, selectedValue);
     return selection ? `${feedback}\n\n${selection}` : feedback;
-  }
-
-  function mergeUniqueMessageBlocks(primary: string, secondary: string): string {
-    const seenParagraphs = new Set<string>();
-    const out: string[] = [];
-    for (const block of [primary, secondary]) {
-      const trimmed = String(block || "").trim();
-      if (!trimmed) continue;
-      const paragraphs = trimmed
-        .replace(/\r/g, "\n")
-        .split(/\n{2,}/)
-        .map((p) => p.trim())
-        .filter(Boolean);
-      const keptParagraphs: string[] = [];
-      for (const paragraph of paragraphs) {
-        const key = deps.canonicalizeComparableText(paragraph);
-        if (!key || seenParagraphs.has(key)) continue;
-        seenParagraphs.add(key);
-        keptParagraphs.push(paragraph);
-      }
-      if (keptParagraphs.length > 0) {
-        out.push(keptParagraphs.join("\n\n"));
-      }
-    }
-    return out.join("\n\n").trim();
   }
 
   function withUpdatedTargetField(result: Record<string, unknown>, stepId: string, value: string): Record<string, unknown> {
@@ -573,7 +557,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
     const mode: WordingChoiceMode =
       isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
-    const normalizedUser = mode === "list" ? deps.normalizeListUserInput(userRaw) : deps.normalizeLightUserInput(userRaw);
+    const normalizedUser = mode === "list"
+      ? deps.normalizeListUserInput(userRaw)
+      : deps.normalizeUserInputAgainstSuggestion(userRaw, suggestionRaw);
     const baseItems = mode === "list" ? extractCommittedListItems(stepId, previousSpecialist) : [];
     const suggestionFullItems = mode === "list" ? pickWordingSuggestionList(specialistResult, suggestionRaw) : [];
     const userRawItems = mode === "list"
@@ -617,6 +603,22 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       return { specialist: autoSelected, wordingChoice: null };
     }
     if (!forcePending && !deps.isMaterialRewriteCandidate(userRaw, suggestionRaw)) {
+      if (mode === "text") {
+        const correctedValue = String(
+          deps.normalizeUserInputAgainstSuggestion(userRaw, suggestionRaw) || suggestionRaw || userRaw
+        ).trim();
+        if (correctedValue) {
+          const corrected = withUpdatedTargetField(
+            {
+              ...specialistResult,
+              refined_formulation: correctedValue,
+            },
+            stepId,
+            correctedValue
+          );
+          return { specialist: corrected, wordingChoice: null };
+        }
+      }
       return { specialist: specialistResult, wordingChoice: null };
     }
     const pendingMessage = mode === "list"
@@ -710,7 +712,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const userFeedback = userChoiceFeedbackMessage(stepId, state, prevRaw, activeSpecialist, params.telemetry);
     const selectedMessage = pickedUser
       ? userFeedback
-      : deps.wordingSelectionMessage(stepId, state, activeSpecialist);
+      : deps.wordingSelectionMessage(stepId, state, activeSpecialist, chosen);
     const selected = withUpdatedTargetField(
       {
         ...prevRaw,
@@ -746,10 +748,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const selectedWithContract: Record<string, unknown> = {
       ...selected,
       action: "ASK",
-      message: mergeUniqueMessageBlocks(
-        String(selected.message || ""),
-        String(renderedSpecialist?.message || "")
-      ),
+      message: String(selected.message || "").trim() || String(renderedSpecialist?.message || "").trim(),
       question: String(renderedSpecialist?.question || ""),
       wording_choice_pending: "false",
       wording_choice_selected: pickedUser ? "user" : "suggestion",

@@ -264,25 +264,12 @@ function contractHeadlineForState(params: {
   }
   const modeKey = params.status === "no_output" ? "define" : "refine";
   const modeTemplateKey = `contract.headline.${modeKey}.${params.hasOptions ? "withOptions" : "withoutOptions"}`;
-  const modeTemplate = uiStringFromState(params.state, modeTemplateKey, "");
-  if (modeTemplate) {
-    return formatIndexedTemplate(modeTemplate, [params.stepLabel, params.companyName]).trim();
-  }
-  const prefix = params.status === "no_output"
-    ? uiStringFromState(params.state, "contract.headline.define", uiDefaultString("contract.headline.define"))
-    : uiStringFromState(params.state, "contract.headline.refine", uiDefaultString("contract.headline.refine"));
-  const templateWithOptions = uiStringFromState(
+  const modeTemplate = uiStringFromState(
     params.state,
-    "contract.headline.withOptions",
-    uiDefaultString("contract.headline.withOptions")
+    modeTemplateKey,
+    uiDefaultString(modeTemplateKey)
   );
-  const templateWithoutOptions = uiStringFromState(
-    params.state,
-    "contract.headline.withoutOptions",
-    uiDefaultString("contract.headline.withoutOptions")
-  );
-  const template = params.hasOptions ? templateWithOptions : templateWithoutOptions;
-  return formatIndexedTemplate(template, [prefix, params.stepLabel, params.companyName]).trim();
+  return formatIndexedTemplate(modeTemplate, [params.stepLabel, params.companyName]).trim();
 }
 
 function interactiveAskPromptFallback(state: CanvasState, stepId: string): string {
@@ -791,6 +778,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     String((specialistForDisplay as any).message ?? "").trim() ||
     String((specialistForDisplay as any).refined_formulation ?? "").trim();
   const recapText = String(recapBody || "").trim();
+  const currentContextHeadingForStep =
+    stepId !== "step_0" ? offTopicCurrentContextHeading(stepId, state) : "";
+  const answerLooksLikeGenericCurrentHeadingOnly =
+    Boolean(answerText) &&
+    Boolean(currentContextHeadingForStep) &&
+    comparableText(answerText) === comparableText(currentContextHeadingForStep);
   const offTopicContextHeading =
     isOfftopic && stepId !== "step_0" ? offTopicCurrentContextHeading(stepId, state) : "";
   const recapBlock =
@@ -826,6 +819,14 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       const recapKey = comparableText(strategyContextBlock);
       if (recapKey && answerKey.includes(recapKey)) return answerText;
       return `${answerText}\n\n${strategyContextBlock}`.trim();
+    }
+    if (effectiveStatus === "valid_output" && recapText) {
+      if (!answerText) return recapBlock;
+      const answerKey = comparableText(answerText);
+      const recapKey = comparableText(recapText);
+      if (recapKey && answerKey.includes(recapKey)) return answerText;
+      if (answerLooksLikeGenericCurrentHeadingOnly) return `${answerText}\n${recapText}`.trim();
+      return `${answerText}\n\n${recapBlock}`.trim();
     }
     return answerText || (effectiveStatus === "valid_output" ? recapBlock : "");
   })();

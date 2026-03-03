@@ -103,7 +103,12 @@ export type RunStepRouteTokenPorts = {
 };
 
 export type RunStepRouteWordingPorts = {
-  wordingSelectionMessage: (stepId: string, state: CanvasState, activeSpecialist?: string) => string;
+  wordingSelectionMessage: (
+    stepId: string,
+    state: CanvasState,
+    activeSpecialist?: string,
+    selectedValue?: string
+  ) => string;
   pickPrompt: (specialist: any) => string;
   buildTextForWidget: (params: { specialist: any }) => string;
 };

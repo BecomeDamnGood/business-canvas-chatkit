@@ -183,7 +183,7 @@ function appendImage(el: Element, image: { alt: string; url: string }): void {
 }
 
 function appendParagraph(el: Element, lines: string[]): void {
-  const paragraph = lines.map((line) => String(line || "").trim()).filter(Boolean).join(" ");
+  const paragraph = lines.map((line) => String(line || "").trim()).filter(Boolean).join("\n");
   const paragraphCheck = normalizeLineText(paragraph);
   if (!paragraphCheck) return;
   if (!paragraph) return;

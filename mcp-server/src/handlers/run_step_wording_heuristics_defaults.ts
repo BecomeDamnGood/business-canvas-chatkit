@@ -13,6 +13,7 @@ import {
   createRunStepWordingHeuristicHelpers,
   normalizeLightUserInput,
   normalizeListUserInput,
+  normalizeUserInputAgainstSuggestion,
   tokenizeWords,
   isMaterialRewriteCandidate,
   isClearlyGeneralOfftopicInput,
@@ -75,6 +76,7 @@ export const pickRoleSuggestionFromPreviousState = wordingHeuristicHelpers.pickR
 export {
   normalizeLightUserInput,
   normalizeListUserInput,
+  normalizeUserInputAgainstSuggestion,
   tokenizeWords,
   isMaterialRewriteCandidate,
   isClearlyGeneralOfftopicInput,

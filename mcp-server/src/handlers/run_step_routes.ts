@@ -183,7 +183,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           message: deps.wordingSelectionMessage(
             deps.dreamStepId,
             context.state,
-            String((context.state as Record<string, unknown>).active_specialist || "")
+            String((context.state as Record<string, unknown>).active_specialist || ""),
+            pickedSuggestion
           ),
           question: "",
           refined_formulation: pickedSuggestion,
@@ -239,7 +240,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           message: deps.wordingSelectionMessage(
             deps.roleStepId,
             context.state,
-            String((context.state as Record<string, unknown>).active_specialist || "")
+            String((context.state as Record<string, unknown>).active_specialist || ""),
+            pickedSuggestion
           ),
           question: "",
           refined_formulation: pickedSuggestion,

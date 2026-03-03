@@ -115,6 +115,15 @@ export function isMaterialRewriteCandidate(userRaw: string, suggestionRaw: strin
   return true;
 }
 
+export function normalizeUserInputAgainstSuggestion(userRaw: string, suggestionRaw: string): string {
+  const user = normalizeLightUserInput(userRaw);
+  if (!user) return "";
+  const suggestion = normalizeLightUserInput(suggestionRaw);
+  if (!suggestion) return user;
+  if (isSpellingOnlyCorrection(userRaw, suggestionRaw)) return suggestion;
+  return user;
+}
+
 export function isClearlyGeneralOfftopicInput(input: string): boolean {
   const text = String(input || "").trim();
   if (!text) return false;

@@ -42,6 +42,9 @@ function stripChoiceInstructionNoise(value: string): string {
     /^choose\s+an?\s+option\s+by\s+typing\s+.+$/i,
     /^.+\s+or\s+choose\s+an?\s+option(s)?(\s+below)?\.?$/i,
     /^.+\s+or\s+choose\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
+    /^are\s+you\s+content\s+with\s+this\s+.+\s+or\s+do\s+you\s+want\s+to\s+refine\s+it\??$/i,
+    /^does\s+this\s+capture\s+the\s+.+\s+and\s+do\s+you\s+want\s+to\s+continue\s+to\s+the\s+next\s+step\s+.+\??$/i,
+    /^based\s+on\s+the\s+.+,\s*your\s+.+\s+could\s+sound\s+like\s+this:?\s*$/i,
   ];
   const inlineNoisePatterns = [
     /\s*choose\s+an?\s+option\s+below\.?/gi,

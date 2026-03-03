@@ -358,7 +358,37 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     );
   }
 
-  function wordingSelectionMessage(stepId: string, state: CanvasState, activeSpecialist = ""): string {
+  function wordingSelectionValue(stepId: string, state: CanvasState, selectedValue = ""): string {
+    const explicit = String(selectedValue || "").trim();
+    if (explicit) return explicit;
+    const last =
+      (state as any)?.last_specialist_result && typeof (state as any).last_specialist_result === "object"
+        ? ((state as any).last_specialist_result as Record<string, unknown>)
+        : {};
+    const field = fieldForStep(stepId);
+    const fieldValue = field ? String(last[field] || "").trim() : "";
+    const refined = String(last.refined_formulation || "").trim();
+    const wordingValue = String(last.wording_choice_agent_current || "").trim();
+    const provisional = provisionalValueForStep(state, stepId);
+    const finalField = FINAL_FIELD_BY_STEP_ID[stepId] || "";
+    const finalValue = finalField ? String((state as any)?.[finalField] || "").trim() : "";
+    const resolved = fieldValue || refined || wordingValue || provisional || finalValue;
+    if (!resolved) return "";
+    if (isBulletConsistencyStep(stepId)) {
+      const items = deps.parseListItems(resolved)
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      if (items.length > 0) return items.map((line) => `• ${line}`).join("\n");
+    }
+    return resolved;
+  }
+
+  function wordingSelectionMessage(
+    stepId: string,
+    state: CanvasState,
+    activeSpecialist = "",
+    selectedValue = ""
+  ): string {
     const specialist = String(activeSpecialist || (state as any)?.active_specialist || "").trim();
     if (stepId === deps.dreamStepId && specialist === deps.dreamExplainerSpecialist) return "";
     const template = localizedUiString(
@@ -366,10 +396,14 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       "offtopic.current.template",
       deps.uiDefaultString("offtopic.current.template")
     );
-    return String(template || "")
+    const heading = String(template || "")
       .replace(/\{0\}/g, wordingStepLabel(stepId, state))
       .replace(/\{1\}/g, wordingCompanyName(state))
       .trim();
+    const currentValue = wordingSelectionValue(stepId, state, selectedValue);
+    if (heading && currentValue) return `${heading}\n${currentValue}`.trim();
+    if (currentValue) return currentValue;
+    return "";
   }
 
   /** Only flag explicit injection markers; never flag bullets/requirements/goals (business brief). */

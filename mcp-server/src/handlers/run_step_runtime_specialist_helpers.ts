@@ -49,10 +49,32 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     };
 
     const next = { ...specialist };
-    const message = localizeText(next.message);
-    const question = localizeText(next.question);
-    if (message) next.message = message;
-    if (question) next.question = question;
+    const localizableKeys = [
+      "message",
+      "question",
+      "refined_formulation",
+      "dream",
+      "purpose",
+      "bigwhy",
+      "role",
+      "entity",
+      "strategy",
+      "targetgroup",
+      "productsservices",
+      "rulesofthegame",
+      "presentation_brief",
+    ];
+    for (const key of localizableKeys) {
+      const raw = String(next[key] || "");
+      if (!raw) continue;
+      next[key] = localizeText(raw);
+    }
+    if (Array.isArray(next.statements)) {
+      next.statements = (next.statements as unknown[])
+        .map((line) => localizeText(line))
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+    }
     return next;
   }
 
