@@ -383,6 +383,10 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_collect") {
       viewVariant = "dream_builder_collect";
     }
+    const shouldForceQuestionText = viewVariant === "wording_choice";
+    const questionTextPayload = shouldForceQuestionText
+      ? { questionText: String(questionText || "").trim() }
+      : (questionText ? { questionText } : {});
     const view = deps.deriveUiViewPayload(viewVariant);
     if (Array.isArray(actionCodesOverride)) {
       const safeOverrideCodes = deps.sanitizeWidgetActionCodes(
@@ -397,7 +401,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           action_codes: safeOverrideCodes,
           expected_choice_count: safeOverrideCodes.length,
           ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
-          ...(questionText ? { questionText } : {}),
+          ...questionTextPayload,
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -408,7 +412,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       }
       if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
         return {
-          ...(questionText ? { questionText } : {}),
+          ...questionTextPayload,
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -425,6 +429,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         if (localDev) flags.escape_menu_suppressed = true;
         if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId) {
           return {
+            ...questionTextPayload,
             ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
             ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
             ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -445,7 +450,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         if (safeCodes.length === 0) {
           if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
             return {
-              ...(questionText ? { questionText } : {}),
+              ...questionTextPayload,
               ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
               ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
               ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -461,7 +466,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           action_codes: safeCodes,
           expected_choice_count: safeCodes.length,
           ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
-          ...(questionText ? { questionText } : {}),
+          ...questionTextPayload,
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -473,7 +478,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     }
     if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
       return {
-        ...(questionText ? { questionText } : {}),
+        ...questionTextPayload,
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),

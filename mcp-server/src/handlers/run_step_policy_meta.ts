@@ -96,7 +96,7 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
   [PRESENTATION_STEP_ID]: "offtopic.step.presentation",
 };
 
-const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
+const BEN_PROFILE_IMAGE_URL = "assets/ben-steenstra.webp";
 const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
 const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
 
@@ -289,14 +289,14 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       const parsedName = String(parsed?.name || "").trim();
       if (parsedName && parsedName !== "TBD") return parsedName;
     }
-    return uiStringFromState(state, "offtopic.companyFallback", "my future company");
+    return uiStringFromState(state, "offtopic.companyFallback", deps.uiDefaultString("offtopic.companyFallback"));
   }
 
   function offTopicCurrentContextLine(stepId: string, state: CanvasState): string {
     const template = uiStringFromState(
       state,
       "offtopic.current.template",
-      "The current {0} of {1} is."
+      deps.uiDefaultString("offtopic.current.template")
     );
     return ensureSentenceEnd(
       formatIndexedTemplate(template, [
@@ -310,7 +310,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     const template = uiStringFromState(
       state,
       "offtopic.redirect.template",
-      "Let's continue with the {0} of {1}."
+      deps.uiDefaultString("offtopic.redirect.template")
     );
     return ensureSentenceEnd(
       formatIndexedTemplate(template, [
@@ -504,7 +504,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         const essenceTemplate = deps.uiStringFromStateMap(
           params.state,
           "motivation.essencePrefix",
-          deps.uiDefaultString("motivation.essencePrefix", "Essence so far: \"{0}\"")
+          deps.uiDefaultString("motivation.essencePrefix")
         );
         blocks.push(formatIndexedTemplate(essenceTemplate, [essence]).trim());
       }

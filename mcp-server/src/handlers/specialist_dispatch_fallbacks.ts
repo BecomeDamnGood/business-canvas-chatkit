@@ -115,7 +115,7 @@ export function buildRateLimitErrorPayload(
       user_message: deps.uiStringFromStateMap(
         state,
         "transient.rate_limited",
-        deps.uiDefaultString("transient.rate_limited", "Please wait a moment and try again.")
+        deps.uiDefaultString("transient.rate_limited", "")
       ),
       retry_action: "retry_same_action",
     },
@@ -161,7 +161,7 @@ export function buildTimeoutErrorPayload(
       user_message: deps.uiStringFromStateMap(
         state,
         "transient.timeout",
-        deps.uiDefaultString("transient.timeout", "This is taking longer than usual. Please try again.")
+        deps.uiDefaultString("transient.timeout", "")
       ),
       retry_action: "retry_same_action",
     },

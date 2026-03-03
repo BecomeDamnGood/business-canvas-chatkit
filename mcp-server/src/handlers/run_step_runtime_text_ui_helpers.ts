@@ -64,7 +64,7 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
   function step0ReadyActionLabel(state: CanvasState | null | undefined): string {
     if (deps.shouldSuppressFallbackText(state)) return "";
     const key = deps.labelKeyForMenuAction("STEP0_MENU_READY_START", "ACTION_STEP0_READY_START", 0);
-    const fallback = String(deps.menuLabelDefaults[key] || "Yes, I'm ready. Let's start!").trim();
+    const fallback = String(deps.menuLabelDefaults[key] || deps.uiDefaultString(key)).trim();
     return uiStringFromStateMap(state, key, fallback);
   }
 
@@ -86,12 +86,12 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
     const existingTemplate = uiStringFromStateMap(
       state,
       "step0.readiness.statement.existing",
-      deps.uiDefaultString("step0.readiness.statement.existing", "You have a {0} called {1}.")
+      deps.uiDefaultString("step0.readiness.statement.existing")
     );
     const startingTemplate = uiStringFromStateMap(
       state,
       "step0.readiness.statement.starting",
-      deps.uiDefaultString("step0.readiness.statement.starting", "You want to start a {0} called {1}.")
+      deps.uiDefaultString("step0.readiness.statement.starting")
     );
     const template = String(parsed.status || "").toLowerCase() === "existing" ? existingTemplate : startingTemplate;
     return formatIndexedTemplate(template, [venture, name]).trim();
@@ -102,15 +102,14 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
     parsed: { venture: string; name: string; status: string }
   ): string {
     if (deps.shouldSuppressFallbackText(state)) return "";
-    const readyLabel = step0ReadyActionLabel(state);
     const suffix = uiStringFromStateMap(
       state,
       "step0.readiness.suffix",
-      deps.uiDefaultString("step0.readiness.suffix", "Are you ready to start with the first step: the Dream?")
+      deps.uiDefaultString("step0.readiness.suffix")
     );
     const statement = step0ReadinessStatement(state, parsed);
-    if (!readyLabel || !statement || !suffix) return "";
-    return `1) ${readyLabel}\n\n${statement} ${suffix}`.trim();
+    if (!statement || !suffix) return "";
+    return `${statement} ${suffix}`.trim();
   }
 
   function countNumberedOptions(prompt: string): number {
@@ -254,7 +253,7 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
     return uiStringFromStateMap(
       state,
       "invariant.prompt.ask.default",
-      deps.uiDefaultString("invariant.prompt.ask.default", "Share your thoughts or choose an option.")
+      deps.uiDefaultString("invariant.prompt.ask.default")
     );
   }
 
@@ -279,7 +278,7 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
       (next as Record<string, unknown>).message = uiStringFromStateMap(
         context.state,
         "wording.choice.context.default",
-        deps.uiDefaultString("wording.choice.context.default", "Please choose the wording that fits best.")
+        deps.uiDefaultString("wording.choice.context.default")
       );
     }
     return next;

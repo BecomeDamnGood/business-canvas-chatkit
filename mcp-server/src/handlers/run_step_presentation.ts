@@ -201,34 +201,34 @@ function headingLabelsForState(
     PURPOSEH: deps.uiStringFromStateMap(
       state,
       "ppt.heading.purpose",
-      deps.uiDefaultString("ppt.heading.purpose", "Purpose")
+      deps.uiDefaultString("ppt.heading.purpose")
     ),
-    ROLEH: deps.uiStringFromStateMap(state, "ppt.heading.role", deps.uiDefaultString("ppt.heading.role", "Role")),
+    ROLEH: deps.uiStringFromStateMap(state, "ppt.heading.role", deps.uiDefaultString("ppt.heading.role")),
     STRATEGYH: deps.uiStringFromStateMap(
       state,
       "ppt.heading.strategy",
-      deps.uiDefaultString("ppt.heading.strategy", "Strategy")
+      deps.uiDefaultString("ppt.heading.strategy")
     ),
     ENTITYH: deps.uiStringFromStateMap(
       state,
       "ppt.heading.entity",
-      deps.uiDefaultString("ppt.heading.entity", "Entity")
+      deps.uiDefaultString("ppt.heading.entity")
     ),
-    DREAMH: deps.uiStringFromStateMap(state, "ppt.heading.dream", deps.uiDefaultString("ppt.heading.dream", "Dream")),
+    DREAMH: deps.uiStringFromStateMap(state, "ppt.heading.dream", deps.uiDefaultString("ppt.heading.dream")),
     TARGET_GROUPH: deps.uiStringFromStateMap(
       state,
       "ppt.heading.targetgroup",
-      deps.uiDefaultString("ppt.heading.targetgroup", "Target Group")
+      deps.uiDefaultString("ppt.heading.targetgroup")
     ),
     PRODUCTS_SERVICESH: deps.uiStringFromStateMap(
       state,
       "ppt.heading.productsservices",
-      deps.uiDefaultString("ppt.heading.productsservices", "Products and Services")
+      deps.uiDefaultString("ppt.heading.productsservices")
     ),
     RULES_OF_THE_GAMEH: deps.uiStringFromStateMap(
       state,
       "ppt.heading.rulesofthegame",
-      deps.uiDefaultString("ppt.heading.rulesofthegame", "Rules of the Game")
+      deps.uiDefaultString("ppt.heading.rulesofthegame")
     ),
   };
 }

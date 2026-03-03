@@ -15,6 +15,7 @@ import {
   extractStatementCount,
   strategyStatementsFromSources,
 } from "./turn_policy/strategy_helpers.js";
+import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -36,20 +37,6 @@ export type TurnPolicyRenderResult = {
   textKeys: string[];
 };
 
-const STEP_LABELS: Record<string, string> = {
-  step_0: "Step 0",
-  dream: "Dream",
-  purpose: "Purpose",
-  bigwhy: "Big Why",
-  role: "Role",
-  entity: "Entity",
-  strategy: "Strategy",
-  targetgroup: "Target Group",
-  productsservices: "Products and Services",
-  rulesofthegame: "Rules of the Game",
-  presentation: "Presentation",
-};
-
 const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
   dream: "offtopic.step.dream",
   purpose: "offtopic.step.purpose",
@@ -62,11 +49,6 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
   rulesofthegame: "offtopic.step.rulesofthegame",
   presentation: "offtopic.step.presentation",
 };
-
-const STEP0_NO_OUTPUT_PROMPT_EN =
-  "To get started, could you tell me what type of business you are running or want to start, and what the name is (or just say 'TBD' if you don't know the name yet)?";
-const STEP0_CARDDESC_EN = "Just to set the context, we'll start with the basics.";
-const STEP0_CONFIRM_SUFFIX_EN = "Are you ready to start with the first step: the Dream?";
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
 
@@ -231,8 +213,15 @@ function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_but
 
 function companyNameForPrompt(state: CanvasState): string {
   const raw = String((state as any).business_name ?? "").trim();
-  if (!raw || raw === "TBD") return "<my future company>";
+  if (!raw || raw === "TBD") {
+    return uiStringFromState(state, "offtopic.companyFallback", uiDefaultString("offtopic.companyFallback"));
+  }
   return raw;
+}
+
+function uiDefaultString(key: string, fallback = ""): string {
+  const value = String(UI_STRINGS_SOURCE_EN[key] || "").trim();
+  return value || String(fallback || "").trim();
 }
 
 function uiStringFromState(state: CanvasState, key: string, fallback: string): string {
@@ -270,21 +259,27 @@ function contractHeadlineForState(params: {
     return uiStringFromState(
       params.state,
       "contract.headline.strategy.moreFocus",
-      "What more do you focus on within your strategy?"
+      uiDefaultString("contract.headline.strategy.moreFocus")
     );
   }
+  const modeKey = params.status === "no_output" ? "define" : "refine";
+  const modeTemplateKey = `contract.headline.${modeKey}.${params.hasOptions ? "withOptions" : "withoutOptions"}`;
+  const modeTemplate = uiStringFromState(params.state, modeTemplateKey, "");
+  if (modeTemplate) {
+    return formatIndexedTemplate(modeTemplate, [params.stepLabel, params.companyName]).trim();
+  }
   const prefix = params.status === "no_output"
-    ? uiStringFromState(params.state, "contract.headline.define", "Define")
-    : uiStringFromState(params.state, "contract.headline.refine", "Refine");
+    ? uiStringFromState(params.state, "contract.headline.define", uiDefaultString("contract.headline.define"))
+    : uiStringFromState(params.state, "contract.headline.refine", uiDefaultString("contract.headline.refine"));
   const templateWithOptions = uiStringFromState(
     params.state,
     "contract.headline.withOptions",
-    "{0} your {1} for {2} or choose an option."
+    uiDefaultString("contract.headline.withOptions")
   );
   const templateWithoutOptions = uiStringFromState(
     params.state,
     "contract.headline.withoutOptions",
-    "{0} your {1} for {2}."
+    uiDefaultString("contract.headline.withoutOptions")
   );
   const template = params.hasOptions ? templateWithOptions : templateWithoutOptions;
   return formatIndexedTemplate(template, [prefix, params.stepLabel, params.companyName]).trim();
@@ -295,20 +290,25 @@ function interactiveAskPromptFallback(state: CanvasState, stepId: string): strin
     return uiStringFromState(
       state,
       "step0.question.initial",
-      STEP0_NO_OUTPUT_PROMPT_EN
+      uiDefaultString("step0.question.initial")
     );
   }
   return uiStringFromState(
     state,
     "invariant.prompt.ask.default",
-    "Share your thoughts or choose an option."
+    uiDefaultString("invariant.prompt.ask.default")
   );
 }
 
 function offTopicStepLabel(stepId: string, state: CanvasState): string {
   const key = OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP[stepId] || "";
-  if (!key) return STEP_LABELS[stepId] || "Current step";
-  return uiStringFromState(state, key, STEP_LABELS[stepId] || "Current step");
+  if (key) {
+    const fallback = uiDefaultString(key);
+    return uiStringFromState(state, key, fallback);
+  }
+  const titleFallback = uiDefaultString(`offtopic.step.${stepId}`);
+  if (titleFallback) return titleFallback;
+  return String(stepId || "").trim();
 }
 
 function offTopicCompanyName(state: CanvasState): string {
@@ -320,11 +320,15 @@ function offTopicCompanyName(state: CanvasState): string {
     const parsedName = String(parsed?.name || "").trim();
     if (parsedName && parsedName !== "TBD") return parsedName;
   }
-  return uiStringFromState(state, "offtopic.companyFallback", "my future company");
+  return uiStringFromState(state, "offtopic.companyFallback", uiDefaultString("offtopic.companyFallback"));
 }
 
 function offTopicCurrentContextHeading(stepId: string, state: CanvasState): string {
-  const template = uiStringFromState(state, "offtopic.current.template", "The current {0} of {1} is.");
+  const template = uiStringFromState(
+    state,
+    "offtopic.current.template",
+    uiDefaultString("offtopic.current.template")
+  );
   return ensureSentenceEnd(
     formatIndexedTemplate(template, [
       offTopicStepLabel(stepId, state),
@@ -347,17 +351,17 @@ function step0ConfirmQuestion(state: CanvasState, venture: string, name: string,
   const suffix = uiStringFromState(
     state,
     "step0.readiness.suffix",
-    STEP0_CONFIRM_SUFFIX_EN
+    uiDefaultString("step0.readiness.suffix")
   );
   const existingTemplate = uiStringFromState(
     state,
     "step0.readiness.statement.existing",
-    "You have a {0} called {1}."
+    uiDefaultString("step0.readiness.statement.existing")
   );
   const startingTemplate = uiStringFromState(
     state,
     "step0.readiness.statement.starting",
-    "You want to start a {0} called {1}."
+    uiDefaultString("step0.readiness.statement.starting")
   );
   const statementTemplate = String(status || "").toLowerCase() === "starting" ? startingTemplate : existingTemplate;
   if (cleanVenture && cleanName) {
@@ -834,11 +838,11 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       Boolean(parsedStep0.venture) &&
       Boolean(parsedStep0.name) &&
       (parsedStep0.status === "existing" || parsedStep0.status === "starting");
-    const step0CardDesc = uiStringFromState(state, "step0.carddesc", STEP0_CARDDESC_EN);
+    const step0CardDesc = uiStringFromState(state, "step0.carddesc", uiDefaultString("step0.carddesc"));
     const step0InitialQuestion = uiStringFromState(
       state,
       "step0.question.initial",
-      STEP0_NO_OUTPUT_PROMPT_EN
+      uiDefaultString("step0.question.initial")
     );
     const specialistQuestion = String((specialistForDisplay as any).question ?? "").trim();
     const step0Message = (() => {

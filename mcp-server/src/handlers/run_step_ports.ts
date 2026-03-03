@@ -209,7 +209,11 @@ export type RunStepPipelineSpecialistPorts<TPayload> = {
 };
 
 export type RunStepPipelineNormalizationPorts = {
-  normalizeEntitySpecialistResult: (stepId: string, specialist: any) => any;
+  normalizeLocalizedConceptTerms: (
+    specialist: Record<string, unknown> | null | undefined,
+    state?: CanvasState | null
+  ) => Record<string, unknown> | null | undefined;
+  normalizeEntitySpecialistResult: (stepId: string, specialist: any, state?: CanvasState | null) => any;
   applyCentralMetaTopicRouter: (params: {
     stepId: string;
     specialistResult: Record<string, unknown>;

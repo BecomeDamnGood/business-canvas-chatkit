@@ -173,15 +173,12 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const message = behavior.uiStringFromStateMap(
       stateForText,
       "bigwhy.tooLong.message",
-      behavior.uiDefaultString(
-        "bigwhy.tooLong.message",
-        "Your formulation is longer than 28 words. Short and clear is better, so please provide a compact version."
-      )
+      behavior.uiDefaultString("bigwhy.tooLong.message")
     );
     const question = behavior.uiStringFromStateMap(
       stateForText,
       "bigwhy.tooLong.question",
-      behavior.uiDefaultString("bigwhy.tooLong.question", "Can you rewrite it in 28 words or fewer?")
+      behavior.uiDefaultString("bigwhy.tooLong.question")
     );
     return {
       action: "REFINE",

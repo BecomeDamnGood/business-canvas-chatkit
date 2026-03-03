@@ -608,30 +608,6 @@ export function buildContractId(stepId: string, status: TurnOutputStatus, menuId
   return buildUiContractId(stepId, status, menuId);
 }
 
-export function buildNoOutputRecap(stepLabel: string): string {
-  return `We have not yet defined the ${String(stepLabel || "current step").trim()}.`;
-}
-
-function headlinePrefixForStatus(status: TurnOutputStatus): "Define" | "Refine" {
-  return status === "no_output" ? "Define" : "Refine";
-}
-
-export function buildHeadlineForContract(params: {
-  stepId?: string;
-  stepLabel: string;
-  companyName: string;
-  status: TurnOutputStatus;
-  hasOptions: boolean;
-  strategyStatementCount?: number;
-}): string {
-  if (params.stepId === "strategy" && Number(params.strategyStatementCount || 0) >= 1) {
-    return "What more do you focus on within your strategy?";
-  }
-  const prefix = headlinePrefixForStatus(params.status);
-  const base = `${prefix} your ${params.stepLabel} for ${params.companyName}`;
-  return params.hasOptions ? `${base} or choose an option.` : `${base}.`;
-}
-
 export function buildContractTextKeys(params: {
   stepId: string;
   status: TurnOutputStatus;

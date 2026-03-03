@@ -333,11 +333,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
   function wordingStepLabel(stepId: string, state?: CanvasState | null): string {
     const key = wordingStepLabelKey(stepId);
     if (key) {
-      const fallback = deps.uiDefaultString(key, "step");
+      const fallback = deps.uiDefaultString(key);
       const localized = localizedUiString(state || null, key, fallback);
       if (localized) return localized;
     }
-    return "step";
+    return String(stepId || "").trim();
   }
 
   function wordingCompanyName(state: CanvasState): string {

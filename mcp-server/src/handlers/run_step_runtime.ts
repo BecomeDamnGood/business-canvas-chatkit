@@ -523,6 +523,7 @@ const runStepRuntimeSpecialistHelpers = createRunStepRuntimeSpecialistHelpers({
 });
 
 const {
+  normalizeLocalizedConceptTerms,
   normalizeEntityPhrase,
   normalizeEntitySpecialistResult,
   enforceDreamBuilderQuestionProgress,
@@ -900,7 +901,7 @@ const runStepRuntimeExecuteDeps = {
   pickWordingAgentBase, copyPendingWordingChoiceState, normalizeNonStep0OfftopicSpecialist,
   uiStringFromStateMap, uiDefaultString, attachRegistryPayload, langFromState, UI_CONTRACT_VERSION,
   DREAM_FORCE_REFINE_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, STRATEGY_SPECIALIST,
-  callSpecialistStrictSafe, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
+  callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
   normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
   isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate,
   buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,

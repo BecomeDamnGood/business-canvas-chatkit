@@ -289,7 +289,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           const message = deps.uiStringFromStateMap(
             context.state,
             "presentation.ready",
-            deps.uiDefaultString("presentation.ready", "Your presentation is ready.")
+            deps.uiDefaultString("presentation.ready")
           );
 
           const specialist = {
@@ -658,7 +658,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           const startHint =
             typeof uiStrings.startHint === "string"
               ? String(uiStrings.startHint)
-              : deps.uiDefaultString("startHint", "Click Start in the widget to begin.");
+              : deps.uiDefaultString("startHint");
 
           const specialist = {
             action: "ASK",

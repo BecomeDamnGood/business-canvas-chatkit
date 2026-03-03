@@ -246,7 +246,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
         (next as Record<string, unknown>).message = deps.uiStringFromStateMap(
           state,
           "wording.choice.context.default",
-          deps.uiDefaultString("wording.choice.context.default", "Please choose the wording that fits best.")
+          deps.uiDefaultString("wording.choice.context.default")
         );
       }
     }

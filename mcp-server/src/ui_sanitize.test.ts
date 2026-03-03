@@ -361,7 +361,7 @@ test("renderStructuredText renders markdown image lines as card images", { concu
     renderStructuredText(
       container as unknown as Element,
       [
-        "![Ben Steenstra](/ui/assets/ben-steenstra.webp)",
+        "![Ben Steenstra](assets/ben-steenstra.webp)",
         "",
         "For more information visit https://www.bensteenstra.com",
       ].join("\n")
@@ -369,7 +369,7 @@ test("renderStructuredText renders markdown image lines as card images", { concu
 
     assert.equal((container.childNodes[0] as any).tagName, "IMG");
     assert.equal((container.childNodes[0] as any).className, "cardDesc-image");
-    assert.equal((container.childNodes[0] as any).src, "/ui/assets/ben-steenstra.webp");
+    assert.equal((container.childNodes[0] as any).src, "assets/ben-steenstra.webp");
     assert.equal((container.childNodes[0] as any).alt, "Ben Steenstra");
     assert.equal((container.childNodes[1] as any).tagName, "P");
   } finally {

@@ -76,16 +76,10 @@ export function createRunStepRuntimeDreamHelpers(deps: CreateRunStepRuntimeDream
   }
 
   function fallbackDreamCandidateFromUserInput(userInput: string, state: CanvasState): string {
+    void state;
     const raw = String(userInput || "").replace(/\r/g, " ").replace(/\s+/g, " ").trim();
-    const fallbackCompany = String((state as any)?.business_name || "").trim();
-    const company = fallbackCompany && fallbackCompany !== "TBD" ? fallbackCompany : "my future company";
-    if (!raw) {
-      return `${company} dreams of a world in which people experience more meaning and long-term value.`;
-    }
-    const trimmed = raw.replace(/[.!?]+$/g, "").trim();
-    if (/dreams of a world in which/i.test(trimmed)) return deps.ensureSentenceEnd(trimmed);
-    const normalizedRest = trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
-    return `${company} dreams of a world in which ${normalizedRest}.`;
+    if (!raw) return "";
+    return deps.ensureSentenceEnd(raw);
   }
 
   function buildDreamRefineFallbackSpecialist(

@@ -294,7 +294,14 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       }
     }
 
-    specialistResult = deps.normalizeEntitySpecialistResult(String(decision1.current_step || ""), specialistResult);
+    specialistResult = asRecord(
+      deps.normalizeLocalizedConceptTerms(specialistResult, state) || specialistResult
+    );
+    specialistResult = deps.normalizeEntitySpecialistResult(
+      String(decision1.current_step || ""),
+      specialistResult,
+      state
+    );
     specialistResult = deps.applyCentralMetaTopicRouter({
       stepId: String(decision1.current_step || ""),
       specialistResult: asRecord(specialistResult),

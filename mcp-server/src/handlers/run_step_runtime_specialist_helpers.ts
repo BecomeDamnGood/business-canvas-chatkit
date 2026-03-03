@@ -13,6 +13,49 @@ type CreateRunStepRuntimeSpecialistHelpersDeps = {
 };
 
 export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntimeSpecialistHelpersDeps) {
+  function normalizeLocalizedConceptTerms(
+    specialist: Record<string, unknown> | null | undefined,
+    state?: CanvasState | null
+  ): Record<string, unknown> | null | undefined {
+    if (!specialist || typeof specialist !== "object") return specialist;
+    const langRaw = String((state as Record<string, unknown> | null | undefined)?.language || "").trim().toLowerCase();
+    const localeRaw = String((state as Record<string, unknown> | null | undefined)?.locale || "").trim().toLowerCase();
+    const baseLang = (langRaw || localeRaw).split(/[-_]/)[0] || "";
+    if (!baseLang || baseLang === "en") return specialist;
+
+    const mapTerm = (key: string, fallback: string): string =>
+      deps.uiStringFromStateMap(state || null, key, deps.uiDefaultString(key, fallback));
+
+    const replacements: Array<{ pattern: RegExp; value: string }> = [
+      { pattern: /\bRules of the Game\b/gi, value: mapTerm("offtopic.step.rulesofthegame", "Rules of the game") },
+      { pattern: /\bProducts and Services\b/gi, value: mapTerm("offtopic.step.productsservices", "Products and Services") },
+      { pattern: /\bTarget Group\b/gi, value: mapTerm("offtopic.step.targetgroup", "Target Group") },
+      { pattern: /\bBig Why\b/gi, value: mapTerm("offtopic.step.bigwhy", "Big Why") },
+      { pattern: /\bPurpose\b/gi, value: mapTerm("offtopic.step.purpose", "Purpose") },
+      { pattern: /\bDream\b/gi, value: mapTerm("offtopic.step.dream", "Dream") },
+      { pattern: /\bRole\b/gi, value: mapTerm("offtopic.step.role", "Role") },
+      { pattern: /\bEntity\b/gi, value: mapTerm("offtopic.step.entity", "Entity") },
+      { pattern: /\bStrategy\b/gi, value: mapTerm("offtopic.step.strategy", "Strategy") },
+      { pattern: /\bWhy\b/gi, value: mapTerm("concept.why", "Why") },
+    ].filter((entry) => String(entry.value || "").trim().length > 0);
+
+    const localizeText = (input: unknown): string => {
+      let text = String(input || "");
+      if (!text) return "";
+      for (const { pattern, value } of replacements) {
+        text = text.replace(pattern, value);
+      }
+      return text;
+    };
+
+    const next = { ...specialist };
+    const message = localizeText(next.message);
+    const question = localizeText(next.question);
+    if (message) next.message = message;
+    if (question) next.question = question;
+    return next;
+  }
+
   function normalizeEntityPhrase(raw: string): string {
     let next = String(raw || "").replace(/\r/g, "\n").trim();
     if (!next) return "";
@@ -30,7 +73,8 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
 
   function normalizeEntitySpecialistResult(
     stepId: string,
-    specialist: Record<string, unknown> | null | undefined
+    specialist: Record<string, unknown> | null | undefined,
+    state?: CanvasState | null
   ): Record<string, unknown> | null | undefined {
     if (stepId !== deps.entityStepId || !specialist || typeof specialist !== "object") return specialist;
     const normalizedRefined = normalizeEntityPhrase(String(specialist.refined_formulation || ""));
@@ -40,6 +84,46 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     const next = { ...specialist };
     if (normalizedRefined) next.refined_formulation = normalizedRefined;
     next.entity = canonical;
+    const templateRaw = deps.uiStringFromStateMap(
+      state || null,
+      "entity.suggestion.template",
+      deps.uiDefaultString("entity.suggestion.template")
+    );
+    const suggestionLine = String(templateRaw || "").includes("{0}")
+      ? String(templateRaw || "").replace(/\{0\}/g, canonical).trim()
+      : `${String(templateRaw || "").trim()} ${canonical}`.trim();
+    const currentMessage = String(next.message || "").replace(/\r/g, "\n").trim();
+    if (!suggestionLine) return next;
+    if (!currentMessage) {
+      next.message = suggestionLine;
+      return next;
+    }
+    const normalizeComparable = (value: string): string =>
+      String(value || "")
+        .toLowerCase()
+        .replace(/<[^>]+>/g, " ")
+        .replace(/[.!?]+$/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    const canonicalComparable = normalizeComparable(canonical);
+    const suggestionComparable = normalizeComparable(suggestionLine);
+    const lines = currentMessage.split("\n");
+    let replacedStandalone = false;
+    const rewrittenLines = lines.map((lineRaw) => {
+      const line = String(lineRaw || "");
+      const comparable = normalizeComparable(line);
+      if (comparable && comparable === canonicalComparable) {
+        replacedStandalone = true;
+        return suggestionLine;
+      }
+      return line;
+    });
+    if (replacedStandalone) {
+      next.message = rewrittenLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+      return next;
+    }
+    if (normalizeComparable(currentMessage).includes(suggestionComparable)) return next;
+    next.message = `${currentMessage}\n\n${suggestionLine}`.trim();
     return next;
   }
 
@@ -156,6 +240,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
   }
 
   return {
+    normalizeLocalizedConceptTerms,
     normalizeEntityPhrase,
     normalizeEntitySpecialistResult,
     enforceDreamBuilderQuestionProgress,
