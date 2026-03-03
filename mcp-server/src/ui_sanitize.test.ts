@@ -381,7 +381,9 @@ test("bundled runtime renders rich body into cardDesc via formatter and keeps un
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /function escapeHtml\(text\) \{/);
   assert.match(source, /function formatText\(text\) \{/);
-  assert.match(source, /if \(ui\.cardDesc\) ui\.cardDesc\.innerHTML = formatText\(bodyText\);/);
+  assert.match(source, /function richHtmlFromText\(text\) \{/);
+  assert.match(source, /ui\.cardDesc\.innerHTML = prestartMarkup \|\| richHtmlFromText\(bodyText\);/);
+  assert.match(source, /ui\.cardDesc\.innerHTML = richHtmlFromText\(bodyText\);/);
   assert.match(source, /if \(ui\.prompt\) ui\.prompt\.textContent = promptText;/);
   assert.match(source, /ui\.actions\.innerHTML = "";/);
   assert.doesNotMatch(source, /ui\.card\.innerHTML\s*=/);

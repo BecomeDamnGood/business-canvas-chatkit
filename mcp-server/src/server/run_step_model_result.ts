@@ -232,7 +232,7 @@ function buildContentFromResult(
   const hasError = Boolean((result as any).error);
   if (hasError) return "Open de app om verder te gaan.";
   if (waitingLocale) return "";
-  if (options?.isFirstStart) return "Canvas Builder geopend in de app.";
+  if (options?.isFirstStart) return "";
   return "";
 }
 

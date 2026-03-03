@@ -82,7 +82,7 @@ function createAppServer(baseUrl: string): McpServer {
     {
       title: "Business Strategy Canvas Builder",
       description:
-        "Use this tool to open or progress the Business Strategy Canvas Builder UI. Do not generate business content in chat. Do not summarize or explain what the app shows. After calling this tool, output nothing or at most one short neutral sentence confirming the app is open. All questions and interaction happen inside the app UI.",
+        "Use this tool to open or progress the Business Strategy Canvas Builder UI. Do not generate business content in chat. Do not summarize or explain what the app shows. After calling this tool, output nothing. All questions and interaction happen inside the app UI.",
       inputSchema: RunStepToolInputSchema,
       annotations: {
         readOnlyHint: false, // Tool generates files and modifies state

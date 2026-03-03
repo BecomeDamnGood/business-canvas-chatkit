@@ -3,559 +3,241 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>The Business Strategy Canvas Builder</title>
+    <title>Business Canvas Widget</title>
     <style>
       :root {
-        --text: #1d1d1f;
-        --muted: #6e6e73;
-        --line: #e5e5ea;
-        --bg: #f5f5f7;
-        --card: #ffffff;
-        --shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-        --blue: #2b83e6;
-        --stepOff: #e8e8ed;
+        color-scheme: light;
+        --bg: #f6f4ef;
+        --panel: #ffffff;
+        --ink: #1a1816;
+        --muted: #6d665e;
+        --line: #ded8cf;
+        --brand: #e8742a;
+        --danger: #9b2d30;
       }
 
       * {
         box-sizing: border-box;
       }
 
-      button,
-      input,
-      select,
-      textarea {
-        font: inherit;
-      }
-
-      html {
-        min-height: 100%;
-      }
-
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-        font-size: 15px;
-        color: var(--text);
-        line-height: 1.47;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        background-color: var(--bg);
-        background-image: url("/ui/assets/background.jpg");
-        background-size: cover;
-        background-position: center;
-        background-attachment: scroll;
-      }
-
-      @media (min-width: 769px) {
-        body {
-          background-attachment: fixed;
-        }
-      }
-
-      :focus {
-        outline: none;
-      }
-
-      :focus-visible {
-        outline: 2px solid var(--blue);
-        outline-offset: 2px;
-      }
-
-      .wrap {
-        max-width: 768px;
-        margin: 0 auto;
-        padding: 0 24px 15px;
-        position: relative;
-      }
-
-      .page-header {
-        width: 100%;
-        background: transparent;
-        color: var(--text);
-        padding: 0;
-        margin-bottom: 10px;
-        position: relative;
-      }
-
-      .page-header .wrap {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: start;
-        padding: 20px 24px 20px;
-        max-width: 720px;
-        margin: 0 auto;
-        background: rgba(255, 255, 255, 0.55);
-        border-radius: 0 0 20px 20px;
-        box-shadow: var(--shadow);
-        border: 1px solid var(--line);
-        border-top: none;
-      }
-
-      .title {
-        grid-column: 1;
-        grid-row: 1;
-        font-size: 26px;
-        font-weight: 600;
-        letter-spacing: -0.025em;
-        line-height: 1.2;
-        margin: 0;
-        padding-right: 16px;
-      }
-
-      .byline {
-        grid-column: 2;
-        grid-row: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 2px;
-        margin: 0;
-        font-size: 14px;
-        font-weight: 600;
-        color: #424245;
-      }
-
-      .byline #byText {
-        display: none;
-      }
-
-      .bylineLogo {
-        width: 126px;
-        height: auto;
-        display: block;
-        margin-top: 5px;
-      }
-
-      .meta {
-        display: none;
-      }
-
-      .stepperRow {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        margin: 0;
-      }
-
-      .page-header .stepperRow {
-        grid-column: 1 / -1;
-        grid-row: 2;
-        width: 100%;
-        padding: 0;
-        margin: 0;
-      }
-
-      .stepper {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0;
-        flex-wrap: nowrap;
-      }
-
-      .page-header .stepper {
-        justify-content: space-between;
-        width: 100%;
-        gap: 4px;
-        margin-top: 32px;
-      }
-
-      .step {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: auto;
-        min-width: 1.6em;
-        font-weight: 400;
-        font-size: 13px;
-        font-variant-numeric: tabular-nums;
-        color: #6e6e73;
-        background: transparent;
-        border: none;
-        border-radius: 0;
-        box-shadow: none;
-        flex: 1 1 0;
-      }
-
-      .step::before {
-        content: "";
-        display: block;
-        width: 100%;
-        max-width: 56px;
-        height: 5px;
-        margin-bottom: 6px;
-        border-radius: 3px;
-        background: #ffffff;
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-      }
-
-      .step.active {
-        font-weight: 600;
-        color: #1d1d20;
-      }
-
-      .step.active::before,
-      .step.completed::before {
-        background: var(--blue);
-        border-color: var(--blue);
-      }
-
-      .stepperTitle {
-        font-size: 13px;
-        font-weight: 400;
-        color: var(--text);
-        position: absolute;
-        bottom: 100%;
-        left: 50%;
-        transform: translateX(-50%);
-        text-align: center;
-        margin: 0 0 6px;
-        white-space: nowrap;
-        width: auto;
-        max-width: 220px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: max-content;
-        pointer-events: none;
-      }
-
-      .stepperTitle.align-left {
-        left: 0;
-        transform: none;
-        text-align: left;
-      }
-
-      .stepperTitle.align-right {
-        left: auto;
-        right: 0;
-        transform: none;
-        text-align: right;
-      }
-
-      .stepLine {
-        display: none;
-      }
-
-      .card-stage {
-        max-width: 720px;
-        margin: 0 auto;
+        background: radial-gradient(circle at 15% 0%, #f3dfd1, transparent 44%), var(--bg);
+        color: var(--ink);
+        font: 15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       }
 
       .shell {
-        width: 100%;
-        margin: 0;
-        background: rgba(255, 255, 255, 0.55);
-        border-radius: 20px;
-        box-shadow: var(--shadow);
+        width: min(720px, 100% - 24px);
+        margin: 18px auto;
+        background: color-mix(in srgb, var(--panel) 86%, transparent);
         border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: 0 12px 36px rgba(37, 28, 22, 0.08);
+        overflow: hidden;
       }
 
-      .bar,
+      .bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--line);
+        background: #fff;
+      }
+
       .status {
-        display: none;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 12px;
       }
 
       .body {
-        padding: 28px 24px 26px;
+        padding: 16px;
+        display: grid;
+        gap: 14px;
       }
 
-      .cardInner {
-        display: flex;
-        align-items: flex-start;
-        gap: 20px;
+      .boot {
+        padding: 16px;
+        display: grid;
+        gap: 10px;
       }
 
-      .badge {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        width: auto;
-        min-width: 50px;
-        font-variant-numeric: tabular-nums;
-        color: var(--text);
-        background: transparent;
-        border: none;
-        border-radius: 0;
-        font-weight: 600;
-        font-size: 26px;
-        line-height: 1;
-        flex: 0 0 auto;
+      .bootLine {
+        height: 12px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--line) 70%, #fff);
       }
 
-      .badge::after {
-        content: "";
-        display: block;
-        width: 50px;
-        height: 5px;
-        margin-top: 4px;
-        border-radius: 3px;
-        background: var(--blue);
+      .bootLine.wide {
+        width: 88%;
       }
 
-      .sectionTitle {
-        font-size: 26px;
-        font-weight: 600;
-        margin: 0 0 8px;
-        color: var(--text);
-        line-height: 1;
+      .bootLine.mid {
+        width: 64%;
       }
 
-      .card {
-        display: none;
+      .bootLine.short {
+        width: 42%;
       }
 
-      .cardTitle {
-        display: none;
+      .card,
+      .cardDesc,
+      .prompt,
+      .error {
+        margin: 0;
+        white-space: pre-wrap;
       }
 
       .cardDesc {
+        color: #3e3833;
+      }
+
+      .richContent {
+        display: grid;
+        gap: 10px;
+      }
+
+      .richP {
         margin: 0;
-        padding: 0;
-        font-size: 17px;
-        line-height: 1.5;
-        color: #424245;
-        max-width: 100%;
-        white-space: pre-line;
+      }
+
+      .richHeading {
+        margin: 0;
+        font-weight: 700;
+      }
+
+      .richList {
+        margin: 0;
+        padding-left: 18px;
       }
 
       .prestartWelcome {
         display: grid;
-        gap: 12px;
+        gap: 10px;
       }
 
-      .prestartHeadline {
-        margin: 0;
-      }
-
-      .prestartBlock {
+      .prestartHeadline,
+      .prestartBlock,
+      .prestartBlockTitle,
+      .prestartBlockBody,
+      .prestartMetaLabel,
+      .prestartMetaValue {
         margin: 0;
       }
 
       .prestartBlockTitle {
-        margin: 0 0 4px;
-        font-size: 17px;
-        font-weight: 600;
-        color: var(--text);
-      }
-
-      .prestartBlockBody {
-        margin: 0;
+        font-weight: 700;
       }
 
       .prestartOutcomes {
         margin: 0;
-        padding-left: 0;
-        list-style-position: inside;
-      }
-
-      .prestartOutcomes li {
-        margin: 0;
-        padding-left: 0;
+        padding-left: 18px;
       }
 
       .prestartMetaGrid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px 14px;
+        gap: 8px;
       }
 
       .prestartMetaItem {
         border: 1px solid var(--line);
         border-radius: 10px;
-        background: rgba(255, 255, 255, 0.8);
         padding: 8px 10px;
+        background: color-mix(in srgb, var(--panel) 94%, transparent);
       }
 
       .prestartMetaLabel {
-        display: block;
+        color: var(--muted);
         font-size: 12px;
         font-weight: 600;
-        color: var(--muted);
       }
 
       .prestartMetaValue {
-        display: block;
         font-size: 16px;
         font-weight: 600;
-        color: var(--text);
+      }
+
+      .subtitle {
+        width: min(720px, 100% - 24px);
+        margin: 6px auto 16px;
+        color: var(--muted);
+        font-size: 12px;
       }
 
       .prompt {
-        font-size: 22px;
-        font-weight: 600;
-        margin: 12px 0;
-        letter-spacing: -0.015em;
-        white-space: pre-wrap;
-        color: var(--text);
+        border-top: 1px dashed var(--line);
+        padding-top: 12px;
       }
 
       .actions {
         display: flex;
-        flex-direction: column;
-        gap: 12px;
-        margin-top: 12px;
-      }
-
-      .row {
-        display: flex;
-        justify-content: flex-start;
-        gap: 12px;
-        margin-top: 12px;
         flex-wrap: wrap;
-        align-items: flex-start;
+        gap: 10px;
       }
 
-      button,
-      .btn {
-        display: inline-flex;
-        justify-content: flex-start;
-        text-align: left;
-        border: 1px solid rgba(43, 131, 230, 0.28);
-        background: rgba(43, 131, 230, 0.06);
-        color: var(--blue);
+      button {
+        border: 1px solid color-mix(in srgb, var(--brand) 35%, #0000);
         border-radius: 999px;
-        padding: 12px 14px;
-        font-size: 16px;
+        background: color-mix(in srgb, var(--brand) 14%, #fff);
+        color: #4d2208;
+        font: inherit;
         font-weight: 600;
+        padding: 8px 14px;
         cursor: pointer;
-        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
       }
 
-      .btn.primary {
-        border-color: rgba(43, 131, 230, 0.28);
-        background: rgba(43, 131, 230, 0.06);
-        color: var(--blue);
-      }
-
-      button:disabled,
-      .btn:disabled {
-        background: #f5f5f7;
-        border-color: var(--line);
-        color: #86868b;
-        cursor: not-allowed;
-      }
-
-      .inputWrap {
-        margin-top: 12px;
+      button[disabled] {
+        opacity: 0.5;
+        cursor: default;
       }
 
       .input {
-        display: flex;
-        align-items: flex-end;
-        gap: 12px;
+        display: grid;
+        gap: 8px;
       }
 
-      textarea,
-      .inputWrap textarea {
+      textarea {
         width: 100%;
-        min-height: 96px;
-        padding: 18px;
-        font-size: 17px;
-        color: #000000;
-        border: 1px solid var(--line);
-        border-radius: 18px;
+        min-height: 92px;
         resize: vertical;
-        outline: none;
-        background-color: var(--card);
-        background-image: url("/ui/assets/textbox_background.jpg");
-        background-repeat: no-repeat;
-        background-position: top right;
-        background-size: auto;
-      }
-
-      textarea::placeholder {
-        color: #86868b;
-      }
-
-      textarea:disabled {
-        background-color: #f5f5f7;
-        background-image: none;
-        color: #86868b;
-        cursor: not-allowed;
-      }
-
-      #inputSend {
-        width: 48px;
-        height: 48px;
-        min-width: 48px;
-        min-height: 48px;
-        border: none;
+        border: 1px solid var(--line);
         border-radius: 12px;
-        background: linear-gradient(180deg, #63acff, #2b83e6);
-        color: transparent;
-        font-size: 0;
-        padding: 0;
-        align-items: center;
-        justify-content: center;
-      }
-
-      #inputSend::before {
-        content: "";
-        width: 24px;
-        height: 24px;
-        background: center / contain no-repeat url("/ui/assets/send_icon.svg");
-      }
-
-      #inputSend:disabled {
-        background: var(--stepOff);
+        padding: 10px 12px;
+        font: inherit;
+        background: #fff;
       }
 
       .error {
-        margin-top: 12px;
-        color: #8b1e1e;
-        border: 1px solid rgba(139, 30, 30, 0.2);
-        border-radius: 10px;
+        color: var(--danger);
+        border: 1px solid color-mix(in srgb, var(--danger) 30%, #0000);
+        border-radius: 12px;
         padding: 10px 12px;
-        background: #fff5f5;
-      }
-
-      .subtitle {
-        text-align: center;
-        color: var(--blue);
-        font-size: 13px;
-        font-weight: 600;
-        margin: 13px 0 0;
-        padding: 0;
-        display: block;
+        background: color-mix(in srgb, var(--danger) 6%, #fff);
       }
 
       .is-hidden {
         display: none !important;
       }
 
-      @media (max-width: 768px) {
-        .wrap {
-          padding: 20px 16px 15px;
+      @media (max-width: 640px) {
+        .shell {
+          width: calc(100% - 16px);
+          margin: 10px auto;
+          border-radius: 12px;
         }
 
-        .page-header .wrap {
-          grid-template-columns: 1fr;
-          row-gap: 8px;
-        }
-
-        .title {
-          padding-right: 0;
-        }
-
-        .page-header .stepper {
-          margin-top: 32px;
-        }
-
-        .cardInner {
-          flex-direction: column;
-          align-items: flex-start;
-        }
-
-        .input {
-          flex-direction: column;
-          align-items: stretch;
-        }
-
-        #inputSend {
-          align-self: flex-end;
+        .subtitle {
+          width: calc(100% - 16px);
+          margin: 4px auto 12px;
         }
 
         .prestartMetaGrid {
@@ -565,79 +247,37 @@
     </style>
   </head>
   <body>
-    <header class="page-header">
-      <div class="wrap">
-        <h1 class="title" id="uiTitle">Business Strategy Canvas Builder</h1>
-        <div class="byline">
-          <span id="byText">A business model by</span>
-          <img
-            id="bylineLogo"
-            class="bylineLogo"
-            src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48c3ZnIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjUuNTUiIGhlaWdodD0iNTAuMjgiIHZpZXdCb3g9IjAgMCAxMjUuNTUgNTAuMjgiPjxkZWZzPjxzdHlsZT4uY2xzLTF7ZmlsbDojNzk3OTdmO30uY2xzLTJ7ZmlsbDojYTdiZmEyO308L3N0eWxlPjwvZGVmcz48cGF0aCBkPSJNNy4wNiwyMy45NWMtLjE5LS4wOC0uNC0uMTQtLjYyLS4xOS4wNS0uMDIuMDktLjAzLjE0LS4wNS40NC0uMi44LS40OCwxLjA1LS44Ni4yNi0uMzguMzktLjg1LjM5LTEuNCwwLS44NC0uMzEtMS40OS0uOTQtMS45NS0uNjMtLjQ2LTEuNTEtLjY5LTIuNjYtLjY5SDB2MTAuMjRoNC43MWMxLjI5LDAsMi4yNS0uMjQsMi44OS0uNzIuNjQtLjQ4Ljk2LTEuMTUuOTYtMi4wMiwwLS41OS0uMTMtMS4wOC0uNC0xLjQ3LS4yNi0uNC0uNjMtLjY5LTEuMS0uODlaTTQuMzUsMTkuN2MuODIsMCwxLjQ2LjE1LDEuOTEuNDZzLjY4Ljc3LjY4LDEuNC0uMjMsMS4wOC0uNjgsMS4zOWMtLjQ1LjMxLTEuMDkuNDctMS45MS40N0gxLjA4di0zLjcyaDMuMjZaTTYuNzYsMjcuN2MtLjQ4LjMxLTEuMTcuNDYtMi4wNi40NkgxLjA4di0zLjg1aDMuNjFjLjksMCwxLjU5LjE1LDIuMDYuNDYuNDguMzEuNzIuNzkuNzIsMS40NnMtLjI0LDEuMTYtLjcyLDEuNDdaIi8+PHBvbHlnb24gcG9pbnRzPSIxMi40MSAyNC4zMSAxNy43MSAyNC4zMSAxNy43MSAyMy4zOSAxMi40MSAyMy4zOSAxMi40MSAxOS43NCAxOC4zNSAxOS43NCAxOC4zNSAxOC44MSAxMS4zMyAxOC44MSAxMS4zMyAyOS4wNSAxOC41NyAyOS4wNSAxOC41NyAyOC4xMiAxMi40MSAyOC4xMiAxMi40MSAyNC4zMSIvPjxwb2x5Z29uIHBvaW50cz0iMjguOSAyNy4xMiAyMi4zIDE4LjgxIDIxLjQxIDE4LjgxIDIxLjQxIDI5LjA1IDIyLjQ5IDI5LjA1IDIyLjQ5IDIwLjc1IDI5LjA4IDI5LjA1IDI5Ljk3IDI5LjA1IDI5Ljk3IDE4LjgxIDI4LjkgMTguODEgMjguOSAyNy4xMiIvPjxwYXRoIGQ9Ik00My4xMiwyNC4yNGMtLjM4LS4yLS43OS0uMzYtMS4yMy0uNDktLjQ0LS4xMy0uODktLjI0LTEuMzQtLjM1LS40NS0uMTEtLjg2LS4yMy0xLjI0LS4zNy0uMzgtLjE0LS42OC0uMzMtLjkxLS41Ny0uMjMtLjI0LS4zNC0uNTctLjM0LS45NywwLS4zNS4xLS42Ny4yOS0uOTQuMTktLjI4LjQ5LS41Ljg5LS42Ny40LS4xNy45MS0uMjUsMS41Mi0uMjUuNDYsMCwuOTMuMDcsMS40My4yLjQ5LjE0Ljk2LjM1LDEuNC42NGwuMzctLjg2Yy0uNDEtLjI4LS45LS41LTEuNDYtLjY3LS41Ny0uMTYtMS4xNC0uMjQtMS43MS0uMjQtLjg3LDAtMS41OC4xMy0yLjE0LjM5LS41Ni4yNi0uOTcuNi0xLjI0LDEuMDItLjI3LjQyLS40Ljg5LS40LDEuNCwwLC41NS4xMS45OS4zNCwxLjMyLjIzLjM0LjUzLjYxLjkxLjgxLjM4LjIuNzkuMzcsMS4yNC40OS40NS4xMi45LjI0LDEuMzUuMzQuNDUuMTEuODYuMjMsMS4yMy4zNy4zNy4xNC42Ny4zMy45LjU4LjIzLjI0LjM0LjU3LjM0Ljk3LDAsLjMzLS4xLjYzLS4yOS45MS0uMTkuMjctLjQ5LjQ5LS44OS42NS0uNC4xNi0uOTMuMjQtMS41Ny4yNHMtMS4zMS0uMTItMS45Mi0uMzZjLS42MS0uMjQtMS4xLS41My0xLjQ2LS44OWwtLjQyLjgzYy4zOC4zOS45Mi43MSwxLjYyLjk2LjcuMjUsMS40My4zNywyLjE5LjM3Ljg4LDAsMS42LS4xMywyLjE2LS4zOS41Ni0uMjYuOTgtLjYsMS4yNS0xLjAyLjI3LS40Mi40MS0uODkuNDEtMS4zOCwwLS41NC0uMTEtLjk3LS4zNC0xLjMtLjIzLS4zMy0uNTMtLjYtLjkxLS44WiIvPjxwb2x5Z29uIHBvaW50cz0iNDUuMjcgMTkuNzQgNDguODcgMTkuNzQgNDguODcgMjkuMDUgNDkuOTUgMjkuMDUgNDkuOTUgMTkuNzQgNTMuNTUgMTkuNzQgNTMuNTUgMTguODEgNDUuMjcgMTguODEgNDUuMjcgMTkuNzQiLz48cG9seWdvbiBwb2ludHM9IjU2LjY1IDI0LjMxIDYxLjk1IDI0LjMxIDYxLjk1IDIzLjM5IDU2LjY1IDIzLjM5IDU2LjY1IDE5Ljc0IDYyLjU5IDE5Ljc0IDYyLjU5IDE4LjgxIDU1LjU3IDE4LjgxIDU1LjU3IDI5LjA1IDYyLjgxIDI5LjA1IDYyLjgxIDI4LjEyIDU2LjY1IDI4LjEyIDU2LjY1IDI0LjMxIi8+PHBvbHlnb24gcG9pbnRzPSI2Ni43MyAyNC4zMSA3Mi4wMyAyNC4zMSA3Mi4wMyAyMy4zOSA2Ni43MyAyMy4zOSA2Ni43MyAxOS43NCA3Mi42OCAxOS43NCA3Mi42OCAxOC44MSA2NS42NSAxOC44MSA2NS42NSAyOS4wNSA3Mi45IDI5LjA1IDcyLjkgMjguMTIgNjYuNzMgMjguMTIgNjYuNzMgMjQuMzEiLz48cG9seWdvbiBwb2ludHM9IjgzLjIzIDI3LjEyIDc2LjYzIDE4LjgxIDc1Ljc0IDE4LjgxIDc1Ljc0IDI5LjA1IDc2LjgyIDI5LjA1IDc2LjgyIDIwLjc1IDgzLjQgMjkuMDUgODQuMyAyOS4wNSA4NC4zIDE4LjgxIDgzLjIzIDE4LjgxIDgzLjIzIDI3LjEyIi8+PHBhdGggZD0iTTkzLjMyLDI0LjI0Yy0uMzgtLjItLjc5LS4zNi0xLjIzLS40OS0uNDQtLjEzLS44OS0uMjQtMS4zNC0uMzUtLjQ1LS4xMS0uODYtLjIzLTEuMjQtLjM3LS4zOC0uMTQtLjY4LS4zMy0uOTEtLjU3LS4yMy0uMjQtLjM0LS41Ny0uMzQtLjk3LDAtLjM1LjEtLjY3LjI5LS45NC4xOS0uMjguNDktLjUuODktLjY3LjQtLjE3LjkxLS4yNSwxLjUyLS4yNS40NiwwLC45My4wNywxLjQzLjIuNDkuMTQuOTYuMzUsMS40LjY0bC4zNy0uODZjLS40MS0uMjgtLjktLjUtMS40Ni0uNjctLjU3LS4xNi0xLjE0LS4yNC0xLjcxLS4yNC0uODcsMC0xLjU4LjEzLTIuMTQuMzktLjU2LjI2LS45Ny42LTEuMjQsMS4wMi0uMjcuNDItLjQuODktLjQsMS40LDAsLjU1LjExLjk5LjM0LDEuMzIuMjMuMzQuNTMuNjEuOTEuODEuMzguMi43OS4zNywxLjI0LjQ5LjQ1LjEyLjkuMjQsMS4zNS4zNC40NS4xMS44Ni4yMywxLjIzLjM3LjM3LjE0LjY3LjMzLjkuNTguMjMuMjQuMzQuNTcuMzQuOTcsMCwuMzMtLjEuNjMtLjI5LjkxLS4xOS4yNy0uNDkuNDktLjg5LjY1LS40LjE2LS45My4yNC0xLjU3LjI0cy0xLjMxLS4xMi0xLjkyLS4zNmMtLjYxLS4yNC0xLjEtLjUzLTEuNDYtLjg5bC0uNDIuODNjLjM4LjM5LjkyLjcxLDEuNjIuOTYuNy4yNSwxLjQzLjM3LDIuMTkuMzcuODgsMCwxLjYtLjEzLDIuMTYtLjM5LjU2LS4yNi45OC0uNiwxLjI1LTEuMDIuMjctLjQyLjQxLS44OS40MS0xLjM4LDAtLjU0LS4xMS0uOTctLjM0LTEuMy0uMjMtLjMzLS41My0uNi0uOTEtLjhaIi8+PHBvbHlnb24gcG9pbnRzPSI5NS40NiAxOS43NCA5OS4wNiAxOS43NCA5OS4wNiAyOS4wNSAxMDAuMTUgMjkuMDUgMTAwLjE1IDE5Ljc0IDEwMy43NSAxOS43NCAxMDMuNzUgMTguODEgOTUuNDYgMTguODEgOTUuNDYgMTkuNzQiLz48cGF0aCBkPSJNMTExLjg0LDI1LjM5Yy42Mi0uMjgsMS4xLS42OCwxLjQ0LTEuMi4zNC0uNTIuNS0xLjE0LjUtMS44NywwLTEuMS0uMzctMS45Ni0xLjEyLTIuNTgtLjc1LS42Mi0xLjc3LS45My0zLjA3LS45M2gtMy44M3YxMC4yNGgxLjA4di0zLjI1aDIuNzVjLjI5LDAsLjU2LS4wMi44Mi0uMDVsMi4zNCwzLjNoMS4xOWwtMi41LTMuNTJjLjE0LS4wNS4yNy0uMDkuNC0uMTVaTTEwOS41NywyNC44OGgtMi43MnYtNS4xNGgyLjcyYzEuMDIsMCwxLjguMjIsMi4zMy42Ny41My40NS44LDEuMDguOCwxLjlzLS4yNywxLjQ0LS44LDEuODljLS41My40NS0xLjMxLjY3LTIuMzMuNjdaIi8+PHBhdGggZD0iTTEyNC4yOSwyOS4wNWgxLjE0bC00LjY4LTEwLjI0aC0xLjA3bC00LjY4LDEwLjI0aDEuMTNsMS4yMi0yLjc0aDUuNzJsMS4yMiwyLjc0Wk0xMTcuNzUsMjUuNDRsMi40Ny01LjUxLDIuNDcsNS41MWgtNC45M1oiLz48cG9seWdvbiBjbGFzcz0iY2xzLTIiIHBvaW50cz0iNi40MSAzOS4yNCA0Ljg0IDM0LjU5IDQuMDkgMzQuNTkgMi40OSAzOS4yMiAuOTUgMzQuNTkgLjExIDM0LjU5IDIuMDIgNDAuMjggMi44OSA0MC4yOCA0LjQ0IDM1LjczIDUuOTkgNDAuMjggNi44NSA0MC4yOCA4Ljc1IDM0LjU5IDcuOTggMzQuNTkgNi40MSAzOS4yNCIvPjxwb2x5Z29uIGNsYXNzPSJjbHMtMiIgcG9pbnRzPSIxNS42MSAzNy4wNCAxMi4zNSAzNy4wNCAxMi4zNSAzNC41OSAxMS41MyAzNC41OSAxMS41MyA0MC4yOCAxMi4zNSA0MC4yOCAxMi4zNSAzNy43NCAxNS42MSAzNy43NCAxNS42MSA0MC4yOCAxNi40MyA0MC4yOCAxNi40MyAzNC41OSAxNS42MSAzNC41OSAxNS42MSAzNy4wNCIvPjxwb2x5Z29uIGNsYXNzPSJjbHMtMiIgcG9pbnRzPSIyMC43NCAzNy43NCAyMy41OSAzNy43NCAyMy41OSAzNy4wNCAyMC43NCAzNy4wNCAyMC43NCAzNS4zIDIzLjk0IDM1LjMgMjMuOTQgMzQuNTkgMTkuOTIgMzQuNTkgMTkuOTIgNDAuMjggMjQuMDYgNDAuMjggMjQuMDYgMzkuNTcgMjAuNzQgMzkuNTcgMjAuNzQgMzcuNzQiLz48cG9seWdvbiBjbGFzcz0iY2xzLTIiIHBvaW50cz0iMzIuMDYgNDAuMjggMzIuMDYgMzQuNTkgMzEuMjQgMzQuNTkgMzEuMjQgMzguODMgMjcuODMgMzQuNTkgMjcuMTYgMzQuNTkgMjcuMTYgNDAuMjggMjcuOTggNDAuMjggMjcuOTggMzYuMDQgMzEuMzkgNDAuMjggMzIuMDYgNDAuMjgiLz48cmVjdCBjbGFzcz0iY2xzLTIiIHg9IjM5LjUzIiB5PSIzNC41OSIgd2lkdGg9Ii44MSIgaGVpZ2h0PSI1LjY5Ii8+PHBvbHlnb24gY2xhc3M9ImNscy0yIiBwb2ludHM9IjQ0Ljk3IDQwLjI4IDQ1Ljc4IDQwLjI4IDQ1Ljc4IDM1LjMgNDcuNzMgMzUuMyA0Ny43MyAzNC41OSA0My4wMiAzNC41OSA0My4wMiAzNS4zIDQ0Ljk3IDM1LjMgNDQuOTcgNDAuMjgiLz48cG9seWdvbiBjbGFzcz0iY2xzLTIiIHBvaW50cz0iNTUuMiAzNy45OCA1OC4wNSAzNy45OCA1OC4wNSAzNy4yOCA1NS4yIDM3LjI4IDU1LjIgMzUuMyA1OC40IDM1LjMgNTguNCAzNC41OSA1NC4zOCAzNC41OSA1NC4zOCA0MC4yOCA1NS4yIDQwLjI4IDU1LjIgMzcuOTgiLz48cG9seWdvbiBjbGFzcz0iY2xzLTIiIHBvaW50cz0iNjIuMTUgMzcuNzQgNjUgMzcuNzQgNjUgMzcuMDQgNjIuMTUgMzcuMDQgNjIuMTUgMzUuMyA2NS4zNSAzNS4zIDY1LjM1IDM0LjU5IDYxLjM0IDM0LjU5IDYxLjM0IDQwLjI4IDY1LjQ3IDQwLjI4IDY1LjQ3IDM5LjU3IDYyLjE1IDM5LjU3IDYyLjE1IDM3Ljc0Ii8+PHBvbHlnb24gY2xhc3M9ImNscy0yIiBwb2ludHM9IjY5LjM5IDM3Ljc0IDcyLjI0IDM3Ljc0IDcyLjI0IDM3LjA0IDY5LjM5IDM3LjA0IDY5LjM5IDM1LjMgNzIuNTkgMzUuMyA3Mi41OSAzNC41OSA2OC41NyAzNC41OSA2OC41NyA0MC4yOCA3Mi43IDQwLjI4IDcyLjcgMzkuNTcgNjkuMzkgMzkuNTcgNjkuMzkgMzcuNzQiLz48cG9seWdvbiBjbGFzcz0iY2xzLTIiIHBvaW50cz0iNzkuNzEgMzkuNTcgNzYuNjIgMzkuNTcgNzYuNjIgMzQuNTkgNzUuODEgMzQuNTkgNzUuODEgNDAuMjggNzkuNzEgNDAuMjggNzkuNzEgMzkuNTciLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik04NC44NCwzOS41NGMtLjIxLjA4LS40Ny4xMS0uOC4xMS0uMzYsMC0uNzEtLjA2LTEuMDUtLjE5LS4zNC0uMTItLjYxLS4yOC0uODMtLjQ3bC0uMy42M2MuMjMuMjEuNTQuMzguOTQuNTIuNC4xMy44MS4yLDEuMjQuMi41LDAsLjkxLS4wNywxLjI0LS4yMi4zMy0uMTUuNTctLjM1LjczLS41OS4xNi0uMjUuMjQtLjUxLjI0LS44cy0uMDYtLjU0LS4xOS0uNzNjLS4xMy0uMTktLjI5LS4zNC0uNDktLjQ2LS4yLS4xMS0uNDMtLjIxLS42OC0uMjgtLjI1LS4wNy0uNDktLjEzLS43NC0uMTlzLS40Ny0uMTItLjY3LS4xOWMtLjItLjA3LS4zNy0uMTctLjUtLjI4cy0uMTktLjI4LS4xOS0uNDhjMC0uMTcuMDUtLjMyLjE0LS40Ni4wOS0uMTQuMjQtLjI0LjQ1LS4zMy4yMS0uMDguNDctLjEyLjc5LS4xMi4yNiwwLC41Mi4wNC43OS4xMS4yNy4wNy41My4xOS43Ny4zNWwuMjctLjY1Yy0uMjQtLjE2LS41Mi0uMjktLjg1LS4zNy0uMzMtLjA5LS42NS0uMTMtLjk4LS4xMy0uNSwwLS45MS4wNy0xLjIzLjIyLS4zMi4xNS0uNTYuMzUtLjcyLjU5LS4xNS4yNS0uMjMuNTItLjIzLjgxcy4wNi41NS4xOS43NGMuMTIuMTkuMjkuMzUuNDkuNDYuMi4xMS40My4yMS42OC4yOC4yNS4wNy40OS4xNC43NC4xOS4yNC4wNS40Ny4xMi42Ny4xOS4yLjA3LjM3LjE3LjUuMjkuMTMuMTIuMTkuMjguMTkuNDcsMCwuMTctLjA1LjMyLS4xNS40NS0uMS4xMy0uMjUuMjQtLjQ2LjMxWiIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTk2LjY5LDM4LjMxYy4zNS0uMTYuNjItLjM4LjgxLS42OC4xOS0uMy4yOC0uNjUuMjgtMS4wNiwwLS42Mi0uMjEtMS4xMS0uNjMtMS40NnMtMS0uNTItMS43NC0uNTJoLTIuMjJ2NS42OWguODF2LTEuNzNoMS40MWMuMTMsMCwuMjMtLjAyLjM1LS4wM2wxLjI0LDEuNzZoLjg5bC0xLjM2LTEuOTJjLjA1LS4wMi4xMS0uMDMuMTYtLjA1Wk05NS4zOSwzNy44NmgtMS4zOHYtMi41NmgxLjM4Yy41MiwwLC45MS4xMSwxLjE4LjMzLjI3LjIyLjQuNTQuNC45NHMtLjEzLjcyLS40Ljk1Yy0uMjcuMjItLjY2LjM0LTEuMTguMzRaIi8+PHJlY3QgY2xhc3M9ImNscy0yIiB4PSIxMDAuODkiIHk9IjM0LjU5IiB3aWR0aD0iLjgxIiBoZWlnaHQ9IjUuNjkiLz48cGF0aCBjbGFzcz0iY2xzLTIiIGQ9Ik0xMDYuMTksMzUuODZjLjItLjE5LjQ0LS4zNS43Mi0uNDYuMjgtLjExLjU4LS4xNi45MS0uMTZzLjYyLjA1Ljg5LjE2Yy4yNy4xMS41My4yNy43Ni41bC41LS41Yy0uMjYtLjI5LS41OC0uNTEtLjk1LS42Ni0uMzctLjE1LS43OS0uMjItMS4yNC0uMjJzLS44NS4wNy0xLjIyLjIyYy0uMzcuMTQtLjY5LjM1LS45Ni42MS0uMjcuMjYtLjQ5LjU3LS42NC45Mi0uMTUuMzUtLjIzLjc0LS4yMywxLjE2cy4wOC44MS4yMywxLjE2Yy4xNS4zNS4zNi42Ni42My45Mi4yNy4yNi41OS40Ny45Ni42MS4zNy4xNC43Ny4yMiwxLjIxLjIyLjQsMCwuNzktLjA2LDEuMTctLjE4LjM4LS4xMi43MS0uMy45OS0uNTR2LTIuMjJoLS43OHYxLjg1Yy0uMTUuMS0uMy4xOC0uNDYuMjMtLjI4LjEtLjU3LjE0LS44Ny4xNC0uMzMsMC0uNjMtLjA1LS45LS4xNi0uMjgtLjExLS41Mi0uMjYtLjcyLS40Ni0uMi0uMi0uMzYtLjQzLS40Ny0uNy0uMTEtLjI3LS4xNy0uNTYtLjE3LS44N3MuMDYtLjYxLjE3LS44N2MuMTEtLjI3LjI3LS41LjQ3LS43WiIvPjxwb2x5Z29uIGNsYXNzPSJjbHMtMiIgcG9pbnRzPSIxMTcuMzUgMzcuMDQgMTE0LjA4IDM3LjA0IDExNC4wOCAzNC41OSAxMTMuMjcgMzQuNTkgMTEzLjI3IDQwLjI4IDExNC4wOCA0MC4yOCAxMTQuMDggMzcuNzQgMTE3LjM1IDM3Ljc0IDExNy4zNSA0MC4yOCAxMTguMTYgNDAuMjggMTE4LjE2IDM0LjU5IDExNy4zNSAzNC41OSAxMTcuMzUgMzcuMDQiLz48cG9seWdvbiBjbGFzcz0iY2xzLTIiIHBvaW50cz0iMTIwLjg0IDM0LjU5IDEyMC44NCAzNS4zIDEyMi43OSAzNS4zIDEyMi43OSA0MC4yOCAxMjMuNiA0MC4yOCAxMjMuNiAzNS4zIDEyNS41NSAzNS4zIDEyNS41NSAzNC41OSAxMjAuODQgMzQuNTkiLz48cmVjdCBjbGFzcz0iY2xzLTIiIHg9IjMxLjQ5IiB5PSI0Ny4wMSIgd2lkdGg9IjIuMTkiIGhlaWdodD0iLjY3Ii8+PHJlY3QgY2xhc3M9ImNscy0yIiB4PSI0MC44NCIgeT0iNDQuNTMiIHdpZHRoPSIuODEiIGhlaWdodD0iNS42OSIvPjxwb2x5Z29uIGNsYXNzPSJjbHMtMiIgcG9pbnRzPSI0NC4zMyA0NS4yMyA0Ni4yOCA0NS4yMyA0Ni4yOCA1MC4yMiA0Ny4wOSA1MC4yMiA0Ny4wOSA0NS4yMyA0OS4wNCA0NS4yMyA0OS4wNCA0NC41MyA0NC4zMyA0NC41MyA0NC4zMyA0NS4yMyIvPjxwb2x5Z29uIGNsYXNzPSJjbHMtMiIgcG9pbnRzPSI2MS4zOSA0OS4xOCA1OS44MiA0NC41MyA1OS4wNyA0NC41MyA1Ny40OCA0OS4xNiA1NS45NCA0NC41MyA1NS4xIDQ0LjUzIDU3IDUwLjIyIDU3Ljg3IDUwLjIyIDU5LjQzIDQ1LjY3IDYwLjk4IDUwLjIyIDYxLjgzIDUwLjIyIDYzLjczIDQ0LjUzIDYyLjk2IDQ0LjUzIDYxLjM5IDQ5LjE4Ii8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNNzEuMTksNDUuMjljLS4yNy0uMjYtLjU5LS40Ny0uOTYtLjYxLS4zNy0uMTQtLjc3LS4yMi0xLjItLjIycy0uODQuMDctMS4yMS4yMmMtLjM3LjE1LS42OS4zNS0uOTYuNjEtLjI3LjI2LS40OC41Ny0uNjMuOTItLjE1LjM1LS4yMy43NC0uMjMsMS4xNXMuMDguOC4yMywxLjE1Yy4xNS4zNS4zNi42Ni42My45MnMuNTkuNDcuOTYuNjEuNzcuMjIsMS4yMS4yMi44NC0uMDcsMS4yLS4yMmMuMzctLjE0LjY5LS4zNS45Ni0uNjEuMjctLjI2LjQ4LS41Ny42My0uOTIuMTUtLjM1LjIyLS43NC4yMi0xLjE2cy0uMDctLjgtLjIyLTEuMTYtLjM2LS42Ni0uNjMtLjkzWk03MS4wNyw0OC4yNGMtLjExLjI3LS4yNy41LS40Ni43LS4yLjItLjQzLjM1LS43LjQ2LS4yNy4xMS0uNTYuMTYtLjg4LjE2cy0uNjEtLjA1LS44Ny0uMTZjLS4yNy0uMTEtLjUtLjI2LS43LS40Ni0uMi0uMi0uMzYtLjQzLS40Ny0uNy0uMTEtLjI3LS4xNy0uNTYtLjE3LS44N3MuMDYtLjYuMTctLjg3Yy4xMS0uMjYuMjctLjQ5LjQ3LS43LjItLjIuNDQtLjM1LjctLjQ2LjI3LS4xMS41Ni0uMTYuODctLjE2cy42MS4wNS44OC4xNmMuMjcuMTEuNS4yNi43LjQ2LjIuMi4zNS40My40Ni43LjExLjI2LjE3LjU1LjE3Ljg3cy0uMDYuNi0uMTcuODdaIi8+PHBhdGggY2xhc3M9ImNscy0yIiBkPSJNNzguNTgsNDguMjVjLjM1LS4xNi42Mi0uMzguODEtLjY4LjE5LS4zLjI4LS42NS4yOC0xLjA2LDAtLjYyLS4yMS0xLjExLS42My0xLjQ2cy0xLS41Mi0xLjc0LS41MmgtMi4yMnY1LjY5aC44MXYtMS43M2gxLjQxYy4xMywwLC4yMy0uMDIuMzUtLjAzbDEuMjQsMS43NmguODlsLTEuMzYtMS45MmMuMDUtLjAyLjExLS4wMy4xNi0uMDVaTTc3LjI4LDQ3LjhoLTEuMzh2LTIuNTZoMS4zOGMuNTIsMCwuOTEuMTEsMS4xOC4zMy4yNy4yMi40LjU0LjQuOTRzLS4xMy43Mi0uNC45NWMtLjI3LjIyLS42Ni4zNC0xLjE4LjM0WiIvPjxwb2x5Z29uIGNsYXNzPSJjbHMtMiIgcG9pbnRzPSI4Ny42MSA0NC41MyA4Ni42OCA0NC41MyA4My41OSA0Ny43MSA4My41OSA0NC41MyA4Mi43OCA0NC41MyA4Mi43OCA1MC4yMiA4My41OSA1MC4yMiA4My41OSA0OC43NSA4NC42NCA0Ny42OSA4Ni44MSA1MC4yMiA4Ny43NyA1MC4yMiA4NS4xOCA0Ny4wOSA4Ny42MSA0NC41MyIvPjxwYXRoIGNsYXNzPSJjbHMtMiIgZD0iTTkzLjQ4LDQ3LjQ4Yy0uMi0uMTEtLjQzLS4yMS0uNjgtLjI4LS4yNS0uMDctLjQ5LS4xMy0uNzQtLjE5cy0uNDctLjEyLS42Ny0uMTljLS4yLS4wNy0uMzctLjE3LS41LS4yOC0uMTMtLjEyLS4xOS0uMjgtLjE5LS40OCwwLS4xNy4wNS0uMzIuMTQtLjQ2LjA5LS4xNC4yNC0uMjQuNDUtLjMzLjIxLS4wOC40Ny0uMTIuNzktLjEyLjI2LDAsLjUyLjA0Ljc5LjExLjI3LjA3LjUzLjE5Ljc3LjM1bC4yNy0uNjVjLS4yNC0uMTYtLjUyLS4yOS0uODUtLjM3LS4zMy0uMDktLjY1LS4xMy0uOTgtLjEzLS41LDAtLjkxLjA3LTEuMjMuMjItLjMyLjE1LS41Ni4zNS0uNzIuNTktLjE1LjI1LS4yMy41Mi0uMjMuODFzLjA2LjU1LjE5Ljc0Yy4xMi4xOS4yOS4zNS40OS40Ni4yLjExLjQzLjIxLjY4LjI4LjI1LjA3LjQ5LjE0Ljc0LjE5LjI0LjA1LjQ3LjEyLjY3LjE5LjIuMDcuMzcuMTcuNS4yOS4xMy4xMi4xOS4yOC4xOS40NywwLC4xNy0uMDUuMzItLjE1LjQ1LS4xLjEzLS4yNS4yNC0uNDYuMzEtLjIxLjA4LS40Ny4xMS0uOC4xMS0uMzYsMC0uNzEtLjA2LTEuMDUtLjE5LS4zNC0uMTItLjYxLS4yOC0uODMtLjQ3bC0uMy42M2MuMjMuMjEuNTQuMzguOTQuNTIuNC4xMy44MS4yLDEuMjQuMi41LDAsLjkxLS4wNywxLjI0LS4yMi4zMy0uMTUuNTctLjM1LjczLS41OS4xNi0uMjUuMjQtLjUxLjI0LS44cy0uMDYtLjU0LS4xOS0uNzNjLS4xMi0uMTktLjI5LS4zNC0uNDktLjQ2WiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTkuNjEuNDZsLTMuNTIsNy43aC44NWwuOTItMi4wNmg0LjNsLjkyLDIuMDZoLjg2TDEwLjQyLjQ2aC0uOFpNOC4xNiw1LjQ1bDEuODUtNC4xNCwxLjg1LDQuMTRoLTMuNzFaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMjIuMzksMi43Yy0uNDQtLjI1LS45My0uMzctMS40OC0uMzctLjUsMC0uOTUuMTEtMS4zNS4zNC0uMzUuMi0uNjIuNDktLjg1Ljg0VjBoLS43OHY4LjE2aC43NXYtMS4xN2MuMjMuMzcuNTEuNjguODcuODguNC4yMy44Ni4zNSwxLjM2LjM1LjU1LDAsMS4wNC0uMTIsMS40OC0uMzcuNDQtLjI1Ljc4LS42LDEuMDMtMS4wNC4yNS0uNDQuMzctLjk2LjM3LTEuNTNzLS4xMi0xLjEtLjM3LTEuNTRjLS4yNS0uNDQtLjU5LS43OC0xLjAzLTEuMDNaTTIyLjcyLDYuNDVjLS4xOS4zNC0uNDUuNi0uNzcuNzktLjMyLjE5LS42OS4yOC0xLjEuMjhzLS43OC0uMDktMS4xMS0uMjgtLjU4LS40NS0uNzctLjc5Yy0uMTktLjM0LS4yOC0uNzQtLjI4LTEuMThzLjA5LS44NS4yOC0xLjE5Yy4xOS0uMzQuNDQtLjYuNzctLjc5cy43LS4yOCwxLjExLS4yOC43OC4wOSwxLjEuMjhjLjMyLjE5LjU4LjQ1Ljc3Ljc5cy4yOS43My4yOSwxLjE5LS4xLjg0LS4yOSwxLjE4WiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTI5LjgyLDUuNDFjMCwuNDQtLjA4LjgyLS4yNCwxLjEzLS4xNi4zMi0uMzguNTYtLjY4Ljcycy0uNjUuMjUtMS4wNS4yNWMtLjU1LDAtLjk4LS4xNi0xLjI4LS40Ny0uMy0uMzEtLjQ2LS43OC0uNDYtMS4zOXYtMy4yN2gtLjc4djMuMzVjMCwuNTUuMSwxLjAxLjMsMS4zOC4yLjM3LjQ5LjY0Ljg1LjgyLjM3LjE4Ljc5LjI4LDEuMjkuMjhzLjk2LS4xMiwxLjM1LS4zNmMuMzItLjIuNTUtLjQ3LjczLS44djEuMWguNzVWMi4zOWgtLjc4djMuMDJaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMzUuOTcsNS4zNWMtLjIyLS4xMS0uNDctLjE5LS43NC0uMjUtLjI3LS4wNi0uNTQtLjEyLS44LS4xNnMtLjUxLS4xLS43NC0uMTdjLS4yMi0uMDctLjQtLjE3LS41NC0uMjktLjE0LS4xMi0uMi0uMy0uMi0uNTIsMC0uMjguMTItLjUxLjM3LS42OS4yNS0uMTguNjMtLjI3LDEuMTUtLjI3LjI5LDAsLjU5LjA0Ljg4LjEyLjI5LjA4LjU3LjIuODMuMzhsLjM0LS42M2MtLjI0LS4xNi0uNTUtLjI5LS45Mi0uMzktLjM3LS4xLS43NS0uMTUtMS4xMi0uMTUtLjQ5LDAtLjkxLjA3LTEuMjUuMjEtLjM0LjE0LS42LjM0LS43OC41OS0uMTguMjUtLjI2LjUzLS4yNi44NXMuMDcuNTkuMi43OWMuMTQuMi4zMS4zNS41My40Ny4yMi4xMS40Ni4yLjczLjI2LjI3LjA2LjU0LjExLjgxLjE1LjI3LjA0LjUyLjEuNzQuMTYuMjIuMDYuNC4xNS41My4yNy4xMy4xMi4yLjI5LjIuNSwwLC4yOS0uMTIuNTItLjM2LjY5LS4yNC4xNy0uNjQuMjYtMS4xOS4yNi0uNCwwLS43OS0uMDYtMS4xNi0uMTktLjM3LS4xMy0uNjctLjI4LS45LS40NmwtLjM1LjYyYy4yNC4yMS41OC4zOCwxLC41MS40Mi4xNC44OC4yLDEuMzUuMi41MSwwLC45NC0uMDcsMS4yOS0uMnMuNjMtLjMzLjgxLS41N2MuMTktLjI1LjI4LS41NC4yOC0uODcsMC0uMzEtLjA3LS41Ny0uMi0uNzZzLS4zMi0uMzQtLjU0LS40NVoiLz48cmVjdCBjbGFzcz0iY2xzLTEiIHg9IjM4LjE1IiB5PSIyLjM5IiB3aWR0aD0iLjc4IiBoZWlnaHQ9IjUuNzciLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik0zOC41NCwwYy0uMTYsMC0uMy4wNS0uNDEuMTZzLS4xNy4yNC0uMTcuMzkuMDUuMjkuMTcuNGMuMTEuMTEuMjUuMTcuNDEuMTdzLjMxLS4wNi40MS0uMTdjLjExLS4xMS4xNi0uMjUuMTYtLjQxcy0uMDUtLjI4LS4xNy0uMzhjLS4xMS0uMS0uMjUtLjE1LS40MS0uMTVaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNDUuMjksMi42Yy0uMzYtLjE4LS43Ny0uMjctMS4yNC0uMjctLjU2LDAtMS4wNC4xMi0xLjQ0LjM2LS4zNC4yLS41OC40Ny0uNzYuOHYtMS4xaC0uNzV2NS43N2guNzh2LTMuMDRjMC0uNDQuMDgtLjgyLjI1LTEuMTMuMTctLjMxLjQtLjU1LjctLjcxLjMtLjE3LjY2LS4yNSwxLjA3LS4yNS41NSwwLC45OC4xNiwxLjI4LjQ3LjMuMzEuNDYuNzcuNDYsMS4zOHYzLjI4aC43OHYtMy4zNWMwLS41Ni0uMS0xLjAyLS4zLTEuMzktLjItLjM3LS40OC0uNjQtLjg0LS44MloiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik01Mi4yMywyLjdjLS40Mi0uMjUtLjktLjM3LTEuNDUtLjM3cy0xLjAyLjEzLTEuNDUuMzhjLS40My4yNS0uNzcuNi0xLjAxLDEuMDQtLjI1LjQ0LS4zNy45NS0uMzcsMS41MnMuMTMsMS4wOC4zOCwxLjUyYy4yNi40NC42MS43OSwxLjA3LDEuMDQuNDYuMjUuOTguMzgsMS41OC4zOC40NiwwLC44OS0uMDgsMS4yNy0uMjQuMzgtLjE2LjcxLS40Ljk2LS43bC0uNDQtLjUxYy0uMjIuMjYtLjQ4LjQ1LS43OS41Ny0uMy4xMi0uNjMuMTktLjk4LjE5LS40NSwwLS44NS0uMDktMS4xOS0uMjgtLjM1LS4xOS0uNjItLjQ1LS44MS0uNzgtLjE2LS4yOC0uMjQtLjYtLjI3LS45NWg0Ljg0czAtLjA5LDAtLjEzYzAtLjA0LDAtLjA4LDAtLjEyLDAtLjU4LS4xMi0xLjA5LS4zNi0xLjUzLS4yNC0uNDQtLjU3LS43OS0xLTEuMDNaTTQ4Ljk4LDQuMDVjLjE4LS4zMy40Mi0uNTkuNzQtLjc3LjMyLS4xOC42Ny0uMjgsMS4wNy0uMjhzLjc2LjA5LDEuMDcuMjhjLjMxLjE4LjU1LjQ0LjczLjc2LjE0LjI2LjIyLjU2LjI0Ljg5aC00LjA4Yy4wMy0uMzIuMS0uNjIuMjQtLjg4WiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTU4LjM4LDUuMzVjLS4yMi0uMTEtLjQ3LS4xOS0uNzQtLjI1LS4yNy0uMDYtLjU0LS4xMi0uOC0uMTZzLS41MS0uMS0uNzQtLjE3Yy0uMjItLjA3LS40LS4xNy0uNTQtLjI5LS4xNC0uMTItLjItLjMtLjItLjUyLDAtLjI4LjEyLS41MS4zNy0uNjkuMjUtLjE4LjYzLS4yNywxLjE1LS4yNy4yOSwwLC41OS4wNC44OC4xMi4yOS4wOC41Ny4yLjgzLjM4bC4zNC0uNjNjLS4yNC0uMTYtLjU1LS4yOS0uOTItLjM5LS4zNy0uMS0uNzUtLjE1LTEuMTItLjE1LS40OSwwLS45MS4wNy0xLjI1LjIxLS4zNC4xNC0uNi4zNC0uNzguNTktLjE4LjI1LS4yNi41My0uMjYuODVzLjA3LjU5LjIuNzljLjE0LjIuMzEuMzUuNTMuNDcuMjIuMTEuNDYuMi43My4yNi4yNy4wNi41NC4xMS44MS4xNS4yNy4wNC41Mi4xLjc0LjE2LjIyLjA2LjQuMTUuNTMuMjcuMTMuMTIuMi4yOS4yLjUsMCwuMjktLjEyLjUyLS4zNi42OS0uMjQuMTctLjY0LjI2LTEuMTkuMjYtLjQsMC0uNzktLjA2LTEuMTYtLjE5LS4zNy0uMTMtLjY3LS4yOC0uOS0uNDZsLS4zNS42MmMuMjQuMjEuNTguMzgsMSwuNTEuNDIuMTQuODguMiwxLjM1LjIuNTEsMCwuOTQtLjA3LDEuMjktLjJzLjYzLS4zMy44MS0uNTdjLjE5LS4yNS4yOC0uNTQuMjgtLjg3LDAtLjMxLS4wNy0uNTctLjItLjc2cy0uMzItLjM0LS41NC0uNDVaIi8+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNjMuNzUsNS4zNWMtLjIyLS4xMS0uNDctLjE5LS43NC0uMjUtLjI3LS4wNi0uNTQtLjEyLS44LS4xNnMtLjUxLS4xLS43NC0uMTdjLS4yMi0uMDctLjQtLjE3LS41NC0uMjktLjE0LS4xMi0uMi0uMy0uMi0uNTIsMC0uMjguMTItLjUxLjM3LS42OS4yNS0uMTguNjMtLjI3LDEuMTUtLjI3LjI5LDAsLjU5LjA0Ljg4LjEyLjI5LjA4LjU3LjIuODMuMzhsLjM0LS42M2MtLjI0LS4xNi0uNTUtLjI5LS45Mi0uMzktLjM3LS4xLS43NS0uMTUtMS4xMi0uMTUtLjQ5LDAtLjkxLjA3LTEuMjUuMjEtLjM0LjE0LS42LjM0LS43OC41OS0uMTguMjUtLjI2LjUzLS4yNi44NXMuMDcuNTkuMi43OWMuMTQuMi4zMS4zNS41My40Ny4yMi4xMS40Ni4yLjczLjI2LjI3LjA2LjU0LjExLjgxLjE1LjI3LjA0LjUyLjEuNzQuMTYuMjIuMDYuNC4xNS41My4yNy4xMy4xMi4yLjI5LjIuNSwwLC4yOS0uMTIuNTItLjM2LjY5LS4yNC4xNy0uNjQuMjYtMS4xOS4yNi0uNCwwLS43OS0uMDYtMS4xNi0uMTktLjM3LS4xMy0uNjctLjI4LS45LS40NmwtLjM1LjYyYy4yNC4yMS41OC4zOCwxLC41MS40Mi4xNC44OC4yLDEuMzUuMi41MSwwLC45NC0uMDcsMS4yOS0uMnMuNjMtLjMzLjgxLS41N2MuMTktLjI1LjI4LS41NC4yOC0uODcsMC0uMzEtLjA3LS41Ny0uMi0uNzZzLS4zMi0uMzQtLjU0LS40NVoiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik03Ny4yNSwyLjZjLS4zNS0uMTgtLjc2LS4yNy0xLjIzLS4yNy0uNiwwLTEuMTIuMTUtMS41NC40My0uMzMuMjMtLjU3LjUyLS43NC44Ni0uMTQtLjM2LS4zMy0uNjYtLjYyLS44Ny0uNC0uMjgtLjg4LS40Mi0xLjQ0LS40Mi0uNTQsMC0xLC4xMi0xLjM5LjM2LS4zMi4yLS41Ni40Ny0uNzMuNzl2LTEuMDloLS43NXY1Ljc3aC43OHYtMy4wNGMwLS40NC4wOC0uODIuMjQtMS4xMy4xNi0uMzEuMzgtLjU1LjY4LS43MS4yOS0uMTcuNjMtLjI1LDEuMDItLjI1LjUzLDAsLjk0LjE2LDEuMjMuNDcuMjkuMzEuNDQuNzcuNDQsMS4zOHYzLjI4aC43OHYtMy4wNGMwLS40NC4wOC0uODIuMjQtMS4xMy4xNi0uMzEuMzgtLjU1LjY3LS43MS4yOS0uMTcuNjMtLjI1LDEuMDMtLjI1LjUzLDAsLjk0LjE2LDEuMjMuNDcuMjkuMzEuNDMuNzcuNDMsMS4zOHYzLjI4aC43OHYtMy4zNWMwLS41Ni0uMS0xLjAyLS4yOS0xLjM5LS4xOS0uMzctLjQ3LS42NC0uODEtLjgyWiIvPjxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTg0LjM1LDIuNzFjLS40NC0uMjUtLjk1LS4zOC0xLjUyLS4zOHMtMS4wNy4xMi0xLjUxLjM3Yy0uNDQuMjUtLjc5LjU5LTEuMDQsMS4wM3MtLjM4Ljk1LS4zOCwxLjUzLjEzLDEuMDcuMzgsMS41Mi42MS44LDEuMDQsMS4wNWMuNDQuMjUuOTQuMzgsMS41MS4zOHMxLjA3LS4xMywxLjUyLS4zOGMuNDUtLjI1LjgtLjYsMS4wNS0xLjA0LjI1LS40NC4zOC0uOTUuMzgtMS41MnMtLjEzLTEuMDktLjM4LTEuNTJjLS4yNS0uNDQtLjYtLjc4LTEuMDQtMS4wM1pNODQuNyw2LjQ1Yy0uMTkuMzQtLjQ0LjYtLjc2Ljc5LS4zMi4xOS0uNjkuMjgtMS4xMS4yOHMtLjc4LS4wOS0xLjA5LS4yOC0uNTctLjQ1LS43Ni0uNzktLjI5LS43NC0uMjktMS4xOC4xLS44NS4yOS0xLjE5LjQ1LS42Ljc3LS43OWMuMzItLjE5LjY5LS4yOCwxLjEtLjI4cy43OC4wOSwxLjEuMjhjLjMyLjE5LjU4LjQ1Ljc2Ljc5LjE5LjM0LjI4LjczLjI4LDEuMTlzLS4wOS44NC0uMjgsMS4xOFoiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik05MS44NywzLjUxYy0uMjItLjM1LS41LS42NC0uODQtLjg0LS40LS4yMy0uODUtLjM0LTEuMzYtLjM0LS41NSwwLTEuMDQuMTItMS40OC4zN3MtLjc4LjU5LTEuMDMsMS4wMy0uMzcuOTUtLjM3LDEuNTQuMTIsMS4wOS4zNywxLjUzLjU5Ljc5LDEuMDMsMS4wNGMuNDQuMjUuOTMuMzcsMS40OC4zNy41MSwwLC45Ny0uMTIsMS4zNy0uMzUuMzYtLjIxLjY0LS41MS44Ni0uODh2MS4xN2guNzVWMGgtLjc4djMuNTFaTTkxLjYsNi40NWMtLjE5LjM0LS40NC42LS43Ny43OS0uMzMuMTktLjcuMjgtMS4xMS4yOHMtLjc3LS4wOS0xLjA5LS4yOGMtLjMyLS4xOS0uNTgtLjQ1LS43Ny0uNzlzLS4yOS0uNzQtLjI5LTEuMTguMS0uODUuMjktMS4xOS40NS0uNi43Ny0uNzljLjMyLS4xOS42OS0uMjgsMS4wOS0uMjhzLjc4LjA5LDEuMTEuMjhjLjMzLjE5LjU4LjQ1Ljc3Ljc5LjE5LjM0LjI4LjczLjI4LDEuMTlzLS4wOS44NC0uMjgsMS4xOFoiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik05OC41MiwyLjdjLS40Mi0uMjUtLjktLjM3LTEuNDUtLjM3cy0xLjAyLjEzLTEuNDUuMzhjLS40My4yNS0uNzcuNi0xLjAxLDEuMDQtLjI1LjQ0LS4zNy45NS0uMzcsMS41MnMuMTMsMS4wOC4zOCwxLjUyYy4yNi40NC42MS43OSwxLjA3LDEuMDQuNDYuMjUuOTguMzgsMS41OC4zOC40NiwwLC44OS0uMDgsMS4yNy0uMjQuMzgtLjE2LjcxLS40Ljk2LS43bC0uNDQtLjUxYy0uMjIuMjYtLjQ4LjQ1LS43OS41Ny0uMy4xMi0uNjMuMTktLjk4LjE5LS40NSwwLS44NS0uMDktMS4xOS0uMjgtLjM1LS4xOS0uNjItLjQ1LS44MS0uNzgtLjE2LS4yOC0uMjQtLjYtLjI3LS45NWg0Ljg0czAtLjA5LDAtLjEzYzAtLjA0LDAtLjA4LDAtLjEyLDAtLjU4LS4xMi0xLjA5LS4zNi0xLjUzLS4yNC0uNDQtLjU3LS43OS0xLTEuMDNaTTk1LjI3LDQuMDVjLjE4LS4zMy40Mi0uNTkuNzQtLjc3LjMyLS4xOC42Ny0uMjgsMS4wNy0uMjhzLjc2LjA5LDEuMDcuMjhjLjMxLjE4LjU1LjQ0LjczLjc2LjE0LjI2LjIyLjU2LjI0Ljg5aC00LjA4Yy4wMy0uMzIuMS0uNjIuMjQtLjg4WiIvPjxyZWN0IGNsYXNzPSJjbHMtMSIgeD0iMTAxLjQ3IiB3aWR0aD0iLjc4IiBoZWlnaHQ9IjguMTYiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik0xMTEuNzcsMi43Yy0uNDQtLjI1LS45My0uMzctMS40OC0uMzctLjUsMC0uOTUuMTEtMS4zNS4zNC0uMzUuMi0uNjIuNDktLjg1Ljg0VjBoLS43OHY4LjE2aC43NXYtMS4xN2MuMjMuMzcuNTEuNjguODcuODguNC4yMy44Ni4zNSwxLjM2LjM1LjU1LDAsMS4wNC0uMTIsMS40OC0uMzcuNDQtLjI1Ljc4LS42LDEuMDMtMS4wNC4yNS0uNDQuMzctLjk2LjM3LTEuNTNzLS4xMi0xLjEtLjM3LTEuNTRjLS4yNS0uNDQtLjU5LS43OC0xLjAzLTEuMDNaTTExMi4xMSw2LjQ1Yy0uMTkuMzQtLjQ1LjYtLjc3Ljc5LS4zMi4xOS0uNjkuMjgtMS4xLjI4cy0uNzgtLjA5LTEuMTEtLjI4LS41OC0uNDUtLjc3LS43OWMtLjE5LS4zNC0uMjgtLjc0LS4yOC0xLjE4cy4wOS0uODUuMjgtMS4xOWMuMTktLjM0LjQ0LS42Ljc3LS43OXMuNy0uMjgsMS4xMS0uMjguNzguMDksMS4xLjI4Yy4zMi4xOS41OC40NS43Ny43OXMuMjkuNzMuMjksMS4xOS0uMS44NC0uMjksMS4xOFoiLz48cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik0xMTguNywyLjM5bC0yLjE4LDQuOTEtMi4xOC00LjkxaC0uODFsMi41OCw1Ljc2LS4yNS41NmMtLjE3LjM2LS4zNS42MS0uNTMuNzUtLjE5LjE0LS40MS4yMS0uNjcuMjEtLjIxLDAtLjQxLS4wNC0uNTgtLjEyLS4xNy0uMDgtLjMzLS4xOS0uNDgtLjMybC0uMzYuNThjLjE4LjE4LjM5LjMxLjYzLjRzLjUuMTMuNzguMTMuNTMtLjA1Ljc2LS4xNGMuMjMtLjA5LjQ0LS4yNS42My0uNDdzLjM3LS41Mi41My0uODlsMi44OS02LjQ3aC0uNzdaIi8+PC9zdmc+"
-            alt="Ben Steenstra - When it feels right it works"
-            width="126"
-            height="50"
-          />
-          <span class="meta" id="meta"></span>
-        </div>
-        <div class="stepperRow" aria-hidden="true">
-          <div class="stepper" id="stepper"></div>
-        </div>
+    <div class="shell">
+      <header class="bar">
+        <div class="status" id="status"></div>
+        <div class="meta" id="meta"></div>
+      </header>
+      <div class="boot" id="boot">
+        <div class="bootLine wide"></div>
+        <div class="bootLine mid"></div>
+        <div class="bootLine short"></div>
       </div>
-    </header>
-
-    <div class="wrap">
-      <section class="card-stage">
-        <div class="shell">
-          <header class="bar">
-            <div class="status" id="status"></div>
-          </header>
-          <main class="body">
-            <div class="cardInner">
-              <div class="badge" id="badge"></div>
-              <div>
-                <div class="sectionTitle" id="sectionTitle"></div>
-                <div class="cardTitle is-hidden" id="cardTitle"></div>
-                <p class="card" id="card"></p>
-                <div class="cardDesc is-hidden" id="cardDesc"></div>
-              </div>
-            </div>
-            <p class="prompt" id="prompt"></p>
-            <div class="actions" id="actions"></div>
-            <div class="row is-hidden" id="confirmActions">
-              <button class="btn primary" id="btnOk" type="button">Continue</button>
-            </div>
-            <div class="inputWrap" id="inputWrap">
-              <form class="input" id="inputForm">
-                <textarea id="inputText"></textarea>
-                <button type="submit" id="inputSend"></button>
-              </form>
-            </div>
-            <p class="error" id="error"></p>
-          </main>
-        </div>
-      </section>
-      <div class="subtitle is-hidden" id="uiSubtitle"></div>
-      <div id="debugOverlay" class="is-hidden" aria-hidden="true"></div>
+      <main class="body is-hidden" id="body">
+        <p class="card" id="card"></p>
+        <div class="cardDesc is-hidden" id="cardDesc"></div>
+        <p class="prompt" id="prompt"></p>
+        <div class="actions" id="actions"></div>
+        <form class="input" id="inputForm">
+          <textarea id="inputText"></textarea>
+          <button type="submit" id="inputSend"></button>
+        </form>
+        <p class="error" id="error"></p>
+      </main>
     </div>
+    <p class="subtitle is-hidden" id="uiSubtitle"></p>
+
     <script>
       (function () {
         "use strict";
 
-        var MODE_SET = new Set(["prestart", "interactive"]);
-        var ORDER = [
-          "step_0",
-          "dream",
-          "purpose",
-          "bigwhy",
-          "role",
-          "entity",
-          "strategy",
-          "targetgroup",
-          "productsservices",
-          "rulesofthegame",
-          "presentation",
-        ];
+        var CONTRACT_FAIL_TEXT = "UI contract violation. Refresh and retry.";
+        var MODE_SET = new Set(["prestart", "interactive", "waiting_locale", "recovery", "blocked", "failed"]);
+
         function byId(id) {
           return document.getElementById(id);
         }
@@ -645,17 +285,12 @@
         var ui = {
           status: byId("status"),
           meta: byId("meta"),
-          uiTitle: byId("uiTitle"),
-          byText: byId("byText"),
-          badge: byId("badge"),
-          sectionTitle: byId("sectionTitle"),
+          body: byId("body"),
+          boot: byId("boot"),
           card: byId("card"),
           cardDesc: byId("cardDesc"),
           prompt: byId("prompt"),
-          stepper: byId("stepper"),
           actions: byId("actions"),
-          confirmActions: byId("confirmActions"),
-          btnOk: byId("btnOk"),
           inputForm: byId("inputForm"),
           inputText: byId("inputText"),
           inputSend: byId("inputSend"),
@@ -668,188 +303,8 @@
           mode: "",
           loading: false,
           actions: [],
-          step0ReadyActionCode: "",
           textSubmit: null,
-          hasRendered: false,
         };
-
-        var LOCAL_UI_STRINGS_BY_LOCALE = {
-          "en": {
-            uiSubtitle: "Use The Business Strategy Canvas Builder widget to continue (not the chat box)",
-            uiUseWidgetToContinue: "Use The Business Strategy Canvas Builder widget to continue (not the chat box).",
-            byText: "A business model by:",
-            btnStart: "Start the process with Validation & Business Name",
-            startHint: "Click Start to begin.",
-            errorMessage: "Something went wrong while processing your message. Please try again.",
-            prestartWelcome: "Build a complete Business Model and Strategy Canvas step by step.",
-          },
-          "es": {
-            uiSubtitle: "Usa el widget Business Strategy Canvas Builder para continuar (no el cuadro de chat)",
-            uiUseWidgetToContinue: "Usa el widget Business Strategy Canvas Builder para continuar (no el cuadro de chat).",
-            byText: "Un modelo de negocio de:",
-            btnStart: "Inicia el proceso con Validación y nombre del negocio",
-            startHint: "Haz clic en Iniciar para comenzar.",
-            errorMessage: "Algo salió mal al procesar tu mensaje. Por favor, inténtalo de nuevo.",
-            prestartWelcome: "Crea un Modelo de Negocio completo y un Strategy Canvas paso a paso.",
-          },
-          "pt-br": {
-            uiSubtitle: "Use o widget Business Strategy Canvas Builder para continuar (não a caixa de chat)",
-            uiUseWidgetToContinue: "Use o widget Business Strategy Canvas Builder para continuar (não a caixa de chat).",
-            byText: "Um modelo de negócios por:",
-            btnStart: "Inicie o processo com Validação e nome do negócio",
-            startHint: "Clique em Iniciar para começar.",
-            errorMessage: "Algo deu errado ao processar sua mensagem. Por favor, tente novamente.",
-            prestartWelcome: "Construa um Modelo de Negócios completo e um Strategy Canvas passo a passo.",
-          },
-          "fr": {
-            uiSubtitle: "Utilisez le widget Business Strategy Canvas Builder pour continuer (pas la zone de chat)",
-            uiUseWidgetToContinue: "Utilisez le widget Business Strategy Canvas Builder pour continuer (pas la zone de chat).",
-            byText: "Un modèle économique par :",
-            btnStart: "Démarrer le processus avec Validation et nom de l’entreprise",
-            startHint: "Cliquez sur Démarrer pour commencer.",
-            errorMessage: "Une erreur est survenue lors du traitement de ton message. Veuillez réessayer.",
-            prestartWelcome: "Construisez un modèle économique complet et un Strategy Canvas étape par étape.",
-          },
-          "de": {
-            uiSubtitle: "Nutze das Widget Business Strategy Canvas Builder, um fortzufahren (nicht das Chatfeld)",
-            uiUseWidgetToContinue: "Nutze das Widget Business Strategy Canvas Builder, um fortzufahren (nicht das Chatfeld).",
-            byText: "Ein Geschäftsmodell von:",
-            btnStart: "Starte den Prozess mit Validierung & Unternehmensname",
-            startHint: "Klicke auf Start, um zu beginnen.",
-            errorMessage: "Beim Verarbeiten deiner Nachricht ist etwas schiefgelaufen. Bitte versuche es erneut.",
-            prestartWelcome: "Erstelle Schritt für Schritt ein vollständiges Geschäftsmodell und ein Strategy Canvas.",
-          },
-          "hi": {
-            uiSubtitle: "आगे बढ़ने के लिए Business Strategy Canvas Builder विजेट का उपयोग करें (चैट बॉक्स नहीं)",
-            uiUseWidgetToContinue: "आगे बढ़ने के लिए Business Strategy Canvas Builder विजेट का उपयोग करें (चैट बॉक्स नहीं)।",
-            byText: "व्यवसाय मॉडल —",
-            btnStart: "सत्यापन और व्यवसाय का नाम के साथ प्रक्रिया शुरू करें",
-            startHint: "शुरू करने के लिए Start पर क्लिक करें।",
-            errorMessage: "आपके संदेश को प्रोसेस करते समय कुछ गलत हो गया। कृपया फिर प्रयास करें।",
-            prestartWelcome: "कदम-दर-कदम एक पूरा बिज़नेस मॉडल और Strategy Canvas बनाएँ।",
-          },
-          "ja": {
-            uiSubtitle: "続行するには Business Strategy Canvas Builder のウィジェットを使用してください（チャット欄ではありません）",
-            uiUseWidgetToContinue: "続行するには Business Strategy Canvas Builder のウィジェットを使用してください（チャット欄ではありません）。",
-            byText: "ビジネスモデル：",
-            btnStart: "「検証とビジネス名」でプロセスを開始",
-            startHint: "開始するには「Start」をクリックしてください。",
-            errorMessage: "メッセージの処理中に問題が発生しました。もう一度お試しください。",
-            prestartWelcome: "完全なビジネスモデルとStrategy Canvasを、ステップごとに作成します。",
-          },
-          "id": {
-            uiSubtitle: "Gunakan widget Business Strategy Canvas Builder untuk melanjutkan (bukan kotak chat)",
-            uiUseWidgetToContinue: "Gunakan widget Business Strategy Canvas Builder untuk melanjutkan (bukan kotak chat).",
-            byText: "Model bisnis oleh:",
-            btnStart: "Mulai proses dengan Validasi & Nama Bisnis",
-            startHint: "Klik Mulai untuk memulai.",
-            errorMessage: "Terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.",
-            prestartWelcome: "Bangun Model Bisnis lengkap dan Strategy Canvas langkah demi langkah.",
-          },
-          "it": {
-            uiSubtitle: "Usa il widget Business Strategy Canvas Builder per continuare (non la chat)",
-            uiUseWidgetToContinue: "Usa il widget Business Strategy Canvas Builder per continuare (non la chat).",
-            byText: "Un modello di business di:",
-            btnStart: "Avvia il processo con Validazione e nome dell’azienda",
-            startHint: "Clicca su Start per iniziare.",
-            errorMessage: "Si è verificato un errore durante l’elaborazione del tuo messaggio. Riprova.",
-            prestartWelcome: "Costruisci un Modello di Business completo e uno Strategy Canvas passo dopo passo.",
-          },
-          "nl": {
-            uiSubtitle: "Gebruik de Business Strategy Canvas Builder-widget om verder te gaan (niet het chatvenster)",
-            uiUseWidgetToContinue: "Gebruik de Business Strategy Canvas Builder-widget om verder te gaan (niet het chatvenster).",
-            byText: "Een businessmodel door:",
-            btnStart: "Start het proces met Validatie & Bedrijfsnaam",
-            startHint: "Klik op Start om te beginnen.",
-            errorMessage: "Er ging iets mis bij het verwerken van je bericht. Probeer het opnieuw.",
-            prestartWelcome: "Bouw stap voor stap een compleet Business Model en Strategy Canvas.",
-          },
-          "ko": {
-            uiSubtitle: "계속하려면 Business Strategy Canvas Builder 위젯을 사용하세요(채팅창 아님)",
-            uiUseWidgetToContinue: "계속하려면 Business Strategy Canvas Builder 위젯을 사용하세요(채팅창 아님).",
-            byText: "비즈니스 모델:",
-            btnStart: "검증 및 비즈니스 이름으로 프로세스 시작하기",
-            startHint: "시작하려면 Start를 클릭하세요.",
-            errorMessage: "메시지를 처리하는 동안 문제가 발생했습니다. 다시 시도해 주세요.",
-            prestartWelcome: "완전한 비즈니스 모델과 Strategy Canvas를 단계별로 만들어 보세요.",
-          },
-          "zh-hans": {
-            uiSubtitle: "请使用“商业战略画布构建器”小组件继续（不要使用聊天框）",
-            uiUseWidgetToContinue: "请使用“商业战略画布构建器”小组件继续（不要使用聊天框）。",
-            byText: "商业模型作者：",
-            btnStart: "从“验证与企业名称”开始流程",
-            startHint: "点击“开始”以启动。",
-            errorMessage: "处理你的消息时出错。请重试。",
-            prestartWelcome: "逐步构建完整的商业模式与战略画布。",
-          },
-        };
-
-        function normalizeLocaleTag(raw) {
-          var value = asText(raw).replace(/_/g, "-").toLowerCase();
-          if (!value) return "";
-          var parts = value.split("-").filter(Boolean);
-          if (!parts.length) return "";
-          return parts.join("-");
-        }
-
-        function localStringsForLanguage(langRaw) {
-          var fallbackEn = toRecord(LOCAL_UI_STRINGS_BY_LOCALE["en"]);
-          var normalized = normalizeLocaleTag(langRaw);
-          if (!normalized) return Object.assign({ lang: "en" }, fallbackEn);
-          var exact = toRecord(LOCAL_UI_STRINGS_BY_LOCALE[normalized]);
-          if (Object.keys(exact).length > 0) {
-            return Object.assign({ lang: normalized.split("-")[0] || "en" }, fallbackEn, exact);
-          }
-          var base = normalized.split("-")[0] || "";
-          if (!base) return Object.assign({ lang: "en" }, fallbackEn);
-          if (base === "pt") {
-            var ptBr = toRecord(LOCAL_UI_STRINGS_BY_LOCALE["pt-br"]);
-            return Object.assign({ lang: "pt" }, fallbackEn, ptBr);
-          }
-          if (base === "zh") {
-            var zhHans = toRecord(LOCAL_UI_STRINGS_BY_LOCALE["zh-hans"]);
-            return Object.assign({ lang: "zh" }, fallbackEn, zhHans);
-          }
-          var localeKeys = Object.keys(LOCAL_UI_STRINGS_BY_LOCALE);
-          for (var i = 0; i < localeKeys.length; i += 1) {
-            var key = localeKeys[i];
-            if (key.split("-")[0] === base) {
-              return Object.assign({ lang: base }, fallbackEn, toRecord(LOCAL_UI_STRINGS_BY_LOCALE[key]));
-            }
-          }
-          return Object.assign({ lang: "en" }, fallbackEn);
-        }
-
-        function preferredLanguage() {
-          var state = toRecord(runtime.state);
-          var hostState = toRecord(toRecord(openAiApi()).widgetState);
-          var explicit = normalizeLocaleTag(
-            state.language ||
-            state.ui_strings_lang ||
-            state.ui_strings_requested_lang ||
-            hostState.language ||
-            hostState.locale ||
-            hostState.ui_strings_lang ||
-            hostState.ui_strings_requested_lang
-          );
-          if (explicit) return explicit;
-          var navigatorLanguage = normalizeLocaleTag(asText(globalThis.navigator && globalThis.navigator.language));
-          return navigatorLanguage || "en";
-        }
-
-        function fallbackStringsFromLang(langRaw) {
-          var localized = localStringsForLanguage(langRaw);
-          return {
-            lang: asText(localized.lang).toLowerCase() || "en",
-            subtitle: asText(localized.uiSubtitle || localized.uiUseWidgetToContinue || ""),
-            byline: asText(localized.byText || "A business model by:"),
-            prestartText: asText(localized.prestartWelcome || localized.startHint || "Click Start to begin."),
-            btnStart: asText(localized.btnStart || "Start the process with Validation & Business Name"),
-            errorMessage: asText(localized.errorMessage || "Something went wrong. Please try again."),
-            startHint: asText(localized.startHint || "Click Start to begin."),
-            uiTitle: "Business Strategy Canvas Builder",
-          };
-        }
 
         function toRecord(value) {
           if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -860,244 +315,87 @@
           return String(value == null ? "" : value).trim();
         }
 
-        function uiString(state, key) {
-          var strings = toRecord(state.ui_strings);
-          return asText(strings[key]);
+        function escapeHtml(text) {
+          return String(text == null ? "" : text)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#39;");
         }
 
-        function specialistBodyByPriority(rawSpecialist) {
-          var specialist = toRecord(rawSpecialist);
-          return (
-            asText(specialist.message) ||
-            asText(specialist.refined_formulation) ||
-            asText(specialist.question)
-          );
+        function formatText(text) {
+          return escapeHtml(text).replaceAll("\n", "<br>");
         }
 
-        function dedupeBodyAgainstPrompt(bodyRaw, promptRaw) {
-          var body = String(bodyRaw || "");
-          var prompt = String(promptRaw || "").trim();
-          if (!body.trim() || !prompt) return body;
-          var bodyTrimmed = body.trim();
-          if (bodyTrimmed === prompt) return "";
-          var bodyLeadingTrimmed = body.trimStart();
-          if (!bodyLeadingTrimmed.startsWith(prompt)) return body;
-          var rest = bodyLeadingTrimmed.slice(prompt.length);
-          if (!/^\s+/.test(rest)) return body;
-          return rest.replace(/^\s+/, "");
-        }
-
-        function extractChoicesFromPrompt(promptText) {
-          var raw = String(promptText || "");
-          var lines = raw.split(/\r?\n/).filter(function (line) {
-            return String(line || "").trim().length > 0;
-          });
-          var found = {};
-          var kept = [];
+        function richHtmlFromText(text) {
+          var source = asText(text);
+          if (!source) return "";
+          var lines = source.replaceAll("\r\n", "\n").split("\n");
+          var blocks = [];
+          var current = [];
           for (var i = 0; i < lines.length; i += 1) {
             var line = lines[i];
-            var match = line.match(/^\s*([1-9])[\)\.]\s*(.+?)\s*$/);
-            if (match && match[1] && match[2]) {
-              found[match[1]] = match[2].trim();
+            if (asText(line).length === 0) {
+              if (current.length > 0) {
+                blocks.push(current);
+                current = [];
+              }
               continue;
             }
-            kept.push(line);
+            current.push(line);
           }
-          var keys = Object.keys(found).sort(function (a, b) {
-            return Number(a) - Number(b);
-          });
-          var consecutive = keys.length > 0;
-          for (var j = 0; j < keys.length; j += 1) {
-            if (Number(keys[j]) !== j + 1) {
-              consecutive = false;
-              break;
+          if (current.length > 0) blocks.push(current);
+          if (blocks.length === 0) return "";
+
+          var html = '<div class="richContent">';
+          for (var j = 0; j < blocks.length; j += 1) {
+            var block = blocks[j];
+            var allOrdered = true;
+            var allBullets = true;
+            var orderedItems = [];
+            var bulletItems = [];
+            for (var k = 0; k < block.length; k += 1) {
+              var orderedMatch = block[k].match(/^\s*\d+[\.\)]\s+(.+)$/);
+              var bulletMatch = block[k].match(/^\s*[-*•]\s+(.+)$/);
+              if (orderedMatch) orderedItems.push(orderedMatch[1]);
+              else allOrdered = false;
+              if (bulletMatch) bulletItems.push(bulletMatch[1]);
+              else allBullets = false;
             }
-          }
-          var choices = consecutive
-            ? keys.map(function (key) {
-                return { value: String(key), label: String(found[key] || "") };
-              })
-            : [];
-          return {
-            promptShown: consecutive ? kept.join("\n").trim() : raw.trim(),
-            choices: choices,
-          };
-        }
 
-        function buildPrestartBodyText(state, localUi) {
-          var headline = asText(
-            uiString(state, "prestartWelcome") ||
-            uiString(state, "prestart.headline") ||
-            localUi.prestartText
-          );
-          var provenTitle = asText(uiString(state, "prestart.proven.title"));
-          var provenBody = asText(uiString(state, "prestart.proven.body"));
-          var outcomesTitle = asText(uiString(state, "prestart.outcomes.title"));
-          var outcome1 = asText(uiString(state, "prestart.outcomes.item1"));
-          var outcome2 = asText(uiString(state, "prestart.outcomes.item2"));
-          var outcome3 = asText(uiString(state, "prestart.outcomes.item3"));
-          var howLabel = asText(uiString(state, "prestart.meta.how.label"));
-          var howValue = asText(uiString(state, "prestart.meta.how.value"));
-          var timeLabel = asText(uiString(state, "prestart.meta.time.label"));
-          var timeValue = asText(uiString(state, "prestart.meta.time.value"));
-
-          var lines = [];
-          if (headline) lines.push(headline);
-          if (provenTitle) {
-            lines.push("");
-            lines.push("**" + provenTitle + "**");
-          }
-          if (provenBody) lines.push(provenBody);
-          if (outcomesTitle) {
-            lines.push("");
-            lines.push("**" + outcomesTitle + "**");
-          }
-          if (outcome1) lines.push("- " + outcome1);
-          if (outcome2) lines.push("- " + outcome2);
-          if (outcome3) lines.push("- " + outcome3);
-
-          var metaPairs = [];
-          if (howLabel || howValue) {
-            metaPairs.push((howLabel || "How") + ": " + (howValue || ""));
-          }
-          if (timeLabel || timeValue) {
-            metaPairs.push((timeLabel || "Time") + ": " + (timeValue || ""));
-          }
-          if (metaPairs.length > 0) {
-            lines.push("");
-            lines.push(metaPairs.join(" | "));
-          }
-
-          var body = lines.join("\n").trim();
-          return body || headline || localUi.prestartText;
-        }
-
-        function buildPrestartBodyMarkup(state, localUi) {
-          var headline = asText(
-            uiString(state, "prestartWelcome") ||
-            uiString(state, "prestart.headline") ||
-            localUi.prestartText
-          );
-          var provenTitle = asText(uiString(state, "prestart.proven.title"));
-          var provenBody = asText(uiString(state, "prestart.proven.body"));
-          var outcomesTitle = asText(uiString(state, "prestart.outcomes.title"));
-          var outcome1 = asText(uiString(state, "prestart.outcomes.item1"));
-          var outcome2 = asText(uiString(state, "prestart.outcomes.item2"));
-          var outcome3 = asText(uiString(state, "prestart.outcomes.item3"));
-          var howLabel = asText(uiString(state, "prestart.meta.how.label"));
-          var howValue = asText(uiString(state, "prestart.meta.how.value"));
-          var timeLabel = asText(uiString(state, "prestart.meta.time.label"));
-          var timeValue = asText(uiString(state, "prestart.meta.time.value"));
-
-          var hasRich =
-            provenTitle.length > 0 ||
-            provenBody.length > 0 ||
-            outcomesTitle.length > 0 ||
-            outcome1.length > 0 ||
-            outcome2.length > 0 ||
-            outcome3.length > 0 ||
-            howLabel.length > 0 ||
-            howValue.length > 0 ||
-            timeLabel.length > 0 ||
-            timeValue.length > 0;
-          if (!hasRich) return "";
-
-          var html = '<div class="prestartWelcome">';
-          if (headline) {
-            html += '<p class="prestartHeadline">' + escapeHtml(headline) + "</p>";
-          }
-          if (provenTitle || provenBody) {
-            html += '<section class="prestartBlock">';
-            if (provenTitle) {
-              html += '<h3 class="prestartBlockTitle">' + escapeHtml(provenTitle) + "</h3>";
+            if (allOrdered && orderedItems.length > 0) {
+              html += '<ol class="richList">';
+              for (var oi = 0; oi < orderedItems.length; oi += 1) {
+                html += "<li>" + escapeHtml(orderedItems[oi]) + "</li>";
+              }
+              html += "</ol>";
+              continue;
             }
-            if (provenBody) {
-              html += '<p class="prestartBlockBody">' + escapeHtml(provenBody) + "</p>";
+
+            if (allBullets && bulletItems.length > 0) {
+              html += '<ul class="richList">';
+              for (var bi = 0; bi < bulletItems.length; bi += 1) {
+                html += "<li>" + escapeHtml(bulletItems[bi]) + "</li>";
+              }
+              html += "</ul>";
+              continue;
             }
-            html += "</section>";
-          }
-          if (outcomesTitle || outcome1 || outcome2 || outcome3) {
-            html += '<section class="prestartBlock">';
-            if (outcomesTitle) {
-              html += '<h3 class="prestartBlockTitle">' + escapeHtml(outcomesTitle) + "</h3>";
+
+            if (block.length === 1 && /[:?]$/.test(asText(block[0])) && asText(block[0]).length <= 120) {
+              html += '<p class="richHeading">' + escapeHtml(block[0]) + "</p>";
+              continue;
             }
-            html += '<ul class="prestartOutcomes">';
-            if (outcome1) html += "<li>" + escapeHtml(outcome1) + "</li>";
-            if (outcome2) html += "<li>" + escapeHtml(outcome2) + "</li>";
-            if (outcome3) html += "<li>" + escapeHtml(outcome3) + "</li>";
-            html += "</ul>";
-            html += "</section>";
-          }
-          if (howLabel || howValue || timeLabel || timeValue) {
-            html += '<div class="prestartMetaGrid">';
-            if (howLabel || howValue) {
-              html += '<div class="prestartMetaItem"><span class="prestartMetaLabel">' + escapeHtml(howLabel || "How") + "</span>";
-              html += '<span class="prestartMetaValue">' + escapeHtml(howValue || "") + "</span></div>";
-            }
-            if (timeLabel || timeValue) {
-              html += '<div class="prestartMetaItem"><span class="prestartMetaLabel">' + escapeHtml(timeLabel || "Time") + "</span>";
-              html += '<span class="prestartMetaValue">' + escapeHtml(timeValue || "") + "</span></div>";
-            }
-            html += "</div>";
+
+            html += '<p class="richP">' + formatText(block.join("\n")) + "</p>";
           }
           html += "</div>";
           return html;
         }
 
-        function deriveStepBadge(stepId) {
-          var normalized = asText(stepId);
-          var match = /^step_(\d+)$/i.exec(normalized);
-          if (!match) return "";
-          var index = Number(match[1]);
-          if (!Number.isFinite(index)) return "";
-          return String(index + 1).padStart(2, "0");
-        }
-
-        function stepIndex(stepId) {
-          var idx = ORDER.indexOf(asText(stepId));
-          return idx >= 0 ? idx : 0;
-        }
-
-        function stripStepPrefix(label) {
-          return asText(label)
-            .replace(/^Step\s+\d+\s*:\s*/i, "")
-            .replace(/^Stap\s+\d+\s*:\s*/i, "");
-        }
-
-        function resolveStepperTitle(stepId, state, sectionTitleText) {
-          return stripStepPrefix(
-            sectionTitleText ||
-            uiString(state, "title." + stepId) ||
-            uiString(state, "sectionTitle." + stepId) ||
-            (stepId === "step_0"
-              ? uiString(state, "stepLabel.validation")
-              : uiString(state, "stepLabel." + stepId)) ||
-            stepId
-          );
-        }
-
-        function buildStepper(stepId, state, sectionTitleText) {
-          if (!ui.stepper) return;
-          var activeIdx = stepIndex(stepId);
-          var stepTitle = resolveStepperTitle(stepId, state, sectionTitleText);
-          ui.stepper.innerHTML = "";
-          for (var i = 0; i < ORDER.length; i += 1) {
-            var node = document.createElement("div");
-            var className = "step";
-            if (i < activeIdx) className += " completed";
-            if (i === activeIdx) className += " active";
-            node.className = className;
-            if (i === activeIdx && stepTitle) {
-              var titleNode = document.createElement("div");
-              titleNode.className = "stepperTitle";
-              titleNode.textContent = stepTitle;
-              if (i === 0) titleNode.classList.add("align-left");
-              if (i === ORDER.length - 1) titleNode.classList.add("align-right");
-              node.appendChild(titleNode);
-            }
-            node.appendChild(document.createTextNode(String(i + 1).padStart(2, "0")));
-            ui.stepper.appendChild(node);
-          }
+        function uiString(state, key) {
+          var strings = toRecord(state.ui_strings);
+          return asText(strings[key]);
         }
 
         function setHidden(el, hidden) {
@@ -1110,7 +408,6 @@
           var disabled = runtime.loading;
           if (ui.inputText) ui.inputText.disabled = disabled;
           if (ui.inputSend) ui.inputSend.disabled = disabled;
-          if (ui.btnOk) ui.btnOk.disabled = disabled;
           if (ui.actions) {
             var buttons = ui.actions.querySelectorAll("button");
             for (var i = 0; i < buttons.length; i += 1) {
@@ -1119,40 +416,115 @@
           }
         }
 
-        function escapeHtml(text) {
-          return String(text || "")
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
+        function failClosed(reason, detail) {
+          document.body.setAttribute("data-ui-marker", reason);
+          console.warn("[ui_fail_closed]", {
+            reason: reason,
+            detail: detail || {},
+          });
+          setHidden(ui.boot, true);
+          setHidden(ui.body, false);
+          if (ui.status) ui.status.textContent = "";
+          if (ui.meta) ui.meta.textContent = "";
+          if (ui.card) ui.card.textContent = "";
+          if (ui.cardDesc) ui.cardDesc.innerHTML = "";
+          if (ui.prompt) ui.prompt.textContent = "";
+          if (ui.actions) ui.actions.innerHTML = "";
+          if (ui.inputText) ui.inputText.value = "";
+          if (ui.error) ui.error.textContent = CONTRACT_FAIL_TEXT + " [" + reason + "]";
+          setHidden(ui.error, false);
+          setHidden(ui.card, true);
+          setHidden(ui.prompt, true);
+          setHidden(ui.actions, true);
+          setHidden(ui.inputForm, true);
+          setLoading(false);
         }
 
-        function formatText(text) {
-          var escaped = escapeHtml(text);
-          var bolded = escaped.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-          return bolded.replace(/\r?\n/g, "<br>");
+        function bodyTextFromResult(result) {
+          var text = asText(result.text);
+          if (text) return text;
+          var specialist = toRecord(result.specialist);
+          return asText(specialist.message) || asText(specialist.refined_formulation) || asText(specialist.question);
         }
 
-        function looksLikeWidgetResult(candidateRaw) {
-          var candidate = toRecord(candidateRaw);
-          if (Object.keys(candidate).length === 0) return false;
-          var state = toRecord(candidate.state);
-          var uiPayload = toRecord(candidate.ui);
-          var view = toRecord(uiPayload.view);
-          var mode = asText(view.mode).toLowerCase();
-          var actionContract = toRecord(uiPayload.action_contract);
-          var hasStep = asText(candidate.current_step_id || state.current_step).length > 0;
-          var hasPromptText = asText(candidate.prompt).length > 0 || asText(candidate.text).length > 0;
-          var hasUiStrings = Object.keys(toRecord(state.ui_strings)).length > 0;
-          var errorPayload = toRecord(candidate.error);
-          var hasErrorText = asText(errorPayload.user_message).length > 0 || asText(errorPayload.message).length > 0;
-          if (MODE_SET.has(mode)) return true;
-          if (hasStep && hasPromptText) return true;
-          if (hasStep && hasUiStrings) return true;
-          if (hasStep && Object.keys(actionContract).length > 0) return true;
-          if (hasStep && hasErrorText) return true;
-          return false;
+        function prestartMarkupFromState(state) {
+          var headline = uiString(state, "prestart.headline");
+          var provenTitle = uiString(state, "prestart.proven.title");
+          var provenBody = uiString(state, "prestart.proven.body");
+          var outcomesTitle = uiString(state, "prestart.outcomes.title");
+          var outcome1 = uiString(state, "prestart.outcomes.item1");
+          var outcome2 = uiString(state, "prestart.outcomes.item2");
+          var outcome3 = uiString(state, "prestart.outcomes.item3");
+          var howLabel = uiString(state, "prestart.meta.how.label");
+          var howValue = uiString(state, "prestart.meta.how.value");
+          var timeLabel = uiString(state, "prestart.meta.time.label");
+          var timeValue = uiString(state, "prestart.meta.time.value");
+          var hasContent =
+            headline ||
+            provenTitle ||
+            provenBody ||
+            outcomesTitle ||
+            outcome1 ||
+            outcome2 ||
+            outcome3 ||
+            howLabel ||
+            howValue ||
+            timeLabel ||
+            timeValue;
+          if (!hasContent) return "";
+          var outcomeItems = [outcome1, outcome2, outcome3].filter(Boolean);
+          var outcomesHtml = "";
+          if (outcomesTitle || outcomeItems.length > 0) {
+            outcomesHtml = '<div class="prestartBlock">';
+            if (outcomesTitle) outcomesHtml += '<p class="prestartBlockTitle">' + escapeHtml(outcomesTitle) + "</p>";
+            if (outcomeItems.length > 0) {
+              outcomesHtml += '<ul class="prestartOutcomes">';
+              for (var i = 0; i < outcomeItems.length; i += 1) {
+                outcomesHtml += "<li>" + escapeHtml(outcomeItems[i]) + "</li>";
+              }
+              outcomesHtml += "</ul>";
+            }
+            outcomesHtml += "</div>";
+          }
+          var metaHtml = "";
+          if (howLabel || howValue || timeLabel || timeValue) {
+            metaHtml =
+              '<div class="prestartMetaGrid">' +
+              '<div class="prestartMetaItem">' +
+              '<p class="prestartMetaLabel">' +
+              escapeHtml(howLabel) +
+              "</p>" +
+              '<p class="prestartMetaValue">' +
+              escapeHtml(howValue) +
+              "</p>" +
+              "</div>" +
+              '<div class="prestartMetaItem">' +
+              '<p class="prestartMetaLabel">' +
+              escapeHtml(timeLabel) +
+              "</p>" +
+              '<p class="prestartMetaValue">' +
+              escapeHtml(timeValue) +
+              "</p>" +
+              "</div>" +
+              "</div>";
+          }
+          return (
+            '<div class="prestartWelcome">' +
+            '<p class="prestartHeadline">' +
+            escapeHtml(headline) +
+            "</p>" +
+            '<div class="prestartBlock">' +
+            '<p class="prestartBlockTitle">' +
+            escapeHtml(provenTitle) +
+            "</p>" +
+            '<p class="prestartBlockBody">' +
+            escapeHtml(provenBody) +
+            "</p>" +
+            "</div>" +
+            outcomesHtml +
+            metaHtml +
+            "</div>"
+          );
         }
 
         function extractWidgetResult(raw) {
@@ -1174,9 +546,74 @@
             toolOutput,
           ];
           for (var i = 0; i < candidates.length; i += 1) {
-            if (looksLikeWidgetResult(candidates[i])) return toRecord(candidates[i]);
+            if (Object.keys(candidates[i]).length > 0) return candidates[i];
           }
           return {};
+        }
+
+        function extractWidgetState(raw) {
+          var root = toRecord(raw);
+          var structured = toRecord(root.structuredContent);
+          var structuredResult = toRecord(structured.result);
+          var toolOutput = toRecord(root.toolOutput);
+          var toolResponseMetadata = toRecord(root.toolResponseMetadata);
+          var widget = extractWidgetResult(raw);
+          var candidates = [
+            toRecord(widget.state),
+            toRecord(root.state),
+            toRecord(structured.state),
+            toRecord(structuredResult.state),
+            toRecord(toolOutput.state),
+            toRecord(toolResponseMetadata.state),
+            toRecord(toRecord(toolResponseMetadata._meta).state),
+          ];
+          for (var i = 0; i < candidates.length; i += 1) {
+            if (Object.keys(candidates[i]).length > 0) return candidates[i];
+          }
+          return {};
+        }
+
+        function renderBootstrapPreview(rawPayload) {
+          var state = extractWidgetState(rawPayload);
+          var strings = toRecord(state.ui_strings);
+          if (Object.keys(strings).length === 0) return false;
+          runtime.state = state;
+          runtime.mode = "prestart";
+          runtime.actions = [];
+          runtime.textSubmit = null;
+          setHidden(ui.boot, true);
+          setHidden(ui.body, false);
+          setLoading(false);
+
+          var stepId = asText(state.current_step) || "step_0";
+          var sectionTitle = uiString(state, "sectionTitle." + stepId) || uiString(state, "title." + stepId) || stepId;
+          if (ui.status) ui.status.textContent = sectionTitle;
+          if (ui.meta) ui.meta.textContent = "prestart";
+          var uiSubtitleText = uiString(state, "uiSubtitle");
+          var byText = uiString(state, "byText");
+          if (ui.uiSubtitle) {
+            var subtitle = [byText, uiSubtitleText].filter(Boolean).join(" · ");
+            ui.uiSubtitle.textContent = subtitle;
+            setHidden(ui.uiSubtitle, subtitle.length === 0);
+          }
+
+          var bodyText = uiString(state, "step0.carddesc") || uiString(state, "prestart.headline") || uiString(state, "prestart.loading");
+          var promptText = uiString(state, "startHint");
+          if (ui.cardDesc) {
+            var prestartMarkup = prestartMarkupFromState(state);
+            ui.cardDesc.innerHTML = prestartMarkup || richHtmlFromText(bodyText);
+          }
+          if (ui.prompt) ui.prompt.textContent = promptText;
+          if (ui.card) ui.card.textContent = bodyText;
+          setHidden(ui.card, true);
+          setHidden(ui.cardDesc, !ui.cardDesc || ui.cardDesc.innerHTML.length === 0);
+          setHidden(ui.prompt, promptText.length === 0);
+          if (ui.actions) ui.actions.innerHTML = "";
+          if (ui.error) ui.error.textContent = "";
+          setHidden(ui.actions, true);
+          setHidden(ui.inputForm, true);
+          setHidden(ui.error, true);
+          return true;
         }
 
         function normalizeAction(raw, strings) {
@@ -1186,9 +623,6 @@
           var label = asText(action.label);
           var labelKey = asText(action.label_key);
           if (!label && labelKey) label = asText(strings[labelKey]);
-          if (!label && actionCode === "ACTION_START") {
-            label = fallbackStringsFromLang(preferredLanguage()).btnStart;
-          }
           if (!label) label = actionCode;
           return {
             actionCode: actionCode,
@@ -1203,35 +637,11 @@
           var strings = toRecord(state.ui_strings);
           var uiPayload = toRecord(result.ui);
           var actionContract = toRecord(uiPayload.action_contract);
-          var sourceActions = Array.isArray(actionContract.actions)
-            ? actionContract.actions
-            : (Array.isArray(uiPayload.actions) ? uiPayload.actions : []);
+          if (!Array.isArray(actionContract.actions)) return [];
           var out = [];
-          for (var i = 0; i < sourceActions.length; i += 1) {
-            var normalized = normalizeAction(sourceActions[i], strings);
+          for (var i = 0; i < actionContract.actions.length; i += 1) {
+            var normalized = normalizeAction(actionContract.actions[i], strings);
             if (normalized) out.push(normalized);
-          }
-          if (out.length === 0 && Array.isArray(uiPayload.action_codes)) {
-            for (var j = 0; j < uiPayload.action_codes.length; j += 1) {
-              var actionCode = asText(uiPayload.action_codes[j]).toUpperCase();
-              if (!actionCode) continue;
-              var label = "";
-              if (actionCode === "ACTION_START") {
-                label = fallbackStringsFromLang(preferredLanguage()).btnStart;
-              } else if (actionCode === "ACTION_STEP0_READY_START") {
-                label = asText(
-                  strings["menuLabel.STEP0_MENU_READY_START.ACTION_STEP0_READY_START"] ||
-                    strings.btnOk_step0_ready ||
-                    "Yes, I'm ready. Let's start!"
-                );
-              }
-              out.push({
-                actionCode: actionCode,
-                role: actionCode === "ACTION_START" ? "start" : "choice",
-                payloadMode: "none",
-                label: label || actionCode,
-              });
-            }
           }
           return out;
         }
@@ -1240,29 +650,12 @@
           return toRecord(globalThis.openai);
         }
 
-          async function callRunStep(message, extraState) {
-            var openai = openAiApi();
-            if (typeof openai.callTool !== "function") {
-              var actionCodeEcho = asText(message).trim().toUpperCase() || "TEXT_INPUT";
-              var livenessState = Object.assign({}, runtime.state, toRecord(extraState), {
-                ui_action_liveness_ack_status: "rejected",
-                ui_action_liveness_state_advanced: "false",
-                ui_action_liveness_reason_code: "transport_unavailable",
-                ui_action_liveness_failure_class: "rejected",
-                ui_action_liveness_action_code: actionCodeEcho,
-                ui_action_liveness_client_action_id: "",
-              });
-              runtime.state = livenessState;
-            if (typeof openai.setWidgetState === "function") {
-                openai.setWidgetState(livenessState);
-              }
-              if (ui.error) {
-                ui.error.textContent = fallbackStringsFromLang(preferredLanguage()).errorMessage;
-                setHidden(ui.error, false);
-              }
-              setLoading(false);
-              return;
-            }
+        async function callRunStep(message, extraState) {
+          var openai = openAiApi();
+          if (typeof openai.callTool !== "function") {
+            failClosed("transport_unavailable", {});
+            return;
+          }
           var nextState = Object.assign({}, runtime.state, toRecord(extraState));
           var payload = {
             current_step_id: asText(nextState.current_step) || "step_0",
@@ -1276,30 +669,17 @@
             ingest(response, "call_tool");
           } catch (error) {
             console.warn("[ui_call_failed]", { message: String(error && error.message ? error.message : error) });
-            if (ui.error) {
-              ui.error.textContent = fallbackStringsFromLang(preferredLanguage()).errorMessage;
-              setHidden(ui.error, false);
-            }
+            failClosed("call_failed", {});
           } finally {
             setLoading(false);
           }
         }
 
-        function step0ReadyLabel(state, action) {
-          var label = asText(toRecord(action).label);
-          if (label) return label;
-          return asText(
-            uiString(state, "menuLabel.STEP0_MENU_READY_START.ACTION_STEP0_READY_START") ||
-            uiString(state, "btnOk_step0_ready") ||
-            "Yes, I'm ready. Let's start!"
-          );
-        }
-
-        function renderActions(mode, stepId, state) {
-          if (ui.actions) ui.actions.innerHTML = "";
+        function renderActions(mode) {
+          if (!ui.actions) return;
+          ui.actions.innerHTML = "";
           var nonText = [];
           runtime.textSubmit = null;
-          runtime.step0ReadyActionCode = "";
           for (var i = 0; i < runtime.actions.length; i += 1) {
             var action = runtime.actions[i];
             if (action.role === "text_submit") {
@@ -1309,191 +689,97 @@
             nonText.push(action);
           }
 
-          var step0ReadyAction = null;
-          if (mode === "interactive" && stepId === "step_0") {
-            for (var j = 0; j < nonText.length; j += 1) {
-              if (nonText[j].actionCode === "ACTION_STEP0_READY_START") {
-                step0ReadyAction = nonText[j];
-                break;
-              }
-            }
+          for (var j = 0; j < nonText.length; j += 1) {
+            (function (action) {
+              var button = document.createElement("button");
+              button.type = "button";
+              button.textContent = action.label;
+              button.disabled = runtime.loading;
+              button.addEventListener("click", function () {
+                if (runtime.loading) return;
+                callRunStep(action.actionCode, {});
+              });
+              ui.actions.appendChild(button);
+            })(nonText[j]);
           }
 
-          var useStep0ReadyPath = Boolean(step0ReadyAction && nonText.length === 1);
-          if (useStep0ReadyPath) {
-            runtime.step0ReadyActionCode = asText(step0ReadyAction.actionCode);
-            if (ui.btnOk) {
-              ui.btnOk.textContent = step0ReadyLabel(state, step0ReadyAction);
-              ui.btnOk.disabled = runtime.loading;
-            }
-          } else if (ui.actions) {
-            for (var k = 0; k < nonText.length; k += 1) {
-              (function (action) {
-                var button = document.createElement("button");
-                button.type = "button";
-                button.textContent = action.label;
-                button.disabled = runtime.loading;
-                button.addEventListener("click", function () {
-                  if (runtime.loading) return;
-                  callRunStep(action.actionCode, {});
-                });
-                ui.actions.appendChild(button);
-              })(nonText[k]);
-            }
-          }
-
-          setHidden(ui.confirmActions, !useStep0ReadyPath);
-
-          var showActionButtons = !useStep0ReadyPath && nonText.length > 0;
+          var showActionButtons = nonText.length > 0;
           setHidden(ui.actions, !showActionButtons);
 
           var showInput = mode === "interactive" && runtime.textSubmit && runtime.textSubmit.payloadMode !== "scores";
-          if (runtime.textSubmit && runtime.textSubmit.payloadMode === "scores") showInput = false;
+          if (runtime.textSubmit && runtime.textSubmit.payloadMode === "scores") {
+            failClosed("unsupported_payload_mode_scores", { current_step: asText(runtime.state.current_step) || "" });
+            return;
+          }
 
           setHidden(ui.inputForm, !showInput);
           if (ui.inputSend) {
-            var submitLabel = runtime.textSubmit ? runtime.textSubmit.label : "";
-            ui.inputSend.textContent = "";
-            if (submitLabel) {
-              ui.inputSend.setAttribute("title", submitLabel);
-              ui.inputSend.setAttribute("aria-label", submitLabel);
-            } else {
-              ui.inputSend.removeAttribute("title");
-              ui.inputSend.removeAttribute("aria-label");
-            }
+            ui.inputSend.textContent = runtime.textSubmit ? runtime.textSubmit.label : "";
           }
         }
 
         function renderResult(result, source) {
           var state = toRecord(result.state);
-          var resultStrings = toRecord(result.ui_strings);
-          if (Object.keys(resultStrings).length > 0) {
-            state = Object.assign({}, state, {
-              ui_strings: Object.assign({}, resultStrings, toRecord(state.ui_strings)),
-            });
-          }
           var uiPayload = toRecord(result.ui);
           var view = toRecord(uiPayload.view);
-          var modeRaw = asText(view.mode).toLowerCase();
-          var mode =
-            modeRaw === "waiting_locale" || modeRaw === "recovery" || modeRaw === "blocked" || modeRaw === "failed"
-              ? "prestart"
-              : modeRaw;
-          if (!MODE_SET.has(mode)) mode = "prestart";
-          var localUi = fallbackStringsFromLang(
-            asText(state.language || state.ui_strings_lang || state.ui_strings_requested_lang || preferredLanguage())
-          );
+          var mode = asText(view.mode).toLowerCase();
+          if (!MODE_SET.has(mode)) {
+            failClosed("view_mode_missing", { source: source });
+            return;
+          }
 
           runtime.state = state;
           runtime.mode = mode;
           runtime.actions = parseActions(result);
+          setHidden(ui.boot, true);
+          setHidden(ui.body, false);
 
-          var stepText = asText(state.current_step || result.current_step_id) || "step_0";
-          var sectionTitleText =
-            asText(
-              uiString(state, "title." + stepText) ||
-              uiString(state, "sectionTitle." + stepText) ||
-              (stepText === "step_0"
-                ? uiString(state, "stepLabel.validation")
-                : uiString(state, "stepLabel." + stepText)) ||
-              stepText
-            );
-          if (ui.status) ui.status.textContent = stepText;
+          var stepId = asText(state.current_step);
+          var sectionTitle = stepId ? uiString(state, "sectionTitle." + stepId) : "";
+          var titleFallback = stepId ? uiString(state, "title." + stepId) : "";
+          if (ui.status) ui.status.textContent = sectionTitle || titleFallback || stepId || "";
           if (ui.meta) ui.meta.textContent = mode;
-          if (ui.sectionTitle) ui.sectionTitle.textContent = sectionTitleText;
-          setHidden(ui.sectionTitle, sectionTitleText.length === 0);
-          buildStepper(stepText, state, sectionTitleText);
-
-          var badgeText = deriveStepBadge(stepText);
-          if (ui.badge) ui.badge.textContent = badgeText;
-          setHidden(ui.badge, badgeText.length === 0);
-
-          var subtitle = uiString(state, "uiSubtitle") || uiString(state, "uiUseWidgetToContinue") || localUi.subtitle;
-          if (ui.uiSubtitle) ui.uiSubtitle.textContent = subtitle;
-          setHidden(ui.uiSubtitle, subtitle.length === 0);
-
-          var titleText = uiString(state, "uiTitle") || localUi.uiTitle;
-          if (titleText && ui.uiTitle) ui.uiTitle.textContent = titleText;
-          var byText = uiString(state, "byText") || uiString(state, "uiBylinePrefix") || localUi.byline;
-          if (byText && ui.byText) ui.byText.textContent = byText;
-
-          var specialist = toRecord(result.specialist);
-          var specialistBodyText = specialistBodyByPriority(specialist);
-          var bodyText = specialistBodyText || asText(result.text);
-          var promptText =
-            asText(specialist.question) ||
-            asText(result.prompt) ||
-            asText(toRecord(uiPayload.prompt).body);
-          if (mode === "interactive") {
-            bodyText = dedupeBodyAgainstPrompt(bodyText, promptText);
-          }
-          var prestartMarkup = "";
-          if (mode === "prestart") {
-            prestartMarkup = buildPrestartBodyMarkup(state, localUi);
-            var prestartBodyText = buildPrestartBodyText(state, localUi);
-            bodyText = prestartMarkup ? prestartBodyText : (specialistBodyText || asText(result.text) || prestartBodyText);
-            promptText = asText(uiString(state, "startHint") || localUi.startHint);
+          var uiSubtitleText = uiString(state, "uiSubtitle");
+          var byText = uiString(state, "byText");
+          if (ui.uiSubtitle) {
+            var subtitle = [byText, uiSubtitleText].filter(Boolean).join(" · ");
+            ui.uiSubtitle.textContent = subtitle;
+            setHidden(ui.uiSubtitle, subtitle.length === 0);
           }
 
-          if (mode === "interactive") {
-            var hasNonTextAction = false;
-            for (var ai = 0; ai < runtime.actions.length; ai += 1) {
-              if (runtime.actions[ai].role !== "text_submit") {
-                hasNonTextAction = true;
-                break;
-              }
-            }
-            if (!hasNonTextAction) {
-              var parsedChoices = extractChoicesFromPrompt(promptText);
-              var promptChoices = Array.isArray(parsedChoices.choices) ? parsedChoices.choices : [];
-              var uiActionCodes = Array.isArray(uiPayload.action_codes) ? uiPayload.action_codes : [];
-              var synthesizedChoices = [];
-              if (promptChoices.length > 0 && uiActionCodes.length === promptChoices.length) {
-                for (var pc = 0; pc < promptChoices.length; pc += 1) {
-                  var mappedCode = asText(uiActionCodes[pc]).toUpperCase();
-                  if (!mappedCode) continue;
-                  synthesizedChoices.push({
-                    actionCode: mappedCode,
-                    role: "choice",
-                    payloadMode: "none",
-                    label: asText(promptChoices[pc].label) || mappedCode,
-                  });
-                }
-              } else if (stepText === "step_0" && promptChoices.length === 1) {
-                synthesizedChoices.push({
-                  actionCode: "ACTION_STEP0_READY_START",
-                  role: "choice",
-                  payloadMode: "none",
-                  label: asText(promptChoices[0].label) || step0ReadyLabel(state, {}),
-                });
-              }
-              if (synthesizedChoices.length > 0) {
-                runtime.actions = runtime.actions.filter(function (action) {
-                  return action.role === "text_submit";
-                }).concat(synthesizedChoices);
-                promptText = asText(parsedChoices.promptShown);
-              }
+          var bodyText = bodyTextFromResult(result);
+          var promptText = asText(result.prompt);
+          if (mode === "prestart" && promptText.length === 0) {
+            promptText = uiString(state, "startHint");
+          }
+          if (ui.cardDesc) {
+            if (mode === "prestart") {
+              var prestartMarkup = prestartMarkupFromState(state);
+              ui.cardDesc.innerHTML = prestartMarkup || richHtmlFromText(bodyText);
+            } else {
+              ui.cardDesc.innerHTML = richHtmlFromText(bodyText);
             }
           }
-
-          if (mode === "interactive" && bodyText.length === 0 && promptText.length === 0) {
-            promptText =
-              uiString(state, "generic.choicePrompt.shareOrOption") ||
-              uiString(state, "step0.question.initial") ||
-              "Share your thoughts or choose an option.";
-          }
-          if (ui.cardDesc) ui.cardDesc.innerHTML = formatText(bodyText);
-          if (mode === "prestart" && ui.cardDesc && prestartMarkup) {
-            ui.cardDesc.innerHTML = prestartMarkup;
-          }
-          if (ui.card) ui.card.textContent = "";
+          if (ui.card) ui.card.textContent = bodyText;
           if (ui.prompt) ui.prompt.textContent = promptText;
-          setHidden(ui.cardDesc, bodyText.length === 0 && prestartMarkup.length === 0);
           setHidden(ui.card, true);
+          setHidden(ui.cardDesc, !ui.cardDesc || ui.cardDesc.innerHTML.length === 0);
           setHidden(ui.prompt, promptText.length === 0);
 
           var errorPayload = toRecord(result.error);
           var errorText = asText(errorPayload.user_message) || asText(errorPayload.message);
+          if (mode === "blocked" || mode === "failed") {
+            if (!errorText) {
+              failClosed("blocked_without_error_message", { mode: mode });
+              return;
+            }
+            if (ui.error) ui.error.textContent = errorText;
+            setHidden(ui.error, false);
+            setHidden(ui.actions, true);
+            setHidden(ui.inputForm, true);
+            setLoading(false);
+            return;
+          }
 
           if (mode === "prestart") {
             var hasStartAction = false;
@@ -1504,106 +790,53 @@
               }
             }
             if (!hasStartAction) {
-              runtime.actions.unshift({
-                actionCode: "ACTION_START",
-                role: "start",
-                payloadMode: "none",
-                label: uiString(state, "btnStart") || localUi.btnStart,
-              });
+              failClosed("prestart_missing_start_action", { current_step: asText(state.current_step) || "" });
+              return;
             }
+          }
+
+          if (mode === "interactive" && runtime.actions.length === 0) {
+            failClosed("interactive_missing_actions", { current_step: asText(state.current_step) || "" });
+            return;
+          }
+
+          if ((mode === "interactive" || mode === "prestart") && bodyText.length === 0 && promptText.length === 0) {
+            failClosed("missing_render_text", { mode: mode, current_step: asText(state.current_step) || "" });
+            return;
           }
 
           setHidden(ui.error, true);
 
-          renderActions(mode, stepText, state);
+          if (mode === "waiting_locale" || mode === "recovery") {
+            setHidden(ui.actions, true);
+            setHidden(ui.inputForm, true);
+          } else {
+            renderActions(mode);
+          }
 
-          runtime.hasRendered = true;
           setLoading(false);
-        }
-
-        function buildLocalPrestartResult() {
-          var lang = asText(preferredLanguage() || "en").toLowerCase() || "en";
-          return {
-            current_step_id: "step_0",
-            text: "",
-            prompt: "",
-            specialist: {
-              action: "ASK",
-              message: "",
-              question: "",
-              refined_formulation: "",
-            },
-            state: {
-              current_step: "step_0",
-              started: "false",
-              language: lang,
-              ui_strings_requested_lang: lang,
-              ui_strings_lang: lang,
-              ui_strings: {},
-            },
-            ui: {
-              view: {
-                mode: "prestart",
-              },
-            },
-          };
         }
 
         function ingest(rawPayload, source) {
           var result = extractWidgetResult(rawPayload);
           if (Object.keys(result).length === 0) {
-            console.warn("[ui_ingest_payload_missing_widget_result]", { source: source });
-            if (!runtime.hasRendered) {
-              renderResult(buildLocalPrestartResult(), source + "_local_prestart");
-            }
+            if (renderBootstrapPreview(rawPayload)) return;
+            failClosed("widget_result_missing", { source: source });
             return;
           }
           renderResult(result, source);
         }
 
-        function resolveNotificationEvent(detailRaw) {
-          var detail = toRecord(detailRaw);
-          var payload = detail.params || {};
-          var hasResultInParams = Object.keys(extractWidgetResult(payload)).length > 0;
-          if (hasResultInParams) {
-            return {
-              renderable: true,
-              reason: "notification_params_payload",
-              source: "openai_notification_method",
-              payload: payload,
-            };
-          }
-          if (Object.keys(extractWidgetResult(detail)).length > 0) {
-            return {
-              renderable: true,
-              reason: "notification_detail_payload",
-              source: "openai_notification_method",
-              payload: detail,
-            };
-          }
-
-          return {
-            renderable: false,
-            reason: "notification_payload_missing",
-            source: "openai_notification_method",
-            payload: {},
-          };
-        }
-
         function onSubmit(event) {
           event.preventDefault();
           if (runtime.loading) return;
+          if (!runtime.textSubmit) {
+            failClosed("text_submit_missing", { mode: runtime.mode || "" });
+            return;
+          }
           var message = asText(ui.inputText ? ui.inputText.value : "");
           if (!message) return;
-          if (ui.inputText) ui.inputText.value = "";
           callRunStep(message, {});
-        }
-
-        function onConfirmReadyClick() {
-          if (runtime.loading) return;
-          var actionCode = asText(runtime.step0ReadyActionCode);
-          if (!actionCode) return;
-          callRunStep(actionCode, {});
         }
 
         function readInitialToolOutput() {
@@ -1617,33 +850,44 @@
           };
         }
 
-        function ingestSetGlobalsPayload() {
+        window.addEventListener("openai:set_globals", function () {
           var payload = readInitialToolOutput();
           ingest(payload, "set_globals");
-        }
-
-        window.addEventListener("openai:set_globals", function () {
-          ingestSetGlobalsPayload();
         });
 
         window.addEventListener("openai:notification", function (event) {
           var detail = toRecord(event && event.detail);
-          var resolved = resolveNotificationEvent(detail);
-          if (!resolved.renderable) {
+          var method = asText(detail.method);
+          var params = toRecord(detail.params);
+          if (method !== "ui/notifications/tool-result") {
+            if (Object.keys(extractWidgetResult(params)).length > 0) {
+              console.warn("[ui_notification_method_gate]", {
+                reason: "notification_renderable_params_without_tool_result_method",
+                method: method,
+              });
+              ingest(params, "notification_method_mismatch_params");
+              return;
+            }
+            if (Object.keys(extractWidgetResult(detail)).length > 0) {
+              console.warn("[ui_notification_method_gate]", {
+                reason: "notification_renderable_detail_without_tool_result_method",
+                method: method,
+              });
+              ingest(detail, "notification_method_mismatch_detail");
+            }
             return;
           }
-          ingest(resolved.payload, resolved.source);
+          var payload = params.toolOutput || params.payload || params.data || detail.toolOutput || detail.payload || detail.data || {};
+          ingest(payload, "notification");
         });
 
         if (ui.inputForm) {
           ui.inputForm.addEventListener("submit", onSubmit);
         }
-        if (ui.btnOk) {
-          ui.btnOk.addEventListener("click", onConfirmReadyClick);
-        }
 
-          ingestSetGlobalsPayload();
-        })();
-      </script>
-    </body>
-  </html>
+        var initialPayload = readInitialToolOutput();
+        ingest(initialPayload, "initial");
+      })();
+    </script>
+  </body>
+</html>
