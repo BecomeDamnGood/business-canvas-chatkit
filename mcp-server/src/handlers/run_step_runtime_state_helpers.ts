@@ -23,6 +23,7 @@ type CreateRunStepRuntimeStateHelpersDeps = {
   parseListItems: (value: string) => string[];
   canonicalizeComparableText: (value: string) => string;
   getFinalsSnapshot: (state: CanvasState) => Record<string, string>;
+  uiDefaultString: (key: string, fallback?: string) => string;
 };
 
 /**
@@ -51,6 +52,35 @@ export const RECAP_INSTRUCTION = `UNIVERSAL RECAP (every step)
 - When wants_recap=false: behave as usual.`;
 
 export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeStateHelpersDeps) {
+  function localizedUiString(
+    state: CanvasState | null | undefined,
+    key: string,
+    fallback: string
+  ): string {
+    const map = state && typeof (state as Record<string, unknown>).ui_strings === "object"
+      ? ((state as Record<string, unknown>).ui_strings as Record<string, unknown>)
+      : null;
+    if (map) {
+      const candidate = String(map[key] || "").trim();
+      if (candidate) return candidate;
+    }
+    return String(fallback || "").trim();
+  }
+
+  function wordingStepLabelKey(stepId: string): string {
+    if (stepId === deps.dreamStepId) return "offtopic.step.dream";
+    if (stepId === deps.purposeStepId) return "offtopic.step.purpose";
+    if (stepId === deps.bigwhyStepId) return "offtopic.step.bigwhy";
+    if (stepId === deps.roleStepId) return "offtopic.step.role";
+    if (stepId === deps.entityStepId) return "offtopic.step.entity";
+    if (stepId === deps.strategyStepId) return "offtopic.step.strategy";
+    if (stepId === deps.targetgroupStepId) return "offtopic.step.targetgroup";
+    if (stepId === deps.productsservicesStepId) return "offtopic.step.productsservices";
+    if (stepId === deps.rulesofthegameStepId) return "offtopic.step.rulesofthegame";
+    if (stepId === deps.presentationStepId) return "offtopic.step.presentation";
+    return "";
+  }
+
   function isBulletConsistencyStep(stepId: string): boolean {
     return (
       stepId === deps.strategyStepId ||
@@ -300,17 +330,13 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     return false;
   }
 
-  function wordingStepLabel(stepId: string): string {
-    if (stepId === deps.dreamStepId) return "Dream";
-    if (stepId === deps.purposeStepId) return "Purpose";
-    if (stepId === deps.bigwhyStepId) return "Big Why";
-    if (stepId === deps.roleStepId) return "Role";
-    if (stepId === deps.entityStepId) return "Entity";
-    if (stepId === deps.strategyStepId) return "Strategy";
-    if (stepId === deps.targetgroupStepId) return "Target Group";
-    if (stepId === deps.productsservicesStepId) return "Products and Services";
-    if (stepId === deps.rulesofthegameStepId) return "Rules of the game";
-    if (stepId === deps.presentationStepId) return "Presentation";
+  function wordingStepLabel(stepId: string, state?: CanvasState | null): string {
+    const key = wordingStepLabelKey(stepId);
+    if (key) {
+      const fallback = deps.uiDefaultString(key, "step");
+      const localized = localizedUiString(state || null, key, fallback);
+      if (localized) return localized;
+    }
     return "step";
   }
 
@@ -325,13 +351,25 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       if (parsedName && parsedName !== "TBD") return parsedName;
     }
 
-    return "my future company";
+    return localizedUiString(
+      state,
+      "offtopic.companyFallback",
+      deps.uiDefaultString("offtopic.companyFallback")
+    );
   }
 
   function wordingSelectionMessage(stepId: string, state: CanvasState, activeSpecialist = ""): string {
     const specialist = String(activeSpecialist || (state as any)?.active_specialist || "").trim();
     if (stepId === deps.dreamStepId && specialist === deps.dreamExplainerSpecialist) return "";
-    return `Your current ${wordingStepLabel(stepId)} for ${wordingCompanyName(state)} is:`;
+    const template = localizedUiString(
+      state,
+      "offtopic.current.template",
+      deps.uiDefaultString("offtopic.current.template")
+    );
+    return String(template || "")
+      .replace(/\{0\}/g, wordingStepLabel(stepId, state))
+      .replace(/\{1\}/g, wordingCompanyName(state))
+      .trim();
   }
 
   /** Only flag explicit injection markers; never flag bullets/requirements/goals (business brief). */

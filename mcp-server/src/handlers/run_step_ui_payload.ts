@@ -338,6 +338,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     }
     const contractMeta = normalizeUiContractMeta(specialist, contractMetaOverride);
     const rawQuestionText = deps.pickPrompt(specialist);
+    const questionText = deps.buildQuestionTextFromActions(rawQuestionText);
     void renderedActionsOverride;
     const effectiveState = (stateOverride && typeof stateOverride === "object" ? stateOverride : null) as
       | CanvasState
@@ -392,7 +393,6 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       }
       if (safeOverrideCodes.length > 0) {
         const renderedActions = deps.buildRenderedActionsFromMenu(contractMenuId, safeOverrideCodes, effectiveState);
-        const questionText = deps.buildQuestionTextFromActions(rawQuestionText);
         return {
           action_codes: safeOverrideCodes,
           expected_choice_count: safeOverrideCodes.length,
@@ -408,6 +408,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       }
       if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
         return {
+          ...(questionText ? { questionText } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -444,6 +445,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         if (safeCodes.length === 0) {
           if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
             return {
+              ...(questionText ? { questionText } : {}),
               ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
               ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
               ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -455,7 +457,6 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           return undefined;
         }
         const renderedActions = deps.buildRenderedActionsFromMenu(menuId, safeCodes, effectiveState);
-        const questionText = deps.buildQuestionTextFromActions(rawQuestionText);
         return {
           action_codes: safeCodes,
           expected_choice_count: safeCodes.length,
@@ -472,6 +473,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     }
     if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
       return {
+        ...(questionText ? { questionText } : {}),
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),

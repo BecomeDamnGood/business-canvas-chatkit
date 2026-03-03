@@ -20,6 +20,7 @@ type EquivalentWordingVariantsParams = {
 
 type BuildWordingChoiceFromTurnParams = {
   stepId: string;
+  state: CanvasState;
   activeSpecialist: string;
   previousSpecialist: Record<string, unknown>;
   specialistResult: Record<string, unknown>;
@@ -93,6 +94,11 @@ function toTrimmedStringArray(input: unknown): string[] {
 }
 
 export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
+  function wordingInstructionForState(state: CanvasState | null | undefined): string {
+    const fallback = deps.uiDefaultString("wordingChoiceInstruction");
+    return deps.uiStringFromStateMap(state, "wordingChoiceInstruction", fallback);
+  }
+
   function isWordingChoiceEligibleStep(stepId: string): boolean {
     return String(stepId || "").trim() !== deps.step0Id;
   }
@@ -412,24 +418,23 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     activeSpecialist = "",
     telemetry?: unknown
   ): string {
+    const ackDefault = deps.uiDefaultString("wording.feedback.user_pick.ack.default");
     const acknowledgment = normalizeCompactFeedbackSentence(
       deps.uiStringFromStateMap(
         state,
         "wording.feedback.user_pick.ack.default",
-        deps.uiDefaultString("wording.feedback.user_pick.ack.default", "You chose your own wording, and that's okay.")
+        ackDefault
       ),
-      "You chose your own wording, and that's okay."
+      ackDefault
     );
+    const reasonDefault = deps.uiDefaultString("wording.feedback.user_pick.reason.default");
     const fallbackReason = normalizeCompactFeedbackSentence(
       deps.uiStringFromStateMap(
         state,
         "wording.feedback.user_pick.reason.default",
-        deps.uiDefaultString(
-          "wording.feedback.user_pick.reason.default",
-          "This keeps your original meaning while staying aligned with this step."
-        )
+        reasonDefault
       ),
-      "This keeps your original meaning while staying aligned with this step."
+      reasonDefault
     );
     let reason = fallbackReason;
     if (deps.isUiWordingFeedbackKeyedV1Enabled()) {
@@ -534,6 +539,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
   } {
     const {
       stepId,
+      state,
       activeSpecialist,
       previousSpecialist,
       specialistResult,
@@ -662,7 +668,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       suggestion_text: suggestionRaw,
       user_items: effectiveUserItems,
       suggestion_items: suggestionItems,
-      instruction: deps.uiDefaultString("wordingChoiceInstruction", "Please click what suits you best."),
+      instruction: wordingInstructionForState(state),
     };
     return { specialist: enriched, wordingChoice };
   }
@@ -764,6 +770,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
 
   function buildWordingChoiceFromPendingSpecialist(
     specialist: Record<string, unknown>,
+    state: CanvasState | null | undefined,
     activeSpecialist: string,
     previousSpecialist?: Record<string, unknown>,
     stepIdHint = "",
@@ -793,7 +800,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       suggestion_text: String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim(),
       user_items: userItems,
       suggestion_items: suggestionItems,
-      instruction: deps.uiDefaultString("wordingChoiceInstruction", "Please click what suits you best."),
+      instruction: wordingInstructionForState(state),
     };
   }
 

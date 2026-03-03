@@ -432,6 +432,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     ) {
       const rebuilt = deps.buildWordingChoiceFromTurn({
         stepId: currentStepForWordingChoice,
+        state: nextState,
         activeSpecialist: currentSpecialistForWordingChoice,
         previousSpecialist: previousSpecialistForWordingChoice,
         specialistResult,
@@ -453,6 +454,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       const pendingChoice = pendingEligible
         ? deps.buildWordingChoiceFromPendingSpecialist(
             specialistResult,
+            nextState,
             String(asStateRecord(nextState).active_specialist || ""),
             previousSpecialistForWordingChoice,
             String(asStateRecord(nextState).current_step || ""),

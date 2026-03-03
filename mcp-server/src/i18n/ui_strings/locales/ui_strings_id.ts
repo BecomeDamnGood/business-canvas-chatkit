@@ -130,7 +130,7 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "offtopic.companyFallback": "perusahaan masa depan saya",
     "offtopic.current.template": "{0} saat ini dari {1} adalah.",
     "offtopic.redirect.template": "Mari lanjutkan dengan {0} dari {1}.",
-    "offtopic.step.bigwhy": "Big Why",
+    "offtopic.step.bigwhy": "Alasan Utama",
     "offtopic.step.dream": "Mimpi",
     "offtopic.step.entity": "Entitas",
     "offtopic.step.presentation": "Presentasi",

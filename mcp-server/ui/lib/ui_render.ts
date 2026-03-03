@@ -135,8 +135,33 @@ export function dedupeBodyAgainstPrompt(bodyRaw: string, promptRaw: string): str
   return rest.replace(/^\s+/, "");
 }
 
-export function stripStructuredChoiceLines(promptRaw: string): string {
-  return String(promptRaw || "").trim();
+function normalizeChoiceLine(value: string): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.!?]+$/g, "")
+    .trim();
+}
+
+export function stripStructuredChoiceLines(promptRaw: string, lang?: string | null): string {
+  const blockedLines = [
+    t(lang, "wordingChoiceInstruction"),
+    t(lang, "invariant.prompt.ask.default"),
+    t(lang, "generic.choicePrompt.shareOrOption"),
+    t(lang, "wording.choice.context.default"),
+  ]
+    .map((line) => normalizeChoiceLine(line))
+    .filter(Boolean);
+  const blockedSet = new Set(blockedLines);
+  const kept = String(promptRaw || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean)
+    .filter((line) => !/^\d+[\)\.]\s+/.test(line))
+    .filter((line) => !blockedSet.has(normalizeChoiceLine(line)));
+  return kept.join("\n").trim();
 }
 
 function setStaticStrings(lang: string): void {
@@ -785,8 +810,7 @@ export function render(overrideToolOutput?: unknown): void {
       String(specialist.question || "").trim() ||
       (current === "step_0"
         ? uiText(lang, "step0.question.initial", "")
-        : uiText(lang, "invariant.prompt.ask.default", "")) ||
-      "Share your thoughts or choose an option."
+        : uiText(lang, "invariant.prompt.ask.default", ""))
     ).trim();
     if (!hasBodyContent && fallbackBody) {
       body = fallbackBody;
@@ -1163,8 +1187,11 @@ export function render(overrideToolOutput?: unknown): void {
 
   let choicesArr: Choice[] = [];
   let promptText = isDreamDirectionView ? "" : promptSource;
-  if (hasStructuredActions) {
-    promptText = isDreamDirectionView ? "" : stripStructuredChoiceLines(promptSource);
+  const shouldStripStructuredPrompt = isViewModeWordingChoice || !hasStructuredActions;
+  if (shouldStripStructuredPrompt) {
+    promptText = isDreamDirectionView ? "" : stripStructuredChoiceLines(promptSource, lang);
+  } else if (hasStructuredActions) {
+    promptText = isDreamDirectionView ? "" : promptSource;
   } else {
     choicesArr = [];
     promptText = isDreamDirectionView ? "" : promptSource;

@@ -130,7 +130,7 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "offtopic.companyFallback": "나의 미래 회사",
     "offtopic.current.template": "{1}의 현재 {0}은(는)",
     "offtopic.redirect.template": "{1}의 {0}(으)로 계속하겠습니다.",
-    "offtopic.step.bigwhy": "Big Why",
+    "offtopic.step.bigwhy": "큰 이유",
     "offtopic.step.dream": "꿈",
     "offtopic.step.entity": "엔터티",
     "offtopic.step.presentation": "프레젠테이션",

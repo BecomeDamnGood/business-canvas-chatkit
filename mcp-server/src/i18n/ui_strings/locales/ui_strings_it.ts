@@ -130,7 +130,7 @@ export const UI_STRINGS_LOCALE_IT: Record<string, string> = {
     "offtopic.companyFallback": "la mia futura azienda",
     "offtopic.current.template": "L’attuale {0} di {1} è.",
     "offtopic.redirect.template": "Continuiamo con il/la {0} di {1}.",
-    "offtopic.step.bigwhy": "Big Why",
+    "offtopic.step.bigwhy": "Motivazione Profonda",
     "offtopic.step.dream": "Sogno",
     "offtopic.step.entity": "Entità",
     "offtopic.step.presentation": "Presentazione",

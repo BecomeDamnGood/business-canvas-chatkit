@@ -162,26 +162,33 @@ function menuBelongsToStep(menuId: string, stepId: string): boolean {
   });
 }
 
-function buildNumberedPrompt(labels: string[], headline: string): string {
-  const numbered = labels.map((label, idx) => `${idx + 1}) ${label}`);
-  if (!numbered.length) return headline;
-  return `${numbered.join("\n")}\n\n${headline}`.trim();
+function normalizeChoiceLine(value: string): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/[.!?]+$/g, "")
+    .trim();
 }
 
-function stripStructuredChoiceLinesForPrompt(promptRaw: string): string {
-  const chooserNoise = [
-    /^(please\s+)?(choose|pick|select)\s+\d+(?:\s*(?:,|\/|or|and)\s*\d+)*\.?$/i,
-    /^(please\s+)?(choose|pick|select)\s+an?\s+option(\s+below)?\.?$/i,
-    /^(please\s+)?(choose|pick|select)\s+one\s+of\s+the\s+options(\s+below)?\.?$/i,
-    /^choose\s+an?\s+option\s+by\s+typing\s+.+$/i,
-  ];
+function stripStructuredChoiceLinesForPrompt(promptRaw: string, state: CanvasState): string {
+  const blockedSet = new Set(
+    [
+      uiStringFromState(state, "wordingChoiceInstruction", ""),
+      uiStringFromState(state, "invariant.prompt.ask.default", ""),
+      uiStringFromState(state, "generic.choicePrompt.shareOrOption", ""),
+      uiStringFromState(state, "wording.choice.context.default", ""),
+    ]
+      .map((line) => normalizeChoiceLine(line))
+      .filter(Boolean)
+  );
   const kept = String(promptRaw || "")
     .replace(/\r/g, "\n")
     .split("\n")
     .map((line) => String(line || "").trim())
     .filter(Boolean)
     .filter((line) => !/^[1-9][\)\.]\s*/.test(line))
-    .filter((line) => !chooserNoise.some((pattern) => pattern.test(line)));
+    .filter((line) => !blockedSet.has(normalizeChoiceLine(line)));
   return kept.join("\n").trim();
 }
 
@@ -875,9 +882,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       !String(step0Headline || "").trim()
         ? interactiveAskPromptFallback(state, stepId)
         : step0Headline;
-    const step0Question = step0ActionCodes.length > 0
-      ? buildNumberedPrompt(step0Labels, step0HeadlineSafe)
-      : step0HeadlineSafe;
+    const step0Question = step0HeadlineSafe;
     const step0ContractId = buildContractId(stepId, effectiveStatus, step0MenuId);
     const step0TextKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId: step0MenuId });
     const step0Specialist: Record<string, unknown> = {
@@ -931,7 +936,10 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     activeSpecialist === "DreamExplainer" &&
     !isOfftopic &&
     menuId === "DREAM_EXPLAINER_MENU_SWITCH_SELF"
-      ? stripStructuredChoiceLinesForPrompt(String((specialistForDisplay as any).question || "").trim())
+      ? stripStructuredChoiceLinesForPrompt(
+          String((specialistForDisplay as any).question || "").trim(),
+          state
+        )
       : "";
   const fallbackPrompt =
     isSemanticInvariantsV1Enabled() &&
@@ -939,7 +947,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !String(headline || "").trim()
       ? interactiveAskPromptFallback(state, stepId)
       : "";
-  const question = buildNumberedPrompt(safeLabels, dreamExplainerPrompt || headline || fallbackPrompt);
+  const question = stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
   const contractId = buildContractId(stepId, effectiveStatus, menuId);
   const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
   const wordingPending = String((specialistForDisplay as any).wording_choice_pending || "").trim() === "true";
@@ -948,7 +956,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       ? uiStringFromState(
           state,
           "wording.choice.context.default",
-          "Please choose the wording that fits best."
+          ""
         )
       : message;
 

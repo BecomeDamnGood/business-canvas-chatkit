@@ -3585,8 +3585,19 @@
       el.appendChild(s);
     }
   }
-  function stripStructuredChoiceLines(promptRaw) {
-    return String(promptRaw || "").trim();
+  function normalizeChoiceLine(value) {
+    return String(value || "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!?]+$/g, "").trim();
+  }
+  function stripStructuredChoiceLines(promptRaw, lang) {
+    const blockedLines = [
+      t(lang, "wordingChoiceInstruction"),
+      t(lang, "invariant.prompt.ask.default"),
+      t(lang, "generic.choicePrompt.shareOrOption"),
+      t(lang, "wording.choice.context.default")
+    ].map((line) => normalizeChoiceLine(line)).filter(Boolean);
+    const blockedSet = new Set(blockedLines);
+    const kept = String(promptRaw || "").replace(/\r/g, "\n").split("\n").map((line) => String(line || "").trim()).filter(Boolean).filter((line) => !/^\d+[\)\.]\s+/.test(line)).filter((line) => !blockedSet.has(normalizeChoiceLine(line)));
+    return kept.join("\n").trim();
   }
   function setStaticStrings(lang) {
     const uiSubtitle = document.getElementById("uiSubtitle");
@@ -4426,8 +4437,11 @@
     }
     let choicesArr = [];
     let promptText = isDreamDirectionView ? "" : promptSource;
-    if (hasStructuredActions) {
-      promptText = isDreamDirectionView ? "" : stripStructuredChoiceLines(promptSource);
+    const shouldStripStructuredPrompt = isViewModeWordingChoice || !hasStructuredActions;
+    if (shouldStripStructuredPrompt) {
+      promptText = isDreamDirectionView ? "" : stripStructuredChoiceLines(promptSource, lang);
+    } else if (hasStructuredActions) {
+      promptText = isDreamDirectionView ? "" : promptSource;
     } else {
       choicesArr = [];
       promptText = isDreamDirectionView ? "" : promptSource;

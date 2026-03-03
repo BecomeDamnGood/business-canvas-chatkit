@@ -99,6 +99,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ) => boolean;
     buildWordingChoiceFromPendingSpecialist: (
       specialistResult: Record<string, unknown>,
+      state: CanvasState | null | undefined,
       activeSpecialist: string,
       previousSpecialist: Record<string, unknown>,
       stepId: string,
@@ -118,6 +119,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     isRefineAdjustRouteToken: (raw: string) => boolean;
     buildWordingChoiceFromTurn: (params: {
       stepId: string;
+      state: CanvasState;
       activeSpecialist: string;
       previousSpecialist: Record<string, unknown>;
       specialistResult: Record<string, unknown>;
@@ -223,15 +225,17 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         action.getDreamRuntimeMode(state)
       )
     ) {
+      const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
+      state = stateWithUi;
       const pendingSpecialist = { ...prev };
       const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
         pendingSpecialist,
+        stateWithUi,
         String((state as Record<string, unknown>).active_specialist || ""),
         prev,
         stepId,
         action.getDreamRuntimeMode(state)
       );
-      const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
       const payload = behavior.attachRegistryPayload(
         {
           ok: true,
@@ -417,6 +421,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     (!isGeneralOfftopicInput || shouldKeepPendingOnOfftopic)
   ) {
     const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
+    state = stateWithUi;
     let pendingSpecialist = {
       ...pendingBeforeTurn,
       ...(isGeneralOfftopicInput ? { is_offtopic: true } : {}),
@@ -441,6 +446,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
 
     const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
       pendingSpecialist,
+      stateWithUi,
       String((state as Record<string, unknown>).active_specialist || ""),
       pendingBeforeTurn,
       String(state.current_step || ""),
@@ -483,11 +489,16 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     };
   }
 
+  let stateForWordingSelection = state;
+  if (runtime.wordingChoiceEnabled && wording.isWordingPickRouteToken(userMessage)) {
+    stateForWordingSelection = await behavior.ensureUiStrings(stateForWordingSelection, userMessage);
+    state = stateForWordingSelection;
+  }
   const wordingSelection = runtime.wordingChoiceEnabled
     ? wording.applyWordingPickSelection({
-        stepId: String(state.current_step ?? ""),
+        stepId: String(stateForWordingSelection.current_step ?? ""),
         routeToken: userMessage,
-        state,
+        state: stateForWordingSelection,
         telemetry: runtime.uiI18nTelemetry,
       })
     : {
@@ -499,6 +510,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
 
   if (wordingSelection.handled) {
     const stateWithUi = await behavior.ensureUiStrings(wordingSelection.nextState, userMessage);
+    state = stateWithUi;
     const payload = behavior.attachRegistryPayload(
       {
         ok: true,
@@ -527,10 +539,13 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
 
   const refineAdjustTurn = wording.isRefineAdjustRouteToken(userMessage);
   if (refineAdjustTurn && runtime.wordingChoiceEnabled && runtime.inputMode === "widget") {
+    const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
+    state = stateWithUi;
     const prev =
       ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
     const rebuilt = wording.buildWordingChoiceFromTurn({
       stepId: String(state.current_step || ""),
+      state,
       activeSpecialist: String((state as Record<string, unknown>).active_specialist || ""),
       previousSpecialist: prev,
       specialistResult: prev,
@@ -541,7 +556,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     if (rebuilt.wordingChoice) {
       const pendingSpecialist = { ...rebuilt.specialist };
       (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
-      const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
       const payload = behavior.attachRegistryPayload(
         {
           ok: true,

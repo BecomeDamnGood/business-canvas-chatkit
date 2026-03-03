@@ -130,7 +130,7 @@ export const UI_STRINGS_LOCALE_ZH_HANS: Record<string, string> = {
     "offtopic.companyFallback": "我未来的公司",
     "offtopic.current.template": "{1} 当前的 {0} 是。",
     "offtopic.redirect.template": "让我们继续 {1} 的 {0}。",
-    "offtopic.step.bigwhy": "Big Why",
+    "offtopic.step.bigwhy": "核心缘由",
     "offtopic.step.dream": "梦想",
     "offtopic.step.entity": "实体",
     "offtopic.step.presentation": "演示文稿",

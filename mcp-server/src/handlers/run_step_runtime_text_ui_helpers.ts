@@ -192,11 +192,29 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
   }
 
   function stripNumberedOptions(prompt: string): string {
+    const normalizeLine = (value: string): string =>
+      String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .replace(/[.!?]+$/g, "")
+        .trim();
+    const blockedSet = new Set(
+      [
+        deps.uiDefaultString("wordingChoiceInstruction"),
+        deps.uiDefaultString("invariant.prompt.ask.default"),
+        deps.uiDefaultString("generic.choicePrompt.shareOrOption"),
+        deps.uiDefaultString("wording.choice.context.default"),
+      ]
+        .map((line) => normalizeLine(line))
+        .filter(Boolean)
+    );
     const kept = String(prompt || "")
       .split(/\r?\n/)
       .map((line) => String(line || "").trim())
       .filter(Boolean)
-      .filter((line) => !/^[1-9][\)\.]\s+/.test(line));
+      .filter((line) => !/^[1-9][\)\.]\s+/.test(line))
+      .filter((line) => !blockedSet.has(normalizeLine(line)));
     return kept.join("\n").trim();
   }
 

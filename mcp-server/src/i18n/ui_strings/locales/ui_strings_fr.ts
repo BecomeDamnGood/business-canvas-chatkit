@@ -201,7 +201,7 @@ export const UI_STRINGS_LOCALE_FR: Record<string, string> = {
     "step0.readiness.statement.existing": "Tu as un(e) {0} appelé(e) {1}.",
     "step0.readiness.statement.starting": "Tu veux créer un(e) {0} appelé(e) {1}.",
     "step0.readiness.suffix": "Es-tu prêt(e) à commencer par la première étape : Dream ?",
-    "stepLabel.validation": "Validation",
+    "stepLabel.validation": "Vérification",
     "strategy.current.template": "Votre stratégie actuelle pour {0} est :",
     "strategy.focuspoints.count.template": "Vous avez maintenant {0} points de focus dans votre stratégie. Je vous conseille d’en formuler au moins 4 et au maximum 7.",
     "strategy.focuspoints.warning.template": "Je vous conseille vivement de n’ajouter au maximum que 7 points de focus. Voulez-vous que je les consolide pour vous ?",

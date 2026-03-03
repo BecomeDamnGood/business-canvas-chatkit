@@ -210,6 +210,7 @@ const runtimeStateHelpers = createRunStepRuntimeStateHelpers({
   parseListItems,
   canonicalizeComparableText,
   getFinalsSnapshot,
+  uiDefaultString,
 });
 const {
   FINAL_FIELD_BY_STEP_ID,

@@ -130,7 +130,7 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "offtopic.companyFallback": "私の将来の会社",
     "offtopic.current.template": "{1} の現在の {0} は。",
     "offtopic.redirect.template": "{1} の {0} を続けましょう。",
-    "offtopic.step.bigwhy": "Big Why",
+    "offtopic.step.bigwhy": "大きな理由",
     "offtopic.step.dream": "夢",
     "offtopic.step.entity": "エンティティ",
     "offtopic.step.presentation": "プレゼンテーション",

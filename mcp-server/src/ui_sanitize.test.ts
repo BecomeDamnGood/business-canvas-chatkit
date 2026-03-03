@@ -379,14 +379,12 @@ test("renderStructuredText renders markdown image lines as card images", { concu
 
 test("bundled runtime renders rich body into cardDesc via formatter and keeps unsafe targets out of innerHTML", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /function escapeHtml\(text\) \{/);
-  assert.match(source, /function formatText\(text\) \{/);
-  assert.match(source, /function richHtmlFromText\(text\) \{/);
-  assert.match(source, /ui\.cardDesc\.innerHTML = prestartMarkup \|\| richHtmlFromText\(bodyText\);/);
-  assert.match(source, /ui\.cardDesc\.innerHTML = richHtmlFromText\(bodyText\);/);
-  assert.match(source, /if \(ui\.prompt\) ui\.prompt\.textContent = promptText;/);
-  assert.match(source, /ui\.actions\.innerHTML = "";/);
-  assert.doesNotMatch(source, /ui\.card\.innerHTML\s*=/);
-  assert.doesNotMatch(source, /ui\.prompt\.innerHTML\s*=/);
-  assert.doesNotMatch(source, /ui\.error\.innerHTML\s*=/);
+  assert.match(source, /function escapeHtml\(/);
+  assert.match(source, /function renderInlineText\(/);
+  assert.match(source, /function renderStructuredText\(/);
+  assert.match(source, /renderStructuredText\(cardDescEl,\s*body \|\| ""\);/);
+  assert.match(source, /renderInlineText\(promptEl,\s*promptText \|\| ""\);/);
+  assert.match(source, /choiceWrap\.innerHTML = "";/);
+  assert.doesNotMatch(source, /(?:ui\.prompt|promptEl)\.innerHTML\s*=/);
+  assert.doesNotMatch(source, /(?:ui\.error|errorEl)\.innerHTML\s*=/);
 });

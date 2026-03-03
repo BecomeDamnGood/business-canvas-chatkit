@@ -286,6 +286,7 @@ export type RunStepPipelineWordingPorts = {
   ) => boolean;
   buildWordingChoiceFromTurn: (params: {
     stepId: string;
+    state: CanvasState;
     activeSpecialist: string;
     previousSpecialist: Record<string, unknown>;
     specialistResult: Record<string, unknown>;
@@ -299,6 +300,7 @@ export type RunStepPipelineWordingPorts = {
   };
   buildWordingChoiceFromPendingSpecialist: (
     specialistResult: any,
+    state: CanvasState | null | undefined,
     activeSpecialist: string,
     previousSpecialist: Record<string, unknown>,
     stepId: string,
