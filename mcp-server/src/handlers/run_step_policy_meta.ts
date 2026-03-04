@@ -434,7 +434,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     const paragraph4Template = uiStringLocaleFirst(state || null, "meta.benProfile.paragraph4");
     const paragraph4 = formatIndexedTemplate(paragraph4Template, [BEN_PROFILE_WEBSITE_URL]);
     return [
-      `![Ben Steenstra](${BEN_PROFILE_IMAGE_URL})`,
       paragraph1,
       paragraph2,
       paragraph3,
@@ -519,6 +518,21 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       return statement;
     }
 
+    const normalized = resolveCurrentStepEssenceValue(stepId, state, specialist, previousSpecialist);
+    if (!normalized) return "";
+    const contextLine = offTopicCurrentContextLine(stepId, state)
+      .replace(/[.!?]+$/g, "")
+      .trim();
+    if (!contextLine) return normalized;
+    return `${contextLine} ${normalized}`.trim();
+  }
+
+  function resolveCurrentStepEssenceValue(
+    stepId: string,
+    state: CanvasState,
+    specialist: Record<string, unknown>,
+    previousSpecialist: Record<string, unknown>
+  ): string {
     const field = deps.fieldForStep(stepId);
     const finalField = deps.finalFieldByStepId[stepId] || "";
     const provisional = deps.provisionalValueForStep(state, stepId);
@@ -537,14 +551,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
           : [];
       if (statements.length > 0) base = statements.join("; ");
     }
-
-    const normalized = normalizeEssenceValueToSingleSentence(base);
-    if (!normalized) return "";
-    const contextLine = offTopicCurrentContextLine(stepId, state)
-      .replace(/[.!?]+$/g, "")
-      .trim();
-    if (!contextLine) return normalized;
-    return `${contextLine} ${normalized}`.trim();
+    return normalizeEssenceValueToSingleSentence(base);
   }
 
   function buildMotivationContinueLine(state: CanvasState, stepId: string, status: TurnOutputStatus): string {
@@ -724,7 +731,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     } as Record<string, unknown>;
 
     if (metaTopic === "BEN_PROFILE") {
-      const essence = overviewEssenceSentence(
+      const currentValue = resolveCurrentStepEssenceValue(
         stepId,
         params.state,
         specialist,
@@ -732,13 +739,23 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
           ? params.previousSpecialist
           : {}
       );
+      const currentContext = offTopicCurrentContextLine(stepId, params.state).trim();
+      const currentBlock = currentContext && currentValue
+        ? `${currentContext}\n${currentValue}`
+        : (currentValue || "");
+      const stepField = deps.fieldForStep(stepId);
       return {
         ...base,
         __widget_profile_image_url: buildBenProfileWidgetProfile(params.state).image_url,
         __widget_profile_image_alt: buildBenProfileWidgetProfile(params.state).image_alt,
         __suppress_refined_append: "true",
-        message: essence
-          ? `${buildBenProfileMessage(params.state)}\n\n${essence}`
+        refined_formulation: "",
+        wording_choice_agent_current: "",
+        wording_choice_pending: "false",
+        wording_choice_selected: "",
+        ...(stepField ? { [stepField]: "" } : {}),
+        message: currentBlock
+          ? `${buildBenProfileMessage(params.state)}\n\n${currentBlock}`
           : buildBenProfileMessage(params.state),
       };
     }

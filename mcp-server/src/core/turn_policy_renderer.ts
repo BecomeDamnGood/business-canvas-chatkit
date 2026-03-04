@@ -240,6 +240,10 @@ function formatIndexedTemplate(templateRaw: string, values: string[]): string {
   });
 }
 
+function recapLabel(state: CanvasState, key: "recap.label.venture" | "recap.label.name" | "recap.label.status", fallback: string): string {
+  return uiStringFromState(state, key, uiDefaultString(key, fallback));
+}
+
 function ensureSentenceEnd(raw: string): string {
   const text = String(raw || "").trim();
   if (!text) return "";
@@ -394,9 +398,9 @@ function computeStatus(
       (parsed.status === "existing" || parsed.status === "starting");
     if (!hasAny) return { status: "no_output", confirmEligible: false, recapBody: "", statementCount: 0 };
     const recap = [
-      `Venture: ${parsed.venture || "-"}`,
-      `Name: ${parsed.name || "-"}`,
-      `Status: ${parsed.status || "-"}`,
+      `${recapLabel(state, "recap.label.venture", "Venture")}: ${parsed.venture || "-"}`,
+      `${recapLabel(state, "recap.label.name", "Name")}: ${parsed.name || "-"}`,
+      `${recapLabel(state, "recap.label.status", "Status")}: ${parsed.status || "-"}`,
     ].join("\n");
     if (valid) return { status: "valid_output", confirmEligible: true, recapBody: recap, statementCount: 0 };
     return { status: "incomplete_output", confirmEligible: false, recapBody: recap, statementCount: 0 };

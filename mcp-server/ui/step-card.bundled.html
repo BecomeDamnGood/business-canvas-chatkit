@@ -4125,8 +4125,41 @@
     } else {
       body = bodyRaw || "";
     }
+    const toRecord2 = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const resolveWidgetProfileMeta = () => {
+      const resultMeta = toRecord2(result?._meta);
+      const resultWidgetMeta = toRecord2(resultMeta.widget);
+      const resultProfile = toRecord2(resultWidgetMeta.profile);
+      const specialist = toRecord2(result?.specialist);
+      const rootMeta = toRecord2(data?._meta);
+      const rootWidgetMeta = toRecord2(rootMeta.widget);
+      const rootProfile = toRecord2(rootWidgetMeta.profile);
+      const profile = Object.keys(resultProfile).length > 0 ? resultProfile : rootProfile;
+      const imageUrlRaw = String(profile.image_url || specialist.__widget_profile_image_url || "").trim();
+      if (!imageUrlRaw) return null;
+      const safeUrl = /^https?:\/\//i.test(imageUrlRaw) || imageUrlRaw.startsWith("/") || imageUrlRaw.startsWith("./") || imageUrlRaw.startsWith("../")
+        ? imageUrlRaw
+        : `./${imageUrlRaw}`;
+      const imageAlt = String(profile.image_alt || specialist.__widget_profile_image_alt || "").trim() || uiText2(lang, "media.image.alt", "");
+      return {
+        image_url: safeUrl,
+        image_alt: imageAlt
+      };
+    };
+    const stripMarkdownImageLines = (raw) => String(raw || "").replace(/\r/g, "\n").split("\n").filter((line) => !/^!\[[^\]]*\]\(([^)\s]+)\)\s*$/i.test(String(line || "").trim())).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    const prependProfileImage = (target, profile) => {
+      if (!target || !profile || !profile.image_url) return;
+      if (target.querySelector("img.cardDesc-image")) return;
+      const img = document.createElement("img");
+      img.className = "cardDesc-image";
+      img.src = String(profile.image_url || "").trim();
+      img.alt = String(profile.image_alt || "").trim();
+      target.prepend(img);
+    };
+    const profileMeta = resolveWidgetProfileMeta();
+    const bodyForRender = profileMeta ? stripMarkdownImageLines(body || "") : String(body || "");
     const cardDescEl = document.getElementById("cardDesc");
-    const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
+    const hasBodyContent = stripInlineText(bodyForRender).trim().length > 0;
     const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
     const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
     if (!hasRenderableInteractiveContent) {
@@ -4161,8 +4194,13 @@
       cardDescEl.classList.add("has-grid");
       const isStep0AskLayout = current === "step_0";
       cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
-      renderStructuredText(cardDescEl, body || "");
-      cardDescEl.classList.remove("is-ben-profile");
+      renderStructuredText(cardDescEl, bodyForRender);
+      if (profileMeta) {
+        prependProfileImage(cardDescEl, profileMeta);
+        cardDescEl.classList.add("is-ben-profile");
+      } else {
+        cardDescEl.classList.remove("is-ben-profile");
+      }
     }
     const previewWrap = document.getElementById("presentationPreview");
     const previewImg = document.getElementById("presentationThumb");

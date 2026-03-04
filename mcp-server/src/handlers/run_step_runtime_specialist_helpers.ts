@@ -37,6 +37,9 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
       { pattern: /\bEntity\b/gi, value: mapTerm("offtopic.step.entity", "Entity") },
       { pattern: /\bStrategy\b/gi, value: mapTerm("offtopic.step.strategy", "Strategy") },
       { pattern: /\bWhy\b/gi, value: mapTerm("concept.why", "Why") },
+      { pattern: /\bVenture\b(?=\s*:)/gi, value: mapTerm("recap.label.venture", "Venture") },
+      { pattern: /\bName\b(?=\s*:)/gi, value: mapTerm("recap.label.name", "Name") },
+      { pattern: /\bStatus\b(?=\s*:)/gi, value: mapTerm("recap.label.status", "Status") },
     ].filter((entry) => String(entry.value || "").trim().length > 0);
 
     const localizeText = (input: unknown): string => {
