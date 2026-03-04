@@ -553,11 +553,13 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       "offtopic.current.template",
       deps.uiDefaultString("offtopic.current.template")
     );
-    const heading = String(template || "")
+    const headingRaw = String(template || "")
       .replace(/\{0\}/g, wordingStepLabel(stepId, state))
       .replace(/\{1\}/g, wordingCompanyName(state))
       .trim();
-    if (heading && currentValue) return `${heading}\n${currentValue}`.trim();
+    const headingBase = headingRaw.replace(/[.!?]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+    const heading = headingBase ? `${headingBase}:` : headingRaw;
+    if (heading && currentValue) return `${heading}\n\n${currentValue}`.trim();
     if (currentValue) return currentValue;
     return "";
   }

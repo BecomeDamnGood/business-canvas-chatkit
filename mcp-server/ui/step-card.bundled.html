@@ -1772,6 +1772,55 @@
     "transient.timeout"
   ]);
   var runtimeUiStrings = {};
+  var LOCAL_PRESTART_FALLBACK_UI = {
+    en: {
+      "title.step_0": "Step 1: Validation & Business Name",
+      "stepLabel.validation": "Validation",
+      "sectionTitle.step_0": "Validation & Business Name",
+      "btnStart": "Start the process with Validation & Business Name",
+      "byText": "A business model by",
+      "startHint": "Click Start to begin.",
+      "prestartWelcome": "Build a complete Business Model and Strategy Canvas step by step.",
+      "prestart.loading": "Loading translation...",
+      "prestart.headline": "Build a complete Business Model and Strategy Canvas step by step.",
+      "prestart.proven.title": "The Proven Standard",
+      "prestart.proven.body": "A globally used strategy canvas, built through Ben Steenstra's step-by-step method of questioning and structured development.",
+      "prestart.outcomes.title": "At the end you will have",
+      "prestart.outcomes.item1": "A focused canvas that fits on one page",
+      "prestart.outcomes.item2": "A presentation you can use immediately (PPTX)",
+      "prestart.outcomes.item3": "A plan your team can align on",
+      "prestart.meta.how.label": "How it works",
+      "prestart.meta.how.value": "One question at a time",
+      "prestart.meta.time.label": "Time",
+      "prestart.meta.time.value": "10-15 minutes"
+    },
+    nl: {
+      "title.step_0": "Stap 1: Validatie & Bedrijfsnaam",
+      "stepLabel.validation": "Validatie",
+      "sectionTitle.step_0": "Validatie & Bedrijfsnaam",
+      "btnStart": "Start het proces met Validatie & Bedrijfsnaam",
+      "byText": "Een businessmodel van:",
+      "startHint": "Klik op Start om te beginnen.",
+      "prestartWelcome": "Bouw stap voor stap een compleet Business Model en Strategie Canvas.",
+      "prestart.loading": "Vertaling laden...",
+      "prestart.headline": "Bouw stap voor stap een compleet Business Model en Strategie Canvas.",
+      "prestart.proven.title": "De Bewezen Standaard",
+      "prestart.proven.body": "Een wereldwijd toegepast strategiecanvas dat door teams over de hele wereld wordt gebruikt, opgebouwd via Ben Steenstra's unieke stap-voor-stap methode van bevragen en gestructureerde ontwikkeling.",
+      "prestart.outcomes.title": "Aan het einde heb je",
+      "prestart.outcomes.item1": "Een gefocust canvas dat op een pagina past",
+      "prestart.outcomes.item2": "Een presentatie die je direct kunt gebruiken (PPTX)",
+      "prestart.outcomes.item3": "Een plan waar je team zich op kan afstemmen",
+      "prestart.meta.how.label": "Hoe het werkt",
+      "prestart.meta.how.value": "Een vraag tegelijk",
+      "prestart.meta.time.label": "Tijd",
+      "prestart.meta.time.value": "10-15 minuten"
+    }
+  };
+  function baseLang(lang) {
+    const l = String(lang || "").trim().toLowerCase();
+    if (!l) return "";
+    return l.split(/[-_]/)[0] || "";
+  }
   function asRecord(value) {
     return value && typeof value === "object" && !Array.isArray(value) ? value : {};
   }
@@ -1787,8 +1836,13 @@
     }
     runtimeUiStrings = normalized;
   }
-  function t(_lang, key) {
-    return String(runtimeUiStrings[key] || "").trim();
+  function t(lang, key) {
+    const fromRuntime = String(runtimeUiStrings[key] || "").trim();
+    if (fromRuntime) return fromRuntime;
+    const langBase = baseLang(lang);
+    const localized = String((LOCAL_PRESTART_FALLBACK_UI[langBase] || {})[key] || "").trim();
+    if (localized) return localized;
+    return String((LOCAL_PRESTART_FALLBACK_UI.en || {})[key] || "").trim();
   }
   function titlesForLang(lang) {
     const titles = {};
@@ -3877,7 +3931,11 @@
     const overrideStrings = state?.ui_strings && typeof state.ui_strings === "object" ? state.ui_strings : null;
     const overrideLang = String(state?.ui_strings_lang || "").trim().toLowerCase();
     const localeCandidate = resolved.resolved_language || String(state?.language || "").trim().toLowerCase();
-    const lang = overrideLang || localeCandidate || "en";
+    const ambientState = widgetState();
+    const ambientLang = String(
+      ambientState.ui_strings_lang || ambientState.language || ambientState.locale || ""
+    ).trim().toLowerCase();
+    const lang = overrideLang || localeCandidate || ambientLang || "en";
     const latestRoot = globalThis.__BSC_LATEST__;
     const latestState = latestRoot?.state && typeof latestRoot.state === "object" ? latestRoot.state : {};
     const stateForLatest = Object.keys(state).length > 0 ? state : latestState;
@@ -3944,7 +4002,12 @@
         prestartEl.classList.remove("has-grid");
         prestartEl.classList.remove("is-step0-ask-layout");
         if (startupPayloadMissing) {
-          renderBootstrapWaitShell(prestartEl, lang);
+          const canRenderLocalizedPrestart = hasPrestartContentForLang(lang);
+          if (canRenderLocalizedPrestart) {
+            renderPrestartContent(prestartEl, lang);
+          } else {
+            renderBootstrapWaitShell(prestartEl, lang);
+          }
         } else {
           const blockedCopy = blockedMessageForReason(
             lang,
@@ -4023,7 +4086,13 @@
             };
           }
         } else {
-          renderBootstrapWaitShell(prestartEl, lang);
+          const currentStep = String(state?.current_step || "").trim() || "step_0";
+          const canRenderLocalizedPrestart = currentStep === "step_0" && hasPrestartContentForLang(lang);
+          if (canRenderLocalizedPrestart) {
+            renderPrestartContent(prestartEl, lang);
+          } else {
+            renderBootstrapWaitShell(prestartEl, lang);
+          }
         }
       }
       if (prompt) prompt.textContent = "";
@@ -4084,7 +4153,7 @@
       if (cardDesc) {
         const prestartEl = cardDesc;
         const hasPrestartContent = hasPrestartContentForLang(lang);
-        const showSkeleton = uiStringsStatus !== "ready" || !hasPrestartContent;
+        const showSkeleton = !hasPrestartContent;
         prestartEl.classList.remove("has-grid");
         prestartEl.classList.remove("is-step0-ask-layout");
         if (showSkeleton) renderPrestartSkeleton(prestartEl, lang);
