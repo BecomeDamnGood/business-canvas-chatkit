@@ -192,7 +192,14 @@ Output handling (HARD)
 - For process/value doubt: set user_intent to WHY_NEEDED or RESISTANCE and meta_topic="MODEL_VALUE".
 - For model/method credibility or origin questions: set user_intent="META_QUESTION" and meta_topic="MODEL_CREDIBILITY".
 - For profile questions about Ben Steenstra: set user_intent="META_QUESTION" and meta_topic="BEN_PROFILE".
+- For "who is this builder for" questions: set user_intent="META_QUESTION" and meta_topic="TOOL_AUDIENCE".
+- For step-skip requests: set user_intent="META_QUESTION" and meta_topic="STEP_SKIP_NOT_SUPPORTED".
+- For "this step is pointless/useless" objections: set user_intent="RESISTANCE" and meta_topic="STEP_POINTLESS".
+- For requests to go one step back: set user_intent="META_QUESTION" and meta_topic="STEP_BACK_NOT_SUPPORTED".
+- For "what is the value of this canvas" questions: set user_intent="WHY_NEEDED" and meta_topic="CANVAS_VALUE".
+- For "is this stored/saved" questions: set user_intent="META_QUESTION" and meta_topic="SESSION_STORAGE".
 - For recap requests: set wants_recap=true, user_intent="RECAP_REQUEST", and meta_topic="RECAP".
+- For "what is my current step output" or "what was my previous step output" questions: classify as recap via wants_recap=true, user_intent="RECAP_REQUEST", meta_topic="RECAP".
 - For non-recap meta turns: keep wants_recap=false and is_offtopic=false.
 - For pure meta turns: keep refined_formulation="", question="", strategy="".
 - Runtime owns the final meta wording and redirect behavior. Do not hardcode model/profile answers or step-specific redirect lines here.

@@ -154,6 +154,18 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "motivation.essencePrefix": "Essence so far: \"{0}\"",
   "meta.modelCredibility.body":
     "This is a practical, step-by-step canvas model that turns ideas into clear choices and real trade-offs.",
+  "meta.topic.toolAudience.body":
+    "This Canvas Builder is designed for founders, entrepreneurs, and startups who want a clear and actionable strategy. It also supports SMEs and scale-ups refining a product, market positioning, or growth plan. It is suitable for national and internationally operating companies that need alignment across teams and markets. It is also useful for C-level leaders and leadership teams who want to validate, recalibrate, or realign strategic direction. Finally, it supports advisors, consultants, accelerators, and innovation teams who want a structured way to turn discussions into a clear strategic output.",
+  "meta.topic.stepSkipNotSupported.body":
+    "This process is designed to build a complete end result step by step. The final output depends on every step to generate a complete and coherent business canvas for your company. Skipping steps is therefore not supported in this process.",
+  "meta.topic.stepPointless.body":
+    "I understand you may not see the value of this step right now. However, the most successful companies can answer every part of this process, because strategy becomes clear when nothing important is left unstated. Please give it another try. Once you see the final result, the connection between the steps and the importance of each one will likely make more sense.",
+  "meta.topic.stepBackNotSupported.body":
+    "This is a linear process. Once a step is completed, you cannot go back during the flow. Do not worry. At the end, when you generate your presentation, you will be able to review each step and make changes before building the final deck.",
+  "meta.topic.canvasValue.body":
+    "Successful entrepreneurs and leaders stay focused on what truly matters. Everything else is execution and day-to-day operations. This canvas gives you a clear overview of the core of your business, including what it is, who it serves, why it wins, and what it needs to succeed. That creates clarity and direction. It can also strengthen motivation during difficult moments, because the purpose and drivers behind the business are made explicit. With this canvas as a foundation, you can steer and develop tactical and operational work, such as marketing plans, business development priorities, and financial forecasting, more effectively.",
+  "meta.topic.sessionStorage.body":
+    "We store the output of each step only while your session remains open. If you close the widget, the information is permanently deleted. The only data we retain from the session is token usage for internal review and insights.",
   "ppt.heading.purpose": "Purpose",
   "ppt.heading.role": "Role",
   "ppt.heading.strategy": "Strategy",

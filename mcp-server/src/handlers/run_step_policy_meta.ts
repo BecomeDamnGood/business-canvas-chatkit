@@ -31,6 +31,8 @@ export const UNIVERSAL_META_OFFTOPIC_POLICY = `UNIVERSAL_META_OFFTOPIC_POLICY (a
 Treat as allowed at any time; infer from intent (no language-specific keyword lists):
 - Profile/credibility questions about the method creator or model origin
 - Questions about process/model value ("why this is needed", "what is the point")
+- Questions about who this builder is for, skipping a step, going back a step, or whether a step feels pointless
+- Questions about session storage/privacy and canvas business value
 - Requests to recap what we have established so far (use wants_recap above; do not replace that mechanism)
 After answering: put the short answer in message, then set question to your normal next question for this step.
 
@@ -64,11 +66,18 @@ export const USER_INTENT_CONTRACT_INSTRUCTION = `USER_INTENT CONTRACT (HARD)
 
 export const META_TOPIC_CONTRACT_INSTRUCTION = `META_TOPIC CONTRACT (HARD)
 - Always return a string field "meta_topic" with one of:
-  NONE, MODEL_VALUE, MODEL_CREDIBILITY, BEN_PROFILE, RECAP.
+  NONE, MODEL_VALUE, MODEL_CREDIBILITY, BEN_PROFILE, TOOL_AUDIENCE, STEP_SKIP_NOT_SUPPORTED, STEP_POINTLESS, STEP_BACK_NOT_SUPPORTED, CANVAS_VALUE, SESSION_STORAGE, RECAP.
 - Infer meta_topic from meaning/context semantically, not from language-specific keyword lists.
 - Set meta_topic="MODEL_VALUE" for process/model-value questions.
 - Set meta_topic="MODEL_CREDIBILITY" for model/method credibility or origin questions.
 - Set meta_topic="BEN_PROFILE" for profile/credibility questions about the method creator.
+- Set meta_topic="TOOL_AUDIENCE" for "who is this for" type questions.
+- Set meta_topic="STEP_SKIP_NOT_SUPPORTED" for requests to skip the current step.
+- Set meta_topic="STEP_POINTLESS" when users explicitly say the step is pointless/useless.
+- Set meta_topic="STEP_BACK_NOT_SUPPORTED" when users ask to go back to a previous step.
+- Set meta_topic="CANVAS_VALUE" for "what is the value of this canvas" type questions.
+- Set meta_topic="SESSION_STORAGE" for "is this saved/stored" type questions.
+- If the user asks for their current step output or previous step output, classify as recap: wants_recap=true, user_intent="RECAP_REQUEST", meta_topic="RECAP".
 - Set meta_topic="RECAP" when wants_recap=true.
 - Set meta_topic="NONE" for normal step input, inspiration-only requests, or generic off-topic content.`;
 
@@ -99,6 +108,73 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
 const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
 const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
 const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
+const META_TOPIC_LOCALES_OFFTOPIC_DOC = new Set<string>([
+  "en",
+  "nl",
+  "de",
+  "fr",
+  "es",
+  "it",
+  "ja",
+  "pt",
+  "hi",
+  "id",
+  "ko",
+  "zh",
+]);
+
+type MetaTopicRouteConfig = {
+  ui_key: string;
+  append_redirect: boolean;
+  append_current_context: boolean;
+  use_profile_media: boolean;
+  enabled_locales: ReadonlySet<string>;
+};
+
+const META_TOPIC_ROUTE_REGISTRY: Partial<Record<SpecialistMetaTopic, MetaTopicRouteConfig>> = {
+  TOOL_AUDIENCE: {
+    ui_key: "meta.topic.toolAudience.body",
+    append_redirect: true,
+    append_current_context: false,
+    use_profile_media: false,
+    enabled_locales: META_TOPIC_LOCALES_OFFTOPIC_DOC,
+  },
+  STEP_SKIP_NOT_SUPPORTED: {
+    ui_key: "meta.topic.stepSkipNotSupported.body",
+    append_redirect: true,
+    append_current_context: false,
+    use_profile_media: false,
+    enabled_locales: META_TOPIC_LOCALES_OFFTOPIC_DOC,
+  },
+  STEP_POINTLESS: {
+    ui_key: "meta.topic.stepPointless.body",
+    append_redirect: true,
+    append_current_context: false,
+    use_profile_media: false,
+    enabled_locales: META_TOPIC_LOCALES_OFFTOPIC_DOC,
+  },
+  STEP_BACK_NOT_SUPPORTED: {
+    ui_key: "meta.topic.stepBackNotSupported.body",
+    append_redirect: true,
+    append_current_context: false,
+    use_profile_media: false,
+    enabled_locales: META_TOPIC_LOCALES_OFFTOPIC_DOC,
+  },
+  CANVAS_VALUE: {
+    ui_key: "meta.topic.canvasValue.body",
+    append_redirect: true,
+    append_current_context: false,
+    use_profile_media: false,
+    enabled_locales: META_TOPIC_LOCALES_OFFTOPIC_DOC,
+  },
+  SESSION_STORAGE: {
+    ui_key: "meta.topic.sessionStorage.body",
+    append_redirect: true,
+    append_current_context: false,
+    use_profile_media: false,
+    enabled_locales: META_TOPIC_LOCALES_OFFTOPIC_DOC,
+  },
+};
 
 const MOTIVATION_MISSING_PIECE_BY_STEP: Record<string, string> = {
   [STEP_0_ID]: "the concrete starting point of your business",
@@ -398,13 +474,13 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     const wantsRecap =
       specialist.wants_recap === true ||
       String((specialist as any).wants_recap || "").trim().toLowerCase() === "true";
+    if (wantsRecap || intent === "RECAP_REQUEST") return "RECAP";
     if (topicRaw === "MODEL_PROCESS") {
       return intent === "WHY_NEEDED" || intent === "RESISTANCE"
         ? "MODEL_VALUE"
         : "MODEL_CREDIBILITY";
     }
     if (SPECIALIST_META_TOPIC_SET.has(topicRaw)) return topicRaw as SpecialistMetaTopic;
-    if (wantsRecap || intent === "RECAP_REQUEST") return "RECAP";
     if (intent === "WHY_NEEDED" || intent === "RESISTANCE") return "MODEL_VALUE";
     if (intent === "META_QUESTION") return "MODEL_CREDIBILITY";
     return "NONE";
@@ -600,6 +676,30 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     ].join(" ");
   }
 
+  function buildMetaTopicMessageFromRegistry(params: {
+    stepId: string;
+    state: CanvasState;
+    metaTopic: SpecialistMetaTopic;
+  }): string {
+    const config = META_TOPIC_ROUTE_REGISTRY[params.metaTopic];
+    if (!config) return "";
+    const localeBase = localeBaseFromState(params.state);
+    if (!config.enabled_locales.has(localeBase || "en")) return "";
+
+    const body = uiStringLocaleFirst(params.state, config.ui_key).trim();
+    if (!body) return "";
+    const chunks: string[] = [body];
+    if (config.append_current_context) {
+      const currentLine = offTopicCurrentContextLine(params.stepId, params.state).trim();
+      if (currentLine) chunks.push(currentLine);
+    }
+    if (config.append_redirect) {
+      const redirectLine = offTopicRedirectLine(params.stepId, params.state).trim();
+      if (redirectLine) chunks.push(redirectLine);
+    }
+    return chunks.join(" ").trim();
+  }
+
   function applyCentralMetaTopicRouter(params: {
     stepId: string;
     specialistResult: Record<string, unknown>;
@@ -647,6 +747,19 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       return {
         ...base,
         message: buildModelCredibilityMessage(stepId, params.state),
+      };
+    }
+
+    if (META_TOPIC_ROUTE_REGISTRY[metaTopic]) {
+      const topicMessage = buildMetaTopicMessageFromRegistry({
+        stepId,
+        state: params.state,
+        metaTopic,
+      });
+      if (!topicMessage) return specialist;
+      return {
+        ...base,
+        message: topicMessage,
       };
     }
 

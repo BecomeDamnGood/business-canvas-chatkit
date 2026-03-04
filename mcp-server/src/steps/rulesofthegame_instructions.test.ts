@@ -11,7 +11,11 @@ test("Rules of the Game instructions include full required output schema fields"
   assert.ok(text.includes('"rulesofthegame": "string"'));
   assert.ok(text.includes('"wants_recap": "boolean"'));
   assert.ok(text.includes('"is_offtopic": "boolean"'));
-  assert.ok(text.includes('"meta_topic": "NONE" | "MODEL_VALUE" | "MODEL_CREDIBILITY" | "BEN_PROFILE" | "RECAP"'));
+  assert.ok(
+    text.includes(
+      '"meta_topic": "NONE" | "MODEL_VALUE" | "MODEL_CREDIBILITY" | "BEN_PROFILE" | "TOOL_AUDIENCE" | "STEP_SKIP_NOT_SUPPORTED" | "STEP_POINTLESS" | "STEP_BACK_NOT_SUPPORTED" | "CANVAS_VALUE" | "SESSION_STORAGE" | "RECAP"'
+    )
+  );
   assert.ok(text.includes('"statements": ["array of strings"]'));
 });
 
