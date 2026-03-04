@@ -244,12 +244,6 @@ function recapLabel(state: CanvasState, key: "recap.label.venture" | "recap.labe
   return uiStringFromState(state, key, uiDefaultString(key, fallback));
 }
 
-function ensureSentenceEnd(raw: string): string {
-  const text = String(raw || "").trim();
-  if (!text) return "";
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-}
-
 function contractHeadlineForState(params: {
   state: CanvasState;
   stepId: string;
@@ -320,12 +314,13 @@ function offTopicCurrentContextHeading(stepId: string, state: CanvasState): stri
     "offtopic.current.template",
     uiDefaultString("offtopic.current.template")
   );
-  return ensureSentenceEnd(
-    formatIndexedTemplate(template, [
-      offTopicStepLabel(stepId, state),
-      offTopicCompanyName(state),
-    ]).trim()
-  );
+  const rendered = formatIndexedTemplate(template, [
+    offTopicStepLabel(stepId, state),
+    offTopicCompanyName(state),
+  ]).trim();
+  if (!rendered) return "";
+  const base = rendered.replace(/[.!?]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+  return base ? `${base}:` : "";
 }
 
 function comparableText(raw: string): string {
@@ -334,6 +329,171 @@ function comparableText(raw: string): string {
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function extractBulletStatements(raw: string): string[] {
+  return String(raw || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter((line) => /^[•\-*]\s+/.test(line))
+    .map((line) => line.replace(/^[•\-*]\s+/, "").trim())
+    .filter(Boolean);
+}
+
+function includesStatement(textKey: string, statement: string): boolean {
+  const candidate = comparableText(statement);
+  if (!candidate) return false;
+  return textKey.includes(candidate);
+}
+
+function answerContainsAllStatements(answerText: string, statements: string[]): boolean {
+  const expected = statements.map((line) => String(line || "").trim()).filter(Boolean);
+  if (expected.length === 0) return false;
+  const answerKey = comparableText(answerText);
+  if (!answerKey) return false;
+  return expected.every((statement) => includesStatement(answerKey, statement));
+}
+
+function hasInlineNumberedSummary(paragraph: string): boolean {
+  const text = String(paragraph || "").replace(/\s+/g, " ").trim();
+  if (!text) return false;
+  const matches = text.match(/\b\d+\s*[^:\n]{0,40}:\s*/g);
+  return Array.isArray(matches) && matches.length >= 2;
+}
+
+function stripInlineNumberedSummaryParagraphs(answerText: string, statements: string[]): string {
+  const expected = statements.map((line) => String(line || "").trim()).filter(Boolean);
+  if (expected.length === 0) return String(answerText || "").trim();
+  const paragraphs = String(answerText || "")
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return "";
+
+  const kept = paragraphs.filter((paragraph) => {
+    if (!hasInlineNumberedSummary(paragraph)) return true;
+    const paragraphKey = comparableText(paragraph);
+    const matched = expected.filter((statement) => includesStatement(paragraphKey, statement)).length;
+    return matched < Math.min(2, expected.length);
+  });
+
+  return kept.join("\n\n").trim();
+}
+
+function dedupeListItems(lines: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = String(raw || "").trim();
+    if (!line) continue;
+    const key = comparableText(line);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(line);
+  }
+  return out;
+}
+
+function splitCamelTitleItems(raw: string): string[] {
+  const tokens = String(raw || "")
+    .replace(/\r/g, " ")
+    .replace(/\n/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length < 3) return [];
+  const chunks: string[] = [];
+  let current: string[] = [];
+  for (const token of tokens) {
+    const plain = token.replace(/^[("'\[]+|[)"'\],.;:!?]+$/g, "");
+    const startsUpper = /^\p{Lu}/u.test(plain);
+    if (startsUpper && current.length > 0) {
+      chunks.push(current.join(" ").trim());
+      current = [token];
+    } else {
+      current.push(token);
+    }
+  }
+  if (current.length > 0) chunks.push(current.join(" ").trim());
+  const cleaned = chunks.map((line) => String(line || "").trim()).filter(Boolean);
+  return cleaned.length >= 2 ? cleaned : [];
+}
+
+function productsServicesItemsFromRecap(raw: string): string[] {
+  const bulletItems = extractBulletStatements(raw);
+  if (bulletItems.length >= 1) return dedupeListItems(bulletItems);
+  const punctSplit = String(raw || "")
+    .replace(/\r/g, "\n")
+    .split(/[;\n,]+/)
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
+    .filter(Boolean);
+  if (punctSplit.length >= 2) return dedupeListItems(punctSplit);
+  const titleSplit = splitCamelTitleItems(raw);
+  if (titleSplit.length >= 2) return dedupeListItems(titleSplit);
+  const single = String(raw || "").trim();
+  return single ? [single] : [];
+}
+
+function localeTokenListFromState(state: CanvasState, key: string): string[] {
+  const value = uiStringFromState(state, key, uiDefaultString(key));
+  return String(value || "")
+    .split("|")
+    .map((token) => String(token || "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function classifyProductsServicesVariant(
+  state: CanvasState,
+  items: string[]
+): "single_product" | "single_service" | "single_mixed" | "plural_products" | "plural_services" | "plural_mixed" {
+  const normalized = items.map((line) => String(line || "").trim()).filter(Boolean);
+  if (normalized.length === 0) return "plural_mixed";
+  const productTokens = localeTokenListFromState(state, "productsservices.classifier.product.tokens");
+  const serviceTokens = localeTokenListFromState(state, "productsservices.classifier.service.tokens");
+  let productCount = 0;
+  let serviceCount = 0;
+  let unknownCount = 0;
+  for (const itemRaw of normalized) {
+    const item = String(itemRaw || "").toLowerCase();
+    const productMatch = productTokens.some((token) => token && item.includes(token));
+    const serviceMatch = serviceTokens.some((token) => token && item.includes(token));
+    if (productMatch && !serviceMatch) {
+      productCount += 1;
+    } else if (serviceMatch && !productMatch) {
+      serviceCount += 1;
+    } else {
+      unknownCount += 1;
+    }
+  }
+  if (normalized.length === 1) {
+    if (productCount === 1) return "single_product";
+    if (serviceCount === 1) return "single_service";
+    return "single_mixed";
+  }
+  if (unknownCount === 0 && productCount > 0 && serviceCount === 0) return "plural_products";
+  if (unknownCount === 0 && serviceCount > 0 && productCount === 0) return "plural_services";
+  return "plural_mixed";
+}
+
+function productsServicesHeadingForState(state: CanvasState, items: string[]): string {
+  const variant = classifyProductsServicesVariant(state, items);
+  const key = `productsservices.current.heading.${variant}`;
+  const template = uiStringFromState(state, key, uiDefaultString(key));
+  const rendered = String(template || "").replace(/\{0\}/g, offTopicCompanyName(state)).trim();
+  if (!rendered) return "";
+  const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+  return base ? `${base}:` : "";
+}
+
+function productsServicesRecapBlock(state: CanvasState, recapText: string): string {
+  const items = productsServicesItemsFromRecap(recapText);
+  if (items.length === 0) return String(recapText || "").trim();
+  const heading = productsServicesHeadingForState(state, items);
+  const bullets = items.map((line) => `• ${line}`).join("\n");
+  if (!heading) return bullets;
+  return `<strong>${heading}</strong>\n${bullets}`.trim();
 }
 
 function step0ConfirmQuestion(state: CanvasState, venture: string, name: string, status: string): string {
@@ -562,6 +722,64 @@ function computeStatus(
   return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
 }
 
+const RECAP_KNOWN_STEP_ORDER = [
+  "dream",
+  "purpose",
+  "bigwhy",
+  "role",
+  "entity",
+  "strategy",
+  "targetgroup",
+  "productsservices",
+  "rulesofthegame",
+] as const;
+
+function isRecapRequestedSpecialist(specialist: Record<string, unknown>): boolean {
+  const wantsRecap =
+    specialist.wants_recap === true ||
+    String((specialist as any).wants_recap || "").trim().toLowerCase() === "true";
+  if (wantsRecap) return true;
+  const userIntent = String((specialist as any).user_intent || "").trim().toUpperCase();
+  if (userIntent === "RECAP_REQUEST") return true;
+  const metaTopic = String((specialist as any).meta_topic || "").trim().toUpperCase();
+  return metaTopic === "RECAP";
+}
+
+function knownValueForStep(state: CanvasState, stepId: string): string {
+  const finalField = getFinalFieldForStepId(stepId);
+  const finalValue = finalField ? String((state as any)[finalField] || "").trim() : "";
+  if (finalValue) return finalValue;
+  return provisionalForStep(state, stepId);
+}
+
+function buildKnownFactsRecap(state: CanvasState): string {
+  const blocks: string[] = [];
+
+  const step0 = parseStep0Line(String((state as any).step_0_final || "").trim());
+  const venture = String(step0.venture || "").trim();
+  const name = String(step0.name || "").trim();
+  if (venture) {
+    blocks.push(
+      `<strong>${recapLabel(state, "recap.label.venture", "Venture")}:</strong>\n${venture}`
+    );
+  }
+  if (name) {
+    blocks.push(
+      `<strong>${recapLabel(state, "recap.label.name", "Name")}:</strong>\n${name}`
+    );
+  }
+
+  for (const stepId of RECAP_KNOWN_STEP_ORDER) {
+    const value = knownValueForStep(state, stepId);
+    if (!value) continue;
+    const label = offTopicStepLabel(stepId, state);
+    if (!label) continue;
+    blocks.push(`<strong>${label}:</strong>\n${value}`);
+  }
+
+  return blocks.join("\n\n").trim();
+}
+
 function labelsForMenu(
   menuId: string,
   actionCodes: string[],
@@ -778,22 +996,28 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     }
   }
 
-  const answerText =
+  let answerText =
     String((specialistForDisplay as any).message ?? "").trim() ||
     String((specialistForDisplay as any).refined_formulation ?? "").trim();
+  if (isRecapRequestedSpecialist(specialistForDisplay)) {
+    const knownRecap = buildKnownFactsRecap(state);
+    if (knownRecap) {
+      answerText = knownRecap;
+    }
+  }
   const recapText = String(recapBody || "").trim();
   const currentContextHeadingForStep =
     stepId !== "step_0" ? offTopicCurrentContextHeading(stepId, state) : "";
-  const answerLooksLikeGenericCurrentHeadingOnly =
-    Boolean(answerText) &&
-    Boolean(currentContextHeadingForStep) &&
-    comparableText(answerText) === comparableText(currentContextHeadingForStep);
   const offTopicContextHeading =
     isOfftopic && stepId !== "step_0" ? offTopicCurrentContextHeading(stepId, state) : "";
-  const recapBlock =
+  const defaultRecapBlock =
     offTopicContextHeading && recapText
       ? `<strong>${offTopicContextHeading}</strong>\n${recapText}`
       : recapText;
+  const recapBlock =
+    stepId === "productsservices" && recapText
+      ? productsServicesRecapBlock(state, recapText)
+      : defaultRecapBlock;
   const strategyStatements =
     stepId === "strategy" ? strategyStatementsFromSources(state, statusSource, prev, { provisionalForStep }) : [];
   const strategyContextBlock =
@@ -818,19 +1042,33 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       return `${answerText}\n\n${recapBlock}`.trim();
     }
     if (strategyContextBlock) {
-      if (!answerText) return strategyContextBlock;
-      const answerKey = comparableText(answerText);
+      const cleanedAnswer = stripInlineNumberedSummaryParagraphs(answerText, strategyStatements);
+      if (!cleanedAnswer) return strategyContextBlock;
+      const answerKey = comparableText(cleanedAnswer);
       const recapKey = comparableText(strategyContextBlock);
-      if (recapKey && answerKey.includes(recapKey)) return answerText;
-      return `${answerText}\n\n${strategyContextBlock}`.trim();
+      if (recapKey && answerKey.includes(recapKey)) return cleanedAnswer;
+      return `${cleanedAnswer}\n\n${strategyContextBlock}`.trim();
     }
     if (effectiveStatus === "valid_output" && recapText) {
-      if (!answerText) return recapBlock;
-      const answerKey = comparableText(answerText);
+      const recapStatements =
+        stepId === "productsservices"
+          ? productsServicesItemsFromRecap(recapText)
+          : extractBulletStatements(recapText);
+      const cleanedAnswer =
+        stepId === "rulesofthegame"
+          ? stripInlineNumberedSummaryParagraphs(answerText, recapStatements)
+          : answerText;
+      if (!cleanedAnswer) return recapBlock;
+      const answerKey = comparableText(cleanedAnswer);
       const recapKey = comparableText(recapText);
-      if (recapKey && answerKey.includes(recapKey)) return answerText;
-      if (answerLooksLikeGenericCurrentHeadingOnly) return `${answerText}\n${recapText}`.trim();
-      return `${answerText}\n\n${recapBlock}`.trim();
+      const cleanedLooksLikeGenericCurrentHeadingOnly =
+        Boolean(cleanedAnswer) &&
+        Boolean(currentContextHeadingForStep) &&
+        comparableText(cleanedAnswer) === comparableText(currentContextHeadingForStep);
+      if (recapKey && answerKey.includes(recapKey)) return cleanedAnswer;
+      if (answerContainsAllStatements(cleanedAnswer, recapStatements)) return cleanedAnswer;
+      if (cleanedLooksLikeGenericCurrentHeadingOnly) return `${cleanedAnswer}\n${recapText}`.trim();
+      return `${cleanedAnswer}\n\n${recapBlock}`.trim();
     }
     return answerText || (effectiveStatus === "valid_output" ? recapBlock : "");
   })();

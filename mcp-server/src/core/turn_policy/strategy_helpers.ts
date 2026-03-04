@@ -26,10 +26,9 @@ function dedupeStatements(lines: string[]): string[] {
   return out;
 }
 
-function parseStrategyStatementsFromText(raw: string): string[] {
+function parseCanonicalListStatements(raw: string): string[] {
   const text = String(raw || "")
     .replace(/\r/g, "\n")
-    .replace(/<[^>]*>/g, " ")
     .trim();
   if (!text) return [];
   const normalizedLines = text
@@ -37,14 +36,10 @@ function parseStrategyStatementsFromText(raw: string): string[] {
     .map((line) => String(line || "").trim())
     .filter(Boolean)
     .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
-    .filter((line) => line.length > 0)
-    .filter((line) => !/^your current strategy for\b/i.test(line))
-    .filter((line) => !/^the current strategy of\b/i.test(line))
-    .filter((line) => !/^you now have \d+\s+focus points?/i.test(line))
-    .filter((line) => !/^i strongly advice you/i.test(line));
+    .filter((line) => line.length > 0);
   if (normalizedLines.length >= 2) return dedupeStatements(normalizedLines);
 
-  const compact = normalizedLines.join(" ").replace(/\s+/g, " ").trim();
+  const compact = text.replace(/\s+/g, " ").trim();
   if (!compact) return [];
   const bulletLike = compact
     .split(/\s*[•]\s+/)
@@ -58,12 +53,6 @@ function parseStrategyStatementsFromText(raw: string): string[] {
     .filter(Boolean);
   if (semicolonParts.length >= 2) return dedupeStatements(semicolonParts);
 
-  const sentenceParts = compact
-    .split(/(?<=[.!?])\s+(?=\S)/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (sentenceParts.length >= 2) return dedupeStatements(sentenceParts);
-
   return dedupeStatements([compact]);
 }
 
@@ -74,7 +63,12 @@ function strategySummaryLine(state: CanvasState, count: number, uiStringFromStat
     "You now have {0} focus points within your strategy. I advise you to formulate at least 4 but maximum 7 focus points."
   );
   const line = String(template || "").replace("{0}", String(count)).trim();
-  return /[.!?]$/.test(line) ? line : `${line}.`;
+  if (!line) return "";
+  const sentenceMatch = line.match(/^([\s\S]*?[.!?。！？])(?:\s+|$)([\s\S]*)$/);
+  const firstSentence = String(sentenceMatch?.[1] || line).trim();
+  const rest = String(sentenceMatch?.[2] || "").trim();
+  const heading = `${firstSentence.replace(/[.!?。！？]+$/g, "").trim()}:`;
+  return rest ? `${heading}\n${rest}` : heading;
 }
 
 function strategyOverflowWarningLine(state: CanvasState, uiStringFromState: UiStringResolver): string {
@@ -100,7 +94,9 @@ function strategyCurrentHeading(
   const line = String(template || "")
     .replace("{0}", companyNameForPrompt(state))
     .trim();
-  return /[.!?]$/.test(line) ? line : `${line}.`;
+  if (!line) return "";
+  const base = line.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+  return base ? `${base}:` : "";
 }
 
 export function buildStrategyContextBlock(
@@ -151,15 +147,11 @@ export function strategyStatementsFromSources(
   if (prevStatements.length > 0) return dedupeStatements(prevStatements);
 
   const candidates = [
-    String((specialist as any).strategy || "").trim(),
-    String((specialist as any).refined_formulation || "").trim(),
-    String((prev as any).strategy || "").trim(),
-    String((prev as any).refined_formulation || "").trim(),
     deps.provisionalForStep(state, "strategy"),
     String((state as any).strategy_final || "").trim(),
   ];
   for (const candidate of candidates) {
-    const parsed = parseStrategyStatementsFromText(candidate);
+    const parsed = parseCanonicalListStatements(candidate);
     if (parsed.length > 0) return parsed;
   }
   return [];

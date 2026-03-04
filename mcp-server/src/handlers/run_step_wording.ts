@@ -725,8 +725,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           return deps.parseListItems(fallbackPickedRaw);
         })()
       : [];
+    const mergedPickedItems = mode === "list" ? mergeListItems(baseItems, pickedItems) : [];
     const rawChosen = mode === "list"
-      ? mergeListItems(baseItems, pickedItems).join("\n")
+      ? mergedPickedItems.join("\n")
       : fallbackPickedRaw;
     const chosen = stepId === deps.entityStepId ? deps.normalizeEntityPhrase(rawChosen) || rawChosen : rawChosen;
     if (!chosen) return { handled: false, specialist: prevRaw, nextState: state };
@@ -745,12 +746,12 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_user_normalized: "",
         wording_choice_user_items: [],
         wording_choice_suggestion_items: [],
-        wording_choice_base_items: mode === "list" ? deps.parseListItems(chosen) : [],
+        wording_choice_base_items: mode === "list" ? mergedPickedItems : [],
         refined_formulation: chosen,
         wording_choice_agent_current: chosen,
         feedback_reason_key: "",
         feedback_reason_text: "",
-        ...(mode === "list" ? { statements: deps.parseListItems(chosen) } : {}),
+        ...(mode === "list" ? { statements: mergedPickedItems } : {}),
       },
       stepId,
       chosen

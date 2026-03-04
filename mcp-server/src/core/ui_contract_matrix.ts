@@ -442,7 +442,6 @@ export const MENU_LABELS: Record<string, string[]> = {
   STRATEGY_MENU_QUESTIONS: ["Explain why a Strategy matters"],
   STRATEGY_MENU_CONFIRM: [
     "Explain why a Strategy matters",
-    "Consolidate my focus points for me please",
     "I'm satisfied with my strategy. Continue to Target Group.",
   ],
   STRATEGY_MENU_FINAL_CONFIRM: [

@@ -86,6 +86,120 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     return String(fallback || "").trim();
   }
 
+  function dedupeItems(items: string[]): string[] {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const raw of items) {
+      const item = String(raw || "").trim();
+      if (!item) continue;
+      const key = deps.canonicalizeComparableText(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+    return out;
+  }
+
+  function splitCamelTitleItems(raw: string): string[] {
+    const tokens = String(raw || "")
+      .replace(/\r/g, " ")
+      .replace(/\n/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (tokens.length < 3) return [];
+    const chunks: string[] = [];
+    let current: string[] = [];
+    for (const token of tokens) {
+      const plain = token.replace(/^[("'\[]+|[)"'\],.;:!?]+$/g, "");
+      const startsUpper = /^\p{Lu}/u.test(plain);
+      if (startsUpper && current.length > 0) {
+        chunks.push(current.join(" ").trim());
+        current = [token];
+      } else {
+        current.push(token);
+      }
+    }
+    if (current.length > 0) chunks.push(current.join(" ").trim());
+    const cleaned = chunks
+      .map((chunk) => chunk.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    return cleaned.length >= 2 ? cleaned : [];
+  }
+
+  function productsServicesItemsFromValue(rawValue: string): string[] {
+    const raw = String(rawValue || "").trim();
+    if (!raw) return [];
+    const parsed = deps.parseListItems(raw)
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+    if (parsed.length >= 2) return dedupeItems(parsed);
+
+    const punctSplit = raw
+      .replace(/\r/g, "\n")
+      .split(/[;\n,]+/)
+      .map((line) => String(line || "").replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
+      .filter(Boolean);
+    if (punctSplit.length >= 2) return dedupeItems(punctSplit);
+
+    const titleSplit = splitCamelTitleItems(raw);
+    if (titleSplit.length >= 2) return dedupeItems(titleSplit);
+
+    return dedupeItems([raw]);
+  }
+
+  function localeTokenSet(state: CanvasState | null | undefined, key: string): string[] {
+    const raw = localizedUiString(state, key, deps.uiDefaultString(key));
+    return String(raw || "")
+      .split("|")
+      .map((token) => String(token || "").trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  function classifyProductsServicesItems(
+    state: CanvasState | null | undefined,
+    items: string[]
+  ): "single_product" | "single_service" | "single_mixed" | "plural_products" | "plural_services" | "plural_mixed" {
+    const normalized = items.map((line) => String(line || "").trim()).filter(Boolean);
+    if (normalized.length === 0) return "plural_mixed";
+    const productTokens = localeTokenSet(state, "productsservices.classifier.product.tokens");
+    const serviceTokens = localeTokenSet(state, "productsservices.classifier.service.tokens");
+    let productCount = 0;
+    let serviceCount = 0;
+    let unknownCount = 0;
+    for (const itemRaw of normalized) {
+      const item = String(itemRaw || "").toLowerCase();
+      const productMatch = productTokens.some((token) => token && item.includes(token));
+      const serviceMatch = serviceTokens.some((token) => token && item.includes(token));
+      if (productMatch && !serviceMatch) {
+        productCount += 1;
+      } else if (serviceMatch && !productMatch) {
+        serviceCount += 1;
+      } else {
+        unknownCount += 1;
+      }
+    }
+    if (normalized.length === 1) {
+      if (productCount === 1) return "single_product";
+      if (serviceCount === 1) return "single_service";
+      return "single_mixed";
+    }
+    if (unknownCount === 0 && productCount > 0 && serviceCount === 0) return "plural_products";
+    if (unknownCount === 0 && serviceCount > 0 && productCount === 0) return "plural_services";
+    return "plural_mixed";
+  }
+
+  function productsServicesCurrentHeading(state: CanvasState | null | undefined, companyName: string, items: string[]): string {
+    const variant = classifyProductsServicesItems(state, items);
+    const key = `productsservices.current.heading.${variant}`;
+    const fallback = deps.uiDefaultString(key);
+    const template = localizedUiString(state, key, fallback);
+    const rendered = String(template || "").replace(/\{0\}/g, companyName).trim();
+    if (!rendered) return "";
+    const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+    return base ? `${base}:` : "";
+  }
+
   function wordingStepLabelKey(stepId: string): string {
     if (stepId === deps.dreamStepId) return "offtopic.step.dream";
     if (stepId === deps.purposeStepId) return "offtopic.step.purpose";
@@ -283,7 +397,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       const carriedStatements = previousStatements
         .map((line) => String(line || "").trim())
         .filter(Boolean);
-      const fallbackStatements = deps.parseListItems(carriedValue || carriedRefined)
+      const fallbackStatements = (
+        stepId === deps.productsservicesStepId
+          ? productsServicesItemsFromValue(carriedValue || carriedRefined)
+          : deps.parseListItems(carriedValue || carriedRefined)
+      )
         .map((line) => String(line || "").trim())
         .filter(Boolean);
       const statements = carriedStatements.length > 0 ? carriedStatements : fallbackStatements;
@@ -314,7 +432,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       ? (
         Array.isArray((specialist as any).statements)
           ? ((specialist as any).statements as string[])
-          : deps.parseListItems(value)
+          : (
+            stepId === deps.productsservicesStepId
+              ? productsServicesItemsFromValue(value)
+              : deps.parseListItems(value)
+          )
       )
         .map((line) => String(line || "").trim())
         .filter(Boolean)
@@ -394,7 +516,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     const resolved = fieldValue || refined || wordingValue || provisional || finalValue;
     if (!resolved) return "";
     if (isBulletConsistencyStep(stepId)) {
-      const items = deps.parseListItems(resolved)
+      const items = (
+        stepId === deps.productsservicesStepId
+          ? productsServicesItemsFromValue(resolved)
+          : deps.parseListItems(resolved)
+      )
         .map((line) => String(line || "").trim())
         .filter(Boolean);
       if (items.length > 0) return items.map((line) => `• ${line}`).join("\n");
@@ -410,6 +536,18 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
   ): string {
     const specialist = String(activeSpecialist || (state as any)?.active_specialist || "").trim();
     if (stepId === deps.dreamStepId && specialist === deps.dreamExplainerSpecialist) return "";
+    const currentValue = wordingSelectionValue(stepId, state, selectedValue);
+    if (stepId === deps.productsservicesStepId) {
+      const items = productsServicesItemsFromValue(currentValue);
+      const company = wordingCompanyName(state);
+      const heading = productsServicesCurrentHeading(state, company, items);
+      if (heading && items.length > 0) {
+        return `${heading}\n${items.map((line) => `• ${line}`).join("\n")}`.trim();
+      }
+      if (heading && currentValue) return `${heading}\n${currentValue}`.trim();
+      if (items.length > 0) return items.map((line) => `• ${line}`).join("\n");
+      return currentValue;
+    }
     const template = localizedUiString(
       state,
       "offtopic.current.template",
@@ -419,7 +557,6 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       .replace(/\{0\}/g, wordingStepLabel(stepId, state))
       .replace(/\{1\}/g, wordingCompanyName(state))
       .trim();
-    const currentValue = wordingSelectionValue(stepId, state, selectedValue);
     if (heading && currentValue) return `${heading}\n${currentValue}`.trim();
     if (currentValue) return currentValue;
     return "";
