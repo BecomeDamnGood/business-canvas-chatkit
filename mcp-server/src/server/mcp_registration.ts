@@ -39,6 +39,15 @@ import { buildContentFromResult } from "./run_step_model_result.js";
 import { loadUiHtml, runStepHandler } from "./run_step_transport.js";
 
 function createAppServer(baseUrl: string): McpServer {
+  const widgetOrigin = (() => {
+    const raw = String(baseUrl || "").trim();
+    if (!raw) return "";
+    try {
+      return new URL(raw).origin;
+    } catch {
+      return "";
+    }
+  })();
   const server = new McpServer(
     {
       name: "business-canvas-chatkit",
@@ -71,6 +80,14 @@ function createAppServer(baseUrl: string): McpServer {
           {
             uri: uiResourceUri,
             text: loadUiHtml(),
+            _meta: {
+              "openai/widgetDescription": "Business Strategy Canvas Builder widget UI",
+              "openai/widgetCSP": {
+                connect_domains: [],
+                resource_domains: widgetOrigin ? [widgetOrigin] : [],
+              },
+              ...(widgetOrigin ? { "openai/widgetDomain": widgetOrigin } : {}),
+            },
           },
         ],
       };

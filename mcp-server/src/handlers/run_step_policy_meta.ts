@@ -105,7 +105,7 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
   [PRESENTATION_STEP_ID]: "offtopic.step.presentation",
 };
 
-const BEN_PROFILE_IMAGE_URL = "assets/ben-steenstra.webp";
+const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
 const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
 const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
 const META_TOPIC_LOCALES_OFFTOPIC_DOC = new Set<string>([

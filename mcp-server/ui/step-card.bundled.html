@@ -1314,6 +1314,7 @@
         flex-direction: column;
         gap: var(--space-4);
         margin-top: var(--space-4);
+        margin-bottom: var(--space-5);
         width: 100%;
         align-self: stretch;
       }
@@ -1358,6 +1359,7 @@
         flex-direction: column;
         gap: var(--space-3);
         margin-top: var(--space-4);
+        margin-bottom: var(--space-5);
       }
 
       .wordingChoiceHeading {
@@ -4206,9 +4208,13 @@
       const profile = Object.keys(resultProfile).length > 0 ? resultProfile : rootProfile;
       const imageUrlRaw = String(profile.image_url || specialist.__widget_profile_image_url || "").trim();
       if (!imageUrlRaw) return null;
-      const safeUrl = /^https?:\/\//i.test(imageUrlRaw) || imageUrlRaw.startsWith("/") || imageUrlRaw.startsWith("./") || imageUrlRaw.startsWith("../")
-        ? imageUrlRaw
-        : `./${imageUrlRaw}`;
+      const safeUrl = (() => {
+        if (/^https?:\/\//i.test(imageUrlRaw)) return imageUrlRaw;
+        if (imageUrlRaw.startsWith("/")) return imageUrlRaw;
+        if (imageUrlRaw.startsWith("assets/")) return `/ui/${imageUrlRaw}`;
+        if (imageUrlRaw.startsWith("./") || imageUrlRaw.startsWith("../")) return imageUrlRaw;
+        return `./${imageUrlRaw}`;
+      })();
       const imageAlt = String(profile.image_alt || specialist.__widget_profile_image_alt || "").trim() || uiText2(lang, "media.image.alt", "");
       return {
         image_url: safeUrl,
