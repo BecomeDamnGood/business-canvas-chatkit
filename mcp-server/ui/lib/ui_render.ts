@@ -40,14 +40,6 @@ type WidgetProfileMeta = {
   image_alt: string;
 };
 
-function isSafeProfileImageUrl(url: string): boolean {
-  const value = String(url || "").trim();
-  if (!value) return false;
-  if (/^https?:\/\//i.test(value)) return true;
-  if (value.startsWith("/")) return true;
-  return false;
-}
-
 function stripMarkdownImageLines(raw: string): string {
   const cleaned = String(raw || "")
     .replace(/\r/g, "\n")
@@ -74,7 +66,6 @@ function resolveWidgetProfileMeta(params: {
 
   const profile = Object.keys(resultProfile).length > 0 ? resultProfile : rootProfile;
   const imageUrl = String(profile.image_url || "").trim();
-  if (!isSafeProfileImageUrl(imageUrl)) return null;
   const imageAlt = String(profile.image_alt || "").trim() || uiText(params.lang, "media.image.alt", "");
   return {
     image_url: imageUrl,
@@ -83,7 +74,7 @@ function resolveWidgetProfileMeta(params: {
 }
 
 function prependProfileImage(cardDescEl: HTMLElement, profile: WidgetProfileMeta): void {
-  if (!cardDescEl || !profile.image_url) return;
+  if (!cardDescEl) return;
   const alreadyRendered = cardDescEl.querySelector("img.cardDesc-image");
   if (alreadyRendered) return;
   const img = document.createElement("img");

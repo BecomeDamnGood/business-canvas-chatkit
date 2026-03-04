@@ -4207,23 +4207,15 @@
       const rootProfile = toRecord2(rootWidgetMeta.profile);
       const profile = Object.keys(resultProfile).length > 0 ? resultProfile : rootProfile;
       const imageUrlRaw = String(profile.image_url || specialist.__widget_profile_image_url || "").trim();
-      if (!imageUrlRaw) return null;
-      const safeUrl = (() => {
-        if (/^https?:\/\//i.test(imageUrlRaw)) return imageUrlRaw;
-        if (imageUrlRaw.startsWith("/")) return imageUrlRaw;
-        if (imageUrlRaw.startsWith("assets/")) return `/ui/${imageUrlRaw}`;
-        if (imageUrlRaw.startsWith("./") || imageUrlRaw.startsWith("../")) return imageUrlRaw;
-        return `./${imageUrlRaw}`;
-      })();
       const imageAlt = String(profile.image_alt || specialist.__widget_profile_image_alt || "").trim() || uiText2(lang, "media.image.alt", "");
       return {
-        image_url: safeUrl,
+        image_url: imageUrlRaw,
         image_alt: imageAlt
       };
     };
     const stripMarkdownImageLines = (raw) => String(raw || "").replace(/\r/g, "\n").split("\n").filter((line) => !/^!\[[^\]]*\]\(([^)\s]+)\)\s*$/i.test(String(line || "").trim())).join("\n").replace(/\n{3,}/g, "\n\n").trim();
     const prependProfileImage = (target, profile) => {
-      if (!target || !profile || !profile.image_url) return;
+      if (!target || !profile) return;
       if (target.querySelector("img.cardDesc-image")) return;
       const img = document.createElement("img");
       img.className = "cardDesc-image";
