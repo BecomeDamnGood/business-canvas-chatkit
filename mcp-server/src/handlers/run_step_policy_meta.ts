@@ -96,7 +96,7 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
   [PRESENTATION_STEP_ID]: "offtopic.step.presentation",
 };
 
-const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
+const BEN_PROFILE_IMAGE_URL = "assets/ben-steenstra.webp";
 const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
 const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
 
@@ -433,7 +433,11 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
 
     const normalized = normalizeEssenceValueToSingleSentence(base);
     if (!normalized) return "";
-    return `The current ${offTopicStepLabel(stepId, state)} of ${offTopicCompanyName(state)} is ${normalized}`;
+    const contextLine = offTopicCurrentContextLine(stepId, state)
+      .replace(/[.!?]+$/g, "")
+      .trim();
+    if (!contextLine) return normalized;
+    return `${contextLine} ${normalized}`.trim();
   }
 
   function buildMotivationContinueLine(state: CanvasState, stepId: string, status: TurnOutputStatus): string {

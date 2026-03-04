@@ -87,6 +87,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     clearStepInteractiveState: (state: CanvasState, stepId: string) => CanvasState;
     isUiStateHygieneSwitchV1Enabled: () => boolean;
     isClearlyGeneralOfftopicInput: (userMessage: string) => boolean;
+    shouldTreatAsStepContributingInput: (userMessage: string, stepId: string) => boolean;
     bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
   };
   wording: {
@@ -399,9 +400,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
 
   const pendingBeforeTurn =
     ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
+  const currentStepId = String(state.current_step || "");
   const isGeneralOfftopicInput = statePorts.isClearlyGeneralOfftopicInput(userMessage);
-  const shouldKeepPendingOnOfftopic =
-    String(state.current_step || "") === ids.dreamStepId && isGeneralOfftopicInput;
+  const isStepContributingInput = statePorts.shouldTreatAsStepContributingInput(userMessage, currentStepId);
 
   if (
     runtime.wordingChoiceEnabled &&
@@ -415,7 +416,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       action.getDreamRuntimeMode(state)
     ) &&
     !wording.isWordingPickRouteToken(userMessage) &&
-    (!isGeneralOfftopicInput || shouldKeepPendingOnOfftopic)
+    isStepContributingInput
   ) {
     const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
     state = stateWithUi;
@@ -433,12 +434,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         previousSpecialist: pendingBeforeTurn,
         state: stateWithUi,
       });
-      if (shouldKeepPendingOnOfftopic) {
-        pendingSpecialist = wording.copyPendingWordingChoiceState(
-          pendingSpecialist,
-          pendingBeforeTurn
-        );
-      }
     }
 
     const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(

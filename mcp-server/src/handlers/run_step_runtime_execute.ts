@@ -326,6 +326,7 @@ export async function runStepRuntimeExecute(
       clearStepInteractiveState,
       isUiStateHygieneSwitchV1Enabled,
       isClearlyGeneralOfftopicInput,
+      shouldTreatAsStepContributingInput,
       bumpUiI18nCounter: (telemetry: any, key: any) =>
         bumpUiI18nCounter(
           telemetry as any,
