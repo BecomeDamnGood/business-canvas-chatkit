@@ -105,7 +105,7 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
   [PRESENTATION_STEP_ID]: "offtopic.step.presentation",
 };
 
-const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
+const BEN_PROFILE_IMAGE_URL = "assets/ben-steenstra.webp";
 const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
 const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
 const META_TOPIC_LOCALES_OFFTOPIC_DOC = new Set<string>([
@@ -403,6 +403,18 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         offTopicCompanyName(state),
       ]).trim()
     );
+  }
+
+  function offTopicCurrentContextHeading(stepId: string, state: CanvasState): string {
+    const template = uiStringLocaleFirst(state, "offtopic.current.template");
+    if (!template) return "";
+    const rendered = formatIndexedTemplate(template, [
+      offTopicStepLabel(stepId, state),
+      offTopicCompanyName(state),
+    ]).trim();
+    if (!rendered) return "";
+    const base = rendered.replace(/[.!?]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+    return base ? `${base}:` : "";
   }
 
   function offTopicRedirectLine(stepId: string, state: CanvasState): string {
@@ -739,9 +751,9 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
           ? params.previousSpecialist
           : {}
       );
-      const currentContext = offTopicCurrentContextLine(stepId, params.state).trim();
-      const currentBlock = currentContext && currentValue
-        ? `${currentContext}\n${currentValue}`
+      const currentContextHeading = offTopicCurrentContextHeading(stepId, params.state).trim();
+      const currentBlock = currentContextHeading && currentValue
+        ? `${currentContextHeading}\n\n${currentValue}`
         : (currentValue || "");
       const stepField = deps.fieldForStep(stepId);
       return {

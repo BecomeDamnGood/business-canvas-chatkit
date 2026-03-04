@@ -301,7 +301,7 @@
         max-width: 580px;
         background: transparent;
         color: var(--text);
-        padding: 0;
+        padding: 15px 0 0;
         margin-bottom: 20px;
         position: relative;
       }
@@ -347,7 +347,7 @@
         letter-spacing: 0.03em;
         margin: 22px 0 0;
         padding: 0;
-        display: block;
+        display: none;
       }
       
       /* Byline – flows in grid row 1 col 2 (right of title) */
@@ -3606,7 +3606,10 @@
     const byText = document.getElementById("byText");
     const btnStartText = document.getElementById("btnStartText");
     const send = document.getElementById("send");
-    if (uiSubtitle) uiSubtitle.textContent = t(lang, "uiSubtitle");
+    if (uiSubtitle) {
+      uiSubtitle.textContent = "";
+      uiSubtitle.style.display = "none";
+    }
     if (byText) byText.textContent = t(lang, "byText");
     if (btnStartText) btnStartText.textContent = t(lang, "btnStart");
     if (send) send.setAttribute("title", t(lang, "sendTitle"));
@@ -3896,6 +3899,7 @@
     const bootstrapWaitingLocale = serverExplicitWaiting;
     const waitingGateActive = bootstrapWaitingLocale;
     const startupPayloadMissing = Object.keys(result || {}).length === 0 && Object.keys(state).length === 0;
+    if (startupPayloadMissing || hasExplicitServerRouting) revealWidgetRoot();
     const overrideStringsMap = overrideStrings;
     const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
     if (hasOverrideStrings) setRuntimeUiStrings(overrideStringsMap);
@@ -3926,7 +3930,10 @@
       }
       if (prompt) prompt.textContent = "";
       if (sectionTitleEl2) sectionTitleEl2.textContent = "";
-      if (uiSubtitle) uiSubtitle.textContent = "";
+      if (uiSubtitle) {
+        uiSubtitle.textContent = "";
+        uiSubtitle.style.display = "none";
+      }
       if (badge2) {
         badge2.textContent = "";
         badge2.style.display = "none";
@@ -4020,7 +4027,10 @@
         }
       }
       if (prompt) prompt.textContent = "";
-      if (uiSubtitle) uiSubtitle.textContent = "";
+      if (uiSubtitle) {
+        uiSubtitle.textContent = "";
+        uiSubtitle.style.display = "none";
+      }
       startHint.textContent = "";
       startHint.style.display = "none";
       btnStart2.style.display = "none";
@@ -4938,7 +4948,7 @@
     });
   }
   if (!tryInitialIngestFromHost("set_globals")) {
-    clearStartupGrace();
+    renderStartupWaitShell("startup_no_initial_payload");
   }
 })();
 

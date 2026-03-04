@@ -227,7 +227,10 @@ function setStaticStrings(lang: string): void {
   const byText = document.getElementById("byText");
   const btnStartText = document.getElementById("btnStartText");
   const send = document.getElementById("send");
-  if (uiSubtitle) uiSubtitle.textContent = t(lang, "uiSubtitle");
+  if (uiSubtitle) {
+    uiSubtitle.textContent = "";
+    (uiSubtitle as HTMLElement).style.display = "none";
+  }
   if (byText) byText.textContent = t(lang, "byText");
   if (btnStartText) btnStartText.textContent = t(lang, "btnStart");
   if (send) send.setAttribute("title", t(lang, "sendTitle"));
@@ -650,9 +653,8 @@ export function render(overrideToolOutput?: unknown): void {
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
     if (prompt) prompt.textContent = "";
     if (uiSubtitle) {
-      uiSubtitle.textContent =
-        uiText(lang, "uiUseWidgetToContinue", "") ||
-        uiText(lang, "uiSubtitle", "");
+      uiSubtitle.textContent = "";
+      (uiSubtitle as HTMLElement).style.display = "none";
     }
     if (sectionTitleEl) sectionTitleEl.textContent = uiText(lang, "sectionTitle.step_0", "");
     (btnStart as HTMLElement).style.display = "inline-flex";
@@ -731,7 +733,10 @@ export function render(overrideToolOutput?: unknown): void {
       renderPrestartContent(prestartEl, lang);
     }
     if (prompt) prompt.textContent = "";
-    if (uiSubtitle) uiSubtitle.textContent = "";
+    if (uiSubtitle) {
+      uiSubtitle.textContent = "";
+      (uiSubtitle as HTMLElement).style.display = "none";
+    }
     startHint.textContent = "";
     (startHint as HTMLElement).style.display = "none";
     (btnStart as HTMLElement).style.display = "none";
