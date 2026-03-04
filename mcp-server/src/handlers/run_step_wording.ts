@@ -100,9 +100,26 @@ function toTrimmedStringArray(input: unknown): string[] {
 }
 
 export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
+  function shouldUseDefaultFallback(state: CanvasState | null | undefined): boolean {
+    const raw = String(
+      (state as any)?.ui_strings_lang ||
+      (state as any)?.ui_strings_requested_lang ||
+      (state as any)?.language ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
+    const base = raw.split("-")[0] || "";
+    return !base || base === "en";
+  }
+
+  function uiStringLocaleFirst(state: CanvasState | null | undefined, key: string): string {
+    const fallback = shouldUseDefaultFallback(state) ? deps.uiDefaultString(key) : "";
+    return deps.uiStringFromStateMap(state, key, fallback);
+  }
+
   function wordingInstructionForState(state: CanvasState | null | undefined): string {
-    const fallback = deps.uiDefaultString("wordingChoiceInstruction");
-    return deps.uiStringFromStateMap(state, "wordingChoiceInstruction", fallback);
+    return uiStringLocaleFirst(state, "wordingChoiceInstruction");
   }
 
   function isWordingChoiceEligibleStep(stepId: string): boolean {
@@ -316,6 +333,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       .replace(/\s+/g, " ")
       .trim();
     const source = cleaned || fallback;
+    if (!source) return "";
     const firstSentence = source
       .split(/(?<=[.!?])\s+/)
       .map((part) => part.trim())
@@ -397,7 +415,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const reasonText = String(prev.feedback_reason_text || "").trim();
     if (reasonKey) {
       const reasonUiKey = `wording.feedback.reason.${reasonKey}`;
-      const fallback = deps.uiDefaultString(reasonUiKey, "");
+      const fallback = shouldUseDefaultFallback(state) ? deps.uiDefaultString(reasonUiKey, "") : "";
       const fromMap = deps.uiStringFromStateMap(state, reasonUiKey, fallback);
       if (fromMap) return normalizeCompactFeedbackSentence(fromMap, "");
     }
@@ -424,7 +442,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     activeSpecialist = "",
     telemetry?: unknown
   ): string {
-    const ackDefault = deps.uiDefaultString("wording.feedback.user_pick.ack.default");
+    const ackDefault = shouldUseDefaultFallback(state)
+      ? deps.uiDefaultString("wording.feedback.user_pick.ack.default")
+      : "";
     const acknowledgment = normalizeCompactFeedbackSentence(
       deps.uiStringFromStateMap(
         state,
@@ -433,7 +453,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       ),
       ackDefault
     );
-    const reasonDefault = deps.uiDefaultString("wording.feedback.user_pick.reason.default");
+    const reasonDefault = shouldUseDefaultFallback(state)
+      ? deps.uiDefaultString("wording.feedback.user_pick.reason.default")
+      : "";
     const fallbackReason = normalizeCompactFeedbackSentence(
       deps.uiStringFromStateMap(
         state,

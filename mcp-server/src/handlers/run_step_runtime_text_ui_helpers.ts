@@ -81,8 +81,13 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
     parsed: { venture: string; name: string; status: string }
   ): string {
     if (deps.shouldSuppressFallbackText(state)) return "";
-    const venture = String(parsed.venture || "venture").trim();
-    const name = String(parsed.name || "TBD").trim();
+    const companyFallback = uiStringFromStateMap(
+      state,
+      "offtopic.companyFallback",
+      deps.uiDefaultString("offtopic.companyFallback")
+    );
+    const venture = String(parsed.venture || companyFallback).trim();
+    const name = String(parsed.name || companyFallback).trim();
     const existingTemplate = uiStringFromStateMap(
       state,
       "step0.readiness.statement.existing",
@@ -243,7 +248,7 @@ export function createRunStepRuntimeTextUiHelpers(deps: CreateRunStepRuntimeText
   }
 
   function buildQuestionTextFromActions(prompt: string): string {
-    return stripNumberedOptions(prompt) || String(prompt || "").trim();
+    return stripNumberedOptions(prompt);
   }
 
   function promptFallbackForInteractiveAsk(state: CanvasState, stepId: string): string {

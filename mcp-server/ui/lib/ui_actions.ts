@@ -1566,22 +1566,23 @@ export function resolveActionLivenessNotice(
     return {
       failure_class: failureClass,
       reason_code: reasonCode || "timeout",
-      message: uiText(state || {}, "transient.timeout", "") || "The action timed out. Please retry.",
+      message: uiText(state || {}, "transient.timeout", ""),
     };
   }
   if (failureClass === "rejected" && reasonCode.includes("rate_limit")) {
     return {
       failure_class: failureClass,
       reason_code: reasonCode,
-      message: uiText(state || {}, "transient.rate_limited", "") || "Please wait a moment and try again.",
+      message: uiText(state || {}, "transient.rate_limited", ""),
     };
   }
   if (failureClass === "dropped" || failureClass === "rejected" || failureClass === "accepted_no_advance") {
-    const base = uiText(state || {}, "error.contract.body", "") || "Action could not be applied.";
+    const base = uiText(state || {}, "error.contract.body", "");
+    const message = base ? `${base} (${reasonCode})` : reasonCode;
     return {
       failure_class: failureClass,
       reason_code: reasonCode,
-      message: `${base} (${reasonCode})`,
+      message,
     };
   }
   return { failure_class: "none", reason_code: "", message: "" };
@@ -1638,8 +1639,7 @@ export async function callRunStep(
       transport_status: transportStatus,
     });
     setInlineNotice(
-      uiText((cleanExtraState as Record<string, unknown>) || {}, "transient.connection_failed", "") ||
-        "Connection to the app host failed. Please try again."
+      uiText((cleanExtraState as Record<string, unknown>) || {}, "transient.connection_failed", "")
     );
     console.warn("run_step: host did not provide callTool or MCP bridge");
     const errEl = document.getElementById("cardDesc");

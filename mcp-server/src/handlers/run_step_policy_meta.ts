@@ -96,7 +96,7 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
   [PRESENTATION_STEP_ID]: "offtopic.step.presentation",
 };
 
-const BEN_PROFILE_IMAGE_URL = "assets/ben-steenstra.webp";
+const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
 const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
 const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
 
@@ -273,6 +273,32 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     return value || fallback;
   }
 
+  function localeBaseFromState(state?: CanvasState | null): string {
+    const raw = String(
+      (state as any)?.ui_strings_lang ||
+      (state as any)?.ui_strings_requested_lang ||
+      (state as any)?.language ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
+    if (!raw) return "";
+    return raw.split("-")[0] || "";
+  }
+
+  function uiStringLocaleFirst(state: CanvasState | null | undefined, key: string): string {
+    const uiStrings = (state && typeof (state as any).ui_strings === "object")
+      ? ((state as any).ui_strings as Record<string, unknown>)
+      : {};
+    const localized = String(uiStrings[key] || "").trim();
+    if (localized) return localized;
+    const base = localeBaseFromState(state || null);
+    if (!base || base === "en") {
+      return deps.uiDefaultString(key);
+    }
+    return "";
+  }
+
   function offTopicStepLabel(stepId: string, state: CanvasState): string {
     const key = OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP[stepId] || "";
     if (!key) return deps.wordingStepLabel(stepId);
@@ -293,11 +319,8 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
   }
 
   function offTopicCurrentContextLine(stepId: string, state: CanvasState): string {
-    const template = uiStringFromState(
-      state,
-      "offtopic.current.template",
-      deps.uiDefaultString("offtopic.current.template")
-    );
+    const template = uiStringLocaleFirst(state, "offtopic.current.template");
+    if (!template) return "";
     return ensureSentenceEnd(
       formatIndexedTemplate(template, [
         offTopicStepLabel(stepId, state),
@@ -307,11 +330,8 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
   }
 
   function offTopicRedirectLine(stepId: string, state: CanvasState): string {
-    const template = uiStringFromState(
-      state,
-      "offtopic.redirect.template",
-      deps.uiDefaultString("offtopic.redirect.template")
-    );
+    const template = uiStringLocaleFirst(state, "offtopic.redirect.template");
+    if (!template) return "";
     return ensureSentenceEnd(
       formatIndexedTemplate(template, [
         offTopicStepLabel(stepId, state),
@@ -320,11 +340,22 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     );
   }
 
+  function buildBenProfileWidgetProfile(state?: CanvasState | null): {
+    image_url: string;
+    image_alt: string;
+  } {
+    const imageAlt = uiStringLocaleFirst(state || null, "media.image.alt");
+    return {
+      image_url: BEN_PROFILE_IMAGE_URL,
+      image_alt: imageAlt,
+    };
+  }
+
   function buildBenProfileMessage(state?: CanvasState | null): string {
-    const paragraph1 = deps.uiStringFromStateMap(state || null, "meta.benProfile.paragraph1", deps.uiDefaultString("meta.benProfile.paragraph1"));
-    const paragraph2 = deps.uiStringFromStateMap(state || null, "meta.benProfile.paragraph2", deps.uiDefaultString("meta.benProfile.paragraph2"));
-    const paragraph3 = deps.uiStringFromStateMap(state || null, "meta.benProfile.paragraph3", deps.uiDefaultString("meta.benProfile.paragraph3"));
-    const paragraph4Template = deps.uiStringFromStateMap(state || null, "meta.benProfile.paragraph4", deps.uiDefaultString("meta.benProfile.paragraph4"));
+    const paragraph1 = uiStringLocaleFirst(state || null, "meta.benProfile.paragraph1");
+    const paragraph2 = uiStringLocaleFirst(state || null, "meta.benProfile.paragraph2");
+    const paragraph3 = uiStringLocaleFirst(state || null, "meta.benProfile.paragraph3");
+    const paragraph4Template = uiStringLocaleFirst(state || null, "meta.benProfile.paragraph4");
     const paragraph4 = formatIndexedTemplate(paragraph4Template, [BEN_PROFILE_WEBSITE_URL]);
     return [
       `![Ben Steenstra](${BEN_PROFILE_IMAGE_URL})`,
@@ -603,6 +634,9 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       );
       return {
         ...base,
+        __widget_profile_image_url: buildBenProfileWidgetProfile(params.state).image_url,
+        __widget_profile_image_alt: buildBenProfileWidgetProfile(params.state).image_alt,
+        __suppress_refined_append: "true",
         message: essence
           ? `${buildBenProfileMessage(params.state)}\n\n${essence}`
           : buildBenProfileMessage(params.state),
@@ -697,6 +731,9 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         action: "ASK",
         is_offtopic: true,
         message: buildBenProfileMessage(params.state),
+        __widget_profile_image_url: buildBenProfileWidgetProfile(params.state).image_url,
+        __widget_profile_image_alt: buildBenProfileWidgetProfile(params.state).image_alt,
+        __suppress_refined_append: "true",
         __offtopic_meta_passthrough: "true",
         wording_choice_pending: "false",
         wording_choice_selected: "",

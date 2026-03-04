@@ -174,16 +174,19 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
         context.userMessage === deps.dreamPickOneRouteToken,
       handle: async (context) => {
-        const previousSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
-        const pickedSuggestion = deps.pickDreamSuggestionFromPreviousState(context.state, previousSpecialist);
+        const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
+        const previousSpecialist = asRecord(
+          (stateWithUi as Record<string, unknown>).last_specialist_result || {}
+        );
+        const pickedSuggestion = deps.pickDreamSuggestionFromPreviousState(stateWithUi, previousSpecialist);
         if (!pickedSuggestion) return null;
 
         const specialist = {
           action: "ASK",
           message: deps.wordingSelectionMessage(
             deps.dreamStepId,
-            context.state,
-            String((context.state as Record<string, unknown>).active_specialist || ""),
+            stateWithUi,
+            String((stateWithUi as Record<string, unknown>).active_specialist || ""),
             pickedSuggestion
           ),
           question: "",
@@ -200,15 +203,15 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           specialist_to_call: deps.dreamSpecialist,
           specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: ${deps.dreamPickOneRouteToken}`,
           current_step: deps.dreamStepId,
-          intro_shown_for_step: String((context.state as Record<string, unknown>).intro_shown_for_step ?? ""),
+          intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
           intro_shown_session:
-            String((context.state as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
+            String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
           show_step_intro: "false",
           show_session_intro: "false",
         } as unknown as OrchestratorOutput;
 
         let nextState = deps.applyStateUpdate({
-          prev: context.state,
+          prev: stateWithUi,
           decision: forcedDecision,
           specialistResult: specialist,
           showSessionIntroUsed: "false",
@@ -231,16 +234,19 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         String((context.state as Record<string, unknown>).current_step || "") === deps.roleStepId &&
         context.userMessage === deps.roleChooseForMeRouteToken,
       handle: async (context) => {
-        const previousSpecialist = asRecord((context.state as Record<string, unknown>).last_specialist_result || {});
-        const pickedSuggestion = deps.pickRoleSuggestionFromPreviousState(context.state, previousSpecialist);
+        const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
+        const previousSpecialist = asRecord(
+          (stateWithUi as Record<string, unknown>).last_specialist_result || {}
+        );
+        const pickedSuggestion = deps.pickRoleSuggestionFromPreviousState(stateWithUi, previousSpecialist);
         if (!pickedSuggestion) return null;
 
         const specialist = {
           action: "ASK",
           message: deps.wordingSelectionMessage(
             deps.roleStepId,
-            context.state,
-            String((context.state as Record<string, unknown>).active_specialist || ""),
+            stateWithUi,
+            String((stateWithUi as Record<string, unknown>).active_specialist || ""),
             pickedSuggestion
           ),
           question: "",
@@ -256,15 +262,15 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           specialist_to_call: deps.roleSpecialist,
           specialist_input: `CURRENT_STEP_ID: ${deps.roleStepId} | USER_MESSAGE: ${deps.roleChooseForMeRouteToken}`,
           current_step: deps.roleStepId,
-          intro_shown_for_step: String((context.state as Record<string, unknown>).intro_shown_for_step ?? ""),
+          intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
           intro_shown_session:
-            String((context.state as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
+            String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
           show_step_intro: "false",
           show_session_intro: "false",
         } as unknown as OrchestratorOutput;
 
         let nextState = deps.applyStateUpdate({
-          prev: context.state,
+          prev: stateWithUi,
           decision: forcedDecision,
           specialistResult: specialist,
           showSessionIntroUsed: "false",

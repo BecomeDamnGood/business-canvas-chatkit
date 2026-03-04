@@ -35,6 +35,64 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+type WidgetProfileMeta = {
+  image_url: string;
+  image_alt: string;
+};
+
+function isSafeProfileImageUrl(url: string): boolean {
+  const value = String(url || "").trim();
+  if (!value) return false;
+  if (/^https?:\/\//i.test(value)) return true;
+  if (value.startsWith("/")) return true;
+  return false;
+}
+
+function stripMarkdownImageLines(raw: string): string {
+  const cleaned = String(raw || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .filter((line) => !/^!\[[^\]]*\]\(([^)\s]+)\)\s*$/i.test(String(line || "").trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return cleaned;
+}
+
+function resolveWidgetProfileMeta(params: {
+  data: Record<string, unknown>;
+  result: Record<string, unknown>;
+  lang: string;
+}): WidgetProfileMeta | null {
+  const resultMeta = toRecord(params.result._meta);
+  const resultWidgetMeta = toRecord(resultMeta.widget);
+  const resultProfile = toRecord(resultWidgetMeta.profile);
+
+  const rootMeta = toRecord(params.data._meta);
+  const rootWidgetMeta = toRecord(rootMeta.widget);
+  const rootProfile = toRecord(rootWidgetMeta.profile);
+
+  const profile = Object.keys(resultProfile).length > 0 ? resultProfile : rootProfile;
+  const imageUrl = String(profile.image_url || "").trim();
+  if (!isSafeProfileImageUrl(imageUrl)) return null;
+  const imageAlt = String(profile.image_alt || "").trim() || uiText(params.lang, "media.image.alt", "");
+  return {
+    image_url: imageUrl,
+    image_alt: imageAlt,
+  };
+}
+
+function prependProfileImage(cardDescEl: HTMLElement, profile: WidgetProfileMeta): void {
+  if (!cardDescEl || !profile.image_url) return;
+  const alreadyRendered = cardDescEl.querySelector("img.cardDesc-image");
+  if (alreadyRendered) return;
+  const img = document.createElement("img");
+  img.className = "cardDesc-image";
+  (img as HTMLImageElement).src = profile.image_url;
+  (img as HTMLImageElement).alt = profile.image_alt;
+  cardDescEl.prepend(img);
+}
+
 function actionContractActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
   const uiPayload = toRecord(resultData.ui);
   const actionContract = toRecord(uiPayload.action_contract);
@@ -352,7 +410,7 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   if (structuredActions.length === 0) {
     const hasLegacyActions = Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
     if (hasLegacyActions) {
-      setInlineNotice(uiText(lang, "error.contract.body", "") || "Please refresh and try again.");
+      setInlineNotice(uiText(lang, "error.contract.body", ""));
     }
     wrap.style.display = "none";
     return;
@@ -796,6 +854,7 @@ export function render(overrideToolOutput?: unknown): void {
     body = bodyRaw || "";
   }
   const cardDescEl = document.getElementById("cardDesc");
+  const profileMeta = resolveWidgetProfileMeta({ data, result, lang });
 
   let hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
   let hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
@@ -836,8 +895,14 @@ export function render(overrideToolOutput?: unknown): void {
     cardDescEl.classList.add("has-grid");
     const isStep0AskLayout = current === "step_0";
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
-    renderStructuredText(cardDescEl, body || "");
-    cardDescEl.classList.remove("is-ben-profile");
+    const bodyForRender = profileMeta ? stripMarkdownImageLines(body || "") : (body || "");
+    renderStructuredText(cardDescEl, bodyForRender);
+    if (profileMeta) {
+      prependProfileImage(cardDescEl, profileMeta);
+      cardDescEl.classList.add("is-ben-profile");
+    } else {
+      cardDescEl.classList.remove("is-ben-profile");
+    }
   }
 
   const previewWrap = document.getElementById("presentationPreview");

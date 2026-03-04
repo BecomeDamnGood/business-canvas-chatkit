@@ -310,6 +310,8 @@ export const CanvasStateZod = z.object({
 
   // shared convenience fields
   business_name: z.string(),
+  normalized_user_input: z.string(),
+  normalized_user_input_source: z.string(),
   quote_last_by_step: z.record(z.string(), z.string()),
 
   // reserved
@@ -382,6 +384,8 @@ export function getDefaultState(): CanvasState {
     dream_builder_statements: [],
 
     business_name: "TBD",
+    normalized_user_input: "",
+    normalized_user_input_source: "",
     quote_last_by_step: {},
 
     summary_target: "unknown",
@@ -586,6 +590,12 @@ export function normalizeState(raw: unknown): CanvasState {
     .filter(Boolean);
 
   const business_name = String(r.business_name ?? d.business_name) || "TBD";
+  const normalized_user_input = String((r as any).normalized_user_input ?? d.normalized_user_input).trim();
+  const normalized_user_input_source = String(
+    (r as any).normalized_user_input_source ?? d.normalized_user_input_source
+  )
+    .trim()
+    .toLowerCase();
   const quote_last_by_step_raw =
     typeof (r as any).quote_last_by_step === "object" && (r as any).quote_last_by_step !== null
       ? ((r as any).quote_last_by_step as Record<string, unknown>)
@@ -653,6 +663,8 @@ export function normalizeState(raw: unknown): CanvasState {
     dream_builder_statements,
 
     business_name,
+    normalized_user_input,
+    normalized_user_input_source,
     quote_last_by_step,
     summary_target,
   };

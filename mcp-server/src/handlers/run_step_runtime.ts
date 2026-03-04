@@ -188,6 +188,7 @@ import { createRunStepRuntimeTextUiHelpers } from "./run_step_runtime_text_ui_he
 import { createRunStepRuntimeSemanticHelpers } from "./run_step_runtime_semantic_helpers.js";
 import { createRunStepRuntimeSpecialistHelpers } from "./run_step_runtime_specialist_helpers.js";
 import { runStepRuntimeExecute } from "./run_step_runtime_execute.js";
+import { correctUserInputSurface } from "./run_step_surface_correction.js";
 export {
   LANGUAGE_LOCK_INSTRUCTION,
   UNIVERSAL_META_OFFTOPIC_POLICY,
@@ -914,6 +915,7 @@ const runStepRuntimeExecuteDeps = {
   looksLikeMetaInstruction, ROLE_SPECIALIST, PRESENTATION_SPECIALIST, DREAM_PICK_ONE_ROUTE_TOKEN,
   ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
   DREAM_START_EXERCISE_ROUTE_TOKEN,
+  correctUserInputSurface,
 };
 
 export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunStepError> {

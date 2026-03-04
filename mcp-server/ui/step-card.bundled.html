@@ -1692,14 +1692,14 @@
           <div class="prompt" id="prompt"></div>
           <div class="inputWrap" id="inputWrap" style="display:none">
             <textarea id="input" placeholder=""></textarea>
-            <button class="send" id="send" title="Send" disabled>
+            <button class="send" id="send" title="" disabled>
               <img src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB3aWR0aD0iMjEiIGhlaWdodD0iMjEiIHZlcnNpb249IjEuMSIgdmlld0JveD0iMCAwIDIxIDIxIj4KICA8IS0tIEdlbmVyYXRvcjogQWRvYmUgSWxsdXN0cmF0b3IgMzAuMi4wLCBTVkcgRXhwb3J0IFBsdWctSW4gLiBTVkcgVmVyc2lvbjogMi4xLjEgQnVpbGQgMTA1KSAgLS0+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5zdDAgewogICAgICAgIGZpbGw6ICNmZmY7CiAgICAgIH0KICAgIDwvc3R5bGU+CiAgPC9kZWZzPgogIDxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik0xMy42Nyw3LjM1Yy0uMzUtLjM1LS45MS0uMzUtMS4yNiwwbC02LjMxLDYuMzFjLS4zNS4zNS0uMzUuOTEsMCwxLjI2LjM1LjM1LjkxLjM1LDEuMjYsMGw2LjMxLTYuMzFjLjM0LS4zNS4zMy0uOTEtLjAyLTEuMjZoLjAyWk0yMC44MSwxLjMybC02LjMxLDE4LjkyYy0uMTEuMzItLjM5LjU1LS43My42aC0uMTJjLS4zLDAtLjU5LS4xNS0uNzUtLjQxbC0yLjk0LTQuNjNjLS4yNy0uNDEtLjE1LS45Ni4yNy0xLjIzLjItLjEzLjQ0LS4xNy42OC0uMTIuMjMuMDUuNDMuMi41Ni40bDEuOTQsMy4wNyw1LjE1LTE1LjQ2TDMuMSw3LjZsMy4wNCwxLjk0Yy40Mi4yNi41NC44MS4yOCwxLjIzLS4yNi40Mi0uODEuNTQtMS4yMy4yOEwuNTYsOC4xMWMtLjI5LS4xOS0uNDUtLjUyLS40LS44Ni4wNC0uMzQuMjgtLjYzLjYtLjc0TDE5LjY4LjJjLjMxLS4xLjY2LS4wMi44OS4yMS4yNC4yNC4zMy41OS4yMy45MWgwWiIvPgo8L3N2Zz4=" alt="">
             </button>
           </div>
           <div class="choiceWrap" id="choiceWrap" style="display:none"></div>
           <div class="row" id="controls">
             <button class="btn primary" id="btnStart" disabled aria-disabled="true">
-              <span id="btnStartText">Start</span>
+              <span id="btnStartText"></span>
               <div class="cta-arrow">
                 <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="5" y1="12" x2="19" y2="12"/>
@@ -1708,10 +1708,10 @@
               </div>
             </button>
             <div class="startHint" id="startHint"></div>
-            <button class="btn primary" id="btnGoToNextStep" style="display:none">Go to next step</button>
-            <button class="btn primary" id="btnStartDreamExercise" style="display:none">Start the exercise</button>
-            <button class="btn" id="btnSwitchToSelfDream" style="display:none">Switch back to self-formulate the dream</button>
-            <button class="btn primary" id="btnDreamConfirm" style="display:none">I'm happy with this formulation, continue to the Purpose step</button>
+            <button class="btn primary" id="btnGoToNextStep" style="display:none"></button>
+            <button class="btn primary" id="btnStartDreamExercise" style="display:none"></button>
+            <button class="btn" id="btnSwitchToSelfDream" style="display:none"></button>
+            <button class="btn primary" id="btnDreamConfirm" style="display:none"></button>
           </div>
           <div class="status" id="status"></div>
         </div>
@@ -3056,7 +3056,7 @@
         transport_status: transportStatus
       });
       setInlineNotice(
-        uiText(cleanExtraState || {}, "transient.connection_failed", "") || "Connection to the app host failed. Please try again."
+        uiText(cleanExtraState || {}, "transient.connection_failed", "")
       );
       console.warn("run_step: host did not provide callTool or MCP bridge");
       const errEl = document.getElementById("cardDesc");
@@ -4747,7 +4747,7 @@
     if (!submitActionCode) {
       console.warn("[ui_action_missing]", { state_key: "ui_action_text_submit" });
       setInlineNotice(
-        uiStringFromContract("error.contract.body") || "Please refresh and try again."
+        uiStringFromContract("error.contract.body")
       );
       return;
     }
@@ -4803,7 +4803,7 @@
       if (!actionCode) {
         console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_user" });
         setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
+          uiStringFromContract("error.contract.body")
         );
         return;
       }
@@ -4818,7 +4818,7 @@
       if (!actionCode) {
         console.warn("[ui_action_missing]", { state_key: "ui_action_wording_pick_suggestion" });
         setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
+          uiStringFromContract("error.contract.body")
         );
         return;
       }
@@ -4833,7 +4833,7 @@
       if (!actionCode) {
         console.warn("[ui_action_missing]", { state_key: "ui_action_start" });
         setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
+          uiStringFromContract("error.contract.body")
         );
         btnStart.disabled = true;
         return;
@@ -4851,7 +4851,7 @@
       if (!actionCode) {
         console.warn("[ui_action_missing]", { state_key: "ui_action_dream_start_exercise" });
         setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
+          uiStringFromContract("error.contract.body")
         );
         return;
       }
@@ -4866,7 +4866,7 @@
       if (!actionCode) {
         console.warn("[ui_action_missing]", { state_key: "ui_action_dream_switch_to_self" });
         setInlineNotice(
-          uiStringFromContract("error.contract.body") || "Please refresh and try again."
+          uiStringFromContract("error.contract.body")
         );
         return;
       }

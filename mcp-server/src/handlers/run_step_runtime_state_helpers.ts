@@ -52,6 +52,24 @@ export const RECAP_INSTRUCTION = `UNIVERSAL RECAP (every step)
 - When wants_recap=false: behave as usual.`;
 
 export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeStateHelpersDeps) {
+  function localeBaseFromState(state: CanvasState | null | undefined): string {
+    const raw = String(
+      (state as any)?.ui_strings_lang ||
+      (state as any)?.ui_strings_requested_lang ||
+      (state as any)?.language ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
+    if (!raw) return "";
+    return raw.split("-")[0] || "";
+  }
+
+  function shouldUseDefaultFallback(state: CanvasState | null | undefined): boolean {
+    const base = localeBaseFromState(state);
+    return !base || base === "en";
+  }
+
   function localizedUiString(
     state: CanvasState | null | undefined,
     key: string,
@@ -64,6 +82,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       const candidate = String(map[key] || "").trim();
       if (candidate) return candidate;
     }
+    if (!shouldUseDefaultFallback(state)) return "";
     return String(fallback || "").trim();
   }
 

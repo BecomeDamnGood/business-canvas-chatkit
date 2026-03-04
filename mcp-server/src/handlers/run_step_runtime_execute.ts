@@ -40,6 +40,7 @@ export async function runStepRuntimeExecute(
     looksLikeMetaInstruction, ROLE_SPECIALIST, PRESENTATION_SPECIALIST, DREAM_PICK_ONE_ROUTE_TOKEN,
     ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
     DREAM_START_EXERCISE_ROUTE_TOKEN,
+    correctUserInputSurface,
   } = deps;
   const ingressParsed = parseRunStepIngressArgs(rawArgs, { defaultStepId: STEP_0_ID });
   const incomingLanguageSourceRaw = ingressParsed.incomingLanguageSourceRaw;
@@ -284,6 +285,39 @@ export async function runStepRuntimeExecute(
   clickedActionCodeForNoRepeat = preflightLayer.clickedActionCodeForNoRepeat;
   blockingMarkerClass = preflightLayer.blockingMarkerClass;
 
+  const surfaceCorrection = await correctUserInputSurface({
+    model,
+    state,
+    userMessage,
+    submittedUserText,
+    actionCodeRaw,
+    localeHint,
+    normalizeLangCode,
+  });
+  if (surfaceCorrection?.llmCall) {
+    rememberLlmCall(surfaceCorrection.llmCall);
+  }
+  const correctedInput = String(surfaceCorrection?.correctedText || "").trim();
+  const isInteractiveTextInput = Boolean(
+    correctedInput &&
+      !correctedInput.startsWith("ACTION_") &&
+      !correctedInput.startsWith("__ROUTE__") &&
+      !correctedInput.startsWith("choice:")
+  );
+  if (isInteractiveTextInput) {
+    userMessage = correctedInput;
+    if (String(submittedUserText || "").trim()) {
+      submittedUserText = correctedInput;
+    }
+  }
+  (state as Record<string, unknown>).normalized_user_input = isInteractiveTextInput ? correctedInput : "";
+  (state as Record<string, unknown>).normalized_user_input_source = isInteractiveTextInput
+    ? String(surfaceCorrection?.source || "passthrough")
+    : "";
+
+  state = await finalizeLayer.ensureLanguage(state, userMessage);
+  languageResolvedThisTurn = true;
+
   const actionRoutingLayer = await runStepRuntimeActionRoutingLayer({
     runtime: {
       state,
@@ -373,9 +407,7 @@ export async function runStepRuntimeExecute(
       (state as Record<string, unknown>).intro_shown_session = "true";
     }
   }
-
-  state = await finalizeLayer.ensureLanguage(state, userMessage);
-  languageResolvedThisTurn = true;
+  state = await finalizeLayer.ensureUiStrings(state, userMessage);
   const lang = langFromState(state);
   const uiI18nCounterPort = (telemetry: unknown, key: string) =>
     bumpUiI18nCounter(

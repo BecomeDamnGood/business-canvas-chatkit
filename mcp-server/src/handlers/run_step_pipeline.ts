@@ -294,6 +294,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       }
     }
 
+    state = await params.ensureUiStrings(state, userMessage);
+
     specialistResult = asRecord(
       deps.normalizeLocalizedConceptTerms(specialistResult, state) || specialistResult
     );

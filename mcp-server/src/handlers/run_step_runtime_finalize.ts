@@ -166,6 +166,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const parts: string[] = [];
 
     const wordingPending = String(specialist?.wording_choice_pending || "") === "true";
+    const suppressRefinedAppend = String(specialist?.__suppress_refined_append || "").trim() === "true";
     const wordingMode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
     const wordingSuggestion = String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim();
     const normalizeLine = (value: string): string =>
@@ -286,7 +287,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         .map((line) => normalizeForDedupe(line))
         .filter(Boolean);
     if (msg) parts.push(msg);
-    if (refined && !wordingPending) {
+    if (refined && !wordingPending && !suppressRefinedAppend) {
       const statementComparable = statementLines
         .map((line) => deps.canonicalizeComparableText(line))
         .filter(Boolean);
