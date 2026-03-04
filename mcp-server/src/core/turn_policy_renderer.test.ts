@@ -51,3 +51,40 @@ test("strategy wording-pick render always appends canonical bullet context and n
     "bevestig/ga door actie moet beschikbaar blijven bij 4 focuspunten"
   );
 });
+
+test("productsservices summary list keeps confirm action available before final commit", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "productsservices";
+  (state as any).active_specialist = "ProductsServices";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = {
+    productsservices: "Branding\nStrategie\nDesign\nWebsites",
+  };
+  (state as any).provisional_source_by_step = {
+    productsservices: "user_input",
+  };
+
+  const specialist = {
+    action: "ASK",
+    message:
+      "Dit is wat je volgens jouw input aanbiedt aan je klanten:\n\n- Branding\n- Strategie\n- Design\n- Websites\n\nIs dit alles wat Mindd aanbiedt of is er meer?",
+    question: "",
+    refined_formulation: "",
+    productsservices: "",
+  } as Record<string, unknown>;
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "productsservices",
+    state,
+    specialist,
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.equal(
+    rendered.uiActionCodes.includes("ACTION_PRODUCTSSERVICES_CONFIRM"),
+    true,
+    "bevestig/ga door actie moet beschikbaar zijn zodra de products/services-lijst zichtbaar is"
+  );
+});

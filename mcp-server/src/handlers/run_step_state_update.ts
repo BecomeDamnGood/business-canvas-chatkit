@@ -45,6 +45,50 @@ type RunStepStateUpdateDeps = {
 };
 
 export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
+  function stripSimpleMarkup(raw: string): string {
+    return String(raw || "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+      .replace(/<\/?p[^>]*>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\r/g, "\n")
+      .trim();
+  }
+
+  function looksLikeQuestion(line: string): boolean {
+    return /[?？]\s*$/.test(String(line || "").trim());
+  }
+
+  function extractProductsServicesCandidateFromMessage(rawMessage: unknown): string {
+    const text = stripSimpleMarkup(String(rawMessage || ""));
+    if (!text) return "";
+
+    const lines = text
+      .split("\n")
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+    if (lines.length === 0) return "";
+
+    const bulletItems = lines
+      .map((line) => line.match(/^\s*[-*•]\s+(.+)$/)?.[1] || "")
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+    if (bulletItems.length > 0) return bulletItems.join("\n");
+
+    const paragraphs = text
+      .split(/\n{2,}/)
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+    if (paragraphs.length >= 2) {
+      const middle = paragraphs.slice(1, -1).find((part) => !looksLikeQuestion(part));
+      if (middle) return middle;
+      const fallbackMiddle = paragraphs[1];
+      if (fallbackMiddle && !looksLikeQuestion(fallbackMiddle)) return fallbackMiddle;
+    }
+
+    return "";
+  }
+
   /**
    * Persist state updates consistently (no nulls).
    * Contract mode: step outputs are staged per step and only committed to *_final on explicit next-step actioncodes.
@@ -129,6 +173,17 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
         specialistResult?.productsservices,
         specialistResult?.refined_formulation
       );
+      if (!String((nextState as any).provisional_by_step?.[deps.productsservicesStepId] || "").trim()) {
+        const candidateFromMessage = extractProductsServicesCandidateFromMessage(specialistResult?.message);
+        if (candidateFromMessage) {
+          nextState = deps.withProvisionalValue(
+            nextState,
+            deps.productsservicesStepId,
+            candidateFromMessage,
+            provisionalSource
+          );
+        }
+      }
     }
     if (nextStep === deps.rulesofthegameStepId) {
       const statementsArray = Array.isArray(specialistResult.statements)

@@ -682,19 +682,13 @@ function computeStatus(
   }
 
   if (stepId === "productsservices") {
-    if (acceptedOutput && (acceptedValue || statementCount > 0 || visibleValue)) {
+    const recapItems = productsServicesItemsFromRecap(acceptedValue || statementBullets || visibleValue);
+    const hasCandidate = recapItems.length > 0 || Boolean(visibleValue) || statementCount > 0;
+    if (acceptedOutput || hasCandidate) {
       return {
         status: "valid_output",
         confirmEligible: true,
         recapBody: acceptedValue || statementBullets || visibleValue,
-        statementCount,
-      };
-    }
-    if (statementCount > 0 || visibleValue) {
-      return {
-        status: "incomplete_output",
-        confirmEligible: false,
-        recapBody: statementBullets || visibleValue,
         statementCount,
       };
     }

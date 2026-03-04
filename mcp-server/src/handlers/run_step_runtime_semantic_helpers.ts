@@ -87,6 +87,7 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     if (committedFinal) return true;
     const provisional = deps.provisionalValueForStep(state, stepId);
     if (!provisional) return false;
+    if (stepId === "productsservices") return true;
     const source = deps.provisionalSourceForStep(state, stepId);
     return source === "user_input" || source === "wording_pick" || source === "action_route";
   }
