@@ -80,6 +80,8 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "dreamBuilder.statements.title": "Your Dream statements",
   "dreamBuilder.statements.count": "N statements out of a minimum of 20 so far",
   "dreamBuilder.statements.empty": "No statements yet.",
+  "dream.intro.body":
+    "Vision comes from the Greek word visio, meaning \"to see.\" A true visionary sees a future before others can see it. They feel it. They dream it. That is why this step is called Dream. A Dream is a vivid picture of the future you want to create. It describes a world that is better, fairer, healthier, simpler, or more inspiring because your organization exists.\n\nIt is not a revenue target, a strategy, or a hidden pitch for a product or service. A real Dream is human. It should touch people and help them feel why it matters. Focus on the change you want to see in the world and the effect you want to have on people's lives, not on the tools or the execution. Write a first version of your Dream. It doesn't have to be perfect. It just has to be real.",
   btnSwitchToSelfDream: "Switch back to self-formulate the dream",
   sendTitle: "Send",
   errorMessage: "Something went wrong while processing your message. Please try again.",
@@ -272,7 +274,7 @@ export const UI_STRINGS_WITH_MENU_KEYS: Record<string, string> = {
 };
 
 export const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_WITH_MENU_KEYS);
-export const UI_STRINGS_SCHEMA_VERSION = "2026-02-25-ui-i18n-v4_catalog";
+export const UI_STRINGS_SCHEMA_VERSION = "2026-03-04-ui-i18n-v5_catalog";
 
 function buildCriticalUiKeysStep0(): string[] {
   const keySet = new Set<string>([

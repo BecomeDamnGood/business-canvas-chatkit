@@ -33,6 +33,7 @@ export const UI_STRINGS_LOCALE_PT_BR: Record<string, string> = {
     "dreamBuilder.statements.empty": "Ainda não há declarações.",
     "dreamBuilder.statements.title": "Suas declarações de Sonho",
     "dreamBuilder.switchSelf.headline": "Continue com o exercício de Sonho.",
+    "dream.intro.body": "Visão vem da palavra grega visio, que significa “ver”. Um verdadeiro visionário vê um futuro antes que outras pessoas consigam vê-lo. Ele sente isso. Ele sonha com isso. Por isso este passo se chama Sonho. Um Sonho é uma imagem viva do futuro que você quer criar. Ele descreve um mundo melhor, mais justo, mais saudável, mais simples ou mais inspirador porque a sua organização existe.\n\nNão é uma meta de receita, nem uma estratégia, nem uma forma disfarçada de promover um produto ou serviço. Um verdadeiro Sonho é humano. Ele deve tocar as pessoas e fazê-las sentir por que isso importa. Concentre-se na mudança que você quer ver no mundo e no impacto que deseja ter na vida das pessoas, não nas ferramentas ou na execução. Escreva a primeira versão do seu Sonho. Não precisa ser perfeita. Só precisa ser real.",
     "error.contract.body": "Atualize a página ou inicie uma nova sessão.",
     "error.contract.title": "O estado do app é inválido.",
     "error.generic.body": "Atualize a página e tente novamente.",

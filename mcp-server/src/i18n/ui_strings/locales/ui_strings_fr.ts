@@ -33,6 +33,7 @@ export const UI_STRINGS_LOCALE_FR: Record<string, string> = {
     "dreamBuilder.statements.empty": "Aucune affirmation pour le moment.",
     "dreamBuilder.statements.title": "Tes affirmations Rêve",
     "dreamBuilder.switchSelf.headline": "Continue avec l’exercice Rêve.",
+    "dream.intro.body": "La vision vient du mot grec visio, qui signifie « voir ». Un véritable visionnaire voit un avenir avant que les autres puissent le voir. Il le ressent. Il le rêve. C’est pourquoi cette étape s’appelle Rêve. Un Rêve est une image vivante de l’avenir que vous souhaitez créer. Il décrit un monde meilleur, plus juste, plus sain, plus simple ou plus inspirant parce que votre organisation existe.\n\nCe n’est pas un objectif de chiffre d’affaires, ni une stratégie, ni une manière déguisée de promouvoir un produit ou un service. Un vrai Rêve est humain. Il doit toucher les gens et leur faire sentir pourquoi cela compte. Concentrez-vous sur le changement que vous voulez voir dans le monde et sur l’impact que vous souhaitez avoir dans la vie des gens, pas sur les outils ni sur l’exécution. Écrivez une première version de votre Rêve. Elle n’a pas besoin d’être parfaite. Elle doit simplement être sincère.",
     "error.contract.body": "Veuillez actualiser la page ou démarrer une nouvelle session.",
     "error.contract.title": "L’état de l’app est invalide.",
     "error.generic.body": "Veuillez actualiser la page et réessayer.",

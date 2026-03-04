@@ -33,6 +33,7 @@ export const UI_STRINGS_LOCALE_IT: Record<string, string> = {
     "dreamBuilder.statements.empty": "Ancora nessuna affermazione.",
     "dreamBuilder.statements.title": "Le tue affermazioni Sogno",
     "dreamBuilder.switchSelf.headline": "Continua con l’esercizio Sogno.",
+    "dream.intro.body": "La visione deriva dalla parola greca visio, che significa “vedere”. Un vero visionario vede un futuro prima che gli altri possano vederlo. Lo sente. Lo sogna. Per questo questo passaggio si chiama Sogno. Un Sogno è un’immagine vivida del futuro che vuoi creare. Descrive un mondo migliore, più giusto, più sano, più semplice o più ispirante perché la tua organizzazione esiste.\n\nNon è un obiettivo di fatturato, né una strategia, né una presentazione mascherata di un prodotto o di un servizio. Un vero Sogno è umano. Dovrebbe toccare le persone e far capire perché conta davvero. Concentrati sul cambiamento che vuoi vedere nel mondo e sull’impatto che vuoi avere nella vita delle persone, non sugli strumenti o sull’esecuzione. Scrivi una prima versione del tuo Sogno. Non deve essere perfetta. Deve solo essere autentica.",
     "error.contract.body": "Aggiorna la pagina o avvia una nuova sessione.",
     "error.contract.title": "Lo stato dell’app non è valido.",
     "error.generic.body": "Aggiorna la pagina e riprova.",

@@ -33,6 +33,7 @@ export const UI_STRINGS_LOCALE_ZH_HANS: Record<string, string> = {
     "dreamBuilder.statements.empty": "暂无陈述。",
     "dreamBuilder.statements.title": "你的 梦想 陈述",
     "dreamBuilder.switchSelf.headline": "继续进行 梦想 练习。",
+    "dream.intro.body": "“愿景”一词源自希腊语 visio，意思是“看见”。真正的远见者会在他人尚未看见之前，就看见未来。他能感受到它，也会去梦想它。因此，这一步被称为梦想（Dream）。梦想是你希望创造的未来的生动图景。它描绘了一个因为你的组织存在而变得更好、更公平、更健康、更简单或更具启发性的世界。\n\n这不是收入目标，也不是战略，更不是为某个产品或服务做的隐藏式推销。真正的梦想是人性的。它应该能够打动人心，让人们感受到为什么这件事很重要。把注意力放在你希望在世界上看到的改变，以及你希望对人们生活产生的影响上，而不是工具或执行方式。写下你梦想的第一个版本。它不需要完美，只需要真实。",
     "error.contract.body": "请刷新页面或开启新的会话。",
     "error.contract.title": "应用状态无效。",
     "error.generic.body": "请刷新后重试。",

@@ -33,6 +33,7 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "dreamBuilder.statements.empty": "Belum ada pernyataan.",
     "dreamBuilder.statements.title": "Pernyataan Mimpi Anda",
     "dreamBuilder.switchSelf.headline": "Lanjutkan dengan latihan Mimpi.",
+    "dream.intro.body": "Visi berasal dari kata Yunani visio, yang berarti “melihat.” Seorang visioner sejati melihat masa depan sebelum orang lain dapat melihatnya. Mereka merasakannya. Mereka memimpikannya. Itulah sebabnya langkah ini disebut Mimpi. Sebuah Mimpi adalah gambaran yang jelas dan hidup tentang masa depan yang ingin Anda ciptakan. Ini menggambarkan dunia yang lebih baik, lebih adil, lebih sehat, lebih sederhana, atau lebih menginspirasi karena organisasi Anda ada.\n\nIni bukan target pendapatan, bukan strategi, dan bukan promosi terselubung untuk produk atau layanan. Mimpi yang nyata bersifat manusiawi. Mimpi harus menyentuh orang dan membuat mereka merasakan mengapa hal ini penting. Fokuslah pada perubahan yang ingin Anda lihat di dunia dan dampak yang ingin Anda berikan pada kehidupan orang lain, bukan pada alat atau pelaksanaannya. Tuliskan versi pertama dari Mimpi Anda. Tidak harus sempurna. Yang penting adalah nyata.",
     "error.contract.body": "Silakan muat ulang atau mulai sesi baru.",
     "error.contract.title": "Status aplikasi tidak valid.",
     "error.generic.body": "Silakan muat ulang dan coba lagi.",

@@ -33,6 +33,7 @@ export const UI_STRINGS_LOCALE_DE: Record<string, string> = {
     "dreamBuilder.statements.empty": "Noch keine Aussagen.",
     "dreamBuilder.statements.title": "Deine Traum-Aussagen",
     "dreamBuilder.switchSelf.headline": "Mach weiter mit der Traum-Übung.",
+    "dream.intro.body": "Vision kommt vom griechischen Wort visio, das „sehen“ bedeutet. Ein echter Visionär sieht eine Zukunft, bevor andere sie sehen können. Er fühlt sie. Er träumt sie. Deshalb heißt dieser Schritt Traum. Ein Traum ist ein lebendiges Bild der Zukunft, die du erschaffen möchtest. Er beschreibt eine Welt, die besser, gerechter, gesünder, einfacher oder inspirierender ist, weil deine Organisation existiert.\n\nEs ist kein Umsatzziel, keine Strategie und kein versteckter Pitch für ein Produkt oder eine Dienstleistung. Ein echter Traum ist menschlich. Er sollte Menschen berühren und sie spüren lassen, warum er wichtig ist. Konzentriere dich auf die Veränderung, die du in der Welt sehen möchtest, und auf die Wirkung, die du auf das Leben von Menschen haben willst, nicht auf Mittel oder Umsetzung. Schreibe eine erste Version deines Traums. Sie muss nicht perfekt sein. Sie muss nur echt sein.",
     "error.contract.body": "Bitte aktualisiere die Seite oder starte eine neue Sitzung.",
     "error.contract.title": "Der App-Status ist ungültig.",
     "error.generic.body": "Bitte aktualisiere die Seite und versuche es erneut.",

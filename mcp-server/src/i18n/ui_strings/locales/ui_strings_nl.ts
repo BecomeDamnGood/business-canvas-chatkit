@@ -33,6 +33,7 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "dreamBuilder.statements.empty": "Nog geen statements.",
     "dreamBuilder.statements.title": "Jouw droom-statements",
     "dreamBuilder.switchSelf.headline": "Ga verder met de Droom-oefening.",
+    "dream.intro.body": "Visie komt van het Griekse woord visio, wat “zien” betekent. Een echte visionair ziet een toekomst voordat anderen die kunnen zien. Ze voelen het. Ze dromen het. Daarom heet deze stap Droom. Een Droom is een levendig beeld van de toekomst die je wilt creëren. Het beschrijft een wereld die beter, eerlijker, gezonder, eenvoudiger of inspirerender is omdat jouw organisatie bestaat.\n\nHet is geen omzetdoel, geen strategie en geen verkapte pitch voor een product of dienst. Een echte Droom is menselijk. Het moet mensen raken en laten voelen waarom het belangrijk is. Richt je op de verandering die je in de wereld wilt zien en het effect dat je wilt hebben op het leven van mensen, niet op de middelen of de uitvoering. Schrijf een eerste versie van je Droom. Het hoeft niet perfect te zijn. Het moet vooral echt zijn.",
     "error.contract.body": "Ververs de pagina of start een nieuwe sessie.",
     "error.contract.title": "De app-status is ongeldig.",
     "error.generic.body": "Ververs en probeer het opnieuw.",

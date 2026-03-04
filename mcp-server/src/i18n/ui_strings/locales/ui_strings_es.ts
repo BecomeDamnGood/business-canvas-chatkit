@@ -33,6 +33,7 @@ export const UI_STRINGS_LOCALE_ES: Record<string, string> = {
     "dreamBuilder.statements.empty": "Aún no hay afirmaciones.",
     "dreamBuilder.statements.title": "Tus afirmaciones de Sueño",
     "dreamBuilder.switchSelf.headline": "Continúa con el ejercicio de Sueño.",
+    "dream.intro.body": "La visión proviene de la palabra griega visio, que significa “ver”. Un verdadero visionario ve un futuro antes de que otros puedan verlo. Lo siente. Lo sueña. Por eso este paso se llama Sueño. Un Sueño es una imagen clara y viva del futuro que quieres crear. Describe un mundo mejor, más justo, más saludable, más simple o más inspirador porque tu organización existe.\n\nNo es un objetivo de ingresos, ni una estrategia, ni un discurso disfrazado para vender un producto o servicio. Un verdadero Sueño es humano. Debe tocar a las personas y hacerles sentir por qué es importante. Concéntrate en el cambio que quieres ver en el mundo y en el impacto que quieres tener en la vida de las personas, no en las herramientas ni en la ejecución. Escribe una primera versión de tu Sueño. No tiene que ser perfecta. Solo tiene que ser real.",
     "error.contract.body": "Por favor, actualiza la página o inicia una nueva sesión.",
     "error.contract.title": "El estado de la app no es válido.",
     "error.generic.body": "Por favor, actualiza la página e inténtalo de nuevo.",

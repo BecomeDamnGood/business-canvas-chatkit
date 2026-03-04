@@ -731,6 +731,17 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       : {};
     if (!stepId || stepId === STEP_0_ID) return specialist;
 
+    // Canonical Dream INTRO text must come from ui_strings catalog source.
+    if (stepId === DREAM_STEP_ID && String((specialist as any).action || "").trim().toUpperCase() === "INTRO") {
+      const introBody = uiStringLocaleFirst(params.state, "dream.intro.body").trim();
+      if (introBody) {
+        return {
+          ...specialist,
+          message: introBody,
+        };
+      }
+    }
+
     const metaTopic = resolveSpecialistMetaTopic(specialist);
     if (metaTopic === "NONE" || metaTopic === "RECAP") return specialist;
 

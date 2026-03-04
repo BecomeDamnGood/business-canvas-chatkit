@@ -91,6 +91,30 @@ test("wants_recap forces RECAP meta topic classification", () => {
   assert.equal(metaTopic, "RECAP");
 });
 
+test("dream INTRO message is sourced from ui_strings catalog key", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "nl",
+    ui_strings: {
+      "dream.intro.body": "Catalog intro body for dream.",
+    },
+  };
+
+  const routed = helpers.applyCentralMetaTopicRouter({
+    stepId: "dream",
+    specialistResult: {
+      action: "INTRO",
+      message: "LLM generated intro that should be ignored",
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    previousSpecialist: {},
+    state,
+  }) as Record<string, unknown>;
+
+  assert.equal(String(routed.message || ""), "Catalog intro body for dream.");
+});
+
 test("offtopic normalizer removes duplicate localized redirect before appending canonical redirect", () => {
   const helpers = buildHelpers();
   const state: any = {
