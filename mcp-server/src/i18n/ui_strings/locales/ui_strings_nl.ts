@@ -188,6 +188,33 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "prestart.proven.title": "De Bewezen Standaard",
     "prestartWelcome": "Bouw stap voor stap een compleet Business Model en Strategie Canvas.",
     "purposeInstructionHint": "Beantwoord de vragen, formuleer je eigen bestaansreden, of kies een optie",
+    "autosuggest.prefix.template": "Op basis van je input stel ik de volgende {0} voor:",
+    "autosuggest.prompt.generic":
+      "Doe een concreet voorstel voor deze stap op basis van de bekende context.",
+    "autosuggest.prompt.dream":
+      "Formuleer een duidelijke Droom-zin voor dit bedrijf op basis van de bekende context. Houd het kort en direct klaar om te bevestigen.",
+    "autosuggest.prompt.purpose":
+      "Formuleer een duidelijke bestaansreden-zin voor dit bedrijf op basis van de bekende context. Houd het kort en direct klaar om te bevestigen.",
+    "autosuggest.prompt.bigwhy":
+      "Formuleer een compacte Grote Waarom-zin voor dit bedrijf op basis van de bekende context. Houd het betekenisvol en direct klaar om te bevestigen.",
+    "autosuggest.prompt.role":
+      "Formuleer een duidelijke Rol-zin voor dit bedrijf op basis van de bekende context. Houd het kort en direct klaar om te bevestigen.",
+    "autosuggest.prompt.entity":
+      "Formuleer een duidelijke Entiteit-zin voor dit bedrijf op basis van de bekende context. Houd het kort en direct klaar om te bevestigen.",
+    "autosuggest.prompt.strategy":
+      "Maak een strategievoorstel voor dit bedrijf met minimaal 4 korte en concrete focuspunten, elk op een nieuwe regel, op basis van de bekende context.",
+    "autosuggest.prompt.targetgroup":
+      "Formuleer een duidelijke doelgroepformulering voor dit bedrijf op basis van de bekende context. Houd het kort en direct klaar om te bevestigen.",
+    "autosuggest.prompt.productsservices":
+      "Maak een voorstel voor producten en diensten voor dit bedrijf met minimaal 3 concrete bullets, op basis van de bekende context.",
+    "autosuggest.prompt.rulesofthegame":
+      "Maak een voorstel voor spelregels voor dit bedrijf met minimaal 3 duidelijke en concrete bulletregels, op basis van de bekende context.",
+    "autosuggest.repair.prompt.strategy":
+      "Geef een definitief strategievoorstel met minimaal 4 duidelijke strategische focuspunten, elk op een nieuwe regel, op basis van de bekende context.",
+    "autosuggest.repair.prompt.productsservices":
+      "Geef een definitief voorstel voor producten en diensten met minimaal 3 concrete bullets op basis van de bekende context.",
+    "autosuggest.repair.prompt.rulesofthegame":
+      "Geef een definitief voorstel voor spelregels met minimaal 3 duidelijke en concrete bulletregels op basis van de bekende context.",
     "scoring.aria.scoreInput": "Score 1 tot 10",
     "scoring.avg.empty": "—",
     "scoring.categoryFallback": "Categorie {0}",

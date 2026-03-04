@@ -1224,6 +1224,7 @@
         align-items: flex-end;
         gap: var(--space-4);
         margin-top: var(--space-4);
+        margin-bottom: var(--space-5);
         width: 100%;
         position: relative;
       }
@@ -4002,12 +4003,7 @@
         prestartEl.classList.remove("has-grid");
         prestartEl.classList.remove("is-step0-ask-layout");
         if (startupPayloadMissing) {
-          const canRenderLocalizedPrestart = hasPrestartContentForLang(lang);
-          if (canRenderLocalizedPrestart) {
-            renderPrestartContent(prestartEl, lang);
-          } else {
-            renderBootstrapWaitShell(prestartEl, lang);
-          }
+          renderBootstrapWaitShell(prestartEl, lang);
         } else {
           const blockedCopy = blockedMessageForReason(
             lang,
@@ -4086,13 +4082,7 @@
             };
           }
         } else {
-          const currentStep = String(state?.current_step || "").trim() || "step_0";
-          const canRenderLocalizedPrestart = currentStep === "step_0" && hasPrestartContentForLang(lang);
-          if (canRenderLocalizedPrestart) {
-            renderPrestartContent(prestartEl, lang);
-          } else {
-            renderBootstrapWaitShell(prestartEl, lang);
-          }
+          renderBootstrapWaitShell(prestartEl, lang);
         }
       }
       if (prompt) prompt.textContent = "";
@@ -4271,7 +4261,7 @@
     if (cardDescEl) {
       cardDescEl.style.display = "block";
       cardDescEl.classList.add("has-grid");
-      const isStep0AskLayout = current === "step_0";
+      const isStep0AskLayout = current === "step_0" && !profileMeta;
       cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
       renderStructuredText(cardDescEl, bodyForRender);
       if (profileMeta) {

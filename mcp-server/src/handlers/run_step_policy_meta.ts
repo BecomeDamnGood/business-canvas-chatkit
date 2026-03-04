@@ -827,6 +827,47 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     return out;
   }
 
+  function normalizeComparableRedirectText(raw: string): string {
+    let next = String(raw || "").trim().toLowerCase();
+    if (!next) return "";
+    try {
+      next = next.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+    } catch {
+      // Keep original when normalize() is unavailable.
+    }
+    next = next
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[“”"'`]/g, "")
+      .replace(/[\-–—_/]+/g, " ")
+      .replace(/[.,!?;:()[\]{}]+/g, " ")
+      .replace(/\b(?:step|stap|paso|passo|etape|etapa|schritt)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return next;
+  }
+
+  function stripRedirectLikeSentence(raw: string, redirectSentence: string): string {
+    const text = String(raw || "").replace(/\r/g, "\n").trim();
+    if (!text) return "";
+    const redirectComparable = normalizeComparableRedirectText(redirectSentence);
+    if (!redirectComparable) return text;
+    const sentences = text
+      .split(/(?<=[.!?])\s+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const kept = sentences.filter((sentence) => {
+      const comparable = normalizeComparableRedirectText(sentence);
+      if (!comparable) return false;
+      if (comparable === redirectComparable) return false;
+      if (comparable.includes(redirectComparable)) return false;
+      if (redirectComparable.includes(comparable) && comparable.length >= Math.max(12, Math.floor(redirectComparable.length * 0.8))) {
+        return false;
+      }
+      return true;
+    });
+    return kept.join(" ").trim();
+  }
+
   function isLikelyMetaQuestionTurn(params: {
     userMessage: string;
     specialistResult: any;
@@ -890,10 +931,13 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       };
     }
 
-    const specialistMessage = stripOfftopicStructureSentences(
-      deps.stripChoiceInstructionNoise(String(specialist.message || "").trim())
-    );
     const redirectSentence = offTopicRedirectLine(stepId, params.state);
+    const specialistMessage = stripRedirectLikeSentence(
+      stripOfftopicStructureSentences(
+        deps.stripChoiceInstructionNoise(String(specialist.message || "").trim())
+      ),
+      redirectSentence
+    );
     const message = specialistMessage
       ? `${specialistMessage} ${redirectSentence}`.trim()
       : redirectSentence;
@@ -975,6 +1019,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
   return {
     resolveMotivationUserIntent,
     resolveSpecialistMetaTopic,
+    buildBenProfileWidgetProfile,
     buildBenProfileMessage,
     applyMotivationQuotesContractV11,
     applyCentralMetaTopicRouter,

@@ -156,6 +156,49 @@ function stripPromptEchoFromMessage(
     .trim();
 }
 
+function normalizePurposeExamplesMessage(contractStepId: string, menuId: string, messageRaw: string): string {
+  if (contractStepId !== "purpose" || menuId !== "PURPOSE_MENU_EXAMPLES") {
+    return String(messageRaw || "").trim();
+  }
+  const message = String(messageRaw || "").replace(/\r/g, "\n").trim();
+  if (!message) return "";
+  const blocks = message
+    .split(/\n{2,}/)
+    .map((block) => String(block || "").trim())
+    .filter(Boolean);
+  if (blocks.length < 3) return message;
+  const hasListMarkers = (value: string): boolean => /^(?:\s*[-*•]|\s*\d+[\).])\s+/m.test(String(value || ""));
+  const normalizeSentenceBlock = (value: string): string =>
+    String(value || "")
+      .replace(/\n+/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  const isSentenceLike = (value: string): boolean => {
+    const plain = normalizeSentenceBlock(value);
+    if (!plain) return false;
+    if (hasListMarkers(plain)) return false;
+    if (plain.length < 18 || plain.length > 280) return false;
+    if (/:$/.test(plain)) return false;
+    if (/^[A-Z0-9 .,'’"-]{6,}$/.test(plain)) return false;
+    return /[.!?]$/.test(plain);
+  };
+  const intro = blocks[0];
+  const tail = blocks[blocks.length - 1];
+  const middle = blocks.slice(1, blocks.length - 1);
+  const middleExamples = middle.filter(isSentenceLike);
+  if (middleExamples.length < 2 || middleExamples.length !== middle.length) {
+    const allAfterIntro = blocks.slice(1);
+    const allExamples = allAfterIntro.filter(isSentenceLike);
+    if (allExamples.length < 2 || allExamples.length !== allAfterIntro.length) {
+      return message;
+    }
+    const bullets = allAfterIntro.map((line) => `- ${normalizeSentenceBlock(line)}`).join("\n");
+    return [intro, bullets].join("\n\n").trim();
+  }
+  const bullets = middle.map((line) => `- ${normalizeSentenceBlock(line)}`).join("\n");
+  return [intro, bullets, tail].join("\n\n").trim();
+}
+
 export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersDeps) {
   function buildTextForWidget(params: {
     specialist: Record<string, unknown>;
@@ -254,6 +297,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const promptFromSpecialist = String(specialist?.question ?? "").trim();
     const promptOverride = String(params.questionTextOverride || "").trim();
     const prompt = promptOverride || promptFromSpecialist;
+    msg = normalizePurposeExamplesMessage(contractStepId, menuId, msg);
     let refined = String(specialist?.refined_formulation ?? "").trim();
     if (!wordingPending) {
       const field = deps.fieldForStep(contractStepId);

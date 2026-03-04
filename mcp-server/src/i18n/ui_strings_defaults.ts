@@ -95,6 +95,33 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "scoring.avg.empty": "—",
   "scoring.input.placeholder": "0",
   purposeInstructionHint: "Answer the questions, formulate your own Purpose, or choose an option",
+  "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
+  "autosuggest.prompt.generic":
+    "Please propose a concrete formulation for this step based on the known context.",
+  "autosuggest.prompt.dream":
+    "Please propose one clear Dream sentence for this business based on the known context. Keep it concise and ready to confirm.",
+  "autosuggest.prompt.purpose":
+    "Please propose one clear Purpose sentence for this business based on the known context. Keep it concise and ready to confirm.",
+  "autosuggest.prompt.bigwhy":
+    "Please propose one concise Big Why sentence for this business based on the known context. Keep it meaningful and ready to confirm.",
+  "autosuggest.prompt.role":
+    "Please propose one clear Role sentence for this business based on the known context. Keep it concise and ready to confirm.",
+  "autosuggest.prompt.entity":
+    "Please propose one clear Entity sentence for this business based on the known context. Keep it concise and ready to confirm.",
+  "autosuggest.prompt.strategy":
+    "Please draft a strategy for this business with at least 4 concise strategic focus points, one per line, based on the known context.",
+  "autosuggest.prompt.targetgroup":
+    "Please propose one clear target group formulation for this business based on the known context. Keep it concise and ready to confirm.",
+  "autosuggest.prompt.productsservices":
+    "Please draft products and services for this business with at least 3 concrete bullet items, based on the known context.",
+  "autosuggest.prompt.rulesofthegame":
+    "Please draft rules of the game for this business with at least 3 distinct bullet rules, based on the known context.",
+  "autosuggest.repair.prompt.strategy":
+    "Please provide a finalized strategy draft with at least 4 distinct strategic focus points, one per line, based on known context.",
+  "autosuggest.repair.prompt.productsservices":
+    "Please provide a finalized products and services draft with at least 3 concrete bullet items based on known context.",
+  "autosuggest.repair.prompt.rulesofthegame":
+    "Please provide a finalized rules of the game draft with at least 3 distinct and concrete rules in bullet form based on known context.",
   "offtopic.redirect.template": "Let's continue with the {0} of {1}.",
   "offtopic.current.template": "The current {0} of {1} is.",
   "productsservices.current.heading.single_product": "The current product of {0} is",

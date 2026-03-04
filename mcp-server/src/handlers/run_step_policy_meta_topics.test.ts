@@ -90,3 +90,38 @@ test("wants_recap forces RECAP meta topic classification", () => {
   });
   assert.equal(metaTopic, "RECAP");
 });
+
+test("offtopic normalizer removes duplicate localized redirect before appending canonical redirect", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "nl",
+    business_name: "Mindd",
+    ui_strings: {
+      "offtopic.redirect.template": "Laten we doorgaan met de {0} van {1}.",
+      "offtopic.step.dream": "droom",
+      "offtopic.companyFallback": "mijn toekomstige bedrijf",
+    },
+  };
+
+  const normalized = helpers.normalizeNonStep0OfftopicSpecialist({
+    stepId: "dream",
+    activeSpecialist: "Dream",
+    userMessage: "ik weet het niet",
+    specialistResult: {
+      action: "ASK",
+      is_offtopic: true,
+      message:
+        "Geen probleem, soms is het lastig om direct een droom te formuleren. Laten we doorgaan met de Droom-stap van Mindd.",
+      user_intent: "OFFTOPIC",
+      meta_topic: "NONE",
+    },
+    previousSpecialist: {},
+    state,
+  }) as Record<string, unknown>;
+
+  const message = String(normalized.message || "");
+  const redirectCount = (message.match(/Laten we doorgaan met/gi) || []).length;
+  assert.equal(redirectCount, 1);
+  assert.doesNotMatch(message, /Droom-stap/i);
+  assert.match(message, /Laten we doorgaan met de droom van Mindd\./);
+});

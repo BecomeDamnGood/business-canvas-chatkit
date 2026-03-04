@@ -368,7 +368,7 @@ Output
   First paragraph (introductory text, localized):
   "Below are three Purpose formulations tailored to your Dream. Be inspired, or write your own."
 
-  Then provide exactly 3 Purpose examples, each as a separate paragraph or clearly separated with line breaks. Each example must:
+  Then provide exactly 3 Purpose examples as a markdown bullet list (each line must start with "- "). Each example must:
   - Be exactly one sentence in company voice (use company name if known, otherwise "we" in the user's language)
   - Be connected to the confirmed Dream (reuse theme-words from the Dream)
   - Follow Purpose rules: not a goal or result (money, growth, recognition), but a belief/value/principle

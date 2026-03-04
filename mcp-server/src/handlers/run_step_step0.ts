@@ -50,6 +50,10 @@ export function maybeSeedStep0CandidateFromInitialMessage(state: CanvasState, so
 type RunStepStep0DisplayDeps = {
   step0Id: string;
   resolveSpecialistMetaTopic: (specialist: Record<string, unknown>) => string;
+  buildBenProfileWidgetProfile: (state: CanvasState) => {
+    image_url: string;
+    image_alt: string;
+  };
   buildBenProfileMessage: (state: CanvasState) => string;
   step0ReadinessQuestion: (state: CanvasState | null | undefined, parsed: Step0Parsed) => string;
   step0CardDescForState: (state: CanvasState | null | undefined) => string;
@@ -100,6 +104,8 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
         return {
           ...next,
           action: "ASK",
+          __widget_profile_image_url: deps.buildBenProfileWidgetProfile(state).image_url,
+          __widget_profile_image_alt: deps.buildBenProfileWidgetProfile(state).image_alt,
           message: deps.buildBenProfileMessage(state),
           question: deps.step0ReadinessQuestion(state, parsed),
           business_name: parsed.name || "TBD",
@@ -114,6 +120,8 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       return normalizeStep0OfftopicToAsk(
         {
           ...next,
+          __widget_profile_image_url: deps.buildBenProfileWidgetProfile(state).image_url,
+          __widget_profile_image_alt: deps.buildBenProfileWidgetProfile(state).image_alt,
           message: deps.buildBenProfileMessage(state),
           is_offtopic: true,
         },

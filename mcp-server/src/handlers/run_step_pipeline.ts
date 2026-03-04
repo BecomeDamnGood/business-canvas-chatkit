@@ -74,76 +74,13 @@ const AUTOSUGGEST_STEP_IDS = new Set<string>([
 ]);
 
 type AutoSuggestPlan = {
-  active: boolean;
+  eligible: boolean;
   stepId: string;
-  promptForCall: string;
   forceDreamSpecialist: boolean;
 };
 
-function normalizeSuggestIntentText(raw: string): string {
-  return String(raw || "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
-function isSuggestForMeIntent(raw: string): boolean {
-  const text = normalizeSuggestIntentText(raw);
-  if (!text) return false;
-  if (text.startsWith("action_") || text.startsWith("__route__") || text.startsWith("choice:")) return false;
-
-  const patterns = [
-    /\bi\s*(?:do\s*not|don't)\s*know\b/i,
-    /\bidk\b/i,
-    /\b(?:give|do|make)\s+(?:me\s+)?(?:a\s+)?suggestion\b/i,
-    /\btell\s+me\s+what\s+it\s+could\s+be\b/i,
-    /\bchoose\s+for\s+me\b/i,
-    /\byou\s+decide\b/i,
-    /\bik\s+weet\s+het\s+niet\b/i,
-    /\bgeen\s+idee\b/i,
-    /\b(?:doe|geef|maak)\s+(?:mij\s+)?(?:een\s+)?suggestie\b/i,
-    /\bvertel\s+(?:me|mij)\s+wat\s+het\s+kan\s+zijn\b/i,
-    /\bkies\s+(?:maar\s+)?voor\s+mij\b/i,
-    /\bjij\s+mag\s+(?:het\s+)?(?:bedenken|verzinnen|invullen)\b/i,
-  ];
-
-  return patterns.some((pattern) => pattern.test(text));
-}
-
-function buildAutoSuggestPrompt(stepId: string): string {
-  if (stepId === "dream") {
-    return "Please propose one clear Dream sentence for this business based on the known context. Keep it concise and ready to confirm.";
-  }
-  if (stepId === "purpose") {
-    return "Please propose one clear Purpose sentence for this business based on the known context. Keep it concise and ready to confirm.";
-  }
-  if (stepId === "bigwhy") {
-    return "Please propose one concise Big Why sentence for this business based on the known context. Keep it meaningful and ready to confirm.";
-  }
-  if (stepId === "role") {
-    return "Please propose one clear Role sentence for this business based on the known context. Keep it concise and ready to confirm.";
-  }
-  if (stepId === "entity") {
-    return "Please propose one clear Entity sentence for this business based on the known context. Keep it concise and ready to confirm.";
-  }
-  if (stepId === "strategy") {
-    return "Please draft a strategy for this business with at least 4 concise strategic focus points, one per line, based on the known context.";
-  }
-  if (stepId === "targetgroup") {
-    return "Please propose one clear target group formulation for this business based on the known context. Keep it concise and ready to confirm.";
-  }
-  if (stepId === "productsservices") {
-    return "Please draft products and services for this business with at least 3 concrete bullet items, based on the known context.";
-  }
-  if (stepId === "rulesofthegame") {
-    return "Please draft rules of the game for this business with at least 3 distinct bullet rules, based on the known context.";
-  }
-  return "Please propose a concrete formulation for this step based on the known context.";
-}
-
 function planAutoSuggest(params: {
   stepId: string;
-  userMessage: string;
   actionCodeRaw: string;
   step0Id: string;
   dreamStepId: string;
@@ -153,26 +90,66 @@ function planAutoSuggest(params: {
 }): AutoSuggestPlan {
   const stepId = String(params.stepId || "").trim();
   if (!stepId || stepId === params.step0Id || stepId === "presentation") {
-    return { active: false, stepId, promptForCall: "", forceDreamSpecialist: false };
+    return { eligible: false, stepId, forceDreamSpecialist: false };
   }
   if (!AUTOSUGGEST_STEP_IDS.has(stepId)) {
-    return { active: false, stepId, promptForCall: "", forceDreamSpecialist: false };
+    return { eligible: false, stepId, forceDreamSpecialist: false };
   }
   if (String(params.actionCodeRaw || "").trim()) {
-    return { active: false, stepId, promptForCall: "", forceDreamSpecialist: false };
-  }
-  if (!isSuggestForMeIntent(params.userMessage)) {
-    return { active: false, stepId, promptForCall: "", forceDreamSpecialist: false };
+    return { eligible: false, stepId, forceDreamSpecialist: false };
   }
   const forceDreamSpecialist =
     stepId === params.dreamStepId &&
     (params.currentSpecialist === params.dreamExplainerSpecialist || params.dreamRuntimeMode !== "self");
   return {
-    active: true,
+    eligible: true,
     stepId,
-    promptForCall: buildAutoSuggestPrompt(stepId),
     forceDreamSpecialist,
   };
+}
+
+function isAutoSuggestIntentFromSpecialist(specialistResult: Record<string, unknown>): boolean {
+  const userIntent = String(specialistResult.user_intent || "").trim().toUpperCase();
+  return userIntent === "INSPIRATION_REQUEST";
+}
+
+function autoSuggestPromptKeyForStep(stepId: string): string {
+  const keyByStep: Record<string, string> = {
+    dream: "autosuggest.prompt.dream",
+    purpose: "autosuggest.prompt.purpose",
+    bigwhy: "autosuggest.prompt.bigwhy",
+    role: "autosuggest.prompt.role",
+    entity: "autosuggest.prompt.entity",
+    strategy: "autosuggest.prompt.strategy",
+    targetgroup: "autosuggest.prompt.targetgroup",
+    productsservices: "autosuggest.prompt.productsservices",
+    rulesofthegame: "autosuggest.prompt.rulesofthegame",
+  };
+  return keyByStep[stepId] || "autosuggest.prompt.generic";
+}
+
+function autoSuggestPromptFromState(stepId: string, state: CanvasState): string {
+  const uiStrings = asRecord((state as Record<string, unknown>).ui_strings);
+  const stepKey = autoSuggestPromptKeyForStep(stepId);
+  const fromStep = String(uiStrings[stepKey] || "").trim();
+  if (fromStep) return fromStep;
+  return String(uiStrings["autosuggest.prompt.generic"] || "").trim();
+}
+
+function autoSuggestRepairPromptKeyForStep(stepId: string): string {
+  const keyByStep: Record<string, string> = {
+    strategy: "autosuggest.repair.prompt.strategy",
+    productsservices: "autosuggest.repair.prompt.productsservices",
+    rulesofthegame: "autosuggest.repair.prompt.rulesofthegame",
+  };
+  return keyByStep[stepId] || "";
+}
+
+function autoSuggestRepairPromptFromState(stepId: string, state: CanvasState): string {
+  const key = autoSuggestRepairPromptKeyForStep(stepId);
+  if (!key) return "";
+  const uiStrings = asRecord((state as Record<string, unknown>).ui_strings);
+  return String(uiStrings[key] || "").trim();
 }
 
 function parseLooseItems(raw: string): string[] {
@@ -235,18 +212,7 @@ function stepLabelForAutoSuggest(stepId: string, state: CanvasState): string {
   };
   const localized = String(uiStrings[keyByStep[stepId] || ""] || "").trim();
   if (localized) return localized;
-  const fallbackByStep: Record<string, string> = {
-    dream: "dream",
-    purpose: "purpose",
-    bigwhy: "big why",
-    role: "role",
-    entity: "entity",
-    strategy: "strategy",
-    targetgroup: "target group",
-    productsservices: "products and services",
-    rulesofthegame: "rules of the game",
-  };
-  return fallbackByStep[stepId] || stepId;
+  return stepId;
 }
 
 function withAutoSuggestPrefixedMessage(params: {
@@ -255,8 +221,14 @@ function withAutoSuggestPrefixedMessage(params: {
   state: CanvasState;
 }): Record<string, unknown> {
   const baseMessage = String(params.specialist.message || "").trim();
+  const uiStrings = asRecord((params.state as Record<string, unknown>).ui_strings);
+  const template = String(uiStrings["autosuggest.prefix.template"] || "").trim();
+  if (!template) return params.specialist;
   const stepLabel = stepLabelForAutoSuggest(params.stepId, params.state);
-  const prefix = `Based on your input I suggest the following ${stepLabel}:`;
+  const prefix = template.includes("{0}")
+    ? template.replace(/\{0\}/g, stepLabel).trim()
+    : `${template} ${stepLabel}`.trim();
+  if (!prefix) return params.specialist;
   return {
     ...params.specialist,
     message: baseMessage ? `${prefix}\n\n${baseMessage}` : prefix,
@@ -343,7 +315,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const currentSpecialistAtTurnStart = String((state as Record<string, unknown>).active_specialist || "").trim();
     const autoSuggestPlan = planAutoSuggest({
       stepId: currentStepId,
-      userMessage,
       actionCodeRaw: params.actionCodeRaw,
       step0Id: deps.step0Id,
       dreamStepId: deps.dreamStepId,
@@ -351,19 +322,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       currentSpecialist: currentSpecialistAtTurnStart,
       dreamRuntimeMode: deps.getDreamRuntimeMode(state),
     });
-    if (autoSuggestPlan.active) {
-      userMessage = autoSuggestPlan.promptForCall;
-    }
     let decision1 = params.decideOrchestration(state, userMessage);
-    if (autoSuggestPlan.forceDreamSpecialist) {
-      decision1 = {
-        ...decision1,
-        current_step: deps.dreamStepId as any,
-        specialist_to_call: deps.dreamSpecialist as any,
-        show_step_intro: "false",
-        show_session_intro: "false",
-      } as typeof decision1;
-    }
     const showSessionIntro = String(decision1.show_session_intro || "");
 
     const call1 = await deps.callSpecialistStrictSafe(
@@ -378,7 +337,44 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     let specialistResult = asRecord(call1.value.specialistResult);
     const stateRecord = asStateRecord(state);
 
-    if (autoSuggestPlan.active) {
+    let autoSuggestApplied = false;
+    const shouldRunAutoSuggest =
+      autoSuggestPlan.eligible &&
+      isAutoSuggestIntentFromSpecialist(specialistResult) &&
+      !(
+        specialistResult?.is_offtopic === true ||
+        String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true"
+      );
+
+    if (shouldRunAutoSuggest) {
+      state = await params.ensureUiStrings(state, userMessage);
+      const autoSuggestPrompt = autoSuggestPromptFromState(autoSuggestPlan.stepId, state);
+      if (autoSuggestPrompt) {
+        const autoSuggestDecision = autoSuggestPlan.forceDreamSpecialist
+          ? {
+              ...decision1,
+              current_step: deps.dreamStepId as any,
+              specialist_to_call: deps.dreamSpecialist as any,
+              show_step_intro: "false",
+              show_session_intro: "false",
+            } as typeof decision1
+          : decision1;
+        const autoSuggestCall = await deps.callSpecialistStrictSafe(
+          { model: params.model, state, decision: autoSuggestDecision, userMessage: autoSuggestPrompt },
+          deps.buildRoutingContext(autoSuggestPrompt),
+          state
+        );
+        if (autoSuggestCall.ok) {
+          params.rememberLlmCall(autoSuggestCall.value);
+          attempts = Math.max(attempts, autoSuggestCall.value.attempts);
+          specialistResult = asRecord(autoSuggestCall.value.specialistResult);
+          decision1 = autoSuggestDecision;
+          autoSuggestApplied = true;
+        }
+      }
+    }
+
+    if (autoSuggestApplied) {
       const shouldRepairMinimum = (): boolean => {
         if (autoSuggestPlan.stepId === deps.strategyStepId) {
           return deps.strategyStatementsForConsolidateGuard(specialistResult, state).length < 4;
@@ -393,15 +389,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       };
 
       if (shouldRepairMinimum()) {
-        const repairPromptByStep: Record<string, string> = {
-          strategy:
-            "Please provide a finalized strategy draft with at least 4 distinct strategic focus points, one per line, based on known context.",
-          productsservices:
-            "Please provide a finalized products and services draft with at least 3 concrete bullet items based on known context.",
-          rulesofthegame:
-            "Please provide a finalized rules of the game draft with at least 3 distinct and concrete rules in bullet form based on known context.",
-        };
-        const repairPrompt = String(repairPromptByStep[autoSuggestPlan.stepId] || "").trim();
+        const repairPrompt = autoSuggestRepairPromptFromState(autoSuggestPlan.stepId, state);
         if (repairPrompt) {
           const repairCall = await deps.callSpecialistStrictSafe(
             { model: params.model, state, decision: decision1, userMessage: repairPrompt },
@@ -616,7 +604,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       provisionalSource: params.actionCodeRaw ? "action_route" : "user_input",
     });
 
-    if (autoSuggestPlan.active) {
+    if (autoSuggestApplied) {
       const isOfftopicAfterSuggest =
         specialistResult?.is_offtopic === true ||
         String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
@@ -695,6 +683,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const currentSpecialistForWordingChoice = String(asStateRecord(nextState).active_specialist || "");
     const previousSpecialistForWordingChoice = asRecord(asStateRecord(state).last_specialist_result);
     const dreamRuntimeModeForWording = deps.getDreamRuntimeMode(nextState);
+    const suppressWordingChoiceForAutoSuggest = autoSuggestApplied;
     const isCurrentTurnOfftopic =
       specialistResult?.is_offtopic === true ||
       String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
@@ -716,6 +705,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     })();
     if (
       params.wordingChoiceEnabled &&
+      !suppressWordingChoiceForAutoSuggest &&
       params.inputMode === "widget" &&
       eligibleForWordingChoiceTurn &&
       !isCurrentTurnOfftopic &&
@@ -734,7 +724,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       specialistResult = rebuilt.specialist;
     }
     asStateRecord(nextState).last_specialist_result = specialistResult;
-    if (params.wordingChoiceEnabled && params.inputMode === "widget") {
+    if (params.wordingChoiceEnabled && params.inputMode === "widget" && !suppressWordingChoiceForAutoSuggest) {
       const pendingEligible = deps.isWordingChoiceEligibleContext(
         String(asStateRecord(nextState).current_step || ""),
         String(asStateRecord(nextState).active_specialist || ""),
