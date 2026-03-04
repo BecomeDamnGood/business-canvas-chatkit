@@ -730,6 +730,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           const stateWithUiCanvas = stateWithUi as CanvasState;
           let nextState: CanvasState = {
             ...stateWithUiCanvas,
+            business_name: name || "TBD",
             active_specialist: deps.step0Specialist,
             last_specialist_result: specialist,
           };

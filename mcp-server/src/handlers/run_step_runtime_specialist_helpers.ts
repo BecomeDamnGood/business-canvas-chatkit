@@ -13,6 +13,25 @@ type CreateRunStepRuntimeSpecialistHelpersDeps = {
 };
 
 export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntimeSpecialistHelpersDeps) {
+  function parseBusinessNameFromStep0Final(state?: CanvasState | null): string {
+    const raw = String((state as Record<string, unknown> | null | undefined)?.step_0_final || "").trim();
+    if (!raw) return "";
+    const match = raw.match(/Name:\s*([^|]+)\s*(\||$)/i);
+    return String(match?.[1] || "").trim();
+  }
+
+  function companyReferenceForState(state?: CanvasState | null): string {
+    const direct = String((state as Record<string, unknown> | null | undefined)?.business_name || "").trim();
+    if (direct && direct !== "TBD") return direct;
+    const parsed = parseBusinessNameFromStep0Final(state);
+    if (parsed && parsed !== "TBD") return parsed;
+    return deps.uiStringFromStateMap(
+      state || null,
+      "offtopic.companyFallback",
+      deps.uiDefaultString("offtopic.companyFallback", "my future company")
+    );
+  }
+
   function normalizeLocalizedConceptTerms(
     specialist: Record<string, unknown> | null | undefined,
     state?: CanvasState | null
@@ -25,8 +44,11 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
 
     const mapTerm = (key: string, fallback: string): string =>
       deps.uiStringFromStateMap(state || null, key, deps.uiDefaultString(key, fallback));
+    const companyRef = companyReferenceForState(state);
 
     const replacements: Array<{ pattern: RegExp; value: string }> = [
+      { pattern: /<\s*my future company\s*>/gi, value: companyRef },
+      { pattern: /\bmy future company\b/gi, value: companyRef },
       { pattern: /\bRules of the Game\b/gi, value: mapTerm("offtopic.step.rulesofthegame", "Rules of the game") },
       { pattern: /\bProducts and Services\b/gi, value: mapTerm("offtopic.step.productsservices", "Products and Services") },
       { pattern: /\bTarget Group\b/gi, value: mapTerm("offtopic.step.targetgroup", "Target Group") },
@@ -66,6 +88,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
       "productsservices",
       "rulesofthegame",
       "presentation_brief",
+      "wording_choice_agent_current",
     ];
     for (const key of localizableKeys) {
       const raw = String(next[key] || "");
@@ -74,6 +97,12 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     }
     if (Array.isArray(next.statements)) {
       next.statements = (next.statements as unknown[])
+        .map((line) => localizeText(line))
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+    }
+    if (Array.isArray(next.wording_choice_suggestion_items)) {
+      next.wording_choice_suggestion_items = (next.wording_choice_suggestion_items as unknown[])
         .map((line) => localizeText(line))
         .map((line) => String(line || "").trim())
         .filter(Boolean);
