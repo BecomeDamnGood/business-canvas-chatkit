@@ -115,6 +115,32 @@ test("dream INTRO message is sourced from ui_strings catalog key", () => {
   assert.equal(String(routed.message || ""), "Catalog intro body for dream.");
 });
 
+test("purpose INTRO message is sourced from ui_strings catalog key and formats company placeholder", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "nl",
+    business_name: "Mindd",
+    ui_strings: {
+      "purpose.intro.body": "Dit is de bestaansreden-intro voor {0}.",
+      "offtopic.companyFallback": "mijn toekomstige bedrijf",
+    },
+  };
+
+  const routed = helpers.applyCentralMetaTopicRouter({
+    stepId: "purpose",
+    specialistResult: {
+      action: "INTRO",
+      message: "LLM generated intro that should be ignored",
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    previousSpecialist: {},
+    state,
+  }) as Record<string, unknown>;
+
+  assert.equal(String(routed.message || ""), "Dit is de bestaansreden-intro voor Mindd.");
+});
+
 test("offtopic normalizer removes duplicate localized redirect before appending canonical redirect", () => {
   const helpers = buildHelpers();
   const state: any = {

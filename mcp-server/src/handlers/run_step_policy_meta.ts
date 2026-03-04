@@ -741,6 +741,15 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         };
       }
     }
+    if (stepId === PURPOSE_STEP_ID && String((specialist as any).action || "").trim().toUpperCase() === "INTRO") {
+      const introTemplate = uiStringLocaleFirst(params.state, "purpose.intro.body").trim();
+      if (introTemplate) {
+        return {
+          ...specialist,
+          message: formatIndexedTemplate(introTemplate, [offTopicCompanyName(params.state)]).trim(),
+        };
+      }
+    }
 
     const metaTopic = resolveSpecialistMetaTopic(specialist);
     if (metaTopic === "NONE" || metaTopic === "RECAP") return specialist;
