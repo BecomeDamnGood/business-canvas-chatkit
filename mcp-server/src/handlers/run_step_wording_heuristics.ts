@@ -77,6 +77,7 @@ function isSpellingOnlyCorrection(userRaw: string, suggestionRaw: string): boole
   const user = normalizeLightUserInput(userRaw);
   const suggestion = normalizeLightUserInput(suggestionRaw);
   if (!user || !suggestion) return false;
+  if (/[{}]/.test(userRaw) || /[{}]/.test(suggestionRaw)) return false;
 
   const normalizedUser = normalizeSurfaceSignature(user);
   const normalizedSuggestion = normalizeSurfaceSignature(suggestion);
@@ -95,9 +96,11 @@ function isSpellingOnlyCorrection(userRaw: string, suggestionRaw: string): boole
     if (!left || !right) return false;
     if (left === right) continue;
     if (/^\d+$/.test(left) || /^\d+$/.test(right)) return false;
-    if (left.length <= 3 || right.length <= 3) return false;
+    if (left.length <= 1 || right.length <= 1) return false;
+    if ((left.length <= 3 || right.length <= 3) && left.charAt(0) !== right.charAt(0)) return false;
     const distance = levenshteinDistance(left, right);
-    const allowedDistance = Math.max(1, Math.floor(Math.min(left.length, right.length) / 5));
+    const shortest = Math.min(left.length, right.length);
+    const allowedDistance = shortest <= 3 ? 1 : Math.max(1, Math.floor(shortest / 5));
     if (distance > allowedDistance) return false;
     changedCount += 1;
   }

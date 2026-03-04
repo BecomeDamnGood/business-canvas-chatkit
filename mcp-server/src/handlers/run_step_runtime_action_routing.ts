@@ -546,7 +546,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       activeSpecialist: String((state as Record<string, unknown>).active_specialist || ""),
       previousSpecialist: prev,
       specialistResult: prev,
-      userTextRaw: String(prev.wording_choice_user_raw || prev.wording_choice_user_normalized || "").trim(),
+      userTextRaw: String(prev.wording_choice_user_normalized || prev.wording_choice_user_raw || "").trim(),
       isOfftopic: false,
       forcePending: true,
     });

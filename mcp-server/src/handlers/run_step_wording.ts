@@ -546,7 +546,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     }
     if (isOfftopic) return { specialist: specialistResult, wordingChoice: null };
     const fallbackUserRaw = forcePending
-      ? String(previousSpecialist.wording_choice_user_raw || previousSpecialist.wording_choice_user_normalized || "").trim()
+      ? String(previousSpecialist.wording_choice_user_normalized || previousSpecialist.wording_choice_user_raw || "").trim()
       : "";
     const userRaw = String(userTextRaw || fallbackUserRaw).trim();
     if (!forcePending && !deps.shouldTreatAsStepContributingInput(userRaw, stepId)) {
