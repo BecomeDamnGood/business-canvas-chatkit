@@ -110,7 +110,7 @@ export type RunStepRouteWordingPorts = {
     selectedValue?: string
   ) => string;
   pickPrompt: (specialist: any) => string;
-  buildTextForWidget: (params: { specialist: any }) => string;
+  buildTextForWidget: (params: { specialist: any; state?: CanvasState | null }) => string;
 };
 
 export type RunStepRouteStatePorts = {

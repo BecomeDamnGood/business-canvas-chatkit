@@ -148,7 +148,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       previousSpecialist: Record<string, unknown>;
       state: CanvasState;
     }) => Record<string, unknown>;
-    buildTextForWidget: (params: { specialist: Record<string, unknown> }) => string;
+    buildTextForWidget: (params: { specialist: Record<string, unknown>; state?: CanvasState | null }) => string;
     pickPrompt: (specialist: Record<string, unknown>) => string;
     uiStringFromStateMap: (state: CanvasState | null | undefined, key: string, fallback: string) => string;
     uiDefaultString: (key: string, fallback?: string) => string;
@@ -240,7 +240,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           tool: "run_step",
           current_step_id: String(state.current_step),
           active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-          text: behavior.buildTextForWidget({ specialist: pendingSpecialist }),
+          text: behavior.buildTextForWidget({ specialist: pendingSpecialist, state: stateWithUi }),
           prompt: behavior.pickPrompt(pendingSpecialist),
           specialist: pendingSpecialist,
           state: stateWithUi,
@@ -457,7 +457,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         tool: "run_step",
         current_step_id: String(state.current_step),
         active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-        text: behavior.buildTextForWidget({ specialist: pendingSpecialist }),
+        text: behavior.buildTextForWidget({ specialist: pendingSpecialist, state: stateWithUi }),
         prompt: behavior.pickPrompt(pendingSpecialist),
         specialist: pendingSpecialist,
         state: stateWithUi,
@@ -509,7 +509,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         tool: "run_step",
         current_step_id: String(stateWithUi.current_step),
         active_specialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-        text: behavior.buildTextForWidget({ specialist: wordingSelection.specialist }),
+        text: behavior.buildTextForWidget({ specialist: wordingSelection.specialist, state: stateWithUi }),
         prompt: behavior.pickPrompt(wordingSelection.specialist),
         specialist: wordingSelection.specialist,
         state: stateWithUi,
@@ -554,7 +554,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           tool: "run_step",
           current_step_id: String(state.current_step),
           active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-          text: behavior.buildTextForWidget({ specialist: pendingSpecialist }),
+          text: behavior.buildTextForWidget({ specialist: pendingSpecialist, state: stateWithUi }),
           prompt: behavior.pickPrompt(pendingSpecialist),
           specialist: pendingSpecialist,
           state: stateWithUi,

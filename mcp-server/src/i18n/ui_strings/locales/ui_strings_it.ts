@@ -171,7 +171,7 @@ export const UI_STRINGS_LOCALE_IT: Record<string, string> = {
     "ppt.heading.role": "Ruolo",
     "ppt.heading.rulesofthegame": "Regole del gioco",
     "concept.why": "Perché",
-    "entity.suggestion.template": "Cosa ne pensi di questa formulazione: {0}",
+    "entity.suggestion.template": "Cosa ne pensi di questa formulazione:\n{0}",
     "ppt.heading.strategy": "Strategia",
     "ppt.heading.targetgroup": "Gruppo target",
     "presentation.error": "Generazione della presentazione non riuscita. Verifica che il modello esista e riprova.",

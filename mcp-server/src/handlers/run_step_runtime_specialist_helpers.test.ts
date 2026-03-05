@@ -75,3 +75,21 @@ test("normalizeLocalizedConceptTerms uses localized fallback when business name 
   assert.doesNotMatch(message, /my future company/i);
 });
 
+test("normalizeEntitySpecialistResult enforces label/value split when template lacks newline", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings: {
+      "entity.suggestion.template": "Wat denk je van de formulering: {0}",
+    },
+  };
+  const specialist: Record<string, unknown> = {
+    refined_formulation: "Een AI-driven communicatie-agency",
+    entity: "",
+    message: "",
+  };
+
+  const next = helpers.normalizeEntitySpecialistResult("entity", specialist, state) as Record<string, unknown>;
+  const message = String(next.message || "");
+  assert.match(message, /^Wat denk je van de formulering:/);
+  assert.match(message, /\nEen AI-driven communicatie-agency$/);
+});

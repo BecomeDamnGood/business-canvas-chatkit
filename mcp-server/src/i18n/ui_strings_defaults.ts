@@ -217,7 +217,7 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "ppt.heading.productsservices": "Products and Services",
   "ppt.heading.rulesofthegame": "Rules of the Game",
   "concept.why": "Why",
-  "entity.suggestion.template": "What do you think of the wording: {0}",
+  "entity.suggestion.template": "What do you think of the wording:\n{0}",
   "offtopic.companyFallback": "my future company",
   "offtopic.step.dream": "Dream",
   "offtopic.step.purpose": "Purpose",

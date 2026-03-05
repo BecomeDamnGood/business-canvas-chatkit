@@ -23,7 +23,7 @@ type TurnResponseEngineDeps<TPayload> = {
     violation: string | null;
   };
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
-  buildTextForWidget: (params: { specialist: Record<string, unknown> }) => string;
+  buildTextForWidget: (params: { specialist: Record<string, unknown>; state?: CanvasState | null }) => string;
   pickPrompt: (specialist: Record<string, unknown>) => string;
   attachRegistryPayload: (
     payload: Record<string, unknown>,
@@ -160,7 +160,7 @@ export function createTurnResponseEngine<TPayload>(
         tool: "run_step" as const,
         current_step_id: String(params.state.current_step),
         active_specialist: String(stateRecord.active_specialist || ""),
-        text: deps.buildTextForWidget({ specialist: params.specialist }),
+        text: deps.buildTextForWidget({ specialist: params.specialist, state: params.state }),
         prompt: deps.pickPrompt(params.specialist),
         specialist: params.specialist,
         state: params.state,

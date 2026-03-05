@@ -171,7 +171,7 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "ppt.heading.role": "役割",
     "ppt.heading.rulesofthegame": "ゲームのルール",
     "concept.why": "なぜ",
-    "entity.suggestion.template": "この表現はどうですか: {0}",
+    "entity.suggestion.template": "この表現はどうですか:\n{0}",
     "ppt.heading.strategy": "戦略",
     "ppt.heading.targetgroup": "ターゲットグループ",
     "presentation.error": "プレゼンテーション生成に失敗しました。テンプレートの存在を確認して再試行してください。",

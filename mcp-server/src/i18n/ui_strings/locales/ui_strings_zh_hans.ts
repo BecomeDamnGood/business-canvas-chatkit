@@ -171,7 +171,7 @@ export const UI_STRINGS_LOCALE_ZH_HANS: Record<string, string> = {
     "ppt.heading.role": "角色",
     "ppt.heading.rulesofthegame": "游戏规则",
     "concept.why": "为什么",
-    "entity.suggestion.template": "你觉得这个表述如何：{0}",
+    "entity.suggestion.template": "你觉得这个表述如何：\n{0}",
     "ppt.heading.strategy": "战略",
     "ppt.heading.targetgroup": "目标群体",
     "presentation.error": "生成演示文稿失败。请检查模板是否存在后重试。",

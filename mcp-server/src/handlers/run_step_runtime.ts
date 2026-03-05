@@ -437,6 +437,7 @@ const runtimeTextHelpers = createRunStepRuntimeTextHelpers({
   parseMenuFromContractIdForStep: (contractIdRaw, stepId) =>
     parseMenuFromContractIdForStep(contractIdRaw, stepId),
   canonicalizeComparableText,
+  wordingSelectionMessage,
   mergeListItems: (userItems, suggestionItems) => mergeListItems(userItems, suggestionItems),
   splitSentenceItems,
   sanitizePendingListMessage: (message, fallbackItems) =>

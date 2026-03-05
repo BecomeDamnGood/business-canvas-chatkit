@@ -171,7 +171,7 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "ppt.heading.role": "역할",
     "ppt.heading.rulesofthegame": "게임의 규칙",
     "concept.why": "왜",
-    "entity.suggestion.template": "이 표현은 어떤가요: {0}",
+    "entity.suggestion.template": "이 표현은 어떤가요:\n{0}",
     "ppt.heading.strategy": "전략",
     "ppt.heading.targetgroup": "타깃 그룹",
     "presentation.error": "프레젠테이션 생성에 실패했습니다. 템플릿이 있는지 확인한 뒤 다시 시도해 주세요。",

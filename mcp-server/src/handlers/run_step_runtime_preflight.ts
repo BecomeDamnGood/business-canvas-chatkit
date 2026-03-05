@@ -25,7 +25,7 @@ type RunStepRuntimePreflightPorts<TPayload extends Record<string, unknown>> = {
       retry_hint: string;
       phase?: string;
     };
-    buildTextForWidget: (params: { specialist: Record<string, unknown> }) => string;
+    buildTextForWidget: (params: { specialist: Record<string, unknown>; state?: CanvasState | null }) => string;
     pickPrompt: (specialist: Record<string, unknown>) => string;
     attachRegistryPayload: (
       payload: Record<string, unknown>,
@@ -135,7 +135,7 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
       retry_hint: string;
       phase?: string;
     };
-    buildTextForWidget: (params: { specialist: Record<string, unknown> }) => string;
+    buildTextForWidget: (params: { specialist: Record<string, unknown>; state?: CanvasState | null }) => string;
     pickPrompt: (specialist: Record<string, unknown>) => string;
     buildFailClosedState: (
       state: CanvasState,

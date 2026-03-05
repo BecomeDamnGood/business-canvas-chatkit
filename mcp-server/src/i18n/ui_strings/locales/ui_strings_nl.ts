@@ -173,7 +173,7 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "ppt.heading.strategy": "Strategie",
     "ppt.heading.targetgroup": "Doelgroep",
     "concept.why": "Waarom",
-    "entity.suggestion.template": "Wat denk je van de formulering: {0}",
+    "entity.suggestion.template": "Wat denk je van de formulering:\n{0}",
     "presentation.error": "Het genereren van de presentatie is mislukt. Controleer of het sjabloon bestaat en probeer het opnieuw.",
     "presentation.ready": "Je presentatie is klaar.",
     "prestart.headline": "Bouw stap voor stap een compleet Business Model en Strategie Canvas.",

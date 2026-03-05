@@ -143,9 +143,14 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
       "entity.suggestion.template",
       deps.uiDefaultString("entity.suggestion.template")
     );
-    const suggestionLine = String(templateRaw || "").includes("{0}")
-      ? String(templateRaw || "").replace(/\{0\}/g, canonical).trim()
-      : `${String(templateRaw || "").trim()} ${canonical}`.trim();
+    const template = String(templateRaw || "").trim();
+    const suggestionLine = template.includes("{0}")
+      ? template
+          .replace(/\s*\{0\}\s*/g, "\n{0}")
+          .replace(/\{0\}/g, canonical)
+          .replace(/\n{3,}/g, "\n\n")
+          .trim()
+      : `${template}\n${canonical}`.trim();
     const currentMessage = String(next.message || "").replace(/\r/g, "\n").trim();
     if (!suggestionLine) return next;
     if (!currentMessage) {

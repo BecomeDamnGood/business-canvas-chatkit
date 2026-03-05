@@ -171,7 +171,7 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "ppt.heading.role": "Peran",
     "ppt.heading.rulesofthegame": "Aturan main",
     "concept.why": "Mengapa",
-    "entity.suggestion.template": "Bagaimana menurut Anda formulasi ini: {0}",
+    "entity.suggestion.template": "Bagaimana menurut Anda formulasi ini:\n{0}",
     "ppt.heading.strategy": "Strategi",
     "ppt.heading.targetgroup": "Kelompok Target",
     "presentation.error": "Pembuatan presentasi gagal. Periksa apakah templat tersedia lalu coba lagi.",

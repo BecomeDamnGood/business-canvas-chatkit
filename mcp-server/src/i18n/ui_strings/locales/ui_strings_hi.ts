@@ -171,7 +171,7 @@ export const UI_STRINGS_LOCALE_HI: Record<string, string> = {
     "ppt.heading.role": "भूमिका",
     "ppt.heading.rulesofthegame": "खेल के नियम",
     "concept.why": "क्यों",
-    "entity.suggestion.template": "इस शब्दांकन के बारे में आपका क्या विचार है: {0}",
+    "entity.suggestion.template": "इस शब्दांकन के बारे में आपका क्या विचार है:\n{0}",
     "ppt.heading.strategy": "रणनीति",
     "ppt.heading.targetgroup": "लक्षित समूह",
     "presentation.error": "प्रस्तुति बनाना असफल रहा। कृपया जाँचें कि टेम्पलेट मौजूद है और फिर प्रयास करें।",

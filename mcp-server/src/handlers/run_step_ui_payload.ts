@@ -73,6 +73,7 @@ type UiPayloadHelperDeps = {
     specialist: any;
     hasWidgetActions?: boolean;
     questionTextOverride?: string;
+    state?: CanvasState | null;
   }) => string;
   deriveBootstrapContract: (state: CanvasState | null | undefined) => BootstrapContractState;
   deriveUiViewPayload: (variant: UiViewVariant) => UiViewPayload | null;
@@ -557,6 +558,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
               specialist: safeSpecialist,
               hasWidgetActions,
               questionTextOverride: String(ui?.questionText || ""),
+              state: payloadState || null,
             }),
           }
         : {}),

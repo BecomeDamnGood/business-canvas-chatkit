@@ -318,7 +318,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
               tool: "run_step" as const,
               current_step_id: String((context.state as Record<string, unknown>).current_step || ""),
               active_specialist: deps.presentationSpecialist,
-              text: deps.buildTextForWidget({ specialist }),
+              text: deps.buildTextForWidget({ specialist, state: context.state }),
               prompt: "",
               specialist,
               presentation_assets: {
@@ -368,7 +368,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
               tool: "run_step" as const,
               current_step_id: String((context.state as Record<string, unknown>).current_step || ""),
               active_specialist: deps.presentationSpecialist,
-              text: deps.buildTextForWidget({ specialist }),
+              text: deps.buildTextForWidget({ specialist, state: context.state }),
               prompt: "",
               specialist,
               state: {

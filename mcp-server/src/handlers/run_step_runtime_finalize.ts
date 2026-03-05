@@ -22,6 +22,12 @@ type RunStepRuntimeTextHelpersDeps = {
   dreamStepId: string;
   parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
   canonicalizeComparableText: (value: string) => string;
+  wordingSelectionMessage: (
+    stepId: string,
+    state: CanvasState,
+    activeSpecialist?: string,
+    selectedValue?: string
+  ) => string;
   mergeListItems: (userItems: string[], suggestionItems: string[]) => string[];
   splitSentenceItems: (text: string) => string[];
   sanitizePendingListMessage: (message: string, fallbackItems: string[]) => string;
@@ -204,6 +210,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     specialist: Record<string, unknown>;
     hasWidgetActions?: boolean;
     questionTextOverride?: string;
+    state?: CanvasState | null;
   }): string {
     const { specialist } = params;
     const parts: string[] = [];
@@ -330,22 +337,87 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         .filter(Boolean)
         .map((line) => normalizeForDedupe(line))
         .filter(Boolean);
+    const extractHeadingAndBodyFromSelection = (
+      selectionRaw: string,
+      selectedValueRaw: string
+    ): { heading: string; body: string } => {
+      const selection = String(selectionRaw || "").replace(/\r/g, "\n").trim();
+      const selectedValue = String(selectedValueRaw || "").replace(/\r/g, "\n").trim();
+      if (!selection || !selectedValue) return { heading: "", body: "" };
+      const selectionComparable = deps.canonicalizeComparableText(selection);
+      const selectedComparable = deps.canonicalizeComparableText(selectedValue);
+      if (!selectionComparable || !selectedComparable || selectionComparable === selectedComparable) {
+        return { heading: "", body: "" };
+      }
+      const blocks = selection
+        .split(/\n{2,}/)
+        .map((block) => String(block || "").trim())
+        .filter(Boolean);
+      const fromSingleNewline = selection
+        .split("\n")
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      if (blocks.length >= 2) {
+        const first = String(blocks[0] || "").trim();
+        const firstComparable = deps.canonicalizeComparableText(first);
+        if (firstComparable && firstComparable !== selectedComparable) {
+          return { heading: first, body: blocks.slice(1).join("\n\n").trim() };
+        }
+      }
+      if (fromSingleNewline.length >= 2) {
+        const firstLine = String(fromSingleNewline[0] || "").trim();
+        const firstComparable = deps.canonicalizeComparableText(firstLine);
+        if (firstComparable && firstComparable !== selectedComparable) {
+          return { heading: firstLine, body: fromSingleNewline.slice(1).join("\n").trim() };
+        }
+      }
+      return { heading: "", body: "" };
+    };
+    let refinedDisplay = refined;
+    const selectionForRefined = (() => {
+      if (wordingPending || !refined) return "";
+      const stepId = String(contractStepId || "").trim();
+      if (!stepId || !deps.fieldForStep(stepId)) return "";
+      const state = params.state;
+      if (!state || typeof state !== "object") return "";
+      const activeSpecialist = String((state as Record<string, unknown>).active_specialist || "").trim();
+      return deps.wordingSelectionMessage(stepId, state, activeSpecialist, refined);
+    })();
+    const selectionParts = extractHeadingAndBodyFromSelection(selectionForRefined, refined);
+    if (selectionParts.body) refinedDisplay = selectionParts.body;
+    const currentHeading = (() => {
+      if (wordingPending) return "";
+      if (!msg || !refined) return "";
+      const heading = selectionParts.heading;
+      if (!heading) return "";
+      const headingComparable = deps.canonicalizeComparableText(heading);
+      if (!headingComparable) return "";
+      const messageComparables = normalizedLines(msg)
+        .map((line) => deps.canonicalizeComparableText(line))
+        .filter(Boolean);
+      if (messageComparables.includes(headingComparable)) return "";
+      const refinedComparables = normalizedLines(refinedDisplay)
+        .map((line) => deps.canonicalizeComparableText(line))
+        .filter(Boolean);
+      if (refinedComparables.includes(headingComparable)) return "";
+      return heading;
+    })();
     if (msg) parts.push(msg);
     if (refined && !wordingPending && !suppressRefinedAppend) {
       const statementComparable = statementLines
         .map((line) => deps.canonicalizeComparableText(line))
         .filter(Boolean);
-      const refinedComparableLines = normalizedLines(refined)
+      const refinedComparableLines = normalizedLines(refinedDisplay)
         .map((line) => deps.canonicalizeComparableText(line))
         .filter(Boolean);
       const refinedMatchesStatements =
         statementComparable.length > 0 &&
         refinedComparableLines.length === statementComparable.length &&
         refinedComparableLines.every((line, idx) => line === statementComparable[idx]);
-      const refinedNormalized = deps.canonicalizeComparableText(refined);
+      const refinedNormalized = deps.canonicalizeComparableText(refinedDisplay);
       const messageNormalized = deps.canonicalizeComparableText(msg);
       const messageLineSet = new Set(normalizedLines(msg).map((line) => deps.canonicalizeComparableText(line)).filter(Boolean));
-      const refinedLineSet = normalizedLines(refined);
+      const refinedLineSet = normalizedLines(refinedDisplay);
       const duplicateByWhole = Boolean(refinedNormalized) && messageNormalized.includes(refinedNormalized);
       const duplicateByLines =
         refinedLineSet.length > 0 &&
@@ -353,8 +425,9 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           const normalized = deps.canonicalizeComparableText(line);
           return Boolean(normalized) && messageLineSet.has(normalized);
         });
+      const refinedWithHeading = currentHeading ? `${currentHeading}\n\n${refinedDisplay}` : refinedDisplay;
       if (!(dreamBuilderRenderContext && refinedMatchesStatements) && !duplicateByWhole && !duplicateByLines) {
-        parts.push(refined);
+        parts.push(refinedWithHeading);
       }
     }
     return parts.join("\n\n").trim();
@@ -457,6 +530,7 @@ type RunStepRuntimeFinalizeResponseDeps<TPayload> = {
     specialist: Record<string, unknown>;
     hasWidgetActions?: boolean;
     questionTextOverride?: string;
+    state?: CanvasState | null;
   }) => string;
   pickPrompt: (specialist: Record<string, unknown>) => string;
   renderFreeTextTurnPolicy: RunStepRenderFreeTextTurnPolicy;

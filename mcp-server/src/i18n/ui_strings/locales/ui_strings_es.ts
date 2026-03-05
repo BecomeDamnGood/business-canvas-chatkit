@@ -171,7 +171,7 @@ export const UI_STRINGS_LOCALE_ES: Record<string, string> = {
     "ppt.heading.role": "Rol",
     "ppt.heading.rulesofthegame": "Reglas del Juego",
     "concept.why": "Porqué",
-    "entity.suggestion.template": "¿Qué te parece esta formulación: {0}",
+    "entity.suggestion.template": "¿Qué te parece esta formulación:\n{0}",
     "ppt.heading.strategy": "Estrategia",
     "ppt.heading.targetgroup": "Grupo objetivo",
     "presentation.error": "La generación de la presentación falló. Por favor, comprueba que la plantilla exista e inténtalo de nuevo.",
