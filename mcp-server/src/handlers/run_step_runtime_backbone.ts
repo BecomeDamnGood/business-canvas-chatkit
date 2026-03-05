@@ -10,6 +10,7 @@ export type HolisticPolicyFlags = {
   offtopicV2: boolean;
   bulletRenderV2: boolean;
   wordingChoiceV2: boolean;
+  wordingChoiceIntentV1: boolean;
   timeoutGuardV2: boolean;
   motivationQuotesV11: boolean;
 };
@@ -143,9 +144,14 @@ export function resolveHolisticPolicyFlags(): HolisticPolicyFlags {
     offtopicV2: holisticPolicyV2 && envFlagEnabled("BSC_OFFTOPIC_V2", localDevDefaults),
     bulletRenderV2: holisticPolicyV2 && envFlagEnabled("BSC_BULLET_RENDER_V2", localDevDefaults),
     wordingChoiceV2: envFlagEnabled("BSC_WORDING_CHOICE_V2", true),
+    wordingChoiceIntentV1: envFlagEnabled("BSC_WORDING_CHOICE_INTENT_V1", true),
     timeoutGuardV2: holisticPolicyV2 && envFlagEnabled("BSC_TIMEOUT_GUARD_V2", localDevDefaults),
     motivationQuotesV11: holisticPolicyV2 && envFlagEnabled("BSC_MOTIVATION_QUOTES_V11", localDevDefaults),
   };
+}
+
+export function isWordingChoiceIntentV1Enabled(): boolean {
+  return envFlagEnabled("BSC_WORDING_CHOICE_INTENT_V1", true);
 }
 
 export function createTurnLlmAccumulator(): TurnLlmAccumulator {

@@ -29,6 +29,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     lastSpecialistResult: Record<string, unknown>;
     inputMode: "widget" | "chat";
     wordingChoiceEnabled: boolean;
+    wordingChoiceIntentV1: boolean;
     uiI18nTelemetry: unknown;
   };
   ids: {
@@ -398,13 +399,12 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     }
   }
 
-  const pendingBeforeTurn =
+  let pendingBeforeTurn =
     ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
   const currentStepId = String(state.current_step || "");
   const isGeneralOfftopicInput = statePorts.isClearlyGeneralOfftopicInput(userMessage);
   const isStepContributingInput = statePorts.shouldTreatAsStepContributingInput(userMessage, currentStepId);
-
-  if (
+  let hasPendingWordingChoice =
     runtime.wordingChoiceEnabled &&
     runtime.inputMode === "widget" &&
     String(pendingBeforeTurn.wording_choice_pending || "") === "true" &&
@@ -414,7 +414,32 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       pendingBeforeTurn,
       pendingBeforeTurn,
       action.getDreamRuntimeMode(state)
-    ) &&
+    );
+  const shouldReleasePendingWordingForTextIntent =
+    hasPendingWordingChoice &&
+    runtime.wordingChoiceIntentV1 &&
+    !wording.isWordingPickRouteToken(userMessage) &&
+    isStepContributingInput;
+  if (shouldReleasePendingWordingForTextIntent) {
+    state = statePorts.clearStepInteractiveState(state, currentStepId);
+    statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
+    pendingBeforeTurn =
+      ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
+    hasPendingWordingChoice =
+      runtime.wordingChoiceEnabled &&
+      runtime.inputMode === "widget" &&
+      String(pendingBeforeTurn.wording_choice_pending || "") === "true" &&
+      wording.isWordingChoiceEligibleContext(
+        String(state.current_step || ""),
+        String((state as Record<string, unknown>).active_specialist || ""),
+        pendingBeforeTurn,
+        pendingBeforeTurn,
+        action.getDreamRuntimeMode(state)
+      );
+  }
+
+  if (
+    hasPendingWordingChoice &&
     !wording.isWordingPickRouteToken(userMessage) &&
     isStepContributingInput
   ) {

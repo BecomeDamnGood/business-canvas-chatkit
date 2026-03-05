@@ -2,6 +2,7 @@ import type { CanvasState, ProvisionalSource } from "../core/state.js";
 import type { WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 
 type WordingChoiceMode = "text" | "list";
+type WordingChoiceVariant = "default" | "clarify_dual";
 
 type RenderFreeTextTurnPolicyResult = {
   specialist: Record<string, unknown>;
@@ -85,6 +86,7 @@ type RunStepWordingDeps = {
   }) => RenderFreeTextTurnPolicyResult;
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
   isUiWordingFeedbackKeyedV1Enabled: () => boolean;
+  isWordingChoiceIntentV1Enabled: () => boolean;
   bumpUiI18nCounter: (telemetry: unknown, key: string, amount?: number) => void;
   wordingSelectionMessage: (
     stepId: string,
@@ -93,6 +95,9 @@ type RunStepWordingDeps = {
     selectedValue?: string
   ) => string;
 };
+
+const WORDING_CLARIFY_USER_LABEL = "Do you mean something like this";
+const WORDING_CLARIFY_SUGGESTION_LABEL = "Or do you mean something like this?";
 
 function toTrimmedStringArray(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -189,9 +194,35 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_agent_current: String(previous.wording_choice_agent_current || ""),
       wording_choice_mode: String(previous.wording_choice_mode || ""),
       wording_choice_target_field: String(previous.wording_choice_target_field || ""),
+      wording_choice_variant: String(previous.wording_choice_variant || ""),
+      wording_choice_user_label: String(previous.wording_choice_user_label || ""),
+      wording_choice_suggestion_label: String(previous.wording_choice_suggestion_label || ""),
       feedback_reason_key: String(previous.feedback_reason_key || ""),
       feedback_reason_text: String(previous.feedback_reason_text || ""),
     };
+  }
+
+  function looksLikeDualClarificationPrompt(previousSpecialist: Record<string, unknown>): boolean {
+    const combined = [
+      String(previousSpecialist.question || ""),
+      String(previousSpecialist.message || ""),
+    ]
+      .join("\n")
+      .replace(/\r/g, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .trim();
+    if (!combined) return false;
+    const questionMarks = (combined.match(/\?/g) || []).length;
+    if (questionMarks >= 2) return true;
+    if (questionMarks < 1) return false;
+    const bulletCount = combined
+      .split("\n")
+      .map((line) => String(line || "").trim())
+      .filter((line) => /^(?:[-*•]|\d+[\).])\s+/.test(line))
+      .length;
+    if (bulletCount >= 2) return true;
+    const quotedCount = (combined.match(/["“”'‘’][^"“”'‘’\n]{4,}["“”'‘’]/g) || []).length;
+    return quotedCount >= 2;
   }
 
   function parseUserListItemsForStep(stepId: string, userRaw: string, suggestionItems: string[]): string[] {
@@ -287,7 +318,14 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       if (/^<\/?strong>/i.test(trimmed) && /so far/i.test(trimmed)) continue;
       if (/^so far\b/i.test(trimmed)) continue;
       if (/^<\/?strong>/i.test(trimmed) && /established so far/i.test(trimmed)) continue;
-      if (/^(this is your input|this would be my suggestion)\s*:?\s*$/i.test(trimmed.replace(/<[^>]+>/g, "").trim())) continue;
+      const normalizedLabel = trimmed.replace(/<[^>]+>/g, "").trim();
+      if (
+        /^(this is your input|this would be my suggestion)\s*:?\s*$/i.test(normalizedLabel) ||
+        /^do you mean something like this\??\s*:?\s*$/i.test(normalizedLabel) ||
+        /^or do you mean something like this\??\s*:?\s*$/i.test(normalizedLabel)
+      ) {
+        continue;
+      }
       const withoutMarker = trimmed.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim();
       const directKey = deps.canonicalizeComparableText(withoutMarker);
       if (known.has(directKey)) continue;
@@ -365,6 +403,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const blockedLinePatterns = [
       /^this is your input:?$/i,
       /^this would be my suggestion:?$/i,
+      /^do you mean something like this\??:?$/i,
+      /^or do you mean something like this\??:?$/i,
       /^please click what suits you best\.?$/i,
       /^choose this version$/i,
       /^if you meant something different/i,
@@ -661,6 +701,13 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const targetField = deps.fieldForStep(stepId);
     const committedTextFromPrev = targetField ? String(previousSpecialist[targetField] || "").trim() : "";
     const committedText = mode === "list" ? baseItems.join("\n") : committedTextFromPrev;
+    const variant: WordingChoiceVariant =
+      deps.isWordingChoiceIntentV1Enabled() &&
+      mode === "text" &&
+      !forcePending &&
+      looksLikeDualClarificationPrompt(previousSpecialist)
+        ? "clarify_dual"
+        : "default";
     const enriched: Record<string, unknown> = {
       ...specialistResult,
       message: pendingMessage,
@@ -674,6 +721,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_suggestion_items: suggestionItems,
       wording_choice_mode: mode,
       wording_choice_target_field: targetField,
+      wording_choice_variant: variant === "clarify_dual" ? variant : "",
+      wording_choice_user_label: variant === "clarify_dual" ? WORDING_CLARIFY_USER_LABEL : "",
+      wording_choice_suggestion_label:
+        variant === "clarify_dual" ? WORDING_CLARIFY_SUGGESTION_LABEL : "",
       feedback_reason_key: "",
       feedback_reason_text: feedbackReasonText,
     };
@@ -688,6 +739,13 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const wordingChoice: WordingChoiceUiPayload = {
       enabled: true,
       mode,
+      ...(variant === "clarify_dual"
+        ? {
+            variant,
+            user_label: WORDING_CLARIFY_USER_LABEL,
+            suggestion_label: WORDING_CLARIFY_SUGGESTION_LABEL,
+          }
+        : {}),
       user_text: normalizedUser,
       suggestion_text: suggestionRaw,
       user_items: effectiveUserItems,
@@ -749,6 +807,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_base_items: mode === "list" ? mergedPickedItems : [],
         refined_formulation: chosen,
         wording_choice_agent_current: chosen,
+        wording_choice_variant: "",
+        wording_choice_user_label: "",
+        wording_choice_suggestion_label: "",
         feedback_reason_key: "",
         feedback_reason_text: "",
         ...(mode === "list" ? { statements: mergedPickedItems } : {}),
@@ -815,9 +876,20 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const mode: WordingChoiceMode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
     const userItems = toTrimmedStringArray(specialist?.wording_choice_user_items);
     const suggestionItems = toTrimmedStringArray(specialist?.wording_choice_suggestion_items);
+    const variant = String(specialist?.wording_choice_variant || "").trim() === "clarify_dual"
+      ? "clarify_dual"
+      : "default";
     return {
       enabled: true,
       mode,
+      ...(variant === "clarify_dual"
+        ? {
+            variant: "clarify_dual" as const,
+            user_label: String(specialist?.wording_choice_user_label || "").trim() || WORDING_CLARIFY_USER_LABEL,
+            suggestion_label:
+              String(specialist?.wording_choice_suggestion_label || "").trim() || WORDING_CLARIFY_SUGGESTION_LABEL,
+          }
+        : {}),
       user_text: String(specialist?.wording_choice_user_normalized || specialist?.wording_choice_user_raw || "").trim(),
       suggestion_text: String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim(),
       user_items: userItems,

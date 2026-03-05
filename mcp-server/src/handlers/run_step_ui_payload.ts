@@ -8,12 +8,16 @@ import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 
 type WordingChoiceMode = "text" | "list";
+type WordingChoiceVariant = "default" | "clarify_dual";
 
 export type WordingChoiceUiPayload = {
   enabled: boolean;
   mode: WordingChoiceMode;
+  variant?: WordingChoiceVariant;
   user_text: string;
   suggestion_text: string;
+  user_label?: string;
+  suggestion_label?: string;
   user_items: string[];
   suggestion_items: string[];
   instruction: string;

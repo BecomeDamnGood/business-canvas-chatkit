@@ -81,6 +81,7 @@ export async function runStepRuntimeExecute(
   // Runtime contract marker: BSC_WORDING_CHOICE_V2 remains the single-path runtime flag.
   const policyFlags = resolveHolisticPolicyFlags();
   const wordingChoiceEnabled = policyFlags.wordingChoiceV2;
+  const wordingChoiceIntentV1 = wordingChoiceEnabled && policyFlags.wordingChoiceIntentV1;
   const motivationQuotesEnabled = policyFlags.motivationQuotesV11;
   if (process.env.ACTIONCODE_LOG_INPUT_MODE === "1") {
     const incomingLanguageSourceNormalized = normalizeStateLanguageSource((args.state as Record<string, unknown>)?.language_source);
@@ -326,6 +327,7 @@ export async function runStepRuntimeExecute(
       lastSpecialistResult,
       inputMode: inputMode === "widget" ? "widget" : "chat",
       wordingChoiceEnabled,
+      wordingChoiceIntentV1,
       uiI18nTelemetry,
     },
     ids: {

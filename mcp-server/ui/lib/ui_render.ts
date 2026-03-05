@@ -443,8 +443,11 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   }
 
   const mode = String(wording.mode || "text") === "list" ? "list" : "text";
+  const variant = String(wording.variant || "default").trim().toLowerCase();
   const userText = String(wording.user_text || "").trim();
   const suggestionText = String(wording.suggestion_text || "").trim();
+  const userLabelFromPayload = String(wording.user_label || "").trim();
+  const suggestionLabelFromPayload = String(wording.suggestion_label || "").trim();
   const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];
   const suggestionItems = Array.isArray(wording.suggestion_items) ? wording.suggestion_items : [];
   const instruction = String(wording.instruction || "").trim() || t(lang, "wordingChoiceInstruction");
@@ -453,8 +456,12 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     if (!trimmed) return "";
     return /[:]\s*$/.test(trimmed) ? trimmed : `${trimmed}:`;
   };
-  const userLabel = ensureLabelColon(t(lang, "wordingChoiceHeading"));
-  const suggestionLabel = ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
+  const userLabel = variant === "clarify_dual"
+    ? (userLabelFromPayload || "Do you mean something like this")
+    : ensureLabelColon(t(lang, "wordingChoiceHeading"));
+  const suggestionLabel = variant === "clarify_dual"
+    ? (suggestionLabelFromPayload || "Or do you mean something like this?")
+    : ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
   const normalizeListItem = (value: unknown): string =>
     String(value || "")
       .replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "")

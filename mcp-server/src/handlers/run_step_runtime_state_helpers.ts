@@ -346,6 +346,9 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       wording_choice_agent_current: "",
       wording_choice_mode: "",
       wording_choice_target_field: "",
+      wording_choice_variant: "",
+      wording_choice_user_label: "",
+      wording_choice_suggestion_label: "",
       feedback_reason_key: "",
       feedback_reason_text: "",
     };

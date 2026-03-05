@@ -282,6 +282,8 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
         if (!normalized) return false;
         if (normalized.includes("this is your input")) return false;
         if (normalized.includes("this would be my suggestion")) return false;
+        if (normalized.includes("do you mean something like this")) return false;
+        if (normalized.includes("or do you mean something like this")) return false;
         if (normalized.includes("if you meant something different")) return false;
         if (/\b(i['’]?ve|i have)\s+(reformulat\w*|rewritten|broadened|converted)\b/i.test(normalized)) return false;
         if (/^statement\s*\d+\s*:/i.test(normalized)) return false;

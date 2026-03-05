@@ -163,6 +163,7 @@ import {
   isUiTranslationFastModelV1Enabled,
   isUiWaitShellV2Enabled,
   isUiWordingFeedbackKeyedV1Enabled,
+  isWordingChoiceIntentV1Enabled,
   isWordingPanelCleanBodyV1Enabled,
   normalizeDreamRuntimeMode,
   normalizeUsage,
@@ -374,6 +375,9 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
   }
   safe.wording_choice_pending = "false";
   safe.wording_choice_selected = "";
+  safe.wording_choice_variant = "";
+  safe.wording_choice_user_label = "";
+  safe.wording_choice_suggestion_label = "";
   safe.feedback_reason_key = "";
   safe.feedback_reason_text = "";
   return safe;
@@ -476,6 +480,8 @@ function compactWordingPanelBody(messageRaw: string): string {
       if (!normalized) return false;
       if (normalized.includes("this is your input")) return false;
       if (normalized.includes("this would be my suggestion")) return false;
+      if (normalized.includes("do you mean something like this")) return false;
+      if (normalized.includes("or do you mean something like this")) return false;
       if (normalized.includes("if you meant something different")) return false;
       if (/\b(i['’]?ve|i have)\s+(reformulat\w*|rewritten|broadened|converted)\b/i.test(normalized)) return false;
       if (/^statement\s*\d+\s*:/i.test(normalized)) return false;
@@ -681,6 +687,7 @@ const wordingHelpers = createRunStepWordingHelpers({
   renderFreeTextTurnPolicy,
   applyUiPhaseByStep,
   isUiWordingFeedbackKeyedV1Enabled,
+  isWordingChoiceIntentV1Enabled,
   bumpUiI18nCounter: (telemetry, key, amount) =>
     bumpUiI18nCounter(
       telemetry as UiI18nTelemetryCounters | null | undefined,
