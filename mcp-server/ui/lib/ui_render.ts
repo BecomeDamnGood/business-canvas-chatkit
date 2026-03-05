@@ -88,6 +88,42 @@ function uiText(lang: string | null | undefined, key: string, _fallback: string)
   return "";
 }
 
+function benAvatarCandidates(): string[] {
+  const candidates: string[] = [];
+  try {
+    const base = String(document.baseURI || window.location.href || "").trim();
+    if (base) {
+      candidates.push(new URL("assets/ben-steenstra.webp", base).href);
+    }
+  } catch {
+    // Ignore URL/base issues in restricted embed contexts.
+  }
+  candidates.push("/ui/assets/ben-steenstra.webp");
+  return Array.from(new Set(candidates.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
+function prependBenProfileAvatar(cardDescEl: HTMLElement): void {
+  if (!cardDescEl || cardDescEl.querySelector(".cardDesc-benAvatar")) return;
+  const candidates = benAvatarCandidates();
+  if (candidates.length === 0) return;
+  const img = document.createElement("img");
+  img.className = "cardDesc-benAvatar";
+  img.alt = "Ben Steenstra";
+  img.loading = "eager";
+  img.decoding = "async";
+  let index = 0;
+  img.onerror = () => {
+    index += 1;
+    if (index < candidates.length) {
+      img.src = candidates[index];
+      return;
+    }
+    img.remove();
+  };
+  img.src = candidates[index];
+  cardDescEl.insertBefore(img, cardDescEl.firstChild);
+}
+
 function stepLabelShort(stepId: string, lang: string | null | undefined): string {
   const full = extractStepTitle(stepId, lang);
   if (stepId === "step_0") return uiText(lang, "stepLabel.validation", "");
@@ -829,6 +865,9 @@ export function render(overrideToolOutput?: unknown): void {
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
     renderStructuredText(cardDescEl, body || "");
+    if (isBenProfile) {
+      prependBenProfileAvatar(cardDescEl);
+    }
   }
 
   const previewWrap = document.getElementById("presentationPreview");
