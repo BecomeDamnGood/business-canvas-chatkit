@@ -439,6 +439,42 @@ function stripInlineNumberedSummaryParagraphs(answerText: string, statements: st
   return kept.join("\n\n").trim();
 }
 
+function stripStrategySummaryParagraphs(answerText: string, statements: string[]): string {
+  const expected = statements.map((line) => String(line || "").trim()).filter(Boolean);
+  const summaryPatterns = [
+    /^so far we have these\b/i,
+    /^i['’]?ve reformulated your input into valid strategy focus choices:?$/i,
+    /^if you want to sharpen or adjust these, let me know\.?$/i,
+    /^current strategy focus points:?$/i,
+    /^you now have\s+\d+\s+focus points within your strategy:?$/i,
+    /^i advise you to formulate at least 4 but maximum 7 focus points\.?$/i,
+    /^your current strategy for\b/i,
+  ];
+  const paragraphs = String(answerText || "")
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return "";
+
+  const kept = paragraphs.filter((paragraph) => {
+    const normalizedLines = paragraph
+      .split("\n")
+      .map((line) => String(line || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    if (normalizedLines.some((line) => summaryPatterns.some((pattern) => pattern.test(line)))) {
+      return false;
+    }
+    const bulletLikeLines = normalizedLines.filter((line) => /^(?:[-*•]|\d+[\).])\s+/.test(line));
+    if (bulletLikeLines.length < 2 || expected.length === 0) return true;
+    const paragraphKey = comparableText(paragraph);
+    const matched = expected.filter((statement) => includesStatement(paragraphKey, statement)).length;
+    return matched < Math.min(2, expected.length);
+  });
+
+  return kept.join("\n\n").trim();
+}
+
 function dedupeListItems(lines: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -1082,6 +1118,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   }
 
   const specialistForDisplay: Record<string, unknown> = { ...specialist };
+  const wordingPending = String((specialistForDisplay as any).wording_choice_pending || "").trim() === "true";
   if (isOfftopic && stepId !== "step_0") {
     const field = stepId === "rulesofthegame" ? "rulesofthegame" : stepId;
     const finalField = getFinalFieldForStepId(stepId);
@@ -1132,7 +1169,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const strategyStatements =
     stepId === "strategy" ? strategyStatementsFromSources(state, statusSource, prev, { provisionalForStep }) : [];
   const strategyContextBlock =
-    !isOfftopic && stepId === "strategy" && strategyStatements.length > 0
+    !isOfftopic && stepId === "strategy" && strategyStatements.length > 0 && !wordingPending
       ? buildStrategyContextBlock(state, strategyStatements, { uiStringFromState, companyNameForPrompt })
       : "";
   const message = (() => {
@@ -1153,7 +1190,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       return `${answerText}\n\n${recapBlock}`.trim();
     }
     if (strategyContextBlock) {
-      const cleanedAnswer = stripInlineNumberedSummaryParagraphs(answerText, strategyStatements);
+      const withoutInlineSummary = stripInlineNumberedSummaryParagraphs(answerText, strategyStatements);
+      const cleanedAnswer = stripStrategySummaryParagraphs(withoutInlineSummary, strategyStatements);
       if (!cleanedAnswer) return strategyContextBlock;
       const answerKey = comparableText(cleanedAnswer);
       const recapKey = comparableText(strategyContextBlock);
@@ -1318,7 +1356,6 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const question = stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
   const contractId = buildContractId(stepId, effectiveStatus, menuId);
   const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
-  const wordingPending = String((specialistForDisplay as any).wording_choice_pending || "").trim() === "true";
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() && wordingPending && !String(message || "").trim()
       ? uiStringFromState(

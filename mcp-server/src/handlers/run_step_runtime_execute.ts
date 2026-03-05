@@ -31,7 +31,7 @@ export async function runStepRuntimeExecute(
     DREAM_FORCE_REFINE_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, STRATEGY_SPECIALIST,
     callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
     normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
-    isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate,
+    isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, classifyPendingWordingChoiceTextIntent, hasDreamSpecialistCandidate,
     buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,
     applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
     inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
@@ -365,6 +365,7 @@ export async function runStepRuntimeExecute(
       isUiStateHygieneSwitchV1Enabled,
       isClearlyGeneralOfftopicInput,
       shouldTreatAsStepContributingInput,
+      classifyPendingWordingChoiceTextIntent,
       bumpUiI18nCounter: (telemetry: any, key: any) =>
         bumpUiI18nCounter(
           telemetry as any,

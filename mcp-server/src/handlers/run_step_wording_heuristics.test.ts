@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { parseListItems, shouldTreatAsStepContributingInput } from "./run_step_wording_heuristics.js";
+import {
+  classifyPendingWordingChoiceTextIntent,
+  parseListItems,
+  shouldTreatAsStepContributingInput,
+} from "./run_step_wording_heuristics.js";
 
 test("parseListItems splits run-on strategy style sentences into logical list items", () => {
   const input =
@@ -33,5 +37,20 @@ test("shouldTreatAsStepContributingInput ignores process navigation utterances",
       "strategy"
     ),
     true
+  );
+});
+
+test("classifyPendingWordingChoiceTextIntent defaults to suggestion accept unless explicit reject is present", () => {
+  assert.equal(
+    classifyPendingWordingChoiceTextIntent("Maak het korter en bondiger."),
+    "accept_suggestion_default"
+  );
+  assert.equal(
+    classifyPendingWordingChoiceTextIntent("Dat is niet wat ik bedoel."),
+    "reject_suggestion_explicit"
+  );
+  assert.equal(
+    classifyPendingWordingChoiceTextIntent("That's not what I meant."),
+    "reject_suggestion_explicit"
   );
 });

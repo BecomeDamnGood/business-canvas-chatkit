@@ -98,6 +98,7 @@ function buildParams(intentEnabled: boolean) {
       isUiStateHygieneSwitchV1Enabled: () => true,
       isClearlyGeneralOfftopicInput: () => false,
       shouldTreatAsStepContributingInput: () => true,
+      classifyPendingWordingChoiceTextIntent: () => "accept_suggestion_default" as const,
       bumpUiI18nCounter: () => {},
     },
     wording: {
@@ -147,6 +148,63 @@ test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-
   assert.equal(result.response, null);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "false");
+});
+
+test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending wording choice when free text does not reject", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.userMessage = "korter en bondiger";
+  params.state.classifyPendingWordingChoiceTextIntent = () => "accept_suggestion_default";
+  params.wording.applyWordingPickSelection = ({ state, routeToken }: any) => {
+    if (routeToken !== "__WORDING_PICK_SUGGESTION__") {
+      return { handled: false, specialist: {}, nextState: state };
+    }
+    return {
+      handled: true,
+      specialist: {},
+      nextState: {
+        ...state,
+        last_specialist_result: {
+          ...((state.last_specialist_result as Record<string, unknown>) || {}),
+          wording_choice_pending: "false",
+          wording_choice_selected: "suggestion",
+          wording_choice_mode: "",
+          wording_choice_target_field: "",
+          wording_choice_user_raw: "",
+          wording_choice_user_normalized: "",
+          wording_choice_user_items: [],
+          wording_choice_suggestion_items: [],
+          wording_choice_base_items: [],
+        },
+      },
+    };
+  };
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "korter en bondiger");
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.wording_choice_selected || ""), "suggestion");
+});
+
+test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when user explicitly rejects it", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.userMessage = "Dat is niet wat ik bedoel.";
+  params.state.classifyPendingWordingChoiceTextIntent = () => "reject_suggestion_explicit";
+  let implicitPickCalled = false;
+  params.wording.applyWordingPickSelection = ({ routeToken, state }: any) => {
+    if (routeToken === "__WORDING_PICK_SUGGESTION__") {
+      implicitPickCalled = true;
+    }
+    return { handled: false, specialist: {}, nextState: state };
+  };
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(implicitPickCalled, false);
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.wording_choice_selected || ""), "");
 });
 
 test("runStepRuntimeActionRoutingLayer maps proceed text intent to current confirm action in widget mode", async () => {

@@ -53,6 +53,90 @@ test("strategy wording-pick render always appends canonical bullet context and n
   );
 });
 
+test("strategy pending wording-choice render does not append canonical context block", () => {
+  const state = getDefaultState();
+  const statements = [
+    "Focus op enterprise klanten met complexe transformatievraagstukken",
+    "Focus op langdurige strategische samenwerkingen met beslissers",
+  ];
+  (state as any).current_step = "strategy";
+  (state as any).active_specialist = "Strategy";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { strategy: statements.join("\n") };
+  (state as any).provisional_source_by_step = { strategy: "user_input" };
+
+  const specialist = {
+    action: "ASK",
+    wording_choice_pending: "true",
+    wording_choice_mode: "list",
+    wording_choice_target_field: "strategy",
+    wording_choice_user_items: statements,
+    wording_choice_suggestion_items: [...statements, "Focus op meetbare waarderealisatie per traject"],
+    message:
+      "Dit is je input:\n- Focus op enterprise klanten met complexe transformatievraagstukken\n- Focus op langdurige strategische samenwerkingen met beslissers\n\nDit is mijn suggestie:\n- Focus op enterprise klanten met complexe transformatievraagstukken\n- Focus op langdurige strategische samenwerkingen met beslissers\n- Focus op meetbare waarderealisatie per traject",
+    question: "",
+    refined_formulation: statements.join("\n"),
+    strategy: statements.join("\n"),
+    statements,
+  } as Record<string, unknown>;
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "strategy",
+    state,
+    specialist,
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.equal(message.includes("You now have"), false);
+  assert.equal(message.includes("Your current Strategy for"), false);
+  assert.equal(message.includes("Kies de versie") || message.includes("Dit is mijn suggestie"), true);
+});
+
+test("strategy render strips model-owned English summary lines and keeps runtime-owned canonical context", () => {
+  const state = getDefaultState();
+  const statements = [
+    "Focus op enterprise klanten met complexe transformatievraagstukken",
+    "Focus op langdurige strategische samenwerkingen met beslissers",
+  ];
+  (state as any).current_step = "strategy";
+  (state as any).active_specialist = "Strategy";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { strategy: statements.join("\n") };
+  (state as any).provisional_source_by_step = { strategy: "user_input" };
+
+  const specialist = {
+    action: "ASK",
+    message: [
+      "I've reformulated your input into valid strategy focus choices:",
+      "",
+      "<strong>So far we have these 2 strategic focus points:</strong>",
+      `- ${statements[0]}`,
+      `- ${statements[1]}`,
+      "",
+      "If you want to sharpen or adjust these, let me know.",
+    ].join("\n"),
+    question: "Is er nog meer waar je altijd op wilt focussen?",
+    refined_formulation: statements.join("\n"),
+    strategy: statements.join("\n"),
+    statements,
+  } as Record<string, unknown>;
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "strategy",
+    state,
+    specialist,
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.equal(/so far we have these/i.test(message), false);
+  assert.equal(/i['’]?ve reformulated your input/i.test(message), false);
+  assert.equal(/if you want to sharpen or adjust these/i.test(message), false);
+  assert.match(message, /You now have 2 focus points within your strategy/i);
+  assert.match(message, /Your current Strategy for Mindd is:/i);
+});
+
 test("productsservices summary list keeps confirm action available before final commit", () => {
   const state = getDefaultState();
   (state as any).current_step = "productsservices";

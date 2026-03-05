@@ -114,6 +114,7 @@ import {
   splitSentenceItems,
   canonicalizeComparableText,
   areEquivalentWordingVariants,
+  classifyPendingWordingChoiceTextIntent,
 } from "./run_step_wording_heuristics.js";
 import {
   LANGUAGE_LOCK_INSTRUCTION,
@@ -721,6 +722,7 @@ export {
   areEquivalentWordingVariants,
   isClearlyGeneralOfftopicInput,
   shouldTreatAsStepContributingInput,
+  classifyPendingWordingChoiceTextIntent,
 };
 
 const resolveActionCodeMenuTransition = uiPayloadHelpers.resolveActionCodeMenuTransition;
@@ -918,7 +920,7 @@ const runStepRuntimeExecuteDeps = {
   DREAM_FORCE_REFINE_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, STRATEGY_SPECIALIST,
   callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
   normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
-  isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate,
+  isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, classifyPendingWordingChoiceTextIntent, hasDreamSpecialistCandidate,
   buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,
   applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
   inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,

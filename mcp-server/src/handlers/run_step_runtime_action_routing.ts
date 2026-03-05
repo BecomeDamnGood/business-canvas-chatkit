@@ -91,6 +91,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     isUiStateHygieneSwitchV1Enabled: () => boolean;
     isClearlyGeneralOfftopicInput: (userMessage: string) => boolean;
     shouldTreatAsStepContributingInput: (userMessage: string, stepId: string) => boolean;
+    classifyPendingWordingChoiceTextIntent: (
+      userMessage: string
+    ) => "accept_suggestion_default" | "reject_suggestion_explicit";
     bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
   };
   wording: {
@@ -235,6 +238,26 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const hasProgressVerb = tokens.some((token) => progressVerbs.has(token));
     const hasStepSignal = tokens.some((token) => stepSignals.has(token));
     return hasProgressVerb && hasStepSignal;
+  };
+
+  const looksLikeExplicitPendingSuggestionReject = (raw: string): boolean => {
+    const comparable = String(raw || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!comparable) return false;
+    const rejectPatterns = [
+      /\b(thats not what i meant|that is not what i meant|not what i meant)\b/i,
+      /\b(no thats wrong|no that is wrong|thats wrong|that is wrong)\b/i,
+      /\b(i mean something else|i meant something else|completely different|totally different)\b/i,
+      /\b(use my version|keep my version)\b/i,
+      /\b(dat is niet wat ik bedoel|dat bedoel ik niet|niet wat ik bedoel)\b/i,
+      /\b(nee dat is fout|nee dat klopt niet|dit klopt niet)\b/i,
+      /\b(ik bedoel iets anders|ik bedoelde iets anders|helemaal anders|totaal anders)\b/i,
+      /\b(gebruik mijn versie|hou mijn versie|houd mijn versie)\b/i,
+    ];
+    return rejectPatterns.some((re) => re.test(comparable));
   };
 
   const buildBigWhyTooLongFeedback = (stateForText: CanvasState): Record<string, unknown> => {
@@ -517,6 +540,11 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   const currentStepId = String(state.current_step || "");
   const isGeneralOfftopicInput = statePorts.isClearlyGeneralOfftopicInput(userMessage);
   const isStepContributingInput = statePorts.shouldTreatAsStepContributingInput(userMessage, currentStepId);
+  const hasFreeTextWhilePending =
+    Boolean(String(userMessage || "").trim()) &&
+    !String(userMessage || "").trim().startsWith("ACTION_") &&
+    !String(userMessage || "").trim().startsWith("__ROUTE__") &&
+    !wording.isWordingPickRouteToken(userMessage);
   let hasPendingWordingChoice =
     runtime.wordingChoiceEnabled &&
     runtime.inputMode === "widget" &&
@@ -528,14 +556,32 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       pendingBeforeTurn,
       action.getDreamRuntimeMode(state)
     );
-  const shouldReleasePendingWordingForTextIntent =
+  const shouldResolvePendingWordingFromTextIntent =
     hasPendingWordingChoice &&
     runtime.wordingChoiceIntentV1 &&
-    !wording.isWordingPickRouteToken(userMessage) &&
-    isStepContributingInput;
-  if (shouldReleasePendingWordingForTextIntent) {
-    state = statePorts.clearStepInteractiveState(state, currentStepId);
-    statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
+    hasFreeTextWhilePending;
+  if (shouldResolvePendingWordingFromTextIntent) {
+    const pendingChoiceIntent = statePorts.classifyPendingWordingChoiceTextIntent(userMessage);
+    const shouldRejectExplicitly =
+      pendingChoiceIntent === "reject_suggestion_explicit" || looksLikeExplicitPendingSuggestionReject(userMessage);
+    if (shouldRejectExplicitly) {
+      state = statePorts.clearStepInteractiveState(state, currentStepId);
+      statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
+    } else {
+      const implicitSelection = wording.applyWordingPickSelection({
+        stepId: currentStepId,
+        routeToken: "__WORDING_PICK_SUGGESTION__",
+        state,
+        telemetry: runtime.uiI18nTelemetry,
+      });
+      if (implicitSelection.handled) {
+        state = implicitSelection.nextState;
+        statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "wording_choice_implicit_accept_count");
+      } else {
+        state = statePorts.clearStepInteractiveState(state, currentStepId);
+        statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
+      }
+    }
     pendingBeforeTurn =
       ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
     hasPendingWordingChoice =

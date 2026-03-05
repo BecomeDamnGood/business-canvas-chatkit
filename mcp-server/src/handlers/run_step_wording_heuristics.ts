@@ -187,6 +187,38 @@ export function shouldTreatAsStepContributingInput(input: string, stepId: string
   return words.length >= 5;
 }
 
+export type PendingWordingChoiceTextIntent =
+  | "accept_suggestion_default"
+  | "reject_suggestion_explicit";
+
+function normalizeIntentComparable(input: string): string {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function classifyPendingWordingChoiceTextIntent(input: string): PendingWordingChoiceTextIntent {
+  const comparable = normalizeIntentComparable(input);
+  if (!comparable) return "accept_suggestion_default";
+
+  const explicitRejectPatterns = [
+    /\b(thats not what i meant|that is not what i meant|not what i meant)\b/i,
+    /\b(no thats wrong|no that is wrong|thats wrong|that is wrong)\b/i,
+    /\b(i mean something else|i meant something else|completely different|totally different)\b/i,
+    /\b(use my version|keep my version)\b/i,
+    /\b(dat is niet wat ik bedoel|dat bedoel ik niet|niet wat ik bedoel)\b/i,
+    /\b(nee dat is fout|nee dat klopt niet|dit klopt niet)\b/i,
+    /\b(ik bedoel iets anders|ik bedoelde iets anders|helemaal anders|totaal anders)\b/i,
+    /\b(gebruik mijn versie|hou mijn versie|houd mijn versie)\b/i,
+  ];
+  if (explicitRejectPatterns.some((re) => re.test(comparable))) {
+    return "reject_suggestion_explicit";
+  }
+  return "accept_suggestion_default";
+}
+
 function extractSuggestionFromMessage(message: string): string {
   const raw = String(message || "").trim();
   if (!raw) return "";
