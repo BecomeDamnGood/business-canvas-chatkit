@@ -79,7 +79,7 @@ function createAppServer(baseUrl: string): McpServer {
         contents: [
           {
             uri: uiResourceUri,
-            text: loadUiHtml(),
+            text: loadUiHtml(baseUrl),
             _meta: {
               "openai/widgetDescription": "Business Strategy Canvas Builder widget UI",
               "openai/widgetCSP": {

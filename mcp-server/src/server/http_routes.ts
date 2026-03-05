@@ -301,7 +301,7 @@ const httpServer = async (req: any, res: any) => {
         ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
         "application/octet-stream";
       if (fileName === "step-card.bundled.html") {
-        const withVersion = loadUiHtml();
+        const withVersion = loadUiHtml(resolveBaseUrl(req));
         res.writeHead(200, {
           "content-type": contentType,
           "cache-control": "no-store",

@@ -277,6 +277,8 @@ const {
   deriveUiViewPayload,
   isConfirmActionCode,
   menuHasConfirmAction,
+  firstConfirmActionCodeForMenu,
+  firstGuidanceActionCodeForMenu,
 } = runtimeActionHelpers;
 const runtimeDreamHelpers = createRunStepRuntimeDreamHelpers({
   strategyStepId: STRATEGY_STEP_ID,
@@ -907,7 +909,7 @@ const runStepRuntimeExecuteDeps = {
   PURPOSE_STEP_ID, BIGWHY_STEP_ID, ROLE_STEP_ID, ENTITY_STEP_ID, STRATEGY_STEP_ID, TARGETGROUP_STEP_ID,
   PRODUCTSSERVICES_STEP_ID, RULESOFTHEGAME_STEP_ID, PRESENTATION_STEP_ID, DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
   NEXT_MENU_BY_ACTIONCODE, DREAM_START_EXERCISE_ACTION_CODES, resolveActionCodeTransition,
-  setUiRenderModeByStep, buildContractId, processActionCode, setDreamRuntimeMode, provisionalValueForStep,
+  setUiRenderModeByStep, buildContractId, processActionCode, firstConfirmActionCodeForMenu, firstGuidanceActionCodeForMenu, setDreamRuntimeMode, provisionalValueForStep,
   clearProvisionalValue, clearStepInteractiveState, isUiStateHygieneSwitchV1Enabled,
   isClearlyGeneralOfftopicInput, isWordingChoiceEligibleContext, buildWordingChoiceFromPendingSpecialist,
   applyWordingPickSelection, isWordingPickRouteToken, isRefineAdjustRouteToken, buildWordingChoiceFromTurn,

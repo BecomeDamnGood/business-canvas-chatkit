@@ -41,12 +41,12 @@ import {
   type RunStepTransportResult,
 } from "./run_step_transport_idempotency.js";
 import { preflightStalePayload } from "./run_step_transport_stale.js";
-import { injectUiVersion } from "./locale_resolution.js";
+import { injectUiVersion, injectWidgetBase } from "./locale_resolution.js";
 
-function loadUiHtml(): string {
+function loadUiHtml(baseUrl = ""): string {
   try {
     const raw = readFileSync(new URL("../../ui/step-card.bundled.html", import.meta.url), "utf-8");
-    return injectUiVersion(raw);
+    return injectWidgetBase(injectUiVersion(raw), baseUrl);
   } catch (e) {
     console.error("[loadUiHtml] Failed:", e);
     return "<html><body>UI not available</body></html>";

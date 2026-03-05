@@ -74,6 +74,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       state: CanvasState,
       lastSpecialistResult: Record<string, unknown>
     ) => string;
+    firstConfirmActionCodeForMenu: (menuId: string) => string;
+    firstGuidanceActionCodeForMenu: (menuId: string) => string;
     setDreamRuntimeMode: (
       state: CanvasState,
       mode: "self" | "builder_collect" | "builder_scoring" | "builder_refine"
@@ -170,6 +172,70 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   let state = runtime.state;
   let userMessage = runtime.userMessage;
   let forcedProceed = false;
+
+  const normalizeItems = (raw: unknown): string[] =>
+    Array.isArray(raw)
+      ? raw.map((line) => String(line || "").trim()).filter(Boolean)
+      : [];
+
+  const hasRenderablePendingWordingChoice = (specialist: Record<string, unknown>): boolean => {
+    if (String(specialist.wording_choice_pending || "").trim() !== "true") return false;
+    const mode = String(specialist.wording_choice_mode || "text").trim() === "list" ? "list" : "text";
+    const userText = String(specialist.wording_choice_user_normalized || specialist.wording_choice_user_raw || "").trim();
+    const suggestionText = String(specialist.wording_choice_agent_current || specialist.refined_formulation || "").trim();
+    const userItems = normalizeItems(specialist.wording_choice_user_items);
+    const suggestionItems = normalizeItems(specialist.wording_choice_suggestion_items);
+    if (mode === "list") {
+      const hasUser = userItems.length > 0 || Boolean(userText);
+      const hasSuggestion = suggestionItems.length > 0 || Boolean(suggestionText);
+      return hasUser && hasSuggestion;
+    }
+    return Boolean(userText && suggestionText);
+  };
+
+  const tokenizeIntent = (raw: string): string[] =>
+    String(raw || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .filter(Boolean);
+
+  const looksLikeProceedTextIntent = (raw: string): boolean => {
+    const tokens = tokenizeIntent(raw);
+    if (tokens.length === 0) return false;
+    if (tokens.length === 1) {
+      return tokens[0] === "next" || tokens[0] === "continue";
+    }
+    if (tokens.length > 14) return false;
+    const progressVerbs = new Set([
+      "continue",
+      "proceed",
+      "advance",
+      "next",
+      "go",
+      "going",
+      "doorgaan",
+      "verder",
+      "ga",
+      "gaan",
+    ]);
+    const stepSignals = new Set([
+      "step",
+      "steps",
+      "stap",
+      "stappen",
+      "next",
+      "volgende",
+      "hierna",
+      "daarna",
+      "further",
+    ]);
+    const hasProgressVerb = tokens.some((token) => progressVerbs.has(token));
+    const hasStepSignal = tokens.some((token) => stepSignals.has(token));
+    return hasProgressVerb && hasStepSignal;
+  };
 
   const buildBigWhyTooLongFeedback = (stateForText: CanvasState): Record<string, unknown> => {
     const message = behavior.uiStringFromStateMap(
@@ -336,6 +402,52 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       }
       userMessage = "";
       forcedProceed = true;
+    }
+  }
+
+  if (!forcedProceed && !userMessage.startsWith("ACTION_")) {
+    const stepId = String(state.current_step || "").trim();
+    if (stepId) {
+      const pending = (((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
+        {}) as Record<string, unknown>;
+      if (String(pending.wording_choice_pending || "").trim() === "true" && !hasRenderablePendingWordingChoice(pending)) {
+        state = statePorts.clearStepInteractiveState(state, stepId);
+        statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
+      }
+    }
+  }
+
+  if (!forcedProceed && !userMessage.startsWith("ACTION_") && !wording.isWordingPickRouteToken(userMessage)) {
+    const stepId = String(state.current_step || "").trim();
+    if (stepId) {
+      const sourceMenuId = action.inferCurrentMenuForStep(state, stepId);
+      const confirmActionCode = action.firstConfirmActionCodeForMenu(String(sourceMenuId || "").trim());
+      if (confirmActionCode && looksLikeProceedTextIntent(userMessage)) {
+        userMessage = confirmActionCode;
+      } else if (looksLikeProceedTextIntent(userMessage)) {
+        const pendingSpecialist =
+          (((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
+            {}) as Record<string, unknown>;
+        const hasPendingWordingChoice =
+          runtime.wordingChoiceEnabled &&
+          String(pendingSpecialist.wording_choice_pending || "").trim() === "true" &&
+          wording.isWordingChoiceEligibleContext(
+            stepId,
+            String((state as Record<string, unknown>).active_specialist || ""),
+            pendingSpecialist,
+            pendingSpecialist,
+            action.getDreamRuntimeMode(state)
+          ) &&
+          hasRenderablePendingWordingChoice(pendingSpecialist);
+        if (hasPendingWordingChoice) {
+          userMessage = "__WORDING_PICK_SUGGESTION__";
+        } else {
+          const guidanceActionCode = action.firstGuidanceActionCodeForMenu(String(sourceMenuId || "").trim());
+          if (guidanceActionCode) {
+            userMessage = guidanceActionCode;
+          }
+        }
+      }
     }
   }
 

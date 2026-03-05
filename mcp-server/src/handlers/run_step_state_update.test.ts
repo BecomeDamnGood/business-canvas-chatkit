@@ -69,3 +69,49 @@ test("applyStateUpdate stores products/services as bullet lines for run-on list 
   assert.ok(lines.length >= 3);
   assert.ok(lines.every((line) => line.startsWith("• ")));
 });
+
+test("applyStateUpdate stores strategy provisional value from statements when strategy text is missing", () => {
+  const helpers = buildHelpers();
+  const next = helpers.applyStateUpdate({
+    prev: { current_step: "strategy" } as any,
+    decision: { current_step: "strategy", specialist_to_call: "StrategySpecialist" } as any,
+    specialistResult: {
+      strategy: "",
+      refined_formulation: "",
+      statements: [
+        "Focus op enterprise-opdrachten",
+        "Inzetten op langdurige samenwerkingen",
+        "Overpresteren via netwerkprojecten",
+        "Prioriteit voor investeringsbereidheid",
+      ],
+    },
+    showSessionIntroUsed: "false",
+  });
+  const value = String((next as any).provisional_by_step?.strategy || "");
+  const lines = value.split("\n").map((line) => line.trim()).filter(Boolean);
+  assert.equal(lines.length, 4);
+  assert.ok(lines.every((line) => line.startsWith("• ")));
+});
+
+test("applyStateUpdate stores products/services provisional value from statements when text is missing", () => {
+  const helpers = buildHelpers();
+  const next = helpers.applyStateUpdate({
+    prev: { current_step: "productsservices" } as any,
+    decision: { current_step: "productsservices", specialist_to_call: "ProductsAndServices" } as any,
+    specialistResult: {
+      productsservices: "",
+      refined_formulation: "",
+      statements: [
+        "AI-compatible websites en apps",
+        "AI-tools en ondersteuning",
+        "Branding",
+        "Strategie",
+      ],
+    },
+    showSessionIntroUsed: "false",
+  });
+  const value = String((next as any).provisional_by_step?.productsservices || "");
+  const lines = value.split("\n").map((line) => line.trim()).filter(Boolean);
+  assert.equal(lines.length, 4);
+  assert.ok(lines.every((line) => line.startsWith("• ")));
+});

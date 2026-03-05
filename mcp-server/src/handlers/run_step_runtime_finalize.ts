@@ -337,6 +337,67 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         .filter(Boolean)
         .map((line) => normalizeForDedupe(line))
         .filter(Boolean);
+    const isBulletConsistencyStep = ["strategy", "productsservices", "rulesofthegame"].includes(
+      String(contractStepId || "").trim()
+    );
+    const extractStructuredListItems = (value: string): string[] => {
+      const lines = String(value || "")
+        .replace(/\r/g, "\n")
+        .split("\n")
+        .map((line) =>
+          String(line || "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+        );
+      const items: string[] = [];
+      let current = "";
+      let sawMarker = false;
+      const flush = () => {
+        const item = String(current || "").replace(/\s+/g, " ").trim();
+        if (item) items.push(item);
+        current = "";
+      };
+      for (const line of lines) {
+        if (!line) {
+          flush();
+          continue;
+        }
+        const marker = line.match(/^(?:[-*•]|\d+[\).])\s+(.+)$/);
+        if (marker) {
+          sawMarker = true;
+          flush();
+          current = String(marker[1] || "").trim();
+          continue;
+        }
+        const looksHeading =
+          /:\s*$/.test(line) ||
+          /^[A-ZÀ-ÖØ-Þ0-9][A-ZÀ-ÖØ-Þ0-9\s,'’"()\/-]{6,}$/.test(line);
+        if (!sawMarker) {
+          if (!looksHeading && line.length >= 3) items.push(line);
+          continue;
+        }
+        if (!current) {
+          if (!looksHeading) current = line;
+          continue;
+        }
+        if (looksHeading) {
+          flush();
+          continue;
+        }
+        current = `${current} ${line}`.replace(/\s+/g, " ").trim();
+      }
+      flush();
+      const deduped: string[] = [];
+      const seen = new Set<string>();
+      for (const item of items) {
+        const normalized = deps.canonicalizeComparableText(item);
+        if (!normalized || seen.has(normalized)) continue;
+        seen.add(normalized);
+        deduped.push(item);
+      }
+      return deduped;
+    };
     const extractHeadingAndBodyFromSelection = (
       selectionRaw: string,
       selectedValueRaw: string
@@ -464,8 +525,28 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           const normalized = deps.canonicalizeComparableText(line);
           return Boolean(normalized) && messageLineSet.has(normalized);
         });
+      const messageListItems = isBulletConsistencyStep ? extractStructuredListItems(msg) : [];
+      const messageListKeys = new Set(
+        messageListItems
+          .map((line) => deps.canonicalizeComparableText(line))
+          .filter(Boolean)
+      );
+      const refinedListItems = isBulletConsistencyStep ? extractStructuredListItems(refinedDisplay) : [];
+      const duplicateByListItems =
+        isBulletConsistencyStep &&
+        refinedListItems.length > 0 &&
+        messageListKeys.size > 0 &&
+        refinedListItems.every((line) => {
+          const normalized = deps.canonicalizeComparableText(line);
+          return Boolean(normalized) && messageListKeys.has(normalized);
+        });
       const refinedWithHeading = currentHeading ? `${currentHeading}\n\n${refinedDisplay}` : refinedDisplay;
-      if (!(dreamBuilderRenderContext && refinedMatchesStatements) && !duplicateByWhole && !duplicateByLines) {
+      if (
+        !(dreamBuilderRenderContext && refinedMatchesStatements) &&
+        !duplicateByWhole &&
+        !duplicateByLines &&
+        !duplicateByListItems
+      ) {
         parts.push(refinedWithHeading);
       }
     }

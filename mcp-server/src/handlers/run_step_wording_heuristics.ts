@@ -138,11 +138,46 @@ export function isClearlyGeneralOfftopicInput(input: string): boolean {
   return false;
 }
 
+function isLikelyProcessNavigationIntent(input: string): boolean {
+  const tokens = tokenizeWords(input);
+  if (tokens.length === 0 || tokens.length > 14) return false;
+  if (tokens.length === 1) {
+    return tokens[0] === "next" || tokens[0] === "continue";
+  }
+  const progressVerbs = new Set([
+    "continue",
+    "proceed",
+    "advance",
+    "next",
+    "go",
+    "going",
+    "doorgaan",
+    "verder",
+    "ga",
+    "gaan",
+  ]);
+  const stepSignals = new Set([
+    "step",
+    "steps",
+    "stap",
+    "stappen",
+    "next",
+    "volgende",
+    "hierna",
+    "daarna",
+    "further",
+  ]);
+  const hasProgressVerb = tokens.some((token) => progressVerbs.has(token));
+  const hasStepSignal = tokens.some((token) => stepSignals.has(token));
+  return hasProgressVerb && hasStepSignal;
+}
+
 export function shouldTreatAsStepContributingInput(input: string, stepId: string): boolean {
   const text = String(input || "").trim();
   void stepId;
   if (!text) return false;
   if (text.startsWith("ACTION_") || text.startsWith("__ROUTE__") || text.startsWith("choice:")) return false;
+  if (isLikelyProcessNavigationIntent(text)) return false;
   if (isClearlyGeneralOfftopicInput(text)) return false;
 
   const letters = (text.match(/[^\W\d_]/g) || []).length;

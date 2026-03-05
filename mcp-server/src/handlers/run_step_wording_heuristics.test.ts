@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { parseListItems } from "./run_step_wording_heuristics.js";
+import { parseListItems, shouldTreatAsStepContributingInput } from "./run_step_wording_heuristics.js";
 
 test("parseListItems splits run-on strategy style sentences into logical list items", () => {
   const input =
@@ -23,4 +23,15 @@ test("parseListItems splits repeated sentence starters into list items", () => {
   assert.equal(items[1], "We leveren AI-tools en ondersteuning");
   assert.equal(items[2], "We verzorgen branding");
   assert.equal(items[3], "We bouwen strategie");
+});
+
+test("shouldTreatAsStepContributingInput ignores process navigation utterances", () => {
+  assert.equal(shouldTreatAsStepContributingInput("Ga door naar de volgende stap", "strategy"), false);
+  assert.equal(
+    shouldTreatAsStepContributingInput(
+      "Focus op langdurige samenwerkingen met interne ambassadeurs bij de klant",
+      "strategy"
+    ),
+    true
+  );
 });

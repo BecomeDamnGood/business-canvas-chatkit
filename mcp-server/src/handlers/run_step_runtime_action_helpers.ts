@@ -96,10 +96,45 @@ export function createRunStepRuntimeActionHelpers(deps: CreateRunStepRuntimeActi
     return actionCodes.some((code) => isConfirmActionCode(String(code || "").trim()));
   }
 
+  function firstConfirmActionCodeForMenu(menuId: string): string {
+    const actionCodes = Array.isArray(deps.actioncodeRegistry.menus[menuId])
+      ? deps.actioncodeRegistry.menus[menuId]
+      : [];
+    for (const rawCode of actionCodes) {
+      const code = String(rawCode || "").trim();
+      if (!code) continue;
+      if (isConfirmActionCode(code)) return code;
+    }
+    return "";
+  }
+
+  function firstGuidanceActionCodeForMenu(menuId: string): string {
+    const actionCodes = Array.isArray(deps.actioncodeRegistry.menus[menuId])
+      ? deps.actioncodeRegistry.menus[menuId]
+      : [];
+    const candidates = actionCodes
+      .map((rawCode) => String(rawCode || "").trim())
+      .filter(Boolean)
+      .filter((code) => !isConfirmActionCode(code));
+    if (candidates.length === 0) return "";
+    const preferenceScore = (code: string): number => {
+      const upper = String(code || "").toUpperCase();
+      if (/_EXPLAIN_MORE|_ASK_|_GIVE_EXAMPLE|_CONSOLIDATE|_FORMULATE|_WRITE|_REFINE/.test(upper)) {
+        return 3;
+      }
+      if (/_ESCAPE_/.test(upper) || /_FINISH_LATER|_CONTINUE$/.test(upper)) return 1;
+      return 2;
+    };
+    const ranked = [...candidates].sort((left, right) => preferenceScore(right) - preferenceScore(left));
+    return String(ranked[0] || "").trim();
+  }
+
   return {
     processActionCode,
     deriveUiViewPayload,
     isConfirmActionCode,
     menuHasConfirmAction,
+    firstConfirmActionCodeForMenu,
+    firstGuidanceActionCodeForMenu,
   };
 }

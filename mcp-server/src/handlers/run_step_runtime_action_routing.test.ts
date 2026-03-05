@@ -86,6 +86,8 @@ function buildParams(intentEnabled: boolean) {
       applyUiPhaseByStep: () => {},
       buildContractId: () => "",
       processActionCode: (actionCodeInput: string) => actionCodeInput,
+      firstConfirmActionCodeForMenu: () => "",
+      firstGuidanceActionCodeForMenu: () => "",
       setDreamRuntimeMode: () => {},
       getDreamRuntimeMode: () => "self" as const,
     },
@@ -145,4 +147,64 @@ test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-
   assert.equal(result.response, null);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "false");
+});
+
+test("runStepRuntimeActionRoutingLayer maps proceed text intent to current confirm action in widget mode", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "strategy",
+    active_specialist: "Strategy",
+    last_specialist_result: {},
+  };
+  params.runtime.userMessage = "Ga door naar de volgende stap";
+  params.runtime.wordingChoiceEnabled = false;
+  params.action.inferCurrentMenuForStep = () => "STRATEGY_MENU_CONFIRM";
+  params.action.firstConfirmActionCodeForMenu = () => "ACTION_STRATEGY_CONFIRM_SATISFIED";
+  params.action.resolveActionCodeTransition = () => null;
+  params.action.processActionCode = () => "yes";
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "yes");
+});
+
+test("runStepRuntimeActionRoutingLayer maps proceed text intent to current confirm action in chat mode", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "strategy",
+    active_specialist: "Strategy",
+    last_specialist_result: {},
+  };
+  params.runtime.inputMode = "chat";
+  params.runtime.userMessage = "Ga door naar de volgende stap";
+  params.runtime.wordingChoiceEnabled = false;
+  params.action.inferCurrentMenuForStep = () => "STRATEGY_MENU_CONFIRM";
+  params.action.firstConfirmActionCodeForMenu = () => "ACTION_STRATEGY_CONFIRM_SATISFIED";
+  params.action.resolveActionCodeTransition = () => null;
+  params.action.processActionCode = () => "yes";
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "yes");
+});
+
+test("runStepRuntimeActionRoutingLayer maps proceed text intent to guidance action when confirm is unavailable", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "strategy",
+    active_specialist: "Strategy",
+    last_specialist_result: {},
+  };
+  params.runtime.inputMode = "chat";
+  params.runtime.userMessage = "Ga door naar de volgende stap";
+  params.runtime.wordingChoiceEnabled = false;
+  params.action.inferCurrentMenuForStep = () => "STRATEGY_MENU_ASK";
+  params.action.firstConfirmActionCodeForMenu = () => "";
+  params.action.firstGuidanceActionCodeForMenu = () => "ACTION_STRATEGY_ASK_3_QUESTIONS";
+  params.action.resolveActionCodeTransition = () => null;
+  params.action.processActionCode = () => "__ROUTE__STRATEGY_ASK_3_QUESTIONS__";
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "__ROUTE__STRATEGY_ASK_3_QUESTIONS__");
 });

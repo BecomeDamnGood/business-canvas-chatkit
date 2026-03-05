@@ -61,6 +61,13 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       .trim();
   }
 
+  function listFromStatements(rawStatements: unknown): string[] {
+    if (!Array.isArray(rawStatements)) return [];
+    return rawStatements
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+  }
+
   function normalizeBulletConsistencyValue(rawValue: unknown): string {
     const items = normalizeBulletItems(rawValue);
     if (items.length === 0) return String(rawValue || "").trim();
@@ -178,12 +185,18 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       stageFieldValue(deps.entityStepId, specialistResult?.entity, specialistResult?.refined_formulation);
     }
     if (nextStep === deps.strategyStepId) {
+      const strategyStatements = listFromStatements(specialistResult?.statements);
       const normalizedStrategy = normalizeBulletConsistencyValue(
-        specialistResult?.strategy || specialistResult?.refined_formulation
+        specialistResult?.strategy ||
+        specialistResult?.refined_formulation ||
+        (strategyStatements.length > 0 ? strategyStatements.join("\n") : "")
       );
       if (normalizedStrategy) {
         specialistResult.strategy = normalizedStrategy;
         specialistResult.refined_formulation = normalizedStrategy;
+        if (strategyStatements.length > 0) {
+          specialistResult.statements = normalizeBulletItems(normalizedStrategy);
+        }
       }
       stageFieldValue(deps.strategyStepId, normalizedStrategy, specialistResult?.refined_formulation);
     }
@@ -197,12 +210,18 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       }
     }
     if (nextStep === deps.productsservicesStepId) {
+      const productsServicesStatements = listFromStatements(specialistResult?.statements);
       const normalizedProductsServices = normalizeBulletConsistencyValue(
-        specialistResult?.productsservices || specialistResult?.refined_formulation
+        specialistResult?.productsservices ||
+        specialistResult?.refined_formulation ||
+        (productsServicesStatements.length > 0 ? productsServicesStatements.join("\n") : "")
       );
       if (normalizedProductsServices) {
         specialistResult.productsservices = normalizedProductsServices;
         specialistResult.refined_formulation = normalizedProductsServices;
+        if (productsServicesStatements.length > 0) {
+          specialistResult.statements = normalizeBulletItems(normalizedProductsServices);
+        }
       }
       stageFieldValue(deps.productsservicesStepId, normalizedProductsServices, specialistResult?.refined_formulation);
       if (!String((nextState as any).provisional_by_step?.[deps.productsservicesStepId] || "").trim()) {

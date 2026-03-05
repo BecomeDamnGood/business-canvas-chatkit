@@ -8,6 +8,12 @@ function injectUiVersion(html: string): string {
   return html.replace(/__UI_VERSION__/g, VERSION);
 }
 
+function injectWidgetBase(html: string, baseUrl: string): string {
+  const normalized = safeString(baseUrl ?? "").trim().replace(/\/+$/, "");
+  const baseHref = normalized ? `${normalized}/` : "about:blank";
+  return html.replace(/__WIDGET_BASE__/g, baseHref);
+}
+
 function normalizeStepId(rawStepId: string): string {
   const trimmed = safeString(rawStepId ?? "").trim();
   if (!trimmed || trimmed.toLowerCase() === "start") return "step_0";
@@ -240,6 +246,7 @@ function readStateFromWidgetResult(result: Record<string, unknown> | null | unde
 
 export {
   classifyStaleInteractiveActionPolicy,
+  injectWidgetBase,
   injectUiVersion,
   isFirstStartStep,
   mergeLocaleHintInputs,

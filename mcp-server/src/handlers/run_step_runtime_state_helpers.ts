@@ -504,7 +504,20 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
   }
 
   function wordingSelectionValue(stepId: string, state: CanvasState, selectedValue = ""): string {
-    const explicit = String(selectedValue || "").trim();
+    const normalizeBulletConsistencySelectionValue = (rawValue: string): string => {
+      const value = String(rawValue || "").trim();
+      if (!value || !isBulletConsistencyStep(stepId)) return value;
+      const items = (
+        stepId === deps.productsservicesStepId
+          ? productsServicesItemsFromValue(value)
+          : deps.parseListItems(value)
+      )
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      if (items.length === 0) return value;
+      return items.map((line) => `• ${line}`).join("\n");
+    };
+    const explicit = normalizeBulletConsistencySelectionValue(selectedValue);
     if (explicit) return explicit;
     const last =
       (state as any)?.last_specialist_result && typeof (state as any).last_specialist_result === "object"
@@ -519,17 +532,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     const finalValue = finalField ? String((state as any)?.[finalField] || "").trim() : "";
     const resolved = fieldValue || refined || wordingValue || provisional || finalValue;
     if (!resolved) return "";
-    if (isBulletConsistencyStep(stepId)) {
-      const items = (
-        stepId === deps.productsservicesStepId
-          ? productsServicesItemsFromValue(resolved)
-          : deps.parseListItems(resolved)
-      )
-        .map((line) => String(line || "").trim())
-        .filter(Boolean);
-      if (items.length > 0) return items.map((line) => `• ${line}`).join("\n");
-    }
-    return resolved;
+    return normalizeBulletConsistencySelectionValue(resolved);
   }
 
   function wordingSelectionMessage(
