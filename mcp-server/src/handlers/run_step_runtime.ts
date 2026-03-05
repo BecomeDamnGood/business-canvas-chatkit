@@ -375,6 +375,7 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
   }
   safe.wording_choice_pending = "false";
   safe.wording_choice_selected = "";
+  safe.wording_choice_list_semantics = "delta";
   safe.wording_choice_variant = "";
   safe.wording_choice_user_label = "";
   safe.wording_choice_suggestion_label = "";
@@ -746,6 +747,7 @@ const stateUpdateHelpers = createRunStepStateUpdateHelpers({
   dreamSpecialist: DREAM_SPECIALIST,
   dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
   withProvisionalValue,
+  parseListItems,
   postProcessRulesOfTheGame,
   buildRulesOfTheGameBullets,
   setDreamRuntimeMode,

@@ -16,6 +16,7 @@ import {
 } from "../steps/rulesofthegame.js";
 import { PRESENTATION_STEP_ID } from "../steps/presentation.js";
 import { createRunStepStateUpdateHelpers } from "./run_step_state_update.js";
+import { parseListItems } from "./run_step_wording_heuristics.js";
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
 
@@ -102,6 +103,7 @@ const stateUpdateHelpers = createRunStepStateUpdateHelpers({
   dreamSpecialist: DREAM_SPECIALIST,
   dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
   withProvisionalValue,
+  parseListItems,
   postProcessRulesOfTheGame,
   buildRulesOfTheGameBullets,
   setDreamRuntimeMode,

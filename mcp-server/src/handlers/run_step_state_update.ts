@@ -38,6 +38,7 @@ type RunStepStateUpdateDeps = {
     value: string,
     source: ProvisionalSource
   ) => CanvasState;
+  parseListItems: (value: string) => string[];
   postProcessRulesOfTheGame: (statements: string[], maxRules: number) => { finalRules: string[] };
   buildRulesOfTheGameBullets: (rules: string[]) => string;
   setDreamRuntimeMode: (state: CanvasState, mode: DreamRuntimeMode) => void;
@@ -45,6 +46,27 @@ type RunStepStateUpdateDeps = {
 };
 
 export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
+  function normalizeBulletItems(rawValue: unknown): string[] {
+    return deps.parseListItems(String(rawValue || ""))
+      .map((line) => String(line || "").replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
+      .filter(Boolean);
+  }
+
+  function bulletsFromItems(items: string[]): string {
+    return items
+      .map((line) => String(line || "").trim())
+      .filter(Boolean)
+      .map((line) => `• ${line}`)
+      .join("\n")
+      .trim();
+  }
+
+  function normalizeBulletConsistencyValue(rawValue: unknown): string {
+    const items = normalizeBulletItems(rawValue);
+    if (items.length === 0) return String(rawValue || "").trim();
+    return bulletsFromItems(items);
+  }
+
   function stripSimpleMarkup(raw: string): string {
     return String(raw || "")
       .replace(/<br\s*\/?>/gi, "\n")
@@ -156,7 +178,14 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       stageFieldValue(deps.entityStepId, specialistResult?.entity, specialistResult?.refined_formulation);
     }
     if (nextStep === deps.strategyStepId) {
-      stageFieldValue(deps.strategyStepId, specialistResult?.strategy, specialistResult?.refined_formulation);
+      const normalizedStrategy = normalizeBulletConsistencyValue(
+        specialistResult?.strategy || specialistResult?.refined_formulation
+      );
+      if (normalizedStrategy) {
+        specialistResult.strategy = normalizedStrategy;
+        specialistResult.refined_formulation = normalizedStrategy;
+      }
+      stageFieldValue(deps.strategyStepId, normalizedStrategy, specialistResult?.refined_formulation);
     }
     if (nextStep === deps.targetgroupStepId) {
       const value = String(specialistResult?.targetgroup || specialistResult?.refined_formulation || "").trim();
@@ -168,18 +197,22 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       }
     }
     if (nextStep === deps.productsservicesStepId) {
-      stageFieldValue(
-        deps.productsservicesStepId,
-        specialistResult?.productsservices,
-        specialistResult?.refined_formulation
+      const normalizedProductsServices = normalizeBulletConsistencyValue(
+        specialistResult?.productsservices || specialistResult?.refined_formulation
       );
+      if (normalizedProductsServices) {
+        specialistResult.productsservices = normalizedProductsServices;
+        specialistResult.refined_formulation = normalizedProductsServices;
+      }
+      stageFieldValue(deps.productsservicesStepId, normalizedProductsServices, specialistResult?.refined_formulation);
       if (!String((nextState as any).provisional_by_step?.[deps.productsservicesStepId] || "").trim()) {
         const candidateFromMessage = extractProductsServicesCandidateFromMessage(specialistResult?.message);
         if (candidateFromMessage) {
+          const normalizedFromMessage = normalizeBulletConsistencyValue(candidateFromMessage);
           nextState = deps.withProvisionalValue(
             nextState,
             deps.productsservicesStepId,
-            candidateFromMessage,
+            normalizedFromMessage || candidateFromMessage,
             provisionalSource
           );
         }
@@ -190,7 +223,11 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
         ? (specialistResult.statements as string[])
         : [];
       const processed = deps.postProcessRulesOfTheGame(statementsArray, 6);
-      const bullets = deps.buildRulesOfTheGameBullets(processed.finalRules);
+      const normalizedRules = normalizeBulletItems(processed.finalRules.join("\n"));
+      const bullets = bulletsFromItems(normalizedRules.length > 0 ? normalizedRules : processed.finalRules);
+      specialistResult.statements = normalizedRules.length > 0 ? normalizedRules : processed.finalRules;
+      specialistResult.rulesofthegame = bullets;
+      specialistResult.refined_formulation = bullets;
       stageFieldValue(
         deps.rulesofthegameStepId,
         bullets,

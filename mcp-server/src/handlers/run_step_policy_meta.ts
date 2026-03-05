@@ -771,6 +771,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         wording_choice_agent_current: "",
         wording_choice_pending: "false",
         wording_choice_selected: "",
+        wording_choice_list_semantics: "delta",
         ...(stepField ? { [stepField]: "" } : {}),
         message: currentBlock
           ? `${buildBenProfileMessage(params.state)}\n\n${currentBlock}`
@@ -924,6 +925,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         __offtopic_meta_passthrough: "true",
         wording_choice_pending: "false",
         wording_choice_selected: "",
+        wording_choice_list_semantics: "delta",
         feedback_reason_key: "",
         feedback_reason_text: "",
       };
@@ -953,6 +955,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       __offtopic_meta_passthrough: "false",
       wording_choice_pending: "false",
       wording_choice_selected: "",
+      wording_choice_list_semantics: "delta",
       feedback_reason_key: "",
       feedback_reason_text: "",
     } as Record<string, unknown>;

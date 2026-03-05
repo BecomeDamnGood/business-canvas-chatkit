@@ -316,16 +316,133 @@ function extractRoleSuggestionSentences(params: {
 export function parseListItems(input: string): string[] {
   const raw = String(input || "").replace(/\r/g, "\n").trim();
   if (!raw) return [];
+  const normalizeListToken = (line: string): string =>
+    String(line || "")
+      .replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const dedupe = (items: string[]): string[] => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const item of items) {
+      const clean = normalizeListToken(item);
+      if (!clean) continue;
+      const key = canonicalizeComparableText(clean);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(clean);
+    }
+    return out;
+  };
   const lines = raw
     .split("\n")
-    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
+    .map((line) => normalizeListToken(line))
     .filter(Boolean);
-  if (lines.length >= 2) return lines;
+  if (lines.length >= 2) return dedupe(lines);
   const parts = raw
     .split(/[;\n]+/)
-    .map((line) => line.trim())
+    .map((line) => normalizeListToken(line))
     .filter(Boolean);
-  return parts.length >= 2 ? parts : [raw];
+  if (parts.length >= 2) return dedupe(parts);
+
+  const punctuated = raw
+    .split(/(?<=[.!?])\s+(?=\S)/)
+    .map((line) => normalizeListToken(line))
+    .filter(Boolean);
+  if (punctuated.length >= 2) return dedupe(punctuated);
+
+  const compact = normalizeListToken(raw).replace(/[.!?]+$/g, "").trim();
+  if (!compact) return [];
+  const words = compact.split(/\s+/).filter(Boolean);
+  if (words.length < 9) return [compact];
+  const normalizeWordToken = (token: string): string =>
+    String(token || "")
+      .replace(/^[("'\[]+|[)"'\],.;:!?]+$/g, "")
+      .trim();
+  const starterAllowList = new Set([
+    "we",
+    "wij",
+    "ik",
+    "i",
+    "our",
+    "ours",
+    "my",
+    "ons",
+    "onze",
+  ]);
+  const firstToken = normalizeWordToken(words[0] || "").toLowerCase();
+  if (firstToken) {
+    const sameTokenIndexes: number[] = [];
+    for (let i = 0; i < words.length; i += 1) {
+      const token = normalizeWordToken(words[i] || "").toLowerCase();
+      if (token && token === firstToken) sameTokenIndexes.push(i);
+    }
+    const repeatedStarterLikelyList =
+      sameTokenIndexes.length >= 2 &&
+      (starterAllowList.has(firstToken) || sameTokenIndexes.length >= 3);
+    if (repeatedStarterLikelyList) {
+      const splitIdxs: number[] = [];
+      let lastSplit = 0;
+      for (const idx of sameTokenIndexes) {
+        if (idx <= 0) continue;
+        const leftCount = idx - lastSplit;
+        const rightCount = words.length - idx;
+        if (leftCount < 3 || rightCount < 3) continue;
+        splitIdxs.push(idx);
+        lastSplit = idx;
+      }
+      if (splitIdxs.length > 0) {
+        const segments: string[] = [];
+        let start = 0;
+        for (const idx of splitIdxs) {
+          const segment = words.slice(start, idx).join(" ").trim();
+          if (segment) segments.push(segment);
+          start = idx;
+        }
+        const tail = words.slice(start).join(" ").trim();
+        if (tail) segments.push(tail);
+        const normalizedSegments = dedupe(
+          segments
+            .map((line) => line.replace(/[.!?]+$/g, "").trim())
+            .filter((line) => line.split(/\s+/).filter(Boolean).length >= 3)
+        );
+        if (normalizedSegments.length >= 2) return normalizedSegments;
+      }
+    }
+  }
+  const actionCue = /^(always|focus|prioritize|deliver|build|invest|maintain|offer|provide|develop|strengthen|target|focussen|altijd|prioriteit|leveren|bouwen|investeren|aanbieden|ontwikkelen|overpresteren|richten|kiezen|werken|samenwerken|concentreren)$/i;
+  const breakIdxs: number[] = [];
+  let lastBreak = 0;
+  for (let i = 1; i < words.length; i += 1) {
+    const token = String(words[i] || "");
+    const startsWithCapital = /^[A-ZÀ-ÖØ-Ý]/.test(token);
+    if (!startsWithCapital) continue;
+    const lowerToken = token.toLowerCase();
+    const leftCount = i - lastBreak;
+    const rightCount = words.length - i;
+    if (leftCount < 4 || rightCount < 4) continue;
+    if (actionCue.test(lowerToken) || (leftCount >= 7 && rightCount >= 7)) {
+      breakIdxs.push(i);
+      lastBreak = i;
+    }
+  }
+  if (breakIdxs.length === 0) return [compact];
+  const segments: string[] = [];
+  let start = 0;
+  for (const idx of breakIdxs) {
+    const segment = words.slice(start, idx).join(" ").trim();
+    if (segment) segments.push(segment);
+    start = idx;
+  }
+  const tail = words.slice(start).join(" ").trim();
+  if (tail) segments.push(tail);
+  const normalizedSegments = dedupe(
+    segments
+      .map((line) => line.replace(/[.!?]+$/g, "").trim())
+      .filter((line) => line.split(/\s+/).filter(Boolean).length >= 3)
+  );
+  if (normalizedSegments.length >= 2) return normalizedSegments;
+  return [compact];
 }
 
 export function splitSentenceItems(input: string): string[] {

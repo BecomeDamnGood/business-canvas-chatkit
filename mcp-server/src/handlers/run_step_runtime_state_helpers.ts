@@ -343,6 +343,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       wording_choice_user_items: [],
       wording_choice_suggestion_items: [],
       wording_choice_base_items: [],
+      wording_choice_list_semantics: "delta",
       wording_choice_agent_current: "",
       wording_choice_mode: "",
       wording_choice_target_field: "",

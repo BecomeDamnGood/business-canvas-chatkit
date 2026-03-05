@@ -385,10 +385,49 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     })();
     const selectionParts = extractHeadingAndBodyFromSelection(selectionForRefined, refined);
     if (selectionParts.body) refinedDisplay = selectionParts.body;
+    const currentSelectedValue = (() => {
+      const stepId = String(contractStepId || "").trim();
+      if (!stepId || !deps.fieldForStep(stepId)) return "";
+      const field = deps.fieldForStep(stepId);
+      const fieldValue = field ? String((specialist as Record<string, unknown>)?.[field] || "").trim() : "";
+      return refinedDisplay || refined || fieldValue;
+    })();
+    const selectionForCurrentValue = (() => {
+      if (wordingPending) return "";
+      const stepId = String(contractStepId || "").trim();
+      if (!stepId || !deps.fieldForStep(stepId)) return "";
+      const state = params.state;
+      if (!state || typeof state !== "object") return "";
+      const activeSpecialist = String((state as Record<string, unknown>).active_specialist || "").trim();
+      if (!currentSelectedValue) return "";
+      return deps.wordingSelectionMessage(stepId, state, activeSpecialist, currentSelectedValue);
+    })();
+    const selectionCurrentParts = extractHeadingAndBodyFromSelection(
+      selectionForCurrentValue,
+      currentSelectedValue
+    );
+    if (selectionCurrentParts.heading && selectionCurrentParts.body) {
+      const msgComparable = deps.canonicalizeComparableText(msg);
+      const headingComparable = deps.canonicalizeComparableText(selectionCurrentParts.heading);
+      const bodyComparable = deps.canonicalizeComparableText(selectionCurrentParts.body);
+      const messageParagraphCount = msg
+        .split(/\n{2,}/)
+        .map((block) => String(block || "").trim())
+        .filter(Boolean).length;
+      const isBodyOnlyMessage = Boolean(msgComparable) && Boolean(bodyComparable) && (
+        msgComparable === bodyComparable ||
+        msgComparable.includes(bodyComparable) ||
+        bodyComparable.includes(msgComparable)
+      );
+      const messageHasHeading = Boolean(headingComparable) && msgComparable.includes(headingComparable);
+      if (!messageHasHeading && (isBodyOnlyMessage && messageParagraphCount <= 1)) {
+        msg = `${selectionCurrentParts.heading}\n\n${selectionCurrentParts.body}`.trim();
+      }
+    }
     const currentHeading = (() => {
       if (wordingPending) return "";
       if (!msg || !refined) return "";
-      const heading = selectionParts.heading;
+      const heading = selectionParts.heading || selectionCurrentParts.heading;
       if (!heading) return "";
       const headingComparable = deps.canonicalizeComparableText(heading);
       if (!headingComparable) return "";

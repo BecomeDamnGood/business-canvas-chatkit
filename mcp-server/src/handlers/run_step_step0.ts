@@ -71,6 +71,7 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       question: deps.step0QuestionForState(state),
       wording_choice_pending: "false",
       wording_choice_selected: "",
+      wording_choice_list_semantics: "delta",
       feedback_reason_key: "",
       feedback_reason_text: "",
       step_0: "",
@@ -106,6 +107,7 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
           step_0: step0FinalRaw,
           wording_choice_pending: "false",
           wording_choice_selected: "",
+          wording_choice_list_semantics: "delta",
           feedback_reason_key: "",
           feedback_reason_text: "",
           is_offtopic: true,
@@ -129,6 +131,7 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       next.step_0 = step0FinalRaw;
       next.wording_choice_pending = "false";
       next.wording_choice_selected = "";
+      next.wording_choice_list_semantics = "delta";
       next.feedback_reason_key = "";
       next.feedback_reason_text = "";
       return next;

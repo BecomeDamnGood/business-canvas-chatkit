@@ -25,6 +25,7 @@ function buildTextHelpers(wordingSelectionMessage: (
     sanitizePendingListMessage: (message: string) => String(message || ""),
     isWordingPanelCleanBodyV1Enabled: () => false,
     fieldForStep: (stepId: string) => {
+      if (stepId === "bigwhy") return "bigwhy";
       if (stepId === "strategy") return "strategy";
       if (stepId === "productsservices") return "productsservices";
       if (stepId === "rulesofthegame") return "rulesofthegame";
@@ -133,3 +134,28 @@ test("buildTextForWidget keeps rules-of-the-game bullets when selecting suggesti
   assert.match(output, /• We kiezen kwaliteit boven snelheid/);
 });
 
+test("buildTextForWidget always shows current heading for Big Why when message only contains formulation", () => {
+  const heading = "JE HUIDIGE GROTE WAAROM VOOR MINDD IS:";
+  const formulation =
+    "Mensen zouden altijd toegang moeten hebben tot eerlijke en volledige informatie, zodat zij zelfstandig en met vertrouwen keuzes kunnen maken die hun leven verrijken.";
+  const helpers = buildTextHelpers((stepId) => {
+    if (stepId !== "bigwhy") return "";
+    return [heading, "", formulation].join("\n");
+  });
+
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "bigwhy:ASK:BIGWHY_MENU_QUESTIONS:v1",
+      message: formulation,
+      refined_formulation: formulation,
+      bigwhy: formulation,
+    },
+    state: {
+      active_specialist: "BigWhy",
+      current_step: "bigwhy",
+    } as any,
+  });
+
+  assert.match(output, new RegExp(heading));
+  assert.match(output, /Mensen zouden altijd toegang moeten hebben/);
+});

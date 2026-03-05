@@ -3,6 +3,7 @@ import type { WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 
 type WordingChoiceMode = "text" | "list";
 type WordingChoiceVariant = "default" | "clarify_dual";
+type WordingChoiceListSemantics = "delta" | "full";
 
 type RenderFreeTextTurnPolicyResult = {
   specialist: Record<string, unknown>;
@@ -99,6 +100,12 @@ type RunStepWordingDeps = {
 const WORDING_CLARIFY_USER_LABEL = "Do you mean something like this";
 const WORDING_CLARIFY_SUGGESTION_LABEL = "Or do you mean something like this?";
 
+const LIST_REMOVE_VERB = /\b(remove|delete|drop|omit|exclude|verwijder|schrap|haal\s+weg|weglaten|wegdoen)\b/i;
+const LIST_REPLACE_VERB = /\b(replace|vervang)\b/i;
+const LIST_REPLACE_WITH = /\b(with|door|met)\b/i;
+const LIST_NO_CHANGE_SIGNAL =
+  /\b(niets\s+meer|niet\s+meer|no\s+more|nothing\s+else|that(?:'| i)?s\s+all|dit\s+is\s+het|alleen\s+dit|meer\s+hebben\s+we\s+niet)\b/i;
+
 function toTrimmedStringArray(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   return input.map((line) => String(line || "").trim()).filter(Boolean);
@@ -191,6 +198,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_base_items: Array.isArray(previous.wording_choice_base_items)
         ? previous.wording_choice_base_items
         : [],
+      wording_choice_list_semantics: String(previous.wording_choice_list_semantics || "delta"),
       wording_choice_agent_current: String(previous.wording_choice_agent_current || ""),
       wording_choice_mode: String(previous.wording_choice_mode || ""),
       wording_choice_target_field: String(previous.wording_choice_target_field || ""),
@@ -234,6 +242,125 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     if (sentenceItems.length < 2) return items;
     if (suggestionItems.length > 0) return sentenceItems;
     return items;
+  }
+
+  function isBusinessListIntentScope(stepId: string): boolean {
+    return (
+      stepId === deps.strategyStepId ||
+      stepId === deps.productsservicesStepId ||
+      stepId === deps.rulesofthegameStepId
+    );
+  }
+
+  function extractQuotedFragments(input: string): string[] {
+    const text = String(input || "");
+    const matches = text.match(/["“”'‘’][^"“”'‘’\n]{3,}["“”'‘’]/g) || [];
+    return matches
+      .map((value) => String(value || "").replace(/^["“”'‘’]|["“”'‘’]$/g, "").trim())
+      .filter(Boolean);
+  }
+
+  function bestMatchingIndex(referenceItems: string[], fragment: string): number {
+    const target = deps.canonicalizeComparableText(fragment);
+    if (!target) return -1;
+    const targetTokens = new Set(deps.tokenizeWords(target));
+    if (targetTokens.size === 0) return -1;
+    let bestIdx = -1;
+    let bestScore = 0;
+    for (let i = 0; i < referenceItems.length; i += 1) {
+      const candidate = String(referenceItems[i] || "").trim();
+      const canonical = deps.canonicalizeComparableText(candidate);
+      if (!canonical) continue;
+      if (canonical === target) return i;
+      const candidateTokens = new Set(deps.tokenizeWords(canonical));
+      let overlap = 0;
+      for (const token of targetTokens) {
+        if (candidateTokens.has(token)) overlap += 1;
+      }
+      const union = targetTokens.size + candidateTokens.size - overlap;
+      const score = union > 0 ? overlap / union : 0;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+    return bestScore >= 0.35 ? bestIdx : -1;
+  }
+
+  function resolveBusinessListIntent(params: {
+    stepId: string;
+    userRaw: string;
+    baseItems: string[];
+    suggestionItems: string[];
+  }): {
+    semantics: WordingChoiceListSemantics;
+    userItems: string[];
+    suggestionItems: string[];
+    normalizedUser: string;
+  } | null {
+    const stepId = String(params.stepId || "").trim();
+    if (!isBusinessListIntentScope(stepId)) return null;
+    const userRaw = String(params.userRaw || "").trim();
+    if (!userRaw) return null;
+    const referenceItems = params.baseItems.length > 0 ? params.baseItems : params.suggestionItems;
+    if (referenceItems.length === 0) return null;
+
+    if (LIST_NO_CHANGE_SIGNAL.test(userRaw)) {
+      const stable = mergeListItems([], referenceItems);
+      return {
+        semantics: "full",
+        userItems: stable,
+        suggestionItems: mergeListItems([], params.suggestionItems.length > 0 ? params.suggestionItems : referenceItems),
+        normalizedUser: stable.join("\n"),
+      };
+    }
+
+    const quotedFragments = extractQuotedFragments(userRaw);
+    const explicitRemove = LIST_REMOVE_VERB.test(userRaw);
+    if (explicitRemove) {
+      const removeIndexes = new Set<number>();
+      for (const fragment of quotedFragments) {
+        const idx = bestMatchingIndex(referenceItems, fragment);
+        if (idx >= 0) removeIndexes.add(idx);
+      }
+      if (removeIndexes.size === 0 && (quotedFragments.length > 0 || deps.tokenizeWords(userRaw).length <= 12)) {
+        const parsedCandidates = deps.parseListItems(userRaw)
+          .map((line) => String(line || "").trim())
+          .filter(Boolean);
+        for (const fragment of parsedCandidates) {
+          const idx = bestMatchingIndex(referenceItems, fragment);
+          if (idx >= 0) removeIndexes.add(idx);
+        }
+      }
+      if (removeIndexes.size > 0) {
+        const kept = referenceItems.filter((_, idx) => !removeIndexes.has(idx));
+        return {
+          semantics: "full",
+          userItems: mergeListItems([], kept),
+          suggestionItems: mergeListItems([], params.suggestionItems.length > 0 ? params.suggestionItems : referenceItems),
+          normalizedUser: mergeListItems([], kept).join("\n"),
+        };
+      }
+    }
+
+    const explicitReplace = LIST_REPLACE_VERB.test(userRaw) && LIST_REPLACE_WITH.test(userRaw);
+    if (explicitReplace && quotedFragments.length >= 2) {
+      const source = quotedFragments[0];
+      const replacement = quotedFragments[1];
+      const sourceIdx = bestMatchingIndex(referenceItems, source);
+      const replacementClean = deps.normalizeLightUserInput(replacement).replace(/[.!?]+$/, "").trim();
+      if (sourceIdx >= 0 && replacementClean) {
+        const next = referenceItems.map((line, idx) => (idx === sourceIdx ? replacementClean : line));
+        return {
+          semantics: "full",
+          userItems: mergeListItems([], next),
+          suggestionItems: mergeListItems([], params.suggestionItems.length > 0 ? params.suggestionItems : referenceItems),
+          normalizedUser: mergeListItems([], next).join("\n"),
+        };
+      }
+    }
+
+    return null;
   }
 
   function extractCommittedListItems(stepId: string, previousSpecialist: unknown): string[] {
@@ -600,6 +727,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           ...specialistResult,
           wording_choice_pending: "false",
           wording_choice_selected: "",
+          wording_choice_list_semantics: "delta",
           feedback_reason_key: "",
           feedback_reason_text: "",
         },
@@ -619,22 +747,40 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
     const mode: WordingChoiceMode =
       isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
-    const normalizedUser = mode === "list"
+    let normalizedUser = mode === "list"
       ? deps.normalizeListUserInput(userRaw)
       : deps.normalizeUserInputAgainstSuggestion(userRaw, suggestionRaw);
     const baseItems = mode === "list" ? extractCommittedListItems(stepId, previousSpecialist) : [];
     const suggestionFullItems = mode === "list" ? pickWordingSuggestionList(specialistResult, suggestionRaw) : [];
-    const userRawItems = mode === "list"
+    let listSemantics: WordingChoiceListSemantics = "delta";
+    let userRawItems = mode === "list"
       ? parseUserListItemsForStep(stepId, userRaw, suggestionFullItems)
       : [];
-    const userItems = mode === "list" ? diffListItems(baseItems, userRawItems) : [];
-    const fallbackUserItems = mode === "list"
+    let userItems = mode === "list" ? diffListItems(baseItems, userRawItems) : [];
+    let fallbackUserItems = mode === "list"
       ? userRawItems.map((line) => String(line || "").trim()).filter(Boolean)
       : [];
-    const effectiveUserItems = mode === "list" && userItems.length === 0
+    let effectiveUserItems = mode === "list" && userItems.length === 0
       ? fallbackUserItems
       : userItems;
-    const suggestionItems = mode === "list" ? diffListItems(baseItems, suggestionFullItems) : [];
+    let suggestionItems = mode === "list" ? diffListItems(baseItems, suggestionFullItems) : [];
+    if (mode === "list") {
+      const listIntent = resolveBusinessListIntent({
+        stepId,
+        userRaw,
+        baseItems,
+        suggestionItems: suggestionFullItems,
+      });
+      if (listIntent) {
+        listSemantics = listIntent.semantics;
+        userRawItems = listIntent.userItems;
+        userItems = listIntent.userItems;
+        fallbackUserItems = listIntent.userItems;
+        effectiveUserItems = listIntent.userItems;
+        suggestionItems = listIntent.suggestionItems;
+        normalizedUser = listIntent.normalizedUser || normalizedUser;
+      }
+    }
     if (mode === "list" && !forcePending && effectiveUserItems.length === 0) {
       return { specialist: specialistResult, wordingChoice: null };
     }
@@ -647,7 +793,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     });
     if (equivalent) {
       const chosenItems = mode === "list"
-        ? mergeListItems(baseItems, suggestionItems.length > 0 ? suggestionItems : effectiveUserItems)
+        ? (
+          listSemantics === "full"
+            ? mergeListItems([], suggestionItems.length > 0 ? suggestionItems : effectiveUserItems)
+            : mergeListItems(baseItems, suggestionItems.length > 0 ? suggestionItems : effectiveUserItems)
+        )
         : [];
       const chosen = mode === "list"
         ? chosenItems.join("\n")
@@ -656,6 +806,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         ...specialistResult,
         wording_choice_pending: "false",
         wording_choice_selected: "suggestion",
+        wording_choice_list_semantics: "delta",
         feedback_reason_key: "",
         feedback_reason_text: "",
         refined_formulation: chosen,
@@ -717,6 +868,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_user_normalized: normalizedUser,
       wording_choice_user_items: effectiveUserItems,
       wording_choice_base_items: baseItems,
+      wording_choice_list_semantics: listSemantics,
       wording_choice_agent_current: suggestionRaw,
       wording_choice_suggestion_items: suggestionItems,
       wording_choice_mode: mode,
@@ -770,6 +922,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     }
     const pickedUser = routeToken === "__WORDING_PICK_USER__";
     const mode: WordingChoiceMode = String(prevRaw.wording_choice_mode || "text") === "list" ? "list" : "text";
+    const listSemantics: WordingChoiceListSemantics =
+      String(prevRaw.wording_choice_list_semantics || "delta") === "full" ? "full" : "delta";
     const baseItems = mode === "list" ? extractCommittedListItems(stepId, prevRaw) : [];
     const fallbackPickedRaw = pickedUser
       ? String(prevRaw.wording_choice_user_normalized || prevRaw.wording_choice_user_raw || "").trim()
@@ -783,7 +937,13 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           return deps.parseListItems(fallbackPickedRaw);
         })()
       : [];
-    const mergedPickedItems = mode === "list" ? mergeListItems(baseItems, pickedItems) : [];
+    const mergedPickedItems = mode === "list"
+      ? (
+        listSemantics === "full"
+          ? mergeListItems([], pickedItems)
+          : mergeListItems(baseItems, pickedItems)
+      )
+      : [];
     const rawChosen = mode === "list"
       ? mergedPickedItems.join("\n")
       : fallbackPickedRaw;
@@ -805,6 +965,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_user_items: [],
         wording_choice_suggestion_items: [],
         wording_choice_base_items: mode === "list" ? mergedPickedItems : [],
+        wording_choice_list_semantics: "delta",
         refined_formulation: chosen,
         wording_choice_agent_current: chosen,
         wording_choice_variant: "",
