@@ -217,7 +217,7 @@ Never refer to "the rule". Always refer to "Rule of the Game".
 
 Hard list-size rule (HARD)
 - Keep it short: 3 to 5 Rules of the Game only.
-- Even when the user proposes more, you must consolidate and prioritize so that there are never more than 6 unique Rules of the Game in the final list.
+- Even when the user proposes more, you must consolidate and prioritize so that there are never more than 5 unique Rules of the Game in the final list.
 
 Overlapping rules and semantic duplicates (HARD)
 
@@ -454,7 +454,7 @@ Step 2: Extract individual rules and add to statements
 - Distinctness rule (HARD): Rules must be clearly distinct in meaning. Do not add a new rule that is a near-duplicate of an existing one (e.g. "We listen to each other" and "We value each other's contributions" are too similar; merge into one formulation or drop one). If the user suggests something that overlaps strongly with an existing rule, refine or merge instead of adding a second rule.
 - Add all extracted rules to statements using MERGE_OR_APPEND(PREVIOUS_STATEMENTS, new_rules)
 - After adding: check statements.length
-  - If statements.length > 8: add advice to message to reduce to maximum 7 Rules of the Game for manageability (advisory, not a hard limit)
+  - If statements.length > 5: add advice to message to reduce to maximum 5 Rules of the Game for manageability (advisory, not a hard limit)
 
 Dynamic prompt text rule (HARD)
 
@@ -567,7 +567,7 @@ export function parseRulesOfTheGameOutput(raw: unknown): RulesOfTheGameOutput {
 
 /**
  * Post-processing helpers for Rules of the Game
- * - Normalize, deduplicate and enforce a hard maximum of 6 Rules of the Game
+ * - Normalize, deduplicate and enforce a hard maximum of 5 Rules of the Game
  * - Build deterministic feedback messages explaining why rules were merged or limited
  */
 
@@ -827,11 +827,11 @@ export function enforceMaxRules(
 }
 
 /**
- * Core post-processing: normalize + deduplicate + enforce a maximum of 6 rules.
+ * Core post-processing: normalize + deduplicate + enforce a maximum of 5 rules.
  */
 export function postProcessRulesOfTheGame(
   statements: string[],
-  maxRules: number = 6
+  maxRules: number = 5
 ): RulesOfTheGamePostProcessResult {
   const safeStatements = Array.isArray(statements) ? statements.filter((s) => typeof s === "string") : [];
 
@@ -863,7 +863,7 @@ export function buildRulesOfTheGameBullets(rules: string[]): string {
  */
 export function postProcessRulesOfTheGameFromBullets(
   raw: string,
-  maxRules: number = 6
+  maxRules: number = 5
 ): RulesOfTheGamePostProcessResult & { bulletList: string } {
   const lines = String(raw ?? "")
     .split(/\r?\n/)
@@ -914,8 +914,8 @@ export function buildUserFeedbackForRulesProcessing(result: RulesOfTheGamePostPr
     const truncatedCount = Array.isArray(result.truncatedIndices) ? result.truncatedIndices.length : 0;
     parts.push(
       truncatedCount > 0
-        ? `Only the 6 most important Rules of the Game are shown here, so it stays a clear set of game rules instead of a long handbook.`
-        : `The list is limited to a maximum of 6 Rules of the Game, so it stays a clear set of game rules instead of a long handbook.`
+        ? `Only the 5 most important Rules of the Game are shown here, so it stays a clear set of game rules instead of a long handbook.`
+        : `The list is limited to a maximum of 5 Rules of the Game, so it stays a clear set of game rules instead of a long handbook.`
     );
   }
 

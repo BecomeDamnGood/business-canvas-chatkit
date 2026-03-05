@@ -257,6 +257,15 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "strategy.current.template": "Je huidige strategie voor {0} is:",
     "strategy.focuspoints.count.template": "Je hebt nu {0} focuspunten binnen je strategie. Ik adviseer je om minimaal 4 en maximaal 7 focuspunten te formuleren.",
     "strategy.focuspoints.warning.template": "Ik raad je sterk aan om maximaal 7 focuspunten toe te voegen. Zal ik dit voor je bundelen?",
+    "rules.policy.overflow.rationale":
+      "Meer dan 5 Spelregels maakt het al snel een handboek. Houd het kort en werkbaar.",
+    "rules.policy.external.rationale":
+      "Spelregels moeten beschrijven hoe wij intern samenwerken, niet externe beloftes of marktclaims.",
+    "rules.policy.choice.rationale": "Kies wat het beste past: jouw input of mijn gebundelde suggestie.",
+    "rules.policy.internal.suggestion.generic":
+      "We spreken voor dit onderwerp een duidelijke interne werkwijze af en houden ons daaraan.",
+    "rules.policy.internal.suggestion.pricing":
+      "We hanteren prijsafspraken intern consequent en transparant in elke samenwerking.",
     "thinking": "Even denken…",
     "title.bigwhy": "Stap 4: Grote Waarom",
     "title.dream": "Stap 2: Droom",

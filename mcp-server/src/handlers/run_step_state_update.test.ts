@@ -31,8 +31,7 @@ function buildHelpers() {
     dreamExplainerSpecialist: "DreamExplainer",
     withProvisionalValue,
     parseListItems,
-    postProcessRulesOfTheGame: (statements: string[]) => ({ finalRules: statements }),
-    buildRulesOfTheGameBullets: (rules: string[]) => rules.map((line) => `• ${line}`).join("\n"),
+    applyRulesRuntimePolicy: ({ specialist }) => ({ specialist }),
     setDreamRuntimeMode: () => {},
     getDreamRuntimeMode: () => "self",
   });

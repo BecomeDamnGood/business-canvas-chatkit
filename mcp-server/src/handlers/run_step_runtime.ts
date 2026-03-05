@@ -40,8 +40,6 @@ import {
   PRODUCTSSERVICES_SPECIALIST,
   RULESOFTHEGAME_STEP_ID,
   RULESOFTHEGAME_SPECIALIST,
-  postProcessRulesOfTheGame,
-  buildRulesOfTheGameBullets,
   PRESENTATION_STEP_ID,
   PRESENTATION_SPECIALIST,
   ACTIONCODE_REGISTRY,
@@ -175,6 +173,7 @@ import {
   syncDreamRuntimeMode as syncDreamRuntimeModeState,
   turnUsageFromAccumulator,
 } from "./run_step_runtime_backbone.js";
+import { applyRulesRuntimePolicy } from "../steps/rulesofthegame_runtime_policy.js";
 import type { RunStepPipelinePorts, RunStepRoutePorts } from "./run_step_ports.js";
 import {
   createRunStepRuntimeStateHelpers,
@@ -752,8 +751,7 @@ const stateUpdateHelpers = createRunStepStateUpdateHelpers({
   dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
   withProvisionalValue,
   parseListItems,
-  postProcessRulesOfTheGame,
-  buildRulesOfTheGameBullets,
+  applyRulesRuntimePolicy,
   setDreamRuntimeMode,
   getDreamRuntimeMode,
 });

@@ -16,6 +16,7 @@ import {
   strategyStatementsFromSources,
 } from "./turn_policy/strategy_helpers.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
+import { evaluateRulesRuntimeGate } from "../steps/rulesofthegame_runtime_policy.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -801,23 +802,35 @@ function computeStatus(
   }
 
   if (stepId === "rulesofthegame") {
-    if (acceptedOutput && (acceptedValue || statementCount >= 3)) {
+    const wordingChoicePending =
+      String((specialist as any).wording_choice_pending || (prev as any).wording_choice_pending || "").trim() === "true";
+    const rulesGate = evaluateRulesRuntimeGate({
+      acceptedOutput,
+      acceptedValue,
+      visibleValue,
+      statements: Array.isArray((specialist as any).statements) && (specialist as any).statements.length > 0
+        ? (specialist as any).statements
+        : (prev as any).statements,
+      wordingChoicePending,
+    });
+    const rulesBullets = rulesGate.items.map((line) => `• ${line}`).join("\n");
+    if (rulesGate.canConfirm) {
       return {
         status: "valid_output",
         confirmEligible: true,
-        recapBody: acceptedValue || statementBullets || visibleValue,
-        statementCount,
+        recapBody: acceptedValue || rulesBullets || statementBullets || visibleValue,
+        statementCount: rulesGate.count,
       };
     }
-    if (statementCount > 0 || visibleValue) {
+    if (rulesGate.hasVisibleValue) {
       return {
         status: "incomplete_output",
         confirmEligible: false,
-        recapBody: statementBullets || visibleValue,
-        statementCount,
+        recapBody: rulesBullets || statementBullets || visibleValue,
+        statementCount: rulesGate.count,
       };
     }
-    return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
+    return { status: "no_output", confirmEligible: false, recapBody: "", statementCount: rulesGate.count };
   }
 
   if (stepId === "productsservices") {

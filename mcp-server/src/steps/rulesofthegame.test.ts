@@ -30,12 +30,12 @@ describe("Rules of the Game post-processing helpers", () => {
     expect(mergedGroups.length).toBe(2);
   });
 
-  it("enforces a hard maximum of 6 rules", () => {
+  it("enforces a hard maximum of 5 rules", () => {
     const rules = ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8"];
-    const { finalRules, truncatedIndices } = enforceMaxRules(rules, 6);
+    const { finalRules, truncatedIndices } = enforceMaxRules(rules, 5);
 
-    expect(finalRules).toEqual(["r1", "r2", "r3", "r4", "r5", "r6"]);
-    expect(truncatedIndices).toEqual([6, 7]);
+    expect(finalRules).toEqual(["r1", "r2", "r3", "r4", "r5"]);
+    expect(truncatedIndices).toEqual([5, 6, 7]);
   });
 
   it("post-processes statements into a deduplicated, limited list", () => {
@@ -49,9 +49,9 @@ describe("Rules of the Game post-processing helpers", () => {
       "Another rule",
     ];
 
-    const result = postProcessRulesOfTheGame(statements, 6);
+    const result = postProcessRulesOfTheGame(statements, 5);
 
-    expect(result.finalRules.length).toBeLessThanOrEqual(6);
+    expect(result.finalRules.length).toBeLessThanOrEqual(5);
     // At least one duplicate group (punctual / quality)
     expect(result.mergedGroups.length).toBeGreaterThan(0);
   });
@@ -63,7 +63,7 @@ describe("Rules of the Game post-processing helpers", () => {
       "We are punctual",
     ];
 
-    const result = postProcessRulesOfTheGame(statements, 6);
+    const result = postProcessRulesOfTheGame(statements, 5);
 
     // Expect at most 2 unique rules: one innovation rule + punctual
     expect(result.finalRules.length).toBeLessThanOrEqual(2);
@@ -79,7 +79,7 @@ describe("Rules of the Game post-processing helpers", () => {
 • We are always warm and friendly
 • We are punctual`;
 
-    const processed = postProcessRulesOfTheGameFromBullets(raw, 6);
+    const processed = postProcessRulesOfTheGameFromBullets(raw, 5);
 
     expect(processed.finalRules.length).toBe(2);
     expect(processed.bulletList.split("\n").length).toBe(2);
@@ -99,7 +99,6 @@ describe("Rules of the Game post-processing helpers", () => {
       truncatedIndices: [2],
     });
     expect(withChangesFeedback).toContain("merged");
-    expect(withChangesFeedback).toContain("6 most important");
+    expect(withChangesFeedback).toContain("5 most important");
   });
 });
-

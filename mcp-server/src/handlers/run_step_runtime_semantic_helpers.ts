@@ -3,6 +3,7 @@ import type {
   TurnOutputStatus,
   TurnPolicyRenderResult,
 } from "../core/turn_policy_renderer.js";
+import { evaluateRulesRuntimeGate } from "../steps/rulesofthegame_runtime_policy.js";
 
 type ActioncodeRegistryEntry = {
   route?: string;
@@ -66,13 +67,15 @@ type SemanticViolationReason =
   | "missing_prompt_for_interactive_ask"
   | "confirm_present_without_accepted_evidence"
   | "intro_mode_must_not_expose_confirm"
-  | "wording_choice_mode_requires_instruction_or_context";
+  | "wording_choice_mode_requires_instruction_or_context"
+  | "rules_confirm_policy_violation";
 
 const SEMANTIC_VIOLATION_REASONS = new Set<SemanticViolationReason>([
   "missing_prompt_for_interactive_ask",
   "confirm_present_without_accepted_evidence",
   "intro_mode_must_not_expose_confirm",
   "wording_choice_mode_requires_instruction_or_context",
+  "rules_confirm_policy_violation",
 ]);
 
 function isSemanticViolationReason(reason: string | null | undefined): reason is SemanticViolationReason {
@@ -90,6 +93,20 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     if (stepId === "productsservices") return true;
     const source = deps.provisionalSourceForStep(state, stepId);
     return source === "user_input" || source === "wording_pick" || source === "action_route";
+  }
+
+  function acceptedValueForStep(state: CanvasState, stepId: string): string {
+    const finalField = String(deps.finalFieldByStepId[stepId] || "").trim();
+    const committedFinal = finalField ? String((state as Record<string, unknown>)?.[finalField] || "").trim() : "";
+    if (committedFinal) return committedFinal;
+    const provisional = deps.provisionalValueForStep(state, stepId);
+    if (!provisional) return "";
+    if (stepId === "productsservices") return provisional;
+    const source = deps.provisionalSourceForStep(state, stepId);
+    if (source === "user_input" || source === "wording_pick" || source === "action_route") {
+      return provisional;
+    }
+    return "";
   }
 
   function validateRenderedContractTurn(
@@ -162,6 +179,23 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     }
     if (state && hasConfirmAction && !hasAcceptedOutputEvidence(state, stepId)) {
       return "confirm_present_without_accepted_evidence";
+    }
+    if (stepId === "rulesofthegame" && state && hasConfirmAction) {
+      const wordingChoicePending = String((specialist as Record<string, unknown>).wording_choice_pending || "").trim() === "true";
+      const acceptedOutput = hasAcceptedOutputEvidence(state, stepId);
+      const acceptedValue = acceptedValueForStep(state, stepId);
+      const visibleValue =
+        String((specialist as Record<string, unknown>).rulesofthegame || "").trim() ||
+        String((specialist as Record<string, unknown>).refined_formulation || "").trim() ||
+        acceptedValue;
+      const rulesGate = evaluateRulesRuntimeGate({
+        acceptedOutput,
+        acceptedValue,
+        visibleValue,
+        statements: (specialist as Record<string, unknown>).statements,
+        wordingChoicePending,
+      });
+      if (!rulesGate.canConfirm) return "rules_confirm_policy_violation";
     }
     if (
       action === "ASK" &&
@@ -251,7 +285,11 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
         );
       }
     }
-    if (reason === "confirm_present_without_accepted_evidence" || reason === "intro_mode_must_not_expose_confirm") {
+    if (
+      reason === "confirm_present_without_accepted_evidence" ||
+      reason === "intro_mode_must_not_expose_confirm" ||
+      reason === "rules_confirm_policy_violation"
+    ) {
       const field = deps.fieldForStep(stepId);
       if (field) (next as Record<string, unknown>)[field] = "";
       (next as Record<string, unknown>).refined_formulation = "";
@@ -292,11 +330,19 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     if (violation === "missing_prompt_for_interactive_ask") {
       deps.bumpUiI18nCounter(params.telemetry, "semantic_prompt_missing_count");
     }
-    if (violation === "confirm_present_without_accepted_evidence" || violation === "intro_mode_must_not_expose_confirm") {
+    if (
+      violation === "confirm_present_without_accepted_evidence" ||
+      violation === "intro_mode_must_not_expose_confirm" ||
+      violation === "rules_confirm_policy_violation"
+    ) {
       deps.bumpUiI18nCounter(params.telemetry, "semantic_confirm_blocked_count");
     }
     let fallbackState = state;
-    if (violation === "confirm_present_without_accepted_evidence" || violation === "intro_mode_must_not_expose_confirm") {
+    if (
+      violation === "confirm_present_without_accepted_evidence" ||
+      violation === "intro_mode_must_not_expose_confirm" ||
+      violation === "rules_confirm_policy_violation"
+    ) {
       fallbackState = deps.clearStepInteractiveState(fallbackState, stepId);
       deps.bumpUiI18nCounter(params.telemetry, "state_hygiene_resets_count");
     }

@@ -108,11 +108,9 @@ import {
   RulesOfTheGameZodSchema,
   buildRulesOfTheGameSpecialistInput,
   type RulesOfTheGameOutput,
-  postProcessRulesOfTheGame,
-  buildRulesOfTheGameBullets,
-  buildUserFeedbackForRulesProcessing,
 } from "../steps/rulesofthegame.js";
 import { normalizeRulesOfTheGameOutputContract } from "../steps/rulesofthegame_contract.js";
+import { applyRulesRuntimePolicy } from "../steps/rulesofthegame_runtime_policy.js";
 
 import {
   PRESENTATION_STEP_ID,
@@ -624,37 +622,18 @@ export async function callSpecialistStrict(
     });
     data = normalizedRules.specialist as any;
 
-    // Apply post-processing when a Rules of the Game candidate is present.
-    if (
-      data &&
-      typeof data === "object" &&
-      typeof (data as any).rulesofthegame === "string" &&
-      String((data as any).rulesofthegame || "").trim() !== ""
-    ) {
-      const statementsForProcessing = Array.isArray((data as any).statements)
-        ? ((data as any).statements as string[])
-        : [];
-      const processed = postProcessRulesOfTheGame(statementsForProcessing, 6);
-      const bullets = buildRulesOfTheGameBullets(processed.finalRules);
-
-      if (bullets) {
-        data = {
-          ...(data as any),
-          refined_formulation: bullets,
-          rulesofthegame: bullets,
-        };
-      }
-
-      const feedback = buildUserFeedbackForRulesProcessing(processed);
-      if (feedback) {
-        const baseMessage =
-          typeof (data as any).message === "string" ? String((data as any).message).trim() : "";
-        (data as any) = {
-          ...(data as any),
-          message: baseMessage ? `${baseMessage}\n\n${feedback}` : feedback,
-        };
-      }
-    }
+    const previousStatements = Array.isArray(statementsFromLast)
+      ? statementsFromLast.map((line) => String(line || "").trim()).filter(Boolean)
+      : [];
+    const policyApplied = applyRulesRuntimePolicy({
+      specialist: (data as unknown as Record<string, unknown>) || {},
+      previousStatements,
+      uiStrings:
+        state && typeof (state as any).ui_strings === "object" && (state as any).ui_strings !== null
+          ? ((state as any).ui_strings as Record<string, unknown>)
+          : {},
+    });
+    data = policyApplied.specialist as any;
 
     return { specialistResult: data, attempts: res.attempts, usage: res.usage, model };
   }

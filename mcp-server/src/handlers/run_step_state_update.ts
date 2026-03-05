@@ -39,8 +39,11 @@ type RunStepStateUpdateDeps = {
     source: ProvisionalSource
   ) => CanvasState;
   parseListItems: (value: string) => string[];
-  postProcessRulesOfTheGame: (statements: string[], maxRules: number) => { finalRules: string[] };
-  buildRulesOfTheGameBullets: (rules: string[]) => string;
+  applyRulesRuntimePolicy: (params: {
+    specialist: Record<string, unknown>;
+    previousStatements?: string[];
+    uiStrings?: Record<string, unknown>;
+  }) => { specialist: Record<string, unknown> };
   setDreamRuntimeMode: (state: CanvasState, mode: DreamRuntimeMode) => void;
   getDreamRuntimeMode: (state: CanvasState) => DreamRuntimeMode;
 };
@@ -123,7 +126,8 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
    * Contract mode: step outputs are staged per step and only committed to *_final on explicit next-step actioncodes.
    */
   function applyStateUpdate(params: ApplyStateUpdateParams): CanvasState {
-    const { prev, decision, specialistResult, showSessionIntroUsed } = params;
+    const { prev, decision, showSessionIntroUsed } = params;
+    let specialistResult = params.specialistResult;
 
     const action = String(specialistResult?.action ?? "");
     const isOfftopic = specialistResult?.is_offtopic === true;
@@ -238,18 +242,35 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       }
     }
     if (nextStep === deps.rulesofthegameStepId) {
-      const statementsArray = Array.isArray(specialistResult.statements)
-        ? (specialistResult.statements as string[])
+      const previousStatements = Array.isArray((prev as any)?.last_specialist_result?.statements)
+        ? ((prev as any).last_specialist_result.statements as unknown[])
+          .map((line) => String(line || "").trim())
+          .filter(Boolean)
         : [];
-      const processed = deps.postProcessRulesOfTheGame(statementsArray, 6);
-      const normalizedRules = normalizeBulletItems(processed.finalRules.join("\n"));
-      const bullets = bulletsFromItems(normalizedRules.length > 0 ? normalizedRules : processed.finalRules);
-      specialistResult.statements = normalizedRules.length > 0 ? normalizedRules : processed.finalRules;
-      specialistResult.rulesofthegame = bullets;
-      specialistResult.refined_formulation = bullets;
+      const policyApplied = deps.applyRulesRuntimePolicy({
+        specialist: (specialistResult || {}) as Record<string, unknown>,
+        previousStatements,
+        uiStrings:
+          prev && typeof (prev as any).ui_strings === "object" && (prev as any).ui_strings !== null
+            ? ((prev as any).ui_strings as Record<string, unknown>)
+            : {},
+      });
+      specialistResult = policyApplied.specialist;
+      const statementsArray = Array.isArray(specialistResult?.statements)
+        ? (specialistResult.statements as unknown[])
+          .map((line) => String(line || "").trim())
+          .filter(Boolean)
+        : [];
+      const normalizedRules = normalizeBulletItems(statementsArray.join("\n"));
+      const rulesValue = String(
+        specialistResult.rulesofthegame ||
+        specialistResult.refined_formulation ||
+        ""
+      ).trim();
+      specialistResult.statements = normalizedRules.length > 0 ? normalizedRules : statementsArray;
       stageFieldValue(
         deps.rulesofthegameStepId,
-        bullets,
+        rulesValue,
         specialistResult?.rulesofthegame || specialistResult?.refined_formulation
       );
     }

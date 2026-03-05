@@ -11,9 +11,8 @@ import { TARGETGROUP_STEP_ID } from "../steps/targetgroup.js";
 import { PRODUCTSSERVICES_STEP_ID } from "../steps/productsservices.js";
 import {
   RULESOFTHEGAME_STEP_ID,
-  postProcessRulesOfTheGame,
-  buildRulesOfTheGameBullets,
 } from "../steps/rulesofthegame.js";
+import { applyRulesRuntimePolicy } from "../steps/rulesofthegame_runtime_policy.js";
 import { PRESENTATION_STEP_ID } from "../steps/presentation.js";
 import { createRunStepStateUpdateHelpers } from "./run_step_state_update.js";
 import { parseListItems } from "./run_step_wording_heuristics.js";
@@ -104,8 +103,7 @@ const stateUpdateHelpers = createRunStepStateUpdateHelpers({
   dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
   withProvisionalValue,
   parseListItems,
-  postProcessRulesOfTheGame,
-  buildRulesOfTheGameBullets,
+  applyRulesRuntimePolicy,
   setDreamRuntimeMode,
   getDreamRuntimeMode,
 });

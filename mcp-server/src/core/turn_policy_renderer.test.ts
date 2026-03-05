@@ -228,6 +228,121 @@ test("known-facts recap keeps products/services and rules as bullet sections", (
   assert.match(message, /•\s*Lever iteratief en transparant op/i);
 });
 
+test("rulesofthegame does not expose confirm when fewer than 3 rules are accepted", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "rulesofthegame";
+  (state as any).active_specialist = "RulesOfTheGame";
+  (state as any).provisional_by_step = {
+    rulesofthegame: "• We communiceren proactief.\n• We komen afspraken na.",
+  };
+  (state as any).provisional_source_by_step = {
+    rulesofthegame: "user_input",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "rulesofthegame",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "So far we have these 2 Rules of the Game.",
+      question: "",
+      refined_formulation: "• We communiceren proactief.\n• We komen afspraken na.",
+      rulesofthegame: "• We communiceren proactief.\n• We komen afspraken na.",
+      statements: [
+        "We communiceren proactief.",
+        "We komen afspraken na.",
+      ],
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "incomplete_output");
+  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:RULES_MENU_ASK_EXPLAIN");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
+});
+
+test("rulesofthegame overflow renders pending-choice context and suppresses confirm menu", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "rulesofthegame";
+  (state as any).active_specialist = "RulesOfTheGame";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "rulesofthegame",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Kies wat je wilt gebruiken: jouw input of mijn suggestie.",
+      question: "",
+      refined_formulation: "",
+      rulesofthegame: "",
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_target_field: "rulesofthegame",
+      wording_choice_user_items: [
+        "We communiceren proactief.",
+        "We leveren op tijd.",
+        "We zijn transparant over risico's.",
+        "We nemen eigenaarschap.",
+        "We werken met duidelijke scope.",
+        "We borgen kwaliteit onder druk.",
+      ],
+      wording_choice_suggestion_items: [
+        "We communiceren proactief.",
+        "We leveren op tijd.",
+        "We nemen eigenaarschap.",
+        "We werken met duidelijke scope.",
+        "We borgen kwaliteit onder druk.",
+      ],
+      statements: [
+        "We communiceren proactief.",
+        "We leveren op tijd.",
+        "We zijn transparant over risico's.",
+        "We nemen eigenaarschap.",
+        "We werken met duidelijke scope.",
+        "We borgen kwaliteit onder druk.",
+      ],
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "incomplete_output");
+  assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:RULES_MENU_ASK_EXPLAIN");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
+});
+
+test("rulesofthegame keeps external rules out of valid_output confirm state", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "rulesofthegame";
+  (state as any).active_specialist = "RulesOfTheGame";
+  (state as any).provisional_by_step = {
+    rulesofthegame: "• Gratis is gratis voor iedereen.\n• We komen afspraken na.\n• We communiceren proactief.",
+  };
+  (state as any).provisional_source_by_step = {
+    rulesofthegame: "user_input",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "rulesofthegame",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "So far we have these 3 Rules of the Game.",
+      question: "",
+      refined_formulation: "• Gratis is gratis voor iedereen.\n• We komen afspraken na.\n• We communiceren proactief.",
+      rulesofthegame: "• Gratis is gratis voor iedereen.\n• We komen afspraken na.\n• We communiceren proactief.",
+      statements: [
+        "Gratis is gratis voor iedereen.",
+        "We komen afspraken na.",
+        "We communiceren proactief.",
+      ],
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "incomplete_output");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
+});
+
 test("entity no-output render ignores stale refine phase menu and falls back to intro menu", () => {
   const state = getDefaultState();
   (state as any).current_step = "entity";

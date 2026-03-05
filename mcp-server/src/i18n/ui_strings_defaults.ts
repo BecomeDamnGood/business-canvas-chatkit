@@ -138,6 +138,15 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "productsservices.classifier.service.tokens": "service|services|consulting|advisory|coaching|support|maintenance|strategy|branding|design|development|training|workshop|workshops",
   "strategy.focuspoints.count.template": "You now have {0} focus points within your strategy. I advise you to formulate at least 4 but maximum 7 focus points.",
   "strategy.focuspoints.warning.template": "I strongly advice you to only add a maximum of 7 focus points. can I consolidate this for you?",
+  "rules.policy.overflow.rationale":
+    "More than 5 Rules of the Game makes this feel like a handbook. Keep it short and practical.",
+  "rules.policy.external.rationale":
+    "Rules of the Game should describe how we work together internally, not external promises or market claims.",
+  "rules.policy.choice.rationale": "Choose what fits best: your input or my consolidated suggestion.",
+  "rules.policy.internal.suggestion.generic":
+    "We define and follow one clear internal work agreement for this topic.",
+  "rules.policy.internal.suggestion.pricing":
+    "We apply pricing rules consistently and transparently in every collaboration.",
   "strategy.current.template": "Your current Strategy for {0} is:",
   "contract.headline.strategy.moreFocus": "What more do you focus on within your strategy?",
   "contract.headline.define": "Define",
