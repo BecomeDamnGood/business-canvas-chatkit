@@ -54,10 +54,10 @@ test("TOOL_AUDIENCE meta topic uses locale key and redirect in supported locale"
 test("new off-topic topics are locale-gated for unsupported locales", () => {
   const helpers = buildHelpers();
   const state: any = {
-    ui_strings_lang: "ru",
+    ui_strings_lang: "sv",
     business_name: "Mindd",
     ui_strings: {
-      "meta.topic.toolAudience.body": "This should not be used for ru.",
+      "meta.topic.toolAudience.body": "This should not be used for sv.",
       "offtopic.redirect.template": "Vamos continuar com o {0} de {1}.",
       "offtopic.step.dream": "sonho",
       "offtopic.companyFallback": "minha futura empresa",
@@ -89,6 +89,62 @@ test("wants_recap forces RECAP meta topic classification", () => {
     meta_topic: "NONE",
   });
   assert.equal(metaTopic, "RECAP");
+});
+
+test("presentation media capability question is deterministically routed to fixed meta topic answer", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "nl",
+    ui_strings: {
+      "meta.topic.presentationMediaNotSupported.body":
+        "Helaas is het nu nog niet mogelijk om afbeeldingen of logo's te verwerken in de presentatie. We werken er hard aan om dit in de toekomst mogelijk te maken.",
+    },
+  };
+
+  const routed = helpers.applyCentralMetaTopicRouter({
+    stepId: "presentation",
+    userMessage: "kan ik afbeeldingen of een logo toevoegen aan de presentatie?",
+    specialistResult: {
+      action: "ASK",
+      message: "orig",
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    previousSpecialist: {},
+    state,
+  }) as Record<string, unknown>;
+
+  assert.equal(routed.action, "ASK");
+  assert.equal(routed.meta_topic, "PRESENTATION_MEDIA_NOT_SUPPORTED");
+  assert.equal(routed.is_offtopic, false);
+  assert.equal(
+    String(routed.message || ""),
+    "Helaas is het nu nog niet mogelijk om afbeeldingen of logo's te verwerken in de presentatie. We werken er hard aan om dit in de toekomst mogelijk te maken."
+  );
+});
+
+test("media capability phrase does not trigger forced presentation topic outside presentation step", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "nl",
+    ui_strings: {},
+  };
+
+  const routed = helpers.applyCentralMetaTopicRouter({
+    stepId: "strategy",
+    userMessage: "kan ik afbeeldingen of een logo toevoegen aan de presentatie?",
+    specialistResult: {
+      action: "ASK",
+      message: "orig",
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    previousSpecialist: {},
+    state,
+  }) as Record<string, unknown>;
+
+  assert.equal(routed.meta_topic, "NONE");
+  assert.equal(String(routed.message || ""), "orig");
 });
 
 test("dream INTRO message is sourced from ui_strings catalog key", () => {

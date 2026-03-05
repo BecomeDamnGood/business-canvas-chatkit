@@ -20,10 +20,10 @@ type RunStepPresentationDeps = {
 };
 
 const SECTION_LABELS: Record<SectionKey, string[]> = {
-  strategy: ["strategy"],
-  targetgroup: ["target group"],
-  productsservices: ["products and services", "products & services"],
-  rulesofthegame: ["rules of the game"],
+  strategy: ["strategy", "strategie"],
+  targetgroup: ["target group", "doelgroep"],
+  productsservices: ["products and services", "products & services", "producten en diensten"],
+  rulesofthegame: ["rules of the game", "spelregels"],
 };
 
 function normalizePresentationTextSingle(input: string): string {
@@ -33,23 +33,57 @@ function normalizePresentationTextSingle(input: string): string {
     .trim();
 }
 
-function presentationLines(input: string): string[] {
-  const raw = String(input || "").replace(/\r/g, "");
-  const lines = raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => line.replace(/^[•\-]\s+/, "").trim())
-    .filter((line) => line.length > 0);
-  return lines.length ? lines : [""];
-}
-
 function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function normalizePresentationLine(input: string): string {
+  return String(input || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function splitPresentationLineItems(input: string): string[] {
+  const line = normalizePresentationLine(input);
+  if (!line) return [];
+  if (line.includes("•")) {
+    return line
+      .split("•")
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+  }
+  const numbered = Array.from(line.matchAll(/(?:^|\s)(\d+[\).]\s*[^]+?)(?=\s+\d+[\).]\s+|$)/g))
+    .map((match) => String(match[1] || "").trim())
+    .filter(Boolean);
+  if (numbered.length >= 2) return numbered;
+  if (line.includes(";")) {
+    return line
+      .split(";")
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+  }
+  return [
+    line.replace(/^\s*(?:[•\-*]|\d+[\).])\s+/, "").trim(),
+  ].filter(Boolean);
+}
+
+function dedupePresentationLines(lines: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of lines) {
+    const line = String(raw || "").trim();
+    if (!line) continue;
+    const key = line.toLowerCase().replace(/\s+/g, " ");
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(line);
+  }
+  return out;
+}
+
 function detectSectionLabel(line: string): { section: SectionKey; rest: string } | null {
-  const trimmed = line.trim();
+  const trimmed = normalizePresentationLine(line);
   for (const [section, labels] of Object.entries(SECTION_LABELS) as [SectionKey, string[]][]) {
     for (const label of labels) {
       const re = new RegExp(`^${escapeRegExp(label)}\\s*[:\\-–]?\\s*(.*)$`, "i");
@@ -63,20 +97,39 @@ function detectSectionLabel(line: string): { section: SectionKey; rest: string }
   return null;
 }
 
-function sanitizeLinesForSection(lines: string[], section: SectionKey): string[] {
-  const out: string[] = [];
+function presentationLinesForSection(input: string, section: SectionKey): string[] {
+  const source = String(input || "").replace(/\r/g, "\n").trim();
+  if (!source) return [""];
+  const allLabels = Object.values(SECTION_LABELS).flat();
+  const boundaryRegex = new RegExp(`\\s+(${allLabels.map(escapeRegExp).join("|")})\\s*[:\\-–]\\s*`, "gi");
+  const withBoundaries = source.replace(boundaryRegex, (_full, label: string) => `\n${label}: `);
+  const lines = withBoundaries
+    .split("\n")
+    .map((line) => normalizePresentationLine(line))
+    .filter(Boolean);
+  const scoped: string[] = [];
+  const generic: string[] = [];
+  let activeSection: SectionKey | null = null;
   for (const line of lines) {
-    const cleaned = line.trim();
-    if (!cleaned || /^[.\-•]+$/.test(cleaned)) continue;
-    const detected = detectSectionLabel(cleaned);
+    const detected = detectSectionLabel(line);
     if (detected) {
-      if (detected.section !== section) break;
-      if (detected.rest) out.push(detected.rest);
+      activeSection = detected.section;
+      if (detected.section === section && detected.rest) {
+        scoped.push(...splitPresentationLineItems(detected.rest));
+      }
       continue;
     }
-    out.push(cleaned);
+    const items = splitPresentationLineItems(line);
+    if (activeSection === null) {
+      generic.push(...items);
+      continue;
+    }
+    if (activeSection === section) {
+      scoped.push(...items);
+    }
   }
-  return out.length ? out : [""];
+  const merged = dedupePresentationLines(scoped.length > 0 ? scoped : generic);
+  return merged.length > 0 ? merged : [""];
 }
 
 function extractFirstTag(xml: string, tag: string): string {
@@ -248,6 +301,10 @@ function toStableFingerprintValue(value: unknown, depth = 0): unknown {
   return next;
 }
 
+export const __testOnly = {
+  presentationLinesForSection,
+};
+
 export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) {
   function baseUrlFromEnv(): string {
     const explicit = String(process.env.PUBLIC_BASE_URL || process.env.BASE_URL || "").trim();
@@ -319,22 +376,13 @@ export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) 
       return { fileName, filePath, outDir, assetFingerprint };
     }
 
-    const strategyLines = sanitizeLinesForSection(
-      presentationLines(String((state as any).strategy_final ?? "")),
-      "strategy"
-    );
-    const targetGroupLines = sanitizeLinesForSection(
-      presentationLines(String((state as any).targetgroup_final ?? "")),
-      "targetgroup"
-    );
-    const productsServicesLines = sanitizeLinesForSection(
-      presentationLines(String((state as any).productsservices_final ?? "")),
+    const strategyLines = presentationLinesForSection(String((state as any).strategy_final ?? ""), "strategy");
+    const targetGroupLines = presentationLinesForSection(String((state as any).targetgroup_final ?? ""), "targetgroup");
+    const productsServicesLines = presentationLinesForSection(
+      String((state as any).productsservices_final ?? ""),
       "productsservices"
     );
-    const rulesLines = sanitizeLinesForSection(
-      presentationLines(String((state as any).rulesofthegame_final ?? "")),
-      "rulesofthegame"
-    );
+    const rulesLines = presentationLinesForSection(String((state as any).rulesofthegame_final ?? ""), "rulesofthegame");
 
     const replacements: Record<string, string> = {
       "{{BUSINESS_NAME}}": escapeXml(normalizePresentationTextSingle(name || "TBD")),

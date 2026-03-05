@@ -265,13 +265,17 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
     const userMessageCandidate =
       pristineAtEntry ? rawNormalized : (deps.looksLikeMetaInstruction(rawNormalized) ? "" : rawNormalized);
 
-    if (
-      String((state as any).initial_user_message ?? "").trim() === "" &&
-      String(userMessageCandidate ?? "").trim() !== "" &&
-      !/^[0-9]+$/.test(String(userMessageCandidate ?? "").trim()) &&
-      !String(userMessageCandidate ?? "").trim().startsWith("ACTION_")
-    ) {
-      (state as any).initial_user_message = String(userMessageCandidate).trim();
+    const currentStepAtEntry = String((state as any).current_step || deps.step0Id).trim() || deps.step0Id;
+    const startedAtEntry = String((state as any).started || "").trim().toLowerCase() === "true";
+    const candidateText = String(userMessageCandidate ?? "").trim();
+    const candidateCanSeed =
+      candidateText !== "" &&
+      !/^[0-9]+$/.test(candidateText) &&
+      !candidateText.startsWith("ACTION_");
+    const prestartBufferingTurn = currentStepAtEntry === deps.step0Id && !startedAtEntry;
+    if (candidateCanSeed && (prestartBufferingTurn || String((state as any).initial_user_message ?? "").trim() === "")) {
+      // Keep the latest meaningful prestart input so ACTION_START can consume it.
+      (state as any).initial_user_message = candidateText;
     }
 
     const lastSpecialistResult = (state as any)?.last_specialist_result;
@@ -409,11 +413,15 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       clickedLabelForNoRepeat = "";
       (state as any).__last_clicked_action_for_contract = "";
       (state as any).__last_clicked_label_for_contract = "";
-      if (
-        String((state as any).initial_user_message ?? "").trim() === "" &&
-        submitted &&
-        !/^[0-9]+$/.test(submitted)
-      ) {
+      const currentStep = String((state as any).current_step || deps.step0Id).trim() || deps.step0Id;
+      const started = String((state as any).started || "").trim().toLowerCase() === "true";
+      const submittedCanSeed =
+        submitted !== "" &&
+        !/^[0-9]+$/.test(submitted) &&
+        !submitted.startsWith("ACTION_");
+      const prestartBufferingTurn = currentStep === deps.step0Id && !started;
+      if (submittedCanSeed && (prestartBufferingTurn || String((state as any).initial_user_message ?? "").trim() === "")) {
+        // Buffer latest prestart text; it will be used once the user taps ACTION_START.
         (state as any).initial_user_message = submitted;
       }
     }

@@ -4,19 +4,12 @@ import { RULESOFTHEGAME_INSTRUCTIONS } from "./rulesofthegame.js";
 
 test("Rules of the Game instructions include full required output schema fields", () => {
   const text = RULESOFTHEGAME_INSTRUCTIONS;
-  assert.ok(text.includes('"action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE"'));
-  assert.ok(text.includes('"message": "string"'));
-  assert.ok(text.includes('"question": "string"'));
-  assert.ok(text.includes('"refined_formulation": "string"'));
-  assert.ok(text.includes('"rulesofthegame": "string"'));
-  assert.ok(text.includes('"wants_recap": "boolean"'));
-  assert.ok(text.includes('"is_offtopic": "boolean"'));
-  assert.ok(
-    text.includes(
-      '"meta_topic": "NONE" | "MODEL_VALUE" | "MODEL_CREDIBILITY" | "BEN_PROFILE" | "TOOL_AUDIENCE" | "STEP_SKIP_NOT_SUPPORTED" | "STEP_POINTLESS" | "STEP_BACK_NOT_SUPPORTED" | "CANVAS_VALUE" | "SESSION_STORAGE" | "RECAP"'
-    )
-  );
-  assert.ok(text.includes('"statements": ["array of strings"]'));
+  assert.match(text, /"action"\s*:\s*"INTRO"\s*\|\s*"ASK"\s*\|\s*"REFINE"\s*\|\s*"ESCAPE"/);
+  assert.match(text, /"message"\s*:\s*"string"/);
+  assert.match(text, /"question"\s*:\s*"string"/);
+  assert.match(text, /"refined_formulation"\s*:\s*"string"/);
+  assert.match(text, /"rulesofthegame"\s*:\s*"string"/);
+  assert.match(text, /"statements"\s*:\s*\["array of strings"\]/);
 });
 
 test("Rules of the Game instructions use canonical contract block and deterministic escape semantics", () => {

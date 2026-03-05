@@ -193,7 +193,7 @@ test("known-facts recap renders strategy as bullets from run-on sentence text", 
   });
 
   const message = String((rendered.specialist as any).message || "");
-  assert.match(message, /<strong>.*strategy.*:<\/strong>/i);
+  assert.match(message, /strategy\s*:/i);
   assert.match(message, /•\s*Focussen op opdrachten voor grote ondernemingen/i);
   assert.match(message, /•\s*Altijd inzetten op langdurige samenwerkingen/i);
   assert.match(message, /•\s*Overpresteren in projecten die via het bestaande netwerk binnenkomen/i);
@@ -220,12 +220,35 @@ test("known-facts recap keeps products/services and rules as bullet sections", (
   });
 
   const message = String((rendered.specialist as any).message || "");
-  assert.match(message, /<strong>.*products.*services.*:<\/strong>/i);
+  assert.match(message, /products.*services\s*:/i);
   assert.match(message, /•\s*AI-compatibele websites en apps/i);
   assert.match(message, /•\s*AI-tools en -ondersteuning/i);
-  assert.match(message, /<strong>.*rules.*game.*:<\/strong>/i);
+  assert.match(message, /rules.*game\s*:/i);
   assert.match(message, /•\s*Werk met duidelijke scope-afspraken/i);
   assert.match(message, /•\s*Lever iteratief en transparant op/i);
+});
+
+test("known-facts recap output is markup-free for user-facing text", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "presentation";
+  (state as any).business_name = "Mindd";
+  (state as any).strategy_final =
+    "<strong>Strategie:</strong> Focus op enterprise-opdrachten. Bouw langdurige samenwerkingen.";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "presentation",
+    state,
+    specialist: {
+      action: "ASK",
+      wants_recap: true,
+      message: "<strong>Dit mag niet zichtbaar zijn</strong>",
+      question: "",
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.doesNotMatch(message, /<[^>]+>/);
 });
 
 test("rulesofthegame does not expose confirm when fewer than 3 rules are accepted", () => {
@@ -436,7 +459,7 @@ test("entity valid output always renders canonical statement with current-contex
 
   const message = String((rendered.specialist as any).message || "");
   assert.equal(rendered.status, "valid_output");
-  assert.match(message, /<strong>.*current.*entity.*mindd.*is:.*<\/strong>/i);
+  assert.match(message, /current.*entity.*mindd.*is:/i);
   assert.match(message, /Mindd is een digitale innovatiepartner voor mkb-bedrijven\./i);
   assert.equal(message.split(canonical).length - 1, 1);
 });
@@ -466,6 +489,6 @@ test("targetgroup valid output appends canonical current-context block when miss
 
   const message = String((rendered.specialist as any).message || "");
   assert.equal(rendered.status, "valid_output");
-  assert.match(message, /<strong>.*current.*target group.*mindd.*is:.*<\/strong>/i);
+  assert.match(message, /current.*target group.*mindd.*is:/i);
   assert.match(message, /Innovatieve mkb-bedrijven met complexe digitaliseringsvraagstukken\./i);
 });

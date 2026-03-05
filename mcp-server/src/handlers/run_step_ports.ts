@@ -224,6 +224,7 @@ export type RunStepPipelineNormalizationPorts = {
     specialistResult: Record<string, unknown>;
     previousSpecialist?: Record<string, unknown>;
     state: CanvasState;
+    userMessage?: string;
   }) => Record<string, unknown>;
   normalizeNonStep0OfftopicSpecialist: (params: {
     stepId: string;

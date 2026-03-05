@@ -66,7 +66,7 @@ export const USER_INTENT_CONTRACT_INSTRUCTION = `USER_INTENT CONTRACT (HARD)
 
 export const META_TOPIC_CONTRACT_INSTRUCTION = `META_TOPIC CONTRACT (HARD)
 - Always return a string field "meta_topic" with one of:
-  NONE, MODEL_VALUE, MODEL_CREDIBILITY, BEN_PROFILE, TOOL_AUDIENCE, STEP_SKIP_NOT_SUPPORTED, STEP_POINTLESS, STEP_BACK_NOT_SUPPORTED, CANVAS_VALUE, SESSION_STORAGE, RECAP.
+  NONE, MODEL_VALUE, MODEL_CREDIBILITY, BEN_PROFILE, TOOL_AUDIENCE, STEP_SKIP_NOT_SUPPORTED, STEP_POINTLESS, STEP_BACK_NOT_SUPPORTED, CANVAS_VALUE, SESSION_STORAGE, PRESENTATION_MEDIA_NOT_SUPPORTED, RECAP.
 - Infer meta_topic from meaning/context semantically, not from language-specific keyword lists.
 - Set meta_topic="MODEL_VALUE" for process/model-value questions.
 - Set meta_topic="MODEL_CREDIBILITY" for model/method credibility or origin questions.
@@ -77,6 +77,7 @@ export const META_TOPIC_CONTRACT_INSTRUCTION = `META_TOPIC CONTRACT (HARD)
 - Set meta_topic="STEP_BACK_NOT_SUPPORTED" when users ask to go back to a previous step.
 - Set meta_topic="CANVAS_VALUE" for "what is the value of this canvas" type questions.
 - Set meta_topic="SESSION_STORAGE" for "is this saved/stored" type questions.
+- Set meta_topic="PRESENTATION_MEDIA_NOT_SUPPORTED" when users ask whether images or logos can be added in the presentation.
 - If the user asks for their current step output or previous step output, classify as recap: wants_recap=true, user_intent="RECAP_REQUEST", meta_topic="RECAP".
 - Set meta_topic="RECAP" when wants_recap=true.
 - Set meta_topic="NONE" for normal step input, inspiration-only requests, or generic off-topic content.`;
@@ -120,6 +121,8 @@ const META_TOPIC_LOCALES_OFFTOPIC_DOC = new Set<string>([
   "id",
   "ko",
   "zh",
+  "ru",
+  "hu",
 ]);
 
 type MetaTopicRouteConfig = {
@@ -169,6 +172,13 @@ const META_TOPIC_ROUTE_REGISTRY: Partial<Record<SpecialistMetaTopic, MetaTopicRo
   SESSION_STORAGE: {
     ui_key: "meta.topic.sessionStorage.body",
     append_redirect: true,
+    append_current_context: false,
+    use_profile_media: false,
+    enabled_locales: META_TOPIC_LOCALES_OFFTOPIC_DOC,
+  },
+  PRESENTATION_MEDIA_NOT_SUPPORTED: {
+    ui_key: "meta.topic.presentationMediaNotSupported.body",
+    append_redirect: false,
     append_current_context: false,
     use_profile_media: false,
     enabled_locales: META_TOPIC_LOCALES_OFFTOPIC_DOC,
@@ -712,6 +722,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     specialistResult: Record<string, unknown>;
     previousSpecialist?: Record<string, unknown>;
     state: CanvasState;
+    userMessage?: string;
   }): Record<string, unknown> {
     const stepId = String(params.stepId || "").trim();
     const specialist = params.specialistResult && typeof params.specialistResult === "object"
@@ -739,7 +750,12 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       }
     }
 
-    const metaTopic = resolveSpecialistMetaTopic(specialist);
+    const mediaCapabilityIntent =
+      stepId === PRESENTATION_STEP_ID &&
+      isPresentationMediaCapabilityQuestion(String(params.userMessage || ""));
+    const metaTopic = mediaCapabilityIntent
+      ? "PRESENTATION_MEDIA_NOT_SUPPORTED"
+      : resolveSpecialistMetaTopic(specialist);
     if (metaTopic === "NONE" || metaTopic === "RECAP") return specialist;
 
     const base = {
@@ -873,6 +889,49 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       return true;
     });
     return kept.join(" ").trim();
+  }
+
+  function normalizeIntentSentence(raw: string): string {
+    let next = String(raw || "").toLowerCase();
+    if (!next) return "";
+    try {
+      next = next.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+    } catch {
+      // Keep original when normalize() is unavailable.
+    }
+    return next
+      .replace(/<[^>]+>/g, " ")
+      .replace(/[“”"'`]/g, "")
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function isPresentationMediaCapabilityQuestion(userMessage: string): boolean {
+    const text = normalizeIntentSentence(userMessage);
+    if (!text) return false;
+    const mediaTokens = [
+      "image", "images", "logo", "logos", "afbeelding", "afbeeldingen", "plaatje", "plaatjes",
+      "bild", "bilder", "immagine", "immagini", "imagen", "imagenes", "imagem", "imagens",
+      "gambar", "चित्र", "छवि", "画像", "写真", "이미지", "로고", "图像", "图片", "標誌", "标志",
+    ];
+    const capabilityTokens = [
+      "can", "possible", "support", "include", "add", "use", "embed",
+      "kan", "mogelijk", "toevoegen", "verwerken", "invoegen", "plaatsen",
+      "kann", "moglich", "hinzufugen", "einbinden",
+      "puedo", "posible", "agregar", "incluir",
+      "posso", "possibile", "aggiungere", "includere",
+      "pode", "possivel", "adicionar", "incluir",
+      "peut", "possible", "ajouter", "inclure",
+      "boleh", "bisa", "tambah",
+      "できます", "可能", "追加", "入れる",
+      "할수", "가능", "추가",
+      "可以", "能", "添加", "加入",
+      "सकता", "संभव", "जोड़", "शामिल",
+    ];
+    const hasMedia = mediaTokens.some((token) => token && text.includes(token));
+    if (!hasMedia) return false;
+    return capabilityTokens.some((token) => token && text.includes(token));
   }
 
   function isLikelyMetaQuestionTurn(params: {

@@ -6,6 +6,7 @@ import { createRunStepWordingHelpers } from "./run_step_wording.js";
 function buildHelpers(intentEnabled: boolean) {
   return createRunStepWordingHelpers({
     step0Id: "step0",
+    presentationStepId: "presentation",
     dreamStepId: "dream",
     strategyStepId: "strategy",
     productsservicesStepId: "productsservices",
@@ -231,4 +232,75 @@ test("applyWordingPickSelection keeps removals when user picks own edited list",
     String((applyResult.specialist.productsservices as string) || ""),
     ["AI-compatible websites and apps", "AI-tools and support", "Branding", "Strategy"].join("\n")
   );
+});
+
+test("buildWordingChoiceFromTurn never enables wording-choice for presentation step", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "presentation",
+    state: {} as any,
+    activeSpecialist: "Presentation",
+    previousSpecialist: {
+      question: "Wil je nog iets aanpassen of je presentatie maken?",
+    },
+    specialistResult: {
+      message: "Dit is wat je zei.",
+      refined_formulation: "Samenvatting",
+      presentation_brief: "Samenvatting",
+    } as Record<string, unknown>,
+    userTextRaw: "Maak dit professioneler en korter.",
+    isOfftopic: false,
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+});
+
+test("buildWordingChoiceFromTurn strips markup from wording-choice payload and stored fields", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "targetgroup",
+    state: {} as any,
+    activeSpecialist: "TargetGroup",
+    previousSpecialist: {
+      question: "Welke doelgroep bedoel je precies?",
+    },
+    specialistResult: {
+      message: "Ik heb een suggestie gemaakt.",
+      refined_formulation: "<strong>Technische mkb-bedrijven</strong> met complexe vraagstukken.",
+    } as Record<string, unknown>,
+    userTextRaw: "<strong>bedrijven</strong> met complexe producten",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.doesNotMatch(String(result.wordingChoice?.user_text || ""), /<[^>]+>/);
+  assert.doesNotMatch(String(result.wordingChoice?.suggestion_text || ""), /<[^>]+>/);
+  assert.doesNotMatch(
+    String((result.specialist as Record<string, unknown>).wording_choice_agent_current || ""),
+    /<[^>]+>/
+  );
+});
+
+test("applyWordingPickSelection strips markup before committing selected wording", () => {
+  const helpers = buildHelpers(true);
+  const applyResult = helpers.applyWordingPickSelection({
+    stepId: "targetgroup",
+    routeToken: "__WORDING_PICK_SUGGESTION__",
+    state: {
+      current_step: "targetgroup",
+      active_specialist: "TargetGroup",
+      last_specialist_result: {
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "targetgroup",
+        wording_choice_user_normalized: "bedrijven met complexe producten",
+        wording_choice_agent_current: "<strong>Technische mkb-bedrijven</strong> met complexe vraagstukken.",
+      },
+    } as any,
+  });
+
+  assert.equal(applyResult.handled, true);
+  assert.doesNotMatch(String(applyResult.specialist.refined_formulation || ""), /<[^>]+>/);
+  assert.doesNotMatch(String(applyResult.specialist.targetgroup || ""), /<[^>]+>/);
 });

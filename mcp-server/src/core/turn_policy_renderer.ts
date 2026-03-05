@@ -365,7 +365,7 @@ function ensureCanonicalContextBlockInMessage(params: {
   const hasCanonical = Boolean(messageKey && messageKey.includes(canonicalKey));
   const hasHeading = Boolean(headingKey && messageKey.includes(headingKey));
   if (hasCanonical && hasHeading) return messageRaw;
-  const canonicalBlock = heading ? `<strong>${heading}</strong>\n${canonical}` : canonical;
+  const canonicalBlock = heading ? `${heading}\n${canonical}` : canonical;
   if (!messageRaw) return canonicalBlock;
   const paragraphs = messageRaw
     .replace(/\r/g, "\n")
@@ -490,6 +490,95 @@ function dedupeListItems(lines: string[]): string[] {
   return out;
 }
 
+type RecapSectionKey = "strategy" | "targetgroup" | "productsservices" | "rulesofthegame";
+
+const RECAP_SECTION_LABELS: Record<RecapSectionKey, string[]> = {
+  strategy: ["strategy", "strategie"],
+  targetgroup: ["target group", "doelgroep"],
+  productsservices: ["products and services", "products & services", "producten en diensten"],
+  rulesofthegame: ["rules of the game", "spelregels"],
+};
+
+function escapeRegExp(text: string): string {
+  return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeRecapLine(raw: string): string {
+  return String(raw || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function splitCompositeRecapLine(rawLine: string): string[] {
+  const line = normalizeRecapLine(rawLine);
+  if (!line) return [];
+  if (line.includes("•")) {
+    return line
+      .split("•")
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+  }
+  const numbered = Array.from(line.matchAll(/(?:^|\s)(\d+[\).]\s*[^]+?)(?=\s+\d+[\).]\s+|$)/g))
+    .map((match) => String(match[1] || "").trim())
+    .filter(Boolean);
+  if (numbered.length >= 2) return numbered;
+  if (line.includes(";")) {
+    return line
+      .split(";")
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+  }
+  return [line];
+}
+
+function detectRecapSectionLabel(lineRaw: string): { section: RecapSectionKey; rest: string } | null {
+  const line = normalizeRecapLine(lineRaw);
+  if (!line) return null;
+  for (const [section, labels] of Object.entries(RECAP_SECTION_LABELS) as [RecapSectionKey, string[]][]) {
+    for (const label of labels) {
+      const re = new RegExp(`^${escapeRegExp(label)}\\s*[:\\-–]?\\s*(.*)$`, "i");
+      const match = line.match(re);
+      if (!match) continue;
+      return { section, rest: String(match[1] || "").trim() };
+    }
+  }
+  return null;
+}
+
+function sectionAwareRecapText(raw: string, section: RecapSectionKey): string {
+  const input = String(raw || "").replace(/\r/g, "\n").trim();
+  if (!input) return "";
+  const allLabels = Object.values(RECAP_SECTION_LABELS).flat();
+  const boundaryRegex = new RegExp(`\\s+(${allLabels.map(escapeRegExp).join("|")})\\s*[:\\-–]\\s*`, "gi");
+  const withBoundaries = input.replace(boundaryRegex, (_full, label: string) => `\n${label}: `);
+  const sourceLines = withBoundaries
+    .split("\n")
+    .map((line) => normalizeRecapLine(line))
+    .filter(Boolean);
+  const scoped: string[] = [];
+  const generic: string[] = [];
+  let active: RecapSectionKey | null = null;
+  for (const line of sourceLines) {
+    const detected = detectRecapSectionLabel(line);
+    if (detected) {
+      active = detected.section;
+      if (detected.section === section && detected.rest) {
+        scoped.push(...splitCompositeRecapLine(detected.rest));
+      }
+      continue;
+    }
+    const parts = splitCompositeRecapLine(line);
+    if (active === null) {
+      generic.push(...parts);
+      continue;
+    }
+    if (active === section) scoped.push(...parts);
+  }
+  const candidateLines = scoped.length > 0 ? scoped : generic;
+  return dedupeListItems(candidateLines).join("\n").trim();
+}
+
 function splitCamelTitleItems(raw: string): string[] {
   const tokens = String(raw || "")
     .replace(/\r/g, " ")
@@ -516,39 +605,42 @@ function splitCamelTitleItems(raw: string): string[] {
 }
 
 function productsServicesItemsFromRecap(raw: string): string[] {
-  const bulletItems = extractBulletStatements(raw);
+  const scoped = sectionAwareRecapText(raw, "productsservices") || String(raw || "");
+  const bulletItems = extractBulletStatements(scoped);
   if (bulletItems.length >= 1) return dedupeListItems(bulletItems);
-  const punctSplit = String(raw || "")
+  const punctSplit = String(scoped || "")
     .replace(/\r/g, "\n")
     .split(/[;\n,]+/)
     .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
     .filter(Boolean);
   if (punctSplit.length >= 2) return dedupeListItems(punctSplit);
-  const titleSplit = splitCamelTitleItems(raw);
+  const titleSplit = splitCamelTitleItems(scoped);
   if (titleSplit.length >= 2) return dedupeListItems(titleSplit);
-  const single = String(raw || "").trim();
+  const single = String(scoped || "").trim();
   return single ? [single] : [];
 }
 
-function genericListItemsFromRecap(raw: string): string[] {
-  const bulletItems = extractBulletStatements(raw);
+function genericListItemsFromRecap(raw: string, section?: RecapSectionKey): string[] {
+  const scoped = section ? sectionAwareRecapText(raw, section) : "";
+  const source = scoped || String(raw || "");
+  const bulletItems = extractBulletStatements(source);
   if (bulletItems.length >= 1) return dedupeListItems(bulletItems);
 
-  const numberedByLine = String(raw || "")
+  const numberedByLine = String(source || "")
     .replace(/\r/g, "\n")
     .split("\n")
     .map((line) => String(line || "").replace(/^\s*\d+[\).]\s*/, "").trim())
     .filter(Boolean);
   if (numberedByLine.length >= 2) return dedupeListItems(numberedByLine);
 
-  const punctSplit = String(raw || "")
+  const punctSplit = String(source || "")
     .replace(/\r/g, "\n")
     .split(/[;\n,]+/)
     .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
     .filter(Boolean);
   if (punctSplit.length >= 2) return dedupeListItems(punctSplit);
 
-  const compact = String(raw || "").replace(/\s+/g, " ").trim();
+  const compact = String(source || "").replace(/\s+/g, " ").trim();
   if (compact) {
     const sentenceSplit = (compact.match(/[^.!?。！？]+[.!?。！？]*/g) || [])
       .map((line) => String(line || "").trim().replace(/[.!?。！？]+$/g, "").trim())
@@ -556,10 +648,10 @@ function genericListItemsFromRecap(raw: string): string[] {
     if (sentenceSplit.length >= 2) return dedupeListItems(sentenceSplit);
   }
 
-  const titleSplit = splitCamelTitleItems(raw);
+  const titleSplit = splitCamelTitleItems(source);
   if (titleSplit.length >= 2) return dedupeListItems(titleSplit);
 
-  const single = String(raw || "").trim();
+  const single = String(source || "").trim();
   return single ? [single] : [];
 }
 
@@ -567,12 +659,12 @@ function recapListItemsForStep(stepId: string, state: CanvasState, raw: string):
   if (stepId === "strategy") {
     const fromStrategySources = strategyStatementsFromSources(state, {}, {}, { provisionalForStep });
     if (fromStrategySources.length >= 2) return fromStrategySources;
-    const fromRecap = genericListItemsFromRecap(raw);
+    const fromRecap = genericListItemsFromRecap(raw, "strategy");
     if (fromRecap.length >= 2) return fromRecap;
     return fromStrategySources.length > 0 ? fromStrategySources : fromRecap;
   }
   if (stepId === "productsservices") return productsServicesItemsFromRecap(raw);
-  if (stepId === "rulesofthegame") return genericListItemsFromRecap(raw);
+  if (stepId === "rulesofthegame") return genericListItemsFromRecap(raw, "rulesofthegame");
   return [];
 }
 
@@ -633,7 +725,7 @@ function productsServicesRecapBlock(state: CanvasState, recapText: string): stri
   const heading = productsServicesHeadingForState(state, items);
   const bullets = items.map((line) => `• ${line}`).join("\n");
   if (!heading) return bullets;
-  return `<strong>${heading}</strong>\n${bullets}`.trim();
+  return `${heading}\n${bullets}`.trim();
 }
 
 function step0ConfirmQuestion(state: CanvasState, venture: string, name: string, status: string): string {
@@ -906,12 +998,12 @@ function buildKnownFactsRecap(state: CanvasState): string {
   const name = String(step0.name || "").trim();
   if (venture) {
     blocks.push(
-      `<strong>${recapLabel(state, "recap.label.venture", "Venture")}:</strong>\n${venture}`
+      `${recapLabel(state, "recap.label.venture", "Venture")}:\n${venture}`
     );
   }
   if (name) {
     blocks.push(
-      `<strong>${recapLabel(state, "recap.label.name", "Name")}:</strong>\n${name}`
+      `${recapLabel(state, "recap.label.name", "Name")}:\n${name}`
     );
   }
 
@@ -923,11 +1015,11 @@ function buildKnownFactsRecap(state: CanvasState): string {
     if (stepId === "strategy" || stepId === "productsservices" || stepId === "rulesofthegame") {
       const recapItems = recapListItemsForStep(stepId, state, value);
       if (recapItems.length > 0) {
-        blocks.push(`<strong>${label}:</strong>\n${recapItems.map((item) => `• ${item}`).join("\n")}`);
+        blocks.push(`${label}:\n${recapItems.map((item) => `• ${item}`).join("\n")}`);
         continue;
       }
     }
-    blocks.push(`<strong>${label}:</strong>\n${value}`);
+    blocks.push(`${label}:\n${value}`);
   }
 
   return blocks.join("\n\n").trim();
@@ -1173,7 +1265,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     isOfftopic && stepId !== "step_0" ? offTopicCurrentContextHeading(stepId, state) : "";
   const defaultRecapBlock =
     offTopicContextHeading && recapText
-      ? `<strong>${offTopicContextHeading}</strong>\n${recapText}`
+      ? `${offTopicContextHeading}\n${recapText}`
       : recapText;
   const recapBlock =
     stepId === "productsservices" && recapText
@@ -1198,7 +1290,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       const headingKey = comparableText(offTopicContextHeading);
       if (recapKey && answerKey.includes(recapKey)) {
         if (!headingKey || answerKey.includes(headingKey)) return answerText;
-        return `${answerText}\n\n<strong>${offTopicContextHeading}</strong>`.trim();
+        return `${answerText}\n\n${offTopicContextHeading}`.trim();
       }
       return `${answerText}\n\n${recapBlock}`.trim();
     }

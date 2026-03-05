@@ -562,6 +562,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       specialistResult: asRecord(specialistResult),
       previousSpecialist: asRecord(stateRecord.last_specialist_result),
       state,
+      userMessage,
     });
     const currentStepIdForOfftopic = String(decision1.current_step || "");
     const currentSpecialistId = String(decision1.specialist_to_call || "");

@@ -68,7 +68,8 @@ type SemanticViolationReason =
   | "confirm_present_without_accepted_evidence"
   | "intro_mode_must_not_expose_confirm"
   | "wording_choice_mode_requires_instruction_or_context"
-  | "rules_confirm_policy_violation";
+  | "rules_confirm_policy_violation"
+  | "user_facing_markup_detected";
 
 const SEMANTIC_VIOLATION_REASONS = new Set<SemanticViolationReason>([
   "missing_prompt_for_interactive_ask",
@@ -76,11 +77,26 @@ const SEMANTIC_VIOLATION_REASONS = new Set<SemanticViolationReason>([
   "intro_mode_must_not_expose_confirm",
   "wording_choice_mode_requires_instruction_or_context",
   "rules_confirm_policy_violation",
+  "user_facing_markup_detected",
 ]);
 
 function isSemanticViolationReason(reason: string | null | undefined): reason is SemanticViolationReason {
   if (!reason) return false;
   return SEMANTIC_VIOLATION_REASONS.has(reason as SemanticViolationReason);
+}
+
+function hasRawMarkup(value: string): boolean {
+  return /<\s*\/?\s*[a-z][^>]*>/i.test(String(value || ""));
+}
+
+function stripMarkupPreserveLines(value: string): string {
+  return String(value || "")
+    .replace(/\r/g, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSemanticHelpersDeps) {
@@ -124,6 +140,25 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
     const uiActions = Array.isArray(rendered.uiActions) ? rendered.uiActions : [];
     const question = String(specialist.question || "").trim();
     const numberedCount = deps.countNumberedOptions(question);
+    const userFacingCandidates: string[] = [
+      String((specialist as Record<string, unknown>).message || ""),
+      String((specialist as Record<string, unknown>).question || ""),
+      String((specialist as Record<string, unknown>).refined_formulation || ""),
+      String((specialist as Record<string, unknown>).wording_choice_user_raw || ""),
+      String((specialist as Record<string, unknown>).wording_choice_user_normalized || ""),
+      String((specialist as Record<string, unknown>).wording_choice_agent_current || ""),
+    ];
+    const userFacingListCandidates: string[] = [
+      ...(Array.isArray((specialist as Record<string, unknown>).wording_choice_user_items)
+        ? ((specialist as Record<string, unknown>).wording_choice_user_items as unknown[]).map((item) => String(item || ""))
+        : []),
+      ...(Array.isArray((specialist as Record<string, unknown>).wording_choice_suggestion_items)
+        ? ((specialist as Record<string, unknown>).wording_choice_suggestion_items as unknown[]).map((item) => String(item || ""))
+        : []),
+    ];
+    if ([...userFacingCandidates, ...userFacingListCandidates].some((value) => hasRawMarkup(value))) {
+      return "user_facing_markup_detected";
+    }
 
     if (action !== "ASK") return "rendered_action_not_ask";
     if (!contractId) return "missing_contract_id";
@@ -295,6 +330,32 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       (next as Record<string, unknown>).refined_formulation = "";
       if (Array.isArray((next as Record<string, unknown>).statements)) {
         (next as Record<string, unknown>).statements = [];
+      }
+    }
+    if (reason === "user_facing_markup_detected") {
+      (next as Record<string, unknown>).message = stripMarkupPreserveLines(String((next as Record<string, unknown>).message || ""));
+      (next as Record<string, unknown>).question = stripMarkupPreserveLines(String((next as Record<string, unknown>).question || ""));
+      (next as Record<string, unknown>).refined_formulation = stripMarkupPreserveLines(
+        String((next as Record<string, unknown>).refined_formulation || "")
+      );
+      (next as Record<string, unknown>).wording_choice_user_raw = stripMarkupPreserveLines(
+        String((next as Record<string, unknown>).wording_choice_user_raw || "")
+      );
+      (next as Record<string, unknown>).wording_choice_user_normalized = stripMarkupPreserveLines(
+        String((next as Record<string, unknown>).wording_choice_user_normalized || "")
+      );
+      (next as Record<string, unknown>).wording_choice_agent_current = stripMarkupPreserveLines(
+        String((next as Record<string, unknown>).wording_choice_agent_current || "")
+      );
+      if (Array.isArray((next as Record<string, unknown>).wording_choice_user_items)) {
+        (next as Record<string, unknown>).wording_choice_user_items = (
+          (next as Record<string, unknown>).wording_choice_user_items as unknown[]
+        ).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean);
+      }
+      if (Array.isArray((next as Record<string, unknown>).wording_choice_suggestion_items)) {
+        (next as Record<string, unknown>).wording_choice_suggestion_items = (
+          (next as Record<string, unknown>).wording_choice_suggestion_items as unknown[]
+        ).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean);
       }
     }
     return next;

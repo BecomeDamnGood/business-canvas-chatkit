@@ -663,6 +663,7 @@ function syncDreamRuntimeMode(state: CanvasState): void {
 
 const wordingHelpers = createRunStepWordingHelpers({
   step0Id: STEP_0_ID,
+  presentationStepId: PRESENTATION_STEP_ID,
   dreamStepId: DREAM_STEP_ID,
   strategyStepId: STRATEGY_STEP_ID,
   productsservicesStepId: PRODUCTSSERVICES_STEP_ID,

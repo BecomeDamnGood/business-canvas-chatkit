@@ -620,7 +620,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const allowStartActionWithSnapshot =
           context.actionCodeRaw === "ACTION_START" && hasLastSpecialist;
         const isStartTrigger =
-          (String(context.userMessage || "").trim() === "" || context.actionCodeRaw === "ACTION_START") &&
+          context.actionCodeRaw === "ACTION_START" &&
           currentStep === deps.step0Id &&
           introShown !== "true" &&
           (!hasLastSpecialist || allowStartActionWithSnapshot);
@@ -649,7 +649,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           !context.isBootstrapPollCall;
 
         const isStartTrigger =
-          (String(context.userMessage || "").trim() === "" || context.actionCodeRaw === "ACTION_START") &&
+          context.actionCodeRaw === "ACTION_START" &&
           currentStep === deps.step0Id &&
           introShown !== "true" &&
           (!hasLastSpecialist || allowStartActionWithSnapshot);

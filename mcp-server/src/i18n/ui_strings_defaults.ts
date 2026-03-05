@@ -90,7 +90,7 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "error.unknownAction": "We could not process this choice. Please refresh and try again.",
   optionsDisplayError: "We can't safely display these options right now. Please try again.",
   scoringIntro1: "You now have more than 20 statements, so I've clustered them for you. You can still edit and add statements, but please give them a score.",
-  scoringIntro2: "",
+  scoringIntro2: "Please score each statement from 1 to 10 based on how important it is for your Dream (1 = low, 10 = very important).",
   scoringIntro3: "The average per cluster updates immediately while you type.",
   scoringDreamQuestion: "You can see above, based on your scores, which topics matter most to you. Do you now have a clearer idea of what your Dream could be about, and can you say something about it? Or would you prefer that I formulate a Dream for you based on what you find important?",
   btnScoringContinue: "Formulate my dream for me based on what I find important.",
@@ -217,6 +217,8 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
     "Successful entrepreneurs and leaders stay focused on what truly matters. Everything else is execution and day-to-day operations. This canvas gives you a clear overview of the core of your business, including what it is, who it serves, why it wins, and what it needs to succeed. That creates clarity and direction. It can also strengthen motivation during difficult moments, because the purpose and drivers behind the business are made explicit. With this canvas as a foundation, you can steer and develop tactical and operational work, such as marketing plans, business development priorities, and financial forecasting, more effectively.",
   "meta.topic.sessionStorage.body":
     "We store the output of each step only while your session remains open. If you close the widget, the information is permanently deleted. The only data we retain from the session is token usage for internal review and insights.",
+  "meta.topic.presentationMediaNotSupported.body":
+    "Unfortunately, it is not yet possible to include images or logos in the presentation. We are working hard to make this possible in the future.",
   "ppt.heading.purpose": "Purpose",
   "ppt.heading.role": "Role",
   "ppt.heading.strategy": "Strategy",

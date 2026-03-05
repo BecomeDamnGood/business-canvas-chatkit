@@ -152,17 +152,17 @@ Tell me what to adjust or create your presentation
 - refined_formulation: show the recap, localized, built ONLY from the finals, so the summary appears directly below the intro:
   Start with one line: "This is what you said:" (localized).
   Then add one blank line (empty line).
-  Then show the recap with the following formatting using HTML <strong> tags for labels:
+  Then show the recap with the following formatting using plain-text labels only (no HTML/markup):
   (1) For step_0_final: parse the pattern "Venture: <venture_type> | Name: <business_name> | Status: <existing|starting>":
-     - Format as "<strong>Venture:</strong> <venture_type>" (translate "Venture" to the user's language).
-     - Directly below that: "<strong>Name:</strong> <business_name>" (translate "Name" to the user's language). Show this even if business_name is "TBD".
+     - Format as "Venture: <venture_type>" (translate "Venture" to the user's language).
+     - Directly below that: "Name: <business_name>" (translate "Name" to the user's language). Show this even if business_name is "TBD".
      - Then one blank line (empty line).
   (2) For all other non-empty finals (dream_final, purpose_final, bigwhy_final, role_final, entity_final, strategy_final, targetgroup_final, productsservices_final, rulesofthegame_final): 
-      - If the value is a single line: format as "<strong>Label:</strong> <value>" with Label in the user's language (e.g. "Dream:", "Purpose:", "Big Why:", "Role:", "Entity:", "Strategy:", "Target Group:", "Products and Services:", "Rules of the Game:").
+      - If the value is a single line: format as "Label: <value>" with Label in the user's language (e.g. "Dream:", "Purpose:", "Big Why:", "Role:", "Entity:", "Strategy:", "Target Group:", "Products and Services:", "Rules of the Game:").
       - If the value contains bullets (lines starting with "• " or "- "): format as:
-        "<strong>Label:</strong>" on its own line, then each bullet on its own line prefixed with "• " (convert "- " bullets to "• ").
+        "Label:" on its own line, then each bullet on its own line prefixed with "• " (convert "- " bullets to "• ").
       - If the value contains numbered lines (lines starting with "1.", "2.", "3.", etc. or "1)", "2)", "3)", etc.): format as:
-        "<strong>Label:</strong>" on its own line, then each numbered line on its own line (preserve the numbering format).
+        "Label:" on its own line, then each numbered line on its own line (preserve the numbering format).
       - CRITICAL: Each final must be formatted separately. Do NOT combine content from strategy_final, targetgroup_final, productsservices_final, or rulesofthegame_final into one section. Each final has its own label and its own content.
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
 - question=""
@@ -189,17 +189,17 @@ Output:
 - message: show the recap, localized, built ONLY from the finals:
   Start with one line: "This is what you said:" (localized).
   Then add one blank line (empty line).
-  Then show the recap with the following formatting using HTML <strong> tags for labels:
+  Then show the recap with the following formatting using plain-text labels only (no HTML/markup):
   (1) For step_0_final: parse the pattern "Venture: <venture_type> | Name: <business_name> | Status: <existing|starting>":
-     - Format as "<strong>Venture:</strong> <venture_type>" (translate "Venture" to the user's language).
-     - Directly below that: "<strong>Name:</strong> <business_name>" (translate "Name" to the user's language). Show this even if business_name is "TBD".
+     - Format as "Venture: <venture_type>" (translate "Venture" to the user's language).
+     - Directly below that: "Name: <business_name>" (translate "Name" to the user's language). Show this even if business_name is "TBD".
      - Then one blank line (empty line).
   (2) For all other non-empty finals (dream_final, purpose_final, bigwhy_final, role_final, entity_final, strategy_final, targetgroup_final, productsservices_final, rulesofthegame_final): 
-      - If the value is a single line: format as "<strong>Label:</strong> <value>" with Label in the user's language.
+      - If the value is a single line: format as "Label: <value>" with Label in the user's language.
       - If the value contains bullets (lines starting with "• " or "- "): format as:
-        "<strong>Label:</strong>" on its own line, then each bullet on its own line prefixed with "• " (convert "- " bullets to "• ").
+        "Label:" on its own line, then each bullet on its own line prefixed with "• " (convert "- " bullets to "• ").
       - If the value contains numbered lines (lines starting with "1.", "2.", "3.", etc. or "1)", "2)", "3)", etc.): format as:
-        "<strong>Label:</strong>" on its own line, then each numbered line on its own line (preserve the numbering format).
+        "Label:" on its own line, then each numbered line on its own line (preserve the numbering format).
       - CRITICAL: Each final must be formatted separately. Do NOT combine content from strategy_final, targetgroup_final, productsservices_final, or rulesofthegame_final into one section. Each final has its own label and its own content.
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
 - refined_formulation=""
@@ -222,17 +222,17 @@ Output:
 - refined_formulation: a polished final recap built ONLY from the finals, using the same formatting structure as ASK:
   Start with one line: "This is what you said:" (localized).
   Then add one blank line (empty line).
-  Then show the recap with the following formatting using HTML <strong> tags for labels:
+  Then show the recap with the following formatting using plain-text labels only (no HTML/markup):
   (1) For step_0_final: parse the pattern "Venture: <venture_type> | Name: <business_name> | Status: <existing|starting>":
-     - Format as "<strong>Venture:</strong> <venture_type>" (translate "Venture" to the user's language).
-     - Directly below that: "<strong>Name:</strong> <business_name>" (translate "Name" to the user's language). Show this even if business_name is "TBD".
+     - Format as "Venture: <venture_type>" (translate "Venture" to the user's language).
+     - Directly below that: "Name: <business_name>" (translate "Name" to the user's language). Show this even if business_name is "TBD".
      - Then one blank line (empty line).
   (2) For all other non-empty finals (dream_final, purpose_final, bigwhy_final, role_final, entity_final, strategy_final, targetgroup_final, productsservices_final, rulesofthegame_final): 
-      - If the value is a single line: format as "<strong>Label:</strong> <value>" with Label in the user's language.
+      - If the value is a single line: format as "Label: <value>" with Label in the user's language.
       - If the value contains bullets (lines starting with "• " or "- "): format as:
-        "<strong>Label:</strong>" on its own line, then each bullet on its own line prefixed with "• " (convert "- " bullets to "• ").
+        "Label:" on its own line, then each bullet on its own line prefixed with "• " (convert "- " bullets to "• ").
       - If the value contains numbered lines (lines starting with "1.", "2.", "3.", etc. or "1)", "2)", "3)", etc.): format as:
-        "<strong>Label:</strong>" on its own line, then each numbered line on its own line (preserve the numbering format).
+        "Label:" on its own line, then each numbered line on its own line (preserve the numbering format).
       - CRITICAL: Each final must be formatted separately. Do NOT combine content from strategy_final, targetgroup_final, productsservices_final, or rulesofthegame_final into one section. Each final has its own label and its own content.
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
 - presentation_brief: identical to refined_formulation.

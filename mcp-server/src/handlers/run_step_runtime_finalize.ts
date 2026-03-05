@@ -97,8 +97,18 @@ function stripChoiceInstructionNoise(value: string): string {
   return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+function stripMarkupPreserveLines(value: string): string {
+  return String(value || "")
+    .replace(/\r/g, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/[ \t]*\n[ \t]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function pickPrompt(specialist: Record<string, unknown>): string {
-  const q = String(specialist?.question ?? "").trim();
+  const q = stripMarkupPreserveLines(String(specialist?.question ?? ""));
   return q || "";
 }
 
@@ -218,7 +228,9 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const wordingPending = String(specialist?.wording_choice_pending || "") === "true";
     const suppressRefinedAppend = String(specialist?.__suppress_refined_append || "").trim() === "true";
     const wordingMode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
-    const wordingSuggestion = String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim();
+    const wordingSuggestion = stripMarkupPreserveLines(
+      String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "")
+    );
     const normalizeLine = (value: string): string =>
       String(value || "")
         .toLowerCase()
@@ -240,7 +252,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         menuId.startsWith("DREAM_EXPLAINER_MENU_")
       );
 
-    let msg = String(specialist?.message ?? "").trim();
+    let msg = stripMarkupPreserveLines(String(specialist?.message ?? ""));
     if (dreamBuilderRenderContext && msg) {
       const statementKeys = new Set(
         statementLines
@@ -301,11 +313,11 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     if (wordingPending && deps.isWordingPanelCleanBodyV1Enabled()) {
       msg = deps.compactWordingPanelBody(msg);
     }
-    const promptFromSpecialist = String(specialist?.question ?? "").trim();
-    const promptOverride = String(params.questionTextOverride || "").trim();
+    const promptFromSpecialist = stripMarkupPreserveLines(String(specialist?.question ?? ""));
+    const promptOverride = stripMarkupPreserveLines(String(params.questionTextOverride || ""));
     const prompt = promptOverride || promptFromSpecialist;
     msg = normalizePurposeExamplesMessage(contractStepId, menuId, msg);
-    let refined = String(specialist?.refined_formulation ?? "").trim();
+    let refined = stripMarkupPreserveLines(String(specialist?.refined_formulation ?? ""));
     if (!wordingPending) {
       const field = deps.fieldForStep(contractStepId);
       const fieldValue = field ? String((specialist as Record<string, unknown>)?.[field] || "").trim() : "";
@@ -402,8 +414,8 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       selectionRaw: string,
       selectedValueRaw: string
     ): { heading: string; body: string } => {
-      const selection = String(selectionRaw || "").replace(/\r/g, "\n").trim();
-      const selectedValue = String(selectedValueRaw || "").replace(/\r/g, "\n").trim();
+      const selection = stripMarkupPreserveLines(selectionRaw);
+      const selectedValue = stripMarkupPreserveLines(selectedValueRaw);
       if (!selection || !selectedValue) return { heading: "", body: "" };
       const selectionComparable = deps.canonicalizeComparableText(selection);
       const selectedComparable = deps.canonicalizeComparableText(selectedValue);

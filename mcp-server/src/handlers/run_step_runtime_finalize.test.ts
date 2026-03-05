@@ -292,3 +292,24 @@ test("buildTextForWidget avoids duplicate rules bullets when message already con
 
   assert.equal((output.match(/We leveren op afspraken/g) || []).length, 1);
 });
+
+test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
+  const helpers = buildTextHelpers(() => "");
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "targetgroup:ASK:TARGETGROUP_MENU_INTRO:v1",
+      message: "<strong>Dit mag niet zichtbaar zijn</strong>\nDoelgroep blijft zichtbaar.",
+      refined_formulation: "<em>Verfijnde tekst</em>",
+      question: "<b>Welke doelgroep bedoel je?</b>",
+      targetgroup: "Doelgroep",
+    },
+    state: {
+      active_specialist: "TargetGroup",
+      current_step: "targetgroup",
+    } as any,
+  });
+
+  assert.doesNotMatch(output, /<[^>]+>/);
+  assert.match(output, /Dit mag niet zichtbaar zijn/);
+  assert.match(output, /Doelgroep blijft zichtbaar\./);
+});
