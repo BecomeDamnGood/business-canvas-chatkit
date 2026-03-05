@@ -164,13 +164,11 @@ function extractBulletItem(line: string): string | null {
 function extractMarkdownImage(line: string): { alt: string; url: string } | null {
   const raw = String(line || "").trim();
   if (!raw) return null;
-  const m = raw.match(/^!\[([^\]]*)\]\(([^)\s]+)\)$/);
+  const m = raw.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
   if (!m) return null;
   const alt = String(m[1] || "").trim() || String(t(latestWidgetLangForText(), "media.image.alt") || "").trim();
   const url = String(m[2] || "").trim();
   if (!url) return null;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !/^https?:\/\//i.test(url)) return null;
-  if (!/^(https?:\/\/|\/|\.{1,2}\/|[A-Za-z0-9_])/i.test(url)) return null;
   return { alt, url };
 }
 

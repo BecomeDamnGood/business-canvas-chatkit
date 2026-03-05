@@ -83,7 +83,7 @@ function createAppServer(baseUrl: string): McpServer {
             _meta: {
               "openai/widgetDescription": "Business Strategy Canvas Builder widget UI",
               "openai/widgetCSP": {
-                connect_domains: [],
+                connect_domains: widgetOrigin ? [widgetOrigin] : [],
                 resource_domains: widgetOrigin ? [widgetOrigin] : [],
               },
               ...(widgetOrigin ? { "openai/widgetDomain": widgetOrigin } : {}),

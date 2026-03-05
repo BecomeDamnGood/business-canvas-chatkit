@@ -505,7 +505,6 @@ const policyMetaHelpers = createRunStepPolicyMetaHelpers({
 const {
   resolveMotivationUserIntent,
   resolveSpecialistMetaTopic,
-  buildBenProfileWidgetProfile,
   buildBenProfileMessage,
   applyMotivationQuotesContractV11,
   applyCentralMetaTopicRouter,
@@ -543,7 +542,6 @@ export { isMetaOfftopicFallbackTurn };
 const step0DisplayHelpers = createRunStepStep0DisplayHelpers({
   step0Id: STEP_0_ID,
   resolveSpecialistMetaTopic,
-  buildBenProfileWidgetProfile,
   buildBenProfileMessage,
   step0ReadinessQuestion,
   step0CardDescForState,

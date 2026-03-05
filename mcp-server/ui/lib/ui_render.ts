@@ -35,52 +35,16 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-type WidgetProfileMeta = {
-  image_url: string;
-  image_alt: string;
-};
+const BEN_PROFILE_IMAGE_ALT = "Ben Steenstra";
+const BEN_PROFILE_IMAGE_PATH = "/ui/assets/ben-steenstra.webp";
 
-function stripMarkdownImageLines(raw: string): string {
-  const cleaned = String(raw || "")
-    .replace(/\r/g, "\n")
-    .split("\n")
-    .filter((line) => !/^!\[[^\]]*\]\(([^)\s]+)\)\s*$/i.test(String(line || "").trim()))
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-  return cleaned;
-}
-
-function resolveWidgetProfileMeta(params: {
-  data: Record<string, unknown>;
-  result: Record<string, unknown>;
-  lang: string;
-}): WidgetProfileMeta | null {
-  const resultMeta = toRecord(params.result._meta);
-  const resultWidgetMeta = toRecord(resultMeta.widget);
-  const resultProfile = toRecord(resultWidgetMeta.profile);
-
-  const rootMeta = toRecord(params.data._meta);
-  const rootWidgetMeta = toRecord(rootMeta.widget);
-  const rootProfile = toRecord(rootWidgetMeta.profile);
-
-  const profile = Object.keys(resultProfile).length > 0 ? resultProfile : rootProfile;
-  const imageUrl = String(profile.image_url || "").trim();
-  const imageAlt = String(profile.image_alt || "").trim() || uiText(params.lang, "media.image.alt", "");
-  return {
-    image_url: imageUrl,
-    image_alt: imageAlt,
-  };
-}
-
-function prependProfileImage(cardDescEl: HTMLElement, profile: WidgetProfileMeta): void {
-  if (!cardDescEl) return;
-  const alreadyRendered = cardDescEl.querySelector("img.cardDesc-image");
-  if (alreadyRendered) return;
+function prependBenProfileImage(cardDescEl: HTMLElement): void {
+  const existing = cardDescEl.querySelector("img.cardDesc-image");
+  if (existing) existing.remove();
   const img = document.createElement("img");
   img.className = "cardDesc-image";
-  (img as HTMLImageElement).src = profile.image_url;
-  (img as HTMLImageElement).alt = profile.image_alt;
+  img.alt = BEN_PROFILE_IMAGE_ALT;
+  img.src = BEN_PROFILE_IMAGE_PATH;
   cardDescEl.prepend(img);
 }
 
@@ -850,55 +814,28 @@ export function render(overrideToolOutput?: unknown): void {
     body = bodyRaw || "";
   }
   const cardDescEl = document.getElementById("cardDesc");
-  const profileMeta = resolveWidgetProfileMeta({ data, result, lang });
 
-  let hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
-  let hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
-  let hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
+  const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
+  const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
+  const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
   if (!hasRenderableInteractiveContent) {
-    const fallbackBody = (
-      String(specialist.message || "").trim() ||
-      String(specialist.refined_formulation || "").trim() ||
-      (current === "step_0" ? uiText(lang, "step0.carddesc", "") : "")
-    ).trim();
-    const fallbackPrompt = (
-      String(specialist.question || "").trim() ||
-      (current === "step_0"
-        ? uiText(lang, "step0.question.initial", "")
-        : uiText(lang, "invariant.prompt.ask.default", ""))
-    ).trim();
-    if (!hasBodyContent && fallbackBody) {
-      body = fallbackBody;
-    }
-    if (!hasPromptContent && fallbackPrompt) {
-      promptSource = fallbackPrompt;
-    }
-    hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
-    hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
-    hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
     console.warn("[ui_contract_interactive_content_absent]", {
       current_step: current,
       view_mode: viewMode || "",
       payload_source: resolved.source,
-      recovery_mode: "graceful_fallback",
       reason_code: "interactive_content_absent",
-      fallback_applied: hasRenderableInteractiveContent,
     });
   }
 
   if (cardDescEl) {
     cardDescEl.style.display = "block";
     cardDescEl.classList.add("has-grid");
-    const isStep0AskLayout = current === "step_0";
+    const isBenProfile = String((specialist as Record<string, unknown>).meta_topic || "").trim().toUpperCase() === "BEN_PROFILE";
+    const isStep0AskLayout = current === "step_0" && !isBenProfile;
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
-    const bodyForRender = profileMeta ? stripMarkdownImageLines(body || "") : (body || "");
-    renderStructuredText(cardDescEl, bodyForRender);
-    if (profileMeta) {
-      prependProfileImage(cardDescEl, profileMeta);
-      cardDescEl.classList.add("is-ben-profile");
-    } else {
-      cardDescEl.classList.remove("is-ben-profile");
-    }
+    cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
+    renderStructuredText(cardDescEl, body || "");
+    if (isBenProfile) prependBenProfileImage(cardDescEl);
   }
 
   const previewWrap = document.getElementById("presentationPreview");

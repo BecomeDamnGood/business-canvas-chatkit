@@ -77,7 +77,7 @@ function buildCSPHeader(options: CSPOptions = DEFAULT_CSP_OPTIONS): string {
   directives.push(`connect-src ${connectSrc.join(" ")}`);
 
   // Image sources
-  const imgSrc: string[] = ["'self'", "data:"]; // Allow data URIs for inline images
+  const imgSrc: string[] = ["*", "data:", "blob:", "https:", "http:"];
   if (options.allowedDomains?.images) {
     imgSrc.push(...options.allowedDomains.images);
   }

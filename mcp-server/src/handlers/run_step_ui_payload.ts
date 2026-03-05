@@ -171,17 +171,6 @@ export function resolveActionCodeMenuTransition(
 }
 
 export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
-  function resolveWidgetProfileMeta(specialist: unknown): Record<string, unknown> | null {
-    const record = toRecord(specialist);
-    const imageUrl = String(record.__widget_profile_image_url || "").trim();
-    if (!imageUrl) return null;
-    const imageAlt = String(record.__widget_profile_image_alt || "").trim();
-    return {
-      image_url: imageUrl,
-      image_alt: imageAlt,
-    };
-  }
-
   function normalizeUiContractMeta(
     specialist: any,
     contractMetaOverride?: UiContractMeta | null
@@ -556,18 +545,8 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const hasWidgetActions =
       (Array.isArray(ui?.action_codes) && ui.action_codes.length > 0) ||
       (Array.isArray(ui?.actions) && ui.actions.length > 0);
-    const widgetProfileMeta = resolveWidgetProfileMeta(safeSpecialist);
     const existingMeta = toRecord((payload as Record<string, unknown>)._meta);
-    const existingWidgetMeta = toRecord(existingMeta.widget);
-    const payloadMeta = widgetProfileMeta
-      ? {
-          ...existingMeta,
-          widget: {
-            ...existingWidgetMeta,
-            profile: widgetProfileMeta,
-          },
-        }
-      : existingMeta;
+    const payloadMeta = existingMeta;
     const safePayload = {
       ...payload,
       specialist: safeSpecialist,

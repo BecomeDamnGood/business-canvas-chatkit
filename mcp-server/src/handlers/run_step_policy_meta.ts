@@ -105,7 +105,6 @@ const OFFTOPIC_STEP_LABEL_UI_KEY_BY_STEP: Record<string, string> = {
   [PRESENTATION_STEP_ID]: "offtopic.step.presentation",
 };
 
-const BEN_PROFILE_IMAGE_URL = "/ui/assets/ben-steenstra.webp";
 const BEN_PROFILE_WEBSITE_URL = "https://www.bensteenstra.com";
 const SPECIALIST_META_TOPIC_SET = new Set<string>(SPECIALIST_META_TOPICS);
 const META_TOPIC_LOCALES_OFFTOPIC_DOC = new Set<string>([
@@ -428,17 +427,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     );
   }
 
-  function buildBenProfileWidgetProfile(state?: CanvasState | null): {
-    image_url: string;
-    image_alt: string;
-  } {
-    const imageAlt = uiStringLocaleFirst(state || null, "media.image.alt");
-    return {
-      image_url: BEN_PROFILE_IMAGE_URL,
-      image_alt: imageAlt,
-    };
-  }
-
   function buildBenProfileMessage(state?: CanvasState | null): string {
     const paragraph1 = uiStringLocaleFirst(state || null, "meta.benProfile.paragraph1");
     const paragraph2 = uiStringLocaleFirst(state || null, "meta.benProfile.paragraph2");
@@ -450,7 +438,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       paragraph2,
       paragraph3,
       paragraph4,
-    ].join("\n\n");
+    ].filter(Boolean).join("\n\n");
   }
 
   const motivationHigherPurposeOpener = deps.uiDefaultString("motivation.opener");
@@ -778,8 +766,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       const stepField = deps.fieldForStep(stepId);
       return {
         ...base,
-        __widget_profile_image_url: buildBenProfileWidgetProfile(params.state).image_url,
-        __widget_profile_image_alt: buildBenProfileWidgetProfile(params.state).image_alt,
         __suppress_refined_append: "true",
         refined_formulation: "",
         wording_choice_agent_current: "",
@@ -934,8 +920,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         action: "ASK",
         is_offtopic: true,
         message: buildBenProfileMessage(params.state),
-        __widget_profile_image_url: buildBenProfileWidgetProfile(params.state).image_url,
-        __widget_profile_image_alt: buildBenProfileWidgetProfile(params.state).image_alt,
         __suppress_refined_append: "true",
         __offtopic_meta_passthrough: "true",
         wording_choice_pending: "false",
@@ -1039,7 +1023,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
   return {
     resolveMotivationUserIntent,
     resolveSpecialistMetaTopic,
-    buildBenProfileWidgetProfile,
     buildBenProfileMessage,
     applyMotivationQuotesContractV11,
     applyCentralMetaTopicRouter,

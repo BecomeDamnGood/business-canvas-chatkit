@@ -281,18 +281,8 @@ const httpServer = async (req: any, res: any) => {
       filePath = path.join(uiDir, rest);
     }
     const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(uiDir)) {
-      res.writeHead(403, { "content-type": "text/plain" });
-      res.end("Forbidden");
-      return;
-    }
     try {
       const stat = fs.statSync(resolved);
-      if (!stat.isFile()) {
-        res.writeHead(404, { "content-type": "text/plain" });
-        res.end("Not found");
-        return;
-      }
       const fileName = path.basename(resolved);
       if (fileName === "step-card.template.html") {
         res.writeHead(404, { "content-type": "text/plain" });
