@@ -35,19 +35,6 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-const BEN_PROFILE_IMAGE_ALT = "Ben Steenstra";
-const BEN_PROFILE_IMAGE_PATH = "/ui/assets/ben-steenstra.webp";
-
-function prependBenProfileImage(cardDescEl: HTMLElement): void {
-  const existing = cardDescEl.querySelector("img.cardDesc-image");
-  if (existing) existing.remove();
-  const img = document.createElement("img");
-  img.className = "cardDesc-image";
-  img.alt = BEN_PROFILE_IMAGE_ALT;
-  img.src = BEN_PROFILE_IMAGE_PATH;
-  cardDescEl.prepend(img);
-}
-
 function actionContractActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
   const uiPayload = toRecord(resultData.ui);
   const actionContract = toRecord(uiPayload.action_contract);
@@ -842,7 +829,6 @@ export function render(overrideToolOutput?: unknown): void {
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
     renderStructuredText(cardDescEl, body || "");
-    if (isBenProfile) prependBenProfileImage(cardDescEl);
   }
 
   const previewWrap = document.getElementById("presentationPreview");

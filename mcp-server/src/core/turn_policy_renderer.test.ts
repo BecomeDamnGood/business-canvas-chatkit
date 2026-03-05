@@ -88,3 +88,57 @@ test("productsservices summary list keeps confirm action available before final 
     "bevestig/ga door actie moet beschikbaar zijn zodra de products/services-lijst zichtbaar is"
   );
 });
+
+test("known-facts recap renders strategy as bullets from run-on sentence text", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "strategy";
+  (state as any).business_name = "Mindd";
+  (state as any).strategy_final =
+    "Focussen op opdrachten voor grote ondernemingen met complexe diensten of producten. Altijd inzetten op langdurige samenwerkingen met interne ambassadeurs bij de klant. Overpresteren in projecten die via het bestaande netwerk binnenkomen. Prioriteit geven aan klanten met substantiële investeringsbereidheid.";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "strategy",
+    state,
+    specialist: {
+      action: "ASK",
+      wants_recap: true,
+      question: "Ga verder met strategie",
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.match(message, /<strong>.*strategy.*:<\/strong>/i);
+  assert.match(message, /•\s*Focussen op opdrachten voor grote ondernemingen/i);
+  assert.match(message, /•\s*Altijd inzetten op langdurige samenwerkingen/i);
+  assert.match(message, /•\s*Overpresteren in projecten die via het bestaande netwerk binnenkomen/i);
+  assert.match(message, /•\s*Prioriteit geven aan klanten met substantiële investeringsbereidheid/i);
+});
+
+test("known-facts recap keeps products/services and rules as bullet sections", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "rulesofthegame";
+  (state as any).business_name = "Mindd";
+  (state as any).productsservices_final = "AI-compatibele websites en apps; AI-tools en -ondersteuning; Branding";
+  (state as any).rulesofthegame_final =
+    "Werk met duidelijke scope-afspraken. Lever iteratief en transparant op. Communiceer proactief bij risico's.";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "rulesofthegame",
+    state,
+    specialist: {
+      action: "ASK",
+      wants_recap: true,
+      question: "Ga verder met spelregels",
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.match(message, /<strong>.*products.*services.*:<\/strong>/i);
+  assert.match(message, /•\s*AI-compatibele websites en apps/i);
+  assert.match(message, /•\s*AI-tools en -ondersteuning/i);
+  assert.match(message, /<strong>.*rules.*game.*:<\/strong>/i);
+  assert.match(message, /•\s*Werk met duidelijke scope-afspraken/i);
+  assert.match(message, /•\s*Lever iteratief en transparant op/i);
+});

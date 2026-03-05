@@ -436,6 +436,52 @@ function productsServicesItemsFromRecap(raw: string): string[] {
   return single ? [single] : [];
 }
 
+function genericListItemsFromRecap(raw: string): string[] {
+  const bulletItems = extractBulletStatements(raw);
+  if (bulletItems.length >= 1) return dedupeListItems(bulletItems);
+
+  const numberedByLine = String(raw || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").replace(/^\s*\d+[\).]\s*/, "").trim())
+    .filter(Boolean);
+  if (numberedByLine.length >= 2) return dedupeListItems(numberedByLine);
+
+  const punctSplit = String(raw || "")
+    .replace(/\r/g, "\n")
+    .split(/[;\n,]+/)
+    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
+    .filter(Boolean);
+  if (punctSplit.length >= 2) return dedupeListItems(punctSplit);
+
+  const compact = String(raw || "").replace(/\s+/g, " ").trim();
+  if (compact) {
+    const sentenceSplit = (compact.match(/[^.!?。！？]+[.!?。！？]*/g) || [])
+      .map((line) => String(line || "").trim().replace(/[.!?。！？]+$/g, "").trim())
+      .filter(Boolean);
+    if (sentenceSplit.length >= 2) return dedupeListItems(sentenceSplit);
+  }
+
+  const titleSplit = splitCamelTitleItems(raw);
+  if (titleSplit.length >= 2) return dedupeListItems(titleSplit);
+
+  const single = String(raw || "").trim();
+  return single ? [single] : [];
+}
+
+function recapListItemsForStep(stepId: string, state: CanvasState, raw: string): string[] {
+  if (stepId === "strategy") {
+    const fromStrategySources = strategyStatementsFromSources(state, {}, {}, { provisionalForStep });
+    if (fromStrategySources.length >= 2) return fromStrategySources;
+    const fromRecap = genericListItemsFromRecap(raw);
+    if (fromRecap.length >= 2) return fromRecap;
+    return fromStrategySources.length > 0 ? fromStrategySources : fromRecap;
+  }
+  if (stepId === "productsservices") return productsServicesItemsFromRecap(raw);
+  if (stepId === "rulesofthegame") return genericListItemsFromRecap(raw);
+  return [];
+}
+
 function localeTokenListFromState(state: CanvasState, key: string): string[] {
   const value = uiStringFromState(state, key, uiDefaultString(key));
   return String(value || "")
@@ -768,6 +814,13 @@ function buildKnownFactsRecap(state: CanvasState): string {
     if (!value) continue;
     const label = offTopicStepLabel(stepId, state);
     if (!label) continue;
+    if (stepId === "strategy" || stepId === "productsservices" || stepId === "rulesofthegame") {
+      const recapItems = recapListItemsForStep(stepId, state, value);
+      if (recapItems.length > 0) {
+        blocks.push(`<strong>${label}:</strong>\n${recapItems.map((item) => `• ${item}`).join("\n")}`);
+        continue;
+      }
+    }
     blocks.push(`<strong>${label}:</strong>\n${value}`);
   }
 

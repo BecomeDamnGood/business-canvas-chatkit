@@ -4195,18 +4195,6 @@
     } else {
       body = bodyRaw || "";
     }
-    const BEN_PROFILE_IMAGE_ALT = "Ben Steenstra";
-    const BEN_PROFILE_IMAGE_PATH = "/ui/assets/ben-steenstra.webp";
-    const prependBenProfileImage = (target) => {
-      if (!target) return;
-      const existing = target.querySelector("img.cardDesc-image");
-      if (existing) existing.remove();
-      const img = document.createElement("img");
-      img.className = "cardDesc-image";
-      img.alt = BEN_PROFILE_IMAGE_ALT;
-      img.src = BEN_PROFILE_IMAGE_PATH;
-      target.prepend(img);
-    };
     const cardDescEl = document.getElementById("cardDesc");
     const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
     const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
@@ -4227,7 +4215,6 @@
       cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
       cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
       renderStructuredText(cardDescEl, body || "");
-      if (isBenProfile) prependBenProfileImage(cardDescEl);
     }
     const previewWrap = document.getElementById("presentationPreview");
     const previewImg = document.getElementById("presentationThumb");
