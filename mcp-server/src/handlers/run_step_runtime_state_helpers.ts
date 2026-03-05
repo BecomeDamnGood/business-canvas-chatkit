@@ -321,7 +321,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
 
   function clearStepInteractiveState(state: CanvasState, stepId: string): CanvasState {
     if (!stepId) return state;
-    let next = clearProvisionalValue(state, stepId);
+    let next = state;
     const last =
       (next as any).last_specialist_result && typeof (next as any).last_specialist_result === "object"
         ? { ...((next as any).last_specialist_result as Record<string, unknown>) }

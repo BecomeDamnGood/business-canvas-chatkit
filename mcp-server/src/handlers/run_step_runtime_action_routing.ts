@@ -363,9 +363,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     if (!(finalInfo.field && !finalInfo.value)) {
       if (finalInfo.field && finalInfo.value) {
         (state as Record<string, unknown>)[finalInfo.field] = finalInfo.value;
-        state = statePorts.isUiStateHygieneSwitchV1Enabled()
-          ? statePorts.clearStepInteractiveState(state, stepId)
-          : statePorts.clearProvisionalValue(state, stepId);
+        state = statePorts.clearProvisionalValue(state, stepId);
+        if (statePorts.isUiStateHygieneSwitchV1Enabled()) {
+          state = statePorts.clearStepInteractiveState(state, stepId);
+        }
       }
 
       const nextStepForProceed =

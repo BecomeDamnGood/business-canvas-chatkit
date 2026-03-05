@@ -119,6 +119,14 @@ function isAcceptedOutput(stepId: string, state: CanvasState): boolean {
   return isAcceptedProvisional(state, stepId);
 }
 
+function acceptedCanonicalValueForStep(stepId: string, state: CanvasState): string {
+  const finalField = getFinalFieldForStepId(stepId);
+  const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
+  if (committedFinal) return committedFinal;
+  if (isAcceptedProvisional(state, stepId)) return provisionalForStep(state, stepId);
+  return "";
+}
+
 function parseStep0Line(step0Line: string): { venture: string; name: string; status: string } {
   const ventureMatch = step0Line.match(/Venture:\s*([^|]+)/i);
   const nameMatch = step0Line.match(/Name:\s*([^|]+)/i);
@@ -201,6 +209,23 @@ function isConfirmActionCode(actionCode: string): boolean {
   if (entry.route === "yes") return true;
   const upper = actionCode.toUpperCase();
   return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
+}
+
+const SINGLE_VALUE_CONFIRM_VISIBILITY_STEPS = new Set([
+  "purpose",
+  "bigwhy",
+  "role",
+  "entity",
+  "targetgroup",
+]);
+
+function menuRequiresKnownOutput(menuId: string): boolean {
+  const actions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
+  if (actions.some((code) => isConfirmActionCode(code))) return true;
+  return actions.some((code) => {
+    const upper = String(code || "").trim().toUpperCase();
+    return upper.includes("_REFINE_") || upper.includes("_POSTREFINE_");
+  });
 }
 
 function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
@@ -321,6 +346,38 @@ function offTopicCurrentContextHeading(stepId: string, state: CanvasState): stri
   if (!rendered) return "";
   const base = rendered.replace(/[.!?]+$/g, "").replace(/\s*:\s*$/g, "").trim();
   return base ? `${base}:` : "";
+}
+
+function ensureCanonicalContextBlockInMessage(params: {
+  message: string;
+  canonicalValue: string;
+  heading: string;
+}): string {
+  const messageRaw = String(params.message || "").trim();
+  const canonical = String(params.canonicalValue || "").trim();
+  const heading = String(params.heading || "").trim();
+  if (!canonical) return messageRaw;
+  const canonicalKey = comparableText(canonical);
+  if (!canonicalKey) return messageRaw;
+  const headingKey = comparableText(heading);
+  const messageKey = comparableText(messageRaw);
+  const hasCanonical = Boolean(messageKey && messageKey.includes(canonicalKey));
+  const hasHeading = Boolean(headingKey && messageKey.includes(headingKey));
+  if (hasCanonical && hasHeading) return messageRaw;
+  const canonicalBlock = heading ? `<strong>${heading}</strong>\n${canonical}` : canonical;
+  if (!messageRaw) return canonicalBlock;
+  const paragraphs = messageRaw
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+  const filteredParagraphs = paragraphs.filter((paragraph) => comparableText(paragraph) !== canonicalKey);
+  let base = filteredParagraphs.join("\n\n").trim();
+  if (hasCanonical && !hasHeading) {
+    base = base.replace(canonical, "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  if (!base) return canonicalBlock;
+  return `${base}\n\n${canonicalBlock}`.trim();
 }
 
 function comparableText(raw: string): string {
@@ -957,6 +1014,13 @@ function resolveMenuContract(params: {
   let menuId = menuIsValidForStep(phaseMenu)
     ? phaseMenu
     : defaultMenu;
+  if (
+    status === "no_output" &&
+    SINGLE_VALUE_CONFIRM_VISIBILITY_STEPS.has(stepId) &&
+    menuRequiresKnownOutput(menuId)
+  ) {
+    menuId = menuIsValidForStep(defaultMenu) ? defaultMenu : "";
+  }
   if (!menuIsValidForStep(menuId)) {
     menuId = menuIsValidForStep(defaultMenu) ? defaultMenu : "";
   }
@@ -1212,9 +1276,19 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     prev: prevForMenu,
   });
   const menuId = resolved.menuId;
-  const safeActionCodes = resolved.actionCodes;
-  const safeLabels = resolved.labels;
-  const safeLabelKeys = resolved.labelKeys;
+  let safeActionCodes = resolved.actionCodes;
+  let safeLabels = resolved.labels;
+  let safeLabelKeys = resolved.labelKeys;
+  const canonicalAcceptedValue = acceptedCanonicalValueForStep(stepId, state);
+  const shouldEnforceConfirmVisibility = SINGLE_VALUE_CONFIRM_VISIBILITY_STEPS.has(stepId);
+  if (shouldEnforceConfirmVisibility && safeActionCodes.some((code) => isConfirmActionCode(code)) && !canonicalAcceptedValue) {
+    const retainedIndices = safeActionCodes
+      .map((code, idx) => (isConfirmActionCode(code) ? -1 : idx))
+      .filter((idx) => idx >= 0);
+    safeActionCodes = retainedIndices.map((idx) => safeActionCodes[idx]);
+    safeLabels = retainedIndices.map((idx) => safeLabels[idx]);
+    safeLabelKeys = retainedIndices.map((idx) => safeLabelKeys[idx]);
+  }
   const headline = contractHeadlineForState({
     state,
     stepId,
@@ -1245,7 +1319,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const contractId = buildContractId(stepId, effectiveStatus, menuId);
   const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
   const wordingPending = String((specialistForDisplay as any).wording_choice_pending || "").trim() === "true";
-  const messageForDisplay =
+  let messageForDisplay =
     isSemanticInvariantsV1Enabled() && wordingPending && !String(message || "").trim()
       ? uiStringFromState(
           state,
@@ -1253,6 +1327,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
           ""
         )
       : message;
+  if (shouldEnforceConfirmVisibility && canonicalAcceptedValue) {
+    messageForDisplay = ensureCanonicalContextBlockInMessage({
+      message: messageForDisplay,
+      canonicalValue: canonicalAcceptedValue,
+      heading: offTopicCurrentContextHeading(stepId, state),
+    });
+  }
 
   const nextSpecialist: Record<string, unknown> = {
     ...specialistForDisplay,

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { getDefaultState } from "./state.js";
 import { renderFreeTextTurnPolicy } from "./turn_policy_renderer.js";
+import { buildUiContractId } from "./ui_contract_id.js";
 
 test("strategy wording-pick render always appends canonical bullet context and never exposes consolidate action", () => {
   const statements = [
@@ -141,4 +142,131 @@ test("known-facts recap keeps products/services and rules as bullet sections", (
   assert.match(message, /<strong>.*rules.*game.*:<\/strong>/i);
   assert.match(message, /•\s*Werk met duidelijke scope-afspraken/i);
   assert.match(message, /•\s*Lever iteratief en transparant op/i);
+});
+
+test("entity no-output render ignores stale refine phase menu and falls back to intro menu", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "entity";
+  (state as any).active_specialist = "Entity";
+  (state as any).business_name = "Mindd";
+  (state as any).__ui_phase_by_step = {
+    entity: buildUiContractId("entity", "valid_output", "ENTITY_MENU_EXAMPLE"),
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "entity",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Ik kan dit verder toelichten.",
+      question: "",
+      refined_formulation: "",
+      entity: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {
+      ui_contract_id: buildUiContractId("entity", "valid_output", "ENTITY_MENU_EXAMPLE"),
+    },
+  });
+
+  assert.equal(rendered.status, "no_output");
+  assert.equal(rendered.contractId, "entity:no_output:ENTITY_MENU_INTRO");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_ENTITY_INTRO_FORMULATE",
+    "ACTION_ENTITY_INTRO_EXPLAIN_MORE",
+  ]);
+  assert.equal(rendered.uiActionCodes.includes("ACTION_ENTITY_EXAMPLE_REFINE"), false);
+});
+
+test("targetgroup no-output render ignores stale postrefine phase menu and falls back to intro menu", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "targetgroup";
+  (state as any).active_specialist = "TargetGroup";
+  (state as any).business_name = "Mindd";
+  (state as any).__ui_phase_by_step = {
+    targetgroup: buildUiContractId("targetgroup", "valid_output", "TARGETGROUP_MENU_POSTREFINE"),
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "targetgroup",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Ik kan dit verder toelichten.",
+      question: "",
+      refined_formulation: "",
+      targetgroup: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {
+      ui_contract_id: buildUiContractId("targetgroup", "valid_output", "TARGETGROUP_MENU_POSTREFINE"),
+    },
+  });
+
+  assert.equal(rendered.status, "no_output");
+  assert.equal(rendered.contractId, "targetgroup:no_output:TARGETGROUP_MENU_INTRO");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE",
+    "ACTION_TARGETGROUP_INTRO_ASK_QUESTIONS",
+  ]);
+  assert.equal(rendered.uiActionCodes.includes("ACTION_TARGETGROUP_POSTREFINE_CONFIRM"), false);
+});
+
+test("entity valid output always renders canonical statement with current-context heading", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd is een digitale innovatiepartner voor mkb-bedrijven.";
+  (state as any).current_step = "entity";
+  (state as any).active_specialist = "Entity";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { entity: canonical };
+  (state as any).provisional_source_by_step = { entity: "wording_pick" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "entity",
+    state,
+    specialist: {
+      action: "ASK",
+      message: canonical,
+      question: "",
+      refined_formulation: "",
+      entity: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.equal(rendered.status, "valid_output");
+  assert.match(message, /<strong>.*current.*entity.*mindd.*is:.*<\/strong>/i);
+  assert.match(message, /Mindd is een digitale innovatiepartner voor mkb-bedrijven\./i);
+  assert.equal(message.split(canonical).length - 1, 1);
+});
+
+test("targetgroup valid output appends canonical current-context block when missing in feedback", () => {
+  const state = getDefaultState();
+  const canonical = "Innovatieve mkb-bedrijven met complexe digitaliseringsvraagstukken.";
+  (state as any).current_step = "targetgroup";
+  (state as any).active_specialist = "TargetGroup";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { targetgroup: canonical };
+  (state as any).provisional_source_by_step = { targetgroup: "wording_pick" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "targetgroup",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Helder, die doelgroepkeuze is concreet.",
+      question: "",
+      refined_formulation: "",
+      targetgroup: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.equal(rendered.status, "valid_output");
+  assert.match(message, /<strong>.*current.*target group.*mindd.*is:.*<\/strong>/i);
+  assert.match(message, /Innovatieve mkb-bedrijven met complexe digitaliseringsvraagstukken\./i);
 });

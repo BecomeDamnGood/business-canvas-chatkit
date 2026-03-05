@@ -55,6 +55,31 @@ test("wordingSelectionMessage normalizes explicit strategy selection to bullets"
   assert.equal((output.match(/^• /gm) || []).length, 5);
 });
 
+test("clearStepInteractiveState clears wording metadata but keeps provisional step content", () => {
+  const helpers = buildHelpers();
+  const next = helpers.clearStepInteractiveState(
+    {
+      current_step: "entity",
+      provisional_by_step: { entity: "Mindd is een digitale innovatiepartner voor mkb-bedrijven." },
+      provisional_source_by_step: { entity: "wording_pick" },
+      last_specialist_result: {
+        wording_choice_pending: "true",
+        wording_choice_target_field: "entity",
+        wording_choice_agent_current: "Mindd is een digitale innovatiepartner voor mkb-bedrijven.",
+      },
+    } as any,
+    "entity"
+  ) as any;
+
+  assert.equal(
+    String((next.provisional_by_step || {}).entity || ""),
+    "Mindd is een digitale innovatiepartner voor mkb-bedrijven."
+  );
+  assert.equal(String((next.provisional_source_by_step || {}).entity || ""), "wording_pick");
+  assert.equal(String((next.last_specialist_result || {}).wording_choice_pending || ""), "false");
+  assert.equal(String((next.last_specialist_result || {}).wording_choice_agent_current || ""), "");
+});
+
 test("wordingSelectionMessage normalizes explicit products/services selection to bullets", () => {
   const helpers = buildHelpers();
   const runOn = "AI-compatible websites en apps AI-tools en ondersteuning Branding Strategie";
