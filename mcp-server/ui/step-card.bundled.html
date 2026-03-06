@@ -2624,63 +2624,14 @@
   var RUN_STEP_TIMEOUT_MS = 25e3;
   var BRIDGE_RESPONSE_TIMEOUT_MS = 6e3;
   var ACTION_BOOTSTRAP_POLL = "ACTION_BOOTSTRAP_POLL";
-  var START_ACK_RECOVERY_DELAY_MS = CLICK_DEBOUNCE_MS + 80;
   var bootstrapPollInFlight = false;
   var bootstrapPollInFlightSignature = "";
-  var startAckRecoveryTimer = null;
-  var startAckRecoverySignature = "";
   function uiFlagEnabled(name, defaultValue) {
     const raw = globalThis[name];
     if (typeof raw === "boolean") return raw;
     const normalized = String(raw ?? "").trim().toLowerCase();
     if (!normalized) return defaultValue;
     return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
-  }
-  function clearStartAckRecoveryTimer() {
-    if (startAckRecoveryTimer) {
-      clearTimeout(startAckRecoveryTimer);
-      startAckRecoveryTimer = null;
-    }
-    startAckRecoverySignature = "";
-  }
-  function scheduleStartAckRecoveryPoll(nextState) {
-    const signature = bootstrapPollSignatureFromState(nextState);
-    if (startAckRecoveryTimer && startAckRecoverySignature === signature) {
-      if (isDevEnv()) {
-        console.log("[ui_start_ack_recovery_poll_deduped]", {
-          poll_signature: signature
-        });
-      }
-      return;
-    }
-    clearStartAckRecoveryTimer();
-    startAckRecoverySignature = signature;
-    startAckRecoveryTimer = setTimeout(() => {
-      startAckRecoveryTimer = null;
-      const latest = globalThis.__BSC_LATEST__ || {};
-      const latestState = toRecord2(latest.state);
-      const recoveryState = Object.keys(latestState).length > 0 ? { ...latestState } : { ...nextState };
-      const mergedOrdering = mergeOutboundOrdering({ nextState: recoveryState, widgetState: widgetState() });
-      if (hasValidBootstrapOrdering(mergedOrdering)) {
-        recoveryState.bootstrap_session_id = mergedOrdering.sessionId;
-        recoveryState.bootstrap_epoch = mergedOrdering.epoch;
-        recoveryState.response_seq = mergedOrdering.responseSeq;
-        recoveryState.host_widget_session_id = mergedOrdering.hostWidgetSessionId;
-      }
-      if (isDevEnv()) {
-        console.log("[ui_start_ack_recovery_poll_dispatch]", {
-          poll_signature: startAckRecoverySignature,
-          ordering_tuple: describeBootstrapOrdering(readBootstrapOrderingState(recoveryState))
-        });
-      }
-      void callRunStep(ACTION_BOOTSTRAP_POLL, {
-        ...recoveryState,
-        __bootstrap_poll: "true",
-        __hydrate_poll: "true",
-        __start_ack_recovery: "true"
-      });
-      startAckRecoverySignature = "";
-    }, START_ACK_RECOVERY_DELAY_MS);
   }
   function maybeScheduleBootstrapRetry(resolved) {
     return computeHydrationState2(resolved);
@@ -3329,14 +3280,30 @@
             ).view
           ).mode || ""
         ).trim().toLowerCase();
-        const startAdvanced = hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart");
+        const responseState = toRecord2(result?.state);
+        const responseLiveness = toRecord2(responseState.ui_action_liveness);
+        const ackStatus = String(
+          result?.ack_status || responseState.ack_status || responseLiveness.ack_status || ""
+        ).trim().toLowerCase();
+        const stateAdvancedRaw = result?.state_advanced ?? responseState.state_advanced ?? responseLiveness.state_advanced;
+        const stateAdvanced = stateAdvancedRaw === true || String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
+        const reasonCode = String(
+          result?.reason_code || responseState.reason_code || responseLiveness.reason_code || ""
+        ).trim().toLowerCase();
+        const hasServerLiveness = ackStatus.length > 0;
+        const startAdvanced = hasServerLiveness ? ackStatus === "accepted" && stateAdvanced : hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart");
         if (!startAdvanced) {
-          console.warn("[ui_start_dispatch_ack_without_state_advance]", {
+          const failureReason = hasServerLiveness ? reasonCode || (ackStatus === "accepted" ? "state_not_advanced" : ackStatus || "action_rejected") : "missing_action_liveness";
+          console.warn("[ui_start_dispatch_not_advanced_fail_closed]", {
             response_ingested: hasIngestedResult,
             ordering_advanced: orderingAdvanced,
             payload_source: resolvedResponse.source,
             payload_reason_code: resolvedResponse.source_reason_code,
             response_view_mode: responseViewMode,
+            ack_status: ackStatus,
+            state_advanced: stateAdvanced,
+            reason_code: reasonCode,
+            failure_reason: failureReason,
             ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
             ordering_after: describeBootstrapOrdering(orderingAfterIngest)
           });
@@ -3344,9 +3311,9 @@
             start_dispatch_state: "failed",
             transport_ready: "true"
           });
-          scheduleStartAckRecoveryPoll(nextState);
+          const failureNoticeBase = uiText(nextState, "error.contract.body", "");
+          setInlineNotice(failureNoticeBase ? `${failureNoticeBase} (${failureReason})` : failureReason);
         } else {
-          clearStartAckRecoveryTimer();
           setWidgetStateSafe({
             start_dispatch_state: "ready",
             transport_ready: "true"
@@ -4040,8 +4007,8 @@
     const hasExplicitServerRouting = serverExplicitWaiting || serverExplicitPrestart || serverExplicitInteractive || serverExplicitRecovery || serverExplicitBlocked || serverExplicitFailed;
     const bootstrapWaitingLocale = serverExplicitWaiting;
     const waitingGateActive = bootstrapWaitingLocale;
-    const startupPayloadMissing = Object.keys(result || {}).length === 0 && Object.keys(state).length === 0;
-    if (startupPayloadMissing || hasExplicitServerRouting) revealWidgetRoot();
+    const shouldRevealForStableView = serverExplicitPrestart || serverExplicitInteractive || serverExplicitBlocked || serverExplicitFailed;
+    if (shouldRevealForStableView) revealWidgetRoot();
     const overrideStringsMap = overrideStrings;
     const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
     if (hasOverrideStrings) setRuntimeUiStrings(overrideStringsMap);
@@ -4085,16 +4052,12 @@
         const prestartEl = cardDesc;
         prestartEl.classList.remove("has-grid");
         prestartEl.classList.remove("is-step0-ask-layout");
-        if (startupPayloadMissing) {
-          renderBootstrapWaitShell(prestartEl, lang);
-        } else {
-          const blockedCopy = blockedMessageForReason(
-            lang,
-            "contract_violation",
-            uiText2(lang, "error.contract.body", "")
-          );
-          renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
-        }
+        const blockedCopy = blockedMessageForReason(
+          lang,
+          "contract_violation",
+          uiText2(lang, "error.contract.body", "")
+        );
+        renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
       }
       if (getIsLoading()) setLoading(false);
       return;
@@ -4722,36 +4685,41 @@
     }
     handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
   }
-  var STARTUP_GRACE_MS_DEFAULT = 320;
-  var STARTUP_WAITING_VIEW_MODE = "waiting_locale";
-  function startupGraceMs() {
-    const raw = Number(globalThis.__BSC_STARTUP_GRACE_MS ?? STARTUP_GRACE_MS_DEFAULT);
+  var STARTUP_FAIL_CLOSED_MS_DEFAULT = 2e3;
+  var startupFailClosedTimer = null;
+  function startupFailClosedMs() {
+    const raw = Number(globalThis.__BSC_STARTUP_FAIL_CLOSED_MS ?? STARTUP_FAIL_CLOSED_MS_DEFAULT);
     if (!Number.isFinite(raw) || raw <= 0) return 0;
-    return Math.max(0, Math.min(1500, Math.trunc(raw)));
-  }
-  function setStartupGraceUntil(untilMs) {
-    globalThis.__BSC_STARTUP_GRACE_UNTIL_MS = untilMs;
+    return Math.max(0, Math.min(15e3, Math.trunc(raw)));
   }
   function clearStartupGrace() {
-    globalThis.__BSC_STARTUP_GRACE_UNTIL_MS = 0;
+    if (startupFailClosedTimer) {
+      clearTimeout(startupFailClosedTimer);
+      startupFailClosedTimer = null;
+    }
   }
-  function buildStartupInitState() {
+  function buildStartupFailClosedState(reason) {
     return {
+      ok: false,
+      error: {
+        type: "contract_violation",
+        reason,
+        user_message: uiStringFromContract("error.contract.body")
+      },
       state: {
         current_step: "step_0",
         started: "false",
-        ui_gate_status: STARTUP_WAITING_VIEW_MODE,
+        ui_gate_status: "blocked",
+        ui_gate_reason: "contract_violation",
         ui_strings_status: "pending"
       },
       ui: {
         flags: {
-          bootstrap_waiting_locale: true,
-          bootstrap_interactive_ready: false,
-          interactive_fallback_active: false
+          startup_fail_closed: true,
+          startup_fail_closed_reason: reason
         },
         view: {
-          mode: STARTUP_WAITING_VIEW_MODE,
-          waiting_locale: true
+          mode: "blocked"
         }
       }
     };
@@ -4777,30 +4745,20 @@
     notifyHostTransportSignal("set_globals");
     return true;
   }
-  function renderStartupWaitShell(reason) {
-    const graceMs = startupGraceMs();
-    const startupInitState = buildStartupInitState();
-    if (graceMs <= 0) {
-      render(startupInitState);
-      return;
-    }
-    const untilMs = Date.now() + graceMs;
-    setStartupGraceUntil(untilMs);
-    console.log("[startup_first_render_wait_shell]", {
-      reason,
-      grace_ms: graceMs
-    });
-    render(startupInitState);
-    setTimeout(() => {
-      if (Date.now() < untilMs) return;
-      clearStartupGrace();
-      if (!tryInitialIngestFromHost("set_globals")) {
-        console.log("[startup_payload_missing_after_grace]", {
-          grace_ms: graceMs
-        });
-        render(startupInitState);
-      }
-    }, graceMs);
+  function scheduleStartupFailClosed(reason) {
+    const timeoutMs = startupFailClosedMs();
+    if (timeoutMs <= 0) return;
+    clearStartupGrace();
+    startupFailClosedTimer = setTimeout(() => {
+      startupFailClosedTimer = null;
+      if (hasRenderedStateSnapshot()) return;
+      if (tryInitialIngestFromHost("set_globals")) return;
+      console.warn("[startup_fail_closed_no_canonical_payload]", {
+        reason,
+        timeout_ms: timeoutMs
+      });
+      render(buildStartupFailClosedState(reason));
+    }, timeoutMs);
   }
   if (isLocalDev && typeof window !== "undefined") {
     const reportDevError = (message, file, line, col) => {
@@ -5037,7 +4995,7 @@
     });
   }
   if (!tryInitialIngestFromHost("set_globals")) {
-    renderStartupWaitShell("startup_no_initial_payload");
+    scheduleStartupFailClosed("startup_no_initial_payload");
   }
 })();
 

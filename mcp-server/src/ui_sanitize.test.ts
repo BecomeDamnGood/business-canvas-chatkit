@@ -388,3 +388,23 @@ test("bundled runtime renders rich body into cardDesc via formatter and keeps un
   assert.doesNotMatch(source, /(?:ui\.prompt|promptEl)\.innerHTML\s*=/);
   assert.doesNotMatch(source, /(?:ui\.error|errorEl)\.innerHTML\s*=/);
 });
+
+test("bundled runtime startup and ACTION_START flow are fail-closed and liveness-driven", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+
+  // Startup: no synthetic wait-shell first paint; wait for canonical payload or fail-closed blocked state.
+  assert.doesNotMatch(source, /function renderStartupWaitShell\(/);
+  assert.match(source, /function scheduleStartupFailClosed\(/);
+  assert.match(source, /scheduleStartupFailClosed\("startup_no_initial_payload"\)/);
+  assert.match(source, /startup_fail_closed_no_canonical_payload/);
+
+  // Root reveal must be tied to stable server views, not missing startup payload.
+  assert.match(source, /const shouldRevealForStableView = serverExplicitPrestart \|\| serverExplicitInteractive \|\| serverExplicitBlocked \|\| serverExplicitFailed;/);
+  assert.doesNotMatch(source, /startupPayloadMissing \|\| hasExplicitServerRouting/);
+
+  // ACTION_START: do not auto-recover with hidden polling; use liveness contract and explicit fail-closed notice.
+  assert.doesNotMatch(source, /scheduleStartAckRecoveryPoll\(/);
+  assert.match(source, /result\?\.ack_status \|\| responseState\.ack_status \|\| responseLiveness\.ack_status/);
+  assert.match(source, /result\?\.state_advanced \?\? responseState\.state_advanced \?\? responseLiveness\.state_advanced/);
+  assert.match(source, /\[ui_start_dispatch_not_advanced_fail_closed\]/);
+});
