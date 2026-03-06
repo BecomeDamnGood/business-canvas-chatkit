@@ -802,3 +802,158 @@ Stopconditie
 ### Oplossing / aanpassing (na akkoord)
 Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
 
+
+## Fix 6 - Lege "Validation" shell blijft bestaan door guard-lattice (niet alleen door code in 1 pad)
+
+### Input (zoals gemeld)
+- User ziet nog steeds een lege `Validation`-kaart (geen bruikbare tekst/actie), ondanks eerdere fixes op startup en ACTION_START.
+- Verwachting: eerste zichtbare state moet direct bruikbaar zijn; nooit een lege interactieve shell.
+
+### Hoog-over analyse
+De regressie zit niet in 1 losse functie, maar in een combinatie van guards/blocks die elkaar niet afdwingen:
+1. Startup fail-closed kijkt alleen naar “payload ontbreekt”, niet naar “payload is semantisch leeg”.
+2. ACTION_START fail-closed kijkt alleen naar het klik/ack-pad, niet naar alle andere render-paden.
+3. Canonical view-state laat `interactive` toe met `has_renderable_content=false`.
+4. UI detecteert “interactive content absent”, maar blokkeert niet; hij rendert een lege kaart.
+
+Gevolg: je kunt technisch “contract-correct” lijken, maar UX-matig alsnog in een lege shell landen.
+
+### Pogingen die al gedaan zijn (en waarom dit niet afdoende was)
+
+1. Commit `28de187` - `fix(ui): enforce canonical startup paint and fail-closed ACTION_START liveness`
+- Wat is geprobeerd:
+  - Startup wait-shell verwijderd; startup naar fail-closed timeout.
+  - ACTION_START pad strenger gemaakt op ack/state_advanced.
+- Waarom dit niet afdoende was:
+  - Startup guard triggert alleen als init payload ontbreekt, niet als payload wel komt maar leeg/interactie-onbruikbaar is.
+  - ACTION_START guard beschermt alleen het klikpad; niet elk ingest-/renderpad.
+  - Canonical state-machine bleef `interactive` toestaan zonder renderbare content.
+
+2. Commit `317a944` - `Fix deterministic ACTION_START flow and step0 startup rendering`
+- Wat is geprobeerd:
+  - Extra renderable-progress check voor `step_0:no_output:no_menu` na ACTION_START.
+  - Seed/fallback voor step0-copy in `start_prestart` route.
+- Waarom dit niet afdoende was:
+  - Deze fix werkt alleen als `start_prestart` route echt geraakt wordt.
+  - Als route wordt overgeslagen door state-gates (`started`/`intro_shown_session`), wordt het fallback-pad nooit gebruikt.
+  - UI laat nog steeds lege interactive view door als warning-only pad.
+
+### Technisch bewijs (guards/blocks die samen het probleem laten bestaan)
+
+- `mcp-server/src/handlers/run_step_canonical_widget_state.ts:60-68`
+  - Hard bewijs: canonical builder retourneert `mode: "interactive"` terwijl `has_renderable_content: false` en `invariant_ok: true`.
+  - Dit legitimeert een lege interactive state.
+
+- `mcp-server/ui/step-card.bundled.html:4265-4273`
+  - Hard bewijs: bij ontbrekende interactieve content alleen `console.warn("ui_contract_interactive_content_absent")`.
+  - Geen blokkade, geen recovery-state, geen fail-closed render.
+
+- `mcp-server/ui/step-card.bundled.html:3290-3334`
+  - Hard bewijs: strenge liveness-check zit uitsluitend in `ACTION_START` dispatch-afhandeling.
+  - Dus buiten dat pad kan lege interactive content nog steeds doorlopen.
+
+- `mcp-server/src/handlers/run_step_preflight.ts:254-255`
+  - Hard bewijs: `rawState.started === true` wordt direct doorgezet.
+  - Daardoor kunnen prestart-routes en start-gates worden overgeslagen als stale state binnenkomt.
+
+- `mcp-server/src/handlers/run_step_routes.ts:650-653` en `679-682`
+  - Hard bewijs: `start_prestart` is gebonden aan `intro_shown_session !== "true"`.
+  - Bij stale `intro_shown_session` wordt het herstel-/seedpad niet geraakt.
+
+### Definitieve root-cause
+Root-cause is een guard-lattice mismatch:
+- Entry-guards (startup timeout, ACTION_START liveness) zijn streng,
+- maar de canonical view-invariant is te permissief (`interactive` zonder renderbare content),
+- en de UI behandelt “geen interactieve content” als warning in plaats van contract-fout.
+
+Daardoor blijft een lege `Validation`-shell mogelijk, ook na meerdere gerichte fixes.
+
+### Structureel fixplan (voorkeur)
+
+1. Maak server-canonical invariant hard
+- `interactive` alleen toegestaan bij `has_renderable_content=true`.
+- Als false: forceer `blocked` of `recovery` met expliciete reason_code.
+
+2. Maak route-gates consistent met canonical invariant
+- `start_prestart` mag niet alleen op `intro_shown_session` vertrouwen als die state-stale kan zijn.
+- Voeg consistency check toe tussen `started`, `intro_shown_session`, `current_step`, en renderbaarheid.
+
+3. Maak UI fail-closed op lege interactive payload
+- `ui_contract_interactive_content_absent` mag geen warning-only blijven.
+- Render expliciete blocked/recovery state i.p.v. lege kaart.
+
+4. Contracttests op guard-combinaties
+- Niet alleen ACTION_START unit tests, maar e2e met:
+  - stale `started=true` input,
+  - stale `intro_shown_session=true`,
+  - payload met `interactive` + geen body/prompt/actions.
+- Assert: nooit lege interactieve shell zichtbaar.
+
+### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
+```text
+Context
+Je onderzoekt een regressie waarbij de widget soms een lege "Validation" interactive shell toont.
+Deze regressie is eerder 2x "gefixt" maar blijft bestaan door guard-lattice gedrag.
+
+Belangrijk
+- Dit is geen losse bug in 1 functie.
+- Zoek expliciet naar guards/blocks die elkaar tegenspreken.
+- Zonder bewijs van guard-keten: geen implementatievoorstel.
+
+Reeds geprobeerd (moet je meenemen in je analyse)
+1) 28de187: startup fail-closed + ACTION_START liveness fail-closed.
+2) 317a944: strengere ACTION_START renderable-progress check + step0 seed/fallback copy.
+
+Waarom nog niet opgelost (hypothese die je moet bewijzen/ontkrachten)
+- Canonical view staat interactive toe zonder renderbare content.
+- UI behandelt interactive zonder content als warning-only.
+- start_prestart herstelpad kan worden overgeslagen door stale state (`started`/`intro_shown_session`).
+
+Onderzoeksopdracht
+1. Reproduceer met eventketen
+- Leg vast per turn:
+  - inbound state.started
+  - inbound intro_shown_session
+  - gekozen route (start_prestart wel/niet)
+  - canonical decision: ui_view_mode, has_renderable_content, reason_code
+  - client log: ui_contract_interactive_content_absent
+
+2. Bewijs guard-lattice causaal
+- Toon exact pad waarin:
+  - ACTION_START liveness niet triggert,
+  - canonical interactive toch emitted wordt,
+  - UI daardoor lege shell rendert.
+
+3. Verplicht te inspecteren codepunten
+- mcp-server/src/handlers/run_step_canonical_widget_state.ts (interactive zonder content)
+- mcp-server/ui/step-card.bundled.html (warning-only bij interactive_content_absent)
+- mcp-server/src/handlers/run_step_preflight.ts (raw started passthrough)
+- mcp-server/src/handlers/run_step_routes.ts (start_prestart gating op intro_shown_session)
+
+4. Verplicht bewijs uit logs/telemetry
+- run_step_canonical_view_emitted
+- ui_contract_interactive_content_absent
+- ui_start_dispatch_not_advanced_fail_closed
+- inclusief dezelfde request/session correlatie
+
+Harde regels
+- Geen quick fix in 1 pad.
+- Geen extra retry-laag als eindoplossing.
+- Eerst invariant-fout oplossen (server canonical + UI fail-closed gedrag).
+- Zonder expliciet akkoord: geen codewijziging.
+
+Verplichte outputstructuur
+A. Korte mensentaal uitleg
+B. Guard-matrix (welke guard, waar, wanneer actief)
+C. Causale keten met request/session bewijs
+D. Waarom 28de187 en 317a944 dit niet afvangen
+E. Structureel fixvoorstel (1 voorkeur + max 2 alternatieven)
+F. Beslisvoorstel met implementatievolgorde
+
+Stopconditie
+- Stop na analyse + plan.
+- Vraag expliciet akkoord voor implementatie.
+```
+
+### Oplossing / aanpassing (na akkoord)
+Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.

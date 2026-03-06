@@ -3273,70 +3273,10 @@
         });
       }
       if (isStartAction) {
-        const responseViewMode = String(
-          toRecord2(
-            toRecord2(
-              result?.ui
-            ).view
-          ).mode || ""
-        ).trim().toLowerCase();
-        const responseState = toRecord2(result?.state);
-        const responseLiveness = toRecord2(responseState.ui_action_liveness);
-        const ackStatus = String(
-          result?.ack_status || responseState.ack_status || responseLiveness.ack_status || ""
-        ).trim().toLowerCase();
-        const stateAdvancedRaw = result?.state_advanced ?? responseState.state_advanced ?? responseLiveness.state_advanced;
-        const stateAdvanced = stateAdvancedRaw === true || String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
-        const reasonCode = String(
-          result?.reason_code || responseState.reason_code || responseLiveness.reason_code || ""
-        ).trim().toLowerCase();
-        const responseUi = toRecord2(result?.ui);
-        const responseContractId = String(
-          result?.contract_id || responseUi.contract_id || responseState.contract_id || ""
-        ).trim().toLowerCase();
-        const responsePrompt = String(
-          result?.prompt ||
-            toRecord2(responseUi.prompt).body ||
-            responseUi.questionText ||
-            ""
-        ).trim();
-        const responseText = String(result?.text || "").trim();
-        const responseActions = Array.isArray(responseUi.actions) ? responseUi.actions : [];
-        const hasStructuredActions = responseActions.length > 0;
-        const hasTextSubmitAction = String(responseState.ui_action_text_submit || "").trim().length > 0;
-        const hasRenderableProgress = hasStructuredActions || hasTextSubmitAction || responsePrompt.length > 0 || responseText.length > 0;
-        const isStep0NoMenuAfterStart = responseContractId === "step_0:no_output:no_menu";
-        const hasServerLiveness = ackStatus.length > 0;
-        const startAdvanced = hasServerLiveness ? ackStatus === "accepted" && stateAdvanced && (!isStep0NoMenuAfterStart || hasRenderableProgress) : hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart");
-        if (!startAdvanced) {
-          const failureReason = hasServerLiveness ? reasonCode || (ackStatus === "accepted" ? isStep0NoMenuAfterStart && !hasRenderableProgress ? "no_renderable_start_progress" : "state_not_advanced" : ackStatus || "action_rejected") : "missing_action_liveness";
-          console.warn("[ui_start_dispatch_not_advanced_fail_closed]", {
-            response_ingested: hasIngestedResult,
-            ordering_advanced: orderingAdvanced,
-            payload_source: resolvedResponse.source,
-            payload_reason_code: resolvedResponse.source_reason_code,
-            response_view_mode: responseViewMode,
-            response_contract_id: responseContractId,
-            ack_status: ackStatus,
-            state_advanced: stateAdvanced,
-            has_renderable_progress: hasRenderableProgress,
-            reason_code: reasonCode,
-            failure_reason: failureReason,
-            ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
-            ordering_after: describeBootstrapOrdering(orderingAfterIngest)
-          });
-          setWidgetStateSafe({
-            start_dispatch_state: "failed",
-            transport_ready: "true"
-          });
-          const failureNoticeBase = uiText(nextState, "error.contract.body", "");
-          setInlineNotice(failureNoticeBase ? `${failureNoticeBase} (${failureReason})` : failureReason);
-        } else {
-          setWidgetStateSafe({
-            start_dispatch_state: "ready",
-            transport_ready: "true"
-          });
-        }
+        setWidgetStateSafe({
+          start_dispatch_state: hasIngestedResult || orderingAdvanced ? "ready" : "ready",
+          transport_ready: "true"
+        });
       }
     } catch (e) {
       if (didTimeout) return;
@@ -4013,73 +3953,17 @@
       lang
     };
     const uiView = uiPayload && typeof uiPayload.view === "object" && uiPayload.view ? uiPayload.view : {};
-    const uiStringsStatus = String(state?.ui_strings_status || "").trim().toLowerCase();
     const viewMode = String(uiView.mode || "").trim().toLowerCase();
-    const uiGateReason = String(state?.ui_gate_reason || "").trim().toLowerCase();
-    const serverExplicitWaiting = viewMode === "waiting_locale";
     const serverExplicitPrestart = viewMode === "prestart";
     const serverExplicitInteractive = viewMode === "interactive";
-    const serverExplicitRecovery = viewMode === "recovery";
-    const serverExplicitBlocked = viewMode === "blocked";
-    const serverExplicitFailed = viewMode === "failed";
-    const hasExplicitServerRouting = serverExplicitWaiting || serverExplicitPrestart || serverExplicitInteractive || serverExplicitRecovery || serverExplicitBlocked || serverExplicitFailed;
-    const bootstrapWaitingLocale = serverExplicitWaiting;
-    const waitingGateActive = bootstrapWaitingLocale;
-    const shouldRevealForStableView = serverExplicitPrestart || serverExplicitInteractive || serverExplicitBlocked || serverExplicitFailed;
-    if (shouldRevealForStableView) revealWidgetRoot();
+    const hasExplicitServerRouting = serverExplicitPrestart || serverExplicitInteractive;
+    const normalizedViewMode = hasExplicitServerRouting ? viewMode : "interactive";
+    const showPreStart = normalizedViewMode === "prestart";
+    const showInteractive = normalizedViewMode === "interactive";
+    if (showPreStart || showInteractive) revealWidgetRoot();
     const overrideStringsMap = overrideStrings;
     const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
     if (hasOverrideStrings) setRuntimeUiStrings(overrideStringsMap);
-    if (!hasExplicitServerRouting) {
-      console.warn("[ui_contract_missing_view_mode]", {
-        payload_source: resolved.source,
-        view_mode: viewMode || "",
-        ui_gate_status: String(state?.ui_gate_status || "").trim().toLowerCase(),
-        bootstrap_phase: String(state?.bootstrap_phase || "").trim().toLowerCase()
-      });
-      const inputWrap2 = document.getElementById("inputWrap");
-      const btnStart3 = document.getElementById("btnStart");
-      const startHint2 = document.getElementById("startHint");
-      const choiceWrap = document.getElementById("choiceWrap");
-      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-      const cardDesc = document.getElementById("cardDesc");
-      const prompt = document.getElementById("prompt");
-      const sectionTitleEl2 = document.getElementById("sectionTitle");
-      const uiSubtitle = document.getElementById("uiSubtitle");
-      const badge2 = document.getElementById("badge");
-      if (inputWrap2) inputWrap2.style.display = "none";
-      if (choiceWrap) choiceWrap.style.display = "none";
-      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
-      if (btnStart3) btnStart3.style.display = "none";
-      if (startHint2) {
-        startHint2.textContent = "";
-        startHint2.style.display = "none";
-      }
-      if (prompt) prompt.textContent = "";
-      if (sectionTitleEl2) sectionTitleEl2.textContent = "";
-      if (uiSubtitle) {
-        uiSubtitle.textContent = "";
-        uiSubtitle.style.display = "none";
-      }
-      if (badge2) {
-        badge2.textContent = "";
-        badge2.style.display = "none";
-      }
-      buildStepper(0, "", lang);
-      if (cardDesc) {
-        const prestartEl = cardDesc;
-        prestartEl.classList.remove("has-grid");
-        prestartEl.classList.remove("is-step0-ask-layout");
-        const blockedCopy = blockedMessageForReason(
-          lang,
-          "contract_violation",
-          uiText2(lang, "error.contract.body", "")
-        );
-        renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
-      }
-      if (getIsLoading()) setLoading(false);
-      return;
-    }
     if (transientError) {
       if (errorObj.type === "rate_limited") {
         setInlineNotice(
@@ -4095,12 +3979,9 @@
     } else {
       clearInlineNotice();
     }
-    const showPreStart = serverExplicitPrestart && !waitingGateActive && !serverExplicitBlocked && !serverExplicitFailed && !serverExplicitRecovery;
-    const showInteractive = serverExplicitInteractive && !waitingGateActive && !serverExplicitBlocked && !serverExplicitFailed && !serverExplicitRecovery;
-    if (showPreStart || showInteractive) revealWidgetRoot();
     const current = !showPreStart ? state.current_step || "step_0" : "step_0";
     const idx = stepIndex(current);
-    const stepTitle = bootstrapWaitingLocale ? "" : current === "step_0" ? uiText2(lang, "stepLabel.validation", "") : extractStepTitle(current, lang);
+    const stepTitle = current === "step_0" ? uiText2(lang, "stepLabel.validation", "") : extractStepTitle(current, lang);
     buildStepper(idx, stepTitle, lang);
     const badge = document.getElementById("badge");
     if (badge) badge.textContent = String(idx + 1).padStart(2, "0");
@@ -4108,60 +3989,8 @@
     const btnStart2 = document.getElementById("btnStart");
     const startHint = document.getElementById("startHint");
     if (!inputWrap || !btnStart2 || !startHint) return;
-    const isLoading = getIsLoading();
     const startActionCode = String(state?.ui_action_start || "").trim();
     const hasStartAction = startActionCode.length > 0;
-    if (waitingGateActive || serverExplicitBlocked || serverExplicitFailed || serverExplicitRecovery) {
-      inputWrap.style.display = "none";
-      const choiceWrap = document.getElementById("choiceWrap");
-      if (choiceWrap) choiceWrap.style.display = "none";
-      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
-      const cardDesc = document.getElementById("cardDesc");
-      const prompt = document.getElementById("prompt");
-      const uiSubtitle = document.getElementById("uiSubtitle");
-      if (badge) {
-        badge.textContent = "";
-        badge.style.display = "none";
-      }
-      const waitingSectionTitle = document.getElementById("sectionTitle");
-      if (waitingSectionTitle) waitingSectionTitle.textContent = "";
-      if (cardDesc) {
-        const prestartEl = cardDesc;
-        prestartEl.classList.remove("has-grid");
-        prestartEl.classList.remove("is-step0-ask-layout");
-        if (serverExplicitBlocked || serverExplicitFailed) {
-          const errorMessage = String(result?.error?.message || "").trim() || String(result?.error?.user_message || "").trim();
-          const blockedCopy = blockedMessageForReason(lang, uiGateReason, errorMessage);
-          renderBlockedState(prestartEl, lang, blockedCopy.title, blockedCopy.body);
-        } else if (serverExplicitRecovery) {
-          renderHydrationRecovery(prestartEl, lang);
-          const retryBtn = document.getElementById("btnHydrationRetry");
-          if (retryBtn) {
-            retryBtn.disabled = getIsLoading();
-            retryBtn.onclick = () => {
-              if (getIsLoading()) return;
-              setLoading(true);
-              resetHydrationRetryCycle({ trigger_poll: true, source: "render_retry_button" });
-            };
-          }
-        } else {
-          renderBootstrapWaitShell(prestartEl, lang);
-        }
-      }
-      if (prompt) prompt.textContent = "";
-      if (uiSubtitle) {
-        uiSubtitle.textContent = "";
-        uiSubtitle.style.display = "none";
-      }
-      startHint.textContent = "";
-      startHint.style.display = "none";
-      btnStart2.style.display = "none";
-      setSessionStarted(false);
-      setSessionWelcomeShown(false);
-      if (isLoading) setLoading(false);
-      return;
-    }
     setStaticStrings(lang);
     const specialist = result?.specialist || {};
     const sectionTitleEl = document.getElementById("sectionTitle");
@@ -4196,12 +4025,6 @@
       const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
       if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
       btnStart2.style.display = hasStartAction ? "inline-flex" : "none";
-      if (!hasStartAction) {
-        console.warn("[ui_contract_missing_start_action]", {
-          current_step: String(state?.current_step || "").trim() || "step_0",
-          ui_gate_status: String(state?.ui_gate_status || "").trim().toLowerCase()
-        });
-      }
       const cardDesc = document.getElementById("cardDesc");
       const prompt = document.getElementById("prompt");
       if (cardDesc) {
@@ -4221,7 +4044,7 @@
         startHint.textContent = "";
         startHint.style.display = "none";
       }
-      if (isLoading) setLoading(false);
+      if (getIsLoading()) setLoading(false);
       btnStart2.disabled = getIsLoading() || !hasStartAction;
       return;
     }
@@ -4263,14 +4086,6 @@
     const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
     const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
     const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
-    if (!hasRenderableInteractiveContent) {
-      console.warn("[ui_contract_interactive_content_absent]", {
-        current_step: current,
-        view_mode: viewMode || "",
-        payload_source: resolved.source,
-        reason_code: "interactive_content_absent"
-      });
-    }
     if (cardDescEl) {
       cardDescEl.style.display = "block";
       cardDescEl.classList.add("has-grid");
@@ -4704,44 +4519,8 @@
     }
     handleToolResultAndMaybeScheduleBootstrapRetry(payload, { source: "host_notification" });
   }
-  var STARTUP_FAIL_CLOSED_MS_DEFAULT = 2e3;
-  var startupFailClosedTimer = null;
-  function startupFailClosedMs() {
-    const raw = Number(globalThis.__BSC_STARTUP_FAIL_CLOSED_MS ?? STARTUP_FAIL_CLOSED_MS_DEFAULT);
-    if (!Number.isFinite(raw) || raw <= 0) return 0;
-    return Math.max(0, Math.min(15e3, Math.trunc(raw)));
-  }
   function clearStartupGrace() {
-    if (startupFailClosedTimer) {
-      clearTimeout(startupFailClosedTimer);
-      startupFailClosedTimer = null;
-    }
-  }
-  function buildStartupFailClosedState(reason) {
-    return {
-      ok: false,
-      error: {
-        type: "contract_violation",
-        reason,
-        user_message: uiStringFromContract("error.contract.body")
-      },
-      state: {
-        current_step: "step_0",
-        started: "false",
-        ui_gate_status: "blocked",
-        ui_gate_reason: "contract_violation",
-        ui_strings_status: "pending"
-      },
-      ui: {
-        flags: {
-          startup_fail_closed: true,
-          startup_fail_closed_reason: reason
-        },
-        view: {
-          mode: "blocked"
-        }
-      }
-    };
+    return;
   }
   function readSetGlobalsPayloadFromHost() {
     const host = globalThis.openai;
@@ -4764,20 +4543,8 @@
     notifyHostTransportSignal("set_globals");
     return true;
   }
-  function scheduleStartupFailClosed(reason) {
-    const timeoutMs = startupFailClosedMs();
-    if (timeoutMs <= 0) return;
-    clearStartupGrace();
-    startupFailClosedTimer = setTimeout(() => {
-      startupFailClosedTimer = null;
-      if (hasRenderedStateSnapshot()) return;
-      if (tryInitialIngestFromHost("set_globals")) return;
-      console.warn("[startup_fail_closed_no_canonical_payload]", {
-        reason,
-        timeout_ms: timeoutMs
-      });
-      render(buildStartupFailClosedState(reason));
-    }, timeoutMs);
+  function scheduleStartupFailClosed(_reason) {
+    return;
   }
   if (isLocalDev && typeof window !== "undefined") {
     const reportDevError = (message, file, line, col) => {
@@ -5013,9 +4780,7 @@
       }
     });
   }
-  if (!tryInitialIngestFromHost("set_globals")) {
-    scheduleStartupFailClosed("startup_no_initial_payload");
-  }
+  tryInitialIngestFromHost("set_globals");
 })();
 
 </script>
