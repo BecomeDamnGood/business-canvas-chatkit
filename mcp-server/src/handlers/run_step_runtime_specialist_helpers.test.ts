@@ -93,3 +93,55 @@ test("normalizeEntitySpecialistResult enforces label/value split when template l
   assert.match(message, /^Wat denk je van de formulering:/);
   assert.match(message, /\nEen AI-driven communicatie-agency$/);
 });
+
+test("enforceDreamBuilderQuestionProgress forces catalog base question in builder base stage", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    __dream_builder_prompt_stage: "base",
+    ui_strings: {
+      "dreamBuilder.question.base": "Catalog BASE vraag",
+      "dreamBuilder.question.more": "Catalog MORE vraag",
+    },
+  };
+  const specialist: Record<string, unknown> = {
+    question: "Model generated intro question",
+    statements: [],
+  };
+
+  const next = helpers.enforceDreamBuilderQuestionProgress(specialist, {
+    currentStepId: "dream",
+    activeSpecialist: "DreamExplainer",
+    canonicalStatementCount: 0,
+    wordingChoicePending: false,
+    state,
+  });
+
+  assert.equal(String(next.question || ""), "Catalog BASE vraag");
+  assert.equal(String(state.__dream_builder_prompt_stage || ""), "base");
+});
+
+test("enforceDreamBuilderQuestionProgress forces catalog more question after first collected input", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    __dream_builder_prompt_stage: "base",
+    ui_strings: {
+      "dreamBuilder.question.base": "Catalog BASE vraag",
+      "dreamBuilder.question.more": "Catalog MORE vraag",
+    },
+  };
+  const specialist: Record<string, unknown> = {
+    question: "Model generated follow-up question",
+    statements: ["Eerste statement"],
+  };
+
+  const next = helpers.enforceDreamBuilderQuestionProgress(specialist, {
+    currentStepId: "dream",
+    activeSpecialist: "DreamExplainer",
+    canonicalStatementCount: 1,
+    wordingChoicePending: false,
+    state,
+  });
+
+  assert.equal(String(next.question || ""), "Catalog MORE vraag");
+  assert.equal(String(state.__dream_builder_prompt_stage || ""), "more");
+});

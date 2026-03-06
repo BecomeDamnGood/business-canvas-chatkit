@@ -180,337 +180,6 @@ Stopconditie
 ### Oplossing / aanpassing (na akkoord)
 Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
 
-## Fix 5 - Role “kies er een voor mij” kan introzin opslaan als finale rol
-
-### Input (zoals gemeld)
-- User koos in stap `Rol` eerst voor `geef 3 voorbeelden`.
-- Daarna koos user `kies er een voor mij`.
-- Daarna vroeg user een samenvatting/recap.
-- Vervolgens ging user door naar de volgende stap.
-- In de opgeslagen output staat bij `ROL`:
-  - `Hier zijn drie korte voorbeelden van een Rol voor Mindd:.`
-  - in plaats van de gekozen rolzin.
-
-Gewenst:
-1. Bij `kies er een voor mij` moet één echte role-optie worden opgeslagen.
-2. Een intro/headline-zin van een voorbeeldenblok mag nooit als role-value worden gecommit.
-3. Recap-vragen mogen dit niet overschrijven of “vervuilen”.
-
-### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
-
-#### Hypothese A - Synthetic role-pick selecteert uit vrije tekst en kan de introregel pakken
-- Route `synthetic_role_pick` kiest een suggestie via message-parsing (`pickRoleSuggestionFromPreviousState`).
-- Als de vorige message een voorbeelden-intro bevat, kan die als kandidaat worden gezien.
-
-#### Hypothese B - Filter voor “voorbeelden-intro” is vooral Engels en mist NL-varianten
-- In `extractRoleSuggestionSentences` staan blokkades als `here are ... role examples`, maar geen NL patroon zoals `Hier zijn drie korte voorbeelden ...`.
-- Daardoor blijft de Nederlandse introregel kandidaat.
-
-#### Hypothese C - Ranking bevoordeelt regels met bedrijfsnaam
-- Kandidaten met bedrijfsnaam krijgen extra score (+10).
-- De introregel bevat vaak de bedrijfsnaam en kan daardoor boven echte voorbeeldzinnen eindigen.
-
-#### Hypothese D - Eenmaal gestaged wordt foutieve waarde later hard gecommit
-- Role-waarde wordt direct in `provisional_by_step.role` gestaged vanuit `role/refined_formulation`.
-- Bij “doorgaan naar volgende stap” commit-pad kiest eerst `provisionalValue`.
-- Daardoor wordt de foutieve introzin naar `role_final` geschreven, ook na een recap-turn.
-
-### Bewijspunten in code (startpunten voor diep onderzoek)
-
-- Synthetic role-pick flow:
-  - `mcp-server/src/handlers/run_step_routes.ts`
-    - `synthetic_role_pick` gebruikt `pickRoleSuggestionFromPreviousState(...)`: regels 231-242.
-    - gekozen waarde wordt direct gezet in `refined_formulation` en `role`: regels 253-255.
-
-- Parsing/ranking van role-kandidaat uit message:
-  - `mcp-server/src/handlers/run_step_wording_heuristics.ts`
-    - `extractRoleSuggestionSentences(...)`: regels 323-381.
-    - blocked-list bevat vooral Engelse patronen: regels 332-339.
-    - ranking geeft +10 bij bedrijfsnaam-match: regel 373.
-  - Zelfde helper wordt gebruikt door picker:
-    - `pickRoleSuggestionFromPreviousState(...)`: regels 599-623.
-
-- Staging van role provisional:
-  - `mcp-server/src/handlers/run_step_state_update.ts`
-    - role staging via `stageFieldValue(... role, refined_formulation)`: regels 185-187.
-
-- Commit naar final bij doorgaan:
-  - `mcp-server/src/handlers/run_step_runtime_action_routing_policy.ts`
-    - `resolveRequiredFinalValue(...)` pakt eerst `provisionalValue`: regels 77-82.
-  - `mcp-server/src/handlers/run_step_runtime_action_routing.ts`
-    - commit naar final-field bij transition: regels 386-390.
-
-### Mogelijke structurele fixes (geen quick fixes)
-
-1. Maak role choose-for-me data-gedreven i.p.v. message-parsing
-- Laat de role-specialist bij “3 voorbeelden” expliciet een gestructureerde lijst returnen (bijv. `role_examples[]`).
-- `synthetic_role_pick` kiest alleen uit die lijst, nooit uit vrijetekst `message`.
-
-2. Voeg locale-onafhankelijke intro/cta-exclusie toe
-- Blokkeer kandidaatregels die alleen “examples/voorbeelden” framing bevatten.
-- Maak dit semantisch i.p.v. taal-hardcoded regex.
-
-3. Voeg pre-commit validatie op role-shape toe
-- Voordat `role`/`role_final` wordt gestaged/gecommit:
-  - reject regels die voorbeelden-intro patronen matchen,
-  - en gebruik laatste geldige role-candidate als fallback.
-
-4. Bescherm commit-pad tegen recap-afgeleide ruis
-- Als laatste specialist-turn recap/meta is, commit alleen als er valide staged role bestaat.
-- Anders final ongewijzigd laten en user terugsturen naar role-keuze.
-
-5. Regressietests op end-to-end sequence
-- Test exact scenario:
-  - 3 voorbeelden -> kies voor mij -> recap -> continue.
-- Assert:
-  - `role_final` bevat echte role-zin, nooit intro/headline.
-- Herhaal voor minstens `nl` en `en`.
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
-```text
-Context
-Je onderzoekt een regressie in Role:
-- user kiest 3 voorbeelden,
-- kiest daarna "kies er een voor mij",
-- vraagt recap,
-- gaat door naar volgende stap,
-- en krijgt als opgeslagen Role een voorbeelden-introzin i.p.v. echte Role.
-
-Observed bug
-- Opgeslagen waarde wordt:
-  "Hier zijn drie korte voorbeelden van een Rol voor <company>:."
-- Verwacht: één echte gekozen Role-zin.
-
-Doel van deze opdracht
-1) Lever definitieve root-cause met causale keten.
-2) Toon exact waar introzin als candidate kan worden gekozen.
-3) Toon exact hoe deze waarde staged en later committed wordt.
-4) Lever structureel fixplan.
-5) Doe GEEN codewijzigingen in deze opdracht.
-
-Harde regels
-- Quick fixes verboden.
-- Geen NL-specifieke patch als enige oplossing.
-- Geen suppressie van commit zonder shape-validatie.
-- Zonder expliciet akkoord: geen implementatie.
-
-Onderzoeksaanpak
-1. Reproduceer exact flowscenario
-- role examples -> choose for me -> recap -> continue.
-- Log per turn:
-  - chosen candidate,
-  - source (message/refined/field),
-  - staged provisional role,
-  - committed role_final.
-
-2. Candidate-herkomst analyseren
-- Verifieer parserfilter op intro/headline regels in meerdere talen.
-- Verifieer ranking (bedrijfsnaam bias) die introregels kan prioriteren.
-
-3. Commit-keten analyseren
-- Bevestig hoe provisional wordt meegenomen in final commit.
-- Bevestig gedrag wanneer laatste turn recap/meta is.
-
-4. Structureel oplossingsvoorstel (niet implementeren)
-- 1 voorkeursrichting + max 2 alternatieven.
-- Per richting:
-  - architecturale impact,
-  - invarianten,
-  - risico/migratie,
-  - teststrategie.
-
-Verplichte outputstructuur
-A. Mensentaal probleemuitleg
-B. Technisch bewijs (file/line + flow)
-C. Definitieve root-cause
-D. Structureel fixplan
-E. Beslisvoorstel (wat eerst, waarom)
-
-Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
-```
-
-### Oplossing / aanpassing (na akkoord)
-Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-
-## Fix 4 - Onnodige keuzekaart bij correcte input + dubbele betekenis in suggestie (bestaansreden)
-
-### Input (zoals gemeld)
-- User vroeg om 3 voorbeeld-bestaansredenen, kopieerde er 1 en gaf die als input.
-- UI toont daarna een wording-choice scherm met:
-  - `Dit is jouw input: ...`
-  - `Dit zou mijn suggestie zijn: Je huidige bestaansreden voor Mindd is: ...`
-- Gevoelde bug: de suggestie is inhoudelijk dezelfde zin met extra prefix, en er is onnodig een keuzepaneel.
-
-Aanvullende functionele nuance (bevestigd):
-- Als de input al correct is, dan mag er wél direct bevestiging staan zoals `Je huidige bestaansreden is: ...`,
-- maar zonder keuze tussen twee varianten.
-
-### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
-
-#### Hypothese A - Suggestie-tekst kan vervuild raken met een context-heading
-- De wording-choice suggestie wordt opgebouwd uit meerdere kandidaten (field/refined/previous/message).
-- Een kandidaat kan een al eerder opgebouwde contextregel bevatten zoals `Je huidige ... is:`.
-- Daardoor vergelijkt de engine niet “zin vs zin”, maar “zin vs heading+zin”.
-
-#### Hypothese B - Equivalentie-check werkt op ruwe tekst en mist heading-unwrapping
-- De gelijkheidscheck (`areEquivalentWordingVariants`) canonicalize’t tekst, maar verwijdert geen `current heading` wrapper.
-- Resultaat: semantisch gelijke inhoud wordt als verschillend gezien, waardoor onterecht wording-choice pending ontstaat.
-
-#### Hypothese C - Zodra pending true is, forceert pipeline altijd keuze-UI
-- Bij `wording_choice_pending=true` wordt `require_wording_pick` gezet en acties onderdrukt.
-- UX-gevolg: user ziet altijd twee keuzevakken, ook als er eigenlijk niets te kiezen is.
-
-#### Hypothese D - Dit patroon is niet beperkt tot bestaansreden
-- Wording-choice eligibility geldt voor vrijwel alle stappen behalve `step_0` en `presentation`.
-- Daarmee kan dezelfde duplicatie/prefix-mismatch ook in andere stappen voorkomen.
-
-### Bewijspunten in code (startpunten voor diep onderzoek)
-
-- Wording-choice scope is breed (bijna alle stappen):
-  - `mcp-server/src/handlers/run_step_wording.ts`
-    - `isWordingChoiceEligibleStep(...)` sluit alleen `step_0` en `presentation` uit: regels 148-153.
-
-- Suggestie-kandidaatselectie die heading-vervuiling kan binnenhalen:
-  - `mcp-server/src/handlers/run_step_wording_heuristics.ts`
-    - `pickDualChoiceSuggestion(...)` candidate-volgorde incl. previous/message: regels 627-698.
-    - `extractSuggestionFromMessage(...)` pakt laatste “bruikbare” zin/paragraaf zonder specifieke filter op `current ... is:` headings: regels 222-270.
-
-- Heading-opbouw van “Je huidige ... is:”:
-  - `mcp-server/src/handlers/run_step_runtime_state_helpers.ts`
-    - `wordingSelectionMessage(...)` bouwt heading uit `offtopic.current.template` + current value: regels 538-571.
-
-- Onterechte pending bij niet-equivalent:
-  - `mcp-server/src/handlers/run_step_wording.ts`
-    - equivalent-check en pending-opbouw (`wording_choice_pending=true`): regels 805-926.
-
-- Pipeline forceert keuzepaneel bij pending:
-  - `mcp-server/src/handlers/run_step_pipeline.ts`
-    - pending choice override + `requireWordingPick=true`: regels 728-751.
-
-### Check: kan dit ook bij andere stappen gebeuren?
-
-Ja, potentieel wel.
-
-Hoog risico (text-mode stappen):
-1. `purpose`
-2. `bigwhy`
-3. `role`
-4. `entity`
-5. `targetgroup`
-6. `dream` (in paden waar wording-choice text-mode actief is)
-
-Ook mogelijk (list-mode, andere uiting):
-1. `strategy`
-2. `productsservices`
-3. `rulesofthegame`
-4. `dream` in builder/list-context
-
-Waarom breed:
-- Dezelfde wording-choice engine + pending-mechaniek wordt stap-overstijgend gebruikt.
-- Een vervuilde suggestion-candidate of wrapper-mismatch kan dus op meerdere stappen dezelfde UX-fout triggeren.
-
-### Mogelijke structurele fixes (geen quick fixes)
-
-1. Voeg een canonical “unwrap current-heading” stap toe vóór equivalentie en vóór payload
-- Strip gecontroleerd patronen als `offtopic.current.template`/step-current headings uit suggestion candidate.
-- Vergelijk vervolgens inhoud-op-inhoud.
-
-2. Voeg short-circuit toe: “inhoud al bevestigd” => geen wording-choice
-- Als user-input canonical gelijk is aan huidige/nieuwe stapwaarde, ga direct naar bevestigingspad (`wordingSelectionMessage`) zonder keuzes.
-
-3. Beperk message-based suggestion extraction tot valide refine-context
-- Gebruik `extractSuggestionFromMessage` alleen als veld/refined kandidaten ontbreken of expliciet refine-intent aanwezig is.
-- Voorkom dat narratieve contextregels als suggestie eindigen.
-
-4. Cross-step regressietests op wording-choice false positives
-- Testmatrix voor text- en list-stappen:
-  - correcte input => géén keuzekaart,
-  - wel bevestigingsregel `Je huidige ... is: ...`,
-  - geen dubbeling van exact dezelfde inhoud met extra prefix.
-
-5. Voeg anti-dup guard toe in pending-opbouw
-- Als `suggestion_text` na canonical-unwrapping gelijk is aan `user_text`, zet `wording_choice_pending=false`.
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
-```text
-Context
-Je onderzoekt een wording-choice regressie:
-- bij correcte input toont de UI toch een keuzepaneel,
-- de suggestie bevat dezelfde inhoud met extra prefix ("Je huidige ... is:"),
-- dit lijkt nu zichtbaar bij bestaansreden, maar moet stap-overstijgend worden gecheckt.
-
-Observed bug
-- User plakt een correcte bestaansreden.
-- In plaats van directe bevestiging verschijnt wording-choice met:
-  - user input
-  - suggestion = heading + vrijwel dezelfde zin
-- Gewenst: directe bevestiging ("Je huidige bestaansreden is: ...") zonder keuzes.
-
-Doel van deze opdracht
-1) Lever definitieve root-cause van false-positive wording-choice.
-2) Toon exact welk pad de heading/prefix in suggestion injecteert.
-3) Onderzoek of dit bij andere stappen kan optreden (matrix).
-4) Lever structureel fixplan.
-5) Doe GEEN codewijzigingen in deze opdracht.
-
-Harde regels
-- Quick fixes verboden.
-- Geen locale-specifieke string hacks.
-- Geen suppressie van wording-choice zonder causale oplossing.
-- Zonder expliciet akkoord: geen implementatie.
-
-Onderzoeksaanpak
-1. Reproduceer op purpose
-- Scenario: voorbeeldzin plakken die al valide is.
-- Log:
-  - userRaw
-  - suggestionRawCandidate
-  - normalizedUser
-  - equivalent=true/false
-  - wording_choice_pending
-
-2. Herleid candidate-keten
-- Check candidate-prioriteit:
-  - field value
-  - refined_formulation
-  - previous wording_choice_agent_current
-  - extractSuggestionFromMessage(message)
-- Markeer waar heading/prefix binnenkomt.
-
-3. Cross-step impactanalyse
-- Herhaal op minimaal:
-  - bigwhy, role, entity, targetgroup (text-mode)
-  - strategy, productsservices, rulesofthegame (list-mode)
-- Rapporteer waar dezelfde false-positive wording-choice optreedt.
-
-4. Structureel oplossingsvoorstel (niet implementeren)
-- 1 voorkeursrichting + max 2 alternatieven.
-- Per richting:
-  - architecturale impact,
-  - invarianten die hard worden,
-  - risico/migratie,
-  - teststrategie.
-
-Verplichte outputstructuur
-A. Mensentaal probleemuitleg
-B. Technisch bewijs (file/line + candidate-keten)
-C. Definitieve root-cause
-D. Cross-step impactmatrix
-E. Structureel fixplan
-F. Beslisvoorstel (wat eerst, waarom)
-
-Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
-```
-
-### Oplossing / aanpassing (na akkoord)
-Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-
 ## Fix 2 - Dream Builder: Engelse leak na switch-to-self + vraagzin niet catalog-gedreven in alle talen
 
 ### Input (zoals gemeld)
@@ -802,3 +471,334 @@ Stopconditie
 
 ### Oplossing / aanpassing (na akkoord)
 Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
+## Fix 4 - Onnodige keuzekaart bij correcte input + dubbele betekenis in suggestie (bestaansreden)
+
+### Input (zoals gemeld)
+- User vroeg om 3 voorbeeld-bestaansredenen, kopieerde er 1 en gaf die als input.
+- UI toont daarna een wording-choice scherm met:
+  - `Dit is jouw input: ...`
+  - `Dit zou mijn suggestie zijn: Je huidige bestaansreden voor Mindd is: ...`
+- Gevoelde bug: de suggestie is inhoudelijk dezelfde zin met extra prefix, en er is onnodig een keuzepaneel.
+
+Aanvullende functionele nuance (bevestigd):
+- Als de input al correct is, dan mag er wél direct bevestiging staan zoals `Je huidige bestaansreden is: ...`,
+- maar zonder keuze tussen twee varianten.
+
+### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
+
+#### Hypothese A - Suggestie-tekst kan vervuild raken met een context-heading
+- De wording-choice suggestie wordt opgebouwd uit meerdere kandidaten (field/refined/previous/message).
+- Een kandidaat kan een al eerder opgebouwde contextregel bevatten zoals `Je huidige ... is:`.
+- Daardoor vergelijkt de engine niet “zin vs zin”, maar “zin vs heading+zin”.
+
+#### Hypothese B - Equivalentie-check werkt op ruwe tekst en mist heading-unwrapping
+- De gelijkheidscheck (`areEquivalentWordingVariants`) canonicalize’t tekst, maar verwijdert geen `current heading` wrapper.
+- Resultaat: semantisch gelijke inhoud wordt als verschillend gezien, waardoor onterecht wording-choice pending ontstaat.
+
+#### Hypothese C - Zodra pending true is, forceert pipeline altijd keuze-UI
+- Bij `wording_choice_pending=true` wordt `require_wording_pick` gezet en acties onderdrukt.
+- UX-gevolg: user ziet altijd twee keuzevakken, ook als er eigenlijk niets te kiezen is.
+
+#### Hypothese D - Dit patroon is niet beperkt tot bestaansreden
+- Wording-choice eligibility geldt voor vrijwel alle stappen behalve `step_0` en `presentation`.
+- Daarmee kan dezelfde duplicatie/prefix-mismatch ook in andere stappen voorkomen.
+
+### Bewijspunten in code (startpunten voor diep onderzoek)
+
+- Wording-choice scope is breed (bijna alle stappen):
+  - `mcp-server/src/handlers/run_step_wording.ts`
+    - `isWordingChoiceEligibleStep(...)` sluit alleen `step_0` en `presentation` uit: regels 148-153.
+
+- Suggestie-kandidaatselectie die heading-vervuiling kan binnenhalen:
+  - `mcp-server/src/handlers/run_step_wording_heuristics.ts`
+    - `pickDualChoiceSuggestion(...)` candidate-volgorde incl. previous/message: regels 627-698.
+    - `extractSuggestionFromMessage(...)` pakt laatste “bruikbare” zin/paragraaf zonder specifieke filter op `current ... is:` headings: regels 222-270.
+
+- Heading-opbouw van “Je huidige ... is:”:
+  - `mcp-server/src/handlers/run_step_runtime_state_helpers.ts`
+    - `wordingSelectionMessage(...)` bouwt heading uit `offtopic.current.template` + current value: regels 538-571.
+
+- Onterechte pending bij niet-equivalent:
+  - `mcp-server/src/handlers/run_step_wording.ts`
+    - equivalent-check en pending-opbouw (`wording_choice_pending=true`): regels 805-926.
+
+- Pipeline forceert keuzepaneel bij pending:
+  - `mcp-server/src/handlers/run_step_pipeline.ts`
+    - pending choice override + `requireWordingPick=true`: regels 728-751.
+
+### Check: kan dit ook bij andere stappen gebeuren?
+
+Ja, potentieel wel.
+
+Hoog risico (text-mode stappen):
+1. `purpose`
+2. `bigwhy`
+3. `role`
+4. `entity`
+5. `targetgroup`
+6. `dream` (in paden waar wording-choice text-mode actief is)
+
+Ook mogelijk (list-mode, andere uiting):
+1. `strategy`
+2. `productsservices`
+3. `rulesofthegame`
+4. `dream` in builder/list-context
+
+Waarom breed:
+- Dezelfde wording-choice engine + pending-mechaniek wordt stap-overstijgend gebruikt.
+- Een vervuilde suggestion-candidate of wrapper-mismatch kan dus op meerdere stappen dezelfde UX-fout triggeren.
+
+### Mogelijke structurele fixes (geen quick fixes)
+
+1. Voeg een canonical “unwrap current-heading” stap toe vóór equivalentie en vóór payload
+- Strip gecontroleerd patronen als `offtopic.current.template`/step-current headings uit suggestion candidate.
+- Vergelijk vervolgens inhoud-op-inhoud.
+
+2. Voeg short-circuit toe: “inhoud al bevestigd” => geen wording-choice
+- Als user-input canonical gelijk is aan huidige/nieuwe stapwaarde, ga direct naar bevestigingspad (`wordingSelectionMessage`) zonder keuzes.
+
+3. Beperk message-based suggestion extraction tot valide refine-context
+- Gebruik `extractSuggestionFromMessage` alleen als veld/refined kandidaten ontbreken of expliciet refine-intent aanwezig is.
+- Voorkom dat narratieve contextregels als suggestie eindigen.
+
+4. Cross-step regressietests op wording-choice false positives
+- Testmatrix voor text- en list-stappen:
+  - correcte input => géén keuzekaart,
+  - wel bevestigingsregel `Je huidige ... is: ...`,
+  - geen dubbeling van exact dezelfde inhoud met extra prefix.
+
+5. Voeg anti-dup guard toe in pending-opbouw
+- Als `suggestion_text` na canonical-unwrapping gelijk is aan `user_text`, zet `wording_choice_pending=false`.
+
+### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
+```text
+Context
+Je onderzoekt een wording-choice regressie:
+- bij correcte input toont de UI toch een keuzepaneel,
+- de suggestie bevat dezelfde inhoud met extra prefix ("Je huidige ... is:"),
+- dit lijkt nu zichtbaar bij bestaansreden, maar moet stap-overstijgend worden gecheckt.
+
+Observed bug
+- User plakt een correcte bestaansreden.
+- In plaats van directe bevestiging verschijnt wording-choice met:
+  - user input
+  - suggestion = heading + vrijwel dezelfde zin
+- Gewenst: directe bevestiging ("Je huidige bestaansreden is: ...") zonder keuzes.
+
+Doel van deze opdracht
+1) Lever definitieve root-cause van false-positive wording-choice.
+2) Toon exact welk pad de heading/prefix in suggestion injecteert.
+3) Onderzoek of dit bij andere stappen kan optreden (matrix).
+4) Lever structureel fixplan.
+5) Doe GEEN codewijzigingen in deze opdracht.
+
+Harde regels
+- Quick fixes verboden.
+- Geen locale-specifieke string hacks.
+- Geen suppressie van wording-choice zonder causale oplossing.
+- Zonder expliciet akkoord: geen implementatie.
+
+Onderzoeksaanpak
+1. Reproduceer op purpose
+- Scenario: voorbeeldzin plakken die al valide is.
+- Log:
+  - userRaw
+  - suggestionRawCandidate
+  - normalizedUser
+  - equivalent=true/false
+  - wording_choice_pending
+
+2. Herleid candidate-keten
+- Check candidate-prioriteit:
+  - field value
+  - refined_formulation
+  - previous wording_choice_agent_current
+  - extractSuggestionFromMessage(message)
+- Markeer waar heading/prefix binnenkomt.
+
+3. Cross-step impactanalyse
+- Herhaal op minimaal:
+  - bigwhy, role, entity, targetgroup (text-mode)
+  - strategy, productsservices, rulesofthegame (list-mode)
+- Rapporteer waar dezelfde false-positive wording-choice optreedt.
+
+4. Structureel oplossingsvoorstel (niet implementeren)
+- 1 voorkeursrichting + max 2 alternatieven.
+- Per richting:
+  - architecturale impact,
+  - invarianten die hard worden,
+  - risico/migratie,
+  - teststrategie.
+
+Verplichte outputstructuur
+A. Mensentaal probleemuitleg
+B. Technisch bewijs (file/line + candidate-keten)
+C. Definitieve root-cause
+D. Cross-step impactmatrix
+E. Structureel fixplan
+F. Beslisvoorstel (wat eerst, waarom)
+
+Stopconditie
+- Stop na analyse + plan.
+- Vraag expliciet akkoord voor implementatie.
+- Zonder akkoord: geen codewijzigingen.
+```
+
+### Oplossing / aanpassing (na akkoord)
+Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
+
+## Fix 5 - Role “kies er een voor mij” kan introzin opslaan als finale rol
+
+### Input (zoals gemeld)
+- User koos in stap `Rol` eerst voor `geef 3 voorbeelden`.
+- Daarna koos user `kies er een voor mij`.
+- Daarna vroeg user een samenvatting/recap.
+- Vervolgens ging user door naar de volgende stap.
+- In de opgeslagen output staat bij `ROL`:
+  - `Hier zijn drie korte voorbeelden van een Rol voor Mindd:.`
+  - in plaats van de gekozen rolzin.
+
+Gewenst:
+1. Bij `kies er een voor mij` moet één echte role-optie worden opgeslagen.
+2. Een intro/headline-zin van een voorbeeldenblok mag nooit als role-value worden gecommit.
+3. Recap-vragen mogen dit niet overschrijven of “vervuilen”.
+
+### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
+
+#### Hypothese A - Synthetic role-pick selecteert uit vrije tekst en kan de introregel pakken
+- Route `synthetic_role_pick` kiest een suggestie via message-parsing (`pickRoleSuggestionFromPreviousState`).
+- Als de vorige message een voorbeelden-intro bevat, kan die als kandidaat worden gezien.
+
+#### Hypothese B - Filter voor “voorbeelden-intro” is vooral Engels en mist NL-varianten
+- In `extractRoleSuggestionSentences` staan blokkades als `here are ... role examples`, maar geen NL patroon zoals `Hier zijn drie korte voorbeelden ...`.
+- Daardoor blijft de Nederlandse introregel kandidaat.
+
+#### Hypothese C - Ranking bevoordeelt regels met bedrijfsnaam
+- Kandidaten met bedrijfsnaam krijgen extra score (+10).
+- De introregel bevat vaak de bedrijfsnaam en kan daardoor boven echte voorbeeldzinnen eindigen.
+
+#### Hypothese D - Eenmaal gestaged wordt foutieve waarde later hard gecommit
+- Role-waarde wordt direct in `provisional_by_step.role` gestaged vanuit `role/refined_formulation`.
+- Bij “doorgaan naar volgende stap” commit-pad kiest eerst `provisionalValue`.
+- Daardoor wordt de foutieve introzin naar `role_final` geschreven, ook na een recap-turn.
+
+### Bewijspunten in code (startpunten voor diep onderzoek)
+
+- Synthetic role-pick flow:
+  - `mcp-server/src/handlers/run_step_routes.ts`
+    - `synthetic_role_pick` gebruikt `pickRoleSuggestionFromPreviousState(...)`: regels 231-242.
+    - gekozen waarde wordt direct gezet in `refined_formulation` en `role`: regels 253-255.
+
+- Parsing/ranking van role-kandidaat uit message:
+  - `mcp-server/src/handlers/run_step_wording_heuristics.ts`
+    - `extractRoleSuggestionSentences(...)`: regels 323-381.
+    - blocked-list bevat vooral Engelse patronen: regels 332-339.
+    - ranking geeft +10 bij bedrijfsnaam-match: regel 373.
+  - Zelfde helper wordt gebruikt door picker:
+    - `pickRoleSuggestionFromPreviousState(...)`: regels 599-623.
+
+- Staging van role provisional:
+  - `mcp-server/src/handlers/run_step_state_update.ts`
+    - role staging via `stageFieldValue(... role, refined_formulation)`: regels 185-187.
+
+- Commit naar final bij doorgaan:
+  - `mcp-server/src/handlers/run_step_runtime_action_routing_policy.ts`
+    - `resolveRequiredFinalValue(...)` pakt eerst `provisionalValue`: regels 77-82.
+  - `mcp-server/src/handlers/run_step_runtime_action_routing.ts`
+    - commit naar final-field bij transition: regels 386-390.
+
+### Mogelijke structurele fixes (geen quick fixes)
+
+1. Maak role choose-for-me data-gedreven i.p.v. message-parsing
+- Laat de role-specialist bij “3 voorbeelden” expliciet een gestructureerde lijst returnen (bijv. `role_examples[]`).
+- `synthetic_role_pick` kiest alleen uit die lijst, nooit uit vrijetekst `message`.
+
+2. Voeg locale-onafhankelijke intro/cta-exclusie toe
+- Blokkeer kandidaatregels die alleen “examples/voorbeelden” framing bevatten.
+- Maak dit semantisch i.p.v. taal-hardcoded regex.
+
+3. Voeg pre-commit validatie op role-shape toe
+- Voordat `role`/`role_final` wordt gestaged/gecommit:
+  - reject regels die voorbeelden-intro patronen matchen,
+  - en gebruik laatste geldige role-candidate als fallback.
+
+4. Bescherm commit-pad tegen recap-afgeleide ruis
+- Als laatste specialist-turn recap/meta is, commit alleen als er valide staged role bestaat.
+- Anders final ongewijzigd laten en user terugsturen naar role-keuze.
+
+5. Regressietests op end-to-end sequence
+- Test exact scenario:
+  - 3 voorbeelden -> kies voor mij -> recap -> continue.
+- Assert:
+  - `role_final` bevat echte role-zin, nooit intro/headline.
+- Herhaal voor minstens `nl` en `en`.
+
+### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
+```text
+Context
+Je onderzoekt een regressie in Role:
+- user kiest 3 voorbeelden,
+- kiest daarna "kies er een voor mij",
+- vraagt recap,
+- gaat door naar volgende stap,
+- en krijgt als opgeslagen Role een voorbeelden-introzin i.p.v. echte Role.
+
+Observed bug
+- Opgeslagen waarde wordt:
+  "Hier zijn drie korte voorbeelden van een Rol voor <company>:."
+- Verwacht: één echte gekozen Role-zin.
+
+Doel van deze opdracht
+1) Lever definitieve root-cause met causale keten.
+2) Toon exact waar introzin als candidate kan worden gekozen.
+3) Toon exact hoe deze waarde staged en later committed wordt.
+4) Lever structureel fixplan.
+5) Doe GEEN codewijzigingen in deze opdracht.
+
+Harde regels
+- Quick fixes verboden.
+- Geen NL-specifieke patch als enige oplossing.
+- Geen suppressie van commit zonder shape-validatie.
+- Zonder expliciet akkoord: geen implementatie.
+
+Onderzoeksaanpak
+1. Reproduceer exact flowscenario
+- role examples -> choose for me -> recap -> continue.
+- Log per turn:
+  - chosen candidate,
+  - source (message/refined/field),
+  - staged provisional role,
+  - committed role_final.
+
+2. Candidate-herkomst analyseren
+- Verifieer parserfilter op intro/headline regels in meerdere talen.
+- Verifieer ranking (bedrijfsnaam bias) die introregels kan prioriteren.
+
+3. Commit-keten analyseren
+- Bevestig hoe provisional wordt meegenomen in final commit.
+- Bevestig gedrag wanneer laatste turn recap/meta is.
+
+4. Structureel oplossingsvoorstel (niet implementeren)
+- 1 voorkeursrichting + max 2 alternatieven.
+- Per richting:
+  - architecturale impact,
+  - invarianten,
+  - risico/migratie,
+  - teststrategie.
+
+Verplichte outputstructuur
+A. Mensentaal probleemuitleg
+B. Technisch bewijs (file/line + flow)
+C. Definitieve root-cause
+D. Structureel fixplan
+E. Beslisvoorstel (wat eerst, waarom)
+
+Stopconditie
+- Stop na analyse + plan.
+- Vraag expliciet akkoord voor implementatie.
+- Zonder akkoord: geen codewijzigingen.
+```
+
+### Oplossing / aanpassing (na akkoord)
+Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
+

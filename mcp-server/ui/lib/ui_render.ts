@@ -124,10 +124,15 @@ function prependBenProfileAvatar(cardDescEl: HTMLElement): void {
   cardDescEl.insertBefore(img, cardDescEl.firstChild);
 }
 
-function stepLabelShort(stepId: string, lang: string | null | undefined): string {
-  const full = extractStepTitle(stepId, lang);
+function activeStepLabel(
+  stepId: string,
+  stepTitle: string | null | undefined,
+  lang: string | null | undefined
+): string {
+  const explicitTitle = String(stepTitle || "").trim();
+  if (explicitTitle) return explicitTitle;
   if (stepId === "step_0") return uiText(lang, "stepLabel.validation", "");
-  return full.length > 12 ? full.slice(0, 12) + "…" : full;
+  return extractStepTitle(stepId, lang);
 }
 
 export function buildStepper(
@@ -139,15 +144,18 @@ export function buildStepper(
   if (!el) return;
   el.innerHTML = "";
   for (let i = 0; i < ORDER.length; i++) {
+    const stepId = ORDER[i];
     const s = document.createElement("div");
     let className = "step-item step";
+    if (stepId === "presentation") className += " step-item--presentation";
     if (i < activeIdx) className += " completed";
     if (i === activeIdx) className += " active";
     s.className = className;
+    s.dataset.stepId = stepId;
     const label = document.createElement("div");
     label.className = "step-item-label";
-    /* Keep behavior: only the active step shows a short label. */
-    label.textContent = i === activeIdx ? stepLabelShort(ORDER[i], lang) : "";
+    /* Only the active step shows a label, now always full-length. */
+    label.textContent = i === activeIdx ? activeStepLabel(stepId, stepTitle, lang) : "";
     s.appendChild(label);
     const bar = document.createElement("div");
     bar.className = "step-bar";

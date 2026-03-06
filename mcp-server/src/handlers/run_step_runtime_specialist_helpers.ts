@@ -211,8 +211,6 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     if (scoringPhase) return specialist;
 
     const currentQuestion = String(specialist.question || "").trim();
-    if (!currentQuestion) return specialist;
-
     const specialistStatementsCount = Array.isArray(specialist.statements)
       ? (specialist.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
       : 0;
@@ -221,23 +219,34 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
       specialistStatementsCount > 0 ||
       params.wordingChoicePending ||
       String(specialist.wording_choice_pending || "").trim() === "true";
-    if (!hasCollectedInput) return specialist;
-
     const stage = String((params.state as Record<string, unknown>).__dream_builder_prompt_stage || "").trim();
-    if (stage === "more") return specialist;
-    const nextQuestion = deps.uiStringFromStateMap(
+
+    const baseQuestion = deps.uiStringFromStateMap(
+      params.state,
+      "dreamBuilder.question.base",
+      deps.uiDefaultString("dreamBuilder.question.base")
+    );
+    const moreQuestion = deps.uiStringFromStateMap(
       params.state,
       "dreamBuilder.question.more",
-      deps.uiDefaultString(
-        "dreamBuilder.question.more",
-        "What more do you see changing in the future, positive or negative? Let your imagination run free."
-      )
+      deps.uiDefaultString("dreamBuilder.question.more")
     );
-    if (!nextQuestion || nextQuestion === currentQuestion) return specialist;
+
+    if (!hasCollectedInput) {
+      if (stage !== "base" && stage !== "") return specialist;
+      if (!baseQuestion || baseQuestion === currentQuestion) return specialist;
+      (params.state as Record<string, unknown>).__dream_builder_prompt_stage = "base";
+      return {
+        ...specialist,
+        question: baseQuestion,
+      };
+    }
+
+    if (!moreQuestion || (stage === "more" && moreQuestion === currentQuestion)) return specialist;
     (params.state as Record<string, unknown>).__dream_builder_prompt_stage = "more";
     return {
       ...specialist,
-      question: nextQuestion,
+      question: moreQuestion,
     };
   }
 

@@ -529,10 +529,29 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             deps.bumpUiI18nCounter(context.uiI18nTelemetry, "state_hygiene_resets_count");
           }
 
+          const switchHeadline = deps.uiStringFromStateMap(
+            switchBaseState,
+            "dreamBuilder.switchSelf.headline",
+            deps.uiDefaultString("dreamBuilder.switchSelf.headline")
+          );
+          const switchIntro = deps.uiStringFromStateMap(
+            switchBaseState,
+            "dreamBuilder.switchSelf.body.intro",
+            deps.uiDefaultString("dreamBuilder.switchSelf.body.intro")
+          );
+          const switchHelper = deps.uiStringFromStateMap(
+            switchBaseState,
+            "dreamBuilder.switchSelf.body.helper",
+            deps.uiDefaultString("dreamBuilder.switchSelf.body.helper")
+          );
+          const switchMessage = [switchHeadline, switchIntro, switchHelper]
+            .map((line) => String(line || "").trim())
+            .filter(Boolean)
+            .join("\n\n");
+
           const specialist = {
             action: "ASK",
-            message:
-              "That's a great way to start. Writing your own dream helps clarify what really matters to you and your business.\n\nTake a moment to write a draft of your dream. I'll help you refine it if needed.",
+            message: switchMessage,
             question: "",
             refined_formulation: "",
             dream: "",

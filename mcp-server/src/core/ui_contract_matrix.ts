@@ -387,7 +387,7 @@ export const MENU_LABELS: Record<string, string[]> = {
   ],
   PURPOSE_MENU_REFINE: [
     "I'm happy with this wording, please continue to next step Big Why.",
-    "Refine the wording",
+    "Refine the wording for me please",
   ],
   PURPOSE_MENU_CONFIRM_SINGLE: [
     "I'm happy with this wording, please continue to next step Big Why.",

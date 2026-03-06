@@ -423,6 +423,7 @@
         display: flex;
         flex-direction: column;
         align-items: flex-start;
+        position: relative;
         cursor: pointer;
         padding-right: 6px;
       }
@@ -448,6 +449,21 @@
       .step-item.active .step-item-label {
         color: var(--orange);
         font-weight: 500;
+        position: absolute;
+        bottom: calc(100% + 5px);
+        left: 0;
+        right: auto;
+        z-index: 2;
+        pointer-events: none;
+        text-align: left;
+        max-width: none;
+        overflow: visible;
+        text-overflow: clip;
+      }
+      .step-item--presentation.active .step-item-label {
+        left: auto;
+        right: 0;
+        text-align: right;
       }
       
       .step-bar {
@@ -3680,24 +3696,28 @@
     if (translated) return translated;
     return "";
   }
-  function stepLabelShort(stepId, lang) {
-    const full = extractStepTitle(stepId, lang);
+  function activeStepLabel(stepId, stepTitle, lang) {
+    const explicitTitle = String(stepTitle || "").trim();
+    if (explicitTitle) return explicitTitle;
     if (stepId === "step_0") return uiText2(lang, "stepLabel.validation", "");
-    return full.length > 12 ? full.slice(0, 12) + "\u2026" : full;
+    return extractStepTitle(stepId, lang);
   }
   function buildStepper(activeIdx, stepTitle, lang) {
     const el = document.getElementById("stepper");
     if (!el) return;
     el.innerHTML = "";
     for (let i = 0; i < ORDER.length; i++) {
+      const stepId = ORDER[i];
       const s = document.createElement("div");
       let className = "step-item step";
+      if (stepId === "presentation") className += " step-item--presentation";
       if (i < activeIdx) className += " completed";
       if (i === activeIdx) className += " active";
       s.className = className;
+      s.dataset.stepId = stepId;
       const label = document.createElement("div");
       label.className = "step-item-label";
-      label.textContent = i === activeIdx ? stepLabelShort(ORDER[i], lang) : "";
+      label.textContent = i === activeIdx ? activeStepLabel(stepId, stepTitle, lang) : "";
       s.appendChild(label);
       const bar = document.createElement("div");
       bar.className = "step-bar";

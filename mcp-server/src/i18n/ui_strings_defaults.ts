@@ -73,10 +73,12 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "invariant.prompt.ask.default": "Share your thoughts or choose an option.",
   "dreamBuilder.startExercise": "Start the exercise",
   "dreamBuilder.question.base":
-    "What do you see changing in the future, positive or negative? Let your imagination run free.",
+    "Looking 5 to 10 years ahead, which major opportunities or threats do you see, and which positive changes do you hope for? Formulate them as clear statements.",
   "dreamBuilder.question.more":
-    "What more do you see changing in the future, positive or negative? Let your imagination run free.",
+    "What else do you see changing in the future, positive or negative? Let your imagination run free and formulate them as clear statements.",
   "dreamBuilder.switchSelf.headline": "Continue with the Dream Exercise.",
+  "dreamBuilder.switchSelf.body.helper": "Take a moment to write a draft of your dream. I'll help you refine it if needed.",
+  "dreamBuilder.switchSelf.body.intro": "That's a great way to start. Writing your own dream helps clarify what really matters to you and your business.",
   "dreamBuilder.statements.title": "Your Dream statements",
   "dreamBuilder.statements.count": "N statements out of a minimum of 20 so far",
   "dreamBuilder.statements.empty": "No statements yet.",

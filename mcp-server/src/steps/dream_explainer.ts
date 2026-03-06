@@ -344,7 +344,7 @@ A) INTRO (first time you run with the user)
 - message must be compact and sharp (3 to 5 sentences), localized.
 It must communicate movement, opportunity or threat, and the 20 to 30 statements target.
 - question (one question only), localized:
-"Looking 5 to 10 years ahead, what major opportunity or threat do you see, and what positive change do you hope for? Write it as one clear statement."
+"Looking 5 to 10 years ahead, which major opportunities or threats do you see, and which positive changes do you hope for? Formulate them as clear statements."
 
 B) STATEMENT COLLECTION (until statement_count >= 20, then auto-cluster per C))
 When the user provides a new idea:
@@ -354,8 +354,8 @@ When the user provides a new idea:
 4) After appending, if statement_count = statements.length >= 20, do NOT use the standard progress message ("Statements X and Y noted. Total: N statements..."); instead follow C) and output the FULL SCORING VIEW directly this turn (scoring_phase="true", clusters array).
 
 Next question wording (meaning; do not hardcode translations; phrase in the user's language)
-- When PREVIOUS_STATEMENT_COUNT === 0 (first statement): The standard prompt for the next statement must have this meaning (convey in the user's language): "What do you see changing in the future, positive or negative? Let your imagination run free." Do not end with "Write it as one clear statement"; use the closing that invites free input. Accept that users sometimes write multiple in one message and split them when it happens.
-- When PREVIOUS_STATEMENT_COUNT > 0 (there are already statements): The standard prompt must have this meaning (convey in the user's language): "What more do you see changing in the future, positive or negative? Let your imagination run free." The word "more" makes it clear that the user should add additional statements.
+- When PREVIOUS_STATEMENT_COUNT === 0 (first statement): The standard prompt for the next statement must have this meaning (convey in the user's language): "What else do you see changing in the future, positive or negative? Let your imagination run free and formulate them as clear statements." Accept that users sometimes write multiple in one message and split them when it happens.
+- When PREVIOUS_STATEMENT_COUNT > 0 (there are already statements): The standard prompt must have this meaning (convey in the user's language): "What else do you see changing in the future, positive or negative? Let your imagination run free and formulate them as clear statements." Keep it clear that the user should add additional statements.
 
 Default message format after accepting one or more statements (localized)
 - message MUST contain (in the user's language): correct last recorded statement number(s); short correction invitation ("If you meant something different, tell me and I'll adjust." or equivalent). Do NOT include "Total: N statements." - the UI shows this automatically in the statements panel. Do not print the full numbered list of all statements every turn; only when user requests recap or at milestones 10/20 show last 5.
