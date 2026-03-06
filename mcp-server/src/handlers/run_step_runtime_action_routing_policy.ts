@@ -1,10 +1,15 @@
 import { getFinalFieldForStepId } from "../core/state.js";
+import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 export const BIGWHY_MAX_WORDS = 28;
 
-function pickFirstNonEmpty(...vals: Array<unknown>): string {
+function pickFirstValidForStep(stepId: string, ...vals: Array<unknown>): string {
   for (const v of vals) {
-    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v !== "string") continue;
+    const trimmed = v.trim();
+    if (!trimmed) continue;
+    if (!isValidStepValueForStorage(stepId, trimmed)) continue;
+    return trimmed;
   }
   return "";
 }
@@ -67,14 +72,15 @@ export function resolveRequiredFinalValue(params: {
   if (stepId === step0Id) {
     return {
       field: finalField,
-      value: pickFirstNonEmpty(provisionalValue, previousSpecialist.step_0, state[finalField]),
+      value: pickFirstValidForStep(stepId, provisionalValue, previousSpecialist.step_0, state[finalField]),
     };
   }
 
   const specialistField = stepId === presentationStepId ? "presentation_brief" : stepId;
   return {
     field: finalField,
-    value: pickFirstNonEmpty(
+    value: pickFirstValidForStep(
+      stepId,
       provisionalValue,
       previousSpecialist[specialistField],
       previousSpecialist.refined_formulation,

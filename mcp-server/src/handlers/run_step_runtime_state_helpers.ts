@@ -3,6 +3,7 @@ import {
   type CanvasState,
   type ProvisionalSource,
 } from "../core/state.js";
+import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 type ParseStep0FinalFn = (raw: string, fallbackName: string) => { name?: string } | null | undefined;
 
@@ -633,6 +634,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       if (!finalField || finals[finalField]) continue;
       const staged = String(provisional[stepId] || "").trim();
       if (!staged) continue;
+      if (!isValidStepValueForStorage(stepId, staged)) continue;
       finals[finalField] = staged;
     }
     const finalsLines =

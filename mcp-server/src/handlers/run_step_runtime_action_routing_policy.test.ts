@@ -77,6 +77,36 @@ test("resolveRequiredFinalValue prioritizes provisional and step-specific fallba
   assert.deepEqual(presentation, { field: "presentation_brief_final", value: "brief value" });
 });
 
+test("resolveRequiredFinalValue skips framing provisional value for role", () => {
+  const resolved = resolveRequiredFinalValue({
+    stepId: "role",
+    previousSpecialist: { role: "Mindd is de gids die ondernemers helpt keuzes te maken." },
+    state: { role_final: "" },
+    provisionalValue: "Hier zijn drie korte voorbeelden van een Rol voor Mindd:.",
+    step0Id: "step_0",
+    presentationStepId: "presentation",
+  });
+  assert.deepEqual(resolved, {
+    field: "role_final",
+    value: "Mindd is de gids die ondernemers helpt keuzes te maken.",
+  });
+});
+
+test("resolveRequiredFinalValue skips framing provisional value for purpose", () => {
+  const resolved = resolveRequiredFinalValue({
+    stepId: "purpose",
+    previousSpecialist: { purpose: "Mindd helpt ondernemers heldere strategische keuzes te maken." },
+    state: { purpose_final: "" },
+    provisionalValue: "Hier zijn drie korte voorbeelden van een Purpose voor Mindd:.",
+    step0Id: "step_0",
+    presentationStepId: "presentation",
+  });
+  assert.deepEqual(resolved, {
+    field: "purpose_final",
+    value: "Mindd helpt ondernemers heldere strategische keuzes te maken.",
+  });
+});
+
 test("BIGWHY_MAX_WORDS remains stable for routing checks", () => {
   assert.equal(BIGWHY_MAX_WORDS, 28);
 });

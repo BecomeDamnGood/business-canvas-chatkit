@@ -109,3 +109,31 @@ test("wordingSelectionMessage normalizes explicit rules selection to bullets", (
   assert.match(output, /JE HUIDIGE SPELREGELS VOOR Mindd IS:/);
   assert.equal((output.match(/^• /gm) || []).length, 3);
 });
+
+test("buildSpecialistContextBlock skips invalid framed provisional values", () => {
+  const helpers = buildHelpers();
+  const block = helpers.buildSpecialistContextBlock({
+    current_step: "role",
+    provisional_by_step: {
+      role: "Hier zijn drie korte voorbeelden van een Rol voor Mindd:.",
+    },
+    last_specialist_result: {},
+  } as any);
+
+  assert.doesNotMatch(block, /role_final:/i);
+  assert.match(block, /\(none yet\)/i);
+});
+
+test("buildSpecialistContextBlock skips invalid framed provisional values for purpose", () => {
+  const helpers = buildHelpers();
+  const block = helpers.buildSpecialistContextBlock({
+    current_step: "purpose",
+    provisional_by_step: {
+      purpose: "Hier zijn drie korte voorbeelden van een Purpose voor Mindd:.",
+    },
+    last_specialist_result: {},
+  } as any);
+
+  assert.doesNotMatch(block, /purpose_final:/i);
+  assert.match(block, /\(none yet\)/i);
+});

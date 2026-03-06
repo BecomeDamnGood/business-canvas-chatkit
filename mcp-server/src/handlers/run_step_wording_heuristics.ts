@@ -1,4 +1,5 @@
 import type { CanvasState } from "../core/state.js";
+import { isValidStepValueForStorage, looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
 
 type WordingChoiceMode = "text" | "list";
 
@@ -302,6 +303,7 @@ function extractDreamSuggestionSentences(params: {
     if (!sentence || sentence.length < 30) continue;
     if (sentence.endsWith("?")) continue;
     if (blocked.some((re) => re.test(sentence))) continue;
+    if (looksLikeExamplesFramingLine(sentence)) continue;
     const key = canonicalizeComparableText(sentence);
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -361,6 +363,7 @@ function extractRoleSuggestionSentences(params: {
     if (!sentence || sentence.length < 24) continue;
     if (sentence.endsWith("?")) continue;
     if (blocked.some((re) => re.test(sentence))) continue;
+    if (looksLikeExamplesFramingLine(sentence)) continue;
     const key = canonicalizeComparableText(sentence);
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -582,7 +585,12 @@ export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeurist
       message: String((previous as any).message || ""),
       companyName: businessName,
     });
-    if (fromMessage.length > 0) return String(fromMessage[0] || "").trim();
+    for (const candidate of fromMessage) {
+      const cleaned = String(candidate || "").trim();
+      if (!cleaned) continue;
+      if (!isValidStepValueForStorage(deps.dreamStepId, cleaned)) continue;
+      return cleaned;
+    }
     const statementLines = Array.isArray((previous as any).statements)
       ? ((previous as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean)
       : [];
@@ -593,7 +601,13 @@ export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeurist
       String((((state as any).provisional_by_step || {})[deps.dreamStepId] || "")).trim(),
       String((state as any).dream_final || "").trim(),
     ].filter(Boolean);
-    return fromFields.length > 0 ? fromFields[0] : "";
+    for (const candidate of fromFields) {
+      const cleaned = String(candidate || "").trim();
+      if (!cleaned) continue;
+      if (!isValidStepValueForStorage(deps.dreamStepId, cleaned)) continue;
+      return cleaned;
+    }
+    return "";
   }
 
   function pickRoleSuggestionFromPreviousState(
@@ -609,7 +623,12 @@ export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeurist
       companyName: businessName,
       ensureSentenceEnd: deps.ensureSentenceEnd,
     });
-    if (fromMessage.length > 0) return String(fromMessage[0] || "").trim();
+    for (const candidate of fromMessage) {
+      const cleaned = String(candidate || "").trim();
+      if (!cleaned) continue;
+      if (!isValidStepValueForStorage(deps.roleStepId, cleaned)) continue;
+      return cleaned;
+    }
     const fromFields = [
       String((previous as any).role || "").trim(),
       String((previous as any).refined_formulation || "").trim(),
@@ -618,6 +637,7 @@ export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeurist
     ].filter(Boolean);
     for (const candidate of fromFields) {
       const cleaned = deps.ensureSentenceEnd(candidate);
+      if (!isValidStepValueForStorage(deps.roleStepId, cleaned)) continue;
       const words = tokenizeWords(cleaned);
       if (words.length >= 5 && !cleaned.endsWith("?")) return cleaned;
     }
@@ -635,6 +655,7 @@ export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeurist
       const raw = String(value || "").trim();
       const trimmed = stepId === deps.entityStepId ? deps.normalizeEntityPhrase(raw) : raw;
       if (!trimmed) return;
+      if (!isValidStepValueForStorage(stepId, trimmed)) return;
       if (candidates.includes(trimmed)) return;
       candidates.push(trimmed);
     };

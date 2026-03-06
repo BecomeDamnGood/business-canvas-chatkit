@@ -114,3 +114,31 @@ test("applyStateUpdate stores products/services provisional value from statement
   assert.equal(lines.length, 4);
   assert.ok(lines.every((line) => line.startsWith("• ")));
 });
+
+test("applyStateUpdate skips role staging for framing intro values", () => {
+  const helpers = buildHelpers();
+  const next = helpers.applyStateUpdate({
+    prev: { current_step: "role" } as any,
+    decision: { current_step: "role", specialist_to_call: "RoleSpecialist" } as any,
+    specialistResult: {
+      role: "Hier zijn drie korte voorbeelden van een Rol voor Mindd:.",
+      refined_formulation: "Hier zijn drie korte voorbeelden van een Rol voor Mindd:.",
+    },
+    showSessionIntroUsed: "false",
+  });
+  assert.equal(String((next as any).provisional_by_step?.role || ""), "");
+});
+
+test("applyStateUpdate skips purpose staging for framing intro values", () => {
+  const helpers = buildHelpers();
+  const next = helpers.applyStateUpdate({
+    prev: { current_step: "purpose" } as any,
+    decision: { current_step: "purpose", specialist_to_call: "PurposeSpecialist" } as any,
+    specialistResult: {
+      purpose: "Hier zijn drie korte voorbeelden van een Purpose voor Mindd:.",
+      refined_formulation: "",
+    },
+    showSessionIntroUsed: "false",
+  });
+  assert.equal(String((next as any).provisional_by_step?.purpose || ""), "");
+});

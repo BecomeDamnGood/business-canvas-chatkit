@@ -1,5 +1,6 @@
 import type { BoolString, CanvasState, ProvisionalSource } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
+import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
 
@@ -170,6 +171,7 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       const fallback = typeof secondaryRaw === "string" ? secondaryRaw.trim() : "";
       const value = primary || fallback;
       if (!value) return;
+      if (!isValidStepValueForStorage(stepId, value)) return;
       nextState = deps.withProvisionalValue(nextState, stepId, value, provisionalSource);
     };
 

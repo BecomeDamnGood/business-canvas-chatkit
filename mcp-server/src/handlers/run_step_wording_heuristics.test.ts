@@ -6,6 +6,11 @@ import {
   parseListItems,
   shouldTreatAsStepContributingInput,
 } from "./run_step_wording_heuristics.js";
+import {
+  pickDualChoiceSuggestion,
+  pickDreamSuggestionFromPreviousState,
+  pickRoleSuggestionFromPreviousState,
+} from "./run_step_wording_heuristics_defaults.js";
 
 test("parseListItems splits run-on strategy style sentences into logical list items", () => {
   const input =
@@ -53,4 +58,54 @@ test("classifyPendingWordingChoiceTextIntent defaults to suggestion accept unles
     classifyPendingWordingChoiceTextIntent("That's not what I meant."),
     "reject_suggestion_explicit"
   );
+});
+
+test("pickRoleSuggestionFromPreviousState skips examples intro framing lines", () => {
+  const picked = pickRoleSuggestionFromPreviousState(
+    { business_name: "Mindd" } as any,
+    {
+      message: [
+        "Hier zijn drie korte voorbeelden van een Rol voor Mindd:.",
+        "1. Mindd is de gids die ondernemers helpt hun visie om te zetten in concrete keuzes.",
+        "2. Mindd is de uitdager die ondernemers confronteert met wat echt belangrijk is.",
+        "3. Mindd is de versneller die ondernemers helpt sneller tot scherpe besluiten te komen.",
+      ].join("\n"),
+    } as any
+  );
+  assert.equal(
+    picked,
+    "Mindd is de gids die ondernemers helpt hun visie om te zetten in concrete keuzes."
+  );
+});
+
+test("pickDreamSuggestionFromPreviousState skips examples intro framing lines", () => {
+  const picked = pickDreamSuggestionFromPreviousState(
+    { business_name: "Mindd" } as any,
+    {
+      message: [
+        "Hier zijn drie korte voorbeelden van een Droom voor Mindd:.",
+        "1. Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+        "2. Mindd droomt van een wereld waarin werk en betekenis samenkomen.",
+        "3. Mindd droomt van een wereld waarin bedrijven groeien zonder hun waarden te verliezen.",
+      ].join("\n"),
+    } as any
+  );
+  assert.equal(
+    picked,
+    "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes."
+  );
+});
+
+test("pickDualChoiceSuggestion ignores examples framing-only message for purpose", () => {
+  const picked = pickDualChoiceSuggestion(
+    "purpose",
+    {
+      message: "Hier zijn drie korte voorbeelden van een Purpose voor Mindd:.",
+      purpose: "",
+      refined_formulation: "",
+    } as any,
+    {} as any,
+    ""
+  );
+  assert.equal(picked, "");
 });
