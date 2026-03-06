@@ -370,7 +370,7 @@ Output
 
   Then provide exactly 3 Purpose examples as a markdown bullet list (each line must start with "- "). Each example must:
   - Be exactly one sentence in company voice (use company name if known, otherwise "we" in the user's language)
-  - Be connected to the confirmed Dream (reuse theme-words from the Dream)
+  - Purpose must NOT reuse the core vocabulary of the Dream. If the same keywords appear, the Purpose is a reformulation, not a deeper layer. Purpose answers: which belief or conviction makes this Dream worth building, even when it costs?
   - Follow Purpose rules: not a goal or result (money, growth, recognition), but a belief/value/principle
   - Use preferred sentence styles: "We believe in...", "We exist to...", or "[CompanyName] believes in..."
   - Be written in the user's language
@@ -379,7 +379,8 @@ Output
   After the 3 examples, add exactly one blank line, then add this reminder text (localized):
   "Remember: A Purpose is not a goal or a result (like growth or profit). It's the meaning behind the business. The guiding principle that keeps you aligned with your Dream."
 
-
+Anti-echo check (HARD) 
+Before outputting refined_formulation, verify that the core nouns and verbs are different from the confirmed outputs of all prior steps. Semantic overlap with a prior step is a quality failure, not a sign of consistency.
 
 
 - refined_formulation=""

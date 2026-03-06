@@ -1,172 +1,175 @@
 # Fix Jochem na Jochem Test
 
-## Fix 1 - Entiteit: headline/menu mismatch en refine-knop zonder zichtbare formulering
+## Fix 1 - Startup wait-shell + dubbele startklik op welkomstscherm
 
 ### Input (zoals gemeld)
-In de stap `entiteit` bleef de user doorvragen. Daarna verscheen een scherm waarbij de agent in communicatiemodus had moeten blijven. Er stond een knop `Verfijn de formulering voor mij alsjeblieft`, terwijl er geen formulering zichtbaar was.
+Tijdens startup van de MCP app verschijnt eerst een loading-scherm (`Loading translation...`). Pas daarna verschijnt de normale app-content in de juiste taal.
+
+Daarnaast is de startknop op het welkomstscherm pas effectief na een eerste klik; in de praktijk moet je vaak 2 keer klikken om naar het volgende scherm te gaan.
 
 Gewenst interface-gedrag:
-1. Feedback op vraag/statement van user.
-2. De standaardzin over wat de huidige `<stepname>` voor `<companyname/my future company>` is.
-3. De opgeslagen statement.
-4. Headline moet `Verfijn je entiteit ...` zijn in plaats van `Definieer ...` als er al output bekend is.
+1. Geen zichtbare tussenschermen met halve/fallback content als eindgebruiker-flow.
+2. Eerste zichtbare app-state is direct bruikbaar en in de juiste taal.
+3. Startknop reageert deterministisch op de eerste klik (single-click progression).
 
 ### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
 
-#### Hypothese A - Status en menu raken ontkoppeld
-- `headline` wordt bepaald op basis van `status` (`no_output` => `define`, anders `refine`).
-- `menu` kan tegelijk uit de bewaarde `phase` komen i.p.v. uit dezelfde `status`.
-- Daardoor kan combinatie ontstaan: headline `Definieer ...` + knop uit `ENTITY_MENU_EXAMPLE` (`Verfijn ...`).
-- Technische aanwijzingen:
-  - `contractHeadlineForState` kiest `define/refine` puur op `status`.
-  - `resolveMenuContract` gebruikt bij `no_output`/`incomplete_output` nog steeds `phaseMenu` als die geldig is.
+#### Hypothese A - Client forceert een synthetische startup wait-state vóór canonical host payload
+- De widget rendert actief een client-side wait-shell met `prestart.loading` zodra de eerste host payload nog niet beschikbaar is.
+- Daardoor ziet de user eerst een fallback-scherm en pas daarna de echte state.
+- Dit verklaart exact het waargenomen patroon “eerst loading, daarna gevuld”.
 
-#### Hypothese B - Tijdelijk opgeslagen step-output kan gewist worden tijdens interactiestate reset
-- Er is een pad dat `clearStepInteractiveState` aanroept.
-- Die reset wist ook `provisional_by_step[stepId]`.
-- Als de entiteit nog niet definitief gecommit was, kan bekende output verdwijnen, waardoor `status` terugvalt naar `no_output`.
-- Technische aanwijzingen:
-  - `clearStepInteractiveState` roept direct `clearProvisionalValue` aan.
-  - Dit pad kan getriggerd worden bij pending wording-choice + nieuwe tekstinput.
+#### Hypothese B - Root wordt te vroeg zichtbaar gemaakt
+- De root wordt vrijgegeven zodra `startupPayloadMissing` waar is, inclusief de synthetische wait-state.
+- Daardoor wordt expliciet gekozen voor “iets tonen” in plaats van “wachten op canonical state en dan in één keer renderen”.
 
-#### Hypothese C - Recap/contextblok wordt niet afgedwongen in dit statuspad
-- Bij off-topic/communicatie-flow wordt recap-context alleen toegevoegd als status niet `no_output` is.
-- Als status onterecht op `no_output` staat, ontbreekt de verwachte blokstructuur met huidige opgeslagen statement.
+#### Hypothese C - Start-actie kan in ‘ack zonder zichtbare advance’-pad vallen
+- In het startpad wordt `ACTION_START` als niet-gevorderd beschouwd als er geen direct ingest-bare widget-result payload is of view nog `prestart` blijft.
+- Dan wordt een recovery-poll gepland i.p.v. directe zichtbare voortgang.
+- UX-effect: eerste klik voelt als no-op; tweede klik lijkt nodig.
 
-#### Hypothese D - Contract-invariant ontbreekt
-- Er lijkt geen harde invariant te bestaan die verbiedt:
-  - `status=no_output` gecombineerd met `ENTITY_MENU_EXAMPLE`, of
-  - tonen van `ACTION_ENTITY_EXAMPLE_REFINE` zonder zichtbare/canonieke formulering.
-- Gevolg: inconsistente UI kan legitiem door de huidige codepaden glippen.
+#### Hypothese D - Startup race tussen ingest-kanalen veroorzaakt prestart-cache-gevoel
+- De code verwerkt meerdere ingest-signalen (`set_globals`, host notification, call response).
+- Als eerste response shape niet canonical wordt herkend, kan prestart visueel blijven staan terwijl server-side start wel accepted is.
+
+### Toets aan OpenAI-richtlijnen (hoog over)
+
+Bronnen:
+- https://developers.openai.com/apps-sdk/build/chatgpt
+- https://developers.openai.com/apps-sdk/build/state-management
+- https://developers.openai.com/apps-sdk/build/ux
+- https://developers.openai.com/apps-sdk/build/ui-guidelines
+
+Wat relevant lijkt:
+1. Apps SDK-voorbeelden sturen op renderen vanuit host-state (`window.openai.toolOutput`) en updates via host-event (`openai:set_globals`).
+2. UX-principes leggen nadruk op snelle/responsieve ervaring en heldere state-transities.
+3. UI-richtlijnen leggen nadruk op duidelijke single-action interacties.
+
+Inferred conclusie (expliciet als inferentie):
+- Een geforceerde client-side startup wait-shell als eerste zichtbare app-state, gevolgd door latere re-render, past slecht bij het gewenste patroon van deterministische host-state render en snelle, eenduidige interactie.
+- Een startknop die niet consistent op eerste klik doorzet is niet in lijn met “clear single-action progression”.
 
 ### Bewijspunten in code (startpunten voor diep onderzoek)
-- `mcp-server/src/core/turn_policy_renderer.ts`
-  - `contractHeadlineForState` (status => define/refine): rond regels 247-270.
-  - `computeStatus` accepted/provisional/visible output: rond regels 615-763.
-  - `resolveMenuContract` phase-menu prioriteit buiten `valid_output`: rond regels 937-959.
-  - off-topic recap alleen bij `effectiveStatus !== no_output`: rond regels 1075-1080.
-- `mcp-server/src/core/ui_contract_matrix.ts`
-  - Entity default menu per status: regels 574-578.
-- `mcp-server/src/i18n/ui_strings/locales/ui_strings_nl.ts`
-  - Label `ACTION_ENTITY_EXAMPLE_REFINE`: regel 75.
-- `mcp-server/src/handlers/run_step_runtime_state_helpers.ts`
-  - `clearStepInteractiveState` wist provisional value: regels 322-325.
-- `mcp-server/src/handlers/run_step_runtime_action_routing.ts`
-  - `clearStepInteractiveState` pad bij text-intent + pending wording: regels 530-537.
-- `mcp-server/src/handlers/run_step_turn_response_engine.ts`
-  - Gerenderde contractfase wordt elke turn teruggeschreven naar `__ui_phase_by_step`: regels 123-126.
+
+- `mcp-server/ui/step-card.bundled.html`
+  - Startup synthetic wait-state:
+    - `STARTUP_GRACE_MS_DEFAULT` + `buildStartupInitState` met `waiting_locale/pending`: regels 4705-4737.
+    - `renderStartupWaitShell(...)`: regels 4760-4784.
+    - trigger bij ontbrekende init payload: regel 5020.
+  - Wait-shell rendering met `prestart.loading`:
+    - `renderBootstrapWaitShell(...)`: regels 3784-3808.
+  - Root reveal timing:
+    - `startupPayloadMissing` + immediate `revealWidgetRoot()`: regels 4023-4025.
+  - Startklik flow:
+    - `btnStart` handler + `callRunStep(actionCode, { started: "true" })`: regels 4947-4960.
+  - Start-ack zonder advance pad:
+    - `startAdvanced = hasIngestedResult && (...)`: regel 3316.
+    - failure-path + recovery poll scheduling: regels 3317-3332.
+  - Recovery timing/debounce:
+    - `CLICK_DEBOUNCE_MS = 250`: regels 2606-2608 en 3157-3158.
+    - `scheduleStartAckRecoveryPoll(...)`: regels 2630-2667.
+
+- `mcp-server/src/handlers/run_step_routes.ts`
+  - `start_prestart` routing en prestart/start-trigger splitsing: regels 612-779.
+
+- Historische regressie-evidence in repo (relevant voor dezelfde defectklasse)
+  - `docs/mcp_widget_regressie_living_rapport.md`: 1212-1220, 1652-1653.
+  - `docs/mcp_widget_stabilisatie_run_resultaat.md`: 49-51, 188-193.
 
 ### Mogelijke structurele fixes (geen quick fixes)
 
-1. Maak een eenduidige UI-state machine per step
-- Één canonieke afleiding voor `headline`, `menu`, `buttons`, `recap-block` vanuit dezelfde step-output-status.
-- `phase` mag alleen subflow-positie zijn binnen een geldige status, nooit een bron die status tegenspreekt.
+1. Maak canonical host payload hard de enige bron voor first visible paint
+- Geen synthetische startup wait-state renderen als normale eerste app-state.
+- Root pas revealen bij canonical payload (of expliciete fail-closed error-state).
 
-2. Splits content-state en interaction-state hard
-- `clearStepInteractiveState` mag géén step-output wissen.
-- Alleen tijdelijke interactievelden resetten (`wording_choice_*`, tijdelijke keuzecontext), niet `provisional_by_step` met inhoudelijke step-output.
+2. Verwijder “prestart.loading” als standaard eerste gebruikersscherm
+- Alleen tonen bij expliciete server view-mode recovery/wait, niet bij client init-miss.
+- Doel: geen visuele dubbele overgang (loading -> prestart content).
 
-3. Status-naar-menu contract hard afdwingen
-- Voor `entity`:
-  - `no_output` => alleen intro/formulate menu’s.
-  - `incomplete/valid` met bestaande entiteit => refine/example menu’s.
-- Geen refine-acties renderen zonder zichtbare/canonieke formulering.
+3. Maak start-advance invariant strenger en deterministischer
+- `ACTION_START` mag user-facing niet eindigen in stilstaande prestart zonder expliciete foutmelding.
+- Als server `accepted + state_advanced` geeft, moet UI binnen begrensde tijd zichtbaar doorzetten naar interactieve state of expliciet falen.
 
-4. Canonieke recap-weergave verplicht maken
-- Als er bekende entiteit is (final of geaccepteerde provisional), dan altijd de 3-blok structuur tonen:
-  1) feedback,
-  2) standaard contextzin,
-  3) opgeslagen statement.
-- Dit moet een invariant zijn, geen best-effort.
+4. Harmoniseer ingest-vormen tot één canonical parsepad
+- `set_globals`, `tool-result` en `call response` moeten dezelfde canonical widget-result selectie afdwingen.
+- Geen prestart-cache behoud bij vorm-mismatch zonder expliciete contract-error.
 
-5. Contract-tests toevoegen op inconsistenties
-- Regressietests voor exact dit scenario:
-  - user blijft doorvragen,
-  - eerdere entiteit bestaat,
-  - UI mag nooit `Definieer ...` combineren met `ENTITY_MENU_EXAMPLE` refine-knop zonder formulering.
-
-### Aanvulling op Fix 1 - Zelfde defectklasse zichtbaar in `doelgroep`
-- Nieuwe observatie: in `doelgroep` verschijnt een `ga door`-actie (`ACTION_TARGETGROUP_POSTREFINE_CONFIRM`) terwijl er geen zichtbare opgeslagen doelgroep-statement in beeld staat.
-- Dit valt onder dezelfde root-causeklasse als Fix 1 (status/menu/render-ontkoppeling + contextblok niet hard afgedwongen), alleen in een andere stap.
-- Daarom geen aparte `Fix 3` nodig op dit moment; dit issue wordt toegevoegd aan de scope en acceptatiecriteria van `Fix 1`.
-- Kanttekening: als de structurele fix van Fix 1 correct stap-onafhankelijk wordt geïmplementeerd, hoort dit probleem automatisch mee opgelost te zijn.
-
-#### Extra bewijspunten voor deze variant
-- `mcp-server/src/core/ui_contract_matrix.ts`
-  - `targetgroup` default menu’s: `no_output -> TARGETGROUP_MENU_INTRO`, `valid_output -> TARGETGROUP_MENU_POSTREFINE`.
-- `mcp-server/src/core/turn_policy_renderer.ts`
-  - `targetgroup` zit in `acceptedDrivenValidSteps`; bij accepted evidence gaat status naar `valid_output`.
-  - headline wordt nog steeds afgeleid van status (`define/refine`) los van menu-phase.
-- `mcp-server/src/handlers/run_step_runtime_semantic_helpers.ts`
-  - contract-invarianten blokkeren confirm vooral op evidence/menu-niveau, maar niet op eis dat de canonical statement zichtbaar in de UI-body moet staan.
-
-#### Extra acceptatiecriteria onder Fix 1
-1. In alle single-value stappen (`entity`, `targetgroup`, `purpose`, `bigwhy`, `role`) geldt:
-   - als een confirm/continue button zichtbaar is, moet in dezelfde turn ook de canonical opgeslagen step-output zichtbaar zijn in de body.
-2. Geen confirm/continue zonder zichtbare statement.
-3. Regressietestmatrix uitbreiden met minimaal `entity` + `targetgroup` voor dit patroon.
-
----
+5. Verifieer met contracttests op UX-uitkomst
+- Regressietests die exact afdwingen:
+  - geen “loading translation -> pas daarna prestart” als standaard startup-flow,
+  - startknop zet met één klik door naar interactieve step_0-state,
+  - geen silent no-op bij start.
 
 ### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
 ```text
 Context
-Je onderzoekt een UI-contract regressie in stap `entity` van de Business Strategy Canvas Builder.
+Je onderzoekt een startup/action regressie in de MCP-widget:
+1) eerst zichtbaar loading/wait-scherm,
+2) daarna pas gevuld welkomstscherm,
+3) startknop voelt als dubbele klik nodig.
 
 Observed bug
-- User bleef doorvragen in entity-step.
-- UI toonde headline "Definieer je entiteit ..." terwijl er al eerder output bekend was.
-- UI toonde knop "Verfijn de formulering voor mij alsjeblieft" terwijl er geen formulering zichtbaar was.
+- User ziet eerst "Loading translation..." in de card.
+- Daarna verschijnt pas de normale prestart-content in de juiste taal.
+- Startknop gaat vaak pas bij tweede klik door naar het volgende scherm.
 
 Doel van deze opdracht
-1) Achterhaal de echte root cause (niet symptoombestrijding).
-2) Lever technisch bewijs met concrete state-transities en codepaden.
-3) Stel alleen structurele oplossingen voor.
+1) Lever definitieve root-cause (geen symptoomfix).
+2) Toets expliciet aan OpenAI Apps SDK-richtlijnen.
+3) Lever structureel fixplan.
 4) Doe GEEN codewijzigingen in deze opdracht.
 
 Harde regels
-- Quick fixes zijn verboden.
-- Geen fallbacks/omwegen/extra guards als structurele oplossing.
-- Als je bestaande guards/fallbacks vindt die dit maskeren, markeer ze als technische schuld met voorstel tot verwijdering na root-cause fix.
-- Zonder expliciet akkoord van opdrachtgever mag er geen code worden aangepast.
+- Quick fixes verboden.
+- Geen extra retries/fallbacks als eindoplossing.
+- Als je fallback-lagen vindt die UX-race maskeren: markeer als technische schuld.
+- Zonder expliciet akkoord: geen implementatie.
 
 Onderzoeksaanpak
 1. Reproduceer deterministisch
-- Reproduceer de flow met exacte inputvolgorde (entity output aanwezig, daarna doorvragen).
-- Leg per turn vast:
-  - `current_step`
-  - `last_specialist_result` (action, message, question, refined_formulation, entity, is_offtopic)
-  - `provisional_by_step.entity`
-  - `provisional_source_by_step.entity`
-  - `entity_final`
-  - `__ui_phase_by_step.entity`
-  - gerenderd `status`, `contract_id`, `menuId`, `uiActionCodes`, `headline/question`
+- Leg startup-eventvolgorde vast:
+  - initial ingest
+  - set_globals
+  - tool-result notification
+  - first render
+  - ACTION_START dispatch/ack/advance
+- Leg per stap vast:
+  - payload-shape bron
+  - selected canonical render source
+  - ui.view.mode
+  - started/current_step
+  - has_start_action
+  - action liveness (ack/status/state_advanced/reason)
 
-2. Maak een causale keten
-- Toon exact waar status wordt bepaald.
-- Toon exact waar menu/phase wordt bepaald.
-- Toon exact waar/wanneer opgeslagen output eventueel wordt gewist.
-- Toon exact waarom refine-button zichtbaar werd zonder zichtbare formulering.
+2. Maak causale keten
+- Toon exact waarom loading-shell eerst zichtbaar wordt.
+- Toon exact waarom startklik in no-progress pad valt.
+- Toon of dit een ingest-shape probleem, ordering probleem, of beide is.
 
-3. Valideer tegen functionele verwachting
-- Verwacht gedrag bij bestaande entity-output:
-  - feedback + standaard contextzin + opgeslagen statement
-  - headline "Verfijn je entiteit ..." (niet "Definieer ...")
+3. OpenAI-richtlijntoets
+- Gebruik minimaal deze bronnen:
+  - https://developers.openai.com/apps-sdk/build/chatgpt
+  - https://developers.openai.com/apps-sdk/build/state-management
+  - https://developers.openai.com/apps-sdk/build/ux
+  - https://developers.openai.com/apps-sdk/build/ui-guidelines
+- Maak expliciet onderscheid tussen:
+  - direct bronfeit
+  - inferentie voor deze codebase
 
-4. Lever structureel oplossingsvoorstel (nog niet implementeren)
-- Presenteer 1 voorkeursrichting + max 2 alternatieven.
-- Voor elke richting:
+4. Lever structureel oplossingsvoorstel (niet implementeren)
+- 1 voorkeursrichting + max 2 alternatieven.
+- Per richting:
   - architecturale impact,
-  - welke invarianten hierdoor hard worden,
-  - risico’s/migratie,
-  - teststrategie (unit + integratie + regressie).
+  - welke invarianten hard worden,
+  - risico/migratie,
+  - teststrategie (unit/integratie/regressie).
 
 Verplichte outputstructuur
-A. Mensentaal uitleg van het probleem (kort en helder)
-B. Technisch bewijs (bestands- en regelnummers, state snapshots)
-C. Definitieve root-cause formulering
-D. Structureel fixplan (zonder codewijziging)
-E. Beslisvoorstel aan opdrachtgever (wat eerst, waarom)
+A. Mensentaal probleemuitleg (kort)
+B. Technisch bewijs (file/line + eventvolgorde)
+C. Definitieve root-cause
+D. Structureel fixplan
+E. Beslisvoorstel (wat eerst, waarom)
 
 Stopconditie
 - Stop na analyse + plan.
@@ -177,506 +180,623 @@ Stopconditie
 ### Oplossing / aanpassing (na akkoord)
 Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
 
-### Oplossing / aanpassing (uitgevoerd op 2026-03-05)
-- Status/menu ontkoppeling structureel opgelost in de turn-policy renderer:
-  - stale refine/postrefine menu's worden niet meer gebruikt als de effectieve status `no_output` is;
-  - voor single-value stappen (`entity`, `targetgroup`, `purpose`, `bigwhy`, `role`) mag een menu dat confirm/refine verwacht niet getoond worden zonder bekende output.
-- Content-state en interaction-state hard gescheiden:
-  - `clearStepInteractiveState` wist geen `provisional_by_step` meer;
-  - clearing van inhoudelijke provisional data gebeurt alleen expliciet in het commit-pad (`clearProvisionalValue`), niet als bijeffect van interactiestate-reset.
-- Canonical context-invariant afgedwongen in de body:
-  - als er accepted/canonical output bekend is voor single-value stappen, wordt altijd een current-context blok afgedwongen met heading + canonical statement;
-  - dit voorkomt refine/confirm-acties zonder zichtbare formulering.
-- Regressietests toegevoegd voor defectklasse:
-  - entity: geen stale refine-menu bij `no_output`;
-  - targetgroup: geen stale postrefine-menu bij `no_output`;
-  - canonical current-context blok wordt zichtbaar afgedwongen bij valid output;
-  - interactive-state reset behoudt provisional content.
-
-## Fix 2 - Wording-choice acceptatie, verlies van focuspunten en ongewenste Engelstalige/dubbele strategieblokken
+## Fix 5 - Role “kies er een voor mij” kan introzin opslaan als finale rol
 
 ### Input (zoals gemeld)
-- In wording-choice stond bij `my suggestion` een versie met 3 statements.
-- User klikte geen keuzebutton, maar vroeg in tekst om het korter/bondiger te maken.
-- Volgens regel moet dit (zonder expliciete afwijzing) gelden als acceptatie van `my suggestion`.
-- Volgend scherm toonde ineens nog maar 2 statements.
-- Daarnaast werd dubbele tekst getoond en een Engelse regel (`SO FAR WE HAVE ...`) die nooit zichtbaar had mogen zijn.
-- Dit moet stap-onafhankelijk kloppen (zelfde principe in elke stap).
+- User koos in stap `Rol` eerst voor `geef 3 voorbeelden`.
+- Daarna koos user `kies er een voor mij`.
+- Daarna vroeg user een samenvatting/recap.
+- Vervolgens ging user door naar de volgende stap.
+- In de opgeslagen output staat bij `ROL`:
+  - `Hier zijn drie korte voorbeelden van een Rol voor Mindd:.`
+  - in plaats van de gekozen rolzin.
+
+Gewenst:
+1. Bij `kies er een voor mij` moet één echte role-optie worden opgeslagen.
+2. Een intro/headline-zin van een voorbeeldenblok mag nooit als role-value worden gecommit.
+3. Recap-vragen mogen dit niet overschrijven of “vervuilen”.
 
 ### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
 
-#### Hypothese A - Pending wording-choice wordt te vroeg vrijgegeven bij vrije tekst
-- Tijdens een pending wording-choice turn wordt vrije step-contributing tekst gezien als signaal om pending state los te laten.
-- Daardoor verdwijnt de keuze-context en wordt usertekst als nieuwe inhoud naar specialist gestuurd, i.p.v. default acceptatie van `my suggestion`.
-- Gevolg: de eerder voorgestelde 3 statements zijn niet langer leidend; specialist kan met 2 statements terugkomen.
-- Technische aanwijzingen:
-  - `run_step_runtime_action_routing.ts` reset pending state via `clearStepInteractiveState` bij text-intent.
-  - Deze reset is vóór de wording-pick selectie.
+#### Hypothese A - Synthetic role-pick selecteert uit vrije tekst en kan de introregel pakken
+- Route `synthetic_role_pick` kiest een suggestie via message-parsing (`pickRoleSuggestionFromPreviousState`).
+- Als de vorige message een voorbeelden-intro bevat, kan die als kandidaat worden gezien.
 
-#### Hypothese B - Reset van interactieve state wist ook inhoudelijke stap-progressie
-- `clearStepInteractiveState` reset niet alleen wording-choice velden, maar wist ook `provisional_by_step[stepId]`.
-- Hierdoor kan eerder geaccepteerde tussentijdse output verloren gaan.
-- Gevolg: canonical basis voor de volgende turn wordt zwakker/kleiner, wat statementverlies versterkt.
+#### Hypothese B - Filter voor “voorbeelden-intro” is vooral Engels en mist NL-varianten
+- In `extractRoleSuggestionSentences` staan blokkades als `here are ... role examples`, maar geen NL patroon zoals `Hier zijn drie korte voorbeelden ...`.
+- Daardoor blijft de Nederlandse introregel kandidaat.
 
-#### Hypothese C - Engels is deels contractueel afgedwongen in specialist-instructies
-- Strategie-instructies bevatten harde vaste zinnen in het Engels (o.a. `So far we have these [X] strategic focus points`).
-- Ondanks "localized"-intentie is dit in praktijk lekgevoelig en kan in output blijven staan.
-- Runtime corrigeert alleen enkele bekende Engelse claims, niet deze volledige familie.
+#### Hypothese C - Ranking bevoordeelt regels met bedrijfsnaam
+- Kandidaten met bedrijfsnaam krijgen extra score (+10).
+- De introregel bevat vaak de bedrijfsnaam en kan daardoor boven echte voorbeeldzinnen eindigen.
 
-#### Hypothese D - Dubbele strategieblokken door dubbele ownership
-- Specialistmessage bevat al een lijst/samenvatting van focuspunten.
-- Renderer voegt daarna nog een canonical `strategyContextBlock` toe.
-- Dedupe-detectie faalt als headings/taal/structuur verschillen, waardoor inhoud dubbel verschijnt.
-- Gevolg: scherm toont lijst in message én nogmaals als "huidige strategie" blok.
+#### Hypothese D - Eenmaal gestaged wordt foutieve waarde later hard gecommit
+- Role-waarde wordt direct in `provisional_by_step.role` gestaged vanuit `role/refined_formulation`.
+- Bij “doorgaan naar volgende stap” commit-pad kiest eerst `provisionalValue`.
+- Daardoor wordt de foutieve introzin naar `role_final` geschreven, ook na een recap-turn.
 
 ### Bewijspunten in code (startpunten voor diep onderzoek)
-- `mcp-server/src/handlers/run_step_runtime_action_routing.ts`
-  - pending release op text-intent: regels 530-537.
-  - pending panel branch die dan wordt overgeslagen: regels 553-557.
-- `mcp-server/src/handlers/run_step_runtime_state_helpers.ts`
-  - `clearStepInteractiveState` wist `provisional` via `clearProvisionalValue`: regels 322-325.
-- `mcp-server/src/steps/strategy.ts`
-  - vaste frase `So far we have these [X] strategic focus points`: regel 420.
-  - herhaalde harde outputpatronen met dezelfde frase: regels 485, 510, 525, 537, 556.
-- `mcp-server/src/core/turn_policy_renderer.ts`
-  - strategy-context wordt extra toegevoegd onder message: regels 1068-1098.
-- `mcp-server/src/core/turn_policy/strategy_helpers.ts`
-  - opbouw van canonical strategy context block (summary + huidige strategie + bullets).
-- `mcp-server/src/handlers/run_step_wording.ts`
-  - beperkte Engelse claim-filter (`you've provided...`) maar niet algemene `So far...` familie (rond `stripUnsupportedReformulationClaims`).
+
+- Synthetic role-pick flow:
+  - `mcp-server/src/handlers/run_step_routes.ts`
+    - `synthetic_role_pick` gebruikt `pickRoleSuggestionFromPreviousState(...)`: regels 231-242.
+    - gekozen waarde wordt direct gezet in `refined_formulation` en `role`: regels 253-255.
+
+- Parsing/ranking van role-kandidaat uit message:
+  - `mcp-server/src/handlers/run_step_wording_heuristics.ts`
+    - `extractRoleSuggestionSentences(...)`: regels 323-381.
+    - blocked-list bevat vooral Engelse patronen: regels 332-339.
+    - ranking geeft +10 bij bedrijfsnaam-match: regel 373.
+  - Zelfde helper wordt gebruikt door picker:
+    - `pickRoleSuggestionFromPreviousState(...)`: regels 599-623.
+
+- Staging van role provisional:
+  - `mcp-server/src/handlers/run_step_state_update.ts`
+    - role staging via `stageFieldValue(... role, refined_formulation)`: regels 185-187.
+
+- Commit naar final bij doorgaan:
+  - `mcp-server/src/handlers/run_step_runtime_action_routing_policy.ts`
+    - `resolveRequiredFinalValue(...)` pakt eerst `provisionalValue`: regels 77-82.
+  - `mcp-server/src/handlers/run_step_runtime_action_routing.ts`
+    - commit naar final-field bij transition: regels 386-390.
 
 ### Mogelijke structurele fixes (geen quick fixes)
 
-1. Maak een expliciete pending-choice intent state machine (stap-onafhankelijk)
-- Nieuwe intents tijdens pending-choice:
-  - `ACCEPT_SUGGESTION_DEFAULT` (default bij geen expliciete afwijzing),
-  - `REJECT_SUGGESTION_EXPLICIT`,
-  - `MODIFY_SUGGESTION`,
-  - `NEW_STEP_CONTENT`.
-- Vrije tekst zonder expliciete afwijzing mag pending niet resetten; base = suggestion.
-- Alleen bij expliciete afwijzing/"helemaal fout/ik bedoel iets anders" mag suggestion verlaten worden.
+1. Maak role choose-for-me data-gedreven i.p.v. message-parsing
+- Laat de role-specialist bij “3 voorbeelden” expliciet een gestructureerde lijst returnen (bijv. `role_examples[]`).
+- `synthetic_role_pick` kiest alleen uit die lijst, nooit uit vrijetekst `message`.
 
-2. Scheid interactie-reset van content-state definitief
-- `clearStepInteractiveState` mag alleen interactieve velden resetten.
-- Content (`provisional_by_step`) moet via aparte, expliciete content-transitie verlopen.
-- Zo voorkom je statementverlies door UI-flow-reset.
+2. Voeg locale-onafhankelijke intro/cta-exclusie toe
+- Blokkeer kandidaatregels die alleen “examples/voorbeelden” framing bevatten.
+- Maak dit semantisch i.p.v. taal-hardcoded regex.
 
-3. Maak runtime owner van alle summary/recap microcopy
-- Specialist levert alleen gestructureerde data (`statements`, `reason`, `question intent`), geen vaste samenvattingszinnen.
-- Runtime rendert altijd gelokaliseerde summaryregels via i18n keys.
-- Verwijder harde Engelse stringvereisten uit specialist-instructies.
+3. Voeg pre-commit validatie op role-shape toe
+- Voordat `role`/`role_final` wordt gestaged/gecommit:
+  - reject regels die voorbeelden-intro patronen matchen,
+  - en gebruik laatste geldige role-candidate als fallback.
 
-4. Single-owner render-contract voor lijstblokken
-- Ofwel specialistmessage toont focuslijst, ofwel renderer `strategyContextBlock` toont die, maar nooit beide.
-- Contract-invariant: één canonical lijstweergave per turn.
-- Voeg list-set dedupe op canonical item keys toe vóór renderen.
+4. Bescherm commit-pad tegen recap-afgeleide ruis
+- Als laatste specialist-turn recap/meta is, commit alleen als er valide staged role bestaat.
+- Anders final ongewijzigd laten en user terugsturen naar role-keuze.
 
-5. Uniforme spelling-normalisatie vóór commit (alle stappen)
-- Eén centrale normalizer/spelling-correctielaag vóór persist/render.
-- Niet verspreid per stap/pad, zodat gedrag consistent blijft bij free text, wording-pick en action routes.
-
----
+5. Regressietests op end-to-end sequence
+- Test exact scenario:
+  - 3 voorbeelden -> kies voor mij -> recap -> continue.
+- Assert:
+  - `role_final` bevat echte role-zin, nooit intro/headline.
+- Herhaal voor minstens `nl` en `en`.
 
 ### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
 ```text
 Context
-Je onderzoekt een regressie in wording-choice en strategy rendering.
+Je onderzoekt een regressie in Role:
+- user kiest 3 voorbeelden,
+- kiest daarna "kies er een voor mij",
+- vraagt recap,
+- gaat door naar volgende stap,
+- en krijgt als opgeslagen Role een voorbeelden-introzin i.p.v. echte Role.
 
 Observed bug
-- In wording-choice had "my suggestion" 3 statements.
-- User klikte geen keuzebutton en vroeg in tekst om korter/bondiger.
-- Volgende scherm toonde 2 statements i.p.v. 3.
-- Er verscheen dubbele inhoud en een Engelse regel ("SO FAR WE HAVE...").
-
-Business rule (hard)
-- Als user geen button kiest en niet expliciet aangeeft dat de suggestie fout is of iets totaal anders bedoeld wordt, dan geldt dat als acceptatie van "my suggestion".
-- Dit gedrag moet in elke stap consistent zijn.
+- Opgeslagen waarde wordt:
+  "Hier zijn drie korte voorbeelden van een Rol voor <company>:."
+- Verwacht: één echte gekozen Role-zin.
 
 Doel van deze opdracht
-1) Bepaal de echte root cause inclusief state-transities.
-2) Lever technisch bewijs voor statementverlies + dubbele render + language leak.
-3) Stel alleen structurele oplossingen voor.
-4) GEEN codewijzigingen in deze opdracht.
+1) Lever definitieve root-cause met causale keten.
+2) Toon exact waar introzin als candidate kan worden gekozen.
+3) Toon exact hoe deze waarde staged en later committed wordt.
+4) Lever structureel fixplan.
+5) Doe GEEN codewijzigingen in deze opdracht.
 
 Harde regels
-- Geen quick fixes.
-- Geen fallbacks/extra guards als eindoplossing.
-- Als bestaande guards/fallbacks de root cause maskeren: markeer als technische schuld.
+- Quick fixes verboden.
+- Geen NL-specifieke patch als enige oplossing.
+- Geen suppressie van commit zonder shape-validatie.
 - Zonder expliciet akkoord: geen implementatie.
 
 Onderzoeksaanpak
-1. Reproduceer deterministisch
-- Gebruik exact deze flow:
-  a) wording-choice met user-versie + suggestion-versie
-  b) geen button click
-  c) user stuurt vrije tekst "korter/bondiger" (zonder expliciete afwijzing)
-- Leg per turn vast:
-  - `current_step`
-  - `last_specialist_result` (incl. `wording_choice_*` velden)
-  - `provisional_by_step[strategy]` + bron
-  - `strategy_final`
-  - `statements`
-  - `ui_contract_id`, `menu`, `status`
-  - uiteindelijke widget tekst
+1. Reproduceer exact flowscenario
+- role examples -> choose for me -> recap -> continue.
+- Log per turn:
+  - chosen candidate,
+  - source (message/refined/field),
+  - staged provisional role,
+  - committed role_final.
 
-2. Causale keten bouwen
-- Toon exact waar pending wording-choice wordt vrijgegeven of behouden.
-- Toon exact waar content-state eventueel wordt gewist tijdens interactieve reset.
-- Toon exact waar 3 -> 2 statements ontstaat.
-- Toon exact waar Engelse regel in output kan ontstaan.
-- Toon exact waarom lijst dubbel in UI komt.
+2. Candidate-herkomst analyseren
+- Verifieer parserfilter op intro/headline regels in meerdere talen.
+- Verifieer ranking (bedrijfsnaam bias) die introregels kan prioriteren.
 
-3. Contract-invarianten toetsen
-- Invariant 1: pending wording-choice zonder expliciete reject => suggestion blijft basis.
-- Invariant 2: interactieve reset wist nooit inhoudelijke step-output.
-- Invariant 3: geen mixed language in user-facing tekst.
-- Invariant 4: per turn exact één canonical lijstweergave.
+3. Commit-keten analyseren
+- Bevestig hoe provisional wordt meegenomen in final commit.
+- Bevestig gedrag wanneer laatste turn recap/meta is.
 
-4. Structureel fixvoorstel (niet implementeren)
-- Presenteer 1 voorkeursontwerp + max 2 alternatieven.
-- Voor elk ontwerp:
-  - architectuurimpact,
-  - welke invarianten hard afgedwongen worden,
-  - migratierisico,
-  - testplan (unit/integratie/regressie).
+4. Structureel oplossingsvoorstel (niet implementeren)
+- 1 voorkeursrichting + max 2 alternatieven.
+- Per richting:
+  - architecturale impact,
+  - invarianten,
+  - risico/migratie,
+  - teststrategie.
 
 Verplichte outputstructuur
-A. Mensentaal uitleg
-B. Technisch bewijs met files/regels + state snapshots
+A. Mensentaal probleemuitleg
+B. Technisch bewijs (file/line + flow)
 C. Definitieve root-cause
 D. Structureel fixplan
-E. Beslisvoorstel + expliciete akkoordvraag voor implementatie
+E. Beslisvoorstel (wat eerst, waarom)
 
 Stopconditie
 - Stop na analyse + plan.
-- Vraag akkoord.
+- Vraag expliciet akkoord voor implementatie.
 - Zonder akkoord: geen codewijzigingen.
 ```
 
 ### Oplossing / aanpassing (na akkoord)
 Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
 
-## Fix 3 - Rules of the Game: onjuiste confirm-gating, geen >5 consolidatieflow, en onvoldoende interne-gerichtheid
+## Fix 4 - Onnodige keuzekaart bij correcte input + dubbele betekenis in suggestie (bestaansreden)
 
 ### Input (zoals gemeld)
-- `Rules of the Game` moet minimaal 3 regels hebben voordat `ga door` zichtbaar mag worden.
-- Bij meer dan 5 regels moet (zoals bij strategie) feedback komen dat te veel regels niet wenselijk is (geen wetboek).
-- Bij >5 moet een `your input / my suggestion`-keuze verschijnen waarin regels in `my suggestion` worden samengevoegd, met uitleg waarom.
-- Belangrijk inhoudelijk: regels zijn intern gericht (hoe je werkt/samenwerkt). Voorbeeld zoals `Gratis is gratis voor iedereen` had een `my suggestion` naar interne regel moeten triggeren.
+- User vroeg om 3 voorbeeld-bestaansredenen, kopieerde er 1 en gaf die als input.
+- UI toont daarna een wording-choice scherm met:
+  - `Dit is jouw input: ...`
+  - `Dit zou mijn suggestie zijn: Je huidige bestaansreden voor Mindd is: ...`
+- Gevoelde bug: de suggestie is inhoudelijk dezelfde zin met extra prefix, en er is onnodig een keuzepaneel.
+
+Aanvullende functionele nuance (bevestigd):
+- Als de input al correct is, dan mag er wél direct bevestiging staan zoals `Je huidige bestaansreden is: ...`,
+- maar zonder keuze tussen twee varianten.
 
 ### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
 
-#### Hypothese A - Confirm verschijnt te vroeg door statuslogica in renderer
-- In `computeStatus` voor `rulesofthegame` geldt nu:
-  - `valid_output` zodra `acceptedOutput` waar is en er een `acceptedValue` is, óf bij `statementCount >= 3`.
-- Daardoor kan `valid_output` (en dus confirm-menu) verschijnen met minder dan 3 regels, zolang er maar geaccepteerde output aanwezig is.
-- Dit botst direct met de businessregel “minimaal 3 voordat ga door mag”.
+#### Hypothese A - Suggestie-tekst kan vervuild raken met een context-heading
+- De wording-choice suggestie wordt opgebouwd uit meerdere kandidaten (field/refined/previous/message).
+- Een kandidaat kan een al eerder opgebouwde contextregel bevatten zoals `Je huidige ... is:`.
+- Daardoor vergelijkt de engine niet “zin vs zin”, maar “zin vs heading+zin”.
 
-#### Hypothese B - Max-limiet en UX-contract lopen niet met gewenste gedrag
-- Post-processing hanteert nu een hard maximum van 6, niet 5.
-- Overschrijding wordt vooral technisch afgekapt/gesaneerd, maar niet contractueel als expliciete user-flow behandeld (met your input/my suggestion).
-- Er is geen rules-specifieke equivalent van strategie-achtige overflow-feedback + consolidatiekeuze.
+#### Hypothese B - Equivalentie-check werkt op ruwe tekst en mist heading-unwrapping
+- De gelijkheidscheck (`areEquivalentWordingVariants`) canonicalize’t tekst, maar verwijdert geen `current heading` wrapper.
+- Resultaat: semantisch gelijke inhoud wordt als verschillend gezien, waardoor onterecht wording-choice pending ontstaat.
 
-#### Hypothese C - Consolidatie bestaat technisch, maar niet als expliciete beslis-UI
-- Er bestaat wel merge/truncate logica in backend (`postProcessRulesOfTheGame`), inclusief feedbacktekst.
-- Deze pipeline wordt niet hard afgedwongen als interactieve keuze-flow (`wording choice`) wanneer gebruiker boven de grens uitkomt.
-- Daardoor mist transparantie en controle op samengevoegde regels.
+#### Hypothese C - Zodra pending true is, forceert pipeline altijd keuze-UI
+- Bij `wording_choice_pending=true` wordt `require_wording_pick` gezet en acties onderdrukt.
+- UX-gevolg: user ziet altijd twee keuzevakken, ook als er eigenlijk niets te kiezen is.
 
-#### Hypothese D - Interne-gerichtheid is niet hard gevalideerd
-- Instructies spreken veel over gedrag/principes, maar niet hard genoeg als validator “altijd intern werk-/samenwerkingsafspraken”.
-- Runtime/code heeft geen deterministische check die externe/perk/markt-georiënteerde regels naar `REFINE + my suggestion` dwingt.
-- Gevolg: regels zoals `Gratis is gratis voor iedereen` kunnen doorstromen zonder interne herformulering.
+#### Hypothese D - Dit patroon is niet beperkt tot bestaansreden
+- Wording-choice eligibility geldt voor vrijwel alle stappen behalve `step_0` en `presentation`.
+- Daarmee kan dezelfde duplicatie/prefix-mismatch ook in andere stappen voorkomen.
 
 ### Bewijspunten in code (startpunten voor diep onderzoek)
-- `mcp-server/src/core/turn_policy_renderer.ts`
-  - `rulesofthegame` statusbepaling: `acceptedOutput && (acceptedValue || statementCount >= 3)` (regels 710-717).
-- `mcp-server/src/core/ui_contract_matrix.ts`
-  - `rulesofthegame.valid_output -> RULES_MENU_CONFIRM` (regels 594-597).
-- `mcp-server/src/handlers/run_step_runtime_semantic_helpers.ts`
-  - confirm-invariants checken vooral “accepted evidence” en menu-consistentie, niet “minimaal 3 zichtbare regels” (regels 159-165, 191-205, 218-225).
-- `mcp-server/src/handlers/run_step_state_update.ts`
-  - rules-state wordt direct genormaliseerd/gecomprimeerd met `postProcessRulesOfTheGame(..., 6)` (regels 240-249).
-- `mcp-server/src/steps/rulesofthegame.ts`
-  - post-process limiet op 6 (regels 830-835), truncatie naar eerste `max` (regels 820-827),
-  - feedbacktekst over merges/limiet bestaat maar is Engels en niet gekoppeld aan een verplichte keuze-flow (regels 893-923).
+
+- Wording-choice scope is breed (bijna alle stappen):
+  - `mcp-server/src/handlers/run_step_wording.ts`
+    - `isWordingChoiceEligibleStep(...)` sluit alleen `step_0` en `presentation` uit: regels 148-153.
+
+- Suggestie-kandidaatselectie die heading-vervuiling kan binnenhalen:
+  - `mcp-server/src/handlers/run_step_wording_heuristics.ts`
+    - `pickDualChoiceSuggestion(...)` candidate-volgorde incl. previous/message: regels 627-698.
+    - `extractSuggestionFromMessage(...)` pakt laatste “bruikbare” zin/paragraaf zonder specifieke filter op `current ... is:` headings: regels 222-270.
+
+- Heading-opbouw van “Je huidige ... is:”:
+  - `mcp-server/src/handlers/run_step_runtime_state_helpers.ts`
+    - `wordingSelectionMessage(...)` bouwt heading uit `offtopic.current.template` + current value: regels 538-571.
+
+- Onterechte pending bij niet-equivalent:
+  - `mcp-server/src/handlers/run_step_wording.ts`
+    - equivalent-check en pending-opbouw (`wording_choice_pending=true`): regels 805-926.
+
+- Pipeline forceert keuzepaneel bij pending:
+  - `mcp-server/src/handlers/run_step_pipeline.ts`
+    - pending choice override + `requireWordingPick=true`: regels 728-751.
+
+### Check: kan dit ook bij andere stappen gebeuren?
+
+Ja, potentieel wel.
+
+Hoog risico (text-mode stappen):
+1. `purpose`
+2. `bigwhy`
+3. `role`
+4. `entity`
+5. `targetgroup`
+6. `dream` (in paden waar wording-choice text-mode actief is)
+
+Ook mogelijk (list-mode, andere uiting):
+1. `strategy`
+2. `productsservices`
+3. `rulesofthegame`
+4. `dream` in builder/list-context
+
+Waarom breed:
+- Dezelfde wording-choice engine + pending-mechaniek wordt stap-overstijgend gebruikt.
+- Een vervuilde suggestion-candidate of wrapper-mismatch kan dus op meerdere stappen dezelfde UX-fout triggeren.
 
 ### Mogelijke structurele fixes (geen quick fixes)
 
-1. Maak harde count-gating contractueel in runtime (niet alleen specialist-instructie)
-- `rulesofthegame` mag alleen `valid_output` zijn bij canoniek aantal regels binnen afgesproken bandbreedte.
-- `ga door`-actie alleen renderen als deze invariant waar is.
+1. Voeg een canonical “unwrap current-heading” stap toe vóór equivalentie en vóór payload
+- Strip gecontroleerd patronen als `offtopic.current.template`/step-current headings uit suggestion candidate.
+- Vergelijk vervolgens inhoud-op-inhoud.
 
-2. Breng limietbeleid op 5 en maak overflow expliciet interactief
-- Uniforme grens: maximaal 5 (in instructie + state-update + renderer + tests).
-- Bij >5: verplicht `your input / my suggestion`-flow met samengevoegde set en korte rationale (“geen wetboek”).
+2. Voeg short-circuit toe: “inhoud al bevestigd” => geen wording-choice
+- Als user-input canonical gelijk is aan huidige/nieuwe stapwaarde, ga direct naar bevestigingspad (`wordingSelectionMessage`) zonder keuzes.
 
-3. Maak consolidatie een first-class UI-contract
-- Niet stil trunceren; altijd expliciet tonen wat is samengevoegd en waarom.
-- User kiest of accepteert default volgens wording-choice policy (zie Fix 2).
+3. Beperk message-based suggestion extraction tot valide refine-context
+- Gebruik `extractSuggestionFromMessage` alleen als veld/refined kandidaten ontbreken of expliciet refine-intent aanwezig is.
+- Voorkom dat narratieve contextregels als suggestie eindigen.
 
-4. Voeg interne-gerichtheid als harde semantische invariant toe
-- Regel moet intern gedrags-/samenwerkingsprincipe beschrijven.
-- Externe/propositie/perk-regels triggeren `REFINE` met interne herformulering (`my suggestion`) en bewijszin waarom.
+4. Cross-step regressietests op wording-choice false positives
+- Testmatrix voor text- en list-stappen:
+  - correcte input => géén keuzekaart,
+  - wel bevestigingsregel `Je huidige ... is: ...`,
+  - geen dubbeling van exact dezelfde inhoud met extra prefix.
 
-5. Harmoniseer instructie en code
-- Specialist-instructies en runtime-validators moeten exact dezelfde definitie hanteren.
-- Verwijder mismatch tussen “3-5” in tekst en “tot 6” in code.
-
----
+5. Voeg anti-dup guard toe in pending-opbouw
+- Als `suggestion_text` na canonical-unwrapping gelijk is aan `user_text`, zet `wording_choice_pending=false`.
 
 ### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
 ```text
 Context
-Je onderzoekt regressiegedrag in stap `rulesofthegame`.
+Je onderzoekt een wording-choice regressie:
+- bij correcte input toont de UI toch een keuzepaneel,
+- de suggestie bevat dezelfde inhoud met extra prefix ("Je huidige ... is:"),
+- dit lijkt nu zichtbaar bij bestaansreden, maar moet stap-overstijgend worden gecheckt.
 
 Observed bug
-- Confirm/ga-door verschijnt terwijl er minder dan 3 regels zichtbaar/canoniek zijn.
-- Bij >5 regels ontbreekt een expliciete consolidatieflow (your input / my suggestion + rationale).
-- Externe formuleringen (bijv. "Gratis is gratis voor iedereen") worden niet consequent intern herformuleerd.
-
-Businessregels (hard)
-1) Minimaal 3 regels voordat ga-door zichtbaar mag zijn.
-2) Meer dan 5 regels is niet wenselijk (geen wetboek): toon feedback + consolidatievoorstel.
-3) Bij >5: toon your input / my suggestion, met samengevoegde my suggestion en uitleg.
-4) Rules of the Game zijn intern gericht: hoe we werken/samenwerken.
+- User plakt een correcte bestaansreden.
+- In plaats van directe bevestiging verschijnt wording-choice met:
+  - user input
+  - suggestion = heading + vrijwel dezelfde zin
+- Gewenst: directe bevestiging ("Je huidige bestaansreden is: ...") zonder keuzes.
 
 Doel van deze opdracht
-1) Bewijs exact waarom confirm te vroeg verschijnt.
-2) Bewijs waarom >5 geen expliciete consolidatiekeuze triggert.
-3) Bewijs waarom externe regels niet hard naar interne regels worden gerefined.
-4) Lever structureel fixplan zonder codewijziging.
+1) Lever definitieve root-cause van false-positive wording-choice.
+2) Toon exact welk pad de heading/prefix in suggestion injecteert.
+3) Onderzoek of dit bij andere stappen kan optreden (matrix).
+4) Lever structureel fixplan.
+5) Doe GEEN codewijzigingen in deze opdracht.
 
 Harde regels
-- Geen quick fixes.
-- Geen extra guards/fallbacks als eindoplossing.
+- Quick fixes verboden.
+- Geen locale-specifieke string hacks.
+- Geen suppressie van wording-choice zonder causale oplossing.
 - Zonder expliciet akkoord: geen implementatie.
 
 Onderzoeksaanpak
-1. Reproduceer deterministisch
-- Scenario A: 2 regels en toch confirm zichtbaar.
-- Scenario B: 6+ regels zonder your input/my suggestion consolidatiekeuze.
-- Scenario C: externe regel (zoals "Gratis is gratis voor iedereen") zonder interne my suggestion.
-- Leg per turn vast:
-  - `current_step`
-  - `last_specialist_result` (incl. `statements`, `refined_formulation`, `rulesofthegame`)
-  - `provisional_by_step.rulesofthegame`
-  - `rulesofthegame_final`
-  - gerenderde `status`, `contract_id`, `menu`, `uiActionCodes`
-  - uiteindelijke widgettekst
+1. Reproduceer op purpose
+- Scenario: voorbeeldzin plakken die al valide is.
+- Log:
+  - userRaw
+  - suggestionRawCandidate
+  - normalizedUser
+  - equivalent=true/false
+  - wording_choice_pending
 
-2. Causale keten
-- Toon statusafleiding naar `valid_output`.
-- Toon menu-afleiding naar confirm.
-- Toon waar rules worden gemerged/truncated en of/waar dit aan user wordt uitgelegd.
-- Toon waar internal-vs-external validatie ontbreekt of te zwak is.
+2. Herleid candidate-keten
+- Check candidate-prioriteit:
+  - field value
+  - refined_formulation
+  - previous wording_choice_agent_current
+  - extractSuggestionFromMessage(message)
+- Markeer waar heading/prefix binnenkomt.
 
-3. Invarianten evalueren
-- Invariant 1: confirm alleen bij >=3 regels.
-- Invariant 2: >5 verplicht expliciete consolidatieflow met rationale.
-- Invariant 3: regels zijn intern gericht, anders REFINE naar interne formulering.
+3. Cross-step impactanalyse
+- Herhaal op minimaal:
+  - bigwhy, role, entity, targetgroup (text-mode)
+  - strategy, productsservices, rulesofthegame (list-mode)
+- Rapporteer waar dezelfde false-positive wording-choice optreedt.
 
-4. Structureel fixvoorstel (niet implementeren)
-- Presenteer 1 voorkeursrichting + max 2 alternatieven.
-- Voor elk:
-  - architectuurimpact,
-  - migratie/risico,
-  - testplan (unit + integratie + regressie),
-  - relatie met Fix 2 (hergebruik pending-choice architectuur waar nuttig).
+4. Structureel oplossingsvoorstel (niet implementeren)
+- 1 voorkeursrichting + max 2 alternatieven.
+- Per richting:
+  - architecturale impact,
+  - invarianten die hard worden,
+  - risico/migratie,
+  - teststrategie.
 
 Verplichte outputstructuur
-A. Mensentaal uitleg
-B. Technisch bewijs (file/regel + state snapshots)
+A. Mensentaal probleemuitleg
+B. Technisch bewijs (file/line + candidate-keten)
 C. Definitieve root-cause
-D. Structureel fixplan
-E. Beslisvoorstel + expliciete akkoordvraag
+D. Cross-step impactmatrix
+E. Structureel fixplan
+F. Beslisvoorstel (wat eerst, waarom)
 
 Stopconditie
 - Stop na analyse + plan.
-- Zonder akkoord geen codewijziging.
+- Vraag expliciet akkoord voor implementatie.
+- Zonder akkoord: geen codewijzigingen.
 ```
 
 ### Oplossing / aanpassing (na akkoord)
 Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
 
-## Fix 4 - Presentatie: bullets/volledigheid, afbeelding-meta, onterechte wording-choice en HTML-lek
+## Fix 2 - Dream Builder: Engelse leak na switch-to-self + vraagzin niet catalog-gedreven in alle talen
 
 ### Input (zoals gemeld)
-- In `presentatie` worden `strategie` en `spelregels` niet als bullets getoond.
-- `producten en diensten` toont in dit geval 2 items terwijl eerder 4-5 items bekend waren.
-- Vraag over afbeeldingen/logo's in presentatie moet uit vast toegestane antwoord komen:
-  - "Helaas is het nu nog niet mogelijk om afbeeldingen of logo's te verwerken in de presentatie. We werken er hard aan om dit in de toekomst mogelijk te maken."
-  - plus vertaling naar alle ondersteunde talen.
-- Dit leidde onterecht tot `your input / my suggestion`.
-  - Dit mag alleen bij expliciete wijzigingsintentie en dan met inhoudelijke feedback als input niet past bij stapcontract.
-- In screenshot 2 kwam HTML/code (`<strong>...`) zichtbaar in de suggestion-card. Dit mag nooit user-facing zichtbaar zijn.
+- In Dream Builder klikte de user op `Terugschakelen naar zelf het droom formuleren`.
+- Daarna verscheen een scherm met Engelse tekst, terwijl de sessie volledig Nederlands was.
+- Verwachting: deze teksten moeten uit de vertaaldocumenten/catalog komen en in alle talen beschikbaar zijn.
+
+Extra copy-eis voor de Dream-vraag:
+- De huidige zin in de flow is:
+  - `Als je 5 tot 10 jaar vooruitkijkt, welke grote kans of dreiging zie je, en welke positieve verandering hoop je? Schrijf het als één duidelijke uitspraak.`
+- Gewenst is een meervoud-/herformuleerde variant in alle talen.
 
 ### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
 
-#### Hypothese A - Presentation recap is model-gestuurd met markup i.p.v. runtime-canoniek rendermodel
-- `presentation`-instructies verplichten nu `<strong>`-tags in specialist-output voor recap.
-- Daardoor wordt structurele opmaak afhankelijk van model-output i.p.v. server-side canonical render.
-- Als die markup downstream in wording-choice terechtkomt, wordt raw HTML zichtbaar als tekst.
-- Technische aanwijzingen:
-  - `steps/presentation.ts` schrijft `<strong>...</strong>` expliciet voor in INTRO/ASK/REFINE recap-output.
+#### Hypothese A - Hardcoded Engelse specialist-message in switch-to-self route
+- In de route `dream_switch_to_self` staat een vaste Engelse boodschap in code.
+- Daardoor lekt Engels direct in `specialist.message`, los van locale/ui_strings.
 
-#### Hypothese B - Wording-choice scope is te breed en sluit `presentation` niet uit
-- Wording-choice eligibility sluit nu alleen `step_0` uit.
-- Hierdoor kan vrije tekst in presentatie-step onterecht in pending choice (`your input / my suggestion`) landen.
-- Bij presentatie kan dat enorme recap-teksten met HTML als suggestion tonen.
-- Technische aanwijzingen:
-  - `isWordingChoiceEligibleStep` in `run_step_wording.ts` retourneert `true` voor alle stappen behalve step 0.
-  - `fieldForStep` mapt `presentation` naar `presentation_brief`; suggestion kan daardoor volledige recap-body worden.
+#### Hypothese B - Eerste Dream Builder-vraag is LLM-semantisch i.p.v. catalog-key
+- De hoofdvraag voor de Dream-oefening wordt in specialist-instructies als betekenisregel opgegeven (in het Engels), met opdracht “localize in user language”.
+- Dat maakt de uiteindelijke tekst afhankelijk van model-output i.p.v. vaste vertaalcatalog.
+- Gevolg: wording drift (singular/plural), inconsistentie met gewenste copy, en geen gegarandeerde parity over alle talen.
 
-#### Hypothese C - Geen dedicated meta-topic + i18n key voor "afbeeldingen/logo niet ondersteund"
-- Centrale meta-router kent geen `meta_topic` voor presentatie-media-capability.
-- Daardoor wordt vraag over afbeeldingen niet deterministisch afgehandeld via vaste tekst per taal.
-- Gevolg: model kan antwoord naar gewone stapflow of wording-choice duwen.
-- Technische aanwijzingen:
-  - `META_TOPIC_CONTRACT_INSTRUCTION` en `META_TOPIC_ROUTE_REGISTRY` bevatten geen presentatie-image topic/key.
-  - In `ui_strings_defaults.ts` en locale files ontbreekt key voor dit vaste antwoord.
+#### Hypothese C - Bestaande i18n-keys zijn slechts deels aangesloten
+- Keys zoals `dreamBuilder.question.base`, `dreamBuilder.question.more`, `dreamBuilder.switchSelf.headline` bestaan al in defaults/locales.
+- Runtime gebruikt `question.more` in een specifiek vervolgpad, maar niet als harde bron voor de eerste Dream-vraag.
+- `dreamBuilder.switchSelf.headline` lijkt gedefinieerd maar niet aangesloten op de switch-to-self message-render.
 
-#### Hypothese D - Bullet/extractie voor presentatie-assets is fragiel bij run-on/gelabelde tekst
-- `presentationLines()` splitst primair op newline; bij samengelijmde tekst op één regel blijft dat één line-item.
-- `sanitizeLinesForSection()` breekt op eerste gedetecteerde andere section-label; daardoor kan sectie-inhoud vroegtijdig afkappen.
-- Dit kan verklaren waarom in output niet alle bekende items terugkomen.
-- Technische aanwijzingen:
-  - `run_step_presentation.ts` gebruikt newline-first parsing en section label break-logic.
+#### Hypothese D - “Localization helper” vervangt alleen termen, niet volledige zinnen
+- `normalizeLocalizedConceptTerms` vervangt concepttermen (zoals stepnamen), maar vertaalt geen complete Engelse alinea’s.
+- Daardoor blijft een hardcoded Engelse paragraaf intact in niet-EN sessies.
 
-#### Hypothese E - Invariant "geen markup/code zichtbaar in user UI" ontbreekt als harde contractcheck
-- Semantische invarianten valideren menu/actions/evidence, maar niet dat wording-choice velden geen raw tags tonen.
-- Hierdoor kan `<strong>` of andere markup ongefilterd in cards terechtkomen.
-- Technische aanwijzingen:
-  - `run_step_runtime_semantic_helpers.ts` bevat geen check op HTML/markup in `wording_choice_*` payload of card-velden.
+#### Hypothese E - Geen cross-locale contracttest op deze copy-paden
+- Er lijkt geen regressietest die afdwingt dat dit specifieke switch-to-self scherm en Dream-vraag altijd uit de catalog komen voor alle ondersteunde locales.
 
 ### Bewijspunten in code (startpunten voor diep onderzoek)
-- `mcp-server/src/steps/presentation.ts`
-  - Recap-format eist HTML `<strong>` labels in meerdere flowblokken (o.a. regels 155-166, 192-203, 225-237).
-- `mcp-server/src/handlers/run_step_wording.ts`
-  - `isWordingChoiceEligibleStep`: alleen `step0` uitgesloten (regels 137-139).
-  - pending flow bouwt `suggestion_text` direct uit suggestionRaw zonder presentation-specifieke sanitatie (o.a. regels 745-747, 891-907).
-- `mcp-server/src/handlers/run_step_wording_heuristics_defaults.ts`
-  - `fieldForStep("presentation") -> "presentation_brief"` (regels 48-60).
-- `mcp-server/src/handlers/run_step_wording_heuristics.ts`
-  - `pickDualChoiceSuggestion` neemt `field`/`refined_formulation` direct als candidate (regels 621-635).
-- `mcp-server/src/handlers/run_step_policy_meta.ts`
-  - toegestane `meta_topic` lijst bevat geen presentatie-media capability topic (regels 67-82).
-  - registry heeft geen route key voor presentatie-afbeeldingen (regels 133-176).
-- `mcp-server/src/i18n/ui_strings_defaults.ts`
-  - wel diverse `meta.topic.*` keys, maar geen key voor "images/logos not supported in presentation" (regels 197-210).
-- `mcp-server/src/handlers/run_step_presentation.ts`
-  - `presentationLines` newline-first parser (regels 36-45).
-  - `sanitizeLinesForSection` stopt bij andere section label (regels 66-79).
-  - sectiestrategie/producten/spelregels worden hierdoor uit finals geëxtraheerd (regels 322-366).
-- `mcp-server/src/handlers/run_step_runtime_semantic_helpers.ts`
-  - geen hard verbod op raw HTML/markup in wording-choice user-facing velden (regels 159-226 focussen op action/menu invarianten).
+
+- Hardcoded Engels na switch-to-self:
+  - `mcp-server/src/handlers/run_step_routes.ts`
+    - `dream_switch_to_self` route met vaste Engelse `specialist.message`: regels 532-536.
+
+- Dream-vraag als semantische specialist-instructie (model-localization):
+  - `mcp-server/src/steps/dream_explainer.ts`
+    - Intro-vraag in Engels als meaning-contract: regel 347.
+    - Vervolgvraag “meaning; do not hardcode translations”: regels 356-358.
+
+- Bestaande i18n keys voor Dream-vragen:
+  - `mcp-server/src/i18n/ui_strings_defaults.ts`
+    - `dreamBuilder.question.base`: regels 75-76.
+    - `dreamBuilder.question.more`: regels 77-78.
+    - `dreamBuilder.switchSelf.headline`: regel 79.
+
+- Gedeeltelijke runtime-aansluiting:
+  - `mcp-server/src/handlers/run_step_runtime_specialist_helpers.ts`
+    - gebruikt `dreamBuilder.question.more` voor prompt-stage `more`: regels 226-237.
+  - `mcp-server/src/handlers/run_step_runtime_backbone.ts`
+    - prompt-stage seed op `base`: regels 79-83.
+
+- Lokalisatiehelper beperkt tot term-replacements:
+  - `mcp-server/src/handlers/run_step_runtime_specialist_helpers.ts`: regels 35-111.
+
+- Catalog-locale matrix (alle ondersteunde locales):
+  - `mcp-server/src/i18n/ui_strings_catalog.ts`: regels 7-37.
 
 ### Mogelijke structurele fixes (geen quick fixes)
 
-1. Maak presentatie-recap runtime-canoniek en markup-vrij
-- Specialist levert alleen gestructureerde data/intent; runtime bouwt de recap weergave vanuit finals.
-- Geen HTML-tags in specialist-outputcontract voor user-visible tekst.
-- Presentatieweergave en PPT-export gebruiken dezelfde canonical list-source.
+1. Verplaats switch-to-self body-copy naar i18n catalog en verwijder hardcoded Engels
+- Introduceer expliciete keys voor deze bodytekst (bijv. `dreamBuilder.switchSelf.body.intro` + `dreamBuilder.switchSelf.body.helper`).
+- Route `dream_switch_to_self` mag alleen catalog-keys gebruiken via `uiStringFromStateMap`.
 
-2. Beperk wording-choice scope contractueel
-- `presentation` uitsluiten van wording-choice, of alleen toelaten in strikt gedefinieerde refine-subflow met korte tekst (geen volledige recap).
-- Geen `your input / my suggestion` tenzij expliciete wijzigingsintentie hard is gedetecteerd.
-- Bij niet-wijzigingsvraag (zoals capability vraag) direct meta-router antwoord, geen wording-choice.
+2. Maak Dream-vraag SSOT via catalog-keys, niet via vrije model-localization
+- Definieer canonieke keys voor:
+  - eerste vraag (`dreamBuilder.question.base`),
+  - vervolgvraag (`dreamBuilder.question.more`),
+  - eventueel variant voor “write as one clear statement” vs “describe future view”.
+- Dwing runtime-override af voor eerste Dream Builder vraag op basis van prompt-stage `base`, analoog aan bestaande `more`-override.
 
-3. Voeg dedicated meta-topic toe voor presentatie-media capability
-- Nieuw topic, bijvoorbeeld `PRESENTATION_MEDIA_NOT_SUPPORTED`.
-- Centrale router geeft vaste tekst via i18n key, in alle ondersteunde talen.
-- Volledig deterministic: geen specialistvrije formulering voor dit onderwerp.
+3. Voer copy-update door in alle ondersteunde locales
+- Update de gewenste meervoud/herformuleerde zin in:
+  - defaults EN,
+  - alle locale bestanden: `de, en, es, fr, hi, hu, id, it, ja, ko, nl, pt_br, ru, zh_hans`.
+- Houd keyset volledig gelijk per locale; geen ontbrekende keys toestaan.
 
-4. Versterk canonical list reconstructie voor presentatie
-- Section-aware parser die ook run-on tekst en gemengde bullets/nummering robust splitst.
-- Nooit silent truncation door eerste vreemde label; parse complete bron en map items per section.
-- Cross-check aantal items tegen canonical state (strategie/rules/products) vóór render/export.
+4. Voeg i18n contracttests toe voor deze paden
+- Test dat `dream_switch_to_self` in niet-EN locale nooit Engelse zinnen rendert.
+- Test dat Dream-vraag in stage `base` en `more` uit catalog-key komt.
+- Test key-parity over alle catalog-locales voor nieuwe Dream keys.
 
-5. Voeg harde UI-safety invariant toe: geen raw markup/code in cards
-- Voor wording-choice en recap-cards: sanitize/escape op contractniveau.
-- Valideer dat user-facing velden geen `<tag>` patronen bevatten.
-- Fail-fast als invariant breekt (telemetry + blokkeren renderpad) i.p.v. stil tonen.
-
-6. Eenduidige spelling-normalisatie vóór intent-routing
-- User input altijd via centrale spelling/normalisatie laag vóór intentclassificatie en wording-choice branching.
-- Zo voorkom je dat lichte taalvarianten onterecht als wijzigingsintentie eindigen.
-
----
+5. Maak copy-governance expliciet
+- Leg vast welke Dream-vraag de canonieke NL bronzin is (vanwege ambigu geformuleerde input met dubbele zin).
+- Vertaal van die canonieke bron naar alle talen; niet per taal vrij herschrijven in specialist.
 
 ### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
 ```text
 Context
-Je onderzoekt regressies in stap `presentation` met impact op recap-weergave, wording-choice, meta-antwoorden en UI-safety.
+Je onderzoekt een i18n-regressie in Dream Builder:
+1) na switch-to-self verschijnt Engelse tekst in niet-EN sessie,
+2) de centrale Dream-vraag moet copy-wise worden aangepast (meervoud/herformulering) en in alle talen consistent zijn.
 
-Observed bugs
-1) In presentatie-recap worden `strategie` en `spelregels` niet als bullets getoond.
-2) `producten en diensten` toont minder items dan eerder bekend (bijv. 2 i.p.v. 4-5).
-3) Vraag over afbeeldingen/logo's in presentatie gaf niet het vaste capability-antwoord, maar leidde tot een onterechte your input/my suggestion-flow.
-4) In suggestion-card werd raw HTML/code zichtbaar (`<strong>...`). Dit mag nooit.
-
-Businessregels (hard)
-- Your input / my suggestion mag alleen bij expliciete wijzigingsintentie.
-- Capability-vraag "kan ik afbeeldingen/logo toevoegen" moet deterministisch via vaste tekst worden beantwoord.
-- Vaste tekst (lokaliseren in alle ondersteunde talen):
-  "Helaas is het nu nog niet mogelijk om afbeeldingen of logo's te verwerken in de presentatie. We werken er hard aan om dit in de toekomst mogelijk te maken."
-- User-facing UI mag nooit raw HTML/code tonen.
-- Zonder expliciet akkoord: geen codewijzigingen.
+Observed bug
+- Klik op `ACTION_DREAM_SWITCH_TO_SELF` toont Engelse paragraaf terwijl sessie NL is.
+- Dream-vraagtekst is niet de gewenste nieuwe formulering en lijkt niet strict catalog-gedreven over alle talen.
 
 Doel van deze opdracht
-1) Achterhaal de echte root cause(s) met causale keten.
-2) Lever technisch bewijs met state snapshots en codepaden.
-3) Stel alleen structurele oplossingen voor.
-4) Doe GEEN implementatie in deze opdracht.
+1) Definieer definitieve root-cause met codebewijs.
+2) Toon exact welke copypaden niet uit ui_strings catalog komen.
+3) Lever structureel i18n-fixplan voor alle ondersteunde locales.
+4) Doe GEEN codewijzigingen in deze opdracht.
 
 Harde regels
 - Quick fixes verboden.
-- Geen fallbacks/omwegen/extra guards als eindoplossing.
-- Als bestaande guards/fallbacks root cause maskeren: markeer als technische schuld.
+- Geen runtime regex-hacks om Engels te maskeren.
+- Geen model-only “localize better” als eindoplossing.
+- Zonder expliciet akkoord: geen implementatie.
 
 Onderzoeksaanpak
-1. Reproduceer deterministisch
-- Scenario A: presentatie-recap met bekende 4-5 products/services en meerdere strategy/rules bullets.
-- Scenario B: user vraagt "kan ik afbeeldingen/logo toevoegen?"
-- Scenario C: vrije uservraag in presentatie zonder expliciete wijzigingsintentie.
-- Leg per turn vast:
-  - `current_step`
-  - `last_specialist_result` (action, message, refined_formulation, presentation_brief, wording_choice_*)
-  - `provisional_by_step.presentation`
-  - `presentation_brief_final`
-  - finals van `strategy`, `productsservices`, `rulesofthegame`
-  - `ui_contract_id`, `menuId`, `status`, `uiActionCodes`
-  - gerenderde widgettekst + wording-choice payload
+1. Herleid copy herkomst per zichtbaar tekstblok
+- Voor switch-to-self scherm:
+  - waar komt body-text vandaan?
+  - waar komt vraag/prompt vandaan?
+  - welke delen komen uit ui_strings keys en welke uit specialist literals?
 
-2. Bouw causale keten
-- Toon waarom wording-choice in presentatie kon activeren.
-- Toon waarom HTML-tagcontent in suggestion-user-facing terechtkwam.
-- Toon waarom bullets/items verloren of samengeplakt raakten.
-- Toon waarom capability-vraag niet via meta-topic vaste tekst werd gerouteerd.
+2. Maak causale keten
+- Toon exact waarom Engels zichtbaar kan worden in NL sessie.
+- Toon waarom huidige Dream-vraag niet volledig via catalog wordt afgedwongen.
 
-3. Toets invarianten
-- Invariant 1: capability-vraag -> vaste meta-antwoordtekst (gelokaliseerd), geen wording-choice.
-- Invariant 2: geen raw markup/code in user-facing UI.
-- Invariant 3: presentatie-recap reflecteert alle canonical items per sectie zonder silent truncation.
-- Invariant 4: wording-choice alleen bij expliciete wijzigingsintentie.
+3. Bepaal catalog-gap
+- Maak key-matrix voor relevante Dream copy:
+  - switch-self body keys
+  - base question key
+  - more question key
+- Controleer key-parity over alle locales.
 
-4. Lever structureel fixvoorstel (niet implementeren)
+4. Lever structureel oplossingsvoorstel (niet implementeren)
 - Presenteer 1 voorkeursrichting + max 2 alternatieven.
-- Voor elk:
-  - architectuurimpact,
-  - welke invarianten hard worden,
-  - migratie/risico,
-  - teststrategie (unit + integratie + regressie + meertalige assertions).
+- Per richting:
+  - architecturale impact,
+  - invarianten die hard worden,
+  - risico/migratie,
+  - teststrategie (unit/integratie/regressie).
 
 Verplichte outputstructuur
-A. Mensentaal uitleg
-B. Technisch bewijs (files/regels + snapshots)
-C. Definitieve root-cause formulering
-D. Structureel fixplan (zonder code)
-E. Beslisvoorstel + expliciete akkoordvraag
+A. Mensentaal probleemuitleg
+B. Technisch bewijs (files/regels + copy-herkomst)
+C. Definitieve root-cause
+D. Structureel fixplan
+E. Beslisvoorstel (incl. canonieke NL bronzin voor vertaling)
 
 Stopconditie
 - Stop na analyse + plan.
-- Vraag expliciet akkoord.
+- Vraag expliciet akkoord voor implementatie.
+- Zonder akkoord: geen codewijzigingen.
+```
+
+### Oplossing / aanpassing (na akkoord)
+Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
+
+## Fix 3 - Stepper label wordt afgekapt; uitlijning labels niet conform (links, behalve presentatie rechts)
+
+### Input (zoals gemeld)
+In de bovenbalk (boven de oranje/grijze streepjes) wordt de actieve staptekst afgekapt als de naam langer is dan het segment.
+
+Gewenst gedrag:
+1. Alle stappen (behalve `presentatie`) links uitgelijnd.
+2. De tekst moet doorlopen zodat de volledige stapnaam leesbaar is (geen afkapping met `...`).
+3. De stap `presentatie` staat rechts uitgelijnd.
+
+### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
+
+#### Hypothese A - Hardcoded tekstafkapping in stepper label functie
+- De renderer kort staplabels expliciet in op 12 karakters en plakt `…`.
+- Daardoor is afkapping geen CSS-bijeffect maar bewust gedrag in JS.
+
+#### Hypothese B - CSS forceert extra ellipsis/overflow clipping
+- Labelstijl gebruikt `white-space: nowrap`, `overflow: hidden`, `text-overflow: ellipsis`, `max-width:100%`.
+- Zelfs zonder JS-truncation blijft clipping actief.
+
+#### Hypothese C - Geen stap-specifieke uitlijningsregel voor `presentation`
+- Stepper-items staan generiek op `align-items:flex-start`.
+- Er is geen aparte logica/CSS voor laatste stap (`presentation`) om label rechts uit te lijnen.
+
+#### Hypothese D - Layout-contract ontbreekt voor “volledige labelzichtbaarheid”
+- De huidige stepper is gebouwd op segmentbreedtes; labelruimte is impliciet aan bar-segment gekoppeld.
+- Zonder expliciete invariant op full-label readability blijft truncation logisch in huidige opzet.
+
+### Bewijspunten in code (startpunten voor diep onderzoek)
+
+- JS truncation:
+  - `mcp-server/ui/lib/ui_render.ts`
+    - `stepLabelShort(...)` kapt op 12 chars + `…`: regels 127-131.
+    - actieve labeltext komt uit `stepLabelShort(...)`: regel 150.
+  - `mcp-server/ui/step-card.bundled.html`
+    - zelfde ingebundelde truncation: regels 3683-3687 en 3700.
+
+- CSS clipping/ellipsis:
+  - `mcp-server/ui/step-card.bundled.html`
+    - `.step-item-label` met `nowrap + overflow:hidden + text-overflow:ellipsis`: regels 431-441.
+
+- Uitlijning step-items:
+  - `mcp-server/ui/step-card.bundled.html`
+    - `.step-item { align-items: flex-start; }` voor alle stappen: regels 421-426.
+    - geen speciale presentatie/right-align rule; alleen `:last-child { padding-right:0; }`: regel 429.
+
+- Stapvolgorde/context presentatie als laatste stap:
+  - `mcp-server/ui/lib/ui_constants.ts`
+    - `ORDER` eindigt met `presentation`: regels 8-20.
+
+### Mogelijke structurele fixes (geen quick fixes)
+
+1. Verwijder truncation uit renderer als beleid
+- Schrap `full.slice(0, 12) + "…"` in stepper-label pad.
+- Label moet vanuit volledige localized title komen.
+
+2. Maak stepper-label CSS full-readable
+- Verwijder/override `overflow:hidden` en `text-overflow:ellipsis` voor actieve labelweergave.
+- Definieer expliciet hoe label mag doorlopen (zonder bar-layout te breken), bv. overlay/absolute label-layer of adaptive label container.
+
+3. Introduceer uitlijningsinvariant per stap
+- Default: actieve label links uitgelijnd.
+- Uitzondering: `presentation` label rechts uitgelijnd.
+- Dwing dit via step-id/class contract, niet via fragiele `:last-child` heuristiek alleen.
+
+4. Regressietests op visual contract
+- Test dat actieve labeltekst exact volledige step-title bevat (geen ellipsis-char).
+- Test dat `presentation`-label rechts staat en andere stappen links.
+- Test op desktop + mobile breakpoints.
+
+### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
+```text
+Context
+Je onderzoekt een UI-regressie in de stepper boven de kaart:
+- actieve staptekst wordt afgekapt,
+- uitlijning moet links zijn voor alle stappen behalve presentatie (rechts).
+
+Observed bug
+- Label toont afgekorte tekst met ellipsis.
+- Gebruiker kan volledige stapnaam niet lezen.
+- Presentatie-uitlijning wijkt af van gewenste contractregel.
+
+Doel van deze opdracht
+1) Lever definitieve root-cause (render + css + layout contract).
+2) Toon exact welke code truncation en clipping veroorzaakt.
+3) Lever structureel fixplan voor leesbaarheid + uitlijning.
+4) Doe GEEN codewijzigingen in deze opdracht.
+
+Harde regels
+- Quick fixes verboden.
+- Geen ad-hoc string-korting per taal.
+- Geen eenmalige CSS hack zonder layout-invariant.
+- Zonder expliciet akkoord: geen implementatie.
+
+Onderzoeksaanpak
+1. Reproduceer deterministisch
+- Leg voor minstens 3 lange staplabels vast:
+  - raw title key waarde,
+  - gerenderde labeltext,
+  - toegepaste css classes/states.
+
+2. Maak causale keten
+- Toon exact waar truncation in JS gebeurt.
+- Toon exact waar CSS clipping gebeurt.
+- Toon waarom presentatie niet apart rechts uitlijnt.
+
+3. Definieer layout-invariant
+- Schrijf harde regels voor:
+  - full label readability,
+  - default links uitgelijnd,
+  - presentatie rechts uitgelijnd.
+
+4. Lever structureel oplossingsvoorstel (niet implementeren)
+- 1 voorkeursrichting + max 2 alternatieven.
+- Per richting:
+  - architecturale impact,
+  - risico/migratie,
+  - teststrategie (unit + UI regressie).
+
+Verplichte outputstructuur
+A. Mensentaal probleemuitleg
+B. Technisch bewijs (files/regels)
+C. Definitieve root-cause
+D. Structureel fixplan
+E. Beslisvoorstel (wat eerst, waarom)
+
+Stopconditie
+- Stop na analyse + plan.
+- Vraag expliciet akkoord voor implementatie.
 - Zonder akkoord: geen codewijzigingen.
 ```
 

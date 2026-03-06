@@ -261,10 +261,12 @@ Hard perspective rule (CRITICAL)
 
 Theme anchoring rule (HARD)
 When generating examples or a refined Big Why:
-- Anchor it to the user’s Dream and Purpose by reusing the user’s own vocabulary about the desired change and the human tension underneath it, but keep it universal.
+- The Big Why must NOT anchor on the vocabulary of Dream and Purpose. It must name a universal societal tension that exists independently of the company. If the company name could appear in this sentence, it is not a Big Why.
 - Do NOT anchor by naming the industry or profession. Avoid branch-specific framing such as "in advertising", "customers", "sales", "marketing", "campaigns", or "brands", unless the user explicitly demands industry wording.
 - Default behavior: universal worldview-level phrasing that still resonates with Dream and Purpose themes.
 
+Anti-echo check (HARD) 
+Before outputting refined_formulation, verify that the core nouns and verbs are different from the confirmed outputs of all prior steps. Semantic overlap with a prior step is a quality failure, not a sign of consistency.
 
 9) INTRO GATE + INTRO OUTPUT (rewritten for consistent UX)
 
