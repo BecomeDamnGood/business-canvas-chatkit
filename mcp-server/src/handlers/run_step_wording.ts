@@ -123,6 +123,95 @@ function stripMarkupPreserveLines(input: string): string {
 }
 
 export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
+  function canonicalHeadingComparable(value: string): string {
+    const compact = String(value || "")
+      .trim()
+      .replace(/[.!?]+$/g, "")
+      .replace(/\s*:\s*$/g, "")
+      .trim();
+    return deps.canonicalizeComparableText(compact);
+  }
+
+  function selectionHeadingForStep(
+    stepId: string,
+    state: CanvasState | null | undefined,
+    activeSpecialist: string
+  ): string {
+    if (!state || typeof state !== "object") return "";
+    const marker = "__BSC_CURRENT_VALUE_MARKER__";
+    const selection = stripMarkupPreserveLines(
+      deps.wordingSelectionMessage(stepId, state, activeSpecialist, marker)
+    );
+    if (!selection || !selection.includes(marker)) return "";
+    const prefix = String(selection.split(marker)[0] || "");
+    const lines = prefix
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+    while (lines.length > 0) {
+      const tail = String(lines[lines.length - 1] || "").trim();
+      if (!tail) {
+        lines.pop();
+        continue;
+      }
+      if (/^(?:[-*•]|\d+[\).])\s*$/.test(tail) || /^[:;,.!?-]+$/.test(tail)) {
+        lines.pop();
+        continue;
+      }
+      break;
+    }
+    return String(lines[0] || "").trim();
+  }
+
+  function unwrapSelectionHeadingFromText(
+    stepId: string,
+    state: CanvasState | null | undefined,
+    activeSpecialist: string,
+    rawValue: string
+  ): string {
+    const value = stripMarkupPreserveLines(rawValue);
+    if (!value) return "";
+    const heading = selectionHeadingForStep(stepId, state, activeSpecialist);
+    const headingComparable = canonicalHeadingComparable(heading);
+    if (!headingComparable) return value;
+
+    const paragraphs = value
+      .split(/\n{2,}/)
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+    if (paragraphs.length >= 2) {
+      const firstComparable = canonicalHeadingComparable(String(paragraphs[0] || ""));
+      if (firstComparable && firstComparable === headingComparable) {
+        const body = paragraphs.slice(1).join("\n\n").trim();
+        if (body) return body;
+      }
+    }
+
+    const lines = value
+      .split("\n")
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+    if (lines.length >= 2) {
+      const firstComparable = canonicalHeadingComparable(String(lines[0] || ""));
+      if (firstComparable && firstComparable === headingComparable) {
+        const body = lines.slice(1).join("\n").trim();
+        if (body) return body;
+      }
+    }
+
+    const colonIndex = value.indexOf(":");
+    if (colonIndex > 0) {
+      const prefixComparable = canonicalHeadingComparable(value.slice(0, colonIndex));
+      if (prefixComparable && prefixComparable === headingComparable) {
+        const body = value.slice(colonIndex + 1).trim();
+        if (body) return body;
+      }
+    }
+
+    return value;
+  }
+
   function shouldUseDefaultFallback(state: CanvasState | null | undefined): boolean {
     const raw = String(
       (state as any)?.ui_strings_lang ||
@@ -758,7 +847,12 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       return { specialist: specialistResult, wordingChoice: null };
     }
     const suggestionRawCandidate = deps.pickDualChoiceSuggestion(stepId, specialistResult, previousSpecialist, userRaw);
-    const suggestionRaw = stripMarkupPreserveLines(suggestionRawCandidate);
+    const suggestionRaw = unwrapSelectionHeadingFromText(
+      stepId,
+      state,
+      activeSpecialist,
+      suggestionRawCandidate
+    );
     if (!userRaw || !suggestionRaw) return { specialist: specialistResult, wordingChoice: null };
     const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
     const mode: WordingChoiceMode =
@@ -943,17 +1037,21 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const mode: WordingChoiceMode = String(prevRaw.wording_choice_mode || "text") === "list" ? "list" : "text";
     const listSemantics: WordingChoiceListSemantics =
       String(prevRaw.wording_choice_list_semantics || "delta") === "full" ? "full" : "delta";
+    const activeSpecialist = String((state as any)?.active_specialist || "").trim();
     const baseItems = mode === "list" ? extractCommittedListItems(stepId, prevRaw) : [];
     const fallbackPickedRaw = pickedUser
       ? String(prevRaw.wording_choice_user_normalized || prevRaw.wording_choice_user_raw || "").trim()
       : String(prevRaw.wording_choice_agent_current || prevRaw.refined_formulation || "").trim();
+    const fallbackPickedText = mode === "list"
+      ? unwrapSelectionHeadingFromText(stepId, state, activeSpecialist, fallbackPickedRaw)
+      : fallbackPickedRaw;
     const pickedItems = mode === "list"
       ? (() => {
           const fromPending = pickedUser
             ? toTrimmedStringArray(prevRaw.wording_choice_user_items)
             : toTrimmedStringArray(prevRaw.wording_choice_suggestion_items);
           if (fromPending.length > 0) return fromPending;
-          return deps.parseListItems(fallbackPickedRaw);
+          return deps.parseListItems(fallbackPickedText);
         })()
       : [];
     const mergedPickedItems = mode === "list"
@@ -965,11 +1063,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       : [];
     const rawChosen = mode === "list"
       ? mergedPickedItems.join("\n")
-      : fallbackPickedRaw;
+      : unwrapSelectionHeadingFromText(stepId, state, activeSpecialist, fallbackPickedRaw);
     const chosenRaw = stepId === deps.entityStepId ? deps.normalizeEntityPhrase(rawChosen) || rawChosen : rawChosen;
     const chosen = stripMarkupPreserveLines(chosenRaw);
     if (!chosen) return { handled: false, specialist: prevRaw, nextState: state };
-    const activeSpecialist = String((state as any)?.active_specialist || "").trim();
     const userFeedback = userChoiceFeedbackMessage(stepId, state, prevRaw, activeSpecialist, params.telemetry);
     const selectedMessage = pickedUser
       ? userFeedback
@@ -1074,7 +1171,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       user_text: stripMarkupPreserveLines(
         String(specialist?.wording_choice_user_normalized || specialist?.wording_choice_user_raw || "").trim()
       ),
-      suggestion_text: stripMarkupPreserveLines(
+      suggestion_text: unwrapSelectionHeadingFromText(
+        stepId,
+        state,
+        activeSpecialist,
         String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim()
       ),
       user_items: userItems,

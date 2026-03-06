@@ -70,6 +70,73 @@ function buildHelpers(intentEnabled: boolean) {
   });
 }
 
+function buildHeadingAwarePurposeHelpers(params: {
+  heading: string;
+  suggestion: string;
+  equivalent?: boolean;
+}) {
+  const canonicalize = (input: string) =>
+    String(input || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  return createRunStepWordingHelpers({
+    step0Id: "step0",
+    presentationStepId: "presentation",
+    dreamStepId: "dream",
+    strategyStepId: "strategy",
+    productsservicesStepId: "productsservices",
+    rulesofthegameStepId: "rulesofthegame",
+    entityStepId: "entity",
+    dreamExplainerSpecialist: "DreamExplainer",
+    normalizeDreamRuntimeMode: () => "self",
+    uiDefaultString: () => "",
+    uiStringFromStateMap: (_state, _key, fallback) => fallback,
+    fieldForStep: (stepId: string) => (stepId === "purpose" ? "purpose" : ""),
+    parseListItems: (input: string) =>
+      String(input || "")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    splitSentenceItems: (input: string) =>
+      String(input || "")
+        .split(/[.!?]+\s+/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    normalizeListUserInput: (input: string) => String(input || "").trim(),
+    normalizeLightUserInput: (input: string) => String(input || "").trim(),
+    normalizeUserInputAgainstSuggestion: (input: string) => String(input || "").trim(),
+    canonicalizeComparableText: canonicalize,
+    stripChoiceInstructionNoise: (input: string) => String(input || "").trim(),
+    tokenizeWords: (input: string) =>
+      String(input || "")
+        .toLowerCase()
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter(Boolean),
+    isMaterialRewriteCandidate: () => true,
+    shouldTreatAsStepContributingInput: () => true,
+    pickDualChoiceSuggestion: () => params.suggestion,
+    areEquivalentWordingVariants: ({ userRaw, suggestionRaw }) =>
+      params.equivalent !== undefined ? params.equivalent : canonicalize(userRaw) === canonicalize(suggestionRaw),
+    normalizeEntityPhrase: (input: string) => String(input || "").trim(),
+    withProvisionalValue: (state) => state,
+    renderFreeTextTurnPolicy: () => ({
+      specialist: {},
+      contractId: "",
+      contractVersion: "",
+      textKeys: [],
+    }),
+    applyUiPhaseByStep: () => {},
+    isUiWordingFeedbackKeyedV1Enabled: () => false,
+    isWordingChoiceIntentV1Enabled: () => true,
+    bumpUiI18nCounter: () => {},
+    wordingSelectionMessage: (_stepId, _state, _activeSpecialist, selectedValue = "") =>
+      `${params.heading}\n\n${selectedValue}`.trim(),
+  });
+}
+
 test("buildWordingChoiceFromTurn marks clarify_dual variant for disambiguation context", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
@@ -303,4 +370,62 @@ test("applyWordingPickSelection strips markup before committing selected wording
   assert.equal(applyResult.handled, true);
   assert.doesNotMatch(String(applyResult.specialist.refined_formulation || ""), /<[^>]+>/);
   assert.doesNotMatch(String(applyResult.specialist.targetgroup || ""), /<[^>]+>/);
+});
+
+test("buildWordingChoiceFromTurn unwraps current-context heading before equivalence check", () => {
+  const heading = "Je huidige bestaansreden voor Mindd is:";
+  const value = "Mindd helpt ondernemers hun visie om te zetten in scherpe keuzes en consistente uitvoering.";
+  const wrapped = `${heading}\n${value}`;
+  const helpers = buildHeadingAwarePurposeHelpers({
+    heading,
+    suggestion: wrapped,
+  });
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "purpose",
+    state: {} as any,
+    activeSpecialist: "Purpose",
+    previousSpecialist: {},
+    specialistResult: {
+      message: wrapped,
+      refined_formulation: "",
+      purpose: "",
+    } as Record<string, unknown>,
+    userTextRaw: value,
+    isOfftopic: false,
+  });
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((result.specialist as Record<string, unknown>).refined_formulation || ""), value);
+  assert.equal(String((result.specialist as Record<string, unknown>).purpose || ""), value);
+});
+
+test("applyWordingPickSelection unwraps current-context heading before committing suggestion", () => {
+  const heading = "Je huidige bestaansreden voor Mindd is:";
+  const value = "Mindd helpt ondernemers hun visie om te zetten in scherpe keuzes en consistente uitvoering.";
+  const wrapped = `${heading}\n${value}`;
+  const helpers = buildHeadingAwarePurposeHelpers({
+    heading,
+    suggestion: wrapped,
+    equivalent: false,
+  });
+  const applyResult = helpers.applyWordingPickSelection({
+    stepId: "purpose",
+    routeToken: "__WORDING_PICK_SUGGESTION__",
+    state: {
+      current_step: "purpose",
+      active_specialist: "Purpose",
+      last_specialist_result: {
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "purpose",
+        wording_choice_user_normalized: value,
+        wording_choice_agent_current: wrapped,
+      },
+    } as any,
+  });
+
+  assert.equal(applyResult.handled, true);
+  assert.equal(String(applyResult.specialist.refined_formulation || ""), value);
+  assert.equal(String(applyResult.specialist.purpose || ""), value);
+  assert.equal(String(applyResult.specialist.wording_choice_agent_current || ""), value);
 });
