@@ -3290,18 +3290,36 @@
         const reasonCode = String(
           result?.reason_code || responseState.reason_code || responseLiveness.reason_code || ""
         ).trim().toLowerCase();
+        const responseUi = toRecord2(result?.ui);
+        const responseContractId = String(
+          result?.contract_id || responseUi.contract_id || responseState.contract_id || ""
+        ).trim().toLowerCase();
+        const responsePrompt = String(
+          result?.prompt ||
+            toRecord2(responseUi.prompt).body ||
+            responseUi.questionText ||
+            ""
+        ).trim();
+        const responseText = String(result?.text || "").trim();
+        const responseActions = Array.isArray(responseUi.actions) ? responseUi.actions : [];
+        const hasStructuredActions = responseActions.length > 0;
+        const hasTextSubmitAction = String(responseState.ui_action_text_submit || "").trim().length > 0;
+        const hasRenderableProgress = hasStructuredActions || hasTextSubmitAction || responsePrompt.length > 0 || responseText.length > 0;
+        const isStep0NoMenuAfterStart = responseContractId === "step_0:no_output:no_menu";
         const hasServerLiveness = ackStatus.length > 0;
-        const startAdvanced = hasServerLiveness ? ackStatus === "accepted" && stateAdvanced : hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart");
+        const startAdvanced = hasServerLiveness ? ackStatus === "accepted" && stateAdvanced && (!isStep0NoMenuAfterStart || hasRenderableProgress) : hasIngestedResult && (orderingAdvanced || responseViewMode !== "prestart");
         if (!startAdvanced) {
-          const failureReason = hasServerLiveness ? reasonCode || (ackStatus === "accepted" ? "state_not_advanced" : ackStatus || "action_rejected") : "missing_action_liveness";
+          const failureReason = hasServerLiveness ? reasonCode || (ackStatus === "accepted" ? isStep0NoMenuAfterStart && !hasRenderableProgress ? "no_renderable_start_progress" : "state_not_advanced" : ackStatus || "action_rejected") : "missing_action_liveness";
           console.warn("[ui_start_dispatch_not_advanced_fail_closed]", {
             response_ingested: hasIngestedResult,
             ordering_advanced: orderingAdvanced,
             payload_source: resolvedResponse.source,
             payload_reason_code: resolvedResponse.source_reason_code,
             response_view_mode: responseViewMode,
+            response_contract_id: responseContractId,
             ack_status: ackStatus,
             state_advanced: stateAdvanced,
+            has_renderable_progress: hasRenderableProgress,
             reason_code: reasonCode,
             failure_reason: failureReason,
             ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
@@ -4215,7 +4233,8 @@
     const isDreamDirectionView = current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
     const bodyRaw = (() => {
       if (result && typeof result === "object" && Object.prototype.hasOwnProperty.call(result, "text")) {
-        return typeof result.text === "string" ? result.text : "";
+        const resultText = typeof result.text === "string" ? result.text : "";
+        if (stripInlineText(resultText).trim().length > 0) return resultText;
       }
       if (result?.specialist && typeof result.specialist === "object") {
         const sp = result.specialist;

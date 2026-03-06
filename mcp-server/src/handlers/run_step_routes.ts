@@ -66,6 +66,14 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function sanitizeStep0SeedToken(raw: unknown, fallback = ""): string {
+  const value = String(raw || "")
+    .replace(/[|\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return value || String(fallback || "").trim();
+}
+
 const SubmitScoresPayloadSchema = z.object({
   action: z.literal("submit_scores"),
   scores: z.array(z.array(z.number().finite())),
@@ -726,6 +734,24 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         (context.state as Record<string, unknown>).intro_shown_session = "true";
         const step0FinalField = getFinalFieldForStepId(deps.step0Id) || "step_0_final";
         let step0Final = String((context.state as Record<string, unknown>)[step0FinalField] ?? "").trim();
+        if (!step0Final) {
+          const initialMsg = String((context.state as Record<string, unknown>).initial_user_message ?? "").trim();
+          const seed = deps.inferStep0SeedFromInitialMessage(initialMsg || context.userMessage);
+          if (seed) {
+            const seededVenture = sanitizeStep0SeedToken(seed.venture, "business");
+            const seededName = sanitizeStep0SeedToken(
+              seed.name,
+              String((context.state as Record<string, unknown>).business_name || "TBD")
+            );
+            const seededStatus =
+              String(seed.status || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+            step0Final = `Venture: ${seededVenture} | Name: ${seededName || "TBD"} | Status: ${seededStatus}`;
+            (context.state as Record<string, unknown>)[step0FinalField] = step0Final;
+            if (seededName && seededName.toLowerCase() !== "tbd") {
+              (context.state as Record<string, unknown>).business_name = seededName;
+            }
+          }
+        }
 
         if (step0Final) {
           const startResolution = await deps.ensureStartState(context.state, startLocaleSeedText);
@@ -767,11 +793,22 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const langSeed = initialMsg || context.userMessage;
         const startResolution = await deps.ensureStartState(context.state, langSeed);
         const stateWithUi = startResolution.state;
+        const fallbackCardDesc = String(
+          deps.uiDefaultString("step0.carddesc", "Just to set the context, we'll start with the basics.")
+        ).trim();
+        const fallbackQuestion = String(
+          deps.uiDefaultString(
+            "step0.question.initial",
+            "To get started, what kind of business are you running or planning, and what is its name?"
+          )
+        ).trim();
+        const step0CardDesc = String(deps.step0CardDescForState(stateWithUi) || "").trim() || fallbackCardDesc;
+        const step0Question = String(deps.step0QuestionForState(stateWithUi) || "").trim() || fallbackQuestion;
 
         const specialist = {
           action: "ASK",
-          message: deps.step0CardDescForState(stateWithUi),
-          question: deps.step0QuestionForState(stateWithUi),
+          message: step0CardDesc,
+          question: step0Question,
           refined_formulation: "",
           business_name: (stateWithUi as Record<string, unknown>).business_name || "TBD",
           step_0: "",

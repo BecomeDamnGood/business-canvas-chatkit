@@ -401,17 +401,6 @@ export async function runStepRuntimeExecute(
   state = actionRoutingLayer.state;
   userMessage = actionRoutingLayer.userMessage;
   const responseUiFlags = actionRoutingLayer.responseUiFlags;
-  if (actionCodeRaw === "ACTION_START") {
-    const currentStep = String((state as Record<string, unknown>).current_step || STEP_0_ID).trim() || STEP_0_ID;
-    const initialUserMessageSeed = String((state as Record<string, unknown>).initial_user_message || "").trim();
-    const step0Final = String((state as Record<string, unknown>).step_0_final || "").trim();
-    if (currentStep === STEP_0_ID && !step0Final && initialUserMessageSeed) {
-      userMessage = initialUserMessageSeed;
-      actionCodeRaw = "";
-      (state as Record<string, unknown>).started = "true";
-      (state as Record<string, unknown>).intro_shown_session = "true";
-    }
-  }
   state = await finalizeLayer.ensureUiStrings(state, userMessage);
   const lang = langFromState(state);
   const uiI18nCounterPort = (telemetry: unknown, key: string) =>

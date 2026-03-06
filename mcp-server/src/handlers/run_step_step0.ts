@@ -31,9 +31,95 @@ export function hasValidStep0Final(step0FinalRaw: string): boolean {
   return Boolean(venture) && Boolean(name) && (status === "existing" || status === "starting");
 }
 
-export function inferStep0SeedFromInitialMessage(_rawInput: string): Step0Seed | null {
-  // Intentionally disabled: step-0 inference must come from specialist output, not local hardcoded parsing.
-  return null;
+function normalizeSeedToken(raw: unknown): string {
+  return String(raw || "")
+    .replace(/[|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isPlausibleName(raw: string): boolean {
+  const value = normalizeSeedToken(raw);
+  if (!value) return false;
+  if (value.length < 2 || value.length > 48) return false;
+  const lowered = value.toLowerCase();
+  if (["tbd", "business", "venture", "bedrijf", "company", "startup", "plan", "canvas"].includes(lowered)) {
+    return false;
+  }
+  return /^[A-Za-z0-9][A-Za-z0-9&'._-]*$/.test(value);
+}
+
+function inferStatusFromInput(rawInput: string): "existing" | "starting" {
+  const lowered = String(rawInput || "").toLowerCase();
+  if (
+    /\b(start|starting|launch|nieuw|new)\b/.test(lowered) ||
+    /\b(wil|wilt|will|want)\b/.test(lowered) && /\b(start|begin|launch)\b/.test(lowered)
+  ) {
+    return "starting";
+  }
+  return "existing";
+}
+
+const VENTURE_HINTS: Array<{ pattern: RegExp; value: string }> = [
+  { pattern: /\breclamebureau\b/i, value: "reclamebureau" },
+  { pattern: /\badvertising agency\b/i, value: "advertising agency" },
+  { pattern: /\bmarketing agency\b/i, value: "marketing agency" },
+  { pattern: /\bagency\b/i, value: "agency" },
+  { pattern: /\bbureau\b/i, value: "bureau" },
+  { pattern: /\bstudio\b/i, value: "studio" },
+  { pattern: /\bconsultancy\b/i, value: "consultancy" },
+  { pattern: /\bwebshop\b/i, value: "webshop" },
+  { pattern: /\brestaurant\b/i, value: "restaurant" },
+  { pattern: /\bpraktijk\b/i, value: "praktijk" },
+  { pattern: /\bstartup\b/i, value: "startup" },
+  { pattern: /\bbusiness\b/i, value: "business" },
+  { pattern: /\bbedrijf\b/i, value: "bedrijf" },
+];
+
+function inferVentureFromInput(rawInput: string): string {
+  const input = String(rawInput || "");
+  for (const hint of VENTURE_HINTS) {
+    if (hint.pattern.test(input)) return hint.value;
+  }
+  return "";
+}
+
+export function inferStep0SeedFromInitialMessage(rawInput: string): Step0Seed | null {
+  const raw = String(rawInput || "").replace(/\s+/g, " ").trim();
+  const input = normalizeSeedToken(rawInput);
+  if (!input) return null;
+  const status = inferStatusFromInput(input);
+
+  const explicitStep0 = raw.match(
+    /Venture:\s*([^|]+?)\s*(?:\||$).*?Name:\s*([^|]+?)\s*(?:\||$).*?Status:\s*(existing|starting)\b/i
+  );
+  if (explicitStep0) {
+    const venture = normalizeSeedToken(explicitStep0[1]);
+    const name = normalizeSeedToken(explicitStep0[2]);
+    const parsedStatus = String(explicitStep0[3] || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+    if (venture && isPlausibleName(name)) {
+      return { venture, name, status: parsedStatus };
+    }
+  }
+
+  const explicitNamed = input.match(/\b(?:called|named|genaamd|heet)\s+([A-Za-z0-9][A-Za-z0-9&'._-]{1,48})\b/i);
+  const pronounVentureName = input.match(
+    /\b(?:my|mijn|our|ons|onze)\s+([A-Za-z][A-Za-z0-9&'/-]*(?:\s+[A-Za-z][A-Za-z0-9&'/-]*){0,2})\s+([A-Za-z0-9][A-Za-z0-9&'._-]{1,48})\b/i
+  );
+  const trailingTitleCase = input.match(/\b([A-Z][A-Za-z0-9&'._-]{1,48})\b\s*$/);
+
+  const ventureFromPattern = normalizeSeedToken(pronounVentureName?.[1] || "");
+  const venture = ventureFromPattern || inferVentureFromInput(input);
+  const nameCandidate = normalizeSeedToken(
+    explicitNamed?.[1] || pronounVentureName?.[2] || trailingTitleCase?.[1] || ""
+  );
+  if (!venture || !isPlausibleName(nameCandidate)) return null;
+
+  return {
+    venture,
+    name: nameCandidate,
+    status,
+  };
 }
 
 export function maybeSeedStep0CandidateFromInitialMessage(state: CanvasState, sourceMessage: string): CanvasState {
