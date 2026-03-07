@@ -123,6 +123,63 @@ test("presentation media capability question is deterministically routed to fixe
   );
 });
 
+test("NO_STARTING_POINT meta topic uses localized body without redirect append", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "nl",
+    business_name: "Mindd",
+    ui_strings: {
+      "meta.topic.noStartingPoint.body": "NL geen-startpunttekst.",
+      "offtopic.redirect.template": "Laten we doorgaan met de {0} van {1}.",
+      "offtopic.step.dream": "droom",
+      "offtopic.companyFallback": "mijn toekomstige bedrijf",
+    },
+  };
+
+  const routed = helpers.applyCentralMetaTopicRouter({
+    stepId: "dream",
+    specialistResult: {
+      action: "ASK",
+      user_intent: "META_QUESTION",
+      meta_topic: "NO_STARTING_POINT",
+    },
+    previousSpecialist: {},
+    state,
+  }) as Record<string, unknown>;
+
+  assert.equal(routed.action, "ASK");
+  assert.equal(routed.meta_topic, "NO_STARTING_POINT");
+  assert.equal(String(routed.message || ""), "NL geen-startpunttekst.");
+  assert.doesNotMatch(String(routed.message || ""), /Laten we doorgaan met/);
+});
+
+test("no-starting-point intent in user message is deterministically routed", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "nl",
+    ui_strings: {
+      "meta.topic.noStartingPoint.body": "NL geen-startpunttekst.",
+    },
+  };
+
+  const routed = helpers.applyCentralMetaTopicRouter({
+    stepId: "strategy",
+    userMessage: "ik wil iets met AI doen, maar geen onderwerp/markt/probleem",
+    specialistResult: {
+      action: "ASK",
+      message: "orig",
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    previousSpecialist: {},
+    state,
+  }) as Record<string, unknown>;
+
+  assert.equal(routed.meta_topic, "NO_STARTING_POINT");
+  assert.equal(routed.is_offtopic, false);
+  assert.equal(String(routed.message || ""), "NL geen-startpunttekst.");
+});
+
 test("media capability phrase does not trigger forced presentation topic outside presentation step", () => {
   const helpers = buildHelpers();
   const state: any = {

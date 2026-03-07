@@ -160,7 +160,7 @@ Output schema fields (must always be present)
   "rulesofthegame": "string",
   "wants_recap": "boolean",
   "is_offtopic": "boolean",
-  "meta_topic": "NONE" | "MODEL_VALUE" | "MODEL_CREDIBILITY" | "BEN_PROFILE" | "TOOL_AUDIENCE" | "STEP_SKIP_NOT_SUPPORTED" | "STEP_POINTLESS" | "STEP_BACK_NOT_SUPPORTED" | "CANVAS_VALUE" | "SESSION_STORAGE" | "RECAP",
+  "meta_topic": "NONE" | "MODEL_VALUE" | "MODEL_CREDIBILITY" | "BEN_PROFILE" | "TOOL_AUDIENCE" | "STEP_SKIP_NOT_SUPPORTED" | "STEP_POINTLESS" | "STEP_BACK_NOT_SUPPORTED" | "CANVAS_VALUE" | "SESSION_STORAGE" | "PRESENTATION_MEDIA_NOT_SUPPORTED" | "NO_STARTING_POINT" | "RECAP",
   "statements": ["array of strings"]
 }
 

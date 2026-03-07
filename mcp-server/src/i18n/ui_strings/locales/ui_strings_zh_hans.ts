@@ -140,6 +140,7 @@ export const UI_STRINGS_LOCALE_ZH_HANS: Record<string, string> = {
     "meta.topic.canvasValue.body": "成功的创业者和领导者会把注意力放在真正重要的事情上，其余的都是执行与日常运营。这个画布能让你清晰看到业务的核心，例如你做什么、为谁而做、为什么能赢、以及成功所需要的关键条件。它能带来清晰度和方向感。它也能在困难时期增强动力，因为企业的使命与关键驱动因素被明确表达出来。以此画布为基础，你可以更有效地推动和完善战术与运营层面的工作，例如市场营销计划、商业优先级以及财务预测。",
     "meta.topic.sessionStorage.body": "我们只在你的会话保持打开的情况下保存每一步的结果。如果你关闭小组件，信息将被永久删除。我们仅保留本次会话的令牌使用量，用于内部复盘与改进。",
     "meta.topic.presentationMediaNotSupported.body": "很遗憾，目前还无法在演示文稿中加入图片或标志。我们正在积极推进，争取在未来支持该功能。",
+    "meta.topic.noStartingPoint.body": "这个 Canvas Builder 用于将一个想法或既有方向转化为具体的战略选择，并形成一套连贯的叙述。只要你已经有一个初步方向，即使还很粗糙，它也能发挥最佳效果。如果你完全没有起点，或还没有明确的问题领域，通常更建议先探索一个初始想法，然后再用这个流程把它梳理清楚并进一步打磨。",
     "motivation.continuePrompt": "给我一句真诚的话。不必完美，只要真实。",
     "motivation.continueTemplate": "我们现在在做的，是把 \"{0}\" 用你在真实决策中也能使用的语言说清楚，从而保护你的动力。",
     "motivation.essencePrefix": "目前的核心是：\"{0}\"",

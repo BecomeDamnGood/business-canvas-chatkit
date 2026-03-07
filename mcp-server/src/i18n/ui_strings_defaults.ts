@@ -221,6 +221,8 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
     "We store the output of each step only while your session remains open. If you close the widget, the information is permanently deleted. The only data we retain from the session is token usage for internal review and insights.",
   "meta.topic.presentationMediaNotSupported.body":
     "Unfortunately, it is not yet possible to include images or logos in the presentation. We are working hard to make this possible in the future.",
+  "meta.topic.noStartingPoint.body":
+    "This Canvas Builder is designed to turn an idea or an existing direction into concrete strategic choices and a coherent story. It works best when you already have an initial direction, even if it is still rough. If you have no starting point at all or no clear problem area yet, it is usually better to explore a first idea first and then use this process to sharpen and structure it.",
   "ppt.heading.purpose": "Purpose",
   "ppt.heading.role": "Role",
   "ppt.heading.strategy": "Strategy",
@@ -289,7 +291,7 @@ export const UI_STRINGS_WITH_MENU_KEYS: Record<string, string> = {
 };
 
 export const UI_STRINGS_KEYS = Object.keys(UI_STRINGS_WITH_MENU_KEYS);
-export const UI_STRINGS_SCHEMA_VERSION = "2026-03-04-ui-i18n-v5_catalog";
+export const UI_STRINGS_SCHEMA_VERSION = "2026-03-07-ui-i18n-v6_catalog";
 
 function buildCriticalUiKeysStep0(): string[] {
   const keySet = new Set<string>([

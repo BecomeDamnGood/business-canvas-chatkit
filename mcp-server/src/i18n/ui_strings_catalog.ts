@@ -18,6 +18,7 @@ import { UI_STRINGS_LOCALE_KO } from "./ui_strings/locales/ui_strings_ko.js";
 import { UI_STRINGS_LOCALE_ZH_HANS } from "./ui_strings/locales/ui_strings_zh_hans.js";
 import { UI_STRINGS_LOCALE_RU } from "./ui_strings/locales/ui_strings_ru.js";
 import { UI_STRINGS_LOCALE_HU } from "./ui_strings/locales/ui_strings_hu.js";
+import { UI_STRINGS_LOCALE_AR } from "./ui_strings/locales/ui_strings_ar.js";
 
 export const UI_STRINGS_CATALOG_BY_LOCALE: Record<string, Record<string, string>> = {
   "en": UI_STRINGS_LOCALE_EN,
@@ -34,6 +35,7 @@ export const UI_STRINGS_CATALOG_BY_LOCALE: Record<string, Record<string, string>
   "zh-Hans": UI_STRINGS_LOCALE_ZH_HANS,
   "ru": UI_STRINGS_LOCALE_RU,
   "hu": UI_STRINGS_LOCALE_HU,
+  "ar": UI_STRINGS_LOCALE_AR,
 } as const;
 
 export const UI_STRINGS_CATALOG_LOCALES: string[] = Object.keys(UI_STRINGS_CATALOG_BY_LOCALE);
