@@ -542,7 +542,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     );
   const shouldResolvePendingWordingFromTextIntent =
     hasPendingWordingChoice &&
-    runtime.wordingChoiceIntentV1 &&
     hasFreeTextWhilePending;
   if (shouldResolvePendingWordingFromTextIntent) {
     const pendingChoiceIntent = statePorts.classifyPendingWordingChoiceTextIntent(userMessage);
