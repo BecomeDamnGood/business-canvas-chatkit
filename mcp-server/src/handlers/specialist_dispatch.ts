@@ -121,6 +121,10 @@ import {
   buildPresentationSpecialistInput,
   type PresentationOutput,
 } from "../steps/presentation.js";
+import {
+  buildExplainLightInstructions,
+  shouldUseExplainLightProfile,
+} from "../steps/explain_profile.js";
 
 export type SpecialistInstructionBlocks = {
   languageLockInstruction: string;
@@ -216,6 +220,10 @@ export type CallSpecialistStrictSafeDeps = {
   }) => void;
 };
 
+function isPlannerContextDedupEnabled(): boolean {
+  return String(process.env.BSC_DEDUP_CONTEXT_PLANNER_V1 || "1").trim() !== "0";
+}
+
 export function composeSpecialistInstructions(
   baseInstructions: string,
   contextBlock: string,
@@ -244,7 +252,20 @@ export async function callSpecialistStrict(
   const { model, state, decision, userMessage } = params;
   const specialist = String(decision.specialist_to_call ?? "");
   const contextBlock = deps.buildSpecialistContextBlock(state);
+  const plannerContextBlock = isPlannerContextDedupEnabled() ? "" : contextBlock;
   const lang = deps.langFromState(state);
+  const intentType = String((state as any).__turn_last_routing_intent_type || "").trim();
+  const explainLight = shouldUseExplainLightProfile(intentType);
+  const composeInstructions = (
+    baseInstructions: string,
+    options?: { includeUniversalMeta?: boolean }
+  ): string => {
+    const base = explainLight ? buildExplainLightInstructions(baseInstructions) : baseInstructions;
+    const includeUniversalMeta = explainLight ? false : Boolean(options?.includeUniversalMeta);
+    return composeSpecialistInstructions(base, contextBlock, deps.instructionBlocks, {
+      includeUniversalMeta,
+    });
+  };
 
   if (process.env.TS_NODE_TRANSPILE_ONLY === "true" && process.env.RUN_INTEGRATION_TESTS !== "1") {
     if (process.env.TEST_FORCE_RATE_LIMIT === "1") {
@@ -300,11 +321,7 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<ValidationAndBusinessNameOutput>({
       model,
-      instructions: composeSpecialistInstructions(
-        VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS,
-        contextBlock,
-        deps.instructionBlocks
-      ),
+      instructions: composeInstructions(VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS),
       plannerInput,
       schemaName: "ValidationAndBusinessName",
       jsonSchema: ValidationAndBusinessNameJsonSchema as any,
@@ -329,7 +346,7 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<DreamOutput>({
       model,
-      instructions: composeSpecialistInstructions(DREAM_INSTRUCTIONS, contextBlock, deps.instructionBlocks),
+      instructions: composeInstructions(DREAM_INSTRUCTIONS),
       plannerInput,
       schemaName: "Dream",
       jsonSchema: DreamJsonSchema as any,
@@ -383,14 +400,9 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<DreamExplainerOutput>({
       model,
-      instructions: composeSpecialistInstructions(
-        DREAM_EXPLAINER_INSTRUCTIONS,
-        contextBlock,
-        deps.instructionBlocks,
-        {
-          includeUniversalMeta: true,
-        }
-      ),
+      instructions: composeInstructions(DREAM_EXPLAINER_INSTRUCTIONS, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "DreamExplainer",
       jsonSchema: DreamExplainerJsonSchema as any,
@@ -414,7 +426,7 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<PurposeOutput>({
       model,
-      instructions: composeSpecialistInstructions(PURPOSE_INSTRUCTIONS, contextBlock, deps.instructionBlocks, {
+      instructions: composeInstructions(PURPOSE_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
       plannerInput,
@@ -440,7 +452,7 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<BigWhyOutput>({
       model,
-      instructions: composeSpecialistInstructions(BIGWHY_INSTRUCTIONS, contextBlock, deps.instructionBlocks, {
+      instructions: composeInstructions(BIGWHY_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
       plannerInput,
@@ -466,7 +478,7 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<RoleOutput>({
       model,
-      instructions: composeSpecialistInstructions(ROLE_INSTRUCTIONS, contextBlock, deps.instructionBlocks, {
+      instructions: composeInstructions(ROLE_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
       plannerInput,
@@ -492,7 +504,7 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<EntityOutput>({
       model,
-      instructions: composeSpecialistInstructions(ENTITY_INSTRUCTIONS, contextBlock, deps.instructionBlocks, {
+      instructions: composeInstructions(ENTITY_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
       plannerInput,
@@ -521,7 +533,7 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<StrategyOutput>({
       model,
-      instructions: composeSpecialistInstructions(STRATEGY_INSTRUCTIONS, contextBlock, deps.instructionBlocks, {
+      instructions: composeInstructions(STRATEGY_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
       plannerInput,
@@ -543,12 +555,12 @@ export async function callSpecialistStrict(
       (state as any).intro_shown_for_step,
       String(decision.current_step || TARGETGROUP_STEP_ID),
       lang,
-      contextBlock
+      plannerContextBlock
     );
 
     const res = await callStrictJson<TargetGroupOutput>({
       model,
-      instructions: composeSpecialistInstructions(TARGETGROUP_INSTRUCTIONS, contextBlock, deps.instructionBlocks, {
+      instructions: composeInstructions(TARGETGROUP_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
       plannerInput,
@@ -570,19 +582,14 @@ export async function callSpecialistStrict(
       (state as any).intro_shown_for_step,
       String(decision.current_step || PRODUCTSSERVICES_STEP_ID),
       lang,
-      contextBlock
+      plannerContextBlock
     );
 
     const res = await callStrictJson<ProductsServicesOutput>({
       model,
-      instructions: composeSpecialistInstructions(
-        PRODUCTSSERVICES_INSTRUCTIONS,
-        contextBlock,
-        deps.instructionBlocks,
-        {
-          includeUniversalMeta: true,
-        }
-      ),
+      instructions: composeInstructions(PRODUCTSSERVICES_INSTRUCTIONS, {
+        includeUniversalMeta: true,
+      }),
       plannerInput,
       schemaName: "ProductsServices",
       jsonSchema: ProductsServicesJsonSchema as any,
@@ -609,7 +616,7 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<RulesOfTheGameOutput>({
       model,
-      instructions: composeSpecialistInstructions(RULESOFTHEGAME_INSTRUCTIONS, contextBlock, deps.instructionBlocks, {
+      instructions: composeInstructions(RULESOFTHEGAME_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
       plannerInput,
@@ -655,7 +662,7 @@ export async function callSpecialistStrict(
 
     const res = await callStrictJson<PresentationOutput>({
       model,
-      instructions: composeSpecialistInstructions(PRESENTATION_INSTRUCTIONS, contextBlock, deps.instructionBlocks, {
+      instructions: composeInstructions(PRESENTATION_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
       plannerInput,

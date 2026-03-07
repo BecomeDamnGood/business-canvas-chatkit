@@ -137,3 +137,35 @@ test("buildSpecialistContextBlock skips invalid framed provisional values for pu
   assert.doesNotMatch(block, /purpose_final:/i);
   assert.match(block, /\(none yet\)/i);
 });
+
+test("buildSpecialistContextBlock whitelists last_specialist_result payload", () => {
+  const helpers = buildHelpers();
+  const block = helpers.buildSpecialistContextBlock({
+    current_step: "targetgroup",
+    last_specialist_result: {
+      action: "REFINE",
+      message: "Mogelijke segmenten",
+      question: "Klopt dit?",
+      refined_formulation: "B2B software scale-ups",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+      statements: ["Segment 1", "Segment 2"],
+      targetgroup: "B2B software scale-ups",
+      debug_payload: { giant: "blob" },
+      ui_contract: "should_not_leak",
+      scratchpad: "remove me",
+    },
+  } as any);
+
+  const match = block.match(/last_specialist_result_json:\s*(\{[\s\S]*\})$/m);
+  assert.ok(match, "context block must include JSON snapshot");
+  const parsed = JSON.parse(String(match?.[1] || "{}")) as Record<string, unknown>;
+  assert.equal(parsed.action, "REFINE");
+  assert.equal(parsed.targetgroup, "B2B software scale-ups");
+  assert.deepEqual(parsed.statements, ["Segment 1", "Segment 2"]);
+  assert.equal(Object.prototype.hasOwnProperty.call(parsed, "debug_payload"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(parsed, "ui_contract"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(parsed, "scratchpad"), false);
+});

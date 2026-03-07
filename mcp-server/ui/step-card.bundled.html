@@ -4489,7 +4489,40 @@
 
   // ui/lib/main.ts
   initActionsConfig({ render, t });
-  var isLocalDev = globalThis.LOCAL_DEV === "1";
+  var isLocalDev = globalThis.LOCAL_DEV === "1" || typeof location !== "undefined" && location.hostname === "localhost";
+  async function callToolViaLocalMcp(toolName, toolArgs) {
+    const body = {
+      jsonrpc: "2.0",
+      id: `local_${Date.now()}`,
+      method: "tools/call",
+      params: { name: String(toolName || ""), arguments: toolArgs || {} }
+    };
+    const response = await fetch("/mcp", {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    const parsed = await response.json();
+    if (!response.ok || parsed?.error) {
+      const message = parsed?.error?.message || `Local MCP call failed (${response.status})`;
+      throw new Error(String(message));
+    }
+    return parsed?.result ?? parsed;
+  }
+  function ensureLocalDevOpenAiShim() {
+    if (!isLocalDev) return;
+    const current = globalThis.openai;
+    if (current && typeof current.callTool === "function") return;
+    const next = current && typeof current === "object" ? current : {};
+    next.callTool = (name, args) => callToolViaLocalMcp(name, args);
+    if (!next.toolOutput || typeof next.toolOutput !== "object") next.toolOutput = {};
+    if (!next.toolResponseMetadata || typeof next.toolResponseMetadata !== "object") next.toolResponseMetadata = {};
+    globalThis.openai = next;
+    console.log("[local_dev_openai_shim_enabled]", { endpoint: "/mcp" });
+  }
   function latestWidgetState() {
     const latest = globalThis.__BSC_LATEST__;
     const state = latest?.state;
@@ -4776,7 +4809,21 @@
       }
     });
   }
-  tryInitialIngestFromHost("set_globals");
+  ensureLocalDevOpenAiShim();
+  const initialIngested = tryInitialIngestFromHost("set_globals");
+  if (!initialIngested && isLocalDev) {
+    callToolViaLocalMcp("run_step", {
+      current_step_id: "step_0",
+      user_message: "",
+      input_mode: "widget",
+      state: {}
+    }).then((payload) => {
+      ingestHostPayload(payload, "set_globals");
+      notifyHostTransportSignal("set_globals");
+    }).catch((err) => {
+      console.error("[local_dev_initial_ingest_failed]", String(err?.message || err || "unknown"));
+    });
+  }
 })();
 
 </script>

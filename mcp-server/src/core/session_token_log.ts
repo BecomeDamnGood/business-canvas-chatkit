@@ -8,6 +8,22 @@ export type SessionTurnTokenUsage = {
   provider_available: boolean;
 };
 
+export type SessionSubcallLogEntry = {
+  call_id: string;
+  timestamp: string;
+  step_id: string;
+  specialist: string;
+  model: string;
+  trigger: string;
+  action_code?: string;
+  intent_type?: string;
+  routing_source?: string;
+  latency_ms?: number | null;
+  attempts: number;
+  usage: SessionTurnTokenUsage;
+  ok?: boolean;
+};
+
 export type SessionTurnLogEntry = {
   turn_id: string;
   timestamp: string;
@@ -21,6 +37,7 @@ export type SessionTurnLogEntry = {
   company_name?: string;
   attempts: number;
   usage: SessionTurnTokenUsage;
+  subcalls?: SessionSubcallLogEntry[];
 };
 
 type SessionLogData = {
@@ -57,6 +74,36 @@ function normalizeTurn(turn: SessionTurnLogEntry): SessionTurnLogEntry {
     typeof latencyMsRaw === "number" && Number.isFinite(latencyMsRaw) && latencyMsRaw >= 0
       ? Math.round(latencyMsRaw)
       : null;
+  const normalizeSubcall = (subcall: SessionSubcallLogEntry): SessionSubcallLogEntry => {
+    const subcallLatencyRaw = (subcall as any)?.latency_ms;
+    const subcallLatency =
+      typeof subcallLatencyRaw === "number" && Number.isFinite(subcallLatencyRaw) && subcallLatencyRaw >= 0
+        ? Math.round(subcallLatencyRaw)
+        : null;
+    return {
+      call_id: String(subcall.call_id || "").trim() || "unknown",
+      timestamp: String(subcall.timestamp || turn.timestamp || new Date().toISOString()).trim() || new Date().toISOString(),
+      step_id: String(subcall.step_id || turn.step_id || "").trim() || "unknown",
+      specialist: String(subcall.specialist || "").trim() || "unknown",
+      model: String(subcall.model || "").trim() || "unknown",
+      trigger: String((subcall as any)?.trigger || "").trim() || "unknown",
+      action_code: String((subcall as any)?.action_code || "").trim(),
+      intent_type: String((subcall as any)?.intent_type || "").trim(),
+      routing_source: String((subcall as any)?.routing_source || "").trim(),
+      latency_ms: subcallLatency,
+      attempts: Number.isFinite(subcall.attempts) ? Math.max(0, Math.trunc(subcall.attempts)) : 0,
+      usage: {
+        input_tokens: normalizeToken(subcall.usage?.input_tokens),
+        output_tokens: normalizeToken(subcall.usage?.output_tokens),
+        total_tokens: normalizeToken(subcall.usage?.total_tokens),
+        provider_available: Boolean(subcall.usage?.provider_available),
+      },
+      ok: typeof (subcall as any)?.ok === "boolean" ? Boolean((subcall as any).ok) : undefined,
+    };
+  };
+  const subcalls = Array.isArray((turn as any)?.subcalls)
+    ? ((turn as any).subcalls as SessionSubcallLogEntry[]).map((subcall) => normalizeSubcall(subcall))
+    : [];
   return {
     turn_id: String(turn.turn_id || "").trim(),
     timestamp: String(turn.timestamp || new Date().toISOString()).trim() || new Date().toISOString(),
@@ -75,6 +122,7 @@ function normalizeTurn(turn: SessionTurnLogEntry): SessionTurnLogEntry {
       total_tokens: normalizeToken(turn.usage?.total_tokens),
       provider_available: Boolean(turn.usage?.provider_available),
     },
+    ...(subcalls.length > 0 ? { subcalls } : {}),
   };
 }
 
@@ -267,10 +315,21 @@ function renderMarkdown(data: SessionLogData): string {
   const turnRows = turns.length
     ? turns
       .map((turn) => {
-        return `| ${turn.timestamp} | ${turn.turn_id} | ${turn.step_id} | ${turn.specialist} | ${turn.model} | ${turn.action_code} | ${turn.intent_type} | ${turn.routing_source} | ${formatNullableNumber(turn.latency_ms ?? null)} | ${turn.company_name} | ${turn.attempts} | ${formatToken(turn.usage.input_tokens)} | ${formatToken(turn.usage.output_tokens)} | ${formatToken(turn.usage.total_tokens)} |`;
+        const subcallCount = Array.isArray(turn.subcalls) ? turn.subcalls.length : 0;
+        return `| ${turn.timestamp} | ${turn.turn_id} | ${turn.step_id} | ${turn.specialist} | ${turn.model} | ${turn.action_code} | ${turn.intent_type} | ${turn.routing_source} | ${formatNullableNumber(turn.latency_ms ?? null)} | ${turn.company_name} | ${turn.attempts} | ${subcallCount} | ${formatToken(turn.usage.input_tokens)} | ${formatToken(turn.usage.output_tokens)} | ${formatToken(turn.usage.total_tokens)} |`;
       })
       .join("\n")
-    : "| - | - | - | - | - | - | - | - | - | - | - | - | - | - |";
+    : "| - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |";
+
+  const subcallRows = turns
+    .flatMap((turn) => {
+      const subcalls = Array.isArray(turn.subcalls) ? turn.subcalls : [];
+      return subcalls.map((subcall) => {
+        const okText = typeof subcall.ok === "boolean" ? String(subcall.ok) : "";
+        return `| ${turn.turn_id} | ${subcall.call_id} | ${subcall.timestamp} | ${subcall.step_id} | ${subcall.specialist} | ${subcall.model} | ${subcall.trigger} | ${subcall.action_code || ""} | ${subcall.intent_type || ""} | ${subcall.routing_source || ""} | ${formatNullableNumber(subcall.latency_ms ?? null)} | ${subcall.attempts} | ${okText} | ${formatToken(subcall.usage.input_tokens)} | ${formatToken(subcall.usage.output_tokens)} | ${formatToken(subcall.usage.total_tokens)} |`;
+      });
+    })
+    .join("\n");
 
   const stepRows = stepTotals.size
     ? [...stepTotals.entries()]
@@ -293,9 +352,15 @@ function renderMarkdown(data: SessionLogData): string {
     "",
     "## Turn Log",
     "",
-    "| timestamp | turn_id | step | specialist | model | action_code | intent_type | routing_source | latency_ms | company_name | attempts | input_tokens | output_tokens | total_tokens |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| timestamp | turn_id | step | specialist | model | action_code | intent_type | routing_source | latency_ms | company_name | attempts | subcalls | input_tokens | output_tokens | total_tokens |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     turnRows,
+    "",
+    "## Subcall Log",
+    "",
+    "| turn_id | call_id | timestamp | step | specialist | model | trigger | action_code | intent_type | routing_source | latency_ms | attempts | ok | input_tokens | output_tokens | total_tokens |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    subcallRows || "| - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |",
     "",
     "## Step Summary",
     "",

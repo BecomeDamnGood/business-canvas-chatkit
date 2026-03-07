@@ -4,6 +4,8 @@ const port = String(process.env.PORT || "8787").trim() || "8787";
 
 const defaults = {
   LOCAL_DEV: "1",
+  BSC_TOKEN_LOGGING_V1: "1",
+  BSC_SESSION_LOG_DIR: "session-logs",
   BSC_HOLISTIC_POLICY_V2: "1",
   BSC_OFFTOPIC_V2: "1",
   BSC_BULLET_RENDER_V2: "1",
@@ -89,7 +91,7 @@ function freePortIfOwnedByMcpServer(targetPort) {
 function startServer() {
   const env = withDefaults(process.env);
   console.log(
-    `[dev-start] Starting local server on port ${port} (LOCAL_DEV=${env.LOCAL_DEV}, policy_v2=${env.BSC_HOLISTIC_POLICY_V2}).`
+    `[dev-start] Starting local server on port ${port} (LOCAL_DEV=${env.LOCAL_DEV}, token_logging=${env.BSC_TOKEN_LOGGING_V1}, token_log_dir=${env.BSC_SESSION_LOG_DIR}, policy_v2=${env.BSC_HOLISTIC_POLICY_V2}).`
   );
   const result = spawnSync("node", ["--loader", "ts-node/esm", "server.ts"], {
     stdio: "inherit",

@@ -3,6 +3,7 @@ import {
   type CanvasState,
   type ProvisionalSource,
 } from "../core/state.js";
+import { buildContextSafeLastSpecialistResult } from "./run_step_context_whitelist.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 type ParseStep0FinalFn = (raw: string, fallbackName: string) => { name?: string } | null | undefined;
@@ -622,10 +623,14 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
 
   function buildSpecialistContextBlock(state: CanvasState): string {
     const safe = (value: unknown) => String(value ?? "").replace(/\r\n/g, "\n");
-    const last =
+    const contextSnapshotV2Enabled = String(process.env.BSC_CONTEXT_SNAPSHOT_V2 || "1").trim() !== "0";
+    const lastRaw =
       state.last_specialist_result && typeof state.last_specialist_result === "object"
-        ? JSON.stringify(state.last_specialist_result)
-        : "";
+        ? (state.last_specialist_result as Record<string, unknown>)
+        : {};
+    const last = JSON.stringify(
+      contextSnapshotV2Enabled ? buildContextSafeLastSpecialistResult(state) : lastRaw
+    );
 
     const finals = { ...deps.getFinalsSnapshot(state) };
     const provisional = normalizedProvisionalByStep(state);

@@ -7,10 +7,11 @@ import { BIGWHY_INSTRUCTIONS } from "./bigwhy.js";
 import { ROLE_INSTRUCTIONS } from "./role.js";
 import { ENTITY_INSTRUCTIONS } from "./entity.js";
 import { STRATEGY_INSTRUCTIONS } from "./strategy.js";
-import { TARGETGROUP_INSTRUCTIONS } from "./targetgroup.js";
-import { PRODUCTSSERVICES_INSTRUCTIONS } from "./productsservices.js";
+import { TARGETGROUP_INSTRUCTIONS, buildTargetGroupSpecialistInput } from "./targetgroup.js";
+import { PRODUCTSSERVICES_INSTRUCTIONS, buildProductsServicesSpecialistInput } from "./productsservices.js";
 import { RULESOFTHEGAME_INSTRUCTIONS } from "./rulesofthegame.js";
 import { PRESENTATION_INSTRUCTIONS } from "./presentation.js";
+import { buildExplainLightInstructions } from "./explain_profile.js";
 
 const NON_STEP0_INSTRUCTIONS: Array<[string, string]> = [
   ["dream", DREAM_INSTRUCTIONS],
@@ -121,4 +122,58 @@ test("non-step0 meta sections declare runtime-owned meta rendering", () => {
       `${stepId} must delegate meta copy rendering to runtime`
     );
   }
+});
+
+test("targetgroup/productsservices planner input does not duplicate STATE FINALS context", () => {
+  const targetInput = buildTargetGroupSpecialistInput(
+    "USER_MESSAGE: define my segment",
+    "targetgroup",
+    "targetgroup",
+    "nl"
+  );
+  const productsInput = buildProductsServicesSpecialistInput(
+    "USER_MESSAGE: we offer workshops",
+    "productsservices",
+    "productsservices",
+    "nl"
+  );
+  for (const input of [targetInput, productsInput]) {
+    assert.ok(input.includes("INTRO_SHOWN_FOR_STEP:"), "planner input must include intro marker");
+    assert.ok(input.includes("CURRENT_STEP:"), "planner input must include current step marker");
+    assert.ok(input.includes("LANGUAGE: nl"), "planner input must include language marker when known");
+    assert.ok(input.includes("PLANNER_INPUT:"), "planner input must include planner payload");
+    assert.equal(
+      input.includes("STATE FINALS:"),
+      false,
+      "planner input must not embed STATE FINALS context; context is injected in system instructions"
+    );
+  }
+});
+
+test("explain-light profile keeps schema and route sections while shrinking non-essential sections", () => {
+  const compact = buildExplainLightInstructions(PURPOSE_INSTRUCTIONS);
+  assert.ok(
+    compact.includes("EXPLAIN-LIGHT PROFILE (token-optimized)"),
+    "compact explain profile marker must be present"
+  );
+  assert.ok(
+    compact.includes("OUTPUT SCHEMA"),
+    "compact explain profile must preserve output schema section"
+  );
+  assert.ok(
+    compact.includes("ACTION CODES AND ROUTE TOKENS") ||
+      compact.includes("__ROUTE__") ||
+      compact.includes("ACTION_") ||
+      compact.includes("Route handling: treat REQUEST_EXPLANATION"),
+    "compact explain profile must preserve action-code/route semantics"
+  );
+  assert.ok(
+    compact.includes("EXPLAIN"),
+    "compact explain profile must preserve explain behavior section"
+  );
+  assert.equal(
+    compact.includes("FIVE-QUESTION MODE"),
+    false,
+    "compact explain profile should drop full ask/refine sections that are not needed for explain turns"
+  );
 });

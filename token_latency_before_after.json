@@ -1,0 +1,672 @@
+{
+  "generated_at": "2026-03-07T14:22:23.839Z",
+  "scenario": "step-flow replay with deterministic action picker and explain-route coverage",
+  "before": {
+    "label": "before",
+    "flags": {
+      "BSC_PROMPT_PROFILE_EXPLAIN_V1": "0",
+      "BSC_DEDUP_CONTEXT_PLANNER_V1": "0",
+      "BSC_CONTEXT_SNAPSHOT_V2": "0",
+      "BSC_SUBCALL_TOKEN_LOG_V1": "0"
+    },
+    "log_dir": "/var/folders/c1/1f753_b117l878ssjj1s3nd80000gn/T/bsc-token-before-5jkHYe",
+    "session_file": "/var/folders/c1/1f753_b117l878ssjj1s3nd80000gn/T/bsc-token-before-5jkHYe/session-2026-03-07-142022-68321ee5-fc19-49a2-9ae2-c1d34b57993d.md",
+    "session_id": "68321ee5-fc19-49a2-9ae2-c1d34b57993d",
+    "totals": {
+      "turns": 9,
+      "input_tokens": 33757,
+      "output_tokens": 1035,
+      "total_tokens": 34792,
+      "latency_p95_ms": 4995,
+      "latency_avg_ms": 3861
+    },
+    "by_callpad": [
+      {
+        "key": "purpose|Purpose||ROUTE",
+        "step_id": "purpose",
+        "specialist": "Purpose",
+        "action_code": "",
+        "intent_type": "ROUTE",
+        "calls": 2,
+        "input_tokens": 8133,
+        "output_tokens": 171,
+        "total_tokens": 8304,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 3962,
+        "latency_avg_ms": 3837
+      },
+      {
+        "key": "purpose|Purpose|ACTION_PURPOSE_INTRO_EXPLAIN_MORE|REQUEST_EXPLANATION",
+        "step_id": "purpose",
+        "specialist": "Purpose",
+        "action_code": "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+        "intent_type": "REQUEST_EXPLANATION",
+        "calls": 2,
+        "input_tokens": 6749,
+        "output_tokens": 294,
+        "total_tokens": 7043,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 4995,
+        "latency_avg_ms": 4801
+      },
+      {
+        "key": "purpose|Purpose|ACTION_DREAM_REFINE_CONFIRM|ROUTE",
+        "step_id": "purpose",
+        "specialist": "Purpose",
+        "action_code": "ACTION_DREAM_REFINE_CONFIRM",
+        "intent_type": "ROUTE",
+        "calls": 1,
+        "input_tokens": 6449,
+        "output_tokens": 216,
+        "total_tokens": 6665,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 4011,
+        "latency_avg_ms": 4011
+      },
+      {
+        "key": "dream|Dream||ROUTE",
+        "step_id": "dream",
+        "specialist": "Dream",
+        "action_code": "",
+        "intent_type": "ROUTE",
+        "calls": 1,
+        "input_tokens": 6373,
+        "output_tokens": 161,
+        "total_tokens": 6534,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 2809,
+        "latency_avg_ms": 2809
+      },
+      {
+        "key": "dream|Dream|ACTION_STEP0_READY_START|ROUTE",
+        "step_id": "dream",
+        "specialist": "Dream",
+        "action_code": "ACTION_STEP0_READY_START",
+        "intent_type": "ROUTE",
+        "calls": 1,
+        "input_tokens": 5404,
+        "output_tokens": 173,
+        "total_tokens": 5577,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 2929,
+        "latency_avg_ms": 2929
+      },
+      {
+        "key": "step_0|ValidationAndBusinessName||",
+        "step_id": "step_0",
+        "specialist": "ValidationAndBusinessName",
+        "action_code": "",
+        "intent_type": "",
+        "calls": 1,
+        "input_tokens": 649,
+        "output_tokens": 20,
+        "total_tokens": 669,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 0,
+        "latency_avg_ms": 0
+      },
+      {
+        "key": "step_0|ValidationAndBusinessName|ACTION_START|",
+        "step_id": "step_0",
+        "specialist": "ValidationAndBusinessName",
+        "action_code": "ACTION_START",
+        "intent_type": "",
+        "calls": 1,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 0,
+        "latency_avg_ms": 0
+      }
+    ],
+    "trace": [
+      {
+        "event": "seed",
+        "sent_mode": "chat",
+        "sent_message": "Help mij met mijn businessplan voor mijn reclamebureau Mindd",
+        "step": "step_0",
+        "specialist": "ValidationAndBusinessName",
+        "actions": [],
+        "error_type": "",
+        "attempt": 1
+      },
+      {
+        "event": "start",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_START",
+        "step": "step_0",
+        "specialist": "ValidationAndBusinessName",
+        "actions": [
+          "ACTION_STEP0_READY_START"
+        ],
+        "error_type": "",
+        "attempt": 1
+      },
+      {
+        "event": "step0_ready",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_STEP0_READY_START",
+        "step": "dream",
+        "specialist": "Dream",
+        "actions": [
+          "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+          "ACTION_DREAM_INTRO_START_EXERCISE"
+        ],
+        "error_type": "",
+        "attempt": 1
+      },
+      {
+        "event": "dream_chat",
+        "sent_mode": "chat",
+        "sent_message": "Wij dromen van ondernemers die met vertrouwen betekenisvolle keuzes maken.",
+        "step": "dream",
+        "specialist": "Dream",
+        "actions": [
+          "ACTION_DREAM_REFINE_CONFIRM",
+          "ACTION_DREAM_REFINE_START_EXERCISE"
+        ],
+        "error_type": "",
+        "attempt": 1
+      },
+      {
+        "event": "dream_confirm",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_DREAM_REFINE_CONFIRM",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+          "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS"
+        ],
+        "error_type": "",
+        "attempt": 1
+      },
+      {
+        "event": "purpose_explain",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+          "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES"
+        ],
+        "error_type": "rate_limited",
+        "attempt": 1
+      },
+      {
+        "event": "purpose_explain",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+          "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES"
+        ],
+        "error_type": "",
+        "attempt": 2
+      },
+      {
+        "event": "purpose_chat",
+        "sent_mode": "chat",
+        "sent_message": "Onze bestaansreden is ondernemers helpen keuzes te maken die passen bij hun waarden.",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+          "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES"
+        ],
+        "error_type": "rate_limited",
+        "attempt": 1
+      },
+      {
+        "event": "purpose_chat",
+        "sent_mode": "chat",
+        "sent_message": "Onze bestaansreden is ondernemers helpen keuzes te maken die passen bij hun waarden.",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_REFINE_CONFIRM",
+          "ACTION_PURPOSE_REFINE_ADJUST"
+        ],
+        "error_type": "",
+        "attempt": 2
+      }
+    ]
+  },
+  "after": {
+    "label": "after",
+    "flags": {
+      "BSC_PROMPT_PROFILE_EXPLAIN_V1": "1",
+      "BSC_DEDUP_CONTEXT_PLANNER_V1": "1",
+      "BSC_CONTEXT_SNAPSHOT_V2": "1",
+      "BSC_SUBCALL_TOKEN_LOG_V1": "1"
+    },
+    "log_dir": "/var/folders/c1/1f753_b117l878ssjj1s3nd80000gn/T/bsc-token-after-3wjHyn",
+    "session_file": "/var/folders/c1/1f753_b117l878ssjj1s3nd80000gn/T/bsc-token-after-3wjHyn/session-2026-03-07-142108-cb13ff8c-d909-4f1d-97f2-89efb4be958a.md",
+    "session_id": "cb13ff8c-d909-4f1d-97f2-89efb4be958a",
+    "totals": {
+      "turns": 11,
+      "input_tokens": 29947,
+      "output_tokens": 940,
+      "total_tokens": 30887,
+      "latency_p95_ms": 10796,
+      "latency_avg_ms": 5590
+    },
+    "by_callpad": [
+      {
+        "key": "purpose|Purpose||ROUTE",
+        "step_id": "purpose",
+        "specialist": "Purpose",
+        "action_code": "",
+        "intent_type": "ROUTE",
+        "calls": 1,
+        "input_tokens": 7289,
+        "output_tokens": 141,
+        "total_tokens": 7430,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 2222,
+        "latency_avg_ms": 2222
+      },
+      {
+        "key": "dream|Dream||ROUTE",
+        "step_id": "dream",
+        "specialist": "Dream",
+        "action_code": "",
+        "intent_type": "ROUTE",
+        "calls": 2,
+        "input_tokens": 6939,
+        "output_tokens": 167,
+        "total_tokens": 7106,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 4425,
+        "latency_avg_ms": 4207
+      },
+      {
+        "key": "purpose|Purpose|ACTION_DREAM_REFINE_CONFIRM|ROUTE",
+        "step_id": "purpose",
+        "specialist": "Purpose",
+        "action_code": "ACTION_DREAM_REFINE_CONFIRM",
+        "intent_type": "ROUTE",
+        "calls": 1,
+        "input_tokens": 6445,
+        "output_tokens": 229,
+        "total_tokens": 6674,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 5795,
+        "latency_avg_ms": 5795
+      },
+      {
+        "key": "dream|Dream|ACTION_STEP0_READY_START|ROUTE",
+        "step_id": "dream",
+        "specialist": "Dream",
+        "action_code": "ACTION_STEP0_READY_START",
+        "intent_type": "ROUTE",
+        "calls": 1,
+        "input_tokens": 5404,
+        "output_tokens": 169,
+        "total_tokens": 5573,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 6102,
+        "latency_avg_ms": 6102
+      },
+      {
+        "key": "purpose|Purpose|ACTION_PURPOSE_INTRO_EXPLAIN_MORE|REQUEST_EXPLANATION",
+        "step_id": "purpose",
+        "specialist": "Purpose",
+        "action_code": "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+        "intent_type": "REQUEST_EXPLANATION",
+        "calls": 3,
+        "input_tokens": 3221,
+        "output_tokens": 214,
+        "total_tokens": 3435,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 10796,
+        "latency_avg_ms": 7937
+      },
+      {
+        "key": "step_0|ValidationAndBusinessName||",
+        "step_id": "step_0",
+        "specialist": "ValidationAndBusinessName",
+        "action_code": "",
+        "intent_type": "",
+        "calls": 1,
+        "input_tokens": 649,
+        "output_tokens": 20,
+        "total_tokens": 669,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 0,
+        "latency_avg_ms": 0
+      },
+      {
+        "key": "step_0|ValidationAndBusinessName|ACTION_START|",
+        "step_id": "step_0",
+        "specialist": "ValidationAndBusinessName",
+        "action_code": "ACTION_START",
+        "intent_type": "",
+        "calls": 1,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 0,
+        "latency_avg_ms": 0
+      },
+      {
+        "key": "purpose|unknown|ACTION_DREAM_REFINE_CONFIRM|ROUTE",
+        "step_id": "purpose",
+        "specialist": "unknown",
+        "action_code": "ACTION_DREAM_REFINE_CONFIRM",
+        "intent_type": "ROUTE",
+        "calls": 1,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "input_unknown": 0,
+        "output_unknown": 0,
+        "total_unknown": 0,
+        "latency_p95_ms": 3964,
+        "latency_avg_ms": 3964
+      }
+    ],
+    "trace": [
+      {
+        "event": "seed",
+        "sent_mode": "chat",
+        "sent_message": "Help mij met mijn businessplan voor mijn reclamebureau Mindd",
+        "step": "step_0",
+        "specialist": "ValidationAndBusinessName",
+        "actions": [],
+        "error_type": "",
+        "attempt": 1
+      },
+      {
+        "event": "start",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_START",
+        "step": "step_0",
+        "specialist": "ValidationAndBusinessName",
+        "actions": [
+          "ACTION_STEP0_READY_START"
+        ],
+        "error_type": "",
+        "attempt": 1
+      },
+      {
+        "event": "step0_ready",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_STEP0_READY_START",
+        "step": "dream",
+        "specialist": "Dream",
+        "actions": [
+          "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+          "ACTION_DREAM_INTRO_START_EXERCISE"
+        ],
+        "error_type": "",
+        "attempt": 1
+      },
+      {
+        "event": "dream_chat",
+        "sent_mode": "chat",
+        "sent_message": "Wij dromen van ondernemers die met vertrouwen betekenisvolle keuzes maken.",
+        "step": "dream",
+        "specialist": "Dream",
+        "actions": [
+          "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+          "ACTION_DREAM_INTRO_START_EXERCISE"
+        ],
+        "error_type": "rate_limited",
+        "attempt": 1
+      },
+      {
+        "event": "dream_chat",
+        "sent_mode": "chat",
+        "sent_message": "Wij dromen van ondernemers die met vertrouwen betekenisvolle keuzes maken.",
+        "step": "dream",
+        "specialist": "Dream",
+        "actions": [
+          "ACTION_DREAM_REFINE_CONFIRM",
+          "ACTION_DREAM_REFINE_START_EXERCISE"
+        ],
+        "error_type": "",
+        "attempt": 2
+      },
+      {
+        "event": "dream_confirm",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_DREAM_REFINE_CONFIRM",
+        "step": "purpose",
+        "specialist": "",
+        "actions": [
+          "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+          "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS"
+        ],
+        "error_type": "rate_limited",
+        "attempt": 1
+      },
+      {
+        "event": "dream_confirm",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_DREAM_REFINE_CONFIRM",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+          "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS"
+        ],
+        "error_type": "",
+        "attempt": 2
+      },
+      {
+        "event": "purpose_explain",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+          "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES"
+        ],
+        "error_type": "timeout",
+        "attempt": 1
+      },
+      {
+        "event": "purpose_explain",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+          "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES"
+        ],
+        "error_type": "timeout",
+        "attempt": 2
+      },
+      {
+        "event": "purpose_explain",
+        "sent_mode": "widget",
+        "sent_message": "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS",
+          "ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES"
+        ],
+        "error_type": "",
+        "attempt": 3
+      },
+      {
+        "event": "purpose_chat",
+        "sent_mode": "chat",
+        "sent_message": "Onze bestaansreden is ondernemers helpen keuzes te maken die passen bij hun waarden.",
+        "step": "purpose",
+        "specialist": "Purpose",
+        "actions": [
+          "ACTION_PURPOSE_REFINE_CONFIRM",
+          "ACTION_PURPOSE_REFINE_ADJUST"
+        ],
+        "error_type": "",
+        "attempt": 1
+      }
+    ]
+  },
+  "totals_delta": {
+    "input_tokens": -3810,
+    "output_tokens": -95,
+    "total_tokens": -3905,
+    "latency_p95_ms": 5801
+  },
+  "by_callpad_delta": [
+    {
+      "key": "purpose|Purpose|ACTION_PURPOSE_INTRO_EXPLAIN_MORE|REQUEST_EXPLANATION",
+      "step_id": "purpose",
+      "specialist": "Purpose",
+      "action_code": "ACTION_PURPOSE_INTRO_EXPLAIN_MORE",
+      "intent_type": "REQUEST_EXPLANATION",
+      "before_calls": 2,
+      "after_calls": 3,
+      "before_total_tokens": 7043,
+      "after_total_tokens": 3435,
+      "delta_total_tokens": -3608,
+      "delta_total_tokens_pct": -51.23,
+      "before_latency_p95_ms": 4995,
+      "after_latency_p95_ms": 10796
+    },
+    {
+      "key": "purpose|Purpose||ROUTE",
+      "step_id": "purpose",
+      "specialist": "Purpose",
+      "action_code": "",
+      "intent_type": "ROUTE",
+      "before_calls": 2,
+      "after_calls": 1,
+      "before_total_tokens": 8304,
+      "after_total_tokens": 7430,
+      "delta_total_tokens": -874,
+      "delta_total_tokens_pct": -10.53,
+      "before_latency_p95_ms": 3962,
+      "after_latency_p95_ms": 2222
+    },
+    {
+      "key": "dream|Dream||ROUTE",
+      "step_id": "dream",
+      "specialist": "Dream",
+      "action_code": "",
+      "intent_type": "ROUTE",
+      "before_calls": 1,
+      "after_calls": 2,
+      "before_total_tokens": 6534,
+      "after_total_tokens": 7106,
+      "delta_total_tokens": 572,
+      "delta_total_tokens_pct": 8.75,
+      "before_latency_p95_ms": 2809,
+      "after_latency_p95_ms": 4425
+    },
+    {
+      "key": "purpose|Purpose|ACTION_DREAM_REFINE_CONFIRM|ROUTE",
+      "step_id": "purpose",
+      "specialist": "Purpose",
+      "action_code": "ACTION_DREAM_REFINE_CONFIRM",
+      "intent_type": "ROUTE",
+      "before_calls": 1,
+      "after_calls": 1,
+      "before_total_tokens": 6665,
+      "after_total_tokens": 6674,
+      "delta_total_tokens": 9,
+      "delta_total_tokens_pct": 0.14,
+      "before_latency_p95_ms": 4011,
+      "after_latency_p95_ms": 5795
+    },
+    {
+      "key": "dream|Dream|ACTION_STEP0_READY_START|ROUTE",
+      "step_id": "dream",
+      "specialist": "Dream",
+      "action_code": "ACTION_STEP0_READY_START",
+      "intent_type": "ROUTE",
+      "before_calls": 1,
+      "after_calls": 1,
+      "before_total_tokens": 5577,
+      "after_total_tokens": 5573,
+      "delta_total_tokens": -4,
+      "delta_total_tokens_pct": -0.07,
+      "before_latency_p95_ms": 2929,
+      "after_latency_p95_ms": 6102
+    },
+    {
+      "key": "step_0|ValidationAndBusinessName||",
+      "step_id": "step_0",
+      "specialist": "ValidationAndBusinessName",
+      "action_code": "",
+      "intent_type": "",
+      "before_calls": 1,
+      "after_calls": 1,
+      "before_total_tokens": 669,
+      "after_total_tokens": 669,
+      "delta_total_tokens": 0,
+      "delta_total_tokens_pct": 0,
+      "before_latency_p95_ms": 0,
+      "after_latency_p95_ms": 0
+    },
+    {
+      "key": "step_0|ValidationAndBusinessName|ACTION_START|",
+      "step_id": "step_0",
+      "specialist": "ValidationAndBusinessName",
+      "action_code": "ACTION_START",
+      "intent_type": "",
+      "before_calls": 1,
+      "after_calls": 1,
+      "before_total_tokens": 0,
+      "after_total_tokens": 0,
+      "delta_total_tokens": 0,
+      "delta_total_tokens_pct": null,
+      "before_latency_p95_ms": 0,
+      "after_latency_p95_ms": 0
+    },
+    {
+      "key": "purpose|unknown|ACTION_DREAM_REFINE_CONFIRM|ROUTE",
+      "step_id": "purpose",
+      "specialist": "unknown",
+      "action_code": "ACTION_DREAM_REFINE_CONFIRM",
+      "intent_type": "ROUTE",
+      "before_calls": 0,
+      "after_calls": 1,
+      "before_total_tokens": 0,
+      "after_total_tokens": 0,
+      "delta_total_tokens": 0,
+      "delta_total_tokens_pct": null,
+      "before_latency_p95_ms": 0,
+      "after_latency_p95_ms": 3964
+    }
+  ]
+}

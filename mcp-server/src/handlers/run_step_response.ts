@@ -151,6 +151,74 @@ type TokenUsageSnapshot = {
   provider_available: boolean;
 };
 
+type SubcallUsageSnapshot = {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  provider_available: boolean;
+};
+
+type TurnSubcallSnapshot = {
+  call_id: string;
+  timestamp: string;
+  step_id: string;
+  specialist: string;
+  model: string;
+  trigger: string;
+  action_code?: string;
+  intent_type?: string;
+  routing_source?: string;
+  latency_ms?: number | null;
+  attempts: number;
+  usage: SubcallUsageSnapshot;
+  ok?: boolean;
+};
+
+function normalizeSubcallUsage(raw: Record<string, unknown> | null | undefined): SubcallUsageSnapshot {
+  const normalize = (value: unknown): number | null => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.round(n);
+  };
+  return {
+    input_tokens: normalize(raw?.input_tokens),
+    output_tokens: normalize(raw?.output_tokens),
+    total_tokens: normalize(raw?.total_tokens),
+    provider_available: Boolean(raw?.provider_available),
+  };
+}
+
+function buildTurnSubcalls(metaRows: Record<string, unknown>[]): TurnSubcallSnapshot[] {
+  return metaRows
+    .map((row, index) => {
+      const usageRaw =
+        row.usage && typeof row.usage === "object"
+          ? (row.usage as Record<string, unknown>)
+          : null;
+      const latencyRaw = Number(row.elapsed_ms);
+      const latencyMs =
+        Number.isFinite(latencyRaw) && latencyRaw >= 0 ? Math.round(latencyRaw) : null;
+      const attemptsRaw = Number(row.attempts);
+      const attempts = Number.isFinite(attemptsRaw) && attemptsRaw >= 0 ? Math.trunc(attemptsRaw) : 0;
+      return {
+        call_id: String(row.call_id || "").trim() || `llm_call_${String(index + 1).padStart(3, "0")}`,
+        timestamp: String(row.timestamp || new Date().toISOString()).trim() || new Date().toISOString(),
+        step_id: String(row.step_id || "").trim() || "unknown",
+        specialist: String(row.specialist || "").trim() || "unknown",
+        model: String(row.model || "").trim() || "unknown",
+        trigger: String(row.trigger || "").trim() || "unknown",
+        action_code: String(row.action_code || "").trim(),
+        intent_type: String(row.intent_type || "").trim(),
+        routing_source: String(row.model_source || "").trim(),
+        latency_ms: latencyMs,
+        attempts,
+        usage: normalizeSubcallUsage(usageRaw),
+        ok: typeof row.ok === "boolean" ? Boolean(row.ok) : undefined,
+      } as TurnSubcallSnapshot;
+    })
+    .filter((row) => Boolean(row.call_id));
+}
+
 type RunStepResponseDeps = {
   applyUiClientActionContract: (targetState: CanvasState | null | undefined) => void;
   parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
@@ -273,6 +341,8 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
         ? ((responseState as any).__llm_call_meta as Record<string, unknown>[])
         : [];
       const lastLlmMeta = llmMetaRows.length > 0 ? llmMetaRows[llmMetaRows.length - 1] : null;
+      const subcallLoggingEnabled = String(process.env.BSC_SUBCALL_TOKEN_LOG_V1 || "1").trim() !== "0";
+      const subcalls = subcallLoggingEnabled ? buildTurnSubcalls(llmMetaRows) : [];
       const actionCode = String(
           (responseState as any).__turn_last_routing_action_code ||
           (responseState as any).__last_llm_action_code ||
@@ -314,6 +384,7 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
           company_name: companyName,
           attempts: tokenUsage.attempts,
           usage: tokenUsage.usage,
+          ...(subcalls.length > 0 ? { subcalls } : {}),
         },
       });
       (responseState as any).__session_log_file = appendResult.filePath;

@@ -55,6 +55,28 @@ test("session token log creates markdown file and appends turns", () => {
         total_tokens: 300,
         provider_available: true,
       },
+      subcalls: [
+        {
+          call_id: "llm_call_001",
+          timestamp: "2026-02-17T10:56:10.050Z",
+          step_id: "dream",
+          specialist: "Dream",
+          model: "gpt-4.1",
+          trigger: "action_code:ACTION_DREAM_INTRO_EXPLAIN_MORE",
+          action_code: "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+          intent_type: "REQUEST_EXPLANATION",
+          routing_source: "default",
+          latency_ms: 423,
+          attempts: 1,
+          ok: true,
+          usage: {
+            input_tokens: 180,
+            output_tokens: 90,
+            total_tokens: 270,
+            provider_available: true,
+          },
+        },
+      ],
     },
   });
 
@@ -65,11 +87,16 @@ test("session token log creates markdown file and appends turns", () => {
   assert.ok(parsed, "machine marker should be parsable");
   assert.equal(parsed?.turns.length, 2);
   assert.equal(parsed?.turns[0]?.company_name, "UnknownCompany");
+  assert.equal(parsed?.turns[1]?.subcalls?.length, 1);
+  assert.equal(parsed?.turns[1]?.subcalls?.[0]?.call_id, "llm_call_001");
+  assert.equal(parsed?.turns[1]?.subcalls?.[0]?.usage.total_tokens, 270);
 
   const markdown = fs.readFileSync(first.filePath, "utf-8");
   assert.match(markdown, /\| step_0 \| 1 \| 120 \| 40 \| 160 \|/);
   assert.match(markdown, /\| dream \| 1 \| 200 \| 100 \| 300 \|/);
   assert.match(markdown, /- total_tokens: 460/);
+  assert.match(markdown, /## Subcall Log/);
+  assert.match(markdown, /\| turn-2 \| llm_call_001 \|/);
 
   const summaryPath = path.join(dir, "TEMP-session-summary.log");
   const summary = fs.readFileSync(summaryPath, "utf-8");

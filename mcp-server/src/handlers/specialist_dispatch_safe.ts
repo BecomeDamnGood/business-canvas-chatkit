@@ -11,6 +11,12 @@ import type {
   SpecialistCallResult,
 } from "./specialist_dispatch.js";
 
+function normalizeUsageToken(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n);
+}
+
 export async function callSpecialistStrictSafe(
   params: SpecialistCallParams,
   routing: {
@@ -47,9 +53,25 @@ export async function callSpecialistStrictSafe(
     stateMeta.__llm_call_meta = next;
     return next;
   };
+  const nextCallId = (): string => {
+    const previous = Number(stateMeta.__llm_call_seq || 0);
+    const next = Number.isFinite(previous) && previous > 0 ? Math.trunc(previous) + 1 : 1;
+    stateMeta.__llm_call_seq = next;
+    return `llm_call_${String(next).padStart(3, "0")}`;
+  };
+  const callId = nextCallId();
+  const trigger = String(routing.actionCode || "").trim()
+    ? `action_code:${String(routing.actionCode || "").trim()}`
+    : String(routing.intentType || "").trim()
+      ? `intent:${String(routing.intentType || "").trim()}`
+      : "message";
+  const stepId = String(params.decision?.current_step || "").trim();
   const baseMeta = {
+    call_id: callId,
     timestamp: new Date().toISOString(),
+    step_id: stepId,
     specialist: String(params.decision?.specialist_to_call ?? ""),
+    trigger,
     action_code: String(routing.actionCode || ""),
     intent_type: String(routing.intentType || ""),
     model: String(routeDecision.model || ""),
@@ -89,6 +111,12 @@ export async function callSpecialistStrictSafe(
   try {
     const value = await deps.callSpecialistStrict(callParams);
     const elapsedMs = Date.now() - startedAt;
+    const usage = {
+      input_tokens: normalizeUsageToken((value.usage as any)?.input_tokens),
+      output_tokens: normalizeUsageToken((value.usage as any)?.output_tokens),
+      total_tokens: normalizeUsageToken((value.usage as any)?.total_tokens),
+      provider_available: Boolean((value.usage as any)?.provider_available),
+    };
     stateMeta.__last_llm_elapsed_ms = elapsedMs;
     stateMeta.__last_llm_model_source = String(routeDecision.source || "");
     stateMeta.__last_llm_action_code = String(routing.actionCode || "");
@@ -99,6 +127,7 @@ export async function callSpecialistStrictSafe(
       elapsed_ms: elapsedMs,
       ok: true,
       attempts: Number(value.attempts || 0),
+      usage,
     });
     if (metaLog.length > 30) metaLog.splice(0, metaLog.length - 30);
     if (logDiagnostics) {
@@ -131,6 +160,12 @@ export async function callSpecialistStrictSafe(
       ok: false,
       attempts: 0,
       error_type: String(err?.type ?? err?.code ?? err?.name ?? "unknown"),
+      usage: {
+        input_tokens: null,
+        output_tokens: null,
+        total_tokens: null,
+        provider_available: false,
+      },
     });
     if (metaLog.length > 30) metaLog.splice(0, metaLog.length - 30);
     if (logDiagnostics) {

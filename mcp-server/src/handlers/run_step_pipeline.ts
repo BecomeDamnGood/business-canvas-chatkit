@@ -760,23 +760,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       wordingChoicePending: requireWordingPick || Boolean(wordingChoiceOverride?.enabled),
       state: nextState,
     });
-    if (!requireWordingPick && !wordingChoiceOverride?.enabled) {
-      const motivationApplied = deps.applyMotivationQuotesContractV11({
-        enabled: params.motivationQuotesEnabled,
-        stepId: String(asStateRecord(nextState).current_step || ""),
-        userMessage,
-        renderedStatus: renderedStatusForPolicy,
-        specialistResult: asRecord(specialistResult),
-        previousSpecialist: previousSpecialistForWordingChoice,
-        state: nextState,
-        requireWordingPick,
-      });
-      specialistResult = motivationApplied.specialistResult;
-      if (motivationApplied.suppressChoices) {
-        actionCodesOverride = [];
-        renderedActionsOverride = [];
-      }
-    }
+    // Motivational quote injection feature removed.
     asStateRecord(nextState).last_specialist_result = specialistResult;
 
     const currentStepForContract = String(asStateRecord(nextState).current_step ?? "");

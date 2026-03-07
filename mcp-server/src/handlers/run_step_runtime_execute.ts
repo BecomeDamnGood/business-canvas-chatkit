@@ -288,6 +288,7 @@ export async function runStepRuntimeExecute(
   (state as Record<string, unknown>).__turn_last_routing_action_code = String(actionCodeRaw || "");
   (state as Record<string, unknown>).__turn_last_routing_intent_type = "";
   (state as Record<string, unknown>).__llm_call_meta = [];
+  (state as Record<string, unknown>).__llm_call_seq = 0;
   (state as Record<string, unknown>).__last_llm_routing_source = "";
   (state as Record<string, unknown>).__last_llm_candidate_model = "";
   (state as Record<string, unknown>).__last_llm_selected_model = "";

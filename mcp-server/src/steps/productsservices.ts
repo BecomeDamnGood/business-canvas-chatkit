@@ -59,7 +59,7 @@ export const ProductsServicesJsonSchema = {
  * - CURRENT_STEP: <string>
  * - LANGUAGE: <string>
  * - PLANNER_INPUT: <string> (contains CURRENT_STEP_ID and USER_MESSAGE)
- * - STATE FINALS: <context block with all confirmed finals>
+ * - STATE FINALS are injected in system instructions (contextBlock), not duplicated in planner input.
  */
 export function buildProductsServicesSpecialistInput(
   userMessage: string,
@@ -70,9 +70,10 @@ export function buildProductsServicesSpecialistInput(
 ): string {
   const plannerInput = `CURRENT_STEP_ID: ${currentStep} | USER_MESSAGE: ${userMessage}`;
   const lang = String(language || "").trim();
+  const context = String(contextBlock || "").trim();
   return `INTRO_SHOWN_FOR_STEP: ${introShownForStep}
 CURRENT_STEP: ${currentStep}
-${lang ? `LANGUAGE: ${lang}\n` : ""}${contextBlock ? `${contextBlock}\n` : ""}PLANNER_INPUT: ${plannerInput}`;
+${lang ? `LANGUAGE: ${lang}\n` : ""}${context ? `${context}\n` : ""}PLANNER_INPUT: ${plannerInput}`;
 }
 
 /**
@@ -108,8 +109,9 @@ The user message contains:
 - INTRO_SHOWN_FOR_STEP: <string>
 - CURRENT_STEP: <string>
 - LANGUAGE: <string>
-- STATE FINALS: <context block with all confirmed finals>
 - PLANNER_INPUT: <string> (contains CURRENT_STEP_ID and USER_MESSAGE)
+
+STATE FINALS context is provided separately in system instructions.
 
 3) OUTPUT SCHEMA (fields and types)
 

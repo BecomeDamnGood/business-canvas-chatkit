@@ -199,63 +199,7 @@ const MOTIVATION_MISSING_PIECE_BY_STEP: Record<string, string> = {
   [PRESENTATION_STEP_ID]: "the story that makes your choices clear and usable for others",
 };
 
-const MOTIVATION_QUOTES_BY_STEP: Record<string, string[]> = {
-  [STEP_0_ID]: [
-    `Do you know what Dwight D. Eisenhower said: "Plans are worthless, but planning is everything."`,
-    `Do you know what Arthur Ashe said: "Start where you are. Use what you have. Do what you can."`,
-    `Do you know what James Clear said: "You do not rise to the level of your goals. You fall to the level of your systems."`,
-  ],
-  [DREAM_STEP_ID]: [
-    `Do you know what Eleanor Roosevelt said: "The future belongs to those who believe in the beauty of their dreams."`,
-    `Do you know what Nelson Mandela said: "It always seems impossible until it’s done."`,
-    `Do you know what Walt Disney said: "All our dreams can come true, if we have the courage to pursue them."`,
-  ],
-  [PURPOSE_STEP_ID]: [
-    `Do you know what Simon Sinek said: "People don’t buy what you do; they buy why you do it."`,
-    `Do you know what John F. Kennedy said: "Efforts and courage are not enough without purpose and direction."`,
-    `Do you know what Friedrich Nietzsche said: "He who has a why to live can bear almost any how."`,
-  ],
-  [BIGWHY_STEP_ID]: [
-    `Do you know what Viktor E. Frankl said: "When we are no longer able to change a situation, we are challenged to change ourselves."`,
-    `Do you know what Howard Thurman said: "Don’t ask what the world needs. Ask what makes you come alive."`,
-    `Do you know what Rumi said: "Let yourself be silently drawn by the strange pull of what you really love."`,
-  ],
-  [ROLE_STEP_ID]: [
-    `Do you know what Lao Tzu said: "To lead people, walk behind them."`,
-    `Do you know what Ralph Nader said: "The function of leadership is to produce more leaders, not more followers."`,
-    `Do you know what Simon Sinek said: "Leadership is not about being in charge. It is about taking care of those in your charge."`,
-  ],
-  [ENTITY_STEP_ID]: [
-    `Do you know what Jeff Bezos said: "Your brand is what people say about you when you’re not in the room."`,
-    `Do you know what Marty Neumeier said: "A brand is a person’s gut feeling about a product, service, or company."`,
-    `Do you know what Scott Cook said: "A brand is no longer what we tell the consumer it is. It is what consumers tell each other it is."`,
-  ],
-  [STRATEGY_STEP_ID]: [
-    `Do you know what Michael E. Porter said: "The essence of strategy is choosing what not to do."`,
-    `Do you know what Henry Mintzberg said: "Strategy is a pattern in a stream of decisions."`,
-    `Do you know what Dwight D. Eisenhower said: "Plans are worthless, but planning is everything."`,
-  ],
-  [TARGETGROUP_STEP_ID]: [
-    `Do you know what Peter Drucker said: "The purpose of business is to create a customer."`,
-    `Do you know what Steve Jobs said: "Start with the customer experience and work backward."`,
-    `Do you know what Seth Godin said: "If you try to reach everyone, you’ll reach no one."`,
-  ],
-  [PRODUCTSSERVICES_STEP_ID]: [
-    `Do you know what Theodore Levitt said: "People don’t want to buy a quarter-inch drill. They want a quarter-inch hole."`,
-    `Do you know what Paul Graham said: "Make something people want."`,
-    `Do you know what Jeff Bezos said: "We’re customer obsessed, not competitor obsessed."`,
-  ],
-  [RULESOFTHEGAME_STEP_ID]: [
-    `Do you know what Ray Dalio said: "Principles are ways of successfully dealing with reality."`,
-    `Do you know what Warren Buffett said: "It takes 20 years to build a reputation and five minutes to ruin it."`,
-    `Do you know what James Clear said: "You do not rise to the level of your goals. You fall to the level of your systems."`,
-  ],
-  [PRESENTATION_STEP_ID]: [
-    `Do you know what Maya Angelou said: "People will never forget how you made them feel."`,
-    `Do you know what George Bernard Shaw said: "The single biggest problem in communication is the illusion that it has taken place."`,
-    `Do you know what Edsger W. Dijkstra said: "Simplicity is a prerequisite for reliability."`,
-  ],
-};
+const MOTIVATION_QUOTES_BY_STEP: Record<string, string[]> = {};
 
 const MOTIVATION_USER_INTENTS = new Set([
   "STEP_INPUT",
@@ -582,94 +526,10 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
   }
 
   function applyMotivationQuotesContractV11(params: MotivationPolicyApplyParams): MotivationPolicyApplyResult {
+    // Feature removed: no motivational quote injection.
     const specialist = params.specialistResult && typeof params.specialistResult === "object"
       ? { ...params.specialistResult }
       : {};
-    if (!params.enabled) return { specialistResult: specialist, suppressChoices: false };
-    if (!MOTIVATION_QUOTES_BY_STEP[params.stepId]) return { specialistResult: specialist, suppressChoices: false };
-    if (String((specialist as any).action || "").trim().toUpperCase() !== "ASK") {
-      return { specialistResult: specialist, suppressChoices: false };
-    }
-    const isOfftopic =
-      specialist.is_offtopic === true ||
-      String((specialist as any).is_offtopic || "").trim().toLowerCase() === "true";
-    if (isOfftopic || params.requireWordingPick) {
-      return { specialistResult: specialist, suppressChoices: false };
-    }
-
-    const userIntent = resolveMotivationUserIntent(specialist);
-    const metaTopic = resolveSpecialistMetaTopic(specialist);
-    const whyTrigger =
-      userIntent === "WHY_NEEDED" ||
-      userIntent === "RESISTANCE" ||
-      metaTopic === "MODEL_VALUE";
-    const inspirationTrigger = userIntent === "INSPIRATION_REQUEST";
-    const questionRaw = stripNumberedChoiceLines(String((specialist as any).question || "")).trim();
-
-    if (whyTrigger) {
-      const essence = overviewEssenceSentence(params.stepId, params.state, specialist, params.previousSpecialist);
-      const quote = pickQuoteForStep(params.stepId, params.state);
-      const opener = deps.uiStringFromStateMap(
-        params.state,
-        "motivation.opener",
-        motivationHigherPurposeOpener
-      );
-      const provenLine = deps.uiStringFromStateMap(
-        params.state,
-        "motivation.provenLine",
-        motivationProvenLine
-      );
-      const continuePrompt = deps.uiStringFromStateMap(
-        params.state,
-        "motivation.continuePrompt",
-        motivationFixedContinuePrompt
-      );
-      const blocks: string[] = [
-        opener,
-        provenLine,
-      ];
-      if (essence) {
-        const essenceTemplate = deps.uiStringFromStateMap(
-          params.state,
-          "motivation.essencePrefix",
-          deps.uiDefaultString("motivation.essencePrefix")
-        );
-        blocks.push(formatIndexedTemplate(essenceTemplate, [essence]).trim());
-      }
-      blocks.push(buildMotivationContinueLine(params.state, params.stepId, params.renderedStatus));
-      if (quote) blocks.push(quote);
-
-      return {
-        specialistResult: {
-          ...specialist,
-          action: "ASK",
-          message: blocks.join("\n\n").trim(),
-          question: essence ? continuePrompt : (questionRaw || continuePrompt),
-          user_intent: userIntent,
-          meta_topic: "MODEL_VALUE",
-          wants_recap: false,
-          is_offtopic: false,
-        },
-        suppressChoices: false,
-      };
-    }
-
-    if (inspirationTrigger) {
-      const quote = pickQuoteForStep(params.stepId, params.state);
-      if (!quote) return { specialistResult: specialist, suppressChoices: false };
-      const currentMessage = String((specialist as any).message || "").trim();
-      const nextMessage = currentMessage
-        ? `${currentMessage}\n\n${quote}`
-        : quote;
-      return {
-        specialistResult: {
-          ...specialist,
-          message: nextMessage,
-        },
-        suppressChoices: false,
-      };
-    }
-
     return { specialistResult: specialist, suppressChoices: false };
   }
 
