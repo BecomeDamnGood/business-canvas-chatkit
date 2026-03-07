@@ -240,7 +240,7 @@
         width: 520px; height: 520px;
         background: radial-gradient(circle, #e8742a88 0%, #f0a06a44 45%, transparent 70%);
         border-radius: 50%;
-        top: -100px; right: -80px;
+        bottom: -100px; left: -80px;
         pointer-events: none;
         animation: floatBlob 8s ease-in-out infinite alternate;
       }
@@ -250,7 +250,7 @@
         width: 320px; height: 320px;
         background: radial-gradient(circle, #e8742a55 0%, transparent 70%);
         border-radius: 50%;
-        bottom: 60px; left: -60px;
+        top: 60px; right: -60px;
         pointer-events: none;
         animation: floatBlob 10s ease-in-out infinite alternate-reverse;
       }
@@ -1624,12 +1624,18 @@
       
       /* ─── Mobile: reflow ─── */
       @media (max-width: 480px) {
+        body {
+          padding-bottom: 60px;
+        }
         .page-header .wrap {
           grid-template-columns: 1fr;
+          padding: 0 16px;
         }
       
         .page-header .title {
           padding-right: 0;
+          font-size: 22px;
+          max-width: 100%;
         }
       
         .page-header .byline {
