@@ -30,8 +30,10 @@ test("structuredContent.result blijft model-safe en bevat geen rijke widget payl
   assert.equal(modelSafe.model_result_shape_version, "v2_minimal");
   assert.equal(modelSafe.current_step_id, "purpose");
   assert.equal(modelSafe.ok, true);
-  assert.equal("text" in modelSafe, false);
-  assert.equal("prompt" in modelSafe, false);
+  assert.equal(String(modelSafe.text || "").trim().length > 0, true);
+  assert.equal(String(modelSafe.prompt || "").trim().length > 0, true);
+  assert.equal(String(modelSafe.text || "").includes("rijke tekst"), false);
+  assert.equal(String(modelSafe.prompt || "").includes("Rijke prompt"), false);
   assert.equal("specialist" in modelSafe, false);
   assert.equal("ui" in modelSafe, false);
 

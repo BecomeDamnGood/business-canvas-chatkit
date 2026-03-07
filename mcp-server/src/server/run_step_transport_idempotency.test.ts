@@ -26,8 +26,10 @@ test("tool response keeps rich payload in _meta.widget_result and model-safe pay
 
   const safeResult = (response.structuredContent.result || {}) as Record<string, unknown>;
   assert.equal(safeResult.model_result_shape_version, "v2_minimal");
-  assert.equal("text" in safeResult, false);
-  assert.equal("prompt" in safeResult, false);
+  assert.equal(String(safeResult.text || "").trim().length > 0, true);
+  assert.equal(String(safeResult.prompt || "").trim().length > 0, true);
+  assert.equal(String(safeResult.text || "").includes("rijke tekst"), false);
+  assert.equal(String(safeResult.prompt || "").includes("rijke prompt"), false);
 
   const meta = (response.meta || {}) as Record<string, unknown>;
   const widgetResult = (meta.widget_result || {}) as Record<string, unknown>;

@@ -30,6 +30,12 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
       : {};
   const currentStep = safeString(result.current_step_id || state.current_step || "step_0");
   const started = safeString(state.started || "");
+  const isStarted = started.toLowerCase() === "true";
+  const uiStrings =
+    state.ui_strings && typeof state.ui_strings === "object"
+      ? (state.ui_strings as Record<string, unknown>)
+      : {};
+  const startHint = safeString(uiStrings.startHint || "").trim();
   const initialUserMessage = safeString(state.initial_user_message || "");
   const locale = safeString((result as any).locale || state.locale || "");
   const language = safeString((result as any).language || state.language || "");
@@ -182,11 +188,16 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (toolContractFamilyVersion) safeState.tool_contract_family_version = toolContractFamilyVersion;
   if (runStepInputSchemaVersion) safeState.run_step_input_schema_version = runStepInputSchemaVersion;
   if (runStepOutputSchemaVersion) safeState.run_step_output_schema_version = runStepOutputSchemaVersion;
+  // Keep model-visible transport renderable for fallback paths without exposing rich content.
+  const modelSafePrompt = !isStarted ? (startHint || "Open de app om verder te gaan.") : "";
+  const modelSafeText = result.ok === true ? modelSafePrompt : "Open de app om verder te gaan.";
   return {
     model_result_shape_version: RUN_STEP_MODEL_RESULT_SHAPE_VERSION,
     ok: result.ok === true,
     tool: safeString(result.tool || "run_step"),
     current_step_id: currentStep,
+    text: modelSafeText,
+    prompt: modelSafePrompt,
     ui_gate_status: uiGateStatus,
     ui_gate_reason: uiGateReason,
     ...(locale ? { locale } : {}),
