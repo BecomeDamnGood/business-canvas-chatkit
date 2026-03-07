@@ -189,8 +189,10 @@ export function shouldTreatAsStepContributingInput(input: string, stepId: string
 }
 
 export type PendingWordingChoiceTextIntent =
-  | "accept_suggestion_default"
-  | "reject_suggestion_explicit";
+  | "accept_suggestion_explicit"
+  | "reject_suggestion_explicit"
+  | "feedback_on_suggestion"
+  | "content_input";
 
 function normalizeIntentComparable(input: string): string {
   return String(input || "")
@@ -202,7 +204,8 @@ function normalizeIntentComparable(input: string): string {
 
 export function classifyPendingWordingChoiceTextIntent(input: string): PendingWordingChoiceTextIntent {
   const comparable = normalizeIntentComparable(input);
-  if (!comparable) return "accept_suggestion_default";
+  const tokens = tokenizeWords(comparable);
+  if (!comparable) return "content_input";
 
   const explicitRejectPatterns = [
     /\b(thats not what i meant|that is not what i meant|not what i meant)\b/i,
@@ -217,7 +220,40 @@ export function classifyPendingWordingChoiceTextIntent(input: string): PendingWo
   if (explicitRejectPatterns.some((re) => re.test(comparable))) {
     return "reject_suggestion_explicit";
   }
-  return "accept_suggestion_default";
+
+  const explicitAcceptPatterns = [
+    /\b(yes|yeah|yep|ja|klopt|exact|precies)\b/i,
+    /\b(this (works|fits)|looks good|sounds good|good to go)\b/i,
+    /\b(dit (werkt|past|klopt)|helemaal goed|prima zo|zo is het goed)\b/i,
+  ];
+  const hasNegation = /\b(not|niet|no)\b/i.test(comparable);
+  if (
+    !hasNegation &&
+    tokens.length > 0 &&
+    tokens.length <= 8 &&
+    explicitAcceptPatterns.some((re) => re.test(comparable))
+  ) {
+    return "accept_suggestion_explicit";
+  }
+
+  const suggestionFeedbackPatterns = [
+    /\b(doesn t|doesnt|isn t|isnt)\b.{0,30}\b(fit|work|land|resonate|click)\b/i,
+    /\b(not sharp enough|not specific enough|not concrete enough)\b/i,
+    /\b(too broad|too generic|too vague|too abstract|too long|too short|too formal)\b/i,
+    /\b(make (it|this) (shorter|clearer|sharper|more concrete|more specific|less generic))\b/i,
+    /\b(dit|deze)\s+raakt\s+me\s+(nog\s+)?niet\b/i,
+    /\b(voelt|klinkt|past)\s+(nog\s+)?niet\b/i,
+    /\b(niet scherp genoeg|niet concreet genoeg|niet specifiek genoeg)\b/i,
+    /\b(te algemeen|te vaag|te abstract|te lang|te kort|te formeel)\b/i,
+    /\b(maak (het|dit) (korter|bondiger|scherper|concreter))\b/i,
+    /\b(korter|bondiger|scherper|concreter)\b/i,
+    /\b(nog niet echt)\b/i,
+  ];
+  if (suggestionFeedbackPatterns.some((re) => re.test(comparable))) {
+    return "feedback_on_suggestion";
+  }
+
+  return "content_input";
 }
 
 function extractSuggestionFromMessage(message: string): string {

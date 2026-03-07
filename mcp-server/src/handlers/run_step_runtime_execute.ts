@@ -411,6 +411,7 @@ export async function runStepRuntimeExecute(
 
   state = actionRoutingLayer.state;
   userMessage = actionRoutingLayer.userMessage;
+  const submittedTextIntent = actionRoutingLayer.submittedTextIntent;
   const responseUiFlags = actionRoutingLayer.responseUiFlags;
   state = await finalizeLayer.ensureUiStrings(state, userMessage);
   const lang = langFromState(state);
@@ -463,6 +464,7 @@ export async function runStepRuntimeExecute(
       uiI18nTelemetry,
       transientPendingScores: transientPendingScores as number[][] | null,
       submittedUserText,
+      submittedTextIntent,
       rawNormalized,
       pristineAtEntry,
       lang,

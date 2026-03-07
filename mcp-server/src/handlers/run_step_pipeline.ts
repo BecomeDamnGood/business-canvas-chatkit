@@ -73,6 +73,21 @@ const AUTOSUGGEST_STEP_IDS = new Set<string>([
   "rulesofthegame",
 ]);
 
+function isNonContributingWordingIntent(intentRaw: string): boolean {
+  const intent = String(intentRaw || "").trim();
+  return intent === "feedback_on_suggestion" || intent === "reject_suggestion_explicit";
+}
+
+export function resolveProvisionalSourceForTurn(params: {
+  actionCodeRaw: string;
+  submittedTextIntent: string;
+}): "action_route" | "user_input" | "system_generated" {
+  const actionCodeRaw = String(params.actionCodeRaw || "").trim();
+  if (actionCodeRaw) return "action_route";
+  if (isNonContributingWordingIntent(params.submittedTextIntent)) return "system_generated";
+  return "user_input";
+}
+
 type AutoSuggestPlan = {
   eligible: boolean;
   stepId: string;
@@ -598,11 +613,16 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       }
     }
 
+    const provisionalSourceForMutation = resolveProvisionalSourceForTurn({
+      actionCodeRaw: params.actionCodeRaw,
+      submittedTextIntent: String(params.submittedTextIntent || "").trim(),
+    });
+
     let nextState = deps.applyPostSpecialistStateMutations({
       prevState: state,
       decision: decision1,
       specialistResult,
-      provisionalSource: params.actionCodeRaw ? "action_route" : "user_input",
+      provisionalSource: provisionalSourceForMutation,
     });
 
     if (autoSuggestApplied) {
@@ -696,10 +716,14 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       dreamRuntimeModeForWording
     );
     const userTextForWordingChoice = (() => {
+      const submittedIntent = String(params.submittedTextIntent || "").trim();
+      const submittedCanSeedWordingChoice = submittedIntent === "" || submittedIntent === "content_input";
       const submitted = String(params.submittedUserText || "").trim();
-      if (submitted) return submitted;
+      if (submitted && submittedCanSeedWordingChoice) return submitted;
+      if (submitted && !submittedCanSeedWordingChoice) return "";
       const raw = String(userMessage || "").trim();
       if (!raw) return "";
+      if (!submittedCanSeedWordingChoice) return "";
       if (raw.startsWith("ACTION_")) return "";
       if (raw.startsWith("__ROUTE__")) return "";
       return raw;

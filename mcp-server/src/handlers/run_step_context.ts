@@ -1,5 +1,6 @@
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { CanvasState } from "../core/state.js";
+import type { PendingWordingChoiceTextIntent } from "./run_step_wording_heuristics.js";
 
 export type RunStepInputMode = "widget" | "chat";
 
@@ -24,6 +25,7 @@ export type RunStepStateContext = {
   state: CanvasState;
   transientPendingScores: number[][] | null;
   submittedUserText: string;
+  submittedTextIntent: PendingWordingChoiceTextIntent | "";
   rawNormalized: string;
   pristineAtEntry: boolean;
 };
@@ -67,6 +69,7 @@ export type RunStepPostSpecialistPipelineRequest = {
   wordingChoiceEnabled: boolean;
   motivationQuotesEnabled: boolean;
   submittedUserText: string;
+  submittedTextIntent: PendingWordingChoiceTextIntent | "";
   lang: string;
   rawNormalized: string;
   pristineAtEntry: boolean;
@@ -106,6 +109,7 @@ export function toRunPostSpecialistPipelineRequest(
     wordingChoiceEnabled: context.routing.wordingChoiceEnabled,
     motivationQuotesEnabled: context.routing.motivationQuotesEnabled,
     submittedUserText: context.state.submittedUserText,
+    submittedTextIntent: context.state.submittedTextIntent,
     lang: context.rendering.lang,
     rawNormalized: context.state.rawNormalized,
     pristineAtEntry: context.state.pristineAtEntry,

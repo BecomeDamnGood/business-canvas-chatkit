@@ -2,6 +2,7 @@ import type { CanvasState } from "../core/state.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 import type { RunStepAttachRegistryPayload } from "./run_step_ports.js";
 import type { WordingChoiceUiPayload } from "./run_step_runtime_action_helpers.js";
+import type { PendingWordingChoiceTextIntent } from "./run_step_wording_heuristics.js";
 import {
   BIGWHY_MAX_WORDS,
   buildActionCodeStepTransitions,
@@ -14,6 +15,7 @@ export type RunStepRuntimeActionRoutingOutput<TPayload extends Record<string, un
   response: TPayload | null;
   state: CanvasState;
   userMessage: string;
+  submittedTextIntent: PendingWordingChoiceTextIntent | "";
   responseUiFlags: Record<string, boolean | string> | null;
   bigwhyMaxWords: number;
   countWords: (text: string) => number;
@@ -93,7 +95,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     shouldTreatAsStepContributingInput: (userMessage: string, stepId: string) => boolean;
     classifyPendingWordingChoiceTextIntent: (
       userMessage: string
-    ) => "accept_suggestion_default" | "reject_suggestion_explicit";
+    ) => PendingWordingChoiceTextIntent;
     bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
   };
   wording: {
@@ -175,6 +177,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   let state = runtime.state;
   let userMessage = runtime.userMessage;
   let forcedProceed = false;
+  let submittedTextIntent: PendingWordingChoiceTextIntent | "" = "";
 
   const normalizeItems = (raw: unknown): string[] =>
     Array.isArray(raw)
@@ -238,26 +241,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const hasProgressVerb = tokens.some((token) => progressVerbs.has(token));
     const hasStepSignal = tokens.some((token) => stepSignals.has(token));
     return hasProgressVerb && hasStepSignal;
-  };
-
-  const looksLikeExplicitPendingSuggestionReject = (raw: string): boolean => {
-    const comparable = String(raw || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/gi, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (!comparable) return false;
-    const rejectPatterns = [
-      /\b(thats not what i meant|that is not what i meant|not what i meant)\b/i,
-      /\b(no thats wrong|no that is wrong|thats wrong|that is wrong)\b/i,
-      /\b(i mean something else|i meant something else|completely different|totally different)\b/i,
-      /\b(use my version|keep my version)\b/i,
-      /\b(dat is niet wat ik bedoel|dat bedoel ik niet|niet wat ik bedoel)\b/i,
-      /\b(nee dat is fout|nee dat klopt niet|dit klopt niet)\b/i,
-      /\b(ik bedoel iets anders|ik bedoelde iets anders|helemaal anders|totaal anders)\b/i,
-      /\b(gebruik mijn versie|hou mijn versie|houd mijn versie)\b/i,
-    ];
-    return rejectPatterns.some((re) => re.test(comparable));
   };
 
   const buildBigWhyTooLongFeedback = (stateForText: CanvasState): Record<string, unknown> => {
@@ -345,6 +328,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         response: behavior.finalizeResponse(payload),
         state,
         userMessage,
+        submittedTextIntent,
         responseUiFlags: null,
         bigwhyMaxWords: BIGWHY_MAX_WORDS,
         countWords,
@@ -562,12 +546,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     hasFreeTextWhilePending;
   if (shouldResolvePendingWordingFromTextIntent) {
     const pendingChoiceIntent = statePorts.classifyPendingWordingChoiceTextIntent(userMessage);
-    const shouldRejectExplicitly =
-      pendingChoiceIntent === "reject_suggestion_explicit" || looksLikeExplicitPendingSuggestionReject(userMessage);
-    if (shouldRejectExplicitly) {
-      state = statePorts.clearStepInteractiveState(state, currentStepId);
-      statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
-    } else {
+    submittedTextIntent = pendingChoiceIntent;
+    if (pendingChoiceIntent === "accept_suggestion_explicit") {
       const implicitSelection = wording.applyWordingPickSelection({
         stepId: currentStepId,
         routeToken: "__WORDING_PICK_SUGGESTION__",
@@ -576,11 +556,15 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       });
       if (implicitSelection.handled) {
         state = implicitSelection.nextState;
+        userMessage = "";
         statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "wording_choice_implicit_accept_count");
       } else {
         state = statePorts.clearStepInteractiveState(state, currentStepId);
         statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
       }
+    } else {
+      state = statePorts.clearStepInteractiveState(state, currentStepId);
+      statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
     }
     pendingBeforeTurn =
       ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
@@ -657,6 +641,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       response: behavior.finalizeResponse(payload),
       state,
       userMessage,
+      submittedTextIntent,
       responseUiFlags: null,
       bigwhyMaxWords: BIGWHY_MAX_WORDS,
       countWords,
@@ -705,6 +690,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       response: behavior.finalizeResponse(payload),
       state,
       userMessage,
+      submittedTextIntent,
       responseUiFlags: null,
       bigwhyMaxWords: BIGWHY_MAX_WORDS,
       countWords,
@@ -753,6 +739,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         response: behavior.finalizeResponse(payload),
         state,
         userMessage,
+        submittedTextIntent,
         responseUiFlags: null,
         bigwhyMaxWords: BIGWHY_MAX_WORDS,
         countWords,
@@ -791,6 +778,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     response: null,
     state,
     userMessage,
+    submittedTextIntent,
     responseUiFlags,
     bigwhyMaxWords: BIGWHY_MAX_WORDS,
     countWords,

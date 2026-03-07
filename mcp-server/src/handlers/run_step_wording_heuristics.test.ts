@@ -45,10 +45,10 @@ test("shouldTreatAsStepContributingInput ignores process navigation utterances",
   );
 });
 
-test("classifyPendingWordingChoiceTextIntent defaults to suggestion accept unless explicit reject is present", () => {
+test("classifyPendingWordingChoiceTextIntent separates accept, reject, feedback and content intents", () => {
   assert.equal(
     classifyPendingWordingChoiceTextIntent("Maak het korter en bondiger."),
-    "accept_suggestion_default"
+    "feedback_on_suggestion"
   );
   assert.equal(
     classifyPendingWordingChoiceTextIntent("Dat is niet wat ik bedoel."),
@@ -57,6 +57,18 @@ test("classifyPendingWordingChoiceTextIntent defaults to suggestion accept unles
   assert.equal(
     classifyPendingWordingChoiceTextIntent("That's not what I meant."),
     "reject_suggestion_explicit"
+  );
+  assert.equal(
+    classifyPendingWordingChoiceTextIntent("Dit raakt me nog niet echt."),
+    "feedback_on_suggestion"
+  );
+  assert.equal(
+    classifyPendingWordingChoiceTextIntent("Ja, dit past goed zo."),
+    "accept_suggestion_explicit"
+  );
+  assert.equal(
+    classifyPendingWordingChoiceTextIntent("Ik bedoel vooral familiebedrijven met een technische kern."),
+    "content_input"
   );
 });
 

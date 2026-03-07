@@ -98,7 +98,7 @@ function buildParams(intentEnabled: boolean) {
       isUiStateHygieneSwitchV1Enabled: () => true,
       isClearlyGeneralOfftopicInput: () => false,
       shouldTreatAsStepContributingInput: () => true,
-      classifyPendingWordingChoiceTextIntent: () => "accept_suggestion_default" as const,
+      classifyPendingWordingChoiceTextIntent: () => "content_input" as const,
       bumpUiI18nCounter: () => {},
     },
     wording: {
@@ -148,12 +148,13 @@ test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-
   assert.equal(result.response, null);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(result.submittedTextIntent, "content_input");
 });
 
-test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending wording choice when free text does not reject", async () => {
+test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending wording choice only for explicit accept text", async () => {
   const params = buildParams(true) as any;
-  params.runtime.userMessage = "korter en bondiger";
-  params.state.classifyPendingWordingChoiceTextIntent = () => "accept_suggestion_default";
+  params.runtime.userMessage = "Ja, dit is goed zo.";
+  params.state.classifyPendingWordingChoiceTextIntent = () => "accept_suggestion_explicit";
   params.wording.applyWordingPickSelection = ({ state, routeToken }: any) => {
     if (routeToken !== "__WORDING_PICK_SUGGESTION__") {
       return { handled: false, specialist: {}, nextState: state };
@@ -181,10 +182,33 @@ test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending 
 
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.equal(result.response, null);
-  assert.equal(result.userMessage, "korter en bondiger");
+  assert.equal(result.userMessage, "");
+  assert.equal(result.submittedTextIntent, "accept_suggestion_explicit");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "false");
   assert.equal(String(specialist.wording_choice_selected || ""), "suggestion");
+});
+
+test("runStepRuntimeActionRoutingLayer clears pending wording choice for feedback without implicit accept", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.userMessage = "Dit raakt me nog niet echt.";
+  params.state.classifyPendingWordingChoiceTextIntent = () => "feedback_on_suggestion";
+  let implicitPickCalled = false;
+  params.wording.applyWordingPickSelection = ({ routeToken, state }: any) => {
+    if (routeToken === "__WORDING_PICK_SUGGESTION__") {
+      implicitPickCalled = true;
+    }
+    return { handled: false, specialist: {}, nextState: state };
+  };
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(implicitPickCalled, false);
+  assert.equal(result.userMessage, "Dit raakt me nog niet echt.");
+  assert.equal(result.submittedTextIntent, "feedback_on_suggestion");
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.wording_choice_selected || ""), "");
 });
 
 test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when user explicitly rejects it", async () => {
@@ -202,6 +226,7 @@ test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when 
   const result = await runStepRuntimeActionRoutingLayer(params);
   assert.equal(result.response, null);
   assert.equal(implicitPickCalled, false);
+  assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "false");
   assert.equal(String(specialist.wording_choice_selected || ""), "");

@@ -98,6 +98,38 @@ function parseSubmitScoresPayload(
   return null;
 }
 
+function clearDreamStateForSwitchToSelf(state: CanvasState, dreamStepId: string): CanvasState {
+  const next: CanvasState = { ...state };
+  const finalField = getFinalFieldForStepId(dreamStepId);
+  if (finalField) {
+    (next as Record<string, unknown>)[finalField] = "";
+  }
+  const provisionalByStep =
+    next && typeof (next as any).provisional_by_step === "object" && (next as any).provisional_by_step !== null
+      ? { ...((next as any).provisional_by_step as Record<string, unknown>) }
+      : {};
+  if (Object.prototype.hasOwnProperty.call(provisionalByStep, dreamStepId)) {
+    delete provisionalByStep[dreamStepId];
+  }
+  (next as Record<string, unknown>).provisional_by_step = provisionalByStep;
+
+  const provisionalSourceByStep =
+    next &&
+    typeof (next as any).provisional_source_by_step === "object" &&
+    (next as any).provisional_source_by_step !== null
+      ? { ...((next as any).provisional_source_by_step as Record<string, unknown>) }
+      : {};
+  if (Object.prototype.hasOwnProperty.call(provisionalSourceByStep, dreamStepId)) {
+    delete provisionalSourceByStep[dreamStepId];
+  }
+  (next as Record<string, unknown>).provisional_source_by_step = provisionalSourceByStep;
+
+  (next as Record<string, unknown>).dream_builder_statements = [];
+  (next as Record<string, unknown>).dream_scores = [];
+  (next as Record<string, unknown>).dream_top_clusters = [];
+  return next;
+}
+
 type RouteTurnIntent = {
   state: CanvasState;
   specialist: Record<string, unknown>;
@@ -525,108 +557,64 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
         String(context.userMessage || "").trim() === deps.switchToSelfDreamToken,
       handle: async (context) => {
-        deps.setDreamRuntimeMode(context.state, "self");
-        const existingDreamCandidate = deps.pickDreamCandidateFromState(context.state);
+        let switchBaseState = deps.isUiStateHygieneSwitchV1Enabled()
+          ? deps.clearStepInteractiveState(context.state, deps.dreamStepId)
+          : context.state;
 
-        if (!existingDreamCandidate) {
-          const switchBaseState = deps.isUiStateHygieneSwitchV1Enabled()
-            ? deps.clearStepInteractiveState(context.state, deps.dreamStepId)
-            : context.state;
-
-          if (switchBaseState !== context.state) {
-            deps.bumpUiI18nCounter(context.uiI18nTelemetry, "state_hygiene_resets_count");
-          }
-
-          const switchHeadline = deps.uiStringFromStateMap(
-            switchBaseState,
-            "dreamBuilder.switchSelf.headline",
-            deps.uiDefaultString("dreamBuilder.switchSelf.headline")
-          );
-          const switchIntro = deps.uiStringFromStateMap(
-            switchBaseState,
-            "dreamBuilder.switchSelf.body.intro",
-            deps.uiDefaultString("dreamBuilder.switchSelf.body.intro")
-          );
-          const switchHelper = deps.uiStringFromStateMap(
-            switchBaseState,
-            "dreamBuilder.switchSelf.body.helper",
-            deps.uiDefaultString("dreamBuilder.switchSelf.body.helper")
-          );
-          const switchMessage = [switchHeadline, switchIntro, switchHelper]
-            .map((line) => String(line || "").trim())
-            .filter(Boolean)
-            .join("\n\n");
-
-          const specialist = {
-            action: "ASK",
-            message: switchMessage,
-            question: "",
-            refined_formulation: "",
-            dream: "",
-            suggest_dreambuilder: "false",
-            wants_recap: false,
-            is_offtopic: false,
-            user_intent: "STEP_INPUT",
-            meta_topic: "NONE",
-          };
-
-          let nextState: CanvasState = {
-            ...switchBaseState,
-            active_specialist: deps.dreamSpecialist,
-            last_specialist_result: specialist,
-          };
-
-          deps.setDreamRuntimeMode(nextState, "self");
-          (nextState as Record<string, unknown>).dream_awaiting_direction = "false";
-
-          deps.applyUiPhaseByStep(
-            nextState,
-            deps.dreamStepId,
-            buildUiContractId(deps.dreamStepId, "no_output", "DREAM_MENU_INTRO")
-          );
-          return finalizeRouteTurnIntent(context, {
-            state: nextState,
-            specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
-            previousSpecialist: asRecord((context.state as Record<string, unknown>).last_specialist_result || {}),
-            responseUiFlags: context.responseUiFlags,
-          });
+        if (switchBaseState !== context.state) {
+          deps.bumpUiI18nCounter(context.uiI18nTelemetry, "state_hygiene_resets_count");
         }
 
-        (context.state as Record<string, unknown>).intro_shown_for_step = "dream";
-        const forcedDecision = {
-          specialist_to_call: deps.dreamSpecialist,
-          specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: I want to write my dream in my own words.`,
-          current_step: deps.dreamStepId,
-          intro_shown_for_step: "dream",
-          intro_shown_session:
-            String((context.state as Record<string, unknown>).intro_shown_session ?? "").trim() === "true" ? "true" : "false",
-          show_step_intro: "false",
-          show_session_intro: "false",
-        } as unknown as OrchestratorOutput;
+        switchBaseState = clearDreamStateForSwitchToSelf(switchBaseState, deps.dreamStepId);
+        deps.setDreamRuntimeMode(switchBaseState, "self");
 
-        const callDream = await deps.callSpecialistStrictSafe(
-          {
-            model: context.model,
-            state: context.state,
-            decision: forcedDecision,
-            userMessage: "I want to write my dream in my own words.",
-          },
-          deps.buildRoutingContext(context.userMessage),
-          context.state
+        const switchHeadline = deps.uiStringFromStateMap(
+          switchBaseState,
+          "dreamBuilder.switchSelf.headline",
+          deps.uiDefaultString("dreamBuilder.switchSelf.headline")
         );
+        const switchIntro = deps.uiStringFromStateMap(
+          switchBaseState,
+          "dreamBuilder.switchSelf.body.intro",
+          deps.uiDefaultString("dreamBuilder.switchSelf.body.intro")
+        );
+        const switchHelper = deps.uiStringFromStateMap(
+          switchBaseState,
+          "dreamBuilder.switchSelf.body.helper",
+          deps.uiDefaultString("dreamBuilder.switchSelf.body.helper")
+        );
+        const switchMessage = [switchHeadline, switchIntro, switchHelper]
+          .map((line) => String(line || "").trim())
+          .filter(Boolean)
+          .join("\n\n");
 
-        if (!callDream.ok) return finalizeRoutePayload(callDream.payload);
-        deps.rememberLlmCall(callDream.value);
+        const specialist = {
+          action: "ASK",
+          message: switchMessage,
+          question: "",
+          refined_formulation: "",
+          dream: "",
+          suggest_dreambuilder: "false",
+          wants_recap: false,
+          is_offtopic: false,
+          user_intent: "STEP_INPUT",
+          meta_topic: "NONE",
+        };
 
-        let nextState = deps.applyStateUpdate({
-          prev: context.state,
-          decision: forcedDecision,
-          specialistResult: callDream.value.specialistResult,
-          showSessionIntroUsed: "false",
-          provisionalSource: "system_generated",
-        });
+        let nextState: CanvasState = {
+          ...switchBaseState,
+          active_specialist: deps.dreamSpecialist,
+          last_specialist_result: specialist,
+        };
 
         deps.setDreamRuntimeMode(nextState, "self");
+        (nextState as Record<string, unknown>).dream_awaiting_direction = "false";
+
+        deps.applyUiPhaseByStep(
+          nextState,
+          deps.dreamStepId,
+          buildUiContractId(deps.dreamStepId, "no_output", "DREAM_MENU_INTRO")
+        );
         return finalizeRouteTurnIntent(context, {
           state: nextState,
           specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),

@@ -293,6 +293,35 @@ test("buildTextForWidget avoids duplicate rules bullets when message already con
   assert.equal((output.match(/We leveren op afspraken/g) || []).length, 1);
 });
 
+test("buildTextForWidget removes monolithic dream summary paragraph when statements are already present", () => {
+  const helpers = buildTextHelpers(() => "");
+  const statements = [
+    "Grenzen zullen vervagen.",
+    "Mensen worden socialer en zorgzamer.",
+    "Heldere en eenvoudige informatie wordt steeds belangrijker in een steeds complexere wereld.",
+  ];
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_REFINE:v1",
+      suggest_dreambuilder: "true",
+      message: [
+        "Ga verder met de Droom-oefening.",
+        "",
+        "Grenzen zullen vervagen. Mensen worden socialer en zorgzamer. Heldere en eenvoudige informatie wordt steeds belangrijker in een steeds complexere wereld.",
+      ].join("\n\n"),
+      statements,
+      refined_formulation: "",
+      dream: "",
+    },
+    state: {
+      active_specialist: "DreamExplainer",
+      current_step: "dream",
+    } as any,
+  });
+
+  assert.equal(output, "Ga verder met de Droom-oefening.");
+});
+
 test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
   const helpers = buildTextHelpers(() => "");
   const output = helpers.buildTextForWidget({

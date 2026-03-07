@@ -254,6 +254,9 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
 
     let msg = stripMarkupPreserveLines(String(specialist?.message ?? ""));
     if (dreamBuilderRenderContext && msg) {
+      const statementComparables = statementLines
+        .map((line) => deps.canonicalizeComparableText(String(line || "")))
+        .filter(Boolean);
       const statementKeys = new Set(
         statementLines
           .map((line) => deps.canonicalizeComparableText(String(line || "")))
@@ -264,6 +267,34 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           .replace(/<[^>]+>/g, " ")
           .replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "")
           .trim();
+      if (statementComparables.length >= 3) {
+        const paragraphs = msg
+          .replace(/\r/g, "\n")
+          .split(/\n{2,}/)
+          .map((part) => String(part || "").trim())
+          .filter(Boolean);
+        const minimumStatementCoverage = Math.min(
+          statementComparables.length,
+          Math.max(3, Math.ceil(statementComparables.length * 0.8))
+        );
+        const filteredParagraphs = paragraphs.filter((paragraph) => {
+          const normalizedParagraph = deps.canonicalizeComparableText(
+            stripMarkers(String(paragraph || "").replace(/\n+/g, " ").trim())
+          );
+          if (!normalizedParagraph) return false;
+          const wordCount = deps.tokenizeWords(paragraph).length;
+          if (wordCount < 20) return true;
+          let matchedStatements = 0;
+          for (const statementComparable of statementComparables) {
+            if (!statementComparable) continue;
+            if (normalizedParagraph.includes(statementComparable)) matchedStatements += 1;
+          }
+          return matchedStatements < minimumStatementCoverage;
+        });
+        if (filteredParagraphs.length > 0 && filteredParagraphs.length !== paragraphs.length) {
+          msg = filteredParagraphs.join("\n\n").trim();
+        }
+      }
       const cleanedLines = msg
         .replace(/\r/g, "\n")
         .split("\n")
