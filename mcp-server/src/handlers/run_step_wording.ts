@@ -98,9 +98,6 @@ type RunStepWordingDeps = {
   ) => string;
 };
 
-const WORDING_CLARIFY_USER_LABEL = "Do you mean something like this";
-const WORDING_CLARIFY_SUGGESTION_LABEL = "Or do you mean something like this?";
-
 const LIST_REMOVE_VERB = /\b(remove|delete|drop|omit|exclude|verwijder|schrap|haal\s+weg|weglaten|wegdoen)\b/i;
 const LIST_REPLACE_VERB = /\b(replace|vervang)\b/i;
 const LIST_REPLACE_WITH = /\b(with|door|met)\b/i;
@@ -234,6 +231,54 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return uiStringLocaleFirst(state, "wordingChoiceInstruction");
   }
 
+  function clarifyUserLabelForState(state: CanvasState | null | undefined): string {
+    const localized = uiStringLocaleFirst(state, "wordingChoiceHeading").trim();
+    return localized || deps.uiDefaultString("wordingChoiceHeading", "");
+  }
+
+  function clarifySuggestionLabelForState(state: CanvasState | null | undefined): string {
+    const localized = uiStringLocaleFirst(state, "wordingChoiceSuggestionLabel").trim();
+    return localized || deps.uiDefaultString("wordingChoiceSuggestionLabel", "");
+  }
+
+  function wordingScaffoldComparables(
+    state: CanvasState | null | undefined,
+    specialist?: Record<string, unknown> | null
+  ): Set<string> {
+    const labels = [
+      uiStringLocaleFirst(state, "wordingChoiceHeading"),
+      uiStringLocaleFirst(state, "wordingChoiceSuggestionLabel"),
+      uiStringLocaleFirst(state, "wordingChoiceInstruction"),
+      uiStringLocaleFirst(state, "wording.choice.context.default"),
+      uiStringLocaleFirst(state, "wordingChoice.chooseVersion"),
+      uiStringLocaleFirst(state, "wordingChoice.useInputFallback"),
+      clarifyUserLabelForState(state),
+      clarifySuggestionLabelForState(state),
+      String(specialist?.wording_choice_user_label || ""),
+      String(specialist?.wording_choice_suggestion_label || ""),
+    ];
+    return new Set(
+      labels
+        .map((label) => canonicalHeadingComparable(label))
+        .filter(Boolean)
+    );
+  }
+
+  function isWordingScaffoldLine(
+    lineRaw: string,
+    blockedComparables: Set<string>
+  ): boolean {
+    const cleaned = String(lineRaw || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!cleaned) return true;
+    const withoutMarker = cleaned.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim();
+    const comparable = canonicalHeadingComparable(withoutMarker);
+    if (!comparable) return false;
+    return blockedComparables.has(comparable);
+  }
+
   function isWordingChoiceEligibleStep(stepId: string): boolean {
     const normalized = String(stepId || "").trim();
     if (!normalized) return false;
@@ -265,6 +310,14 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const previousScoringPhase = String(previous.scoring_phase || "").trim() === "true";
     if (currentScoringPhase || previousScoringPhase) return false;
     return true;
+  }
+
+  function isWordingChoiceIntentEligibleSpecialist(specialist: Record<string, unknown>): boolean {
+    const metaTopic = String(specialist.meta_topic || "").trim().toUpperCase();
+    if (metaTopic && metaTopic !== "NONE") return false;
+    const userIntent = String(specialist.user_intent || "").trim().toUpperCase();
+    if (!userIntent) return true;
+    return userIntent === "STEP_INPUT";
   }
 
   function isListChoiceScope(stepId: string, activeSpecialist: string): boolean {
@@ -520,9 +573,15 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return merged;
   }
 
-  function sanitizePendingListMessage(messageRaw: string, knownItems: string[]): string {
+  function sanitizePendingListMessage(
+    messageRaw: string,
+    knownItems: string[],
+    state: CanvasState | null | undefined,
+    specialist?: Record<string, unknown> | null
+  ): string {
     const message = String(messageRaw || "").replace(/\r/g, "\n");
     if (!message.trim()) return "";
+    const blockedComparables = wordingScaffoldComparables(state, specialist);
     const known = new Set(
       knownItems
         .map((line) => deps.canonicalizeComparableText(line))
@@ -537,26 +596,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         kept.push("");
         continue;
       }
-      const normalized = trimmed.replace(/<[^>]+>/g, "").trim();
-      if (
-        /\b(i['’]?ve|i have)\s+(reformulat\w*|rewritten|broadened|converted)\b/i.test(normalized) ||
-        /^statement\s*\d+\s*:/i.test(normalized) ||
-        /^statements?\s+\d+\s*(?:to|-)\s*\d+/i.test(normalized) ||
-        /\bif you meant something different\b/i.test(normalized)
-      ) {
-        continue;
-      }
-      if (/^<\/?strong>/i.test(trimmed) && /so far/i.test(trimmed)) continue;
-      if (/^so far\b/i.test(trimmed)) continue;
-      if (/^<\/?strong>/i.test(trimmed) && /established so far/i.test(trimmed)) continue;
-      const normalizedLabel = trimmed.replace(/<[^>]+>/g, "").trim();
-      if (
-        /^(this is your input|this would be my suggestion)\s*:?\s*$/i.test(normalizedLabel) ||
-        /^do you mean something like this\??\s*:?\s*$/i.test(normalizedLabel) ||
-        /^or do you mean something like this\??\s*:?\s*$/i.test(normalizedLabel)
-      ) {
-        continue;
-      }
+      if (isWordingScaffoldLine(trimmed, blockedComparables)) continue;
       const withoutMarker = trimmed.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim();
       const directKey = deps.canonicalizeComparableText(withoutMarker);
       if (known.has(directKey)) continue;
@@ -616,6 +656,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     suggestionRaw: string;
     userRaw: string;
     knownItems: string[];
+    state?: CanvasState | null;
+    specialist?: Record<string, unknown> | null;
   }): string {
     const source = String(params.messageRaw || "").replace(/\r/g, "\n").trim();
     if (!source) return "";
@@ -631,21 +673,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       .map((line) => deps.stripChoiceInstructionNoise(String(line || "").replace(/<[^>]+>/g, " ").trim()))
       .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
       .filter(Boolean);
-    const blockedLinePatterns = [
-      /^this is your input:?$/i,
-      /^this would be my suggestion:?$/i,
-      /^do you mean something like this\??:?$/i,
-      /^or do you mean something like this\??:?$/i,
-      /^please click what suits you best\.?$/i,
-      /^choose this version$/i,
-      /^if you meant something different/i,
-      /^statement\s*\d+\s*:/i,
-      /^so far\b/i,
-      /^your current\b/i,
-    ];
+    const blockedComparables = wordingScaffoldComparables(params.state || null, params.specialist || null);
     const candidates: string[] = [];
     for (const line of lines) {
-      if (blockedLinePatterns.some((pattern) => pattern.test(line))) continue;
+      if (isWordingScaffoldLine(line, blockedComparables)) continue;
       const lineComparable = deps.canonicalizeComparableText(line);
       if (!lineComparable) continue;
       if (knownComparables.has(lineComparable)) continue;
@@ -662,7 +693,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       for (const sentence of sentences) {
         const normalized = sentence.replace(/\s+/g, " ").trim();
         if (!normalized) continue;
-        if (blockedLinePatterns.some((pattern) => pattern.test(normalized))) continue;
+        if (isWordingScaffoldLine(normalized, blockedComparables)) continue;
         const sentenceComparable = deps.canonicalizeComparableText(normalized);
         if (!sentenceComparable) continue;
         if (
@@ -701,6 +732,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         Array.isArray(prev.wording_choice_base_items) ? toTrimmedStringArray(prev.wording_choice_base_items) : [],
         Array.isArray(prev.wording_choice_suggestion_items) ? toTrimmedStringArray(prev.wording_choice_suggestion_items) : []
       ),
+      state,
+      specialist: prev,
     });
     if (fallbackFromMessage) return fallbackFromMessage;
     return "";
@@ -838,6 +871,19 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wordingChoice: null,
       };
     }
+    if (!isWordingChoiceIntentEligibleSpecialist(specialistResult)) {
+      return {
+        specialist: {
+          ...specialistResult,
+          wording_choice_pending: "false",
+          wording_choice_selected: "",
+          wording_choice_list_semantics: "delta",
+          feedback_reason_key: "",
+          feedback_reason_text: "",
+        },
+        wordingChoice: null,
+      };
+    }
     if (isOfftopic) return { specialist: specialistResult, wordingChoice: null };
     const fallbackUserRaw = forcePending
       ? String(previousSpecialist.wording_choice_user_normalized || previousSpecialist.wording_choice_user_raw || "").trim()
@@ -950,7 +996,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const pendingMessage = mode === "list"
       ? sanitizePendingListMessage(
         String(specialistResult.message || ""),
-        mergeListItems(baseItems, suggestionFullItems)
+        mergeListItems(baseItems, suggestionFullItems),
+        state,
+        specialistResult
       )
       : sanitizePendingTextMessage(
         String(specialistResult.message || ""),
@@ -961,6 +1009,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       suggestionRaw,
       userRaw,
       knownItems: mergeListItems(baseItems, suggestionFullItems),
+      state,
+      specialist: specialistResult,
     });
     const targetField = deps.fieldForStep(stepId);
     const committedTextFromPrev = targetField ? String(previousSpecialist[targetField] || "").trim() : "";
@@ -987,9 +1037,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_mode: mode,
       wording_choice_target_field: targetField,
       wording_choice_variant: variant === "clarify_dual" ? variant : "",
-      wording_choice_user_label: variant === "clarify_dual" ? WORDING_CLARIFY_USER_LABEL : "",
+      wording_choice_user_label: variant === "clarify_dual" ? clarifyUserLabelForState(state) : "",
       wording_choice_suggestion_label:
-        variant === "clarify_dual" ? WORDING_CLARIFY_SUGGESTION_LABEL : "",
+        variant === "clarify_dual" ? clarifySuggestionLabelForState(state) : "",
       feedback_reason_key: "",
       feedback_reason_text: feedbackReasonText,
     };
@@ -1007,8 +1057,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       ...(variant === "clarify_dual"
         ? {
             variant,
-            user_label: WORDING_CLARIFY_USER_LABEL,
-            suggestion_label: WORDING_CLARIFY_SUGGESTION_LABEL,
+            user_label: clarifyUserLabelForState(state),
+            suggestion_label: clarifySuggestionLabelForState(state),
           }
         : {}),
       user_text: normalizedUserSafe,
@@ -1140,6 +1190,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     if (String(specialist?.wording_choice_pending || "") !== "true") return null;
     const stepId = String(stepIdHint || specialist?.wording_choice_target_field || "").trim();
     if (!stepId) return null;
+    if (!isWordingChoiceIntentEligibleSpecialist(specialist)) return null;
     if (
       !isWordingChoiceEligibleContext(
         stepId,
@@ -1163,9 +1214,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       ...(variant === "clarify_dual"
         ? {
             variant: "clarify_dual" as const,
-            user_label: String(specialist?.wording_choice_user_label || "").trim() || WORDING_CLARIFY_USER_LABEL,
+            user_label:
+              String(specialist?.wording_choice_user_label || "").trim() || clarifyUserLabelForState(state),
             suggestion_label:
-              String(specialist?.wording_choice_suggestion_label || "").trim() || WORDING_CLARIFY_SUGGESTION_LABEL,
+              String(specialist?.wording_choice_suggestion_label || "").trim() ||
+              clarifySuggestionLabelForState(state),
           }
         : {}),
       user_text: stripMarkupPreserveLines(

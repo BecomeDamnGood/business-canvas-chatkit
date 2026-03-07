@@ -78,7 +78,7 @@ export const META_TOPIC_CONTRACT_INSTRUCTION = `META_TOPIC CONTRACT (HARD)
 - Set meta_topic="CANVAS_VALUE" for "what is the value of this canvas" type questions.
 - Set meta_topic="SESSION_STORAGE" for "is this saved/stored" type questions.
 - Set meta_topic="PRESENTATION_MEDIA_NOT_SUPPORTED" when users ask whether images or logos can be added in the presentation.
-- Set meta_topic="NO_STARTING_POINT" when the user wants to do something with AI but has no topic, market, problem area, or starting point yet.
+- Set meta_topic="NO_STARTING_POINT" when the user has no clear starting point, topic, market, or problem area yet (with or without explicitly mentioning AI).
 - If the user asks for their current step output or previous step output, classify as recap: wants_recap=true, user_intent="RECAP_REQUEST", meta_topic="RECAP".
 - Set meta_topic="RECAP" when wants_recap=true.
 - Set meta_topic="NONE" for normal step input, inspiration-only requests, or generic off-topic content.`;
@@ -619,15 +619,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       }
     }
 
-    const mediaCapabilityIntent =
-      stepId === PRESENTATION_STEP_ID &&
-      isPresentationMediaCapabilityQuestion(String(params.userMessage || ""));
-    const noStartingPointIntent = isNoStartingPointIntentQuestion(String(params.userMessage || ""));
-    const metaTopic = mediaCapabilityIntent
-      ? "PRESENTATION_MEDIA_NOT_SUPPORTED"
-      : noStartingPointIntent
-        ? "NO_STARTING_POINT"
-      : resolveSpecialistMetaTopic(specialist);
+    const metaTopic = resolveSpecialistMetaTopic(specialist);
     if (metaTopic === "NONE" || metaTopic === "RECAP") return specialist;
 
     const base = {
@@ -639,18 +631,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     } as Record<string, unknown>;
 
     if (metaTopic === "BEN_PROFILE") {
-      const currentValue = resolveCurrentStepEssenceValue(
-        stepId,
-        params.state,
-        specialist,
-        params.previousSpecialist && typeof params.previousSpecialist === "object"
-          ? params.previousSpecialist
-          : {}
-      );
-      const currentContextHeading = offTopicCurrentContextHeading(stepId, params.state).trim();
-      const currentBlock = currentContextHeading && currentValue
-        ? `${currentContextHeading}\n\n${currentValue}`
-        : (currentValue || "");
       const stepField = deps.fieldForStep(stepId);
       return {
         ...base,
@@ -661,9 +641,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         wording_choice_selected: "",
         wording_choice_list_semantics: "delta",
         ...(stepField ? { [stepField]: "" } : {}),
-        message: currentBlock
-          ? `${buildBenProfileMessage(params.state)}\n\n${currentBlock}`
-          : buildBenProfileMessage(params.state),
+        message: buildBenProfileMessage(params.state),
       };
     }
 
@@ -761,90 +739,6 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       return true;
     });
     return kept.join(" ").trim();
-  }
-
-  function normalizeIntentSentence(raw: string): string {
-    let next = String(raw || "").toLowerCase();
-    if (!next) return "";
-    try {
-      next = next.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
-    } catch {
-      // Keep original when normalize() is unavailable.
-    }
-    return next
-      .replace(/<[^>]+>/g, " ")
-      .replace(/[“”"'`]/g, "")
-      .replace(/[^\p{L}\p{N}\s]/gu, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  function isPresentationMediaCapabilityQuestion(userMessage: string): boolean {
-    const text = normalizeIntentSentence(userMessage);
-    if (!text) return false;
-    const mediaTokens = [
-      "image", "images", "logo", "logos", "afbeelding", "afbeeldingen", "plaatje", "plaatjes",
-      "bild", "bilder", "immagine", "immagini", "imagen", "imagenes", "imagem", "imagens",
-      "gambar", "चित्र", "छवि", "画像", "写真", "이미지", "로고", "图像", "图片", "標誌", "标志",
-    ];
-    const capabilityTokens = [
-      "can", "possible", "support", "include", "add", "use", "embed",
-      "kan", "mogelijk", "toevoegen", "verwerken", "invoegen", "plaatsen",
-      "kann", "moglich", "hinzufugen", "einbinden",
-      "puedo", "posible", "agregar", "incluir",
-      "posso", "possibile", "aggiungere", "includere",
-      "pode", "possivel", "adicionar", "incluir",
-      "peut", "possible", "ajouter", "inclure",
-      "boleh", "bisa", "tambah",
-      "できます", "可能", "追加", "入れる",
-      "할수", "가능", "추가",
-      "可以", "能", "添加", "加入",
-      "सकता", "संभव", "जोड़", "शामिल",
-    ];
-    const hasMedia = mediaTokens.some((token) => token && text.includes(token));
-    if (!hasMedia) return false;
-    return capabilityTokens.some((token) => token && text.includes(token));
-  }
-
-  function isNoStartingPointIntentQuestion(userMessage: string): boolean {
-    const text = normalizeIntentSentence(userMessage);
-    if (!text) return false;
-    const aiPatterns: RegExp[] = [
-      /\bai\b/i,
-      /\bartificial intelligence\b/i,
-      /\bkunstmatige intelligentie\b/i,
-      /\bintelligence artificielle\b/i,
-      /\binteligencia artificial\b/i,
-      /\bintelligenza artificiale\b/i,
-      /\bki\b/i,
-      /\bia\b/i,
-      /人工知能/,
-      /искусственный интеллект/i,
-      /인공지능/,
-      /人工智能/,
-      /ذكاء اصطناعي/,
-      /कृत्रिम बुद्धिमत्ता/,
-    ];
-    const hasAiIntent = aiPatterns.some((pattern) => pattern.test(text));
-    if (!hasAiIntent) return false;
-
-    const noStartPatterns: RegExp[] = [
-      /\b(?:no|none|without)\b.{0,60}\b(?:topic|market|problem|problem area|starting point|direction)\b/i,
-      /\b(?:geen|niet)\b.{0,60}\b(?:onderwerp|markt|probleem|startpunt|richting)\b/i,
-      /\b(?:kein|keine|ohne)\b.{0,60}\b(?:thema|markt|problem|problemfeld|startpunkt|richtung)\b/i,
-      /\b(?:aucun|pas de|sans)\b.{0,60}\b(?:sujet|marche|probleme|point de depart|direction)\b/i,
-      /\b(?:ningun|ninguna|sin)\b.{0,60}\b(?:tema|mercado|problema|punto de partida|direccion)\b/i,
-      /\b(?:nessun|nessuna|senza)\b.{0,60}\b(?:tema|mercato|problema|punto di partenza|direzione)\b/i,
-      /\b(?:sem|nao)\b.{0,60}\b(?:tema|mercado|problema|ponto de partida|direcao)\b/i,
-      /\b(?:нет|без)\b.{0,60}\b(?:темы|рынка|проблем|отправной точки|направления)\b/i,
-      /\b(?:لا|بدون)\b.{0,60}\b(?:موضوع|سوق|مشكلة|نقطة انطلاق|اتجاه)\b/i,
-      /\b(?:बिना|नहीं)\b.{0,60}\b(?:विषय|बाजार|समस्या|शुरुआती बिंदु|दिशा)\b/i,
-      /\b(?:tanpa|belum)\b.{0,60}\b(?:topik|pasar|masalah|titik awal|arah)\b/i,
-      /(?:トピック|市場|課題|出発点|方向性).{0,30}(?:ない|ありません)/,
-      /(?:주제|시장|문제|출발점|방향).{0,30}(?:없|아직)/,
-      /(?:主题|市場|市场|問題|问题|起点|方向).{0,20}(?:没有|還沒有|还没有|不明确|不清楚)/,
-    ];
-    return noStartPatterns.some((pattern) => pattern.test(text));
   }
 
   function isLikelyMetaQuestionTurn(params: {

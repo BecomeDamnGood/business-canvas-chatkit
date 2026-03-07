@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveProvisionalSourceForTurn } from "./run_step_pipeline.js";
+import { isWordingChoiceIntentEligible, resolveProvisionalSourceForTurn } from "./run_step_pipeline.js";
 
 test("resolveProvisionalSourceForTurn keeps action-route precedence", () => {
   assert.equal(
@@ -51,5 +51,29 @@ test("resolveProvisionalSourceForTurn keeps user-input source for content and ex
       submittedTextIntent: "",
     }),
     "user_input"
+  );
+});
+
+test("isWordingChoiceIntentEligible allows only step-input/meta-none turns", () => {
+  assert.equal(
+    isWordingChoiceIntentEligible({
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    }),
+    true
+  );
+  assert.equal(
+    isWordingChoiceIntentEligible({
+      user_intent: "META_QUESTION",
+      meta_topic: "NONE",
+    }),
+    false
+  );
+  assert.equal(
+    isWordingChoiceIntentEligible({
+      user_intent: "STEP_INPUT",
+      meta_topic: "NO_STARTING_POINT",
+    }),
+    false
   );
 });

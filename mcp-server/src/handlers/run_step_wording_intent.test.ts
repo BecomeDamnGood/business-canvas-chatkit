@@ -4,6 +4,14 @@ import assert from "node:assert/strict";
 import { createRunStepWordingHelpers } from "./run_step_wording.js";
 
 function buildHelpers(intentEnabled: boolean) {
+  const defaultUi: Record<string, string> = {
+    wordingChoiceHeading: "This is your input:",
+    wordingChoiceSuggestionLabel: "This would be my suggestion:",
+    wordingChoiceInstruction: "Please click what suits you best.",
+    "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wordingChoice.chooseVersion": "Choose this version",
+    "wordingChoice.useInputFallback": "Use this input",
+  };
   return createRunStepWordingHelpers({
     step0Id: "step0",
     presentationStepId: "presentation",
@@ -14,7 +22,7 @@ function buildHelpers(intentEnabled: boolean) {
     entityStepId: "entity",
     dreamExplainerSpecialist: "DreamExplainer",
     normalizeDreamRuntimeMode: () => "self",
-    uiDefaultString: () => "",
+    uiDefaultString: (key: string) => defaultUi[key] || "",
     uiStringFromStateMap: (_state, _key, fallback) => fallback,
     fieldForStep: (stepId: string) => {
       if (stepId === "targetgroup") return "targetgroup";
@@ -75,6 +83,14 @@ function buildHeadingAwarePurposeHelpers(params: {
   suggestion: string;
   equivalent?: boolean;
 }) {
+  const defaultUi: Record<string, string> = {
+    wordingChoiceHeading: "This is your input:",
+    wordingChoiceSuggestionLabel: "This would be my suggestion:",
+    wordingChoiceInstruction: "Please click what suits you best.",
+    "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wordingChoice.chooseVersion": "Choose this version",
+    "wordingChoice.useInputFallback": "Use this input",
+  };
   const canonicalize = (input: string) =>
     String(input || "")
       .toLowerCase()
@@ -91,7 +107,7 @@ function buildHeadingAwarePurposeHelpers(params: {
     entityStepId: "entity",
     dreamExplainerSpecialist: "DreamExplainer",
     normalizeDreamRuntimeMode: () => "self",
-    uiDefaultString: () => "",
+    uiDefaultString: (key: string) => defaultUi[key] || "",
     uiStringFromStateMap: (_state, _key, fallback) => fallback,
     fieldForStep: (stepId: string) => (stepId === "purpose" ? "purpose" : ""),
     parseListItems: (input: string) =>
@@ -157,8 +173,8 @@ test("buildWordingChoiceFromTurn marks clarify_dual variant for disambiguation c
 
   assert.ok(result.wordingChoice);
   assert.equal(result.wordingChoice?.variant, "clarify_dual");
-  assert.equal(result.wordingChoice?.user_label, "Do you mean something like this");
-  assert.equal(result.wordingChoice?.suggestion_label, "Or do you mean something like this?");
+  assert.equal(result.wordingChoice?.user_label, "This is your input:");
+  assert.equal(result.wordingChoice?.suggestion_label, "This would be my suggestion:");
 });
 
 test("buildWordingChoiceFromTurn keeps default variant for regular rewrite context", () => {
@@ -180,6 +196,48 @@ test("buildWordingChoiceFromTurn keeps default variant for regular rewrite conte
 
   assert.ok(result.wordingChoice);
   assert.equal(result.wordingChoice?.variant, undefined);
+});
+
+test("buildWordingChoiceFromTurn skips wording panel for meta-topic turns", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "targetgroup",
+    state: {} as any,
+    activeSpecialist: "TargetGroup",
+    previousSpecialist: {},
+    specialistResult: {
+      message: "Meta response",
+      refined_formulation: "Industrial manufacturers with technical product development.",
+      user_intent: "STEP_INPUT",
+      meta_topic: "NO_STARTING_POINT",
+    },
+    userTextRaw: "I don't know what I want yet.",
+    isOfftopic: false,
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+});
+
+test("buildWordingChoiceFromTurn skips wording panel when user intent is not step input", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "targetgroup",
+    state: {} as any,
+    activeSpecialist: "TargetGroup",
+    previousSpecialist: {},
+    specialistResult: {
+      message: "Meta response",
+      refined_formulation: "Industrial manufacturers with technical product development.",
+      user_intent: "META_QUESTION",
+      meta_topic: "NONE",
+    },
+    userTextRaw: "Who is Ben?",
+    isOfftopic: false,
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
 });
 
 test("buildWordingChoiceFromTurn treats remove-line requests as list edit intent in business list steps", () => {

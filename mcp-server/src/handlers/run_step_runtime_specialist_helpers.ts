@@ -234,43 +234,11 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     return metaTopic !== "NONE";
   }
 
-  function compactWordingPanelBody(messageRaw: string): string {
-    const message = String(messageRaw || "").replace(/\r/g, "\n").trim();
-    if (!message) return "";
-    const lines = message
-      .split("\n")
-      .map((line) => String(line || "").replace(/<[^>]+>/g, " ").trim())
-      .filter(Boolean)
-      .filter((line) => !/^\s*(?:[-*•]|\d+[\).])\s+/.test(line))
-      .filter((line) => {
-        const normalized = line.toLowerCase();
-        if (!normalized) return false;
-        if (normalized.includes("this is your input")) return false;
-        if (normalized.includes("this would be my suggestion")) return false;
-        if (normalized.includes("do you mean something like this")) return false;
-        if (normalized.includes("or do you mean something like this")) return false;
-        if (normalized.includes("if you meant something different")) return false;
-        if (/\b(i['’]?ve|i have)\s+(reformulat\w*|rewritten|broadened|converted)\b/i.test(normalized)) return false;
-        if (/^statement\s*\d+\s*:/i.test(normalized)) return false;
-        if (/^statements?\s+\d+\s*(?:to|-)\s*\d+/i.test(normalized)) return false;
-        return true;
-      });
-    if (lines.length === 0) return "";
-    const firstLine = String(lines[0] || "").trim();
-    if (!firstLine) return "";
-    const firstSentence = firstLine
-      .split(/(?<=[.!?])\s+/)
-      .map((part) => part.trim())
-      .filter(Boolean)[0] || "";
-    return deps.ensureSentenceEnd(firstSentence || firstLine);
-  }
-
   return {
     normalizeLocalizedConceptTerms,
     normalizeEntityPhrase,
     normalizeEntitySpecialistResult,
     enforceDreamBuilderQuestionProgress,
     isMetaOfftopicFallbackTurn,
-    compactWordingPanelBody,
   };
 }

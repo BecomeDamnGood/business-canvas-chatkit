@@ -128,6 +128,34 @@ function isAutoSuggestIntentFromSpecialist(specialistResult: Record<string, unkn
   return userIntent === "INSPIRATION_REQUEST";
 }
 
+function clearPendingWordingChoiceFields(specialistResult: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...specialistResult,
+    wording_choice_pending: "false",
+    wording_choice_selected: "",
+    wording_choice_user_raw: "",
+    wording_choice_user_normalized: "",
+    wording_choice_user_items: [],
+    wording_choice_suggestion_items: [],
+    wording_choice_base_items: [],
+    wording_choice_list_semantics: "delta",
+    wording_choice_agent_current: "",
+    wording_choice_mode: "",
+    wording_choice_target_field: "",
+    wording_choice_variant: "",
+    wording_choice_user_label: "",
+    wording_choice_suggestion_label: "",
+  };
+}
+
+export function isWordingChoiceIntentEligible(specialistResult: Record<string, unknown>): boolean {
+  const metaTopic = String(specialistResult.meta_topic || "").trim().toUpperCase();
+  if (metaTopic && metaTopic !== "NONE") return false;
+  const userIntent = String(specialistResult.user_intent || "").trim().toUpperCase();
+  if (!userIntent) return true;
+  return userIntent === "STEP_INPUT";
+}
+
 function autoSuggestPromptKeyForStep(stepId: string): string {
   const keyByStep: Record<string, string> = {
     dream: "autosuggest.prompt.dream",
@@ -728,10 +756,12 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       if (raw.startsWith("__ROUTE__")) return "";
       return raw;
     })();
+    const wordingIntentEligible = isWordingChoiceIntentEligible(asRecord(specialistResult));
     if (
       params.wordingChoiceEnabled &&
       !suppressWordingChoiceForAutoSuggest &&
       params.inputMode === "widget" &&
+      wordingIntentEligible &&
       eligibleForWordingChoiceTurn &&
       !isCurrentTurnOfftopic &&
       !isTrueFlag(specialistResult.wording_choice_pending)
@@ -749,7 +779,12 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       specialistResult = rebuilt.specialist;
     }
     asStateRecord(nextState).last_specialist_result = specialistResult;
-    if (params.wordingChoiceEnabled && params.inputMode === "widget" && !suppressWordingChoiceForAutoSuggest) {
+    if (
+      params.wordingChoiceEnabled &&
+      params.inputMode === "widget" &&
+      !suppressWordingChoiceForAutoSuggest &&
+      wordingIntentEligible
+    ) {
       const pendingEligible = deps.isWordingChoiceEligibleContext(
         String(asStateRecord(nextState).current_step || ""),
         String(asStateRecord(nextState).active_specialist || ""),
@@ -767,12 +802,16 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
             dreamRuntimeModeForWording
           )
         : null;
-      if (pendingChoice) {
+      if (pendingChoice?.enabled) {
         wordingChoiceOverride = pendingChoice;
         requireWordingPick = true;
         actionCodesOverride = [];
         renderedActionsOverride = [];
+      } else if (isTrueFlag(specialistResult.wording_choice_pending)) {
+        specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
       }
+    } else if (isTrueFlag(specialistResult.wording_choice_pending)) {
+      specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
     }
 
     const canonicalDreamBuilderStatementsCount =

@@ -447,8 +447,8 @@ const runtimeTextHelpers = createRunStepRuntimeTextHelpers({
   wordingSelectionMessage,
   mergeListItems: (userItems, suggestionItems) => mergeListItems(userItems, suggestionItems),
   splitSentenceItems,
-  sanitizePendingListMessage: (message, fallbackItems) =>
-    sanitizePendingListMessage(message, fallbackItems),
+  sanitizePendingListMessage: (message, fallbackItems, stateForSanitize, specialistForSanitize) =>
+    sanitizePendingListMessage(message, fallbackItems, stateForSanitize || null, specialistForSanitize || null),
   isWordingPanelCleanBodyV1Enabled,
   fieldForStep,
   stripUnsupportedReformulationClaims: (message) =>
@@ -470,26 +470,48 @@ const {
   generatePresentationAssets,
 } = presentationHelpers;
 
-function compactWordingPanelBody(messageRaw: string): string {
+function normalizeNoiseComparable(value: string): string {
+  return String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/[.!?]+$/g, "")
+    .replace(/\s*:\s*$/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function wordingPanelNoiseComparables(state: CanvasState | null | undefined): Set<string> {
+  const keys = [
+    "wordingChoiceHeading",
+    "wordingChoiceSuggestionLabel",
+    "wordingChoiceInstruction",
+    "wording.choice.context.default",
+    "wordingChoice.chooseVersion",
+    "wordingChoice.useInputFallback",
+  ];
+  const comparables = new Set<string>();
+  for (const key of keys) {
+    const fallback = uiDefaultString(key, "");
+    const localized = uiStringFromStateMap(state || null, key, fallback);
+    const comparable = normalizeNoiseComparable(localized);
+    if (comparable) comparables.add(comparable);
+  }
+  return comparables;
+}
+
+function compactWordingPanelBody(messageRaw: string, state?: CanvasState | null): string {
   const message = String(messageRaw || "").replace(/\r/g, "\n").trim();
   if (!message) return "";
+  const blockedComparables = wordingPanelNoiseComparables(state || null);
   const lines = message
     .split("\n")
     .map((line) => String(line || "").replace(/<[^>]+>/g, " ").trim())
     .filter(Boolean)
     .filter((line) => !/^\s*(?:[-*•]|\d+[\).])\s+/.test(line))
     .filter((line) => {
-      const normalized = line.toLowerCase();
-      if (!normalized) return false;
-      if (normalized.includes("this is your input")) return false;
-      if (normalized.includes("this would be my suggestion")) return false;
-      if (normalized.includes("do you mean something like this")) return false;
-      if (normalized.includes("or do you mean something like this")) return false;
-      if (normalized.includes("if you meant something different")) return false;
-      if (/\b(i['’]?ve|i have)\s+(reformulat\w*|rewritten|broadened|converted)\b/i.test(normalized)) return false;
-      if (/^statement\s*\d+\s*:/i.test(normalized)) return false;
-      if (/^statements?\s+\d+\s*(?:to|-)\s*\d+/i.test(normalized)) return false;
-      return true;
+      const comparable = normalizeNoiseComparable(line);
+      if (!comparable) return false;
+      return !blockedComparables.has(comparable);
     });
   if (lines.length === 0) return "";
   const firstLine = String(lines[0] || "").trim();

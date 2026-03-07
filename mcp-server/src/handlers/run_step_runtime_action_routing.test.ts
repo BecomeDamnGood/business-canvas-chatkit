@@ -143,6 +143,16 @@ test("runStepRuntimeActionRoutingLayer keeps pending block when intent flow flag
   assert.equal((result.response as Record<string, unknown>).blocked_pending, true);
 });
 
+test("runStepRuntimeActionRoutingLayer clears stale pending block when pending wording payload is not renderable", async () => {
+  const params = buildParams(false) as any;
+  params.wording.buildWordingChoiceFromPendingSpecialist = () => null;
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+});
+
 test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-text intent when enabled", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(true) as any);
   assert.equal(result.response, null);

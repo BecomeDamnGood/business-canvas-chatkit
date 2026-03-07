@@ -30,12 +30,17 @@ type RunStepRuntimeTextHelpersDeps = {
   ) => string;
   mergeListItems: (userItems: string[], suggestionItems: string[]) => string[];
   splitSentenceItems: (text: string) => string[];
-  sanitizePendingListMessage: (message: string, fallbackItems: string[]) => string;
+  sanitizePendingListMessage: (
+    message: string,
+    fallbackItems: string[],
+    state?: CanvasState | null | undefined,
+    specialist?: Record<string, unknown> | null | undefined
+  ) => string;
   isWordingPanelCleanBodyV1Enabled: () => boolean;
   fieldForStep: (stepId: string) => string;
   stripUnsupportedReformulationClaims: (message: string) => string;
   tokenizeWords: (text: string) => string[];
-  compactWordingPanelBody: (message: string) => string;
+  compactWordingPanelBody: (message: string, state?: CanvasState | null | undefined) => string;
 };
 
 function stripChoiceInstructionNoise(value: string): string {
@@ -249,9 +254,18 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       String(specialist?.__suppress_refined_append || "").trim() === "true" ||
       isSingleValueValidOutput;
     const menuId = deps.parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
-    const statementLines = Array.isArray(specialist?.statements)
+    const stateDreamBuilderStatements =
+      Array.isArray((params.state as Record<string, unknown> | null | undefined)?.dream_builder_statements)
+        ? (((params.state as Record<string, unknown>).dream_builder_statements as unknown[])
+            .map((line) => String(line || "").trim())
+            .filter(Boolean))
+        : [];
+    const specialistStatementLines = Array.isArray(specialist?.statements)
       ? (specialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean)
       : [];
+    const statementLines = stateDreamBuilderStatements.length > 0
+      ? stateDreamBuilderStatements
+      : specialistStatementLines;
     const dreamBuilderRenderContext =
       statementLines.length > 0 &&
       contractStepId === deps.dreamStepId &&
@@ -262,9 +276,23 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
 
     let msg = stripMarkupPreserveLines(String(specialist?.message ?? ""));
     if (dreamBuilderRenderContext && msg) {
-      const statementComparables = statementLines
-        .map((line) => deps.canonicalizeComparableText(String(line || "")))
-        .filter(Boolean);
+      const stateUiStrings =
+        params.state && typeof (params.state as Record<string, unknown>).ui_strings === "object"
+          ? ((params.state as Record<string, unknown>).ui_strings as Record<string, unknown>)
+          : {};
+      const dreamStatementsTitleComparable = deps.canonicalizeComparableText(
+        String(stateUiStrings["dreamBuilder.statements.title"] || "").trim()
+      );
+      const normalizeCountComparable = (value: string): string =>
+        deps
+          .canonicalizeComparableText(String(value || ""))
+          .replace(/\b\d+\b/g, "n")
+          .replace(/\bn\b/g, "n")
+          .replace(/\s+/g, " ")
+          .trim();
+      const dreamStatementsCountComparable = normalizeCountComparable(
+        String(stateUiStrings["dreamBuilder.statements.count"] || "").trim()
+      );
       const statementKeys = new Set(
         statementLines
           .map((line) => deps.canonicalizeComparableText(String(line || "")))
@@ -275,29 +303,19 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           .replace(/<[^>]+>/g, " ")
           .replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "")
           .trim();
-      if (statementComparables.length >= 3) {
+      if (statementKeys.size >= 2) {
         const paragraphs = msg
           .replace(/\r/g, "\n")
           .split(/\n{2,}/)
           .map((part) => String(part || "").trim())
           .filter(Boolean);
-        const minimumStatementCoverage = Math.min(
-          statementComparables.length,
-          Math.max(3, Math.ceil(statementComparables.length * 0.8))
-        );
         const filteredParagraphs = paragraphs.filter((paragraph) => {
-          const normalizedParagraph = deps.canonicalizeComparableText(
-            stripMarkers(String(paragraph || "").replace(/\n+/g, " ").trim())
-          );
-          if (!normalizedParagraph) return false;
-          const wordCount = deps.tokenizeWords(paragraph).length;
-          if (wordCount < 20) return true;
-          let matchedStatements = 0;
-          for (const statementComparable of statementComparables) {
-            if (!statementComparable) continue;
-            if (normalizedParagraph.includes(statementComparable)) matchedStatements += 1;
-          }
-          return matchedStatements < minimumStatementCoverage;
+          const sentenceKeys = deps
+            .splitSentenceItems(stripMarkers(String(paragraph || "").replace(/\n+/g, " ").trim()))
+            .map((line) => deps.canonicalizeComparableText(line))
+            .filter(Boolean);
+          if (sentenceKeys.length < 2) return true;
+          return !sentenceKeys.every((key) => statementKeys.has(key));
         });
         if (filteredParagraphs.length > 0 && filteredParagraphs.length !== paragraphs.length) {
           msg = filteredParagraphs.join("\n\n").trim();
@@ -312,11 +330,13 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           const stripped = stripMarkers(line);
           const lineKey = deps.canonicalizeComparableText(stripped);
           if (lineKey && statementKeys.has(lineKey)) return false;
-          if (/^your dream statements$/i.test(stripped)) return false;
-          if (/^your current dream for\b.*\bis:?$/i.test(stripped)) return false;
+          if (lineKey && dreamStatementsTitleComparable && lineKey === dreamStatementsTitleComparable) {
+            return false;
+          }
           if (
-            /^\d+\s+statements?\b/i.test(stripped) &&
-            /(minimum|so far|out of|at least)/i.test(stripped)
+            lineKey &&
+            dreamStatementsCountComparable &&
+            normalizeCountComparable(lineKey) === dreamStatementsCountComparable
           ) {
             return false;
           }
@@ -347,10 +367,10 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         : [];
       const knownItems = deps.mergeListItems(userItems, suggestionItems);
       const fallbackItems = knownItems.length > 0 ? knownItems : deps.splitSentenceItems(wordingSuggestion);
-      msg = deps.sanitizePendingListMessage(msg, fallbackItems);
+      msg = deps.sanitizePendingListMessage(msg, fallbackItems, params.state || null, specialist);
     }
     if (wordingPending && deps.isWordingPanelCleanBodyV1Enabled()) {
-      msg = deps.compactWordingPanelBody(msg);
+      msg = deps.compactWordingPanelBody(msg, params.state || null);
     }
     const promptFromSpecialist = stripMarkupPreserveLines(String(specialist?.question ?? ""));
     const promptOverride = stripMarkupPreserveLines(String(params.questionTextOverride || ""));

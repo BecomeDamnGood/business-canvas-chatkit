@@ -91,7 +91,7 @@ test("wants_recap forces RECAP meta topic classification", () => {
   assert.equal(metaTopic, "RECAP");
 });
 
-test("presentation media capability question is deterministically routed to fixed meta topic answer", () => {
+test("presentation media capability meta topic uses fixed localized answer", () => {
   const helpers = buildHelpers();
   const state: any = {
     ui_strings_lang: "nl",
@@ -103,12 +103,11 @@ test("presentation media capability question is deterministically routed to fixe
 
   const routed = helpers.applyCentralMetaTopicRouter({
     stepId: "presentation",
-    userMessage: "kan ik afbeeldingen of een logo toevoegen aan de presentatie?",
     specialistResult: {
       action: "ASK",
       message: "orig",
-      user_intent: "STEP_INPUT",
-      meta_topic: "NONE",
+      user_intent: "META_QUESTION",
+      meta_topic: "PRESENTATION_MEDIA_NOT_SUPPORTED",
     },
     previousSpecialist: {},
     state,
@@ -153,7 +152,7 @@ test("NO_STARTING_POINT meta topic uses localized body without redirect append",
   assert.doesNotMatch(String(routed.message || ""), /Laten we doorgaan met/);
 });
 
-test("no-starting-point intent in user message is deterministically routed", () => {
+test("meta topic routing remains intent-driven and does not force no-startpoint by keyword matching", () => {
   const helpers = buildHelpers();
   const state: any = {
     ui_strings_lang: "nl",
@@ -164,7 +163,7 @@ test("no-starting-point intent in user message is deterministically routed", () 
 
   const routed = helpers.applyCentralMetaTopicRouter({
     stepId: "strategy",
-    userMessage: "ik wil iets met AI doen, maar geen onderwerp/markt/probleem",
+    userMessage: "Ik weet eigenlijk niet wat ik wil, ik wil gewoon rondreizen en geld verdienen.",
     specialistResult: {
       action: "ASK",
       message: "orig",
@@ -175,9 +174,43 @@ test("no-starting-point intent in user message is deterministically routed", () 
     state,
   }) as Record<string, unknown>;
 
-  assert.equal(routed.meta_topic, "NO_STARTING_POINT");
-  assert.equal(routed.is_offtopic, false);
-  assert.equal(String(routed.message || ""), "NL geen-startpunttekst.");
+  assert.equal(routed.meta_topic, "NONE");
+  assert.equal(String(routed.message || ""), "orig");
+});
+
+test("BEN_PROFILE route does not inject extra current-context block in message", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "en",
+    business_name: "Mindd",
+    dream_final: "A clear dream statement.",
+    ui_strings: {
+      "meta.benProfile.paragraph1": "P1",
+      "meta.benProfile.paragraph2": "P2",
+      "meta.benProfile.paragraph3": "P3",
+      "meta.benProfile.paragraph4": "P4 {0}",
+      "offtopic.current.template": "The current {0} of {1} is.",
+      "offtopic.step.dream": "Dream",
+    },
+  };
+
+  const routed = helpers.applyCentralMetaTopicRouter({
+    stepId: "dream",
+    specialistResult: {
+      action: "ASK",
+      user_intent: "META_QUESTION",
+      meta_topic: "BEN_PROFILE",
+      dream: "A clear dream statement.",
+    },
+    previousSpecialist: {},
+    state,
+  }) as Record<string, unknown>;
+
+  assert.equal(routed.meta_topic, "BEN_PROFILE");
+  const message = String(routed.message || "");
+  assert.match(message, /P1/);
+  assert.doesNotMatch(message, /The current Dream of Mindd is/i);
+  assert.doesNotMatch(message, /A clear dream statement/i);
 });
 
 test("media capability phrase does not trigger forced presentation topic outside presentation step", () => {

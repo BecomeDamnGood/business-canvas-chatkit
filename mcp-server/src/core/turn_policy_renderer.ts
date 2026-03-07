@@ -784,14 +784,17 @@ function step0ConfirmQuestion(state: CanvasState, venture: string, name: string,
   return suffix;
 }
 
-function isStep0MetaMessage(message: string): boolean {
-  const lower = String(message || "").toLowerCase();
-  if (!lower) return false;
-  return (
-    lower.includes("bensteenstra.com") ||
-    lower.includes("ben steenstra") ||
-    lower.includes("now, back to the business strategy canvas builder")
-  );
+function isStep0MetaTurn(specialist: Record<string, unknown>): boolean {
+  const wantsRecap =
+    specialist.wants_recap === true ||
+    String((specialist as any).wants_recap || "").trim().toLowerCase() === "true";
+  if (wantsRecap) return true;
+  const userIntent = String((specialist as any).user_intent || "").trim().toUpperCase();
+  if (userIntent === "META_QUESTION" || userIntent === "WHY_NEEDED" || userIntent === "RESISTANCE") {
+    return true;
+  }
+  const metaTopic = String((specialist as any).meta_topic || "").trim().toUpperCase();
+  return Boolean(metaTopic && metaTopic !== "NONE");
 }
 
 function extractCandidate(stepId: string, specialist: Record<string, unknown>, prev: Record<string, unknown>): string {
@@ -1376,7 +1379,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       const preserveSpecialistMessage =
         sourceAction === "ESCAPE" ||
         isOfftopic ||
-        isStep0MetaMessage(answerText) ||
+        isStep0MetaTurn(specialistForDisplay as Record<string, unknown>) ||
         String((specialistForDisplay as any).wants_recap || "").toLowerCase() === "true";
       if (preserveSpecialistMessage && answerText) return answerText;
       return step0CardDesc;

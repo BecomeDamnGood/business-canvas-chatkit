@@ -21,7 +21,11 @@ function buildTextHelpers(wordingSelectionMessage: (
         .trim(),
     wordingSelectionMessage,
     mergeListItems: (userItems: string[], suggestionItems: string[]) => [...userItems, ...suggestionItems],
-    splitSentenceItems: (text: string) => String(text || "").split(/\n+/).filter(Boolean),
+    splitSentenceItems: (text: string) =>
+      String(text || "")
+        .split(/(?:[.!?]+\s+|\n+)/)
+        .map((line) => line.trim())
+        .filter(Boolean),
     sanitizePendingListMessage: (message: string) => String(message || ""),
     isWordingPanelCleanBodyV1Enabled: () => false,
     fieldForStep: (stepId: string) => {
@@ -320,6 +324,50 @@ test("buildTextForWidget removes monolithic dream summary paragraph when stateme
   });
 
   assert.equal(output, "Ga verder met de Droom-oefening.");
+});
+
+test("buildTextForWidget removes duplicate dream summary paragraph using canonical state statements when specialist statements are missing", () => {
+  const helpers = buildTextHelpers(() => "");
+  const statements = [
+    "People will have more opportunities to improve their lives and feel valued for their contributions.",
+    "Positive impact and meaningful work will be increasingly valued in society.",
+    "Individuals will have greater freedom in how they use their time and make choices.",
+    "People will take greater pride in their work and its contribution to the world.",
+    "Businesses will increasingly reflect the values and identities of their founders.",
+  ];
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_REFINE:v1",
+      suggest_dreambuilder: "true",
+      message: [
+        "People will have more opportunities to improve their lives and feel valued for their contributions. Positive impact and meaningful work will be increasingly valued in society. Individuals will have greater freedom in how they use their time and make choices. People will take greater pride in their work and its contribution to the world. Businesses will increasingly reflect the values and identities of their founders.",
+        "",
+        "YOUR DREAM STATEMENTS",
+        "5 statements out of a minimum of 20 so far",
+        "1. People will have more opportunities to improve their lives and feel valued for their contributions.",
+        "2. Positive impact and meaningful work will be increasingly valued in society.",
+        "3. Individuals will have greater freedom in how they use their time and make choices.",
+        "4. People will take greater pride in their work and its contribution to the world.",
+        "5. Businesses will increasingly reflect the values and identities of their founders.",
+      ].join("\n"),
+      refined_formulation: "",
+      dream: "",
+    },
+    state: {
+      active_specialist: "DreamExplainer",
+      current_step: "dream",
+      dream_builder_statements: statements,
+      ui_strings: {
+        "dreamBuilder.statements.title": "YOUR DREAM STATEMENTS",
+        "dreamBuilder.statements.count": "N statements out of a minimum of 20 so far",
+      },
+    } as any,
+  });
+
+  assert.equal(
+    output,
+    ""
+  );
 });
 
 test("buildTextForWidget strips raw HTML tags from user-facing text", () => {

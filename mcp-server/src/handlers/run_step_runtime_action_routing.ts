@@ -612,6 +612,21 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       String(state.current_step || ""),
       action.getDreamRuntimeMode(state)
     );
+    if (!pendingChoice || pendingChoice.enabled !== true) {
+      state = statePorts.clearStepInteractiveState(stateWithUi, String(state.current_step || ""));
+      statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
+      return {
+        response: null,
+        state,
+        userMessage,
+        submittedTextIntent,
+        responseUiFlags: null,
+        bigwhyMaxWords: BIGWHY_MAX_WORDS,
+        countWords,
+        pickBigWhyCandidate,
+        buildBigWhyTooLongFeedback,
+      };
+    }
 
     console.log("[wording_choice_pending_blocked]", {
       step: String(state.current_step || ""),
