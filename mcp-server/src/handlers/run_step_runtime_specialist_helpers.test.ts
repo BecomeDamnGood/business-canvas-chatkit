@@ -75,7 +75,7 @@ test("normalizeLocalizedConceptTerms uses localized fallback when business name 
   assert.doesNotMatch(message, /my future company/i);
 });
 
-test("normalizeEntitySpecialistResult enforces label/value split when template lacks newline", () => {
+test("normalizeEntitySpecialistResult only normalizes canonical entity fields and does not compose display copy", () => {
   const helpers = buildHelpers();
   const state: any = {
     ui_strings: {
@@ -89,9 +89,9 @@ test("normalizeEntitySpecialistResult enforces label/value split when template l
   };
 
   const next = helpers.normalizeEntitySpecialistResult("entity", specialist, state) as Record<string, unknown>;
-  const message = String(next.message || "");
-  assert.match(message, /^Wat denk je van de formulering:/);
-  assert.match(message, /\nEen AI-driven communicatie-agency$/);
+  assert.equal(String(next.refined_formulation || ""), "Een AI-driven communicatie-agency");
+  assert.equal(String(next.entity || ""), "Een AI-driven communicatie-agency");
+  assert.equal(String(next.message || ""), "");
 });
 
 test("enforceDreamBuilderQuestionProgress forces catalog base question in builder base stage", () => {

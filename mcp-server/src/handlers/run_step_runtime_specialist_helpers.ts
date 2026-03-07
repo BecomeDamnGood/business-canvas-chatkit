@@ -130,6 +130,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     specialist: Record<string, unknown> | null | undefined,
     state?: CanvasState | null
   ): Record<string, unknown> | null | undefined {
+    void state;
     if (stepId !== deps.entityStepId || !specialist || typeof specialist !== "object") return specialist;
     const normalizedRefined = normalizeEntityPhrase(String(specialist.refined_formulation || ""));
     const normalizedEntity = normalizeEntityPhrase(String(specialist.entity || ""));
@@ -138,51 +139,6 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     const next = { ...specialist };
     if (normalizedRefined) next.refined_formulation = normalizedRefined;
     next.entity = canonical;
-    const templateRaw = deps.uiStringFromStateMap(
-      state || null,
-      "entity.suggestion.template",
-      deps.uiDefaultString("entity.suggestion.template")
-    );
-    const template = String(templateRaw || "").trim();
-    const suggestionLine = template.includes("{0}")
-      ? template
-          .replace(/\s*\{0\}\s*/g, "\n{0}")
-          .replace(/\{0\}/g, canonical)
-          .replace(/\n{3,}/g, "\n\n")
-          .trim()
-      : `${template}\n${canonical}`.trim();
-    const currentMessage = String(next.message || "").replace(/\r/g, "\n").trim();
-    if (!suggestionLine) return next;
-    if (!currentMessage) {
-      next.message = suggestionLine;
-      return next;
-    }
-    const normalizeComparable = (value: string): string =>
-      String(value || "")
-        .toLowerCase()
-        .replace(/<[^>]+>/g, " ")
-        .replace(/[.!?]+$/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-    const canonicalComparable = normalizeComparable(canonical);
-    const suggestionComparable = normalizeComparable(suggestionLine);
-    const lines = currentMessage.split("\n");
-    let replacedStandalone = false;
-    const rewrittenLines = lines.map((lineRaw) => {
-      const line = String(lineRaw || "");
-      const comparable = normalizeComparable(line);
-      if (comparable && comparable === canonicalComparable) {
-        replacedStandalone = true;
-        return suggestionLine;
-      }
-      return line;
-    });
-    if (replacedStandalone) {
-      next.message = rewrittenLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-      return next;
-    }
-    if (normalizeComparable(currentMessage).includes(suggestionComparable)) return next;
-    next.message = `${currentMessage}\n\n${suggestionLine}`.trim();
     return next;
   }
 

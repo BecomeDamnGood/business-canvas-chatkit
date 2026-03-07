@@ -434,7 +434,7 @@ test("targetgroup no-output render ignores stale postrefine phase menu and falls
   assert.equal(rendered.uiActionCodes.includes("ACTION_TARGETGROUP_POSTREFINE_CONFIRM"), false);
 });
 
-test("entity valid output always renders canonical statement with current-context heading", () => {
+test("entity valid output uses suggestion heading SSOT and suppresses duplicate current-context framing", () => {
   const state = getDefaultState();
   const canonical = "Mindd is een digitale innovatiepartner voor mkb-bedrijven.";
   (state as any).current_step = "entity";
@@ -459,12 +459,14 @@ test("entity valid output always renders canonical statement with current-contex
 
   const message = String((rendered.specialist as any).message || "");
   assert.equal(rendered.status, "valid_output");
-  assert.match(message, /current.*entity.*mindd.*is:/i);
+  assert.match(message, /^what do you think of the wording$/im);
+  assert.doesNotMatch(message, /current.*entity.*mindd.*is:/i);
   assert.match(message, /Mindd is een digitale innovatiepartner voor mkb-bedrijven\./i);
   assert.equal(message.split(canonical).length - 1, 1);
+  assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
 });
 
-test("targetgroup valid output appends canonical current-context block when missing in feedback", () => {
+test("targetgroup valid output keeps a single canonical heading/value block", () => {
   const state = getDefaultState();
   const canonical = "Innovatieve mkb-bedrijven met complexe digitaliseringsvraagstukken.";
   (state as any).current_step = "targetgroup";
@@ -490,5 +492,62 @@ test("targetgroup valid output appends canonical current-context block when miss
   const message = String((rendered.specialist as any).message || "");
   assert.equal(rendered.status, "valid_output");
   assert.match(message, /current.*target group.*mindd.*is:/i);
+  assert.doesNotMatch(message, /helder, die doelgroepkeuze is concreet/i);
   assert.match(message, /Innovatieve mkb-bedrijven met complexe digitaliseringsvraagstukken\./i);
+  assert.equal(message.split(canonical).length - 1, 1);
+  assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
+});
+
+test("single-value confirm steps render exactly one canonical heading/value block in valid output", () => {
+  const cases = [
+    {
+      stepId: "purpose",
+      field: "purpose",
+      canonical: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      specialistLabel: "Purpose",
+    },
+    {
+      stepId: "bigwhy",
+      field: "bigwhy",
+      canonical:
+        "Mensen verdienen eerlijke informatie zodat zij zelfstandig keuzes kunnen maken die hun leven verrijken.",
+      specialistLabel: "BigWhy",
+    },
+    {
+      stepId: "role",
+      field: "role",
+      canonical: "Mindd verbindt complexe informatie met menselijke besluitkracht.",
+      specialistLabel: "Role",
+    },
+  ] as const;
+
+  for (const current of cases) {
+    const state = getDefaultState();
+    (state as any).current_step = current.stepId;
+    (state as any).active_specialist = current.specialistLabel;
+    (state as any).business_name = "Mindd";
+    (state as any).provisional_by_step = { [current.stepId]: current.canonical };
+    (state as any).provisional_source_by_step = { [current.stepId]: "wording_pick" };
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: current.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        message: "Vrije feedback die niet in de confirm-view mag blijven staan.",
+        question: "",
+        refined_formulation: "",
+        [current.field]: "",
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    const message = String((rendered.specialist as any).message || "");
+    assert.equal(rendered.status, "valid_output");
+    assert.match(message, /current.*mindd.*is:/i);
+    assert.doesNotMatch(message, /vrije feedback/i);
+    assert.equal(message.split(current.canonical).length - 1, 1);
+    assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
+  }
 });

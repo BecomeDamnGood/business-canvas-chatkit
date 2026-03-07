@@ -342,3 +342,33 @@ test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
   assert.match(output, /Dit mag niet zichtbaar zijn/);
   assert.match(output, /Doelgroep blijft zichtbaar\./);
 });
+
+test("buildTextForWidget keeps renderer-owned single-value confirm heading in valid_output", () => {
+  const canonical =
+    "Mensen zouden altijd toegang moeten hebben tot eerlijke en volledige informatie, zodat zij zelfstandig keuzes kunnen maken.";
+  const helpers = buildTextHelpers((stepId) => {
+    if (stepId !== "bigwhy") return "";
+    return [
+      "JE HUIDIGE GROTE WAAROM VOOR MINDD IS:",
+      "",
+      canonical,
+    ].join("\n");
+  });
+
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "bigwhy:valid_output:BIGWHY_MENU_CONFIRM_SINGLE:v1",
+      message: ["Wat denk je van deze formulering", canonical].join("\n"),
+      refined_formulation: canonical,
+      bigwhy: canonical,
+    },
+    state: {
+      active_specialist: "BigWhy",
+      current_step: "bigwhy",
+    } as any,
+  });
+
+  assert.match(output, /^Wat denk je van deze formulering$/im);
+  assert.doesNotMatch(output, /JE HUIDIGE GROTE WAAROM VOOR MINDD IS:/i);
+  assert.equal((output.match(/Mensen zouden altijd toegang moeten hebben/g) || []).length, 1);
+});

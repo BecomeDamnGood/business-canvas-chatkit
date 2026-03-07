@@ -349,6 +349,36 @@ function offTopicCurrentContextHeading(stepId: string, state: CanvasState): stri
   return base ? `${base}:` : "";
 }
 
+function singleValueConfirmHeading(stepId: string, state: CanvasState): string {
+  if (stepId === "entity") {
+    const template = uiStringFromState(
+      state,
+      "entity.suggestion.template",
+      uiDefaultString("entity.suggestion.template")
+    );
+    const firstLine = String(template || "")
+      .replace(/\r/g, "\n")
+      .replace(/\s*\{0\}\s*/g, "\n")
+      .split("\n")
+      .map((line) => String(line || "").trim())
+      .find(Boolean);
+    const heading = String(firstLine || "")
+      .replace(/[.!?]+$/g, "")
+      .replace(/\s*:\s*$/g, "")
+      .trim();
+    if (heading) return heading;
+  }
+  return offTopicCurrentContextHeading(stepId, state);
+}
+
+function singleValueConfirmCanonicalMessage(stepId: string, state: CanvasState, canonicalValue: string): string {
+  const canonical = String(canonicalValue || "").trim();
+  if (!canonical) return "";
+  const heading = singleValueConfirmHeading(stepId, state);
+  if (!heading) return canonical;
+  return `${heading}\n${canonical}`.trim();
+}
+
 function ensureCanonicalContextBlockInMessage(params: {
   message: string;
   canonicalValue: string;
@@ -1469,7 +1499,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
           ""
         )
       : message;
-  if (shouldEnforceConfirmVisibility && canonicalAcceptedValue) {
+  const useSingleValueConfirmSsot =
+    shouldEnforceConfirmVisibility &&
+    Boolean(canonicalAcceptedValue) &&
+    effectiveStatus === "valid_output" &&
+    !isOfftopic &&
+    !wordingPending;
+  if (useSingleValueConfirmSsot) {
+    messageForDisplay = singleValueConfirmCanonicalMessage(stepId, state, canonicalAcceptedValue);
+  } else if (shouldEnforceConfirmVisibility && canonicalAcceptedValue) {
     messageForDisplay = ensureCanonicalContextBlockInMessage({
       message: messageForDisplay,
       canonicalValue: canonicalAcceptedValue,
@@ -1483,6 +1521,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     message: messageForDisplay,
     question,
     ui_show_step_intro_chrome: showStepIntroChrome,
+    ...(useSingleValueConfirmSsot ? { __suppress_refined_append: "true" } : {}),
     ui_contract_id: contractId,
     ui_contract_version: UI_CONTRACT_VERSION,
     ui_text_keys: textKeys,

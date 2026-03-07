@@ -226,7 +226,6 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const parts: string[] = [];
 
     const wordingPending = String(specialist?.wording_choice_pending || "") === "true";
-    const suppressRefinedAppend = String(specialist?.__suppress_refined_append || "").trim() === "true";
     const wordingMode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
     const wordingSuggestion = stripMarkupPreserveLines(
       String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "")
@@ -239,7 +238,16 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         .trim();
     const suggestionNorm = normalizeLine(wordingSuggestion);
     const contractId = String((specialist as Record<string, unknown>)?.ui_contract_id || "").trim();
-    const contractStepId = contractId.split(":")[0] || "";
+    const contractParts = contractId.split(":");
+    const contractStepId = contractParts[0] || "";
+    const contractStatus = String(contractParts[1] || "").trim().toLowerCase();
+    const isSingleValueConfirmStep = new Set(["purpose", "bigwhy", "role", "entity", "targetgroup"]).has(
+      contractStepId
+    );
+    const isSingleValueValidOutput = contractStatus === "valid_output" && isSingleValueConfirmStep;
+    const suppressRefinedAppend =
+      String(specialist?.__suppress_refined_append || "").trim() === "true" ||
+      isSingleValueValidOutput;
     const menuId = deps.parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
     const statementLines = Array.isArray(specialist?.statements)
       ? (specialist.statements as string[]).map((line) => String(line || "").trim()).filter(Boolean)
@@ -510,7 +518,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       selectionForCurrentValue,
       currentSelectedValue
     );
-    if (selectionCurrentParts.heading && selectionCurrentParts.body) {
+    if (!isSingleValueValidOutput && selectionCurrentParts.heading && selectionCurrentParts.body) {
       const msgComparable = deps.canonicalizeComparableText(msg);
       const headingComparable = deps.canonicalizeComparableText(selectionCurrentParts.heading);
       const bodyComparable = deps.canonicalizeComparableText(selectionCurrentParts.body);
@@ -529,6 +537,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       }
     }
     const currentHeading = (() => {
+      if (isSingleValueValidOutput) return "";
       if (wordingPending) return "";
       if (!msg || !refined) return "";
       const heading = selectionParts.heading || selectionCurrentParts.heading;
