@@ -742,11 +742,15 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
 
   const buildRoutingContext = (routeOrText: string): RunStepRuntimeRoutingContext => {
     const actionCodeRaw = routing.getActionCodeRaw();
+    const intentType = routing.deriveIntentTypeForRouting(actionCodeRaw, routeOrText);
+    const state = routing.getState() as Record<string, unknown>;
+    state.__turn_last_routing_action_code = actionCodeRaw;
+    state.__turn_last_routing_intent_type = intentType;
     return {
       enabled: routing.modelRoutingEnabled,
       shadow: routing.modelRoutingShadow,
       actionCode: actionCodeRaw,
-      intentType: routing.deriveIntentTypeForRouting(actionCodeRaw, routeOrText),
+      intentType,
     };
   };
 

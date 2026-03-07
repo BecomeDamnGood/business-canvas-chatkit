@@ -216,6 +216,11 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
     const hasRenderableContent = String(canonicalViewDecisionRaw?.has_renderable_content || "false") === "true";
     const hasStartAction = String(canonicalViewDecisionRaw?.has_start_action || "false") === "true";
     const invariantOk = String(canonicalViewDecisionRaw?.invariant_ok || "false") === "true";
+    const interactionState = String(canonicalViewDecisionRaw?.interaction_state || "").trim().toLowerCase();
+    const isMutable = String(canonicalViewDecisionRaw?.is_mutable || "false") === "true";
+    const editableFields = Array.isArray(canonicalViewDecisionRaw?.editable_fields)
+      ? canonicalViewDecisionRaw?.editable_fields.map((field) => String(field || "").trim()).filter(Boolean)
+      : [];
     const decisionContext = createLogContext(finalResponse, stateForDecision);
     logStructuredEvent("info", "run_step_canonical_view_emitted", decisionContext, {
       started,
@@ -226,6 +231,9 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       ).trim().toLowerCase(),
       has_renderable_content: hasRenderableContent,
       has_start_action: hasStartAction,
+      interaction_state: interactionState,
+      is_mutable: isMutable,
+      editable_fields_count: editableFields.length,
       invariant_ok: invariantOk,
       reason_code: String(canonicalViewDecisionRaw?.reason_code || "").trim(),
       host_widget_session_id_present: String(stateForDecision.host_widget_session_id || "") ? "true" : "false",
@@ -261,6 +269,34 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
 
       const tokenUsage = deps.resolveTurnTokenUsage();
       const model = tokenUsage.models.length > 0 ? tokenUsage.models.join(",") : deps.baselineModel;
+      const llmMetaRows = Array.isArray((responseState as any).__llm_call_meta)
+        ? ((responseState as any).__llm_call_meta as Record<string, unknown>[])
+        : [];
+      const lastLlmMeta = llmMetaRows.length > 0 ? llmMetaRows[llmMetaRows.length - 1] : null;
+      const actionCode = String(
+          (responseState as any).__turn_last_routing_action_code ||
+          (responseState as any).__last_llm_action_code ||
+          (responseState as any).__last_clicked_action_for_contract ||
+          ""
+      ).trim();
+      const intentType = String(
+        (responseState as any).__last_llm_intent_type ||
+          (responseState as any).__turn_last_routing_intent_type ||
+          ""
+      ).trim();
+      const routingSource = String(
+        (lastLlmMeta?.model_source as string) ||
+          (responseState as any).__last_llm_model_source ||
+          (responseState as any).__last_llm_routing_source ||
+          ""
+      ).trim();
+      const latencyRaw = Number(
+        (lastLlmMeta?.elapsed_ms as number | undefined) ??
+          (responseState as any).__last_llm_elapsed_ms
+      );
+      const latencyMs =
+        Number.isFinite(latencyRaw) && latencyRaw >= 0 ? Math.round(latencyRaw) : null;
+      const companyName = String((responseState as any).business_name || "").trim() || "UnknownCompany";
       const appendResult = appendSessionTokenLog({
         sessionId,
         sessionStartedAt,
@@ -271,6 +307,11 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
           step_id: String((finalResponse as any).current_step_id || (responseState as any).current_step || ""),
           specialist: String((finalResponse as any).active_specialist || (responseState as any).active_specialist || ""),
           model,
+          action_code: actionCode,
+          intent_type: intentType,
+          routing_source: routingSource,
+          latency_ms: latencyMs,
+          company_name: companyName,
           attempts: tokenUsage.attempts,
           usage: tokenUsage.usage,
         },

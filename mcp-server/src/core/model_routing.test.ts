@@ -160,3 +160,86 @@ test("invalid or missing config safely falls back to baseline model", () => {
   assert.equal(invalid.source, "config_unavailable");
   assert.equal(invalid.applied, false);
 });
+
+test("model routing applies fallback chain when primary model is unavailable", () => {
+  __clearModelRoutingCacheForTests();
+  const envVar = "BSC_AVAILABLE_MODELS_TEST";
+  const previous = process.env[envVar];
+  process.env[envVar] = "gpt-4o-mini";
+  try {
+    const configPath = writeConfig({
+      version: "test-v4",
+      enabled: true,
+      default_model: "gpt-4.1-mini",
+      budget_model: "gpt-4o-mini",
+      translation_model: "gpt-4o-mini",
+      availability: {
+        mode: "env_allowlist",
+        env_var: envVar,
+      },
+      default_fallback_chain: ["gpt-4o-mini"],
+      fallback_by_source: {},
+      fallback_by_model: {},
+      fallback_by_action_code: {
+        ACTION_X: ["gpt-4o-mini"],
+      },
+      fallback_by_intent: {},
+      fallback_by_specialist: {},
+      hard_pinned_4_1: { action_codes: [], intents: [], specialists: [] },
+      by_action_code: { ACTION_X: "gpt-4.1" },
+      by_intent: {},
+      by_specialist: {},
+    });
+
+    const routed = resolveModelForCall({
+      fallbackModel: "gpt-4.1-mini",
+      routingEnabled: true,
+      actionCode: "ACTION_X",
+      configPath,
+    });
+    assert.equal(routed.candidate_model, "gpt-4.1");
+    assert.equal(routed.model, "gpt-4o-mini");
+    assert.equal(routed.selected_source, "fallback");
+    assert.equal(routed.availability_checked, true);
+    assert.ok(routed.fallback_chain.includes("gpt-4o-mini"));
+  } finally {
+    if (previous === undefined) delete process.env[envVar];
+    else process.env[envVar] = previous;
+  }
+});
+
+test("model routing keeps primary model when availability allowlist is not configured", () => {
+  __clearModelRoutingCacheForTests();
+  const configPath = writeConfig({
+    version: "test-v5",
+    enabled: true,
+    default_model: "gpt-4.1-mini",
+    budget_model: "gpt-4o-mini",
+    translation_model: "gpt-4o-mini",
+    availability: {
+      mode: "env_allowlist",
+      env_var: "UNSET_ENV_VAR_FOR_ROUTING_TEST",
+    },
+    default_fallback_chain: ["gpt-4.1", "gpt-4o-mini"],
+    fallback_by_source: {},
+    fallback_by_model: {},
+    fallback_by_action_code: {},
+    fallback_by_intent: {},
+    fallback_by_specialist: {},
+    hard_pinned_4_1: { action_codes: [], intents: [], specialists: [] },
+    by_action_code: { ACTION_X: "gpt-4.1-mini" },
+    by_intent: {},
+    by_specialist: {},
+  });
+
+  const routed = resolveModelForCall({
+    fallbackModel: "gpt-4.1",
+    routingEnabled: true,
+    actionCode: "ACTION_X",
+    configPath,
+  });
+  assert.equal(routed.candidate_model, "gpt-4.1-mini");
+  assert.equal(routed.model, "gpt-4.1-mini");
+  assert.equal(routed.selected_source, "primary");
+  assert.equal(routed.availability_checked, false);
+});

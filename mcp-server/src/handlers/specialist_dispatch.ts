@@ -272,7 +272,14 @@ export async function callSpecialistStrict(
     };
     const specialistResult =
       specialist === STEP_0_SPECIALIST
-        ? { ...base, business_name: "TBD", step_0: "" }
+        ? {
+            ...base,
+            business_name: "TBD",
+            step_0: "",
+            step0_interaction_state: "step0_editing",
+            is_mutable: true,
+            editable_fields: ["business_name"],
+          }
         : base;
     return {
       specialistResult,

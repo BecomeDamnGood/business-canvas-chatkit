@@ -14,6 +14,11 @@ export type SessionTurnLogEntry = {
   step_id: string;
   specialist: string;
   model: string;
+  action_code?: string;
+  intent_type?: string;
+  routing_source?: string;
+  latency_ms?: number | null;
+  company_name?: string;
   attempts: number;
   usage: SessionTurnTokenUsage;
 };
@@ -46,12 +51,22 @@ function normalizeToken(value: unknown): number | null {
 }
 
 function normalizeTurn(turn: SessionTurnLogEntry): SessionTurnLogEntry {
+  const latencyMsRaw = (turn as any)?.latency_ms;
+  const latencyMs =
+    typeof latencyMsRaw === "number" && Number.isFinite(latencyMsRaw) && latencyMsRaw >= 0
+      ? Math.round(latencyMsRaw)
+      : null;
   return {
     turn_id: String(turn.turn_id || "").trim(),
     timestamp: String(turn.timestamp || new Date().toISOString()).trim() || new Date().toISOString(),
     step_id: String(turn.step_id || "").trim() || "unknown",
     specialist: String(turn.specialist || "").trim() || "unknown",
     model: String(turn.model || "").trim() || "unknown",
+    action_code: String((turn as any)?.action_code || "").trim(),
+    intent_type: String((turn as any)?.intent_type || "").trim(),
+    routing_source: String((turn as any)?.routing_source || "").trim(),
+    latency_ms: latencyMs,
+    company_name: String((turn as any)?.company_name || "").trim() || "UnknownCompany",
     attempts: Number.isFinite(turn.attempts) ? Math.max(0, Math.trunc(turn.attempts)) : 0,
     usage: {
       input_tokens: normalizeToken(turn.usage?.input_tokens),
@@ -116,6 +131,10 @@ function parseDataFromFile(filePath: string): SessionLogData | null {
 }
 
 function formatToken(value: number | null): string {
+  return value === null ? "unknown" : String(value);
+}
+
+function formatNullableNumber(value: number | null): string {
   return value === null ? "unknown" : String(value);
 }
 
@@ -206,10 +225,10 @@ function renderMarkdown(data: SessionLogData): string {
   const turnRows = turns.length
     ? turns
       .map((turn) => {
-        return `| ${turn.timestamp} | ${turn.turn_id} | ${turn.step_id} | ${turn.specialist} | ${turn.model} | ${turn.attempts} | ${formatToken(turn.usage.input_tokens)} | ${formatToken(turn.usage.output_tokens)} | ${formatToken(turn.usage.total_tokens)} |`;
+        return `| ${turn.timestamp} | ${turn.turn_id} | ${turn.step_id} | ${turn.specialist} | ${turn.model} | ${turn.action_code} | ${turn.intent_type} | ${turn.routing_source} | ${formatNullableNumber(turn.latency_ms ?? null)} | ${turn.company_name} | ${turn.attempts} | ${formatToken(turn.usage.input_tokens)} | ${formatToken(turn.usage.output_tokens)} | ${formatToken(turn.usage.total_tokens)} |`;
       })
       .join("\n")
-    : "| - | - | - | - | - | - | - | - | - |";
+    : "| - | - | - | - | - | - | - | - | - | - | - | - | - | - |";
 
   const stepRows = stepTotals.size
     ? [...stepTotals.entries()]
@@ -232,8 +251,8 @@ function renderMarkdown(data: SessionLogData): string {
     "",
     "## Turn Log",
     "",
-    "| timestamp | turn_id | step | specialist | model | attempts | input_tokens | output_tokens | total_tokens |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| timestamp | turn_id | step | specialist | model | action_code | intent_type | routing_source | latency_ms | company_name | attempts | input_tokens | output_tokens | total_tokens |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     turnRows,
     "",
     "## Step Summary",
@@ -249,6 +268,77 @@ function renderMarkdown(data: SessionLogData): string {
     `- total_tokens: ${formatToken(grand.total_tokens)}`,
     "",
   ].join("\n");
+}
+
+function parseSummaryTimestamp(iso: string): string {
+  const parsed = new Date(iso);
+  const d = Number.isFinite(parsed.getTime()) ? parsed : new Date();
+  const yyyy = String(d.getUTCFullYear());
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mi = String(d.getUTCMinutes()).padStart(2, "0");
+  const ss = String(d.getUTCSeconds()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss} UTC`;
+}
+
+function aggregateModelsForSummary(turns: SessionTurnLogEntry[]): {
+  modelParts: string[];
+  totalTokens: number | null;
+  companyName: string;
+} {
+  const byModel = new Map<string, { total: number; unknown: boolean }>();
+  let companyName = "UnknownCompany";
+  let totalTokens = 0;
+  let totalUnknown = false;
+  for (const turn of turns) {
+    if (companyName === "UnknownCompany") {
+      const candidate = String(turn.company_name || "").trim();
+      if (candidate) companyName = candidate;
+    }
+    const model = String(turn.model || "unknown").trim() || "unknown";
+    const current = byModel.get(model) || { total: 0, unknown: false };
+    if (turn.usage.total_tokens === null) current.unknown = true;
+    else current.total += turn.usage.total_tokens;
+    byModel.set(model, current);
+    if (turn.usage.total_tokens === null) totalUnknown = true;
+    else totalTokens += turn.usage.total_tokens;
+  }
+  const modelParts = [...byModel.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([model, value]) => `${model} <${value.unknown ? "unknown" : String(value.total)}>`);
+  return {
+    modelParts,
+    totalTokens: totalUnknown ? null : totalTokens,
+    companyName,
+  };
+}
+
+function refreshTempSessionSummary(logDir: string): void {
+  const resolvedDir = path.isAbsolute(logDir) ? logDir : path.resolve(process.cwd(), logDir);
+  const files = fs.existsSync(resolvedDir)
+    ? fs.readdirSync(resolvedDir).filter((name) => /^session-\d{4}-\d{2}-\d{2}-\d{6}-.+\.md$/i.test(name))
+    : [];
+  const entries = files
+    .map((name) => {
+      const filePath = path.join(resolvedDir, name);
+      const parsed = parseDataFromFile(filePath);
+      if (!parsed) return null;
+      const turns = [...parsed.turns].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      const summary = aggregateModelsForSummary(turns);
+      const timestamp = parseSummaryTimestamp(parsed.started_at);
+      const models = summary.modelParts.length > 0 ? summary.modelParts.join(" - ") : "unknown <unknown>";
+      const totalPart = `Total tokens <${summary.totalTokens === null ? "unknown" : String(summary.totalTokens)}>`;
+      return {
+        started_at: parsed.started_at,
+        line: `${timestamp} - ${summary.companyName || "UnknownCompany"} - ${models} - ${totalPart}`,
+      };
+    })
+    .filter((item): item is { started_at: string; line: string } => Boolean(item))
+    .sort((left, right) => left.started_at.localeCompare(right.started_at));
+  const summaryFilePath = path.join(resolvedDir, "TEMP-session-summary.log");
+  const body = ["TEMP - remove before go-live", ...entries.map((entry) => entry.line), ""].join("\n");
+  fs.writeFileSync(summaryFilePath, body, "utf-8");
 }
 
 export function appendSessionTokenLog(params: AppendSessionTokenLogParams): AppendSessionTokenLogResult {
@@ -281,6 +371,7 @@ export function appendSessionTokenLog(params: AppendSessionTokenLogParams): Appe
   }
 
   fs.writeFileSync(filePath, renderMarkdown(base), "utf-8");
+  refreshTempSessionSummary(path.dirname(filePath));
   return { filePath, duplicate };
 }
 

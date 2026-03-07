@@ -449,10 +449,7 @@
       .step-item.active .step-item-label {
         color: var(--orange);
         font-weight: 500;
-        position: absolute;
-        bottom: calc(100% + 5px);
-        left: 0;
-        right: auto;
+        position: static;
         z-index: 2;
         pointer-events: none;
         text-align: left;
@@ -461,8 +458,7 @@
         text-overflow: clip;
       }
       .step-item--presentation.active .step-item-label {
-        left: auto;
-        right: 0;
+        align-self: flex-end;
         text-align: right;
       }
       

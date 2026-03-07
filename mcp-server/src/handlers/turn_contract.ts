@@ -50,8 +50,11 @@ type FinalizeContractInternalsOptions = UiParityDeps & {
 export type CanonicalViewDecisionSnapshot = {
   started: boolean;
   ui_view_mode: string;
+  interaction_state: string;
   has_renderable_content: boolean;
   has_start_action: boolean;
+  is_mutable: boolean;
+  editable_fields: string[];
   invariant_ok: boolean;
   reason_code: string;
 };
@@ -60,6 +63,14 @@ function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function normalizeEditableFields(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const values = raw
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return Array.from(new Set(values));
 }
 
 const UI_ACTION_ROLES = new Set<UiActionRole>([
@@ -369,6 +380,13 @@ function applyCanonicalWidgetState(
   const currentStep = String(nextResponse.current_step_id || state.current_step || STEP_0_ID).trim() || STEP_0_ID;
   const started = String(state.started || "").trim().toLowerCase() === "true";
   const interactiveHasRenderableContent = hasRenderableResponseContent(nextResponse);
+  const specialist = toRecord(nextResponse.specialist);
+  const step0InteractionState = String(specialist.step0_interaction_state || "").trim().toLowerCase();
+  const step0IsMutableRaw = specialist.is_mutable;
+  const step0IsMutable =
+    step0IsMutableRaw === true ||
+    String(step0IsMutableRaw || "").trim().toLowerCase() === "true";
+  const step0EditableFields = normalizeEditableFields(specialist.editable_fields);
   let startActionAvailable = hasStartAction(nextResponse, state);
   if (currentStep === STEP_0_ID && !started && !startActionAvailable) {
     state.ui_action_start = "ACTION_START";
@@ -384,11 +402,17 @@ function applyCanonicalWidgetState(
     uiGateStatus: String(state.ui_gate_status || ""),
     bootstrapPhase: String(state.bootstrap_phase || ""),
     variant: String(uiView.variant || "").trim(),
+    step0InteractionState,
+    isMutable: step0IsMutable,
+    editableFields: step0EditableFields,
   });
 
   ui.view = {
     mode: canonical.mode,
+    interaction_state: canonical.interaction_state,
     waiting_locale: false,
+    is_mutable: canonical.is_mutable,
+    editable_fields: canonical.editable_fields,
     ...(canonical.variant ? { variant: canonical.variant } : {}),
   };
   if (String(state.ui_gate_status || "").trim().toLowerCase() === "failed") {
@@ -400,8 +424,11 @@ function applyCanonicalWidgetState(
   return {
     started,
     ui_view_mode: canonical.mode,
+    interaction_state: canonical.interaction_state,
     has_renderable_content: canonical.has_renderable_content,
     has_start_action: canonical.has_start_action,
+    is_mutable: canonical.is_mutable,
+    editable_fields: canonical.editable_fields,
     invariant_ok: canonical.invariant_ok,
     reason_code: canonical.reason_code,
   };

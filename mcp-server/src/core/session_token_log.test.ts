@@ -64,11 +64,20 @@ test("session token log creates markdown file and appends turns", () => {
   const parsed = __parseSessionLogDataForTests(first.filePath);
   assert.ok(parsed, "machine marker should be parsable");
   assert.equal(parsed?.turns.length, 2);
+  assert.equal(parsed?.turns[0]?.company_name, "UnknownCompany");
 
   const markdown = fs.readFileSync(first.filePath, "utf-8");
   assert.match(markdown, /\| step_0 \| 1 \| 120 \| 40 \| 160 \|/);
   assert.match(markdown, /\| dream \| 1 \| 200 \| 100 \| 300 \|/);
   assert.match(markdown, /- total_tokens: 460/);
+
+  const summaryPath = path.join(dir, "TEMP-session-summary.log");
+  const summary = fs.readFileSync(summaryPath, "utf-8");
+  assert.match(summary, /^TEMP - remove before go-live/m);
+  assert.match(
+    summary,
+    /2026-02-17 10:56:00 UTC - UnknownCompany - gpt-4\.1 <300> - gpt-4o-mini <160> - Total tokens <460>/
+  );
 });
 
 test("session token log is idempotent for duplicate turn_id", () => {
@@ -146,4 +155,8 @@ test("session token log shows unknown when provider usage is missing", () => {
   const markdown = fs.readFileSync(result.filePath, "utf-8");
   assert.match(markdown, /\| bigwhy \| 1 \| unknown \| unknown \| unknown \|/);
   assert.match(markdown, /- total_tokens: unknown/);
+
+  const summaryPath = path.join(dir, "TEMP-session-summary.log");
+  const summary = fs.readFileSync(summaryPath, "utf-8");
+  assert.match(summary, /2026-02-17 12:00:00 UTC - UnknownCompany - gpt-4\.1 <unknown> - Total tokens <unknown>/);
 });

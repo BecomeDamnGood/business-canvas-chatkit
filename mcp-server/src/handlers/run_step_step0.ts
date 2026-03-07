@@ -1,6 +1,10 @@
 import type { CanvasState } from "../core/state.js";
 
 type Step0Parsed = { venture: string; name: string; status: string };
+type Step0TurnIntent = "confirm_start" | "change_name" | "other";
+type Step0InteractionState = "step0_ready" | "step0_editing";
+
+const STEP0_EDITABLE_FIELDS = ["business_name"] as const;
 
 export type Step0Seed = {
   venture: string;
@@ -84,6 +88,73 @@ function inferVentureFromInput(rawInput: string): string {
   return "";
 }
 
+function normalizeIntentInput(rawInput: string): string {
+  return String(rawInput || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectStep0TurnIntent(rawInput: string): Step0TurnIntent {
+  const normalized = normalizeIntentInput(rawInput);
+  if (!normalized) return "other";
+  const tokens = normalized.split(" ").filter(Boolean);
+  if (tokens.length > 0 && tokens.length <= 10) {
+    const first = tokens[0];
+    if (["ja", "yes", "ok", "okay", "zeker", "prima", "ready", "klaar", "start"].includes(first)) {
+      return "confirm_start";
+    }
+    const hasProgress = tokens.some((token) =>
+      ["start", "begin", "beginnen", "doorgaan", "verder", "continue", "proceed"].includes(token)
+    );
+    const hasConfirm = tokens.some((token) =>
+      ["ja", "yes", "zeker", "klaar", "ready", "ok", "okay"].includes(token)
+    );
+    if (hasProgress && hasConfirm) return "confirm_start";
+  }
+
+  const changeNamePatterns = [
+    /\b(?:name|naam)\s*(?:is|=|:)\s+\S+/i,
+    /\b(?:called|named|genaamd|heet)\s+\S+/i,
+    /\b(?:my name is|de naam is|het heet|its name is|it is called)\b/i,
+  ];
+  if (changeNamePatterns.some((pattern) => pattern.test(normalized))) return "change_name";
+  return "other";
+}
+
+function normalizeBusinessName(rawName: string): string {
+  const normalized = normalizeSeedToken(rawName);
+  if (!normalized) return "";
+  return normalized;
+}
+
+function normalizedNameEquals(left: string, right: string): boolean {
+  return normalizeBusinessName(left).toLowerCase() === normalizeBusinessName(right).toLowerCase();
+}
+
+function toStep0Status(rawStatus: string): "existing" | "starting" {
+  return String(rawStatus || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+}
+
+function composeStep0Final(ventureRaw: string, nameRaw: string, statusRaw: string): string {
+  const venture = normalizeSeedToken(ventureRaw) || "business";
+  const name = normalizeBusinessName(nameRaw) || "TBD";
+  const status = toStep0Status(statusRaw);
+  return `Venture: ${venture} | Name: ${name} | Status: ${status}`;
+}
+
+function applyStep0InteractionMetadata(next: Record<string, unknown>, state: Step0InteractionState): void {
+  next.step0_interaction_state = state;
+  if (state === "step0_editing") {
+    next.is_mutable = true;
+    next.editable_fields = [...STEP0_EDITABLE_FIELDS];
+    return;
+  }
+  next.is_mutable = false;
+  next.editable_fields = [];
+}
+
 export function inferStep0SeedFromInitialMessage(rawInput: string): Step0Seed | null {
   const raw = String(rawInput || "").replace(/\s+/g, " ").trim();
   const input = normalizeSeedToken(rawInput);
@@ -150,7 +221,7 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
     const rawMessage = String(next.message || "").trim();
     const cleanedMessage = deps.stripChoiceInstructionNoise(rawMessage);
     const hasMessage = Boolean(cleanedMessage);
-    return {
+    const output = {
       ...next,
       action: "ASK",
       message: hasMessage ? cleanedMessage : deps.step0CardDescForState(state),
@@ -163,6 +234,8 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       step_0: "",
       is_offtopic: true,
     };
+    applyStep0InteractionMetadata(output, "step0_editing");
+    return output;
   }
 
   function normalizeStep0AskDisplayContract(stepId: string, specialist: any, state: CanvasState, userInput = ""): any {
@@ -184,7 +257,7 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
     if (isBenMeta) {
       if (hasStep0) {
         const parsed = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
-        return {
+        const output = {
           ...next,
           action: "ASK",
           message: deps.buildBenProfileMessage(state),
@@ -198,6 +271,8 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
           feedback_reason_text: "",
           is_offtopic: true,
         };
+        applyStep0InteractionMetadata(output, "step0_ready");
+        return output;
       }
       return normalizeStep0OfftopicToAsk(
         {
@@ -210,21 +285,62 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
       );
     }
     if (hasStep0 && (action === "ASK" || action === "ESCAPE")) {
-      const parsed = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
+      const parsedFromState = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
+      const userIntent = detectStep0TurnIntent(normalizedInput);
+      const incomingStep0Raw = String(next.step_0 || "").trim();
+      const incomingHasValidStep0 = hasValidStep0Final(incomingStep0Raw);
+      const incomingParsed = incomingHasValidStep0
+        ? parseStep0Final(incomingStep0Raw, String(next.business_name || parsedFromState.name || "TBD"))
+        : null;
+      const incomingBusinessName = normalizeBusinessName(String(next.business_name || ""));
+      const candidateName = normalizeBusinessName(incomingParsed?.name || incomingBusinessName);
+      const candidateStep0 = incomingParsed
+        ? composeStep0Final(incomingParsed.venture, incomingParsed.name, incomingParsed.status)
+        : (candidateName
+            ? composeStep0Final(parsedFromState.venture, candidateName, parsedFromState.status)
+            : "");
+      const hasTupleMutation =
+        Boolean(candidateStep0) &&
+        normalizeIntentInput(candidateStep0) !== normalizeIntentInput(step0FinalRaw);
+      const hasNameMutation =
+        Boolean(candidateName) &&
+        candidateName.toLowerCase() !== "tbd" &&
+        !normalizedNameEquals(candidateName, parsedFromState.name);
+      const shouldApplyEdit =
+        userIntent === "change_name" && (hasNameMutation || hasTupleMutation);
+      if (shouldApplyEdit && candidateStep0) {
+        const parsedEdit = parseStep0Final(candidateStep0, parsedFromState.name || "TBD");
+        next.action = "ASK";
+        next.question = deps.step0ReadinessQuestion(state, parsedEdit);
+        next.business_name = parsedEdit.name || "TBD";
+        next.step_0 = candidateStep0;
+        next.wording_choice_pending = "false";
+        next.wording_choice_selected = "";
+        next.wording_choice_list_semantics = "delta";
+        next.feedback_reason_key = "";
+        next.feedback_reason_text = "";
+        if (!String(next.message || "").trim()) {
+          next.message = deps.step0CardDescForState(state);
+        }
+        applyStep0InteractionMetadata(next, "step0_editing");
+        return next;
+      }
       next.action = "ASK";
-      next.question = deps.step0ReadinessQuestion(state, parsed);
-      next.business_name = parsed.name || "TBD";
+      next.question = deps.step0ReadinessQuestion(state, parsedFromState);
+      next.business_name = parsedFromState.name || "TBD";
       next.step_0 = step0FinalRaw;
       next.wording_choice_pending = "false";
       next.wording_choice_selected = "";
       next.wording_choice_list_semantics = "delta";
       next.feedback_reason_key = "";
       next.feedback_reason_text = "";
+      applyStep0InteractionMetadata(next, "step0_ready");
       return next;
     }
     if (String(next.action || "").trim() !== "ASK") return next;
     next.message = deps.step0CardDescForState(state);
     next.question = deps.step0QuestionForState(state);
+    applyStep0InteractionMetadata(next, "step0_editing");
     return next;
   }
 

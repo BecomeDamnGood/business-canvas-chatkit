@@ -5,6 +5,9 @@ function routeToIntent(route: string): StepIntent {
   if (!normalized) return { type: "SUBMIT_TEXT", text: "", context: "free_text" };
   if (normalized.includes("FINISH_LATER")) return { type: "FINISH_LATER" };
   if (normalized.includes("CONTINUE")) return { type: "CONTINUE" };
+  if (normalized.includes("EXPLAIN") || normalized.includes("GIVE_EXAMPLE")) {
+    return { type: "REQUEST_EXPLANATION", topic: normalized };
+  }
   if (normalized.includes("START_EXERCISE")) {
     return { type: "START_EXERCISE", exerciseType: "dream_builder" };
   }

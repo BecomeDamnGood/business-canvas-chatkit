@@ -1,9 +1,79 @@
 {
-  "version": "v1",
+  "version": "v2_fallback_availability",
   "enabled": true,
-  "default_model": "gpt-4.1",
+  "default_model": "gpt-4.1-mini",
   "budget_model": "gpt-4o-mini",
   "translation_model": "gpt-4o-mini",
+  "availability": {
+    "mode": "env_allowlist",
+    "env_var": "BSC_AVAILABLE_MODELS"
+  },
+  "default_fallback_chain": [
+    "gpt-4.1",
+    "gpt-4o-mini"
+  ],
+  "fallback_by_source": {
+    "hard_pinned_4_1": [
+      "gpt-4.1-mini",
+      "gpt-4o-mini"
+    ],
+    "action_code": [
+      "gpt-4.1-mini",
+      "gpt-4.1",
+      "gpt-4o-mini"
+    ],
+    "intent": [
+      "gpt-4.1-mini",
+      "gpt-4.1"
+    ],
+    "specialist": [
+      "gpt-4.1-mini",
+      "gpt-4.1"
+    ],
+    "default": [
+      "gpt-4.1",
+      "gpt-4o-mini"
+    ],
+    "translation_model": [
+      "gpt-4.1-mini",
+      "gpt-4.1"
+    ]
+  },
+  "fallback_by_model": {
+    "gpt-4.1": [
+      "gpt-4.1-mini",
+      "gpt-4o-mini"
+    ],
+    "gpt-4.1-mini": [
+      "gpt-4.1",
+      "gpt-4o-mini"
+    ],
+    "gpt-4o-mini": [
+      "gpt-4.1-mini",
+      "gpt-4.1"
+    ]
+  },
+  "fallback_by_action_code": {
+    "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES": [
+      "gpt-4.1-mini"
+    ],
+    "ACTION_PRESENTATION_MAKE": [
+      "gpt-4.1-mini"
+    ]
+  },
+  "fallback_by_intent": {
+    "SUBMIT_SCORES": [
+      "gpt-4.1-mini"
+    ]
+  },
+  "fallback_by_specialist": {
+    "DreamExplainer": [
+      "gpt-4.1-mini"
+    ],
+    "Presentation": [
+      "gpt-4.1-mini"
+    ]
+  },
   "hard_pinned_4_1": {
     "action_codes": [
       "ACTION_CONFIRM_CONTINUE",

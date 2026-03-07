@@ -285,6 +285,16 @@ export async function runStepRuntimeExecute(
   clickedLabelForNoRepeat = preflightLayer.clickedLabelForNoRepeat;
   clickedActionCodeForNoRepeat = preflightLayer.clickedActionCodeForNoRepeat;
   blockingMarkerClass = preflightLayer.blockingMarkerClass;
+  (state as Record<string, unknown>).__turn_last_routing_action_code = String(actionCodeRaw || "");
+  (state as Record<string, unknown>).__turn_last_routing_intent_type = "";
+  (state as Record<string, unknown>).__llm_call_meta = [];
+  (state as Record<string, unknown>).__last_llm_routing_source = "";
+  (state as Record<string, unknown>).__last_llm_candidate_model = "";
+  (state as Record<string, unknown>).__last_llm_selected_model = "";
+  (state as Record<string, unknown>).__last_llm_elapsed_ms = "";
+  (state as Record<string, unknown>).__last_llm_model_source = "";
+  (state as Record<string, unknown>).__last_llm_action_code = "";
+  (state as Record<string, unknown>).__last_llm_intent_type = "";
 
   const surfaceCorrection = await correctUserInputSurface({
     model,
