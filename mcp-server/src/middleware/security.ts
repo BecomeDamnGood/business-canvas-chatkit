@@ -33,7 +33,7 @@ const DEFAULT_CSP_OPTIONS: CSPOptions = {
   },
 };
 
-function buildCSPHeader(options: CSPOptions = DEFAULT_CSP_OPTIONS): string {
+export function buildCSPHeader(options: CSPOptions = DEFAULT_CSP_OPTIONS): string {
   const directives: string[] = [];
 
   // Default source
@@ -77,7 +77,7 @@ function buildCSPHeader(options: CSPOptions = DEFAULT_CSP_OPTIONS): string {
   directives.push(`connect-src ${connectSrc.join(" ")}`);
 
   // Image sources
-  const imgSrc: string[] = ["*", "data:", "blob:", "https:", "http:"];
+  const imgSrc: string[] = ["'self'", "data:", "blob:", "https:"];
   if (options.allowedDomains?.images) {
     imgSrc.push(...options.allowedDomains.images);
   }
@@ -85,6 +85,9 @@ function buildCSPHeader(options: CSPOptions = DEFAULT_CSP_OPTIONS): string {
 
   // Object sources (for embeds)
   directives.push("object-src 'none'");
+
+  // Frames are not needed inside the widget runtime.
+  directives.push("frame-src 'none'");
 
   // Base URI
   directives.push("base-uri 'self'");
@@ -98,6 +101,9 @@ function buildCSPHeader(options: CSPOptions = DEFAULT_CSP_OPTIONS): string {
   } else {
     directives.push("frame-ancestors 'none'"); // Default: block all
   }
+
+  directives.push("upgrade-insecure-requests");
+  directives.push("block-all-mixed-content");
 
   return directives.join("; ");
 }
@@ -114,8 +120,9 @@ export function applySecurityHeaders(res: any, options?: CSPOptions): void {
     res.setHeader("Content-Security-Policy", csp);
     res.setHeader("X-Content-Type-Options", "nosniff");
     // X-Frame-Options removed: CSP frame-ancestors has precedence and is more flexible
-    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("X-XSS-Protection", "0");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   }
 }
 

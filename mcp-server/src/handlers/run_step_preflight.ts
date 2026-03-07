@@ -142,6 +142,32 @@ type NormalizeActionCodeResult = {
   clickedActionCodeForNoRepeat: string;
 };
 
+const SESSION_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_SESSION_TURN_INDEX = 1_000_000;
+
+function normalizeIncomingSessionId(raw: unknown): string {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  return SESSION_ID_RE.test(value) ? value : "";
+}
+
+function normalizeIncomingSessionStartedAt(raw: unknown): string {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (!Number.isFinite(parsed.getTime())) return "";
+  return parsed.toISOString();
+}
+
+function normalizeIncomingSessionTurnIndex(raw: unknown): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  const normalized = Math.trunc(n);
+  if (normalized > MAX_SESSION_TURN_INDEX) return MAX_SESSION_TURN_INDEX;
+  return normalized;
+}
+
 export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
   function initializeRunStepPreflight(params: InitializePreflightParams): InitializePreflightResult {
     const rawState = (params.args.state ?? {}) as Record<string, unknown>;
@@ -218,15 +244,14 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       }
     }
 
-    const incomingSessionId = String((rawState as any).__session_id || "").trim();
-    const incomingSessionStartedAt = String((rawState as any).__session_started_at || "").trim();
-    const incomingSessionLogFile = String((rawState as any).__session_log_file || "").trim();
-    const incomingSessionTurnIndex = Number((rawState as any).__session_turn_index ?? 0);
+    const incomingSessionId = normalizeIncomingSessionId((rawState as any).__session_id);
+    const incomingSessionStartedAt = normalizeIncomingSessionStartedAt((rawState as any).__session_started_at);
+    const incomingSessionTurnIndex = normalizeIncomingSessionTurnIndex((rawState as any).__session_turn_index);
     if (incomingSessionId) (state as any).__session_id = incomingSessionId;
     if (incomingSessionStartedAt) (state as any).__session_started_at = incomingSessionStartedAt;
-    if (incomingSessionLogFile) (state as any).__session_log_file = incomingSessionLogFile;
-    if (Number.isFinite(incomingSessionTurnIndex) && incomingSessionTurnIndex >= 0) {
-      (state as any).__session_turn_index = Math.trunc(incomingSessionTurnIndex);
+    // __session_log_file is server-owned and never trusted from client state.
+    if (incomingSessionTurnIndex !== null) {
+      (state as any).__session_turn_index = incomingSessionTurnIndex;
     }
     if (!String((state as any).__session_id || "").trim()) {
       (state as any).__session_id = crypto.randomUUID();

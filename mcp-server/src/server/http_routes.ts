@@ -63,6 +63,11 @@ const httpServer = async (req: any, res: any) => {
 
   // OpenAI Apps Challenge endpoint (for App Store submission verification)
   if (req.method === "GET" && url.pathname === OPENAI_APPS_CHALLENGE_PATH) {
+    if (!OPENAI_APPS_CHALLENGE_TOKEN) {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("Not found");
+      return;
+    }
     res.writeHead(200, { "content-type": "text/plain" });
     res.end(OPENAI_APPS_CHALLENGE_TOKEN);
     return;

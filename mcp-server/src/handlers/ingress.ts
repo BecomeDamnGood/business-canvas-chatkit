@@ -20,19 +20,31 @@ export const ALLOWED_TRANSIENT_STATE_KEYS = new Set<string>([
   "__ui_telemetry",
   "__ui_phase_by_step",
   "__ui_render_mode_by_step",
-  "__request_id",
-  "__trace_id",
   "__client_action_id",
   "__session_id",
   "__session_started_at",
-  "__session_log_file",
-  "__session_turn_index",
-  "__session_turn_id",
-  "__idempotency_registry_owner",
   "__dream_runtime_mode",
   "__dream_builder_prompt_stage",
   "__last_clicked_action_for_contract",
   "__last_clicked_label_for_contract",
+]);
+
+// Server-owned keys must never be trusted from client-echoed state.
+const SERVER_OWNED_TRANSIENT_STATE_KEYS = new Set<string>([
+  "__request_id",
+  "__trace_id",
+  "__session_log_file",
+  "__session_turn_index",
+  "__session_turn_id",
+  "__idempotency_registry_owner",
+  "__llm_call_meta",
+  "__last_llm_routing_source",
+  "__last_llm_candidate_model",
+  "__last_llm_selected_model",
+  "__last_llm_elapsed_ms",
+  "__last_llm_model_source",
+  "__last_llm_action_code",
+  "__last_llm_intent_type",
 ]);
 
 export function stripUnknownTransientStateKeys(next: Record<string, unknown>): void {
@@ -50,6 +62,11 @@ export function canonicalizeStateForRunStepArgs(raw: unknown): unknown {
   // Never trust client-echoed ui_strings payload as authoritative state.
   if (Object.prototype.hasOwnProperty.call(next, "ui_strings")) {
     delete next.ui_strings;
+  }
+  for (const key of SERVER_OWNED_TRANSIENT_STATE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(next, key)) {
+      delete next[key];
+    }
   }
   stripUnknownTransientStateKeys(next);
   next.language_source = normalizeStateLanguageSource(next.language_source);

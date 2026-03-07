@@ -43,6 +43,7 @@ export type AppendSessionTokenLogResult = {
 };
 
 const DATA_MARKER_PREFIX = "SESSION_LOG_DATA:";
+const SESSION_LOG_FILE_RE = /^session-\d{4}-\d{2}-\d{2}-\d{6}-[a-zA-Z0-9_-]{1,80}\.md$/;
 
 function normalizeToken(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
@@ -102,13 +103,54 @@ function defaultLogDir(): string {
   return path.isAbsolute(raw) ? raw : path.resolve(process.cwd(), raw);
 }
 
-function resolveFilePath(sessionId: string, startedAt: string, explicitPath?: string, explicitDir?: string): string {
-  if (explicitPath && String(explicitPath).trim()) return String(explicitPath).trim();
+function resolveDefaultFilePath(sessionId: string, startedAt: string, explicitDir?: string): string {
   const logDir = explicitDir && String(explicitDir).trim() ? String(explicitDir).trim() : defaultLogDir();
   const resolvedDir = path.isAbsolute(logDir) ? logDir : path.resolve(process.cwd(), logDir);
   const parts = toDateParts(startedAt);
   const fileName = `session-${parts.yyyyMmDd}-${parts.hhmmss}-${safeSessionId(sessionId)}.md`;
   return path.join(resolvedDir, fileName);
+}
+
+function resolveFilePath(sessionId: string, startedAt: string, explicitPath?: string, explicitDir?: string): string {
+  const expected = resolveDefaultFilePath(sessionId, startedAt, explicitDir);
+  if (!explicitPath || !String(explicitPath).trim()) return expected;
+  const candidate = path.resolve(String(explicitPath).trim());
+  const expectedResolved = path.resolve(expected);
+  const expectedBaseName = path.basename(expectedResolved);
+  if (!SESSION_LOG_FILE_RE.test(path.basename(candidate))) return expectedResolved;
+  if (path.basename(candidate) !== expectedBaseName) return expectedResolved;
+  if (explicitDir && path.dirname(candidate) !== path.dirname(expectedResolved)) return expectedResolved;
+  return candidate;
+}
+
+function resolveRetentionDays(): number {
+  const raw = Number(process.env.BSC_SESSION_LOG_RETENTION_DAYS || 30);
+  if (!Number.isFinite(raw) || raw <= 0) return 30;
+  return Math.max(1, Math.trunc(raw));
+}
+
+function purgeExpiredSessionLogs(logDir: string): void {
+  const retentionDays = resolveRetentionDays();
+  const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  const resolvedDir = path.isAbsolute(logDir) ? logDir : path.resolve(process.cwd(), logDir);
+  if (!fs.existsSync(resolvedDir)) return;
+  const names = fs.readdirSync(resolvedDir);
+  for (const name of names) {
+    if (!SESSION_LOG_FILE_RE.test(name)) continue;
+    const filePath = path.join(resolvedDir, name);
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      continue;
+    }
+    if (!Number.isFinite(stat.mtimeMs) || stat.mtimeMs >= cutoffMs) continue;
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      // best-effort purge; ignore unlink failures
+    }
+  }
 }
 
 function parseDataFromFile(filePath: string): SessionLogData | null {
@@ -354,6 +396,7 @@ export function appendSessionTokenLog(params: AppendSessionTokenLogParams): Appe
 
   const filePath = resolveFilePath(sessionId, sessionStartedAt, params.filePath, params.logDir);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  purgeExpiredSessionLogs(path.dirname(filePath));
 
   const existing = parseDataFromFile(filePath);
   const base: SessionLogData =

@@ -31,7 +31,12 @@ function loadDotEnv() {
   }
 }
 
-loadDotEnv();
+const nodeEnv = safeString(process.env.NODE_ENV ?? "").trim().toLowerCase();
+const shouldLoadDotEnv =
+  process.env.LOCAL_DEV === "1" || nodeEnv === "development" || nodeEnv === "test";
+if (shouldLoadDotEnv) {
+  loadDotEnv();
+}
 
 let runStepModule: typeof import("../handlers/run_step.js") | null = null;
 async function getRunStep() {
@@ -57,8 +62,7 @@ const VERSION = safeString(process.env.VERSION ?? "").trim() || "v119";
 const IMAGE_DIGEST = safeString(process.env.IMAGE_DIGEST ?? "").trim();
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
-const OPENAI_APPS_CHALLENGE_TOKEN =
-  process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "A467Dv1LPRa1lxtsLiwJsqHtyqKXDRCIVDnRA2xskw8";
+const OPENAI_APPS_CHALLENGE_TOKEN = safeString(process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "").trim();
 
 const MCP_PATH = "/mcp";
 const UI_RESOURCE_PATH = "/ui/step-card";
@@ -90,6 +94,38 @@ function envFlagEnabled(name: string, fallback: boolean): boolean {
 
 const RUN_STEP_STALE_INGEST_GUARD_V1_ENABLED = envFlagEnabled("RUN_STEP_STALE_INGEST_GUARD_V1", false);
 const RUN_STEP_STALE_REBASE_V1_ENABLED = envFlagEnabled("RUN_STEP_STALE_REBASE_V1", false);
+
+function enforceRuntimeSecretsPolicy(): void {
+  const isProduction = nodeEnv === "production" && !isLocalDev;
+  if (!isProduction) return;
+  const apiKey = safeString(process.env.OPENAI_API_KEY ?? "").trim();
+  if (!apiKey) {
+    throw new Error(
+      "Missing OPENAI_API_KEY in production. Configure runtime secret injection (e.g. secret manager) before startup."
+    );
+  }
+  const explicitSource = safeString(
+    process.env.BSC_RUNTIME_SECRET_SOURCE ?? process.env.OPENAI_API_KEY_SOURCE ?? ""
+  )
+    .trim()
+    .toLowerCase();
+  const inferredSource = process.env.AWS_EXECUTION_ENV ? "aws_secrets_manager" : "";
+  const effectiveSource = explicitSource || inferredSource;
+  const allowedSources = new Set([
+    "aws_secrets_manager",
+    "gcp_secret_manager",
+    "azure_key_vault",
+    "hashicorp_vault",
+    "runtime_secret_injection",
+  ]);
+  if (!effectiveSource || !allowedSources.has(effectiveSource)) {
+    throw new Error(
+      "Invalid or missing runtime secret source in production. Set BSC_RUNTIME_SECRET_SOURCE to an approved secret manager source."
+    );
+  }
+}
+
+enforceRuntimeSecretsPolicy();
 
 function delay(ms: number): Promise<void> {
   if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();

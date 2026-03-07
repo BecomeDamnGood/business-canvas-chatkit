@@ -51,6 +51,13 @@ function createStructuredResponse(
   };
 }
 
+export function __createStructuredResponseForTests(params: {
+  resultForClient: Record<string, unknown>;
+  metaLabel: string;
+}): RunStepTransportResult {
+  return createStructuredResponse(params);
+}
+
 function buildIdempotencyErrorResult(params: {
   context: RunStepContext;
   incomingOrdering: BootstrapOrdering;

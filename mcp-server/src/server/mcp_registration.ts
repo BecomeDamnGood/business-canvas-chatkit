@@ -38,6 +38,15 @@ import {
 import { buildContentFromResult } from "./run_step_model_result.js";
 import { loadUiHtml, runStepHandler } from "./run_step_transport.js";
 
+export const RUN_STEP_TOOL_ANNOTATIONS = Object.freeze({
+  readOnlyHint: false,
+  openWorldHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+});
+
+export const RUN_STEP_TOOL_SECURITY_SCHEMES = Object.freeze([{ type: "noauth" }] as const);
+
 function createAppServer(baseUrl: string): McpServer {
   const widgetOrigin = (() => {
     const raw = String(baseUrl || "").trim();
@@ -101,18 +110,13 @@ function createAppServer(baseUrl: string): McpServer {
       description:
         "Use this tool to open or progress the Business Strategy Canvas Builder UI. Do not generate business content in chat. Do not summarize or explain what the app shows. After calling this tool, output nothing. All questions and interaction happen inside the app UI.",
       inputSchema: RunStepToolInputSchema,
-      annotations: {
-        readOnlyHint: false, // Tool generates files and modifies state
-        openWorldHint: false, // No external posts
-        destructiveHint: false, // No destructive actions
-        idempotentHint: false,
-      },
+      annotations: RUN_STEP_TOOL_ANNOTATIONS,
       outputSchema: RunStepToolStructuredContentOutputSchema,
       // Note: securitySchemes is in _meta per MCP SDK implementation requirements.
       // The MCP SDK does not support top-level securitySchemes in the current version.
       // This is included in the MCP response JSON that ChatGPT/OpenAI receives.
       _meta: {
-        securitySchemes: [{ type: "noauth" }],
+        securitySchemes: RUN_STEP_TOOL_SECURITY_SCHEMES,
         ui: {
           resourceUri: uiResourceUri,
           visibility: ["model", "app"],

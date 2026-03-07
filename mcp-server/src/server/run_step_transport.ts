@@ -80,13 +80,9 @@ function resolveStructuredContentMetaFromWidgetResult(
 }
 
 function buildStructuredContentResult(widgetResult: Record<string, unknown>): Record<string, unknown> {
-  const modelSafeResult = buildModelSafeResult(widgetResult);
-  const richState = toRecord(widgetResult.state);
-  return {
-    ...toRecord(widgetResult),
-    ...modelSafeResult,
-    state: Object.keys(richState).length > 0 ? richState : toRecord(modelSafeResult.state),
-  };
+  // OpenAI Apps data-minimalisatie: structuredContent blijft model-safe.
+  // Rijke payload gaat uitsluitend via _meta.widget_result (component-only).
+  return buildModelSafeResult(widgetResult);
 }
 
 function resolveIdempotencyEarlyLiveness(
@@ -618,6 +614,7 @@ async function runStepHandler(args: RunStepHandlerArgs): Promise<{ structuredCon
 }
 
 export {
+  buildStructuredContentResult as __buildStructuredContentResultForTests,
   loadUiHtml,
   runStepHandler,
 };

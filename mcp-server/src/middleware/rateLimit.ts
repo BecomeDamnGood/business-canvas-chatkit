@@ -16,6 +16,13 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const MAX_REQUEST_SIZE_BYTES = Number(process.env.MAX_REQUEST_SIZE_BYTES || 1024 * 1024); // 1MB default
 const ABUSE_THRESHOLD = Number(process.env.ABUSE_THRESHOLD || 100); // requests per minute
 const ABUSE_BAN_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const RATE_LIMIT_TRUST_PROXY = ["1", "true", "yes", "on"].includes(
+  String(process.env.RATE_LIMIT_TRUST_PROXY || "").trim().toLowerCase()
+);
+const RATE_LIMIT_TRUSTED_PROXY_HOPS = Math.max(
+  0,
+  Math.trunc(Number(process.env.RATE_LIMIT_TRUSTED_PROXY_HOPS || 1) || 1)
+);
 
 type StructuredLogSeverity = "info" | "warn" | "error";
 
@@ -29,18 +36,45 @@ function getHeader(req: any, name: string): string {
   return normalizeLogField(req?.headers?.[name.toLowerCase()] || "");
 }
 
-function getClientIp(req: any): string {
-  // Check various headers for IP (for proxies/load balancers)
-  const forwarded = req.headers["x-forwarded-for"];
-  if (forwarded) {
-    return String(forwarded).split(",")[0].trim();
+function parseForwardedIps(raw: unknown): string[] {
+  const text = String(raw || "").trim();
+  if (!text) return [];
+  return text
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+export function resolveClientIpWithPolicy(
+  req: any,
+  policy: { trustProxy: boolean; trustedProxyHops: number }
+): { ip: string; source: "socket" | "x-forwarded-for" | "x-real-ip" } {
+  const socketIp = String(req?.socket?.remoteAddress || "").trim() || "unknown";
+  if (!policy.trustProxy) {
+    return { ip: socketIp, source: "socket" };
   }
-  const realIp = req.headers["x-real-ip"];
+  const forwarded = parseForwardedIps(req?.headers?.["x-forwarded-for"]);
+  if (forwarded.length > 0) {
+    // RFC-style chain: client, proxy1, proxy2. Pick client index by trusted hops.
+    const index = Math.max(0, forwarded.length - (policy.trustedProxyHops + 1));
+    return { ip: forwarded[index] || socketIp, source: "x-forwarded-for" };
+  }
+  const realIp = String(req?.headers?.["x-real-ip"] || "").trim();
   if (realIp) {
-    return String(realIp);
+    return { ip: realIp, source: "x-real-ip" };
   }
-  // Fallback to connection remoteAddress
-  return req.socket?.remoteAddress || "unknown";
+  return { ip: socketIp, source: "socket" };
+}
+
+export function resolveClientIp(req: any): { ip: string; source: "socket" | "x-forwarded-for" | "x-real-ip" } {
+  return resolveClientIpWithPolicy(req, {
+    trustProxy: RATE_LIMIT_TRUST_PROXY,
+    trustedProxyHops: RATE_LIMIT_TRUSTED_PROXY_HOPS,
+  });
+}
+
+function getClientIp(req: any): string {
+  return resolveClientIp(req).ip;
 }
 
 function getCorrelationId(req: any): string {
@@ -67,6 +101,7 @@ function logStructuredRateEvent(
   req: any,
   details: Record<string, unknown> = {}
 ) {
+  const ipResolution = resolveClientIp(req);
   const payload = {
     event: normalizeLogField(event, 128) || "event_unknown",
     severity,
@@ -75,7 +110,8 @@ function logStructuredRateEvent(
     session_id: "",
     step_id: "",
     contract_id: "",
-    ip: normalizeLogField(getClientIp(req), 128),
+    ip: normalizeLogField(ipResolution.ip, 128),
+    ip_source: ipResolution.source,
     method: normalizeLogField(req?.method || "", 16),
     url: normalizeLogField(req?.url || "", 256),
     content_length: Number(req?.headers?.["content-length"] || 0),
@@ -220,7 +256,7 @@ export function createRateLimitMiddleware() {
 /**
  * Cleanup old entries periodically (prevent memory leak)
  */
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
   const now = Date.now();
   let cleaned = 0;
   for (const ip in store) {
@@ -245,3 +281,6 @@ setInterval(() => {
     );
   }
 }, 5 * 60 * 1000); // Every 5 minutes
+if (typeof (cleanupInterval as any).unref === "function") {
+  (cleanupInterval as any).unref();
+}

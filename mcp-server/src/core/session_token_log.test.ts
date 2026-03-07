@@ -160,3 +160,71 @@ test("session token log shows unknown when provider usage is missing", () => {
   const summary = fs.readFileSync(summaryPath, "utf-8");
   assert.match(summary, /2026-02-17 12:00:00 UTC - UnknownCompany - gpt-4\.1 <unknown> - Total tokens <unknown>/);
 });
+
+test("session token log negeert onveilige expliciete filePath", () => {
+  const dir = tempDir();
+  const sessionId = "session-safe-path";
+  const startedAt = "2026-02-17T13:00:00.000Z";
+  const unsafePath = path.join(os.tmpdir(), "outside-session-log.md");
+
+  const result = appendSessionTokenLog({
+    sessionId,
+    sessionStartedAt: startedAt,
+    logDir: dir,
+    filePath: unsafePath,
+    turn: {
+      turn_id: "turn-safe",
+      timestamp: "2026-02-17T13:00:01.000Z",
+      step_id: "entity",
+      specialist: "Entity",
+      model: "gpt-4.1",
+      attempts: 1,
+      usage: {
+        input_tokens: 1,
+        output_tokens: 1,
+        total_tokens: 2,
+        provider_available: true,
+      },
+    },
+  });
+
+  assert.equal(path.resolve(result.filePath), path.join(dir, "session-2026-02-17-130000-session-safe-path.md"));
+  assert.notEqual(path.resolve(result.filePath), path.resolve(unsafePath));
+});
+
+test("session token log purges expired session files op basis van retentie", () => {
+  const dir = tempDir();
+  const oldFile = path.join(dir, "session-2025-01-01-000000-oldsession.md");
+  fs.writeFileSync(oldFile, "old", "utf-8");
+  const twoDaysAgo = Date.now() - 2 * 24 * 60 * 60 * 1000;
+  fs.utimesSync(oldFile, twoDaysAgo / 1000, twoDaysAgo / 1000);
+
+  const prevRetention = process.env.BSC_SESSION_LOG_RETENTION_DAYS;
+  process.env.BSC_SESSION_LOG_RETENTION_DAYS = "1";
+  try {
+    appendSessionTokenLog({
+      sessionId: "session-retention",
+      sessionStartedAt: "2026-02-17T14:00:00.000Z",
+      logDir: dir,
+      turn: {
+        turn_id: "turn-retention",
+        timestamp: "2026-02-17T14:00:01.000Z",
+        step_id: "role",
+        specialist: "Role",
+        model: "gpt-4.1",
+        attempts: 1,
+        usage: {
+          input_tokens: 1,
+          output_tokens: 1,
+          total_tokens: 2,
+          provider_available: true,
+        },
+      },
+    });
+  } finally {
+    if (prevRetention === undefined) delete process.env.BSC_SESSION_LOG_RETENTION_DAYS;
+    else process.env.BSC_SESSION_LOG_RETENTION_DAYS = prevRetention;
+  }
+
+  assert.equal(fs.existsSync(oldFile), false);
+});
