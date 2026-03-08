@@ -820,8 +820,8 @@ export function render(overrideToolOutput?: unknown): void {
       String(specialist.refined_formulation || "").trim() ||
       String(specialist.question || "").trim();
     return (
-      specialistText ||
       String(resultText || "").trim() ||
+      specialistText ||
       (uiPayload.prompt && typeof (uiPayload.prompt as Record<string, unknown>).body === "string"
         ? String((uiPayload.prompt as Record<string, unknown>).body || "")
         : "")
