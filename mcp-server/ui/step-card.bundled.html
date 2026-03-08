@@ -2458,6 +2458,98 @@
     if (fromWidget.responseSeq > fromNext.responseSeq) return fromWidget;
     return fromNext;
   }
+  function normalizeStep0Bootstrap(raw) {
+    const bootstrap = toRecord2(raw);
+    const venture = String(bootstrap.venture || "").replace(/\s+/g, " ").trim();
+    const name = String(bootstrap.name || "").replace(/\s+/g, " ").trim();
+    const status = String(bootstrap.status || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+    const source = String(bootstrap.source || "").trim();
+    if (!venture && !name && !source) return {};
+    return {
+      ...(venture ? { venture } : {}),
+      ...(name ? { name } : {}),
+      ...(venture && name ? { status } : {}),
+      ...(source ? { source } : {})
+    };
+  }
+  function isKnownBusinessName(raw) {
+    const name = String(raw || "").replace(/\s+/g, " ").trim();
+    return Boolean(name) && name.toLowerCase() !== "tbd";
+  }
+  function composeStep0FinalFromBootstrap(bootstrap) {
+    const venture = String(bootstrap.venture || "").replace(/\s+/g, " ").trim();
+    const name = String(bootstrap.name || "").replace(/\s+/g, " ").trim();
+    if (!venture || !name) return "";
+    const status = String(bootstrap.status || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+    return `Venture: ${venture} | Name: ${name} | Status: ${status}`;
+  }
+  function continuityScopeCompatible(preferred, fallback) {
+    const preferredOrdering = readBootstrapOrderingState(preferred);
+    const fallbackOrdering = readBootstrapOrderingState(fallback);
+    if (!hasValidBootstrapOrdering(preferredOrdering) || !hasValidBootstrapOrdering(fallbackOrdering)) return true;
+    if (preferredOrdering.sessionId !== fallbackOrdering.sessionId) return false;
+    if (preferredOrdering.hostWidgetSessionId && fallbackOrdering.hostWidgetSessionId && preferredOrdering.hostWidgetSessionId !== fallbackOrdering.hostWidgetSessionId) {
+      return false;
+    }
+    return true;
+  }
+  function continuityScopeResetRequired(currentState, incomingState) {
+    const currentOrdering = readBootstrapOrderingState(currentState);
+    const incomingOrdering = readBootstrapOrderingState(incomingState);
+    if (!hasValidBootstrapOrdering(currentOrdering) || !hasValidBootstrapOrdering(incomingOrdering)) return false;
+    return !continuityScopeCompatible(incomingState, currentState);
+  }
+  function extractStep0ContinuityContext(state) {
+    const source = state && typeof state === "object" ? state : {};
+    const bootstrap = normalizeStep0Bootstrap(source.step0_bootstrap);
+    const businessNameFromState = isKnownBusinessName(source.business_name) ? String(source.business_name).replace(/\s+/g, " ").trim() : "";
+    const businessNameFromBootstrap = isKnownBusinessName(bootstrap.name) ? String(bootstrap.name).replace(/\s+/g, " ").trim() : "";
+    const step0FinalFromState = String(source.step_0_final || "").replace(/\s+/g, " ").trim();
+    const step0FinalFromBootstrap = composeStep0FinalFromBootstrap(bootstrap);
+    return {
+      ...(Object.keys(bootstrap).length > 0 ? { step0_bootstrap: bootstrap } : {}),
+      ...((businessNameFromState || businessNameFromBootstrap) ? { business_name: businessNameFromState || businessNameFromBootstrap } : {}),
+      ...((step0FinalFromState || step0FinalFromBootstrap) ? { step_0_final: step0FinalFromState || step0FinalFromBootstrap } : {})
+    };
+  }
+  function retainStep0Continuity(preferred, ...fallbacks) {
+    let next = preferred && typeof preferred === "object" ? { ...preferred } : {};
+    for (const fallback of fallbacks) {
+      if (!continuityScopeCompatible(next, fallback || {})) continue;
+      const nextContext = extractStep0ContinuityContext(next);
+      const fallbackContext = extractStep0ContinuityContext(fallback || {});
+      if (!Object.keys(toRecord2(nextContext.step0_bootstrap)).length && Object.keys(toRecord2(fallbackContext.step0_bootstrap)).length) {
+        next.step0_bootstrap = fallbackContext.step0_bootstrap;
+      }
+      if (!String(nextContext.business_name || "").trim() && String(fallbackContext.business_name || "").trim()) {
+        next.business_name = fallbackContext.business_name;
+      }
+      if (!String(nextContext.step_0_final || "").trim() && String(fallbackContext.step_0_final || "").trim()) {
+        next.step_0_final = fallbackContext.step_0_final;
+      }
+    }
+    const normalizedContext = extractStep0ContinuityContext(next);
+    return {
+      ...next,
+      ...(Object.keys(toRecord2(normalizedContext.step0_bootstrap)).length ? { step0_bootstrap: normalizedContext.step0_bootstrap } : {}),
+      ...(String(normalizedContext.business_name || "").trim() ? { business_name: normalizedContext.business_name } : {}),
+      ...(String(normalizedContext.step_0_final || "").trim() ? { step_0_final: normalizedContext.step_0_final } : {})
+    };
+  }
+  function buildWidgetStateContinuityPatch(params) {
+    const resetContinuity = continuityScopeResetRequired(params.currentWidgetState, params.incomingState);
+    const retained = retainStep0Continuity(params.incomingState, params.currentWidgetState);
+    const patch = resetContinuity ? {
+      business_name: void 0,
+      step_0_final: void 0,
+      step0_bootstrap: void 0
+    } : {};
+    const retainedContext = extractStep0ContinuityContext(retained);
+    if (String(retainedContext.business_name || "").trim()) patch.business_name = retainedContext.business_name;
+    if (String(retainedContext.step_0_final || "").trim()) patch.step_0_final = retainedContext.step_0_final;
+    if (Object.keys(toRecord2(retainedContext.step0_bootstrap)).length) patch.step0_bootstrap = retainedContext.step0_bootstrap;
+    return patch;
+  }
   function evaluatePayloadQuality(result) {
     const state = toRecord2(result.state);
     const uiPayload = toRecord2(result.ui);
@@ -2712,6 +2804,10 @@
       responseSeq: resolved.response_seq,
       hostWidgetSessionId: resolved.host_widget_session_id
     };
+    const continuityPatch = buildWidgetStateContinuityPatch({
+      currentWidgetState: widgetState(),
+      incomingState: toRecord2(result.state)
+    });
     const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
     const currentHasOrdering = hasValidBootstrapOrdering(currentOrdering);
     const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
@@ -2768,6 +2864,7 @@
     }
     if (incomingHasOrdering && orderingDecision.apply) {
       setWidgetStateSafe({
+        ...continuityPatch,
         bootstrap_session_id: incomingOrdering.sessionId,
         bootstrap_epoch: incomingOrdering.epoch,
         response_seq: incomingOrdering.responseSeq,
@@ -2781,6 +2878,8 @@
         incoming_tuple: describeBootstrapOrdering(incomingOrdering),
         current_tuple: describeBootstrapOrdering(currentOrdering)
       });
+    } else if (Object.keys(continuityPatch).length > 0) {
+      setWidgetStateSafe(continuityPatch);
     }
     const shouldPersistToRenderCache = shouldUpdateRenderCache({
       currentHasPayload: Object.keys(currentCachedResult).length > 0,
@@ -3164,13 +3263,21 @@
       if (!persistedStarted && !isBootstrapPollCall) return;
     }
     const latest = globalThis.__BSC_LATEST__ || {};
-    const state = latest.state || { current_step: "step_0" };
+    const latestState = toRecord2(latest.state);
+    const persistedWidgetState = widgetState();
+    const activeClientState = retainStep0Continuity(
+      Object.keys(latestState).length > 0 ? latestState : persistedWidgetState,
+      latestState,
+      persistedWidgetState
+    );
+    const state = Object.keys(activeClientState).length > 0 ? activeClientState : { current_step: "step_0" };
     const baseState = state;
-    const ws = widgetState();
+    const ws = persistedWidgetState;
     let nextState = Object.assign({}, baseState);
     if (cleanExtraState && typeof cleanExtraState === "object") {
       nextState = Object.assign({}, nextState, cleanExtraState);
     }
+    nextState = retainStep0Continuity(nextState, activeClientState, ws);
     const outboundOrdering = mergeOutboundOrdering({ nextState, widgetState: ws });
     if (hasValidBootstrapOrdering(outboundOrdering)) {
       nextState.bootstrap_session_id = outboundOrdering.sessionId;
@@ -4085,7 +4192,10 @@
     const lang = overrideLang || localeCandidate || ambientLang || "en";
     const latestRoot = globalThis.__BSC_LATEST__;
     const latestState = latestRoot?.state && typeof latestRoot.state === "object" ? latestRoot.state : {};
-    const stateForLatest = Object.keys(state).length > 0 ? state : latestState;
+    const stateForLatest = retainStep0Continuity(
+      Object.keys(state).length > 0 ? state : latestState,
+      latestState
+    );
     globalThis.__BSC_LATEST__ = {
       state: stateForLatest,
       lang

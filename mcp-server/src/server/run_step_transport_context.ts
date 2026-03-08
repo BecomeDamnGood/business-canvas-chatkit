@@ -227,6 +227,37 @@ function normalizeLocaleHintSource(raw: unknown): LocaleHintSource {
     : "none";
 }
 
+function normalizeStep0Token(raw: unknown): string {
+  return safeString(raw ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hydrateStep0ContextFromBootstrap(state: Record<string, unknown>): Record<string, unknown> {
+  const bootstrap =
+    state.step0_bootstrap && typeof state.step0_bootstrap === "object" && !Array.isArray(state.step0_bootstrap)
+      ? (state.step0_bootstrap as Record<string, unknown>)
+      : {};
+  const venture = normalizeStep0Token(bootstrap.venture);
+  const name = normalizeStep0Token(bootstrap.name);
+  if (!venture || !name) return state;
+  const status = safeString(bootstrap.status).trim().toLowerCase() === "existing" ? "existing" : "starting";
+  const source = normalizeStep0Token(bootstrap.source);
+  const businessName = normalizeStep0Token(state.business_name);
+  const step0Final = normalizeStep0Token(state.step_0_final);
+  return {
+    ...state,
+    step0_bootstrap: {
+      ...(source ? { source } : {}),
+      venture,
+      name,
+      status,
+    },
+    ...((!businessName || businessName.toLowerCase() === "tbd") ? { business_name: name } : {}),
+    ...(step0Final ? {} : { step_0_final: `Venture: ${venture} | Name: ${name} | Status: ${status}` }),
+  };
+}
+
 export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
   const correlationId = normalizeLogField(args.correlation_id, 512) || randomUUID();
   const traceId = normalizeLogField(args.trace_id, 512) || correlationId;
@@ -258,13 +289,13 @@ export function buildRunStepContext(args: RunStepHandlerArgs): RunStepContext {
     bootstrapSessionId: state.bootstrap_session_id,
   });
 
-  let stateForTool: Record<string, unknown> = {
+  let stateForTool: Record<string, unknown> = hydrateStep0ContextFromBootstrap({
     ...state,
     ...(hasInitiator || !shouldSeedInitialUserMessage ? {} : { initial_user_message: normalizedMessage }),
     ...(shouldMarkStarted ? { started: "true" } : {}),
     __request_id: correlationId,
     ...(traceId ? { __trace_id: traceId } : {}),
-  };
+  });
 
   const incomingBootstrapSessionRaw = safeString(stateForTool.bootstrap_session_id ?? "").trim();
   const incomingBootstrapSession = normalizeBootstrapSessionId(incomingBootstrapSessionRaw);

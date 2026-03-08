@@ -4,6 +4,12 @@ import fs from "node:fs";
 import { renderInlineText, renderSingleValueCardContent, renderStructuredText } from "../ui/lib/ui_text.ts";
 import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.ts";
 import { canonicalizeWidgetPayload } from "../ui/lib/locale_bootstrap_runtime.ts";
+import {
+  callRunStep,
+  handleToolResultAndMaybeScheduleBootstrapRetry,
+  initActionsConfig,
+  widgetState,
+} from "../ui/lib/ui_actions.ts";
 import { readDreamBuilderViewContract, renderChoiceButtons, resolveWidgetBodyText } from "../ui/lib/ui_render.ts";
 import { setIsLoading } from "../ui/lib/ui_state.ts";
 
@@ -544,6 +550,185 @@ test("canonical widget payload only accepts _meta.widget_result authority", () =
   });
   assert.equal(droppedStructuredOnly.source, "none");
   assert.deepEqual(droppedStructuredOnly.result, {});
+});
+
+test("widget continuity retains known business context when a later same-session payload is leaner", { concurrency: false }, () => {
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  const originalLastToolOutput = (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  try {
+    const host = {
+      widgetState: {} as Record<string, unknown>,
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+    };
+    (globalThis as unknown as { openai?: unknown }).openai = host;
+    initActionsConfig({
+      render: () => {},
+      t: () => "",
+    });
+
+    handleToolResultAndMaybeScheduleBootstrapRetry({
+      _meta: {
+        widget_result: {
+          current_step_id: "step_0",
+          state: {
+            current_step: "step_0",
+            business_name: "Mindd",
+            step_0_final: "Venture: reclamebureau | Name: Mindd | Status: existing",
+            step0_bootstrap: {
+              venture: "reclamebureau",
+              name: "Mindd",
+              status: "existing",
+              source: "initial_user_message",
+            },
+            bootstrap_session_id: "sess-1",
+            bootstrap_epoch: 1,
+            response_seq: 1,
+            host_widget_session_id: "host-1",
+          },
+        },
+      },
+    });
+
+    handleToolResultAndMaybeScheduleBootstrapRetry({
+      _meta: {
+        widget_result: {
+          current_step_id: "dream",
+          state: {
+            current_step: "dream",
+            bootstrap_session_id: "sess-1",
+            bootstrap_epoch: 1,
+            response_seq: 2,
+            host_widget_session_id: "host-1",
+          },
+        },
+      },
+    });
+
+    const persisted = widgetState();
+    assert.equal(String(persisted.business_name || ""), "Mindd");
+    assert.equal(
+      String(persisted.step_0_final || ""),
+      "Venture: reclamebureau | Name: Mindd | Status: existing"
+    );
+    assert.deepEqual(persisted.step0_bootstrap, {
+      venture: "reclamebureau",
+      name: "Mindd",
+      status: "existing",
+      source: "initial_user_message",
+    });
+  } finally {
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalLatest === undefined) delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+    else (globalThis as Record<string, unknown>).__BSC_LATEST__ = originalLatest;
+    if (originalLastToolOutput === undefined) delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+    else (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = originalLastToolOutput;
+  }
+});
+
+test("callRunStep keeps step-0 continuity in outbound state when latest render lost it", { concurrency: false }, async () => {
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
+  const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  const originalLastToolOutput = (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  const originalWindow = (globalThis as unknown as { window?: unknown }).window;
+  setIsLoading(false);
+  try {
+    let capturedPayload: Record<string, unknown> | null = null;
+    const host = {
+      widgetState: {
+        started: "true",
+        current_step: "dream",
+        business_name: "Mindd",
+        step_0_final: "Venture: reclamebureau | Name: Mindd | Status: existing",
+        step0_bootstrap: {
+          venture: "reclamebureau",
+          name: "Mindd",
+          status: "existing",
+          source: "initial_user_message",
+        },
+        bootstrap_session_id: "sess-1",
+        bootstrap_epoch: 1,
+        response_seq: 2,
+        host_widget_session_id: "host-1",
+      } as Record<string, unknown>,
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+      async callTool(_name: string, args: unknown) {
+        capturedPayload = args as Record<string, unknown>;
+        return {
+          _meta: {
+            widget_result: {
+              current_step_id: "dream",
+              state: {
+                current_step: "dream",
+                bootstrap_session_id: "sess-1",
+                bootstrap_epoch: 1,
+                response_seq: 3,
+                host_widget_session_id: "host-1",
+              },
+            },
+          },
+        };
+      },
+    };
+    (globalThis as unknown as { openai?: unknown }).openai = host;
+    (globalThis as unknown as { document?: unknown }).document = {
+      getElementById() {
+        return null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+    };
+    (globalThis as unknown as { window?: unknown }).window = undefined;
+    (globalThis as Record<string, unknown>).__BSC_LATEST__ = {
+      state: {
+        current_step: "dream",
+        bootstrap_session_id: "sess-1",
+        bootstrap_epoch: 1,
+        response_seq: 2,
+        host_widget_session_id: "host-1",
+      },
+      lang: "nl",
+    };
+    initActionsConfig({
+      render: () => {},
+      t: () => "",
+    });
+
+    await callRunStep("ACTION_DREAM_INTRO_EXPLAIN_MORE");
+
+    assert.ok(capturedPayload);
+    const outboundState = (capturedPayload?.state || {}) as Record<string, unknown>;
+    assert.equal(String(outboundState.business_name || ""), "Mindd");
+    assert.equal(
+      String(outboundState.step_0_final || ""),
+      "Venture: reclamebureau | Name: Mindd | Status: existing"
+    );
+    assert.deepEqual(outboundState.step0_bootstrap, {
+      venture: "reclamebureau",
+      name: "Mindd",
+      status: "existing",
+      source: "initial_user_message",
+    });
+  } finally {
+    setIsLoading(false);
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
+    else (globalThis as unknown as { document?: unknown }).document = originalDocument;
+    if (originalWindow === undefined) delete (globalThis as unknown as { window?: unknown }).window;
+    else (globalThis as unknown as { window?: unknown }).window = originalWindow;
+    if (originalLatest === undefined) delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+    else (globalThis as Record<string, unknown>).__BSC_LATEST__ = originalLatest;
+    if (originalLastToolOutput === undefined) delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+    else (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = originalLastToolOutput;
+  }
 });
 
 test("bundled runtime does not retain legacy render-source fallbacks", () => {
