@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  classifyPendingWordingChoiceTextIntent,
+  resolvePendingWordingChoiceIntent,
   parseListItems,
   shouldTreatAsStepContributingInput,
 } from "./run_step_wording_heuristics.js";
@@ -45,30 +45,38 @@ test("shouldTreatAsStepContributingInput ignores process navigation utterances",
   );
 });
 
-test("classifyPendingWordingChoiceTextIntent separates accept, reject, feedback and content intents", () => {
-  assert.equal(
-    classifyPendingWordingChoiceTextIntent("Maak het korter en bondiger."),
-    "feedback_on_suggestion"
+test("resolvePendingWordingChoiceIntent resolves semantic intent and anchor against pending suggestion context", () => {
+  const context = {
+    pendingSuggestion: "Technische mkb-bedrijven met complexe productontwikkeling.",
+    pendingUserInput: "Alle bedrijven met complexe producten.",
+  };
+  assert.deepEqual(
+    resolvePendingWordingChoiceIntent({
+      ...context,
+      input: "Dit klinkt nog een beetje saai.",
+    }),
+    { intent: "feedback_on_suggestion", anchor: "suggestion" }
   );
-  assert.equal(
-    classifyPendingWordingChoiceTextIntent("Dat is niet wat ik bedoel."),
-    "reject_suggestion_explicit"
+  assert.deepEqual(
+    resolvePendingWordingChoiceIntent({
+      ...context,
+      input: "Dat is niet wat ik bedoel.",
+    }),
+    { intent: "reject_suggestion_explicit", anchor: "suggestion" }
   );
-  assert.equal(
-    classifyPendingWordingChoiceTextIntent("That's not what I meant."),
-    "reject_suggestion_explicit"
+  assert.deepEqual(
+    resolvePendingWordingChoiceIntent({
+      ...context,
+      input: "Ja, dit klopt zo.",
+    }),
+    { intent: "accept_suggestion_explicit", anchor: "suggestion" }
   );
-  assert.equal(
-    classifyPendingWordingChoiceTextIntent("Dit raakt me nog niet echt."),
-    "feedback_on_suggestion"
-  );
-  assert.equal(
-    classifyPendingWordingChoiceTextIntent("Ja, dit past goed zo."),
-    "accept_suggestion_explicit"
-  );
-  assert.equal(
-    classifyPendingWordingChoiceTextIntent("Ik bedoel vooral familiebedrijven met een technische kern."),
-    "content_input"
+  assert.deepEqual(
+    resolvePendingWordingChoiceIntent({
+      ...context,
+      input: "Ik bedoel vooral familiebedrijven met een technische kern.",
+    }),
+    { intent: "content_input", anchor: "user_input" }
   );
 });
 

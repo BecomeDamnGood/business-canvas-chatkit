@@ -88,6 +88,46 @@ export function resolveProvisionalSourceForTurn(params: {
   return "user_input";
 }
 
+export function resolveWordingChoiceSeedUserText(params: {
+  submittedTextIntent: string;
+  submittedTextAnchor: string;
+  submittedUserText: string;
+  userMessage: string;
+  previousSpecialist: Record<string, unknown>;
+}): string {
+  const submittedIntent = String(params.submittedTextIntent || "").trim();
+  const submittedAnchor = String(params.submittedTextAnchor || "").trim();
+  const submittedCanSeedWordingChoice =
+    submittedIntent === "" ||
+    submittedIntent === "content_input" ||
+    (
+      (submittedIntent === "feedback_on_suggestion" || submittedIntent === "reject_suggestion_explicit") &&
+      submittedAnchor === "suggestion"
+    );
+  const seedFromSuggestion =
+    (
+      submittedIntent === "feedback_on_suggestion" ||
+      submittedIntent === "reject_suggestion_explicit"
+    ) &&
+    submittedAnchor === "suggestion";
+  if (seedFromSuggestion) {
+    return String(
+      params.previousSpecialist.wording_choice_agent_current ||
+      params.previousSpecialist.refined_formulation ||
+      ""
+    ).trim();
+  }
+  const submitted = String(params.submittedUserText || "").trim();
+  if (submitted && submittedCanSeedWordingChoice) return submitted;
+  if (submitted && !submittedCanSeedWordingChoice) return "";
+  const raw = String(params.userMessage || "").trim();
+  if (!raw) return "";
+  if (!submittedCanSeedWordingChoice) return "";
+  if (raw.startsWith("ACTION_")) return "";
+  if (raw.startsWith("__ROUTE__")) return "";
+  return raw;
+}
+
 type AutoSuggestPlan = {
   eligible: boolean;
   stepId: string;
@@ -142,6 +182,7 @@ function clearPendingWordingChoiceFields(specialistResult: Record<string, unknow
     wording_choice_agent_current: "",
     wording_choice_mode: "",
     wording_choice_target_field: "",
+    wording_choice_presentation: "",
     wording_choice_variant: "",
     wording_choice_user_label: "",
     wording_choice_suggestion_label: "",
@@ -743,19 +784,13 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       asRecord(asStateRecord(state).last_specialist_result),
       dreamRuntimeModeForWording
     );
-    const userTextForWordingChoice = (() => {
-      const submittedIntent = String(params.submittedTextIntent || "").trim();
-      const submittedCanSeedWordingChoice = submittedIntent === "" || submittedIntent === "content_input";
-      const submitted = String(params.submittedUserText || "").trim();
-      if (submitted && submittedCanSeedWordingChoice) return submitted;
-      if (submitted && !submittedCanSeedWordingChoice) return "";
-      const raw = String(userMessage || "").trim();
-      if (!raw) return "";
-      if (!submittedCanSeedWordingChoice) return "";
-      if (raw.startsWith("ACTION_")) return "";
-      if (raw.startsWith("__ROUTE__")) return "";
-      return raw;
-    })();
+    const userTextForWordingChoice = resolveWordingChoiceSeedUserText({
+      submittedTextIntent: String(params.submittedTextIntent || "").trim(),
+      submittedTextAnchor: String(params.submittedTextAnchor || "").trim(),
+      submittedUserText: String(params.submittedUserText || "").trim(),
+      userMessage,
+      previousSpecialist: previousSpecialistForWordingChoice,
+    });
     const wordingIntentEligible = isWordingChoiceIntentEligible(asRecord(specialistResult));
     if (
       params.wordingChoiceEnabled &&
@@ -808,7 +843,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         actionCodesOverride = [];
         renderedActionsOverride = [];
       } else if (isTrueFlag(specialistResult.wording_choice_pending)) {
-        specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
+        const presentation = String(specialistResult.wording_choice_presentation || "").trim();
+        if (presentation !== "canonical") {
+          specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
+        }
       }
     } else if (isTrueFlag(specialistResult.wording_choice_pending)) {
       specialistResult = clearPendingWordingChoiceFields(asRecord(specialistResult));
@@ -820,7 +858,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       currentStepId: String(asStateRecord(nextState).current_step || ""),
       activeSpecialist: String(asStateRecord(nextState).active_specialist || ""),
       canonicalStatementCount: canonicalDreamBuilderStatementsCount,
-      wordingChoicePending: requireWordingPick || Boolean(wordingChoiceOverride?.enabled),
+      wordingChoicePending:
+        requireWordingPick ||
+        Boolean(wordingChoiceOverride?.enabled) ||
+        isTrueFlag((specialistResult as Record<string, unknown>).wording_choice_pending),
       state: nextState,
     });
     // Motivational quote injection feature removed.

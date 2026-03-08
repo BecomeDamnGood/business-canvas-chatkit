@@ -1,7 +1,10 @@
 import type { CanvasState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { LLMUsage } from "./run_step_dependencies.js";
-import type { PendingWordingChoiceTextIntent } from "./run_step_wording_heuristics.js";
+import type {
+  PendingWordingChoiceTextAnchor,
+  PendingWordingChoiceTextIntent,
+} from "./run_step_wording_heuristics.js";
 
 import type { RunStepContext } from "./run_step_context.js";
 import type { RunStepRoutePorts } from "./run_step_ports.js";
@@ -27,6 +30,7 @@ export async function runStepRuntimeSpecialRoutesLayer<TPayload extends Record<s
     transientPendingScores: number[][] | null;
     submittedUserText: string;
     submittedTextIntent: PendingWordingChoiceTextIntent | "";
+    submittedTextAnchor: PendingWordingChoiceTextAnchor | "";
     rawNormalized: string;
     pristineAtEntry: boolean;
     lang: string;
@@ -61,6 +65,7 @@ export async function runStepRuntimeSpecialRoutesLayer<TPayload extends Record<s
       transientPendingScores: params.runtime.transientPendingScores,
       submittedUserText: params.runtime.submittedUserText,
       submittedTextIntent: params.runtime.submittedTextIntent,
+      submittedTextAnchor: params.runtime.submittedTextAnchor,
       rawNormalized: params.runtime.rawNormalized,
       pristineAtEntry: params.runtime.pristineAtEntry,
     },

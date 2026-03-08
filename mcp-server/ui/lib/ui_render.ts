@@ -488,10 +488,10 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     return /[:]\s*$/.test(trimmed) ? trimmed : `${trimmed}:`;
   };
   const userLabel = variant === "clarify_dual"
-    ? (userLabelFromPayload || "Do you mean something like this")
+    ? (userLabelFromPayload || ensureLabelColon(t(lang, "wordingChoiceHeading")))
     : ensureLabelColon(t(lang, "wordingChoiceHeading"));
   const suggestionLabel = variant === "clarify_dual"
-    ? (suggestionLabelFromPayload || "Or do you mean something like this?")
+    ? (suggestionLabelFromPayload || ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel")))
     : ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
   const normalizeListItem = (value: unknown): string =>
     String(value || "")

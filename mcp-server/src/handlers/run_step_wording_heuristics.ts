@@ -194,6 +194,13 @@ export type PendingWordingChoiceTextIntent =
   | "feedback_on_suggestion"
   | "content_input";
 
+export type PendingWordingChoiceTextAnchor = "suggestion" | "user_input";
+
+export type PendingWordingChoiceIntentResolution = {
+  intent: PendingWordingChoiceTextIntent;
+  anchor: PendingWordingChoiceTextAnchor;
+};
+
 function normalizeIntentComparable(input: string): string {
   return String(input || "")
     .toLowerCase()
@@ -202,58 +209,123 @@ function normalizeIntentComparable(input: string): string {
     .trim();
 }
 
-export function classifyPendingWordingChoiceTextIntent(input: string): PendingWordingChoiceTextIntent {
-  const comparable = normalizeIntentComparable(input);
+function similarityToPrototype(inputComparable: string, prototypes: string[]): number {
+  if (!inputComparable) return 0;
+  let best = 0;
+  for (const candidate of prototypes) {
+    const score = tokenJaccardSimilarity(inputComparable, normalizeIntentComparable(candidate));
+    if (score > best) best = score;
+  }
+  return best;
+}
+
+function contentDensity(tokens: string[]): number {
+  if (tokens.length === 0) return 0;
+  const stopwords = new Set([
+    "the", "a", "an", "and", "or", "to", "of", "for", "in", "on", "with", "this", "that", "it", "is",
+    "ik", "dit", "de", "het", "een", "en", "of", "voor", "met", "dat", "die", "van", "te", "is",
+    "my", "me", "you", "your", "we", "our", "wij", "jij", "je", "mijn", "ons", "onze",
+  ]);
+  const content = tokens.filter((token) => token.length >= 4 && !stopwords.has(token)).length;
+  return content / tokens.length;
+}
+
+function shouldAnchorToSuggestion(params: {
+  comparable: string;
+  tokens: string[];
+  pendingSuggestionComparable: string;
+  pendingUserComparable: string;
+  acceptScore: number;
+  rejectScore: number;
+}): boolean {
+  const {
+    comparable,
+    tokens,
+    pendingSuggestionComparable,
+    pendingUserComparable,
+    acceptScore,
+    rejectScore,
+  } = params;
+  if (!comparable) return false;
+  if (acceptScore >= 0.5 || rejectScore >= 0.45) return true;
+  const suggestionSimilarity = pendingSuggestionComparable
+    ? tokenJaccardSimilarity(comparable, pendingSuggestionComparable)
+    : 0;
+  const userSimilarity = pendingUserComparable
+    ? tokenJaccardSimilarity(comparable, pendingUserComparable)
+    : 0;
+  if (suggestionSimilarity >= 0.22 && suggestionSimilarity >= userSimilarity + 0.06) return true;
+  if (!pendingSuggestionComparable) return false;
+  const compactFeedbackLike = tokens.length > 0 && tokens.length <= 7;
+  const lowContentDensity = contentDensity(tokens) < 0.62;
+  const directInstructionTone = /[!?]/.test(comparable) || /\b(more|less|ander|anders)\b/.test(comparable);
+  if (compactFeedbackLike && (lowContentDensity || directInstructionTone)) return true;
+  return false;
+}
+
+export function resolvePendingWordingChoiceIntent(params: {
+  input: string;
+  pendingSuggestion?: string;
+  pendingUserInput?: string;
+}): PendingWordingChoiceIntentResolution {
+  const comparable = normalizeIntentComparable(params.input);
   const tokens = tokenizeWords(comparable);
-  if (!comparable) return "content_input";
+  if (!comparable) return { intent: "content_input", anchor: "user_input" };
 
-  const explicitRejectPatterns = [
-    /\b(thats not what i meant|that is not what i meant|not what i meant)\b/i,
-    /\b(no thats wrong|no that is wrong|thats wrong|that is wrong)\b/i,
-    /\b(i mean something else|i meant something else|completely different|totally different)\b/i,
-    /\b(use my version|keep my version)\b/i,
-    /\b(dat is niet wat ik bedoel|dat bedoel ik niet|niet wat ik bedoel)\b/i,
-    /\b(nee dat is fout|nee dat klopt niet|dit klopt niet)\b/i,
-    /\b(ik bedoel iets anders|ik bedoelde iets anders|helemaal anders|totaal anders)\b/i,
-    /\b(gebruik mijn versie|hou mijn versie|houd mijn versie)\b/i,
+  const acceptPrototypes = [
+    "yes this works",
+    "this sounds good",
+    "ja dit klopt",
+    "helemaal goed",
+    "precies zo",
   ];
-  if (explicitRejectPatterns.some((re) => re.test(comparable))) {
-    return "reject_suggestion_explicit";
+  const rejectPrototypes = [
+    "that is not what i mean",
+    "this is wrong",
+    "i mean something else",
+    "dat is niet wat ik bedoel",
+    "dit klopt niet",
+    "ik bedoel iets anders",
+  ];
+
+  const acceptScore = similarityToPrototype(comparable, acceptPrototypes);
+  const rejectScore = similarityToPrototype(comparable, rejectPrototypes);
+  const anchor = shouldAnchorToSuggestion({
+    comparable,
+    tokens,
+    pendingSuggestionComparable: normalizeIntentComparable(params.pendingSuggestion || ""),
+    pendingUserComparable: normalizeIntentComparable(params.pendingUserInput || ""),
+    acceptScore,
+    rejectScore,
+  })
+    ? "suggestion"
+    : "user_input";
+
+  if (anchor === "suggestion") {
+    const negationSignals = new Set(["no", "not", "niet", "geen", "nee"]);
+    const positiveSignals = new Set(["yes", "yeah", "yep", "ja", "klopt", "precies", "exact", "goed"]);
+    const shortAffirmation =
+      tokens.length > 0 &&
+      tokens.length <= 8 &&
+      tokens.some((token) => positiveSignals.has(token)) &&
+      !tokens.some((token) => negationSignals.has(token));
+    if (shortAffirmation) {
+      return { intent: "accept_suggestion_explicit", anchor };
+    }
+    if (acceptScore >= 0.4 && rejectScore < 0.4) {
+      return { intent: "accept_suggestion_explicit", anchor };
+    }
+    if (rejectScore >= 0.45) {
+      return { intent: "reject_suggestion_explicit", anchor };
+    }
+    return { intent: "feedback_on_suggestion", anchor };
   }
 
-  const explicitAcceptPatterns = [
-    /\b(yes|yeah|yep|ja|klopt|exact|precies)\b/i,
-    /\b(this (works|fits)|looks good|sounds good|good to go)\b/i,
-    /\b(dit (werkt|past|klopt)|helemaal goed|prima zo|zo is het goed)\b/i,
-  ];
-  const hasNegation = /\b(not|niet|no)\b/i.test(comparable);
-  if (
-    !hasNegation &&
-    tokens.length > 0 &&
-    tokens.length <= 8 &&
-    explicitAcceptPatterns.some((re) => re.test(comparable))
-  ) {
-    return "accept_suggestion_explicit";
-  }
+  return { intent: "content_input", anchor };
+}
 
-  const suggestionFeedbackPatterns = [
-    /\b(doesn t|doesnt|isn t|isnt)\b.{0,30}\b(fit|work|land|resonate|click)\b/i,
-    /\b(not sharp enough|not specific enough|not concrete enough)\b/i,
-    /\b(too broad|too generic|too vague|too abstract|too long|too short|too formal)\b/i,
-    /\b(make (it|this) (shorter|clearer|sharper|more concrete|more specific|less generic))\b/i,
-    /\b(dit|deze)\s+raakt\s+me\s+(nog\s+)?niet\b/i,
-    /\b(voelt|klinkt|past)\s+(nog\s+)?niet\b/i,
-    /\b(niet scherp genoeg|niet concreet genoeg|niet specifiek genoeg)\b/i,
-    /\b(te algemeen|te vaag|te abstract|te lang|te kort|te formeel)\b/i,
-    /\b(maak (het|dit) (korter|bondiger|scherper|concreter))\b/i,
-    /\b(korter|bondiger|scherper|concreter)\b/i,
-    /\b(nog niet echt)\b/i,
-  ];
-  if (suggestionFeedbackPatterns.some((re) => re.test(comparable))) {
-    return "feedback_on_suggestion";
-  }
-
-  return "content_input";
+export function classifyPendingWordingChoiceTextIntent(input: string): PendingWordingChoiceTextIntent {
+  return resolvePendingWordingChoiceIntent({ input }).intent;
 }
 
 function extractSuggestionFromMessage(message: string): string {

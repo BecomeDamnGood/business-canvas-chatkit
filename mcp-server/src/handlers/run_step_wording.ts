@@ -4,6 +4,7 @@ import type { WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 type WordingChoiceMode = "text" | "list";
 type WordingChoiceVariant = "default" | "clarify_dual";
 type WordingChoiceListSemantics = "delta" | "full";
+type WordingChoicePresentation = "picker" | "canonical";
 
 type RenderFreeTextTurnPolicyResult = {
   specialist: Record<string, unknown>;
@@ -337,6 +338,18 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return false;
   }
 
+  function prefersCanonicalSuggestionPresentation(stepId: string, mode: WordingChoiceMode): boolean {
+    if (mode !== "text") return false;
+    return (
+      stepId === deps.dreamStepId ||
+      stepId === "purpose" ||
+      stepId === "bigwhy" ||
+      stepId === "role" ||
+      stepId === deps.entityStepId ||
+      stepId === "targetgroup"
+    );
+  }
+
   function copyPendingWordingChoiceState(current: unknown, previous: Record<string, unknown>): Record<string, unknown> {
     const pending = String(previous.wording_choice_pending || "") === "true";
     if (!pending || !current || typeof current !== "object") return (current || {}) as Record<string, unknown>;
@@ -359,6 +372,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_agent_current: String(previous.wording_choice_agent_current || ""),
       wording_choice_mode: String(previous.wording_choice_mode || ""),
       wording_choice_target_field: String(previous.wording_choice_target_field || ""),
+      wording_choice_presentation: String(previous.wording_choice_presentation || ""),
       wording_choice_variant: String(previous.wording_choice_variant || ""),
       wording_choice_user_label: String(previous.wording_choice_user_label || ""),
       wording_choice_suggestion_label: String(previous.wording_choice_suggestion_label || ""),
@@ -865,6 +879,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           wording_choice_pending: "false",
           wording_choice_selected: "",
           wording_choice_list_semantics: "delta",
+          wording_choice_presentation: "",
           feedback_reason_key: "",
           feedback_reason_text: "",
         },
@@ -878,6 +893,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           wording_choice_pending: "false",
           wording_choice_selected: "",
           wording_choice_list_semantics: "delta",
+          wording_choice_presentation: "",
           feedback_reason_key: "",
           feedback_reason_text: "",
         },
@@ -903,6 +919,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
     const mode: WordingChoiceMode =
       isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
+    const presentation: WordingChoicePresentation = prefersCanonicalSuggestionPresentation(stepId, mode)
+      ? "canonical"
+      : "picker";
     let normalizedUser = mode === "list"
       ? deps.normalizeListUserInput(userRaw)
       : deps.normalizeUserInputAgainstSuggestion(userRaw, suggestionRaw);
@@ -965,6 +984,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_pending: "false",
         wording_choice_selected: "suggestion",
         wording_choice_list_semantics: "delta",
+        wording_choice_presentation: "",
         feedback_reason_key: "",
         feedback_reason_text: "",
         refined_formulation: chosen,
@@ -1036,6 +1056,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_suggestion_items: suggestionItems,
       wording_choice_mode: mode,
       wording_choice_target_field: targetField,
+      wording_choice_presentation: presentation,
       wording_choice_variant: variant === "clarify_dual" ? variant : "",
       wording_choice_user_label: variant === "clarify_dual" ? clarifyUserLabelForState(state) : "",
       wording_choice_suggestion_label:
@@ -1051,6 +1072,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     }
     enriched.refined_formulation =
       committedText || String(previousSpecialist.refined_formulation || "").trim();
+    if (presentation === "canonical") {
+      return { specialist: enriched, wordingChoice: null };
+    }
     const wordingChoice: WordingChoiceUiPayload = {
       enabled: true,
       mode,
@@ -1135,6 +1159,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_list_semantics: "delta",
         refined_formulation: chosen,
         wording_choice_agent_current: chosen,
+        wording_choice_presentation: "",
         wording_choice_variant: "",
         wording_choice_user_label: "",
         wording_choice_suggestion_label: "",
@@ -1203,6 +1228,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       return null;
     }
     const mode: WordingChoiceMode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
+    const presentation: WordingChoicePresentation =
+      String(specialist?.wording_choice_presentation || "").trim() === "canonical"
+        ? "canonical"
+        : "picker";
+    if (presentation === "canonical") return null;
     const userItems = toTrimmedStringArray(specialist?.wording_choice_user_items).map((line) => stripMarkupPreserveLines(line));
     const suggestionItems = toTrimmedStringArray(specialist?.wording_choice_suggestion_items).map((line) => stripMarkupPreserveLines(line));
     const variant = String(specialist?.wording_choice_variant || "").trim() === "clarify_dual"

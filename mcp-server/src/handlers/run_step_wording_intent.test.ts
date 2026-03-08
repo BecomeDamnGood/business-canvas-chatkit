@@ -25,6 +25,11 @@ function buildHelpers(intentEnabled: boolean) {
     uiDefaultString: (key: string) => defaultUi[key] || "",
     uiStringFromStateMap: (_state, _key, fallback) => fallback,
     fieldForStep: (stepId: string) => {
+      if (stepId === "dream") return "dream";
+      if (stepId === "purpose") return "purpose";
+      if (stepId === "bigwhy") return "bigwhy";
+      if (stepId === "role") return "role";
+      if (stepId === "entity") return "entity";
       if (stepId === "targetgroup") return "targetgroup";
       if (stepId === "strategy") return "strategy";
       if (stepId === "productsservices") return "productsservices";
@@ -153,7 +158,7 @@ function buildHeadingAwarePurposeHelpers(params: {
   });
 }
 
-test("buildWordingChoiceFromTurn marks clarify_dual variant for disambiguation context", () => {
+test("buildWordingChoiceFromTurn keeps targetgroup in canonical pending presentation", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "targetgroup",
@@ -171,13 +176,12 @@ test("buildWordingChoiceFromTurn marks clarify_dual variant for disambiguation c
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(result.wordingChoice?.variant, "clarify_dual");
-  assert.equal(result.wordingChoice?.user_label, "This is your input:");
-  assert.equal(result.wordingChoice?.suggestion_label, "This would be my suggestion:");
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
 });
 
-test("buildWordingChoiceFromTurn keeps default variant for regular rewrite context", () => {
+test("buildWordingChoiceFromTurn keeps canonical pending presentation for regular targetgroup rewrites", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "targetgroup",
@@ -194,8 +198,72 @@ test("buildWordingChoiceFromTurn keeps default variant for regular rewrite conte
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.equal(result.wordingChoice?.variant, undefined);
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+});
+
+test("buildWordingChoiceFromTurn keeps Dream in canonical pending presentation for rough first input", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {} as any,
+    activeSpecialist: "Dream",
+    previousSpecialist: {},
+    specialistResult: {
+      message: "Een aangescherpte Droom helpt om later scherpe keuzes te maken.",
+      refined_formulation: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      dream: "",
+    } as Record<string, unknown>,
+    userTextRaw: "Wij willen bedrijven helpen groeien.",
+    isOfftopic: false,
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+});
+
+test("buildWordingChoiceFromTurn keeps Purpose in canonical pending presentation", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "purpose",
+    state: {} as any,
+    activeSpecialist: "Purpose",
+    previousSpecialist: {},
+    specialistResult: {
+      message: "Een aangescherpte Bestaansreden maakt je koers concreter.",
+      refined_formulation: "Mindd bestaat om ondernemers helderheid te geven in strategische keuzes.",
+      purpose: "",
+    } as Record<string, unknown>,
+    userTextRaw: "We willen ondernemers helpen.",
+    isOfftopic: false,
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+});
+
+test("buildWordingChoiceFromTurn keeps Role in canonical pending presentation", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "role",
+    state: {} as any,
+    activeSpecialist: "Role",
+    previousSpecialist: {},
+    specialistResult: {
+      message: "Een scherpe Rol maakt je positionering stabiel.",
+      refined_formulation: "Mindd is de gids die ondernemers helpt koersvast te blijven.",
+      role: "",
+    } as Record<string, unknown>,
+    userTextRaw: "Wij zijn een adviesbureau.",
+    isOfftopic: false,
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
 });
 
 test("buildWordingChoiceFromTurn skips wording panel for meta-topic turns", () => {
@@ -381,7 +449,7 @@ test("buildWordingChoiceFromTurn never enables wording-choice for presentation s
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
 });
 
-test("buildWordingChoiceFromTurn strips markup from wording-choice payload and stored fields", () => {
+test("buildWordingChoiceFromTurn strips markup from canonical pending wording fields", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "targetgroup",
@@ -398,9 +466,12 @@ test("buildWordingChoiceFromTurn strips markup from wording-choice payload and s
     isOfftopic: false,
   });
 
-  assert.ok(result.wordingChoice);
-  assert.doesNotMatch(String(result.wordingChoice?.user_text || ""), /<[^>]+>/);
-  assert.doesNotMatch(String(result.wordingChoice?.suggestion_text || ""), /<[^>]+>/);
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.doesNotMatch(
+    String((result.specialist as Record<string, unknown>).wording_choice_user_normalized || ""),
+    /<[^>]+>/
+  );
   assert.doesNotMatch(
     String((result.specialist as Record<string, unknown>).wording_choice_agent_current || ""),
     /<[^>]+>/

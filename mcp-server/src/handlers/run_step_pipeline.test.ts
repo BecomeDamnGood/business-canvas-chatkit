@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { isWordingChoiceIntentEligible, resolveProvisionalSourceForTurn } from "./run_step_pipeline.js";
+import {
+  isWordingChoiceIntentEligible,
+  resolveProvisionalSourceForTurn,
+  resolveWordingChoiceSeedUserText,
+} from "./run_step_pipeline.js";
 
 test("resolveProvisionalSourceForTurn keeps action-route precedence", () => {
   assert.equal(
@@ -75,5 +79,35 @@ test("isWordingChoiceIntentEligible allows only step-input/meta-none turns", () 
       meta_topic: "NO_STARTING_POINT",
     }),
     false
+  );
+});
+
+test("resolveWordingChoiceSeedUserText anchors feedback on suggestion to the previous suggestion", () => {
+  assert.equal(
+    resolveWordingChoiceSeedUserText({
+      submittedTextIntent: "feedback_on_suggestion",
+      submittedTextAnchor: "suggestion",
+      submittedUserText: "Dit klinkt nog een beetje saai.",
+      userMessage: "Dit klinkt nog een beetje saai.",
+      previousSpecialist: {
+        wording_choice_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
+      },
+    }),
+    "Technische mkb-bedrijven met complexe productontwikkeling."
+  );
+});
+
+test("resolveWordingChoiceSeedUserText keeps direct user content input as seed", () => {
+  assert.equal(
+    resolveWordingChoiceSeedUserText({
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      submittedUserText: "Familiebedrijven met een technische kern.",
+      userMessage: "Familiebedrijven met een technische kern.",
+      previousSpecialist: {
+        wording_choice_agent_current: "Technische mkb-bedrijven met complexe productontwikkeling.",
+      },
+    }),
+    "Familiebedrijven met een technische kern."
   );
 });

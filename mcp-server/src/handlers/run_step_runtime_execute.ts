@@ -31,7 +31,7 @@ export async function runStepRuntimeExecute(
     DREAM_FORCE_REFINE_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, STRATEGY_SPECIALIST,
     callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
     normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
-    isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, classifyPendingWordingChoiceTextIntent, hasDreamSpecialistCandidate,
+    isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, resolvePendingWordingChoiceIntent, hasDreamSpecialistCandidate,
     buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,
     applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
     inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
@@ -376,7 +376,7 @@ export async function runStepRuntimeExecute(
       isUiStateHygieneSwitchV1Enabled,
       isClearlyGeneralOfftopicInput,
       shouldTreatAsStepContributingInput,
-      classifyPendingWordingChoiceTextIntent,
+      resolvePendingWordingChoiceIntent,
       bumpUiI18nCounter: (telemetry: any, key: any) =>
         bumpUiI18nCounter(
           telemetry as any,
@@ -412,6 +412,7 @@ export async function runStepRuntimeExecute(
   state = actionRoutingLayer.state;
   userMessage = actionRoutingLayer.userMessage;
   const submittedTextIntent = actionRoutingLayer.submittedTextIntent;
+  const submittedTextAnchor = actionRoutingLayer.submittedTextAnchor;
   const responseUiFlags = actionRoutingLayer.responseUiFlags;
   state = await finalizeLayer.ensureUiStrings(state, userMessage);
   const lang = langFromState(state);
@@ -465,6 +466,7 @@ export async function runStepRuntimeExecute(
       transientPendingScores: transientPendingScores as number[][] | null,
       submittedUserText,
       submittedTextIntent,
+      submittedTextAnchor,
       rawNormalized,
       pristineAtEntry,
       lang,

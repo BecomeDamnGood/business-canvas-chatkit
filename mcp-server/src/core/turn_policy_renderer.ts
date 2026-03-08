@@ -1494,8 +1494,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const question = stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
   const contractId = buildContractId(stepId, effectiveStatus, menuId);
   const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
+  const wordingPresentation =
+    String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
+      ? "canonical"
+      : "picker";
   let messageForDisplay =
-    isSemanticInvariantsV1Enabled() && wordingPending && !String(message || "").trim()
+    isSemanticInvariantsV1Enabled() &&
+    wordingPending &&
+    wordingPresentation === "picker" &&
+    !String(message || "").trim()
       ? uiStringFromState(
           state,
           "wording.choice.context.default",

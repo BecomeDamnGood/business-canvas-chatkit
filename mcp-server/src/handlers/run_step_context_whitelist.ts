@@ -10,6 +10,14 @@ const GLOBAL_CONTEXT_KEYS = new Set([
   "user_intent",
   "meta_topic",
   "statements",
+  "wording_choice_pending",
+  "wording_choice_user_raw",
+  "wording_choice_user_normalized",
+  "wording_choice_user_items",
+  "wording_choice_agent_current",
+  "wording_choice_suggestion_items",
+  "wording_choice_target_field",
+  "wording_choice_presentation",
 ]);
 
 const STEP_FIELD_BY_STEP_ID: Record<string, string> = {
@@ -69,4 +77,3 @@ export function buildContextSafeLastSpecialistResult(
   }
   return result;
 }
-
