@@ -232,6 +232,9 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
 
     const wordingPending = String(specialist?.wording_choice_pending || "") === "true";
     const wordingMode = String(specialist?.wording_choice_mode || "text") === "list" ? "list" : "text";
+    const wordingPresentation = String(specialist?.wording_choice_presentation || "").trim();
+    const canonicalPendingTextSuggestion =
+      wordingPending && wordingMode === "text" && wordingPresentation === "canonical";
     const wordingSuggestion = stripMarkupPreserveLines(
       String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "")
     );
@@ -254,6 +257,18 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       String(specialist?.__suppress_refined_append || "").trim() === "true" ||
       isSingleValueValidOutput;
     const menuId = deps.parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
+    const stateUiStrings =
+      params.state && typeof (params.state as Record<string, unknown>).ui_strings === "object"
+        ? ((params.state as Record<string, unknown>).ui_strings as Record<string, unknown>)
+        : {};
+    const dreamRuntimeModeRaw = String(
+      ((params.state as Record<string, unknown> | null | undefined)?.__dream_runtime_mode || "")
+    ).trim();
+    const dreamBuilderModeActive =
+      contractStepId === deps.dreamStepId &&
+      (dreamRuntimeModeRaw === "builder_collect" ||
+        dreamRuntimeModeRaw === "builder_refine" ||
+        dreamRuntimeModeRaw === "builder_scoring");
     const stateDreamBuilderStatements =
       Array.isArray((params.state as Record<string, unknown> | null | undefined)?.dream_builder_statements)
         ? (((params.state as Record<string, unknown>).dream_builder_statements as unknown[])
@@ -270,16 +285,13 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       statementLines.length > 0 &&
       contractStepId === deps.dreamStepId &&
       (
+        dreamBuilderModeActive ||
         String(specialist?.suggest_dreambuilder || "").trim() === "true" ||
         menuId.startsWith("DREAM_EXPLAINER_MENU_")
       );
 
     let msg = stripMarkupPreserveLines(String(specialist?.message ?? ""));
     if (dreamBuilderRenderContext && msg) {
-      const stateUiStrings =
-        params.state && typeof (params.state as Record<string, unknown>).ui_strings === "object"
-          ? ((params.state as Record<string, unknown>).ui_strings as Record<string, unknown>)
-          : {};
       const dreamStatementsTitleComparable = deps.canonicalizeComparableText(
         String(stateUiStrings["dreamBuilder.statements.title"] || "").trim()
       );
@@ -574,7 +586,36 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       if (refinedComparables.includes(headingComparable)) return "";
       return heading;
     })();
+    const canonicalPendingSuggestionText = canonicalPendingTextSuggestion ? wordingSuggestion : "";
+    const canonicalPendingSuggestionHeading = canonicalPendingTextSuggestion
+      ? stripMarkupPreserveLines(String(stateUiStrings["wordingChoiceSuggestionLabel"] || "").trim())
+      : "";
+    const canonicalPendingSuggestionBlock = canonicalPendingSuggestionText
+      ? (
+        canonicalPendingSuggestionHeading
+          ? `${canonicalPendingSuggestionHeading}\n${canonicalPendingSuggestionText}`
+          : canonicalPendingSuggestionText
+      ).trim()
+      : "";
     if (msg) parts.push(msg);
+    if (canonicalPendingSuggestionText) {
+      const suggestionNormalized = deps.canonicalizeComparableText(canonicalPendingSuggestionText);
+      const messageNormalized = deps.canonicalizeComparableText(msg);
+      const messageLineSet = new Set(
+        normalizedLines(msg).map((line) => deps.canonicalizeComparableText(line)).filter(Boolean)
+      );
+      const suggestionLines = normalizedLines(canonicalPendingSuggestionText);
+      const duplicateByWhole = Boolean(suggestionNormalized) && messageNormalized.includes(suggestionNormalized);
+      const duplicateByLines =
+        suggestionLines.length > 0 &&
+        suggestionLines.every((line) => {
+          const normalized = deps.canonicalizeComparableText(line);
+          return Boolean(normalized) && messageLineSet.has(normalized);
+        });
+      if (!duplicateByWhole && !duplicateByLines) {
+        parts.push(canonicalPendingSuggestionBlock);
+      }
+    }
     if (refined && !wordingPending && !suppressRefinedAppend) {
       const statementComparable = statementLines
         .map((line) => deps.canonicalizeComparableText(line))

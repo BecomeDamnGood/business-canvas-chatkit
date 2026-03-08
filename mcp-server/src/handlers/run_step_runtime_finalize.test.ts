@@ -370,6 +370,109 @@ test("buildTextForWidget removes duplicate dream summary paragraph using canonic
   );
 });
 
+test("buildTextForWidget removes duplicate dream summary paragraph in builder runtime mode even without dream-explainer flags", () => {
+  const helpers = buildTextHelpers(() => "");
+  const statements = [
+    "Wanneer mensen werk doen dat betekenisvol is, ervaren ze meer welzijn en voldoening in hun leven.",
+    "Duurzame initiatieven en bedrijven zullen een blijvende positieve impact hebben op de samenleving, ook na de oprichters.",
+    "De komende jaren zal de roep om meer autonomie en vrijheid in werk en leven verder toenemen.",
+    "Mensen zullen steeds meer waarde hechten aan trots en zingeving in hun werk.",
+    "Bedrijven zullen vaker een afspiegeling zijn van de waarden en identiteit van hun oprichters.",
+  ];
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      suggest_dreambuilder: "false",
+      message: [
+        "Ga verder met de Droom-oefening.",
+        "",
+        statements.join(" "),
+      ].join("\n\n"),
+      refined_formulation: "",
+      dream: "",
+    },
+    state: {
+      active_specialist: "Dream",
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+      dream_builder_statements: statements,
+      ui_strings: {
+        "dreamBuilder.statements.title": "JOUW DROOM-STATEMENTS",
+        "dreamBuilder.statements.count": "N statements van minimaal 20 tot nu toe",
+      },
+    } as any,
+  });
+
+  assert.equal(output, "Ga verder met de Droom-oefening.");
+});
+
+test("buildTextForWidget includes canonical pending suggestion text when wording-choice is pending", () => {
+  const helpers = buildTextHelpers(() => "");
+  const suggestion =
+    "Mindd droomt van een wereld waarin mensen dankzij AI beter geinformeerde keuzes maken en meer rust ervaren bij aankopen.";
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      message: "Dat is een interessant uitgangspunt.",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "canonical",
+      wording_choice_agent_current: suggestion,
+      refined_formulation: "",
+      dream: "",
+    },
+    state: {
+      active_specialist: "Dream",
+      current_step: "dream",
+      ui_strings: {
+        wordingChoiceSuggestionLabel: "Dit zou mijn suggestie zijn:",
+      },
+    } as any,
+  });
+
+  assert.match(output, /Dat is een interessant uitgangspunt\./);
+  assert.match(output, /Dit zou mijn suggestie zijn:/);
+  assert.equal((output.match(/Mindd droomt van een wereld/g) || []).length, 1);
+});
+
+test("buildTextForWidget keeps canonical pending suggestion visible across single-value confirm steps", () => {
+  const helpers = buildTextHelpers(() => "");
+  const scenarios = [
+    {
+      stepId: "purpose",
+      contract: "purpose:ASK:PURPOSE_MENU_QUESTIONS:v1",
+      suggestion:
+        "Mindd bestaat om mensen met complexe keuzes helderheid te geven, zodat ze met vertrouwen kunnen handelen.",
+    },
+    {
+      stepId: "role",
+      contract: "role:ASK:ROLE_MENU_QUESTIONS:v1",
+      suggestion:
+        "Mindd is de gids die complexe informatie vertaalt naar heldere keuzes voor ondernemers.",
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const output = helpers.buildTextForWidget({
+      specialist: {
+        ui_contract_id: scenario.contract,
+        message: "Heldere richting helpt je keuzes verscherpen.",
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_presentation: "canonical",
+        wording_choice_agent_current: scenario.suggestion,
+        refined_formulation: "",
+      },
+      state: {
+        active_specialist: scenario.stepId,
+        current_step: scenario.stepId,
+      } as any,
+    });
+    assert.match(output, /Heldere richting helpt je keuzes verscherpen\./);
+    assert.match(output, new RegExp(scenario.suggestion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+});
+
 test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
   const helpers = buildTextHelpers(() => "");
   const output = helpers.buildTextForWidget({
