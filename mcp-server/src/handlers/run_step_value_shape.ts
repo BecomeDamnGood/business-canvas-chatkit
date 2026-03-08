@@ -1,3 +1,5 @@
+import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
+
 function normalizeCandidateSurface(raw: unknown): string {
   return String(raw || "")
     .replace(/<[^>]+>/g, " ")
@@ -39,5 +41,6 @@ export function isValidStepValueForStorage(stepId: string, raw: unknown): boolea
   const value = normalizeCandidateSurface(raw);
   if (!value) return false;
   if (stepId !== "step_0" && stepId !== "presentation" && looksLikeExamplesFramingLine(value)) return false;
+  if (stepId === "dream") return isStageableDreamCandidate(value);
   return true;
 }

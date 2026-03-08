@@ -9,6 +9,7 @@ export type DreamRuntimePolicyApplyResult = {
   specialist: Record<string, unknown>;
   sourceViolationCodes: DreamRuntimeViolationCode[];
   candidateViolationCodes: DreamRuntimeViolationCode[];
+  candidateShapeValid: boolean;
   requiresRepair: boolean;
   repairSeed: string;
   canStage: boolean;
@@ -43,6 +44,31 @@ function looksLikeDreamLine(raw: unknown): boolean {
   if (value.includes("?")) return false;
   if (value.startsWith("ACTION_") || value.startsWith("__ROUTE__")) return false;
   return DREAM_LINE_PATTERN.test(value);
+}
+
+export function isStageableDreamCandidate(raw: unknown): boolean {
+  const value = normalizeComparable(raw);
+  if (!value) return false;
+  if (!looksLikeDreamLine(value)) return false;
+  const numberedLines = value
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /^\d+[\).]\s+/.test(line));
+  if (numberedLines.length > 0) return false;
+  const bulletLines = value
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /^[\-*•]\s+/.test(line));
+  if (bulletLines.length > 0) return false;
+  const words = value.split(/\s+/).filter(Boolean);
+  if (words.length < 7) return false;
+  if (words.length > 70) return false;
+  const sentenceCount = value
+    .split(/[.!?]+/)
+    .map((part) => part.trim())
+    .filter(Boolean).length;
+  if (sentenceCount < 1 || sentenceCount > 3) return false;
+  return true;
 }
 
 export function detectDreamRuntimeViolations(raw: unknown): DreamRuntimeViolationCode[] {
@@ -94,10 +120,11 @@ export function applyDreamRuntimePolicy(params: {
   const currentValue = normalizeComparable(params.currentValue || "");
   const sourceViolationCodes = detectDreamRuntimeViolations(sourceValue);
   const candidateViolationCodes = detectDreamRuntimeViolations(candidateValue);
+  const candidateShapeValid = candidateValue ? isStageableDreamCandidate(candidateValue) : true;
   const effectiveViolations =
     sourceViolationCodes.length > 0 ? sourceViolationCodes : candidateViolationCodes;
-  const canStage = candidateValue ? candidateViolationCodes.length === 0 : true;
-  const requiresRepair = Boolean(candidateValue) && candidateViolationCodes.length > 0;
+  const canStage = candidateValue ? candidateShapeValid && candidateViolationCodes.length === 0 : true;
+  const requiresRepair = Boolean(candidateValue) && (!candidateShapeValid || candidateViolationCodes.length > 0);
   const repairSeed = pickRepairSeed({
     candidateValue,
     sourceValue,
@@ -119,6 +146,7 @@ export function applyDreamRuntimePolicy(params: {
     specialist: nextSpecialist,
     sourceViolationCodes,
     candidateViolationCodes,
+    candidateShapeValid,
     requiresRepair,
     repairSeed,
     canStage,

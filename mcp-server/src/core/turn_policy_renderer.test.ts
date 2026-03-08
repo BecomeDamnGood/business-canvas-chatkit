@@ -704,6 +704,115 @@ test("single-value valid output suppresses stale feedback reason after user pick
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
+test("dream single-value content strips duplicated leading feedback sentence from support text", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd droomt van een wereld waarin mensen met plezier en vertrouwen hun aankopen doen.";
+  const feedbackReason =
+    "De huidige droom klinkt nog wat vlak en mist een sprankje inspiratie.";
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { dream: canonical };
+  (state as any).provisional_source_by_step = { dream: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: [
+        feedbackReason,
+        `${feedbackReason} Ik heb het beeld versterkt door te benadrukken dat mensen niet alleen zeker en vertrouwd willen kopen, maar vooral willen genieten van het plezier en de voldoening van hun keuzes.`,
+        "JE HUIDIGE DROOM VOOR MINDD IS",
+        canonical,
+      ].join("\n\n"),
+      question: "",
+      refined_formulation: canonical,
+      dream: canonical,
+      feedback_reason_text: feedbackReason,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  assert.equal(String(uiContent.feedback_reason_text || ""), feedbackReason);
+  assert.equal(
+    String(uiContent.support_text || ""),
+    "Ik heb het beeld versterkt door te benadrukken dat mensen niet alleen zeker en vertrouwd willen kopen, maar vooral willen genieten van het plezier en de voldoening van hun keuzes."
+  );
+});
+
+test("pending canonical single-value message strips duplicated leading feedback sentence across steps", () => {
+  const cases = [
+    {
+      stepId: "purpose",
+      activeSpecialist: "Purpose",
+      canonical: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      feedbackReason: "De huidige bestaansreden klinkt nog te algemeen.",
+      explanation:
+        "Ik heb hem aangescherpt zodat duidelijker wordt welke betekenis Mindd voor mensen wil hebben.",
+    },
+    {
+      stepId: "role",
+      activeSpecialist: "Role",
+      canonical: "Mindd verbindt complexe informatie met menselijke besluitkracht.",
+      feedbackReason: "De huidige rol klinkt nog te abstract.",
+      explanation:
+        "Ik heb hem concreter gemaakt zodat direct voelbaar wordt wat Mindd voor mensen doet.",
+    },
+    {
+      stepId: "entity",
+      activeSpecialist: "Entity",
+      canonical: "Mindd is een digitale innovatiepartner voor mkb-bedrijven.",
+      feedbackReason: "De huidige omschrijving klinkt nog te breed.",
+      explanation:
+        "Ik heb hem specifieker gemaakt zodat het type organisatie meteen duidelijker wordt.",
+    },
+  ] as const;
+
+  for (const current of cases) {
+    const state = getDefaultState();
+    (state as any).current_step = current.stepId;
+    (state as any).active_specialist = current.activeSpecialist;
+    (state as any).business_name = "Mindd";
+    (state as any).provisional_by_step = { [current.stepId]: current.canonical };
+    (state as any).provisional_source_by_step = { [current.stepId]: "wording_pick" };
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: current.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        message: [current.feedbackReason, `${current.feedbackReason} ${current.explanation}`].join("\n\n"),
+        question: "Wat vind je van deze formulering?",
+        refined_formulation: "",
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_presentation: "canonical",
+        wording_choice_agent_current: current.canonical,
+        feedback_reason_text: current.feedbackReason,
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    const message = String((rendered.specialist as any).message || "");
+    assert.equal(
+      (message.match(new RegExp(current.feedbackReason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) || []).length,
+      0
+    );
+    assert.match(
+      message,
+      new RegExp(current.explanation.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+    );
+    assert.doesNotMatch(
+      message,
+      new RegExp(current.canonical.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+    );
+  }
+});
+
 test("dream builder_refine keeps confirm action for user-driven current-value refinements", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes durven maken.";
@@ -732,6 +841,49 @@ test("dream builder_refine keeps confirm action for user-driven current-value re
   assert.equal(rendered.confirmEligible, true);
   assert.equal(rendered.contractId, "dream:valid_output:DREAM_EXPLAINER_MENU_REFINE");
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_EXPLAINER_REFINE_CONFIRM"), true);
+});
+
+test("dream render ignores malformed accepted builder summaries as current dream", () => {
+  const state = getDefaultState();
+  const malformedSummary = [
+    "Over 5 tot 10 jaar zullen meer mensen verlangen naar werk dat een positieve invloed heeft op het leven van anderen.",
+    "Steeds meer mensen zullen streven naar het bouwen van iets dat hun eigen leven overstijgt en blijvende waarde heeft voor de samenleving.",
+    "Vrijheid in tijd en keuzes zal voor mensen wereldwijd een steeds belangrijker thema worden.",
+    "Mensen zullen in de toekomst meer waarde hechten aan trots kunnen zijn op hun werk en hun bijdrage aan de samenleving.",
+  ].join(" ");
+
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { dream: malformedSummary };
+  (state as any).provisional_source_by_step = { dream: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: [
+        "De droom is het toekomstbeeld dat richting geeft aan alles wat je met je bedrijf wilt bereiken.",
+        "Een inspirerende droom helpt om keuzes te maken, motiveert jou en anderen, en zorgt dat je bedrijf meer is dan alleen producten of diensten verkopen.",
+      ].join("\n\n"),
+      question: "Schrijf een eerste versie van je droom.",
+      refined_formulation: "",
+      dream: "",
+      suggest_dreambuilder: "false",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.equal(rendered.status, "incomplete_output");
+  assert.equal(rendered.confirmEligible, false);
+  assert.doesNotMatch(message, /je huidige droom voor mindd is/i);
+  assert.doesNotMatch(
+    message,
+    /over 5 tot 10 jaar zullen meer mensen verlangen naar werk dat een positieve invloed heeft/i
+  );
 });
 
 test("single-value confirm steps keep confirm actions for user-driven current-value refinements", () => {

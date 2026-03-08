@@ -17,6 +17,7 @@ import {
 } from "./turn_policy/strategy_helpers.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
 import { evaluateRulesRuntimeGate } from "../steps/rulesofthegame_runtime_policy.js";
+import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -106,9 +107,17 @@ function provisionalSourceForStep(state: CanvasState, stepId: string): string {
   return "system_generated";
 }
 
+function isRenderableAcceptedValue(stepId: string, raw: unknown): boolean {
+  const value = String(raw || "").trim();
+  if (!value) return false;
+  if (stepId === "dream") return isStageableDreamCandidate(value);
+  return true;
+}
+
 function isAcceptedProvisional(state: CanvasState, stepId: string): boolean {
   const provisional = provisionalForStep(state, stepId);
   if (!provisional) return false;
+  if (!isRenderableAcceptedValue(stepId, provisional)) return false;
   const source = provisionalSourceForStep(state, stepId);
   return source === "user_input" || source === "wording_pick" || source === "action_route";
 }
@@ -116,14 +125,14 @@ function isAcceptedProvisional(state: CanvasState, stepId: string): boolean {
 function isAcceptedOutput(stepId: string, state: CanvasState): boolean {
   const finalField = getFinalFieldForStepId(stepId);
   const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
-  if (committedFinal) return true;
+  if (isRenderableAcceptedValue(stepId, committedFinal)) return true;
   return isAcceptedProvisional(state, stepId);
 }
 
 function acceptedCanonicalValueForStep(stepId: string, state: CanvasState): string {
   const finalField = getFinalFieldForStepId(stepId);
   const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
-  if (committedFinal) return committedFinal;
+  if (isRenderableAcceptedValue(stepId, committedFinal)) return committedFinal;
   if (isAcceptedProvisional(state, stepId)) return provisionalForStep(state, stepId);
   return "";
 }
@@ -404,6 +413,26 @@ function canonicalParagraphBlocks(raw: string): string[] {
     .filter(Boolean);
 }
 
+function sentenceBoundaryBlocks(raw: string): string[] {
+  return String(raw || "")
+    .replace(/\r/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+}
+
+function stripLeadingFeedbackSentence(block: string, feedbackReasonText: string): string {
+  const normalizedFeedback = comparableText(feedbackReasonText);
+  if (!normalizedFeedback) return String(block || "").trim();
+  const sentences = sentenceBoundaryBlocks(block);
+  if (sentences.length === 0) return String(block || "").trim();
+  const firstSentence = String(sentences[0] || "").trim();
+  if (comparableText(firstSentence) !== normalizedFeedback) return String(block || "").trim();
+  return sentences.slice(1).join(" ").trim();
+}
+
 function isSingleValueCanonicalBlock(block: string, heading: string, canonicalValue: string): boolean {
   const blockKey = comparableText(block);
   const canonicalKey = comparableText(canonicalValue);
@@ -424,21 +453,57 @@ function isSingleValueCanonicalBlock(block: string, heading: string, canonicalVa
   return blockKey === comparableText(`${heading} ${canonicalValue}`);
 }
 
+function isSingleValueHeadingBlock(block: string, heading: string): boolean {
+  const blockKey = comparableText(block);
+  const headingKey = comparableText(heading);
+  if (!blockKey || !headingKey) return false;
+  return blockKey === headingKey;
+}
+
+function isSingleValueHeadingLikeBlock(block: string): boolean {
+  const trimmed = String(block || "").trim();
+  if (!trimmed) return false;
+  if (trimmed.includes("\n")) return false;
+  const normalized = trimmed.replace(/\s+/g, " ");
+  const words = normalized.split(" ").filter(Boolean);
+  if (words.length === 0 || words.length > 12) return false;
+  return !/[.!?]$/.test(normalized);
+}
+
 function singleValueSupportText(params: {
   message: string;
   heading: string;
   canonicalValue: string;
   feedbackReasonText?: string;
 }): string {
-  const feedbackKey = comparableText(String(params.feedbackReasonText || "").trim());
+  const feedbackReasonText = String(params.feedbackReasonText || "").trim();
+  const feedbackKey = comparableText(feedbackReasonText);
   const blocks = canonicalParagraphBlocks(params.message);
-  const filtered = blocks.filter((block) => {
-    const blockKey = comparableText(block);
-    if (!blockKey) return false;
-    if (feedbackKey && blockKey === feedbackKey) return false;
-    if (isSingleValueCanonicalBlock(block, params.heading, params.canonicalValue)) return false;
-    return true;
-  });
+  const filtered = blocks
+    .map((block, index) => {
+      const blockKey = comparableText(block);
+      const nextBlock = String(blocks[index + 1] || "").trim();
+      if (!blockKey) return "";
+      if (feedbackKey && blockKey === feedbackKey) return "";
+      if (isSingleValueHeadingBlock(block, params.heading)) return "";
+      if (
+        isSingleValueHeadingLikeBlock(block) &&
+        isSingleValueCanonicalBlock(nextBlock, params.heading, params.canonicalValue)
+      ) {
+        return "";
+      }
+      if (isSingleValueCanonicalBlock(block, params.heading, params.canonicalValue)) return "";
+      return feedbackKey ? stripLeadingFeedbackSentence(block, feedbackReasonText) : block;
+    })
+    .map((block) => String(block || "").trim())
+    .filter((block) => {
+      const blockKey = comparableText(block);
+      if (!blockKey) return false;
+      if (feedbackKey && blockKey === feedbackKey) return false;
+      if (isSingleValueHeadingBlock(block, params.heading)) return false;
+      if (isSingleValueCanonicalBlock(block, params.heading, params.canonicalValue)) return false;
+      return true;
+    });
   return filtered.join("\n\n").trim();
 }
 
@@ -961,7 +1026,8 @@ function computeStatus(
   }
 
   const finalField = getFinalFieldForStepId(stepId);
-  const committedFinalValue = finalField ? String((state as any)[finalField] ?? "").trim() : "";
+  const committedFinalRaw = finalField ? String((state as any)[finalField] ?? "").trim() : "";
+  const committedFinalValue = isRenderableAcceptedValue(stepId, committedFinalRaw) ? committedFinalRaw : "";
   const provisionalValue = provisionalForStep(state, stepId);
   const acceptedOutput = isAcceptedOutput(stepId, state);
   const acceptedValue = committedFinalValue || (isAcceptedProvisional(state, stepId) ? provisionalValue : "");
@@ -1148,8 +1214,9 @@ function isRecapRequestedSpecialist(specialist: Record<string, unknown>): boolea
 function knownValueForStep(state: CanvasState, stepId: string): string {
   const finalField = getFinalFieldForStepId(stepId);
   const finalValue = finalField ? String((state as any)[finalField] || "").trim() : "";
-  if (finalValue) return finalValue;
-  return provisionalForStep(state, stepId);
+  if (isRenderableAcceptedValue(stepId, finalValue)) return finalValue;
+  const provisional = provisionalForStep(state, stepId);
+  return isRenderableAcceptedValue(stepId, provisional) ? provisional : "";
 }
 
 function buildKnownFactsRecap(state: CanvasState): string {
