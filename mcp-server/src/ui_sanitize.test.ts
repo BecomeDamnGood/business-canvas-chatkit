@@ -571,3 +571,31 @@ test("bundled prestart intro movie hides iframe when no language-specific link e
   assert.match(source, /if \(introVideoUrl\) \{/);
   assert.doesNotMatch(source, /PRESTART_SHOW_VIDEO\s*=\s*true/);
 });
+
+test("bundled ben profile movie uses language-mapped SSOT links and hides when unavailable", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /const BEN_PROFILE_VIDEO_BY_LANG = \{/);
+  assert.match(source, /en:\s*"https:\/\/youtu\.be\/kV4oF2mUZXI"/);
+  assert.match(source, /nl:\s*"https:\/\/youtu\.be\/5TLxnL2OkQo"/);
+  assert.match(source, /it:\s*"https:\/\/youtu\.be\/S7_GwDJZIAs"/);
+  assert.match(source, /de:\s*"https:\/\/youtu\.be\/T18fvylOojg"/);
+  assert.match(source, /es:\s*"https:\/\/youtu\.be\/eLSh19ZZ2yM"/);
+  assert.match(source, /function benProfileVideoUrlForLang\(lang\)/);
+  assert.match(source, /const videoUrl = benProfileVideoUrlForLang\(lang\);/);
+  assert.match(source, /if \(!videoUrl\) return;/);
+});
+
+test("bundled dream-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /const DREAM_STEP_VIDEO_BY_LANG = \{/);
+  assert.match(source, /en:\s*"https:\/\/youtu\.be\/94cmzR2w62o"/);
+  assert.match(source, /nl:\s*"https:\/\/youtu\.be\/kksn8roVbQg"/);
+  assert.match(source, /it:\s*"https:\/\/youtu\.be\/g-fbHy78uIw"/);
+  assert.match(source, /de:\s*"https:\/\/youtu\.be\/KtzkZFE4m5Q"/);
+  assert.match(source, /es:\s*"https:\/\/youtu\.be\/-36ryKgLiPo"/);
+  assert.match(source, /function dreamStepVideoUrlForLang\(lang\)/);
+  assert.match(source, /const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView;/);
+  assert.match(source, /appendDreamStepIntroVideo\(cardDescEl, lang\);/);
+  assert.match(source, /const videoUrl = dreamStepVideoUrlForLang\(lang\);/);
+  assert.match(source, /if \(!videoUrl\) return;/);
+});

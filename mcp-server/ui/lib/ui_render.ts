@@ -8,6 +8,8 @@ import {
   titlesForLang,
   prestartContentForLang,
   prestartIntroVideoUrlForLang,
+  benProfileVideoUrlForLang,
+  dreamStepVideoUrlForLang,
   hasPrestartContentForLang,
   getSectionTitle,
   setRuntimeUiStrings,
@@ -162,6 +164,37 @@ function prependBenProfileAvatar(cardDescEl: HTMLElement): void {
   };
   img.src = candidates[index];
   cardDescEl.insertBefore(img, cardDescEl.firstChild);
+}
+
+function appendVideoEmbed(cardDescEl: HTMLElement, videoUrl: string, title: string, prepend = false): void {
+  const safeVideoUrl = String(videoUrl || "").trim();
+  if (!cardDescEl || !safeVideoUrl) return;
+  const videoWrap = appendTextNode("div", "cardDesc-video", "");
+  const iframe = document.createElement("iframe");
+  iframe.src = safeVideoUrl;
+  iframe.title = String(title || "").trim() || "embedded-video";
+  iframe.setAttribute("allow", "autoplay; encrypted-media; fullscreen");
+  iframe.allowFullscreen = true;
+  videoWrap.appendChild(iframe);
+  if (prepend) {
+    cardDescEl.insertBefore(videoWrap, cardDescEl.firstChild);
+    return;
+  }
+  cardDescEl.appendChild(videoWrap);
+}
+
+function prependBenProfileVideo(cardDescEl: HTMLElement, lang: string | null | undefined): void {
+  if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;
+  const videoUrl = benProfileVideoUrlForLang(lang);
+  if (!videoUrl) return;
+  appendVideoEmbed(cardDescEl, videoUrl, "ben-profile-video", true);
+}
+
+function appendDreamStepIntroVideo(cardDescEl: HTMLElement, lang: string | null | undefined): void {
+  if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;
+  const videoUrl = dreamStepVideoUrlForLang(lang);
+  if (!videoUrl) return;
+  appendVideoEmbed(cardDescEl, videoUrl, "dream-step-video");
 }
 
 function activeStepLabel(
@@ -338,14 +371,7 @@ function renderPrestartContent(cardDesc: HTMLElement, lang: string): void {
 
   const introVideoUrl = prestartIntroVideoUrlForLang(lang);
   if (introVideoUrl) {
-    const videoWrap = appendTextNode("div", "cardDesc-video", "");
-    const iframe = document.createElement("iframe");
-    iframe.src = introVideoUrl;
-    iframe.title = String(content.headline || "").trim() || "prestart-video";
-    iframe.setAttribute("allow", "autoplay; encrypted-media; fullscreen");
-    iframe.allowFullscreen = true;
-    videoWrap.appendChild(iframe);
-    cardDesc.appendChild(videoWrap);
+    appendVideoEmbed(cardDesc, introVideoUrl, String(content.headline || "").trim() || "prestart-video");
   }
 
   const sectionOutcomes = appendTextNode("div", "section", "");
@@ -971,14 +997,24 @@ export function render(overrideToolOutput?: unknown): void {
     cardDescEl.classList.add("has-grid");
     const isBenProfile = String((specialist as Record<string, unknown>).meta_topic || "").trim().toUpperCase() === "BEN_PROFILE";
     const isStep0AskLayout = current === "step_0" && !isBenProfile;
+    const shouldAppendDreamStepVideo =
+      current === "dream" &&
+      showStepIntroChrome &&
+      dreamRuntimeMode === "self" &&
+      !isDreamDirectionView &&
+      !wordingChoiceActive;
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
     const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
     if (!renderedSemanticContent && !wordingChoiceActive) {
       renderStructuredText(cardDescEl, body || "");
+      if (shouldAppendDreamStepVideo) {
+        appendDreamStepIntroVideo(cardDescEl, lang);
+      }
     }
     if (isBenProfile) {
       prependBenProfileAvatar(cardDescEl);
+      prependBenProfileVideo(cardDescEl, lang);
     }
   }
 
