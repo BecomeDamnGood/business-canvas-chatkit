@@ -5,6 +5,13 @@ type WordingChoiceMode = "text" | "list";
 type WordingChoiceVariant = "default" | "clarify_dual";
 type WordingChoiceListSemantics = "delta" | "full";
 type WordingChoicePresentation = "picker" | "canonical";
+type PendingSuggestionIntent =
+  | "accept_suggestion_explicit"
+  | "reject_suggestion_explicit"
+  | "feedback_on_suggestion"
+  | "content_input"
+  | "";
+type PendingSuggestionAnchor = "suggestion" | "user_input" | "";
 
 type RenderFreeTextTurnPolicyResult = {
   specialist: Record<string, unknown>;
@@ -31,6 +38,9 @@ type BuildWordingChoiceFromTurnParams = {
   isOfftopic: boolean;
   forcePending?: boolean;
   dreamRuntimeModeRaw?: unknown;
+  submittedTextIntent?: string;
+  submittedTextAnchor?: string;
+  submittedFeedbackText?: string;
 };
 
 type WordingPickSelectionParams = {
@@ -338,7 +348,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return false;
   }
 
-  function prefersCanonicalSuggestionPresentation(stepId: string, mode: WordingChoiceMode): boolean {
+  function isSingleValueTextChoiceStep(stepId: string, mode: WordingChoiceMode): boolean {
     if (mode !== "text") return false;
     return (
       stepId === deps.dreamStepId ||
@@ -348,6 +358,70 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       stepId === deps.entityStepId ||
       stepId === "targetgroup"
     );
+  }
+
+  function normalizePendingSuggestionIntent(raw: unknown): PendingSuggestionIntent {
+    const value = String(raw || "").trim();
+    if (
+      value === "accept_suggestion_explicit" ||
+      value === "reject_suggestion_explicit" ||
+      value === "feedback_on_suggestion" ||
+      value === "content_input"
+    ) {
+      return value;
+    }
+    return "";
+  }
+
+  function normalizePendingSuggestionAnchor(raw: unknown): PendingSuggestionAnchor {
+    const value = String(raw || "").trim();
+    if (value === "suggestion" || value === "user_input") return value;
+    return "";
+  }
+
+  function resolveWordingChoicePresentation(params: {
+    stepId: string;
+    mode: WordingChoiceMode;
+    previousSpecialist: Record<string, unknown>;
+    forcePending: boolean;
+    submittedTextIntent?: string;
+    submittedTextAnchor?: string;
+  }): WordingChoicePresentation {
+    const { stepId, mode, previousSpecialist, forcePending } = params;
+    if (!isSingleValueTextChoiceStep(stepId, mode)) return "picker";
+    const preservedPresentation =
+      forcePending && String(previousSpecialist.wording_choice_pending || "") === "true"
+        ? String(previousSpecialist.wording_choice_presentation || "").trim()
+        : "";
+    if (preservedPresentation === "canonical" || preservedPresentation === "picker") {
+      return preservedPresentation;
+    }
+    const submittedIntent = normalizePendingSuggestionIntent(params.submittedTextIntent);
+    const submittedAnchor = normalizePendingSuggestionAnchor(params.submittedTextAnchor);
+    if (
+      submittedAnchor === "suggestion" &&
+      (submittedIntent === "feedback_on_suggestion" || submittedIntent === "reject_suggestion_explicit")
+    ) {
+      return "canonical";
+    }
+    return "picker";
+  }
+
+  function seedSourceForPendingSuggestion(params: {
+    intent: PendingSuggestionIntent;
+    anchor: PendingSuggestionAnchor;
+  }): string {
+    const { intent, anchor } = params;
+    if (
+      anchor === "suggestion" &&
+      (intent === "feedback_on_suggestion" || intent === "reject_suggestion_explicit")
+    ) {
+      return "previous_suggestion";
+    }
+    if (anchor === "suggestion" && intent === "accept_suggestion_explicit") {
+      return "accepted_suggestion";
+    }
+    return "user_input";
   }
 
   function copyPendingWordingChoiceState(current: unknown, previous: Record<string, unknown>): Record<string, unknown> {
@@ -378,6 +452,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_suggestion_label: String(previous.wording_choice_suggestion_label || ""),
       feedback_reason_key: String(previous.feedback_reason_key || ""),
       feedback_reason_text: String(previous.feedback_reason_text || ""),
+      pending_suggestion_intent: String(previous.pending_suggestion_intent || ""),
+      pending_suggestion_anchor: String(previous.pending_suggestion_anchor || ""),
+      pending_suggestion_seed_source: String(previous.pending_suggestion_seed_source || ""),
+      pending_suggestion_feedback_text: String(previous.pending_suggestion_feedback_text || ""),
+      pending_suggestion_presentation_mode: String(previous.pending_suggestion_presentation_mode || ""),
     };
   }
 
@@ -886,6 +965,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           wording_choice_presentation: "",
           feedback_reason_key: "",
           feedback_reason_text: "",
+          pending_suggestion_intent: "",
+          pending_suggestion_anchor: "",
+          pending_suggestion_seed_source: "",
+          pending_suggestion_feedback_text: "",
+          pending_suggestion_presentation_mode: "",
         },
         wordingChoice: null,
       };
@@ -900,6 +984,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           wording_choice_presentation: "",
           feedback_reason_key: "",
           feedback_reason_text: "",
+          pending_suggestion_intent: "",
+          pending_suggestion_anchor: "",
+          pending_suggestion_seed_source: "",
+          pending_suggestion_feedback_text: "",
+          pending_suggestion_presentation_mode: "",
         },
         wordingChoice: null,
       };
@@ -912,6 +1001,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     if (!forcePending && !deps.shouldTreatAsStepContributingInput(userRaw, stepId)) {
       return { specialist: specialistResult, wordingChoice: null };
     }
+    const submittedIntent = normalizePendingSuggestionIntent(params.submittedTextIntent);
+    const submittedAnchor = normalizePendingSuggestionAnchor(params.submittedTextAnchor);
     const suggestionRawCandidate = deps.pickDualChoiceSuggestion(stepId, specialistResult, previousSpecialist, userRaw);
     const suggestionRaw = unwrapSelectionHeadingFromText(
       stepId,
@@ -923,9 +1014,14 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
     const mode: WordingChoiceMode =
       isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
-    const presentation: WordingChoicePresentation = prefersCanonicalSuggestionPresentation(stepId, mode)
-      ? "canonical"
-      : "picker";
+    const presentation: WordingChoicePresentation = resolveWordingChoicePresentation({
+      stepId,
+      mode,
+      previousSpecialist,
+      forcePending: Boolean(forcePending),
+      submittedTextIntent: submittedIntent,
+      submittedTextAnchor: submittedAnchor,
+    });
     let normalizedUser = mode === "list"
       ? deps.normalizeListUserInput(userRaw)
       : deps.normalizeUserInputAgainstSuggestion(userRaw, suggestionRaw);
@@ -991,6 +1087,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_presentation: "",
         feedback_reason_key: "",
         feedback_reason_text: "",
+        pending_suggestion_intent: "",
+        pending_suggestion_anchor: "",
+        pending_suggestion_seed_source: "",
+        pending_suggestion_feedback_text: "",
+        pending_suggestion_presentation_mode: "",
         refined_formulation: chosen,
         ...(mode === "list" ? { statements: chosenItems } : {}),
       };
@@ -1049,6 +1150,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       looksLikeDualClarificationPrompt(previousSpecialist)
         ? "clarify_dual"
         : "default";
+    const pendingSuggestionSeedSource = seedSourceForPendingSuggestion({
+      intent: submittedIntent,
+      anchor: submittedAnchor,
+    });
+    const feedbackText = String(params.submittedFeedbackText || "").trim();
     const enriched: Record<string, unknown> = {
       ...specialistResult,
       message: pendingMessage,
@@ -1070,6 +1176,12 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         variant === "clarify_dual" ? clarifySuggestionLabelForState(state) : "",
       feedback_reason_key: "",
       feedback_reason_text: feedbackReason,
+      pending_suggestion_intent: submittedIntent,
+      pending_suggestion_anchor: submittedAnchor,
+      pending_suggestion_seed_source: pendingSuggestionSeedSource,
+      pending_suggestion_feedback_text:
+        submittedAnchor === "suggestion" && feedbackText ? stripMarkupPreserveLines(feedbackText) : "",
+      pending_suggestion_presentation_mode: presentation,
     };
     if (targetField) {
       enriched[targetField] = committedText;
@@ -1172,6 +1284,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_suggestion_label: "",
         feedback_reason_key: "",
         feedback_reason_text: "",
+        pending_suggestion_intent: "",
+        pending_suggestion_anchor: "",
+        pending_suggestion_seed_source: "",
+        pending_suggestion_feedback_text: "",
+        pending_suggestion_presentation_mode: "",
         ...(mode === "list" ? { statements: mergedPickedItems } : {}),
       },
       stepId,

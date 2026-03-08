@@ -30,6 +30,8 @@ export type UiViewVariant =
   | "dream_builder_scoring"
   | "dream_builder_refine";
 
+export type DreamBuilderBodyMode = "none" | "support_only" | "full_narrative";
+
 type UiViewModeRoute =
   | "prestart"
   | "interactive"
@@ -39,6 +41,8 @@ export type UiViewPayload = {
   mode?: UiViewModeRoute;
   waiting_locale?: false;
   variant?: Exclude<UiViewVariant, "default">;
+  dream_builder_body_mode?: DreamBuilderBodyMode;
+  dream_builder_statements_visible?: boolean;
 };
 
 export type UiContractMeta = {
@@ -119,6 +123,31 @@ function menuBelongsToStep(menuId: string, stepId: string): boolean {
     const actionStep = String(ACTIONCODE_REGISTRY.actions[actionCode]?.step || "").trim();
     return actionStep === safeStepId || actionStep === "system";
   });
+}
+
+function splitComparableSentences(text: string): string[] {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .split(/(?:[.!?]+\s+|\n+)/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function inferDreamBuilderBodyMode(bodyRaw: string): DreamBuilderBodyMode {
+  const body = String(bodyRaw || "").trim();
+  if (!body) return "none";
+  const paragraphs = body
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+  if (paragraphs.length === 0) return "none";
+  const allSupportOnly = paragraphs.every((paragraph) => {
+    const words = paragraph.split(/\s+/).map((token) => token.trim()).filter(Boolean).length;
+    const sentenceCount = splitComparableSentences(paragraph).length;
+    return words > 0 && words <= 18 && sentenceCount <= 1;
+  });
+  return allSupportOnly ? "support_only" : "full_narrative";
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -274,7 +303,8 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     wordingChoiceOverride?: WordingChoiceUiPayload | null,
     stateOverride?: CanvasState | null,
     stepIdOverride?: string,
-    contractMetaOverride?: UiContractMeta | null
+    contractMetaOverride?: UiContractMeta | null,
+    canonicalTextOverride?: string | null
   ): {
     action_codes?: string[];
     expected_choice_count?: number;
@@ -365,6 +395,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const effectiveStepId = String(stepIdOverride || (effectiveState as any)?.current_step || "").trim();
     const contractMenuId = parseMenuFromContractIdForStep(contractMeta.contractId, effectiveStepId);
     const dreamRuntimeMode = String((effectiveState as any)?.__dream_runtime_mode || "").trim();
+    const canonicalText = String(canonicalTextOverride || "").trim();
     const statementsCount = Array.isArray((specialist as any)?.statements)
       ? ((specialist as any).statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).length
       : 0;
@@ -380,6 +411,16 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       Boolean(wordingChoiceOverride?.enabled) ||
       String((specialist as any)?.wording_choice_pending || "").trim() === "true" ||
       Boolean((flagsOverride || {}).require_wording_pick);
+    const suggestDreamBuilder = String((specialist as any)?.suggest_dreambuilder || "").trim() === "true";
+    const dreamBuilderFlowActive =
+      effectiveStepId === DREAM_STEP_ID &&
+      (
+        dreamRuntimeMode === "builder_collect" ||
+        dreamRuntimeMode === "builder_refine" ||
+        dreamRuntimeMode === "builder_scoring" ||
+        suggestDreamBuilder ||
+        contractMenuId.startsWith("DREAM_EXPLAINER_MENU_")
+      );
     let viewVariant: UiViewVariant = "default";
     if (
       effectiveStepId === DREAM_STEP_ID &&
@@ -389,16 +430,33 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       viewVariant = "dream_builder_scoring";
     } else if (wordingPickPending) {
       viewVariant = "wording_choice";
-    } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_refine") {
-      viewVariant = "dream_builder_refine";
-    } else if (effectiveStepId === DREAM_STEP_ID && dreamRuntimeMode === "builder_collect") {
-      viewVariant = "dream_builder_collect";
+    } else if (dreamBuilderFlowActive) {
+      viewVariant =
+        dreamRuntimeMode === "builder_refine" || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
+          ? "dream_builder_refine"
+          : "dream_builder_collect";
     }
     const shouldForceQuestionText = viewVariant === "wording_choice";
     const questionTextPayload = shouldForceQuestionText
       ? { questionText: String(questionText || "").trim() }
       : (questionText ? { questionText } : {});
     const view = deps.deriveUiViewPayload(viewVariant);
+    const dreamBuilderStatementsVisible =
+      (viewVariant === "dream_builder_collect" || viewVariant === "dream_builder_refine") &&
+      canonicalStatementsCount > 0 &&
+      canonicalStatementsCount < 20;
+    const dreamBuilderBodyMode =
+      dreamBuilderFlowActive && viewVariant !== "dream_builder_scoring"
+        ? inferDreamBuilderBodyMode(canonicalText)
+        : undefined;
+    const viewPayload =
+      view && dreamBuilderFlowActive
+        ? {
+            ...view,
+            ...(dreamBuilderBodyMode ? { dream_builder_body_mode: dreamBuilderBodyMode } : {}),
+            dream_builder_statements_visible: dreamBuilderStatementsVisible,
+          }
+        : view;
     if (Array.isArray(actionCodesOverride)) {
       const safeOverrideCodes = deps.sanitizeWidgetActionCodes(
         actionCodesOverride.map((code) => String(code || "").trim()).filter(Boolean)
@@ -416,18 +474,18 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-          ...(view ? { view } : {}),
+          ...(viewPayload ? { view: viewPayload } : {}),
           flags,
           ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
         };
       }
-      if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
+      if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload) {
         return {
           ...questionTextPayload,
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-          ...(view ? { view } : {}),
+          ...(viewPayload ? { view: viewPayload } : {}),
           flags,
           ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
         };
@@ -459,13 +517,13 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           flags.escape_actioncodes_suppressed = true;
         }
         if (safeCodes.length === 0) {
-          if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
+          if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload) {
             return {
               ...questionTextPayload,
               ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
               ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
               ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-              ...(view ? { view } : {}),
+              ...(viewPayload ? { view: viewPayload } : {}),
               flags,
               ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
             };
@@ -481,19 +539,19 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-          ...(view ? { view } : {}),
+          ...(viewPayload ? { view: viewPayload } : {}),
           flags,
           ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
         };
       }
     }
-    if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || view) {
+    if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload) {
       return {
         ...questionTextPayload,
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
-        ...(view ? { view } : {}),
+        ...(viewPayload ? { view: viewPayload } : {}),
         flags,
         ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
       };
@@ -537,7 +595,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         state: payloadState,
       });
     }
-    const ui = buildUiPayload(
+    const provisionalUi = buildUiPayload(
       safeSpecialist,
       flagsOverride,
       actionCodesOverride,
@@ -547,9 +605,28 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       payloadStepId,
       effectiveContractOverride
     );
-    const hasWidgetActions =
-      (Array.isArray(ui?.action_codes) && ui.action_codes.length > 0) ||
-      (Array.isArray(ui?.actions) && ui.actions.length > 0);
+    const provisionalHasWidgetActions =
+      (Array.isArray(provisionalUi?.action_codes) && provisionalUi.action_codes.length > 0) ||
+      (Array.isArray(provisionalUi?.actions) && provisionalUi.actions.length > 0);
+    const canonicalText = Object.prototype.hasOwnProperty.call(payload, "text")
+      ? deps.buildTextForWidget({
+          specialist: safeSpecialist,
+          hasWidgetActions: provisionalHasWidgetActions,
+          questionTextOverride: String(provisionalUi?.questionText || ""),
+          state: payloadState || null,
+        })
+      : String((payload as Record<string, unknown>).text || "");
+    const ui = buildUiPayload(
+      safeSpecialist,
+      flagsOverride,
+      actionCodesOverride,
+      renderedActionsOverride,
+      wordingChoiceOverride,
+      payloadState,
+      payloadStepId,
+      effectiveContractOverride,
+      canonicalText
+    );
     const existingMeta = toRecord((payload as Record<string, unknown>)._meta);
     const payloadMeta = existingMeta;
     const safePayload = {
@@ -558,12 +635,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       ...(Object.keys(payloadMeta).length > 0 ? { _meta: payloadMeta } : {}),
       ...(Object.prototype.hasOwnProperty.call(payload, "text")
         ? {
-            text: deps.buildTextForWidget({
-              specialist: safeSpecialist,
-              hasWidgetActions,
-              questionTextOverride: String(ui?.questionText || ""),
-              state: payloadState || null,
-            }),
+            text: canonicalText,
           }
         : {}),
       ...(Object.prototype.hasOwnProperty.call(payload, "prompt")

@@ -180,6 +180,57 @@ export function dedupeBodyAgainstPrompt(bodyRaw: string, promptRaw: string): str
   return rest.replace(/^\s+/, "");
 }
 
+export function readDreamBuilderViewContract(
+  uiViewRaw: Record<string, unknown> | null | undefined
+): {
+  active: boolean;
+  bodyMode: "" | "none" | "support_only" | "full_narrative";
+  hasExplicitStatementsVisible: boolean;
+  statementsVisible: boolean;
+} {
+  const uiView = uiViewRaw && typeof uiViewRaw === "object" ? uiViewRaw : {};
+  const variant = String(uiView.variant || "").trim();
+  const active =
+    variant === "dream_builder_collect" ||
+    variant === "dream_builder_refine" ||
+    variant === "dream_builder_scoring";
+  const bodyModeRaw = String(uiView.dream_builder_body_mode || "").trim();
+  const bodyMode =
+    bodyModeRaw === "none" || bodyModeRaw === "support_only" || bodyModeRaw === "full_narrative"
+      ? bodyModeRaw
+      : "";
+  const rawStatementsVisible = uiView.dream_builder_statements_visible;
+  const hasExplicitStatementsVisible = rawStatementsVisible === true || rawStatementsVisible === false;
+  return {
+    active,
+    bodyMode,
+    hasExplicitStatementsVisible,
+    statementsVisible: rawStatementsVisible === true,
+  };
+}
+
+export function resolveWidgetBodyText(params: {
+  currentStep: string;
+  resultText: unknown;
+  specialist: Record<string, unknown>;
+  promptBody?: unknown;
+  dreamBuilderViewContract?: ReturnType<typeof readDreamBuilderViewContract>;
+}): string {
+  const resultText = typeof params.resultText === "string" ? String(params.resultText || "").trim() : "";
+  const promptBody = String(params.promptBody || "");
+  const specialist = params.specialist || {};
+  const specialistText =
+    String(specialist.message || "").trim() ||
+    String(specialist.refined_formulation || "").trim() ||
+    String(specialist.question || "").trim();
+  const dreamBuilderViewContract = params.dreamBuilderViewContract || readDreamBuilderViewContract(null);
+  if (params.currentStep === "dream" && dreamBuilderViewContract.active) {
+    if (typeof params.resultText === "string") return resultText;
+    if (dreamBuilderViewContract.bodyMode === "none") return "";
+  }
+  return resultText || specialistText || promptBody;
+}
+
 function normalizeChoiceLine(value: string): string {
   return String(value || "")
     .trim()
@@ -826,37 +877,32 @@ export function render(overrideToolOutput?: unknown): void {
   const isDreamDirectionView =
     current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
 
-  const bodyRaw = ((): string => {
-    const resultText = typeof result?.text === "string" ? result.text : "";
-    const specialistText =
-      String(specialist.message || "").trim() ||
-      String(specialist.refined_formulation || "").trim() ||
-      String(specialist.question || "").trim();
-    return (
-      String(resultText || "").trim() ||
-      specialistText ||
-      (uiPayload.prompt && typeof (uiPayload.prompt as Record<string, unknown>).body === "string"
-        ? String((uiPayload.prompt as Record<string, unknown>).body || "")
-        : "")
-    );
-  })();
   const uiViewVariant = String((uiView.variant || "")).trim();
-  const hasExplicitViewVariant = uiViewVariant.length > 0;
   const isViewModeWordingChoice = uiViewVariant === "wording_choice";
   const isViewModeDreamBuilderCollect = uiViewVariant === "dream_builder_collect";
   const isViewModeDreamBuilderRefine = uiViewVariant === "dream_builder_refine";
   const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
+  const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
   const uiQuestionText = String(uiPayload.questionText || "").trim();
   const structuredActions = choiceActionsForResult(result);
   const hasStructuredActions = structuredActions.length > 0;
+  const promptBody =
+    uiPayload.prompt && typeof (uiPayload.prompt as Record<string, unknown>).body === "string"
+      ? String((uiPayload.prompt as Record<string, unknown>).body || "")
+      : "";
   const promptRaw = (
     uiQuestionText ||
     String(specialist.question || "").trim() ||
     (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") ||
-    (uiPayload.prompt && typeof (uiPayload.prompt as Record<string, unknown>).body === "string"
-      ? String((uiPayload.prompt as Record<string, unknown>).body || "")
-      : "")
+    promptBody
   ) as string;
+  const bodyRaw = resolveWidgetBodyText({
+    currentStep: current,
+    resultText: result?.text,
+    specialist,
+    promptBody,
+    dreamBuilderViewContract,
+  });
   let promptSource = promptRaw;
   let body: string;
   if (isDreamDirectionView && promptSource) {
@@ -1194,7 +1240,11 @@ export function render(overrideToolOutput?: unknown): void {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   } else if (
     current === "dream" &&
-    (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine || (!hasExplicitViewVariant && isDreamExplainerMode)) &&
+    (
+      dreamBuilderViewContract.hasExplicitStatementsVisible
+        ? dreamBuilderViewContract.statementsVisible
+        : (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine)
+    ) &&
     Array.isArray(statementsArray) &&
     statementsArray.length > 0 &&
     statementsArray.length < 20

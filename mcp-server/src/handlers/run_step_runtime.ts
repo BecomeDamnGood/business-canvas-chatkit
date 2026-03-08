@@ -384,6 +384,11 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
   safe.wording_choice_suggestion_label = "";
   safe.feedback_reason_key = "";
   safe.feedback_reason_text = "";
+  safe.pending_suggestion_intent = "";
+  safe.pending_suggestion_anchor = "";
+  safe.pending_suggestion_seed_source = "";
+  safe.pending_suggestion_feedback_text = "";
+  safe.pending_suggestion_presentation_mode = "";
   return safe;
 }
 

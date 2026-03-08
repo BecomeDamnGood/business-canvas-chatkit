@@ -231,6 +231,9 @@ test("runStepRuntimeActionRoutingLayer clears pending wording choice for feedbac
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
   assert.equal(String(specialist.wording_choice_selected || ""), "");
+  assert.equal(String(specialist.pending_suggestion_intent || ""), "feedback_on_suggestion");
+  assert.equal(String(specialist.pending_suggestion_anchor || ""), "suggestion");
+  assert.equal(String(specialist.pending_suggestion_seed_source || ""), "previous_suggestion");
 });
 
 test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when user explicitly rejects it", async () => {
@@ -256,6 +259,8 @@ test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when 
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
   assert.equal(String(specialist.wording_choice_selected || ""), "");
+  assert.equal(String(specialist.pending_suggestion_intent || ""), "reject_suggestion_explicit");
+  assert.equal(String(specialist.pending_suggestion_anchor || ""), "suggestion");
 });
 
 test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Dream pending flow", async () => {

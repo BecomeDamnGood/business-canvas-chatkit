@@ -538,13 +538,27 @@ function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality
   const promptObj = toRecord(uiPayload.prompt);
   const specialist = toRecord(result.specialist);
   const viewMode = String(uiView.mode || "").trim().toLowerCase();
+  const viewVariant = String(uiView.variant || "").trim();
   const uiStrings = toRecord(state.ui_strings);
   const hasUiStrings = Object.keys(uiStrings).length > 0;
+  const hasDreamBuilderStatements =
+    (
+      uiView.dream_builder_statements_visible === true ||
+      (
+        (viewVariant === "dream_builder_collect" || viewVariant === "dream_builder_refine") &&
+        uiView.dream_builder_statements_visible !== false
+      )
+    ) &&
+    (
+      Array.isArray(specialist.statements) && specialist.statements.length > 0 ||
+      Array.isArray(state.dream_builder_statements) && state.dream_builder_statements.length > 0
+    );
   const hasInteractiveContent =
     String(result.text || "").trim().length > 0 ||
     String(result.prompt || "").trim().length > 0 ||
     String(promptObj.body || "").trim().length > 0 ||
     String(uiPayload.questionText || "").trim().length > 0 ||
+    hasDreamBuilderStatements ||
     String(specialist.message || "").trim().length > 0 ||
     String(specialist.question || "").trim().length > 0 ||
     String(specialist.refined_formulation || "").trim().length > 0 ||

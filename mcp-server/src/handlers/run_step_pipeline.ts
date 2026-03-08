@@ -196,6 +196,11 @@ function clearPendingWordingChoiceFields(specialistResult: Record<string, unknow
     wording_choice_variant: "",
     wording_choice_user_label: "",
     wording_choice_suggestion_label: "",
+    pending_suggestion_intent: "",
+    pending_suggestion_anchor: "",
+    pending_suggestion_seed_source: "",
+    pending_suggestion_feedback_text: "",
+    pending_suggestion_presentation_mode: "",
   };
 }
 
@@ -825,6 +830,9 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         isOfftopic: false,
         forcePending: forcePendingWordingChoice,
         dreamRuntimeModeRaw: dreamRuntimeModeForWording,
+        submittedTextIntent: String(params.submittedTextIntent || "").trim(),
+        submittedTextAnchor: String(params.submittedTextAnchor || "").trim(),
+        submittedFeedbackText: String(params.submittedUserText || "").trim(),
       });
       specialistResult = rebuilt.specialist;
     }

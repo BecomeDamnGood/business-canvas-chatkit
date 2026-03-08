@@ -3711,6 +3711,35 @@
   function normalizeChoiceLine(value) {
     return String(value || "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!?]+$/g, "").trim();
   }
+  function readDreamBuilderViewContract(uiViewRaw) {
+    const uiView2 = uiViewRaw && typeof uiViewRaw === "object" ? uiViewRaw : {};
+    const variant = String(uiView2.variant || "").trim();
+    const active = variant === "dream_builder_collect" || variant === "dream_builder_refine" || variant === "dream_builder_scoring";
+    const bodyModeRaw = String(uiView2.dream_builder_body_mode || "").trim();
+    const bodyMode = bodyModeRaw === "none" || bodyModeRaw === "support_only" || bodyModeRaw === "full_narrative" ? bodyModeRaw : "";
+    const rawStatementsVisible = uiView2.dream_builder_statements_visible;
+    const hasExplicitStatementsVisible = rawStatementsVisible === true || rawStatementsVisible === false;
+    return {
+      active,
+      bodyMode,
+      hasExplicitStatementsVisible,
+      statementsVisible: rawStatementsVisible === true
+    };
+  }
+  function resolveWidgetBodyText(params) {
+    const resultText = typeof params.resultText === "string" ? String(params.resultText || "").trim() : "";
+    const promptBody = String(params.promptBody || "");
+    const specialist2 = params.specialist || {};
+    const specialistText = String(specialist2.message || "").trim() || String(specialist2.refined_formulation || "").trim() || String(specialist2.question || "").trim();
+    const dreamBuilderViewContract2 = params.dreamBuilderViewContract || readDreamBuilderViewContract(null);
+    if (params.currentStep === "dream" && dreamBuilderViewContract2.active) {
+      if (typeof params.resultText === "string")
+        return resultText;
+      if (dreamBuilderViewContract2.bodyMode === "none")
+        return "";
+    }
+    return resultText || specialistText || promptBody;
+  }
   function stripStructuredChoiceLines(promptRaw, lang) {
     const blockedLines = [
       t(lang, "wordingChoiceInstruction"),
@@ -4124,28 +4153,25 @@
     startHint.textContent = "";
     startHint.style.display = "none";
     const isDreamDirectionView = current === "dream" && String(state.dream_awaiting_direction || "").trim() === "true";
-    const bodyRaw = (() => {
-      if (result && typeof result === "object" && Object.prototype.hasOwnProperty.call(result, "text")) {
-        const resultText = typeof result.text === "string" ? result.text : "";
-        if (stripInlineText(resultText).trim().length > 0) return resultText;
-      }
-      if (result?.specialist && typeof result.specialist === "object") {
-        const sp = result.specialist;
-        return String(sp.message || "").trim() || String(sp.refined_formulation || "").trim() || String(sp.question || "").trim() || "";
-      }
-      return "";
-    })();
     const uiViewVariant = String(uiView.variant || "").trim();
-    const hasExplicitViewVariant = uiViewVariant.length > 0;
     const isViewModeWordingChoice = uiViewVariant === "wording_choice";
     const isViewModeDreamBuilderCollect = uiViewVariant === "dream_builder_collect";
     const isViewModeDreamBuilderRefine = uiViewVariant === "dream_builder_refine";
     const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
+    const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
     const uiQuestionText = String(uiPayload.questionText || "").trim();
     const structuredActions = Array.isArray(uiPayload.actions) ? uiPayload.actions : [];
     const hasStructuredActions = structuredActions.length > 0;
-    const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") || (uiPayload.prompt && typeof uiPayload.prompt.body === "string" ? String(uiPayload.prompt.body || "") : "");
+    const promptBody = uiPayload.prompt && typeof uiPayload.prompt.body === "string" ? String(uiPayload.prompt.body || "") : "";
+    const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") || promptBody;
     const promptSource = uiQuestionText || promptRaw;
+    const bodyRaw = resolveWidgetBodyText({
+      currentStep: current,
+      resultText: result?.text,
+      specialist,
+      promptBody,
+      dreamBuilderViewContract
+    });
     let body;
     if (isDreamDirectionView && promptSource) {
       body = promptSource;
@@ -4409,7 +4435,7 @@
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
     } else if (isDreamDirectionView) {
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
-    } else if (current === "dream" && (isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine || !hasExplicitViewVariant && isDreamExplainerMode) && Array.isArray(statementsArray) && statementsArray.length > 0 && statementsArray.length < 20) {
+    } else if (current === "dream" && (dreamBuilderViewContract.hasExplicitStatementsVisible ? dreamBuilderViewContract.statementsVisible : isViewModeDreamBuilderCollect || isViewModeDreamBuilderRefine) && Array.isArray(statementsArray) && statementsArray.length > 0 && statementsArray.length < 20) {
       if (statementsPanelEl) statementsPanelEl.style.display = "block";
       if (statementsTitleEl)
         statementsTitleEl.textContent = t(lang, "dreamBuilder.statements.title");

@@ -355,6 +355,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       wording_choice_suggestion_label: "",
       feedback_reason_key: "",
       feedback_reason_text: "",
+      pending_suggestion_intent: "",
+      pending_suggestion_anchor: "",
+      pending_suggestion_seed_source: "",
+      pending_suggestion_feedback_text: "",
+      pending_suggestion_presentation_mode: "",
     };
     (next as any).last_specialist_result = resetLast;
     return next;
@@ -629,6 +634,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       state.last_specialist_result && typeof state.last_specialist_result === "object"
         ? (state.last_specialist_result as Record<string, unknown>)
         : {};
+    const pendingSuggestionIntent = String(lastRaw.pending_suggestion_intent || "").trim();
+    const pendingSuggestionAnchor = String(lastRaw.pending_suggestion_anchor || "").trim();
+    const pendingSuggestionSeedSource = String(lastRaw.pending_suggestion_seed_source || "").trim();
+    const pendingSuggestionFeedbackText = String(lastRaw.pending_suggestion_feedback_text || "").trim();
+    const pendingSuggestionPresentationMode = String(lastRaw.pending_suggestion_presentation_mode || "").trim();
     const last = JSON.stringify(
       contextSnapshotV2Enabled ? buildContextSafeLastSpecialistResult(state) : lastRaw
     );
@@ -649,6 +659,23 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
         : Object.entries(finals)
             .map(([k, v]) => `- ${k}: ${safe(v)}`)
             .join("\n");
+    const pendingSuggestionContractLines =
+      pendingSuggestionIntent && pendingSuggestionAnchor
+        ? [
+            "",
+            "PENDING SUGGESTION CONTRACT (follow exactly when present)",
+            `- intent: ${safe(pendingSuggestionIntent)}`,
+            `- anchor: ${safe(pendingSuggestionAnchor)}`,
+            `- seed_source: ${safe(pendingSuggestionSeedSource)}`,
+            `- presentation_mode: ${safe(pendingSuggestionPresentationMode)}`,
+            pendingSuggestionFeedbackText
+              ? `- feedback_text: ${safe(pendingSuggestionFeedbackText)}`
+              : "- feedback_text: (none)",
+            "- If intent is feedback_on_suggestion or reject_suggestion_explicit with anchor suggestion, rewrite the previous suggestion itself.",
+            "- Stay on step content. Do not switch to coaching, motivation, process explanation, or meta-step framing.",
+            "- Return the next candidate wording for the same step field.",
+          ].join("\n")
+        : "";
 
     return `STATE FINALS (canonical; use for recap; do not invent)
 ${finalsLines}
@@ -658,6 +685,7 @@ RECAP RULE: Only include in a recap the finals listed above. Do not add placehol
 STATE META (do not output this section)
 - intro_shown_for_step: ${safe((state as any).intro_shown_for_step)}
 - intro_shown_session: ${safe((state as any).intro_shown_session)}
+${pendingSuggestionContractLines}
 - last_specialist_result_json: ${safe(last)}`;
   }
 

@@ -18,6 +18,11 @@ const GLOBAL_CONTEXT_KEYS = new Set([
   "wording_choice_suggestion_items",
   "wording_choice_target_field",
   "wording_choice_presentation",
+  "pending_suggestion_intent",
+  "pending_suggestion_anchor",
+  "pending_suggestion_seed_source",
+  "pending_suggestion_feedback_text",
+  "pending_suggestion_presentation_mode",
 ]);
 
 const STEP_FIELD_BY_STEP_ID: Record<string, string> = {

@@ -379,6 +379,32 @@ function singleValueConfirmCanonicalMessage(stepId: string, state: CanvasState, 
   return `${heading}\n${canonical}`.trim();
 }
 
+function hasCanonicalContextBlockShape(message: string, heading: string, canonicalValue: string): boolean {
+  const canonicalKey = comparableText(canonicalValue);
+  if (!canonicalKey) return false;
+  const headingKey = comparableText(heading);
+  const lines = String(message || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  for (let i = 0; i < lines.length; i += 1) {
+    const currentKey = comparableText(lines[i] || "");
+    if (!currentKey) continue;
+    if (!headingKey) {
+      if (currentKey === canonicalKey) return true;
+      continue;
+    }
+    if (currentKey !== headingKey) continue;
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const nextKey = comparableText(lines[j] || "");
+      if (!nextKey) continue;
+      return nextKey === canonicalKey;
+    }
+  }
+  return false;
+}
+
 function ensureCanonicalContextBlockInMessage(params: {
   message: string;
   canonicalValue: string;
@@ -394,15 +420,25 @@ function ensureCanonicalContextBlockInMessage(params: {
   const messageKey = comparableText(messageRaw);
   const hasCanonical = Boolean(messageKey && messageKey.includes(canonicalKey));
   const hasHeading = Boolean(headingKey && messageKey.includes(headingKey));
-  if (hasCanonical && hasHeading) return messageRaw;
   const canonicalBlock = heading ? `${heading}\n${canonical}` : canonical;
+  if (hasCanonical && hasHeading && hasCanonicalContextBlockShape(messageRaw, heading, canonical)) {
+    return messageRaw;
+  }
   if (!messageRaw) return canonicalBlock;
   const paragraphs = messageRaw
     .replace(/\r/g, "\n")
     .split(/\n{2,}/)
     .map((part) => String(part || "").trim())
     .filter(Boolean);
-  const filteredParagraphs = paragraphs.filter((paragraph) => comparableText(paragraph) !== canonicalKey);
+  const filteredParagraphs = paragraphs.filter((paragraph) => {
+    const paragraphKey = comparableText(paragraph);
+    if (!paragraphKey) return false;
+    if (paragraphKey === canonicalKey) return false;
+    if (headingKey && paragraphKey === headingKey) return false;
+    if (paragraphKey.includes(canonicalKey)) return false;
+    if (headingKey && paragraphKey.includes(headingKey)) return false;
+    return true;
+  });
   let base = filteredParagraphs.join("\n\n").trim();
   if (hasCanonical && !hasHeading) {
     base = base.replace(canonical, "").replace(/\n{3,}/g, "\n\n").trim();
@@ -1499,6 +1535,11 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       ? "canonical"
       : "picker";
   const feedbackReasonForDisplay = String((specialistForDisplay as any).feedback_reason_text || "").trim();
+  const pendingCanonicalValue =
+    wordingPending && wordingPresentation === "canonical"
+      ? String((specialistForDisplay as any).wording_choice_agent_current || specialistForDisplay.refined_formulation || "")
+        .trim()
+      : "";
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
     wordingPending &&
@@ -1510,6 +1551,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
           ""
         )
       : message;
+  if (wordingPending && wordingPresentation === "canonical" && pendingCanonicalValue) {
+    messageForDisplay = ensureCanonicalContextBlockInMessage({
+      message: messageForDisplay,
+      canonicalValue: pendingCanonicalValue,
+      heading: singleValueConfirmHeading(stepId, state),
+    });
+  }
   const useSingleValueConfirmSsot =
     shouldEnforceConfirmVisibility &&
     Boolean(canonicalAcceptedValue) &&

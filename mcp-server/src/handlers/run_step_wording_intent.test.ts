@@ -171,7 +171,7 @@ function buildHeadingAwareSingleValueHelpers(params: {
   });
 }
 
-test("buildWordingChoiceFromTurn keeps targetgroup in canonical pending presentation", () => {
+test("buildWordingChoiceFromTurn keeps targetgroup in picker pending presentation for direct content input", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "targetgroup",
@@ -189,12 +189,12 @@ test("buildWordingChoiceFromTurn keeps targetgroup in canonical pending presenta
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.ok(result.wordingChoice);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
 
-test("buildWordingChoiceFromTurn keeps canonical pending presentation for regular targetgroup rewrites", () => {
+test("buildWordingChoiceFromTurn keeps targetgroup picker pending presentation for regular rewrites", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "targetgroup",
@@ -211,12 +211,12 @@ test("buildWordingChoiceFromTurn keeps canonical pending presentation for regula
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.ok(result.wordingChoice);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
 
-test("buildWordingChoiceFromTurn keeps Dream in canonical pending presentation for rough first input", () => {
+test("buildWordingChoiceFromTurn keeps Dream in picker pending presentation for direct content input", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "dream",
@@ -232,12 +232,12 @@ test("buildWordingChoiceFromTurn keeps Dream in canonical pending presentation f
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.ok(result.wordingChoice);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
 
-test("buildWordingChoiceFromTurn keeps Purpose in canonical pending presentation", () => {
+test("buildWordingChoiceFromTurn keeps Purpose in picker pending presentation for direct content input", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "purpose",
@@ -253,12 +253,12 @@ test("buildWordingChoiceFromTurn keeps Purpose in canonical pending presentation
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.ok(result.wordingChoice);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
 
-test("buildWordingChoiceFromTurn keeps Role in canonical pending presentation", () => {
+test("buildWordingChoiceFromTurn keeps Role in picker pending presentation for direct content input", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "role",
@@ -274,9 +274,9 @@ test("buildWordingChoiceFromTurn keeps Role in canonical pending presentation", 
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
+  assert.ok(result.wordingChoice);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
 
 test("buildWordingChoiceFromTurn skips wording panel for meta-topic turns", () => {
@@ -462,7 +462,7 @@ test("buildWordingChoiceFromTurn never enables wording-choice for presentation s
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
 });
 
-test("buildWordingChoiceFromTurn strips markup from canonical pending wording fields", () => {
+test("buildWordingChoiceFromTurn strips markup from picker pending wording fields", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "targetgroup",
@@ -479,8 +479,8 @@ test("buildWordingChoiceFromTurn strips markup from canonical pending wording fi
     isOfftopic: false,
   });
 
-  assert.equal(result.wordingChoice, null);
-  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.ok(result.wordingChoice);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
   assert.doesNotMatch(
     String((result.specialist as Record<string, unknown>).wording_choice_user_normalized || ""),
     /<[^>]+>/
@@ -618,16 +618,21 @@ test("buildWordingChoiceFromTurn keeps canonical pending during forced pending f
       userTextRaw: scenario.value,
       isOfftopic: false,
       forcePending: true,
+      submittedTextIntent: "feedback_on_suggestion",
+      submittedTextAnchor: "suggestion",
+      submittedFeedbackText: "Dit voelt nog te vlak.",
     });
 
     assert.equal(result.wordingChoice, null);
     assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
     assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+    assert.equal(String((result.specialist as Record<string, unknown>).pending_suggestion_anchor || ""), "suggestion");
+    assert.equal(String((result.specialist as Record<string, unknown>).pending_suggestion_intent || ""), "feedback_on_suggestion");
     assert.notEqual(String((result.specialist as Record<string, unknown>).feedback_reason_text || "").trim(), "");
   }
 });
 
-test("buildWordingChoiceFromTurn bypasses contributing-input gate while forced pending is active", () => {
+test("buildWordingChoiceFromTurn bypasses contributing-input gate while forced pending feedback is active", () => {
   const helpers = buildHelpers(true);
   const value = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
   const result = helpers.buildWordingChoiceFromTurn({
@@ -648,6 +653,9 @@ test("buildWordingChoiceFromTurn bypasses contributing-input gate while forced p
     userTextRaw: "?",
     isOfftopic: false,
     forcePending: true,
+    submittedTextIntent: "reject_suggestion_explicit",
+    submittedTextAnchor: "suggestion",
+    submittedFeedbackText: "Dat is niet wat ik bedoel.",
   });
 
   assert.equal(result.wordingChoice, null);

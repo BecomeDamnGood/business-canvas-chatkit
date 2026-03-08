@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { renderInlineText, renderStructuredText } from "../ui/lib/ui_text.ts";
 import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.ts";
-import { renderChoiceButtons } from "../ui/lib/ui_render.ts";
+import { readDreamBuilderViewContract, renderChoiceButtons, resolveWidgetBodyText } from "../ui/lib/ui_render.ts";
 import { setIsLoading } from "../ui/lib/ui_state.ts";
 
 test("renderInlineText builds STRONG nodes safely", { concurrency: false }, () => {
@@ -227,6 +227,24 @@ test("extractChoicesFromPrompt stays inert while structured ui.actions still ren
   assert.equal(buttons.length, 2);
 
   (globalThis as unknown as { document: unknown }).document = originalDocument;
+});
+
+test("resolveWidgetBodyText keeps empty canonical dream-builder body authoritative", () => {
+  const body = resolveWidgetBodyText({
+    currentStep: "dream",
+    resultText: "",
+    specialist: {
+      message: "Over 5 tot 10 jaar zal werk steeds meer gericht zijn op positieve impact.",
+    },
+    promptBody: "",
+    dreamBuilderViewContract: readDreamBuilderViewContract({
+      variant: "dream_builder_collect",
+      dream_builder_body_mode: "none",
+      dream_builder_statements_visible: true,
+    }),
+  });
+
+  assert.equal(body, "");
 });
 
 test("renderStructuredText groups paragraphs, ordered lists, and bullets", { concurrency: false }, () => {

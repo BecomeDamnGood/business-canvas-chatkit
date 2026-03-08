@@ -304,6 +304,9 @@ export type RunStepPipelineWordingPorts = {
     isOfftopic: boolean;
     forcePending?: boolean;
     dreamRuntimeModeRaw?: unknown;
+    submittedTextIntent?: string;
+    submittedTextAnchor?: string;
+    submittedFeedbackText?: string;
   }) => {
     specialist: Record<string, unknown>;
     wordingChoice?: WordingChoiceUiPayload | null;

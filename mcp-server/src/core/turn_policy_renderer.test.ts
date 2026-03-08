@@ -582,3 +582,35 @@ test("single-value valid output keeps feedback reason above canonical block when
   assert.match(message, /current.*mindd.*is:/i);
   assert.equal(message.split(canonical).length - 1, 1);
 });
+
+test("single-value pending canonical output normalizes inline heading/value into separate lines", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { dream: canonical };
+  (state as any).provisional_source_by_step = { dream: "wording_pick" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: `Je huidige droom voor Mindd is: ${canonical}`,
+      question: "Wat vind je van deze formulering?",
+      refined_formulation: "",
+      dream: "",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "canonical",
+      wording_choice_agent_current: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.match(message, /current.*dream.*mindd.*is:\nMindd droomt van een wereld/i);
+  assert.doesNotMatch(message, /current.*dream.*mindd.*is: Mindd droomt/i);
+});

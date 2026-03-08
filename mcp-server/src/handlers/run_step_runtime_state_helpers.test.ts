@@ -153,6 +153,11 @@ test("buildSpecialistContextBlock whitelists last_specialist_result payload", ()
       meta_topic: "NONE",
       statements: ["Segment 1", "Segment 2"],
       targetgroup: "B2B software scale-ups",
+      pending_suggestion_intent: "feedback_on_suggestion",
+      pending_suggestion_anchor: "suggestion",
+      pending_suggestion_seed_source: "previous_suggestion",
+      pending_suggestion_feedback_text: "Dit klinkt nog te algemeen.",
+      pending_suggestion_presentation_mode: "canonical",
       debug_payload: { giant: "blob" },
       ui_contract: "should_not_leak",
       scratchpad: "remove me",
@@ -165,7 +170,11 @@ test("buildSpecialistContextBlock whitelists last_specialist_result payload", ()
   assert.equal(parsed.action, "REFINE");
   assert.equal(parsed.targetgroup, "B2B software scale-ups");
   assert.deepEqual(parsed.statements, ["Segment 1", "Segment 2"]);
+  assert.equal(parsed.pending_suggestion_intent, "feedback_on_suggestion");
+  assert.equal(parsed.pending_suggestion_anchor, "suggestion");
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, "debug_payload"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, "ui_contract"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, "scratchpad"), false);
+  assert.match(block, /PENDING SUGGESTION CONTRACT/i);
+  assert.match(block, /rewrite the previous suggestion itself/i);
 });

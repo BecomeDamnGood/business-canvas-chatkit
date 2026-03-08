@@ -114,8 +114,27 @@ function normalizeUiActionSurface(rawSurface: unknown, fallback: UiActionSurface
 function hasRenderableResponseContent(response: RunStepContractResponse): boolean {
   const uiPayload = toRecord(response.ui);
   const uiPrompt = toRecord(uiPayload.prompt);
+  const uiView = toRecord(uiPayload.view);
   const specialist = toRecord(response.specialist);
+  const stateRecord =
+    response.state && typeof response.state === "object"
+      ? (response.state as Record<string, unknown>)
+      : {};
   const hasActions = Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
+  const viewVariant = String(uiView.variant || "").trim();
+  const hasDreamBuilderStatements =
+    (
+      uiView.dream_builder_statements_visible === true ||
+      (
+        (viewVariant === "dream_builder_collect" || viewVariant === "dream_builder_refine") &&
+        uiView.dream_builder_statements_visible !== false
+      )
+    ) &&
+    (
+      Array.isArray(specialist.statements) && specialist.statements.length > 0 ||
+      Array.isArray(stateRecord.dream_builder_statements) &&
+      (stateRecord.dream_builder_statements as unknown[]).length > 0
+    );
   const prompt = String(response.prompt || "").trim();
   const body =
     String(response.text || "").trim() ||
@@ -125,7 +144,7 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
   const question =
     String(uiPayload.questionText || "").trim() ||
     String(specialist.question || "").trim();
-  return hasActions || Boolean(prompt) || Boolean(body) || Boolean(question);
+  return hasActions || hasDreamBuilderStatements || Boolean(prompt) || Boolean(body) || Boolean(question);
 }
 
 function hasStartAction(response: RunStepContractResponse, state: Record<string, unknown>): boolean {
@@ -414,6 +433,12 @@ function applyCanonicalWidgetState(
     is_mutable: canonical.is_mutable,
     editable_fields: canonical.editable_fields,
     ...(canonical.variant ? { variant: canonical.variant } : {}),
+    ...(String(uiView.dream_builder_body_mode || "").trim()
+      ? { dream_builder_body_mode: String(uiView.dream_builder_body_mode || "").trim() }
+      : {}),
+    ...(uiView.dream_builder_statements_visible === true || uiView.dream_builder_statements_visible === false
+      ? { dream_builder_statements_visible: uiView.dream_builder_statements_visible === true }
+      : {}),
   };
   if (String(state.ui_gate_status || "").trim().toLowerCase() === "failed") {
     state.ui_gate_status = "ready";

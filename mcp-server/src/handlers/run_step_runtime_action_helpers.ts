@@ -43,10 +43,14 @@ type UiViewVariant =
   | "dream_builder_scoring"
   | "dream_builder_refine";
 
+export type DreamBuilderBodyMode = "none" | "support_only" | "full_narrative";
+
 export type UiViewPayload = {
   mode?: "prestart" | "interactive" | "blocked";
   waiting_locale?: false;
   variant?: Exclude<UiViewVariant, "default">;
+  dream_builder_body_mode?: DreamBuilderBodyMode;
+  dream_builder_statements_visible?: boolean;
 };
 
 export function createRunStepRuntimeActionHelpers(deps: CreateRunStepRuntimeActionHelpersDeps) {

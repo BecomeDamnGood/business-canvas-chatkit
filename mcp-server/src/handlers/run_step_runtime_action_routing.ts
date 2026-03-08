@@ -575,6 +575,35 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     });
     submittedTextIntent = pendingIntentResolution.intent;
     submittedTextAnchor = pendingIntentResolution.anchor;
+    if (pendingIntentResolution.intent !== "accept_suggestion_explicit") {
+      const pendingFeedbackText = String(userMessage || "").trim();
+      const preservedPresentation = String(pendingBeforeTurn.wording_choice_presentation || "").trim();
+      const nextPending = {
+        ...pendingBeforeTurn,
+        pending_suggestion_intent: pendingIntentResolution.intent,
+        pending_suggestion_anchor: pendingIntentResolution.anchor,
+        pending_suggestion_seed_source:
+          pendingIntentResolution.anchor === "suggestion" &&
+          (
+            pendingIntentResolution.intent === "feedback_on_suggestion" ||
+            pendingIntentResolution.intent === "reject_suggestion_explicit"
+          )
+            ? "previous_suggestion"
+            : "user_input",
+        pending_suggestion_feedback_text:
+          pendingIntentResolution.anchor === "suggestion" ? pendingFeedbackText : "",
+        pending_suggestion_presentation_mode:
+          pendingIntentResolution.anchor === "suggestion" &&
+          (
+            pendingIntentResolution.intent === "feedback_on_suggestion" ||
+            pendingIntentResolution.intent === "reject_suggestion_explicit"
+          )
+            ? "canonical"
+            : (preservedPresentation || "picker"),
+      };
+      (state as Record<string, unknown>).last_specialist_result = nextPending;
+      pendingBeforeTurn = nextPending;
+    }
     if (pendingIntentResolution.intent === "accept_suggestion_explicit") {
       const implicitSelection = wording.applyWordingPickSelection({
         stepId: currentStepId,
