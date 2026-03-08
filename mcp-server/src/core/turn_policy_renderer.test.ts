@@ -595,7 +595,82 @@ test("single-value valid output keeps feedback reason above canonical block when
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
-test("single-value pending canonical output normalizes inline heading/value into separate lines", () => {
+test("single-value pending canonical wording hides canonical block, feedback reason, and stale ui content across steps", () => {
+  const scenarios = [
+    {
+      stepId: "dream",
+      activeSpecialist: "Dream",
+      value: "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.",
+    },
+    {
+      stepId: "purpose",
+      activeSpecialist: "Purpose",
+      value: "Mindd bestaat om complexe keuzes begrijpelijk te maken zodat mensen met vertrouwen kunnen handelen.",
+    },
+    {
+      stepId: "bigwhy",
+      activeSpecialist: "BigWhy",
+      value: "Omdat mensen rust voelen wanneer complexe beslissingen eindelijk helder worden.",
+    },
+    {
+      stepId: "role",
+      activeSpecialist: "Role",
+      value: "Mindd is de gids die complexe informatie vertaalt naar heldere keuzes.",
+    },
+    {
+      stepId: "entity",
+      activeSpecialist: "Entity",
+      value: "Een strategisch reclamebureau voor complexe keuzes.",
+    },
+    {
+      stepId: "targetgroup",
+      activeSpecialist: "TargetGroup",
+      value: "Technische mkb-bedrijven met complexe producten en lange aankooptrajecten.",
+    },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const state = getDefaultState();
+    (state as any).current_step = scenario.stepId;
+    (state as any).active_specialist = scenario.activeSpecialist;
+    (state as any).business_name = "Mindd";
+    (state as any).provisional_by_step = { [scenario.stepId]: scenario.value };
+    (state as any).provisional_source_by_step = { [scenario.stepId]: "wording_pick" };
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: scenario.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        message:
+          "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
+        question: "Wat vind je van deze formulering?",
+        refined_formulation: "",
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_presentation: "canonical",
+        wording_choice_agent_current: scenario.value,
+        feedback_reason_text:
+          "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
+        ui_content: {
+          kind: "single_value",
+          heading: "stale",
+          canonical_text: scenario.value,
+        },
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    const message = String((rendered.specialist as any).message || "");
+    assert.equal(rendered.status, "valid_output");
+    assert.equal(String((rendered.specialist as any).ui_content || ""), "");
+    assert.doesNotMatch(message, /toekomstbeeld waarin mensen zich zekerder/i);
+    assert.doesNotMatch(message, new RegExp(scenario.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+  }
+});
+
+test("single-value valid output suppresses stale feedback reason after user picks own wording", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
   (state as any).current_step = "dream";
@@ -609,14 +684,13 @@ test("single-value pending canonical output normalizes inline heading/value into
     state,
     specialist: {
       action: "ASK",
-      message: `Je huidige droom voor Mindd is: ${canonical}`,
-      question: "Wat vind je van deze formulering?",
-      refined_formulation: "",
-      dream: "",
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_presentation: "canonical",
-      wording_choice_agent_current: canonical,
+      message: canonical,
+      question: "",
+      refined_formulation: canonical,
+      dream: canonical,
+      wording_choice_selected: "user",
+      feedback_reason_text:
+        "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -624,9 +698,8 @@ test("single-value pending canonical output normalizes inline heading/value into
 
   const message = String((rendered.specialist as any).message || "");
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
-  assert.match(message, /current.*dream.*mindd.*is:\nMindd droomt van een wereld/i);
-  assert.doesNotMatch(message, /current.*dream.*mindd.*is: Mindd droomt/i);
-  assert.equal(String(uiContent.kind || ""), "single_value");
-  assert.match(String(uiContent.heading || ""), /current.*dream.*mindd.*is:/i);
+  assert.equal(rendered.status, "valid_output");
+  assert.doesNotMatch(message, /toekomstbeeld waarin mensen zich zekerder/i);
+  assert.equal(String(uiContent.feedback_reason_text || ""), "");
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });

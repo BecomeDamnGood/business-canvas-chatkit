@@ -574,6 +574,42 @@ test("applyWordingPickSelection unwraps current-context heading before committin
   assert.equal(String(applyResult.specialist.wording_choice_agent_current || ""), value);
 });
 
+test("applyWordingPickSelection does not carry suggestion rationale when user picks own single-value wording", () => {
+  const heading = "Je huidige droom voor Mindd is:";
+  const userValue = "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.";
+  const suggestionValue = "Mindd droomt van een wereld waarin mensen zonder zorgen complexe keuzes durven maken.";
+  const helpers = buildHeadingAwareSingleValueHelpers({
+    stepId: "dream",
+    heading,
+    suggestion: suggestionValue,
+    equivalent: false,
+  });
+  const applyResult = helpers.applyWordingPickSelection({
+    stepId: "dream",
+    routeToken: "__WORDING_PICK_USER__",
+    state: {
+      current_step: "dream",
+      active_specialist: "Dream",
+      last_specialist_result: {
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "dream",
+        wording_choice_user_normalized: userValue,
+        wording_choice_agent_current: suggestionValue,
+        feedback_reason_text:
+          "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
+      },
+    } as any,
+  });
+
+  assert.equal(applyResult.handled, true);
+  assert.equal(String(applyResult.specialist.wording_choice_selected || ""), "user");
+  assert.equal(String(applyResult.specialist.feedback_reason_text || ""), "");
+  assert.match(String(applyResult.specialist.message || ""), /je huidige droom voor mindd is:/i);
+  assert.match(String(applyResult.specialist.message || ""), /mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken/i);
+  assert.doesNotMatch(String(applyResult.specialist.message || ""), /toekomstbeeld waarin mensen zich zekerder/i);
+});
+
 test("buildWordingChoiceFromTurn keeps canonical pending during forced pending feedback even when suggestion is equivalent", () => {
   const scenarios = [
     {

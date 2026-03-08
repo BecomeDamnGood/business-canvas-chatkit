@@ -1623,11 +1623,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const question = stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
   const contractId = buildContractId(stepId, effectiveStatus, menuId);
   const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
+  const wordingChoiceSelected = String((specialistForDisplay as any).wording_choice_selected || "").trim();
   const wordingPresentation =
     String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
       ? "canonical"
       : "picker";
-  const feedbackReasonForDisplay = String((specialistForDisplay as any).feedback_reason_text || "").trim();
+  const feedbackReasonForDisplay =
+    wordingChoiceSelected === "user"
+      ? ""
+      : String((specialistForDisplay as any).feedback_reason_text || "").trim();
   const pendingCanonicalValue =
     wordingPending && wordingPresentation === "canonical"
       ? String((specialistForDisplay as any).wording_choice_agent_current || specialistForDisplay.refined_formulation || "")
@@ -1645,10 +1649,11 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         )
       : message;
   if (wordingPending && wordingPresentation === "canonical" && pendingCanonicalValue) {
-    messageForDisplay = ensureCanonicalContextBlockInMessage({
+    messageForDisplay = singleValueSupportText({
       message: messageForDisplay,
-      canonicalValue: pendingCanonicalValue,
       heading: singleValueConfirmHeading(stepId, state),
+      canonicalValue: pendingCanonicalValue,
+      feedbackReasonText: feedbackReasonForDisplay,
     });
   }
   const useSingleValueConfirmSsot =
@@ -1662,7 +1667,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     messageForDisplay = feedbackReasonForDisplay
       ? `${feedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
       : canonicalMessage;
-  } else if (shouldEnforceConfirmVisibility && canonicalAcceptedValue) {
+  } else if (shouldEnforceConfirmVisibility && canonicalAcceptedValue && !wordingPending) {
     messageForDisplay = ensureCanonicalContextBlockInMessage({
       message: messageForDisplay,
       canonicalValue: canonicalAcceptedValue,
@@ -1671,8 +1676,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   }
   const singleValueUiCanonicalValue = (() => {
     if (isOfftopic) return "";
-    if (wordingPending && wordingPresentation === "canonical") return pendingCanonicalValue;
-    if (effectiveStatus === "valid_output" && canonicalAcceptedValue && SINGLE_VALUE_STRUCTURED_CONTENT_STEPS.has(stepId)) {
+    if (
+      !wordingPending &&
+      effectiveStatus === "valid_output" &&
+      canonicalAcceptedValue &&
+      SINGLE_VALUE_STRUCTURED_CONTENT_STEPS.has(stepId)
+    ) {
       return canonicalAcceptedValue;
     }
     return "";
@@ -1686,8 +1695,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     feedbackReasonText: feedbackReasonForDisplay,
   });
 
+  const {
+    ui_content: _staleUiContent,
+    ...specialistForDisplayWithoutUiContent
+  } = specialistForDisplay as Record<string, unknown>;
+
   const nextSpecialist: Record<string, unknown> = {
-    ...specialistForDisplay,
+    ...specialistForDisplayWithoutUiContent,
     action: "ASK",
     message: messageForDisplay,
     question,

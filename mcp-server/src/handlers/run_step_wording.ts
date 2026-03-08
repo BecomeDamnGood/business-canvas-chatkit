@@ -864,22 +864,13 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       ),
       ackDefault
     );
-    const fallbackReason = defaultWordingFeedbackReason(state);
-    let reason = fallbackReason;
-    if (deps.isUiWordingFeedbackKeyedV1Enabled()) {
-      const explicitReason = resolveFeedbackReasonFromSpecialist(state, prev);
-      if (explicitReason) {
-        reason = explicitReason;
-      } else {
-        deps.bumpUiI18nCounter(telemetry, "wording_feedback_fallback_count");
-      }
-    }
-    const feedback = `${acknowledgment} ${reason}`.trim();
+    void telemetry;
     const selectedValue = String(
       prev.wording_choice_user_normalized || prev.wording_choice_user_raw || prev.refined_formulation || ""
     ).trim();
     const selection = deps.wordingSelectionMessage(stepId, state, activeSpecialist, selectedValue);
-    return selection ? `${feedback}\n\n${selection}` : feedback;
+    if (acknowledgment && selection) return `${acknowledgment}\n\n${selection}`.trim();
+    return selection || acknowledgment;
   }
 
   function withUpdatedTargetField(result: Record<string, unknown>, stepId: string, value: string): Record<string, unknown> {
