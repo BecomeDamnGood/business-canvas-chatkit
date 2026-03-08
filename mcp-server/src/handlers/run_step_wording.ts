@@ -753,6 +753,20 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return "";
   }
 
+  function defaultWordingFeedbackReason(state: CanvasState): string {
+    const reasonDefault = shouldUseDefaultFallback(state)
+      ? deps.uiDefaultString("wording.feedback.user_pick.reason.default")
+      : "";
+    return normalizeCompactFeedbackSentence(
+      deps.uiStringFromStateMap(
+        state,
+        "wording.feedback.user_pick.reason.default",
+        reasonDefault
+      ),
+      reasonDefault
+    );
+  }
+
   function userChoiceFeedbackMessage(
     stepId: string,
     state: CanvasState,
@@ -771,17 +785,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       ),
       ackDefault
     );
-    const reasonDefault = shouldUseDefaultFallback(state)
-      ? deps.uiDefaultString("wording.feedback.user_pick.reason.default")
-      : "";
-    const fallbackReason = normalizeCompactFeedbackSentence(
-      deps.uiStringFromStateMap(
-        state,
-        "wording.feedback.user_pick.reason.default",
-        reasonDefault
-      ),
-      reasonDefault
-    );
+    const fallbackReason = defaultWordingFeedbackReason(state);
     let reason = fallbackReason;
     if (deps.isUiWordingFeedbackKeyedV1Enabled()) {
       const explicitReason = resolveFeedbackReasonFromSpecialist(state, prev);
@@ -968,7 +972,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       userItems: effectiveUserItems,
       suggestionItems,
     });
-    if (equivalent) {
+    if (equivalent && !forcePending) {
       const chosenItems = mode === "list"
         ? (
           listSemantics === "full"
@@ -1032,6 +1036,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       state,
       specialist: specialistResult,
     });
+    const feedbackReason =
+      feedbackReasonText ||
+      (forcePending ? defaultWordingFeedbackReason(state) : "");
     const targetField = deps.fieldForStep(stepId);
     const committedTextFromPrev = targetField ? String(previousSpecialist[targetField] || "").trim() : "";
     const committedText = mode === "list" ? baseItems.join("\n") : committedTextFromPrev;
@@ -1062,7 +1069,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_suggestion_label:
         variant === "clarify_dual" ? clarifySuggestionLabelForState(state) : "",
       feedback_reason_key: "",
-      feedback_reason_text: feedbackReasonText,
+      feedback_reason_text: feedbackReason,
     };
     if (targetField) {
       enriched[targetField] = committedText;

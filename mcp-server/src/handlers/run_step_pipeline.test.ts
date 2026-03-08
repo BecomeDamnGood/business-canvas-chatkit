@@ -5,6 +5,7 @@ import {
   isWordingChoiceIntentEligible,
   resolveProvisionalSourceForTurn,
   resolveWordingChoiceSeedUserText,
+  shouldForcePendingWordingChoiceFromIntent,
 } from "./run_step_pipeline.js";
 
 test("resolveProvisionalSourceForTurn keeps action-route precedence", () => {
@@ -109,5 +110,36 @@ test("resolveWordingChoiceSeedUserText keeps direct user content input as seed",
       },
     }),
     "Familiebedrijven met een technische kern."
+  );
+});
+
+test("shouldForcePendingWordingChoiceFromIntent forces pending only for suggestion-anchored feedback/reject intents", () => {
+  assert.equal(
+    shouldForcePendingWordingChoiceFromIntent({
+      submittedTextIntent: "feedback_on_suggestion",
+      submittedTextAnchor: "suggestion",
+    }),
+    true
+  );
+  assert.equal(
+    shouldForcePendingWordingChoiceFromIntent({
+      submittedTextIntent: "reject_suggestion_explicit",
+      submittedTextAnchor: "suggestion",
+    }),
+    true
+  );
+  assert.equal(
+    shouldForcePendingWordingChoiceFromIntent({
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+    }),
+    false
+  );
+  assert.equal(
+    shouldForcePendingWordingChoiceFromIntent({
+      submittedTextIntent: "feedback_on_suggestion",
+      submittedTextAnchor: "user_input",
+    }),
+    false
   );
 });

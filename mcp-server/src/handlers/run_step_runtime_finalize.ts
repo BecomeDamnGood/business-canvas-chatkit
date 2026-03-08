@@ -283,6 +283,20 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         .replace(/<[^>]+>/g, " ")
         .replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "")
         .trim();
+    const keepDreamBuilderSupportParagraphsOnly = (messageRaw: string): string => {
+      const paragraphs = String(messageRaw || "")
+        .replace(/\r/g, "\n")
+        .split(/\n{2,}/)
+        .map((part) => stripMarkers(String(part || "").replace(/\n+/g, " ").trim()))
+        .filter(Boolean);
+      if (paragraphs.length === 0) return "";
+      const kept = paragraphs.filter((paragraph) => {
+        const words = deps.tokenizeWords(paragraph).length;
+        const sentenceCount = deps.splitSentenceItems(paragraph).length;
+        return words > 0 && words <= 18 && sentenceCount <= 1;
+      });
+      return kept.join("\n\n").trim();
+    };
     const dreamBuilderRenderContext =
       statementLines.length > 0 &&
       contractStepId === deps.dreamStepId &&
@@ -369,6 +383,9 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         if (messageSentenceKeys.length >= 2 && messageSentenceKeys.every((key) => statementKeys.has(key))) {
           msg = "";
         }
+      }
+      if (msg) {
+        msg = keepDreamBuilderSupportParagraphsOnly(msg);
       }
     }
     if (wordingPending && wordingMode === "text" && suggestionNorm) {

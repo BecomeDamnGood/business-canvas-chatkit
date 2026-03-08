@@ -1498,6 +1498,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
       ? "canonical"
       : "picker";
+  const feedbackReasonForDisplay = String((specialistForDisplay as any).feedback_reason_text || "").trim();
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
     wordingPending &&
@@ -1516,7 +1517,10 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !isOfftopic &&
     !wordingPending;
   if (useSingleValueConfirmSsot) {
-    messageForDisplay = singleValueConfirmCanonicalMessage(stepId, state, canonicalAcceptedValue);
+    const canonicalMessage = singleValueConfirmCanonicalMessage(stepId, state, canonicalAcceptedValue);
+    messageForDisplay = feedbackReasonForDisplay
+      ? `${feedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
+      : canonicalMessage;
   } else if (shouldEnforceConfirmVisibility && canonicalAcceptedValue) {
     messageForDisplay = ensureCanonicalContextBlockInMessage({
       message: messageForDisplay,

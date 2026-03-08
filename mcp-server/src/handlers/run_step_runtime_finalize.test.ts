@@ -438,6 +438,80 @@ test("buildTextForWidget drops dream narrative paragraph when it only repeats ca
   assert.equal(output, "");
 });
 
+test("buildTextForWidget drops paraphrased dream narrative summary when canonical statements are shown", () => {
+  const helpers = buildTextHelpers(() => "");
+  const statements = [
+    "In de komende 5 tot 10 jaar zullen mensen meer zoeken naar werk dat een positieve impact heeft op hun leven en dat van anderen.",
+    "Er zal een groeiende behoefte zijn aan bedrijven en initiatieven die een blijvende waarde creeren voor de samenleving.",
+    "Vrijheid in tijd en keuzes wordt steeds belangrijker voor mensen in hun werk en leven.",
+    "Mensen zullen steeds meer waarde hechten aan trots kunnen zijn op hun werk en bijdrage aan de maatschappij.",
+    "Ondernemingen zullen vaker een authentieke weerspiegeling zijn van de waarden en identiteit van hun oprichters.",
+  ];
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      suggest_dreambuilder: "false",
+      message: [
+        "Mensen zullen vaker betekenis zoeken in werk dat positief doorwerkt in hun omgeving.",
+        "Organisaties die duurzame waarde toevoegen, krijgen meer vertrouwen en relevantie.",
+        "Autonomie in keuzes over tijd en werk wordt voor steeds meer mensen een harde voorwaarde.",
+        "Trots en maatschappelijke bijdrage worden bepalender in hoe mensen werk beoordelen.",
+        "Bedrijven laten in toenemende mate de identiteit van hun oprichters zien in hun handelen.",
+      ].join(" "),
+      refined_formulation: "",
+      dream: "",
+    },
+    state: {
+      active_specialist: "Dream",
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+      dream_builder_statements: statements,
+      ui_strings: {
+        "dreamBuilder.statements.title": "JOUW DROOM-STATEMENTS",
+        "dreamBuilder.statements.count": "N statements van minimaal 20 tot nu toe",
+      },
+    } as any,
+  });
+
+  assert.equal(output, "");
+});
+
+test("buildTextForWidget keeps short dream-builder support sentence while dropping long paraphrased summary", () => {
+  const helpers = buildTextHelpers(() => "");
+  const statements = [
+    "Over 5 tot 10 jaar zullen mensen meer waarde hechten aan werk dat een positieve impact heeft op hun leven en dat van anderen.",
+    "Duurzame initiatieven en bedrijven zullen een grotere rol spelen in de samenleving en generaties overstijgen.",
+    "Mensen zullen meer vrijheid zoeken in hun tijdsbesteding en keuzes, zowel prive als professioneel.",
+    "Trots op het eigen werk en de bijdrage aan de samenleving wordt belangrijker voor mensen.",
+    "Bedrijven zullen steeds vaker een authentieke afspiegeling zijn van de waarden en identiteit van hun oprichters.",
+  ];
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      suggest_dreambuilder: "false",
+      message: [
+        "Dat is een goed beginpunt.",
+        "",
+        "Mensen kiezen vaker voor werk met betekenis en zichtbare impact. Organisaties met duurzame waarde worden betrouwbaarder gevonden. Vrijheid en autonomie in keuzes worden belangrijker. Trots op bijdrage en zingeving groeit. Bedrijven laten sterker zien welke waarden ze belichamen.",
+      ].join("\n\n"),
+      refined_formulation: "",
+      dream: "",
+    },
+    state: {
+      active_specialist: "Dream",
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+      dream_builder_statements: statements,
+      ui_strings: {
+        "dreamBuilder.statements.title": "JOUW DROOM-STATEMENTS",
+        "dreamBuilder.statements.count": "N statements van minimaal 20 tot nu toe",
+      },
+    } as any,
+  });
+
+  assert.equal(output, "Dat is een goed beginpunt.");
+});
+
 test("buildTextForWidget does not append refined dream text when it semantically equals canonical statements", () => {
   const helpers = buildTextHelpers(() => "");
   const statements = [

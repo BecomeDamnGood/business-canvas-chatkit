@@ -551,3 +551,34 @@ test("single-value confirm steps render exactly one canonical heading/value bloc
     assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
   }
 });
+
+test("single-value valid output keeps feedback reason above canonical block when present", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { purpose: canonical };
+  (state as any).provisional_source_by_step = { purpose: "wording_pick" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Dat is een goed beginpunt.",
+      question: "",
+      refined_formulation: canonical,
+      purpose: canonical,
+      feedback_reason_text: "Ik heb AI niet als kern opgenomen omdat je Droom effect-gericht blijft.",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.equal(rendered.status, "valid_output");
+  assert.match(message, /ik heb ai niet als kern opgenomen/i);
+  assert.match(message, /current.*mindd.*is:/i);
+  assert.equal(message.split(canonical).length - 1, 1);
+});

@@ -9,6 +9,8 @@ function buildHelpers(intentEnabled: boolean) {
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wording.feedback.user_pick.reason.default":
+      "This keeps your original meaning while staying aligned with this step.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
   };
@@ -83,7 +85,8 @@ function buildHelpers(intentEnabled: boolean) {
   });
 }
 
-function buildHeadingAwarePurposeHelpers(params: {
+function buildHeadingAwareSingleValueHelpers(params: {
+  stepId: "dream" | "purpose" | "bigwhy" | "role" | "entity" | "targetgroup";
   heading: string;
   suggestion: string;
   equivalent?: boolean;
@@ -93,6 +96,8 @@ function buildHeadingAwarePurposeHelpers(params: {
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wording.feedback.user_pick.reason.default":
+      "This keeps your original meaning while staying aligned with this step.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
   };
@@ -114,7 +119,15 @@ function buildHeadingAwarePurposeHelpers(params: {
     normalizeDreamRuntimeMode: () => "self",
     uiDefaultString: (key: string) => defaultUi[key] || "",
     uiStringFromStateMap: (_state, _key, fallback) => fallback,
-    fieldForStep: (stepId: string) => (stepId === "purpose" ? "purpose" : ""),
+    fieldForStep: (stepId: string) => {
+      if (stepId === "dream") return "dream";
+      if (stepId === "purpose") return "purpose";
+      if (stepId === "bigwhy") return "bigwhy";
+      if (stepId === "role") return "role";
+      if (stepId === "entity") return "entity";
+      if (stepId === "targetgroup") return "targetgroup";
+      return "";
+    },
     parseListItems: (input: string) =>
       String(input || "")
         .split(/\n+/)
@@ -505,7 +518,8 @@ test("buildWordingChoiceFromTurn unwraps current-context heading before equivale
   const heading = "Je huidige bestaansreden voor Mindd is:";
   const value = "Mindd helpt ondernemers hun visie om te zetten in scherpe keuzes en consistente uitvoering.";
   const wrapped = `${heading}\n${value}`;
-  const helpers = buildHeadingAwarePurposeHelpers({
+  const helpers = buildHeadingAwareSingleValueHelpers({
+    stepId: "purpose",
     heading,
     suggestion: wrapped,
   });
@@ -532,7 +546,8 @@ test("applyWordingPickSelection unwraps current-context heading before committin
   const heading = "Je huidige bestaansreden voor Mindd is:";
   const value = "Mindd helpt ondernemers hun visie om te zetten in scherpe keuzes en consistente uitvoering.";
   const wrapped = `${heading}\n${value}`;
-  const helpers = buildHeadingAwarePurposeHelpers({
+  const helpers = buildHeadingAwareSingleValueHelpers({
+    stepId: "purpose",
     heading,
     suggestion: wrapped,
     equivalent: false,
@@ -557,4 +572,85 @@ test("applyWordingPickSelection unwraps current-context heading before committin
   assert.equal(String(applyResult.specialist.refined_formulation || ""), value);
   assert.equal(String(applyResult.specialist.purpose || ""), value);
   assert.equal(String(applyResult.specialist.wording_choice_agent_current || ""), value);
+});
+
+test("buildWordingChoiceFromTurn keeps canonical pending during forced pending feedback even when suggestion is equivalent", () => {
+  const scenarios = [
+    {
+      stepId: "dream" as const,
+      activeSpecialist: "Dream",
+      value:
+        "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken door heldere informatie.",
+    },
+    {
+      stepId: "purpose" as const,
+      activeSpecialist: "Purpose",
+      value: "Mindd bestaat om complexe keuzes begrijpelijk te maken zodat mensen met vertrouwen kunnen handelen.",
+    },
+    {
+      stepId: "role" as const,
+      activeSpecialist: "Role",
+      value: "Mindd is de gids die complexe informatie vertaalt naar heldere keuzes voor ondernemers.",
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const helpers = buildHeadingAwareSingleValueHelpers({
+      stepId: scenario.stepId,
+      heading: "Je huidige formulering voor Mindd is:",
+      suggestion: scenario.value,
+      equivalent: true,
+    });
+    const result = helpers.buildWordingChoiceFromTurn({
+      stepId: scenario.stepId,
+      state: {} as any,
+      activeSpecialist: scenario.activeSpecialist,
+      previousSpecialist: {
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_user_normalized: scenario.value,
+        wording_choice_agent_current: scenario.value,
+      },
+      specialistResult: {
+        message: "Dat is een goed beginpunt.",
+        refined_formulation: scenario.value,
+      } as Record<string, unknown>,
+      userTextRaw: scenario.value,
+      isOfftopic: false,
+      forcePending: true,
+    });
+
+    assert.equal(result.wordingChoice, null);
+    assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+    assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+    assert.notEqual(String((result.specialist as Record<string, unknown>).feedback_reason_text || "").trim(), "");
+  }
+});
+
+test("buildWordingChoiceFromTurn bypasses contributing-input gate while forced pending is active", () => {
+  const helpers = buildHelpers(true);
+  const value = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "purpose",
+    state: {} as any,
+    activeSpecialist: "Purpose",
+    previousSpecialist: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_user_normalized: value,
+      wording_choice_agent_current: value,
+    },
+    specialistResult: {
+      message: "Dat is een goed beginpunt.",
+      refined_formulation: value,
+      purpose: value,
+    } as Record<string, unknown>,
+    userTextRaw: "?",
+    isOfftopic: false,
+    forcePending: true,
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
 });

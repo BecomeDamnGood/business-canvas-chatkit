@@ -78,6 +78,16 @@ function isNonContributingWordingIntent(intentRaw: string): boolean {
   return intent === "feedback_on_suggestion" || intent === "reject_suggestion_explicit";
 }
 
+export function shouldForcePendingWordingChoiceFromIntent(params: {
+  submittedTextIntent: string;
+  submittedTextAnchor: string;
+}): boolean {
+  const intent = String(params.submittedTextIntent || "").trim();
+  const anchor = String(params.submittedTextAnchor || "").trim();
+  if (anchor !== "suggestion") return false;
+  return intent === "feedback_on_suggestion" || intent === "reject_suggestion_explicit";
+}
+
 export function resolveProvisionalSourceForTurn(params: {
   actionCodeRaw: string;
   submittedTextIntent: string;
@@ -791,6 +801,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       userMessage,
       previousSpecialist: previousSpecialistForWordingChoice,
     });
+    const forcePendingWordingChoice = shouldForcePendingWordingChoiceFromIntent({
+      submittedTextIntent: String(params.submittedTextIntent || "").trim(),
+      submittedTextAnchor: String(params.submittedTextAnchor || "").trim(),
+    });
     const wordingIntentEligible = isWordingChoiceIntentEligible(asRecord(specialistResult));
     if (
       params.wordingChoiceEnabled &&
@@ -809,6 +823,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         specialistResult,
         userTextRaw: userTextForWordingChoice,
         isOfftopic: false,
+        forcePending: forcePendingWordingChoice,
         dreamRuntimeModeRaw: dreamRuntimeModeForWording,
       });
       specialistResult = rebuilt.specialist;
