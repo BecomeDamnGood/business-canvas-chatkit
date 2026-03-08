@@ -14,6 +14,14 @@ test("inferStep0SeedFromInitialMessage extracts Dutch possessive venture+name", 
   assert.equal(seed?.status, "existing");
 });
 
+test("inferStep0SeedFromInitialMessage prefers venture hint plus trailing brand in natural opening sentence", () => {
+  const seed = inferStep0SeedFromInitialMessage("help met mijn ondernemingsplan voor mijn reclamebureau Mindd");
+  assert.ok(seed);
+  assert.equal(seed?.venture, "reclamebureau");
+  assert.equal(seed?.name, "Mindd");
+  assert.equal(seed?.status, "existing");
+});
+
 test("inferStep0SeedFromInitialMessage extracts named startup intent", () => {
   const seed = inferStep0SeedFromInitialMessage("I want to start an agency called Mindd");
   assert.ok(seed);
@@ -33,6 +41,11 @@ test("inferStep0SeedFromInitialMessage keeps explicit step0 contract tuple", () 
 
 test("inferStep0SeedFromInitialMessage returns null when no venture-name signal exists", () => {
   const seed = inferStep0SeedFromInitialMessage("Help me build a business plan");
+  assert.equal(seed, null);
+});
+
+test("inferStep0SeedFromInitialMessage returns null when venture type is present without a distinct business name", () => {
+  const seed = inferStep0SeedFromInitialMessage("Help met mijn ondernemingsplan voor mijn reclamebureau");
   assert.equal(seed, null);
 });
 

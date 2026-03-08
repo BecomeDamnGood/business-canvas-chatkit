@@ -12,6 +12,14 @@ export type Step0Seed = {
   status: "existing" | "starting";
 };
 
+type SeedCandidate = {
+  value: string;
+  score: number;
+  source: string;
+  start: number;
+  end: number;
+};
+
 export function parseStep0Final(step0Final: string, fallbackName: string): Step0Parsed {
   const nameMatch = step0Final.match(/Name:\s*([^|]+)\s*(\||$)/i);
   const ventureMatch = step0Final.match(/Venture:\s*([^|]+)\s*(\||$)/i);
@@ -42,15 +50,55 @@ function normalizeSeedToken(raw: unknown): string {
     .trim();
 }
 
-function isPlausibleName(raw: string): boolean {
+const GENERIC_NAME_TOKENS = new Set([
+  "tbd",
+  "business",
+  "venture",
+  "bedrijf",
+  "company",
+  "startup",
+  "plan",
+  "canvas",
+  "businessplan",
+  "ondernemingsplan",
+]);
+
+const RESERVED_LEADING_NAME_TOKENS = new Set([
+  "called",
+  "named",
+  "genaamd",
+  "heet",
+  "for",
+  "voor",
+  "with",
+  "met",
+  "my",
+  "mijn",
+  "our",
+  "ons",
+  "onze",
+]);
+
+function normalizeSeedKey(raw: string): string {
+  return normalizeSeedToken(raw).toLowerCase();
+}
+
+function looksLikeBusinessName(raw: string): boolean {
   const value = normalizeSeedToken(raw);
   if (!value) return false;
-  if (value.length < 2 || value.length > 48) return false;
-  const lowered = value.toLowerCase();
-  if (["tbd", "business", "venture", "bedrijf", "company", "startup", "plan", "canvas"].includes(lowered)) {
+  if (value.length < 2 || value.length > 64) return false;
+  if (!/^[A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3}$/.test(value)) {
     return false;
   }
-  return /^[A-Za-z0-9][A-Za-z0-9&'._-]*$/.test(value);
+  const lowered = normalizeSeedKey(value);
+  if (GENERIC_NAME_TOKENS.has(lowered)) return false;
+  return true;
+}
+
+function looksBrandLike(raw: string): boolean {
+  const value = normalizeSeedToken(raw);
+  if (!value) return false;
+  return /[A-Z]/.test(value) || /[0-9&._-]/.test(value);
 }
 
 function inferStatusFromInput(rawInput: string): "existing" | "starting" {
@@ -80,12 +128,130 @@ const VENTURE_HINTS: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bbedrijf\b/i, value: "bedrijf" },
 ];
 
+const VENTURE_NAME_BLOCKLIST = new Set(VENTURE_HINTS.map((hint) => normalizeSeedKey(hint.value)));
+const GENERIC_VENTURE_VALUES = new Set(["business", "bedrijf", "company", "startup"]);
+
 function inferVentureFromInput(rawInput: string): string {
   const input = String(rawInput || "");
   for (const hint of VENTURE_HINTS) {
     if (hint.pattern.test(input)) return hint.value;
   }
   return "";
+}
+
+function scoreVentureCandidate(value: string, input: string, matchStart: number): number {
+  const normalized = normalizeSeedKey(value);
+  let score = GENERIC_VENTURE_VALUES.has(normalized) ? 2 : 4;
+  if (value.includes(" ")) score += 1;
+  const prefix = input.slice(Math.max(0, matchStart - 24), matchStart).toLowerCase();
+  if (/\b(?:my|mijn|our|ons|onze|for|voor|a|an|een)\s*$/.test(prefix)) score += 1;
+  return score;
+}
+
+function collectVentureCandidates(rawInput: string): SeedCandidate[] {
+  const input = normalizeSeedToken(rawInput);
+  if (!input) return [];
+  const candidates: SeedCandidate[] = [];
+  for (const hint of VENTURE_HINTS) {
+    const match = input.match(hint.pattern);
+    if (!match || typeof match.index !== "number") continue;
+    candidates.push({
+      value: normalizeSeedToken(hint.value),
+      score: scoreVentureCandidate(hint.value, input, match.index),
+      source: "venture_hint",
+      start: match.index,
+      end: match.index + String(match[0] || "").length,
+    });
+  }
+  return candidates;
+}
+
+function extractLeadingNamePhrase(rawTail: string): string {
+  const tokens = normalizeSeedToken(rawTail).split(" ").filter(Boolean);
+  if (tokens.length === 0) return "";
+  const firstToken = normalizeSeedKey(tokens[0]);
+  if (RESERVED_LEADING_NAME_TOKENS.has(firstToken)) return "";
+  const parts: string[] = [];
+  for (const token of tokens) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9&'._-]*$/.test(token)) break;
+    if (parts.length === 0 && RESERVED_LEADING_NAME_TOKENS.has(normalizeSeedKey(token))) break;
+    parts.push(token);
+    if (parts.length >= 3) break;
+  }
+  return normalizeSeedToken(parts.join(" "));
+}
+
+function scoreNameCandidate(value: string, baseScore: number): number {
+  let score = baseScore;
+  if (looksBrandLike(value)) score += 1;
+  if (value.includes(" ")) score += 1;
+  return score;
+}
+
+function collectNameCandidates(rawInput: string, ventureCandidates: SeedCandidate[]): SeedCandidate[] {
+  const raw = String(rawInput || "").replace(/\s+/g, " ").trim();
+  if (!raw) return [];
+  const candidates: SeedCandidate[] = [];
+  const explicitNamed = raw.match(
+    /\b(?:called|named|genaamd|heet)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,2})\b/i
+  );
+  if (explicitNamed && typeof explicitNamed.index === "number") {
+    const value = normalizeSeedToken(explicitNamed[1]);
+    candidates.push({
+      value,
+      score: scoreNameCandidate(value, 5),
+      source: "explicit_named",
+      start: explicitNamed.index,
+      end: explicitNamed.index + String(explicitNamed[0] || "").length,
+    });
+  }
+
+  const trailingTitleCase = raw.match(
+    /\b([A-Z][A-Za-z0-9&'._-]*(?:\s+[A-Z][A-Za-z0-9&'._-]*){0,2})\b\s*$/
+  );
+  if (trailingTitleCase && typeof trailingTitleCase.index === "number") {
+    const value = normalizeSeedToken(trailingTitleCase[1]);
+    candidates.push({
+      value,
+      score: scoreNameCandidate(value, 3),
+      source: "trailing_title_case",
+      start: trailingTitleCase.index,
+      end: trailingTitleCase.index + String(trailingTitleCase[0] || "").length,
+    });
+  }
+
+  for (const ventureCandidate of ventureCandidates) {
+    if (ventureCandidate.end >= raw.length) continue;
+    const value = extractLeadingNamePhrase(raw.slice(ventureCandidate.end));
+    if (!value) continue;
+    candidates.push({
+      value,
+      score: scoreNameCandidate(value, 4),
+      source: "after_venture",
+      start: ventureCandidate.end,
+      end: ventureCandidate.end + value.length,
+    });
+  }
+
+  return candidates;
+}
+
+function pickBestCandidate(candidates: SeedCandidate[]): SeedCandidate | null {
+  const ranked = [...candidates].sort((left, right) => {
+    if (right.score !== left.score) return right.score - left.score;
+    if (right.value.length !== left.value.length) return right.value.length - left.value.length;
+    return left.start - right.start;
+  });
+  return ranked[0] || null;
+}
+
+function isValidSeedNameCandidate(raw: string, ventureRaw: string): boolean {
+  const value = normalizeSeedToken(raw);
+  if (!looksLikeBusinessName(value)) return false;
+  const lowered = normalizeSeedKey(value);
+  if (VENTURE_NAME_BLOCKLIST.has(lowered)) return false;
+  if (lowered === normalizeSeedKey(ventureRaw)) return false;
+  return true;
 }
 
 function normalizeIntentInput(rawInput: string): string {
@@ -168,27 +334,24 @@ export function inferStep0SeedFromInitialMessage(rawInput: string): Step0Seed | 
     const venture = normalizeSeedToken(explicitStep0[1]);
     const name = normalizeSeedToken(explicitStep0[2]);
     const parsedStatus = String(explicitStep0[3] || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
-    if (venture && isPlausibleName(name)) {
+    if (venture && looksLikeBusinessName(name)) {
       return { venture, name, status: parsedStatus };
     }
   }
 
-  const explicitNamed = input.match(/\b(?:called|named|genaamd|heet)\s+([A-Za-z0-9][A-Za-z0-9&'._-]{1,48})\b/i);
-  const pronounVentureName = input.match(
-    /\b(?:my|mijn|our|ons|onze)\s+([A-Za-z][A-Za-z0-9&'/-]*(?:\s+[A-Za-z][A-Za-z0-9&'/-]*){0,2})\s+([A-Za-z0-9][A-Za-z0-9&'._-]{1,48})\b/i
-  );
-  const trailingTitleCase = input.match(/\b([A-Z][A-Za-z0-9&'._-]{1,48})\b\s*$/);
+  const ventureCandidates = collectVentureCandidates(raw);
+  const bestVenture = pickBestCandidate(ventureCandidates);
+  if (!bestVenture || bestVenture.score < 3) return null;
 
-  const ventureFromPattern = normalizeSeedToken(pronounVentureName?.[1] || "");
-  const venture = ventureFromPattern || inferVentureFromInput(input);
-  const nameCandidate = normalizeSeedToken(
-    explicitNamed?.[1] || pronounVentureName?.[2] || trailingTitleCase?.[1] || ""
+  const nameCandidates = collectNameCandidates(raw, ventureCandidates).filter((candidate) =>
+    isValidSeedNameCandidate(candidate.value, bestVenture.value)
   );
-  if (!venture || !isPlausibleName(nameCandidate)) return null;
+  const bestName = pickBestCandidate(nameCandidates);
+  if (!bestName || bestName.score < 4) return null;
 
   return {
-    venture,
-    name: nameCandidate,
+    venture: bestVenture.value,
+    name: bestName.value,
     status,
   };
 }
