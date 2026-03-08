@@ -7,13 +7,20 @@ test("tool response keeps rich payload in _meta.widget_result and model-safe pay
   const richResult = {
     ok: true,
     tool: "run_step",
-    current_step_id: "dream",
+    current_step_id: "step_0",
     text: "rijke tekst",
     prompt: "rijke prompt",
-    specialist: { action: "ASK", dream: "waarde" },
+    specialist: { action: "ASK", step_0: "Venture: reclamebureau | Name: Mindd | Status: existing" },
     state: {
-      current_step: "dream",
-      dream_final: "gevoelige inhoud",
+      current_step: "step_0",
+      step_0_final: "Venture: reclamebureau | Name: Mindd | Status: existing",
+      business_name: "Mindd",
+      step0_bootstrap: {
+        venture: "reclamebureau",
+        name: "Mindd",
+        status: "existing",
+        source: "initial_user_message",
+      },
       locale: "nl",
       language: "nl",
     },
@@ -34,5 +41,14 @@ test("tool response keeps rich payload in _meta.widget_result and model-safe pay
   const meta = (response.meta || {}) as Record<string, unknown>;
   const widgetResult = (meta.widget_result || {}) as Record<string, unknown>;
   assert.equal(widgetResult.text, "rijke tekst");
-  assert.equal((widgetResult.state as Record<string, unknown>).dream_final, "gevoelige inhoud");
+  assert.equal((widgetResult.state as Record<string, unknown>).business_name, "Mindd");
+  assert.deepEqual((widgetResult.state as Record<string, unknown>).step0_bootstrap, {
+    venture: "reclamebureau",
+    name: "Mindd",
+    status: "existing",
+    source: "initial_user_message",
+  });
+  assert.equal((safeResult.state as Record<string, unknown>).business_name, undefined);
+  assert.equal((safeResult.state as Record<string, unknown>).step_0_final, undefined);
+  assert.equal((safeResult.state as Record<string, unknown>).step0_bootstrap, undefined);
 });

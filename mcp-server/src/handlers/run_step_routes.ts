@@ -726,6 +726,19 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const step0FinalField = getFinalFieldForStepId(deps.step0Id) || "step_0_final";
         let step0Final = String((context.state as Record<string, unknown>)[step0FinalField] ?? "").trim();
         if (!step0Final) {
+          const rawBootstrap = asRecord((context.state as Record<string, unknown>).step0_bootstrap || {});
+          const bootstrapVenture = sanitizeStep0SeedToken(rawBootstrap.venture, "");
+          const bootstrapName = sanitizeStep0SeedToken(rawBootstrap.name, "");
+          const bootstrapStatus =
+            String(rawBootstrap.status || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+          const hasBootstrap = bootstrapVenture !== "" && bootstrapName !== "";
+          if (hasBootstrap) {
+            step0Final = `Venture: ${bootstrapVenture} | Name: ${bootstrapName} | Status: ${bootstrapStatus}`;
+            (context.state as Record<string, unknown>)[step0FinalField] = step0Final;
+            (context.state as Record<string, unknown>).business_name = bootstrapName;
+          }
+        }
+        if (!step0Final) {
           const initialMsg = String((context.state as Record<string, unknown>).initial_user_message ?? "").trim();
           const seed = deps.inferStep0SeedFromInitialMessage(initialMsg || context.userMessage);
           if (seed) {
@@ -741,6 +754,12 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             if (seededName && seededName.toLowerCase() !== "tbd") {
               (context.state as Record<string, unknown>).business_name = seededName;
             }
+            (context.state as Record<string, unknown>).step0_bootstrap = {
+              venture: seededVenture,
+              name: seededName || "TBD",
+              status: seededStatus,
+              source: "initial_user_message",
+            };
           }
         }
 

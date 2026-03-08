@@ -301,6 +301,12 @@ export const CanvasStateZod = z.object({
   productsservices_final: z.string(),
   rulesofthegame_final: z.string(),
   presentation_brief_final: z.string(),
+  step0_bootstrap: z.object({
+    venture: z.string(),
+    name: z.string(),
+    status: z.string(),
+    source: z.string(),
+  }),
 
   // staged per-step value (chosen wording before explicit next-step confirm)
   provisional_by_step: z.record(z.string(), z.string()),
@@ -377,6 +383,12 @@ export function getDefaultState(): CanvasState {
     productsservices_final: "",
     rulesofthegame_final: "",
     presentation_brief_final: "",
+    step0_bootstrap: {
+      venture: "",
+      name: "",
+      status: "",
+      source: "",
+    },
 
     provisional_by_step: {},
     provisional_source_by_step: {},
@@ -548,6 +560,16 @@ export function normalizeState(raw: unknown): CanvasState {
   const productsservices_final = String(r.productsservices_final ?? d.productsservices_final);
   const rulesofthegame_final = String(r.rulesofthegame_final ?? d.rulesofthegame_final);
   const presentation_brief_final = String(r.presentation_brief_final ?? d.presentation_brief_final);
+  const step0_bootstrap_raw =
+    typeof r.step0_bootstrap === "object" && r.step0_bootstrap !== null
+      ? (r.step0_bootstrap as Record<string, unknown>)
+      : {};
+  const step0_bootstrap = {
+    venture: String(step0_bootstrap_raw.venture ?? "").trim(),
+    name: String(step0_bootstrap_raw.name ?? "").trim(),
+    status: String(step0_bootstrap_raw.status ?? "").trim(),
+    source: String(step0_bootstrap_raw.source ?? "").trim(),
+  };
   const provisional_raw =
     typeof r.provisional_by_step === "object" && r.provisional_by_step !== null
       ? (r.provisional_by_step as Record<string, unknown>)
@@ -656,6 +678,7 @@ export function normalizeState(raw: unknown): CanvasState {
     productsservices_final,
     rulesofthegame_final,
     presentation_brief_final,
+    step0_bootstrap,
 
     provisional_by_step,
     provisional_source_by_step,
@@ -973,10 +996,23 @@ export function markStepIntroShown(state: CanvasState, step: string): CanvasStat
 export function persistStep0(state: CanvasState, step0Line: string, businessName: string): CanvasState {
   const step_0_final = String(step0Line ?? "").trim();
   const business_name = String(businessName ?? "").trim() || "TBD";
+  const ventureMatch = step_0_final.match(/Venture:\s*([^|]+?)\s*(?:\||$)/i);
+  const nameMatch = step_0_final.match(/Name:\s*([^|]+?)\s*(?:\||$)/i);
+  const statusMatch = step_0_final.match(/Status:\s*(existing|starting)\b/i);
+  const step0_bootstrap =
+    step_0_final && ventureMatch && nameMatch && statusMatch
+      ? {
+          venture: String(ventureMatch[1] || "").trim(),
+          name: String(nameMatch[1] || business_name).trim() || business_name,
+          status: String(statusMatch[1] || "").trim().toLowerCase(),
+          source: "step_0_final",
+        }
+      : state.step0_bootstrap;
   return CanvasStateZod.parse({
     ...state,
     step_0_final: step_0_final || state.step_0_final,
     business_name,
+    step0_bootstrap,
   });
 }
 

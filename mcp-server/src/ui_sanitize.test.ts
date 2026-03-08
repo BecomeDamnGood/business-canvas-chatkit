@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { renderInlineText, renderStructuredText } from "../ui/lib/ui_text.ts";
 import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.ts";
+import { canonicalizeWidgetPayload } from "../ui/lib/locale_bootstrap_runtime.ts";
 import { readDreamBuilderViewContract, renderChoiceButtons, resolveWidgetBodyText } from "../ui/lib/ui_render.ts";
 import { setIsLoading } from "../ui/lib/ui_state.ts";
 
@@ -426,6 +427,46 @@ test("bundled runtime startup and ACTION_START flow stay on the simple happy-pat
   assert.doesNotMatch(source, /result\?\.state_advanced \?\? responseState\.state_advanced \?\? responseLiveness\.state_advanced/);
   assert.doesNotMatch(source, /\[ui_start_dispatch_not_advanced_fail_closed\]/);
   assert.doesNotMatch(source, /\[ui_contract_interactive_content_absent\]/);
+});
+
+test("canonical widget payload only accepts _meta.widget_result authority", () => {
+  const canonical = canonicalizeWidgetPayload({
+    _meta: {
+      widget_result: {
+        current_step_id: "step_0",
+        state: { current_step: "step_0" },
+      },
+    },
+    structuredContent: {
+      result: {
+        current_step_id: "dream",
+        state: { current_step: "dream" },
+      },
+    },
+    result: {
+      current_step_id: "purpose",
+      state: { current_step: "purpose" },
+    },
+  });
+  assert.equal(canonical.source, "meta.widget_result");
+  assert.equal(String((canonical.result.state as Record<string, unknown>).current_step || ""), "step_0");
+
+  const droppedStructuredOnly = canonicalizeWidgetPayload({
+    structuredContent: {
+      result: {
+        current_step_id: "dream",
+        state: { current_step: "dream" },
+      },
+    },
+  });
+  assert.equal(droppedStructuredOnly.source, "none");
+  assert.deepEqual(droppedStructuredOnly.result, {});
+});
+
+test("bundled runtime does not retain legacy render-source fallbacks", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /structuredContent\.result/);
+  assert.doesNotMatch(source, /root\.result/);
 });
 
 test("bundled prestart intro movie uses language-mapped SSOT links", () => {

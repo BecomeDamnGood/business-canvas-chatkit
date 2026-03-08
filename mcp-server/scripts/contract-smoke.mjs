@@ -264,6 +264,21 @@ async function main() {
     true,
     "transport_seeded_no_click_start: initial_user_message must preserve chat input"
   );
+  assert.deepEqual(
+    transportWidgetState.step0_bootstrap,
+    {
+      venture: "reclamebureau",
+      name: "Mindd",
+      status: "existing",
+      source: "initial_user_message",
+    },
+    "transport_seeded_no_click_start: widget_result must expose canonical step0 bootstrap tuple"
+  );
+  assert.equal(
+    typeof transportStructuredState.step0_bootstrap,
+    "undefined",
+    "transport_seeded_no_click_start: structured state must not expose rich step0 bootstrap tuple"
+  );
   assert.equal(typeof parsedTransportStructured.meta?.step, "string", "transport_seeded_no_click_start: meta.step string required");
   assert.equal(
     typeof parsedTransportStructured.meta?.specialist,
@@ -285,6 +300,38 @@ async function main() {
       String(transportStructuredResult.text || "").trim().length > 0,
     true,
     "transport_seeded_no_click_start: structured result must stay renderable for fallback paths"
+  );
+
+  const transportStarted = await runStepHandler({
+    current_step_id: "step_0",
+    user_message: "ACTION_START",
+    input_mode: "widget",
+    locale_hint: "nl",
+    locale_hint_source: "message_detect",
+    state: transportWidgetState,
+  });
+  const transportStartedWidget = transportStarted.meta?.widget_result && typeof transportStarted.meta.widget_result === "object"
+    ? transportStarted.meta.widget_result
+    : {};
+  const transportStartedState = stateOf(transportStartedWidget);
+  const transportStartedSpecialist =
+    transportStartedWidget.specialist && typeof transportStartedWidget.specialist === "object"
+      ? transportStartedWidget.specialist
+      : {};
+  assert.equal(
+    String(transportStartedState.step_0_final || ""),
+    "Venture: reclamebureau | Name: Mindd | Status: existing",
+    "transport_seeded_start: ACTION_START must preserve remembered step0 tuple"
+  );
+  assert.equal(
+    String(transportStartedState.business_name || ""),
+    "Mindd",
+    "transport_seeded_start: ACTION_START must preserve remembered business name"
+  );
+  assert.equal(
+    String(transportStartedSpecialist.step0_interaction_state || ""),
+    "step0_ready",
+    "transport_seeded_start: ACTION_START must open ready step0 state"
   );
 
   const poll1 = await run_step({

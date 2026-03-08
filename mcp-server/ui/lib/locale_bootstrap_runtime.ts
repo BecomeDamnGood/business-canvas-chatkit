@@ -165,7 +165,6 @@ function resolveMetaWidgetResult(raw: unknown): {
   reason_code: PayloadReasonCode;
 } {
   const root = toRecord(raw);
-  const structured = toRecord(root.structuredContent);
   const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
 
   const fromRootMeta = pickMetaWidgetResult(root);
@@ -176,37 +175,6 @@ function resolveMetaWidgetResult(raw: unknown): {
   const fromToolOutputMeta = pickMetaWidgetResult(toolOutput);
   if (looksLikeWidgetResult(fromToolOutputMeta)) {
     return { result: fromToolOutputMeta, source: "meta.widget_result", reason_code: "meta_widget_result" };
-  }
-
-  const fromStructuredResult = toRecord(structured.result);
-  if (looksLikeWidgetResult(fromStructuredResult)) {
-    return {
-      result: fromStructuredResult,
-      source: "structured_content.result",
-      reason_code: "structured_content_result",
-    };
-  }
-
-  const fromRootResult = toRecord(root.result);
-  if (looksLikeWidgetResult(fromRootResult)) {
-    return { result: fromRootResult, source: "result", reason_code: "result_fallback" };
-  }
-
-  const fromToolOutputResult = toRecord(toRecord(root.toolOutput).result);
-  if (looksLikeWidgetResult(fromToolOutputResult)) {
-    return { result: fromToolOutputResult, source: "result", reason_code: "result_fallback" };
-  }
-
-  if (looksLikeWidgetResult(root)) {
-    return { result: root, source: "direct", reason_code: "direct_payload" };
-  }
-
-  if (looksLikeWidgetResult(structured)) {
-    return { result: structured, source: "direct", reason_code: "direct_payload" };
-  }
-
-  if (looksLikeWidgetResult(toolOutput)) {
-    return { result: toolOutput, source: "direct", reason_code: "direct_payload" };
   }
 
   return { result: {}, source: "none", reason_code: "none" };

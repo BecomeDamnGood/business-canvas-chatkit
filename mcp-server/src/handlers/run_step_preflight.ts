@@ -302,6 +302,10 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       // Keep the latest meaningful prestart input so ACTION_START can consume it.
       (state as any).initial_user_message = candidateText;
     }
+    const bufferedInitialUserMessage = String((state as any).initial_user_message ?? "").trim();
+    if (bufferedInitialUserMessage) {
+      state = deps.maybeSeedStep0CandidateFromInitialMessage(state, bufferedInitialUserMessage);
+    }
 
     const lastSpecialistResult = (state as any)?.last_specialist_result;
     const actionCodeRaw = userMessageCandidate.startsWith("ACTION_") ? userMessageCandidate : "";

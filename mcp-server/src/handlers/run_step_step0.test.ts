@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import {
   createRunStepStep0DisplayHelpers,
   inferStep0SeedFromInitialMessage,
+  resolveStep0BootstrapFromState,
+  maybeSeedStep0CandidateFromInitialMessage,
 } from "./run_step_step0.js";
+import { getDefaultState } from "../core/state.js";
 
 test("inferStep0SeedFromInitialMessage extracts Dutch possessive venture+name", () => {
   const seed = inferStep0SeedFromInitialMessage("Help met een businessplan voor mijn reclamebureau Mindd");
@@ -47,6 +50,36 @@ test("inferStep0SeedFromInitialMessage returns null when no venture-name signal 
 test("inferStep0SeedFromInitialMessage returns null when venture type is present without a distinct business name", () => {
   const seed = inferStep0SeedFromInitialMessage("Help met mijn ondernemingsplan voor mijn reclamebureau");
   assert.equal(seed, null);
+});
+
+test("maybeSeedStep0CandidateFromInitialMessage stores canonical prestart bootstrap tuple", () => {
+  const seeded = maybeSeedStep0CandidateFromInitialMessage(
+    getDefaultState(),
+    "Help met een bedrijfsplan voor mijn reclamebureau genaamd Mindd"
+  );
+
+  assert.deepEqual((seeded as any).step0_bootstrap, {
+    venture: "reclamebureau",
+    name: "Mindd",
+    status: "existing",
+    source: "initial_user_message",
+  });
+  assert.equal(seeded.business_name, "Mindd");
+});
+
+test("resolveStep0BootstrapFromState falls back to persisted step_0_final", () => {
+  const bootstrap = resolveStep0BootstrapFromState({
+    ...getDefaultState(),
+    step_0_final: "Venture: reclamebureau | Name: Mindd | Status: existing",
+    business_name: "Mindd",
+  } as any);
+
+  assert.deepEqual(bootstrap, {
+    venture: "reclamebureau",
+    name: "Mindd",
+    status: "existing",
+    source: "step_0_final",
+  });
 });
 
 test("normalizeStep0AskDisplayContract preserves ready state on confirm intent", () => {

@@ -2108,21 +2108,7 @@
   }
   function reasonCodeForMeta(context) {
     if (context === "root") return "meta_widget_result_root";
-    if (context === "root.result") return "meta_widget_result_root_result";
     return "meta_widget_result_tool_output";
-  }
-  function reasonCodeForResultWrapper(context) {
-    if (context === "toolOutput") return "result_wrapper_tool_output";
-    return "result_wrapper_root";
-  }
-  function reasonCodeForDirect(context) {
-    if (context === "toolOutput") return "direct_widget_result_tool_output";
-    return "direct_widget_result_root";
-  }
-  function reasonCodeForStructured(context) {
-    if (context === "root") return "structured_content_result_root";
-    if (context === "root.result") return "structured_content_result_root_result";
-    return "structured_content_result_tool_output";
   }
   function pickMetaWidgetResult(container, context) {
     const meta = toRecord(container._meta);
@@ -2134,37 +2120,8 @@
       reason_code: reasonCodeForMeta(context)
     };
   }
-  function pickNonMetaWidgetResult(container, context) {
-    const wrapperResult = toRecord(container.result);
-    if (isWidgetResultLike(wrapperResult)) {
-      return {
-        result: wrapperResult,
-        source: "root.result",
-        reason_code: reasonCodeForResultWrapper(context)
-      };
-    }
-    const directCandidate = container;
-    if (isWidgetResultLike(directCandidate)) {
-      return {
-        result: directCandidate,
-        source: "root.result",
-        reason_code: reasonCodeForDirect(context)
-      };
-    }
-    const structuredContent = toRecord(container.structuredContent);
-    const structuredResult = toRecord(structuredContent.result);
-    if (isWidgetResultLike(structuredResult)) {
-      return {
-        result: structuredResult,
-        source: "structuredContent.result",
-        reason_code: reasonCodeForStructured(context)
-      };
-    }
-    return null;
-  }
   function resolveWidgetResultFromKnownShapes(raw) {
     const root = toRecord(raw);
-    const rootResult = toRecord(root.result);
     const mergedToolOutput = mergeToolOutputWithResponseMetadata(
       root.toolOutput,
       root.toolResponseMetadata
@@ -2172,19 +2129,12 @@
     const candidates = [
       { context: "root", payload: root }
     ];
-    if (Object.keys(rootResult).length) {
-      candidates.push({ context: "root.result", payload: rootResult });
-    }
     if (Object.keys(mergedToolOutput).length) {
       candidates.push({ context: "toolOutput", payload: mergedToolOutput });
     }
     for (const candidate of candidates) {
       const pickedMeta = pickMetaWidgetResult(candidate.payload, candidate.context);
       if (pickedMeta) return pickedMeta;
-    }
-    for (const candidate of candidates) {
-      const picked = pickNonMetaWidgetResult(candidate.payload, candidate.context);
-      if (picked) return picked;
     }
     return {
       result: {},

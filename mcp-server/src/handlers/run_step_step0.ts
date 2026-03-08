@@ -12,6 +12,13 @@ export type Step0Seed = {
   status: "existing" | "starting";
 };
 
+export type Step0Bootstrap = {
+  venture: string;
+  name: string;
+  status: "existing" | "starting";
+  source: "initial_user_message" | "step_0_final";
+};
+
 type SeedCandidate = {
   value: string;
   score: number;
@@ -310,6 +317,52 @@ function composeStep0Final(ventureRaw: string, nameRaw: string, statusRaw: strin
   return `Venture: ${venture} | Name: ${name} | Status: ${status}`;
 }
 
+function normalizeStep0BootstrapSource(rawSource: unknown): Step0Bootstrap["source"] {
+  return String(rawSource || "").trim() === "step_0_final" ? "step_0_final" : "initial_user_message";
+}
+
+function buildStep0Bootstrap(
+  ventureRaw: unknown,
+  nameRaw: unknown,
+  statusRaw: unknown,
+  sourceRaw: unknown
+): Step0Bootstrap | null {
+  const venture = normalizeSeedToken(ventureRaw);
+  const name = normalizeBusinessName(String(nameRaw || ""));
+  if (!venture || !name) return null;
+  return {
+    venture,
+    name,
+    status: toStep0Status(String(statusRaw || "")),
+    source: normalizeStep0BootstrapSource(sourceRaw),
+  };
+}
+
+export function composeStep0FinalFromBootstrap(bootstrap: Step0Bootstrap): string {
+  return composeStep0Final(bootstrap.venture, bootstrap.name, bootstrap.status);
+}
+
+export function resolveStep0BootstrapFromState(
+  state: CanvasState | Record<string, unknown> | null | undefined
+): Step0Bootstrap | null {
+  const stateRecord =
+    state && typeof state === "object" && !Array.isArray(state)
+      ? (state as Record<string, unknown>)
+      : {};
+  const fromState = buildStep0Bootstrap(
+    (stateRecord.step0_bootstrap as Record<string, unknown> | undefined)?.venture,
+    (stateRecord.step0_bootstrap as Record<string, unknown> | undefined)?.name,
+    (stateRecord.step0_bootstrap as Record<string, unknown> | undefined)?.status,
+    (stateRecord.step0_bootstrap as Record<string, unknown> | undefined)?.source
+  );
+  if (fromState) return fromState;
+
+  const step0FinalRaw = String(stateRecord.step_0_final || "").trim();
+  if (!hasValidStep0Final(step0FinalRaw)) return null;
+  const parsed = parseStep0Final(step0FinalRaw, String(stateRecord.business_name || "TBD"));
+  return buildStep0Bootstrap(parsed.venture, parsed.name, parsed.status, "step_0_final");
+}
+
 function applyStep0InteractionMetadata(next: Record<string, unknown>, state: Step0InteractionState): void {
   next.step0_interaction_state = state;
   if (state === "step0_editing") {
@@ -357,14 +410,29 @@ export function inferStep0SeedFromInitialMessage(rawInput: string): Step0Seed | 
 }
 
 export function maybeSeedStep0CandidateFromInitialMessage(state: CanvasState, sourceMessage: string): CanvasState {
+  const authoritativeBootstrap = resolveStep0BootstrapFromState(state);
+  if (authoritativeBootstrap) {
+    return {
+      ...(state as any),
+      step0_bootstrap: authoritativeBootstrap,
+    } as CanvasState;
+  }
   const seed = inferStep0SeedFromInitialMessage(sourceMessage);
   if (!seed) return state;
   const currentBusinessName = String((state as any).business_name || "").trim();
-  if (currentBusinessName && currentBusinessName.toLowerCase() !== "tbd") return state;
-  return {
+  const nextState: Record<string, unknown> = {
     ...(state as any),
-    business_name: seed.name,
-  } as CanvasState;
+    step0_bootstrap: {
+      venture: seed.venture,
+      name: seed.name,
+      status: seed.status,
+      source: "initial_user_message",
+    } satisfies Step0Bootstrap,
+  };
+  if (!currentBusinessName || currentBusinessName.toLowerCase() === "tbd") {
+    nextState.business_name = seed.name;
+  }
+  return nextState as CanvasState;
 }
 
 type RunStepStep0DisplayDeps = {
