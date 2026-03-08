@@ -26,7 +26,7 @@ import {
   toolData,
   setLastToolOutput,
   resolveActionLivenessNotice,
-  retainStep0Continuity,
+  retainCanonicalStepContinuity,
   uiLang,
   resolveWidgetPayload,
   resetHydrationRetryCycle,
@@ -707,7 +707,7 @@ export function render(overrideToolOutput?: unknown): void {
   const latestState = latestRoot?.state && typeof latestRoot.state === "object"
     ? (latestRoot.state as Record<string, unknown>)
     : {};
-  const stateForLatest = retainStep0Continuity(
+  const stateForLatest = retainCanonicalStepContinuity(
     Object.keys(state).length > 0 ? state : latestState,
     latestState
   );
@@ -1303,8 +1303,12 @@ export function render(overrideToolOutput?: unknown): void {
       };
     }
 
+    const latestScoringState = retainCanonicalStepContinuity(
+      state,
+      latestState
+    );
     (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__ =
-      { state, lang };
+      { state: latestScoringState, lang };
 
     if (isLoading) setLoading(false);
     return;
@@ -1501,8 +1505,12 @@ export function render(overrideToolOutput?: unknown): void {
   const inputVal = ((document.getElementById("input") as HTMLInputElement)?.value || "").trim();
   setSendEnabled(inputVal.length > 0);
 
+  const latestInteractiveState = retainCanonicalStepContinuity(
+    state,
+    latestState
+  );
   (globalThis as { __BSC_LATEST__?: { state: Record<string, unknown>; lang: string } }).__BSC_LATEST__ =
-    { state, lang };
+    { state: latestInteractiveState, lang };
 
   if (getIsLoading()) setLoading(false);
 }

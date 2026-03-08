@@ -47,6 +47,8 @@ export function initActionsConfig(config: {
 }): void {
   _render = config.render;
   _t = config.t;
+  // Reset per-instance dispatch debounce so a fresh widget session cannot inherit a stale click lockout.
+  lastCallAt = 0;
 }
 
 export function setBridgeEnabled(enabled: boolean): void {
@@ -427,6 +429,50 @@ const STEP0_CONTINUITY_FIELDS: Step0ContinuityField[] = [
   "step0_bootstrap",
 ];
 
+type CanonicalContinuityStep =
+  | "dream"
+  | "purpose"
+  | "bigwhy"
+  | "role"
+  | "entity"
+  | "strategy"
+  | "targetgroup"
+  | "productsservices"
+  | "rulesofthegame"
+  | "presentation";
+
+const CANONICAL_CONTINUITY_STEP_IDS: CanonicalContinuityStep[] = [
+  "dream",
+  "purpose",
+  "bigwhy",
+  "role",
+  "entity",
+  "strategy",
+  "targetgroup",
+  "productsservices",
+  "rulesofthegame",
+  "presentation",
+];
+
+const CANONICAL_FINAL_FIELD_BY_STEP_ID: Record<CanonicalContinuityStep, string> = {
+  dream: "dream_final",
+  purpose: "purpose_final",
+  bigwhy: "bigwhy_final",
+  role: "role_final",
+  entity: "entity_final",
+  strategy: "strategy_final",
+  targetgroup: "targetgroup_final",
+  productsservices: "productsservices_final",
+  rulesofthegame: "rulesofthegame_final",
+  presentation: "presentation_brief_final",
+};
+
+const ACCEPTED_CANONICAL_PROVISIONAL_SOURCES = new Set([
+  "user_input",
+  "wording_pick",
+  "action_route",
+]);
+
 export type WidgetStateOrderingSnapshot = {
   bootstrap_session_id: string;
   bootstrap_epoch: number;
@@ -544,6 +590,60 @@ function composeStep0FinalFromBootstrap(bootstrap: Record<string, unknown>): str
   return `Venture: ${venture} | Name: ${name} | Status: ${status}`;
 }
 
+function hasOwnKey(source: Record<string, unknown> | null | undefined, key: string): boolean {
+  return Boolean(source) && Object.prototype.hasOwnProperty.call(source, key);
+}
+
+function normalizeAcceptedCanonicalSource(raw: unknown): string {
+  const source = String(raw || "").trim();
+  return ACCEPTED_CANONICAL_PROVISIONAL_SOURCES.has(source) ? source : "";
+}
+
+function extractCanonicalContinuityContext(
+  state: Record<string, unknown> | null | undefined
+): {
+  finals: Record<string, string>;
+  provisional_by_step: Record<string, string>;
+  provisional_source_by_step: Record<string, string>;
+} {
+  const source = state && typeof state === "object" ? state : {};
+  const finals: Record<string, string> = {};
+  for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
+    const finalField = CANONICAL_FINAL_FIELD_BY_STEP_ID[stepId];
+    const finalValue = String(source[finalField] || "").trim();
+    if (finalValue) finals[finalField] = finalValue;
+  }
+  const provisionalByStep = toRecord(source.provisional_by_step);
+  const provisionalSourceByStep = toRecord(source.provisional_source_by_step);
+  const acceptedProvisionalByStep: Record<string, string> = {};
+  const acceptedProvisionalSources: Record<string, string> = {};
+  for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
+    const value = String(provisionalByStep[stepId] || "").trim();
+    const sourceValue = normalizeAcceptedCanonicalSource(provisionalSourceByStep[stepId]);
+    if (!value || !sourceValue) continue;
+    acceptedProvisionalByStep[stepId] = value;
+    acceptedProvisionalSources[stepId] = sourceValue;
+  }
+  return {
+    finals,
+    provisional_by_step: acceptedProvisionalByStep,
+    provisional_source_by_step: acceptedProvisionalSources,
+  };
+}
+
+function hasExplicitCanonicalProvisionalClear(
+  state: Record<string, unknown> | null | undefined,
+  stepId: CanonicalContinuityStep
+): boolean {
+  const source = state && typeof state === "object" ? state : {};
+  const provisionalByStep = toRecord(source.provisional_by_step);
+  const provisionalSourceByStep = toRecord(source.provisional_source_by_step);
+  return (
+    (hasOwnKey(provisionalByStep, stepId) && String(provisionalByStep[stepId] || "").trim() === "") ||
+    (hasOwnKey(provisionalSourceByStep, stepId) && String(provisionalSourceByStep[stepId] || "").trim() === "")
+  );
+}
+
 function continuityScopeCompatible(
   preferred: Record<string, unknown> | null | undefined,
   fallback: Record<string, unknown> | null | undefined
@@ -632,23 +732,152 @@ export function retainStep0Continuity(
   };
 }
 
+export function retainCanonicalStepContinuity(
+  preferred: Record<string, unknown> | null | undefined,
+  ...fallbacks: Array<Record<string, unknown> | null | undefined>
+): Record<string, unknown> {
+  let next = retainStep0Continuity(preferred, ...fallbacks);
+  for (const fallback of fallbacks) {
+    if (!continuityScopeCompatible(next, fallback || {})) continue;
+    const fallbackState = fallback && typeof fallback === "object" ? fallback : {};
+    const nextProvisionalRaw = toRecord(next.provisional_by_step);
+    const nextSourceRaw = toRecord(next.provisional_source_by_step);
+    const fallbackProvisionalRaw = toRecord(fallbackState.provisional_by_step);
+    const fallbackSourceRaw = toRecord(fallbackState.provisional_source_by_step);
+    const nextProvisional = { ...nextProvisionalRaw };
+    const nextSources = { ...nextSourceRaw };
+    let mapsChanged = false;
+
+    for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
+      const finalField = CANONICAL_FINAL_FIELD_BY_STEP_ID[stepId];
+      const nextHasExplicitFinal = hasOwnKey(next, finalField);
+      const nextFinalValue = String(next[finalField] || "").trim();
+      const fallbackFinalValue = String(fallbackState[finalField] || "").trim();
+      if (!nextHasExplicitFinal && !nextFinalValue && fallbackFinalValue) {
+        next[finalField] = fallbackFinalValue;
+      }
+
+      const nextValue = String(nextProvisional[stepId] || "").trim();
+      const nextSource = normalizeAcceptedCanonicalSource(nextSources[stepId]);
+      if (nextValue && nextSource) continue;
+      if (hasExplicitCanonicalProvisionalClear(next, stepId)) continue;
+
+      const fallbackValue = String(fallbackProvisionalRaw[stepId] || "").trim();
+      const fallbackSource = normalizeAcceptedCanonicalSource(fallbackSourceRaw[stepId]);
+      if (!fallbackValue || !fallbackSource) continue;
+
+      if (!nextValue && !hasOwnKey(nextProvisionalRaw, stepId)) {
+        nextProvisional[stepId] = fallbackValue;
+        mapsChanged = true;
+      }
+      if (!nextSource && !hasOwnKey(nextSourceRaw, stepId)) {
+        nextSources[stepId] = fallbackSource;
+        mapsChanged = true;
+      }
+      if (!String(nextProvisional[stepId] || "").trim() && normalizeAcceptedCanonicalSource(nextSources[stepId])) {
+        nextProvisional[stepId] = fallbackValue;
+        mapsChanged = true;
+      }
+      if (String(nextProvisional[stepId] || "").trim() && !normalizeAcceptedCanonicalSource(nextSources[stepId])) {
+        nextSources[stepId] = fallbackSource;
+        mapsChanged = true;
+      }
+    }
+
+    if (mapsChanged) {
+      next.provisional_by_step = nextProvisional;
+      next.provisional_source_by_step = nextSources;
+    }
+  }
+
+  const normalizedContext = extractCanonicalContinuityContext(next);
+  return {
+    ...next,
+    ...normalizedContext.finals,
+    ...(Object.keys(normalizedContext.provisional_by_step).length
+      ? {
+        provisional_by_step: {
+          ...toRecord(next.provisional_by_step),
+          ...normalizedContext.provisional_by_step,
+        },
+      }
+      : {}),
+    ...(Object.keys(normalizedContext.provisional_source_by_step).length
+      ? {
+        provisional_source_by_step: {
+          ...toRecord(next.provisional_source_by_step),
+          ...normalizedContext.provisional_source_by_step,
+        },
+      }
+      : {}),
+  };
+}
+
 function buildWidgetStateContinuityPatch(params: {
   currentWidgetState: Record<string, unknown>;
   incomingState: Record<string, unknown>;
 }): Record<string, unknown> {
   const resetContinuity = continuityScopeResetRequired(params.currentWidgetState, params.incomingState);
-  const retained = retainStep0Continuity(params.incomingState, params.currentWidgetState);
+  const retained = retainCanonicalStepContinuity(params.incomingState, params.currentWidgetState);
+  const currentCanonicalContext = extractCanonicalContinuityContext(params.currentWidgetState);
+  const retainedCanonicalContext = extractCanonicalContinuityContext(retained);
   const patch: Record<string, unknown> = resetContinuity
     ? {
       business_name: undefined,
       step_0_final: undefined,
       step0_bootstrap: undefined,
+      provisional_by_step: undefined,
+      provisional_source_by_step: undefined,
     }
     : {};
+  if (resetContinuity) {
+    for (const finalField of Object.values(CANONICAL_FINAL_FIELD_BY_STEP_ID)) patch[finalField] = undefined;
+  }
   const retainedContext = extractStep0ContinuityContext(retained);
   if (String(retainedContext.business_name || "").trim()) patch.business_name = retainedContext.business_name;
   if (String(retainedContext.step_0_final || "").trim()) patch.step_0_final = retainedContext.step_0_final;
   if (Object.keys(toRecord(retainedContext.step0_bootstrap)).length) patch.step0_bootstrap = retainedContext.step0_bootstrap;
+
+  for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
+    const finalField = CANONICAL_FINAL_FIELD_BY_STEP_ID[stepId];
+    const retainedFinalValue = String(retainedCanonicalContext.finals[finalField] || "").trim();
+    if (hasOwnKey(params.incomingState, finalField) && String(params.incomingState[finalField] || "").trim() === "") {
+      patch[finalField] = undefined;
+      continue;
+    }
+    if (retainedFinalValue) {
+      patch[finalField] = retainedFinalValue;
+      continue;
+    }
+    if (String(currentCanonicalContext.finals[finalField] || "").trim()) {
+      patch[finalField] = undefined;
+    }
+  }
+
+  const nextAcceptedProvisionalByStep = { ...currentCanonicalContext.provisional_by_step };
+  const nextAcceptedProvisionalSources = { ...currentCanonicalContext.provisional_source_by_step };
+  for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
+    if (hasExplicitCanonicalProvisionalClear(params.incomingState, stepId)) {
+      delete nextAcceptedProvisionalByStep[stepId];
+      delete nextAcceptedProvisionalSources[stepId];
+      continue;
+    }
+    const retainedValue = String(retainedCanonicalContext.provisional_by_step[stepId] || "").trim();
+    const retainedSource = String(retainedCanonicalContext.provisional_source_by_step[stepId] || "").trim();
+    if (retainedValue && retainedSource) {
+      nextAcceptedProvisionalByStep[stepId] = retainedValue;
+      nextAcceptedProvisionalSources[stepId] = retainedSource;
+      continue;
+    }
+    delete nextAcceptedProvisionalByStep[stepId];
+    delete nextAcceptedProvisionalSources[stepId];
+  }
+  patch.provisional_by_step = Object.keys(nextAcceptedProvisionalByStep).length > 0
+    ? nextAcceptedProvisionalByStep
+    : undefined;
+  patch.provisional_source_by_step = Object.keys(nextAcceptedProvisionalSources).length > 0
+    ? nextAcceptedProvisionalSources
+    : undefined;
   return patch;
 }
 
@@ -1046,9 +1275,22 @@ export function setWidgetStateSafe(patch: Record<string, unknown> | null): void 
   const includesOrderingPatch = orderingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch || {}, key));
   const orderingBefore = readBootstrapOrderingState(ws);
   const keys = Object.keys(next);
+  const stableSerialize = (value: unknown, seen = new WeakSet<object>()): string => {
+    if (value === null) return "null";
+    if (value === undefined) return "undefined";
+    const type = typeof value;
+    if (type !== "object") return `${type}:${String(value)}`;
+    if (seen.has(value as object)) return "[circular]";
+    seen.add(value as object);
+    if (Array.isArray(value)) {
+      return `[${value.map((entry) => stableSerialize(entry, seen)).join(",")}]`;
+    }
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${key}:${stableSerialize(record[key], seen)}`).join(",")}}`;
+  };
   let changed = false;
   for (const k of keys) {
-    if (String(ws[k] ?? "") !== String(next[k] ?? "")) {
+    if (stableSerialize(ws[k]) !== stableSerialize(next[k])) {
       changed = true;
       break;
     }
@@ -1774,7 +2016,7 @@ export async function callRunStep(
   const latestSnapshot = (globalThis as { __BSC_LATEST__?: { state?: Record<string, unknown> } }).__BSC_LATEST__ || {};
   const latestState = toRecord(latestSnapshot.state);
   const persistedWidgetState = widgetState();
-  const activeClientState = retainStep0Continuity(
+  const activeClientState = retainCanonicalStepContinuity(
     Object.keys(latestState).length > 0 ? latestState : persistedWidgetState,
     latestState,
     persistedWidgetState
@@ -1854,7 +2096,7 @@ export async function callRunStep(
   if (cleanExtraState && typeof cleanExtraState === "object") {
     nextState = Object.assign({}, nextState, cleanExtraState);
   }
-  nextState = retainStep0Continuity(nextState, activeClientState, ws);
+  nextState = retainCanonicalStepContinuity(nextState, activeClientState, ws);
   const outboundOrdering = mergeOutboundOrdering({ nextState, widgetState: ws });
   if (hasValidBootstrapOrdering(outboundOrdering)) {
     (nextState as Record<string, unknown>).bootstrap_session_id = outboundOrdering.sessionId;

@@ -2270,6 +2270,7 @@
   function initActionsConfig(config) {
     _render = config.render;
     _t = config.t;
+    lastCallAt = 0;
   }
   function setBridgeEnabled(enabled) {
     bridgeEnabled = enabled;
@@ -2483,6 +2484,55 @@
     const status = String(bootstrap.status || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
     return `Venture: ${venture} | Name: ${name} | Status: ${status}`;
   }
+  function hasOwnKey(source, key) {
+    return Boolean(source) && Object.prototype.hasOwnProperty.call(source, key);
+  }
+  function normalizeAcceptedCanonicalSource(raw) {
+    const source = String(raw || "").trim();
+    return source === "user_input" || source === "wording_pick" || source === "action_route" ? source : "";
+  }
+  function extractCanonicalContinuityContext(state) {
+    const source = state && typeof state === "object" ? state : {};
+    const finals = {};
+    const finalFields = {
+      dream: "dream_final",
+      purpose: "purpose_final",
+      bigwhy: "bigwhy_final",
+      role: "role_final",
+      entity: "entity_final",
+      strategy: "strategy_final",
+      targetgroup: "targetgroup_final",
+      productsservices: "productsservices_final",
+      rulesofthegame: "rulesofthegame_final",
+      presentation: "presentation_brief_final"
+    };
+    for (const finalField of Object.values(finalFields)) {
+      const finalValue = String(source[finalField] || "").trim();
+      if (finalValue) finals[finalField] = finalValue;
+    }
+    const provisionalByStep = toRecord2(source.provisional_by_step);
+    const provisionalSourceByStep = toRecord2(source.provisional_source_by_step);
+    const acceptedProvisionalByStep = {};
+    const acceptedProvisionalSources = {};
+    for (const stepId of Object.keys(finalFields)) {
+      const value = String(provisionalByStep[stepId] || "").trim();
+      const sourceValue = normalizeAcceptedCanonicalSource(provisionalSourceByStep[stepId]);
+      if (!value || !sourceValue) continue;
+      acceptedProvisionalByStep[stepId] = value;
+      acceptedProvisionalSources[stepId] = sourceValue;
+    }
+    return {
+      finals,
+      provisional_by_step: acceptedProvisionalByStep,
+      provisional_source_by_step: acceptedProvisionalSources
+    };
+  }
+  function hasExplicitCanonicalProvisionalClear(state, stepId) {
+    const source = state && typeof state === "object" ? state : {};
+    const provisionalByStep = toRecord2(source.provisional_by_step);
+    const provisionalSourceByStep = toRecord2(source.provisional_source_by_step);
+    return hasOwnKey(provisionalByStep, stepId) && String(provisionalByStep[stepId] || "").trim() === "" || hasOwnKey(provisionalSourceByStep, stepId) && String(provisionalSourceByStep[stepId] || "").trim() === "";
+  }
   function continuityScopeCompatible(preferred, fallback) {
     const preferredOrdering = readBootstrapOrderingState(preferred);
     const fallbackOrdering = readBootstrapOrderingState(fallback);
@@ -2536,18 +2586,149 @@
       ...(String(normalizedContext.step_0_final || "").trim() ? { step_0_final: normalizedContext.step_0_final } : {})
     };
   }
+  function retainCanonicalStepContinuity(preferred, ...fallbacks) {
+    let next = retainStep0Continuity(preferred, ...fallbacks);
+    const finalFields = {
+      dream: "dream_final",
+      purpose: "purpose_final",
+      bigwhy: "bigwhy_final",
+      role: "role_final",
+      entity: "entity_final",
+      strategy: "strategy_final",
+      targetgroup: "targetgroup_final",
+      productsservices: "productsservices_final",
+      rulesofthegame: "rulesofthegame_final",
+      presentation: "presentation_brief_final"
+    };
+    for (const fallback of fallbacks) {
+      if (!continuityScopeCompatible(next, fallback || {})) continue;
+      const fallbackState = fallback && typeof fallback === "object" ? fallback : {};
+      const nextProvisionalRaw = toRecord2(next.provisional_by_step);
+      const nextSourceRaw = toRecord2(next.provisional_source_by_step);
+      const fallbackProvisionalRaw = toRecord2(fallbackState.provisional_by_step);
+      const fallbackSourceRaw = toRecord2(fallbackState.provisional_source_by_step);
+      const nextProvisional = { ...nextProvisionalRaw };
+      const nextSources = { ...nextSourceRaw };
+      let mapsChanged = false;
+      for (const [stepId, finalField] of Object.entries(finalFields)) {
+        const nextHasExplicitFinal = hasOwnKey(next, finalField);
+        const nextFinalValue = String(next[finalField] || "").trim();
+        const fallbackFinalValue = String(fallbackState[finalField] || "").trim();
+        if (!nextHasExplicitFinal && !nextFinalValue && fallbackFinalValue) {
+          next[finalField] = fallbackFinalValue;
+        }
+        const nextValue = String(nextProvisional[stepId] || "").trim();
+        const nextSource = normalizeAcceptedCanonicalSource(nextSources[stepId]);
+        if (nextValue && nextSource) continue;
+        if (hasExplicitCanonicalProvisionalClear(next, stepId)) continue;
+        const fallbackValue = String(fallbackProvisionalRaw[stepId] || "").trim();
+        const fallbackSource = normalizeAcceptedCanonicalSource(fallbackSourceRaw[stepId]);
+        if (!fallbackValue || !fallbackSource) continue;
+        if (!nextValue && !hasOwnKey(nextProvisionalRaw, stepId)) {
+          nextProvisional[stepId] = fallbackValue;
+          mapsChanged = true;
+        }
+        if (!nextSource && !hasOwnKey(nextSourceRaw, stepId)) {
+          nextSources[stepId] = fallbackSource;
+          mapsChanged = true;
+        }
+        if (!String(nextProvisional[stepId] || "").trim() && normalizeAcceptedCanonicalSource(nextSources[stepId])) {
+          nextProvisional[stepId] = fallbackValue;
+          mapsChanged = true;
+        }
+        if (String(nextProvisional[stepId] || "").trim() && !normalizeAcceptedCanonicalSource(nextSources[stepId])) {
+          nextSources[stepId] = fallbackSource;
+          mapsChanged = true;
+        }
+      }
+      if (mapsChanged) {
+        next.provisional_by_step = nextProvisional;
+        next.provisional_source_by_step = nextSources;
+      }
+    }
+    const normalizedContext = extractCanonicalContinuityContext(next);
+    return {
+      ...next,
+      ...normalizedContext.finals,
+      ...(Object.keys(normalizedContext.provisional_by_step).length ? {
+        provisional_by_step: {
+          ...toRecord2(next.provisional_by_step),
+          ...normalizedContext.provisional_by_step
+        }
+      } : {}),
+      ...(Object.keys(normalizedContext.provisional_source_by_step).length ? {
+        provisional_source_by_step: {
+          ...toRecord2(next.provisional_source_by_step),
+          ...normalizedContext.provisional_source_by_step
+        }
+      } : {})
+    };
+  }
   function buildWidgetStateContinuityPatch(params) {
     const resetContinuity = continuityScopeResetRequired(params.currentWidgetState, params.incomingState);
-    const retained = retainStep0Continuity(params.incomingState, params.currentWidgetState);
+    const retained = retainCanonicalStepContinuity(params.incomingState, params.currentWidgetState);
+    const currentCanonicalContext = extractCanonicalContinuityContext(params.currentWidgetState);
+    const retainedCanonicalContext = extractCanonicalContinuityContext(retained);
+    const finalFields = {
+      dream: "dream_final",
+      purpose: "purpose_final",
+      bigwhy: "bigwhy_final",
+      role: "role_final",
+      entity: "entity_final",
+      strategy: "strategy_final",
+      targetgroup: "targetgroup_final",
+      productsservices: "productsservices_final",
+      rulesofthegame: "rulesofthegame_final",
+      presentation: "presentation_brief_final"
+    };
     const patch = resetContinuity ? {
       business_name: void 0,
       step_0_final: void 0,
-      step0_bootstrap: void 0
+      step0_bootstrap: void 0,
+      provisional_by_step: void 0,
+      provisional_source_by_step: void 0
     } : {};
+    if (resetContinuity) {
+      for (const finalField of Object.values(finalFields)) patch[finalField] = void 0;
+    }
     const retainedContext = extractStep0ContinuityContext(retained);
     if (String(retainedContext.business_name || "").trim()) patch.business_name = retainedContext.business_name;
     if (String(retainedContext.step_0_final || "").trim()) patch.step_0_final = retainedContext.step_0_final;
     if (Object.keys(toRecord2(retainedContext.step0_bootstrap)).length) patch.step0_bootstrap = retainedContext.step0_bootstrap;
+    for (const [stepId, finalField] of Object.entries(finalFields)) {
+      const retainedFinalValue = String(retainedCanonicalContext.finals[finalField] || "").trim();
+      if (hasOwnKey(params.incomingState, finalField) && String(params.incomingState[finalField] || "").trim() === "") {
+        patch[finalField] = void 0;
+        continue;
+      }
+      if (retainedFinalValue) {
+        patch[finalField] = retainedFinalValue;
+        continue;
+      }
+      if (String(currentCanonicalContext.finals[finalField] || "").trim()) {
+        patch[finalField] = void 0;
+      }
+    }
+    const nextAcceptedProvisionalByStep = { ...currentCanonicalContext.provisional_by_step };
+    const nextAcceptedProvisionalSources = { ...currentCanonicalContext.provisional_source_by_step };
+    for (const stepId of Object.keys(finalFields)) {
+      if (hasExplicitCanonicalProvisionalClear(params.incomingState, stepId)) {
+        delete nextAcceptedProvisionalByStep[stepId];
+        delete nextAcceptedProvisionalSources[stepId];
+        continue;
+      }
+      const retainedValue = String(retainedCanonicalContext.provisional_by_step[stepId] || "").trim();
+      const retainedSource = String(retainedCanonicalContext.provisional_source_by_step[stepId] || "").trim();
+      if (retainedValue && retainedSource) {
+        nextAcceptedProvisionalByStep[stepId] = retainedValue;
+        nextAcceptedProvisionalSources[stepId] = retainedSource;
+        continue;
+      }
+      delete nextAcceptedProvisionalByStep[stepId];
+      delete nextAcceptedProvisionalSources[stepId];
+    }
+    patch.provisional_by_step = Object.keys(nextAcceptedProvisionalByStep).length > 0 ? nextAcceptedProvisionalByStep : void 0;
+    patch.provisional_source_by_step = Object.keys(nextAcceptedProvisionalSources).length > 0 ? nextAcceptedProvisionalSources : void 0;
     return patch;
   }
   function evaluatePayloadQuality(result) {
@@ -2713,9 +2894,21 @@
       }
     }
     const keys = Object.keys(next);
+    const stableSerialize = (value, seen = /* @__PURE__ */ new WeakSet()) => {
+      if (value === null) return "null";
+      if (value === void 0) return "undefined";
+      const type = typeof value;
+      if (type !== "object") return `${type}:${String(value)}`;
+      if (seen.has(value)) return "[circular]";
+      seen.add(value);
+      if (Array.isArray(value)) {
+        return `[${value.map((entry) => stableSerialize(entry, seen)).join(",")}]`;
+      }
+      return `{${Object.keys(value).sort().map((key) => `${key}:${stableSerialize(value[key], seen)}`).join(",")}}`;
+    };
     let changed = false;
     for (const k of keys) {
-      if (String(ws[k] ?? "") !== String(next[k] ?? "")) {
+      if (stableSerialize(ws[k]) !== stableSerialize(next[k])) {
         changed = true;
         break;
       }
@@ -3265,7 +3458,7 @@
     const latest = globalThis.__BSC_LATEST__ || {};
     const latestState = toRecord2(latest.state);
     const persistedWidgetState = widgetState();
-    const activeClientState = retainStep0Continuity(
+    const activeClientState = retainCanonicalStepContinuity(
       Object.keys(latestState).length > 0 ? latestState : persistedWidgetState,
       latestState,
       persistedWidgetState
@@ -3277,7 +3470,7 @@
     if (cleanExtraState && typeof cleanExtraState === "object") {
       nextState = Object.assign({}, nextState, cleanExtraState);
     }
-    nextState = retainStep0Continuity(nextState, activeClientState, ws);
+    nextState = retainCanonicalStepContinuity(nextState, activeClientState, ws);
     const outboundOrdering = mergeOutboundOrdering({ nextState, widgetState: ws });
     if (hasValidBootstrapOrdering(outboundOrdering)) {
       nextState.bootstrap_session_id = outboundOrdering.sessionId;
@@ -4192,7 +4385,7 @@
     const lang = overrideLang || localeCandidate || ambientLang || "en";
     const latestRoot = globalThis.__BSC_LATEST__;
     const latestState = latestRoot?.state && typeof latestRoot.state === "object" ? latestRoot.state : {};
-    const stateForLatest = retainStep0Continuity(
+    const stateForLatest = retainCanonicalStepContinuity(
       Object.keys(state).length > 0 ? state : latestState,
       latestState
     );
@@ -4578,7 +4771,11 @@
           callRunStep(actionCode, { __pending_scores: payload });
         };
       }
-      globalThis.__BSC_LATEST__ = { state, lang };
+      const latestScoringState = retainCanonicalStepContinuity(
+        state,
+        latestState
+      );
+      globalThis.__BSC_LATEST__ = { state: latestScoringState, lang };
       if (isLoading) setLoading(false);
       return;
     }
@@ -4742,7 +4939,11 @@
     if (input) input.placeholder = t(lang, "inputPlaceholder");
     const inputVal = (document.getElementById("input")?.value || "").trim();
     setSendEnabled(inputVal.length > 0);
-    globalThis.__BSC_LATEST__ = { state, lang };
+    const latestInteractiveState = retainCanonicalStepContinuity(
+      state,
+      latestState
+    );
+    globalThis.__BSC_LATEST__ = { state: latestInteractiveState, lang };
     if (getIsLoading()) setLoading(false);
   }
 
