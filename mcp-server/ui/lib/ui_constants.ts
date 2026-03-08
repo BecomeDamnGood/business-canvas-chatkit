@@ -34,6 +34,39 @@ export type PrestartContent = {
   skeleton: string;
 };
 
+const PRESTART_INTRO_VIDEO_BY_LANG: Record<string, string> = {
+  en: "https://youtu.be/JjlY4iGWSi8",
+  nl: "https://youtu.be/FD3BZit8evg",
+  de: "https://youtu.be/dMnAR-eVedo",
+  es: "https://youtu.be/hEfq_ciotPk",
+  fr: "https://youtu.be/WalQNHy1DRo",
+  ja: "https://youtu.be/o1di1BkDdKA",
+};
+
+function normalizePrestartYouTubeEmbedUrl(rawUrl: string): string {
+  const input = String(rawUrl || "").trim();
+  if (!input) return "";
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    return "";
+  }
+  const host = parsed.hostname.toLowerCase();
+  let videoId = "";
+  if (host === "youtu.be") {
+    videoId = parsed.pathname.replace(/^\/+/, "").split("/")[0] || "";
+  } else if (host.endsWith("youtube.com")) {
+    if (parsed.pathname.startsWith("/watch")) {
+      videoId = String(parsed.searchParams.get("v") || "").trim();
+    } else if (parsed.pathname.startsWith("/embed/")) {
+      videoId = parsed.pathname.replace(/^\/embed\//, "").split("/")[0] || "";
+    }
+  }
+  if (!/^[A-Za-z0-9_-]{6,}$/.test(videoId)) return "";
+  return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`;
+}
+
 const CRITICAL_PRESTART_KEYS = [
   "prestart.headline",
   "prestart.proven.title",
@@ -110,6 +143,12 @@ export function titlesForLang(lang: string | null | undefined): Record<string, s
 
 export function prestartWelcomeForLang(lang: string | null | undefined): string {
   return t(lang, "prestartWelcome");
+}
+
+export function prestartIntroVideoUrlForLang(lang: string | null | undefined): string {
+  const langBase = baseLang(lang);
+  if (!langBase) return "";
+  return normalizePrestartYouTubeEmbedUrl(PRESTART_INTRO_VIDEO_BY_LANG[langBase] || "");
 }
 
 export function hasPrestartContentForLang(lang: string | null | undefined): boolean {

@@ -409,3 +409,22 @@ test("bundled runtime startup and ACTION_START flow stay on the simple happy-pat
   assert.doesNotMatch(source, /\[ui_start_dispatch_not_advanced_fail_closed\]/);
   assert.doesNotMatch(source, /\[ui_contract_interactive_content_absent\]/);
 });
+
+test("bundled prestart intro movie uses language-mapped SSOT links", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /const PRESTART_INTRO_VIDEO_BY_LANG = \{/);
+  assert.match(source, /en:\s*"https:\/\/youtu\.be\/JjlY4iGWSi8"/);
+  assert.match(source, /nl:\s*"https:\/\/youtu\.be\/FD3BZit8evg"/);
+  assert.match(source, /de:\s*"https:\/\/youtu\.be\/dMnAR-eVedo"/);
+  assert.match(source, /es:\s*"https:\/\/youtu\.be\/hEfq_ciotPk"/);
+  assert.match(source, /fr:\s*"https:\/\/youtu\.be\/WalQNHy1DRo"/);
+  assert.match(source, /ja:\s*"https:\/\/youtu\.be\/o1di1BkDdKA"/);
+});
+
+test("bundled prestart intro movie hides iframe when no language-specific link exists", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /function prestartIntroVideoUrlForLang\(lang\)/);
+  assert.match(source, /const introVideoUrl = prestartIntroVideoUrlForLang\(lang\);/);
+  assert.match(source, /if \(introVideoUrl\) \{/);
+  assert.doesNotMatch(source, /PRESTART_SHOW_VIDEO\s*=\s*true/);
+});

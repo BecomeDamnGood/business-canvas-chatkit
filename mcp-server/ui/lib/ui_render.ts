@@ -7,6 +7,7 @@ import {
   t,
   titlesForLang,
   prestartContentForLang,
+  prestartIntroVideoUrlForLang,
   hasPrestartContentForLang,
   getSectionTitle,
   setRuntimeUiStrings,
@@ -244,6 +245,18 @@ function renderPrestartContent(cardDesc: HTMLElement, lang: string): void {
   cardDesc.appendChild(sectionProven);
 
   cardDesc.appendChild(appendTextNode("div", "divider", ""));
+
+  const introVideoUrl = prestartIntroVideoUrlForLang(lang);
+  if (introVideoUrl) {
+    const videoWrap = appendTextNode("div", "cardDesc-video", "");
+    const iframe = document.createElement("iframe");
+    iframe.src = introVideoUrl;
+    iframe.title = String(content.headline || "").trim() || "prestart-video";
+    iframe.setAttribute("allow", "autoplay; encrypted-media; fullscreen");
+    iframe.allowFullscreen = true;
+    videoWrap.appendChild(iframe);
+    cardDesc.appendChild(videoWrap);
+  }
 
   const sectionOutcomes = appendTextNode("div", "section", "");
   sectionOutcomes.appendChild(appendTextNode("div", "section-title", content.outcomesTitle));

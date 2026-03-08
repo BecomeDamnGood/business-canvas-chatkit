@@ -1886,6 +1886,37 @@
       "prestart.meta.time.value": "10-15 minuten"
     }
   };
+  const PRESTART_INTRO_VIDEO_BY_LANG = {
+    en: "https://youtu.be/JjlY4iGWSi8",
+    nl: "https://youtu.be/FD3BZit8evg",
+    de: "https://youtu.be/dMnAR-eVedo",
+    es: "https://youtu.be/hEfq_ciotPk",
+    fr: "https://youtu.be/WalQNHy1DRo",
+    ja: "https://youtu.be/o1di1BkDdKA"
+  };
+  function normalizePrestartYouTubeEmbedUrl(rawUrl) {
+    const input = String(rawUrl || "").trim();
+    if (!input) return "";
+    let parsed;
+    try {
+      parsed = new URL(input);
+    } catch {
+      return "";
+    }
+    const host = parsed.hostname.toLowerCase();
+    let videoId = "";
+    if (host === "youtu.be") {
+      videoId = parsed.pathname.replace(/^\/+/, "").split("/")[0] || "";
+    } else if (host.endsWith("youtube.com")) {
+      if (parsed.pathname.startsWith("/watch")) {
+        videoId = String(parsed.searchParams.get("v") || "").trim();
+      } else if (parsed.pathname.startsWith("/embed/")) {
+        videoId = parsed.pathname.replace(/^\/embed\//, "").split("/")[0] || "";
+      }
+    }
+    if (!/^[A-Za-z0-9_-]{6,}$/.test(videoId)) return "";
+    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`;
+  }
   function baseLang(lang) {
     const l = String(lang || "").trim().toLowerCase();
     if (!l) return "";
@@ -1923,6 +1954,11 @@
   }
   function hasPrestartContentForLang(lang) {
     return CRITICAL_PRESTART_KEYS.every((key) => String(t(lang, key) || "").trim().length > 0);
+  }
+  function prestartIntroVideoUrlForLang(lang) {
+    const langBase = baseLang(lang);
+    if (!langBase) return "";
+    return normalizePrestartYouTubeEmbedUrl(PRESTART_INTRO_VIDEO_BY_LANG[langBase] || "");
   }
   function prestartContentForLang(lang) {
     return {
@@ -3716,13 +3752,13 @@
     sectionProven.appendChild(appendTextNode("div", "section-body", content.provenBody));
     cardDesc.appendChild(sectionProven);
     cardDesc.appendChild(appendTextNode("div", "divider", ""));
-    var PRESTART_SHOW_VIDEO = true;
-    if (PRESTART_SHOW_VIDEO) {
+    const introVideoUrl = prestartIntroVideoUrlForLang(lang);
+    if (introVideoUrl) {
       var videoWrap = document.createElement("div");
       videoWrap.className = "cardDesc-video";
       var iframe = document.createElement("iframe");
-      iframe.src = "https://www.youtube-nocookie.com/embed/JjlY4iGWSi8?autoplay=1&rel=0&playsinline=1";
-      iframe.title = "Intro video";
+      iframe.src = introVideoUrl;
+      iframe.title = String(content.headline || "").trim() || "prestart-video";
       iframe.setAttribute("allow", "autoplay; encrypted-media; fullscreen");
       iframe.allowFullscreen = true;
       videoWrap.appendChild(iframe);
