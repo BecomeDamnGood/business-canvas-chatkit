@@ -40,6 +40,7 @@ const PRESTART_INTRO_VIDEO_BY_LANG: Record<string, string> = {
   de: "https://youtu.be/dMnAR-eVedo",
   es: "https://youtu.be/hEfq_ciotPk",
   fr: "https://youtu.be/WalQNHy1DRo",
+  it: "https://youtu.be/XUMJ44mXQ6Y",
   ja: "https://youtu.be/o1di1BkDdKA",
 };
 

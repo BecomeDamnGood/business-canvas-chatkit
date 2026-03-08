@@ -406,6 +406,102 @@ test("buildTextForWidget removes duplicate dream summary paragraph in builder ru
   assert.equal(output, "Ga verder met de Droom-oefening.");
 });
 
+test("buildTextForWidget drops dream narrative paragraph when it only repeats canonical statements", () => {
+  const helpers = buildTextHelpers(() => "");
+  const statements = [
+    "Over 5 tot 10 jaar zullen mensen meer waarde hechten aan werk dat een positieve impact heeft op hun leven en dat van anderen.",
+    "Duurzame initiatieven en bedrijven zullen een grotere rol spelen in de samenleving en generaties overstijgen.",
+    "Mensen zullen meer vrijheid zoeken in hun tijdsbesteding en keuzes, zowel prive als professioneel.",
+    "Trots op het eigen werk en de bijdrage aan de samenleving wordt belangrijker voor mensen.",
+    "Bedrijven zullen steeds vaker een authentieke afspiegeling zijn van de waarden en identiteit van hun oprichters.",
+  ];
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      suggest_dreambuilder: "false",
+      message: statements.join(" "),
+      refined_formulation: "",
+      dream: "",
+    },
+    state: {
+      active_specialist: "Dream",
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+      dream_builder_statements: statements,
+      ui_strings: {
+        "dreamBuilder.statements.title": "JOUW DROOM-STATEMENTS",
+        "dreamBuilder.statements.count": "N statements van minimaal 20 tot nu toe",
+      },
+    } as any,
+  });
+
+  assert.equal(output, "");
+});
+
+test("buildTextForWidget does not append refined dream text when it semantically equals canonical statements", () => {
+  const helpers = buildTextHelpers(() => "");
+  const statements = [
+    "Wanneer mensen werk doen dat betekenisvol is, ervaren ze meer welzijn en voldoening in hun leven.",
+    "Duurzame initiatieven en bedrijven zullen een blijvende positieve impact hebben op de samenleving, ook na de oprichters.",
+    "De komende jaren zal de roep om meer autonomie en vrijheid in werk en leven verder toenemen.",
+    "Mensen zullen steeds meer waarde hechten aan trots en zingeving in hun werk.",
+    "Bedrijven zullen vaker een afspiegeling zijn van de waarden en identiteit van hun oprichters.",
+  ];
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      suggest_dreambuilder: "false",
+      message: "Dat is een sterk startpunt.",
+      refined_formulation: statements.join(" "),
+      dream: "",
+    },
+    state: {
+      active_specialist: "Dream",
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+      dream_builder_statements: statements,
+      ui_strings: {
+        "dreamBuilder.statements.title": "JOUW DROOM-STATEMENTS",
+        "dreamBuilder.statements.count": "N statements van minimaal 20 tot nu toe",
+      },
+    } as any,
+  });
+
+  assert.equal(output, "Dat is een sterk startpunt.");
+});
+
+test("buildTextForWidget keeps dream-builder rendering canonical-only and skips refined append channel", () => {
+  const helpers = buildTextHelpers(() => "");
+  const statements = [
+    "Mensen zoeken vaker betekenisvol werk met zichtbare impact.",
+    "Bedrijven nemen meer verantwoordelijkheid voor lange-termijn effecten.",
+    "Autonomie en keuzevrijheid in werk worden belangrijker.",
+    "Trots en zingeving sturen keuzes van professionals.",
+    "Organisaties weerspiegelen steeds sterker de waarden van oprichters.",
+  ];
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      suggest_dreambuilder: "false",
+      message: "Ga verder met de Droom-oefening.",
+      refined_formulation: "We bouwen een toekomst met meer humane AI-keuzes.",
+      dream: "",
+    },
+    state: {
+      active_specialist: "Dream",
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+      dream_builder_statements: statements,
+      ui_strings: {
+        "dreamBuilder.statements.title": "JOUW DROOM-STATEMENTS",
+        "dreamBuilder.statements.count": "N statements van minimaal 20 tot nu toe",
+      },
+    } as any,
+  });
+
+  assert.equal(output, "Ga verder met de Droom-oefening.");
+});
+
 test("buildTextForWidget includes canonical pending suggestion text when wording-choice is pending", () => {
   const helpers = buildTextHelpers(() => "");
   const suggestion =

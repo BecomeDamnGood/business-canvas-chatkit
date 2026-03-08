@@ -418,6 +418,7 @@ test("bundled prestart intro movie uses language-mapped SSOT links", () => {
   assert.match(source, /de:\s*"https:\/\/youtu\.be\/dMnAR-eVedo"/);
   assert.match(source, /es:\s*"https:\/\/youtu\.be\/hEfq_ciotPk"/);
   assert.match(source, /fr:\s*"https:\/\/youtu\.be\/WalQNHy1DRo"/);
+  assert.match(source, /it:\s*"https:\/\/youtu\.be\/XUMJ44mXQ6Y"/);
   assert.match(source, /ja:\s*"https:\/\/youtu\.be\/o1di1BkDdKA"/);
 });
 

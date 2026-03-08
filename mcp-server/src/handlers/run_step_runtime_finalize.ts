@@ -253,9 +253,6 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       contractStepId
     );
     const isSingleValueValidOutput = contractStatus === "valid_output" && isSingleValueConfirmStep;
-    const suppressRefinedAppend =
-      String(specialist?.__suppress_refined_append || "").trim() === "true" ||
-      isSingleValueValidOutput;
     const menuId = deps.parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
     const stateUiStrings =
       params.state && typeof (params.state as Record<string, unknown>).ui_strings === "object"
@@ -281,6 +278,11 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const statementLines = stateDreamBuilderStatements.length > 0
       ? stateDreamBuilderStatements
       : specialistStatementLines;
+    const stripMarkers = (line: string): string =>
+      String(line || "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "")
+        .trim();
     const dreamBuilderRenderContext =
       statementLines.length > 0 &&
       contractStepId === deps.dreamStepId &&
@@ -289,6 +291,11 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         String(specialist?.suggest_dreambuilder || "").trim() === "true" ||
         menuId.startsWith("DREAM_EXPLAINER_MENU_")
       );
+    const dreamBuilderCanonicalOnlyView = dreamBuilderRenderContext;
+    const suppressRefinedAppend =
+      String(specialist?.__suppress_refined_append || "").trim() === "true" ||
+      isSingleValueValidOutput ||
+      dreamBuilderCanonicalOnlyView;
 
     let msg = stripMarkupPreserveLines(String(specialist?.message ?? ""));
     if (dreamBuilderRenderContext && msg) {
@@ -310,11 +317,6 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           .map((line) => deps.canonicalizeComparableText(String(line || "")))
           .filter(Boolean)
       );
-      const stripMarkers = (line: string): string =>
-        String(line || "")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "")
-          .trim();
       if (statementKeys.size >= 2) {
         const paragraphs = msg
           .replace(/\r/g, "\n")
@@ -329,9 +331,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           if (sentenceKeys.length < 2) return true;
           return !sentenceKeys.every((key) => statementKeys.has(key));
         });
-        if (filteredParagraphs.length > 0 && filteredParagraphs.length !== paragraphs.length) {
-          msg = filteredParagraphs.join("\n\n").trim();
-        }
+        msg = filteredParagraphs.join("\n\n").trim();
       }
       const cleanedLines = msg
         .replace(/\r/g, "\n")
@@ -361,6 +361,15 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
           return deps.tokenizeWords(prefix).length > 8;
         });
       msg = cleanedLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+      if (statementKeys.size >= 2 && msg) {
+        const messageSentenceKeys = deps
+          .splitSentenceItems(stripMarkers(msg.replace(/\n+/g, " ").trim()))
+          .map((line) => deps.canonicalizeComparableText(line))
+          .filter(Boolean);
+        if (messageSentenceKeys.length >= 2 && messageSentenceKeys.every((key) => statementKeys.has(key))) {
+          msg = "";
+        }
+      }
     }
     if (wordingPending && wordingMode === "text" && suggestionNorm) {
       const paragraphs = msg
@@ -519,7 +528,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     };
     let refinedDisplay = refined;
     const selectionForRefined = (() => {
-      if (wordingPending || !refined) return "";
+      if (dreamBuilderCanonicalOnlyView || wordingPending || !refined) return "";
       const stepId = String(contractStepId || "").trim();
       if (!stepId || !deps.fieldForStep(stepId)) return "";
       const state = params.state;
@@ -537,7 +546,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       return refinedDisplay || refined || fieldValue;
     })();
     const selectionForCurrentValue = (() => {
-      if (wordingPending) return "";
+      if (dreamBuilderCanonicalOnlyView || wordingPending) return "";
       const stepId = String(contractStepId || "").trim();
       if (!stepId || !deps.fieldForStep(stepId)) return "";
       const state = params.state;
@@ -550,7 +559,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       selectionForCurrentValue,
       currentSelectedValue
     );
-    if (!isSingleValueValidOutput && selectionCurrentParts.heading && selectionCurrentParts.body) {
+    if (!dreamBuilderCanonicalOnlyView && !isSingleValueValidOutput && selectionCurrentParts.heading && selectionCurrentParts.body) {
       const msgComparable = deps.canonicalizeComparableText(msg);
       const headingComparable = deps.canonicalizeComparableText(selectionCurrentParts.heading);
       const bodyComparable = deps.canonicalizeComparableText(selectionCurrentParts.body);
@@ -620,13 +629,24 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       const statementComparable = statementLines
         .map((line) => deps.canonicalizeComparableText(line))
         .filter(Boolean);
+      const statementComparableSet = new Set(statementComparable);
       const refinedComparableLines = normalizedLines(refinedDisplay)
         .map((line) => deps.canonicalizeComparableText(line))
         .filter(Boolean);
-      const refinedMatchesStatements =
+      const refinedMatchesStatementsByLines =
         statementComparable.length > 0 &&
         refinedComparableLines.length === statementComparable.length &&
         refinedComparableLines.every((line, idx) => line === statementComparable[idx]);
+      const refinedSentenceComparables = deps
+        .splitSentenceItems(stripMarkers(refinedDisplay.replace(/\n+/g, " ").trim()))
+        .map((line) => deps.canonicalizeComparableText(line))
+        .filter(Boolean);
+      const refinedSentenceSet = new Set(refinedSentenceComparables);
+      const refinedMatchesStatementsBySentences =
+        statementComparableSet.size > 0 &&
+        refinedSentenceSet.size === statementComparableSet.size &&
+        Array.from(refinedSentenceSet).every((line) => statementComparableSet.has(line));
+      const refinedMatchesStatements = refinedMatchesStatementsByLines || refinedMatchesStatementsBySentences;
       const refinedNormalized = deps.canonicalizeComparableText(refinedDisplay);
       const messageNormalized = deps.canonicalizeComparableText(msg);
       const messageLineSet = new Set(normalizedLines(msg).map((line) => deps.canonicalizeComparableText(line)).filter(Boolean));
