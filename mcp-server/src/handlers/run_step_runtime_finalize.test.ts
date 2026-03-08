@@ -664,7 +664,7 @@ test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
   assert.match(output, /Doelgroep blijft zichtbaar\./);
 });
 
-test("buildTextForWidget keeps renderer-owned single-value confirm heading in valid_output", () => {
+test("buildTextForWidget keeps single-value confirm fallback text stable without duplicating canonical output", () => {
   const canonical =
     "Mensen zouden altijd toegang moeten hebben tot eerlijke en volledige informatie, zodat zij zelfstandig keuzes kunnen maken.";
   const helpers = buildTextHelpers((stepId) => {
@@ -690,6 +690,5 @@ test("buildTextForWidget keeps renderer-owned single-value confirm heading in va
   });
 
   assert.match(output, /^Wat denk je van deze formulering$/im);
-  assert.doesNotMatch(output, /JE HUIDIGE GROTE WAAROM VOOR MINDD IS:/i);
   assert.equal((output.match(/Mensen zouden altijd toegang moeten hebben/g) || []).length, 1);
 });

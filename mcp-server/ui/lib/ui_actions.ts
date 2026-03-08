@@ -535,6 +535,7 @@ function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality
   const state = toRecord(result.state);
   const uiPayload = toRecord(result.ui);
   const uiView = toRecord(uiPayload.view);
+  const uiContent = toRecord(uiPayload.content);
   const promptObj = toRecord(uiPayload.prompt);
   const specialist = toRecord(result.specialist);
   const viewMode = String(uiView.mode || "").trim().toLowerCase();
@@ -558,6 +559,10 @@ function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality
     String(result.prompt || "").trim().length > 0 ||
     String(promptObj.body || "").trim().length > 0 ||
     String(uiPayload.questionText || "").trim().length > 0 ||
+    String(uiContent.heading || "").trim().length > 0 ||
+    String(uiContent.canonical_text || "").trim().length > 0 ||
+    String(uiContent.support_text || "").trim().length > 0 ||
+    String(uiContent.feedback_reason_text || "").trim().length > 0 ||
     hasDreamBuilderStatements ||
     String(specialist.message || "").trim().length > 0 ||
     String(specialist.question || "").trim().length > 0 ||

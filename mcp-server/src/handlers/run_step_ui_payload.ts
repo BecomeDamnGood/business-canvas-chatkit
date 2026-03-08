@@ -4,7 +4,7 @@ import { MENU_LABEL_DEFAULTS, labelKeyForMenuAction } from "../core/menu_contrac
 import { NEXT_MENU_BY_ACTIONCODE, UI_CONTRACT_VERSION } from "../core/ui_contract_matrix.js";
 import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../core/ui_contract_id.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
-import type { RenderedAction } from "../contracts/ui_actions.js";
+import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 
 type WordingChoiceMode = "text" | "list";
@@ -154,6 +154,24 @@ function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function normalizeUiContentPayload(raw: unknown): UiContentPayload | undefined {
+  const record = toRecord(raw);
+  const kind = String(record.kind || "").trim();
+  if (kind !== "single_value") return undefined;
+  const heading = String(record.heading || "").trim();
+  const canonicalText = String(record.canonical_text || "").trim();
+  const supportText = String(record.support_text || "").trim();
+  const feedbackReasonText = String(record.feedback_reason_text || "").trim();
+  if (!heading && !canonicalText && !supportText && !feedbackReasonText) return undefined;
+  return {
+    kind: "single_value",
+    ...(heading ? { heading } : {}),
+    ...(canonicalText ? { canonical_text: canonicalText } : {}),
+    ...(supportText ? { support_text: supportText } : {}),
+    ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
+  };
 }
 
 export function resolveActionCodeTransition(
@@ -310,6 +328,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     expected_choice_count?: number;
     actions?: RenderedAction[];
     questionText?: string;
+    content?: UiContentPayload;
     contract_id?: string;
     contract_version?: string;
     text_keys?: string[];
@@ -440,6 +459,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const questionTextPayload = shouldForceQuestionText
       ? { questionText: String(questionText || "").trim() }
       : (questionText ? { questionText } : {});
+    const contentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
     const view = deps.deriveUiViewPayload(viewVariant);
     const dreamBuilderStatementsVisible =
       (viewVariant === "dream_builder_collect" || viewVariant === "dream_builder_refine") &&
@@ -471,6 +491,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           expected_choice_count: safeOverrideCodes.length,
           ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
           ...questionTextPayload,
+          ...(contentPayload ? { content: contentPayload } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -479,9 +500,10 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
         };
       }
-      if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload) {
+      if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload || contentPayload) {
         return {
           ...questionTextPayload,
+          ...(contentPayload ? { content: contentPayload } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -496,9 +518,10 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     if (menuId) {
       if (deps.isWidgetSuppressedEscapeMenuId(menuId)) {
         if (localDev) flags.escape_menu_suppressed = true;
-        if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId) {
+        if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || contentPayload) {
           return {
             ...questionTextPayload,
+            ...(contentPayload ? { content: contentPayload } : {}),
             ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
             ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
             ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -517,9 +540,10 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           flags.escape_actioncodes_suppressed = true;
         }
         if (safeCodes.length === 0) {
-          if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload) {
+          if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload || contentPayload) {
             return {
               ...questionTextPayload,
+              ...(contentPayload ? { content: contentPayload } : {}),
               ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
               ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
               ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -536,6 +560,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           expected_choice_count: safeCodes.length,
           ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
           ...questionTextPayload,
+          ...(contentPayload ? { content: contentPayload } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -545,9 +570,10 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         };
       }
     }
-    if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload) {
+    if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload || contentPayload) {
       return {
         ...questionTextPayload,
+        ...(contentPayload ? { content: contentPayload } : {}),
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),

@@ -12,7 +12,7 @@ import {
   getSectionTitle,
   setRuntimeUiStrings,
 } from "./ui_constants.js";
-import { escapeHtml, renderInlineText, renderStructuredText, stripInlineText } from "./ui_text.js";
+import { escapeHtml, renderInlineText, renderSingleValueCardContent, renderStructuredText, stripInlineText } from "./ui_text.js";
 import type { Choice } from "./ui_choices.js";
 import {
   callRunStep,
@@ -34,6 +34,27 @@ function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
+  heading?: string;
+  canonicalText?: string;
+  supportText?: string;
+  feedbackReasonText?: string;
+} | null {
+  const content = toRecord(uiPayload.content);
+  if (String(content.kind || "").trim() !== "single_value") return null;
+  const heading = String(content.heading || "").trim();
+  const canonicalText = String(content.canonical_text || "").trim();
+  const supportText = String(content.support_text || "").trim();
+  const feedbackReasonText = String(content.feedback_reason_text || "").trim();
+  if (!heading && !canonicalText && !supportText && !feedbackReasonText) return null;
+  return {
+    ...(heading ? { heading } : {}),
+    ...(canonicalText ? { canonicalText } : {}),
+    ...(supportText ? { supportText } : {}),
+    ...(feedbackReasonText ? { feedbackReasonText } : {}),
+  };
 }
 
 function actionContractActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
@@ -884,6 +905,7 @@ export function render(overrideToolOutput?: unknown): void {
   const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
   const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
   const uiQuestionText = String(uiPayload.questionText || "").trim();
+  const singleValueContent = readSingleValueCardContent(uiPayload);
   const structuredActions = choiceActionsForResult(result);
   const hasStructuredActions = structuredActions.length > 0;
   const promptBody =
@@ -912,9 +934,10 @@ export function render(overrideToolOutput?: unknown): void {
   }
   const cardDescEl = document.getElementById("cardDesc");
 
+  const hasSemanticCardContent = Boolean(singleValueContent);
   const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
   const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
-  const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
+  const hasRenderableInteractiveContent = hasSemanticCardContent || hasBodyContent || hasPromptContent || hasStructuredActions;
   if (!hasRenderableInteractiveContent) {
     console.warn("[ui_contract_interactive_content_absent]", {
       current_step: current,
@@ -931,7 +954,10 @@ export function render(overrideToolOutput?: unknown): void {
     const isStep0AskLayout = current === "step_0" && !isBenProfile;
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
-    renderStructuredText(cardDescEl, body || "");
+    const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
+    if (!renderedSemanticContent) {
+      renderStructuredText(cardDescEl, body || "");
+    }
     if (isBenProfile) {
       prependBenProfileAvatar(cardDescEl);
     }

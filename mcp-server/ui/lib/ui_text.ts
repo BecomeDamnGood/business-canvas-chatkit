@@ -204,6 +204,16 @@ function appendHeading(el: Element, line: string): void {
   el.appendChild(p);
 }
 
+function appendCanonicalValue(el: Element, line: string): void {
+  const textRaw = String(line || "").trim();
+  const textCheck = normalizeLineText(textRaw);
+  if (!textCheck) return;
+  const p = document.createElement("p");
+  p.className = "cardCanonicalValue";
+  renderInlineText(p, textRaw);
+  el.appendChild(p);
+}
+
 function appendList(el: Element, tagName: "ol" | "ul", className: string, items: string[]): void {
   const filtered = items
     .map((item) => ({ raw: String(item || "").trim(), clean: normalizeLineText(item) }))
@@ -229,7 +239,10 @@ function appendList(el: Element, tagName: "ol" | "ul", className: string, items:
 export function renderStructuredText(el: Element | null, raw: string | null | undefined): void {
   if (!el) return;
   clearElementChildren(el);
+  appendStructuredText(el, raw);
+}
 
+function appendStructuredText(el: Element, raw: string | null | undefined): void {
   const source = String(raw || "").replace(/\r\n?/g, "\n");
   if (!source.trim()) return;
 
@@ -298,4 +311,31 @@ export function renderStructuredText(el: Element | null, raw: string | null | un
     }
     appendParagraph(el, paragraphLines);
   }
+}
+
+export type SingleValueCardContent = {
+  heading?: string | null;
+  canonicalText?: string | null;
+  supportText?: string | null;
+  feedbackReasonText?: string | null;
+};
+
+export function renderSingleValueCardContent(
+  el: Element | null,
+  content: SingleValueCardContent | null | undefined
+): boolean {
+  if (!el) return false;
+  clearElementChildren(el);
+  const heading = String(content?.heading || "").trim();
+  const canonicalText = String(content?.canonicalText || "").trim();
+  const supportText = String(content?.supportText || "").trim();
+  const feedbackReasonText = String(content?.feedbackReasonText || "").trim();
+  if (!heading && !canonicalText && !supportText && !feedbackReasonText) {
+    return false;
+  }
+  if (feedbackReasonText) appendStructuredText(el, feedbackReasonText);
+  if (supportText) appendStructuredText(el, supportText);
+  if (heading) appendHeading(el, heading);
+  if (canonicalText) appendCanonicalValue(el, canonicalText);
+  return true;
 }

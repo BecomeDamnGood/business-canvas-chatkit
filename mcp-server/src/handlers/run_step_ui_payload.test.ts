@@ -90,3 +90,58 @@ test("attachRegistryPayload marks short canonical dream-builder coaching text as
   assert.equal(payload.ui?.view?.dream_builder_body_mode, "support_only");
   assert.equal(payload.ui?.view?.dream_builder_statements_visible, true);
 });
+
+test("attachRegistryPayload forwards structured single-value content into ui.content", () => {
+  const helpers = buildHelpers();
+  const canonical = "Een strategisch reclamebureau voor complexe keuzes";
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: [ "Wat denk je van de formulering", canonical ].join("\n"),
+      prompt: "",
+      current_step_id: "entity",
+      state: {
+        current_step: "entity",
+        active_specialist: "Entity",
+      } as any,
+    },
+    {
+      ui_contract_id: "entity:valid_output:ENTITY_MENU_CONFIRM_SINGLE:v1",
+      __canonical_text: canonical,
+      message: [ "Wat denk je van de formulering", canonical ].join("\n"),
+      ui_content: {
+        kind: "single_value",
+        heading: "Wat denk je van de formulering",
+        canonical_text: canonical,
+      },
+    }
+  );
+
+  assert.deepEqual(payload.ui?.content, {
+    kind: "single_value",
+    heading: "Wat denk je van de formulering",
+    canonical_text: canonical,
+  });
+});
+
+test("attachRegistryPayload keeps legacy payloads renderable when ui.content is absent", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "Vrije bodytekst zonder structured content.",
+      prompt: "",
+      current_step_id: "purpose",
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+      } as any,
+    },
+    {
+      ui_contract_id: "purpose:ASK:PURPOSE_MENU_QUESTIONS:v1",
+      __canonical_text: "Vrije bodytekst zonder structured content.",
+      message: "Vrije bodytekst zonder structured content.",
+    }
+  );
+
+  assert.equal(payload.text, "Vrije bodytekst zonder structured content.");
+  assert.equal(payload.ui?.content, undefined);
+});

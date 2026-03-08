@@ -2,7 +2,7 @@ import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
 import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "./menu_contract.js";
 import { getFinalFieldForStepId, type CanvasState } from "./state.js";
 import { actionCodeToIntent } from "./actioncode_intent.js";
-import type { RenderedAction } from "../contracts/ui_actions.js";
+import type { RenderedAction, UiSingleValueContent } from "../contracts/ui_actions.js";
 import {
   DEFAULT_MENU_BY_STATUS,
   UI_CONTRACT_VERSION,
@@ -220,6 +220,11 @@ const SINGLE_VALUE_CONFIRM_VISIBILITY_STEPS = new Set([
   "targetgroup",
 ]);
 
+const SINGLE_VALUE_STRUCTURED_CONTENT_STEPS = new Set([
+  ...SINGLE_VALUE_CONFIRM_VISIBILITY_STEPS,
+  "dream",
+]);
+
 function menuRequiresKnownOutput(menuId: string): boolean {
   const actions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
   if (actions.some((code) => isConfirmActionCode(code))) return true;
@@ -377,6 +382,94 @@ function singleValueConfirmCanonicalMessage(stepId: string, state: CanvasState, 
   const heading = singleValueConfirmHeading(stepId, state);
   if (!heading) return canonical;
   return `${heading}\n${canonical}`.trim();
+}
+
+function isDreamBuilderSingleValueContext(stepId: string, state: CanvasState, specialist: Record<string, unknown>): boolean {
+  if (stepId !== "dream") return false;
+  const runtimeMode = normalizeDreamRuntimeMode((state as any).__dream_runtime_mode);
+  if (runtimeMode !== "self") return true;
+  const activeSpecialist = String((state as any).active_specialist || "").trim();
+  if (activeSpecialist === "DreamExplainer") return true;
+  if (String((specialist as any).suggest_dreambuilder || "").trim() === "true") return true;
+  const contractId = String((specialist as any).ui_contract_id || "").trim();
+  const menuId = parseUiContractMenuForStep(contractId, stepId);
+  return menuId.startsWith("DREAM_EXPLAINER_MENU_");
+}
+
+function canonicalParagraphBlocks(raw: string): string[] {
+  return String(raw || "")
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map((block) => String(block || "").trim())
+    .filter(Boolean);
+}
+
+function isSingleValueCanonicalBlock(block: string, heading: string, canonicalValue: string): boolean {
+  const blockKey = comparableText(block);
+  const canonicalKey = comparableText(canonicalValue);
+  if (!blockKey || !canonicalKey) return false;
+  if (blockKey === canonicalKey) return true;
+  const headingKey = comparableText(heading);
+  if (!headingKey) return false;
+  const lines = String(block || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  if (lines.length >= 2) {
+    const firstKey = comparableText(lines[0] || "");
+    const secondKey = comparableText(lines[1] || "");
+    if (firstKey === headingKey && secondKey === canonicalKey && lines.length === 2) return true;
+  }
+  return blockKey === comparableText(`${heading} ${canonicalValue}`);
+}
+
+function singleValueSupportText(params: {
+  message: string;
+  heading: string;
+  canonicalValue: string;
+  feedbackReasonText?: string;
+}): string {
+  const feedbackKey = comparableText(String(params.feedbackReasonText || "").trim());
+  const blocks = canonicalParagraphBlocks(params.message);
+  const filtered = blocks.filter((block) => {
+    const blockKey = comparableText(block);
+    if (!blockKey) return false;
+    if (feedbackKey && blockKey === feedbackKey) return false;
+    if (isSingleValueCanonicalBlock(block, params.heading, params.canonicalValue)) return false;
+    return true;
+  });
+  return filtered.join("\n\n").trim();
+}
+
+function buildSingleValueUiContent(params: {
+  stepId: string;
+  state: CanvasState;
+  specialist: Record<string, unknown>;
+  message: string;
+  canonicalValue: string;
+  feedbackReasonText?: string;
+}): UiSingleValueContent | undefined {
+  const { stepId, state, specialist, message, canonicalValue } = params;
+  const canonicalText = String(canonicalValue || "").trim();
+  if (!canonicalText) return undefined;
+  if (!SINGLE_VALUE_STRUCTURED_CONTENT_STEPS.has(stepId)) return undefined;
+  if (isDreamBuilderSingleValueContext(stepId, state, specialist)) return undefined;
+  const heading = singleValueConfirmHeading(stepId, state);
+  const feedbackReasonText = String(params.feedbackReasonText || "").trim();
+  const supportText = singleValueSupportText({
+    message,
+    heading,
+    canonicalValue: canonicalText,
+    feedbackReasonText,
+  });
+  return {
+    kind: "single_value",
+    ...(heading ? { heading } : {}),
+    canonical_text: canonicalText,
+    ...(supportText ? { support_text: supportText } : {}),
+    ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
+  };
 }
 
 function hasCanonicalContextBlockShape(message: string, heading: string, canonicalValue: string): boolean {
@@ -1576,6 +1669,22 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       heading: offTopicCurrentContextHeading(stepId, state),
     });
   }
+  const singleValueUiCanonicalValue = (() => {
+    if (isOfftopic) return "";
+    if (wordingPending && wordingPresentation === "canonical") return pendingCanonicalValue;
+    if (effectiveStatus === "valid_output" && canonicalAcceptedValue && SINGLE_VALUE_STRUCTURED_CONTENT_STEPS.has(stepId)) {
+      return canonicalAcceptedValue;
+    }
+    return "";
+  })();
+  const singleValueUiContent = buildSingleValueUiContent({
+    stepId,
+    state,
+    specialist: specialistForDisplay,
+    message: messageForDisplay,
+    canonicalValue: singleValueUiCanonicalValue,
+    feedbackReasonText: feedbackReasonForDisplay,
+  });
 
   const nextSpecialist: Record<string, unknown> = {
     ...specialistForDisplay,
@@ -1583,6 +1692,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     message: messageForDisplay,
     question,
     ui_show_step_intro_chrome: showStepIntroChrome,
+    ...(singleValueUiContent ? { ui_content: singleValueUiContent } : {}),
     ...(useSingleValueConfirmSsot ? { __suppress_refined_append: "true" } : {}),
     ui_contract_id: contractId,
     ui_contract_version: UI_CONTRACT_VERSION,

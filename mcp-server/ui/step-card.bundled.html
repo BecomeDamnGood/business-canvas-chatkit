@@ -2438,12 +2438,13 @@
     const state = toRecord2(result.state);
     const uiPayload = toRecord2(result.ui);
     const uiView = toRecord2(uiPayload.view);
+    const uiContent = toRecord2(uiPayload.content);
     const promptObj = toRecord2(uiPayload.prompt);
     const specialist = toRecord2(result.specialist);
     const viewMode = String(uiView.mode || "").trim().toLowerCase();
     const uiStrings = toRecord2(state.ui_strings);
     const hasUiStrings = Object.keys(uiStrings).length > 0;
-    const hasInteractiveContent = String(result.text || "").trim().length > 0 || String(result.prompt || "").trim().length > 0 || String(promptObj.body || "").trim().length > 0 || String(uiPayload.questionText || "").trim().length > 0 || String(specialist.message || "").trim().length > 0 || String(specialist.question || "").trim().length > 0 || String(specialist.refined_formulation || "").trim().length > 0 || Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
+    const hasInteractiveContent = String(result.text || "").trim().length > 0 || String(result.prompt || "").trim().length > 0 || String(promptObj.body || "").trim().length > 0 || String(uiPayload.questionText || "").trim().length > 0 || String(uiContent.heading || "").trim().length > 0 || String(uiContent.canonical_text || "").trim().length > 0 || String(uiContent.support_text || "").trim().length > 0 || String(uiContent.feedback_reason_text || "").trim().length > 0 || String(specialist.message || "").trim().length > 0 || String(specialist.question || "").trim().length > 0 || String(specialist.refined_formulation || "").trim().length > 0 || Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
     const hasState = Object.keys(state).length > 0;
     const hasCurrentStep = String(state.current_step || "").trim().length > 0 || String(result.current_step_id || "").trim().length > 0;
     const renderable = viewMode === "prestart" && hasUiStrings || viewMode === "interactive" && hasInteractiveContent || viewMode === "waiting_locale" || viewMode === "recovery" || viewMode === "blocked" || viewMode === "failed";
@@ -3535,6 +3536,15 @@
     renderInlineText(p, textRaw);
     el.appendChild(p);
   }
+  function appendCanonicalValue(el, line) {
+    const textRaw = String(line || "").trim();
+    const textCheck = normalizeLineText(textRaw);
+    if (!textCheck) return;
+    const p = document.createElement("p");
+    p.className = "cardCanonicalValue";
+    renderInlineText(p, textRaw);
+    el.appendChild(p);
+  }
   function appendList(el, tagName, className, items) {
     const filtered = items.map((item) => ({ raw: String(item || "").trim(), clean: normalizeLineText(item) })).filter((item) => item.clean.length > 0);
     if (!filtered.length) return;
@@ -3550,6 +3560,9 @@
   function renderStructuredText(el, raw) {
     if (!el) return;
     clearElementChildren(el);
+    appendStructuredText(el, raw);
+  }
+  function appendStructuredText(el, raw) {
     const source = String(raw || "").replace(/\r\n?/g, "\n");
     if (!source.trim()) return;
     const lines = source.split("\n");
@@ -3613,8 +3626,39 @@
       appendParagraph(el, paragraphLines);
     }
   }
+  function renderSingleValueCardContent(el, content) {
+    if (!el) return false;
+    clearElementChildren(el);
+    const heading = String(content?.heading || "").trim();
+    const canonicalText = String(content?.canonicalText || "").trim();
+    const supportText = String(content?.supportText || "").trim();
+    const feedbackReasonText = String(content?.feedbackReasonText || "").trim();
+    if (!heading && !canonicalText && !supportText && !feedbackReasonText) {
+      return false;
+    }
+    if (feedbackReasonText) appendStructuredText(el, feedbackReasonText);
+    if (supportText) appendStructuredText(el, supportText);
+    if (heading) appendHeading(el, heading);
+    if (canonicalText) appendCanonicalValue(el, canonicalText);
+    return true;
+  }
 
   // ui/lib/ui_render.ts
+  function readSingleValueCardContent(uiPayload) {
+    const content = toRecord2(uiPayload.content);
+    if (String(content.kind || "").trim() !== "single_value") return null;
+    const heading = String(content.heading || "").trim();
+    const canonicalText = String(content.canonical_text || "").trim();
+    const supportText = String(content.support_text || "").trim();
+    const feedbackReasonText = String(content.feedback_reason_text || "").trim();
+    if (!heading && !canonicalText && !supportText && !feedbackReasonText) return null;
+    return {
+      ...(heading ? { heading } : {}),
+      ...(canonicalText ? { canonicalText } : {}),
+      ...(supportText ? { supportText } : {}),
+      ...(feedbackReasonText ? { feedbackReasonText } : {})
+    };
+  }
   function stepIndex(stepId) {
     const idx = ORDER.indexOf(stepId);
     return idx >= 0 ? idx : 0;
@@ -4110,11 +4154,12 @@
     const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
     const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
     const uiQuestionText = String(uiPayload.questionText || "").trim();
+    const singleValueContent = readSingleValueCardContent(uiPayload);
     const structuredActions = Array.isArray(uiPayload.actions) ? uiPayload.actions : [];
     const hasStructuredActions = structuredActions.length > 0;
     const promptBody = uiPayload.prompt && typeof uiPayload.prompt.body === "string" ? String(uiPayload.prompt.body || "") : "";
-    const promptRaw = (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") || promptBody;
-    const promptSource = uiQuestionText || promptRaw;
+    const promptRaw = uiQuestionText || String(specialist.question || "").trim() || (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") || promptBody;
+    let promptSource = promptRaw;
     const bodyRaw = resolveWidgetBodyText({
       currentStep: current,
       resultText: result?.text,
@@ -4129,9 +4174,10 @@
       body = bodyRaw || "";
     }
     const cardDescEl = document.getElementById("cardDesc");
+    const hasSemanticCardContent = Boolean(singleValueContent);
     const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
     const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
-    const hasRenderableInteractiveContent = hasBodyContent || hasPromptContent || hasStructuredActions;
+    const hasRenderableInteractiveContent = hasSemanticCardContent || hasBodyContent || hasPromptContent || hasStructuredActions;
     if (cardDescEl) {
       cardDescEl.style.display = "block";
       cardDescEl.classList.add("has-grid");
@@ -4139,7 +4185,10 @@
       const isStep0AskLayout = current === "step_0" && !isBenProfile;
       cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
       cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
-      renderStructuredText(cardDescEl, body || "");
+      const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
+      if (!renderedSemanticContent) {
+        renderStructuredText(cardDescEl, body || "");
+      }
       if (isBenProfile) {
         prependBenProfileAvatar(cardDescEl);
       }

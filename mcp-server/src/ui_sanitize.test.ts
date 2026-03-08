@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { renderInlineText, renderStructuredText } from "../ui/lib/ui_text.ts";
+import { renderInlineText, renderSingleValueCardContent, renderStructuredText } from "../ui/lib/ui_text.ts";
 import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.ts";
 import { canonicalizeWidgetPayload } from "../ui/lib/locale_bootstrap_runtime.ts";
 import { readDreamBuilderViewContract, renderChoiceButtons, resolveWidgetBodyText } from "../ui/lib/ui_render.ts";
@@ -396,11 +396,94 @@ test("renderStructuredText renders markdown image lines as card images", { concu
   }
 });
 
+test("renderSingleValueCardContent keeps semantic heading and canonical value separate without punctuation", { concurrency: false }, () => {
+  const originalDocument = (globalThis as unknown as { document: unknown }).document;
+  const fakeDocument = {
+    createDocumentFragment() {
+      return {
+        nodeType: 11,
+        childNodes: [] as unknown[],
+        appendChild(node: unknown) {
+          this.childNodes.push(node);
+          return node;
+        },
+      };
+    },
+    createTextNode(text: string) {
+      return { nodeType: 3, textContent: String(text) };
+    },
+    createElement(tag: string) {
+      return {
+        nodeType: 1,
+        tagName: String(tag).toUpperCase(),
+        className: "",
+        textContent: "",
+        childNodes: [] as unknown[],
+        get firstChild() {
+          return this.childNodes.length ? this.childNodes[0] : null;
+        },
+        removeChild() {
+          this.childNodes.shift();
+        },
+        appendChild(node: unknown) {
+          this.childNodes.push(node);
+          return node;
+        },
+      };
+    },
+  };
+  (globalThis as unknown as { document: unknown }).document = fakeDocument;
+  try {
+    const scenarios = [
+      {
+        heading: "Wat denk je van de formulering",
+        canonicalText: "Een strategisch reclamebureau voor complexe keuzes",
+      },
+      {
+        heading: "What do you think of the wording",
+        canonicalText: "A strategic advertising agency for complex decisions",
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const container = {
+        innerHTML: "",
+        childNodes: [] as unknown[],
+        appendChild(node: unknown) {
+          this.childNodes.push(node);
+          return node;
+        },
+      };
+
+      const rendered = renderSingleValueCardContent(container as unknown as Element, scenario);
+
+      assert.equal(rendered, true);
+      assert.equal(container.childNodes.length, 2);
+      assert.equal((container.childNodes[0] as any).tagName, "P");
+      assert.equal((container.childNodes[0] as any).className, "cardSubheading");
+      assert.equal((container.childNodes[1] as any).tagName, "P");
+      assert.equal((container.childNodes[1] as any).className, "cardCanonicalValue");
+      const headingFragment = (container.childNodes[0] as { childNodes: unknown[] }).childNodes[0] as {
+        childNodes: { textContent: string }[];
+      };
+      const canonicalFragment = (container.childNodes[1] as { childNodes: unknown[] }).childNodes[0] as {
+        childNodes: { textContent: string }[];
+      };
+      assert.equal(String(headingFragment.childNodes[0]?.textContent || ""), scenario.heading);
+      assert.equal(String(canonicalFragment.childNodes[0]?.textContent || ""), scenario.canonicalText);
+    }
+  } finally {
+    (globalThis as unknown as { document: unknown }).document = originalDocument;
+  }
+});
+
 test("bundled runtime renders rich body into cardDesc via formatter and keeps unsafe targets out of innerHTML", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /function escapeHtml\(/);
   assert.match(source, /function renderInlineText\(/);
+  assert.match(source, /function renderSingleValueCardContent\(/);
   assert.match(source, /function renderStructuredText\(/);
+  assert.match(source, /renderSingleValueCardContent\(cardDescEl,\s*singleValueContent\)/);
   assert.match(source, /renderStructuredText\(cardDescEl,\s*body \|\| ""\);/);
   assert.match(source, /renderInlineText\(promptEl,\s*promptText \|\| ""\);/);
   assert.match(source, /choiceWrap\.innerHTML = "";/);

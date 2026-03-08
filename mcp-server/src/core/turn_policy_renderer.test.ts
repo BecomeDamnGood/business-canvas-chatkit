@@ -458,12 +458,17 @@ test("entity valid output uses suggestion heading SSOT and suppresses duplicate 
   });
 
   const message = String((rendered.specialist as any).message || "");
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
   assert.match(message, /^what do you think of the wording$/im);
   assert.doesNotMatch(message, /current.*entity.*mindd.*is:/i);
   assert.match(message, /Mindd is een digitale innovatiepartner voor mkb-bedrijven\./i);
   assert.equal(message.split(canonical).length - 1, 1);
   assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
+  assert.equal(String(uiContent.kind || ""), "single_value");
+  assert.equal(String(uiContent.heading || ""), "What do you think of the wording");
+  assert.equal(String(uiContent.canonical_text || ""), canonical);
+  assert.equal(String(uiContent.support_text || ""), "");
 });
 
 test("targetgroup valid output keeps a single canonical heading/value block", () => {
@@ -544,11 +549,15 @@ test("single-value confirm steps render exactly one canonical heading/value bloc
     });
 
     const message = String((rendered.specialist as any).message || "");
+    const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
     assert.equal(rendered.status, "valid_output");
     assert.match(message, /current.*mindd.*is:/i);
     assert.doesNotMatch(message, /vrije feedback/i);
     assert.equal(message.split(current.canonical).length - 1, 1);
     assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
+    assert.equal(String(uiContent.kind || ""), "single_value");
+    assert.equal(String(uiContent.canonical_text || ""), current.canonical);
+    assert.ok(String(uiContent.heading || "").trim().length > 0);
   }
 });
 
@@ -577,10 +586,13 @@ test("single-value valid output keeps feedback reason above canonical block when
   });
 
   const message = String((rendered.specialist as any).message || "");
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
   assert.match(message, /ik heb ai niet als kern opgenomen/i);
   assert.match(message, /current.*mindd.*is:/i);
   assert.equal(message.split(canonical).length - 1, 1);
+  assert.equal(String(uiContent.feedback_reason_text || ""), "Ik heb AI niet als kern opgenomen omdat je Droom effect-gericht blijft.");
+  assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
 test("single-value pending canonical output normalizes inline heading/value into separate lines", () => {
@@ -611,6 +623,10 @@ test("single-value pending canonical output normalizes inline heading/value into
   });
 
   const message = String((rendered.specialist as any).message || "");
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.match(message, /current.*dream.*mindd.*is:\nMindd droomt van een wereld/i);
   assert.doesNotMatch(message, /current.*dream.*mindd.*is: Mindd droomt/i);
+  assert.equal(String(uiContent.kind || ""), "single_value");
+  assert.match(String(uiContent.heading || ""), /current.*dream.*mindd.*is:/i);
+  assert.equal(String(uiContent.canonical_text || ""), canonical);
 });

@@ -1,4 +1,4 @@
-import type { RenderedAction } from "../contracts/ui_actions.js";
+import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { CanvasState } from "../core/state.js";
 import type {
   UiViewPayload,
@@ -18,6 +18,7 @@ export type RunStepBase = {
     expected_choice_count?: number;
     actions?: RenderedAction[];
     questionText?: string;
+    content?: UiContentPayload;
     contract_id?: string;
     contract_version?: string;
     text_keys?: string[];

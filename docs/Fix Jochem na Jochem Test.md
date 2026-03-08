@@ -1,958 +1,315 @@
 # Fix Jochem na Jochem Test
 
-## Fix 1 - Startup wait-shell + dubbele startklik op welkomstscherm
+## Fix 1 - Single-value heading/body shape is heuristisch en verliest uppercase-semantiek
 
 ### Input (zoals gemeld)
-Tijdens startup van de MCP app verschijnt eerst een loading-scherm (`Loading translation...`). Pas daarna verschijnt de normale app-content in de juiste taal.
+- In single-value confirm/refine screens verschijnt een regel zoals:
+  - `Wat denk je van de formulering`
+- Verwachting:
+  - deze regel moet als aparte heading/kicker renderen,
+  - dus in uppercase-stijl,
+  - en niet samenvallen met de canonieke waarde eronder.
+- Waargenomen gedrag:
+  - de UI toont bijvoorbeeld:
+    - `Wat denk je van de formulering Een strategisch reclamebureau voor complexe keuzes`
+  - waardoor de heading geen heading meer is maar gewone bodytekst.
 
-Daarnaast is de startknop op het welkomstscherm pas effectief na een eerste klik; in de praktijk moet je vaak 2 keer klikken om naar het volgende scherm te gaan.
-
-Gewenst interface-gedrag:
-1. Geen zichtbare tussenschermen met halve/fallback content als eindgebruiker-flow.
-2. Eerste zichtbare app-state is direct bruikbaar en in de juiste taal.
-3. Startknop reageert deterministisch op de eerste klik (single-click progression).
+Gewenst structureel gedrag:
+1. Heading-semantiek voor single-value steps komt uit het contract, niet uit tekst-parsing.
+2. De renderer weet expliciet wat `heading`, `canonical value` en `support text` is.
+3. Uppercase-styling hangt alleen af van semantische rol, niet van toevallige interpunctie zoals `:`.
+4. Het systeem blijft werken voor `Entity`, `Purpose`, `Big Why`, `Role`, `Dream` en vergelijkbare single-value schermen.
 
 ### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
 
-#### Hypothese A - Client forceert een synthetische startup wait-state vóór canonical host payload
-- De widget rendert actief een client-side wait-shell met `prestart.loading` zodra de eerste host payload nog niet beschikbaar is.
-- Daardoor ziet de user eerst een fallback-scherm en pas daarna de echte state.
-- Dit verklaart exact het waargenomen patroon “eerst loading, daarna gevuld”.
+#### Hypothese A - Heading-semantiek gaat verloren tussen turn-policy en widget-render
+- De backend kan voor single-value steps wel degelijk een heading + canonical value afleiden.
+- Maar die shape wordt onderweg terug omgezet naar vrije tekstblokken.
+- Daardoor moet de frontend later opnieuw raden wat een heading is.
 
-#### Hypothese B - Root wordt te vroeg zichtbaar gemaakt
-- De root wordt vrijgegeven zodra `startupPayloadMissing` waar is, inclusief de synthetische wait-state.
-- Daardoor wordt expliciet gekozen voor “iets tonen” in plaats van “wachten op canonical state en dan in één keer renderen”.
+#### Hypothese B - Frontend heading-detectie is puur heuristisch
+- De widget behandelt alleen regels die eindigen op `:` of als standalone `<strong>...</strong>` binnenkomen als heading.
+- Een semantisch geldige heading zonder `:` wordt daardoor gewone paragraaftekst.
 
-#### Hypothese C - Start-actie kan in ‘ack zonder zichtbare advance’-pad vallen
-- In het startpad wordt `ACTION_START` als niet-gevorderd beschouwd als er geen direct ingest-bare widget-result payload is of view nog `prestart` blijft.
-- Dan wordt een recovery-poll gepland i.p.v. directe zichtbare voortgang.
-- UX-effect: eerste klik voelt als no-op; tweede klik lijkt nodig.
+#### Hypothese C - Niet-heading regels worden daarna samengevoegd tot één paragraaf
+- Zodra de eerste regel niet als heading wordt gezien, worden heading + canonical value in één paragraph-block gezet.
+- Dan is het visueel onmogelijk om nog uppercase-kicker styling toe te passen.
 
-#### Hypothese D - Startup race tussen ingest-kanalen veroorzaakt prestart-cache-gevoel
-- De code verwerkt meerdere ingest-signalen (`set_globals`, host notification, call response).
-- Als eerste response shape niet canonical wordt herkend, kan prestart visueel blijven staan terwijl server-side start wel accepted is.
+#### Hypothese D - `questionText`, `message`, canonical text en body lopen door elkaar
+- De renderketen heeft meerdere velden voor prompt/body/canonical/picker-context.
+- Daardoor is niet hard gegarandeerd welk veld de single-value heading bevat en welk veld de canonieke tekst bevat.
 
-### Toets aan OpenAI-richtlijnen (hoog over)
-
-Bronnen:
-- https://developers.openai.com/apps-sdk/build/chatgpt
-- https://developers.openai.com/apps-sdk/build/state-management
-- https://developers.openai.com/apps-sdk/build/ux
-- https://developers.openai.com/apps-sdk/build/ui-guidelines
-
-Wat relevant lijkt:
-1. Apps SDK-voorbeelden sturen op renderen vanuit host-state (`window.openai.toolOutput`) en updates via host-event (`openai:set_globals`).
-2. UX-principes leggen nadruk op snelle/responsieve ervaring en heldere state-transities.
-3. UI-richtlijnen leggen nadruk op duidelijke single-action interacties.
-
-Inferred conclusie (expliciet als inferentie):
-- Een geforceerde client-side startup wait-shell als eerste zichtbare app-state, gevolgd door latere re-render, past slecht bij het gewenste patroon van deterministische host-state render en snelle, eenduidige interactie.
-- Een startknop die niet consistent op eerste klik doorzet is niet in lijn met “clear single-action progression”.
+#### Hypothese E - De huidige tests normaliseren het foutieve gedrag al deels
+- Er bestaan tests die expliciet accepteren dat zulke regels als gewone tekst boven de canonical value verschijnen.
+- Daardoor blijft de verkeerde shape regressievrij bestaan.
 
 ### Bewijspunten in code (startpunten voor diep onderzoek)
 
-- `mcp-server/ui/step-card.bundled.html`
-  - Startup synthetic wait-state:
-    - `STARTUP_GRACE_MS_DEFAULT` + `buildStartupInitState` met `waiting_locale/pending`: regels 4705-4737.
-    - `renderStartupWaitShell(...)`: regels 4760-4784.
-    - trigger bij ontbrekende init payload: regel 5020.
-  - Wait-shell rendering met `prestart.loading`:
-    - `renderBootstrapWaitShell(...)`: regels 3784-3808.
-  - Root reveal timing:
-    - `startupPayloadMissing` + immediate `revealWidgetRoot()`: regels 4023-4025.
-  - Startklik flow:
-    - `btnStart` handler + `callRunStep(actionCode, { started: "true" })`: regels 4947-4960.
-  - Start-ack zonder advance pad:
-    - `startAdvanced = hasIngestedResult && (...)`: regel 3316.
-    - failure-path + recovery poll scheduling: regels 3317-3332.
-  - Recovery timing/debounce:
-    - `CLICK_DEBOUNCE_MS = 250`: regels 2606-2608 en 3157-3158.
-    - `scheduleStartAckRecoveryPoll(...)`: regels 2630-2667.
+- Backend kent al een single-value heading voor `Entity`:
+  - `mcp-server/src/core/turn_policy_renderer.ts`
+    - `singleValueConfirmHeading(...)`: regels 352-372.
+    - leest `entity.suggestion.template`, pakt de eerste regel en maakt daar een heading van.
+  - `mcp-server/src/core/turn_policy_renderer.ts`
+    - `singleValueConfirmCanonicalMessage(...)`: regels 374-380.
+    - bouwt expliciet `heading + canonical value`.
 
-- `mcp-server/src/handlers/run_step_routes.ts`
-  - `start_prestart` routing en prestart/start-trigger splitsing: regels 612-779.
+- De turn-policy gebruikt die heading/canonical-shape ook actief:
+  - `mcp-server/src/core/turn_policy_renderer.ts`
+    - canonical/context enforcement rond confirm visibility: regels 1555-1573.
+  - Gevolg:
+    - server-side bestaat de semantiek al gedeeltelijk,
+    - maar niet als hard UI-contract.
 
-- Historische regressie-evidence in repo (relevant voor dezelfde defectklasse)
-  - `docs/mcp_widget_regressie_living_rapport.md`: 1212-1220, 1652-1653.
-  - `docs/mcp_widget_stabilisatie_run_resultaat.md`: 49-51, 188-193.
+- De finalize-laag vlakt dit daarna weer af naar tekstblokken:
+  - `mcp-server/src/handlers/run_step_runtime_finalize.ts`
+    - selectie van `selectionCurrentParts.heading/body`: regels 565-595.
+    - voegt heading en body samen terug in `msg` als multiline string.
+  - Dit is nog steeds tekst-shape, geen expliciet structured payload.
 
-### Mogelijke structurele fixes (geen quick fixes)
+- UI payload kent wel `questionText`, maar geen aparte `heading/body/canonical`-structuur:
+  - `mcp-server/src/handlers/run_step_ui_payload.ts`
+    - `rawQuestionText` -> `questionText`: regels 381-382.
+    - `questionTextPayload`: regels 439-442.
+  - Gevolg:
+    - structured single-value heading heeft geen dedicated veld.
 
-1. Maak canonical host payload hard de enige bron voor first visible paint
-- Geen synthetische startup wait-state renderen als normale eerste app-state.
-- Root pas revealen bij canonical payload (of expliciete fail-closed error-state).
-
-2. Verwijder “prestart.loading” als standaard eerste gebruikersscherm
-- Alleen tonen bij expliciete server view-mode recovery/wait, niet bij client init-miss.
-- Doel: geen visuele dubbele overgang (loading -> prestart content).
-
-3. Maak start-advance invariant strenger en deterministischer
-- `ACTION_START` mag user-facing niet eindigen in stilstaande prestart zonder expliciete foutmelding.
-- Als server `accepted + state_advanced` geeft, moet UI binnen begrensde tijd zichtbaar doorzetten naar interactieve state of expliciet falen.
-
-4. Harmoniseer ingest-vormen tot één canonical parsepad
-- `set_globals`, `tool-result` en `call response` moeten dezelfde canonical widget-result selectie afdwingen.
-- Geen prestart-cache behoud bij vorm-mismatch zonder expliciete contract-error.
-
-5. Verifieer met contracttests op UX-uitkomst
-- Regressietests die exact afdwingen:
-  - geen “loading translation -> pas daarna prestart” als standaard startup-flow,
-  - startknop zet met één klik door naar interactieve step_0-state,
-  - geen silent no-op bij start.
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
-```text
-Context
-Je onderzoekt een startup/action regressie in de MCP-widget:
-1) eerst zichtbaar loading/wait-scherm,
-2) daarna pas gevuld welkomstscherm,
-3) startknop voelt als dubbele klik nodig.
-
-Observed bug
-- User ziet eerst "Loading translation..." in de card.
-- Daarna verschijnt pas de normale prestart-content in de juiste taal.
-- Startknop gaat vaak pas bij tweede klik door naar het volgende scherm.
-
-Doel van deze opdracht
-1) Lever definitieve root-cause (geen symptoomfix).
-2) Toets expliciet aan OpenAI Apps SDK-richtlijnen.
-3) Lever structureel fixplan.
-4) Doe GEEN codewijzigingen in deze opdracht.
-
-Harde regels
-- Quick fixes verboden.
-- Geen extra retries/fallbacks als eindoplossing.
-- Als je fallback-lagen vindt die UX-race maskeren: markeer als technische schuld.
-- Zonder expliciet akkoord: geen implementatie.
-
-Onderzoeksaanpak
-1. Reproduceer deterministisch
-- Leg startup-eventvolgorde vast:
-  - initial ingest
-  - set_globals
-  - tool-result notification
-  - first render
-  - ACTION_START dispatch/ack/advance
-- Leg per stap vast:
-  - payload-shape bron
-  - selected canonical render source
-  - ui.view.mode
-  - started/current_step
-  - has_start_action
-  - action liveness (ack/status/state_advanced/reason)
-
-2. Maak causale keten
-- Toon exact waarom loading-shell eerst zichtbaar wordt.
-- Toon exact waarom startklik in no-progress pad valt.
-- Toon of dit een ingest-shape probleem, ordering probleem, of beide is.
-
-3. OpenAI-richtlijntoets
-- Gebruik minimaal deze bronnen:
-  - https://developers.openai.com/apps-sdk/build/chatgpt
-  - https://developers.openai.com/apps-sdk/build/state-management
-  - https://developers.openai.com/apps-sdk/build/ux
-  - https://developers.openai.com/apps-sdk/build/ui-guidelines
-- Maak expliciet onderscheid tussen:
-  - direct bronfeit
-  - inferentie voor deze codebase
-
-4. Lever structureel oplossingsvoorstel (niet implementeren)
-- 1 voorkeursrichting + max 2 alternatieven.
-- Per richting:
-  - architecturale impact,
-  - welke invarianten hard worden,
-  - risico/migratie,
-  - teststrategie (unit/integratie/regressie).
-
-Verplichte outputstructuur
-A. Mensentaal probleemuitleg (kort)
-B. Technisch bewijs (file/line + eventvolgorde)
-C. Definitieve root-cause
-D. Structureel fixplan
-E. Beslisvoorstel (wat eerst, waarom)
-
-Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
-```
-
-### Oplossing / aanpassing (na akkoord)
-Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-
-## Fix 2 - Dream Builder: Engelse leak na switch-to-self + vraagzin niet catalog-gedreven in alle talen
-
-### Input (zoals gemeld)
-- In Dream Builder klikte de user op `Terugschakelen naar zelf het droom formuleren`.
-- Daarna verscheen een scherm met Engelse tekst, terwijl de sessie volledig Nederlands was.
-- Verwachting: deze teksten moeten uit de vertaaldocumenten/catalog komen en in alle talen beschikbaar zijn.
-
-Extra copy-eis voor de Dream-vraag:
-- De huidige zin in de flow is:
-  - `Als je 5 tot 10 jaar vooruitkijkt, welke grote kans of dreiging zie je, en welke positieve verandering hoop je? Schrijf het als één duidelijke uitspraak.`
-- Gewenst is een meervoud-/herformuleerde variant in alle talen.
-
-### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
-
-#### Hypothese A - Hardcoded Engelse specialist-message in switch-to-self route
-- In de route `dream_switch_to_self` staat een vaste Engelse boodschap in code.
-- Daardoor lekt Engels direct in `specialist.message`, los van locale/ui_strings.
-
-#### Hypothese B - Eerste Dream Builder-vraag is LLM-semantisch i.p.v. catalog-key
-- De hoofdvraag voor de Dream-oefening wordt in specialist-instructies als betekenisregel opgegeven (in het Engels), met opdracht “localize in user language”.
-- Dat maakt de uiteindelijke tekst afhankelijk van model-output i.p.v. vaste vertaalcatalog.
-- Gevolg: wording drift (singular/plural), inconsistentie met gewenste copy, en geen gegarandeerde parity over alle talen.
-
-#### Hypothese C - Bestaande i18n-keys zijn slechts deels aangesloten
-- Keys zoals `dreamBuilder.question.base`, `dreamBuilder.question.more`, `dreamBuilder.switchSelf.headline` bestaan al in defaults/locales.
-- Runtime gebruikt `question.more` in een specifiek vervolgpad, maar niet als harde bron voor de eerste Dream-vraag.
-- `dreamBuilder.switchSelf.headline` lijkt gedefinieerd maar niet aangesloten op de switch-to-self message-render.
-
-#### Hypothese D - “Localization helper” vervangt alleen termen, niet volledige zinnen
-- `normalizeLocalizedConceptTerms` vervangt concepttermen (zoals stepnamen), maar vertaalt geen complete Engelse alinea’s.
-- Daardoor blijft een hardcoded Engelse paragraaf intact in niet-EN sessies.
-
-#### Hypothese E - Geen cross-locale contracttest op deze copy-paden
-- Er lijkt geen regressietest die afdwingt dat dit specifieke switch-to-self scherm en Dream-vraag altijd uit de catalog komen voor alle ondersteunde locales.
-
-### Bewijspunten in code (startpunten voor diep onderzoek)
-
-- Hardcoded Engels na switch-to-self:
-  - `mcp-server/src/handlers/run_step_routes.ts`
-    - `dream_switch_to_self` route met vaste Engelse `specialist.message`: regels 532-536.
-
-- Dream-vraag als semantische specialist-instructie (model-localization):
-  - `mcp-server/src/steps/dream_explainer.ts`
-    - Intro-vraag in Engels als meaning-contract: regel 347.
-    - Vervolgvraag “meaning; do not hardcode translations”: regels 356-358.
-
-- Bestaande i18n keys voor Dream-vragen:
-  - `mcp-server/src/i18n/ui_strings_defaults.ts`
-    - `dreamBuilder.question.base`: regels 75-76.
-    - `dreamBuilder.question.more`: regels 77-78.
-    - `dreamBuilder.switchSelf.headline`: regel 79.
-
-- Gedeeltelijke runtime-aansluiting:
-  - `mcp-server/src/handlers/run_step_runtime_specialist_helpers.ts`
-    - gebruikt `dreamBuilder.question.more` voor prompt-stage `more`: regels 226-237.
-  - `mcp-server/src/handlers/run_step_runtime_backbone.ts`
-    - prompt-stage seed op `base`: regels 79-83.
-
-- Lokalisatiehelper beperkt tot term-replacements:
-  - `mcp-server/src/handlers/run_step_runtime_specialist_helpers.ts`: regels 35-111.
-
-- Catalog-locale matrix (alle ondersteunde locales):
-  - `mcp-server/src/i18n/ui_strings_catalog.ts`: regels 7-37.
-
-### Mogelijke structurele fixes (geen quick fixes)
-
-1. Verplaats switch-to-self body-copy naar i18n catalog en verwijder hardcoded Engels
-- Introduceer expliciete keys voor deze bodytekst (bijv. `dreamBuilder.switchSelf.body.intro` + `dreamBuilder.switchSelf.body.helper`).
-- Route `dream_switch_to_self` mag alleen catalog-keys gebruiken via `uiStringFromStateMap`.
-
-2. Maak Dream-vraag SSOT via catalog-keys, niet via vrije model-localization
-- Definieer canonieke keys voor:
-  - eerste vraag (`dreamBuilder.question.base`),
-  - vervolgvraag (`dreamBuilder.question.more`),
-  - eventueel variant voor “write as one clear statement” vs “describe future view”.
-- Dwing runtime-override af voor eerste Dream Builder vraag op basis van prompt-stage `base`, analoog aan bestaande `more`-override.
-
-3. Voer copy-update door in alle ondersteunde locales
-- Update de gewenste meervoud/herformuleerde zin in:
-  - defaults EN,
-  - alle locale bestanden: `de, en, es, fr, hi, hu, id, it, ja, ko, nl, pt_br, ru, zh_hans`.
-- Houd keyset volledig gelijk per locale; geen ontbrekende keys toestaan.
-
-4. Voeg i18n contracttests toe voor deze paden
-- Test dat `dream_switch_to_self` in niet-EN locale nooit Engelse zinnen rendert.
-- Test dat Dream-vraag in stage `base` en `more` uit catalog-key komt.
-- Test key-parity over alle catalog-locales voor nieuwe Dream keys.
-
-5. Maak copy-governance expliciet
-- Leg vast welke Dream-vraag de canonieke NL bronzin is (vanwege ambigu geformuleerde input met dubbele zin).
-- Vertaal van die canonieke bron naar alle talen; niet per taal vrij herschrijven in specialist.
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
-```text
-Context
-Je onderzoekt een i18n-regressie in Dream Builder:
-1) na switch-to-self verschijnt Engelse tekst in niet-EN sessie,
-2) de centrale Dream-vraag moet copy-wise worden aangepast (meervoud/herformulering) en in alle talen consistent zijn.
-
-Observed bug
-- Klik op `ACTION_DREAM_SWITCH_TO_SELF` toont Engelse paragraaf terwijl sessie NL is.
-- Dream-vraagtekst is niet de gewenste nieuwe formulering en lijkt niet strict catalog-gedreven over alle talen.
-
-Doel van deze opdracht
-1) Definieer definitieve root-cause met codebewijs.
-2) Toon exact welke copypaden niet uit ui_strings catalog komen.
-3) Lever structureel i18n-fixplan voor alle ondersteunde locales.
-4) Doe GEEN codewijzigingen in deze opdracht.
-
-Harde regels
-- Quick fixes verboden.
-- Geen runtime regex-hacks om Engels te maskeren.
-- Geen model-only “localize better” als eindoplossing.
-- Zonder expliciet akkoord: geen implementatie.
-
-Onderzoeksaanpak
-1. Herleid copy herkomst per zichtbaar tekstblok
-- Voor switch-to-self scherm:
-  - waar komt body-text vandaan?
-  - waar komt vraag/prompt vandaan?
-  - welke delen komen uit ui_strings keys en welke uit specialist literals?
-
-2. Maak causale keten
-- Toon exact waarom Engels zichtbaar kan worden in NL sessie.
-- Toon waarom huidige Dream-vraag niet volledig via catalog wordt afgedwongen.
-
-3. Bepaal catalog-gap
-- Maak key-matrix voor relevante Dream copy:
-  - switch-self body keys
-  - base question key
-  - more question key
-- Controleer key-parity over alle locales.
-
-4. Lever structureel oplossingsvoorstel (niet implementeren)
-- Presenteer 1 voorkeursrichting + max 2 alternatieven.
-- Per richting:
-  - architecturale impact,
-  - invarianten die hard worden,
-  - risico/migratie,
-  - teststrategie (unit/integratie/regressie).
-
-Verplichte outputstructuur
-A. Mensentaal probleemuitleg
-B. Technisch bewijs (files/regels + copy-herkomst)
-C. Definitieve root-cause
-D. Structureel fixplan
-E. Beslisvoorstel (incl. canonieke NL bronzin voor vertaling)
-
-Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
-```
-
-### Oplossing / aanpassing (na akkoord)
-Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-
-## Fix 3 - Stepper label wordt afgekapt; uitlijning labels niet conform (links, behalve presentatie rechts)
-
-### Input (zoals gemeld)
-In de bovenbalk (boven de oranje/grijze streepjes) wordt de actieve staptekst afgekapt als de naam langer is dan het segment.
-
-Gewenst gedrag:
-1. Alle stappen (behalve `presentatie`) links uitgelijnd.
-2. De tekst moet doorlopen zodat de volledige stapnaam leesbaar is (geen afkapping met `...`).
-3. De stap `presentatie` staat rechts uitgelijnd.
-
-### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
-
-#### Hypothese A - Hardcoded tekstafkapping in stepper label functie
-- De renderer kort staplabels expliciet in op 12 karakters en plakt `…`.
-- Daardoor is afkapping geen CSS-bijeffect maar bewust gedrag in JS.
-
-#### Hypothese B - CSS forceert extra ellipsis/overflow clipping
-- Labelstijl gebruikt `white-space: nowrap`, `overflow: hidden`, `text-overflow: ellipsis`, `max-width:100%`.
-- Zelfs zonder JS-truncation blijft clipping actief.
-
-#### Hypothese C - Geen stap-specifieke uitlijningsregel voor `presentation`
-- Stepper-items staan generiek op `align-items:flex-start`.
-- Er is geen aparte logica/CSS voor laatste stap (`presentation`) om label rechts uit te lijnen.
-
-#### Hypothese D - Layout-contract ontbreekt voor “volledige labelzichtbaarheid”
-- De huidige stepper is gebouwd op segmentbreedtes; labelruimte is impliciet aan bar-segment gekoppeld.
-- Zonder expliciete invariant op full-label readability blijft truncation logisch in huidige opzet.
-
-### Bewijspunten in code (startpunten voor diep onderzoek)
-
-- JS truncation:
+- De widget kiest daarna vrij tussen prompt/body-bronnen:
   - `mcp-server/ui/lib/ui_render.ts`
-    - `stepLabelShort(...)` kapt op 12 chars + `…`: regels 127-131.
-    - actieve labeltext komt uit `stepLabelShort(...)`: regel 150.
-  - `mcp-server/ui/step-card.bundled.html`
-    - zelfde ingebundelde truncation: regels 3683-3687 en 3700.
+    - `uiQuestionText`, `promptRaw`, `bodyRaw`, `promptSource`, `body`: regels 886-912.
+    - `renderStructuredText(cardDescEl, body || "")`: regel 934.
+  - Gevolg:
+    - de visuele hoofdcard vertrouwt op body-tekstshape.
 
-- CSS clipping/ellipsis:
-  - `mcp-server/ui/step-card.bundled.html`
-    - `.step-item-label` met `nowrap + overflow:hidden + text-overflow:ellipsis`: regels 431-441.
+- De frontend heading-detectie is puur heuristisch:
+  - `mcp-server/ui/lib/ui_text.ts`
+    - `isHeadingLikeLine(...)`: regels 146-150.
+    - alleen `:` of standalone `<strong>...</strong>`.
+  - `mcp-server/ui/lib/ui_text.ts`
+    - `appendHeading(...)`: regels 193-204.
+    - alleen dan krijgt de regel class `cardSubheading`.
 
-- Uitlijning step-items:
-  - `mcp-server/ui/step-card.bundled.html`
-    - `.step-item { align-items: flex-start; }` voor alle stappen: regels 421-426.
-    - geen speciale presentatie/right-align rule; alleen `:last-child { padding-right:0; }`: regel 429.
+- Zodra een regel niet als heading wordt herkend, wordt hij gewone paragraph-body:
+  - `mcp-server/ui/lib/ui_text.ts`
+    - paragraph grouping: regels 183-190 en 287-299.
+  - Gevolg:
+    - `Wat denk je van de formulering` + canonical value kunnen in één block eindigen.
 
-- Stapvolgorde/context presentatie als laatste stap:
-  - `mcp-server/ui/lib/ui_constants.ts`
-    - `ORDER` eindigt met `presentation`: regels 8-20.
+- Uppercase-styling hangt alleen aan die heading class:
+  - `mcp-server/ui/step-card.bundled.html`
+    - body paragraph styling: regels 762-769.
+    - heading styling `.cardDesc .cardSubheading`: regels 878-885.
+  - Dus:
+    - geen `cardSubheading` => geen uppercase.
+
+- Er is al regressie-evidence dat foutieve vrije-tekstshape geaccepteerd wordt:
+  - `mcp-server/src/handlers/run_step_runtime_finalize.test.ts`
+    - regels 679-694 testen een variant waarin een regel zoals `Wat denk je van deze formulering` als gewone outputtekst bestaat.
+
+### Definitieve root-cause (hoog over)
+
+Dit defect ontstaat door een contractgat, niet door CSS.
+
+1. De backend kent voor single-value states impliciet al wel heading/canonical-semantiek.
+2. Die semantiek wordt niet als hard UI-contract doorgegeven.
+3. In plaats daarvan wordt de inhoud teruggeflattened naar multiline tekst.
+4. De frontend probeert vervolgens heuristisch te raden wat een heading is.
+5. Zodra interpunctie of layout net afwijkt, degradeert de heading naar gewone bodytekst.
+6. Dan verdwijnt ook automatisch de uppercase-styling, omdat die alleen aan de heading-class hangt.
+
+Kort:
+- de fout zit in “semantic structure encoded as text”,
+- niet in de uppercase-CSS zelf.
 
 ### Mogelijke structurele fixes (geen quick fixes)
 
-1. Verwijder truncation uit renderer als beleid
-- Schrap `full.slice(0, 12) + "…"` in stepper-label pad.
-- Label moet vanuit volledige localized title komen.
+1. Introduceer een expliciete single-value content-shape in het UI-contract
+- Bijvoorbeeld een payload-structuur zoals:
+  - `ui.content.heading`
+  - `ui.content.canonical_text`
+  - `ui.content.support_text`
+  - eventueel `ui.content.feedback_reason_text`
+- De frontend rendert dan heading/body elk in een eigen semantisch blok.
 
-2. Maak stepper-label CSS full-readable
-- Verwijder/override `overflow:hidden` en `text-overflow:ellipsis` voor actieve labelweergave.
-- Definieer expliciet hoe label mag doorlopen (zonder bar-layout te breken), bv. overlay/absolute label-layer of adaptive label container.
+2. Laat de frontend niet langer headings raden uit punctuation
+- `isHeadingLikeLine` mag hooguit fallback zijn voor legacy content.
+- Niet meer de primaire manier waarop single-value confirm/refine screens worden opgebouwd.
 
-3. Introduceer uitlijningsinvariant per stap
-- Default: actieve label links uitgelijnd.
-- Uitzondering: `presentation` label rechts uitgelijnd.
-- Dwing dit via step-id/class contract, niet via fragiele `:last-child` heuristiek alleen.
+3. Gebruik één SSOT voor single-value confirm/refine rendering
+- Niet tegelijk:
+  - `message`
+  - `refined_formulation`
+  - `questionText`
+  - `wordingSelectionMessage(...)`
+  - body heuristics
+- Maar één canonical render-shape waar confirm/refine UI altijd op draait.
 
-4. Regressietests op visual contract
-- Test dat actieve labeltekst exact volledige step-title bevat (geen ellipsis-char).
-- Test dat `presentation`-label rechts staat en andere stappen links.
-- Test op desktop + mobile breakpoints.
+4. Maak migration/backward compatibility expliciet
+- Oude payloads zonder nieuwe structurele velden mogen nog renderen.
+- Maar single-value screens die uit nieuwe turn-policy komen moeten altijd de nieuwe structured path gebruiken.
 
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
+5. Verplaats regressietests van “string shape” naar “semantic shape”
+- Tests moeten niet meer bewijzen dat het systeem een losse headingzin ergens in tekst kan vinden.
+- Tests moeten bewijzen dat heading/body/canonical apart blijven tot in de widget-render.
+
+### Voorkeursrichting
+
+Voorkeursrichting:
+- voeg een expliciete structured content contractlaag toe voor single-value steps,
+- gebruik die eerst voor `Entity`, `Purpose`, `Big Why`, `Role`, `Dream`,
+- en laat de huidige heading-heuristiek alleen als legacy fallback bestaan.
+
+Waarom dit de beste richting is:
+- lost de huidige bug echt op in plaats van hem te maskeren,
+- voorkomt nieuwe varianten van hetzelfde probleem,
+- maakt styling, i18n en wording semantisch stabieler,
+- en verkleint de afhankelijkheid van toeval in `message`-tekst.
+
+Alternatief 1:
+- heading-detectie verbreden in de frontend
+- bijvoorbeeld ook regels als `Wat denk je van ...` als heading markeren
+- nadeel:
+  - taalafhankelijk,
+  - fragiel,
+  - blijft tekst-parsing in plaats van contract.
+
+Alternatief 2:
+- afdwingen dat backend altijd `:` of `<strong>` injecteert
+- nadeel:
+  - nog steeds tekst-hacks,
+  - semantiek blijft impliciet,
+  - render blijft afhankelijk van formatting-conventies.
+
+### Agent instructie (copy-paste, diep onderzoek + implementatie)
 ```text
 Context
-Je onderzoekt een UI-regressie in de stepper boven de kaart:
-- actieve staptekst wordt afgekapt,
-- uitlijning moet links zijn voor alle stappen behalve presentatie (rechts).
+Je implementeert een structurele fix voor single-value confirm/refine schermen in de MCP-widget.
 
 Observed bug
-- Label toont afgekorte tekst met ellipsis.
-- Gebruiker kan volledige stapnaam niet lezen.
-- Presentatie-uitlijning wijkt af van gewenste contractregel.
+- Regels zoals "Wat denk je van de formulering" moeten als aparte uppercase heading renderen.
+- In de praktijk komen ze soms als gewone bodytekst binnen.
+- Dan worden heading en canonical value samengevoegd tot één paragraaf.
 
 Doel van deze opdracht
-1) Lever definitieve root-cause (render + css + layout contract).
-2) Toon exact welke code truncation en clipping veroorzaakt.
-3) Lever structureel fixplan voor leesbaarheid + uitlijning.
-4) Doe GEEN codewijzigingen in deze opdracht.
+1) Elimineer heading-detectie-op-basis-van-tekst als primaire renderstrategie voor single-value steps.
+2) Introduceer een expliciete structured content-shape voor single-value confirm/refine rendering.
+3) Zorg dat uppercase/kicker-styling volgt uit semantische rol, niet uit punctuation.
+4) Behoud backward compatibility voor oude payloads waar redelijk nodig.
 
 Harde regels
-- Quick fixes verboden.
-- Geen ad-hoc string-korting per taal.
-- Geen eenmalige CSS hack zonder layout-invariant.
-- Zonder expliciet akkoord: geen implementatie.
+- Geen quick fix die alleen een `:` toevoegt.
+- Geen regex/keyword-oplossing als hoofdoplossing.
+- Geen frontend-only patch zolang de backend nog vrije tekst als hoofdcontract gebruikt.
+- Geen breuk van wording-choice, Dream Builder of list-steps.
+- i18n blijft via bestaande keys/contracten; geen nieuwe hardcoded user-facing copy in logic.
 
-Onderzoeksaanpak
-1. Reproduceer deterministisch
-- Leg voor minstens 3 lange staplabels vast:
-  - raw title key waarde,
-  - gerenderde labeltext,
-  - toegepaste css classes/states.
+Onderzoeksaanpak vóór implementatie
+1. Trace de huidige single-value keten end-to-end
+- `turn_policy_renderer`
+- `run_step_runtime_finalize`
+- `run_step_ui_payload`
+- `ui_render`
+- `ui_text`
+- Leg per laag vast:
+  - waar heading-semantiek aanwezig is,
+  - waar die wordt afgevlakt,
+  - waar de widget nog moet gokken.
 
-2. Maak causale keten
-- Toon exact waar truncation in JS gebeurt.
-- Toon exact waar CSS clipping gebeurt.
-- Toon waarom presentatie niet apart rechts uitlijnt.
+2. Bepaal scope van stappen
+- Minimaal:
+  - `entity`
+  - `purpose`
+  - `bigwhy`
+  - `role`
+  - `dream` waar relevant voor single-value canonical confirmation
+- Controleer ook of `targetgroup` in dezelfde single-value confirm visibility flow valt.
 
-3. Definieer layout-invariant
-- Schrijf harde regels voor:
-  - full label readability,
-  - default links uitgelijnd,
-  - presentatie rechts uitgelijnd.
+3. Ontwerp nieuw contract
+- Voeg een structured UI-content vorm toe, bijvoorbeeld:
+  - `ui.content.heading`
+  - `ui.content.canonical_text`
+  - `ui.content.support_text`
+  - `ui.content.feedback_reason_text`
+- Kies namen die passen bij bestaande UI-contract conventies.
+- Maak duidelijk welk veld SSOT is voor single-value rendering.
 
-4. Lever structureel oplossingsvoorstel (niet implementeren)
-- 1 voorkeursrichting + max 2 alternatieven.
-- Per richting:
-  - architecturale impact,
-  - risico/migratie,
-  - teststrategie (unit + UI regressie).
+4. Definieer renderinvariant
+- Voor single-value confirm/refine states geldt:
+  - heading is apart veld,
+  - canonical value is apart veld,
+  - support/feedback is apart veld,
+  - frontend voegt deze niet samen tot één paragraph blob.
+- Frontend heading rendering mag niet afhangen van:
+  - `:`
+  - `<strong>`
+  - lege regels
+  - locale-specifieke zinsvorm.
 
-Verplichte outputstructuur
-A. Mensentaal probleemuitleg
-B. Technisch bewijs (files/regels)
-C. Definitieve root-cause
-D. Structureel fixplan
-E. Beslisvoorstel (wat eerst, waarom)
+Implementatierichting
+1. Backend: contractvorming
+- Pas `turn_policy_renderer` aan zodat single-value states een structured content payload meesturen.
+- Gebruik bestaande single-value kennis (`singleValueConfirmHeading`, canonical accepted value, feedback reason) als bron.
+- Zorg dat de nieuwe shape actief gevuld wordt in confirm/refine contexts waar nu canonical visibility enforced wordt.
 
-Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
-```
+2. Runtime/finalize: niet meer flattenen als primaire weg
+- Verminder of verwijder voor deze structured single-value contexts het terugschrijven naar vrije `msg`-tekst als hoofdbron.
+- `buildTextForWidget` mag voor legacy/telemetry/fallback nog tekst genereren, maar niet langer de primaire source zijn voor deze schermen.
+- Controleer expliciet interactie met wording-choice pending en canonical presentation.
 
-### Oplossing / aanpassing (na akkoord)
-Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-## Fix 4 - Onnodige keuzekaart bij correcte input + dubbele betekenis in suggestie (bestaansreden)
+3. UI payload
+- Breid `ui` payload schema en builders uit zodat de structured contentvelden veilig worden doorgegeven.
+- Houd bestaande velden backward compatible.
+- Documenteer welk veld de widget eerst moet gebruiken.
 
-### Input (zoals gemeld)
-- User vroeg om 3 voorbeeld-bestaansredenen, kopieerde er 1 en gaf die als input.
-- UI toont daarna een wording-choice scherm met:
-  - `Dit is jouw input: ...`
-  - `Dit zou mijn suggestie zijn: Je huidige bestaansreden voor Mindd is: ...`
-- Gevoelde bug: de suggestie is inhoudelijk dezelfde zin met extra prefix, en er is onnodig een keuzepaneel.
+4. Frontend render
+- In `ui_render`:
+  - detecteer de nieuwe structured single-value content shape,
+  - render heading, canonical text en support text als aparte blocks,
+  - gebruik voor heading een dedicated semantische/class path die altijd uppercase-styling krijgt.
+- Gebruik `renderStructuredText` alleen nog voor vrije body/support content, niet om de heading-rol zelf te bepalen.
 
-Aanvullende functionele nuance (bevestigd):
-- Als de input al correct is, dan mag er wél direct bevestiging staan zoals `Je huidige bestaansreden is: ...`,
-- maar zonder keuze tussen twee varianten.
+5. Frontend fallback
+- Laat `isHeadingLikeLine` bestaan voor legacy vrije tekst.
+- Gebruik die alleen als fallback wanneer structured content ontbreekt.
+- Structured content heeft altijd voorrang.
 
-### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
+Verplichte tests
+1. Renderer/turn-policy tests
+- Single-value entity confirm state levert expliciete structured heading + canonical text.
+- Zelfde voor minstens één andere single-value step (`purpose` of `bigwhy`).
 
-#### Hypothese A - Suggestie-tekst kan vervuild raken met een context-heading
-- De wording-choice suggestie wordt opgebouwd uit meerdere kandidaten (field/refined/previous/message).
-- Een kandidaat kan een al eerder opgebouwde contextregel bevatten zoals `Je huidige ... is:`.
-- Daardoor vergelijkt de engine niet “zin vs zin”, maar “zin vs heading+zin”.
+2. Runtime/finalize tests
+- Structured single-value payload wordt niet terug afgevlakt tot één multiline blob.
+- Geen regressie in wording-choice of canonical pending flows.
 
-#### Hypothese B - Equivalentie-check werkt op ruwe tekst en mist heading-unwrapping
-- De gelijkheidscheck (`areEquivalentWordingVariants`) canonicalize’t tekst, maar verwijdert geen `current heading` wrapper.
-- Resultaat: semantisch gelijke inhoud wordt als verschillend gezien, waardoor onterecht wording-choice pending ontstaat.
+3. UI payload tests
+- Nieuwe structured content shape komt door in `ui`.
+- Oude payloads zonder die shape blijven renderbaar.
 
-#### Hypothese C - Zodra pending true is, forceert pipeline altijd keuze-UI
-- Bij `wording_choice_pending=true` wordt `require_wording_pick` gezet en acties onderdrukt.
-- UX-gevolg: user ziet altijd twee keuzevakken, ook als er eigenlijk niets te kiezen is.
+4. Frontend render tests
+- Heading rendert in aparte node/class met uppercase-styling pad.
+- Heading zonder `:` blijft heading.
+- Heading en canonical value worden niet samengevoegd tot één paragraph.
 
-#### Hypothese D - Dit patroon is niet beperkt tot bestaansreden
-- Wording-choice eligibility geldt voor vrijwel alle stappen behalve `step_0` en `presentation`.
-- Daarmee kan dezelfde duplicatie/prefix-mismatch ook in andere stappen voorkomen.
+5. Regressietests
+- Case:
+  - heading = `Wat denk je van de formulering`
+  - canonical = `Een strategisch reclamebureau voor complexe keuzes`
+  - verwacht:
+    - heading apart,
+    - canonical apart,
+    - geen inline samenvoeging.
+- Voeg ook een Engels equivalent toe.
 
-### Bewijspunten in code (startpunten voor diep onderzoek)
-
-- Wording-choice scope is breed (bijna alle stappen):
-  - `mcp-server/src/handlers/run_step_wording.ts`
-    - `isWordingChoiceEligibleStep(...)` sluit alleen `step_0` en `presentation` uit: regels 148-153.
-
-- Suggestie-kandidaatselectie die heading-vervuiling kan binnenhalen:
-  - `mcp-server/src/handlers/run_step_wording_heuristics.ts`
-    - `pickDualChoiceSuggestion(...)` candidate-volgorde incl. previous/message: regels 627-698.
-    - `extractSuggestionFromMessage(...)` pakt laatste “bruikbare” zin/paragraaf zonder specifieke filter op `current ... is:` headings: regels 222-270.
-
-- Heading-opbouw van “Je huidige ... is:”:
-  - `mcp-server/src/handlers/run_step_runtime_state_helpers.ts`
-    - `wordingSelectionMessage(...)` bouwt heading uit `offtopic.current.template` + current value: regels 538-571.
-
-- Onterechte pending bij niet-equivalent:
-  - `mcp-server/src/handlers/run_step_wording.ts`
-    - equivalent-check en pending-opbouw (`wording_choice_pending=true`): regels 805-926.
-
-- Pipeline forceert keuzepaneel bij pending:
-  - `mcp-server/src/handlers/run_step_pipeline.ts`
-    - pending choice override + `requireWordingPick=true`: regels 728-751.
-
-### Check: kan dit ook bij andere stappen gebeuren?
-
-Ja, potentieel wel.
-
-Hoog risico (text-mode stappen):
-1. `purpose`
-2. `bigwhy`
-3. `role`
-4. `entity`
-5. `targetgroup`
-6. `dream` (in paden waar wording-choice text-mode actief is)
-
-Ook mogelijk (list-mode, andere uiting):
-1. `strategy`
-2. `productsservices`
-3. `rulesofthegame`
-4. `dream` in builder/list-context
-
-Waarom breed:
-- Dezelfde wording-choice engine + pending-mechaniek wordt stap-overstijgend gebruikt.
-- Een vervuilde suggestion-candidate of wrapper-mismatch kan dus op meerdere stappen dezelfde UX-fout triggeren.
-
-### Mogelijke structurele fixes (geen quick fixes)
-
-1. Voeg een canonical “unwrap current-heading” stap toe vóór equivalentie en vóór payload
-- Strip gecontroleerd patronen als `offtopic.current.template`/step-current headings uit suggestion candidate.
-- Vergelijk vervolgens inhoud-op-inhoud.
-
-2. Voeg short-circuit toe: “inhoud al bevestigd” => geen wording-choice
-- Als user-input canonical gelijk is aan huidige/nieuwe stapwaarde, ga direct naar bevestigingspad (`wordingSelectionMessage`) zonder keuzes.
-
-3. Beperk message-based suggestion extraction tot valide refine-context
-- Gebruik `extractSuggestionFromMessage` alleen als veld/refined kandidaten ontbreken of expliciet refine-intent aanwezig is.
-- Voorkom dat narratieve contextregels als suggestie eindigen.
-
-4. Cross-step regressietests op wording-choice false positives
-- Testmatrix voor text- en list-stappen:
-  - correcte input => géén keuzekaart,
-  - wel bevestigingsregel `Je huidige ... is: ...`,
-  - geen dubbeling van exact dezelfde inhoud met extra prefix.
-
-5. Voeg anti-dup guard toe in pending-opbouw
-- Als `suggestion_text` na canonical-unwrapping gelijk is aan `user_text`, zet `wording_choice_pending=false`.
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
-```text
-Context
-Je onderzoekt een wording-choice regressie:
-- bij correcte input toont de UI toch een keuzepaneel,
-- de suggestie bevat dezelfde inhoud met extra prefix ("Je huidige ... is:"),
-- dit lijkt nu zichtbaar bij bestaansreden, maar moet stap-overstijgend worden gecheckt.
-
-Observed bug
-- User plakt een correcte bestaansreden.
-- In plaats van directe bevestiging verschijnt wording-choice met:
-  - user input
-  - suggestion = heading + vrijwel dezelfde zin
-- Gewenst: directe bevestiging ("Je huidige bestaansreden is: ...") zonder keuzes.
-
-Doel van deze opdracht
-1) Lever definitieve root-cause van false-positive wording-choice.
-2) Toon exact welk pad de heading/prefix in suggestion injecteert.
-3) Onderzoek of dit bij andere stappen kan optreden (matrix).
-4) Lever structureel fixplan.
-5) Doe GEEN codewijzigingen in deze opdracht.
-
-Harde regels
-- Quick fixes verboden.
-- Geen locale-specifieke string hacks.
-- Geen suppressie van wording-choice zonder causale oplossing.
-- Zonder expliciet akkoord: geen implementatie.
-
-Onderzoeksaanpak
-1. Reproduceer op purpose
-- Scenario: voorbeeldzin plakken die al valide is.
-- Log:
-  - userRaw
-  - suggestionRawCandidate
-  - normalizedUser
-  - equivalent=true/false
-  - wording_choice_pending
-
-2. Herleid candidate-keten
-- Check candidate-prioriteit:
-  - field value
-  - refined_formulation
-  - previous wording_choice_agent_current
-  - extractSuggestionFromMessage(message)
-- Markeer waar heading/prefix binnenkomt.
-
-3. Cross-step impactanalyse
-- Herhaal op minimaal:
-  - bigwhy, role, entity, targetgroup (text-mode)
-  - strategy, productsservices, rulesofthegame (list-mode)
-- Rapporteer waar dezelfde false-positive wording-choice optreedt.
-
-4. Structureel oplossingsvoorstel (niet implementeren)
-- 1 voorkeursrichting + max 2 alternatieven.
-- Per richting:
-  - architecturale impact,
-  - invarianten die hard worden,
-  - risico/migratie,
-  - teststrategie.
-
-Verplichte outputstructuur
-A. Mensentaal probleemuitleg
-B. Technisch bewijs (file/line + candidate-keten)
-C. Definitieve root-cause
-D. Cross-step impactmatrix
-E. Structureel fixplan
-F. Beslisvoorstel (wat eerst, waarom)
+Belangrijke reviewvragen tijdens implementatie
+- Is er nog ergens één pad waar single-value heading alleen als vrije tekst bestaat?
+- Is `questionText` nog onterecht bron voor single-value heading in confirm/refine states?
+- Kan de widget structured content overschrijven met prompt/body fallback?
+- Is Dream Builder uitgesloten van deze renderingregel waar nodig?
 
 Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
-```
-
-### Oplossing / aanpassing (na akkoord)
-Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-
-## Fix 5 - Role “kies er een voor mij” kan introzin opslaan als finale rol
-
-### Input (zoals gemeld)
-- User koos in stap `Rol` eerst voor `geef 3 voorbeelden`.
-- Daarna koos user `kies er een voor mij`.
-- Daarna vroeg user een samenvatting/recap.
-- Vervolgens ging user door naar de volgende stap.
-- In de opgeslagen output staat bij `ROL`:
-  - `Hier zijn drie korte voorbeelden van een Rol voor Mindd:.`
-  - in plaats van de gekozen rolzin.
-
-Gewenst:
-1. Bij `kies er een voor mij` moet één echte role-optie worden opgeslagen.
-2. Een intro/headline-zin van een voorbeeldenblok mag nooit als role-value worden gecommit.
-3. Recap-vragen mogen dit niet overschrijven of “vervuilen”.
-
-### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
-
-#### Hypothese A - Synthetic role-pick selecteert uit vrije tekst en kan de introregel pakken
-- Route `synthetic_role_pick` kiest een suggestie via message-parsing (`pickRoleSuggestionFromPreviousState`).
-- Als de vorige message een voorbeelden-intro bevat, kan die als kandidaat worden gezien.
-
-#### Hypothese B - Filter voor “voorbeelden-intro” is vooral Engels en mist NL-varianten
-- In `extractRoleSuggestionSentences` staan blokkades als `here are ... role examples`, maar geen NL patroon zoals `Hier zijn drie korte voorbeelden ...`.
-- Daardoor blijft de Nederlandse introregel kandidaat.
-
-#### Hypothese C - Ranking bevoordeelt regels met bedrijfsnaam
-- Kandidaten met bedrijfsnaam krijgen extra score (+10).
-- De introregel bevat vaak de bedrijfsnaam en kan daardoor boven echte voorbeeldzinnen eindigen.
-
-#### Hypothese D - Eenmaal gestaged wordt foutieve waarde later hard gecommit
-- Role-waarde wordt direct in `provisional_by_step.role` gestaged vanuit `role/refined_formulation`.
-- Bij “doorgaan naar volgende stap” commit-pad kiest eerst `provisionalValue`.
-- Daardoor wordt de foutieve introzin naar `role_final` geschreven, ook na een recap-turn.
-
-### Bewijspunten in code (startpunten voor diep onderzoek)
-
-- Synthetic role-pick flow:
-  - `mcp-server/src/handlers/run_step_routes.ts`
-    - `synthetic_role_pick` gebruikt `pickRoleSuggestionFromPreviousState(...)`: regels 231-242.
-    - gekozen waarde wordt direct gezet in `refined_formulation` en `role`: regels 253-255.
-
-- Parsing/ranking van role-kandidaat uit message:
-  - `mcp-server/src/handlers/run_step_wording_heuristics.ts`
-    - `extractRoleSuggestionSentences(...)`: regels 323-381.
-    - blocked-list bevat vooral Engelse patronen: regels 332-339.
-    - ranking geeft +10 bij bedrijfsnaam-match: regel 373.
-  - Zelfde helper wordt gebruikt door picker:
-    - `pickRoleSuggestionFromPreviousState(...)`: regels 599-623.
-
-- Staging van role provisional:
-  - `mcp-server/src/handlers/run_step_state_update.ts`
-    - role staging via `stageFieldValue(... role, refined_formulation)`: regels 185-187.
-
-- Commit naar final bij doorgaan:
-  - `mcp-server/src/handlers/run_step_runtime_action_routing_policy.ts`
-    - `resolveRequiredFinalValue(...)` pakt eerst `provisionalValue`: regels 77-82.
-  - `mcp-server/src/handlers/run_step_runtime_action_routing.ts`
-    - commit naar final-field bij transition: regels 386-390.
-
-### Mogelijke structurele fixes (geen quick fixes)
-
-1. Maak role choose-for-me data-gedreven i.p.v. message-parsing
-- Laat de role-specialist bij “3 voorbeelden” expliciet een gestructureerde lijst returnen (bijv. `role_examples[]`).
-- `synthetic_role_pick` kiest alleen uit die lijst, nooit uit vrijetekst `message`.
-
-2. Voeg locale-onafhankelijke intro/cta-exclusie toe
-- Blokkeer kandidaatregels die alleen “examples/voorbeelden” framing bevatten.
-- Maak dit semantisch i.p.v. taal-hardcoded regex.
-
-3. Voeg pre-commit validatie op role-shape toe
-- Voordat `role`/`role_final` wordt gestaged/gecommit:
-  - reject regels die voorbeelden-intro patronen matchen,
-  - en gebruik laatste geldige role-candidate als fallback.
-
-4. Bescherm commit-pad tegen recap-afgeleide ruis
-- Als laatste specialist-turn recap/meta is, commit alleen als er valide staged role bestaat.
-- Anders final ongewijzigd laten en user terugsturen naar role-keuze.
-
-5. Regressietests op end-to-end sequence
-- Test exact scenario:
-  - 3 voorbeelden -> kies voor mij -> recap -> continue.
-- Assert:
-  - `role_final` bevat echte role-zin, nooit intro/headline.
-- Herhaal voor minstens `nl` en `en`.
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
-```text
-Context
-Je onderzoekt een regressie in Role:
-- user kiest 3 voorbeelden,
-- kiest daarna "kies er een voor mij",
-- vraagt recap,
-- gaat door naar volgende stap,
-- en krijgt als opgeslagen Role een voorbeelden-introzin i.p.v. echte Role.
-
-Observed bug
-- Opgeslagen waarde wordt:
-  "Hier zijn drie korte voorbeelden van een Rol voor <company>:."
-- Verwacht: één echte gekozen Role-zin.
-
-Doel van deze opdracht
-1) Lever definitieve root-cause met causale keten.
-2) Toon exact waar introzin als candidate kan worden gekozen.
-3) Toon exact hoe deze waarde staged en later committed wordt.
-4) Lever structureel fixplan.
-5) Doe GEEN codewijzigingen in deze opdracht.
-
-Harde regels
-- Quick fixes verboden.
-- Geen NL-specifieke patch als enige oplossing.
-- Geen suppressie van commit zonder shape-validatie.
-- Zonder expliciet akkoord: geen implementatie.
-
-Onderzoeksaanpak
-1. Reproduceer exact flowscenario
-- role examples -> choose for me -> recap -> continue.
-- Log per turn:
-  - chosen candidate,
-  - source (message/refined/field),
-  - staged provisional role,
-  - committed role_final.
-
-2. Candidate-herkomst analyseren
-- Verifieer parserfilter op intro/headline regels in meerdere talen.
-- Verifieer ranking (bedrijfsnaam bias) die introregels kan prioriteren.
-
-3. Commit-keten analyseren
-- Bevestig hoe provisional wordt meegenomen in final commit.
-- Bevestig gedrag wanneer laatste turn recap/meta is.
-
-4. Structureel oplossingsvoorstel (niet implementeren)
-- 1 voorkeursrichting + max 2 alternatieven.
-- Per richting:
-  - architecturale impact,
-  - invarianten,
-  - risico/migratie,
-  - teststrategie.
-
-Verplichte outputstructuur
-A. Mensentaal probleemuitleg
-B. Technisch bewijs (file/line + flow)
-C. Definitieve root-cause
-D. Structureel fixplan
-E. Beslisvoorstel (wat eerst, waarom)
-
-Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
-```
-
-### Oplossing / aanpassing (na akkoord)
-Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-
-
-## Fix 6 - Lege "Validation" shell blijft bestaan door guard-lattice (niet alleen door code in 1 pad)
-
-### Input (zoals gemeld)
-- User ziet nog steeds een lege `Validation`-kaart (geen bruikbare tekst/actie), ondanks eerdere fixes op startup en ACTION_START.
-- Verwachting: eerste zichtbare state moet direct bruikbaar zijn; nooit een lege interactieve shell.
-
-### Hoog-over analyse
-De regressie zit niet in 1 losse functie, maar in een combinatie van guards/blocks die elkaar niet afdwingen:
-1. Startup fail-closed kijkt alleen naar “payload ontbreekt”, niet naar “payload is semantisch leeg”.
-2. ACTION_START fail-closed kijkt alleen naar het klik/ack-pad, niet naar alle andere render-paden.
-3. Canonical view-state laat `interactive` toe met `has_renderable_content=false`.
-4. UI detecteert “interactive content absent”, maar blokkeert niet; hij rendert een lege kaart.
-
-Gevolg: je kunt technisch “contract-correct” lijken, maar UX-matig alsnog in een lege shell landen.
-
-### Pogingen die al gedaan zijn (en waarom dit niet afdoende was)
-
-1. Commit `28de187` - `fix(ui): enforce canonical startup paint and fail-closed ACTION_START liveness`
-- Wat is geprobeerd:
-  - Startup wait-shell verwijderd; startup naar fail-closed timeout.
-  - ACTION_START pad strenger gemaakt op ack/state_advanced.
-- Waarom dit niet afdoende was:
-  - Startup guard triggert alleen als init payload ontbreekt, niet als payload wel komt maar leeg/interactie-onbruikbaar is.
-  - ACTION_START guard beschermt alleen het klikpad; niet elk ingest-/renderpad.
-  - Canonical state-machine bleef `interactive` toestaan zonder renderbare content.
-
-2. Commit `317a944` - `Fix deterministic ACTION_START flow and step0 startup rendering`
-- Wat is geprobeerd:
-  - Extra renderable-progress check voor `step_0:no_output:no_menu` na ACTION_START.
-  - Seed/fallback voor step0-copy in `start_prestart` route.
-- Waarom dit niet afdoende was:
-  - Deze fix werkt alleen als `start_prestart` route echt geraakt wordt.
-  - Als route wordt overgeslagen door state-gates (`started`/`intro_shown_session`), wordt het fallback-pad nooit gebruikt.
-  - UI laat nog steeds lege interactive view door als warning-only pad.
-
-### Technisch bewijs (guards/blocks die samen het probleem laten bestaan)
-
-- `mcp-server/src/handlers/run_step_canonical_widget_state.ts:60-68`
-  - Hard bewijs: canonical builder retourneert `mode: "interactive"` terwijl `has_renderable_content: false` en `invariant_ok: true`.
-  - Dit legitimeert een lege interactive state.
-
-- `mcp-server/ui/step-card.bundled.html:4265-4273`
-  - Hard bewijs: bij ontbrekende interactieve content alleen `console.warn("ui_contract_interactive_content_absent")`.
-  - Geen blokkade, geen recovery-state, geen fail-closed render.
-
-- `mcp-server/ui/step-card.bundled.html:3290-3334`
-  - Hard bewijs: strenge liveness-check zit uitsluitend in `ACTION_START` dispatch-afhandeling.
-  - Dus buiten dat pad kan lege interactive content nog steeds doorlopen.
-
-- `mcp-server/src/handlers/run_step_preflight.ts:254-255`
-  - Hard bewijs: `rawState.started === true` wordt direct doorgezet.
-  - Daardoor kunnen prestart-routes en start-gates worden overgeslagen als stale state binnenkomt.
-
-- `mcp-server/src/handlers/run_step_routes.ts:650-653` en `679-682`
-  - Hard bewijs: `start_prestart` is gebonden aan `intro_shown_session !== "true"`.
-  - Bij stale `intro_shown_session` wordt het herstel-/seedpad niet geraakt.
-
-### Definitieve root-cause
-Root-cause is een guard-lattice mismatch:
-- Entry-guards (startup timeout, ACTION_START liveness) zijn streng,
-- maar de canonical view-invariant is te permissief (`interactive` zonder renderbare content),
-- en de UI behandelt “geen interactieve content” als warning in plaats van contract-fout.
-
-Daardoor blijft een lege `Validation`-shell mogelijk, ook na meerdere gerichte fixes.
-
-### Structureel fixplan (voorkeur)
-
-1. Maak server-canonical invariant hard
-- `interactive` alleen toegestaan bij `has_renderable_content=true`.
-- Als false: forceer `blocked` of `recovery` met expliciete reason_code.
-
-2. Maak route-gates consistent met canonical invariant
-- `start_prestart` mag niet alleen op `intro_shown_session` vertrouwen als die state-stale kan zijn.
-- Voeg consistency check toe tussen `started`, `intro_shown_session`, `current_step`, en renderbaarheid.
-
-3. Maak UI fail-closed op lege interactive payload
-- `ui_contract_interactive_content_absent` mag geen warning-only blijven.
-- Render expliciete blocked/recovery state i.p.v. lege kaart.
-
-4. Contracttests op guard-combinaties
-- Niet alleen ACTION_START unit tests, maar e2e met:
-  - stale `started=true` input,
-  - stale `intro_shown_session=true`,
-  - payload met `interactive` + geen body/prompt/actions.
-- Assert: nooit lege interactieve shell zichtbaar.
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
-```text
-Context
-Je onderzoekt een regressie waarbij de widget soms een lege "Validation" interactive shell toont.
-Deze regressie is eerder 2x "gefixt" maar blijft bestaan door guard-lattice gedrag.
-
-Belangrijk
-- Dit is geen losse bug in 1 functie.
-- Zoek expliciet naar guards/blocks die elkaar tegenspreken.
-- Zonder bewijs van guard-keten: geen implementatievoorstel.
-
-Reeds geprobeerd (moet je meenemen in je analyse)
-1) 28de187: startup fail-closed + ACTION_START liveness fail-closed.
-2) 317a944: strengere ACTION_START renderable-progress check + step0 seed/fallback copy.
-
-Waarom nog niet opgelost (hypothese die je moet bewijzen/ontkrachten)
-- Canonical view staat interactive toe zonder renderbare content.
-- UI behandelt interactive zonder content als warning-only.
-- start_prestart herstelpad kan worden overgeslagen door stale state (`started`/`intro_shown_session`).
-
-Onderzoeksopdracht
-1. Reproduceer met eventketen
-- Leg vast per turn:
-  - inbound state.started
-  - inbound intro_shown_session
-  - gekozen route (start_prestart wel/niet)
-  - canonical decision: ui_view_mode, has_renderable_content, reason_code
-  - client log: ui_contract_interactive_content_absent
-
-2. Bewijs guard-lattice causaal
-- Toon exact pad waarin:
-  - ACTION_START liveness niet triggert,
-  - canonical interactive toch emitted wordt,
-  - UI daardoor lege shell rendert.
-
-3. Verplicht te inspecteren codepunten
-- mcp-server/src/handlers/run_step_canonical_widget_state.ts (interactive zonder content)
-- mcp-server/ui/step-card.bundled.html (warning-only bij interactive_content_absent)
-- mcp-server/src/handlers/run_step_preflight.ts (raw started passthrough)
-- mcp-server/src/handlers/run_step_routes.ts (start_prestart gating op intro_shown_session)
-
-4. Verplicht bewijs uit logs/telemetry
-- run_step_canonical_view_emitted
-- ui_contract_interactive_content_absent
-- ui_start_dispatch_not_advanced_fail_closed
-- inclusief dezelfde request/session correlatie
-
-Harde regels
-- Geen quick fix in 1 pad.
-- Geen extra retry-laag als eindoplossing.
-- Eerst invariant-fout oplossen (server canonical + UI fail-closed gedrag).
-- Zonder expliciet akkoord: geen codewijziging.
-
-Verplichte outputstructuur
-A. Korte mensentaal uitleg
-B. Guard-matrix (welke guard, waar, wanneer actief)
-C. Causale keten met request/session bewijs
-D. Waarom 28de187 en 317a944 dit niet afvangen
-E. Structureel fixvoorstel (1 voorkeur + max 2 alternatieven)
-F. Beslisvoorstel met implementatievolgorde
-
-Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
+- Klaar pas als single-value confirm/refine heading-semantiek contractueel is gemaakt,
+- de widget niet meer hoeft te raden,
+- en regressietests expliciet bewijzen dat uppercase/kicker rendering niet meer afhangt van punctuation.
 ```
 
 ### Oplossing / aanpassing (na akkoord)

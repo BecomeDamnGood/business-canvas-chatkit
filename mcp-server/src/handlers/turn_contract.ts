@@ -115,6 +115,7 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
   const uiPayload = toRecord(response.ui);
   const uiPrompt = toRecord(uiPayload.prompt);
   const uiView = toRecord(uiPayload.view);
+  const uiContent = toRecord(uiPayload.content);
   const specialist = toRecord(response.specialist);
   const stateRecord =
     response.state && typeof response.state === "object"
@@ -144,7 +145,12 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
   const question =
     String(uiPayload.questionText || "").trim() ||
     String(specialist.question || "").trim();
-  return hasActions || hasDreamBuilderStatements || Boolean(prompt) || Boolean(body) || Boolean(question);
+  const hasStructuredContent =
+    String(uiContent.heading || "").trim().length > 0 ||
+    String(uiContent.canonical_text || "").trim().length > 0 ||
+    String(uiContent.support_text || "").trim().length > 0 ||
+    String(uiContent.feedback_reason_text || "").trim().length > 0;
+  return hasActions || hasDreamBuilderStatements || hasStructuredContent || Boolean(prompt) || Boolean(body) || Boolean(question);
 }
 
 function hasStartAction(response: RunStepContractResponse, state: Record<string, unknown>): boolean {
