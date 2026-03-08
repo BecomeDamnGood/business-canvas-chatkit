@@ -981,7 +981,7 @@
         padding: 0;
       }
       
-      /* Prestart video (HeyGen) – set PRESTART_SHOW_VIDEO=false in renderPrestartContent to remove */
+      /* Prestart video embed – set PRESTART_SHOW_VIDEO=false in renderPrestartContent to remove */
       .cardDesc .cardDesc-video {
         position: relative;
         width: 100%;
@@ -3721,8 +3721,8 @@
       var videoWrap = document.createElement("div");
       videoWrap.className = "cardDesc-video";
       var iframe = document.createElement("iframe");
-      iframe.src = "https://app.heygen.com/embeds/21a731dde15e412684066900f0f67709?autoplay=1";
-      iframe.title = "Intro EN II";
+      iframe.src = "https://www.youtube-nocookie.com/embed/JjlY4iGWSi8?autoplay=1&rel=0&playsinline=1";
+      iframe.title = "Intro video";
       iframe.setAttribute("allow", "autoplay; encrypted-media; fullscreen");
       iframe.allowFullscreen = true;
       videoWrap.appendChild(iframe);

@@ -57,6 +57,17 @@ function createAppServer(baseUrl: string): McpServer {
       return "";
     }
   })();
+  const frameDomains = Array.from(
+    new Set(
+      [
+        widgetOrigin || "",
+        "https://www.youtube.com",
+        "https://www.youtube-nocookie.com",
+        "https://youtu.be",
+        "https://app.heygen.com",
+      ].filter(Boolean)
+    )
+  );
   const server = new McpServer(
     {
       name: "business-canvas-chatkit",
@@ -94,6 +105,7 @@ function createAppServer(baseUrl: string): McpServer {
               "openai/widgetCSP": {
                 connect_domains: widgetOrigin ? [widgetOrigin] : [],
                 resource_domains: widgetOrigin ? [widgetOrigin] : [],
+                frame_domains: frameDomains,
               },
               ...(widgetOrigin ? { "openai/widgetDomain": widgetOrigin } : {}),
             },
