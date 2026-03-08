@@ -643,6 +643,75 @@ test("buildTextForWidget keeps canonical pending suggestion visible across singl
   }
 });
 
+test("buildTextForWidget suppresses standalone body text for single-value wording-choice picker states", () => {
+  const helpers = buildTextHelpers((stepId) => {
+    if (stepId === "dream") {
+      return [
+        "JE HUIDIGE DROOM VOOR MINDD IS",
+        "",
+        "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      ].join("\n");
+    }
+    if (stepId === "purpose") {
+      return [
+        "JE HUIDIGE PURPOSE VOOR MINDD IS",
+        "",
+        "Mindd bestaat om mensen helderheid te geven in complexe beslissingen.",
+      ].join("\n");
+    }
+    return "";
+  });
+
+  const scenarios = [
+    {
+      contract: "dream:ASK:DREAM_MENU_REFINE:v1",
+      stepId: "dream",
+      message: [
+        "Je voorstel is te algemeen voor een droom.",
+        "",
+        "JE HUIDIGE DROOM VOOR MINDD IS",
+        "",
+        "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      ].join("\n"),
+      suggestion: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+    },
+    {
+      contract: "purpose:ASK:PURPOSE_MENU_QUESTIONS:v1",
+      stepId: "purpose",
+      message: [
+        "Ik heb het herschreven zodat het specifieker wordt.",
+        "",
+        "JE HUIDIGE PURPOSE VOOR MINDD IS",
+        "",
+        "Mindd bestaat om mensen helderheid te geven in complexe beslissingen.",
+      ].join("\n"),
+      suggestion: "Mindd bestaat om mensen helderheid te geven in complexe beslissingen.",
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const output = helpers.buildTextForWidget({
+      specialist: {
+        ui_contract_id: scenario.contract,
+        message: scenario.message,
+        refined_formulation: scenario.suggestion,
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_presentation: "picker",
+        wording_choice_target_field: scenario.stepId,
+        wording_choice_user_normalized: "Originele input",
+        wording_choice_agent_current: scenario.suggestion,
+      },
+      state: {
+        active_specialist: scenario.stepId,
+        current_step: scenario.stepId,
+      } as any,
+    });
+
+    assert.equal(output, "");
+  }
+});
+
 test("buildTextForWidget strips raw HTML tags from user-facing text", () => {
   const helpers = buildTextHelpers(() => "");
   const output = helpers.buildTextForWidget({

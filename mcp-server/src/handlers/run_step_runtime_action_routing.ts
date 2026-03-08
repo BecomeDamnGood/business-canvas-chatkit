@@ -14,6 +14,7 @@ import {
   pickBigWhyCandidate,
   resolveRequiredFinalValue,
 } from "./run_step_runtime_action_routing_policy.js";
+import { normalizePendingPickerSpecialistContract } from "./run_step_wording_picker_contract.js";
 
 export type RunStepRuntimeActionRoutingOutput<TPayload extends Record<string, unknown>> = {
   response: TPayload | null;
@@ -313,7 +314,11 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ) {
       const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
       state = stateWithUi;
-      const pendingSpecialist = { ...prev };
+      const pendingSpecialist = normalizePendingPickerSpecialistContract({
+        specialist: prev,
+        stepIdHint: stepId,
+      });
+      (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
       const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
         pendingSpecialist,
         stateWithUi,
@@ -664,6 +669,12 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       });
     }
 
+    pendingSpecialist = normalizePendingPickerSpecialistContract({
+      specialist: pendingSpecialist,
+      stepIdHint: String(state.current_step || ""),
+    });
+    (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
+
     const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
       pendingSpecialist,
       stateWithUi,
@@ -794,7 +805,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       forcePending: true,
     });
     if (rebuilt.wordingChoice) {
-      const pendingSpecialist = { ...rebuilt.specialist };
+      const pendingSpecialist = normalizePendingPickerSpecialistContract({
+        specialist: rebuilt.specialist,
+        stepIdHint: String(state.current_step || ""),
+      });
       (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
       const payload = behavior.attachRegistryPayload(
         {

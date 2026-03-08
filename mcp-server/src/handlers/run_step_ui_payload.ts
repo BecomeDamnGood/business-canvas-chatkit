@@ -6,6 +6,7 @@ import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../cor
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
+import { isSingleValueTextPickerState } from "./run_step_wording_picker_contract.js";
 
 type WordingChoiceMode = "text" | "list";
 type WordingChoiceVariant = "default" | "clarify_dual";
@@ -459,7 +460,14 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const questionTextPayload = shouldForceQuestionText
       ? { questionText: String(questionText || "").trim() }
       : (questionText ? { questionText } : {});
-    const contentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
+    const rawContentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
+    const shouldSuppressSingleValueContent =
+      Boolean(rawContentPayload) &&
+      isSingleValueTextPickerState({
+        specialist: specialist as Record<string, unknown>,
+        stepIdHint: effectiveStepId,
+      });
+    const contentPayload = shouldSuppressSingleValueContent ? undefined : rawContentPayload;
     const view = deps.deriveUiViewPayload(viewVariant);
     const dreamBuilderStatementsVisible =
       (viewVariant === "dream_builder_collect" || viewVariant === "dream_builder_refine") &&

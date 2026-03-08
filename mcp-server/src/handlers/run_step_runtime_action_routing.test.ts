@@ -156,6 +156,51 @@ test("runStepRuntimeActionRoutingLayer keeps pending state for free-text turns w
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
 });
 
+test("runStepRuntimeActionRoutingLayer strips stale single-value content before rebuilding a resumed picker payload", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.actionCodeRaw = "ACTION_TARGETGROUP_POSTREFINE_CONFIRM";
+  params.runtime.userMessage = "";
+  params.runtime.state.last_specialist_result = {
+    ...params.runtime.state.last_specialist_result,
+    message: [
+      "Je voorstel is te algemeen.",
+      "",
+      "JE HUIDIGE DOELGROEP VOOR MINDD IS",
+      "",
+      "Industrial manufacturers with technical product development.",
+    ].join("\n"),
+    refined_formulation: "Industrial manufacturers with technical product development.",
+    ui_content: {
+      kind: "single_value",
+      heading: "JE HUIDIGE DOELGROEP VOOR MINDD IS",
+      canonical_text: "Industrial manufacturers with technical product development.",
+    },
+  };
+  params.behavior.buildTextForWidget = ({ specialist }: { specialist: Record<string, unknown> }) =>
+    String(specialist.message || "");
+  params.behavior.attachRegistryPayload = (
+    payload: Record<string, unknown>,
+    specialist: Record<string, unknown>,
+    flagsOverride?: Record<string, boolean | string> | null
+  ) => ({
+    ...payload,
+    specialist,
+    ui: {
+      flags: flagsOverride || {},
+    },
+  });
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.ok(result.response);
+  assert.equal(String((result.response as Record<string, unknown>).text || ""), "");
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.message || ""), "");
+  assert.equal(String(specialist.refined_formulation || ""), "");
+  assert.equal("ui_content" in specialist, false);
+  const responseSpecialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
+  assert.equal("ui_content" in responseSpecialist, false);
+});
+
 test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-text intent when enabled", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(true) as any);
   assert.equal(result.response, null);

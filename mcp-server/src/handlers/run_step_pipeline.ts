@@ -20,6 +20,7 @@ import {
   isTrueFlag,
   readStringArray,
 } from "./run_step_type_guards.js";
+import { normalizePendingPickerSpecialistContract } from "./run_step_wording_picker_contract.js";
 import { resolveCurrentValueFeedbackIntent } from "./run_step_wording_heuristics.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
@@ -993,6 +994,10 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           )
         : null;
       if (pendingChoice?.enabled) {
+        specialistResult = normalizePendingPickerSpecialistContract({
+          specialist: asRecord(specialistResult),
+          stepIdHint: String(asStateRecord(nextState).current_step || ""),
+        });
         wordingChoiceOverride = pendingChoice;
         requireWordingPick = true;
         actionCodesOverride = [];

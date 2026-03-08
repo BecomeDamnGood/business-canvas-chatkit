@@ -123,6 +123,52 @@ test("attachRegistryPayload forwards structured single-value content into ui.con
   });
 });
 
+test("attachRegistryPayload suppresses single-value ui.content while wording-choice picker is active", () => {
+  const helpers = buildHelpers();
+  const canonical = "Mindd droomt van een wereld waarin keuzes rust geven.";
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: canonical,
+      prompt: "",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:ASK:DREAM_MENU_REFINE:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "dream",
+      wording_choice_user_normalized: "Wij willen bedrijven helpen groeien.",
+      wording_choice_agent_current: canonical,
+      ui_content: {
+        kind: "single_value",
+        heading: "JE HUIDIGE DROOM VOOR MINDD IS",
+        canonical_text: canonical,
+      },
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "text",
+      user_text: "Wij willen bedrijven helpen groeien.",
+      suggestion_text: canonical,
+      user_items: [],
+      suggestion_items: [],
+      instruction: "Kies welke formulering je wilt gebruiken.",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(payload.ui?.content, undefined);
+  assert.equal(payload.ui?.wording_choice?.enabled, true);
+});
+
 test("attachRegistryPayload keeps legacy payloads renderable when ui.content is absent", () => {
   const helpers = buildHelpers();
   const payload = helpers.attachRegistryPayload(

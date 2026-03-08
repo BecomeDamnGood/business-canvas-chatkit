@@ -57,6 +57,24 @@ function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
   };
 }
 
+export function shouldSuppressMainCardForWordingChoice(
+  uiPayloadRaw: Record<string, unknown> | null | undefined,
+  uiViewVariantRaw: string | null | undefined
+): boolean {
+  const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
+  const uiViewVariant = String(uiViewVariantRaw || "").trim();
+  const wordingChoicePayload =
+    uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice
+      ? (uiPayload.wording_choice as Record<string, unknown>)
+      : {};
+  const flags = toRecord(uiPayload.flags);
+  return (
+    uiViewVariant === "wording_choice" ||
+    wordingChoicePayload.enabled === true ||
+    String(flags.require_wording_pick || "").trim() === "true"
+  );
+}
+
 function actionContractActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
   const uiPayload = toRecord(resultData.ui);
   const actionContract = toRecord(uiPayload.action_contract);
@@ -905,7 +923,8 @@ export function render(overrideToolOutput?: unknown): void {
   const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
   const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
   const uiQuestionText = String(uiPayload.questionText || "").trim();
-  const singleValueContent = readSingleValueCardContent(uiPayload);
+  const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(uiPayload, uiViewVariant);
+  const singleValueContent = wordingChoiceActive ? null : readSingleValueCardContent(uiPayload);
   const structuredActions = choiceActionsForResult(result);
   const hasStructuredActions = structuredActions.length > 0;
   const promptBody =
@@ -955,7 +974,7 @@ export function render(overrideToolOutput?: unknown): void {
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
     const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
-    if (!renderedSemanticContent) {
+    if (!renderedSemanticContent && !wordingChoiceActive) {
       renderStructuredText(cardDescEl, body || "");
     }
     if (isBenProfile) {

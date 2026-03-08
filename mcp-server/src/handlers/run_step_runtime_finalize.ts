@@ -8,6 +8,7 @@ import type {
 } from "./run_step_ports.js";
 import { createTurnResponseEngine, type TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
+import { isSingleValueTextPickerState } from "./run_step_wording_picker_contract.js";
 
 export type RunStepRuntimeInputMode = "widget" | "chat";
 
@@ -249,6 +250,9 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const contractParts = contractId.split(":");
     const contractStepId = contractParts[0] || "";
     const contractStatus = String(contractParts[1] || "").trim().toLowerCase();
+    if (isSingleValueTextPickerState({ specialist, stepIdHint: contractStepId })) {
+      return "";
+    }
     const isSingleValueConfirmStep = new Set(["purpose", "bigwhy", "role", "entity", "targetgroup"]).has(
       contractStepId
     );
