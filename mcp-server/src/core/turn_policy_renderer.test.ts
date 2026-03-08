@@ -703,3 +703,163 @@ test("single-value valid output suppresses stale feedback reason after user pick
   assert.equal(String(uiContent.feedback_reason_text || ""), "");
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
+
+test("dream builder_refine keeps confirm action for user-driven current-value refinements", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes durven maken.";
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "DreamExplainer";
+  (state as any).business_name = "Mindd";
+  (state as any).__dream_runtime_mode = "builder_refine";
+  (state as any).provisional_by_step = { dream: canonical };
+  (state as any).provisional_source_by_step = { dream: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Ik heb de Droom inspirerender gemaakt.",
+      question: "Wat vind je van deze versie?",
+      refined_formulation: canonical,
+      dream: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.equal(rendered.contractId, "dream:valid_output:DREAM_EXPLAINER_MENU_REFINE");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_EXPLAINER_REFINE_CONFIRM"), true);
+});
+
+test("single-value confirm steps keep confirm actions for user-driven current-value refinements", () => {
+  const cases = [
+    {
+      stepId: "purpose",
+      field: "purpose",
+      activeSpecialist: "Purpose",
+      canonical: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      confirmAction: "ACTION_PURPOSE_REFINE_CONFIRM",
+      contractId: "purpose:valid_output:PURPOSE_MENU_REFINE",
+    },
+    {
+      stepId: "bigwhy",
+      field: "bigwhy",
+      activeSpecialist: "BigWhy",
+      canonical: "Mensen verdienen rust en helderheid wanneer ingewikkelde keuzes op hun pad komen.",
+      confirmAction: "ACTION_BIGWHY_REFINE_CONFIRM",
+      contractId: "bigwhy:valid_output:BIGWHY_MENU_REFINE",
+    },
+    {
+      stepId: "role",
+      field: "role",
+      activeSpecialist: "Role",
+      canonical: "Mindd vertaalt complexe informatie naar richtinggevende keuzes.",
+      confirmAction: "ACTION_ROLE_REFINE_CONFIRM",
+      contractId: "role:valid_output:ROLE_MENU_REFINE",
+    },
+    {
+      stepId: "entity",
+      field: "entity",
+      activeSpecialist: "Entity",
+      canonical: "Mindd is een strategische partner voor complexe groeivraagstukken.",
+      confirmAction: "ACTION_ENTITY_EXAMPLE_CONFIRM",
+      contractId: "entity:valid_output:ENTITY_MENU_EXAMPLE",
+    },
+    {
+      stepId: "targetgroup",
+      field: "targetgroup",
+      activeSpecialist: "TargetGroup",
+      canonical: "Technische mkb-bedrijven met complexe proposities en lange aankooptrajecten.",
+      confirmAction: "ACTION_TARGETGROUP_POSTREFINE_CONFIRM",
+      contractId: "targetgroup:valid_output:TARGETGROUP_MENU_POSTREFINE",
+    },
+  ] as const;
+
+  for (const current of cases) {
+    const state = getDefaultState();
+    (state as any).current_step = current.stepId;
+    (state as any).active_specialist = current.activeSpecialist;
+    (state as any).business_name = "Mindd";
+    (state as any).provisional_by_step = { [current.stepId]: current.canonical };
+    (state as any).provisional_source_by_step = { [current.stepId]: "user_input" };
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: current.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        message: "Ik heb dit scherper geformuleerd.",
+        question: "",
+        refined_formulation: current.canonical,
+        [current.field]: current.canonical,
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    assert.equal(rendered.status, "valid_output");
+    assert.equal(rendered.confirmEligible, true);
+    assert.equal(rendered.contractId, current.contractId);
+    assert.equal(rendered.uiActionCodes.includes(current.confirmAction), true);
+  }
+});
+
+test("presentation accepted provisional remains valid output without synthetic confirm action", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd helpt complexe keuzes vertalen naar een heldere, overtuigende presentatie.";
+  (state as any).current_step = "presentation";
+  (state as any).active_specialist = "Presentation";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { presentation: canonical };
+  (state as any).provisional_source_by_step = { presentation: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "presentation",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Dit is een sterkere briefing voor je presentatie.",
+      question: "",
+      refined_formulation: canonical,
+      presentation_brief: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.equal(rendered.contractId, "presentation:valid_output:PRESENTATION_MENU_ASK");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_PRESENTATION_MAKE"), true);
+});
+
+test("recap render suppresses refined append so known-facts body stays authoritative", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).dream_final = canonical;
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      wants_recap: true,
+      message: "Hier is je recap.",
+      question: "",
+      refined_formulation: canonical,
+      dream: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.equal(message.split(canonical).length - 1, 1);
+  assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
+});

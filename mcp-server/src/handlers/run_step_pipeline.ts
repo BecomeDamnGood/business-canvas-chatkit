@@ -79,8 +79,7 @@ function isNonContributingWordingIntent(intentRaw: string): boolean {
   const intent = String(intentRaw || "").trim();
   return (
     intent === "feedback_on_suggestion" ||
-    intent === "reject_suggestion_explicit" ||
-    intent === "feedback_on_current_value"
+    intent === "reject_suggestion_explicit"
   );
 }
 

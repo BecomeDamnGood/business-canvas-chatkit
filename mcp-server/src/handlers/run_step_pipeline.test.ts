@@ -20,7 +20,7 @@ test("resolveProvisionalSourceForTurn keeps action-route precedence", () => {
   );
 });
 
-test("resolveProvisionalSourceForTurn treats feedback/reject wording intents as system-generated", () => {
+test("resolveProvisionalSourceForTurn treats suggestion feedback/reject intents as system-generated", () => {
   assert.equal(
     resolveProvisionalSourceForTurn({
       actionCodeRaw: "",
@@ -35,12 +35,15 @@ test("resolveProvisionalSourceForTurn treats feedback/reject wording intents as 
     }),
     "system_generated"
   );
+});
+
+test("resolveProvisionalSourceForTurn treats feedback on current value as user-driven evidence", () => {
   assert.equal(
     resolveProvisionalSourceForTurn({
       actionCodeRaw: "",
       submittedTextIntent: "feedback_on_current_value",
     }),
-    "system_generated"
+    "user_input"
   );
 });
 

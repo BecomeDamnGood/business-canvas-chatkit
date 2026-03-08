@@ -1385,6 +1385,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   }
 
   const specialistForDisplay: Record<string, unknown> = { ...specialist };
+  const recapRequested = isRecapRequestedSpecialist(specialistForDisplay);
   const wordingPending = String((specialistForDisplay as any).wording_choice_pending || "").trim() === "true";
   if (isOfftopic && stepId !== "step_0") {
     const field = stepId === "rulesofthegame" ? "rulesofthegame" : stepId;
@@ -1414,7 +1415,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   let answerText =
     String((specialistForDisplay as any).message ?? "").trim() ||
     String((specialistForDisplay as any).refined_formulation ?? "").trim();
-  if (isRecapRequestedSpecialist(specialistForDisplay)) {
+  if (recapRequested) {
     const knownRecap = buildKnownFactsRecap(state);
     if (knownRecap) {
       answerText = knownRecap;
@@ -1707,7 +1708,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     question,
     ui_show_step_intro_chrome: showStepIntroChrome,
     ...(singleValueUiContent ? { ui_content: singleValueUiContent } : {}),
-    ...(useSingleValueConfirmSsot ? { __suppress_refined_append: "true" } : {}),
+    ...((useSingleValueConfirmSsot || recapRequested) ? { __suppress_refined_append: "true" } : {}),
     ui_contract_id: contractId,
     ui_contract_version: UI_CONTRACT_VERSION,
     ui_text_keys: textKeys,

@@ -512,6 +512,30 @@ test("buildTextForWidget keeps short dream-builder support sentence while droppi
   assert.equal(output, "Dat is een goed beginpunt.");
 });
 
+test("buildTextForWidget keeps recap body exclusive when refined append is suppressed", () => {
+  const helpers = buildTextHelpers(() => "");
+  const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "dream:valid_output:DREAM_MENU_REFINE:v1",
+      wants_recap: true,
+      __suppress_refined_append: "true",
+      message: [
+        "DROOM:",
+        canonical,
+      ].join("\n"),
+      refined_formulation: canonical,
+      dream: canonical,
+    },
+    state: {
+      active_specialist: "Dream",
+      current_step: "dream",
+    } as any,
+  });
+
+  assert.equal((output.match(/Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken\./g) || []).length, 1);
+});
+
 test("buildTextForWidget does not append refined dream text when it semantically equals canonical statements", () => {
   const helpers = buildTextHelpers(() => "");
   const statements = [
