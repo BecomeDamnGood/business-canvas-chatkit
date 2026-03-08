@@ -20,6 +20,7 @@ import {
   isTrueFlag,
   readStringArray,
 } from "./run_step_type_guards.js";
+import { resolveCurrentValueFeedbackIntent } from "./run_step_wording_heuristics.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 type RunStepPipelineFlatPorts<TPayload> =
@@ -75,7 +76,11 @@ const AUTOSUGGEST_STEP_IDS = new Set<string>([
 
 function isNonContributingWordingIntent(intentRaw: string): boolean {
   const intent = String(intentRaw || "").trim();
-  return intent === "feedback_on_suggestion" || intent === "reject_suggestion_explicit";
+  return (
+    intent === "feedback_on_suggestion" ||
+    intent === "reject_suggestion_explicit" ||
+    intent === "feedback_on_current_value"
+  );
 }
 
 export function shouldForcePendingWordingChoiceFromIntent(params: {
@@ -136,6 +141,77 @@ export function resolveWordingChoiceSeedUserText(params: {
   if (raw.startsWith("ACTION_")) return "";
   if (raw.startsWith("__ROUTE__")) return "";
   return raw;
+}
+
+export function pickCurrentStepValueForFeedback(state: CanvasState, stepId: string): string {
+  const provisional = String(((state as Record<string, unknown>).provisional_by_step as Record<string, unknown> | undefined)?.[stepId] || "").trim();
+  if (provisional) return provisional;
+  if (stepId === "dream") return String((state as Record<string, unknown>).dream_final || "").trim();
+  return "";
+}
+
+export function shouldTreatTurnAsDreamCurrentValueFeedback(params: {
+  state: CanvasState;
+  stepId: string;
+  userMessage: string;
+  actionCodeRaw?: string;
+  submittedTextIntent?: string;
+}): boolean {
+  const stepId = String(params.stepId || "").trim();
+  const userMessage = String(params.userMessage || "").trim();
+  const actionCodeRaw = String(params.actionCodeRaw || "").trim();
+  const submittedTextIntent = String(params.submittedTextIntent || "").trim();
+  if (stepId !== "dream" || !userMessage || actionCodeRaw) return false;
+  if (submittedTextIntent) return false;
+  const currentValue = pickCurrentStepValueForFeedback(params.state, stepId);
+  if (!currentValue) return false;
+  return resolveCurrentValueFeedbackIntent({
+    stepId,
+    input: userMessage,
+    currentValue,
+  }) === "feedback_on_current_value";
+}
+
+function stateWithDreamCurrentValueFeedbackContext(
+  state: CanvasState,
+  currentValue: string,
+  feedbackText: string
+): CanvasState {
+  const last = ((state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  return {
+    ...state,
+    last_specialist_result: {
+      ...last,
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_target_field: "dream",
+      wording_choice_user_raw: currentValue,
+      wording_choice_user_normalized: currentValue,
+      wording_choice_agent_current: currentValue,
+      wording_choice_presentation: "canonical",
+      pending_suggestion_intent: "feedback_on_current_value",
+      pending_suggestion_anchor: "current_value",
+      pending_suggestion_seed_source: "current_value",
+      pending_suggestion_feedback_text: feedbackText,
+      pending_suggestion_presentation_mode: "canonical",
+      refined_formulation: currentValue,
+      dream: currentValue,
+    },
+  };
+}
+
+function compactFeedbackReasonFromMessage(messageRaw: string): string {
+  const message = String(messageRaw || "").replace(/\r/g, " ").replace(/\s+/g, " ").trim();
+  if (!message) return "";
+  const sentences = message
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+  for (const sentence of sentences) {
+    if (sentence.length < 18) continue;
+    return sentence;
+  }
+  return message;
 }
 
 type AutoSuggestPlan = {
@@ -410,6 +486,9 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
 
     let state = params.state;
     let userMessage = params.userMessage;
+    let submittedTextIntent = String(params.submittedTextIntent || "").trim();
+    let submittedTextAnchor = String(params.submittedTextAnchor || "").trim();
+    let submittedUserText = String(params.submittedUserText || "").trim();
     const currentStepId = String((state as Record<string, unknown>).current_step || "").trim();
     const currentSpecialistAtTurnStart = String((state as Record<string, unknown>).active_specialist || "").trim();
     const autoSuggestPlan = planAutoSuggest({
@@ -421,20 +500,37 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       currentSpecialist: currentSpecialistAtTurnStart,
       dreamRuntimeMode: deps.getDreamRuntimeMode(state),
     });
-    let decision1 = params.decideOrchestration(state, userMessage);
+    const currentDreamValueForFeedback = pickCurrentStepValueForFeedback(state, deps.dreamStepId);
+    const dreamCurrentValueFeedback =
+      shouldTreatTurnAsDreamCurrentValueFeedback({
+        state,
+        stepId: currentStepId,
+        userMessage,
+        actionCodeRaw: params.actionCodeRaw,
+        submittedTextIntent,
+      });
+    if (dreamCurrentValueFeedback) {
+      submittedTextIntent = "feedback_on_current_value";
+      submittedTextAnchor = "current_value";
+      submittedUserText = userMessage;
+    }
+    const stateForSpecialist = dreamCurrentValueFeedback
+      ? stateWithDreamCurrentValueFeedbackContext(state, currentDreamValueForFeedback, userMessage)
+      : state;
+    let decision1 = params.decideOrchestration(stateForSpecialist, userMessage);
     const showSessionIntro = String(decision1.show_session_intro || "");
 
     const call1 = await deps.callSpecialistStrictSafe(
-      { model: params.model, state, decision: decision1, userMessage },
+      { model: params.model, state: stateForSpecialist, decision: decision1, userMessage },
       deps.buildRoutingContext(userMessage),
-      state
+      stateForSpecialist
     );
     if (!call1.ok) return finalizePipelinePayload(call1.payload);
     params.rememberLlmCall(call1.value);
 
     let attempts = call1.value.attempts;
     let specialistResult = asRecord(call1.value.specialistResult);
-    const stateRecord = asStateRecord(state);
+    const stateRecord = asStateRecord(stateForSpecialist);
 
     let autoSuggestApplied = false;
     const shouldRunAutoSuggest =
@@ -586,6 +682,22 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           specialistResult = deps.buildDreamRefineFallbackSpecialist(specialistResult, userMessage, state);
         }
       }
+      const policyRequiresRepair =
+        String((specialistResult as Record<string, unknown>).__dream_policy_requires_repair || "").trim() === "true";
+      const policyRepairSeed = String((specialistResult as Record<string, unknown>).__dream_policy_repair_seed || "").trim();
+      if (!isOfftopic && !isMetaFallback && policyRequiresRepair && policyRepairSeed) {
+        const repairInput = `${deps.dreamForceRefineRoutePrefix}\n${policyRepairSeed}`;
+        const callRepair = await deps.callSpecialistStrictSafe(
+          { model: params.model, state, decision: decision1, userMessage: repairInput },
+          deps.buildRoutingContext(repairInput),
+          state
+        );
+        if (callRepair.ok) {
+          params.rememberLlmCall(callRepair.value);
+          attempts = Math.max(attempts, callRepair.value.attempts);
+          specialistResult = asRecord(callRepair.value.specialistResult);
+        }
+      }
     }
 
     if (
@@ -696,10 +808,26 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         deps.bumpUiI18nCounter(params.uiI18nTelemetry, "step0_escape_ready_recovered_count");
       }
     }
+    if (
+      currentStepIdForOfftopic === deps.dreamStepId &&
+      (
+        submittedTextIntent === "feedback_on_current_value" ||
+        Array.isArray((specialistResult as Record<string, unknown>).__dream_policy_violation_codes)
+      ) &&
+      !String((specialistResult as Record<string, unknown>).feedback_reason_text || "").trim()
+    ) {
+      const fallbackReason = compactFeedbackReasonFromMessage(String(specialistResult.message || ""));
+      if (fallbackReason) {
+        specialistResult = {
+          ...specialistResult,
+          feedback_reason_text: fallbackReason,
+        };
+      }
+    }
 
     const provisionalSourceForMutation = resolveProvisionalSourceForTurn({
       actionCodeRaw: params.actionCodeRaw,
-      submittedTextIntent: String(params.submittedTextIntent || "").trim(),
+      submittedTextIntent,
     });
 
     let nextState = deps.applyPostSpecialistStateMutations({
@@ -800,17 +928,20 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       dreamRuntimeModeForWording
     );
     const userTextForWordingChoice = resolveWordingChoiceSeedUserText({
-      submittedTextIntent: String(params.submittedTextIntent || "").trim(),
-      submittedTextAnchor: String(params.submittedTextAnchor || "").trim(),
-      submittedUserText: String(params.submittedUserText || "").trim(),
+      submittedTextIntent,
+      submittedTextAnchor,
+      submittedUserText,
       userMessage,
       previousSpecialist: previousSpecialistForWordingChoice,
     });
     const forcePendingWordingChoice = shouldForcePendingWordingChoiceFromIntent({
-      submittedTextIntent: String(params.submittedTextIntent || "").trim(),
-      submittedTextAnchor: String(params.submittedTextAnchor || "").trim(),
+      submittedTextIntent,
+      submittedTextAnchor,
     });
     const wordingIntentEligible = isWordingChoiceIntentEligible(asRecord(specialistResult));
+    const skipWordingChoiceForTurn =
+      submittedTextIntent === "feedback_on_current_value" ||
+      String((specialistResult as Record<string, unknown>).__dream_policy_skip_wording_choice || "").trim() === "true";
     if (
       params.wordingChoiceEnabled &&
       !suppressWordingChoiceForAutoSuggest &&
@@ -818,6 +949,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       wordingIntentEligible &&
       eligibleForWordingChoiceTurn &&
       !isCurrentTurnOfftopic &&
+      !skipWordingChoiceForTurn &&
       !isTrueFlag(specialistResult.wording_choice_pending)
     ) {
       const rebuilt = deps.buildWordingChoiceFromTurn({
@@ -830,9 +962,9 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         isOfftopic: false,
         forcePending: forcePendingWordingChoice,
         dreamRuntimeModeRaw: dreamRuntimeModeForWording,
-        submittedTextIntent: String(params.submittedTextIntent || "").trim(),
-        submittedTextAnchor: String(params.submittedTextAnchor || "").trim(),
-        submittedFeedbackText: String(params.submittedUserText || "").trim(),
+        submittedTextIntent,
+        submittedTextAnchor,
+        submittedFeedbackText: submittedUserText,
       });
       specialistResult = rebuilt.specialist;
     }

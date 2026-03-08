@@ -175,6 +175,7 @@ import {
   turnUsageFromAccumulator,
 } from "./run_step_runtime_backbone.js";
 import { applyRulesRuntimePolicy } from "../steps/rulesofthegame_runtime_policy.js";
+import { applyDreamRuntimePolicy } from "../steps/dream_runtime_policy.js";
 import type { RunStepPipelinePorts, RunStepRoutePorts } from "./run_step_ports.js";
 import {
   createRunStepRuntimeStateHelpers,
@@ -781,6 +782,7 @@ const stateUpdateHelpers = createRunStepStateUpdateHelpers({
   dreamExplainerSpecialist: DREAM_EXPLAINER_SPECIALIST,
   withProvisionalValue,
   parseListItems,
+  applyDreamRuntimePolicy,
   applyRulesRuntimePolicy,
   setDreamRuntimeMode,
   getDreamRuntimeMode,

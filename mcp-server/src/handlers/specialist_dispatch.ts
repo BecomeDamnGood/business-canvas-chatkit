@@ -111,6 +111,7 @@ import {
 } from "../steps/rulesofthegame.js";
 import { normalizeRulesOfTheGameOutputContract } from "../steps/rulesofthegame_contract.js";
 import { applyRulesRuntimePolicy } from "../steps/rulesofthegame_runtime_policy.js";
+import { applyDreamRuntimePolicy } from "../steps/dream_runtime_policy.js";
 
 import {
   PRESENTATION_STEP_ID,
@@ -357,7 +358,18 @@ export async function callSpecialistStrict(
       debugLabel: "Dream",
     });
 
-    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
+    const currentDreamValue = String(
+      ((state as any).provisional_by_step || {})[DREAM_STEP_ID] ||
+      (state as any).dream_final ||
+      ""
+    ).trim();
+    const policyApplied = applyDreamRuntimePolicy({
+      specialist: (res.data as unknown as Record<string, unknown>) || {},
+      userMessage,
+      currentValue: currentDreamValue,
+    });
+
+    return { specialistResult: policyApplied.specialist, attempts: res.attempts, usage: res.usage, model };
   }
 
   if (specialist === DREAM_EXPLAINER_SPECIALIST) {

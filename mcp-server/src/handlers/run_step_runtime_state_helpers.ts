@@ -672,6 +672,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
               ? `- feedback_text: ${safe(pendingSuggestionFeedbackText)}`
               : "- feedback_text: (none)",
             "- If intent is feedback_on_suggestion or reject_suggestion_explicit with anchor suggestion, rewrite the previous suggestion itself.",
+            "- If intent is feedback_on_current_value with anchor current_value, rewrite the current accepted wording itself.",
             "- Stay on step content. Do not switch to coaching, motivation, process explanation, or meta-step framing.",
             "- Return the next candidate wording for the same step field.",
           ].join("\n")

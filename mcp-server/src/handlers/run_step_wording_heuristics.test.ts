@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   resolvePendingWordingChoiceIntent,
+  resolveCurrentValueFeedbackIntent,
   parseListItems,
   shouldTreatAsStepContributingInput,
 } from "./run_step_wording_heuristics.js";
@@ -77,6 +78,44 @@ test("resolvePendingWordingChoiceIntent resolves semantic intent and anchor agai
       input: "Ik bedoel vooral familiebedrijven met een technische kern.",
     }),
     { intent: "content_input", anchor: "user_input" }
+  );
+});
+
+test("resolveCurrentValueFeedbackIntent treats Dream wording feedback as feedback on current value", () => {
+  const currentValue =
+    "Mindd droomt van een wereld waarin mensen zich vol vertrouwen laten inspireren bij hun keuzes, dankzij de opkomst van AI.";
+
+  assert.equal(
+    resolveCurrentValueFeedbackIntent({
+      stepId: "dream",
+      input: "Ik vind dit een saaie formulering",
+      currentValue,
+    }),
+    "feedback_on_current_value"
+  );
+  assert.equal(
+    resolveCurrentValueFeedbackIntent({
+      stepId: "dream",
+      input: "Dit is te veel op AI gebaseerd",
+      currentValue,
+    }),
+    "feedback_on_current_value"
+  );
+  assert.equal(
+    resolveCurrentValueFeedbackIntent({
+      stepId: "dream",
+      input: "Maak dit minder technologie-afhankelijk",
+      currentValue,
+    }),
+    "feedback_on_current_value"
+  );
+  assert.equal(
+    resolveCurrentValueFeedbackIntent({
+      stepId: "dream",
+      input: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes durven maken die bij hen passen.",
+      currentValue,
+    }),
+    "content_input"
   );
 });
 

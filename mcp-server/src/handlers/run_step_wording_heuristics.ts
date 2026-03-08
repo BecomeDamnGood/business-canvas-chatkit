@@ -201,6 +201,8 @@ export type PendingWordingChoiceIntentResolution = {
   anchor: PendingWordingChoiceTextAnchor;
 };
 
+export type CurrentValueFeedbackIntent = "feedback_on_current_value" | "content_input";
+
 function normalizeIntentComparable(input: string): string {
   return String(input || "")
     .toLowerCase()
@@ -217,6 +219,53 @@ function similarityToPrototype(inputComparable: string, prototypes: string[]): n
     if (score > best) best = score;
   }
   return best;
+}
+
+function looksLikeDreamValueInput(input: string): boolean {
+  const comparable = normalizeIntentComparable(input);
+  if (!comparable) return false;
+  if (/\b(dreams of a world|dreams of a future|droomt van een wereld|droomt van een toekomst)\b/i.test(input)) {
+    return true;
+  }
+  const tokens = tokenizeWords(comparable);
+  return tokens.length >= 10 && /^(?:[a-z0-9]+\s+){1,6}(dreams|droomt)\b/i.test(comparable);
+}
+
+export function resolveCurrentValueFeedbackIntent(params: {
+  stepId: string;
+  input: string;
+  currentValue?: string;
+}): CurrentValueFeedbackIntent {
+  const stepId = String(params.stepId || "").trim();
+  const input = String(params.input || "").trim();
+  const currentValue = String(params.currentValue || "").trim();
+  if (stepId !== "dream" || !input || !currentValue) return "content_input";
+  if (looksLikeDreamValueInput(input)) return "content_input";
+  const comparable = normalizeIntentComparable(input);
+  if (!comparable) return "content_input";
+
+  const wordingFeedbackPattern =
+    /\b(formulering|bewoording|zin|sentence|wording|phrasing|saaie|saai|vlak|wollig|abstract|concreet|krachtig|krachtiger|helder|helderder|duidelijker|inspirerend|inspirerender)\b/i;
+  const technologyCorrectionPattern =
+    /\b(ai|technologie|technology|tool|platform)\b/i;
+  const reductionPattern =
+    /\b(te veel|too much|minder|less|afhankelijk|based|gebaseerd|tool first|tool-first|technology first|technology-first)\b/i;
+  const rewritePattern =
+    /^(maak|make|herschrijf|rewrite|herformuleer|rephrase|verwoord|formuleer|remove|haal)\b/i;
+  const demonstrativePattern = /\b(dit|deze|this|current|huidige)\b/i;
+  const opinionPattern = /^(ik vind|i find|dit is|this is|dit voelt|this feels|dit klinkt|this sounds)\b/i;
+
+  if (wordingFeedbackPattern.test(input)) return "feedback_on_current_value";
+  if (technologyCorrectionPattern.test(input) && reductionPattern.test(input)) {
+    return "feedback_on_current_value";
+  }
+  if (rewritePattern.test(input) && demonstrativePattern.test(input)) {
+    return "feedback_on_current_value";
+  }
+  if (opinionPattern.test(input) && demonstrativePattern.test(input)) {
+    return "feedback_on_current_value";
+  }
+  return "content_input";
 }
 
 function contentDensity(tokens: string[]): number {

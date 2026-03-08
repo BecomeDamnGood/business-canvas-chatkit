@@ -31,6 +31,7 @@ function buildHelpers() {
     dreamExplainerSpecialist: "DreamExplainer",
     withProvisionalValue,
     parseListItems,
+    applyDreamRuntimePolicy: ({ specialist }) => ({ specialist, canStage: true }),
     applyRulesRuntimePolicy: ({ specialist }) => ({ specialist }),
     setDreamRuntimeMode: () => {},
     getDreamRuntimeMode: () => "self",
@@ -127,6 +128,57 @@ test("applyStateUpdate skips role staging for framing intro values", () => {
     showSessionIntroUsed: "false",
   });
   assert.equal(String((next as any).provisional_by_step?.role || ""), "");
+});
+
+test("applyStateUpdate does not stage dream when runtime policy blocks it", () => {
+  const withProvisionalValue = (state: any, stepId: string, value: string) => {
+    const next = { ...(state || {}) };
+    const map = next.provisional_by_step && typeof next.provisional_by_step === "object"
+      ? { ...next.provisional_by_step }
+      : {};
+    map[stepId] = String(value || "").trim();
+    next.provisional_by_step = map;
+    return next;
+  };
+  const helpers = createRunStepStateUpdateHelpers({
+    step0Id: "step0",
+    dreamStepId: "dream",
+    purposeStepId: "purpose",
+    bigwhyStepId: "bigwhy",
+    roleStepId: "role",
+    entityStepId: "entity",
+    strategyStepId: "strategy",
+    targetgroupStepId: "targetgroup",
+    productsservicesStepId: "productsservices",
+    rulesofthegameStepId: "rulesofthegame",
+    presentationStepId: "presentation",
+    dreamSpecialist: "DreamSpecialist",
+    dreamExplainerSpecialist: "DreamExplainer",
+    withProvisionalValue,
+    parseListItems,
+    applyDreamRuntimePolicy: ({ specialist }) => ({
+      specialist: {
+        ...specialist,
+        __dream_policy_can_stage: "false",
+      },
+      canStage: false,
+    }),
+    applyRulesRuntimePolicy: ({ specialist }) => ({ specialist }),
+    setDreamRuntimeMode: () => {},
+    getDreamRuntimeMode: () => "self",
+  });
+
+  const next = helpers.applyStateUpdate({
+    prev: { current_step: "dream" } as any,
+    decision: { current_step: "dream", specialist_to_call: "DreamSpecialist" } as any,
+    specialistResult: {
+      dream: "Mindd droomt van een wereld waarin mensen keuzes maken dankzij AI.",
+      refined_formulation: "Mindd droomt van een wereld waarin mensen keuzes maken dankzij AI.",
+    },
+    showSessionIntroUsed: "false",
+  });
+
+  assert.equal(String((next as any).provisional_by_step?.dream || ""), "");
 });
 
 test("applyStateUpdate skips purpose staging for framing intro values", () => {

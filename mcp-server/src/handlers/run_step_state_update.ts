@@ -40,6 +40,11 @@ type RunStepStateUpdateDeps = {
     source: ProvisionalSource
   ) => CanvasState;
   parseListItems: (value: string) => string[];
+  applyDreamRuntimePolicy: (params: {
+    specialist: Record<string, unknown>;
+    userMessage?: string;
+    currentValue?: string;
+  }) => { specialist: Record<string, unknown>; canStage: boolean };
   applyRulesRuntimePolicy: (params: {
     specialist: Record<string, unknown>;
     previousStatements?: string[];
@@ -176,9 +181,19 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
     };
 
     if (nextStep === deps.dreamStepId) {
-      stageFieldValue(deps.dreamStepId, specialistResult?.dream, specialistResult?.refined_formulation);
-    }
-    if (nextStep === deps.purposeStepId) {
+      const policyApplied = deps.applyDreamRuntimePolicy({
+        specialist: (specialistResult || {}) as Record<string, unknown>,
+        currentValue: String(
+          (prev as any)?.provisional_by_step?.[deps.dreamStepId] ||
+          (prev as any)?.dream_final ||
+          ""
+        ).trim(),
+      });
+      specialistResult = policyApplied.specialist;
+      if (policyApplied.canStage) {
+        stageFieldValue(deps.dreamStepId, specialistResult?.dream, specialistResult?.refined_formulation);
+      }
+    } else if (nextStep === deps.purposeStepId) {
       stageFieldValue(deps.purposeStepId, specialistResult?.purpose, specialistResult?.refined_formulation);
     }
     if (nextStep === deps.bigwhyStepId) {
