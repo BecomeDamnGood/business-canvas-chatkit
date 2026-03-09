@@ -271,6 +271,10 @@ export const UI_STRINGS_LOCALE_RU: Record<string, string> = {
     "wordingChoice.chooseVersion": "Выбрать эту версию",
     "wordingChoice.useInputFallback": "Использовать этот ввод",
     "wordingChoiceHeading": "Вот ваш ввод:",
+    "wordingChoiceGroupedCompareUserLabel": "Вот ваша компактная формулировка:",
+    "wordingChoiceGroupedCompareSuggestionLabel": "Вот мое предложение:",
+    "wordingChoiceGroupedCompareInstruction": "Выберите версию, которая лучше всего подходит к оставшемуся различию.",
+    "wordingChoiceGroupedCompareRetainedHeading": "Эти пункты уже остаются в финальном списке:",
     "wordingChoiceInstruction": "Пожалуйста, нажмите на то, что подходит вам лучше всего.",
     "wordingChoiceSuggestionLabel": "Вот моё предложение:",
 } as const;

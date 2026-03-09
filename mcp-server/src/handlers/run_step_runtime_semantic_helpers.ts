@@ -155,6 +155,21 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
       ...(Array.isArray((specialist as Record<string, unknown>).wording_choice_suggestion_items)
         ? ((specialist as Record<string, unknown>).wording_choice_suggestion_items as unknown[]).map((item) => String(item || ""))
         : []),
+      ...(Array.isArray((specialist as Record<string, unknown>).wording_choice_compare_units)
+        ? ((specialist as Record<string, unknown>).wording_choice_compare_units as unknown[]).flatMap((entry) => {
+            const record = entry && typeof entry === "object" && !Array.isArray(entry)
+              ? (entry as Record<string, unknown>)
+              : {};
+            return [
+              String(record.user_text || ""),
+              String(record.suggestion_text || ""),
+              ...(Array.isArray(record.user_items) ? (record.user_items as unknown[]).map((item) => String(item || "")) : []),
+              ...(Array.isArray(record.suggestion_items)
+                ? (record.suggestion_items as unknown[]).map((item) => String(item || ""))
+                : []),
+            ];
+          })
+        : []),
     ];
     if ([...userFacingCandidates, ...userFacingListCandidates].some((value) => hasRawMarkup(value))) {
       return "user_facing_markup_detected";
@@ -356,6 +371,24 @@ export function createRunStepRuntimeSemanticHelpers(deps: CreateRunStepRuntimeSe
         (next as Record<string, unknown>).wording_choice_suggestion_items = (
           (next as Record<string, unknown>).wording_choice_suggestion_items as unknown[]
         ).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean);
+      }
+      if (Array.isArray((next as Record<string, unknown>).wording_choice_compare_units)) {
+        (next as Record<string, unknown>).wording_choice_compare_units = (
+          (next as Record<string, unknown>).wording_choice_compare_units as unknown[]
+        ).map((entry, index) => {
+          const record: Record<string, unknown> = entry && typeof entry === "object" && !Array.isArray(entry)
+            ? { ...(entry as Record<string, unknown>) }
+            : { id: `unit_${index + 1}` };
+          record.user_text = stripMarkupPreserveLines(String(record.user_text || ""));
+          record.suggestion_text = stripMarkupPreserveLines(String(record.suggestion_text || ""));
+          record.user_items = Array.isArray(record.user_items)
+            ? (record.user_items as unknown[]).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean)
+            : [];
+          record.suggestion_items = Array.isArray(record.suggestion_items)
+            ? (record.suggestion_items as unknown[]).map((item) => stripMarkupPreserveLines(String(item || ""))).filter(Boolean)
+            : [];
+          return record;
+        });
       }
     }
     return next;

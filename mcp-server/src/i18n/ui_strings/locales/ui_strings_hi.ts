@@ -260,6 +260,10 @@ export const UI_STRINGS_LOCALE_HI: Record<string, string> = {
     "wordingChoice.chooseVersion": "यह संस्करण चुनें",
     "wordingChoice.useInputFallback": "यह इनपुट उपयोग करें",
     "wordingChoiceHeading": "यह आपका इनपुट है:",
+    "wordingChoiceGroupedCompareUserLabel": "यह आपकी संक्षिप्त अभिव्यक्ति है:",
+    "wordingChoiceGroupedCompareSuggestionLabel": "यह मेरा सुझाव है:",
+    "wordingChoiceGroupedCompareInstruction": "जो संस्करण बाकी अंतर के लिए सबसे सही लगे, उसे चुनें।",
+    "wordingChoiceGroupedCompareRetainedHeading": "ये बिंदु पहले से अंतिम सूची में बने रहेंगे:",
     "wordingChoiceInstruction": "कृपया जो सबसे अच्छा लगे उस पर क्लिक करें।",
     "wordingChoiceSuggestionLabel": "मेरी सुझावित भाषा यह होगी:",
 } as const;

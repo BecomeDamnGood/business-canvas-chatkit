@@ -270,6 +270,10 @@ export const UI_STRINGS_LOCALE_HU: Record<string, string> = {
     "wordingChoice.chooseVersion": "Válaszd ezt a verziót",
     "wordingChoice.useInputFallback": "Használd ezt a bevitelt",
     "wordingChoiceHeading": "Ez a te beviteled:",
+    "wordingChoiceGroupedCompareUserLabel": "Ez a te tömör megfogalmazásod:",
+    "wordingChoiceGroupedCompareSuggestionLabel": "Ez az én javaslatom:",
+    "wordingChoiceGroupedCompareInstruction": "Válaszd azt a verziót, amelyik a legjobban illik a fennmaradó különbséghez.",
+    "wordingChoiceGroupedCompareRetainedHeading": "Ezek a pontok már benne maradnak a végső listában:",
     "wordingChoiceInstruction": "Kérlek kattints arra, ami a legjobban megfelel.",
     "wordingChoiceSuggestionLabel": "Ez lenne a javaslatom:",
 } as const;

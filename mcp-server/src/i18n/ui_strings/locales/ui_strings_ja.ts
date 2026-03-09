@@ -260,6 +260,10 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "wordingChoice.chooseVersion": "このバージョンを選ぶ",
     "wordingChoice.useInputFallback": "この入力を使う",
     "wordingChoiceHeading": "あなたの入力：",
+    "wordingChoiceGroupedCompareUserLabel": "あなたのコンパクトな表現はこちらです：",
+    "wordingChoiceGroupedCompareSuggestionLabel": "私の提案はこちらです：",
+    "wordingChoiceGroupedCompareInstruction": "残っている違いに最も合う方を選んでください。",
+    "wordingChoiceGroupedCompareRetainedHeading": "これらの項目は最終リストにそのまま残ります：",
     "wordingChoiceInstruction": "一番しっくりくるものをクリックしてください。",
     "wordingChoiceSuggestionLabel": "私の提案：",
 } as const;

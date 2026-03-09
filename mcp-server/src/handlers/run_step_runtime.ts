@@ -384,6 +384,10 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
   safe.wording_choice_variant = "";
   safe.wording_choice_user_label = "";
   safe.wording_choice_suggestion_label = "";
+  safe.wording_choice_compare_mode = "";
+  safe.wording_choice_compare_cursor = "";
+  safe.wording_choice_compare_units = [];
+  safe.wording_choice_compare_segments = [];
   safe.wording_choice_user_variant_semantics = "";
   safe.wording_choice_user_variant_stepworthy = "";
   safe.feedback_reason_key = "";
@@ -493,8 +497,12 @@ function normalizeNoiseComparable(value: string): string {
 function wordingPanelNoiseComparables(state: CanvasState | null | undefined): Set<string> {
   const keys = [
     "wordingChoiceHeading",
+    "wordingChoiceGroupedCompareUserLabel",
     "wordingChoiceSuggestionLabel",
+    "wordingChoiceGroupedCompareSuggestionLabel",
     "wordingChoiceInstruction",
+    "wordingChoiceGroupedCompareInstruction",
+    "wordingChoiceGroupedCompareRetainedHeading",
     "wording.choice.context.default",
     "wordingChoice.chooseVersion",
     "wordingChoice.useInputFallback",

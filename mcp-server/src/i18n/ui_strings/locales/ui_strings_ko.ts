@@ -260,6 +260,10 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "wordingChoice.chooseVersion": "이 버전 선택",
     "wordingChoice.useInputFallback": "이 입력 사용",
     "wordingChoiceHeading": "당신의 입력:",
+    "wordingChoiceGroupedCompareUserLabel": "당신의 간결한 표현은 이것입니다:",
+    "wordingChoiceGroupedCompareSuggestionLabel": "제 제안은 이것입니다:",
+    "wordingChoiceGroupedCompareInstruction": "남아 있는 차이에 가장 잘 맞는 버전을 선택해 주세요.",
+    "wordingChoiceGroupedCompareRetainedHeading": "이 항목들은 이미 최종 목록에 유지됩니다:",
     "wordingChoiceInstruction": "가장 잘 맞는 것을 클릭해 주세요.",
     "wordingChoiceSuggestionLabel": "제 제안:",
 } as const;

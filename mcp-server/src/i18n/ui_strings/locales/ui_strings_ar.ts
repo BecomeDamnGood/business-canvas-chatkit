@@ -2,6 +2,10 @@ import { UI_STRINGS_SOURCE_EN } from "../../ui_strings_defaults.js";
 
 export const UI_STRINGS_LOCALE_AR: Record<string, string> = {
     ...UI_STRINGS_SOURCE_EN,
+    "wordingChoiceGroupedCompareUserLabel": "هذه هي صياغتك المختصرة:",
+    "wordingChoiceGroupedCompareSuggestionLabel": "هذا هو اقتراحي:",
+    "wordingChoiceGroupedCompareInstruction": "اختر النسخة التي تناسب الاختلاف المتبقي بشكل أفضل.",
+    "wordingChoiceGroupedCompareRetainedHeading": "هذه النقاط ستبقى بالفعل في القائمة النهائية:",
     "dreamBuilder.question.base": "إذا نظرت من 5 إلى 10 سنوات إلى الأمام، فما الفرص أو التهديدات الكبرى التي تراها، وما التغييرات الإيجابية التي تأملها؟ صُغها كعبارات واضحة.",
     "dreamBuilder.question.more": "ما التغييرات الأخرى التي تراها في المستقبل، سواء كانت إيجابية أو سلبية؟ أطلق العنان لخيالك وصُغها كعبارات واضحة.",
     "dreamBuilder.switchSelf.headline": "تابع مع تمرين الحلم.",

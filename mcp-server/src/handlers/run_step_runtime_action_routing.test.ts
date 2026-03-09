@@ -440,6 +440,94 @@ test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible pick
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
 });
 
+test("runStepRuntimeActionRoutingLayer keeps strategy confirm blocked while grouped compare units are still pending", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.actionCodeRaw = "ACTION_STRATEGY_CONFIRM_SATISFIED";
+  params.runtime.userMessage = "";
+  params.runtime.state = {
+    current_step: "strategy",
+    active_specialist: "Strategy",
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_target_field: "strategy",
+      wording_choice_presentation: "picker",
+      wording_choice_compare_mode: "grouped_units",
+      wording_choice_compare_cursor: "0",
+      wording_choice_compare_segments: [
+        { kind: "retained", items: ["Recurring revenue", "Expert-led delivery"] },
+        { kind: "unit", unit_id: "unit_1" },
+      ],
+      wording_choice_compare_units: [
+        {
+          id: "unit_1",
+          user_items: ["Operational simplicity"],
+          suggestion_items: ["Operational focus"],
+          user_text: "Operational simplicity",
+          suggestion_text: "Operational focus",
+          resolution: "",
+          confidence: "anchored",
+        },
+      ],
+      wording_choice_user_items: ["Operational simplicity"],
+      wording_choice_suggestion_items: ["Operational focus"],
+      wording_choice_user_normalized: "Operational simplicity",
+      wording_choice_agent_current: "Operational focus",
+      statements: ["Recurring revenue", "Expert-led delivery"],
+      strategy: ["Recurring revenue", "Expert-led delivery"].join("\n"),
+    },
+  };
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.ok(result.response);
+  const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+});
+
+test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped compare units are still pending", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.actionCodeRaw = "ACTION_RULES_CONFIRM_ALL";
+  params.runtime.userMessage = "";
+  params.runtime.state = {
+    current_step: "rulesofthegame",
+    active_specialist: "RulesOfTheGame",
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_target_field: "rulesofthegame",
+      wording_choice_presentation: "picker",
+      wording_choice_compare_mode: "grouped_units",
+      wording_choice_compare_cursor: "0",
+      wording_choice_compare_segments: [
+        { kind: "retained", items: ["We communicate proactively.", "We keep commitments."] },
+        { kind: "unit", unit_id: "unit_1" },
+      ],
+      wording_choice_compare_units: [
+        {
+          id: "unit_1",
+          user_items: ["We resolve blockers quickly."],
+          suggestion_items: ["We escalate blockers early and visibly."],
+          user_text: "We resolve blockers quickly.",
+          suggestion_text: "We escalate blockers early and visibly.",
+          resolution: "",
+          confidence: "anchored",
+        },
+      ],
+      wording_choice_user_items: ["We resolve blockers quickly."],
+      wording_choice_suggestion_items: ["We escalate blockers early and visibly."],
+      wording_choice_user_normalized: "We resolve blockers quickly.",
+      wording_choice_agent_current: "We escalate blockers early and visibly.",
+      statements: ["We communicate proactively.", "We keep commitments."],
+      rulesofthegame: ["We communicate proactively.", "We keep commitments."].join("\n"),
+    },
+  };
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.ok(result.response);
+  const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+});
+
 test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-text intent when enabled", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(true) as any);
   assert.equal(result.response, null);

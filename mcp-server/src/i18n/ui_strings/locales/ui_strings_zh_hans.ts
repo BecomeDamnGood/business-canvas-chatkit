@@ -260,6 +260,10 @@ export const UI_STRINGS_LOCALE_ZH_HANS: Record<string, string> = {
     "wordingChoice.chooseVersion": "选择这个版本",
     "wordingChoice.useInputFallback": "使用这个输入",
     "wordingChoiceHeading": "这是你的输入：",
+    "wordingChoiceGroupedCompareUserLabel": "这是你的紧凑表述：",
+    "wordingChoiceGroupedCompareSuggestionLabel": "这是我的建议：",
+    "wordingChoiceGroupedCompareInstruction": "请选择最适合剩余差异的版本。",
+    "wordingChoiceGroupedCompareRetainedHeading": "这些要点已经会保留在最终列表中：",
     "wordingChoiceInstruction": "请选择最适合你的版本。",
     "wordingChoiceSuggestionLabel": "这是我的建议：",
 } as const;

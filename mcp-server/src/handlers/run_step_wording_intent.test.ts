@@ -7,6 +7,10 @@ function buildHelpers(intentEnabled: boolean) {
   const defaultUi: Record<string, string> = {
     wordingChoiceHeading: "This is your input:",
     wordingChoiceInterpretedListHeading: "This is what I took from your input:",
+    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
+    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
+    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "wording.choice.context.default": "Please choose the wording that fits best.",
@@ -95,6 +99,10 @@ function buildHeadingAwareSingleValueHelpers(params: {
   const defaultUi: Record<string, string> = {
     wordingChoiceHeading: "This is your input:",
     wordingChoiceInterpretedListHeading: "This is what I took from your input:",
+    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
+    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
+    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "wording.choice.context.default": "Please choose the wording that fits best.",
@@ -478,7 +486,7 @@ test("buildWordingChoiceFromTurn treats remove-line requests as list edit intent
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_list_semantics || ""), "full");
 });
 
-test("buildWordingChoiceFromTurn compares strategy wording choices as full interpreted sets", () => {
+test("buildWordingChoiceFromTurn compares strategy wording choices per differing compare unit", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
     stepId: "strategy",
@@ -513,29 +521,15 @@ test("buildWordingChoiceFromTurn compares strategy wording choices as full inter
 
   assert.ok(result.wordingChoice);
   assert.equal(result.wordingChoice?.mode, "list");
-  assert.equal(result.wordingChoice?.user_label, "This is what I took from your input:");
+  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
   assert.equal(
     String((result.specialist as Record<string, unknown>).wording_choice_list_semantics || ""),
     "full"
   );
-  assert.deepEqual(result.wordingChoice?.user_items, [
-    "Recurring revenue",
-    "Expert-led delivery",
-    "Operational simplicity",
-  ]);
-  assert.deepEqual(result.wordingChoice?.suggestion_items, [
-    "Recurring revenue",
-    "Expert-led delivery",
-    "Operational focus",
-  ]);
-  assert.equal(
-    result.wordingChoice?.user_text,
-    [
-      "Recurring revenue",
-      "Expert-led delivery",
-      "Operational simplicity",
-    ].join("\n")
-  );
+  assert.deepEqual(result.wordingChoice?.user_items, ["Operational simplicity"]);
+  assert.deepEqual(result.wordingChoice?.suggestion_items, ["Operational focus"]);
+  assert.equal(result.wordingChoice?.user_text, "Operational simplicity");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
 });
 
 test("buildWordingChoiceFromPendingSpecialist applies interpreted list labels for business list steps", () => {
@@ -574,6 +568,285 @@ test("buildWordingChoiceFromPendingSpecialist applies interpreted list labels fo
   assert.ok(wordingChoice);
   assert.equal(wordingChoice?.user_label, "This is what I took from your input:");
   assert.equal(wordingChoice?.suggestion_label, "This would be my suggestion:");
+});
+
+test("buildWordingChoiceFromTurn creates grouped compare unit for free-text strategy input and keeps agreed bullets visible", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "strategy",
+    state: {} as any,
+    activeSpecialist: "Strategy",
+    previousSpecialist: {
+      statements: ["Recurring revenue", "Expert-led delivery"],
+      strategy: ["Recurring revenue", "Expert-led delivery"].join("\n"),
+    },
+    specialistResult: {
+      message: "This is what your current strategy looks like.",
+      refined_formulation: [
+        "Recurring revenue",
+        "Expert-led delivery",
+        "Operational focus",
+      ].join("\n"),
+      statements: [
+        "Recurring revenue",
+        "Expert-led delivery",
+        "Operational focus",
+      ],
+    },
+    userTextRaw: "Operational simplicity",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
+  assert.equal(result.wordingChoice?.suggestion_label, "This is my suggestion:");
+  assert.deepEqual(result.wordingChoice?.user_items, ["Operational simplicity"]);
+  assert.deepEqual(result.wordingChoice?.suggestion_items, ["Operational focus"]);
+  assert.match(String(result.wordingChoice?.instruction || ""), /These points already stay in the final list:/);
+  assert.match(String(result.wordingChoice?.instruction || ""), /Recurring revenue/);
+  assert.match(String(result.wordingChoice?.instruction || ""), /Expert-led delivery/);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+});
+
+test("buildWordingChoiceFromTurn supports 1 user sentence versus 2 suggestion bullets as one compare unit", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "productsservices",
+    state: {} as any,
+    activeSpecialist: "ProductsServices",
+    previousSpecialist: {
+      statements: [],
+      productsservices: "",
+    },
+    specialistResult: {
+      message: "This is the sharpened offer.",
+      refined_formulation: ["AI audits", "Implementation guidance"].join("\n"),
+      statements: ["AI audits", "Implementation guidance"],
+    },
+    userTextRaw: "AI audits and implementation guidance",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.deepEqual(result.wordingChoice?.user_items, ["AI audits and implementation guidance"]);
+  assert.deepEqual(result.wordingChoice?.suggestion_items, ["AI audits", "Implementation guidance"]);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+});
+
+test("buildWordingChoiceFromTurn supports 3 user bullets versus 1 compact suggestion as one compare unit", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "rulesofthegame",
+    state: {} as any,
+    activeSpecialist: "RulesOfTheGame",
+    previousSpecialist: {
+      statements: [],
+      rulesofthegame: "",
+    },
+    specialistResult: {
+      message: "This is the compact rule suggestion.",
+      refined_formulation: "We keep each other accountable for delivery.",
+      statements: ["We keep each other accountable for delivery."],
+    },
+    userTextRaw: [
+      "We do what we promise.",
+      "We follow up on ownership.",
+      "We resolve blockers fast.",
+    ].join("\n"),
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.deepEqual(result.wordingChoice?.user_items, [
+    "We do what we promise.",
+    "We follow up on ownership.",
+    "We resolve blockers fast.",
+  ]);
+  assert.deepEqual(result.wordingChoice?.suggestion_items, [
+    "We keep each other accountable for delivery.",
+  ]);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+});
+
+test("buildWordingChoiceFromTurn directly accepts one valid strategy sentence when it already meets the step wording", () => {
+  const defaultUi: Record<string, string> = {
+    wordingChoiceHeading: "This is your input:",
+    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
+    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
+    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
+    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
+    wordingChoiceSuggestionLabel: "This would be my suggestion:",
+    wordingChoiceInstruction: "Please click what suits you best.",
+    "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wording.feedback.user_pick.reason.default":
+      "This keeps your original meaning while staying aligned with this step.",
+    "wordingChoice.chooseVersion": "Choose this version",
+    "wordingChoice.useInputFallback": "Use this input",
+  };
+  const canonicalize = (input: string) =>
+    String(input || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const helpers = createRunStepWordingHelpers({
+    step0Id: "step0",
+    presentationStepId: "presentation",
+    dreamStepId: "dream",
+    strategyStepId: "strategy",
+    productsservicesStepId: "productsservices",
+    rulesofthegameStepId: "rulesofthegame",
+    entityStepId: "entity",
+    dreamExplainerSpecialist: "DreamExplainer",
+    normalizeDreamRuntimeMode: () => "self",
+    uiDefaultString: (key: string) => defaultUi[key] || "",
+    uiStringFromStateMap: (_state, _key, fallback) => fallback,
+    fieldForStep: (stepId: string) => {
+      if (stepId === "strategy") return "strategy";
+      return "";
+    },
+    parseListItems: (input: string) =>
+      String(input || "")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    splitSentenceItems: (input: string) =>
+      String(input || "")
+        .split(/[.!?]+\s+/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    normalizeListUserInput: (input: string) => String(input || "").trim(),
+    normalizeLightUserInput: (input: string) => String(input || "").trim(),
+    normalizeUserInputAgainstSuggestion: (input: string) => String(input || "").trim(),
+    canonicalizeComparableText: canonicalize,
+    stripChoiceInstructionNoise: (input: string) => String(input || "").trim(),
+    tokenizeWords: (input: string) =>
+      String(input || "")
+        .toLowerCase()
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter(Boolean),
+    isMaterialRewriteCandidate: () => true,
+    shouldTreatAsStepContributingInput: () => true,
+    pickDualChoiceSuggestion: (_stepId, specialistResult) =>
+      String((specialistResult as Record<string, unknown>)?.refined_formulation || "").trim(),
+    areEquivalentWordingVariants: ({ userItems, suggestionItems }) =>
+      JSON.stringify(userItems.map(canonicalize)) === JSON.stringify(suggestionItems.map(canonicalize)),
+    normalizeEntityPhrase: (input: string) => String(input || "").trim(),
+    withProvisionalValue: (state) => state,
+    renderFreeTextTurnPolicy: () => ({
+      specialist: {},
+      contractId: "",
+      contractVersion: "",
+      textKeys: [],
+    }),
+    applyUiPhaseByStep: () => {},
+    isUiWordingFeedbackKeyedV1Enabled: () => false,
+    isWordingChoiceIntentV1Enabled: () => true,
+    bumpUiI18nCounter: () => {},
+    wordingSelectionMessage: () => "",
+  });
+
+  const line = "Focus on recurring revenue with implementation retainers";
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "strategy",
+    state: {} as any,
+    activeSpecialist: "Strategy",
+    previousSpecialist: {
+      statements: [],
+      strategy: "",
+    },
+    specialistResult: {
+      message: "This focus point is already sharp enough.",
+      refined_formulation: line,
+      statements: [line],
+    },
+    userTextRaw: line,
+    isOfftopic: false,
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((result.specialist as Record<string, unknown>).refined_formulation || ""), line);
+  assert.deepEqual((result.specialist as Record<string, unknown>).statements, [line]);
+  assert.equal(String((result.specialist as Record<string, unknown>).strategy || ""), line);
+});
+
+test("applyWordingPickSelection resolves grouped compare units into one final productsservices list", () => {
+  const helpers = buildHelpers(true);
+  const state = {
+    current_step: "productsservices",
+    active_specialist: "ProductsServices",
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_target_field: "productsservices",
+      wording_choice_presentation: "picker",
+      wording_choice_variant: "grouped_list_units",
+      wording_choice_compare_mode: "grouped_units",
+      wording_choice_compare_cursor: "0",
+      wording_choice_compare_segments: [
+        { kind: "retained", items: ["Strategy workshops"] },
+        { kind: "unit", unit_id: "unit_1" },
+        { kind: "unit", unit_id: "unit_2" },
+      ],
+      wording_choice_compare_units: [
+        {
+          id: "unit_1",
+          user_items: ["AI websites"],
+          suggestion_items: ["AI-compatible websites"],
+          user_text: "AI websites",
+          suggestion_text: "AI-compatible websites",
+          resolution: "",
+          confidence: "anchored",
+        },
+        {
+          id: "unit_2",
+          user_items: ["Branding retainers"],
+          suggestion_items: ["Brand systems"],
+          user_text: "Branding retainers",
+          suggestion_text: "Brand systems",
+          resolution: "",
+          confidence: "anchored",
+        },
+      ],
+      wording_choice_user_items: ["AI websites"],
+      wording_choice_suggestion_items: ["AI-compatible websites"],
+      wording_choice_user_normalized: "AI websites",
+      wording_choice_agent_current: "AI-compatible websites",
+      wording_choice_user_label: "This is your compact wording:",
+      wording_choice_suggestion_label: "This is my suggestion:",
+    },
+  } as any;
+
+  const first = helpers.applyWordingPickSelection({
+    stepId: "productsservices",
+    routeToken: "__WORDING_PICK_USER__",
+    state,
+  });
+
+  assert.equal(first.handled, true);
+  assert.equal(String(first.specialist.wording_choice_pending || ""), "true");
+  assert.deepEqual((first.specialist.wording_choice_user_items as string[]) || [], ["Branding retainers"]);
+
+  const second = helpers.applyWordingPickSelection({
+    stepId: "productsservices",
+    routeToken: "__WORDING_PICK_SUGGESTION__",
+    state: first.nextState,
+  });
+
+  assert.equal(second.handled, true);
+  assert.equal(String(second.specialist.wording_choice_pending || ""), "false");
+  assert.deepEqual((second.specialist.statements as string[]) || [], [
+    "Strategy workshops",
+    "AI websites",
+    "Brand systems",
+  ]);
+  assert.equal(
+    String((second.specialist.productsservices as string) || ""),
+    ["Strategy workshops", "AI websites", "Brand systems"].join("\n")
+  );
 });
 
 test("applyWordingPickSelection keeps removals when user picks own edited list", () => {

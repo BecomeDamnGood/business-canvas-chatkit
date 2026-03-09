@@ -9,7 +9,7 @@ import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 import { isSingleValueTextPickerState } from "./run_step_wording_picker_contract.js";
 
 type WordingChoiceMode = "text" | "list";
-type WordingChoiceVariant = "default" | "clarify_dual";
+type WordingChoiceVariant = "default" | "clarify_dual" | "grouped_list_units";
 
 export type WordingChoiceUiPayload = {
   enabled: boolean;

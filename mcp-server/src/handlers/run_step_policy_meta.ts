@@ -657,6 +657,10 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         wording_choice_pending: "false",
         wording_choice_selected: "",
         wording_choice_list_semantics: "delta",
+        wording_choice_compare_mode: "",
+        wording_choice_compare_cursor: "",
+        wording_choice_compare_units: [],
+        wording_choice_compare_segments: [],
         ...(stepField ? { [stepField]: "" } : {}),
         message: buildBenProfileMessage(params.state),
       };
@@ -809,6 +813,10 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
         wording_choice_pending: "false",
         wording_choice_selected: "",
         wording_choice_list_semantics: "delta",
+        wording_choice_compare_mode: "",
+        wording_choice_compare_cursor: "",
+        wording_choice_compare_units: [],
+        wording_choice_compare_segments: [],
         feedback_reason_key: "",
         feedback_reason_text: "",
       };
@@ -839,6 +847,10 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       wording_choice_pending: "false",
       wording_choice_selected: "",
       wording_choice_list_semantics: "delta",
+      wording_choice_compare_mode: "",
+      wording_choice_compare_cursor: "",
+      wording_choice_compare_units: [],
+      wording_choice_compare_segments: [],
       feedback_reason_key: "",
       feedback_reason_text: "",
     } as Record<string, unknown>;

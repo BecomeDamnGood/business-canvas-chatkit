@@ -318,6 +318,10 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "wordingChoice.useInputFallback": "Gebruik deze input",
     "wordingChoiceHeading": "Dit is jouw input:",
     "wordingChoiceInterpretedListHeading": "Zo heb ik je input geinterpreteerd:",
+    "wordingChoiceGroupedCompareUserLabel": "Jouw compacte formulering is dit:",
+    "wordingChoiceGroupedCompareSuggestionLabel": "Mijn suggestie is dit:",
+    "wordingChoiceGroupedCompareInstruction": "Kies de versie die het beste past bij het resterende verschil.",
+    "wordingChoiceGroupedCompareRetainedHeading": "Deze punten blijven al in de definitieve lijst:",
     "wordingChoiceInstruction": "Klik alsjeblieft wat het beste bij je past.",
     "wordingChoiceSuggestionLabel": "Dit zou mijn suggestie zijn:",
 } as const;

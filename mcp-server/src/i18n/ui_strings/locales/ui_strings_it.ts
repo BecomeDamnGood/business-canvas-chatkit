@@ -260,6 +260,10 @@ export const UI_STRINGS_LOCALE_IT: Record<string, string> = {
     "wordingChoice.chooseVersion": "Scegli questa versione",
     "wordingChoice.useInputFallback": "Usa questo input",
     "wordingChoiceHeading": "Questo è il tuo input:",
+    "wordingChoiceGroupedCompareUserLabel": "Questa è la tua formulazione compatta:",
+    "wordingChoiceGroupedCompareSuggestionLabel": "Questo è il mio suggerimento:",
+    "wordingChoiceGroupedCompareInstruction": "Scegli la versione che si adatta meglio alla differenza rimanente.",
+    "wordingChoiceGroupedCompareRetainedHeading": "Questi punti restano gia nella lista finale:",
     "wordingChoiceInstruction": "Clicca su ciò che ti si addice di più.",
     "wordingChoiceSuggestionLabel": "Questo sarebbe il mio suggerimento:",
 } as const;

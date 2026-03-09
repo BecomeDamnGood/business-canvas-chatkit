@@ -260,6 +260,10 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "wordingChoice.chooseVersion": "Pilih versi ini",
     "wordingChoice.useInputFallback": "Gunakan input ini",
     "wordingChoiceHeading": "Ini input Anda:",
+    "wordingChoiceGroupedCompareUserLabel": "Ini rumusan ringkas Anda:",
+    "wordingChoiceGroupedCompareSuggestionLabel": "Ini saran saya:",
+    "wordingChoiceGroupedCompareInstruction": "Pilih versi yang paling sesuai untuk perbedaan yang tersisa.",
+    "wordingChoiceGroupedCompareRetainedHeading": "Poin-poin ini sudah tetap berada dalam daftar final:",
     "wordingChoiceInstruction": "Silakan klik yang paling cocok untuk Anda.",
     "wordingChoiceSuggestionLabel": "Ini saran saya:",
 } as const;
