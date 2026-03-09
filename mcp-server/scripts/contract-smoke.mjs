@@ -53,6 +53,14 @@ if (!String(process.env.OPENAI_API_KEY || "").trim()) {
             }),
           };
         }
+        if (schemaName === "AcceptedOutputUserTurnClassifier") {
+          return {
+            output_text: JSON.stringify({
+              turn_kind: "unclear",
+              user_variant_is_stepworthy: false,
+            }),
+          };
+        }
         throw new Error(`No contract-smoke test client response for schema ${schemaName}`);
       },
     },
