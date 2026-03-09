@@ -9,6 +9,7 @@ function buildHelpers() {
     "offtopic.current.template": "JE HUIDIGE {0} VOOR {1} IS",
     "offtopic.step.strategy": "STRATEGIE",
     "offtopic.step.rulesofthegame": "SPELREGELS",
+    "sectionTitle.rulesofthegameOf": "DE SPELREGELS VAN {0}",
     "productsservices.current.heading.plural_mixed": "Dit is wat je volgens jouw input aan {0} klanten biedt",
     "productsservices.classifier.product.tokens": "website|websites|app|apps|tool|tools",
     "productsservices.classifier.service.tokens": "ondersteuning|strategie|branding|advies",
@@ -106,7 +107,26 @@ test("wordingSelectionMessage normalizes explicit rules selection to bullets", (
     runOn
   );
 
-  assert.match(output, /JE HUIDIGE SPELREGELS VOOR Mindd IS:/);
+  assert.match(output, /DE SPELREGELS VAN Mindd:/);
+  assert.equal((output.match(/^• /gm) || []).length, 3);
+});
+
+test("wordingSelectionMessage uses localized plural rules heading outside Dutch", () => {
+  const helpers = buildHelpers();
+  const output = helpers.wordingSelectionMessage(
+    "rulesofthegame",
+    {
+      business_name: "Mindd",
+      ui_strings_lang: "es",
+      ui_strings: {
+        "sectionTitle.rulesofthegameOf": "Las Reglas del juego de {0}",
+      },
+    } as any,
+    "RulesOfTheGame",
+    "Cumplimos acuerdos; Comunicamos riesgos a tiempo; Trabajamos con alcance claro"
+  );
+
+  assert.match(output, /Las Reglas del juego de Mindd:/);
   assert.equal((output.match(/^• /gm) || []).length, 3);
 });
 

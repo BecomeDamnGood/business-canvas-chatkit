@@ -349,6 +349,14 @@ function offTopicCompanyName(state: CanvasState): string {
 }
 
 function offTopicCurrentContextHeading(stepId: string, state: CanvasState): string {
+  if (stepId === "rulesofthegame") {
+    const key = "sectionTitle.rulesofthegameOf";
+    const template = uiStringFromState(state, key, uiDefaultString(key));
+    const rendered = String(template || "").replace(/\{0\}/g, offTopicCompanyName(state)).trim();
+    if (!rendered) return "";
+    const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+    return base ? `${base}:` : "";
+  }
   const template = uiStringFromState(
     state,
     "offtopic.current.template",
@@ -952,6 +960,25 @@ function productsServicesRecapBlock(state: CanvasState, recapText: string): stri
   return `${heading}\n${bullets}`.trim();
 }
 
+function rulesOfTheGameRecapBlock(state: CanvasState, recapText: string): string {
+  const items = evaluateRulesRuntimeGate({
+    acceptedOutput: true,
+    acceptedValue: "",
+    visibleValue: recapText,
+    statements: [],
+    wordingChoicePending: false,
+  }).items;
+  if (items.length === 0) return String(recapText || "").trim();
+  const key = "sectionTitle.rulesofthegameOf";
+  const template = uiStringFromState(state, key, uiDefaultString(key));
+  const rendered = String(template || "").replace(/\{0\}/g, offTopicCompanyName(state)).trim();
+  const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+  const heading = base ? `${base}:` : "";
+  const bullets = items.map((line) => `• ${line}`).join("\n");
+  if (!heading) return bullets;
+  return `${heading}\n${bullets}`.trim();
+}
+
 function step0ConfirmQuestion(state: CanvasState, venture: string, name: string, status: string): string {
   const cleanVenture = String(venture || "").trim();
   const cleanName = String(name || "").trim();
@@ -1500,6 +1527,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const recapBlock =
     stepId === "productsservices" && recapText
       ? productsServicesRecapBlock(state, recapText)
+      : stepId === "rulesofthegame" && recapText
+        ? rulesOfTheGameRecapBlock(state, recapText)
       : defaultRecapBlock;
   const strategyStatements =
     stepId === "strategy" ? strategyStatementsFromSources(state, statusSource, prev, { provisionalForStep }) : [];

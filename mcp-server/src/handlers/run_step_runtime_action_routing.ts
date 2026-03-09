@@ -17,6 +17,11 @@ import {
 } from "./run_step_runtime_action_routing_policy.js";
 import { normalizePendingPickerSpecialistContract } from "./run_step_wording_picker_contract.js";
 import { isSingleValueTextPickerStep } from "./run_step_wording_picker_contract.js";
+import {
+  evaluateRulesRuntimeGate,
+  RULESOFTHEGAME_MIN_RULES,
+  RULESOFTHEGAME_MAX_RULES,
+} from "../steps/rulesofthegame_runtime_policy.js";
 
 export type RunStepRuntimeActionRoutingOutput<TPayload extends Record<string, unknown>> = {
   response: TPayload | null;
@@ -311,6 +316,64 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     return hasProgressVerb && hasStepSignal;
   };
 
+  const acceptedRulesOutput = (stateForRules: CanvasState): boolean => {
+    const committedFinal = String((stateForRules as Record<string, unknown>).rulesofthegame_final || "").trim();
+    if (committedFinal) return true;
+    const provisional =
+      statePorts.provisionalValueForStep(stateForRules as Record<string, unknown>, ids.rulesofthegameStepId);
+    if (!provisional) return false;
+    const rawMap =
+      (stateForRules as Record<string, unknown>).provisional_source_by_step &&
+      typeof (stateForRules as Record<string, unknown>).provisional_source_by_step === "object"
+        ? ((stateForRules as Record<string, unknown>).provisional_source_by_step as Record<string, unknown>)
+        : {};
+    const source = String(rawMap[ids.rulesofthegameStepId] || "").trim();
+    return source === "user_input" || source === "wording_pick" || source === "action_route";
+  };
+
+  const acceptedRulesValue = (stateForRules: CanvasState): string => {
+    const committedFinal = String((stateForRules as Record<string, unknown>).rulesofthegame_final || "").trim();
+    if (committedFinal) return committedFinal;
+    return acceptedRulesOutput(stateForRules)
+      ? statePorts.provisionalValueForStep(stateForRules as Record<string, unknown>, ids.rulesofthegameStepId)
+      : "";
+  };
+
+  const rulesProceedBlockCodes = (
+    stateForRules: CanvasState,
+    pendingSpecialist: Record<string, unknown>
+  ): string[] => {
+    const acceptedOutput = acceptedRulesOutput(stateForRules);
+    const acceptedValue = acceptedRulesValue(stateForRules);
+    const visibleValue =
+      String(pendingSpecialist.rulesofthegame || "").trim() ||
+      String(pendingSpecialist.refined_formulation || "").trim() ||
+      acceptedValue;
+    const wordingChoicePending = String(pendingSpecialist.wording_choice_pending || "").trim() === "true";
+    const gate = evaluateRulesRuntimeGate({
+      acceptedOutput,
+      acceptedValue,
+      visibleValue,
+      statements: pendingSpecialist.statements,
+      wordingChoicePending,
+    });
+    const codes: string[] = [];
+    if (gate.count < RULESOFTHEGAME_MIN_RULES) codes.push("rules_min_count");
+    if (gate.count > RULESOFTHEGAME_MAX_RULES) codes.push("rules_max_count");
+    if (gate.hasExternalRule) codes.push("rules_external_focus");
+    if (wordingChoicePending) codes.push("rules_pending_choice");
+    if (
+      !acceptedOutput &&
+      gate.count >= RULESOFTHEGAME_MIN_RULES &&
+      gate.count <= RULESOFTHEGAME_MAX_RULES &&
+      !gate.hasExternalRule &&
+      !wordingChoicePending
+    ) {
+      codes.push("rules_missing_accepted_output");
+    }
+    return codes;
+  };
+
   const buildBigWhyTooLongFeedback = (stateForText: CanvasState): Record<string, unknown> => {
     const message = behavior.uiStringFromStateMap(
       stateForText,
@@ -546,6 +609,26 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       const confirmActionCode = action.firstConfirmActionCodeForMenu(String(sourceMenuId || "").trim());
       if (confirmActionCode && looksLikeProceedTextIntent(userMessage)) {
         userMessage = confirmActionCode;
+      } else if (stepId === ids.rulesofthegameStepId && looksLikeProceedTextIntent(userMessage)) {
+        const pendingSpecialist =
+          (((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
+            {}) as Record<string, unknown>;
+        const blockCodes = rulesProceedBlockCodes(state, pendingSpecialist);
+        (state as Record<string, unknown>).last_specialist_result = {
+          ...pendingSpecialist,
+          proceed_request_intent: "next_step",
+          proceed_block_reason_codes: blockCodes,
+          proceed_block_rule_count: evaluateRulesRuntimeGate({
+            acceptedOutput: acceptedRulesOutput(state),
+            acceptedValue: acceptedRulesValue(state),
+            visibleValue:
+              String(pendingSpecialist.rulesofthegame || "").trim() ||
+              String(pendingSpecialist.refined_formulation || "").trim() ||
+              acceptedRulesValue(state),
+            statements: pendingSpecialist.statements,
+            wordingChoicePending: String(pendingSpecialist.wording_choice_pending || "").trim() === "true",
+          }).count,
+        };
       } else if (looksLikeProceedTextIntent(userMessage)) {
         const pendingSpecialist =
           (((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
@@ -636,6 +719,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   let pendingBeforeTurn =
     ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
   const currentStepId = String(state.current_step || "");
+  const isRulesProceedBlockTurn =
+    currentStepId === ids.rulesofthegameStepId &&
+    looksLikeProceedTextIntent(userMessage) &&
+    String((pendingBeforeTurn as Record<string, unknown>).proceed_request_intent || "").trim() === "next_step";
   const isGeneralOfftopicInput = statePorts.isClearlyGeneralOfftopicInput(userMessage);
   const isStepContributingInput = statePorts.shouldTreatAsStepContributingInput(userMessage, currentStepId);
   const hasFreeTextWhilePending =
@@ -657,7 +744,8 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     hasRenderablePendingWordingChoice(pendingBeforeTurn);
   const shouldResolvePendingWordingFromTextIntent =
     hasPendingWordingChoice &&
-    hasFreeTextWhilePending;
+    hasFreeTextWhilePending &&
+    !isRulesProceedBlockTurn;
   if (shouldResolvePendingWordingFromTextIntent) {
     const pendingSuggestion = String(
       pendingBeforeTurn.wording_choice_agent_current || pendingBeforeTurn.refined_formulation || ""

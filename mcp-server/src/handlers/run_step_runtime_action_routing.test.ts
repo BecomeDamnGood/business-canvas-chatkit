@@ -683,3 +683,91 @@ test("runStepRuntimeActionRoutingLayer maps proceed text intent to guidance acti
   assert.equal(result.response, null);
   assert.equal(result.userMessage, "__ROUTE__STRATEGY_ASK_3_QUESTIONS__");
 });
+
+test("runStepRuntimeActionRoutingLayer preserves rules proceed as user intent and stores semantic block reason when too few rules are available", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "rulesofthegame",
+    active_specialist: "RulesOfTheGame",
+    provisional_by_step: {
+      rulesofthegame: "• We communiceren proactief.\n• We komen afspraken na.",
+    },
+    provisional_source_by_step: {
+      rulesofthegame: "user_input",
+    },
+    last_specialist_result: {
+      rulesofthegame: "• We communiceren proactief.\n• We komen afspraken na.",
+      statements: [
+        "We communiceren proactief.",
+        "We komen afspraken na.",
+      ],
+    },
+  };
+  params.runtime.inputMode = "chat";
+  params.runtime.userMessage = "Ga door naar de volgende stap";
+  params.runtime.wordingChoiceEnabled = false;
+  params.action.inferCurrentMenuForStep = () => "RULES_MENU_ASK_EXPLAIN";
+  params.action.firstConfirmActionCodeForMenu = () => "";
+  params.action.firstGuidanceActionCodeForMenu = () => "ACTION_RULES_ASK_EXPLAIN_MORE";
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "Ga door naar de volgende stap");
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.proceed_request_intent || ""), "next_step");
+  assert.deepEqual(specialist.proceed_block_reason_codes, ["rules_min_count"]);
+  assert.equal(Number(specialist.proceed_block_rule_count || 0), 2);
+});
+
+test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing and stores semantic reasons when rules are pending choice", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "rulesofthegame",
+    active_specialist: "RulesOfTheGame",
+    provisional_by_step: {
+      rulesofthegame:
+        "• Gratis is gratis voor iedereen.\n• We komen afspraken na.\n• We communiceren proactief.",
+    },
+    provisional_source_by_step: {
+      rulesofthegame: "user_input",
+    },
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_target_field: "rulesofthegame",
+      wording_choice_user_items: [
+        "Gratis is gratis voor iedereen.",
+        "We komen afspraken na.",
+        "We communiceren proactief.",
+      ],
+      wording_choice_suggestion_items: [
+        "We passen prijsafspraken consequent en transparant toe in iedere samenwerking.",
+        "We komen afspraken na.",
+        "We communiceren proactief.",
+      ],
+      statements: [
+        "Gratis is gratis voor iedereen.",
+        "We komen afspraken na.",
+        "We communiceren proactief.",
+      ],
+    },
+  };
+  params.runtime.inputMode = "widget";
+  params.runtime.userMessage = "Ga door naar de volgende stap";
+  params.runtime.wordingChoiceEnabled = true;
+  params.action.inferCurrentMenuForStep = () => "RULES_MENU_ASK_EXPLAIN";
+  params.action.firstConfirmActionCodeForMenu = () => "";
+  params.action.firstGuidanceActionCodeForMenu = () => "ACTION_RULES_ASK_EXPLAIN_MORE";
+  params.wording.isWordingChoiceEligibleContext = () => true;
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "Ga door naar de volgende stap");
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.proceed_request_intent || ""), "next_step");
+  assert.deepEqual(
+    specialist.proceed_block_reason_codes,
+    ["rules_external_focus", "rules_pending_choice"]
+  );
+  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+});

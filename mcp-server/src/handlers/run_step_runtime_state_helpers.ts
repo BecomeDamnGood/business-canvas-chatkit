@@ -202,6 +202,19 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     return base ? `${base}:` : "";
   }
 
+  function rulesOfTheGameCurrentHeading(
+    state: CanvasState | null | undefined,
+    companyName: string
+  ): string {
+    const key = "sectionTitle.rulesofthegameOf";
+    const fallback = deps.uiDefaultString(key);
+    const template = localizedUiString(state, key, fallback);
+    const rendered = String(template || "").replace(/\{0\}/g, companyName).trim();
+    if (!rendered) return "";
+    const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+    return base ? `${base}:` : "";
+  }
+
   function wordingStepLabelKey(stepId: string): string {
     if (stepId === deps.dreamStepId) return "offtopic.step.dream";
     if (stepId === deps.purposeStepId) return "offtopic.step.purpose";
@@ -362,6 +375,9 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       pending_suggestion_seed_source: "",
       pending_suggestion_feedback_text: "",
       pending_suggestion_presentation_mode: "",
+      proceed_request_intent: "",
+      proceed_block_reason_codes: [],
+      proceed_block_rule_count: 0,
     };
     (next as any).last_specialist_result = resetLast;
     return next;
@@ -565,6 +581,19 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       if (items.length > 0) return items.map((line) => `• ${line}`).join("\n");
       return currentValue;
     }
+    if (stepId === deps.rulesofthegameStepId) {
+      const items = deps.parseListItems(currentValue)
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      const company = wordingCompanyName(state);
+      const heading = rulesOfTheGameCurrentHeading(state, company);
+      if (heading && items.length > 0) {
+        return `${heading}\n${items.map((line) => `• ${line}`).join("\n")}`.trim();
+      }
+      if (heading && currentValue) return `${heading}\n\n${currentValue}`.trim();
+      if (items.length > 0) return items.map((line) => `• ${line}`).join("\n");
+      return currentValue;
+    }
     const template = localizedUiString(
       state,
       "offtopic.current.template",
@@ -641,6 +670,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     const pendingSuggestionSeedSource = String(lastRaw.pending_suggestion_seed_source || "").trim();
     const pendingSuggestionFeedbackText = String(lastRaw.pending_suggestion_feedback_text || "").trim();
     const pendingSuggestionPresentationMode = String(lastRaw.pending_suggestion_presentation_mode || "").trim();
+    const proceedRequestIntent = String(lastRaw.proceed_request_intent || "").trim();
+    const proceedBlockReasonCodes = Array.isArray(lastRaw.proceed_block_reason_codes)
+      ? (lastRaw.proceed_block_reason_codes as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const proceedBlockRuleCount = Number((lastRaw as Record<string, unknown>).proceed_block_rule_count ?? 0) || 0;
     const last = JSON.stringify(
       contextSnapshotV2Enabled ? buildContextSafeLastSpecialistResult(state) : lastRaw
     );
@@ -679,6 +713,20 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
             "- Return the next candidate wording for the same step field.",
           ].join("\n")
         : "";
+    const proceedRequestContractLines =
+      proceedRequestIntent === "next_step"
+        ? [
+            "",
+            "PROCEED REQUEST CONTRACT (follow exactly when present)",
+            "- The user explicitly asked to continue to the next step.",
+            `- block_reason_codes: ${proceedBlockReasonCodes.join(", ") || "(none)"}`,
+            `- visible_rule_count: ${String(proceedBlockRuleCount || 0)}`,
+            "- For rulesofthegame, if block_reason_codes is not empty: do NOT open a new suggestion or picker flow unless the user explicitly asked for one.",
+            "- Explain clearly why proceed is blocked based on the reason codes and the current visible rules.",
+            "- Ask only for the missing correction needed to make proceed possible.",
+            "- Reason code meanings: rules_min_count=fewer than 3 valid rules; rules_max_count=more than 5 rules; rules_pending_choice=an unresolved wording choice exists; rules_external_focus=one or more visible rules are external promises or market claims; rules_missing_accepted_output=visible rules are not yet accepted as the current set.",
+          ].join("\n")
+        : "";
 
     return `STATE FINALS (canonical; use for recap; do not invent)
 ${finalsLines}
@@ -689,6 +737,7 @@ STATE META (do not output this section)
 - intro_shown_for_step: ${safe((state as any).intro_shown_for_step)}
 - intro_shown_session: ${safe((state as any).intro_shown_session)}
 ${pendingSuggestionContractLines}
+${proceedRequestContractLines}
 - last_specialist_result_json: ${safe(last)}`;
   }
 

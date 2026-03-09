@@ -25,6 +25,9 @@ const GLOBAL_CONTEXT_KEYS = new Set([
   "pending_suggestion_seed_source",
   "pending_suggestion_feedback_text",
   "pending_suggestion_presentation_mode",
+  "proceed_request_intent",
+  "proceed_block_reason_codes",
+  "proceed_block_rule_count",
 ]);
 
 const STEP_FIELD_BY_STEP_ID: Record<string, string> = {

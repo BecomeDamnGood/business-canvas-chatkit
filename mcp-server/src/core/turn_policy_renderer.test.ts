@@ -284,6 +284,43 @@ test("rulesofthegame does not expose confirm when fewer than 3 rules are accepte
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
 });
 
+test("rulesofthegame exposes confirm when 3 accepted internal rules are available", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "rulesofthegame";
+  (state as any).active_specialist = "RulesOfTheGame";
+  (state as any).provisional_by_step = {
+    rulesofthegame:
+      "• We communiceren proactief.\n• We werken met duidelijke scope.\n• We nemen eigenaarschap.",
+  };
+  (state as any).provisional_source_by_step = {
+    rulesofthegame: "user_input",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "rulesofthegame",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "So far we have these 3 Rules of the Game.",
+      question: "",
+      refined_formulation:
+        "• We communiceren proactief.\n• We werken met duidelijke scope.\n• We nemen eigenaarschap.",
+      rulesofthegame:
+        "• We communiceren proactief.\n• We werken met duidelijke scope.\n• We nemen eigenaarschap.",
+      statements: [
+        "We communiceren proactief.",
+        "We werken met duidelijke scope.",
+        "We nemen eigenaarschap.",
+      ],
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.contractId, "rulesofthegame:valid_output:RULES_MENU_CONFIRM");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), true);
+});
+
 test("rulesofthegame overflow renders pending-choice context and suppresses confirm menu", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";

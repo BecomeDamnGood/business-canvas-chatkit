@@ -110,7 +110,7 @@ test("buildTextForWidget keeps rules-of-the-game bullets when selecting suggesti
   const helpers = buildTextHelpers((stepId) => {
     if (stepId !== "rulesofthegame") return "";
     return [
-      "Je huidige spelregels voor Mindd is:",
+      "De Spelregels van Mindd:",
       "",
       "• We leveren op afspraken",
       "• We spreken conflicten direct uit",
@@ -133,7 +133,7 @@ test("buildTextForWidget keeps rules-of-the-game bullets when selecting suggesti
     } as any,
   });
 
-  assert.match(output, /Je huidige spelregels voor Mindd is:/);
+  assert.match(output, /De Spelregels van Mindd:/);
   assert.match(output, /• We leveren op afspraken/);
   assert.match(output, /• We kiezen kwaliteit boven snelheid/);
 });
@@ -259,7 +259,7 @@ test("buildTextForWidget avoids duplicate rules bullets when message already con
   const helpers = buildTextHelpers((stepId) => {
     if (stepId !== "rulesofthegame") return "";
     return [
-      "Je huidige spelregels voor Mindd is:",
+      "De Spelregels van Mindd:",
       "",
       "• We leveren op afspraken",
       "• We spreken conflicten direct uit",
