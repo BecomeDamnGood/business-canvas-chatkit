@@ -357,6 +357,14 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
   }
 
   function offTopicCurrentContextLine(stepId: string, state: CanvasState): string {
+    if (stepId === RULESOFTHEGAME_STEP_ID) {
+      const key = "sectionTitle.rulesofthegameOf";
+      const template = uiStringLocaleFirst(state, key);
+      if (!template) return "";
+      return ensureSentenceEnd(
+        formatIndexedTemplate(template, [offTopicCompanyName(state)]).trim()
+      );
+    }
     const template = uiStringLocaleFirst(state, "offtopic.current.template");
     if (!template) return "";
     return ensureSentenceEnd(
@@ -368,6 +376,15 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
   }
 
   function offTopicCurrentContextHeading(stepId: string, state: CanvasState): string {
+    if (stepId === RULESOFTHEGAME_STEP_ID) {
+      const key = "sectionTitle.rulesofthegameOf";
+      const template = uiStringLocaleFirst(state, key);
+      if (!template) return "";
+      const rendered = formatIndexedTemplate(template, [offTopicCompanyName(state)]).trim();
+      if (!rendered) return "";
+      const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+      return base ? `${base}:` : "";
+    }
     const template = uiStringLocaleFirst(state, "offtopic.current.template");
     if (!template) return "";
     const rendered = formatIndexedTemplate(template, [

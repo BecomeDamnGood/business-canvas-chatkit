@@ -152,6 +152,61 @@ test("NO_STARTING_POINT meta topic uses localized body without redirect append",
   assert.doesNotMatch(String(routed.message || ""), /Laten we doorgaan met/);
 });
 
+test("rules current-context validation uses rules-specific heading instead of generic singular template", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "nl",
+    business_name: "Mindd",
+    ui_strings: {
+      "sectionTitle.rulesofthegameOf": "De Spelregels van {0}",
+      "offtopic.redirect.template": "Laten we doorgaan met de {0} van {1}.",
+      "offtopic.step.rulesofthegame": "spelregels",
+      "offtopic.current.template": "Je huidige {0} voor {1} is",
+    },
+  };
+
+  const violation = helpers.validateNonStep0OfftopicMessageShape(
+    "rulesofthegame",
+    {
+      action: "ESCAPE",
+      is_offtopic: true,
+      message: "De Spelregels van Mindd. Laten we doorgaan met de spelregels van Mindd.",
+    },
+    state
+  );
+
+  assert.equal(violation, "offtopic_current_context_must_be_recap_only");
+});
+
+test("rules meta topic redirect does not fall back to generic singular current template", () => {
+  const helpers = buildHelpers();
+  const state: any = {
+    ui_strings_lang: "nl",
+    business_name: "Mindd",
+    ui_strings: {
+      "meta.topic.toolAudience.body": "NL doelgroeptekst.",
+      "sectionTitle.rulesofthegameOf": "De Spelregels van {0}",
+      "offtopic.redirect.template": "Laten we doorgaan met de {0} van {1}.",
+      "offtopic.step.rulesofthegame": "spelregels",
+      "offtopic.current.template": "Je huidige {0} voor {1} is",
+    },
+  };
+
+  const routed = helpers.applyCentralMetaTopicRouter({
+    stepId: "rulesofthegame",
+    specialistResult: {
+      action: "ASK",
+      user_intent: "META_QUESTION",
+      meta_topic: "TOOL_AUDIENCE",
+    },
+    previousSpecialist: {},
+    state,
+  }) as Record<string, unknown>;
+
+  assert.match(String(routed.message || ""), /Laten we doorgaan met de spelregels van Mindd\./);
+  assert.doesNotMatch(String(routed.message || ""), /Je huidige spelregels voor Mindd is/i);
+});
+
 test("meta topic routing remains intent-driven and does not force no-startpoint by keyword matching", () => {
   const helpers = buildHelpers();
   const state: any = {

@@ -689,6 +689,7 @@ test("runStepRuntimeActionRoutingLayer preserves rules proceed as user intent an
   params.runtime.state = {
     current_step: "rulesofthegame",
     active_specialist: "RulesOfTheGame",
+    business_name: "Mindd",
     provisional_by_step: {
       rulesofthegame: "• We communiceren proactief.\n• We komen afspraken na.",
     },
@@ -709,14 +710,34 @@ test("runStepRuntimeActionRoutingLayer preserves rules proceed as user intent an
   params.action.inferCurrentMenuForStep = () => "RULES_MENU_ASK_EXPLAIN";
   params.action.firstConfirmActionCodeForMenu = () => "";
   params.action.firstGuidanceActionCodeForMenu = () => "ACTION_RULES_ASK_EXPLAIN_MORE";
+  params.behavior.buildTextForWidget = ({ specialist }: { specialist: Record<string, unknown> }) =>
+    [String(specialist.message || ""), String(specialist.rulesofthegame || "")].filter(Boolean).join("\n\n");
+  params.behavior.pickPrompt = (specialist: Record<string, unknown>) => String(specialist.question || "");
+  params.behavior.uiStringFromStateMap = (state: any, key: string, fallback: string) =>
+    String((state?.ui_strings || {})[key] || fallback || "");
+  params.behavior.uiDefaultString = (key: string, fallback = "") => {
+    const defaults: Record<string, string> = {
+      "rules.proceed.block.prefix": "Je kunt nog niet doorgaan.",
+      "rules.proceed.block.reason.min.template": "Je hebt minimaal {0} geldige spelregels nodig; nu zijn het er {1}.",
+      "rules.proceed.block.question.min.template":
+        "Voeg voldoende interne spelregels toe om op minimaal {0} geldige spelregels te komen.",
+    };
+    return String(defaults[key] || fallback || "");
+  };
+  params.behavior.attachRegistryPayload = (payload: Record<string, unknown>, specialist: Record<string, unknown>) => ({
+    ...payload,
+    specialist,
+  });
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.equal(result.response, null);
-  assert.equal(result.userMessage, "Ga door naar de volgende stap");
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.ok(result.response);
+  const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
   assert.equal(String(specialist.proceed_request_intent || ""), "next_step");
   assert.deepEqual(specialist.proceed_block_reason_codes, ["rules_min_count"]);
   assert.equal(Number(specialist.proceed_block_rule_count || 0), 2);
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.match(String((result.response as Record<string, unknown>).text || ""), /Je kunt nog niet doorgaan/);
+  assert.doesNotMatch(String((result.response as Record<string, unknown>).text || ""), /Op basis van je input stel ik/);
 });
 
 test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing and stores semantic reasons when rules are pending choice", async () => {
@@ -724,6 +745,7 @@ test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing
   params.runtime.state = {
     current_step: "rulesofthegame",
     active_specialist: "RulesOfTheGame",
+    business_name: "Mindd",
     provisional_by_step: {
       rulesofthegame:
         "• Gratis is gratis voor iedereen.\n• We komen afspraken na.\n• We communiceren proactief.",
@@ -759,15 +781,72 @@ test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing
   params.action.firstConfirmActionCodeForMenu = () => "";
   params.action.firstGuidanceActionCodeForMenu = () => "ACTION_RULES_ASK_EXPLAIN_MORE";
   params.wording.isWordingChoiceEligibleContext = () => true;
+  params.behavior.buildTextForWidget = ({ specialist }: { specialist: Record<string, unknown> }) =>
+    [String(specialist.message || ""), String(specialist.rulesofthegame || "")].filter(Boolean).join("\n\n");
+  params.behavior.pickPrompt = (specialist: Record<string, unknown>) => String(specialist.question || "");
+  params.behavior.uiStringFromStateMap = (state: any, key: string, fallback: string) =>
+    String((state?.ui_strings || {})[key] || fallback || "");
+  params.behavior.uiDefaultString = (key: string, fallback = "") => {
+    const defaults: Record<string, string> = {
+      "rules.proceed.block.prefix": "Je kunt nog niet doorgaan.",
+      "rules.proceed.block.reason.external":
+        "Minstens een zichtbare regel is een externe belofte of marktclaim. Spelregels moeten beschrijven hoe jullie intern samenwerken.",
+      "rules.proceed.block.reason.pending_choice":
+        "Er staat nog een open wording-keuze klaar. Werk eerst naar één definitieve set spelregels toe.",
+      "rules.proceed.block.question.external":
+        "Herschrijf alleen de externe belofte of marktclaim naar interne samenwerkingsregels.",
+    };
+    return String(defaults[key] || fallback || "");
+  };
+  params.behavior.attachRegistryPayload = (payload: Record<string, unknown>, specialist: Record<string, unknown>) => ({
+    ...payload,
+    specialist,
+  });
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.equal(result.response, null);
-  assert.equal(result.userMessage, "Ga door naar de volgende stap");
-  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.ok(result.response);
+  const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
   assert.equal(String(specialist.proceed_request_intent || ""), "next_step");
   assert.deepEqual(
     specialist.proceed_block_reason_codes,
     ["rules_external_focus", "rules_pending_choice"]
   );
-  assert.equal(String(specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.doesNotMatch(String((result.response as Record<string, unknown>).text || ""), /Op basis van je input stel ik/);
+});
+
+test("runStepRuntimeActionRoutingLayer routes rules proceed to confirm when the rules gate is valid even without a visible confirm button", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "rulesofthegame",
+    active_specialist: "RulesOfTheGame",
+    provisional_by_step: {
+      rulesofthegame:
+        "• We communiceren proactief.\n• We werken met duidelijke scope.\n• We nemen eigenaarschap.",
+    },
+    provisional_source_by_step: {
+      rulesofthegame: "user_input",
+    },
+    last_specialist_result: {
+      rulesofthegame:
+        "• We communiceren proactief.\n• We werken met duidelijke scope.\n• We nemen eigenaarschap.",
+      statements: [
+        "We communiceren proactief.",
+        "We werken met duidelijke scope.",
+        "We nemen eigenaarschap.",
+      ],
+    },
+  };
+  params.runtime.inputMode = "chat";
+  params.runtime.userMessage = "Ga door naar de volgende stap";
+  params.runtime.wordingChoiceEnabled = false;
+  params.action.inferCurrentMenuForStep = () => "RULES_MENU_ASK_EXPLAIN";
+  params.action.firstConfirmActionCodeForMenu = () => "";
+  params.action.processActionCode = () => "__ROUTE__RULES_CONFIRM_ALL__";
+  params.state.provisionalValueForStep = (state: Record<string, unknown>, stepId: string) =>
+    String(((state.provisional_by_step as Record<string, unknown> | undefined) || {})[stepId] || "");
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "__ROUTE__RULES_CONFIRM_ALL__");
 });

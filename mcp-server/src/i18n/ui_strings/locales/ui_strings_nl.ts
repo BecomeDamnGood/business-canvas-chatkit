@@ -270,6 +270,27 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
       "We spreken voor dit onderwerp een duidelijke interne werkwijze af en houden ons daaraan.",
     "rules.policy.internal.suggestion.pricing":
       "We hanteren prijsafspraken intern consequent en transparant in elke samenwerking.",
+    "rules.proceed.block.prefix": "Je kunt nog niet doorgaan.",
+    "rules.proceed.block.reason.min.template":
+      "Je hebt minimaal {0} geldige spelregels nodig; nu zijn het er {1}.",
+    "rules.proceed.block.reason.max.template":
+      "Je hebt nu {0} spelregels; breng dit terug naar maximaal {1}.",
+    "rules.proceed.block.reason.external":
+      "Minstens een zichtbare regel is een externe belofte of marktclaim. Spelregels moeten beschrijven hoe jullie intern samenwerken.",
+    "rules.proceed.block.reason.pending_choice":
+      "Er staat nog een open wording-keuze klaar. Werk eerst naar één definitieve set spelregels toe.",
+    "rules.proceed.block.reason.missing_accepted_output":
+      "De zichtbare spelregels zijn nog niet bevestigd als de huidige set.",
+    "rules.proceed.block.question.min.template":
+      "Voeg voldoende interne spelregels toe om op minimaal {0} geldige spelregels te komen.",
+    "rules.proceed.block.question.max.template":
+      "Breng dit terug naar maximaal {0} spelregels door overlap te bundelen of bijzaken te schrappen.",
+    "rules.proceed.block.question.external":
+      "Herschrijf alleen de externe belofte of marktclaim naar interne samenwerkingsregels.",
+    "rules.proceed.block.question.pending_choice":
+      "Stuur de ene definitieve set spelregels die je wilt behouden.",
+    "rules.proceed.block.question.missing_accepted_output":
+      "Stuur de definitieve set van 3 tot 5 spelregels die je wilt bevestigen.",
     "thinking": "Even denken…",
     "title.bigwhy": "Stap 4: Grote Waarom",
     "title.dream": "Stap 2: Droom",

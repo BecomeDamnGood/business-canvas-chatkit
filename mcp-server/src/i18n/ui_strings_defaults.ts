@@ -149,6 +149,27 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
     "We define and follow one clear internal work agreement for this topic.",
   "rules.policy.internal.suggestion.pricing":
     "We apply pricing rules consistently and transparently in every collaboration.",
+  "rules.proceed.block.prefix": "You cannot continue yet.",
+  "rules.proceed.block.reason.min.template":
+    "At least {0} valid Rules of the Game are required; you currently have {1}.",
+  "rules.proceed.block.reason.max.template":
+    "You currently have {0} Rules of the Game; reduce this to at most {1}.",
+  "rules.proceed.block.reason.external":
+    "At least one visible rule is an external promise or market claim. Rules of the Game must describe how you work together internally.",
+  "rules.proceed.block.reason.pending_choice":
+    "There is still an open wording choice. First resolve one definitive set of Rules of the Game.",
+  "rules.proceed.block.reason.missing_accepted_output":
+    "The visible rules are not yet accepted as the current set.",
+  "rules.proceed.block.question.min.template":
+    "Add enough internal rules to reach at least {0} valid Rules of the Game.",
+  "rules.proceed.block.question.max.template":
+    "Reduce this to at most {0} Rules of the Game by merging overlap or removing non-essential rules.",
+  "rules.proceed.block.question.external":
+    "Rewrite only the external promise or market-claim rule or rules into internal collaboration rules.",
+  "rules.proceed.block.question.pending_choice":
+    "Send the one definitive set of Rules of the Game you want to keep.",
+  "rules.proceed.block.question.missing_accepted_output":
+    "Send the definitive set of 3 to 5 Rules of the Game you want to confirm.",
   "strategy.current.template": "Your current Strategy for {0} is:",
   "contract.headline.strategy.moreFocus": "What more do you focus on within your strategy?",
   "contract.headline.define": "Define",

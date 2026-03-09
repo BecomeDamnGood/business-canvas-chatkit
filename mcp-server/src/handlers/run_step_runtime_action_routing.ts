@@ -374,6 +374,122 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     return codes;
   };
 
+  const formatUiTemplate = (templateRaw: string, values: Array<string | number>): string =>
+    values.reduce(
+      (acc: string, value, index) => acc.replace(new RegExp(`\\{${index}\\}`, "g"), String(value)),
+      String(templateRaw || "")
+    ).trim();
+
+  const rulesProceedUiText = (
+    stateForText: CanvasState,
+    key: string
+  ): string =>
+    behavior.uiStringFromStateMap(
+      stateForText,
+      key,
+      behavior.uiDefaultString(key)
+    );
+
+  const buildRulesProceedBlockedSpecialist = (
+    stateForText: CanvasState,
+    pendingSpecialist: Record<string, unknown>
+  ): Record<string, unknown> => {
+    const acceptedOutput = acceptedRulesOutput(stateForText);
+    const acceptedValue = acceptedRulesValue(stateForText);
+    const visibleValue =
+      String(pendingSpecialist.rulesofthegame || "").trim() ||
+      String(pendingSpecialist.refined_formulation || "").trim() ||
+      acceptedValue;
+    const wordingChoicePending = String(pendingSpecialist.wording_choice_pending || "").trim() === "true";
+    const gate = evaluateRulesRuntimeGate({
+      acceptedOutput,
+      acceptedValue,
+      visibleValue,
+      statements: pendingSpecialist.statements,
+      wordingChoicePending,
+    });
+    const blockCodes = rulesProceedBlockCodes(stateForText, pendingSpecialist);
+    const reasonLines = [
+      blockCodes.includes("rules_min_count")
+        ? formatUiTemplate(
+            rulesProceedUiText(stateForText, "rules.proceed.block.reason.min.template"),
+            [RULESOFTHEGAME_MIN_RULES, gate.count]
+          )
+        : "",
+      blockCodes.includes("rules_max_count")
+        ? formatUiTemplate(
+            rulesProceedUiText(stateForText, "rules.proceed.block.reason.max.template"),
+            [gate.count, RULESOFTHEGAME_MAX_RULES]
+          )
+        : "",
+      blockCodes.includes("rules_external_focus")
+        ? rulesProceedUiText(stateForText, "rules.proceed.block.reason.external")
+        : "",
+      blockCodes.includes("rules_pending_choice")
+        ? rulesProceedUiText(stateForText, "rules.proceed.block.reason.pending_choice")
+        : "",
+      blockCodes.includes("rules_missing_accepted_output")
+        ? rulesProceedUiText(stateForText, "rules.proceed.block.reason.missing_accepted_output")
+        : "",
+    ].filter(Boolean);
+    const prefix = rulesProceedUiText(stateForText, "rules.proceed.block.prefix");
+    const question = blockCodes.includes("rules_external_focus")
+      ? rulesProceedUiText(stateForText, "rules.proceed.block.question.external")
+      : blockCodes.includes("rules_pending_choice")
+        ? rulesProceedUiText(stateForText, "rules.proceed.block.question.pending_choice")
+        : blockCodes.includes("rules_max_count")
+          ? formatUiTemplate(
+              rulesProceedUiText(stateForText, "rules.proceed.block.question.max.template"),
+              [RULESOFTHEGAME_MAX_RULES]
+            )
+          : blockCodes.includes("rules_missing_accepted_output")
+            ? rulesProceedUiText(stateForText, "rules.proceed.block.question.missing_accepted_output")
+            : formatUiTemplate(
+                rulesProceedUiText(stateForText, "rules.proceed.block.question.min.template"),
+                [RULESOFTHEGAME_MIN_RULES]
+              );
+    const bulletList = gate.items.map((line) => `• ${line}`).join("\n");
+    const rulesText = bulletList || visibleValue;
+    return {
+      action: "ASK",
+      message: [prefix, ...reasonLines].join(" ").trim(),
+      question,
+      refined_formulation: rulesText,
+      rulesofthegame: rulesText,
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+      statements: gate.items,
+      proceed_request_intent: "next_step",
+      proceed_block_reason_codes: blockCodes,
+      proceed_block_rule_count: gate.count,
+      wording_choice_pending: "false",
+      wording_choice_selected: "",
+      wording_choice_mode: "",
+      wording_choice_target_field: "",
+      wording_choice_user_raw: "",
+      wording_choice_user_normalized: "",
+      wording_choice_user_items: [],
+      wording_choice_suggestion_items: [],
+      wording_choice_base_items: [],
+      wording_choice_agent_current: "",
+      wording_choice_presentation: "",
+      wording_choice_variant: "",
+      wording_choice_user_label: "",
+      wording_choice_suggestion_label: "",
+      wording_choice_user_variant_semantics: "",
+      wording_choice_user_variant_stepworthy: "",
+      pending_suggestion_intent: "",
+      pending_suggestion_anchor: "",
+      pending_suggestion_seed_source: "",
+      pending_suggestion_feedback_text: "",
+      pending_suggestion_presentation_mode: "",
+      feedback_reason_key: "",
+      feedback_reason_text: "",
+    };
+  };
+
   const buildBigWhyTooLongFeedback = (stateForText: CanvasState): Record<string, unknown> => {
     const message = behavior.uiStringFromStateMap(
       stateForText,
@@ -614,21 +730,40 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           (((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
             {}) as Record<string, unknown>;
         const blockCodes = rulesProceedBlockCodes(state, pendingSpecialist);
-        (state as Record<string, unknown>).last_specialist_result = {
-          ...pendingSpecialist,
-          proceed_request_intent: "next_step",
-          proceed_block_reason_codes: blockCodes,
-          proceed_block_rule_count: evaluateRulesRuntimeGate({
-            acceptedOutput: acceptedRulesOutput(state),
-            acceptedValue: acceptedRulesValue(state),
-            visibleValue:
-              String(pendingSpecialist.rulesofthegame || "").trim() ||
-              String(pendingSpecialist.refined_formulation || "").trim() ||
-              acceptedRulesValue(state),
-            statements: pendingSpecialist.statements,
-            wordingChoicePending: String(pendingSpecialist.wording_choice_pending || "").trim() === "true",
-          }).count,
-        };
+        if (blockCodes.length === 0) {
+          userMessage = "ACTION_RULES_CONFIRM_ALL";
+        } else {
+          state = await behavior.ensureUiStrings(state, userMessage);
+          state = statePorts.clearStepInteractiveState(state, ids.rulesofthegameStepId);
+          const blockedSpecialist = buildRulesProceedBlockedSpecialist(state, pendingSpecialist);
+          (state as Record<string, unknown>).last_specialist_result = blockedSpecialist;
+          const payload = behavior.attachRegistryPayload(
+            ({
+              ok: true,
+              tool: "run_step",
+              current_step_id: String(state.current_step),
+              active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
+              text: behavior.buildTextForWidget({ specialist: blockedSpecialist, state }),
+              prompt: behavior.pickPrompt(blockedSpecialist),
+              specialist: blockedSpecialist,
+              state,
+            } as unknown as TPayload),
+            blockedSpecialist
+          );
+          return {
+            response: behavior.finalizeResponse(payload),
+            state,
+            userMessage,
+            submittedTextIntent,
+            submittedTextAnchor,
+            acceptedOutputUserTurnClassification,
+            responseUiFlags: null,
+            bigwhyMaxWords: BIGWHY_MAX_WORDS,
+            countWords,
+            pickBigWhyCandidate,
+            buildBigWhyTooLongFeedback,
+          };
+        }
       } else if (looksLikeProceedTextIntent(userMessage)) {
         const pendingSpecialist =
           (((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) ||
