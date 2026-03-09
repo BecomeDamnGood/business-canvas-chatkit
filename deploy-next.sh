@@ -75,5 +75,8 @@ aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS 
 echo "Pushing image..."
 docker push "$IMAGE_URI"
 
+echo "Removing local alias tag: ${ECR_REPO}:${NEXT_TAG}"
+docker image rm "${ECR_REPO}:${NEXT_TAG}" >/dev/null 2>&1 || true
+
 echo "DEPLOY_TAG=${NEXT_TAG}"
 echo "APP_RUNNER_IMAGE=${IMAGE_URI}"
