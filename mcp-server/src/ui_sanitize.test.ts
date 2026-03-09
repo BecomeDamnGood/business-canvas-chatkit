@@ -12,6 +12,11 @@ import {
 } from "../ui/lib/ui_actions.ts";
 import { readDreamBuilderViewContract, renderChoiceButtons, resolveWidgetBodyText } from "../ui/lib/ui_render.ts";
 import { setIsLoading } from "../ui/lib/ui_state.ts";
+import {
+  dropIncompatibleLastSpecialistResult,
+  stampResponseContentLocale,
+} from "./handlers/locale_continuity.ts";
+import { buildTransientFallbackSpecialist } from "./handlers/specialist_dispatch_fallbacks.ts";
 
 test("renderInlineText builds STRONG nodes safely", { concurrency: false }, () => {
   const originalDocument = (globalThis as unknown as { document: unknown }).document;
@@ -550,6 +555,98 @@ test("canonical widget payload only accepts _meta.widget_result authority", () =
   });
   assert.equal(droppedStructuredOnly.source, "none");
   assert.deepEqual(droppedStructuredOnly.result, {});
+});
+
+test("locale continuity drops locale-mismatched last specialist render state across current-value steps", () => {
+  const steps = ["dream", "purpose", "bigwhy", "role", "entity", "targetgroup"];
+  for (const stepId of steps) {
+    const next = dropIncompatibleLastSpecialistResult({
+      current_step: stepId,
+      language: "en",
+      locale: "en",
+      ui_strings_lang: "en",
+      ui_strings_requested_lang: "en",
+      last_specialist_result: {
+        action: "ASK",
+        message: "Nederlandse specialistbody die niet meer mag lekken.",
+        question: "Vraag in het Nederlands.",
+        __content_language: "nl",
+        __content_locale: "nl",
+      },
+    });
+    assert.deepEqual(
+      (next.last_specialist_result || {}) as Record<string, unknown>,
+      {},
+      `expected stale specialist content to clear for step ${stepId}`
+    );
+  }
+});
+
+test("transient fallback does not reuse stale specialist body after locale authority switches to English", () => {
+  const fallback = buildTransientFallbackSpecialist(
+    {
+      current_step: "bigwhy",
+      language: "en",
+      locale: "en",
+      ui_strings_lang: "en",
+      ui_strings_requested_lang: "en",
+      last_specialist_result: {
+        action: "ASK",
+        message: "Als mens zijn we...",
+        question: "Waarom is dit belangrijk?",
+        __content_language: "nl",
+        __content_locale: "nl",
+      },
+    } as any,
+    {
+      step0CardDescForState: () => "",
+      step0QuestionForState: () => "",
+      pickPrompt: (specialist) => String(specialist?.question || ""),
+      renderFreeTextTurnPolicy: () => ({
+        specialist: {
+          action: "ASK",
+          message: "Define your Big Why in one clear sentence.",
+          question: "What should stay at the core of your motivation?",
+          refined_formulation: "",
+        },
+      }),
+    }
+  );
+
+  assert.equal(String(fallback.message || ""), "Define your Big Why in one clear sentence.");
+  assert.equal(String(fallback.question || ""), "What should stay at the core of your motivation?");
+});
+
+test("response finalization stamps a single locale authority onto response content and persisted specialist state", () => {
+  const stamped = stampResponseContentLocale({
+    current_step_id: "purpose",
+    specialist: {
+      action: "ASK",
+      message: "What do you exist to change?",
+    },
+    state: {
+      current_step: "purpose",
+      language: "en",
+      locale: "en",
+      ui_strings_lang: "en",
+      ui_strings_requested_lang: "en",
+      last_specialist_result: {
+        action: "ASK",
+        message: "What do you exist to change?",
+      },
+    },
+  });
+
+  assert.equal(String(stamped.content_language || ""), "en");
+  assert.equal(String(stamped.content_locale || ""), "en");
+  assert.equal(String(((stamped.specialist || {}) as Record<string, unknown>).__content_language || ""), "en");
+  assert.equal(
+    String(
+      ((((stamped.state || {}) as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>)
+        .__content_language || ""
+    ),
+    "en"
+  );
 });
 
 test("widget continuity retains known business context when a later same-session payload is leaner", { concurrency: false }, () => {

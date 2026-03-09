@@ -1,4 +1,8 @@
 import type { RunStepError, RunStepSuccess } from "./run_step_runtime_types.js";
+import {
+  dropIncompatibleLastSpecialistResult,
+  resolveStateLocaleAuthority,
+} from "./locale_continuity.js";
 
 export async function runStepRuntimeExecute(
   rawArgs: unknown,
@@ -328,7 +332,11 @@ export async function runStepRuntimeExecute(
     ? String(surfaceCorrection?.source || "passthrough")
     : "";
 
+  const localeAuthorityBeforeResolve = resolveStateLocaleAuthority(state);
   state = await finalizeLayer.ensureLanguage(state, userMessage);
+  state = dropIncompatibleLastSpecialistResult(state, {
+    previousAuthority: localeAuthorityBeforeResolve,
+  });
   languageResolvedThisTurn = true;
 
   const actionRoutingLayer = await runStepRuntimeActionRoutingLayer({

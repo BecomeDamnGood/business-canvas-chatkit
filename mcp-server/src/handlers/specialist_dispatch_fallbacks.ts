@@ -5,6 +5,7 @@ import type {
   ErrorPayloadDeps,
   RunStepErrorLike,
 } from "./specialist_dispatch.js";
+import { dropIncompatibleLastSpecialistResult } from "./locale_continuity.js";
 
 export function isRateLimitError(err: any): boolean {
   return Boolean(
@@ -37,17 +38,18 @@ export function buildTransientFallbackSpecialist(
   state: CanvasState,
   deps: BuildTransientFallbackDeps
 ): Record<string, unknown> {
-  const last = ((state as any).last_specialist_result || {}) as Record<string, unknown>;
+  const safeState = dropIncompatibleLastSpecialistResult(state);
+  const last = ((safeState as any).last_specialist_result || {}) as Record<string, unknown>;
   if (hasUsableSpecialistForRetry(last, deps.pickPrompt)) return last;
 
-  const stepId = String((state as any).current_step || STEP_0_ID);
+  const stepId = String((safeState as any).current_step || STEP_0_ID);
   if (stepId === STEP_0_ID) {
     return {
       action: "ASK",
-      message: deps.step0CardDescForState(state),
-      question: deps.step0QuestionForState(state),
+      message: deps.step0CardDescForState(safeState),
+      question: deps.step0QuestionForState(safeState),
       refined_formulation: "",
-      business_name: String((state as any).business_name || "TBD"),
+      business_name: String((safeState as any).business_name || "TBD"),
       step_0: "",
       step0_interaction_state: "step0_editing",
       is_mutable: true,
@@ -61,7 +63,7 @@ export function buildTransientFallbackSpecialist(
 
   const rendered = deps.renderFreeTextTurnPolicy({
     stepId,
-    state,
+    state: safeState,
     specialist: {
       action: "ASK",
       message: "",

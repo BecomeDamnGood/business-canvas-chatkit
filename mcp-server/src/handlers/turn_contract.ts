@@ -4,6 +4,7 @@ import type { CanvasState } from "../core/state.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
 import { STEP_0_ID } from "../steps/step_0_validation.js";
 import { buildCanonicalWidgetState } from "./run_step_canonical_widget_state.js";
+import { stampResponseContentLocale } from "./locale_continuity.js";
 import {
   CONTRACT_BOOTSTRAP_PHASES,
   CONTRACT_UI_FALLBACK_REASONS,
@@ -553,7 +554,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
   response: T,
   options: FinalizeContractInternalsOptions
 ): T {
-  let finalResponse = response as RunStepContractResponse;
+  let finalResponse = stampResponseContentLocale(response) as RunStepContractResponse;
   const responseStateForCleanup = finalResponse?.state as CanvasState | undefined;
   if (responseStateForCleanup) {
     if (Object.prototype.hasOwnProperty.call(responseStateForCleanup as any, "__last_clicked_label_for_contract")) {
