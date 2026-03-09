@@ -14,6 +14,14 @@ function pickFirstValidForStep(stepId: string, ...vals: Array<unknown>): string 
   return "";
 }
 
+function pickCanonicalTextFromUiContent(source: Record<string, unknown> | null | undefined): string {
+  const uiContent =
+    source && typeof source.ui_content === "object" && source.ui_content
+      ? (source.ui_content as Record<string, unknown>)
+      : null;
+  return typeof uiContent?.canonical_text === "string" ? uiContent.canonical_text.trim() : "";
+}
+
 export function countWords(text: string): number {
   const trimmed = text.trim();
   if (!trimmed) return 0;
@@ -77,6 +85,7 @@ export function resolveRequiredFinalValue(params: {
   }
 
   const specialistField = stepId === presentationStepId ? "presentation_brief" : stepId;
+  const previousCanonicalText = pickCanonicalTextFromUiContent(previousSpecialist);
   return {
     field: finalField,
     value: pickFirstValidForStep(
@@ -84,6 +93,8 @@ export function resolveRequiredFinalValue(params: {
       provisionalValue,
       previousSpecialist[specialistField],
       previousSpecialist.refined_formulation,
+      previousSpecialist.wording_choice_agent_current,
+      previousCanonicalText,
       state[finalField]
     ),
   };

@@ -988,30 +988,77 @@ test("presentation accepted provisional remains valid output without synthetic c
   assert.equal(rendered.uiActionCodes.includes("ACTION_PRESENTATION_MAKE"), true);
 });
 
-test("recap render suppresses refined append so known-facts body stays authoritative", () => {
-  const state = getDefaultState();
-  const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
-  (state as any).current_step = "dream";
-  (state as any).active_specialist = "Dream";
-  (state as any).business_name = "Mindd";
-  (state as any).dream_final = canonical;
-
-  const rendered = renderFreeTextTurnPolicy({
-    stepId: "dream",
-    state,
-    specialist: {
-      action: "ASK",
-      wants_recap: true,
-      message: "Hier is je recap.",
-      question: "",
-      refined_formulation: canonical,
-      dream: canonical,
-      is_offtopic: false,
+test("recap render suppresses duplicate single-value cards across accepted-output steps", () => {
+  const cases = [
+    {
+      stepId: "dream",
+      activeSpecialist: "Dream",
+      finalField: "dream_final",
+      specialistField: "dream",
+      canonical: "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.",
     },
-    previousSpecialist: {},
-  });
+    {
+      stepId: "purpose",
+      activeSpecialist: "Purpose",
+      finalField: "purpose_final",
+      specialistField: "purpose",
+      canonical: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+    },
+    {
+      stepId: "bigwhy",
+      activeSpecialist: "BigWhy",
+      finalField: "bigwhy_final",
+      specialistField: "bigwhy",
+      canonical: "Mensen verdienen rust en helderheid wanneer ingewikkelde keuzes op hun pad komen.",
+    },
+    {
+      stepId: "role",
+      activeSpecialist: "Role",
+      finalField: "role_final",
+      specialistField: "role",
+      canonical: "Mindd is de gids die complexe informatie omzet in richting.",
+    },
+    {
+      stepId: "entity",
+      activeSpecialist: "Entity",
+      finalField: "entity_final",
+      specialistField: "entity",
+      canonical: "Mindd is een strategische partner voor complexe groeivraagstukken.",
+    },
+    {
+      stepId: "targetgroup",
+      activeSpecialist: "TargetGroup",
+      finalField: "targetgroup_final",
+      specialistField: "targetgroup",
+      canonical: "Technische mkb-bedrijven met complexe proposities en lange aankooptrajecten.",
+    },
+  ] as const;
 
-  const message = String((rendered.specialist as any).message || "");
-  assert.equal(message.split(canonical).length - 1, 1);
-  assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
+  for (const current of cases) {
+    const state = getDefaultState();
+    (state as any).current_step = current.stepId;
+    (state as any).active_specialist = current.activeSpecialist;
+    (state as any).business_name = "Mindd";
+    (state as any)[current.finalField] = current.canonical;
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: current.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        wants_recap: true,
+        message: "Hier is je recap.",
+        question: "",
+        refined_formulation: current.canonical,
+        [current.specialistField]: current.canonical,
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    const message = String((rendered.specialist as any).message || "");
+    assert.equal(message.split(current.canonical).length - 1, 1);
+    assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
+    assert.equal("ui_content" in ((rendered.specialist as any) || {}), false);
+  }
 });

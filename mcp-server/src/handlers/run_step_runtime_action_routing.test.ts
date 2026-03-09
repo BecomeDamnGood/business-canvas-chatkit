@@ -250,6 +250,101 @@ test("runStepRuntimeActionRoutingLayer reroutes resumed Dream picker to canonica
   assert.equal(String(specialist.wording_choice_user_variant_semantics || ""), "raw_source_content");
 });
 
+test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm actions when canonical value only exists in ui content", async () => {
+  const cases = [
+    {
+      actionCode: "ACTION_DREAM_REFINE_CONFIRM",
+      currentStep: "dream",
+      activeSpecialist: "Dream",
+      finalField: "dream_final",
+      nextStep: "purpose",
+      fieldKey: "dream",
+      heading: "JE HUIDIGE DROOM VOOR FLUEROP IS",
+      canonical: "FluerOp droomt van een wereld waarin mensen zich verbonden voelen met de natuur.",
+    },
+    {
+      actionCode: "ACTION_PURPOSE_REFINE_CONFIRM",
+      currentStep: "purpose",
+      activeSpecialist: "Purpose",
+      finalField: "purpose_final",
+      nextStep: "bigwhy",
+      fieldKey: "purpose",
+      heading: "JE HUIDIGE DASEINSREDEN VOOR FLUEROP IS",
+      canonical: "FluerOp bestaat om mensen opnieuw verbinding met natuur en rust te laten ervaren.",
+    },
+    {
+      actionCode: "ACTION_BIGWHY_REFINE_CONFIRM",
+      currentStep: "bigwhy",
+      activeSpecialist: "BigWhy",
+      finalField: "bigwhy_final",
+      nextStep: "role",
+      fieldKey: "bigwhy",
+      heading: "JE HUIDIGE BIG WHY VOOR FLUEROP IS",
+      canonical: "Mensen verdienen rust, richting en verbondenheid in een druk bestaan.",
+    },
+    {
+      actionCode: "ACTION_ROLE_REFINE_CONFIRM",
+      currentStep: "role",
+      activeSpecialist: "Role",
+      finalField: "role_final",
+      nextStep: "entity",
+      fieldKey: "role",
+      heading: "JE HUIDIGE ROL VOOR FLUEROP IS",
+      canonical: "FluerOp is de gids die mensen helpt opnieuw in verbinding te leven met natuur en ritme.",
+    },
+    {
+      actionCode: "ACTION_ENTITY_EXAMPLE_CONFIRM",
+      currentStep: "entity",
+      activeSpecialist: "Entity",
+      finalField: "entity_final",
+      nextStep: "strategy",
+      fieldKey: "entity",
+      heading: "JE HUIDIGE ENTITEIT VOOR FLUEROP IS",
+      canonical: "FluerOp is een merk voor natuurlijke ritmes, rust en verbonden leven.",
+    },
+    {
+      actionCode: "ACTION_TARGETGROUP_POSTREFINE_CONFIRM",
+      currentStep: "targetgroup",
+      activeSpecialist: "TargetGroup",
+      finalField: "targetgroup_final",
+      nextStep: "productsservices",
+      fieldKey: "targetgroup",
+      heading: "JE HUIDIGE DOELGROEP VOOR FLUEROP IS",
+      canonical: "Mensen die zich vervreemd voelen van natuur en op zoek zijn naar meer rust en eenvoud.",
+    },
+  ] as const;
+
+  for (const current of cases) {
+    const params = buildParams(true) as any;
+    params.runtime.actionCodeRaw = current.actionCode;
+    params.runtime.userMessage = "";
+    params.runtime.state = {
+      current_step: current.currentStep,
+      active_specialist: current.activeSpecialist,
+      [current.finalField]: "",
+      provisional_by_step: {},
+      provisional_source_by_step: {},
+      last_specialist_result: {
+        ui_content: {
+          kind: "single_value",
+          heading: current.heading,
+          canonical_text: current.canonical,
+        },
+        refined_formulation: "",
+        [current.fieldKey]: "",
+        wording_choice_pending: "false",
+      },
+    };
+    params.state.provisionalValueForStep = () => "";
+
+    const result = await runStepRuntimeActionRoutingLayer(params);
+    assert.equal(result.response, null);
+    assert.equal(String((result.state as Record<string, unknown>).current_step || ""), current.nextStep);
+    assert.equal(String((result.state as Record<string, unknown>)[current.finalField] || ""), current.canonical);
+    assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "");
+  }
+});
+
 test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-text intent when enabled", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(true) as any);
   assert.equal(result.response, null);

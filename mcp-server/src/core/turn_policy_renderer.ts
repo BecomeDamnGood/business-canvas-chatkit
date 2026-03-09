@@ -1729,7 +1729,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     Boolean(canonicalAcceptedValue) &&
     effectiveStatus === "valid_output" &&
     !isOfftopic &&
-    !wordingPending;
+    !wordingPending &&
+    !recapRequested;
   if (useSingleValueConfirmSsot) {
     const canonicalMessage = singleValueConfirmCanonicalMessage(stepId, state, canonicalAcceptedValue);
     messageForDisplay = feedbackReasonForDisplay
@@ -1743,6 +1744,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     });
   }
   const singleValueUiCanonicalValue = (() => {
+    if (recapRequested) return "";
     if (isOfftopic) return "";
     if (
       !wordingPending &&

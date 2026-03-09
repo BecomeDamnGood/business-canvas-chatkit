@@ -107,6 +107,60 @@ test("resolveRequiredFinalValue skips framing provisional value for purpose", ()
   });
 });
 
+test("resolveRequiredFinalValue falls back to canonical ui content for single-value confirm steps", () => {
+  const cases = [
+    {
+      stepId: "dream",
+      stateField: "dream_final",
+      canonical: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes durven maken.",
+    },
+    {
+      stepId: "purpose",
+      stateField: "purpose_final",
+      canonical: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+    },
+    {
+      stepId: "bigwhy",
+      stateField: "bigwhy_final",
+      canonical: "Mensen verdienen helderheid wanneer ingewikkelde keuzes op hun pad komen.",
+    },
+    {
+      stepId: "role",
+      stateField: "role_final",
+      canonical: "Mindd is de gids die complexe informatie omzet in richting.",
+    },
+    {
+      stepId: "entity",
+      stateField: "entity_final",
+      canonical: "Mindd is een strategische partner voor complexe groeivraagstukken.",
+    },
+    {
+      stepId: "targetgroup",
+      stateField: "targetgroup_final",
+      canonical: "Technische mkb-bedrijven met complexe proposities en lange aankooptrajecten.",
+    },
+  ] as const;
+
+  for (const current of cases) {
+    const resolved = resolveRequiredFinalValue({
+      stepId: current.stepId,
+      previousSpecialist: {
+        ui_content: {
+          canonical_text: current.canonical,
+        },
+      },
+      state: { [current.stateField]: "" },
+      provisionalValue: "",
+      step0Id: "step_0",
+      presentationStepId: "presentation",
+    });
+    assert.deepEqual(resolved, {
+      field: current.stateField,
+      value: current.canonical,
+    });
+  }
+});
+
 test("BIGWHY_MAX_WORDS remains stable for routing checks", () => {
   assert.equal(BIGWHY_MAX_WORDS, 28);
 });
