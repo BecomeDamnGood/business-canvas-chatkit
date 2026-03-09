@@ -36,6 +36,7 @@ export async function runStepRuntimeExecute(
     applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
     inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
     pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState,
+    classifyAcceptedOutputUserTurn,
     runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer,
     looksLikeMetaInstruction, ROLE_SPECIALIST, PRESENTATION_SPECIALIST, DREAM_PICK_ONE_ROUTE_TOKEN,
     ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
@@ -336,6 +337,7 @@ export async function runStepRuntimeExecute(
       userMessage,
       actionCodeRaw,
       lastSpecialistResult,
+      model,
       inputMode: inputMode === "widget" ? "widget" : "chat",
       wordingChoiceEnabled,
       wordingChoiceIntentV1,
@@ -377,6 +379,7 @@ export async function runStepRuntimeExecute(
       isClearlyGeneralOfftopicInput,
       shouldTreatAsStepContributingInput,
       resolvePendingWordingChoiceIntent,
+      classifyAcceptedOutputUserTurn,
       bumpUiI18nCounter: (telemetry: any, key: any) =>
         bumpUiI18nCounter(
           telemetry as any,
@@ -428,7 +431,12 @@ export async function runStepRuntimeExecute(
     normalization: { normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter, normalizeNonStep0OfftopicSpecialist, normalizeStep0AskDisplayContract, hasValidStep0Final },
     state: { applyPostSpecialistStateMutations, getDreamRuntimeMode, isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, hasDreamSpecialistCandidate, buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, pickBigWhyCandidate: actionRoutingLayer.pickBigWhyCandidate, countWords: actionRoutingLayer.countWords, buildBigWhyTooLongFeedback: actionRoutingLayer.buildBigWhyTooLongFeedback, enforceDreamBuilderQuestionProgress, applyMotivationQuotesContractV11 },
     render: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, buildContractId },
-    wording: { isWordingChoiceEligibleContext, buildWordingChoiceFromTurn, buildWordingChoiceFromPendingSpecialist },
+    wording: {
+      classifyAcceptedOutputUserTurn,
+      isWordingChoiceEligibleContext,
+      buildWordingChoiceFromTurn,
+      buildWordingChoiceFromPendingSpecialist,
+    },
     response: {
       attachRegistryPayload: finalizeLayer.attachRegistryPayload,
       turnResponseEngine: finalizeLayer.turnResponseEngine,

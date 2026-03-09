@@ -5,6 +5,7 @@ import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import type { TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
+import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 
 export type RunStepSpecialistRouting = {
   enabled: boolean;
@@ -289,6 +290,15 @@ export type RunStepPipelineRenderPorts = {
 };
 
 export type RunStepPipelineWordingPorts = {
+  classifyAcceptedOutputUserTurn: (params: {
+    model: string;
+    stepId: string;
+    userMessage: string;
+    currentAcceptedValue?: string;
+    pendingSuggestion?: string;
+    pendingUserVariant?: string;
+    language?: string;
+  }) => Promise<AcceptedOutputUserTurnClassification>;
   isWordingChoiceEligibleContext: (
     stepId: string,
     activeSpecialist: string,
@@ -309,6 +319,7 @@ export type RunStepPipelineWordingPorts = {
     submittedTextIntent?: string;
     submittedTextAnchor?: string;
     submittedFeedbackText?: string;
+    acceptedOutputUserTurnClassification?: AcceptedOutputUserTurnClassification | null;
   }) => {
     specialist: Record<string, unknown>;
     wordingChoice?: WordingChoiceUiPayload | null;

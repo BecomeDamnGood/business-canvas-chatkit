@@ -15,6 +15,8 @@ function buildBaseState(): Record<string, unknown> {
       wording_choice_user_raw: "I mean all companies that build complex products.",
       wording_choice_user_normalized: "I mean all companies that build complex products.",
       wording_choice_agent_current: "Industrial manufacturers with technical product development.",
+      wording_choice_user_variant_semantics: "step_variant",
+      wording_choice_user_variant_stepworthy: "true",
       wording_choice_user_items: [],
       wording_choice_suggestion_items: [],
       wording_choice_base_items: [],
@@ -58,6 +60,7 @@ function buildParams(intentEnabled: boolean) {
       userMessage: "Nee, ik bedoel echt industriële maakbedrijven.",
       actionCodeRaw: "",
       lastSpecialistResult: {},
+      model: "gpt-5-mini",
       inputMode: "widget" as const,
       wordingChoiceEnabled: true,
       wordingChoiceIntentV1: intentEnabled,
@@ -99,6 +102,10 @@ function buildParams(intentEnabled: boolean) {
       isClearlyGeneralOfftopicInput: () => false,
       shouldTreatAsStepContributingInput: () => true,
       resolvePendingWordingChoiceIntent: () => ({ intent: "content_input" as const, anchor: "user_input" as const }),
+      classifyAcceptedOutputUserTurn: async () => ({
+        turn_kind: "unclear" as const,
+        user_variant_is_stepworthy: false,
+      }),
       bumpUiI18nCounter: () => {},
     },
     wording: {
@@ -199,6 +206,48 @@ test("runStepRuntimeActionRoutingLayer strips stale single-value content before 
   assert.equal("ui_content" in specialist, false);
   const responseSpecialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
   assert.equal("ui_content" in responseSpecialist, false);
+});
+
+test("runStepRuntimeActionRoutingLayer reroutes resumed Dream picker to canonical when stored user variant is not stepworthy", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.actionCodeRaw = "ACTION_DREAM_REFINE_CONFIRM";
+  params.runtime.userMessage = "";
+  params.runtime.state = {
+    current_step: "dream",
+    active_specialist: "Dream",
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_target_field: "dream",
+      wording_choice_user_raw:
+        "Ik zou willen dat mensen gezonder zouden eten met minder bewerkt voedsel en voedsel eten waar minimale tot geen ongezonde toevoegingen in zitten.",
+      wording_choice_user_normalized:
+        "Ik zou willen dat mensen gezonder zouden eten met minder bewerkt voedsel en voedsel eten waar minimale tot geen ongezonde toevoegingen in zitten.",
+      wording_choice_agent_current:
+        "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
+      message: "Ik denk dat ik je begrijp.",
+      refined_formulation:
+        "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
+      wording_choice_user_items: [],
+      wording_choice_suggestion_items: [],
+      wording_choice_base_items: [],
+    },
+  };
+  params.state.classifyAcceptedOutputUserTurn = async () => ({
+    turn_kind: "raw_source_content" as const,
+    user_variant_is_stepworthy: false,
+  });
+  params.behavior.attachRegistryPayload = (payload: Record<string, unknown>, specialist: Record<string, unknown>) => ({
+    ...payload,
+    specialist,
+  });
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.ok(result.response);
+  const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_presentation || ""), "canonical");
+  assert.equal(String(specialist.wording_choice_user_variant_stepworthy || ""), "false");
+  assert.equal(String(specialist.wording_choice_user_variant_semantics || ""), "raw_source_content");
 });
 
 test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-text intent when enabled", async () => {
@@ -320,6 +369,8 @@ test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Drea
       wording_choice_user_raw: "Wij willen bedrijven helpen groeien.",
       wording_choice_user_normalized: "Wij willen bedrijven helpen groeien.",
       wording_choice_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      wording_choice_user_variant_semantics: "step_variant",
+      wording_choice_user_variant_stepworthy: "true",
       wording_choice_user_items: [],
       wording_choice_suggestion_items: [],
       wording_choice_base_items: [],
@@ -363,6 +414,8 @@ test("runStepRuntimeActionRoutingLayer keeps specialist path open for explicit r
       wording_choice_user_raw: "Wij willen bedrijven helpen groeien.",
       wording_choice_user_normalized: "Wij willen bedrijven helpen groeien.",
       wording_choice_agent_current: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
+      wording_choice_user_variant_semantics: "step_variant",
+      wording_choice_user_variant_stepworthy: "true",
       wording_choice_user_items: [],
       wording_choice_suggestion_items: [],
       wording_choice_base_items: [],

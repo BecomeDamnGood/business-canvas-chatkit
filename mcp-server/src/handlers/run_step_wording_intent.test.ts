@@ -237,6 +237,70 @@ test("buildWordingChoiceFromTurn keeps Dream in picker pending presentation for 
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
 });
 
+test("buildWordingChoiceFromTurn suppresses Dream picker when user text is only raw source content", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {} as any,
+    activeSpecialist: "Dream",
+    previousSpecialist: {},
+    specialistResult: {
+      message: "Ik denk dat ik je begrijp.",
+      refined_formulation:
+        "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
+      dream: "",
+    } as Record<string, unknown>,
+    userTextRaw:
+      "Ik zou willen dat mensen gezonder zouden eten met minder bewerkt voedsel en voedsel eten waar minimale tot geen ongezonde toevoegingen in zitten.",
+    isOfftopic: false,
+    acceptedOutputUserTurnClassification: {
+      turn_kind: "raw_source_content",
+      user_variant_is_stepworthy: false,
+    },
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(
+    String((result.specialist as Record<string, unknown>).wording_choice_user_variant_semantics || ""),
+    "raw_source_content"
+  );
+});
+
+test("buildWordingChoiceFromTurn suppresses Dream picker when user text is refine feedback", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {} as any,
+    activeSpecialist: "Dream",
+    previousSpecialist: {
+      dream:
+        "Bart droomt van een wereld waarin mensen zich gezond en energiek voelen doordat zij genieten van puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
+    },
+    specialistResult: {
+      message: "Ik denk dat ik begrijp wat je bedoelt.",
+      refined_formulation:
+        "Bart droomt van een wereld waarin mensen zich vitaal en hoopvol voelen doordat zij kiezen voor puur, onbewerkt voedsel zonder ongezonde toevoegingen.",
+      dream: "",
+    } as Record<string, unknown>,
+    userTextRaw: "Ik wil het iets positiever laten klinken.",
+    isOfftopic: false,
+    acceptedOutputUserTurnClassification: {
+      turn_kind: "feedback_on_existing_content",
+      user_variant_is_stepworthy: false,
+    },
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(
+    String((result.specialist as Record<string, unknown>).wording_choice_user_variant_semantics || ""),
+    "feedback_on_existing_content"
+  );
+});
+
 test("buildWordingChoiceFromTurn keeps Purpose in picker pending presentation for direct content input", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
@@ -277,6 +341,37 @@ test("buildWordingChoiceFromTurn keeps Role in picker pending presentation for d
   assert.ok(result.wordingChoice);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+});
+
+test("buildWordingChoiceFromTurn suppresses Role picker when user text is pure rejection", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "role",
+    state: {} as any,
+    activeSpecialist: "Role",
+    previousSpecialist: {
+      role: "Mindd helpt ondernemers koersvast te blijven in lastige keuzes.",
+    },
+    specialistResult: {
+      message: "Ik denk dat ik begrijp wat je afwijst.",
+      refined_formulation: "Mindd helpt ondernemers keuzes maken die standhouden onder druk.",
+      role: "",
+    } as Record<string, unknown>,
+    userTextRaw: "Nee, dat bedoel ik niet.",
+    isOfftopic: false,
+    acceptedOutputUserTurnClassification: {
+      turn_kind: "rejection_without_replacement",
+      user_variant_is_stepworthy: false,
+    },
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(
+    String((result.specialist as Record<string, unknown>).wording_choice_user_variant_semantics || ""),
+    "rejection_without_replacement"
+  );
 });
 
 test("buildWordingChoiceFromTurn skips wording panel for meta-topic turns", () => {

@@ -1,5 +1,5 @@
 import type { OrchestratorOutput } from "../core/orchestrator.js";
-import type { CanvasState } from "../core/state.js";
+import { getFinalFieldForStepId, type CanvasState } from "../core/state.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 import {
   buildUiContractId,
@@ -23,7 +23,7 @@ import {
   readStringArray,
 } from "./run_step_type_guards.js";
 import { normalizePendingPickerSpecialistContract } from "./run_step_wording_picker_contract.js";
-import { resolveCurrentValueFeedbackIntent } from "./run_step_wording_heuristics.js";
+import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 type RunStepPipelineFlatPorts<TPayload> =
@@ -75,6 +75,15 @@ const AUTOSUGGEST_STEP_IDS = new Set<string>([
   "targetgroup",
   "productsservices",
   "rulesofthegame",
+]);
+
+const ACCEPTED_OUTPUT_SINGLE_VALUE_STEP_IDS = new Set<string>([
+  "dream",
+  "purpose",
+  "bigwhy",
+  "role",
+  "entity",
+  "targetgroup",
 ]);
 
 function isNonContributingWordingIntent(intentRaw: string): boolean {
@@ -152,13 +161,37 @@ export function pickCurrentStepValueForFeedback(state: CanvasState, stepId: stri
   return "";
 }
 
-export function shouldTreatTurnAsDreamCurrentValueFeedback(params: {
+function pickCurrentAcceptedValueForStep(state: CanvasState, stepId: string): string {
+  const provisional = String(
+    ((state as Record<string, unknown>).provisional_by_step as Record<string, unknown> | undefined)?.[stepId] || ""
+  ).trim();
+  if (provisional) return provisional;
+  const finalField = getFinalFieldForStepId(stepId);
+  return finalField ? String((state as Record<string, unknown>)[finalField] || "").trim() : "";
+}
+
+function isAcceptedOutputSingleValueStep(stepId: string): boolean {
+  return ACCEPTED_OUTPUT_SINGLE_VALUE_STEP_IDS.has(String(stepId || "").trim());
+}
+
+export async function shouldTreatTurnAsDreamCurrentValueFeedback(params: {
   state: CanvasState;
   stepId: string;
   userMessage: string;
+  model: string;
+  language?: string;
+  classifyAcceptedOutputUserTurn: (params: {
+    model: string;
+    stepId: string;
+    userMessage: string;
+    currentAcceptedValue?: string;
+    pendingSuggestion?: string;
+    pendingUserVariant?: string;
+    language?: string;
+  }) => Promise<AcceptedOutputUserTurnClassification>;
   actionCodeRaw?: string;
   submittedTextIntent?: string;
-}): boolean {
+}): Promise<boolean> {
   const stepId = String(params.stepId || "").trim();
   const userMessage = String(params.userMessage || "").trim();
   const actionCodeRaw = String(params.actionCodeRaw || "").trim();
@@ -167,11 +200,17 @@ export function shouldTreatTurnAsDreamCurrentValueFeedback(params: {
   if (submittedTextIntent) return false;
   const currentValue = pickCurrentStepValueForFeedback(params.state, stepId);
   if (!currentValue) return false;
-  return resolveCurrentValueFeedbackIntent({
+  const classification = await params.classifyAcceptedOutputUserTurn({
+    model: params.model,
     stepId,
-    input: userMessage,
-    currentValue,
-  }) === "feedback_on_current_value";
+    userMessage,
+    currentAcceptedValue: currentValue,
+    language: params.language,
+  });
+  return (
+    classification.turn_kind === "feedback_on_existing_content" ||
+    classification.turn_kind === "rejection_without_replacement"
+  );
 }
 
 function stateWithDreamCurrentValueFeedbackContext(
@@ -274,6 +313,8 @@ function clearPendingWordingChoiceFields(specialistResult: Record<string, unknow
     wording_choice_variant: "",
     wording_choice_user_label: "",
     wording_choice_suggestion_label: "",
+    wording_choice_user_variant_semantics: "",
+    wording_choice_user_variant_stepworthy: "",
     pending_suggestion_intent: "",
     pending_suggestion_anchor: "",
     pending_suggestion_seed_source: "",
@@ -503,14 +544,16 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       dreamRuntimeMode: deps.getDreamRuntimeMode(state),
     });
     const currentDreamValueForFeedback = pickCurrentStepValueForFeedback(state, deps.dreamStepId);
-    const dreamCurrentValueFeedback =
-      shouldTreatTurnAsDreamCurrentValueFeedback({
-        state,
-        stepId: currentStepId,
-        userMessage,
-        actionCodeRaw: params.actionCodeRaw,
-        submittedTextIntent,
-      });
+    const dreamCurrentValueFeedback = await shouldTreatTurnAsDreamCurrentValueFeedback({
+      state,
+      stepId: currentStepId,
+      userMessage,
+      model: params.model,
+      language: params.lang,
+      classifyAcceptedOutputUserTurn: deps.classifyAcceptedOutputUserTurn,
+      actionCodeRaw: params.actionCodeRaw,
+      submittedTextIntent,
+    });
     if (dreamCurrentValueFeedback) {
       submittedTextIntent = "feedback_on_current_value";
       submittedTextAnchor = "current_value";
@@ -994,6 +1037,19 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       !skipWordingChoiceForTurn &&
       !isTrueFlag(specialistResult.wording_choice_pending)
     ) {
+      const acceptedOutputUserTurnClassification =
+        !forcePendingWordingChoice &&
+        isAcceptedOutputSingleValueStep(currentStepForWordingChoice) &&
+        Boolean(String(userTextForWordingChoice || "").trim())
+          ? await deps.classifyAcceptedOutputUserTurn({
+              model: params.model,
+              stepId: currentStepForWordingChoice,
+              userMessage: userTextForWordingChoice,
+              currentAcceptedValue: pickCurrentAcceptedValueForStep(nextState, currentStepForWordingChoice),
+              pendingSuggestion: String((specialistResult as Record<string, unknown>).refined_formulation || "").trim(),
+              language: params.lang,
+            })
+          : null;
       const rebuilt = deps.buildWordingChoiceFromTurn({
         stepId: currentStepForWordingChoice,
         state: nextState,
@@ -1007,6 +1063,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         submittedTextIntent,
         submittedTextAnchor,
         submittedFeedbackText: submittedUserText,
+        acceptedOutputUserTurnClassification,
       });
       specialistResult = rebuilt.specialist;
     }

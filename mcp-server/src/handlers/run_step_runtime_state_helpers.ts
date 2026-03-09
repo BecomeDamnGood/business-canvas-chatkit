@@ -353,6 +353,8 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       wording_choice_variant: "",
       wording_choice_user_label: "",
       wording_choice_suggestion_label: "",
+      wording_choice_user_variant_semantics: "",
+      wording_choice_user_variant_stepworthy: "",
       feedback_reason_key: "",
       feedback_reason_text: "",
       pending_suggestion_intent: "",

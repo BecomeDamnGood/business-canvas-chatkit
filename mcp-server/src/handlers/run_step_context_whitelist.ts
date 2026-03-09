@@ -18,6 +18,8 @@ const GLOBAL_CONTEXT_KEYS = new Set([
   "wording_choice_suggestion_items",
   "wording_choice_target_field",
   "wording_choice_presentation",
+  "wording_choice_user_variant_semantics",
+  "wording_choice_user_variant_stepworthy",
   "pending_suggestion_intent",
   "pending_suggestion_anchor",
   "pending_suggestion_seed_source",

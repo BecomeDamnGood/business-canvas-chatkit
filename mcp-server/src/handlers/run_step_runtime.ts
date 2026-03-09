@@ -189,6 +189,7 @@ import {
 import { createRunStepRuntimeDreamHelpers } from "./run_step_runtime_dream_helpers.js";
 import { createRunStepRuntimeTextUiHelpers } from "./run_step_runtime_text_ui_helpers.js";
 import { createRunStepRuntimeSemanticHelpers } from "./run_step_runtime_semantic_helpers.js";
+import { classifyAcceptedOutputUserTurn as classifyAcceptedOutputUserTurnRaw } from "./run_step_accepted_output_semantics.js";
 import { createRunStepRuntimeSpecialistHelpers } from "./run_step_runtime_specialist_helpers.js";
 import { runStepRuntimeExecute } from "./run_step_runtime_execute.js";
 import { correctUserInputSurface } from "./run_step_surface_correction.js";
@@ -383,6 +384,8 @@ function sanitizeEscapeInWidget(specialist: unknown): Record<string, unknown> {
   safe.wording_choice_variant = "";
   safe.wording_choice_user_label = "";
   safe.wording_choice_suggestion_label = "";
+  safe.wording_choice_user_variant_semantics = "";
+  safe.wording_choice_user_variant_stepworthy = "";
   safe.feedback_reason_key = "";
   safe.feedback_reason_text = "";
   safe.pending_suggestion_intent = "";
@@ -863,6 +866,19 @@ async function callSpecialistStrictSafe(
   };
 }
 
+async function classifyAcceptedOutputUserTurn(params: {
+  model: string;
+  stepId: string;
+  userMessage: string;
+  currentAcceptedValue?: string;
+  pendingSuggestion?: string;
+  pendingUserVariant?: string;
+  language?: string;
+}) {
+  const result = await classifyAcceptedOutputUserTurnRaw(params);
+  return result.classification;
+}
+
 const runStepPreflightHelpers = createRunStepPreflightHelpers({
   step0Id: STEP_0_ID,
   currentStateVersion: CURRENT_STATE_VERSION,
@@ -959,7 +975,7 @@ const runStepRuntimeExecuteDeps = {
   looksLikeMetaInstruction, ROLE_SPECIALIST, PRESENTATION_SPECIALIST, DREAM_PICK_ONE_ROUTE_TOKEN,
   ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
   DREAM_START_EXERCISE_ROUTE_TOKEN,
-  correctUserInputSurface,
+  correctUserInputSurface, classifyAcceptedOutputUserTurn,
 };
 
 export async function run_step(rawArgs: unknown): Promise<RunStepSuccess | RunStepError> {

@@ -2,6 +2,7 @@ import type { CanvasState } from "../core/state.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 import type { RunStepAttachRegistryPayload } from "./run_step_ports.js";
 import type { WordingChoiceUiPayload } from "./run_step_runtime_action_helpers.js";
+import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 import type {
   PendingWordingChoiceIntentResolution,
   PendingWordingChoiceTextAnchor,
@@ -15,6 +16,7 @@ import {
   resolveRequiredFinalValue,
 } from "./run_step_runtime_action_routing_policy.js";
 import { normalizePendingPickerSpecialistContract } from "./run_step_wording_picker_contract.js";
+import { isSingleValueTextPickerStep } from "./run_step_wording_picker_contract.js";
 
 export type RunStepRuntimeActionRoutingOutput<TPayload extends Record<string, unknown>> = {
   response: TPayload | null;
@@ -22,6 +24,7 @@ export type RunStepRuntimeActionRoutingOutput<TPayload extends Record<string, un
   userMessage: string;
   submittedTextIntent: PendingWordingChoiceTextIntent | "";
   submittedTextAnchor: PendingWordingChoiceTextAnchor | "";
+  acceptedOutputUserTurnClassification: AcceptedOutputUserTurnClassification | null;
   responseUiFlags: Record<string, boolean | string> | null;
   bigwhyMaxWords: number;
   countWords: (text: string) => number;
@@ -35,6 +38,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     userMessage: string;
     actionCodeRaw: string;
     lastSpecialistResult: Record<string, unknown>;
+    model: string;
     inputMode: "widget" | "chat";
     wordingChoiceEnabled: boolean;
     wordingChoiceIntentV1: boolean;
@@ -106,6 +110,15 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       pendingUserInput: string;
     }) => Promise<PendingWordingChoiceIntentResolution> | PendingWordingChoiceIntentResolution;
     bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
+    classifyAcceptedOutputUserTurn: (params: {
+      model: string;
+      stepId: string;
+      userMessage: string;
+      currentAcceptedValue?: string;
+      pendingSuggestion?: string;
+      pendingUserVariant?: string;
+      language?: string;
+    }) => Promise<AcceptedOutputUserTurnClassification>;
   };
   wording: {
     isWordingChoiceEligibleContext: (
@@ -188,6 +201,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   let forcedProceed = false;
   let submittedTextIntent: PendingWordingChoiceTextIntent | "" = "";
   let submittedTextAnchor: PendingWordingChoiceTextAnchor | "" = "";
+  let acceptedOutputUserTurnClassification: AcceptedOutputUserTurnClassification | null = null;
 
   const normalizeItems = (raw: unknown): string[] =>
     Array.isArray(raw)
@@ -197,6 +211,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   const hasRenderablePendingWordingChoice = (specialist: Record<string, unknown>): boolean => {
     if (String(specialist.wording_choice_pending || "").trim() !== "true") return false;
     const mode = String(specialist.wording_choice_mode || "text").trim() === "list" ? "list" : "text";
+    const stepId = String(specialist.wording_choice_target_field || "").trim();
     const userText = String(specialist.wording_choice_user_normalized || specialist.wording_choice_user_raw || "").trim();
     const suggestionText = String(specialist.wording_choice_agent_current || specialist.refined_formulation || "").trim();
     const userItems = normalizeItems(specialist.wording_choice_user_items);
@@ -206,6 +221,13 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       const hasSuggestion = suggestionItems.length > 0 || Boolean(suggestionText);
       return hasUser && hasSuggestion;
     }
+    if (
+      pendingWordingChoicePresentation(specialist) === "picker" &&
+      isSingleValueTextPickerStep(stepId, mode) &&
+      String(specialist.wording_choice_user_variant_stepworthy || "").trim() !== "true"
+    ) {
+      return false;
+    }
     return Boolean(userText && suggestionText);
   };
 
@@ -214,6 +236,33 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
 
   const hasPickerPendingWordingChoice = (specialist: Record<string, unknown>): boolean =>
     pendingWordingChoicePresentation(specialist) === "picker" && hasRenderablePendingWordingChoice(specialist);
+
+  const normalizeAcceptedOutputPendingSpecialist = async (
+    specialist: Record<string, unknown>,
+    stepId: string
+  ): Promise<Record<string, unknown>> => {
+    if (String(specialist.wording_choice_pending || "").trim() !== "true") return specialist;
+    const mode = String(specialist.wording_choice_mode || "text").trim() === "list" ? "list" : "text";
+    if (!isSingleValueTextPickerStep(stepId, mode)) return specialist;
+    if (pendingWordingChoicePresentation(specialist) !== "picker") return specialist;
+    if (String(specialist.wording_choice_user_variant_stepworthy || "").trim() === "true") return specialist;
+    const userVariant = String(specialist.wording_choice_user_normalized || specialist.wording_choice_user_raw || "").trim();
+    const suggestion = String(specialist.wording_choice_agent_current || specialist.refined_formulation || "").trim();
+    if (!userVariant || !suggestion) return specialist;
+    const classification = await statePorts.classifyAcceptedOutputUserTurn({
+      model: runtime.model,
+      stepId,
+      userMessage: userVariant,
+      pendingSuggestion: suggestion,
+      pendingUserVariant: userVariant,
+    });
+    return {
+      ...specialist,
+      wording_choice_user_variant_semantics: classification.turn_kind,
+      wording_choice_user_variant_stepworthy: classification.user_variant_is_stepworthy ? "true" : "false",
+      wording_choice_presentation: classification.user_variant_is_stepworthy ? "picker" : "canonical",
+    };
+  };
 
   const tokenizeIntent = (raw: string): string[] =>
     String(raw || "")
@@ -314,8 +363,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ) {
       const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
       state = stateWithUi;
+      const pendingSpecialistSeed = await normalizeAcceptedOutputPendingSpecialist(prev, stepId);
       const pendingSpecialist = normalizePendingPickerSpecialistContract({
-        specialist: prev,
+        specialist: pendingSpecialistSeed,
         stepIdHint: stepId,
       });
       (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
@@ -351,6 +401,39 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           userMessage,
           submittedTextIntent,
           submittedTextAnchor,
+          acceptedOutputUserTurnClassification,
+          responseUiFlags: null,
+          bigwhyMaxWords: BIGWHY_MAX_WORDS,
+          countWords,
+          pickBigWhyCandidate,
+          buildBigWhyTooLongFeedback,
+        };
+      }
+      if (
+        String(pendingSpecialist.wording_choice_pending || "").trim() === "true" &&
+        pendingWordingChoicePresentation(pendingSpecialist) === "canonical" &&
+        hasRenderablePendingWordingChoice(pendingSpecialist)
+      ) {
+        const payload = behavior.attachRegistryPayload(
+          {
+            ok: true,
+            tool: "run_step",
+            current_step_id: String(state.current_step),
+            active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
+            text: behavior.buildTextForWidget({ specialist: pendingSpecialist, state: stateWithUi }),
+            prompt: behavior.pickPrompt(pendingSpecialist),
+            specialist: pendingSpecialist,
+            state: stateWithUi,
+          },
+          pendingSpecialist
+        );
+        return {
+          response: behavior.finalizeResponse(payload),
+          state,
+          userMessage,
+          submittedTextIntent,
+          submittedTextAnchor,
+          acceptedOutputUserTurnClassification,
           responseUiFlags: null,
           bigwhyMaxWords: BIGWHY_MAX_WORDS,
           countWords,
@@ -568,16 +651,32 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     hasPendingWordingChoice &&
     hasFreeTextWhilePending;
   if (shouldResolvePendingWordingFromTextIntent) {
-    const pendingIntentResolution = await statePorts.resolvePendingWordingChoiceIntent({
-      userMessage,
+    const pendingSuggestion = String(
+      pendingBeforeTurn.wording_choice_agent_current || pendingBeforeTurn.refined_formulation || ""
+    ).trim();
+    const pendingUserInput = String(
+      pendingBeforeTurn.wording_choice_user_normalized || pendingBeforeTurn.wording_choice_user_raw || ""
+    ).trim();
+    acceptedOutputUserTurnClassification = await statePorts.classifyAcceptedOutputUserTurn({
+      model: runtime.model,
       stepId: currentStepId,
-      pendingSuggestion: String(
-        pendingBeforeTurn.wording_choice_agent_current || pendingBeforeTurn.refined_formulation || ""
-      ).trim(),
-      pendingUserInput: String(
-        pendingBeforeTurn.wording_choice_user_normalized || pendingBeforeTurn.wording_choice_user_raw || ""
-      ).trim(),
+      userMessage,
+      pendingSuggestion,
+      pendingUserVariant: pendingUserInput,
     });
+    const pendingIntentResolution =
+      acceptedOutputUserTurnClassification.turn_kind === "accept_existing_suggestion"
+        ? { intent: "accept_suggestion_explicit" as const, anchor: "suggestion" as const }
+        : acceptedOutputUserTurnClassification.turn_kind === "feedback_on_existing_content"
+          ? { intent: "feedback_on_suggestion" as const, anchor: "suggestion" as const }
+          : acceptedOutputUserTurnClassification.turn_kind === "rejection_without_replacement"
+            ? { intent: "reject_suggestion_explicit" as const, anchor: "suggestion" as const }
+            : await statePorts.resolvePendingWordingChoiceIntent({
+                userMessage,
+                stepId: currentStepId,
+                pendingSuggestion,
+                pendingUserInput,
+              });
     submittedTextIntent = pendingIntentResolution.intent;
     submittedTextAnchor = pendingIntentResolution.anchor;
     if (pendingIntentResolution.intent !== "accept_suggestion_explicit") {
@@ -692,6 +791,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         userMessage,
         submittedTextIntent,
         submittedTextAnchor,
+        acceptedOutputUserTurnClassification,
         responseUiFlags: null,
         bigwhyMaxWords: BIGWHY_MAX_WORDS,
         countWords,
@@ -730,6 +830,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       userMessage,
       submittedTextIntent,
       submittedTextAnchor,
+      acceptedOutputUserTurnClassification,
       responseUiFlags: null,
       bigwhyMaxWords: BIGWHY_MAX_WORDS,
       countWords,
@@ -780,6 +881,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       userMessage,
       submittedTextIntent,
       submittedTextAnchor,
+      acceptedOutputUserTurnClassification,
       responseUiFlags: null,
       bigwhyMaxWords: BIGWHY_MAX_WORDS,
       countWords,
@@ -833,6 +935,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         userMessage,
         submittedTextIntent,
         submittedTextAnchor,
+        acceptedOutputUserTurnClassification,
         responseUiFlags: null,
         bigwhyMaxWords: BIGWHY_MAX_WORDS,
         countWords,
@@ -873,6 +976,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     userMessage,
     submittedTextIntent,
     submittedTextAnchor,
+    acceptedOutputUserTurnClassification,
     responseUiFlags,
     bigwhyMaxWords: BIGWHY_MAX_WORDS,
     countWords,

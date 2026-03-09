@@ -150,28 +150,38 @@ test("pickCurrentStepValueForFeedback prefers provisional Dream over final", () 
   );
 });
 
-test("shouldTreatTurnAsDreamCurrentValueFeedback detects Dream formulation feedback without pending picker", () => {
+test("shouldTreatTurnAsDreamCurrentValueFeedback detects Dream formulation feedback without pending picker", async () => {
   assert.equal(
-    shouldTreatTurnAsDreamCurrentValueFeedback({
+    await shouldTreatTurnAsDreamCurrentValueFeedback({
       state: {
         current_step: "dream",
         dream_final: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes durven maken.",
       } as any,
       stepId: "dream",
       userMessage: "Ik vind dit een saaie formulering",
+      model: "gpt-5-mini",
+      classifyAcceptedOutputUserTurn: async () => ({
+        turn_kind: "feedback_on_existing_content",
+        user_variant_is_stepworthy: false,
+      }),
       actionCodeRaw: "",
       submittedTextIntent: "",
     }),
     true
   );
   assert.equal(
-    shouldTreatTurnAsDreamCurrentValueFeedback({
+    await shouldTreatTurnAsDreamCurrentValueFeedback({
       state: {
         current_step: "dream",
         dream_final: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes durven maken.",
       } as any,
       stepId: "dream",
       userMessage: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes durven maken die bij hen passen.",
+      model: "gpt-5-mini",
+      classifyAcceptedOutputUserTurn: async () => ({
+        turn_kind: "step_variant",
+        user_variant_is_stepworthy: true,
+      }),
       actionCodeRaw: "",
       submittedTextIntent: "",
     }),

@@ -1,5 +1,6 @@
 import type { CanvasState, ProvisionalSource } from "../core/state.js";
 import type { WordingChoiceUiPayload } from "./run_step_ui_payload.js";
+import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 
 type WordingChoiceMode = "text" | "list";
 type WordingChoiceVariant = "default" | "clarify_dual";
@@ -41,6 +42,7 @@ type BuildWordingChoiceFromTurnParams = {
   submittedTextIntent?: string;
   submittedTextAnchor?: string;
   submittedFeedbackText?: string;
+  acceptedOutputUserTurnClassification?: AcceptedOutputUserTurnClassification | null;
 };
 
 type WordingPickSelectionParams = {
@@ -108,6 +110,15 @@ type RunStepWordingDeps = {
     selectedValue?: string
   ) => string;
 };
+
+const ACCEPTED_OUTPUT_SINGLE_VALUE_STEP_IDS = new Set([
+  "dream",
+  "purpose",
+  "bigwhy",
+  "role",
+  "entity",
+  "targetgroup",
+]);
 
 const LIST_REMOVE_VERB = /\b(remove|delete|drop|omit|exclude|verwijder|schrap|haal\s+weg|weglaten|wegdoen)\b/i;
 const LIST_REPLACE_VERB = /\b(replace|vervang)\b/i;
@@ -450,6 +461,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_variant: String(previous.wording_choice_variant || ""),
       wording_choice_user_label: String(previous.wording_choice_user_label || ""),
       wording_choice_suggestion_label: String(previous.wording_choice_suggestion_label || ""),
+      wording_choice_user_variant_semantics: String(previous.wording_choice_user_variant_semantics || ""),
+      wording_choice_user_variant_stepworthy: String(previous.wording_choice_user_variant_stepworthy || ""),
       feedback_reason_key: String(previous.feedback_reason_key || ""),
       feedback_reason_text: String(previous.feedback_reason_text || ""),
       pending_suggestion_intent: String(previous.pending_suggestion_intent || ""),
@@ -905,6 +918,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return token === "__WORDING_PICK_USER__" || token === "__WORDING_PICK_SUGGESTION__";
   }
 
+  function isAcceptedOutputSingleValueTextStep(stepId: string, mode: WordingChoiceMode): boolean {
+    return mode === "text" && ACCEPTED_OUTPUT_SINGLE_VALUE_STEP_IDS.has(String(stepId || "").trim());
+  }
+
   function stripUnsupportedReformulationClaims(messageRaw: string): string {
     const message = String(messageRaw || "").replace(/\r/g, "\n");
     if (!message.trim()) return "";
@@ -945,6 +962,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       isOfftopic,
       forcePending,
       dreamRuntimeModeRaw,
+      acceptedOutputUserTurnClassification,
     } = params;
     if (!isWordingChoiceEligibleContext(stepId, activeSpecialist, specialistResult, previousSpecialist, dreamRuntimeModeRaw)) {
       return {
@@ -954,6 +972,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           wording_choice_selected: "",
           wording_choice_list_semantics: "delta",
           wording_choice_presentation: "",
+          wording_choice_user_variant_semantics: "",
+          wording_choice_user_variant_stepworthy: "",
           feedback_reason_key: "",
           feedback_reason_text: "",
           pending_suggestion_intent: "",
@@ -973,6 +993,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           wording_choice_selected: "",
           wording_choice_list_semantics: "delta",
           wording_choice_presentation: "",
+          wording_choice_user_variant_semantics: "",
+          wording_choice_user_variant_stepworthy: "",
           feedback_reason_key: "",
           feedback_reason_text: "",
           pending_suggestion_intent: "",
@@ -1005,7 +1027,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const dreamBuilderContext = isDreamBuilderContext(stepId, dreamRuntimeModeRaw);
     const mode: WordingChoiceMode =
       isListChoiceScope(stepId, activeSpecialist) || dreamBuilderContext ? "list" : "text";
-    const presentation: WordingChoicePresentation = resolveWordingChoicePresentation({
+    const basePresentation: WordingChoicePresentation = resolveWordingChoicePresentation({
       stepId,
       mode,
       previousSpecialist,
@@ -1013,6 +1035,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       submittedTextIntent: submittedIntent,
       submittedTextAnchor: submittedAnchor,
     });
+    const shouldSuppressUserVariantPicker =
+      isAcceptedOutputSingleValueTextStep(stepId, mode) &&
+      acceptedOutputUserTurnClassification?.user_variant_is_stepworthy === false;
+    const presentation: WordingChoicePresentation =
+      shouldSuppressUserVariantPicker ? "canonical" : basePresentation;
     let normalizedUser = mode === "list"
       ? deps.normalizeListUserInput(userRaw)
       : deps.normalizeUserInputAgainstSuggestion(userRaw, suggestionRaw);
@@ -1076,6 +1103,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_selected: "suggestion",
         wording_choice_list_semantics: "delta",
         wording_choice_presentation: "",
+        wording_choice_user_variant_semantics: "",
+        wording_choice_user_variant_stepworthy: "",
         feedback_reason_key: "",
         feedback_reason_text: "",
         pending_suggestion_intent: "",
@@ -1165,6 +1194,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_user_label: variant === "clarify_dual" ? clarifyUserLabelForState(state) : "",
       wording_choice_suggestion_label:
         variant === "clarify_dual" ? clarifySuggestionLabelForState(state) : "",
+      wording_choice_user_variant_semantics: acceptedOutputUserTurnClassification?.turn_kind || "",
+      wording_choice_user_variant_stepworthy:
+        acceptedOutputUserTurnClassification
+          ? (acceptedOutputUserTurnClassification.user_variant_is_stepworthy ? "true" : "false")
+          : "",
       feedback_reason_key: "",
       feedback_reason_text: feedbackReason,
       pending_suggestion_intent: submittedIntent,
@@ -1273,6 +1307,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_variant: "",
         wording_choice_user_label: "",
         wording_choice_suggestion_label: "",
+        wording_choice_user_variant_semantics: "",
+        wording_choice_user_variant_stepworthy: "",
         feedback_reason_key: "",
         feedback_reason_text: "",
         pending_suggestion_intent: "",
@@ -1348,6 +1384,12 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         ? "canonical"
         : "picker";
     if (presentation === "canonical") return null;
+    if (
+      isAcceptedOutputSingleValueTextStep(stepId, mode) &&
+      String(specialist?.wording_choice_user_variant_stepworthy || "").trim() !== "true"
+    ) {
+      return null;
+    }
     const userItems = toTrimmedStringArray(specialist?.wording_choice_user_items).map((line) => stripMarkupPreserveLines(line));
     const suggestionItems = toTrimmedStringArray(specialist?.wording_choice_suggestion_items).map((line) => stripMarkupPreserveLines(line));
     const variant = String(specialist?.wording_choice_variant || "").trim() === "clarify_dual"
