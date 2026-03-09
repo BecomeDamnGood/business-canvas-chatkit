@@ -8,7 +8,8 @@ AWS_REGION="us-east-1"
 AWS_ACCOUNT_ID="559050238376"
 ECR_REPO="business-canvas-mcp"
 OVERRIDE_TAG="${1:-}"
-OVERRIDE_PLATFORM="${2:-}"
+DEFAULT_PLATFORM="linux/amd64"
+OVERRIDE_PLATFORM="${2:-$DEFAULT_PLATFORM}"
 
 ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}"
 
@@ -17,6 +18,7 @@ cd "$REPO_PATH"
 echo "Running contract smoke gate..."
 (
   cd mcp-server
+  node scripts/verify-ui-runtime-artifacts.mjs
   node --loader ts-node/esm scripts/contract-smoke.mjs
 )
 
