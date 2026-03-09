@@ -219,6 +219,11 @@ User-friendly formatting rules
 ROUTE TOKENS (HARD)
 If USER_MESSAGE is exactly one of these tokens, follow the specified route:
 
+- "__ROUTE__DREAM_EXPLAINER_CONTINUE__" → Follow route: continue the Dream exercise from the current collection or scoring state.
+- "__ROUTE__DREAM_EXPLAINER_FINISH_LATER__" → Follow route: finish the Dream exercise for now with a gentle closing response and suggest_dreambuilder="false".
+- "__ROUTE__DREAM_EXPLAINER_REFINE__" → Follow route: refine the current Dream candidate before continuing.
+- "__ROUTE__DREAM_EXPLAINER_CONTINUE_TO_PURPOSE__" → Follow route: confirm the current Dream and exit the Dream exercise to continue to Purpose with suggest_dreambuilder="false".
+
 (Output in the target language only.)
 
 Scope guard (off-topic / ASK)

@@ -875,6 +875,202 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     };
   }
 
+  function comparableTokens(input: string): string[] {
+    return Array.from(
+      new Set(
+        deps
+          .tokenizeWords(deps.canonicalizeComparableText(input))
+          .map((token) => String(token || "").trim())
+          .filter((token) => token.length >= 2)
+      )
+    );
+  }
+
+  function tokenJaccard(left: string[], right: string[]): number {
+    if (left.length === 0 || right.length === 0) return 0;
+    const leftSet = new Set(left);
+    const rightSet = new Set(right);
+    let overlap = 0;
+    for (const token of leftSet) {
+      if (rightSet.has(token)) overlap += 1;
+    }
+    if (overlap === 0) return 0;
+    const union = leftSet.size + rightSet.size - overlap;
+    return union > 0 ? overlap / union : 0;
+  }
+
+  function comparableSliceTokens(items: string[]): string[] {
+    return comparableTokens(items.join(" "));
+  }
+
+  function itemSimilarity(leftRaw: string, rightRaw: string): number {
+    const left = String(leftRaw || "").trim();
+    const right = String(rightRaw || "").trim();
+    if (!left || !right) return 0;
+    const leftCanonical = deps.canonicalizeComparableText(left);
+    const rightCanonical = deps.canonicalizeComparableText(right);
+    if (!leftCanonical || !rightCanonical) return 0;
+    if (leftCanonical === rightCanonical) return 1;
+    if (leftCanonical.includes(rightCanonical) || rightCanonical.includes(leftCanonical)) return 0.92;
+    return tokenJaccard(comparableTokens(leftCanonical), comparableTokens(rightCanonical));
+  }
+
+  function averageBestDirectionalSimilarity(sourceItems: string[], targetItems: string[]): number {
+    if (sourceItems.length === 0 || targetItems.length === 0) return 0;
+    let total = 0;
+    for (const source of sourceItems) {
+      let best = 0;
+      for (const target of targetItems) {
+        best = Math.max(best, itemSimilarity(source, target));
+      }
+      total += best;
+    }
+    return total / sourceItems.length;
+  }
+
+  function sliceSimilarity(userItems: string[], suggestionItems: string[]): number {
+    if (userItems.length === 0 || suggestionItems.length === 0) return 0;
+    const userToSuggestion = averageBestDirectionalSimilarity(userItems, suggestionItems);
+    const suggestionToUser = averageBestDirectionalSimilarity(suggestionItems, userItems);
+    const tokenScore = tokenJaccard(comparableSliceTokens(userItems), comparableSliceTokens(suggestionItems));
+    return Math.max(tokenScore, (userToSuggestion + suggestionToUser) / 2);
+  }
+
+  function semanticWholeSetConfidence(userItems: string[], suggestionItems: string[]): {
+    coverage: number;
+    strongestPair: number;
+    tokenScore: number;
+  } {
+    let strongestPair = 0;
+    for (const userItem of userItems) {
+      for (const suggestionItem of suggestionItems) {
+        strongestPair = Math.max(strongestPair, itemSimilarity(userItem, suggestionItem));
+      }
+    }
+    return {
+      coverage: sliceSimilarity(userItems, suggestionItems),
+      strongestPair,
+      tokenScore: tokenJaccard(comparableSliceTokens(userItems), comparableSliceTokens(suggestionItems)),
+    };
+  }
+
+  function buildSemanticAnchorlessComparePlan(params: {
+    userItems: string[];
+    suggestionItems: string[];
+  }): BusinessListComparePlan | null {
+    const userItems = params.userItems.map((line) => String(line || "").trim()).filter(Boolean);
+    const suggestionItems = params.suggestionItems.map((line) => String(line || "").trim()).filter(Boolean);
+    if (userItems.length < 2 || suggestionItems.length < 2) return null;
+    if (Math.max(userItems.length, suggestionItems.length) > 5) return null;
+
+    const pairCandidates: Array<{ userIndex: number; suggestionIndex: number; score: number }> = [];
+    for (let userIndex = 0; userIndex < userItems.length; userIndex += 1) {
+      for (let suggestionIndex = 0; suggestionIndex < suggestionItems.length; suggestionIndex += 1) {
+        const score = itemSimilarity(userItems[userIndex], suggestionItems[suggestionIndex]);
+        if (score >= 0.45) {
+          pairCandidates.push({ userIndex, suggestionIndex, score });
+        }
+      }
+    }
+
+    pairCandidates.sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      if (left.userIndex !== right.userIndex) return left.userIndex - right.userIndex;
+      return left.suggestionIndex - right.suggestionIndex;
+    });
+
+    const usedUser = new Set<number>();
+    const usedSuggestion = new Set<number>();
+    const semanticAnchors: Array<{ userIndex: number; suggestionIndex: number; score: number }> = [];
+    for (const candidate of pairCandidates) {
+      if (usedUser.has(candidate.userIndex) || usedSuggestion.has(candidate.suggestionIndex)) continue;
+      usedUser.add(candidate.userIndex);
+      usedSuggestion.add(candidate.suggestionIndex);
+      semanticAnchors.push(candidate);
+    }
+    semanticAnchors.sort((left, right) => {
+      if (left.userIndex !== right.userIndex) return left.userIndex - right.userIndex;
+      return left.suggestionIndex - right.suggestionIndex;
+    });
+
+    const monotonicAnchors: Array<{ userIndex: number; suggestionIndex: number; score: number }> = [];
+    let previousSuggestionIndex = -1;
+    for (const anchor of semanticAnchors) {
+      if (anchor.suggestionIndex <= previousSuggestionIndex) continue;
+      monotonicAnchors.push(anchor);
+      previousSuggestionIndex = anchor.suggestionIndex;
+    }
+
+    const wholeSet = semanticWholeSetConfidence(userItems, suggestionItems);
+    const unitThreshold = 0.34;
+    const strongWholeSet =
+      (wholeSet.coverage >= 0.34 && wholeSet.strongestPair >= 0.5) ||
+      (wholeSet.coverage >= 0.3 && wholeSet.tokenScore >= 0.22);
+    if (!strongWholeSet) return null;
+
+    const anchoredUnits: WordingChoiceCompareUnit[] = [];
+    const anchoredSegments: WordingChoiceCompareSegment[] = [];
+    let lastUserIndex = 0;
+    let lastSuggestionIndex = 0;
+    let unitCount = 0;
+    for (const anchor of monotonicAnchors) {
+      const userSlice = userItems.slice(lastUserIndex, anchor.userIndex + 1);
+      const suggestionSlice = suggestionItems.slice(lastSuggestionIndex, anchor.suggestionIndex + 1);
+      const score = sliceSimilarity(userSlice, suggestionSlice);
+      if (score < unitThreshold) continue;
+      unitCount += 1;
+      const unit = createCompareUnit({
+        id: `unit_${unitCount}`,
+        userItems: userSlice,
+        suggestionItems: suggestionSlice,
+        confidence: "fallback",
+      });
+      anchoredUnits.push(unit);
+      anchoredSegments.push({ kind: "unit", unit_id: unit.id });
+      lastUserIndex = anchor.userIndex + 1;
+      lastSuggestionIndex = anchor.suggestionIndex + 1;
+    }
+
+    const trailingUserSlice = userItems.slice(lastUserIndex);
+    const trailingSuggestionSlice = suggestionItems.slice(lastSuggestionIndex);
+    if (trailingUserSlice.length > 0 || trailingSuggestionSlice.length > 0) {
+      const trailingScore = sliceSimilarity(trailingUserSlice, trailingSuggestionSlice);
+      if (trailingScore >= unitThreshold) {
+        unitCount += 1;
+        const unit = createCompareUnit({
+          id: `unit_${unitCount}`,
+          userItems: trailingUserSlice,
+          suggestionItems: trailingSuggestionSlice,
+          confidence: "fallback",
+        });
+        anchoredUnits.push(unit);
+        anchoredSegments.push({ kind: "unit", unit_id: unit.id });
+      }
+    }
+
+    if (anchoredUnits.length >= 2) {
+      return {
+        mode: "grouped_units",
+        units: anchoredUnits,
+        segments: anchoredSegments,
+        initialUnit: anchoredUnits[0],
+      };
+    }
+
+    const singleUnit = createCompareUnit({
+      id: "unit_1",
+      userItems,
+      suggestionItems,
+      confidence: "fallback",
+    });
+    return {
+      mode: "grouped_units",
+      units: [singleUnit],
+      segments: [{ kind: "unit", unit_id: singleUnit.id }],
+      initialUnit: singleUnit,
+    };
+  }
+
   function longestCommonListAnchors(
     userItems: string[],
     suggestionItems: string[]
@@ -925,7 +1121,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
 
     const anchors = longestCommonListAnchors(userItems, suggestionItems);
     if (anchors.length === 0 && userItems.length > 1 && suggestionItems.length > 1) {
-      return null;
+      return buildSemanticAnchorlessComparePlan({
+        userItems,
+        suggestionItems,
+      });
     }
 
     const segments: WordingChoiceCompareSegment[] = [];

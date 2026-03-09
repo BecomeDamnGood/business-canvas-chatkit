@@ -334,6 +334,7 @@ ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:
 
 - "__ROUTE__RULES_WRITE__" → Follow route: write or paste 3 to 5 Rules now (output action="ASK" with write question)
+- "__ROUTE__RULES_EXPLAIN_MORE__" → Follow route: explain why Rules of the Game matter (output action="ASK" with explanation text)
 - "__ROUTE__RULES_GIVE_EXAMPLE__" → Follow route: give one concrete example (output action="ASK" with example and write question)
 - "__ROUTE__RULES_ADJUST__" → Follow route: adjust the rules (output action="ASK" with adjustment question)
 - "__ROUTE__RULES_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)

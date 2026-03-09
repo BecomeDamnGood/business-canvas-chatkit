@@ -325,6 +325,8 @@ Question (localized) must show exactly:
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:
 
 - "__ROUTE__STRATEGY_FORMULATE__" → Follow route: formulate Strategy now (output action="ASK" with formulation question)
+- "__ROUTE__STRATEGY_EXPLAIN_MORE__" → Follow route: explain again why Strategy matters (output action="ASK" with explanation text)
+- "__ROUTE__STRATEGY_ASK_3_QUESTIONS__" → Follow route: ask the 10 strategy clarification questions (output action="ASK" with those questions)
 - "__ROUTE__STRATEGY_GIVE_EXAMPLES__" → Follow route: give examples (output action="ASK" with 3 examples)
 - "__ROUTE__STRATEGY_CONSOLIDATE__" → Follow route: consolidate focus points to a maximum of 7 while preserving core meaning
 - "__ROUTE__STRATEGY_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)

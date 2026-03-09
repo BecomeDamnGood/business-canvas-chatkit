@@ -1,462 +1,338 @@
 # Fix Jochem na Jochem Test
 
 
-## Fix 1 - Dream Builder dubbele content: 12-pogingen terugblik + structurele briefing
+## Fix 1 - Bullet-Step SSOT: grouped compare mag niet terugvallen naar legacy full-set compare bij anchorless rewrites, en wording-choice mag de normale step-prompt niet lekken
 
 ### Input (zoals gemeld)
-Dit had niet mogen staan als losse paragraaf boven de bullets:
-- `Over 5 tot 10 jaar zal werk steeds meer gericht zijn op het maken van een positieve impact ...`
+Bij `strategy`, `productsservices` en `rulesofthegame` werkt het product inhoudelijk met bullets/lijsten.
 
-Reden:
-- Deze inhoud staat al in de Dream Builder bullets.
-- De UI toont daardoor dezelfde semantische content dubbel (narrative paragraaf + statementslijst).
+De gewenste productrichting was al:
+- niet langer standaard twee volledige sets naast elkaar vergelijken
+- wel: alleen echte verschillen reviewen
+- correcte / niet-betwiste bullets automatisch behouden
+- compare per afwijkende compare-unit
+- finale set daarna nog steeds langs de bestaande set-based gates
 
-### Wat al gedaan is (12 pogingen) en waarom dat telkens niet afdoende was
+Maar in de praktijk gaat het nog steeds mis in een belangrijk type case:
+- de user geeft 2 tot 5 bullets of losse zinnen
+- de agent herschrijft die inhoudelijk goed, maar zonder exacte tekstuele overlap
+- bijvoorbeeld:
+  - `3 user-bullets -> 4 compactere / scherpere suggestion-bullets`
+  - of `2 user-bullets -> 3 herschreven suggestion-bullets`
+- inhoudelijk is het nog steeds duidelijk dezelfde set-discussie
+- maar de UI valt terug naar de oude full-set compare
 
-1. `0318e72` - fallback/localisatie rond dream wording
-- Focus: copy/fallback.
-- Waarom onvoldoende: lost semantische dedupe tussen body en statements niet op.
+Zichtbare symptomen:
+- de user ziet weer:
+  - `Dit is jouw input`
+  - `Dit zou mijn suggestie zijn`
+  - twee volledige blokken
+  - twee keer `Kies deze versie`
+- niet-betwiste punten worden dus niet automatisch behouden
+- de user moet alsnog bijna de hele set A versus B kiezen
 
-2. `4bbec9c` - heading/list rendering fixes
-- Focus: rendering-structuur en heading parsing.
-- Waarom onvoldoende: targette vorm, niet de bron van dubbele Dream-inhoud.
+Tweede zichtbaar probleem:
+- tijdens wording-choice blijft de normale step-prompt onder de compare zichtbaar
+- bijvoorbeeld onder een strategy compare staat nog:
+  - `Waar focus je nog meer op binnen je strategie?`
+- dat maakt de UI semantisch dubbel:
+  - bovenaan vraagt het systeem om wording-keuze
+  - onderaan lijkt het systeem alweer om nieuw input te vragen
 
-3. `012ecfd` - intent-driven wording disambiguation
-- Focus: intentrouting pending wording.
-- Waarom onvoldoende: dual-vs-canonical routing verbeterd, maar geen harde body-vs-statements SSOT.
+Belangrijke observatie:
+- dit probleem zit niet in de step-prompts zelf
+- dit zit in de compare-builder en de wording-choice rendering
 
-4. `256e298` - canonical single-value context invariants
-- Focus: confirm-context invarianten.
-- Waarom onvoldoende: invariant gold vooral op single-value confirm, niet op Dream Builder narrative+bullets.
+### Eerste analyse (grote lijnen, nu met concrete codebevindingen)
 
-5. `5db0483` - wording acceptance stabilisatie
-- Focus: accept/reject wording-flow.
-- Waarom onvoldoende: gedrag rond keuzeacceptatie, niet dedupe van Dream Builder contentkanalen.
+#### Hypothese A - De huidige grouped compare is nog te afhankelijk van exacte anchors
+- In de huidige implementatie wordt grouped compare alleen gebouwd als er voldoende exact herkenbare overlap is tussen user-items en suggestion-items.
+- De code gebruikt eerst een anchor/LCS-achtige match op gecanonicaliseerde list-items.
+- Als:
+  - `anchors.length === 0`
+  - en `userItems.length > 1`
+  - en `suggestionItems.length > 1`
+- dan valt de code direct terug naar `null` voor grouped compare.
+- Daardoor gaat de flow terug naar de oude full-set compare.
 
-6. `0b86519` - heading wrapper false positives
-- Focus: heading-detectie.
-- Waarom onvoldoende: cosmetische false positives, niet semantische duplicatie van statements.
+#### Hypothese B - Juist de belangrijkste productcases zijn vaak anchorless rewrites
+- Een user schrijft vaak:
+  - ruwe bullets
+  - halve zinnen
+  - gemixte observaties
+- De agent herschrijft die vervolgens naar:
+  - compactere bullets
+  - gesplitste bullets
+  - samengevoegde bullets
+  - positievere of bruikbaardere formuleringen
+- In zulke gevallen is exacte tekstuele overlap vaak juist afwezig.
+- Dus het product faalt nu juist op de cases waarvoor grouped compare bedoeld was.
 
-7. `9c739d6` - catalog-driven Dream copy
-- Focus: i18n/copybron.
-- Waarom onvoldoende: correcte tekstbron voorkomt niet dat dezelfde inhoud 2x uit verschillende velden wordt getoond.
+#### Hypothese C - De huidige fallback is te grof voor semantisch duidelijke n:m rewrites
+- Als `3 -> 4` of `2 -> 3` inhoudelijk duidelijk één herschreven set is, hoort dat nog steeds grouped compare te zijn.
+- De fallback naar full-set compare mag alleen gebruikt worden wanneer matching echt semantisch onzeker is.
+- Nu wordt full-set fallback al gebruikt zodra exacte anchors ontbreken.
+- Dat is te vroeg en productmatig onjuist.
 
-8. `956404f` - single-value confirm SSOT composition
-- Focus: SSOT voor confirm-copy.
-- Waarom onvoldoende: Dream Builder statements-flow valt deels buiten dit pad.
+#### Hypothese D - De compare-UI en de gewone step-prompt lopen nog door elkaar
+- Tijdens wording-choice wordt de gewone `questionText` nog steeds meegestuurd.
+- De frontend rendert daarna:
+  - de wording-choice panel
+  - én de normale prompt onderaan
+- Daardoor lijkt de user tegelijk in twee toestanden te zitten:
+  - kies tussen varianten
+  - geef nog meer input
 
-9. `3a693ef` - dream-builder dedupe + runtime cleanup
-- Focus: dedupe in runtime teksthelper.
-- Waarom onvoldoende: dedupe is context-gated; bij gate-mismatch blijft dubbele content mogelijk.
+#### Hypothese E - De eerdere route-token / prompt-fixes lossen dit probleem niet op
+- Step-prompt fixes zoals:
+  - `purpose give examples`
+  - expliciete route-token documentatie
+- zijn nuttig, maar raken dit pad niet.
+- Dit issue leeft in:
+  - wording compare plan construction
+  - wording fallback policy
+  - wording-choice rendering
 
-10. `9c5d769` - semantic pending suggestion routing
-- Focus: pending suggestion intent-contract.
-- Waarom onvoldoende: intentlaag verbeterd, maar display-compositie (body + statements panel) bleef multi-owner.
+### Definitieve invariant
 
-11. `8708516` - UI prefereert canonical text source
-- Focus: één voorkeursbron voor card-body.
-- Waarom onvoldoende: statements-panel blijft onafhankelijk renderen; zonder cross-channel dedupe blijft dubbeling.
+- `strategy`, `productsservices` en `rulesofthegame` blijven inhoudelijk list-steps.
+- De user mag daar niet standaard twee volledige sets hoeven kiezen als het verschil lokaal te reviewen is.
+- Grouped compare mag NIET afhankelijk zijn van exacte tekstuele anchors als de set semantisch nog duidelijk matchbaar is.
+- Exacte anchors mogen een optimalisatie zijn, maar niet de harde voorwaarde voor grouped compare.
+- Voor semantisch duidelijke `1:1`, `1:n`, `n:1` en `n:m` rewrites moet grouped compare de default blijven.
+- Alleen wanneer matching echt onzeker is, mag de code terugvallen naar full-set compare of een expliciete herstelroute.
+- Niet-betwiste bullets moeten automatisch behouden blijven wanneer dat inhoudelijk verantwoord is.
+- Tijdens wording-choice mag de normale step-prompt niet tegelijk zichtbaar zijn.
+- De user moet op dat moment één duidelijke taak zien:
+  - kies lokaal tussen varianten
+- Final confirm/gating blijft set-based en server-side.
+- Alle user-facing labels voor grouped compare blijven i18n-gedreven.
 
-12. `a92729e` - single-source rendering + intent SSOT
-- Focus: verdere SSOT-scherping runtime/pipeline.
-- Waarom onvoldoende: nog steeds geen harde contractregel die verbiedt dat body semantisch dezelfde inhoud heeft als `dream_builder_statements` wanneer die lijst zichtbaar is.
+### Mogelijke structurele fix
 
-### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
+1. Vervang `exact-anchor-first` als harde gate door `semantic compare planning`
+- Houd de huidige anchor/LCS-logica als snelle happy path.
+- Maar maak `anchors.length === 0` niet automatisch een full-set fallback.
+- Voeg een tweede planningslaag toe voor anchorless rewrites:
+  - semantic similarity op itemniveau
+  - token overlap / normalized phrase overlap
+  - eventueel lightweight pair/group scoring
+  - of een expliciete compare-unit grouping heuristic voor kleine sets
+- Het doel is:
+  - semantisch duidelijke n:m herschrijvingen alsnog als grouped compare modelleren
+  - zonder te doen alsof er exacte anchors zijn
 
-#### Hypothese A - Multi-owner contentcompositie (server body vs client statements panel)
-- De card-body wordt opgebouwd uit `result.text/specialist.message`.
-- De statementslijst wordt apart vanuit `specialist/statelijnen` gerenderd.
-- Zonder harde, gedeelde invariant kunnen beide tegelijk dezelfde inhoud tonen.
+2. Ondersteun expliciet `n:m` compare-units
+- De bestaande productrichting noemt al:
+  - `1:1`
+  - `1:n`
+  - `n:1`
+- Maar in de praktijk is ook `n:m` nodig.
+- Bijvoorbeeld:
+  - 3 user-bullets worden herschreven naar 4 suggestion-bullets
+  - zonder letterlijk gedeelde bullet
+- In dat geval moet één compare-unit of een kleine reeks compare-units mogelijk zijn, zolang de matching betrouwbaar genoeg is.
 
-#### Hypothese B - Dedupe in runtime is gated en daardoor niet altijd actief
-- Dream Builder dedupe in runtime-finalize draait alleen bij specifieke contextvoorwaarden.
-- Als `dreamBuilderRenderContext` niet exact waar is, blijft duplicate narrative staan.
+3. Gebruik full-set fallback alleen bij echte onzekerheid
+- Full-set compare blijft toegestaan, maar alleen als expliciete safety fallback.
+- Niet als implicit fallback omdat exacte anchors ontbreken.
+- De fallback-conditie moet dus veranderen van:
+  - `geen anchors + beide kanten >1`
+- naar iets als:
+  - `semantic grouping confidence onder drempel`
+  - of `meerdere plausibele groupings zonder betrouwbare keuze`
 
-#### Hypothese C - UI-fallback voor statements-panel is ruimer dan server-dedupe-context
-- UI toont statements ook via fallback-conditie.
-- Die conditie is niet 1-op-1 gekoppeld aan de server-side dedupe-activatie, waardoor mismatch ontstaat.
+4. Houd retained bullets zichtbaar wanneer ze echt retained zijn
+- Als er anchors of semantisch stabiele items zijn:
+  - neem die automatisch op als retained
+  - toon ze in de instruction / retained block
+- Als een case volledig anchorless is:
+  - forceer dan geen fake retained bullets
+  - maar bouw wel compare-units als de herschreven set nog duidelijk vergelijkbaar is
 
-#### Hypothese D - Dedupe is vooral lexicaal, niet contractueel
-- Dedupe vertrouwt op vergelijking van tekstlijnen/sentences.
-- Bij kleine variaties, volgordeverschillen of contextregels kan semantische dubbeling toch blijven staan.
+5. Onderdruk de gewone step-prompt tijdens wording-choice
+- Terwijl `wording_choice_pending === true` en de picker actief is:
+  - render géén normale step-question onder de picker
+  - render géén tweede impliciete ask-state
+- De UI moet in wording-choice mode één duidelijke state tonen:
+  - compare panel
+  - local choice CTA's
+  - geen parallelle “wat nog meer?” prompt
 
-#### Hypothese E - Eerdere fixes zaten verspreid over lagen zonder expliciete “Dream Builder content ownership” contractregel
-- We hebben veel verbeterd in losse lagen (renderer, wording, pipeline, UI), maar zonder één afdwingbare ownershipregel voor body-vs-statements.
+6. Houd grouped compare labels semantisch correct
+- Als grouped compare actief is voor list-steps, gebruik:
+  - `Jouw compacte formulering is dit`
+  - `Mijn suggestie is dit`
+- Niet de legacy wording:
+  - `Dit is jouw input`
+  - `Dit zou mijn suggestie zijn`
+- Legacy labels mogen alleen blijven voor de oude full-set fallback of pure text compare.
 
-### Bewijspunten in code (startpunten voor diep onderzoek)
+7. Test niet alleen anchor-cases, maar juist de failure-case
+- Er moet verplichte testdekking komen voor:
+  - `strategy` met `3 user-items -> 4 suggestion-items`
+  - geen exacte gedeelde bullet
+  - inhoudelijk wel duidelijke rewrite
+  - verwacht resultaat: grouped compare, niet legacy full-set compare
 
-- UI rendert body en statements los van elkaar:
-  - `mcp-server/ui/lib/ui_render.ts`: 829-841 (body source), 888 (body render), 930-951 + 1196-1234 (statements panel).
+### Voorkeursrichting
 
-- Statements-panel fallback is actief buiten expliciete view-variant:
-  - `mcp-server/ui/lib/ui_render.ts`: 1197-1201 (`!hasExplicitViewVariant && isDreamExplainerMode`).
+Voorkeursrichting:
+- maak grouped compare semantisch robuust voor kleine anchorless rewrites
+- en maak wording-choice render semantisch exclusief
 
-- Dream Builder dedupe bestaat, maar is context-gated:
-  - `mcp-server/src/handlers/run_step_runtime_finalize.ts`: 300-307 (dreamBuilderRenderContext gate), 334-389 (message cleanup).
+Concreet betekent dat:
+- de compare-builder mag niet stoppen zodra exacte anchors ontbreken
+- hij moet nog één semantische grouping-pass doen
+- pas bij echte onzekerheid valt hij terug naar full-set compare
+- en tijdens wording-choice verdwijnt de gewone step-prompt volledig uit beeld
 
-- Hulpfunctie voor dedupe tegen prompt bestaat, maar wordt niet gebruikt in de renderflow:
-  - `mcp-server/ui/lib/ui_render.ts`: 168-181 (`dedupeBodyAgainstPrompt`), geen call-site.
+Waarom dit de beste richting is:
+- dit lost de echte productbreuk op in plaats van alleen de makkelijke anchor-cases
+- dit sluit aan op hoe users daadwerkelijk schrijven
+- dit maakt `strategy`, `productsservices` en `rulesofthegame` echt vriendelijker
+- dit voorkomt dubbelzinnige UI-states
+- dit laat de bestaande confirm/gates intact
 
-### Mogelijke structurele fixes (geen quick fixes)
-
-1. Definieer harde SSOT-eigenaarschap voor Dream Builder contentkanalen
-- Wanneer statements-panel zichtbaar is, mag body geen semantische herhaling van statements bevatten.
-- Dit als contractregel, niet als best-effort heuristiek.
-
-2. Synchroniseer server- en UI-gates
-- Dezelfde condition-set moet bepalen:
-  - wanneer statements zichtbaar zijn,
-  - wanneer dedupe verplicht is,
-  - welke body toegestaan is (support/coach-zinnen alleen).
-
-3. Introduceer expliciete `dream_builder_body_mode` in UI-contract
-- Bijvoorbeeld: `support_only | full_narrative | none`.
-- UI mag niet zelfstandig fallbacken naar dubbele content buiten dit contract.
-
-4. Verplaats Dream Builder dedupe naar één canonical compositiefunctie
-- Niet verspreid over runtime finalize + UI heuristieken.
-- Eén punt dat beslist: welke tekstblokken verschijnen samen.
-
-5. Breid regressietests uit met “no semantic duplicate across channels”
-- Test: narrative paragraaf met 5 zinnen die overeenkomen met 5 statements -> body moet leeg/ingekort worden.
-- Test met lichte parafrase en volgordevariatie.
-- Test op gate-mismatch scenario (`no explicit view variant` + dreamExplainer fallback).
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
+### Agent instructie (copy-paste, implementatieopdracht)
 ```text
 Context
-Dream Builder toont soms dubbele content: een narrative paragraaf die semantisch hetzelfde is als de statements-bullets.
-Er zijn al circa 12 eerdere fixes gedaan in meerdere lagen, maar het probleem keert terug.
+Voor `strategy`, `productsservices` en `rulesofthegame` bestaat al grouped compare-werk, maar een belangrijk type case valt nog steeds terug naar legacy full-set compare.
 
-Observed bug
-- Een volledige paragraaf met Dream-inhoud verschijnt bovenaan.
-- Dezelfde inhoud verschijnt direct daaronder opnieuw als genummerde statements.
-- Dit is ongewenste dubbele content.
+De huidige failure-case:
+- user geeft meerdere bullets of losse zinnen
+- de agent herschrijft die inhoudelijk goed
+- maar zonder exacte tekstuele overlap
+- bijvoorbeeld:
+  - 3 user-bullets -> 4 suggestion-bullets
+  - 2 user-bullets -> 3 suggestion-bullets
+- de UI toont dan weer de oude full-set compare:
+  - `Dit is jouw input`
+  - `Dit zou mijn suggestie zijn`
+  - twee complete blokken
+- terwijl dit productmatig grouped compare had moeten zijn
 
-Doel van deze opdracht
-1) Maak een forensische terugblik op de eerdere fixes en waarom ze onvoldoende waren.
-2) Bepaal definitieve root-cause van de huidige duplicate-channel regressie.
-3) Ontwerp een structurele SSOT-oplossing voor Dream Builder content ownership.
-4) Doe GEEN codewijzigingen in deze opdracht.
+Tweede probleem:
+- tijdens wording-choice blijft de normale step-prompt onder de compare zichtbaar
+- bijvoorbeeld:
+  - `Waar focus je nog meer op binnen je strategie?`
+- dat is semantisch fout: de user zit nog in compare/pick state, niet in nieuwe input state
+
+Concrete codebevinding
+De huidige compare-builder gebruikt exacte anchors/LCS op canonicalized list items.
+Als:
+- er geen anchors zijn
+- én beide kanten meer dan 1 item hebben
+dan valt de compare-builder nu direct terug naar `null`,
+waardoor de legacy full-set compare activeert.
+
+Dat is te grof.
+Exacte anchors mogen een optimalisatie zijn, maar niet de harde voorwaarde voor grouped compare.
+
+Nieuwe productrichting
+Voor `strategy`, `productsservices` en `rulesofthegame` moet grouped compare ook werken bij kleine anchorless rewrites, zolang de matching semantisch betrouwbaar genoeg is.
+
+De flow moet dus zijn:
+1. probeer anchors / retained bullets te vinden
+2. als anchors ontbreken, probeer alsnog semantic compare grouping
+3. bouw grouped compare-units voor semantisch duidelijke `1:1`, `1:n`, `n:1` en `n:m`
+4. val alleen terug naar full-set compare als matching echt onzeker is
+5. toon tijdens wording-choice géén normale step-prompt onder de compare
 
 Harde regels
-- Geen quick fix met extra string-strip als eindoplossing.
-- Geen lokale patch in alleen UI of alleen server; oplossing moet cross-layer contractueel zijn.
-- Geen hardcoded user-facing copy in runtime code; copy via i18n keys.
-- Behoud bestaande contracten/invariants (`ui_contract_id`, rendered status, confirm visibility).
-- Zonder expliciet akkoord: geen implementatie.
+- Behoud server-side set-based gating als eindautoriteit
+- Geen vrije bullet-editor bouwen
+- Geen fake retained bullets tonen als die er inhoudelijk niet zijn
+- Geen semantisch onbetrouwbare pairings forceren
+- Full-set compare blijft alleen een expliciete safety fallback
+- Tijdens wording-choice geen parallelle ask-state renderen
+- Geen hardcoded user-facing copy toevoegen
+- Grouped compare labels blijven i18n-gedreven
 
-Onderzoeksaanpak
-1. Reconstrueer de laatste 12 relevante pogingen (commit + intent + effect + gat).
-2. Trace exact de huidige flow:
-   - server text composition
-   - dream builder statement source
-   - ui body rendering
-   - ui statements rendering
-3. Bewijs de gate-mismatch (server dedupe gate vs ui panel gate).
-4. Definieer SSOT-contract voor Dream Builder content ownership:
-   - toegestaan blokkencombinaties
-   - verboden combinatie (narrative duplicate + statements)
-5. Lever regressietestmatrix met semantische duplicate-cases.
+Uit te voeren aanpak
 
-Verplichte outputstructuur
-A. Terugblik 12 pogingen (wat gedaan, waarom onvoldoende)
-B. Technisch bewijs huidige regressie (file/line)
-C. Definitieve root-cause
-D. Structureel fixplan (SSOT compositiecontract)
-E. Testplan + risico-inschatting
+1. Maak grouped compare niet afhankelijk van exacte anchors
+- Houd de huidige anchor/LCS-logica als eerste pass.
+- Verwijder de huidige harde return die grouped compare afbreekt zodra:
+  - `anchors.length === 0`
+  - en beide kanten meer dan 1 item hebben
+- Voeg daarna een tweede semantic planning pass toe.
+
+2. Voeg semantic grouping toe voor anchorless kleine lists
+- Richt op kleine list-steps:
+  - `strategy`
+  - `productsservices`
+  - `rulesofthegame`
+- Ondersteun semantisch duidelijke rewrites zoals:
+  - 1 -> 1
+  - 1 -> 2
+  - 2 -> 1
+  - 3 -> 4
+  - 2 -> 3
+- Een compare-unit hoeft dus niet exact bullet-tegen-bullet te zijn.
+- Als één duidelijke grouping mogelijk is, gebruik grouped compare.
+
+3. Gebruik confidence-based fallback
+- Als semantic grouping te onzeker is:
+  - gebruik dan expliciet legacy full-set compare
+- Maar maak `geen exacte anchors` op zichzelf niet langer voldoende reden voor fallback.
+
+4. Houd retained bullets alleen als ze echt retained zijn
+- Als er anchors of semantisch stabiele overeenkomsten zijn:
+  - zet die in retained segments
+- Als de hele case een complete rewrite is zonder retained items:
+  - grouped compare mag nog steeds
+  - maar dan zonder retained block of met leeg retained block
+
+5. Maak wording-choice render exclusief
+- Als wording-choice actief is:
+  - render de compare panel
+  - render de picker CTA's
+  - render NIET de gewone step-prompt onder de compare
+- De user mag op dat moment geen dubbele taak zien.
+
+6. Houd grouped compare labels semantisch correct
+- Voor grouped list compare:
+  - user side: `Jouw compacte formulering is dit`
+  - suggestion side: `Mijn suggestie is dit`
+- Legacy wording:
+  - `Dit is jouw input`
+  - `Dit zou mijn suggestie zijn`
+  mag alleen zichtbaar zijn in echte legacy full-set fallback of pure text compare.
+
+Verplichte outputstructuur van je implementatieverslag
+A. Waarom de huidige compare-builder terugviel naar legacy full-set compare
+B. Hoe anchorless semantic grouping nu werkt
+C. Hoe en wanneer full-set fallback nog wordt gebruikt
+D. Hoe wording-choice rendering de normale step-prompt nu onderdrukt
+E. Welke i18n-labels actief blijven voor grouped compare
+F. Waarom de bestaande set-based gates intact blijven
+G. Welke regressietests zijn toegevoegd
+
+Verplichte testdekking
+- `strategy`: 3 user-items -> 4 suggestion-items, geen exacte anchors, maar wel grouped compare
+- `productsservices` of `rulesofthegame`: extra anchorless n:m rewrite-case
+- bestaande anchor-based grouped compare blijft werken
+- retained bullets blijven zichtbaar als ze echt bestaan
+- legacy full-set fallback blijft actief bij echt onzekere matching
+- grouped compare gebruikt niet de legacy labels
+- tijdens wording-choice wordt de gewone step-prompt niet onder de compare gerenderd
+
+Definitieve invariant
+- Voor `strategy`, `productsservices` en `rulesofthegame` mag grouped compare niet alleen werken als er exacte anchors zijn.
+- Kleine semantisch duidelijke anchorless rewrites moeten ook grouped compare krijgen.
+- Full-set compare is alleen nog een expliciete safety fallback.
+- Tijdens wording-choice ziet de user geen parallelle gewone step-vraag.
+- Finale step-output blijft set-based en gaat nog steeds door de bestaande server-side gates.
 
 Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
+- Stop pas na implementatie, testaanpassingen en verificatie.
+- Rapporteer expliciet:
+  - waarom de oude code terugviel
+  - hoe anchorless grouping nu werkt
+  - hoe de render exclusiviteit van wording-choice is opgelost
+  - en welke fallback-conditie overblijft voor echt onzekere matching
 ```
 
 ### Oplossing / aanpassing (na akkoord)
 Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-
-## Fix 2 - Dream wording-flow: onderscheid input vs feedback + regressie in canonical heading-shape
-
-### Input (zoals gemeld)
-Geobserveerde regressies in Dream:
-
-1. Bij een volledige userzin (inhoudelijke herformulering) verschijnt niet meer het dual-keuzevlak (`your input / my suggestion`), maar alleen nog één versie.
-2. Bij feedback op een bestaande suggestie (bijv. `dit klinkt saai`) verschuift de output naar stap-/motivatiecopy i.p.v. inhoudelijke hersuggestie.
-3. De interface-shape is onjuist: `Je huidige droom voor Mindd is:` moet als aparte headingregel (uppercase-stijl) boven de droom staan, niet inline in een lopende alinea.
-
-Gewenst gedrag:
-- Twee expliciete inputtypes blijven bestaan:
-  - `content_input` (user levert eigen zin) -> dual-keuze moet beschikbaar blijven waar relevant.
-  - `feedback_on_suggestion` (user corrigeert bestaande suggestie) -> nieuwe suggestie op basis van vorige suggestie, zonder verkeerde stap-meta-uitwijk.
-
-### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
-
-#### Hypothese A - Over-canonicalisatie onderdrukt dual flow voor Dream
-- De wording-opbouw forceert voor Dream standaard `canonical` presentatie.
-- Daardoor wordt de picker/double-choice payload niet opgebouwd, ook niet wanneer inputtype inhoudelijk `content_input` is.
-
-#### Hypothese B - Presentatiekeuze is step-gedreven i.p.v. intent-gedreven
-- De beslislaag gebruikt vooral step-scope (`dream` => canonical) en onvoldoende het onderscheid tussen inhoudelijke herformulering versus feedback op pending suggestie.
-- Gevolg: twee fundamenteel verschillende userintenties vallen visueel op hetzelfde pad.
-
-#### Hypothese C - Feedbackturn mist harde inhoudsconstraint
-- Bij `feedback_on_suggestion` kan specialist-copy uitwaaieren naar coaching/stapframing i.p.v. directe inhoudelijke hersuggestie.
-- Hierdoor voelt het alsof feedback niet op de droominhoud wordt toegepast.
-
-#### Hypothese D - Renderer accepteert inline heading+waarde als “goed genoeg”
-- Canonical context-dedupe controleert aanwezigheid van heading/canonical tekst, maar normaliseert de vorm niet af naar aparte headingregel + waarde.
-- Daardoor blijft een onjuiste inline variant (`Je huidige droom...: <zin>`) staan.
-
-#### Hypothese E - UI toont geen dual panel zodra wording-choice payload ontbreekt
-- In canonical pad komt vaak geen `wording_choice` UI payload mee.
-- De client verbergt dan het keuzevlak volledig en laat alleen de standaard card zien.
-
-### Bewijspunten in code (startpunten voor diep onderzoek)
-
-- Canonical-voorkeur voor Dream in wording-opbouw:
-  - `mcp-server/src/handlers/run_step_wording.ts`: 341-350, 926-928.
-
-- Canonical pad retourneert geen picker payload:
-  - `mcp-server/src/handlers/run_step_wording.ts`: 1082-1084.
-
-- Pipeline zet picker alleen bij expliciete pending-choice payload:
-  - `mcp-server/src/handlers/run_step_pipeline.ts`: 855-863.
-
-- Pending-intent resolutie bestaat, maar presentatie blijft losgekoppeld van intent:
-  - `mcp-server/src/handlers/run_step_runtime_action_routing.ts`: 562-577.
-  - `mcp-server/src/handlers/run_step_wording_heuristics.ts`: 266-325.
-
-- Canonical context-block afdwingen zonder shape-normalisatie:
-  - `mcp-server/src/core/turn_policy_renderer.ts`: 382-412, 1524-1529.
-
-- UI verbergt wording-keuzevlak als payload niet enabled is:
-  - `mcp-server/ui/lib/ui_render.ts`: 482-487.
-
-- Heading-rendering vraagt expliciete heading-structuur per regel:
-  - `mcp-server/ui/lib/ui_text.ts`: 227-285.
-
-### Mogelijke structurele fixes (geen quick fixes)
-
-1. Maak presentatiekeuze intent-gedreven (SSOT), niet step-hardcoded
-- Inputclassificatie als primaire driver:
-  - `content_input` op pending suggestie -> dual picker (`your input / my suggestion`) waar contract dat toelaat.
-  - `feedback_on_suggestion` / `reject_suggestion_explicit` -> canonical hersuggestieflow met suggestion-anchor.
-
-2. Definieer een expliciet “pending suggestion turn contract”
-- Vereiste velden per intent:
-  - `intent`, `anchor`, `seed_source`, `presentation_mode`.
-- Verplicht dat `feedback_on_suggestion` de vorige suggestie als basis gebruikt en niet terugvalt op generieke stapmeta-copy.
-
-3. Voeg output-shape invariant toe voor single-value canonical blokken
-- `heading` en `canonical value` moeten als aparte blokregels worden afgedwongen.
-- Inline varianten (`heading: value` in één lopende alinea) normaliseren naar 2-regelige canonical structuur.
-
-4. Houd dual-flow functioneel voor vrijwillige userzin
-- Als user bewust een eigen zin aanlevert, moet de keuze om eigen formulering te behouden versus suggestie te kiezen intact blijven.
-- Geen globale suppressie van dual panel voor alle Dream-gevallen.
-
-5. Cross-step harmonisatie
-- Pas dezelfde intent/presentation-regels toe op Purpose, BigWhy, Role, Entity, Targetgroup en andere single-value confirm-flows.
-- Vermijd per-step uitzonderingslogica.
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
-```text
-Context
-Na recente wijzigingen zijn twee verschillende typen userinput in Dream onvoldoende gescheiden:
-1) inhoudelijke eigen zin (moet dual keuze kunnen tonen),
-2) feedback op bestaande suggestie (moet nieuwe suggestie opleveren op basis van de vorige suggestie).
-Daarnaast is canonical heading-shape regressief (inline i.p.v. headingregel + waarde).
-
-Observed bugs
-- Bij inhoudelijke userzin verdwijnt vaak de dual flow (your input / my suggestion).
-- Bij feedback zoals "dit klinkt saai" verschuift output naar stap-/motivatiecopy i.p.v. inhoudelijke hersuggestie.
-- "Je huidige droom voor Mindd is" verschijnt niet altijd als aparte headingregel boven de droomwaarde.
-
-Doel van deze opdracht
-1) Bepaal definitieve root-cause van presentatie-routing (canonical vs picker) en intentverwerking.
-2) Ontwerp een structureel intent-contract voor pending suggestion afhandeling.
-3) Definieer shape-invariants voor canonical heading/value rendering.
-4) Doe GEEN codewijzigingen in deze opdracht.
-
-Harde regels
-- Geen keyword-hacks of locale-regex als primaire routering.
-- Geen hardcoded user-facing runtime copy; alles via i18n keys.
-- Pending wording-choice mag specialist/intent-pad niet blokkeren.
-- Behoud bestaande contracten/invariants (`ui_contract_id`, rendered status, confirm visibility).
-- Oplossing moet cross-step werken, niet Dream-only quick patch.
-- Zonder expliciet akkoord: geen implementatie.
-
-Onderzoeksaanpak
-1. Trace end-to-end:
-   - pending intent detectie
-   - action routing
-   - pipeline seeding
-   - wording-choice opbouw
-   - renderer output-shape
-   - ui panel visibility
-2. Maak intentmatrix met minimaal:
-   - accept_suggestion_explicit
-   - reject_suggestion_explicit
-   - feedback_on_suggestion
-   - content_input
-   inclusief `anchor/source`.
-3. Toets of presentatiekeuze (`picker` vs `canonical`) nu step-gedreven is en waar dit intent overschrijft.
-4. Definieer structureel voorstel:
-   - intent-gedreven presentatiekeuze
-   - canonical shape-normalisatie (heading apart)
-   - regressietests voor Dream + minimaal 2 andere single-value stappen.
-
-Verplichte outputstructuur
-A. Mensentaal probleemuitleg
-B. Technisch bewijs (file/line)
-C. Definitieve root-cause
-D. Structureel fixplan (SSOT + intent-contract)
-E. Testplan + risico-inschatting
-
-Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
-```
-
-### Oplossing / aanpassing (na akkoord)
-Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-
-
-## Fix 3 - Step 0 seed-extractie herkent bedrijfsnaam en type fout bij natuurlijke openingszin
-
-### Input (zoals gemeld)
-User-input:
-- `help met mijn ondernemingsplan voor mijn reclamebureau Mindd`
-
-Huidige output in validate/readiness:
-- `Je hebt een ondernemingsplan voor mijn genaamd reclamebureau...`
-
-Verwachting:
-- Bedrijfstype: `reclamebureau`
-- Bedrijfsnaam: `Mindd`
-- Correcte readiness-zin op basis van die twee velden.
-
-### Eerste analyse (grote lijnen, nog geen definitieve root-cause)
-
-#### Hypothese A - Breed possessive patroon pakt verkeerde zinsdelen als venture/name
-- De parser matcht vroeg op `mijn ...` en kapt op een onjuiste plek in de zin.
-- Daardoor wordt een beschrijvend fragment als venture gezien en `reclamebureau` als naam.
-
-#### Hypothese B - Prioriteit van extractiebronnen is semantisch onjuist
-- Parser geeft voorrang aan regex-groepen uit het possessive patroon.
-- Daardoor worden sterkere signalen (venture-hints zoals `reclamebureau`, en trailing merknaam `Mindd`) genegeerd.
-
-#### Hypothese C - Validatie voorkomt foutieve tuple niet
-- Naam-validatie accepteert `reclamebureau` als plausibele naam.
-- Venture-validatie vereist vooral “niet leeg”, waardoor een fragment als `ondernemingsplan voor mijn` kan passeren.
-
-#### Hypothese D - Foute seed wordt vroeg gecommitteerd en downstream klakkeloos gerenderd
-- In start-prestart route wordt seed direct naar `step_0_final` geschreven.
-- Readiness-render gebruikt die tuple direct in de catalog-template, dus fout wordt zichtbaar in UI.
-
-### Bewijspunten in code (startpunten voor diep onderzoek)
-
-- Te brede possessive match + prioriteit:
-  - `mcp-server/src/handlers/run_step_step0.ts`: 177-186
-  - `pronounVentureName` wordt geprioriteerd boven venture-hints en trailing naam.
-
-- Venture/name selectie die verkeerde tuple produceert:
-  - `mcp-server/src/handlers/run_step_step0.ts`: 183-187
-
-- Naam-validatie die generieke venture-termen niet voldoende uitsluit:
-  - `mcp-server/src/handlers/run_step_step0.ts`: 45-54
-
-- Seed wordt hard in state gezet tijdens startup:
-  - `mcp-server/src/handlers/run_step_routes.ts`: 730-743
-
-- Readiness-zin rendert tuple 1-op-1 via i18n-template:
-  - `mcp-server/src/handlers/run_step_runtime_text_ui_helpers.ts`: 79-117
-  - `mcp-server/src/i18n/ui_strings/locales/ui_strings_nl.ts`: keys `step0.readiness.statement.*`
-
-- Regressiespoor in historie:
-  - Parser is in nieuwere vorm herschreven in commit `0d69c8f` (vervanging van stopwoord-gedreven extractie door bredere pattern-first extractie).
-
-### Mogelijke structurele fixes (geen quick fixes)
-
-1. Maak Step-0 seed-extractie semantisch en score-gedreven i.p.v. first-match regex-prioriteit
-- Kandidaten voor `venture` en `name` apart verzamelen.
-- Ranking toepassen met expliciete conflictregels (venture-woorden mogen geen naam winnen).
-
-2. Hard onderscheid tussen `venture lexicon` en `brand/name lexicon`
-- Venture-termset als negatieve filter voor naamkandidaten.
-- Multi-token beschrijvende fragmenten blokkeren als venture-kandidaat wanneer ze functie-woorden bevatten (`voor`, `mijn`, `met`, etc.).
-
-3. Introduceer tuple-consistentievalidatie vóór commit naar `step_0_final`
-- Als `venture` en `name` semantisch botsen of lage confidence hebben: niet committen.
-- Dan gecontroleerd fallback-pad (vraag om verduidelijking) i.p.v. foutieve tuple tonen.
-
-4. Eén SSOT-parser voor alle Step-0 seeding-paden
-- Zelfde parser gebruiken in prestart, bootstrap en latere correctieflows.
-- Geen parallelle infer-logica per route.
-
-5. Versterk regressietests op natuurlijke openingszinnen
-- Cases met meerdere `mijn/my` segmenten.
-- Cases met type + merknaam in vrije volgorde.
-- Cases die foutieve “naam=venture” moeten blokkeren.
-
-### Agent instructie (copy-paste, diep onderzoek, geen code wijzigen)
-```text
-Context
-Step 0 (Validatie & Bedrijfsnaam) herkent bij natuurlijke openingszinnen soms de venture en bedrijfsnaam verkeerd.
-
-Observed bug
-Input: "help met mijn ondernemingsplan voor mijn reclamebureau Mindd"
-Huidige interpretatie gaat fout: venture en naam worden omgewisseld of vervuild door zinsfragmenten.
-De readiness-zin toont daardoor onzinnige output.
-
-Doel van deze opdracht
-1) Bepaal definitieve root-cause van de foutieve step-0 tuple-extractie.
-2) Ontwerp een structurele, herbruikbare parse-strategie voor venture + bedrijfsnaam.
-3) Definieer regressietests die dit blijvend voorkomen.
-4) Doe GEEN codewijzigingen in deze opdracht.
-
-Harde regels
-- Geen keyword-hack of losse regex-fix als eindoplossing.
-- Geen route-specifieke workaround; oplossing moet SSOT zijn.
-- Geen hardcoded user-facing copy in runtime; copy blijft via i18n keys.
-- Behoud bestaande contracten/invariants (`ui_contract_id`, rendered status, confirm visibility).
-- Zonder expliciet akkoord: geen implementatie.
-
-Onderzoeksaanpak
-1. Trace end-to-end:
-   - seed-detectie in step0 parser
-   - route commit naar `step_0_final`
-   - readiness-rendering
-2. Maak causale keten met concreet bewijs (file/line).
-3. Ontwerp parser-contract:
-   - aparte kandidaatsets voor venture en name
-   - confidence/ranking
-   - conflict-resolutie
-   - commit-guardrails
-4. Toets op cross-flow impact:
-   - startup/prestart
-   - latere naamwijziging in step0
-   - fallback naar clarify-flow
-5. Definieer regressietestmatrix:
-   - NL/EN openingszinnen
-   - meerdere possessive segmenten
-   - venture-term als ongeldige name
-   - false-positive blokkades
-
-Verplichte outputstructuur
-A. Mensentaal probleemuitleg
-B. Technisch bewijs (file/line)
-C. Definitieve root-cause
-D. Structureel fixplan (SSOT)
-E. Testplan + risico-inschatting
-
-Stopconditie
-- Stop na analyse + plan.
-- Vraag expliciet akkoord voor implementatie.
-- Zonder akkoord: geen codewijzigingen.
-```
-
-### Oplossing / aanpassing (na akkoord)
-Nog niet ingevuld. Wacht op expliciet akkoord voor implementatie.
-

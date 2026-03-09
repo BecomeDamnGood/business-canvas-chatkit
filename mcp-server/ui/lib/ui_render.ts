@@ -78,6 +78,18 @@ export function shouldSuppressMainCardForWordingChoice(
   );
 }
 
+export function shouldSuppressPromptForWordingChoice(params: {
+  uiViewVariant?: string | null;
+  wordingChoiceActive?: boolean;
+  requireWordingPick?: boolean;
+}): boolean {
+  return (
+    String(params.uiViewVariant || "").trim() === "wording_choice" ||
+    params.wordingChoiceActive === true ||
+    params.requireWordingPick === true
+  );
+}
+
 function actionContractActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
   const uiPayload = toRecord(resultData.ui);
   const actionContract = toRecord(uiPayload.action_contract);
@@ -1438,6 +1450,15 @@ export function render(overrideToolOutput?: unknown): void {
     if (statementsPanelEl) statementsPanelEl.style.display = "none";
   }
 
+  let requireWordingPick = false;
+  const suppressWordingChoice = isViewModeDreamBuilderScoring;
+  if (!suppressWordingChoice) {
+    requireWordingPick = renderWordingChoicePanel(result, lang);
+  } else {
+    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+  }
+
   let choicesArr: Choice[] = [];
   let promptText = isDreamDirectionView ? "" : promptSource;
   const shouldStripStructuredPrompt = isViewModeWordingChoice || !hasStructuredActions;
@@ -1449,14 +1470,12 @@ export function render(overrideToolOutput?: unknown): void {
     choicesArr = [];
     promptText = isDreamDirectionView ? "" : promptSource;
   }
-
-  let requireWordingPick = false;
-  const suppressWordingChoice = isViewModeDreamBuilderScoring;
-  if (!suppressWordingChoice) {
-    requireWordingPick = renderWordingChoicePanel(result, lang);
-  } else {
-    const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-    if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+  if (shouldSuppressPromptForWordingChoice({
+    uiViewVariant,
+    wordingChoiceActive,
+    requireWordingPick,
+  })) {
+    promptText = "";
   }
 
   const promptEl = document.getElementById("prompt");

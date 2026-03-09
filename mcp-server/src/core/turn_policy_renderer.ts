@@ -1691,6 +1691,11 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     safeLabels = retainedIndices.map((idx) => safeLabels[idx]);
     safeLabelKeys = retainedIndices.map((idx) => safeLabelKeys[idx]);
   }
+  const wordingChoiceSelected = String((specialistForDisplay as any).wording_choice_selected || "").trim();
+  const wordingPresentation =
+    String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
+      ? "canonical"
+      : "picker";
   const headline = contractHeadlineForState({
     state,
     stepId,
@@ -1717,14 +1722,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !String(headline || "").trim()
       ? interactiveAskPromptFallback(state, stepId)
       : "";
-  const question = stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
+  const question =
+    wordingPending && wordingPresentation === "picker"
+      ? ""
+      : stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
   const contractId = buildContractId(stepId, effectiveStatus, menuId);
   const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
-  const wordingChoiceSelected = String((specialistForDisplay as any).wording_choice_selected || "").trim();
-  const wordingPresentation =
-    String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
-      ? "canonical"
-      : "picker";
   const feedbackReasonForDisplay =
     wordingChoiceSelected === "user"
       ? ""

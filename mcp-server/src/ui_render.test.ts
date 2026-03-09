@@ -5,6 +5,7 @@ import {
   actionRoleForStateKey,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
+  shouldSuppressPromptForWordingChoice,
   shouldSuppressMainCardForWordingChoice,
 } from "../ui/lib/ui_render.js";
 import { benProfileVideoUrlForLang, dreamStepVideoUrlForLang } from "../ui/lib/ui_constants.js";
@@ -52,6 +53,25 @@ test("shouldSuppressMainCardForWordingChoice keeps the main card enabled for non
       },
       "default"
     ),
+    false
+  );
+});
+
+test("shouldSuppressPromptForWordingChoice hides the prompt while wording-choice is active", () => {
+  assert.equal(
+    shouldSuppressPromptForWordingChoice({
+      uiViewVariant: "wording_choice",
+      wordingChoiceActive: true,
+      requireWordingPick: true,
+    }),
+    true
+  );
+  assert.equal(
+    shouldSuppressPromptForWordingChoice({
+      uiViewVariant: "default",
+      wordingChoiceActive: false,
+      requireWordingPick: false,
+    }),
     false
   );
 });

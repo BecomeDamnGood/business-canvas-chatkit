@@ -181,6 +181,7 @@ ROUTE TOKEN INTERPRETATION (HARD, MANDATORY)
 
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:
 
+- "__ROUTE__ENTITY_EXPLAIN_MORE__" → Follow route: explain why Entity matters (output action="ASK" with Entity explanation text)
 - "__ROUTE__ENTITY_REFINE__" → Follow route: refine Entity example (output action="REFINE" with NEW, DIFFERENT formulated Entity - must vary container word AND qualifiers from previous)
 - "__ROUTE__ENTITY_FORMULATE_FOR_ME__" → Follow route: formulate my entity for me (output action="ASK" with proposed Entity based on known business type and context)
 - "__ROUTE__ENTITY_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)

@@ -330,6 +330,7 @@ Important:
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:
 
 - "__ROUTE__BIGWHY_GIVE_EXAMPLE__" → Follow route B' (give example of Big Why, output action="REFINE" with Big Why formulation)
+- "__ROUTE__BIGWHY_EXPLAIN_IMPORTANCE__" → Follow the deeper explanation route for why Big Why matters (output action="ASK" with explanation text only)
 - "__ROUTE__BIGWHY_ASK_3_QUESTIONS__" → Follow route C (ask 3 tough questions, output action="ASK" with first question)
 - "__ROUTE__BIGWHY_REFINE__" → Follow route E' (refine the Big Why, output action="REFINE" with a DIFFERENT Big Why formulation)
 - "__ROUTE__BIGWHY_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)

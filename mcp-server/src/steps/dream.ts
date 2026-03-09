@@ -140,6 +140,7 @@ ROUTE TOKENS (HARD)
 If USER_MESSAGE is exactly one of these tokens, follow the specified route:
 - "__ROUTE__DREAM_EXPLAIN_MORE__" → Follow route: WHY DREAM MATTERS (Level 1).
 - "__ROUTE__DREAM_GIVE_SUGGESTIONS__" → Follow route: DREAM SUGGESTIONS.
+- "__ROUTE__DREAM_PICK_ONE__" → Follow route: choose one Dream suggestion and set it as the current Dream candidate.
 - "__ROUTE__DREAM_START_EXERCISE__" → Follow route: EXERCISE HANDSHAKE (DreamExplainer).
 - "__ROUTE__DREAM_FINISH_LATER__" → Follow route: finish later (gentle closing question).
 - "__ROUTE__DREAM_FORCE_REFINE__" → Internal recovery route: return REFINE with a non-empty Dream candidate based on the user input.

@@ -93,6 +93,45 @@ test("strategy pending wording-choice render does not append canonical context b
   assert.equal(message.includes("Kies de versie") || message.includes("Dit is mijn suggestie"), true);
 });
 
+test("strategy wording-choice picker suppresses the normal step question", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "strategy";
+  (state as any).active_specialist = "Strategy";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "strategy",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Kies de beste formulering voor het resterende verschil.",
+      question: "Waar focus je nog meer op binnen je strategie?",
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_presentation: "picker",
+      wording_choice_variant: "grouped_list_units",
+      wording_choice_target_field: "strategy",
+      wording_choice_compare_mode: "grouped_units",
+      wording_choice_compare_units: [
+        {
+          id: "unit_1",
+          user_items: ["Recurring revenue through retainers"],
+          suggestion_items: ["Build recurring revenue with implementation retainers"],
+          user_text: "Recurring revenue through retainers",
+          suggestion_text: "Build recurring revenue with implementation retainers",
+          resolution: "",
+          confidence: "fallback",
+        },
+      ],
+      wording_choice_compare_segments: [{ kind: "unit", unit_id: "unit_1" }],
+      wording_choice_user_items: ["Recurring revenue through retainers"],
+      wording_choice_suggestion_items: ["Build recurring revenue with implementation retainers"],
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(String((rendered.specialist as any).question || ""), "");
+});
+
 test("strategy render strips model-owned English summary lines and keeps runtime-owned canonical context", () => {
   const state = getDefaultState();
   const statements = [

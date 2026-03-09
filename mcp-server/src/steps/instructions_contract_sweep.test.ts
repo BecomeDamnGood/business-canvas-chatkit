@@ -12,6 +12,7 @@ import { PRODUCTSSERVICES_INSTRUCTIONS, buildProductsServicesSpecialistInput } f
 import { RULESOFTHEGAME_INSTRUCTIONS } from "./rulesofthegame.js";
 import { PRESENTATION_INSTRUCTIONS } from "./presentation.js";
 import { buildExplainLightInstructions } from "./explain_profile.js";
+import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 
 const NON_STEP0_INSTRUCTIONS: Array<[string, string]> = [
   ["dream", DREAM_INSTRUCTIONS],
@@ -102,6 +103,46 @@ test("core steps explicitly declare runtime contract-driven menu/button routing"
     assert.ok(
       text.includes("Menu/buttons are runtime contract-driven via contract_id + action_codes."),
       `${stepId} must explicitly declare runtime contract-driven routing`
+    );
+  }
+});
+
+test("menu-exposed content routes are explicitly documented in step instructions", () => {
+  const instructionTextsByStep = new Map<string, string>([
+    ["dream", `${DREAM_INSTRUCTIONS}\n${DREAM_EXPLAINER_INSTRUCTIONS}`],
+    ["purpose", PURPOSE_INSTRUCTIONS],
+    ["bigwhy", BIGWHY_INSTRUCTIONS],
+    ["role", ROLE_INSTRUCTIONS],
+    ["entity", ENTITY_INSTRUCTIONS],
+    ["strategy", STRATEGY_INSTRUCTIONS],
+    ["targetgroup", TARGETGROUP_INSTRUCTIONS],
+    ["productsservices", PRODUCTSSERVICES_INSTRUCTIONS],
+    ["rulesofthegame", RULESOFTHEGAME_INSTRUCTIONS],
+    ["presentation", PRESENTATION_INSTRUCTIONS],
+  ]);
+  const menuActionCodes = new Set(
+    Object.values(ACTIONCODE_REGISTRY.menus).flatMap((codes) =>
+      Array.isArray(codes) ? codes.map((code) => String(code || "").trim()).filter(Boolean) : []
+    )
+  );
+  const shouldEnforceRouteDocumentation = (route: string): boolean => {
+    if (!route.startsWith("__ROUTE__")) return false;
+    if (/_CONTINUE__$/.test(route)) return false;
+    if (/_FINAL_CONTINUE__$/.test(route)) return false;
+    if (/_CONFIRM_SATISFIED__$/.test(route)) return false;
+    return true;
+  };
+
+  for (const [actionCode, entry] of Object.entries(ACTIONCODE_REGISTRY.actions)) {
+    if (!menuActionCodes.has(actionCode)) continue;
+    const stepId = String(entry.step || "").trim();
+    const route = String(entry.route || "").trim();
+    if (!instructionTextsByStep.has(stepId)) continue;
+    if (!shouldEnforceRouteDocumentation(route)) continue;
+    const text = instructionTextsByStep.get(stepId) || "";
+    assert.ok(
+      text.includes(route),
+      `${stepId} instructions must explicitly document menu route ${route} from ${actionCode}`
     );
   }
 });

@@ -456,10 +456,10 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ? "dream_builder_refine"
           : "dream_builder_collect";
     }
-    const shouldForceQuestionText = viewVariant === "wording_choice";
-    const questionTextPayload = shouldForceQuestionText
-      ? { questionText: String(questionText || "").trim() }
-      : (questionText ? { questionText } : {});
+    const questionTextPayload =
+      viewVariant === "wording_choice"
+        ? {}
+        : (questionText ? { questionText } : {});
     const rawContentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
     const shouldSuppressSingleValueContent =
       Boolean(rawContentPayload) &&

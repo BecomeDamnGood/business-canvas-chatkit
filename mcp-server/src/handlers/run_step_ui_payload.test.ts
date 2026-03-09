@@ -169,6 +169,47 @@ test("attachRegistryPayload suppresses single-value ui.content while wording-cho
   assert.equal(payload.ui?.wording_choice?.enabled, true);
 });
 
+test("attachRegistryPayload omits questionText while wording-choice picker is active", () => {
+  const helpers = buildHelpers();
+  const canonical = "Build recurring revenue with implementation retainers.";
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: canonical,
+      prompt: "Waar focus je nog meer op binnen je strategie?",
+      current_step_id: "strategy",
+      state: {
+        current_step: "strategy",
+        active_specialist: "Strategy",
+      } as any,
+    },
+    {
+      ui_contract_id: "strategy:ASK:STRATEGY_MENU_ASK_MORE:v1",
+      question: "Waar focus je nog meer op binnen je strategie?",
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "strategy",
+      wording_choice_user_items: ["Recurring revenue through retainers"],
+      wording_choice_suggestion_items: [canonical],
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "list",
+      user_text: "Recurring revenue through retainers",
+      suggestion_text: canonical,
+      user_items: ["Recurring revenue through retainers"],
+      suggestion_items: [canonical],
+      instruction: "Kies de versie die het beste past bij het resterende verschil.",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, "wording_choice");
+  assert.equal(Object.prototype.hasOwnProperty.call(payload.ui || {}, "questionText"), false);
+});
+
 test("attachRegistryPayload keeps legacy payloads renderable when ui.content is absent", () => {
   const helpers = buildHelpers();
   const payload = helpers.attachRegistryPayload(

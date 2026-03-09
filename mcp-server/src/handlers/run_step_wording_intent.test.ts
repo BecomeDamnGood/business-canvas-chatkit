@@ -668,6 +668,160 @@ test("buildWordingChoiceFromTurn supports 3 user bullets versus 1 compact sugges
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
 });
 
+test("buildWordingChoiceFromTurn keeps strategy anchorless 3-to-4 rewrites in grouped compare mode", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "strategy",
+    state: {} as any,
+    activeSpecialist: "Strategy",
+    previousSpecialist: {
+      statements: [],
+      strategy: "",
+    },
+    specialistResult: {
+      message: "This is the sharpened strategy set.",
+      refined_formulation: [
+        "Build recurring revenue with implementation retainers",
+        "Partner directly with internal decision-makers",
+        "Focus on complex organisations with longer buying cycles",
+        "Keep delivery practical and measurable from day one",
+      ].join("\n"),
+      statements: [
+        "Build recurring revenue with implementation retainers",
+        "Partner directly with internal decision-makers",
+        "Focus on complex organisations with longer buying cycles",
+        "Keep delivery practical and measurable from day one",
+      ],
+    },
+    userTextRaw: [
+      "Recurring revenue through retainers",
+      "Work with decision-makers inside complex organisations",
+      "Keep delivery practical and measurable",
+    ].join("\n"),
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
+  assert.equal(result.wordingChoice?.suggestion_label, "This is my suggestion:");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.equal(Array.isArray((result.specialist as Record<string, unknown>).wording_choice_compare_units), true);
+  const compareUnits = ((result.specialist as Record<string, unknown>).wording_choice_compare_units as Array<Record<string, unknown>>) || [];
+  assert.equal(compareUnits.length >= 1, true);
+  assert.deepEqual(
+    compareUnits.flatMap((unit) => ((unit.user_items as string[]) || []).map((line) => String(line || ""))),
+    [
+      "Recurring revenue through retainers",
+      "Work with decision-makers inside complex organisations",
+      "Keep delivery practical and measurable",
+    ]
+  );
+  assert.deepEqual(
+    compareUnits.flatMap((unit) => ((unit.suggestion_items as string[]) || []).map((line) => String(line || ""))),
+    [
+      "Build recurring revenue with implementation retainers",
+      "Partner directly with internal decision-makers",
+      "Focus on complex organisations with longer buying cycles",
+      "Keep delivery practical and measurable from day one",
+    ]
+  );
+  assert.equal((result.wordingChoice?.user_items || []).length >= 1, true);
+  assert.equal((result.wordingChoice?.suggestion_items || []).length >= 1, true);
+});
+
+test("buildWordingChoiceFromTurn keeps productsservices anchorless 2-to-3 rewrites in grouped compare mode", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "productsservices",
+    state: {} as any,
+    activeSpecialist: "ProductsServices",
+    previousSpecialist: {
+      statements: [],
+      productsservices: "",
+    },
+    specialistResult: {
+      message: "This is the sharpened offer set.",
+      refined_formulation: [
+        "AI opportunity scans",
+        "Implementation guidance for AI adoption",
+        "Brand strategy for technical companies",
+      ].join("\n"),
+      statements: [
+        "AI opportunity scans",
+        "Implementation guidance for AI adoption",
+        "Brand strategy for technical companies",
+      ],
+    },
+    userTextRaw: [
+      "AI scans and implementation help",
+      "Brand strategy for technical teams",
+    ].join("\n"),
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
+  assert.equal(result.wordingChoice?.suggestion_label, "This is my suggestion:");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  const compareUnits = ((result.specialist as Record<string, unknown>).wording_choice_compare_units as Array<Record<string, unknown>>) || [];
+  assert.equal(compareUnits.length >= 1, true);
+  assert.deepEqual(
+    compareUnits.flatMap((unit) => ((unit.user_items as string[]) || []).map((line) => String(line || ""))),
+    [
+      "AI scans and implementation help",
+      "Brand strategy for technical teams",
+    ]
+  );
+  assert.deepEqual(
+    compareUnits.flatMap((unit) => ((unit.suggestion_items as string[]) || []).map((line) => String(line || ""))),
+    [
+      "AI opportunity scans",
+      "Implementation guidance for AI adoption",
+      "Brand strategy for technical companies",
+    ]
+  );
+  assert.equal((result.wordingChoice?.user_items || []).length >= 1, true);
+  assert.equal((result.wordingChoice?.suggestion_items || []).length >= 1, true);
+});
+
+test("buildWordingChoiceFromTurn falls back to legacy full-set compare when anchorless business list matching is too uncertain", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "rulesofthegame",
+    state: {} as any,
+    activeSpecialist: "RulesOfTheGame",
+    previousSpecialist: {
+      statements: [],
+      rulesofthegame: "",
+    },
+    specialistResult: {
+      message: "This is the rewritten rule set.",
+      refined_formulation: [
+        "Protect margin through weekly dashboard reviews",
+        "Automate recurring workflows where possible",
+        "Keep process changes fully documented",
+      ].join("\n"),
+      statements: [
+        "Protect margin through weekly dashboard reviews",
+        "Automate recurring workflows where possible",
+        "Keep process changes fully documented",
+      ],
+    },
+    userTextRaw: [
+      "Tell hard truths early",
+      "Own the room during client workshops",
+    ].join("\n"),
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "");
+  assert.equal(result.wordingChoice?.user_label, "This is what I took from your input:");
+  assert.equal(result.wordingChoice?.suggestion_label, "This would be my suggestion:");
+});
+
 test("buildWordingChoiceFromTurn directly accepts one valid strategy sentence when it already meets the step wording", () => {
   const defaultUi: Record<string, string> = {
     wordingChoiceHeading: "This is your input:",
