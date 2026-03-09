@@ -237,6 +237,9 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
   const hasPickerPendingWordingChoice = (specialist: Record<string, unknown>): boolean =>
     pendingWordingChoicePresentation(specialist) === "picker" && hasRenderablePendingWordingChoice(specialist);
 
+  const hasCanonicalPendingWordingChoice = (specialist: Record<string, unknown>): boolean =>
+    pendingWordingChoicePresentation(specialist) === "canonical" && hasRenderablePendingWordingChoice(specialist);
+
   const normalizeAcceptedOutputPendingSpecialist = async (
     specialist: Record<string, unknown>,
     stepId: string
@@ -368,7 +371,12 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         specialist: pendingSpecialistSeed,
         stepIdHint: stepId,
       });
-      (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
+      const canonicalPendingConfirmable = hasCanonicalPendingWordingChoice(pendingSpecialist);
+      if (canonicalPendingConfirmable) {
+        state = statePorts.clearStepInteractiveState(stateWithUi, stepId);
+      } else {
+        (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
+      }
       const pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
         pendingSpecialist,
         stateWithUi,
@@ -409,11 +417,11 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
           buildBigWhyTooLongFeedback,
         };
       }
-      if (
+      if (!canonicalPendingConfirmable && (
         String(pendingSpecialist.wording_choice_pending || "").trim() === "true" &&
         pendingWordingChoicePresentation(pendingSpecialist) === "canonical" &&
         hasRenderablePendingWordingChoice(pendingSpecialist)
-      ) {
+      )) {
         const payload = behavior.attachRegistryPayload(
           {
             ok: true,

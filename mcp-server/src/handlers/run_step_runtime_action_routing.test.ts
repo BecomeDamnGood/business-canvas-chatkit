@@ -253,6 +253,16 @@ test("runStepRuntimeActionRoutingLayer reroutes resumed Dream picker to canonica
 test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm actions when canonical value only exists in ui content", async () => {
   const cases = [
     {
+      actionCode: "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
+      currentStep: "dream",
+      activeSpecialist: "DreamExplainer",
+      finalField: "dream_final",
+      nextStep: "purpose",
+      fieldKey: "dream",
+      heading: "JE HUIDIGE DROOM VOOR FLUEROP IS",
+      canonical: "FluerOp droomt van een wereld waarin mensen zich verbonden voelen met de natuur.",
+    },
+    {
       actionCode: "ACTION_DREAM_REFINE_CONFIRM",
       currentStep: "dream",
       activeSpecialist: "Dream",
@@ -343,6 +353,91 @@ test("runStepRuntimeActionRoutingLayer proceeds from single-value confirm action
     assert.equal(String((result.state as Record<string, unknown>)[current.finalField] || ""), current.canonical);
     assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "");
   }
+});
+
+test("runStepRuntimeActionRoutingLayer proceeds from Dream confirm when canonical pending wording state is hidden behind the card", async () => {
+  const cases = [
+    {
+      actionCode: "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
+      activeSpecialist: "DreamExplainer",
+    },
+    {
+      actionCode: "ACTION_DREAM_REFINE_CONFIRM",
+      activeSpecialist: "Dream",
+    },
+  ] as const;
+  const canonical = "FluerOp droomt van een wereld waarin mensen zich verbonden voelen met de natuur.";
+
+  for (const current of cases) {
+    const params = buildParams(true) as any;
+    params.runtime.actionCodeRaw = current.actionCode;
+    params.runtime.userMessage = "";
+    params.runtime.state = {
+      current_step: "dream",
+      active_specialist: current.activeSpecialist,
+      dream_final: "",
+      provisional_by_step: {},
+      provisional_source_by_step: {},
+      last_specialist_result: {
+        ui_content: {
+          kind: "single_value",
+          heading: "JE HUIDIGE DROOM VOOR FLUEROP IS",
+          canonical_text: canonical,
+        },
+        refined_formulation: canonical,
+        dream: "",
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "dream",
+        wording_choice_presentation: "canonical",
+        wording_choice_agent_current: canonical,
+        wording_choice_user_raw: "Ik wil dat mensen meer verbonden zijn met natuur.",
+        wording_choice_user_normalized: "Ik wil dat mensen meer verbonden zijn met natuur.",
+        wording_choice_user_variant_semantics: "raw_source_content",
+        wording_choice_user_variant_stepworthy: "false",
+      },
+    };
+    params.state.provisionalValueForStep = () => "";
+    params.wording.buildWordingChoiceFromPendingSpecialist = () => null;
+
+    const result = await runStepRuntimeActionRoutingLayer(params);
+    assert.equal(result.response, null);
+    assert.equal(String((result.state as Record<string, unknown>).current_step || ""), "purpose");
+    assert.equal(String((result.state as Record<string, unknown>).dream_final || ""), canonical);
+    assert.equal(String((result.state as Record<string, unknown>).active_specialist || ""), "");
+    const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+    assert.notEqual(String(specialist.wording_choice_pending || ""), "true");
+  }
+});
+
+test("runStepRuntimeActionRoutingLayer keeps confirm blocked when a visible picker wording choice is still pending", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.actionCodeRaw = "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM";
+  params.runtime.userMessage = "";
+  params.runtime.state = {
+    current_step: "dream",
+    active_specialist: "DreamExplainer",
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_target_field: "dream",
+      wording_choice_presentation: "picker",
+      wording_choice_user_raw: "Ik wil dat mensen gezonder eten.",
+      wording_choice_user_normalized: "Ik wil dat mensen gezonder eten.",
+      wording_choice_agent_current:
+        "FluerOp droomt van een wereld waarin mensen zich gezond en energiek voelen door puur eten.",
+      wording_choice_user_variant_semantics: "step_variant",
+      wording_choice_user_variant_stepworthy: "true",
+      refined_formulation:
+        "FluerOp droomt van een wereld waarin mensen zich gezond en energiek voelen door puur eten.",
+    },
+  };
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.ok(result.response);
+  assert.equal(String((result.state as Record<string, unknown>).current_step || ""), "dream");
+  const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "true");
 });
 
 test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-text intent when enabled", async () => {
