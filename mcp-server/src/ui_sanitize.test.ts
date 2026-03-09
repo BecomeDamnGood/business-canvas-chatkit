@@ -996,10 +996,380 @@ test("callRunStep keeps accepted canonical step continuity in outbound state whe
   }
 });
 
+test("dream confirm advances to purpose when the server returns an accepted canonical widget payload", { concurrency: false }, async () => {
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
+  const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  const originalLastToolOutput = (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  const originalWindow = (globalThis as unknown as { window?: unknown }).window;
+  setIsLoading(false);
+  try {
+    const renderedPayloads: unknown[] = [];
+    const host = {
+      widgetState: {
+        started: "true",
+        current_step: "dream",
+        bootstrap_session_id: "sess-1",
+        bootstrap_epoch: 1,
+        response_seq: 2,
+        host_widget_session_id: "host-1",
+      } as Record<string, unknown>,
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+      async callTool(_name: string, args: unknown) {
+        const payload = args as Record<string, unknown>;
+        assert.equal(String(payload.user_message || ""), "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM");
+        return {
+          _meta: {
+            widget_result: {
+              current_step_id: "purpose",
+              ok: true,
+              ack_status: "accepted",
+              state_advanced: true,
+              state: {
+                current_step: "purpose",
+                ack_status: "accepted",
+                state_advanced: true,
+                bootstrap_session_id: "sess-1",
+                bootstrap_epoch: 1,
+                response_seq: 3,
+                host_widget_session_id: "host-1",
+                ui_action_liveness: {
+                  ack_status: "accepted",
+                  state_advanced: true,
+                  action_code_echo: "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
+                },
+              },
+              ui: {
+                view: { mode: "interactive" },
+                content: { heading: "Purpose" },
+              },
+            },
+          },
+        };
+      },
+    };
+    (globalThis as unknown as { openai?: unknown }).openai = host;
+    (globalThis as unknown as { document?: unknown }).document = {
+      getElementById() {
+        return null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+    };
+    (globalThis as unknown as { window?: unknown }).window = undefined;
+    (globalThis as Record<string, unknown>).__BSC_LATEST__ = {
+      state: {
+        current_step: "dream",
+        bootstrap_session_id: "sess-1",
+        bootstrap_epoch: 1,
+        response_seq: 2,
+        host_widget_session_id: "host-1",
+      },
+      lang: "nl",
+    };
+    initActionsConfig({
+      render: (raw) => {
+        renderedPayloads.push(raw);
+      },
+      t: () => "",
+    });
+
+    await callRunStep("ACTION_DREAM_EXPLAINER_REFINE_CONFIRM");
+
+    assert.equal(renderedPayloads.length, 1);
+    const rendered = canonicalizeWidgetPayload(renderedPayloads[0]).result;
+    assert.equal(String(rendered.current_step_id || ""), "purpose");
+    assert.equal(String((rendered.state as Record<string, unknown>).current_step || ""), "purpose");
+    assert.equal(String(host.widgetState.ui_action_liveness_ack_status || ""), "accepted");
+    assert.equal(String(host.widgetState.ui_action_liveness_state_advanced || ""), "true");
+  } finally {
+    setIsLoading(false);
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
+    else (globalThis as unknown as { document?: unknown }).document = originalDocument;
+    if (originalWindow === undefined) delete (globalThis as unknown as { window?: unknown }).window;
+    else (globalThis as unknown as { window?: unknown }).window = originalWindow;
+    if (originalLatest === undefined) delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+    else (globalThis as Record<string, unknown>).__BSC_LATEST__ = originalLatest;
+    if (originalLastToolOutput === undefined) delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+    else (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = originalLastToolOutput;
+  }
+});
+
+test("callRunStep fail-closes active dispatches that return no canonical widget payload instead of reusing the stale card", { concurrency: false }, async () => {
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
+  const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  const originalLastToolOutput = (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  const originalWindow = (globalThis as unknown as { window?: unknown }).window;
+  setIsLoading(false);
+  try {
+    const renderedPayloads: unknown[] = [];
+    const staleDreamEnvelope = {
+      _meta: {
+        widget_result: {
+          current_step_id: "dream",
+          ok: true,
+          state: {
+            current_step: "dream",
+            bootstrap_session_id: "sess-1",
+            bootstrap_epoch: 1,
+            response_seq: 2,
+            host_widget_session_id: "host-1",
+          },
+          ui: {
+            view: { mode: "interactive" },
+            content: { heading: "Dream" },
+          },
+        },
+      },
+    };
+    const host = {
+      widgetState: {
+        started: "true",
+        current_step: "dream",
+        bootstrap_session_id: "sess-1",
+        bootstrap_epoch: 1,
+        response_seq: 2,
+        host_widget_session_id: "host-1",
+      } as Record<string, unknown>,
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+      async callTool() {
+        return {
+          structuredContent: {
+            result: {
+              current_step_id: "purpose",
+              ack_status: "accepted",
+              state_advanced: true,
+              action_code_echo: "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
+              state: {
+                current_step: "purpose",
+                ack_status: "accepted",
+                state_advanced: true,
+                bootstrap_session_id: "sess-1",
+                bootstrap_epoch: 1,
+                response_seq: 3,
+                host_widget_session_id: "host-1",
+                ui_action_liveness: {
+                  ack_status: "accepted",
+                  state_advanced: true,
+                  action_code_echo: "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM",
+                },
+              },
+            },
+          },
+        };
+      },
+    };
+    (globalThis as unknown as { openai?: unknown }).openai = host;
+    (globalThis as unknown as { document?: unknown }).document = {
+      getElementById() {
+        return null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+    };
+    (globalThis as unknown as { window?: unknown }).window = undefined;
+    (globalThis as Record<string, unknown>).__BSC_LATEST__ = {
+      state: {
+        current_step: "dream",
+        bootstrap_session_id: "sess-1",
+        bootstrap_epoch: 1,
+        response_seq: 2,
+        host_widget_session_id: "host-1",
+      },
+      lang: "nl",
+    };
+    (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = staleDreamEnvelope;
+    initActionsConfig({
+      render: (raw) => {
+        renderedPayloads.push(raw);
+      },
+      t: () => "",
+    });
+
+    await callRunStep("ACTION_DREAM_EXPLAINER_REFINE_CONFIRM");
+
+    assert.equal(renderedPayloads.length, 1);
+    const rendered = canonicalizeWidgetPayload(renderedPayloads[0]).result;
+    const renderedState = (rendered.state || {}) as Record<string, unknown>;
+    assert.equal(String(rendered.current_step_id || ""), "purpose");
+    assert.equal(String(renderedState.current_step || ""), "purpose");
+    assert.equal(String((rendered.error as Record<string, unknown>).type || ""), "contract_violation");
+    assert.equal(String((rendered.error as Record<string, unknown>).reason || ""), "incoming_missing_widget_result");
+    assert.equal(String(renderedState.ui_gate_reason || ""), "contract_violation");
+    assert.equal(String(host.widgetState.ui_action_liveness_ack_status || ""), "accepted");
+    assert.equal(String(host.widgetState.ui_action_liveness_state_advanced || ""), "true");
+
+    const cachedAfter = canonicalizeWidgetPayload(
+      (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__
+    ).result;
+    assert.equal(String(cachedAfter.current_step_id || ""), "purpose");
+    assert.equal(String(((cachedAfter.state || {}) as Record<string, unknown>).ui_gate_reason || ""), "contract_violation");
+  } finally {
+    setIsLoading(false);
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
+    else (globalThis as unknown as { document?: unknown }).document = originalDocument;
+    if (originalWindow === undefined) delete (globalThis as unknown as { window?: unknown }).window;
+    else (globalThis as unknown as { window?: unknown }).window = originalWindow;
+    if (originalLatest === undefined) delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+    else (globalThis as Record<string, unknown>).__BSC_LATEST__ = originalLatest;
+    if (originalLastToolOutput === undefined) delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+    else (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = originalLastToolOutput;
+  }
+});
+
+test("accepted confirm actions across current-value steps render the next step", { concurrency: false }, async () => {
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
+  const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  const originalLastToolOutput = (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  const originalWindow = (globalThis as unknown as { window?: unknown }).window;
+  setIsLoading(false);
+  try {
+    const scenarios = [
+      { action: "ACTION_DREAM_EXPLAINER_REFINE_CONFIRM", current: "dream", next: "purpose" },
+      { action: "ACTION_PURPOSE_REFINE_CONFIRM", current: "purpose", next: "bigwhy" },
+      { action: "ACTION_BIGWHY_REFINE_CONFIRM", current: "bigwhy", next: "role" },
+      { action: "ACTION_ROLE_REFINE_CONFIRM", current: "role", next: "entity" },
+      { action: "ACTION_ENTITY_EXAMPLE_CONFIRM", current: "entity", next: "strategy" },
+      { action: "ACTION_TARGETGROUP_POSTREFINE_CONFIRM", current: "targetgroup", next: "productsservices" },
+    ] as const;
+
+    const renderedSteps: string[] = [];
+    const host = {
+      widgetState: {} as Record<string, unknown>,
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+      async callTool(_name: string, args: unknown) {
+        const payload = args as Record<string, unknown>;
+        const state = (payload.state || {}) as Record<string, unknown>;
+        const current = String(state.current_step || "");
+        const scenario = scenarios.find((entry) => entry.action === String(payload.user_message || ""));
+        assert.ok(scenario);
+        assert.equal(current, scenario.current);
+        return {
+          _meta: {
+            widget_result: {
+              current_step_id: scenario.next,
+              ok: true,
+              ack_status: "accepted",
+              state_advanced: true,
+              state: {
+                current_step: scenario.next,
+                ack_status: "accepted",
+                state_advanced: true,
+                bootstrap_session_id: "sess-x",
+                bootstrap_epoch: 1,
+                response_seq: Number(state.response_seq || 1) + 1,
+                host_widget_session_id: "host-x",
+                ui_action_liveness: {
+                  ack_status: "accepted",
+                  state_advanced: true,
+                  action_code_echo: scenario.action,
+                },
+              },
+              ui: {
+                view: { mode: "interactive" },
+                content: { heading: scenario.next },
+              },
+            },
+          },
+        };
+      },
+    };
+    (globalThis as unknown as { openai?: unknown }).openai = host;
+    (globalThis as unknown as { document?: unknown }).document = {
+      getElementById() {
+        return null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+    };
+    (globalThis as unknown as { window?: unknown }).window = undefined;
+
+    for (const [index, scenario] of scenarios.entries()) {
+      initActionsConfig({
+        render: (raw) => {
+          const rendered = canonicalizeWidgetPayload(raw).result;
+          renderedSteps.push(String((rendered.state as Record<string, unknown>).current_step || rendered.current_step_id || ""));
+        },
+        t: () => "",
+      });
+      host.widgetState = {
+        started: "true",
+        current_step: scenario.current,
+        bootstrap_session_id: "sess-x",
+        bootstrap_epoch: 1,
+        response_seq: index + 1,
+        host_widget_session_id: "host-x",
+      };
+      (globalThis as Record<string, unknown>).__BSC_LATEST__ = {
+        state: {
+          current_step: scenario.current,
+          bootstrap_session_id: "sess-x",
+          bootstrap_epoch: 1,
+          response_seq: index + 1,
+          host_widget_session_id: "host-x",
+        },
+        lang: "nl",
+      };
+      (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = {
+        _meta: {
+          widget_result: {
+            current_step_id: scenario.current,
+            state: {
+              current_step: scenario.current,
+              bootstrap_session_id: "sess-x",
+              bootstrap_epoch: 1,
+              response_seq: index + 1,
+              host_widget_session_id: "host-x",
+            },
+          },
+        },
+      };
+      await callRunStep(scenario.action);
+    }
+
+    assert.deepEqual(renderedSteps, scenarios.map((scenario) => scenario.next));
+  } finally {
+    setIsLoading(false);
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
+    else (globalThis as unknown as { document?: unknown }).document = originalDocument;
+    if (originalWindow === undefined) delete (globalThis as unknown as { window?: unknown }).window;
+    else (globalThis as unknown as { window?: unknown }).window = originalWindow;
+    if (originalLatest === undefined) delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+    else (globalThis as Record<string, unknown>).__BSC_LATEST__ = originalLatest;
+    if (originalLastToolOutput === undefined) delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+    else (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = originalLastToolOutput;
+  }
+});
+
 test("bundled runtime does not retain legacy render-source fallbacks", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /structuredContent\.result/);
-  assert.doesNotMatch(source, /root\.result/);
+  assert.match(source, /source:\s*"meta\.widget_result"/);
+  assert.doesNotMatch(source, /source:\s*"structuredContent\.result"/);
+  assert.doesNotMatch(source, /source:\s*"result"/);
+});
+
+test("bundled runtime fail-closes missing canonical widget payloads", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /incoming_missing_widget_result/);
+  assert.match(source, /Canonical widget payload is missing in tool response\./);
+  assert.match(source, /widget_result:/);
 });
 
 test("bundled runtime retains canonical step continuity for latest render cache", () => {

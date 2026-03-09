@@ -2766,43 +2766,129 @@
     if (params.incoming.hasInteractiveContent && !params.current.hasInteractiveContent) return true;
     return params.incoming.score > params.current.score;
   }
+  function coalesceDiagnosticString() {
+    for (let index = 0; index < arguments.length; index += 1) {
+      const text = String(arguments[index] || "").trim();
+      if (text) return text;
+    }
+    return "";
+  }
+  function looksLikeDiagnosticResult(candidateRaw) {
+    const candidate = toRecord2(candidateRaw);
+    if (!Object.keys(candidate).length) return false;
+    if (Object.keys(toRecord2(candidate.state)).length > 0) return true;
+    if (String(candidate.current_step_id || "").trim()) return true;
+    if (String(candidate.ack_status || "").trim()) return true;
+    if (String(toRecord2(candidate.ui_action_liveness).ack_status || "").trim()) return true;
+    if (String(toRecord2(toRecord2(candidate.state).ui_action_liveness).ack_status || "").trim()) return true;
+    return false;
+  }
+  function resolveDiagnosticIncomingResult(raw) {
+    const root = toRecord2(raw);
+    const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
+    const candidates = [
+      root,
+      root.result,
+      toRecord2(root.structuredContent).result,
+      toolOutput,
+      toolOutput.result,
+      toRecord2(toolOutput.structuredContent).result
+    ];
+    for (const candidate of candidates) {
+      if (looksLikeDiagnosticResult(candidate)) return toRecord2(candidate);
+    }
+    return {};
+  }
   function buildTupleFailClosedEnvelope(params) {
     const currentState = toRecord2(params.currentResult.state);
-    const incomingState = toRecord2(params.incomingResult.state);
-    const stateSource = Object.keys(currentState).length > 0 ? currentState : incomingState;
-    const currentStep = String(stateSource.current_step || "step_0").trim() || "step_0";
+    const incomingResult = Object.keys(toRecord2(params.incomingResult)).length > 0 ? toRecord2(params.incomingResult) : resolveDiagnosticIncomingResult(params.incomingRaw);
+    const incomingState = toRecord2(incomingResult.state);
+    const stateSource = Object.keys(incomingState).length > 0 ? incomingState : currentState;
+    const currentStep = String(incomingState.current_step || incomingResult.current_step_id || currentState.current_step || params.currentResult.current_step_id || "step_0").trim() || "step_0";
     const language = String(
       stateSource.language || stateSource.ui_strings_lang || stateSource.ui_strings_requested_lang || "en"
     ).trim().toLowerCase() || "en";
     const uiStringsRequestedLang = String(
       stateSource.ui_strings_requested_lang || stateSource.ui_strings_lang || language
     ).trim() || language;
+    const ackStatus = String(
+      incomingResult.ack_status || incomingState.ack_status || toRecord2(incomingState.ui_action_liveness).ack_status || ""
+    ).trim().toLowerCase();
+    const stateAdvancedRaw = incomingResult.state_advanced ?? incomingState.state_advanced ?? toRecord2(incomingState.ui_action_liveness).state_advanced ?? false;
+    const stateAdvanced = stateAdvancedRaw === true || String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
+    const reasonCode = String(
+      incomingResult.reason_code || incomingState.reason_code || toRecord2(incomingState.ui_action_liveness).reason_code || ""
+    ).trim().toLowerCase();
+    const actionCodeEcho = coalesceDiagnosticString(
+      incomingResult.action_code_echo,
+      incomingState.action_code_echo,
+      toRecord2(incomingState.ui_action_liveness).action_code_echo
+    ).toUpperCase();
+    const clientActionIdEcho = coalesceDiagnosticString(
+      incomingResult.client_action_id_echo,
+      incomingState.client_action_id_echo,
+      toRecord2(incomingState.ui_action_liveness).client_action_id_echo
+    );
+    const failClosedState = {
+      current_step: currentStep,
+      started: String(stateSource.started || currentState.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
+      language,
+      ui_strings_status: String(stateSource.ui_strings_status || currentState.ui_strings_status || "pending").trim().toLowerCase() || "pending",
+      ui_strings_lang: String(stateSource.ui_strings_lang || currentState.ui_strings_lang || language).trim().toLowerCase() || language,
+      ui_strings_requested_lang: uiStringsRequestedLang,
+      ui_gate_status: "blocked",
+      ui_gate_reason: "contract_violation",
+      bootstrap_phase: "failed",
+      reason_code: "incoming_missing_widget_result",
+      bootstrap_session_id: String(stateSource.bootstrap_session_id || currentState.bootstrap_session_id || "").trim(),
+      bootstrap_epoch: parsePositiveInt2(stateSource.bootstrap_epoch || currentState.bootstrap_epoch),
+      response_seq: parsePositiveInt2(stateSource.response_seq || currentState.response_seq),
+      host_widget_session_id: String(stateSource.host_widget_session_id || currentState.host_widget_session_id || "").trim()
+    };
+    if (Object.keys(toRecord2(stateSource.ui_strings)).length > 0) failClosedState.ui_strings = toRecord2(stateSource.ui_strings);
+    if (ackStatus || actionCodeEcho || clientActionIdEcho) {
+      failClosedState.ui_action_liveness = {
+        ...(ackStatus ? {
+          ack_status: ackStatus,
+          state_advanced: stateAdvanced,
+          reason_code: stateAdvanced ? "" : reasonCode || "state_not_advanced"
+        } : {}),
+        ...(actionCodeEcho ? { action_code_echo: actionCodeEcho } : {}),
+        ...(clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {})
+      };
+    }
     return {
-      result: {
+      _meta: {
+        widget_result: {
         current_step_id: currentStep,
+        ok: false,
+        ...(ackStatus ? {
+          ack_status: ackStatus,
+          state_advanced: stateAdvanced,
+          reason_code: stateAdvanced ? "" : reasonCode || "state_not_advanced"
+        } : {}),
+        ...(actionCodeEcho ? { action_code_echo: actionCodeEcho } : {}),
+        ...(clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {}),
+        error: {
+          type: "contract_violation",
+          message: "Canonical widget payload is missing in tool response.",
+          reason: "incoming_missing_widget_result"
+        },
         state: {
-          current_step: currentStep,
-          started: String(stateSource.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
-          language,
-          ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
-          ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
-          ui_strings_requested_lang: uiStringsRequestedLang,
-          ui_gate_status: "waiting_locale",
-          ui_gate_reason: "translation_pending",
-          bootstrap_phase: "waiting_locale"
+          ...failClosedState
         },
         ui: {
           flags: {
-            bootstrap_waiting_locale: true,
+            bootstrap_waiting_locale: false,
             bootstrap_interactive_ready: false,
-            interactive_fallback_active: true,
             tuple_incomplete_fail_closed: true,
-            tuple_fail_closed_reason: "incoming_missing_tuple"
+            tuple_fail_closed_reason: "incoming_missing_widget_result"
           },
           view: {
-            mode: "recovery",
-            waiting_locale: true
+            mode: "blocked",
+            waiting_locale: false
           }
+        }
         }
       }
     };
@@ -2975,19 +3061,26 @@
   function handleToolResultAndMaybeScheduleBootstrapRetry(raw, opts) {
     const source = String(opts?.source || "unknown");
     const normalizedResult = normalizeToolResult(raw);
-    const normalized = normalizedResult.normalized;
+    const currentCachedResolved = resolveWidgetPayload2(getLastToolOutput());
+    const currentCachedResult = currentCachedResolved.result;
+    let normalized = normalizedResult.normalized;
     if (!Object.keys(normalized).length) {
       console.warn("[ui_ingest_dropped_no_widget_result]", {
         source,
         payload_source: normalizedResult.source,
         payload_reason_code: normalizedResult.reasonCode
       });
-      return {};
+      if (source === "call_run_step") {
+        normalized = buildTupleFailClosedEnvelope({
+          currentResult: currentCachedResult,
+          incomingRaw: raw
+        });
+      } else {
+        return {};
+      }
     }
     const resolved = resolveWidgetPayload2(normalized);
     const result = resolved.result;
-    const currentCachedResolved = resolveWidgetPayload2(getLastToolOutput());
-    const currentCachedResult = currentCachedResolved.result;
     const currentQuality = evaluatePayloadQuality(currentCachedResult);
     const incomingQuality = evaluatePayloadQuality(result);
     const currentOrdering = readBootstrapOrderingState(widgetState());
@@ -3044,16 +3137,17 @@
         current_tuple: describeBootstrapOrdering(currentOrdering),
         current_tuple_present: currentHasOrdering
       });
-      if (currentHasOrdering) {
+      if (currentHasOrdering && source !== "call_run_step") {
         return {};
       }
       const failClosedEnvelope = buildTupleFailClosedEnvelope({
         currentResult: currentCachedResult,
+        incomingRaw: raw,
         incomingResult: result
       });
       setLastToolOutput(failClosedEnvelope);
       if (_render) _render(failClosedEnvelope);
-      return {};
+      return resolveWidgetPayload2(failClosedEnvelope).result;
     }
     if (incomingHasOrdering && orderingDecision.apply) {
       setWidgetStateSafe({

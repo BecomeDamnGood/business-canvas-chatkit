@@ -968,14 +968,52 @@ function evaluatePayloadQuality(result: Record<string, unknown>): PayloadQuality
   };
 }
 
+function looksLikeDiagnosticResult(candidateRaw: unknown): boolean {
+  const candidate = toRecord(candidateRaw);
+  if (!Object.keys(candidate).length) return false;
+  if (Object.keys(toRecord(candidate.state)).length > 0) return true;
+  if (String(candidate.current_step_id || "").trim()) return true;
+  if (String(candidate.ack_status || "").trim()) return true;
+  if (String(toRecord(candidate.ui_action_liveness).ack_status || "").trim()) return true;
+  if (String(toRecord(toRecord(candidate.state).ui_action_liveness).ack_status || "").trim()) return true;
+  return false;
+}
+
+function resolveDiagnosticIncomingResult(raw: unknown): Record<string, unknown> {
+  const root = toRecord(raw);
+  const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
+  const candidates: unknown[] = [
+    root,
+    root.result,
+    toRecord(root.structuredContent).result,
+    toolOutput,
+    toolOutput.result,
+    toRecord(toolOutput.structuredContent).result,
+  ];
+  for (const candidate of candidates) {
+    if (looksLikeDiagnosticResult(candidate)) return toRecord(candidate);
+  }
+  return {};
+}
+
 function buildTupleFailClosedEnvelope(params: {
   currentResult: Record<string, unknown>;
-  incomingResult: Record<string, unknown>;
+  incomingRaw?: unknown;
+  incomingResult?: Record<string, unknown>;
 }): Record<string, unknown> {
   const currentState = toRecord(params.currentResult.state);
-  const incomingState = toRecord(params.incomingResult.state);
-  const stateSource = Object.keys(currentState).length > 0 ? currentState : incomingState;
-  const currentStep = String(stateSource.current_step || "step_0").trim() || "step_0";
+  const incomingResult = Object.keys(toRecord(params.incomingResult)).length > 0
+    ? toRecord(params.incomingResult)
+    : resolveDiagnosticIncomingResult(params.incomingRaw);
+  const incomingState = toRecord(incomingResult.state);
+  const stateSource = Object.keys(incomingState).length > 0 ? incomingState : currentState;
+  const currentStep = String(
+    incomingState.current_step ||
+    incomingResult.current_step_id ||
+    currentState.current_step ||
+    params.currentResult.current_step_id ||
+    "step_0"
+  ).trim() || "step_0";
   const language = String(
     stateSource.language || stateSource.ui_strings_lang || stateSource.ui_strings_requested_lang || "en"
   )
@@ -984,6 +1022,76 @@ function buildTupleFailClosedEnvelope(params: {
   const uiStringsRequestedLang = String(
     stateSource.ui_strings_requested_lang || stateSource.ui_strings_lang || language
   ).trim() || language;
+  const liveness = readIncomingLivenessSignal(incomingResult);
+  const incomingLiveness = toRecord(incomingState.ui_action_liveness);
+  const actionCodeEcho = coalesceString(
+    incomingResult.action_code_echo,
+    incomingState.action_code_echo,
+    incomingLiveness.action_code_echo
+  ).trim().toUpperCase();
+  const clientActionIdEcho = coalesceString(
+    incomingResult.client_action_id_echo,
+    incomingState.client_action_id_echo,
+    incomingLiveness.client_action_id_echo
+  );
+  const requestId = coalesceString(
+    incomingState.request_id,
+    incomingState.__request_id,
+    incomingResult.request_id,
+    incomingResult.__request_id
+  );
+  const correlationId = coalesceString(
+    incomingState.correlation_id,
+    incomingState.__correlation_id,
+    incomingResult.correlation_id,
+    incomingResult.__correlation_id
+  );
+  const bootstrapSessionId = String(
+    stateSource.bootstrap_session_id || currentState.bootstrap_session_id || ""
+  ).trim();
+  const bootstrapEpoch = parsePositiveInt(stateSource.bootstrap_epoch || currentState.bootstrap_epoch);
+  const responseSeq = parsePositiveInt(stateSource.response_seq || currentState.response_seq);
+  const hostWidgetSessionId = String(
+    stateSource.host_widget_session_id || currentState.host_widget_session_id || ""
+  ).trim();
+  const failClosedState: Record<string, unknown> = {
+    current_step: currentStep,
+    started: String(stateSource.started || currentState.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
+    language,
+    ui_strings_status: String(stateSource.ui_strings_status || currentState.ui_strings_status || "pending")
+      .trim()
+      .toLowerCase() || "pending",
+    ui_strings_lang: String(stateSource.ui_strings_lang || currentState.ui_strings_lang || language)
+      .trim()
+      .toLowerCase() || language,
+    ui_strings_requested_lang: uiStringsRequestedLang,
+    ui_gate_status: "blocked",
+    ui_gate_reason: "contract_violation",
+    bootstrap_phase: "failed",
+    reason_code: "incoming_missing_widget_result",
+  };
+  if (bootstrapSessionId) failClosedState.bootstrap_session_id = bootstrapSessionId;
+  if (bootstrapEpoch > 0) failClosedState.bootstrap_epoch = bootstrapEpoch;
+  if (responseSeq > 0) failClosedState.response_seq = responseSeq;
+  if (hostWidgetSessionId) failClosedState.host_widget_session_id = hostWidgetSessionId;
+  if (requestId) failClosedState.request_id = requestId;
+  if (correlationId) failClosedState.correlation_id = correlationId;
+  if (Object.keys(toRecord(stateSource.ui_strings)).length > 0) {
+    failClosedState.ui_strings = toRecord(stateSource.ui_strings);
+  } else if (Object.keys(toRecord(currentState.ui_strings)).length > 0) {
+    failClosedState.ui_strings = toRecord(currentState.ui_strings);
+  }
+  if (liveness.has_liveness || actionCodeEcho || clientActionIdEcho) {
+    failClosedState.ui_action_liveness = {
+      ...(liveness.has_liveness ? {
+        ack_status: liveness.ack_status,
+        state_advanced: liveness.state_advanced,
+        reason_code: liveness.reason_code,
+      } : {}),
+      ...(actionCodeEcho ? { action_code_echo: actionCodeEcho } : {}),
+      ...(clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {}),
+    };
+  }
   return {
     _meta: {
       widget_result: {
@@ -991,27 +1099,23 @@ function buildTupleFailClosedEnvelope(params: {
         ok: false,
         error: {
           type: "contract_violation",
-          message: "Tuple metadata is missing in widget payload.",
-          reason: "incoming_missing_tuple",
+          message: "Canonical widget payload is missing in tool response.",
+          reason: "incoming_missing_widget_result",
         },
-        state: {
-          current_step: currentStep,
-          started: String(stateSource.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
-          language,
-          ui_strings_status: String(stateSource.ui_strings_status || "pending").trim().toLowerCase() || "pending",
-          ui_strings_lang: String(stateSource.ui_strings_lang || language).trim().toLowerCase() || language,
-          ui_strings_requested_lang: uiStringsRequestedLang,
-          ui_gate_status: "blocked",
-          ui_gate_reason: "contract_violation",
-          bootstrap_phase: "failed",
-          reason_code: "incoming_missing_tuple",
-        },
+        ...(liveness.has_liveness ? {
+          ack_status: liveness.ack_status,
+          state_advanced: liveness.state_advanced,
+          reason_code: liveness.reason_code,
+        } : {}),
+        ...(actionCodeEcho ? { action_code_echo: actionCodeEcho } : {}),
+        ...(clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {}),
+        state: failClosedState,
         ui: {
           flags: {
-            bootstrap_waiting_locale: true,
+            bootstrap_waiting_locale: false,
             bootstrap_interactive_ready: false,
             tuple_incomplete_fail_closed: true,
-            tuple_fail_closed_reason: "incoming_missing_tuple",
+            tuple_fail_closed_reason: "incoming_missing_widget_result",
           },
           view: {
             mode: "blocked",
@@ -1447,12 +1551,34 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
       client_ingest_seq: ingestContext.client_ingest_seq,
       payload_shape_fingerprint: ingestContext.payload_shape_fingerprint,
     });
-    const cached = getLastToolOutput();
-    if (Object.keys(cached).length > 0) {
-      normalized = cached;
+    if (source === "call_run_step") {
+      const failClosedEnvelope = buildTupleFailClosedEnvelope({
+        currentResult: resolveWidgetPayload(getLastToolOutput()).result,
+        incomingRaw: raw,
+      });
+      const failClosedResolved = resolveWidgetPayload(failClosedEnvelope);
+      console.warn("[ui_ingest_fail_closed_missing_widget_result]", {
+        source,
+        correlation_id: ingestContext.correlation_id,
+        client_action_id: ingestContext.client_action_id,
+        request_id: ingestContext.request_id,
+        client_ingest_ts_ms: ingestContext.client_ingest_ts_ms,
+        client_ingest_seq: ingestContext.client_ingest_seq,
+        payload_shape_fingerprint: ingestContext.payload_shape_fingerprint,
+        fail_closed_reason: "incoming_missing_widget_result",
+        fail_closed_step: String(
+          toRecord(failClosedResolved.result.state).current_step || failClosedResolved.result.current_step_id || ""
+        ),
+      });
+      normalized = failClosedEnvelope;
     } else {
-      if (_render) _render(raw);
-      return resolvedForDrop.result;
+      const cached = getLastToolOutput();
+      if (Object.keys(cached).length > 0) {
+        normalized = cached;
+      } else {
+        if (_render) _render(raw);
+        return resolvedForDrop.result;
+      }
     }
   }
   const resolved = resolveWidgetPayload(normalized);
