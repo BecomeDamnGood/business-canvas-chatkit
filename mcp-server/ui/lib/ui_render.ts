@@ -676,12 +676,16 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     if (!trimmed) return "";
     return /[:]\s*$/.test(trimmed) ? trimmed : `${trimmed}:`;
   };
-  const userLabel = variant === "clarify_dual"
-    ? (userLabelFromPayload || ensureLabelColon(t(lang, "wordingChoiceHeading")))
-    : ensureLabelColon(t(lang, "wordingChoiceHeading"));
-  const suggestionLabel = variant === "clarify_dual"
-    ? (suggestionLabelFromPayload || ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel")))
-    : ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
+  const userLabel = userLabelFromPayload
+    ? ensureLabelColon(userLabelFromPayload)
+    : variant === "clarify_dual"
+      ? ensureLabelColon(t(lang, "wordingChoiceHeading"))
+      : ensureLabelColon(t(lang, "wordingChoiceHeading"));
+  const suggestionLabel = suggestionLabelFromPayload
+    ? ensureLabelColon(suggestionLabelFromPayload)
+    : variant === "clarify_dual"
+      ? ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"))
+      : ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
   const normalizeListItem = (value: unknown): string =>
     String(value || "")
       .replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "")

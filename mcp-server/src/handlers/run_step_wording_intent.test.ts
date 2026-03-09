@@ -6,6 +6,7 @@ import { createRunStepWordingHelpers } from "./run_step_wording.js";
 function buildHelpers(intentEnabled: boolean) {
   const defaultUi: Record<string, string> = {
     wordingChoiceHeading: "This is your input:",
+    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "wording.choice.context.default": "Please choose the wording that fits best.",
@@ -93,6 +94,7 @@ function buildHeadingAwareSingleValueHelpers(params: {
 }) {
   const defaultUi: Record<string, string> = {
     wordingChoiceHeading: "This is your input:",
+    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "wording.choice.context.default": "Please choose the wording that fits best.",
@@ -474,6 +476,104 @@ test("buildWordingChoiceFromTurn treats remove-line requests as list edit intent
     "Strategy",
   ]);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_list_semantics || ""), "full");
+});
+
+test("buildWordingChoiceFromTurn compares strategy wording choices as full interpreted sets", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "strategy",
+    state: {} as any,
+    activeSpecialist: "Strategy",
+    previousSpecialist: {
+      statements: [
+        "Recurring revenue",
+        "Expert-led delivery",
+      ],
+      strategy: [
+        "Recurring revenue",
+        "Expert-led delivery",
+      ].join("\n"),
+    },
+    specialistResult: {
+      message: "This is what your current strategy looks like.",
+      refined_formulation: [
+        "Recurring revenue",
+        "Expert-led delivery",
+        "Operational focus",
+      ].join("\n"),
+      statements: [
+        "Recurring revenue",
+        "Expert-led delivery",
+        "Operational focus",
+      ],
+    },
+    userTextRaw: "Operational simplicity",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice?.mode, "list");
+  assert.equal(result.wordingChoice?.user_label, "This is what I took from your input:");
+  assert.equal(
+    String((result.specialist as Record<string, unknown>).wording_choice_list_semantics || ""),
+    "full"
+  );
+  assert.deepEqual(result.wordingChoice?.user_items, [
+    "Recurring revenue",
+    "Expert-led delivery",
+    "Operational simplicity",
+  ]);
+  assert.deepEqual(result.wordingChoice?.suggestion_items, [
+    "Recurring revenue",
+    "Expert-led delivery",
+    "Operational focus",
+  ]);
+  assert.equal(
+    result.wordingChoice?.user_text,
+    [
+      "Recurring revenue",
+      "Expert-led delivery",
+      "Operational simplicity",
+    ].join("\n")
+  );
+});
+
+test("buildWordingChoiceFromPendingSpecialist applies interpreted list labels for business list steps", () => {
+  const helpers = buildHelpers(true);
+  const wordingChoice = helpers.buildWordingChoiceFromPendingSpecialist(
+    {
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_target_field: "rulesofthegame",
+      wording_choice_user_normalized: [
+        "We communicate proactively.",
+        "We keep commitments.",
+        "We escalate risks early.",
+      ].join("\n"),
+      wording_choice_agent_current: [
+        "We communicate proactively.",
+        "We keep commitments.",
+        "We escalate risks early.",
+      ].join("\n"),
+      wording_choice_user_items: [
+        "We communicate proactively.",
+        "We keep commitments.",
+        "We escalate risks early.",
+      ],
+      wording_choice_suggestion_items: [
+        "We communicate proactively.",
+        "We keep commitments.",
+        "We escalate risks early.",
+      ],
+    },
+    {} as any,
+    "RulesOfTheGame",
+    {}
+  );
+
+  assert.ok(wordingChoice);
+  assert.equal(wordingChoice?.user_label, "This is what I took from your input:");
+  assert.equal(wordingChoice?.suggestion_label, "This would be my suggestion:");
 });
 
 test("applyWordingPickSelection keeps removals when user picks own edited list", () => {

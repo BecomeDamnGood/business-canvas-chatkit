@@ -263,6 +263,34 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return localized || deps.uiDefaultString("wordingChoiceSuggestionLabel", "");
   }
 
+  function interpretedListUserLabelForState(state: CanvasState | null | undefined): string {
+    const localized = uiStringLocaleFirst(state, "wordingChoiceInterpretedListHeading").trim();
+    if (localized) return localized;
+    return clarifyUserLabelForState(state);
+  }
+
+  function wordingChoiceLabelsForStep(params: {
+    stepId: string;
+    mode: WordingChoiceMode;
+    state: CanvasState | null | undefined;
+    variant: WordingChoiceVariant;
+  }): { userLabel?: string; suggestionLabel?: string } {
+    const { stepId, mode, state, variant } = params;
+    if (variant === "clarify_dual") {
+      return {
+        userLabel: clarifyUserLabelForState(state),
+        suggestionLabel: clarifySuggestionLabelForState(state),
+      };
+    }
+    if (mode === "list" && isBusinessListIntentScope(stepId)) {
+      return {
+        userLabel: interpretedListUserLabelForState(state),
+        suggestionLabel: clarifySuggestionLabelForState(state),
+      };
+    }
+    return {};
+  }
+
   function wordingScaffoldComparables(
     state: CanvasState | null | undefined,
     specialist?: Record<string, unknown> | null
@@ -274,6 +302,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       uiStringLocaleFirst(state, "wording.choice.context.default"),
       uiStringLocaleFirst(state, "wordingChoice.chooseVersion"),
       uiStringLocaleFirst(state, "wordingChoice.useInputFallback"),
+      interpretedListUserLabelForState(state),
       clarifyUserLabelForState(state),
       clarifySuggestionLabelForState(state),
       String(specialist?.wording_choice_user_label || ""),
@@ -500,6 +529,20 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const items = deps.parseListItems(userRaw)
       .map((line) => String(line || "").trim())
       .filter(Boolean);
+    if (isBusinessListIntentScope(stepId) && items.length <= 1) {
+      const sentenceItems = deps.splitSentenceItems(userRaw)
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      if (sentenceItems.length >= 2) return mergeListItems([], sentenceItems);
+      const commaItems = String(userRaw || "")
+        .replace(/\r/g, "\n")
+        .split(/\s*,\s*/)
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      if (commaItems.length >= 2 && (suggestionItems.length >= 2 || commaItems.length >= 3)) {
+        return mergeListItems([], commaItems);
+      }
+    }
     if (stepId !== deps.dreamStepId || items.length !== 1) return items;
     const sentenceItems = deps.splitSentenceItems(userRaw);
     if (sentenceItems.length < 2) return items;
@@ -1074,6 +1117,25 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         normalizedUser = listIntent.normalizedUser || normalizedUser;
       }
     }
+    if (mode === "list" && isBusinessListIntentScope(stepId)) {
+      const fullUserItems = mergeListItems(
+        listSemantics === "full" ? [] : baseItems,
+        effectiveUserItems.length > 0 ? effectiveUserItems : fallbackUserItems
+      );
+      const fullSuggestionItems = mergeListItems(
+        listSemantics === "full" ? [] : baseItems,
+        suggestionFullItems.length > 0 ? suggestionFullItems : suggestionItems
+      );
+      listSemantics = "full";
+      userRawItems = fullUserItems;
+      userItems = fullUserItems;
+      fallbackUserItems = fullUserItems;
+      effectiveUserItems = fullUserItems;
+      suggestionItems = fullSuggestionItems;
+      if (fullUserItems.length > 0) {
+        normalizedUser = fullUserItems.join("\n");
+      }
+    }
     if (mode === "list" && !forcePending && effectiveUserItems.length === 0) {
       return { specialist: specialistResult, wordingChoice: null };
     }
@@ -1174,6 +1236,12 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       intent: submittedIntent,
       anchor: submittedAnchor,
     });
+    const wordingLabels = wordingChoiceLabelsForStep({
+      stepId,
+      mode,
+      state,
+      variant,
+    });
     const feedbackText = String(params.submittedFeedbackText || "").trim();
     const enriched: Record<string, unknown> = {
       ...specialistResult,
@@ -1191,9 +1259,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_target_field: targetField,
       wording_choice_presentation: presentation,
       wording_choice_variant: variant === "clarify_dual" ? variant : "",
-      wording_choice_user_label: variant === "clarify_dual" ? clarifyUserLabelForState(state) : "",
-      wording_choice_suggestion_label:
-        variant === "clarify_dual" ? clarifySuggestionLabelForState(state) : "",
+      wording_choice_user_label: wordingLabels.userLabel || "",
+      wording_choice_suggestion_label: wordingLabels.suggestionLabel || "",
       wording_choice_user_variant_semantics: acceptedOutputUserTurnClassification?.turn_kind || "",
       wording_choice_user_variant_stepworthy:
         acceptedOutputUserTurnClassification
@@ -1222,13 +1289,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const wordingChoice: WordingChoiceUiPayload = {
       enabled: true,
       mode,
-      ...(variant === "clarify_dual"
-        ? {
-            variant,
-            user_label: clarifyUserLabelForState(state),
-            suggestion_label: clarifySuggestionLabelForState(state),
-          }
-        : {}),
+      ...(variant === "clarify_dual" ? { variant } : {}),
+      ...(wordingLabels.userLabel ? { user_label: wordingLabels.userLabel } : {}),
+      ...(wordingLabels.suggestionLabel ? { suggestion_label: wordingLabels.suggestionLabel } : {}),
       user_text: normalizedUserSafe,
       suggestion_text: suggestionRaw,
       user_items: effectiveUserItems,
@@ -1395,30 +1458,40 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const variant = String(specialist?.wording_choice_variant || "").trim() === "clarify_dual"
       ? "clarify_dual"
       : "default";
+    const wordingLabels = wordingChoiceLabelsForStep({
+      stepId,
+      mode,
+      state,
+      variant,
+    });
+    const userLabel = String(specialist?.wording_choice_user_label || "").trim() || wordingLabels.userLabel || "";
+    const suggestionLabel =
+      String(specialist?.wording_choice_suggestion_label || "").trim() || wordingLabels.suggestionLabel || "";
+    const fallbackUserText = stripMarkupPreserveLines(
+      String(specialist?.wording_choice_user_normalized || specialist?.wording_choice_user_raw || "").trim()
+    );
+    const fallbackSuggestionText = unwrapSelectionHeadingFromText(
+      stepId,
+      state,
+      activeSpecialist,
+      String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim()
+    );
+    const resolvedUserItems = mode === "list" && userItems.length === 0
+      ? parseUserListItemsForStep(stepId, fallbackUserText, suggestionItems)
+      : userItems;
+    const resolvedSuggestionItems = mode === "list" && suggestionItems.length === 0
+      ? pickWordingSuggestionList(specialist, fallbackSuggestionText)
+      : suggestionItems;
     return {
       enabled: true,
       mode,
-      ...(variant === "clarify_dual"
-        ? {
-            variant: "clarify_dual" as const,
-            user_label:
-              String(specialist?.wording_choice_user_label || "").trim() || clarifyUserLabelForState(state),
-            suggestion_label:
-              String(specialist?.wording_choice_suggestion_label || "").trim() ||
-              clarifySuggestionLabelForState(state),
-          }
-        : {}),
-      user_text: stripMarkupPreserveLines(
-        String(specialist?.wording_choice_user_normalized || specialist?.wording_choice_user_raw || "").trim()
-      ),
-      suggestion_text: unwrapSelectionHeadingFromText(
-        stepId,
-        state,
-        activeSpecialist,
-        String(specialist?.wording_choice_agent_current || specialist?.refined_formulation || "").trim()
-      ),
-      user_items: userItems,
-      suggestion_items: suggestionItems,
+      ...(variant === "clarify_dual" ? { variant: "clarify_dual" as const } : {}),
+      ...(userLabel ? { user_label: userLabel } : {}),
+      ...(suggestionLabel ? { suggestion_label: suggestionLabel } : {}),
+      user_text: fallbackUserText,
+      suggestion_text: fallbackSuggestionText,
+      user_items: resolvedUserItems,
+      suggestion_items: resolvedSuggestionItems,
       instruction: wordingInstructionForState(state),
     };
   }

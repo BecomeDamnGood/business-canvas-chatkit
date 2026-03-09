@@ -317,6 +317,7 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "wordingChoice.chooseVersion": "Kies deze versie",
     "wordingChoice.useInputFallback": "Gebruik deze input",
     "wordingChoiceHeading": "Dit is jouw input:",
+    "wordingChoiceInterpretedListHeading": "Zo heb ik je input geinterpreteerd:",
     "wordingChoiceInstruction": "Klik alsjeblieft wat het beste bij je past.",
     "wordingChoiceSuggestionLabel": "Dit zou mijn suggestie zijn:",
 } as const;

@@ -64,6 +64,7 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   btnStart: "Start the process with Validation & Business Name",
   btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
   wordingChoiceHeading: "This is your input:",
+  wordingChoiceInterpretedListHeading: "This is what I took from your input:",
   wordingChoiceSuggestionLabel: "This would be my suggestion:",
   wordingChoiceInstruction: "Please click what suits you best.",
   "wording.choice.context.default": "Please choose the wording that fits best.",
