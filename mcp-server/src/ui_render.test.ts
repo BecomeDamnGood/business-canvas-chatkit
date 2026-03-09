@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { shouldSuppressMainCardForWordingChoice } from "../ui/lib/ui_render.js";
+import {
+  actionRoleForStateKey,
+  resolveActionCodeForStateKey,
+  resolveActionPayloadModeForStateKey,
+  shouldSuppressMainCardForWordingChoice,
+} from "../ui/lib/ui_render.js";
 import { benProfileVideoUrlForLang, dreamStepVideoUrlForLang } from "../ui/lib/ui_constants.js";
 
 test("shouldSuppressMainCardForWordingChoice suppresses the main card for wording-choice view variants", () => {
@@ -49,6 +54,49 @@ test("shouldSuppressMainCardForWordingChoice keeps the main card enabled for non
     ),
     false
   );
+});
+
+test("resolveActionCodeForStateKey falls back to action contract when lean state omits start action", () => {
+  const result = {
+    ui: {
+      action_contract: {
+        actions: [
+          {
+            role: "start",
+            action_code: "ACTION_START",
+          },
+        ],
+      },
+    },
+  };
+
+  assert.equal(actionRoleForStateKey("ui_action_start"), "start");
+  assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_start"), "ACTION_START");
+});
+
+test("resolveActionCodeForStateKey keeps state fallback when action contract is absent", () => {
+  assert.equal(
+    resolveActionCodeForStateKey({}, { ui_action_dream_switch_to_self: "__ROUTE__DREAM_SWITCH_TO_SELF__" }, "ui_action_dream_switch_to_self"),
+    "__ROUTE__DREAM_SWITCH_TO_SELF__"
+  );
+});
+
+test("resolveActionPayloadModeForStateKey falls back to action contract payload mode for text submit", () => {
+  const result = {
+    ui: {
+      action_contract: {
+        actions: [
+          {
+            role: "text_submit",
+            action_code: "ACTION_SUBMIT",
+            payload_mode: "scores",
+          },
+        ],
+      },
+    },
+  };
+
+  assert.equal(resolveActionPayloadModeForStateKey(result, {}, "ui_action_text_submit"), "scores");
 });
 
 test("benProfileVideoUrlForLang returns only configured language-specific videos", () => {

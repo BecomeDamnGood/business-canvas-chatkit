@@ -4866,7 +4866,7 @@
       return choiceWrap.childNodes.length > 0;
     })();
     const choiceMode = !requireWordingPick && (renderedChoiceButtons || hasStructuredActions);
-    const textSubmitActionCode = String(state.ui_action_text_submit || "").trim();
+    const textSubmitActionCode = actionCodeFromState("ui_action_text_submit");
     const textSubmitAvailable = textSubmitActionCode.length > 0;
     inputWrap.style.display = textSubmitAvailable ? "flex" : "none";
     if (!textSubmitAvailable) setSendEnabled(false);
@@ -4996,9 +4996,62 @@
   function uiStringFromContract(key) {
     return String(t(latestWidgetLang(), key) || "").trim();
   }
+  function latestWidgetResult() {
+    const data = toolData();
+    const resolved = resolveWidgetPayload(data);
+    return resolved.result && typeof resolved.result === "object" ? resolved.result : {};
+  }
+  function actionRoleForStateKey(stateKey) {
+    const normalized = String(stateKey || "").trim();
+    const roleMap = {
+      ui_action_start: "start",
+      ui_action_text_submit: "text_submit",
+      ui_action_wording_pick_user: "wording_pick_user",
+      ui_action_wording_pick_suggestion: "wording_pick_suggestion",
+      ui_action_dream_start_exercise: "dream_start_exercise",
+      ui_action_dream_switch_to_self: "dream_switch_to_self"
+    };
+    return String(roleMap[normalized] || "").trim();
+  }
+  function actionDescriptorFromLatestContract(role) {
+    const roleNorm = String(role || "").trim().toLowerCase();
+    if (!roleNorm) return null;
+    const result = latestWidgetResult();
+    const ui = result && typeof result.ui === "object" ? result.ui : {};
+    const actionContract = ui && typeof ui.action_contract === "object" ? ui.action_contract : {};
+    const actions = Array.isArray(actionContract.actions) ? actionContract.actions : [];
+    for (const action of actions) {
+      if (!action || typeof action !== "object") continue;
+      if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
+      const actionCode = String(action.action_code || "").trim();
+      if (!actionCode) continue;
+      return {
+        actionCode,
+        payloadMode: String(action.payload_mode || "").trim().toLowerCase()
+      };
+    }
+    return null;
+  }
   function actionCodeFromState(stateKey) {
+    const role = actionRoleForStateKey(stateKey);
+    if (role) {
+      const descriptor = actionDescriptorFromLatestContract(role);
+      if (descriptor?.actionCode) return descriptor.actionCode;
+    }
     const state = latestWidgetState();
     return String(state[stateKey] || "").trim();
+  }
+  function actionPayloadModeFromState(stateKey) {
+    const role = actionRoleForStateKey(stateKey);
+    if (role) {
+      const descriptor = actionDescriptorFromLatestContract(role);
+      if (descriptor?.payloadMode) return descriptor.payloadMode;
+    }
+    const state = latestWidgetState();
+    if (String(stateKey || "").trim() === "ui_action_text_submit") {
+      return String(state.ui_action_text_submit_payload_mode || "").trim().toLowerCase();
+    }
+    return "";
   }
   function ingestHostPayload(payload, source) {
     clearStartupGrace();
@@ -5111,9 +5164,8 @@
     const input = document.getElementById("input");
     const inputVal = (input?.value || "").trim();
     if (!inputVal) return;
-    const st = latestWidgetState();
-    const submitActionCode = String(st.ui_action_text_submit || "").trim();
-    const submitPayloadMode = String(st.ui_action_text_submit_payload_mode || "text").trim().toLowerCase();
+    const submitActionCode = actionCodeFromState("ui_action_text_submit");
+    const submitPayloadMode = actionPayloadModeFromState("ui_action_text_submit") || "text";
     if (!submitActionCode) {
       console.warn("[ui_action_missing]", { state_key: "ui_action_text_submit" });
       setInlineNotice(

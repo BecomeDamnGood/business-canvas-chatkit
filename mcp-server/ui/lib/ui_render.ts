@@ -96,16 +96,75 @@ function actionContractActionsForResult(resultData: Record<string, unknown>): Ar
   return [];
 }
 
-function actionCodeForRole(resultData: Record<string, unknown>, role: string): string {
+type ActionDescriptor = {
+  actionCode: string;
+  payloadMode: string;
+};
+
+const ACTION_ROLE_BY_STATE_KEY: Record<string, string> = {
+  ui_action_start: "start",
+  ui_action_text_submit: "text_submit",
+  ui_action_wording_pick_user: "wording_pick_user",
+  ui_action_wording_pick_suggestion: "wording_pick_suggestion",
+  ui_action_dream_start_exercise: "dream_start_exercise",
+  ui_action_dream_switch_to_self: "dream_switch_to_self",
+};
+
+const ACTION_PAYLOAD_MODE_STATE_KEY_BY_STATE_KEY: Record<string, string> = {
+  ui_action_text_submit: "ui_action_text_submit_payload_mode",
+};
+
+function actionDescriptorForRole(resultData: Record<string, unknown>, role: string): ActionDescriptor | null {
   const roleNorm = String(role || "").trim().toLowerCase();
-  if (!roleNorm) return "";
+  if (!roleNorm) return null;
   const actions = actionContractActionsForResult(resultData);
   for (const action of actions) {
     if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
     const actionCode = String(action.action_code || "").trim();
-    if (actionCode) return actionCode;
+    if (!actionCode) continue;
+    return {
+      actionCode,
+      payloadMode: String(action.payload_mode || "").trim().toLowerCase(),
+    };
   }
-  return "";
+  return null;
+}
+
+function actionCodeForRole(resultData: Record<string, unknown>, role: string): string {
+  return actionDescriptorForRole(resultData, role)?.actionCode || "";
+}
+
+export function actionRoleForStateKey(stateKey: string): string {
+  return String(ACTION_ROLE_BY_STATE_KEY[String(stateKey || "").trim()] || "").trim();
+}
+
+export function resolveActionCodeForStateKey(
+  resultData: Record<string, unknown>,
+  stateRaw: Record<string, unknown> | null | undefined,
+  stateKey: string
+): string {
+  const state = toRecord(stateRaw);
+  const role = actionRoleForStateKey(stateKey);
+  if (role) {
+    const actionCodeFromContract = actionCodeForRole(resultData, role);
+    if (actionCodeFromContract) return actionCodeFromContract;
+  }
+  return String(state[stateKey] || "").trim();
+}
+
+export function resolveActionPayloadModeForStateKey(
+  resultData: Record<string, unknown>,
+  stateRaw: Record<string, unknown> | null | undefined,
+  stateKey: string
+): string {
+  const state = toRecord(stateRaw);
+  const role = actionRoleForStateKey(stateKey);
+  if (role) {
+    const payloadMode = String(actionDescriptorForRole(resultData, role)?.payloadMode || "").trim().toLowerCase();
+    if (payloadMode) return payloadMode;
+  }
+  const fallbackStateKey = ACTION_PAYLOAD_MODE_STATE_KEY_BY_STATE_KEY[String(stateKey || "").trim()];
+  return fallbackStateKey ? String(state[fallbackStateKey] || "").trim().toLowerCase() : "";
 }
 
 function choiceActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
