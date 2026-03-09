@@ -86,3 +86,36 @@ test("buildRunStepContext hydrates business context from step0_bootstrap for lea
     source: "initial_user_message",
   });
 });
+
+test("buildRunStepContext preserves multiword venture bootstrap for lean resumed requests", () => {
+  const context = buildRunStepContext({
+    current_step_id: "dream",
+    user_message: "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+    input_mode: "widget",
+    state: {
+      current_step: "dream",
+      step0_bootstrap: {
+        venture: "Unified Commerce aanbieder",
+        name: "New Black",
+        status: "existing",
+        source: "initial_user_message",
+      },
+      bootstrap_session_id: "bs_12345678-1234-1234-1234-123456789abc",
+      bootstrap_epoch: 1,
+      response_seq: 2,
+      host_widget_session_id: "host-1",
+    },
+  });
+
+  assert.equal(String(context.stateForTool.business_name || ""), "New Black");
+  assert.equal(
+    String(context.stateForTool.step_0_final || ""),
+    "Venture: Unified Commerce aanbieder | Name: New Black | Status: existing"
+  );
+  assert.deepEqual(context.stateForTool.step0_bootstrap, {
+    venture: "Unified Commerce aanbieder",
+    name: "New Black",
+    status: "existing",
+    source: "initial_user_message",
+  });
+});

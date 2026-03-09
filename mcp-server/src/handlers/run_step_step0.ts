@@ -108,10 +108,76 @@ function looksBrandLike(raw: string): boolean {
   return /[A-Z]/.test(value) || /[0-9&._-]/.test(value);
 }
 
+function isSeedWordToken(raw: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9&'._-]*$/.test(raw);
+}
+
+function isLowerWordToken(raw: string): boolean {
+  return /^[a-z]+$/.test(raw);
+}
+
+function extractCandidatePhrase(rawInput: string, mode: "name" | "venture"): string {
+  const tokens = normalizeSeedToken(rawInput).split(" ").filter(Boolean);
+  if (tokens.length === 0) return "";
+  if (mode === "name" && RESERVED_LEADING_NAME_TOKENS.has(normalizeSeedKey(tokens[0]))) return "";
+
+  const parts: string[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!isSeedWordToken(token)) break;
+    const normalized = normalizeSeedKey(token);
+    if (mode === "name" && parts.length === 0 && RESERVED_LEADING_NAME_TOKENS.has(normalized)) break;
+    if (parts.length === 0) {
+      parts.push(token);
+      continue;
+    }
+    if (mode === "venture") {
+      parts.push(token);
+      if (parts.length >= 4) break;
+      continue;
+    }
+
+    if (looksBrandLike(token)) {
+      parts.push(token);
+      if (parts.length >= 4) break;
+      continue;
+    }
+
+    const nextToken = tokens[index + 1] || "";
+    if (nextToken && looksBrandLike(nextToken)) {
+      parts.push(token);
+      if (parts.length >= 4) break;
+      continue;
+    }
+    if (!nextToken && parts.length === 1 && isLowerWordToken(token)) {
+      parts.push(token);
+    }
+    break;
+  }
+
+  return normalizeSeedToken(parts.join(" "));
+}
+
+function extractVenturePhrase(rawInput: string): string {
+  return extractCandidatePhrase(rawInput, "venture");
+}
+
+function isValidSeedVentureCandidate(raw: string): boolean {
+  const value = normalizeSeedToken(raw);
+  if (!value) return false;
+  if (value.length < 2 || value.length > 64) return false;
+  if (!/^[A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,4}$/.test(value)) {
+    return false;
+  }
+  const tokens = value.split(" ").filter(Boolean);
+  const tail = tokens[tokens.length - 1] || "";
+  return Boolean(tail) && isLowerWordToken(tail);
+}
+
 function inferStatusFromInput(rawInput: string): "existing" | "starting" {
   const lowered = String(rawInput || "").toLowerCase();
   if (
-    /\b(start|starting|launch|nieuw|new)\b/.test(lowered) ||
+    /\b(start|starting|launch)\b/.test(lowered) ||
     /\b(wil|wilt|will|want)\b/.test(lowered) && /\b(start|begin|launch)\b/.test(lowered)
   ) {
     return "starting";
@@ -170,22 +236,85 @@ function collectVentureCandidates(rawInput: string): SeedCandidate[] {
       end: match.index + String(match[0] || "").length,
     });
   }
+
+  const namedIdentityPattern =
+    /\b(?:i am|ik ben|we are|wij zijn)\s+(?:a|an|een)\s+(.+?)\s+\b(?:called|named|genaamd|heet)\b/i;
+  const namedIdentity = namedIdentityPattern.exec(input);
+  if (namedIdentity && typeof namedIdentity.index === "number") {
+    const value = extractVenturePhrase(namedIdentity[1]);
+    if (isValidSeedVentureCandidate(value)) {
+      const ventureOffset = namedIdentity[0].indexOf(namedIdentity[1]);
+      const start = namedIdentity.index + Math.max(ventureOffset, 0);
+      candidates.push({
+        value,
+        score: scoreVentureCandidate(value, input, start) + 2,
+        source: "identity_named_phrase",
+        start,
+        end: start + value.length,
+      });
+    }
+  }
+
+  const trailingIdentityPattern =
+    /\b(?:i am|ik ben|we are|wij zijn)\s+(?:a|an|een)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3})[.!?]?\s*$/i;
+  const trailingIdentity = trailingIdentityPattern.exec(input);
+  if (trailingIdentity && typeof trailingIdentity.index === "number") {
+    const value = extractVenturePhrase(trailingIdentity[1]);
+    if (isValidSeedVentureCandidate(value)) {
+      const ventureOffset = trailingIdentity[0].indexOf(trailingIdentity[1]);
+      const start = trailingIdentity.index + Math.max(ventureOffset, 0);
+      candidates.push({
+        value,
+        score: scoreVentureCandidate(value, input, start) + 2,
+        source: "identity_trailing_phrase",
+        start,
+        end: start + value.length,
+      });
+    }
+  }
+
+  const trailingForPattern =
+    /\b(?:for|voor)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3})\s+(?:a|an|een)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3})[.!?]?\s*$/i;
+  const trailingFor = trailingForPattern.exec(input);
+  if (trailingFor && typeof trailingFor.index === "number") {
+    const value = extractVenturePhrase(trailingFor[2]);
+    if (isValidSeedVentureCandidate(value)) {
+      const ventureOffset = trailingFor[0].lastIndexOf(trailingFor[2]);
+      const start = trailingFor.index + Math.max(ventureOffset, 0);
+      candidates.push({
+        value,
+        score: scoreVentureCandidate(value, input, start) + 2,
+        source: "for_name_venture_phrase",
+        start,
+        end: start + value.length,
+      });
+    }
+  }
+
+  const trailingPossessivePattern =
+    /\b(?:my|mijn|our|ons|onze)\s+(.+?)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,2})[.!?]?\s*$/i;
+  const trailingPossessive = trailingPossessivePattern.exec(input);
+  if (trailingPossessive && typeof trailingPossessive.index === "number") {
+    const nameCandidate = extractLeadingNamePhrase(trailingPossessive[2]);
+    const value = extractVenturePhrase(trailingPossessive[1]);
+    if (nameCandidate && looksBrandLike(nameCandidate) && isValidSeedVentureCandidate(value)) {
+      const ventureOffset = trailingPossessive[0].indexOf(trailingPossessive[1]);
+      const start = trailingPossessive.index + Math.max(ventureOffset, 0);
+      candidates.push({
+        value,
+        score: scoreVentureCandidate(value, input, start) + 2,
+        source: "possessive_venture_phrase",
+        start,
+        end: start + value.length,
+      });
+    }
+  }
+
   return candidates;
 }
 
 function extractLeadingNamePhrase(rawTail: string): string {
-  const tokens = normalizeSeedToken(rawTail).split(" ").filter(Boolean);
-  if (tokens.length === 0) return "";
-  const firstToken = normalizeSeedKey(tokens[0]);
-  if (RESERVED_LEADING_NAME_TOKENS.has(firstToken)) return "";
-  const parts: string[] = [];
-  for (const token of tokens) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9&'._-]*$/.test(token)) break;
-    if (parts.length === 0 && RESERVED_LEADING_NAME_TOKENS.has(normalizeSeedKey(token))) break;
-    parts.push(token);
-    if (parts.length >= 3) break;
-  }
-  return normalizeSeedToken(parts.join(" "));
+  return extractCandidatePhrase(rawTail, "name");
 }
 
 function scoreNameCandidate(value: string, baseScore: number): number {
@@ -199,18 +328,52 @@ function collectNameCandidates(rawInput: string, ventureCandidates: SeedCandidat
   const raw = String(rawInput || "").replace(/\s+/g, " ").trim();
   if (!raw) return [];
   const candidates: SeedCandidate[] = [];
-  const explicitNamed = raw.match(
-    /\b(?:called|named|genaamd|heet)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,2})\b/i
-  );
+  const explicitNamed = /\b(?:called|named|genaamd|heet)\s+(.+)/i.exec(raw);
   if (explicitNamed && typeof explicitNamed.index === "number") {
-    const value = normalizeSeedToken(explicitNamed[1]);
-    candidates.push({
-      value,
-      score: scoreNameCandidate(value, 5),
-      source: "explicit_named",
-      start: explicitNamed.index,
-      end: explicitNamed.index + String(explicitNamed[0] || "").length,
-    });
+    const value = extractLeadingNamePhrase(explicitNamed[1]);
+    if (value) {
+      const nameOffset = explicitNamed[0].indexOf(explicitNamed[1]);
+      const start = explicitNamed.index + Math.max(nameOffset, 0);
+      candidates.push({
+        value,
+        score: scoreNameCandidate(value, 5),
+        source: "explicit_named",
+        start,
+        end: start + value.length,
+      });
+    }
+  }
+
+  const trailingFor = /\b(?:for|voor)\s+(.+?)\s+(?:a|an|een)\s+[A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3}[.!?]?\s*$/i.exec(raw);
+  if (trailingFor && typeof trailingFor.index === "number") {
+    const value = extractLeadingNamePhrase(trailingFor[1]);
+    if (value) {
+      const nameOffset = trailingFor[0].indexOf(trailingFor[1]);
+      const start = trailingFor.index + Math.max(nameOffset, 0);
+      candidates.push({
+        value,
+        score: scoreNameCandidate(value, 5),
+        source: "before_article_venture",
+        start,
+        end: start + value.length,
+      });
+    }
+  }
+
+  const trailingPossessive = /\b(?:my|mijn|our|ons|onze)\s+(.+?)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,2})[.!?]?\s*$/i.exec(raw);
+  if (trailingPossessive && typeof trailingPossessive.index === "number") {
+    const value = extractLeadingNamePhrase(trailingPossessive[2]);
+    if (value && looksLikeBusinessName(value) && looksBrandLike(value)) {
+      const nameOffset = trailingPossessive[0].lastIndexOf(trailingPossessive[2]);
+      const start = trailingPossessive.index + Math.max(nameOffset, 0);
+      candidates.push({
+        value,
+        score: scoreNameCandidate(value, 5),
+        source: "possessive_name_phrase",
+        start,
+        end: start + value.length,
+      });
+    }
   }
 
   const trailingTitleCase = raw.match(

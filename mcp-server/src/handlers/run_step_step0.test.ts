@@ -33,6 +33,44 @@ test("inferStep0SeedFromInitialMessage extracts named startup intent", () => {
   assert.equal(seed?.status, "starting");
 });
 
+test("inferStep0SeedFromInitialMessage extracts brand before trailing venture phrase", () => {
+  const seed = inferStep0SeedFromInitialMessage(
+    "Ik wil een businessplan voor New Black een Unified Commerce aanbieder"
+  );
+  assert.ok(seed);
+  assert.equal(seed?.venture, "Unified Commerce aanbieder");
+  assert.equal(seed?.name, "New Black");
+  assert.equal(seed?.status, "existing");
+});
+
+test("inferStep0SeedFromInitialMessage trims named phrases before the next clause", () => {
+  const seed = inferStep0SeedFromInitialMessage(
+    "Wij zijn een Unified Commerce aanbieder genaamd New Black en ik wil een Businessplan"
+  );
+  assert.ok(seed);
+  assert.equal(seed?.venture, "Unified Commerce aanbieder");
+  assert.equal(seed?.name, "New Black");
+  assert.equal(seed?.status, "existing");
+});
+
+test("inferStep0SeedFromInitialMessage prefers specific identity venture and trims polluted generic company names", () => {
+  const seed = inferStep0SeedFromInitialMessage(
+    "Ik wil een Businessplan voor mijn bedrijf Bart en ik ben een schoenenverkoper"
+  );
+  assert.ok(seed);
+  assert.equal(seed?.venture, "schoenenverkoper");
+  assert.equal(seed?.name, "Bart");
+  assert.equal(seed?.status, "existing");
+});
+
+test("inferStep0SeedFromInitialMessage extracts possessive venture and trailing brand without a fixed hint word", () => {
+  const seed = inferStep0SeedFromInitialMessage("Help met een businessplan voor mijn kledingmerk Benzo");
+  assert.ok(seed);
+  assert.equal(seed?.venture, "kledingmerk");
+  assert.equal(seed?.name, "Benzo");
+  assert.equal(seed?.status, "existing");
+});
+
 test("inferStep0SeedFromInitialMessage keeps explicit step0 contract tuple", () => {
   const seed = inferStep0SeedFromInitialMessage("Venture: studio | Name: BrandX | Status: existing");
   assert.deepEqual(seed, {
@@ -77,6 +115,21 @@ test("resolveStep0BootstrapFromState falls back to persisted step_0_final", () =
   assert.deepEqual(bootstrap, {
     venture: "reclamebureau",
     name: "Mindd",
+    status: "existing",
+    source: "step_0_final",
+  });
+});
+
+test("resolveStep0BootstrapFromState keeps recovered bootstrap tuple with generic multiword venture", () => {
+  const bootstrap = resolveStep0BootstrapFromState({
+    ...getDefaultState(),
+    step_0_final: "Venture: Unified Commerce aanbieder | Name: New Black | Status: existing",
+    business_name: "New Black",
+  } as any);
+
+  assert.deepEqual(bootstrap, {
+    venture: "Unified Commerce aanbieder",
+    name: "New Black",
     status: "existing",
     source: "step_0_final",
   });
