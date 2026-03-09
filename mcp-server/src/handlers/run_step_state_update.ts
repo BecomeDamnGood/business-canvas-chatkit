@@ -299,6 +299,9 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       );
     }
 
+    (nextState as any).last_specialist_result =
+      typeof specialistResult === "object" && specialistResult !== null ? specialistResult : {};
+
     return nextState;
   }
 

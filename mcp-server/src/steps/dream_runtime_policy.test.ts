@@ -35,7 +35,7 @@ test("dream runtime policy adds explicit rationale when source Dream is technolo
   assert.equal(String(result.specialist.feedback_reason_text || ""), "");
 });
 
-test("dream runtime policy requests repair when candidate itself remains technology-first", () => {
+test("dream runtime policy requests repair but still allows staging for shape-valid Dream lines", () => {
   const result = applyDreamRuntimePolicy({
     specialist: {
       refined_formulation:
@@ -45,10 +45,10 @@ test("dream runtime policy requests repair when candidate itself remains technol
     },
   });
 
-  assert.equal(result.canStage, false);
+  assert.equal(result.canStage, true);
   assert.equal(result.requiresRepair, true);
   assert.equal(String(result.specialist.__dream_policy_requires_repair || ""), "true");
-  assert.equal(String(result.specialist.__dream_policy_can_stage || ""), "false");
+  assert.equal(String(result.specialist.__dream_policy_can_stage || ""), "true");
 });
 
 test("stageable dream candidate requires dream-line shape instead of accepting builder summaries", () => {

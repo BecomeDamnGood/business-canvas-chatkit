@@ -123,7 +123,9 @@ export function applyDreamRuntimePolicy(params: {
   const candidateShapeValid = candidateValue ? isStageableDreamCandidate(candidateValue) : true;
   const effectiveViolations =
     sourceViolationCodes.length > 0 ? sourceViolationCodes : candidateViolationCodes;
-  const canStage = candidateValue ? candidateShapeValid && candidateViolationCodes.length === 0 : true;
+  // A canonically phrased Dream may still need refinement feedback, but that must not
+  // prevent provisional staging once the line is structurally valid as a Dream sentence.
+  const canStage = candidateValue ? candidateShapeValid : true;
   const requiresRepair = Boolean(candidateValue) && (!candidateShapeValid || candidateViolationCodes.length > 0);
   const repairSeed = pickRepairSeed({
     candidateValue,

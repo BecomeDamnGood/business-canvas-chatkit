@@ -843,6 +843,38 @@ test("dream builder_refine keeps confirm action for user-driven current-value re
   assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_EXPLAINER_REFINE_CONFIRM"), true);
 });
 
+test("dream valid output keeps confirm available when staged canonical Dream still carries refine feedback", () => {
+  const state = getDefaultState();
+  const canonical =
+    "de Hand droomt van een wereld waarin mensen zich zelfverzekerd en uniek kunnen uitdrukken door stijlvolle accessoires die hun persoonlijkheid versterken.";
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "de Hand";
+  (state as any).provisional_by_step = { dream: canonical };
+  (state as any).provisional_source_by_step = { dream: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Je droom is nu nog te algemeen en gebruikt een absolute zoals 'iedereen'.",
+      question: "",
+      refined_formulation: canonical,
+      dream: canonical,
+      __dream_policy_requires_repair: "true",
+      __dream_policy_can_stage: "true",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.confirmEligible, true);
+  assert.equal(rendered.contractId, "dream:valid_output:DREAM_MENU_REFINE");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_DREAM_REFINE_CONFIRM"), true);
+});
+
 test("dream render ignores malformed accepted builder summaries as current dream", () => {
   const state = getDefaultState();
   const malformedSummary = [
