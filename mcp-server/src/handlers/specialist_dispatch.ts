@@ -1,4 +1,4 @@
-import { callStrictJson, type LLMUsage } from "../core/llm.js";
+import { __hasInjectedTestClient, callStrictJson, type LLMUsage } from "../core/llm.js";
 import type { CanvasState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 
@@ -10,6 +10,22 @@ import {
   buildStep0SpecialistInput,
   type ValidationAndBusinessNameOutput,
 } from "../steps/step_0_validation.js";
+import {
+  STEP_0_BOOTSTRAP_SPECIALIST,
+  STEP_0_BOOTSTRAP_INSTRUCTIONS,
+  Step0BootstrapExtractionJsonSchema,
+  Step0BootstrapExtractionZodSchema,
+  buildStep0BootstrapSpecialistInput,
+  type Step0BootstrapExtractionOutput,
+} from "../steps/step_0_bootstrap.js";
+import {
+  STEP_0_TURN_INTENT_SPECIALIST,
+  STEP_0_TURN_INTENT_INSTRUCTIONS,
+  Step0TurnIntentJsonSchema,
+  Step0TurnIntentZodSchema,
+  buildStep0TurnIntentSpecialistInput,
+  type Step0TurnIntentOutput,
+} from "../steps/step_0_turn_intent.js";
 
 import {
   DREAM_STEP_ID,
@@ -268,7 +284,11 @@ export async function callSpecialistStrict(
     });
   };
 
-  if (process.env.TS_NODE_TRANSPILE_ONLY === "true" && process.env.RUN_INTEGRATION_TESTS !== "1") {
+  if (
+    process.env.TS_NODE_TRANSPILE_ONLY === "true" &&
+    process.env.RUN_INTEGRATION_TESTS !== "1" &&
+    !(specialist === STEP_0_BOOTSTRAP_SPECIALIST && __hasInjectedTestClient())
+  ) {
     if (process.env.TEST_FORCE_RATE_LIMIT === "1") {
       const err = new Error("rate_limit_exceeded");
       (err as any).rate_limited = true;
@@ -293,7 +313,11 @@ export async function callSpecialistStrict(
       meta_topic: "NONE",
     };
     const specialistResult =
-      specialist === STEP_0_SPECIALIST
+      specialist === STEP_0_TURN_INTENT_SPECIALIST
+        ? {
+            intent: "other",
+          }
+        : specialist === STEP_0_SPECIALIST
         ? {
             ...base,
             business_name: "TBD",
@@ -331,6 +355,53 @@ export async function callSpecialistStrict(
       topP: 1,
       maxOutputTokens: 2048,
       debugLabel: "ValidationAndBusinessName",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
+  }
+
+  if (specialist === STEP_0_BOOTSTRAP_SPECIALIST) {
+    const langExplicit = String((state as any).language ?? "").trim();
+    const plannerInput = buildStep0BootstrapSpecialistInput(userMessage, langExplicit ? lang : "");
+
+    const res = await callStrictJson<Step0BootstrapExtractionOutput>({
+      model,
+      instructions: composeInstructions(STEP_0_BOOTSTRAP_INSTRUCTIONS),
+      plannerInput,
+      schemaName: "Step0BootstrapExtractor",
+      jsonSchema: Step0BootstrapExtractionJsonSchema as any,
+      zodSchema: Step0BootstrapExtractionZodSchema,
+      temperature: 0,
+      topP: 1,
+      maxOutputTokens: 400,
+      debugLabel: "Step0BootstrapExtractor",
+    });
+
+    return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };
+  }
+
+  if (specialist === STEP_0_TURN_INTENT_SPECIALIST) {
+    const langExplicit = String((state as any).language ?? "").trim();
+    const plannerInput = buildStep0TurnIntentSpecialistInput({
+      userMessage,
+      currentStep0Final: String((state as any).step_0_final ?? ""),
+      currentBusinessName: String((state as any).business_name ?? ""),
+      candidateStep0: String((decision as any).step0_candidate ?? ""),
+      candidateBusinessName: String((decision as any).step0_candidate_business_name ?? ""),
+      language: langExplicit ? lang : "",
+    });
+
+    const res = await callStrictJson<Step0TurnIntentOutput>({
+      model,
+      instructions: composeInstructions(STEP_0_TURN_INTENT_INSTRUCTIONS),
+      plannerInput,
+      schemaName: "Step0TurnIntentClassifier",
+      jsonSchema: Step0TurnIntentJsonSchema as any,
+      zodSchema: Step0TurnIntentZodSchema,
+      temperature: 0,
+      topP: 1,
+      maxOutputTokens: 120,
+      debugLabel: "Step0TurnIntentClassifier",
     });
 
     return { specialistResult: res.data, attempts: res.attempts, usage: res.usage, model };

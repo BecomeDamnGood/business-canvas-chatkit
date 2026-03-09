@@ -4,10 +4,60 @@ import { run_step } from "../src/handlers/run_step.ts";
 import { CURRENT_STATE_VERSION, getDefaultState } from "../src/core/state.ts";
 import { RunStepToolStructuredContentOutputSchema } from "../src/contracts/mcp_tool_contract.ts";
 import { runStepHandler } from "../src/server/run_step_transport.ts";
+import { __setTestClient } from "../src/core/llm.ts";
 
 process.env.TS_NODE_TRANSPILE_ONLY = process.env.TS_NODE_TRANSPILE_ONLY || "true";
 process.env.UI_LOCALE_READY_GATE_V1 = process.env.UI_LOCALE_READY_GATE_V1 || "1";
 process.env.UI_START_TRIGGER_LANG_RESOLVE_V1 = process.env.UI_START_TRIGGER_LANG_RESOLVE_V1 || "1";
+
+if (!String(process.env.OPENAI_API_KEY || "").trim()) {
+  process.env.OPENAI_API_KEY = "test";
+  __setTestClient({
+    responses: {
+      create: async (body) => {
+        const schemaName = String(body?.text?.format?.name || "");
+        const plannerInput = Array.isArray(body?.input) ? String(body.input[1]?.content || "") : "";
+        if (schemaName === "Step0BootstrapExtractor") {
+          if (/Mindd/i.test(plannerInput) && /reclamebureau/i.test(plannerInput)) {
+            return {
+              output_text: JSON.stringify({
+                recognized: true,
+                venture: "reclamebureau",
+                name: "Mindd",
+                status: "existing",
+              }),
+            };
+          }
+          return {
+            output_text: JSON.stringify({
+              recognized: false,
+              venture: "",
+              name: "",
+              status: "starting",
+            }),
+          };
+        }
+        if (schemaName === "ValidationAndBusinessName") {
+          return {
+            output_text: JSON.stringify({
+              action: "ASK",
+              message: "",
+              question: "",
+              refined_formulation: "",
+              business_name: "Mindd",
+              step_0: "Venture: reclamebureau | Name: Mindd | Status: existing",
+              wants_recap: false,
+              is_offtopic: false,
+              user_intent: "STEP_INPUT",
+              meta_topic: "NONE",
+            }),
+          };
+        }
+        throw new Error(`No contract-smoke test client response for schema ${schemaName}`);
+      },
+    },
+  });
+}
 
 function stateOf(result) {
   return result && typeof result === "object" && result.state && typeof result.state === "object"

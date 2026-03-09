@@ -125,6 +125,10 @@ export function __setTestClient(client: OpenAIClient | null) {
   _client = client;
 }
 
+export function __hasInjectedTestClient(): boolean {
+  return _client !== null;
+}
+
 function extractOutputText(resp: any): string {
   // Responses API provides output_text at top level
   if (typeof resp?.output_text === "string" && resp.output_text.trim().length) {

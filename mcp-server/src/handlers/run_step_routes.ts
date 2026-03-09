@@ -12,6 +12,7 @@ import {
   type RunStepRenderedRouteOutput,
   type RunStepRoutePorts,
 } from "./run_step_ports.js";
+import { STEP_0_BOOTSTRAP_SPECIALIST } from "../steps/step_0_bootstrap.js";
 
 export type RenderedRouteOutput = RunStepRenderedRouteOutput;
 export type RouteRegistryContext = RunStepRouteRegistryRequest;
@@ -673,8 +674,69 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
 
         const initialUserMessageSeed = String((context.state as Record<string, unknown>).initial_user_message ?? "").trim();
         const startLocaleSeedText = initialUserMessageSeed || context.userMessage;
+        const step0FinalField = getFinalFieldForStepId(deps.step0Id) || "step_0_final";
+
+        const maybeHydrateBootstrapFromStep0Specialist = async (persistFinal: boolean): Promise<string> => {
+          const currentBootstrap = asRecord((context.state as Record<string, unknown>).step0_bootstrap || {});
+          const hasBootstrap =
+            sanitizeStep0SeedToken(currentBootstrap.venture, "") !== "" &&
+            sanitizeStep0SeedToken(currentBootstrap.name, "") !== "";
+          if (hasBootstrap) return "";
+          if (!initialUserMessageSeed) return "";
+
+          const bootstrapDecision = {
+            specialist_to_call: STEP_0_BOOTSTRAP_SPECIALIST,
+            specialist_input: initialUserMessageSeed,
+            current_step: deps.step0Id,
+            intro_shown_for_step:
+              String((context.state as Record<string, unknown>).intro_shown_for_step ?? "").trim() || deps.step0Id,
+            intro_shown_session:
+              String((context.state as Record<string, unknown>).intro_shown_session ?? "").trim() === "true"
+                ? "true"
+                : "false",
+            show_step_intro: "false",
+            show_session_intro: "false",
+          } as unknown as OrchestratorOutput;
+          const bootstrapCall = await deps.callSpecialistStrictSafe(
+            {
+              model: context.model,
+              state: context.state,
+              decision: bootstrapDecision,
+              userMessage: initialUserMessageSeed,
+            },
+            deps.buildRoutingContext(initialUserMessageSeed),
+            context.state
+          );
+          if (!bootstrapCall.ok) return "";
+
+          deps.rememberLlmCall(bootstrapCall.value);
+          const bootstrapResult = asRecord(bootstrapCall.value.specialistResult || {});
+          const recognized = bootstrapResult.recognized === true ||
+            String(bootstrapResult.recognized || "").trim().toLowerCase() === "true";
+          if (!recognized) return "";
+          const seededVenture = sanitizeStep0SeedToken(bootstrapResult.venture, "");
+          const seededName = sanitizeStep0SeedToken(bootstrapResult.name, "");
+          if (!seededVenture || !seededName) return "";
+          const seededStatus =
+            String(bootstrapResult.status || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
+          const canonicalStep0Final = `Venture: ${seededVenture} | Name: ${seededName || "TBD"} | Status: ${seededStatus}`;
+          if (seededName && seededName.toLowerCase() !== "tbd") {
+            (context.state as Record<string, unknown>).business_name = seededName;
+          }
+          (context.state as Record<string, unknown>).step0_bootstrap = {
+            venture: seededVenture,
+            name: seededName || "TBD",
+            status: seededStatus,
+            source: "initial_user_message",
+          };
+          if (persistFinal) {
+            (context.state as Record<string, unknown>)[step0FinalField] = canonicalStep0Final;
+          }
+          return canonicalStep0Final;
+        };
 
         if (shouldReturnPrestartGate) {
+          await maybeHydrateBootstrapFromStep0Specialist(false);
           const startResolution = await deps.ensureStartState(context.state, startLocaleSeedText);
           const stateWithUi = startResolution.state;
           const uiStrings = asRecord((stateWithUi as Record<string, unknown>).ui_strings);
@@ -723,7 +785,6 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         }
 
         (context.state as Record<string, unknown>).intro_shown_session = "true";
-        const step0FinalField = getFinalFieldForStepId(deps.step0Id) || "step_0_final";
         let step0Final = String((context.state as Record<string, unknown>)[step0FinalField] ?? "").trim();
         if (!step0Final) {
           const rawBootstrap = asRecord((context.state as Record<string, unknown>).step0_bootstrap || {});
@@ -761,6 +822,9 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
               source: "initial_user_message",
             };
           }
+        }
+        if (!step0Final) {
+          step0Final = await maybeHydrateBootstrapFromStep0Specialist(true);
         }
 
         if (step0Final) {

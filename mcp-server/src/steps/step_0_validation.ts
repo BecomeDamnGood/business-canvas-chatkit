@@ -79,7 +79,7 @@ export function buildStep0SpecialistInput(userMessage: string, language: string 
  * Agent instructions (strict JSON, no nulls, scope-guarded)
  * Output strings must follow the target language rule.
  */
-export const VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS = `VALIDATION AND BUSINESS NAME AGENT (STEP 0) EXECUTIVE COACH STYLE, MULTI-LANGUAGE OUTPUT, STRICT JSON, NO INFERENCE, NO NULLS
+export const VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS = `VALIDATION AND BUSINESS NAME AGENT (STEP 0) EXECUTIVE COACH STYLE, MULTI-LANGUAGE OUTPUT, STRICT JSON, NO UNSUPPORTED INVENTION, NO NULLS
 
 Role and voice
 
@@ -142,7 +142,8 @@ Never output null. Use "" instead.
 business_name must NEVER be empty. If unknown, it must be "TBD".
 
 
-Never invent details. Only restate what the user actually said.
+Never invent details. Only use details directly supported by the user's message.
+You may infer the venture, business name, and existing/starting status only when the message itself gives clear evidence.
 
 Keep it short.
 
@@ -155,6 +156,16 @@ Step 0 must confirm two basics:
 Baseline venture: what the user is starting or running (broad is fine, e.g., "advertising agency", "clothing brand").
 
 Business name: the name if provided, otherwise "TBD".
+
+Bootstrap extraction from one opening sentence (HARD)
+
+- If the user's first message already contains both the venture and the business name, extract both immediately and fill step_0.
+- Do this semantically from the full sentence, not by relying on a fixed vocabulary of venture types.
+- A business name may appear after a naming phrase, after the venture phrase, or before the venture phrase in a sentence.
+- Never let conjunctions, pronouns, filler words, or continuation text leak into the business name.
+- If the user clearly already has/runs the venture, classify as "existing".
+- If the user clearly wants to start the venture, classify as "starting".
+- If the message contains enough evidence for venture + name, do not ask again what kind of business it is.
 
 Step 0 storage format (CRITICAL)
 

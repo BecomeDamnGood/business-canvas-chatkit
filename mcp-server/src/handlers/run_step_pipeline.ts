@@ -1,3 +1,4 @@
+import type { OrchestratorOutput } from "../core/orchestrator.js";
 import type { CanvasState } from "../core/state.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
 import {
@@ -6,6 +7,7 @@ import {
   validateUiContractIdForStep,
 } from "../core/ui_contract_id.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
+import { STEP_0_TURN_INTENT_SPECIALIST } from "../steps/step_0_turn_intent.js";
 import {
   type RunStepContext,
   type RunStepPostSpecialistPipelineRequest,
@@ -793,11 +795,51 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     });
     if (currentStepIdForOfftopic === deps.step0Id) {
       const sourceActionStep0 = String(specialistResult.action || "").trim().toUpperCase();
+      let step0TurnIntent: "confirm_start" | "change_name" | "other" = "other";
+      const currentStep0Final = String(asStateRecord(state).step_0_final || "").trim();
+      if (
+        deps.hasValidStep0Final(currentStep0Final) &&
+        (sourceActionStep0 === "ASK" || sourceActionStep0 === "ESCAPE") &&
+        String(userMessage || "").trim() !== ""
+      ) {
+        const step0IntentDecision = {
+          specialist_to_call: STEP_0_TURN_INTENT_SPECIALIST,
+          specialist_input: userMessage,
+          current_step: deps.step0Id,
+          step0_candidate: String((specialistResult as Record<string, unknown>).step_0 || ""),
+          step0_candidate_business_name: String((specialistResult as Record<string, unknown>).business_name || ""),
+          intro_shown_for_step: deps.step0Id,
+          intro_shown_session:
+            String(asStateRecord(state).intro_shown_session || "").trim().toLowerCase() === "true"
+              ? "true"
+              : "false",
+          show_step_intro: "false",
+          show_session_intro: "false",
+        } as unknown as OrchestratorOutput;
+        const step0IntentCall = await deps.callSpecialistStrictSafe(
+          {
+            model: params.model,
+            state,
+            decision: step0IntentDecision,
+            userMessage,
+          },
+          deps.buildRoutingContext(userMessage),
+          state
+        );
+        if (step0IntentCall.ok) {
+          params.rememberLlmCall(step0IntentCall.value);
+          const intentRaw = String(asRecord(step0IntentCall.value.specialistResult).intent || "").trim();
+          if (intentRaw === "confirm_start" || intentRaw === "change_name" || intentRaw === "other") {
+            step0TurnIntent = intentRaw;
+          }
+        }
+      }
       specialistResult = deps.normalizeStep0AskDisplayContract(
         deps.step0Id,
         specialistResult,
         state,
-        userMessage
+        userMessage,
+        step0TurnIntent
       );
       const normalizedActionStep0 = String(specialistResult.action || "").trim().toUpperCase();
       if (

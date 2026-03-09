@@ -9,68 +9,6 @@ import {
 } from "./run_step_step0.js";
 import { getDefaultState } from "../core/state.js";
 
-test("inferStep0SeedFromInitialMessage extracts Dutch possessive venture+name", () => {
-  const seed = inferStep0SeedFromInitialMessage("Help met een businessplan voor mijn reclamebureau Mindd");
-  assert.ok(seed);
-  assert.equal(seed?.venture, "reclamebureau");
-  assert.equal(seed?.name, "Mindd");
-  assert.equal(seed?.status, "existing");
-});
-
-test("inferStep0SeedFromInitialMessage prefers venture hint plus trailing brand in natural opening sentence", () => {
-  const seed = inferStep0SeedFromInitialMessage("help met mijn ondernemingsplan voor mijn reclamebureau Mindd");
-  assert.ok(seed);
-  assert.equal(seed?.venture, "reclamebureau");
-  assert.equal(seed?.name, "Mindd");
-  assert.equal(seed?.status, "existing");
-});
-
-test("inferStep0SeedFromInitialMessage extracts named startup intent", () => {
-  const seed = inferStep0SeedFromInitialMessage("I want to start an agency called Mindd");
-  assert.ok(seed);
-  assert.equal(seed?.venture, "agency");
-  assert.equal(seed?.name, "Mindd");
-  assert.equal(seed?.status, "starting");
-});
-
-test("inferStep0SeedFromInitialMessage extracts brand before trailing venture phrase", () => {
-  const seed = inferStep0SeedFromInitialMessage(
-    "Ik wil een businessplan voor New Black een Unified Commerce aanbieder"
-  );
-  assert.ok(seed);
-  assert.equal(seed?.venture, "Unified Commerce aanbieder");
-  assert.equal(seed?.name, "New Black");
-  assert.equal(seed?.status, "existing");
-});
-
-test("inferStep0SeedFromInitialMessage trims named phrases before the next clause", () => {
-  const seed = inferStep0SeedFromInitialMessage(
-    "Wij zijn een Unified Commerce aanbieder genaamd New Black en ik wil een Businessplan"
-  );
-  assert.ok(seed);
-  assert.equal(seed?.venture, "Unified Commerce aanbieder");
-  assert.equal(seed?.name, "New Black");
-  assert.equal(seed?.status, "existing");
-});
-
-test("inferStep0SeedFromInitialMessage prefers specific identity venture and trims polluted generic company names", () => {
-  const seed = inferStep0SeedFromInitialMessage(
-    "Ik wil een Businessplan voor mijn bedrijf Bart en ik ben een schoenenverkoper"
-  );
-  assert.ok(seed);
-  assert.equal(seed?.venture, "schoenenverkoper");
-  assert.equal(seed?.name, "Bart");
-  assert.equal(seed?.status, "existing");
-});
-
-test("inferStep0SeedFromInitialMessage extracts possessive venture and trailing brand without a fixed hint word", () => {
-  const seed = inferStep0SeedFromInitialMessage("Help met een businessplan voor mijn kledingmerk Benzo");
-  assert.ok(seed);
-  assert.equal(seed?.venture, "kledingmerk");
-  assert.equal(seed?.name, "Benzo");
-  assert.equal(seed?.status, "existing");
-});
-
 test("inferStep0SeedFromInitialMessage keeps explicit step0 contract tuple", () => {
   const seed = inferStep0SeedFromInitialMessage("Venture: studio | Name: BrandX | Status: existing");
   assert.deepEqual(seed, {
@@ -85,15 +23,15 @@ test("inferStep0SeedFromInitialMessage returns null when no venture-name signal 
   assert.equal(seed, null);
 });
 
-test("inferStep0SeedFromInitialMessage returns null when venture type is present without a distinct business name", () => {
-  const seed = inferStep0SeedFromInitialMessage("Help met mijn ondernemingsplan voor mijn reclamebureau");
+test("inferStep0SeedFromInitialMessage leaves natural-language bootstrap inference to the LLM layer", () => {
+  const seed = inferStep0SeedFromInitialMessage("Ik heb een tuin onderhoudbedrijf Groene Vingers en wil een businessplan");
   assert.equal(seed, null);
 });
 
-test("maybeSeedStep0CandidateFromInitialMessage stores canonical prestart bootstrap tuple", () => {
+test("maybeSeedStep0CandidateFromInitialMessage stores canonical prestart bootstrap tuple only from explicit step0 tuple input", () => {
   const seeded = maybeSeedStep0CandidateFromInitialMessage(
     getDefaultState(),
-    "Help met een bedrijfsplan voor mijn reclamebureau genaamd Mindd"
+    "Venture: reclamebureau | Name: Mindd | Status: existing"
   );
 
   assert.deepEqual((seeded as any).step0_bootstrap, {
@@ -103,6 +41,21 @@ test("maybeSeedStep0CandidateFromInitialMessage stores canonical prestart bootst
     source: "initial_user_message",
   });
   assert.equal(seeded.business_name, "Mindd");
+});
+
+test("maybeSeedStep0CandidateFromInitialMessage does not heuristically seed natural-language openings", () => {
+  const seeded = maybeSeedStep0CandidateFromInitialMessage(
+    getDefaultState(),
+    "Help met een businessplan voor mijn kledingmerk Benzo"
+  );
+
+  assert.deepEqual((seeded as any).step0_bootstrap, {
+    venture: "",
+    name: "",
+    status: "",
+    source: "",
+  });
+  assert.equal(seeded.business_name, "TBD");
 });
 
 test("resolveStep0BootstrapFromState falls back to persisted step_0_final", () => {
@@ -161,7 +114,8 @@ test("normalizeStep0AskDisplayContract preserves ready state on confirm intent",
     "step_0",
     specialist,
     state,
-    "ja ik ben er klaar voor"
+    "ja ik ben er klaar voor",
+    "confirm_start"
   );
 
   assert.equal(normalized.business_name, "Mindd");
@@ -197,7 +151,8 @@ test("normalizeStep0AskDisplayContract keeps explicit name edit and marks editab
     "step_0",
     specialist,
     state,
-    "nee de naam is de virtuele CowBoy"
+    "nee de naam is de virtuele CowBoy",
+    "change_name"
   );
 
   assert.equal(normalized.business_name, "de virtuele CowBoy");

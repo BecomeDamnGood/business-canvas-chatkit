@@ -19,14 +19,6 @@ export type Step0Bootstrap = {
   source: "initial_user_message" | "step_0_final";
 };
 
-type SeedCandidate = {
-  value: string;
-  score: number;
-  source: string;
-  start: number;
-  end: number;
-};
-
 export function parseStep0Final(step0Final: string, fallbackName: string): Step0Parsed {
   const nameMatch = step0Final.match(/Name:\s*([^|]+)\s*(\||$)/i);
   const ventureMatch = step0Final.match(/Venture:\s*([^|]+)\s*(\||$)/i);
@@ -57,406 +49,12 @@ function normalizeSeedToken(raw: unknown): string {
     .trim();
 }
 
-const GENERIC_NAME_TOKENS = new Set([
-  "tbd",
-  "business",
-  "venture",
-  "bedrijf",
-  "company",
-  "startup",
-  "plan",
-  "canvas",
-  "businessplan",
-  "ondernemingsplan",
-]);
-
-const RESERVED_LEADING_NAME_TOKENS = new Set([
-  "called",
-  "named",
-  "genaamd",
-  "heet",
-  "for",
-  "voor",
-  "with",
-  "met",
-  "my",
-  "mijn",
-  "our",
-  "ons",
-  "onze",
-]);
-
-function normalizeSeedKey(raw: string): string {
-  return normalizeSeedToken(raw).toLowerCase();
-}
-
-function looksLikeBusinessName(raw: string): boolean {
-  const value = normalizeSeedToken(raw);
-  if (!value) return false;
-  if (value.length < 2 || value.length > 64) return false;
-  if (!/^[A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3}$/.test(value)) {
-    return false;
-  }
-  const lowered = normalizeSeedKey(value);
-  if (GENERIC_NAME_TOKENS.has(lowered)) return false;
-  return true;
-}
-
-function looksBrandLike(raw: string): boolean {
-  const value = normalizeSeedToken(raw);
-  if (!value) return false;
-  return /[A-Z]/.test(value) || /[0-9&._-]/.test(value);
-}
-
-function isSeedWordToken(raw: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9&'._-]*$/.test(raw);
-}
-
-function isLowerWordToken(raw: string): boolean {
-  return /^[a-z]+$/.test(raw);
-}
-
-function extractCandidatePhrase(rawInput: string, mode: "name" | "venture"): string {
-  const tokens = normalizeSeedToken(rawInput).split(" ").filter(Boolean);
-  if (tokens.length === 0) return "";
-  if (mode === "name" && RESERVED_LEADING_NAME_TOKENS.has(normalizeSeedKey(tokens[0]))) return "";
-
-  const parts: string[] = [];
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (!isSeedWordToken(token)) break;
-    const normalized = normalizeSeedKey(token);
-    if (mode === "name" && parts.length === 0 && RESERVED_LEADING_NAME_TOKENS.has(normalized)) break;
-    if (parts.length === 0) {
-      parts.push(token);
-      continue;
-    }
-    if (mode === "venture") {
-      parts.push(token);
-      if (parts.length >= 4) break;
-      continue;
-    }
-
-    if (looksBrandLike(token)) {
-      parts.push(token);
-      if (parts.length >= 4) break;
-      continue;
-    }
-
-    const nextToken = tokens[index + 1] || "";
-    if (nextToken && looksBrandLike(nextToken)) {
-      parts.push(token);
-      if (parts.length >= 4) break;
-      continue;
-    }
-    if (!nextToken && parts.length === 1 && isLowerWordToken(token)) {
-      parts.push(token);
-    }
-    break;
-  }
-
-  return normalizeSeedToken(parts.join(" "));
-}
-
-function extractVenturePhrase(rawInput: string): string {
-  return extractCandidatePhrase(rawInput, "venture");
-}
-
-function isValidSeedVentureCandidate(raw: string): boolean {
-  const value = normalizeSeedToken(raw);
-  if (!value) return false;
-  if (value.length < 2 || value.length > 64) return false;
-  if (!/^[A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,4}$/.test(value)) {
-    return false;
-  }
-  const tokens = value.split(" ").filter(Boolean);
-  const tail = tokens[tokens.length - 1] || "";
-  return Boolean(tail) && isLowerWordToken(tail);
-}
-
-function inferStatusFromInput(rawInput: string): "existing" | "starting" {
-  const lowered = String(rawInput || "").toLowerCase();
-  if (
-    /\b(start|starting|launch)\b/.test(lowered) ||
-    /\b(wil|wilt|will|want)\b/.test(lowered) && /\b(start|begin|launch)\b/.test(lowered)
-  ) {
-    return "starting";
-  }
-  return "existing";
-}
-
-const VENTURE_HINTS: Array<{ pattern: RegExp; value: string }> = [
-  { pattern: /\breclamebureau\b/i, value: "reclamebureau" },
-  { pattern: /\badvertising agency\b/i, value: "advertising agency" },
-  { pattern: /\bmarketing agency\b/i, value: "marketing agency" },
-  { pattern: /\bagency\b/i, value: "agency" },
-  { pattern: /\bbureau\b/i, value: "bureau" },
-  { pattern: /\bstudio\b/i, value: "studio" },
-  { pattern: /\bconsultancy\b/i, value: "consultancy" },
-  { pattern: /\bwebshop\b/i, value: "webshop" },
-  { pattern: /\brestaurant\b/i, value: "restaurant" },
-  { pattern: /\bpraktijk\b/i, value: "praktijk" },
-  { pattern: /\bstartup\b/i, value: "startup" },
-  { pattern: /\bbusiness\b/i, value: "business" },
-  { pattern: /\bbedrijf\b/i, value: "bedrijf" },
-];
-
-const VENTURE_NAME_BLOCKLIST = new Set(VENTURE_HINTS.map((hint) => normalizeSeedKey(hint.value)));
-const GENERIC_VENTURE_VALUES = new Set(["business", "bedrijf", "company", "startup"]);
-
-function inferVentureFromInput(rawInput: string): string {
-  const input = String(rawInput || "");
-  for (const hint of VENTURE_HINTS) {
-    if (hint.pattern.test(input)) return hint.value;
-  }
-  return "";
-}
-
-function scoreVentureCandidate(value: string, input: string, matchStart: number): number {
-  const normalized = normalizeSeedKey(value);
-  let score = GENERIC_VENTURE_VALUES.has(normalized) ? 2 : 4;
-  if (value.includes(" ")) score += 1;
-  const prefix = input.slice(Math.max(0, matchStart - 24), matchStart).toLowerCase();
-  if (/\b(?:my|mijn|our|ons|onze|for|voor|a|an|een)\s*$/.test(prefix)) score += 1;
-  return score;
-}
-
-function collectVentureCandidates(rawInput: string): SeedCandidate[] {
-  const input = normalizeSeedToken(rawInput);
-  if (!input) return [];
-  const candidates: SeedCandidate[] = [];
-  for (const hint of VENTURE_HINTS) {
-    const match = input.match(hint.pattern);
-    if (!match || typeof match.index !== "number") continue;
-    candidates.push({
-      value: normalizeSeedToken(hint.value),
-      score: scoreVentureCandidate(hint.value, input, match.index),
-      source: "venture_hint",
-      start: match.index,
-      end: match.index + String(match[0] || "").length,
-    });
-  }
-
-  const namedIdentityPattern =
-    /\b(?:i am|ik ben|we are|wij zijn)\s+(?:a|an|een)\s+(.+?)\s+\b(?:called|named|genaamd|heet)\b/i;
-  const namedIdentity = namedIdentityPattern.exec(input);
-  if (namedIdentity && typeof namedIdentity.index === "number") {
-    const value = extractVenturePhrase(namedIdentity[1]);
-    if (isValidSeedVentureCandidate(value)) {
-      const ventureOffset = namedIdentity[0].indexOf(namedIdentity[1]);
-      const start = namedIdentity.index + Math.max(ventureOffset, 0);
-      candidates.push({
-        value,
-        score: scoreVentureCandidate(value, input, start) + 2,
-        source: "identity_named_phrase",
-        start,
-        end: start + value.length,
-      });
-    }
-  }
-
-  const trailingIdentityPattern =
-    /\b(?:i am|ik ben|we are|wij zijn)\s+(?:a|an|een)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3})[.!?]?\s*$/i;
-  const trailingIdentity = trailingIdentityPattern.exec(input);
-  if (trailingIdentity && typeof trailingIdentity.index === "number") {
-    const value = extractVenturePhrase(trailingIdentity[1]);
-    if (isValidSeedVentureCandidate(value)) {
-      const ventureOffset = trailingIdentity[0].indexOf(trailingIdentity[1]);
-      const start = trailingIdentity.index + Math.max(ventureOffset, 0);
-      candidates.push({
-        value,
-        score: scoreVentureCandidate(value, input, start) + 2,
-        source: "identity_trailing_phrase",
-        start,
-        end: start + value.length,
-      });
-    }
-  }
-
-  const trailingForPattern =
-    /\b(?:for|voor)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3})\s+(?:a|an|een)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3})[.!?]?\s*$/i;
-  const trailingFor = trailingForPattern.exec(input);
-  if (trailingFor && typeof trailingFor.index === "number") {
-    const value = extractVenturePhrase(trailingFor[2]);
-    if (isValidSeedVentureCandidate(value)) {
-      const ventureOffset = trailingFor[0].lastIndexOf(trailingFor[2]);
-      const start = trailingFor.index + Math.max(ventureOffset, 0);
-      candidates.push({
-        value,
-        score: scoreVentureCandidate(value, input, start) + 2,
-        source: "for_name_venture_phrase",
-        start,
-        end: start + value.length,
-      });
-    }
-  }
-
-  const trailingPossessivePattern =
-    /\b(?:my|mijn|our|ons|onze)\s+(.+?)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,2})[.!?]?\s*$/i;
-  const trailingPossessive = trailingPossessivePattern.exec(input);
-  if (trailingPossessive && typeof trailingPossessive.index === "number") {
-    const nameCandidate = extractLeadingNamePhrase(trailingPossessive[2]);
-    const value = extractVenturePhrase(trailingPossessive[1]);
-    if (nameCandidate && looksBrandLike(nameCandidate) && isValidSeedVentureCandidate(value)) {
-      const ventureOffset = trailingPossessive[0].indexOf(trailingPossessive[1]);
-      const start = trailingPossessive.index + Math.max(ventureOffset, 0);
-      candidates.push({
-        value,
-        score: scoreVentureCandidate(value, input, start) + 2,
-        source: "possessive_venture_phrase",
-        start,
-        end: start + value.length,
-      });
-    }
-  }
-
-  return candidates;
-}
-
-function extractLeadingNamePhrase(rawTail: string): string {
-  return extractCandidatePhrase(rawTail, "name");
-}
-
-function scoreNameCandidate(value: string, baseScore: number): number {
-  let score = baseScore;
-  if (looksBrandLike(value)) score += 1;
-  if (value.includes(" ")) score += 1;
-  return score;
-}
-
-function collectNameCandidates(rawInput: string, ventureCandidates: SeedCandidate[]): SeedCandidate[] {
-  const raw = String(rawInput || "").replace(/\s+/g, " ").trim();
-  if (!raw) return [];
-  const candidates: SeedCandidate[] = [];
-  const explicitNamed = /\b(?:called|named|genaamd|heet)\s+(.+)/i.exec(raw);
-  if (explicitNamed && typeof explicitNamed.index === "number") {
-    const value = extractLeadingNamePhrase(explicitNamed[1]);
-    if (value) {
-      const nameOffset = explicitNamed[0].indexOf(explicitNamed[1]);
-      const start = explicitNamed.index + Math.max(nameOffset, 0);
-      candidates.push({
-        value,
-        score: scoreNameCandidate(value, 5),
-        source: "explicit_named",
-        start,
-        end: start + value.length,
-      });
-    }
-  }
-
-  const trailingFor = /\b(?:for|voor)\s+(.+?)\s+(?:a|an|een)\s+[A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,3}[.!?]?\s*$/i.exec(raw);
-  if (trailingFor && typeof trailingFor.index === "number") {
-    const value = extractLeadingNamePhrase(trailingFor[1]);
-    if (value) {
-      const nameOffset = trailingFor[0].indexOf(trailingFor[1]);
-      const start = trailingFor.index + Math.max(nameOffset, 0);
-      candidates.push({
-        value,
-        score: scoreNameCandidate(value, 5),
-        source: "before_article_venture",
-        start,
-        end: start + value.length,
-      });
-    }
-  }
-
-  const trailingPossessive = /\b(?:my|mijn|our|ons|onze)\s+(.+?)\s+([A-Za-z0-9][A-Za-z0-9&'._-]*(?:\s+[A-Za-z0-9][A-Za-z0-9&'._-]*){0,2})[.!?]?\s*$/i.exec(raw);
-  if (trailingPossessive && typeof trailingPossessive.index === "number") {
-    const value = extractLeadingNamePhrase(trailingPossessive[2]);
-    if (value && looksLikeBusinessName(value) && looksBrandLike(value)) {
-      const nameOffset = trailingPossessive[0].lastIndexOf(trailingPossessive[2]);
-      const start = trailingPossessive.index + Math.max(nameOffset, 0);
-      candidates.push({
-        value,
-        score: scoreNameCandidate(value, 5),
-        source: "possessive_name_phrase",
-        start,
-        end: start + value.length,
-      });
-    }
-  }
-
-  const trailingTitleCase = raw.match(
-    /\b([A-Z][A-Za-z0-9&'._-]*(?:\s+[A-Z][A-Za-z0-9&'._-]*){0,2})\b\s*$/
-  );
-  if (trailingTitleCase && typeof trailingTitleCase.index === "number") {
-    const value = normalizeSeedToken(trailingTitleCase[1]);
-    candidates.push({
-      value,
-      score: scoreNameCandidate(value, 3),
-      source: "trailing_title_case",
-      start: trailingTitleCase.index,
-      end: trailingTitleCase.index + String(trailingTitleCase[0] || "").length,
-    });
-  }
-
-  for (const ventureCandidate of ventureCandidates) {
-    if (ventureCandidate.end >= raw.length) continue;
-    const value = extractLeadingNamePhrase(raw.slice(ventureCandidate.end));
-    if (!value) continue;
-    candidates.push({
-      value,
-      score: scoreNameCandidate(value, 4),
-      source: "after_venture",
-      start: ventureCandidate.end,
-      end: ventureCandidate.end + value.length,
-    });
-  }
-
-  return candidates;
-}
-
-function pickBestCandidate(candidates: SeedCandidate[]): SeedCandidate | null {
-  const ranked = [...candidates].sort((left, right) => {
-    if (right.score !== left.score) return right.score - left.score;
-    if (right.value.length !== left.value.length) return right.value.length - left.value.length;
-    return left.start - right.start;
-  });
-  return ranked[0] || null;
-}
-
-function isValidSeedNameCandidate(raw: string, ventureRaw: string): boolean {
-  const value = normalizeSeedToken(raw);
-  if (!looksLikeBusinessName(value)) return false;
-  const lowered = normalizeSeedKey(value);
-  if (VENTURE_NAME_BLOCKLIST.has(lowered)) return false;
-  if (lowered === normalizeSeedKey(ventureRaw)) return false;
-  return true;
-}
-
-function normalizeIntentInput(rawInput: string): string {
+function normalizeComparableInput(rawInput: string): string {
   return String(rawInput || "")
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function detectStep0TurnIntent(rawInput: string): Step0TurnIntent {
-  const normalized = normalizeIntentInput(rawInput);
-  if (!normalized) return "other";
-  const tokens = normalized.split(" ").filter(Boolean);
-  if (tokens.length > 0 && tokens.length <= 10) {
-    const first = tokens[0];
-    if (["ja", "yes", "ok", "okay", "zeker", "prima", "ready", "klaar", "start"].includes(first)) {
-      return "confirm_start";
-    }
-    const hasProgress = tokens.some((token) =>
-      ["start", "begin", "beginnen", "doorgaan", "verder", "continue", "proceed"].includes(token)
-    );
-    const hasConfirm = tokens.some((token) =>
-      ["ja", "yes", "zeker", "klaar", "ready", "ok", "okay"].includes(token)
-    );
-    if (hasProgress && hasConfirm) return "confirm_start";
-  }
-
-  const changeNamePatterns = [
-    /\b(?:name|naam)\s*(?:is|=|:)\s+\S+/i,
-    /\b(?:called|named|genaamd|heet)\s+\S+/i,
-    /\b(?:my name is|de naam is|het heet|its name is|it is called)\b/i,
-  ];
-  if (changeNamePatterns.some((pattern) => pattern.test(normalized))) return "change_name";
-  return "other";
 }
 
 function normalizeBusinessName(rawName: string): string {
@@ -539,9 +137,7 @@ function applyStep0InteractionMetadata(next: Record<string, unknown>, state: Ste
 
 export function inferStep0SeedFromInitialMessage(rawInput: string): Step0Seed | null {
   const raw = String(rawInput || "").replace(/\s+/g, " ").trim();
-  const input = normalizeSeedToken(rawInput);
-  if (!input) return null;
-  const status = inferStatusFromInput(input);
+  if (!raw) return null;
 
   const explicitStep0 = raw.match(
     /Venture:\s*([^|]+?)\s*(?:\||$).*?Name:\s*([^|]+?)\s*(?:\||$).*?Status:\s*(existing|starting)\b/i
@@ -550,26 +146,11 @@ export function inferStep0SeedFromInitialMessage(rawInput: string): Step0Seed | 
     const venture = normalizeSeedToken(explicitStep0[1]);
     const name = normalizeSeedToken(explicitStep0[2]);
     const parsedStatus = String(explicitStep0[3] || "").trim().toLowerCase() === "existing" ? "existing" : "starting";
-    if (venture && looksLikeBusinessName(name)) {
+    if (venture && name) {
       return { venture, name, status: parsedStatus };
     }
   }
-
-  const ventureCandidates = collectVentureCandidates(raw);
-  const bestVenture = pickBestCandidate(ventureCandidates);
-  if (!bestVenture || bestVenture.score < 3) return null;
-
-  const nameCandidates = collectNameCandidates(raw, ventureCandidates).filter((candidate) =>
-    isValidSeedNameCandidate(candidate.value, bestVenture.value)
-  );
-  const bestName = pickBestCandidate(nameCandidates);
-  if (!bestName || bestName.score < 4) return null;
-
-  return {
-    venture: bestVenture.value,
-    name: bestName.value,
-    status,
-  };
+  return null;
 }
 
 export function maybeSeedStep0CandidateFromInitialMessage(state: CanvasState, sourceMessage: string): CanvasState {
@@ -632,7 +213,13 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
     return output;
   }
 
-  function normalizeStep0AskDisplayContract(stepId: string, specialist: any, state: CanvasState, userInput = ""): any {
+  function normalizeStep0AskDisplayContract(
+    stepId: string,
+    specialist: any,
+    state: CanvasState,
+    userInput = "",
+    userIntent: Step0TurnIntent = "other"
+  ): any {
     if (stepId !== deps.step0Id || !specialist || typeof specialist !== "object") return specialist;
     const action = String(specialist.action || "").trim().toUpperCase();
     const next = { ...specialist };
@@ -680,7 +267,6 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
     }
     if (hasStep0 && (action === "ASK" || action === "ESCAPE")) {
       const parsedFromState = parseStep0Final(step0FinalRaw, String((state as any).business_name || "TBD"));
-      const userIntent = detectStep0TurnIntent(normalizedInput);
       const incomingStep0Raw = String(next.step_0 || "").trim();
       const incomingHasValidStep0 = hasValidStep0Final(incomingStep0Raw);
       const incomingParsed = incomingHasValidStep0
@@ -695,7 +281,7 @@ export function createRunStepStep0DisplayHelpers(deps: RunStepStep0DisplayDeps) 
             : "");
       const hasTupleMutation =
         Boolean(candidateStep0) &&
-        normalizeIntentInput(candidateStep0) !== normalizeIntentInput(step0FinalRaw);
+        normalizeComparableInput(candidateStep0) !== normalizeComparableInput(step0FinalRaw);
       const hasNameMutation =
         Boolean(candidateName) &&
         candidateName.toLowerCase() !== "tbd" &&

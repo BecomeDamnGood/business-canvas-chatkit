@@ -135,6 +135,7 @@ export type RunStepRouteStep0Ports = {
     routeOrText: string
   ) => Promise<{ state: CanvasState; interactiveReady: boolean }>;
   parseStep0Final: (...args: any[]) => any;
+  hasValidStep0Final: (value: string) => boolean;
   inferStep0SeedFromInitialMessage: (
     rawInput: string
   ) => { venture: string; name: string; status: "existing" | "starting" } | null;
@@ -238,7 +239,8 @@ export type RunStepPipelineNormalizationPorts = {
     stepId: string,
     specialist: any,
     state: CanvasState,
-    userInput?: string
+    userInput?: string,
+    userIntent?: "confirm_start" | "change_name" | "other"
   ) => any;
   hasValidStep0Final: (value: string) => boolean;
 };

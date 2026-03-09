@@ -443,7 +443,7 @@ export async function runStepRuntimeExecute(
     wording: { wordingSelectionMessage, pickPrompt, buildTextForWidget },
     state: { applyStateUpdate, setDreamRuntimeMode, getDreamRuntimeMode, isUiStateHygieneSwitchV1Enabled, clearStepInteractiveState },
     contracts: { renderFreeTextTurnPolicy, validateRenderedContractOrRecover, applyUiPhaseByStep, ensureUiStrings: finalizeLayer.ensureUiStrings, buildContractId },
-    step0: { ensureStartState: finalizeLayer.ensureStartState, parseStep0Final, inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState },
+    step0: { ensureStartState: finalizeLayer.ensureStartState, parseStep0Final, hasValidStep0Final, inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState },
     presentation: { generatePresentationAssets, uiStringFromStateMap, uiDefaultString },
     specialist: { callSpecialistStrictSafe, buildRoutingContext: finalizeLayer.buildRoutingContext, rememberLlmCall },
     response: { attachRegistryPayload: finalizeLayer.attachRegistryPayload, finalizeResponse: finalizeLayer.finalizeResponse, turnResponseEngine: finalizeLayer.turnResponseEngine },
