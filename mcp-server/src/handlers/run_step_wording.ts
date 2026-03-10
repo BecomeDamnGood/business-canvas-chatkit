@@ -245,32 +245,63 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     stepId: string,
     state: CanvasState | null | undefined,
     activeSpecialist: string
-  ): string {
-    if (!state || typeof state !== "object") return "";
+  ): string[] {
+    if (!state || typeof state !== "object") return [];
     const marker = "__BSC_CURRENT_VALUE_MARKER__";
     const selection = stripMarkupPreserveLines(
       deps.wordingSelectionMessage(stepId, state, activeSpecialist, marker)
     );
-    if (!selection || !selection.includes(marker)) return "";
-    const prefix = String(selection.split(marker)[0] || "");
-    const lines = prefix
-      .replace(/\r/g, "\n")
-      .split("\n")
-      .map((line) => String(line || "").trim())
-      .filter(Boolean);
-    while (lines.length > 0) {
-      const tail = String(lines[lines.length - 1] || "").trim();
-      if (!tail) {
-        lines.pop();
-        continue;
+    const headings: string[] = [];
+    if (selection && selection.includes(marker)) {
+      const prefix = String(selection.split(marker)[0] || "");
+      const lines = prefix
+        .replace(/\r/g, "\n")
+        .split("\n")
+        .map((line) => String(line || "").trim())
+        .filter(Boolean);
+      while (lines.length > 0) {
+        const tail = String(lines[lines.length - 1] || "").trim();
+        if (!tail) {
+          lines.pop();
+          continue;
+        }
+        if (/^(?:[-*•]|\d+[\).])\s*$/.test(tail) || /^[:;,.!?-]+$/.test(tail)) {
+          lines.pop();
+          continue;
+        }
+        break;
       }
-      if (/^(?:[-*•]|\d+[\).])\s*$/.test(tail) || /^[:;,.!?-]+$/.test(tail)) {
-        lines.pop();
-        continue;
-      }
-      break;
+      const currentHeading = String(lines[0] || "").trim();
+      if (currentHeading) headings.push(currentHeading);
     }
-    return String(lines[0] || "").trim();
+
+    const template = deps.uiStringFromStateMap(
+      state,
+      "autosuggest.prefix.template",
+      deps.uiDefaultString("autosuggest.prefix.template")
+    );
+    const stepLabelKeyByStep: Record<string, string> = {
+      dream: "offtopic.step.dream",
+      purpose: "offtopic.step.purpose",
+      bigwhy: "offtopic.step.bigwhy",
+      role: "offtopic.step.role",
+      entity: "offtopic.step.entity",
+      strategy: "offtopic.step.strategy",
+      targetgroup: "offtopic.step.targetgroup",
+      productsservices: "offtopic.step.productsservices",
+      rulesofthegame: "offtopic.step.rulesofthegame",
+      presentation: "offtopic.step.presentation",
+    };
+    const stepLabelKey = stepLabelKeyByStep[stepId] || "";
+    const stepLabel = stepLabelKey
+      ? deps.uiStringFromStateMap(state, stepLabelKey, deps.uiDefaultString(stepLabelKey))
+      : stepId;
+    const suggestionHeading = String(template || "").includes("{0}")
+      ? String(template || "").replace(/\{0\}/g, String(stepLabel || "").trim()).trim()
+      : `${String(template || "").trim()} ${String(stepLabel || "").trim()}`.trim();
+    if (suggestionHeading) headings.push(suggestionHeading);
+
+    return Array.from(new Set(headings.map((line) => String(line || "").trim()).filter(Boolean)));
   }
 
   function unwrapSelectionHeadingFromText(
@@ -281,9 +312,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
   ): string {
     const value = stripMarkupPreserveLines(rawValue);
     if (!value) return "";
-    const heading = selectionHeadingForStep(stepId, state, activeSpecialist);
-    const headingComparable = canonicalHeadingComparable(heading);
-    if (!headingComparable) return value;
+    const headingComparables = selectionHeadingForStep(stepId, state, activeSpecialist)
+      .map((heading) => canonicalHeadingComparable(heading))
+      .filter(Boolean);
+    if (headingComparables.length === 0) return value;
 
     const paragraphs = value
       .split(/\n{2,}/)
@@ -291,7 +323,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       .filter(Boolean);
     if (paragraphs.length >= 2) {
       const firstComparable = canonicalHeadingComparable(String(paragraphs[0] || ""));
-      if (firstComparable && firstComparable === headingComparable) {
+      if (firstComparable && headingComparables.includes(firstComparable)) {
         const body = paragraphs.slice(1).join("\n\n").trim();
         if (body) return body;
       }
@@ -303,7 +335,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       .filter(Boolean);
     if (lines.length >= 2) {
       const firstComparable = canonicalHeadingComparable(String(lines[0] || ""));
-      if (firstComparable && firstComparable === headingComparable) {
+      if (firstComparable && headingComparables.includes(firstComparable)) {
         const body = lines.slice(1).join("\n").trim();
         if (body) return body;
       }
@@ -312,7 +344,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const colonIndex = value.indexOf(":");
     if (colonIndex > 0) {
       const prefixComparable = canonicalHeadingComparable(value.slice(0, colonIndex));
-      if (prefixComparable && prefixComparable === headingComparable) {
+      if (prefixComparable && headingComparables.includes(prefixComparable)) {
         const body = value.slice(colonIndex + 1).trim();
         if (body) return body;
       }

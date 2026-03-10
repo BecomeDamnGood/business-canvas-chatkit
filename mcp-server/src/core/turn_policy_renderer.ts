@@ -16,7 +16,11 @@ import {
   strategyStatementsFromSources,
 } from "./turn_policy/strategy_helpers.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
-import { evaluateRulesRuntimeGate } from "../steps/rulesofthegame_runtime_policy.js";
+import {
+  evaluateRulesRuntimeGate,
+  RULESOFTHEGAME_MAX_RULES,
+  RULESOFTHEGAME_MIN_RULES,
+} from "../steps/rulesofthegame_runtime_policy.js";
 import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
@@ -371,26 +375,35 @@ function offTopicCurrentContextHeading(stepId: string, state: CanvasState): stri
   return base ? `${base}:` : "";
 }
 
+function autoSuggestHeading(stepId: string, state: CanvasState): string {
+  const template = uiStringFromState(
+    state,
+    "autosuggest.prefix.template",
+    uiDefaultString("autosuggest.prefix.template")
+  );
+  const stepLabel = offTopicStepLabel(stepId, state);
+  const rendered = String(template || "").includes("{0}")
+    ? String(template || "").replace(/\{0\}/g, stepLabel).trim()
+    : `${String(template || "").trim()} ${stepLabel}`.trim();
+  if (!rendered) return "";
+  return /:\s*$/.test(rendered) ? rendered : `${rendered}:`;
+}
+
+function hasCommittedAcceptedValue(stepId: string, state: CanvasState): boolean {
+  const finalField = getFinalFieldForStepId(stepId);
+  const committedFinal = finalField ? String((state as any)[finalField] || "").trim() : "";
+  return isRenderableAcceptedValue(stepId, committedFinal);
+}
+
+function shouldUseCurrentValueHeading(stepId: string, state: CanvasState): boolean {
+  if (hasCommittedAcceptedValue(stepId, state)) return true;
+  return provisionalSourceForStep(state, stepId) === "wording_pick";
+}
+
 function singleValueConfirmHeading(stepId: string, state: CanvasState): string {
-  if (stepId === "entity") {
-    const template = uiStringFromState(
-      state,
-      "entity.suggestion.template",
-      uiDefaultString("entity.suggestion.template")
-    );
-    const firstLine = String(template || "")
-      .replace(/\r/g, "\n")
-      .replace(/\s*\{0\}\s*/g, "\n")
-      .split("\n")
-      .map((line) => String(line || "").trim())
-      .find(Boolean);
-    const heading = String(firstLine || "")
-      .replace(/[.!?]+$/g, "")
-      .replace(/\s*:\s*$/g, "")
-      .trim();
-    if (heading) return heading;
-  }
-  return offTopicCurrentContextHeading(stepId, state);
+  return shouldUseCurrentValueHeading(stepId, state)
+    ? offTopicCurrentContextHeading(stepId, state)
+    : autoSuggestHeading(stepId, state);
 }
 
 function singleValueConfirmCanonicalMessage(stepId: string, state: CanvasState, canonicalValue: string): string {
@@ -979,6 +992,60 @@ function rulesOfTheGameRecapBlock(state: CanvasState, recapText: string): string
   return `${heading}\n${bullets}`.trim();
 }
 
+function rulesOfTheGameCountLine(state: CanvasState, count: number): string {
+  const template = uiStringFromState(
+    state,
+    "rulesofthegame.count.template",
+    uiDefaultString("rulesofthegame.count.template")
+  );
+  const line = String(template || "")
+    .replace(/\{0\}/g, String(count))
+    .replace(/\{1\}/g, String(RULESOFTHEGAME_MIN_RULES))
+    .replace(/\{2\}/g, String(RULESOFTHEGAME_MAX_RULES))
+    .trim();
+  if (!line) return "";
+  const sentenceMatch = line.match(/^([\s\S]*?[.!?。！？])(?:\s+|$)([\s\S]*)$/);
+  const firstSentence = String(sentenceMatch?.[1] || line).trim();
+  const rest = String(sentenceMatch?.[2] || "").trim();
+  const heading = `${firstSentence.replace(/[.!?。！？]+$/g, "").trim()}:`;
+  return rest ? `${heading}\n${rest}` : heading;
+}
+
+function rulesOfTheGameCurrentHeading(state: CanvasState): string {
+  const template = uiStringFromState(
+    state,
+    "rulesofthegame.current.template",
+    uiDefaultString("rulesofthegame.current.template")
+  );
+  const rendered = String(template || "").replace(/\{0\}/g, offTopicCompanyName(state)).trim();
+  if (!rendered) return "";
+  const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
+  return base ? `${base}:` : "";
+}
+
+function rulesOfTheGameContextBlock(
+  state: CanvasState,
+  recapText: string
+): { items: string[]; block: string } {
+  const items = evaluateRulesRuntimeGate({
+    acceptedOutput: true,
+    acceptedValue: "",
+    visibleValue: recapText,
+    statements: [],
+    wordingChoicePending: false,
+  }).items;
+  if (items.length === 0) return { items: [], block: String(recapText || "").trim() };
+  const parts = [
+    rulesOfTheGameCountLine(state, items.length),
+    rulesOfTheGameCurrentHeading(state),
+    items.map((line) => `• ${line}`).join("\n"),
+  ].filter(Boolean);
+  return {
+    items,
+    block: parts.join("\n").trim(),
+  };
+}
+
 function step0ConfirmQuestion(state: CanvasState, venture: string, name: string, status: string): string {
   const cleanVenture = String(venture || "").trim();
   const cleanName = String(name || "").trim();
@@ -1536,6 +1603,10 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !isOfftopic && stepId === "strategy" && strategyStatements.length > 0 && !wordingPending
       ? buildStrategyContextBlock(state, strategyStatements, { uiStringFromState, companyNameForPrompt })
       : "";
+  const rulesContext =
+    !isOfftopic && stepId === "rulesofthegame" && recapText && !wordingPending
+      ? rulesOfTheGameContextBlock(state, recapText)
+      : { items: [], block: "" };
   const message = (() => {
     if (
       isOfftopic &&
@@ -1561,6 +1632,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       const recapKey = comparableText(strategyContextBlock);
       if (recapKey && answerKey.includes(recapKey)) return cleanedAnswer;
       return `${cleanedAnswer}\n\n${strategyContextBlock}`.trim();
+    }
+    if (rulesContext.block) {
+      const cleanedAnswer = stripInlineNumberedSummaryParagraphs(answerText, rulesContext.items);
+      if (!cleanedAnswer) return rulesContext.block;
+      const answerKey = comparableText(cleanedAnswer);
+      const recapKey = comparableText(rulesContext.block);
+      if (recapKey && answerKey.includes(recapKey)) return cleanedAnswer;
+      if (answerContainsAllStatements(cleanedAnswer, rulesContext.items)) return cleanedAnswer;
+      return `${cleanedAnswer}\n\n${rulesContext.block}`.trim();
     }
     if (effectiveStatus === "valid_output" && recapText) {
       const recapStatements =

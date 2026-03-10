@@ -895,12 +895,47 @@ test("runStepRuntimeActionRoutingLayer keeps rules proceed out of picker routing
   assert.ok(result.response);
   const specialist = ((result.response as Record<string, unknown>).specialist || {}) as Record<string, unknown>;
   assert.equal(String(specialist.proceed_request_intent || ""), "next_step");
-  assert.deepEqual(
-    specialist.proceed_block_reason_codes,
-    ["rules_external_focus", "rules_pending_choice"]
-  );
+  assert.deepEqual(specialist.proceed_block_reason_codes, ["rules_pending_choice"]);
   assert.equal(String(specialist.wording_choice_pending || ""), "false");
   assert.doesNotMatch(String((result.response as Record<string, unknown>).text || ""), /Op basis van je input stel ik/);
+});
+
+test("runStepRuntimeActionRoutingLayer routes rules proceed to confirm for accepted 3-5 rule sets even when one rule is externally phrased", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "rulesofthegame",
+    active_specialist: "RulesOfTheGame",
+    provisional_by_step: {
+      rulesofthegame:
+        "• We bewaken kwaliteit.\n• We doen alles met plezier.\n• We maken de klant koning.\n• We geven minder uit dan er binnenkomt.\n• We zijn punctueel.",
+    },
+    provisional_source_by_step: {
+      rulesofthegame: "wording_pick",
+    },
+    last_specialist_result: {
+      rulesofthegame:
+        "• We bewaken kwaliteit.\n• We doen alles met plezier.\n• We maken de klant koning.\n• We geven minder uit dan er binnenkomt.\n• We zijn punctueel.",
+      statements: [
+        "We bewaken kwaliteit.",
+        "We doen alles met plezier.",
+        "We maken de klant koning.",
+        "We geven minder uit dan er binnenkomt.",
+        "We zijn punctueel.",
+      ],
+    },
+  };
+  params.runtime.inputMode = "chat";
+  params.runtime.userMessage = "Ga door naar de volgende stap";
+  params.runtime.wordingChoiceEnabled = false;
+  params.action.inferCurrentMenuForStep = () => "RULES_MENU_ASK_EXPLAIN";
+  params.action.firstConfirmActionCodeForMenu = () => "";
+  params.action.processActionCode = () => "__ROUTE__RULES_CONFIRM_ALL__";
+  params.state.provisionalValueForStep = (state: Record<string, unknown>, stepId: string) =>
+    String(((state.provisional_by_step as Record<string, unknown> | undefined) || {})[stepId] || "");
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "__ROUTE__RULES_CONFIRM_ALL__");
 });
 
 test("runStepRuntimeActionRoutingLayer routes rules proceed to confirm when the rules gate is valid even without a visible confirm button", async () => {

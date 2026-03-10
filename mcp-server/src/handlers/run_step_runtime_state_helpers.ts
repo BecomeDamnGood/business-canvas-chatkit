@@ -728,7 +728,7 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
             "- For rulesofthegame, if block_reason_codes is not empty: do NOT open a new suggestion or picker flow unless the user explicitly asked for one.",
             "- Explain clearly why proceed is blocked based on the reason codes and the current visible rules.",
             "- Ask only for the missing correction needed to make proceed possible.",
-            "- Reason code meanings: rules_min_count=fewer than 3 valid rules; rules_max_count=more than 5 rules; rules_pending_choice=an unresolved wording choice exists; rules_external_focus=one or more visible rules are external promises or market claims; rules_missing_accepted_output=visible rules are not yet accepted as the current set.",
+            "- Reason code meanings: rules_min_count=fewer than 3 valid rules; rules_max_count=more than 5 rules; rules_pending_choice=an unresolved wording choice exists; rules_missing_accepted_output=visible rules are not yet accepted as the current set.",
           ].join("\n")
         : "";
 

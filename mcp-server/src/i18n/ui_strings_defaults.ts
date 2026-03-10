@@ -62,7 +62,7 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   inputPlaceholder: "Type your answer here (use The Business Strategy Canvas Builder widget, not the chat box)…",
   thinking: "Thinking…",
   btnStart: "Start the process with Validation & Business Name",
-  btnDreamConfirm: "I'm happy with this formulation, continue to the Purpose step",
+  btnDreamConfirm: "I'm happy with this formulation, continue to step 3 Purpose",
   wordingChoiceHeading: "This is your input:",
   wordingChoiceInterpretedListHeading: "This is what I took from your input:",
   wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
@@ -145,6 +145,9 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "productsservices.classifier.service.tokens": "service|services|consulting|advisory|coaching|support|maintenance|strategy|branding|design|development|training|workshop|workshops",
   "strategy.focuspoints.count.template": "You now have {0} focus points within your strategy. I advise you to formulate at least 4 but maximum 7 focus points.",
   "strategy.focuspoints.warning.template": "I strongly advice you to only add a maximum of 7 focus points. can I consolidate this for you?",
+  "rulesofthegame.count.template":
+    "You now have {0} Rules of the Game. I advise you to formulate at least {1} and at most {2} Rules of the Game.",
+  "rulesofthegame.current.template": "Your current Rules of the Game for {0} are:",
   "rules.policy.overflow.rationale":
     "More than 5 Rules of the Game makes this feel like a handbook. Keep it short and practical.",
   "rules.policy.external.rationale":

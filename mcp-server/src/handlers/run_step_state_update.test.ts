@@ -117,6 +117,30 @@ test("applyStateUpdate stores products/services provisional value from statement
   assert.ok(lines.every((line) => line.startsWith("• ")));
 });
 
+test("applyStateUpdate stores rules provisional value from statements when rules text is missing", () => {
+  const helpers = buildHelpers();
+  const next = helpers.applyStateUpdate({
+    prev: { current_step: "rulesofthegame" } as any,
+    decision: { current_step: "rulesofthegame", specialist_to_call: "RulesOfTheGame" } as any,
+    specialistResult: {
+      rulesofthegame: "",
+      refined_formulation: "",
+      statements: [
+        "We bewaken kwaliteit.",
+        "We doen alles met plezier.",
+        "We maken de klant koning.",
+        "We geven minder uit dan er binnenkomt.",
+        "We zijn punctueel.",
+      ],
+    },
+    showSessionIntroUsed: "false",
+  });
+  const value = String((next as any).provisional_by_step?.rulesofthegame || "");
+  const lines = value.split("\n").map((line) => line.trim()).filter(Boolean);
+  assert.equal(lines.length, 5);
+  assert.ok(lines.every((line) => line.startsWith("• ")));
+});
+
 test("applyStateUpdate skips role staging for framing intro values", () => {
   const helpers = buildHelpers();
   const next = helpers.applyStateUpdate({

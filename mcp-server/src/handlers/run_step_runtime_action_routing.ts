@@ -360,13 +360,11 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     const codes: string[] = [];
     if (gate.count < RULESOFTHEGAME_MIN_RULES) codes.push("rules_min_count");
     if (gate.count > RULESOFTHEGAME_MAX_RULES) codes.push("rules_max_count");
-    if (gate.hasExternalRule) codes.push("rules_external_focus");
     if (wordingChoicePending) codes.push("rules_pending_choice");
     if (
       !acceptedOutput &&
       gate.count >= RULESOFTHEGAME_MIN_RULES &&
       gate.count <= RULESOFTHEGAME_MAX_RULES &&
-      !gate.hasExternalRule &&
       !wordingChoicePending
     ) {
       codes.push("rules_missing_accepted_output");
@@ -422,9 +420,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
             [gate.count, RULESOFTHEGAME_MAX_RULES]
           )
         : "",
-      blockCodes.includes("rules_external_focus")
-        ? rulesProceedUiText(stateForText, "rules.proceed.block.reason.external")
-        : "",
       blockCodes.includes("rules_pending_choice")
         ? rulesProceedUiText(stateForText, "rules.proceed.block.reason.pending_choice")
         : "",
@@ -433,21 +428,19 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         : "",
     ].filter(Boolean);
     const prefix = rulesProceedUiText(stateForText, "rules.proceed.block.prefix");
-    const question = blockCodes.includes("rules_external_focus")
-      ? rulesProceedUiText(stateForText, "rules.proceed.block.question.external")
-      : blockCodes.includes("rules_pending_choice")
-        ? rulesProceedUiText(stateForText, "rules.proceed.block.question.pending_choice")
-        : blockCodes.includes("rules_max_count")
-          ? formatUiTemplate(
-              rulesProceedUiText(stateForText, "rules.proceed.block.question.max.template"),
-              [RULESOFTHEGAME_MAX_RULES]
-            )
-          : blockCodes.includes("rules_missing_accepted_output")
-            ? rulesProceedUiText(stateForText, "rules.proceed.block.question.missing_accepted_output")
-            : formatUiTemplate(
-                rulesProceedUiText(stateForText, "rules.proceed.block.question.min.template"),
-                [RULESOFTHEGAME_MIN_RULES]
-              );
+    const question = blockCodes.includes("rules_pending_choice")
+      ? rulesProceedUiText(stateForText, "rules.proceed.block.question.pending_choice")
+      : blockCodes.includes("rules_max_count")
+        ? formatUiTemplate(
+            rulesProceedUiText(stateForText, "rules.proceed.block.question.max.template"),
+            [RULESOFTHEGAME_MAX_RULES]
+          )
+        : blockCodes.includes("rules_missing_accepted_output")
+          ? rulesProceedUiText(stateForText, "rules.proceed.block.question.missing_accepted_output")
+          : formatUiTemplate(
+              rulesProceedUiText(stateForText, "rules.proceed.block.question.min.template"),
+              [RULESOFTHEGAME_MIN_RULES]
+            );
     const bulletList = gate.items.map((line) => `• ${line}`).join("\n");
     const rulesText = bulletList || visibleValue;
     return {

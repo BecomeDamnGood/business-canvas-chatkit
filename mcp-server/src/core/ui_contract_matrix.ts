@@ -383,14 +383,14 @@ export const MENU_LABELS: Record<string, string[]> = {
   ],
   PURPOSE_MENU_AFTER_CHOOSE: [
     "Ask 3 questions to help me define the Purpose.",
-    "I'm happy with this wording, please continue to next step Big Why.",
+    "I'm happy with this wording, please continue to step 4 the Big Why.",
   ],
   PURPOSE_MENU_REFINE: [
-    "I'm happy with this wording, please continue to next step Big Why.",
+    "I'm happy with this wording, please continue to step 4 the Big Why.",
     "Refine the wording for me please",
   ],
   PURPOSE_MENU_CONFIRM_SINGLE: [
-    "I'm happy with this wording, please continue to next step Big Why.",
+    "I'm happy with this wording, please continue to step 4 the Big Why.",
   ],
   BIGWHY_MENU_INTRO: [
     "Give me an example of the Big Why",
@@ -427,11 +427,11 @@ export const MENU_LABELS: Record<string, string[]> = {
   ],
   ENTITY_MENU_FORMULATE: ["Formulate my entity for me"],
   ENTITY_MENU_EXAMPLE: [
-    "I'm happy with this wording, go to the next step Strategy.",
+    "I'm happy with this wording, continue to step 7 Strategy.",
     "Refine the wording for me please",
   ],
   ENTITY_MENU_CONFIRM_SINGLE: [
-    "I'm happy with this wording, go to the next step Strategy.",
+    "I'm happy with this wording, continue to step 7 Strategy.",
   ],
   STRATEGY_MENU_INTRO: ["Explain why a Strategy matters"],
   STRATEGY_MENU_ASK: [
@@ -442,10 +442,10 @@ export const MENU_LABELS: Record<string, string[]> = {
   STRATEGY_MENU_QUESTIONS: ["Explain why a Strategy matters"],
   STRATEGY_MENU_CONFIRM: [
     "Explain why a Strategy matters",
-    "I'm satisfied with my strategy. Continue to Target Group.",
+    "I'm satisfied with my strategy, continue to step 8 Target Group.",
   ],
   STRATEGY_MENU_FINAL_CONFIRM: [
-    "I'm satisfied with my strategy. Continue to Target Group.",
+    "I'm satisfied with my strategy, continue to step 8 Target Group.",
   ],
   TARGETGROUP_MENU_INTRO: [
     "Explain me more about Target Groups",
@@ -458,11 +458,11 @@ export const MENU_LABELS: Record<string, string[]> = {
     "Explain me more about Target Groups",
   ],
   TARGETGROUP_MENU_POSTREFINE: [
-    "I'm happy with this wording, continue to next step Products and Services",
+    "I'm happy with this wording, continue to next step 9 Products and Services",
     "Ask me some questions to define my specific Target Group",
   ],
   PRODUCTSSERVICES_MENU_CONFIRM: [
-    "This is all what we offer, continue to step Rules of the Game",
+    "This is all what we offer, continue to step 10 Rules of the Game",
   ],
   RULES_MENU_INTRO: [
     "Please explain more about Rules of the Game",
@@ -480,7 +480,7 @@ export const MENU_LABELS: Record<string, string[]> = {
   ],
   RULES_MENU_REFINE: ["Yes, this fits", "I want to adjust it."],
   RULES_MENU_CONFIRM: [
-    "These are all my rules of the game, continue to Presentation",
+    "These are all my rules of the game, continue to the final step Presentation",
     "Please explain more about Rules of the Game",
     "Give one concrete example (Rule versus poster slogan)",
   ],

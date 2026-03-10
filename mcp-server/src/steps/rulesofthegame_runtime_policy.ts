@@ -145,8 +145,7 @@ export function evaluateRulesRuntimeGate(params: {
     params.acceptedOutput &&
     !params.wordingChoicePending &&
     count >= RULESOFTHEGAME_MIN_RULES &&
-    count <= RULESOFTHEGAME_MAX_RULES &&
-    !hasExternalRule;
+    count <= RULESOFTHEGAME_MAX_RULES;
   return {
     items,
     count,

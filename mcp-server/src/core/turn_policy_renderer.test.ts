@@ -267,6 +267,35 @@ test("known-facts recap keeps products/services and rules as bullet sections", (
   assert.match(message, /•\s*Lever iteratief en transparant op/i);
 });
 
+test("known-facts recap includes provisional rules when only statements-backed staging exists", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "rulesofthegame";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = {
+    rulesofthegame:
+      "• We bewaken kwaliteit.\n• We doen alles met plezier.\n• We maken de klant koning.\n• We geven minder uit dan er binnenkomt.\n• We zijn punctueel.",
+  };
+  (state as any).provisional_source_by_step = {
+    rulesofthegame: "user_input",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "rulesofthegame",
+    state,
+    specialist: {
+      action: "ASK",
+      wants_recap: true,
+      question: "Ga verder met spelregels",
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.match(message, /rules.*game\s*:/i);
+  assert.match(message, /•\s*We bewaken kwaliteit/i);
+  assert.match(message, /•\s*We maken de klant koning/i);
+});
+
 test("known-facts recap output is markup-free for user-facing text", () => {
   const state = getDefaultState();
   (state as any).current_step = "presentation";
@@ -294,6 +323,7 @@ test("rulesofthegame does not expose confirm when fewer than 3 rules are accepte
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
   (state as any).active_specialist = "RulesOfTheGame";
+  (state as any).business_name = "Mindd";
   (state as any).provisional_by_step = {
     rulesofthegame: "• We communiceren proactief.\n• We komen afspraken na.",
   };
@@ -318,15 +348,20 @@ test("rulesofthegame does not expose confirm when fewer than 3 rules are accepte
     previousSpecialist: {},
   });
 
+  const message = String((rendered.specialist as any).message || "");
   assert.equal(rendered.status, "incomplete_output");
   assert.equal(rendered.contractId, "rulesofthegame:incomplete_output:RULES_MENU_ASK_EXPLAIN");
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
+  assert.match(message, /you now have 2 rules of the game/i);
+  assert.match(message, /at least 3 and at most 5 rules of the game/i);
+  assert.match(message, /current rules of the game.*mindd.*are:/i);
 });
 
 test("rulesofthegame exposes confirm when 3 accepted internal rules are available", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
   (state as any).active_specialist = "RulesOfTheGame";
+  (state as any).business_name = "Mindd";
   (state as any).provisional_by_step = {
     rulesofthegame:
       "• We communiceren proactief.\n• We werken met duidelijke scope.\n• We nemen eigenaarschap.",
@@ -355,9 +390,12 @@ test("rulesofthegame exposes confirm when 3 accepted internal rules are availabl
     previousSpecialist: {},
   });
 
+  const message = String((rendered.specialist as any).message || "");
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.contractId, "rulesofthegame:valid_output:RULES_MENU_CONFIRM");
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), true);
+  assert.match(message, /you now have 3 rules of the game/i);
+  assert.match(message, /current rules of the game.*mindd.*are:/i);
 });
 
 test("rulesofthegame overflow renders pending-choice context and suppresses confirm menu", () => {
@@ -409,7 +447,7 @@ test("rulesofthegame overflow renders pending-choice context and suppresses conf
   assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
 });
 
-test("rulesofthegame keeps external rules out of valid_output confirm state", () => {
+test("rulesofthegame keeps confirm available for accepted 3-5 rule sets even when wording is externally framed", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
   (state as any).active_specialist = "RulesOfTheGame";
@@ -438,8 +476,9 @@ test("rulesofthegame keeps external rules out of valid_output confirm state", ()
     previousSpecialist: {},
   });
 
-  assert.equal(rendered.status, "incomplete_output");
-  assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), false);
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.contractId, "rulesofthegame:valid_output:RULES_MENU_CONFIRM");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_RULES_CONFIRM_ALL"), true);
 });
 
 test("entity no-output render ignores stale refine phase menu and falls back to intro menu", () => {
@@ -510,7 +549,7 @@ test("targetgroup no-output render ignores stale postrefine phase menu and falls
   assert.equal(rendered.uiActionCodes.includes("ACTION_TARGETGROUP_POSTREFINE_CONFIRM"), false);
 });
 
-test("entity valid output uses suggestion heading SSOT and suppresses duplicate current-context framing", () => {
+test("entity valid output uses current-value heading after wording pick and suppresses duplicate free text", () => {
   const state = getDefaultState();
   const canonical = "Mindd is een digitale innovatiepartner voor mkb-bedrijven.";
   (state as any).current_step = "entity";
@@ -536,15 +575,105 @@ test("entity valid output uses suggestion heading SSOT and suppresses duplicate 
   const message = String((rendered.specialist as any).message || "");
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
-  assert.match(message, /^what do you think of the wording$/im);
-  assert.doesNotMatch(message, /current.*entity.*mindd.*is:/i);
+  assert.match(message, /current.*entity.*mindd.*is:/i);
   assert.match(message, /Mindd is een digitale innovatiepartner voor mkb-bedrijven\./i);
   assert.equal(message.split(canonical).length - 1, 1);
   assert.equal(String((rendered.specialist as any).__suppress_refined_append || ""), "true");
   assert.equal(String(uiContent.kind || ""), "single_value");
-  assert.equal(String(uiContent.heading || ""), "What do you think of the wording");
+  assert.match(String(uiContent.heading || ""), /current.*entity.*mindd.*is:/i);
   assert.equal(String(uiContent.canonical_text || ""), canonical);
   assert.equal(String(uiContent.support_text || ""), "");
+});
+
+test("dream valid output from user-input summary uses autosuggest heading instead of current-value heading", () => {
+  const state = getDefaultState();
+  const canonical =
+    "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
+  (state as any).current_step = "dream";
+  (state as any).active_specialist = "Dream";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { dream: canonical };
+  (state as any).provisional_source_by_step = { dream: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "dream",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Ik heb je input herschreven naar een inspirerend toekomstbeeld.",
+      question: "",
+      refined_formulation: canonical,
+      dream: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(String(uiContent.kind || ""), "single_value");
+  assert.equal(
+    String(uiContent.heading || ""),
+    "Based on your input I suggest the following Dream:"
+  );
+  assert.doesNotMatch(String(uiContent.heading || ""), /current.*dream.*mindd.*is:/i);
+  assert.equal(String(uiContent.canonical_text || ""), canonical);
+});
+
+test("single-value valid output from user input keeps autosuggest heading until wording pick or final commit", () => {
+  const cases = [
+    {
+      stepId: "purpose",
+      field: "purpose",
+      canonical: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      specialistLabel: "Purpose",
+      expectedHeading: "Based on your input I suggest the following Purpose:",
+    },
+    {
+      stepId: "bigwhy",
+      field: "bigwhy",
+      canonical:
+        "Mensen verdienen eerlijke informatie zodat zij zelfstandig keuzes kunnen maken die hun leven verrijken.",
+      specialistLabel: "BigWhy",
+      expectedHeading: "Based on your input I suggest the following Big Why:",
+    },
+    {
+      stepId: "role",
+      field: "role",
+      canonical: "Mindd verbindt complexe informatie met menselijke besluitkracht.",
+      specialistLabel: "Role",
+      expectedHeading: "Based on your input I suggest the following Role:",
+    },
+  ] as const;
+
+  for (const current of cases) {
+    const state = getDefaultState();
+    (state as any).current_step = current.stepId;
+    (state as any).active_specialist = current.specialistLabel;
+    (state as any).business_name = "Mindd";
+    (state as any).provisional_by_step = { [current.stepId]: current.canonical };
+    (state as any).provisional_source_by_step = { [current.stepId]: "user_input" };
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: current.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        message: "Vrije feedback die niet in de suggest-view mag blijven staan.",
+        question: "",
+        refined_formulation: "",
+        [current.field]: "",
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+    assert.equal(rendered.status, "valid_output");
+    assert.equal(String(uiContent.kind || ""), "single_value");
+    assert.equal(String(uiContent.heading || ""), current.expectedHeading);
+    assert.equal(String(uiContent.canonical_text || ""), current.canonical);
+  }
 });
 
 test("targetgroup valid output keeps a single canonical heading/value block", () => {

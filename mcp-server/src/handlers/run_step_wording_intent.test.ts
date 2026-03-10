@@ -18,6 +18,13 @@ function buildHelpers(intentEnabled: boolean) {
       "This keeps your original meaning while staying aligned with this step.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
+    "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
+    "offtopic.step.dream": "Dream",
+    "offtopic.step.purpose": "Purpose",
+    "offtopic.step.bigwhy": "Big Why",
+    "offtopic.step.role": "Role",
+    "offtopic.step.entity": "Entity",
+    "offtopic.step.targetgroup": "Target Group",
   };
   return createRunStepWordingHelpers({
     step0Id: "step0",
@@ -110,6 +117,13 @@ function buildHeadingAwareSingleValueHelpers(params: {
       "This keeps your original meaning while staying aligned with this step.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
+    "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
+    "offtopic.step.dream": "Dream",
+    "offtopic.step.purpose": "Purpose",
+    "offtopic.step.bigwhy": "Big Why",
+    "offtopic.step.role": "Role",
+    "offtopic.step.entity": "Entity",
+    "offtopic.step.targetgroup": "Target Group",
   };
   const canonicalize = (input: string) =>
     String(input || "")
@@ -1193,6 +1207,66 @@ test("applyWordingPickSelection unwraps current-context heading before committin
   assert.equal(applyResult.handled, true);
   assert.equal(String(applyResult.specialist.refined_formulation || ""), value);
   assert.equal(String(applyResult.specialist.purpose || ""), value);
+  assert.equal(String(applyResult.specialist.wording_choice_agent_current || ""), value);
+});
+
+test("buildWordingChoiceFromTurn unwraps autosuggest heading before equivalence check", () => {
+  const heading = "Based on your input I suggest the following Dream:";
+  const value = "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.";
+  const wrapped = `${heading}\n${value}`;
+  const helpers = buildHeadingAwareSingleValueHelpers({
+    stepId: "dream",
+    heading: "Je huidige droom voor Mindd is:",
+    suggestion: wrapped,
+  });
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {} as any,
+    activeSpecialist: "Dream",
+    previousSpecialist: {},
+    specialistResult: {
+      message: wrapped,
+      refined_formulation: "",
+      dream: "",
+    } as Record<string, unknown>,
+    userTextRaw: value,
+    isOfftopic: false,
+  });
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "false");
+  assert.equal(String((result.specialist as Record<string, unknown>).refined_formulation || ""), value);
+  assert.equal(String((result.specialist as Record<string, unknown>).dream || ""), value);
+});
+
+test("applyWordingPickSelection unwraps autosuggest heading before committing suggestion", () => {
+  const heading = "Based on your input I suggest the following Dream:";
+  const value = "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.";
+  const wrapped = `${heading}\n${value}`;
+  const helpers = buildHeadingAwareSingleValueHelpers({
+    stepId: "dream",
+    heading: "Je huidige droom voor Mindd is:",
+    suggestion: wrapped,
+    equivalent: false,
+  });
+  const applyResult = helpers.applyWordingPickSelection({
+    stepId: "dream",
+    routeToken: "__WORDING_PICK_SUGGESTION__",
+    state: {
+      current_step: "dream",
+      active_specialist: "Dream",
+      last_specialist_result: {
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "dream",
+        wording_choice_user_normalized: value,
+        wording_choice_agent_current: wrapped,
+      },
+    } as any,
+  });
+
+  assert.equal(applyResult.handled, true);
+  assert.equal(String(applyResult.specialist.refined_formulation || ""), value);
+  assert.equal(String(applyResult.specialist.dream || ""), value);
   assert.equal(String(applyResult.specialist.wording_choice_agent_current || ""), value);
 });
 

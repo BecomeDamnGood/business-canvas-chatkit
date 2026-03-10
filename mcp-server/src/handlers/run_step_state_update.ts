@@ -285,9 +285,10 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
         ""
       ).trim();
       specialistResult.statements = normalizedRules.length > 0 ? normalizedRules : statementsArray;
+      const stagedRulesValue = rulesValue || bulletsFromItems(normalizedRules);
       stageFieldValue(
         deps.rulesofthegameStepId,
-        rulesValue,
+        stagedRulesValue,
         specialistResult?.rulesofthegame || specialistResult?.refined_formulation
       );
     }
