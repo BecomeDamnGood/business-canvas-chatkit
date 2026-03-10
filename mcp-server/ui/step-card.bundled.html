@@ -1900,14 +1900,24 @@
     nl: "https://youtu.be/5TLxnL2OkQo",
     it: "https://youtu.be/S7_GwDJZIAs",
     de: "https://youtu.be/T18fvylOojg",
-    es: "https://youtu.be/eLSh19ZZ2yM"
+    es: "https://youtu.be/eLSh19ZZ2yM",
+    fr: "https://youtu.be/0soI44DLOxY",
+    ja: "https://youtu.be/o5Z0e4_Aolg"
   };
   const DREAM_STEP_VIDEO_BY_LANG = {
     en: "https://youtu.be/94cmzR2w62o",
     nl: "https://youtu.be/kksn8roVbQg",
     it: "https://youtu.be/g-fbHy78uIw",
     de: "https://youtu.be/KtzkZFE4m5Q",
-    es: "https://youtu.be/-36ryKgLiPo"
+    es: "https://youtu.be/-36ryKgLiPo",
+    fr: "https://youtu.be/ajUsijJzyiY"
+  };
+  const PURPOSE_STEP_VIDEO_BY_LANG = {
+    en: "https://youtu.be/OhtRcBRmiQ0",
+    de: "https://youtu.be/OfG_T2VDhtg",
+    es: "https://youtu.be/TTU7vAkaVJA",
+    fr: "https://youtu.be/EqoczF4mnGc",
+    it: "https://youtu.be/tISM_mLZDgk"
   };
   function normalizeYouTubeEmbedUrl(rawUrl) {
     const input = String(rawUrl || "").trim();
@@ -1984,6 +1994,11 @@
     const langBase = baseLang(lang);
     if (!langBase) return "";
     return normalizeYouTubeEmbedUrl(DREAM_STEP_VIDEO_BY_LANG[langBase] || "");
+  }
+  function purposeStepVideoUrlForLang(lang) {
+    const langBase = baseLang(lang);
+    if (!langBase) return "";
+    return normalizeYouTubeEmbedUrl(PURPOSE_STEP_VIDEO_BY_LANG[langBase] || "");
   }
   function prestartContentForLang(lang) {
     return {
@@ -3965,6 +3980,12 @@
     if (!videoUrl) return;
     appendVideoEmbed(cardDescEl, videoUrl, "dream-step-video");
   }
+  function appendPurposeStepIntroVideo(cardDescEl, lang) {
+    if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;
+    const videoUrl = purposeStepVideoUrlForLang(lang);
+    if (!videoUrl) return;
+    appendVideoEmbed(cardDescEl, videoUrl, "purpose-step-video");
+  }
   function appendParagraph(el, lines) {
     const paragraph = lines.map((line) => String(line || "").trim()).filter(Boolean).join(" ");
     const paragraphCheck = normalizeLineText(paragraph);
@@ -4626,6 +4647,7 @@
       const isBenProfile = String(specialist.meta_topic || "").trim().toUpperCase() === "BEN_PROFILE";
       const isStep0AskLayout = current === "step_0" && !isBenProfile;
       const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView;
+      const shouldAppendPurposeStepVideo = current === "purpose" && showStepIntroChrome;
       cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
       cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
       const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
@@ -4633,6 +4655,8 @@
         renderStructuredText(cardDescEl, body || "");
         if (shouldAppendDreamStepVideo) {
           appendDreamStepIntroVideo(cardDescEl, lang);
+        } else if (shouldAppendPurposeStepVideo) {
+          appendPurposeStepIntroVideo(cardDescEl, lang);
         }
       }
       if (isBenProfile) {

@@ -491,6 +491,33 @@ function isSingleValueHeadingLikeBlock(block: string): boolean {
   return !/[.!?]$/.test(normalized);
 }
 
+const SINGLE_VALUE_INFERRED_FEEDBACK_STEPS = new Set(["purpose", "bigwhy"]);
+
+function inferSingleValueFeedbackReason(params: {
+  stepId: string;
+  message: string;
+  heading: string;
+  canonicalValue: string;
+}): string {
+  if (!SINGLE_VALUE_INFERRED_FEEDBACK_STEPS.has(String(params.stepId || "").trim())) return "";
+  const canonicalText = String(params.canonicalValue || "").trim();
+  if (!canonicalText) return "";
+  const blocks = canonicalParagraphBlocks(params.message);
+  const candidates = blocks.filter((block) => {
+    const trimmed = String(block || "").trim();
+    if (!trimmed) return false;
+    if (isSingleValueHeadingBlock(trimmed, params.heading)) return false;
+    if (isSingleValueCanonicalBlock(trimmed, params.heading, canonicalText)) return false;
+    return true;
+  });
+  if (candidates.length === 0) return "";
+  const firstBlock = String(candidates[0] || "").trim();
+  if (!firstBlock) return "";
+  const sentences = sentenceBoundaryBlocks(firstBlock);
+  if (sentences.length < 2 && candidates.length < 2) return "";
+  return String(sentences[0] || firstBlock).replace(/\s+/g, " ").trim();
+}
+
 function singleValueSupportText(params: {
   message: string;
   heading: string;
@@ -1808,15 +1835,23 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       : stripStructuredChoiceLinesForPrompt(dreamExplainerPrompt || headline || fallbackPrompt, state);
   const contractId = buildContractId(stepId, effectiveStatus, menuId);
   const textKeys = buildContractTextKeys({ stepId, status: effectiveStatus, menuId });
-  const feedbackReasonForDisplay =
-    wordingChoiceSelected === "user"
-      ? ""
-      : String((specialistForDisplay as any).feedback_reason_text || "").trim();
   const pendingCanonicalValue =
     wordingPending && wordingPresentation === "canonical"
       ? String((specialistForDisplay as any).wording_choice_agent_current || specialistForDisplay.refined_formulation || "")
         .trim()
       : "";
+  const explicitFeedbackReasonForDisplay =
+    wordingChoiceSelected === "user"
+      ? ""
+      : String((specialistForDisplay as any).feedback_reason_text || "").trim();
+  const feedbackReasonForDisplay =
+    explicitFeedbackReasonForDisplay ||
+    inferSingleValueFeedbackReason({
+      stepId,
+      message: String(message || ""),
+      heading: singleValueConfirmHeading(stepId, state),
+      canonicalValue: pendingCanonicalValue || canonicalAcceptedValue,
+    });
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
     wordingPending &&

@@ -1522,3 +1522,18 @@ test("bundled dream-step intro movie uses language-mapped SSOT links and hides w
   assert.match(source, /const videoUrl = dreamStepVideoUrlForLang\(lang\);/);
   assert.match(source, /if \(!videoUrl\) return;/);
 });
+
+test("bundled purpose-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /const PURPOSE_STEP_VIDEO_BY_LANG = \{/);
+  assert.match(source, /en:\s*"https:\/\/youtu\.be\/OhtRcBRmiQ0"/);
+  assert.match(source, /de:\s*"https:\/\/youtu\.be\/OfG_T2VDhtg"/);
+  assert.match(source, /es:\s*"https:\/\/youtu\.be\/TTU7vAkaVJA"/);
+  assert.match(source, /fr:\s*"https:\/\/youtu\.be\/EqoczF4mnGc"/);
+  assert.match(source, /it:\s*"https:\/\/youtu\.be\/tISM_mLZDgk"/);
+  assert.match(source, /function purposeStepVideoUrlForLang\(lang\)/);
+  assert.match(source, /const shouldAppendPurposeStepVideo = current === "purpose" && showStepIntroChrome;/);
+  assert.match(source, /appendPurposeStepIntroVideo\(cardDescEl, lang\);/);
+  assert.match(source, /const videoUrl = purposeStepVideoUrlForLang\(lang\);/);
+  assert.match(source, /if \(!videoUrl\) return;/);
+});

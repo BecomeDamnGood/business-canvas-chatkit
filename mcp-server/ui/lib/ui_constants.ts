@@ -50,6 +50,8 @@ const BEN_PROFILE_VIDEO_BY_LANG: Record<string, string> = {
   it: "https://youtu.be/S7_GwDJZIAs",
   de: "https://youtu.be/T18fvylOojg",
   es: "https://youtu.be/eLSh19ZZ2yM",
+  fr: "https://youtu.be/0soI44DLOxY",
+  ja: "https://youtu.be/o5Z0e4_Aolg",
 };
 
 const DREAM_STEP_VIDEO_BY_LANG: Record<string, string> = {
@@ -58,6 +60,15 @@ const DREAM_STEP_VIDEO_BY_LANG: Record<string, string> = {
   it: "https://youtu.be/g-fbHy78uIw",
   de: "https://youtu.be/KtzkZFE4m5Q",
   es: "https://youtu.be/-36ryKgLiPo",
+  fr: "https://youtu.be/ajUsijJzyiY",
+};
+
+const PURPOSE_STEP_VIDEO_BY_LANG: Record<string, string> = {
+  en: "https://youtu.be/OhtRcBRmiQ0",
+  de: "https://youtu.be/OfG_T2VDhtg",
+  es: "https://youtu.be/TTU7vAkaVJA",
+  fr: "https://youtu.be/EqoczF4mnGc",
+  it: "https://youtu.be/tISM_mLZDgk",
 };
 
 function normalizeYouTubeEmbedUrl(rawUrl: string): string {
@@ -178,6 +189,12 @@ export function dreamStepVideoUrlForLang(lang: string | null | undefined): strin
   const langBase = baseLang(lang);
   if (!langBase) return "";
   return normalizeYouTubeEmbedUrl(DREAM_STEP_VIDEO_BY_LANG[langBase] || "");
+}
+
+export function purposeStepVideoUrlForLang(lang: string | null | undefined): string {
+  const langBase = baseLang(lang);
+  if (!langBase) return "";
+  return normalizeYouTubeEmbedUrl(PURPOSE_STEP_VIDEO_BY_LANG[langBase] || "");
 }
 
 export function hasPrestartContentForLang(lang: string | null | undefined): boolean {

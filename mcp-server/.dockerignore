@@ -1,0 +1,9 @@
+node_modules/
+dist/
+docs/
+test-results/
+session-logs/
+.env
+.env.save
+.DS_Store
+assets/.DS_Store

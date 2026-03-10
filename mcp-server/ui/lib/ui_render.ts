@@ -10,6 +10,7 @@ import {
   prestartIntroVideoUrlForLang,
   benProfileVideoUrlForLang,
   dreamStepVideoUrlForLang,
+  purposeStepVideoUrlForLang,
   hasPrestartContentForLang,
   getSectionTitle,
   setRuntimeUiStrings,
@@ -267,6 +268,13 @@ function appendDreamStepIntroVideo(cardDescEl: HTMLElement, lang: string | null 
   const videoUrl = dreamStepVideoUrlForLang(lang);
   if (!videoUrl) return;
   appendVideoEmbed(cardDescEl, videoUrl, "dream-step-video");
+}
+
+function appendPurposeStepIntroVideo(cardDescEl: HTMLElement, lang: string | null | undefined): void {
+  if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;
+  const videoUrl = purposeStepVideoUrlForLang(lang);
+  if (!videoUrl) return;
+  appendVideoEmbed(cardDescEl, videoUrl, "purpose-step-video");
 }
 
 function activeStepLabel(
@@ -1082,6 +1090,10 @@ export function render(overrideToolOutput?: unknown): void {
       dreamRuntimeMode === "self" &&
       !isDreamDirectionView &&
       !wordingChoiceActive;
+    const shouldAppendPurposeStepVideo =
+      current === "purpose" &&
+      showStepIntroChrome &&
+      !wordingChoiceActive;
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
     const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
@@ -1089,6 +1101,8 @@ export function render(overrideToolOutput?: unknown): void {
       renderStructuredText(cardDescEl, body || "");
       if (shouldAppendDreamStepVideo) {
         appendDreamStepIntroVideo(cardDescEl, lang);
+      } else if (shouldAppendPurposeStepVideo) {
+        appendPurposeStepIntroVideo(cardDescEl, lang);
       }
     }
     if (isBenProfile) {

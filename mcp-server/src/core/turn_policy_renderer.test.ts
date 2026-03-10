@@ -800,6 +800,78 @@ test("single-value valid output keeps feedback reason above canonical block when
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
+test("single-value valid output infers feedback reason from multi-sentence purpose reformulation message", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { purpose: canonical };
+  (state as any).provisional_source_by_step = { purpose: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message:
+        "Je beschrijving is nog te algemeen en mist een duidelijk menselijk effect. Ik heb de formulering aangescherpt zodat direct voelbaar wordt waarom Mindd bestaat.",
+      question: "",
+      refined_formulation: canonical,
+      purpose: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  assert.equal(rendered.status, "valid_output");
+  assert.match(message, /je beschrijving is nog te algemeen/i);
+  assert.match(message, /based on your input i suggest the following purpose:/i);
+  assert.equal(
+    String(uiContent.feedback_reason_text || ""),
+    "Je beschrijving is nog te algemeen en mist een duidelijk menselijk effect."
+  );
+  assert.equal(String(uiContent.canonical_text || ""), canonical);
+});
+
+test("single-value valid output infers feedback reason from multi-sentence big why reformulation message", () => {
+  const state = getDefaultState();
+  const canonical = "Omdat mensen rust voelen wanneer complexe beslissingen eindelijk helder worden.";
+  (state as any).current_step = "bigwhy";
+  (state as any).active_specialist = "BigWhy";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { bigwhy: canonical };
+  (state as any).provisional_source_by_step = { bigwhy: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "bigwhy",
+    state,
+    specialist: {
+      action: "ASK",
+      message:
+        "Je grote waarom klinkt nog beschrijvend en mist emotionele urgentie. Ik heb hem compacter gemaakt zodat de diepere drijfveer direct voelbaar wordt.",
+      question: "",
+      refined_formulation: canonical,
+      bigwhy: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  assert.equal(rendered.status, "valid_output");
+  assert.match(message, /je grote waarom klinkt nog beschrijvend/i);
+  assert.match(message, /based on your input i suggest the following big why:/i);
+  assert.equal(
+    String(uiContent.feedback_reason_text || ""),
+    "Je grote waarom klinkt nog beschrijvend en mist emotionele urgentie."
+  );
+  assert.equal(String(uiContent.canonical_text || ""), canonical);
+});
+
 test("single-value pending canonical wording hides canonical block, feedback reason, and stale ui content across steps", () => {
   const scenarios = [
     {
