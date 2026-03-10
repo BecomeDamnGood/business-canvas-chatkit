@@ -50,6 +50,12 @@ export type StrictJsonCallArgs<T> = {
    * Debug label that you can log upstream (e.g., specialist name)
    */
   debugLabel?: string;
+
+  /**
+   * Whether to prepend the global canvas glossary to the system prompt.
+   * Keep this opt-in so utility/classifier calls do not pay the token cost.
+   */
+  includeGlossary?: boolean;
 };
 
 export type LLMUsage = {
@@ -223,7 +229,7 @@ function parseRetryAfterMs(value: unknown, msg: string): number | null {
       return n < 1000 ? Math.round(n * 1000) : Math.round(n);
     }
   }
-  const fromMsg = msg.match(/retry after\\s*(\\d+(?:\\.\\d+)?)\\s*(ms|s)?/i);
+  const fromMsg = msg.match(/retry after\s*(\d+(?:\.\d+)?)\s*(ms|s)?/i);
   if (fromMsg && fromMsg[1]) {
     const n = Number(fromMsg[1]);
     if (!isNaN(n) && n > 0) {
@@ -232,6 +238,10 @@ function parseRetryAfterMs(value: unknown, msg: string): number | null {
     }
   }
   return null;
+}
+
+export function __parseRetryAfterMsForTest(value: unknown, msg: string): number | null {
+  return parseRetryAfterMs(value, msg);
 }
 
 function getTimeoutMs(overrideMs?: number): number {
@@ -372,7 +382,9 @@ async function createResponseWithRetries(
 
 async function callOnceStrictJson(args: Omit<StrictJsonCallArgs<any>, "zodSchema">) {
   const client = getClient();
-  const instructionsWithGlossary = composeInstructionsWithGlossary(args.instructions);
+  const instructionsWithGlossary = args.includeGlossary
+    ? composeInstructionsWithGlossary(args.instructions)
+    : args.instructions;
   if (GLOSSARY_DEBUG) {
     const preview = instructionsWithGlossary.slice(0, 300);
     console.error("[llm] GLOBAL_GLOSSARY present in prompt; preview:", preview.replace(/\n/g, " ").trim() + "...");
@@ -450,6 +462,7 @@ export async function callStrictJson<T>(
   const attempt1 = await callOnceStrictJson({
     model: args.model,
     instructions: args.instructions,
+    includeGlossary: args.includeGlossary,
     plannerInput: args.plannerInput,
     schemaName: args.schemaName,
     jsonSchema: args.jsonSchema,
@@ -494,6 +507,7 @@ Now return a corrected JSON output that matches the schema exactly.`;
   const attempt2 = await callOnceStrictJson({
     model: args.model,
     instructions: repairInstructions,
+    includeGlossary: args.includeGlossary,
     plannerInput: repairPlannerInput,
     schemaName: args.schemaName,
     jsonSchema: args.jsonSchema,

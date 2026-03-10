@@ -1,3 +1,5 @@
+import { CANONICAL_STEPS } from "./state.js";
+
 /**
  * Global glossary: canonical term intents for The Business Strategy Canvas Builder.
  * Single source of truth; applied to every step. No per-language translation tables.
@@ -5,17 +7,7 @@
  */
 
 /** Canonical step IDs (internal; never derive semantics from translated labels). */
-export const CANONICAL_STEP_IDS = [
-  "step_0",
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "strategy",
-  "rulesofthegame",
-  "presentation",
-] as const;
+export const CANONICAL_STEP_IDS = CANONICAL_STEPS;
 
 /**
  * GLOBAL_GLOSSARY: intent definitions for key canvas terms.

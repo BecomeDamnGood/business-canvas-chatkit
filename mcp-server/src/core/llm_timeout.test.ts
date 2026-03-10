@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { callStrictJson, __normalizeOpenAIApiKeyForTest, __setTestClient } from "./llm.js";
+import { callStrictJson, __normalizeOpenAIApiKeyForTest, __parseRetryAfterMsForTest, __setTestClient } from "./llm.js";
 
 test("normalize OpenAI key accepts raw and JSON secret formats", () => {
   assert.equal(__normalizeOpenAIApiKeyForTest("sk-test-raw"), "sk-test-raw");
@@ -163,4 +163,71 @@ test("callStrictJson marks usage unknown when provider omits usage", async () =>
     if (prevKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = prevKey;
   }
+});
+
+test("retry-after parsing handles header values and message text units", () => {
+  assert.equal(__parseRetryAfterMsForTest("2", ""), 2000);
+  assert.equal(__parseRetryAfterMsForTest(undefined, "Please retry after 250 ms"), 250);
+  assert.equal(__parseRetryAfterMsForTest(undefined, "Please retry after 1.5 s"), 1500);
+});
+
+test("callStrictJson only prepends glossary when explicitly requested", async () => {
+  const prevKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test";
+  const seenSystemPrompts: string[] = [];
+
+  __setTestClient({
+    responses: {
+      create: async (payload: any) => {
+        seenSystemPrompts.push(String(payload?.input?.[0]?.content || ""));
+        return {
+          output_text: JSON.stringify({ value: "ok" }),
+          usage: {
+            input_tokens: 1,
+            output_tokens: 1,
+            total_tokens: 2,
+          },
+        };
+      },
+    },
+  } as any);
+
+  try {
+    await callStrictJson({
+      model: "gpt-4.1",
+      instructions: "Return JSON.",
+      includeGlossary: false,
+      plannerInput: "TEST",
+      schemaName: "NoGlossary",
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["value"],
+        properties: { value: { type: "string" } },
+      },
+      zodSchema: z.object({ value: z.string() }),
+    });
+    await callStrictJson({
+      model: "gpt-4.1",
+      instructions: "Return JSON.",
+      includeGlossary: true,
+      plannerInput: "TEST",
+      schemaName: "WithGlossary",
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["value"],
+        properties: { value: { type: "string" } },
+      },
+      zodSchema: z.object({ value: z.string() }),
+    });
+  } finally {
+    __setTestClient(null);
+    if (prevKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = prevKey;
+  }
+
+  assert.equal(seenSystemPrompts.length, 2);
+  assert.equal(seenSystemPrompts[0], "Return JSON.");
+  assert.match(seenSystemPrompts[1], /^## CANVAS TERM GLOSSARY/);
 });

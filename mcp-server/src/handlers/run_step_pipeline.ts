@@ -38,16 +38,6 @@ type RunStepPipelineFlatPorts<TPayload> =
   & RunStepPipelinePorts<TPayload>["guard"]
   & RunStepPipelinePorts<TPayload>["i18n"];
 
-const POST_SPECIALIST_STAGE_ORDER = [
-  "pre_guard_normalization",
-  "repair_attempts",
-  "state_mutation",
-  "render_validate",
-  "optional_rerender_recovery",
-  "overlay_pass",
-  "contract_propagation",
-] as const;
-
 function flattenRunStepPipelinePorts<TPayload>(
   ports: RunStepPipelinePorts<TPayload>
 ): RunStepPipelineFlatPorts<TPayload> {
@@ -529,7 +519,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
 
   async function runPostSpecialistPipeline(context: RunStepContext): Promise<TPayload> {
     const params: RunPostSpecialistPipelineParams = toRunPostSpecialistPipelineRequest(context);
-    void POST_SPECIALIST_STAGE_ORDER;
 
     let state = params.state;
     let userMessage = params.userMessage;
@@ -585,10 +574,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const shouldRunAutoSuggest =
       autoSuggestPlan.eligible &&
       isAutoSuggestIntentFromSpecialist(specialistResult) &&
-      !(
-        specialistResult?.is_offtopic === true ||
-        String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true"
-      );
+      !isTrueFlag(specialistResult?.is_offtopic);
 
     if (shouldRunAutoSuggest) {
       state = await params.ensureUiStrings(state, userMessage);
@@ -678,26 +664,11 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         };
       }
     }
-    if (decision1.specialist_to_call === deps.dreamExplainerSpecialist) {
-      const modeAtTurnStart = deps.getDreamRuntimeMode(state);
-      const previousCanonicalCount = readStringArray(stateRecord.dream_builder_statements).length;
-      const currentStatementCount = readStringArray(specialistResult.statements).length;
-      const effectiveStatementCount = Math.max(previousCanonicalCount, currentStatementCount);
-      const scoringPhase = isTrueFlag(specialistResult.scoring_phase);
-      const hasClusters = Array.isArray(specialistResult.clusters) && specialistResult.clusters.length > 0;
-      void modeAtTurnStart;
-      void effectiveStatementCount;
-      void scoringPhase;
-      void hasClusters;
-    }
-
     if (
       String(decision1.current_step || "") === deps.dreamStepId &&
       String(decision1.specialist_to_call || "") === deps.dreamSpecialist
     ) {
-      const isOfftopic =
-        specialistResult?.is_offtopic === true ||
-        String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
+      const isOfftopic = isTrueFlag(specialistResult?.is_offtopic);
       const isMetaFallback = deps.isMetaOfftopicFallbackTurn({
         stepId: deps.dreamStepId,
         userMessage,
@@ -719,9 +690,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
           params.rememberLlmCall(callRepair.value);
           attempts = Math.max(attempts, callRepair.value.attempts);
           const repaired = asRecord(callRepair.value.specialistResult);
-          const repairedOfftopic =
-            repaired?.is_offtopic === true ||
-            String(repaired?.is_offtopic || "").trim().toLowerCase() === "true";
+          const repairedOfftopic = isTrueFlag(repaired?.is_offtopic);
           if (!repairedOfftopic && deps.hasDreamSpecialistCandidate(repaired)) {
             specialistResult = repaired;
           } else {
@@ -754,9 +723,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       String(decision1.specialist_to_call || "") === deps.strategySpecialist &&
       String(userMessage || "").trim().startsWith(deps.strategyConsolidateRouteToken)
     ) {
-      const initialOfftopic =
-        specialistResult?.is_offtopic === true ||
-        String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
+      const initialOfftopic = isTrueFlag(specialistResult?.is_offtopic);
       const initialCount = deps.strategyStatementsForConsolidateGuard(specialistResult, state).length;
       if (!initialOfftopic && initialCount > 7) {
         const seedStatements = deps.strategyStatementsForConsolidateGuard(specialistResult, state);
@@ -773,13 +740,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         attempts = Math.max(attempts, repairCall.value.attempts);
         specialistResult = asRecord(repairCall.value.specialistResult);
       }
-
-      const repairedOfftopic =
-        specialistResult?.is_offtopic === true ||
-        String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
-      const repairedCount = deps.strategyStatementsForConsolidateGuard(specialistResult, state).length;
-      void repairedOfftopic;
-      void repairedCount;
     }
 
     if (String(decision1.current_step || "") === deps.bigwhyStepId) {
@@ -826,9 +786,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     });
     const currentStepIdForOfftopic = String(decision1.current_step || "");
     const currentSpecialistId = String(decision1.specialist_to_call || "");
-    const isOfftopicTurnAfterFallback =
-      specialistResult?.is_offtopic === true ||
-      String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
+    const isOfftopicTurnAfterFallback = isTrueFlag(specialistResult?.is_offtopic);
     if (currentStepIdForOfftopic !== deps.step0Id && isOfftopicTurnAfterFallback) {
       state = await params.ensureUiStrings(state, userMessage);
     }
@@ -927,9 +885,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     });
 
     if (autoSuggestApplied) {
-      const isOfftopicAfterSuggest =
-        specialistResult?.is_offtopic === true ||
-        String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
+      const isOfftopicAfterSuggest = isTrueFlag(specialistResult?.is_offtopic);
       if (!isOfftopicAfterSuggest) {
         specialistResult = withAutoSuggestPrefixedMessage({
           specialist: specialistResult,
@@ -967,8 +923,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const isDreamExplainerOfftopicTurn =
       String(asStateRecord(nextState).current_step || "") === deps.dreamStepId &&
       String(asStateRecord(nextState).active_specialist || "") === deps.dreamExplainerSpecialist &&
-      (specialistResult?.is_offtopic === true ||
-        String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true");
+      isTrueFlag(specialistResult?.is_offtopic);
     if (isDreamExplainerOfftopicTurn) {
       const previousSpecialist = asRecord(asStateRecord(state).last_specialist_result);
       specialistResult = deps.normalizeNonStep0OfftopicSpecialist({
@@ -1006,9 +961,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const previousSpecialistForWordingChoice = asRecord(asStateRecord(state).last_specialist_result);
     const dreamRuntimeModeForWording = deps.getDreamRuntimeMode(nextState);
     const suppressWordingChoiceForAutoSuggest = autoSuggestApplied;
-    const isCurrentTurnOfftopic =
-      specialistResult?.is_offtopic === true ||
-      String(specialistResult?.is_offtopic || "").trim().toLowerCase() === "true";
+    const isCurrentTurnOfftopic = isTrueFlag(specialistResult?.is_offtopic);
     const eligibleForWordingChoiceTurn = deps.isWordingChoiceEligibleContext(
       currentStepForWordingChoice,
       currentSpecialistForWordingChoice,

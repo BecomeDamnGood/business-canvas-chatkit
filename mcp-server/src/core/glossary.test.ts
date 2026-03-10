@@ -11,19 +11,11 @@ import {
   composeInstructionsWithGlossary,
   getGlossaryPrefix,
 } from "./glossary.js";
+import { CANONICAL_STEPS } from "./state.js";
 
 describe("glossary", () => {
-  it("exports canonical step IDs including purpose, dream, role, entity, strategy, bigwhy, rulesofthegame", () => {
-    const ids = [...CANONICAL_STEP_IDS];
-    assert.ok(ids.includes("step_0"));
-    assert.ok(ids.includes("dream"));
-    assert.ok(ids.includes("purpose"));
-    assert.ok(ids.includes("bigwhy"));
-    assert.ok(ids.includes("role"));
-    assert.ok(ids.includes("entity"));
-    assert.ok(ids.includes("strategy"));
-    assert.ok(ids.includes("rulesofthegame"));
-    assert.ok(ids.includes("presentation"));
+  it("reuses the canonical step IDs from state", () => {
+    assert.deepEqual([...CANONICAL_STEP_IDS], [...CANONICAL_STEPS]);
   });
 
   it("purpose: forbids goal/objective concept for purpose", () => {

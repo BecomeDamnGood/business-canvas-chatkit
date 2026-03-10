@@ -347,6 +347,7 @@ export async function callSpecialistStrict(
     const res = await callStrictJson<ValidationAndBusinessNameOutput>({
       model,
       instructions: composeInstructions(VALIDATION_AND_BUSINESS_NAME_INSTRUCTIONS),
+      includeGlossary: false,
       plannerInput,
       schemaName: "ValidationAndBusinessName",
       jsonSchema: ValidationAndBusinessNameJsonSchema as any,
@@ -367,6 +368,7 @@ export async function callSpecialistStrict(
     const res = await callStrictJson<Step0BootstrapExtractionOutput>({
       model,
       instructions: composeInstructions(STEP_0_BOOTSTRAP_INSTRUCTIONS),
+      includeGlossary: false,
       plannerInput,
       schemaName: "Step0BootstrapExtractor",
       jsonSchema: Step0BootstrapExtractionJsonSchema as any,
@@ -394,6 +396,7 @@ export async function callSpecialistStrict(
     const res = await callStrictJson<Step0TurnIntentOutput>({
       model,
       instructions: composeInstructions(STEP_0_TURN_INTENT_INSTRUCTIONS),
+      includeGlossary: false,
       plannerInput,
       schemaName: "Step0TurnIntentClassifier",
       jsonSchema: Step0TurnIntentJsonSchema as any,
@@ -419,6 +422,7 @@ export async function callSpecialistStrict(
     const res = await callStrictJson<DreamOutput>({
       model,
       instructions: composeInstructions(DREAM_INSTRUCTIONS),
+      includeGlossary: true,
       plannerInput,
       schemaName: "Dream",
       jsonSchema: DreamJsonSchema as any,
@@ -486,6 +490,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(DREAM_EXPLAINER_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: true,
       plannerInput,
       schemaName: "DreamExplainer",
       jsonSchema: DreamExplainerJsonSchema as any,
@@ -512,6 +517,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(PURPOSE_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: true,
       plannerInput,
       schemaName: "Purpose",
       jsonSchema: PurposeJsonSchema as any,
@@ -538,6 +544,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(BIGWHY_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: !String(userMessage || "").trim().startsWith("__SHORTEN_BIGWHY__"),
       plannerInput,
       schemaName: "BigWhy",
       jsonSchema: BigWhyJsonSchema as any,
@@ -564,6 +571,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(ROLE_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: true,
       plannerInput,
       schemaName: "Role",
       jsonSchema: RoleJsonSchema as any,
@@ -590,6 +598,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(ENTITY_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: true,
       plannerInput,
       schemaName: "Entity",
       jsonSchema: EntityJsonSchema as any,
@@ -619,6 +628,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(STRATEGY_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: true,
       plannerInput,
       schemaName: "Strategy",
       jsonSchema: StrategyJsonSchema as any,
@@ -646,6 +656,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(TARGETGROUP_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: true,
       plannerInput,
       schemaName: "TargetGroup",
       jsonSchema: TargetGroupJsonSchema as any,
@@ -673,6 +684,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(PRODUCTSSERVICES_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: true,
       plannerInput,
       schemaName: "ProductsServices",
       jsonSchema: ProductsServicesJsonSchema as any,
@@ -702,6 +714,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(RULESOFTHEGAME_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: true,
       plannerInput,
       schemaName: "RulesOfTheGame",
       jsonSchema: RulesOfTheGameJsonSchema as any,
@@ -748,6 +761,7 @@ export async function callSpecialistStrict(
       instructions: composeInstructions(PRESENTATION_INSTRUCTIONS, {
         includeUniversalMeta: true,
       }),
+      includeGlossary: true,
       plannerInput,
       schemaName: "Presentation",
       jsonSchema: PresentationJsonSchema as any,

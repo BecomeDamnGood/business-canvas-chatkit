@@ -1,4 +1,5 @@
 import type { CanvasState } from "../core/state.js";
+import { isTrueFlag } from "./run_step_type_guards.js";
 
 type CreateRunStepRuntimeSpecialistHelpersDeps = {
   step0Id: string;
@@ -159,9 +160,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     if (currentStepId !== deps.dreamStepId || activeSpecialist !== deps.dreamExplainerSpecialist) {
       return specialist;
     }
-    const isOfftopic =
-      specialist.is_offtopic === true ||
-      String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
+    const isOfftopic = isTrueFlag(specialist.is_offtopic);
     if (isOfftopic) return specialist;
     const scoringPhase = String(specialist.scoring_phase || "").trim() === "true";
     if (scoringPhase) return specialist;
@@ -218,7 +217,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
       params.specialistResult && typeof params.specialistResult === "object"
         ? (params.specialistResult as Record<string, unknown>)
         : {};
-    const offTopicFlag = specialist.is_offtopic === true || String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
+    const offTopicFlag = isTrueFlag(specialist.is_offtopic);
     if (offTopicFlag) return false;
 
     const userIntent = deps.resolveMotivationUserIntent(specialist);

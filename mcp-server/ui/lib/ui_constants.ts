@@ -69,6 +69,7 @@ const PURPOSE_STEP_VIDEO_BY_LANG: Record<string, string> = {
   es: "https://youtu.be/TTU7vAkaVJA",
   fr: "https://youtu.be/EqoczF4mnGc",
   it: "https://youtu.be/tISM_mLZDgk",
+  nl: "https://youtu.be/oS0tKfpLaYg",
 };
 
 function normalizeYouTubeEmbedUrl(rawUrl: string): string {

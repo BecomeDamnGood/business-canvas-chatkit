@@ -100,7 +100,7 @@ test("session token log creates markdown file and appends turns", () => {
 
   const summaryPath = path.join(dir, "TEMP-session-summary.log");
   const summary = fs.readFileSync(summaryPath, "utf-8");
-  assert.match(summary, /^TEMP - remove before go-live/m);
+  assert.match(summary, /^Session summary$/m);
   assert.match(
     summary,
     /2026-02-17 10:56:00 UTC - UnknownCompany - gpt-4\.1 <300> - gpt-4o-mini <160> - Total tokens <460>/

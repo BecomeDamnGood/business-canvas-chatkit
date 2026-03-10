@@ -46,6 +46,11 @@ type SessionLogData = {
   turns: SessionTurnLogEntry[];
 };
 
+type SessionSummaryEntry = {
+  key: string;
+  line: string;
+};
+
 export type AppendSessionTokenLogParams = {
   sessionId: string;
   sessionStartedAt: string;
@@ -61,6 +66,7 @@ export type AppendSessionTokenLogResult = {
 
 const DATA_MARKER_PREFIX = "SESSION_LOG_DATA:";
 const SESSION_LOG_FILE_RE = /^session-\d{4}-\d{2}-\d{2}-\d{6}-[a-zA-Z0-9_-]{1,80}\.md$/;
+const SESSION_SUMMARY_FILE = "TEMP-session-summary.log";
 
 function normalizeToken(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
@@ -177,11 +183,18 @@ function resolveRetentionDays(): number {
   return Math.max(1, Math.trunc(raw));
 }
 
-function purgeExpiredSessionLogs(logDir: string): void {
+function summaryKeyFromSessionFileName(fileName: string): string | null {
+  const match = fileName.match(/^session-(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})(\d{2})-[a-zA-Z0-9_-]{1,80}\.md$/);
+  if (!match) return null;
+  return `${match[1]} ${match[2]}:${match[3]}:${match[4]} UTC`;
+}
+
+function purgeExpiredSessionLogs(logDir: string): Set<string> {
   const retentionDays = resolveRetentionDays();
   const cutoffMs = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
   const resolvedDir = path.isAbsolute(logDir) ? logDir : path.resolve(process.cwd(), logDir);
-  if (!fs.existsSync(resolvedDir)) return;
+  const removedSummaryKeys = new Set<string>();
+  if (!fs.existsSync(resolvedDir)) return removedSummaryKeys;
   const names = fs.readdirSync(resolvedDir);
   for (const name of names) {
     if (!SESSION_LOG_FILE_RE.test(name)) continue;
@@ -195,10 +208,13 @@ function purgeExpiredSessionLogs(logDir: string): void {
     if (!Number.isFinite(stat.mtimeMs) || stat.mtimeMs >= cutoffMs) continue;
     try {
       fs.unlinkSync(filePath);
+      const summaryKey = summaryKeyFromSessionFileName(name);
+      if (summaryKey) removedSummaryKeys.add(summaryKey);
     } catch {
       // best-effort purge; ignore unlink failures
     }
   }
+  return removedSummaryKeys;
 }
 
 function parseDataFromFile(filePath: string): SessionLogData | null {
@@ -421,30 +437,37 @@ function aggregateModelsForSummary(turns: SessionTurnLogEntry[]): {
   };
 }
 
-function refreshTempSessionSummary(logDir: string): void {
+function buildSessionSummaryEntry(data: SessionLogData): SessionSummaryEntry {
+  const turns = [...data.turns].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const summary = aggregateModelsForSummary(turns);
+  const key = parseSummaryTimestamp(data.started_at);
+  const models = summary.modelParts.length > 0 ? summary.modelParts.join(" - ") : "unknown <unknown>";
+  const totalPart = `Total tokens <${summary.totalTokens === null ? "unknown" : String(summary.totalTokens)}>`;
+  return {
+    key,
+    line: `${key} - ${summary.companyName || "UnknownCompany"} - ${models} - ${totalPart}`,
+  };
+}
+
+function readSessionSummaryEntries(summaryFilePath: string): SessionSummaryEntry[] {
+  if (!fs.existsSync(summaryFilePath)) return [];
+  const content = fs.readFileSync(summaryFilePath, "utf-8");
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC - /.test(line))
+    .map((line) => ({ key: line.slice(0, "YYYY-MM-DD HH:MM:SS UTC".length), line }));
+}
+
+function refreshTempSessionSummary(logDir: string, data: SessionLogData, removedSummaryKeys: Set<string>): void {
   const resolvedDir = path.isAbsolute(logDir) ? logDir : path.resolve(process.cwd(), logDir);
-  const files = fs.existsSync(resolvedDir)
-    ? fs.readdirSync(resolvedDir).filter((name) => /^session-\d{4}-\d{2}-\d{2}-\d{6}-.+\.md$/i.test(name))
-    : [];
-  const entries = files
-    .map((name) => {
-      const filePath = path.join(resolvedDir, name);
-      const parsed = parseDataFromFile(filePath);
-      if (!parsed) return null;
-      const turns = [...parsed.turns].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-      const summary = aggregateModelsForSummary(turns);
-      const timestamp = parseSummaryTimestamp(parsed.started_at);
-      const models = summary.modelParts.length > 0 ? summary.modelParts.join(" - ") : "unknown <unknown>";
-      const totalPart = `Total tokens <${summary.totalTokens === null ? "unknown" : String(summary.totalTokens)}>`;
-      return {
-        started_at: parsed.started_at,
-        line: `${timestamp} - ${summary.companyName || "UnknownCompany"} - ${models} - ${totalPart}`,
-      };
-    })
-    .filter((item): item is { started_at: string; line: string } => Boolean(item))
-    .sort((left, right) => left.started_at.localeCompare(right.started_at));
-  const summaryFilePath = path.join(resolvedDir, "TEMP-session-summary.log");
-  const body = ["TEMP - remove before go-live", ...entries.map((entry) => entry.line), ""].join("\n");
+  const summaryFilePath = path.join(resolvedDir, SESSION_SUMMARY_FILE);
+  const nextEntry = buildSessionSummaryEntry(data);
+  const nextEntries = readSessionSummaryEntries(summaryFilePath)
+    .filter((entry) => entry.key !== nextEntry.key && !removedSummaryKeys.has(entry.key));
+  nextEntries.push(nextEntry);
+  nextEntries.sort((left, right) => left.key.localeCompare(right.key));
+  const body = ["Session summary", ...nextEntries.map((entry) => entry.line), ""].join("\n");
   fs.writeFileSync(summaryFilePath, body, "utf-8");
 }
 
@@ -461,7 +484,7 @@ export function appendSessionTokenLog(params: AppendSessionTokenLogParams): Appe
 
   const filePath = resolveFilePath(sessionId, sessionStartedAt, params.filePath, params.logDir);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  purgeExpiredSessionLogs(path.dirname(filePath));
+  const removedSummaryKeys = purgeExpiredSessionLogs(path.dirname(filePath));
 
   const existing = parseDataFromFile(filePath);
   const base: SessionLogData =
@@ -479,7 +502,7 @@ export function appendSessionTokenLog(params: AppendSessionTokenLogParams): Appe
   }
 
   fs.writeFileSync(filePath, renderMarkdown(base), "utf-8");
-  refreshTempSessionSummary(path.dirname(filePath));
+  refreshTempSessionSummary(path.dirname(filePath), base, removedSummaryKeys);
   return { filePath, duplicate };
 }
 

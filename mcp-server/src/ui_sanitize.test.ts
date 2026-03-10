@@ -1531,6 +1531,7 @@ test("bundled purpose-step intro movie uses language-mapped SSOT links and hides
   assert.match(source, /es:\s*"https:\/\/youtu\.be\/TTU7vAkaVJA"/);
   assert.match(source, /fr:\s*"https:\/\/youtu\.be\/EqoczF4mnGc"/);
   assert.match(source, /it:\s*"https:\/\/youtu\.be\/tISM_mLZDgk"/);
+  assert.match(source, /nl:\s*"https:\/\/youtu\.be\/oS0tKfpLaYg"/);
   assert.match(source, /function purposeStepVideoUrlForLang\(lang\)/);
   assert.match(source, /const shouldAppendPurposeStepVideo = current === "purpose" && showStepIntroChrome;/);
   assert.match(source, /appendPurposeStepIntroVideo\(cardDescEl, lang\);/);

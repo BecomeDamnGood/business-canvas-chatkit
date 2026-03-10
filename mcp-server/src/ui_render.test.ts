@@ -146,5 +146,5 @@ test("purposeStepVideoUrlForLang returns only configured language-specific video
   assert.match(purposeStepVideoUrlForLang("es"), /youtube-nocookie\.com\/embed\/TTU7vAkaVJA/);
   assert.match(purposeStepVideoUrlForLang("fr"), /youtube-nocookie\.com\/embed\/EqoczF4mnGc/);
   assert.match(purposeStepVideoUrlForLang("it"), /youtube-nocookie\.com\/embed\/tISM_mLZDgk/);
-  assert.equal(purposeStepVideoUrlForLang("nl"), "");
+  assert.match(purposeStepVideoUrlForLang("nl"), /youtube-nocookie\.com\/embed\/oS0tKfpLaYg/);
 });

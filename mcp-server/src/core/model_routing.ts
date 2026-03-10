@@ -64,11 +64,13 @@ export type ModelRoutingDecision = {
 
 type CacheEntry = {
   mtimeMs: number;
+  lastCheckedMs: number;
   parsed: { ok: true; config: ModelRoutingConfig } | { ok: false; error: string };
 };
 
 const DEFAULT_MODEL = "gpt-4.1";
 const DEFAULT_CONFIG_PATH = path.resolve(process.cwd(), "config", "model-routing.json");
+const CACHE_FRESHNESS_MS = 1000;
 const cache = new Map<string, CacheEntry>();
 
 function normalizeModel(raw: unknown, fallback: string): string {
@@ -149,24 +151,29 @@ function loadRoutingConfig(configPath?: string):
   | { ok: false; error: string } {
   const filePath = String(configPath || process.env.BSC_MODEL_ROUTING_CONFIG || DEFAULT_CONFIG_PATH).trim();
   if (!filePath) return { ok: false, error: "empty config path" };
+  const now = Date.now();
+  const cached = cache.get(filePath);
+  if (cached && now - cached.lastCheckedMs < CACHE_FRESHNESS_MS) {
+    return cached.parsed;
+  }
   let stat: fs.Stats;
   try {
     stat = fs.statSync(filePath);
   } catch {
     return { ok: false, error: `config not found: ${filePath}` };
   }
-  const cached = cache.get(filePath);
   if (cached && cached.mtimeMs === stat.mtimeMs) {
+    cached.lastCheckedMs = now;
     return cached.parsed;
   }
   try {
     const parsedJson = JSON.parse(fs.readFileSync(filePath, "utf-8"));
     const parsed = parseConfig(parsedJson);
-    cache.set(filePath, { mtimeMs: stat.mtimeMs, parsed });
+    cache.set(filePath, { mtimeMs: stat.mtimeMs, lastCheckedMs: now, parsed });
     return parsed;
   } catch (err: any) {
     const parsed = { ok: false as const, error: err?.message || "invalid JSON" };
-    cache.set(filePath, { mtimeMs: stat.mtimeMs, parsed });
+    cache.set(filePath, { mtimeMs: stat.mtimeMs, lastCheckedMs: now, parsed });
     return parsed;
   }
 }

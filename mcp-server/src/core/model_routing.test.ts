@@ -243,3 +243,42 @@ test("model routing keeps primary model when availability allowlist is not confi
   assert.equal(routed.selected_source, "primary");
   assert.equal(routed.availability_checked, false);
 });
+
+test("model routing reuses a fresh stat result across repeated calls", () => {
+  __clearModelRoutingCacheForTests();
+  const configPath = writeConfig({
+    version: "test-v6",
+    enabled: true,
+    default_model: "gpt-4.1",
+    budget_model: "gpt-4o-mini",
+    translation_model: "gpt-4o-mini",
+    hard_pinned_4_1: { action_codes: [], intents: [], specialists: [] },
+    by_action_code: {},
+    by_intent: {},
+    by_specialist: {},
+  });
+
+  const originalStatSync = fs.statSync;
+  let statCalls = 0;
+  (fs as any).statSync = (...args: any[]) => {
+    statCalls += 1;
+    return originalStatSync(...args);
+  };
+
+  try {
+    resolveModelForCall({
+      fallbackModel: "gpt-4.1",
+      routingEnabled: true,
+      configPath,
+    });
+    resolveModelForCall({
+      fallbackModel: "gpt-4.1",
+      routingEnabled: true,
+      configPath,
+    });
+  } finally {
+    (fs as any).statSync = originalStatSync;
+  }
+
+  assert.equal(statCalls, 1);
+});

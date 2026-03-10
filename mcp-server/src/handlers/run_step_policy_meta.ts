@@ -13,6 +13,7 @@ import { PRODUCTSSERVICES_STEP_ID } from "../steps/productsservices.js";
 import { RULESOFTHEGAME_STEP_ID } from "../steps/rulesofthegame.js";
 import { PRESENTATION_STEP_ID } from "../steps/presentation.js";
 import { SPECIALIST_META_TOPICS, type SpecialistMetaTopic } from "../steps/user_intent.js";
+import { isTrueFlag } from "./run_step_type_guards.js";
 
 export const LANGUAGE_LOCK_INSTRUCTION = `LANGUAGE OVERRIDE (HARD)
 - ALWAYS produce ALL user-facing JSON strings in the LANGUAGE parameter.
@@ -436,13 +437,9 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     if (MOTIVATION_USER_INTENTS.has(intentRaw as MotivationUserIntent)) {
       return intentRaw as MotivationUserIntent;
     }
-    const wantsRecap =
-      specialist.wants_recap === true ||
-      String((specialist as any).wants_recap || "").trim().toLowerCase() === "true";
+    const wantsRecap = isTrueFlag((specialist as any).wants_recap);
     if (wantsRecap) return "RECAP_REQUEST";
-    const isOfftopic =
-      specialist.is_offtopic === true ||
-      String((specialist as any).is_offtopic || "").trim().toLowerCase() === "true";
+    const isOfftopic = isTrueFlag((specialist as any).is_offtopic);
     if (isOfftopic) return "OFFTOPIC";
     return "STEP_INPUT";
   }
@@ -770,7 +767,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     const specialist = params.specialistResult && typeof params.specialistResult === "object"
       ? params.specialistResult
       : {};
-    if (specialist.wants_recap === true || String(specialist.wants_recap || "").trim().toLowerCase() === "true") {
+    if (isTrueFlag(specialist.wants_recap)) {
       return true;
     }
     const userIntent = resolveMotivationUserIntent(specialist);
@@ -797,9 +794,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
       ? params.specialistResult
       : {};
     if (!stepId || stepId === STEP_0_ID) return specialist;
-    const isOfftopic =
-      specialist.is_offtopic === true ||
-      String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
+    const isOfftopic = isTrueFlag(specialist.is_offtopic);
     if (!isOfftopic) return specialist;
     const metaTopic = resolveSpecialistMetaTopic(specialist);
     if (metaTopic === "BEN_PROFILE") {
@@ -879,9 +874,7 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
     state?: CanvasState
   ): string | null {
     if (!state || stepId === STEP_0_ID) return null;
-    const isOfftopic =
-      specialist.is_offtopic === true ||
-      String(specialist.is_offtopic || "").trim().toLowerCase() === "true";
+    const isOfftopic = isTrueFlag(specialist.is_offtopic);
     if (!isOfftopic) return null;
     if (String((specialist as any).__offtopic_meta_passthrough || "").trim().toLowerCase() === "true") return null;
     if (isLikelyMetaQuestionTurn({ userMessage: "", specialistResult: specialist })) return null;
