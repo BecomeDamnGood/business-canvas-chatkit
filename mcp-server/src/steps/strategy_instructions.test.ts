@@ -17,7 +17,7 @@ test("Strategy instructions keep button/menu routing contract-driven (no fixed b
 test("Strategy instructions require bullet examples and avoid duplicate reformulation prose", () => {
   const text = STRATEGY_INSTRUCTIONS;
   assert.ok(
-    text.includes('followed by 2-3 example focus points as DASH bullets, each on its own new line and each starting with "- "'),
+    text.includes('If helpful, add "For example:" followed by 2-3 DASH bullet examples in message only.'),
     "instructions must require dash bullets in the For example block"
   );
   assert.ok(
@@ -40,5 +40,26 @@ test("Strategy instructions enforce 4-7 focus points and include consolidate rou
     text.includes("Minimum 3, maximum 5."),
     false,
     "instructions must no longer contain old 3-5 hard rule"
+  );
+});
+
+test("Strategy instructions keep local proposals pending instead of auto-committing full rewrites", () => {
+  const text = STRATEGY_INSTRUCTIONS;
+  assert.ok(
+    text.includes("Strategy is incremental and conservative by default."),
+    "instructions must explicitly prefer local incremental strategy handling"
+  );
+  assert.ok(
+    text.includes("Do NOT silently commit an interpreted proposal as if it were already final."),
+    "instructions must keep free-text strategy proposals in suggestion flow"
+  );
+  assert.ok(
+    text.includes("A full 4 to 7 focus-point rewrite is the exception, not the default."),
+    "instructions must explicitly demote full-set rewrites to fallback behavior"
+  );
+  assert.equal(
+    text.includes("the reformulated statements are ALREADY added directly to statements in that same REFINE turn"),
+    false,
+    "instructions must no longer auto-accept refined strategy proposals"
   );
 });

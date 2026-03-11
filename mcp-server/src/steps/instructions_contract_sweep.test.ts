@@ -176,7 +176,8 @@ test("targetgroup/productsservices planner input does not duplicate STATE FINALS
     "USER_MESSAGE: we offer workshops",
     "productsservices",
     "productsservices",
-    "nl"
+    "nl",
+    ["Workshops", "Implementation guidance"]
   );
   for (const input of [targetInput, productsInput]) {
     assert.ok(input.includes("INTRO_SHOWN_FOR_STEP:"), "planner input must include intro marker");
@@ -189,6 +190,8 @@ test("targetgroup/productsservices planner input does not duplicate STATE FINALS
       "planner input must not embed STATE FINALS context; context is injected in system instructions"
     );
   }
+  assert.ok(productsInput.includes('PREVIOUS_STATEMENTS: ["Workshops","Implementation guidance"]'));
+  assert.ok(productsInput.includes("PREVIOUS_STATEMENT_COUNT: 2"));
 });
 
 test("explain-light profile keeps schema and route sections while shrinking non-essential sections", () => {

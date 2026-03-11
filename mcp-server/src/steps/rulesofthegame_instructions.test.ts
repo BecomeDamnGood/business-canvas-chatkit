@@ -47,3 +47,24 @@ test("Rules of the Game instructions do not contain contradictory field-discipli
     "legacy contradictory ASK(normal) line must not remain"
   );
 });
+
+test("Rules of the Game instructions keep local proposals pending instead of rewriting the whole set", () => {
+  const text = RULESOFTHEGAME_INSTRUCTIONS;
+  assert.ok(
+    text.includes("Rules of the Game are incremental and conservative by default."),
+    "instructions must explicitly prefer local incremental rules handling"
+  );
+  assert.ok(
+    text.includes("Do NOT silently commit an interpreted proposal as if it were already final."),
+    "instructions must keep free-text rules proposals in suggestion flow"
+  );
+  assert.ok(
+    text.includes("A full 3 to 5 rule rewrite is the exception, not the default."),
+    "instructions must explicitly demote full-set rules rewrites to fallback behavior"
+  );
+  assert.equal(
+    text.includes("When you abstract an operational rule into a broader Rule of the Game, the abstracted rule is automatically accepted"),
+    false,
+    "instructions must no longer auto-accept rewritten rules"
+  );
+});

@@ -1,6 +1,7 @@
 import type { CanvasState, ProvisionalSource } from "../core/state.js";
 import type { WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
+import { resolveBusinessListTurn } from "./run_step_business_list_turn.js";
 
 type WordingChoiceMode = "text" | "list";
 type WordingChoiceVariant = "default" | "clarify_dual" | "grouped_list_units";
@@ -150,9 +151,6 @@ const ACCEPTED_OUTPUT_SINGLE_VALUE_STEP_IDS = new Set([
   "targetgroup",
 ]);
 
-const LIST_REMOVE_VERB = /\b(remove|delete|drop|omit|exclude|verwijder|schrap|haal\s+weg|weglaten|wegdoen)\b/i;
-const LIST_REPLACE_VERB = /\b(replace|vervang)\b/i;
-const LIST_REPLACE_WITH = /\b(with|door|met)\b/i;
 const LIST_NO_CHANGE_SIGNAL =
   /\b(niets\s+meer|niet\s+meer|no\s+more|nothing\s+else|that(?:'| i)?s\s+all|dit\s+is\s+het|alleen\s+dit|meer\s+hebben\s+we\s+niet)\b/i;
 
@@ -724,41 +722,6 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     );
   }
 
-  function extractQuotedFragments(input: string): string[] {
-    const text = String(input || "");
-    const matches = text.match(/["“”'‘’][^"“”'‘’\n]{3,}["“”'‘’]/g) || [];
-    return matches
-      .map((value) => String(value || "").replace(/^["“”'‘’]|["“”'‘’]$/g, "").trim())
-      .filter(Boolean);
-  }
-
-  function bestMatchingIndex(referenceItems: string[], fragment: string): number {
-    const target = deps.canonicalizeComparableText(fragment);
-    if (!target) return -1;
-    const targetTokens = new Set(deps.tokenizeWords(target));
-    if (targetTokens.size === 0) return -1;
-    let bestIdx = -1;
-    let bestScore = 0;
-    for (let i = 0; i < referenceItems.length; i += 1) {
-      const candidate = String(referenceItems[i] || "").trim();
-      const canonical = deps.canonicalizeComparableText(candidate);
-      if (!canonical) continue;
-      if (canonical === target) return i;
-      const candidateTokens = new Set(deps.tokenizeWords(canonical));
-      let overlap = 0;
-      for (const token of targetTokens) {
-        if (candidateTokens.has(token)) overlap += 1;
-      }
-      const union = targetTokens.size + candidateTokens.size - overlap;
-      const score = union > 0 ? overlap / union : 0;
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = i;
-      }
-    }
-    return bestScore >= 0.35 ? bestIdx : -1;
-  }
-
   function resolveBusinessListIntent(params: {
     stepId: string;
     userRaw: string;
@@ -786,50 +749,26 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         normalizedUser: stable.join("\n"),
       };
     }
-
-    const quotedFragments = extractQuotedFragments(userRaw);
-    const explicitRemove = LIST_REMOVE_VERB.test(userRaw);
-    if (explicitRemove) {
-      const removeIndexes = new Set<number>();
-      for (const fragment of quotedFragments) {
-        const idx = bestMatchingIndex(referenceItems, fragment);
-        if (idx >= 0) removeIndexes.add(idx);
-      }
-      if (removeIndexes.size === 0 && (quotedFragments.length > 0 || deps.tokenizeWords(userRaw).length <= 12)) {
-        const parsedCandidates = deps.parseListItems(userRaw)
-          .map((line) => String(line || "").trim())
-          .filter(Boolean);
-        for (const fragment of parsedCandidates) {
-          const idx = bestMatchingIndex(referenceItems, fragment);
-          if (idx >= 0) removeIndexes.add(idx);
-        }
-      }
-      if (removeIndexes.size > 0) {
-        const kept = referenceItems.filter((_, idx) => !removeIndexes.has(idx));
-        return {
-          semantics: "full",
-          userItems: mergeListItems([], kept),
-          suggestionItems: mergeListItems([], params.suggestionItems.length > 0 ? params.suggestionItems : referenceItems),
-          normalizedUser: mergeListItems([], kept).join("\n"),
-        };
-      }
+    const turnResolution = resolveBusinessListTurn({
+      stepId,
+      userMessage: userRaw,
+      referenceItems,
+    });
+    if (turnResolution.kind === "remove") {
+      return {
+        semantics: "full",
+        userItems: mergeListItems([], turnResolution.updatedItems),
+        suggestionItems: mergeListItems([], params.suggestionItems.length > 0 ? params.suggestionItems : referenceItems),
+        normalizedUser: mergeListItems([], turnResolution.updatedItems).join("\n"),
+      };
     }
-
-    const explicitReplace = LIST_REPLACE_VERB.test(userRaw) && LIST_REPLACE_WITH.test(userRaw);
-    if (explicitReplace && quotedFragments.length >= 2) {
-      const source = quotedFragments[0];
-      const replacement = quotedFragments[1];
-      const sourceIdx = bestMatchingIndex(referenceItems, source);
-      const replacementClean = deps.normalizeLightUserInput(replacement).replace(/[.!?]+$/, "").trim();
-      if (sourceIdx >= 0 && replacementClean) {
-        const next = referenceItems.map((line, idx) => (idx === sourceIdx ? replacementClean : line));
-        return {
-          semantics: "full",
-          userItems: mergeListItems([], next),
-          suggestionItems: mergeListItems([], params.suggestionItems.length > 0 ? params.suggestionItems : referenceItems),
-          normalizedUser: mergeListItems([], next).join("\n"),
-        };
-      }
+    if (turnResolution.kind === "edit" && Array.isArray(turnResolution.updatedItems)) {
+      return {
+        semantics: "full",
+        userItems: mergeListItems([], turnResolution.updatedItems),
+        suggestionItems: mergeListItems([], params.suggestionItems.length > 0 ? params.suggestionItems : referenceItems),
+        normalizedUser: mergeListItems([], turnResolution.updatedItems).join("\n"),
+      };
     }
 
     return null;

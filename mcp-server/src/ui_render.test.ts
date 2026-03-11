@@ -5,6 +5,7 @@ import {
   actionRoleForStateKey,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
+  shouldRenderPurposeStepIntroVideo,
   shouldSuppressPromptForWordingChoice,
   shouldSuppressMainCardForWordingChoice,
 } from "../ui/lib/ui_render.js";
@@ -147,4 +148,49 @@ test("purposeStepVideoUrlForLang returns only configured language-specific video
   assert.match(purposeStepVideoUrlForLang("fr"), /youtube-nocookie\.com\/embed\/EqoczF4mnGc/);
   assert.match(purposeStepVideoUrlForLang("it"), /youtube-nocookie\.com\/embed\/tISM_mLZDgk/);
   assert.match(purposeStepVideoUrlForLang("nl"), /youtube-nocookie\.com\/embed\/oS0tKfpLaYg/);
+});
+
+test("shouldRenderPurposeStepIntroVideo returns true for configured languages in intro state", () => {
+  assert.equal(
+    shouldRenderPurposeStepIntroVideo({
+      currentStep: "purpose",
+      showStepIntroChrome: true,
+      wordingChoiceActive: false,
+      lang: "nl",
+    }),
+    true
+  );
+});
+
+test("shouldRenderPurposeStepIntroVideo returns false for languages without a configured purpose video", () => {
+  assert.equal(
+    shouldRenderPurposeStepIntroVideo({
+      currentStep: "purpose",
+      showStepIntroChrome: true,
+      wordingChoiceActive: false,
+      lang: "pt-BR",
+    }),
+    false
+  );
+});
+
+test("shouldRenderPurposeStepIntroVideo returns false outside intro state or while wording-choice is active", () => {
+  assert.equal(
+    shouldRenderPurposeStepIntroVideo({
+      currentStep: "purpose",
+      showStepIntroChrome: false,
+      wordingChoiceActive: false,
+      lang: "en",
+    }),
+    false
+  );
+  assert.equal(
+    shouldRenderPurposeStepIntroVideo({
+      currentStep: "purpose",
+      showStepIntroChrome: true,
+      wordingChoiceActive: true,
+      lang: "en",
+    }),
+    false
+  );
 });

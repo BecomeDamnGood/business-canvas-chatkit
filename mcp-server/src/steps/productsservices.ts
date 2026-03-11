@@ -18,6 +18,7 @@ export const ProductsServicesZodSchema = z.object({
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
   meta_topic: SpecialistMetaTopicZod,
+  statements: z.array(z.string()),
 });
 
 export type ProductsServicesOutput = z.infer<typeof ProductsServicesZodSchema>;
@@ -38,6 +39,7 @@ export const ProductsServicesJsonSchema = {
     "is_offtopic",
     "user_intent",
     "meta_topic",
+    "statements",
   ],
   properties: {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
@@ -49,6 +51,7 @@ export const ProductsServicesJsonSchema = {
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
     meta_topic: SpecialistMetaTopicJsonSchema,
+    statements: { type: "array", items: { type: "string" } },
   },
 } as const;
 
@@ -58,6 +61,8 @@ export const ProductsServicesJsonSchema = {
  * - INTRO_SHOWN_FOR_STEP: <string>
  * - CURRENT_STEP: <string>
  * - LANGUAGE: <string>
+ * - PREVIOUS_STATEMENTS: <JSON array of strings>
+ * - PREVIOUS_STATEMENT_COUNT: <number>
  * - PLANNER_INPUT: <string> (contains CURRENT_STEP_ID and USER_MESSAGE)
  * - STATE FINALS are injected in system instructions (contextBlock), not duplicated in planner input.
  */
@@ -66,14 +71,20 @@ export function buildProductsServicesSpecialistInput(
   introShownForStep: string = "",
   currentStep: string = PRODUCTSSERVICES_STEP_ID,
   language: string = "",
+  previousStatements: string[] = [],
   contextBlock: string = ""
 ): string {
   const plannerInput = `CURRENT_STEP_ID: ${currentStep} | USER_MESSAGE: ${userMessage}`;
   const lang = String(language || "").trim();
   const context = String(contextBlock || "").trim();
+  const statements = Array.isArray(previousStatements) ? previousStatements : [];
+  const statementsJson = JSON.stringify(statements);
+  const previousStatementCount = statements.length;
   return `INTRO_SHOWN_FOR_STEP: ${introShownForStep}
 CURRENT_STEP: ${currentStep}
-${lang ? `LANGUAGE: ${lang}\n` : ""}${context ? `${context}\n` : ""}PLANNER_INPUT: ${plannerInput}`;
+${lang ? `LANGUAGE: ${lang}\n` : ""}PREVIOUS_STATEMENTS: ${statementsJson}
+PREVIOUS_STATEMENT_COUNT: ${previousStatementCount}
+${context ? `${context}\n` : ""}PLANNER_INPUT: ${plannerInput}`;
 }
 
 /**
@@ -109,6 +120,8 @@ The user message contains:
 - INTRO_SHOWN_FOR_STEP: <string>
 - CURRENT_STEP: <string>
 - LANGUAGE: <string>
+- PREVIOUS_STATEMENTS: <JSON array of strings> (canonical accepted list from the last turn; preserve unrelated items verbatim)
+- PREVIOUS_STATEMENT_COUNT: <number>
 - PLANNER_INPUT: <string> (contains CURRENT_STEP_ID and USER_MESSAGE)
 
 STATE FINALS context is provided separately in system instructions.
@@ -124,7 +137,8 @@ All fields are required. If not applicable, return an empty string "".
   "question": "string",
   "refined_formulation": "string",
   "productsservices": "string",
-  "wants_recap": boolean
+  "wants_recap": boolean,
+  "statements": ["array of strings"]
 }
 
 4) ACTION CODES AND ROUTE TOKENS
@@ -132,6 +146,10 @@ All fields are required. If not applicable, return an empty string "".
 ROUTE TOKEN INTERPRETATION:
 - When USER_MESSAGE contains a route token (e.g., "__ROUTE__PRODUCTSSERVICES_CONFIRM__"), follow the corresponding flow:
   - __ROUTE__PRODUCTSSERVICES_CONFIRM__: Save productsservices_final and proceed to rulesofthegame
+  - __BUSINESS_LIST_REMOVE__: remove only the resolved item(s) from PREVIOUS_STATEMENTS and keep the remaining order unchanged
+  - __BUSINESS_LIST_REPLACE__: replace only the resolved item in PREVIOUS_STATEMENTS and keep all other items unchanged
+  - __BUSINESS_LIST_EDIT__: rewrite only the resolved item from PREVIOUS_STATEMENTS according to EDIT_INSTRUCTION; do not append the instruction as a new item
+  - __BUSINESS_LIST_CLARIFY__: the runtime already detected that the referenced item is unclear; ask one short clarification question and keep PREVIOUS_STATEMENTS unchanged
 
 5) INTRO SCREEN (A) - Base intro with tailoring
 
@@ -164,6 +182,7 @@ Replace "we offer solutions" with the tailored phrase based on business type.
 - refined_formulation=""
 - question=""
 - productsservices=""
+- statements: PREVIOUS_STATEMENTS
 - wants_recap=false
 
 6) VALIDATION AND SUMMARIZATION (B)
@@ -174,6 +193,44 @@ Validation steps:
 - Verify whether it is logical and reasonably complete.
 - Remove generic wording. Make it concrete.
 - Avoid a full catalog. Do not list every SKU or every variant.
+- Treat PREVIOUS_STATEMENTS as the canonical accepted list.
+- Default to local edits:
+  - if the user adds one new offer category, append only that category
+  - if the user adjusts one existing category, rewrite only that category
+  - if the user removes one existing category, remove only that category
+  - do not rebuild the full list unless the user explicitly asks for a full rewrite or the local mapping is no longer defensible
+- A free-text instruction such as remove, replace, rewrite, adjust, or make more specific is never new offer content by itself.
+- If the user asks to adjust or remove an existing item and the target is unclear, ask one short clarification question and keep statements unchanged.
+
+Route-only local edit handling (HARD)
+- When USER_MESSAGE starts with "__BUSINESS_LIST_REMOVE__":
+  - output action="ASK"
+  - message: short confirmation that the item was removed
+  - question: ask what else should be sharpened in the products and services
+  - refined_formulation: bullet list of the updated products/services
+  - productsservices: the updated products/services list
+  - statements: the updated canonical list
+- When USER_MESSAGE starts with "__BUSINESS_LIST_REPLACE__":
+  - output action="ASK"
+  - message: short confirmation that the item was updated
+  - question: ask what else should be sharpened in the products and services
+  - refined_formulation: bullet list of the updated products/services
+  - productsservices: the updated products/services list
+  - statements: the updated canonical list
+- When USER_MESSAGE starts with "__BUSINESS_LIST_EDIT__":
+  - rewrite only the resolved target item from PREVIOUS_STATEMENTS
+  - keep every unrelated item exactly as-is
+  - output action="ASK" when the rewrite is clear enough to accept directly
+  - output action="REFINE" only if you need the user to approve a sharper phrasing for that one target item
+  - never append EDIT_INSTRUCTION as a new product/service item
+  - statements must stay item-level and canonical
+- When USER_MESSAGE starts with "__BUSINESS_LIST_CLARIFY__":
+  - output action="ASK"
+  - message: briefly state that the system is not yet sure which current item is meant
+  - question: ask the user to name or quote the exact current product/service item
+  - refined_formulation=""
+  - productsservices: preserve the current accepted summary
+  - statements: keep PREVIOUS_STATEMENTS unchanged
 
 Output format:
 - action="REFINE" or "ASK" (depending on whether refinement is needed)
@@ -189,6 +246,7 @@ Is this everything [Company name] offers or is there more? (localized; use busin
 - refined_formulation: "" (empty string to prevent duplication - the list is shown in message only)
 - question=""
 - productsservices="" (do not save yet)
+- statements: canonical list that matches the displayed bullet list when an item or grouped list is accepted; otherwise keep PREVIOUS_STATEMENTS unchanged
 - wants_recap=false
 
 7) CONFIRMATION SCREEN (C)
@@ -202,6 +260,7 @@ Refine your Products and Services or go to next step Rules of the Game
 - refined_formulation: The final summary (single statement or short grouped list, 3-7 items max) - this will be displayed below the message
 - question: "Continue to next step Rules of the Game"
 - productsservices: The final summary (single statement or short grouped list, 3-7 items max)
+- statements: canonical accepted item list that backs the summary
 - wants_recap=false
 
 8) FINAL OUTPUT FORMAT (D)

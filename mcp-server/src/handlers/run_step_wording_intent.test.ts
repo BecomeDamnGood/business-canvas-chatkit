@@ -622,6 +622,62 @@ test("buildWordingChoiceFromTurn creates grouped compare unit for free-text stra
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
 });
 
+test("buildWordingChoiceFromTurn keeps strategy 7-to-8 overflow as a local consolidation suggestion with retained bullets", () => {
+  const helpers = buildHelpers(true);
+  const previousStatements = [
+    "Recurring revenue",
+    "Expert-led delivery",
+    "Decision-maker access",
+    "Complex organisations only",
+    "Operational simplicity",
+    "Measurable delivery",
+    "Long-term partnerships",
+  ];
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "strategy",
+    state: {} as any,
+    activeSpecialist: "Strategy",
+    previousSpecialist: {
+      statements: previousStatements,
+      strategy: previousStatements.join("\n"),
+    },
+    specialistResult: {
+      message: "This is the consolidation suggestion to keep the strategy focused.",
+      refined_formulation: [
+        "Recurring revenue",
+        "Expert-led delivery",
+        "Decision-maker access",
+        "Complex organisations only",
+        "Operational simplicity",
+        "Measurable delivery",
+        "Long-term partnerships with built-in client education",
+      ].join("\n"),
+      statements: [
+        "Recurring revenue",
+        "Expert-led delivery",
+        "Decision-maker access",
+        "Complex organisations only",
+        "Operational simplicity",
+        "Measurable delivery",
+        "Long-term partnerships with built-in client education",
+      ],
+    },
+    userTextRaw: "Add client education as a separate strategic focus.",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice?.mode, "list");
+  assert.equal(result.wordingChoice?.user_label, "This is your compact wording:");
+  assert.equal(result.wordingChoice?.suggestion_label, "This is my suggestion:");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.deepEqual((result.specialist as Record<string, unknown>).statements, previousStatements);
+  assert.match(String(result.wordingChoice?.instruction || ""), /These points already stay in the final list:/);
+  assert.match(String(result.wordingChoice?.instruction || ""), /Recurring revenue/);
+  assert.match(String(result.wordingChoice?.instruction || ""), /Long-term partnerships/);
+});
+
 test("buildWordingChoiceFromTurn supports 1 user sentence versus 2 suggestion bullets as one compare unit", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
@@ -680,6 +736,72 @@ test("buildWordingChoiceFromTurn supports 3 user bullets versus 1 compact sugges
     "We keep each other accountable for delivery.",
   ]);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+});
+
+test("buildWordingChoiceFromTurn keeps free-text strategy proposals pending instead of committing them", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "strategy",
+    state: {} as any,
+    activeSpecialist: "Strategy",
+    previousSpecialist: {
+      statements: ["Recurring revenue"],
+      strategy: "Recurring revenue",
+    },
+    specialistResult: {
+      message: "I think I understand what you mean.",
+      refined_formulation: [
+        "Recurring revenue",
+        "Client education inside long-term programs",
+      ].join("\n"),
+      statements: [
+        "Recurring revenue",
+        "Client education inside long-term programs",
+      ],
+    },
+    userTextRaw:
+      "I do not want to run loose workshops anymore. It should really become something that strengthens the long-term programs and helps clients apply the work themselves.",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice?.mode, "list");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.deepEqual((result.specialist as Record<string, unknown>).statements, ["Recurring revenue"]);
+  assert.equal(String((result.specialist as Record<string, unknown>).strategy || ""), "Recurring revenue");
+});
+
+test("buildWordingChoiceFromTurn keeps free-text rules proposals pending and local", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "rulesofthegame",
+    state: {} as any,
+    activeSpecialist: "RulesOfTheGame",
+    previousSpecialist: {
+      statements: ["We communicate proactively."],
+      rulesofthegame: "We communicate proactively.",
+    },
+    specialistResult: {
+      message: "I think I understand what you mean.",
+      refined_formulation: [
+        "We communicate proactively.",
+        "We raise quality concerns before delivery leaves the building.",
+      ].join("\n"),
+      statements: [
+        "We communicate proactively.",
+        "We raise quality concerns before delivery leaves the building.",
+      ],
+    },
+    userTextRaw:
+      "If something is not right, I want the team to say it before it reaches the client instead of patching it later.",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice?.mode, "list");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.deepEqual((result.specialist as Record<string, unknown>).statements, ["We communicate proactively."]);
+  assert.equal(String((result.specialist as Record<string, unknown>).rulesofthegame || ""), "We communicate proactively.");
 });
 
 test("buildWordingChoiceFromTurn keeps strategy anchorless 3-to-4 rewrites in grouped compare mode", () => {

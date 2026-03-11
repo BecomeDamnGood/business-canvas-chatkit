@@ -91,6 +91,18 @@ export function shouldSuppressPromptForWordingChoice(params: {
   );
 }
 
+export function shouldRenderPurposeStepIntroVideo(params: {
+  currentStep?: string | null;
+  showStepIntroChrome?: boolean;
+  wordingChoiceActive?: boolean;
+  lang?: string | null;
+}): boolean {
+  if (String(params.currentStep || "").trim() !== "purpose") return false;
+  if (params.showStepIntroChrome !== true) return false;
+  if (params.wordingChoiceActive === true) return false;
+  return Boolean(purposeStepVideoUrlForLang(params.lang));
+}
+
 function actionContractActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
   const uiPayload = toRecord(resultData.ui);
   const actionContract = toRecord(uiPayload.action_contract);
@@ -1091,9 +1103,12 @@ export function render(overrideToolOutput?: unknown): void {
       !isDreamDirectionView &&
       !wordingChoiceActive;
     const shouldAppendPurposeStepVideo =
-      current === "purpose" &&
-      showStepIntroChrome &&
-      !wordingChoiceActive;
+      shouldRenderPurposeStepIntroVideo({
+        currentStep: current,
+        showStepIntroChrome,
+        wordingChoiceActive,
+        lang,
+      });
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
     const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);

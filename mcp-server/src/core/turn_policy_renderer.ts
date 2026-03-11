@@ -240,6 +240,13 @@ const SINGLE_VALUE_STRUCTURED_CONTENT_STEPS = new Set([
   "dream",
 ]);
 
+const PURPOSE_INTRO_VIDEO_MENU_IDS = new Set([
+  "PURPOSE_MENU_INTRO",
+  "PURPOSE_MENU_EXPLAIN",
+  "PURPOSE_MENU_POST_ASK",
+  "PURPOSE_MENU_EXAMPLES",
+]);
+
 function menuRequiresKnownOutput(menuId: string): boolean {
   const actions = Array.isArray(ACTIONCODE_REGISTRY.menus[menuId]) ? ACTIONCODE_REGISTRY.menus[menuId] : [];
   if (actions.some((code) => isConfirmActionCode(code))) return true;
@@ -247,6 +254,18 @@ function menuRequiresKnownOutput(menuId: string): boolean {
     const upper = String(code || "").trim().toUpperCase();
     return upper.includes("_REFINE_") || upper.includes("_POSTREFINE_");
   });
+}
+
+function isSemanticPurposeIntroVisibleState(params: {
+  stepId: string;
+  status: TurnOutputStatus;
+  menuId: string;
+  wordingPending: boolean;
+}): boolean {
+  if (params.stepId !== "purpose") return false;
+  if (params.wordingPending) return false;
+  if (params.status === "valid_output") return false;
+  return PURPOSE_INTRO_VIDEO_MENU_IDS.has(String(params.menuId || "").trim());
 }
 
 function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
@@ -1566,7 +1585,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const specialist = params.specialist || {};
   const prev = params.previousSpecialist || {};
   const sourceAction = String((specialist as any).action || "").trim().toUpperCase();
-  const showStepIntroChrome = stepId !== "step_0" && sourceAction === "INTRO";
+  const legacyShowStepIntroChrome = stepId !== "step_0" && sourceAction === "INTRO";
   const activeSpecialist = String((state as any).active_specialist ?? "").trim();
   const stepLabel = offTopicStepLabel(stepId, state);
   const companyName = companyNameForPrompt(state);
@@ -1828,6 +1847,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
       ? "canonical"
       : "picker";
+  const showStepIntroChrome =
+    stepId === "purpose"
+      ? isSemanticPurposeIntroVisibleState({
+          stepId,
+          status: effectiveStatus,
+          menuId,
+          wordingPending,
+        }) || legacyShowStepIntroChrome
+      : legacyShowStepIntroChrome;
   const headline = contractHeadlineForState({
     state,
     stepId,

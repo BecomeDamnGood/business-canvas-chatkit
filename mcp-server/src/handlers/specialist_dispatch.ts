@@ -671,11 +671,14 @@ export async function callSpecialistStrict(
   }
 
   if (specialist === PRODUCTSSERVICES_SPECIALIST) {
+    const lastResult = (state as any).last_specialist_result || {};
+    const statementsFromLast = Array.isArray(lastResult.statements) ? lastResult.statements : [];
     const plannerInput = buildProductsServicesSpecialistInput(
       userMessage,
       (state as any).intro_shown_for_step,
       String(decision.current_step || PRODUCTSSERVICES_STEP_ID),
       lang,
+      statementsFromLast,
       plannerContextBlock
     );
 

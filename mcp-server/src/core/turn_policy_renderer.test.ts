@@ -710,6 +710,78 @@ test("single-value valid output from user input keeps autosuggest heading until 
   }
 });
 
+test("purpose semantic intro chrome stays visible for intro-family menus even without INTRO source action", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "I can ask three questions to help you define the Purpose.",
+      question: "What deeper reason makes this business matter to you?",
+      ui_contract_id: buildUiContractId("purpose", "ASK", "PURPOSE_MENU_POST_ASK"),
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(String((rendered.specialist as any).ui_show_step_intro_chrome || ""), "true");
+  assert.equal(rendered.contractId, "purpose:no_output:PURPOSE_MENU_POST_ASK");
+});
+
+test("purpose semantic intro chrome stays hidden for refine states", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+  (state as any).provisional_by_step = { purpose: canonical };
+  (state as any).provisional_source_by_step = { purpose: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: canonical,
+      question: "",
+      purpose: canonical,
+      refined_formulation: canonical,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(String((rendered.specialist as any).ui_show_step_intro_chrome || ""), "");
+  assert.equal(rendered.contractId, "purpose:valid_output:PURPOSE_MENU_REFINE");
+});
+
+test("purpose semantic intro chrome stays hidden while wording-choice is pending", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "Kies welke formulering je wilt gebruiken.",
+      question: "",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "purpose",
+      wording_choice_user_raw: "Ik wil iets goeds doen.",
+      wording_choice_user_normalized: "Ik wil iets goeds doen.",
+      wording_choice_agent_current: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(String((rendered.specialist as any).ui_show_step_intro_chrome || ""), "");
+});
+
 test("targetgroup valid output keeps a single canonical heading/value block", () => {
   const state = getDefaultState();
   const canonical = "Innovatieve mkb-bedrijven met complexe digitaliseringsvraagstukken.";

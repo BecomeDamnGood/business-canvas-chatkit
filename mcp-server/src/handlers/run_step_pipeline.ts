@@ -24,6 +24,13 @@ import {
 } from "./run_step_type_guards.js";
 import { normalizePendingPickerSpecialistContract } from "./run_step_wording_picker_contract.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
+import {
+  applyBusinessListTurnResolution,
+  isBusinessListStep,
+  readBusinessListReferenceItems,
+  resolveBusinessListTurn,
+  type BusinessListTurnResolution,
+} from "./run_step_business_list_turn.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 type RunStepPipelineFlatPorts<TPayload> =
@@ -555,12 +562,27 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const stateForSpecialist = dreamCurrentValueFeedback
       ? stateWithDreamCurrentValueFeedbackContext(state, currentDreamValueForFeedback, userMessage)
       : state;
+    const businessListTurnResolution: BusinessListTurnResolution | null =
+      isBusinessListStep(currentStepId) &&
+      !String(params.actionCodeRaw || "").trim() &&
+      String(userMessage || "").trim() !== ""
+        ? resolveBusinessListTurn({
+            stepId: currentStepId,
+            userMessage,
+            referenceItems: readBusinessListReferenceItems(stateForSpecialist, currentStepId),
+          })
+        : null;
+    const userMessageForSpecialist =
+      businessListTurnResolution &&
+      businessListTurnResolution.kind !== "add"
+        ? businessListTurnResolution.routePrompt
+        : userMessage;
     let decision1 = params.decideOrchestration(stateForSpecialist, userMessage);
     const showSessionIntro = String(decision1.show_session_intro || "");
 
     const call1 = await deps.callSpecialistStrictSafe(
-      { model: params.model, state: stateForSpecialist, decision: decision1, userMessage },
-      deps.buildRoutingContext(userMessage),
+      { model: params.model, state: stateForSpecialist, decision: decision1, userMessage: userMessageForSpecialist },
+      deps.buildRoutingContext(userMessageForSpecialist),
       stateForSpecialist
     );
     if (!call1.ok) return finalizePipelinePayload(call1.payload);
@@ -569,6 +591,18 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     let attempts = call1.value.attempts;
     let specialistResult = asRecord(call1.value.specialistResult);
     const stateRecord = asStateRecord(stateForSpecialist);
+    if (
+      businessListTurnResolution &&
+      businessListTurnResolution.kind !== "add" &&
+      String(decision1.current_step || "").trim() === currentStepId
+    ) {
+      specialistResult = applyBusinessListTurnResolution({
+        stepId: currentStepId,
+        resolution: businessListTurnResolution,
+        specialistResult,
+      });
+      specialistResult.__business_list_turn_preclassified = "true";
+    }
 
     let autoSuggestApplied = false;
     const shouldRunAutoSuggest =
@@ -983,7 +1017,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
     const wordingIntentEligible = isWordingChoiceIntentEligible(asRecord(specialistResult));
     const skipWordingChoiceForTurn =
       submittedTextIntent === "feedback_on_current_value" ||
-      String((specialistResult as Record<string, unknown>).__dream_policy_skip_wording_choice || "").trim() === "true";
+      String((specialistResult as Record<string, unknown>).__dream_policy_skip_wording_choice || "").trim() === "true" ||
+      String((specialistResult as Record<string, unknown>).__business_list_turn_preclassified || "").trim() === "true";
     if (
       params.wordingChoiceEnabled &&
       !suppressWordingChoiceForAutoSuggest &&

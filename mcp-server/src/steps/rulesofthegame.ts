@@ -151,6 +151,12 @@ You receive a single string that contains:
 - PLANNER_INPUT: <string> (contains CURRENT_STEP_ID and USER_MESSAGE)
 Assume chat history contains Dream, Purpose, Big Why, Role, Entity, Strategy. Rules must be consistent with that context, but do not invent new facts.
 
+Route tokens for local list editing (HARD)
+- "__BUSINESS_LIST_REMOVE__": remove only the resolved Rule(s) of the Game from PREVIOUS_STATEMENTS and keep the remaining order unchanged
+- "__BUSINESS_LIST_REPLACE__": replace only the resolved Rule of the Game and keep the rest unchanged
+- "__BUSINESS_LIST_EDIT__": rewrite only the resolved Rule of the Game according to EDIT_INSTRUCTION; do not append the instruction as a new rule
+- "__BUSINESS_LIST_CLARIFY__": the runtime already detected that the referenced rule is unclear; ask one short clarification question and keep PREVIOUS_STATEMENTS unchanged
+
 Output schema fields (must always be present)
 {
   "action": "INTRO" | "ASK" | "REFINE"  | "ESCAPE",
@@ -362,28 +368,55 @@ If the user has not provided a list yet:
 
 When the user provides rules (one line or multiple lines)
 
-Automatic acceptance rule (HARD)
-- When you abstract an operational rule into a broader Rule of the Game, the abstracted rule is automatically accepted and added to statements. Do not ask for confirmation. Present it as the accepted rule in the message field, then ask if there are more rules to add.
-- CRITICAL: When you abstract an operational rule, you MUST add the abstracted rule to the statements array in your output. The statements field in your JSON output must contain: statements must be computed using MERGE_OR_APPEND(PREVIOUS_STATEMENTS, new_rules). Never show the abstracted rule only in the message field without adding it to statements.
-- Message field for abstracted rules must contain EXACTLY this structure (example below):
-  - Start with the refinement message: "Thanks, this is a good intent. To make it a usable Rule of the Game, we need it a bit more concrete. Is the underlying intention maybe: [abstracted rule]? That way it guides behavior in [brief explanation of broader applicability, e.g., 'all work, not just double-checking' or 'all commitments, not just start times']." 
-  - Then add an empty line
-  - Then show ALL statements from the statements array, starting with: "So far we have these [X] Rules of the Game:" (where X = statements.length after adding the new abstracted rule) followed by an empty line, then a bullet list of ALL statements from the statements array (including the new abstracted one), each on a new line with a bullet: "• [statement text]"
-  - Then add an empty line
-  - Then add: "If you want to adjust this rule, let me know."
-  
-  Example output structure (if PREVIOUS_STATEMENTS = ["We are punctual"] and new abstracted rule = "We focus on quality"):
-  
-  Thanks, this is a good intent. To make it a usable Rule of the Game, we need it a bit more concrete. Is the underlying intention maybe: We focus on quality? That way it guides behavior in all work, not just double-checking.
-  
-  So far we have these 2 Rules of the Game:
-  
-  • We are punctual
-  • We focus on quality
-  
-  If you want to adjust this rule, let me know.
-  
-  CRITICAL: This structure MUST be followed EVERY TIME, even if there is only 1 statement. Always show "So far we have these [X] Rules of the Game:" followed by ALL statements as bullets.
+Default evaluation mode (HARD)
+- Rules of the Game are incremental and conservative by default.
+- Treat PREVIOUS_STATEMENTS as the canonical accepted list.
+- Preserve accepted rules verbatim unless a small local merge or compliant wording repair is clearly needed.
+- A rough sentence, a long explanation, or one extra rule is NOT permission to rewrite the whole list.
+- Only generate a full 3 to 5 rule set when:
+  1) the user explicitly asks for a full rewrite or consolidation,
+  2) local matching is genuinely not defensible anymore, or
+  3) you must consolidate because the list would otherwise exceed 5 rules.
+- Free-text commands like remove, replace, rewrite, adjust, or make more specific are edit instructions against the existing rules list, not new rules by themselves.
+
+Route-only local edit handling (HARD)
+- When USER_MESSAGE starts with "__BUSINESS_LIST_REMOVE__":
+  - action="ASK"
+  - remove only the resolved target rule(s) from PREVIOUS_STATEMENTS
+  - statements: updated canonical list
+  - rulesofthegame: updated canonical list rendered as bullets with "• "
+  - refined_formulation: same updated bullet list
+  - message: short confirmation that the rule was removed
+  - question: ask what else should be sharpened in the Rules of the Game
+- When USER_MESSAGE starts with "__BUSINESS_LIST_REPLACE__":
+  - action="ASK"
+  - replace only the resolved target rule
+  - keep all unrelated rules unchanged
+  - statements: updated canonical list
+  - rulesofthegame: updated canonical list rendered as bullets with "• "
+  - refined_formulation: same updated bullet list
+  - message: short confirmation that the rule was updated
+  - question: ask what else should be sharpened in the Rules of the Game
+- When USER_MESSAGE starts with "__BUSINESS_LIST_EDIT__":
+  - rewrite only the resolved target rule from PREVIOUS_STATEMENTS
+  - keep all unrelated rules unchanged
+  - never append EDIT_INSTRUCTION as a new rule
+  - if the rewrite is clear enough, output action="ASK" and update statements immediately
+  - if the rewrite is still unclear, output action="REFINE" with only the local replacement proposal and keep statements unchanged
+- When USER_MESSAGE starts with "__BUSINESS_LIST_CLARIFY__":
+  - action="ASK"
+  - message: briefly state that it is not yet clear which current rule is meant
+  - question: ask the user to quote or name the exact current Rule of the Game to adjust or remove
+  - statements: keep PREVIOUS_STATEMENTS unchanged
+  - rulesofthegame: keep the current accepted list
+  - refined_formulation: keep the current accepted list
+
+Local rule proposal rule (HARD)
+- If the user submits one new rule or one rough sentence, reformulate ONLY that new material, or the smallest overlapping cluster that must change with it.
+- Keep unrelated accepted rules unchanged.
+- If the user's wording is close and compliant, accept it directly with minimal normalization.
+- If the user's wording is close but not yet compliant, propose the closest compliant wording first instead of replacing the whole list.
+- Do not split one user rule into multiple rules unless that split is necessary to preserve meaning.
 
 STATEMENTS CANONICAL LIST (HARD)
 - PREVIOUS_STATEMENTS is the canonical list from the last turn.
@@ -411,6 +444,15 @@ USER LISTENING RULE (HARD)
   3) Provide ONE proposed alternative phrasing that is more usable, but do not replace the accepted rule unless the user explicitly asks to replace it.
 - Never ignore or override a specific user request. Default to accepting, then advising.
 
+Free-text interpretation rule (HARD)
+- If the user gives a story, long free text, or operational explanation that is not yet a clean rule:
+  - output action="REFINE"
+  - message must first explicitly signal interpretation, for example with the localized equivalent of "I think I understand what you mean" or "What do you think of this suggestion?"
+  - refined_formulation must contain ONLY the interpreted rule proposal in bullet form, kept as close as possible to the user's meaning
+  - rulesofthegame=""
+  - statements must stay PREVIOUS_STATEMENTS unchanged until the user accepts or further adjusts the proposal
+- Do NOT silently commit an interpreted proposal as if it were already final.
+
 Step 1: Normalization and abstraction (HARD)
 
 First determine input type:
@@ -418,8 +460,6 @@ First determine input type:
 If user input already sounds like Rules of the Game, keep wording and only normalize formatting.
 
 If user input is operational policies, thresholds, SLAs, checklists, or exception free procedures, convert them into broader Rules of the Game.
-
-In all cases: output 3 to 5 bullets only.
 
 Formatting: Convert the user's list into bullet format using "• " per line.
 - If keeping wording: trim extra spaces, normalize obvious typos only if they do not change meaning
@@ -432,35 +472,17 @@ Formatting: Convert the user's list into bullet format using "• " per line.
 Step 2: Extract individual rules and add to statements
 - Split the normalized/abstracted list into individual rules (split on line breaks).
 - Extract each rule as a separate statement.
-- CRITICAL OUTPUT REQUIREMENT: When you abstract operational rules into broader Rules of the Game, you MUST output statements computed using MERGE_OR_APPEND(PREVIOUS_STATEMENTS, new_rules) in your JSON response. The statements array is the canonical list that the UI displays. Do not only show the abstracted rule in the message field-it must also be in the statements array.
-  
-  Example: If PREVIOUS_STATEMENTS = ["We are punctual"] and you abstract "We double-check all work" to "We focus on quality", then statements = ["We are punctual", "We focus on quality"] and message MUST start with:
-  
-  So far we have these 2 Rules of the Game:
-  
-  • We are punctual
-  • We focus on quality
-  
-  [then refinement message]
-  
-  
-  Example: If PREVIOUS_STATEMENTS = ["We are punctual"] and user adds "We are always warm and friendly", then statements = ["We are punctual", "We are always warm and friendly"] and message MUST start with:
-  
-  So far we have these 2 Rules of the Game:
-  
-  • We are punctual
-  • We are always warm and friendly
-  
-  CRITICAL: This structure MUST be followed EVERY TIME, even if PREVIOUS_STATEMENTS was empty. If this is the first statement, X = 1 and show "So far we have these 1 Rules of the Game:" followed by that one statement.
+- CRITICAL OUTPUT REQUIREMENT: When a new rule is accepted as-is or after a minimal local rewrite, update statements using MERGE_OR_APPEND(PREVIOUS_STATEMENTS, new_rules).
+- If you are only proposing a rewrite or interpretation and the user has not accepted it yet, keep statements equal to PREVIOUS_STATEMENTS.
 - Distinctness rule (HARD): Rules must be clearly distinct in meaning. Do not add a new rule that is a near-duplicate of an existing one (e.g. "We listen to each other" and "We value each other's contributions" are too similar; merge into one formulation or drop one). If the user suggests something that overlaps strongly with an existing rule, refine or merge instead of adding a second rule.
-- Add all extracted rules to statements using MERGE_OR_APPEND(PREVIOUS_STATEMENTS, new_rules)
 - After adding: check statements.length
-  - If statements.length > 5: add advice to message to reduce to maximum 5 Rules of the Game for manageability (advisory, not a hard limit)
+  - If statements.length > 5, do NOT silently overwrite the list. Output a consolidation suggestion that explains briefly why the list must be reduced and propose the smallest defensible consolidation.
+  - In that consolidation suggestion, keep rulesofthegame="" and keep statements equal to PREVIOUS_STATEMENTS until the user accepts the proposed 3 to 5 rule variant.
 
 Dynamic prompt text rule (HARD)
 
 CRITICAL FIELD SEPARATION RULE:
-- The "message" field should only contain recap/information (e.g., "So far we have these X Rules of the Game:" with the list).
+- The "message" field should only contain concise recap/information or concise proposal feedback. Do not dump the whole list there unless a final confirmation screen is explicitly needed.
 
 - The prompt text in the question field must be dynamic based on PREVIOUS_STATEMENT_COUNT:
   - If PREVIOUS_STATEMENT_COUNT === 0: "Do you have more Rules of the Game to add?" (localized)
@@ -496,39 +518,23 @@ REFINE TRIGGER: COMPETITIVE CLAIMS (HARD)
 
 ASK output (when acceptable)
 - action="ASK"
-- message=""
-- refined_formulation: bullet list of the rules
-- rulesofthegame: contains the final 3 to 5 Rules of the Game phrased at principle level. If the user provided operational rules, do not store them as final rules. Instead store the translated Rules of the Game. Same bullet list as refined_formulation.
-- question: ask whether this fully captures the Rules of the Game and whether to continue
+- message: short confirmation or merge feedback only. Do not rewrite the full list in message.
+- refined_formulation=""
+- rulesofthegame=""
+- question: ask whether there are more Rules of the Game to add, unless the user explicitly signaled that the set is complete.
+- statements: updated list after MERGE_OR_APPEND when the new rule is accepted
 
 REFINE output (when refinement is truly needed)
 HARD rule: do not lecture, do not reject the whole list.
 - action="REFINE"
-- message: CRITICAL: MUST ALWAYS start with the friendly refinement message: "Thanks, this is a good intent. To make it a usable Rule of the Game, we need it a bit more concrete. Is the underlying intention maybe: [refined_formulation]? That way it guides behavior in [brief explanation of broader applicability]." Then add an empty line, then "So far we have these [X] Rules of the Game:" (where X = statements.length) followed by an empty line, then a bullet list of ALL statements from the statements array, each on a new line with a bullet: "• [statement text]". Then add an empty line, then: "If you want to adjust this rule, let me know."
-  
-  Example: If statements = ["We are punctual", "We focus on quality"] and refined_formulation = "We strive for excellence", message MUST start with:
-  
-  [refinement message]
-  
-  So far we have these 2 Rules of the Game:
-  
-  • We are punctual
-  • We focus on quality
-  
-  If you want to adjust this rule, let me know.
-- refined_formulation: propose a minimally edited version of ONLY ONE rule (not the whole list), keeping the original intention, making it more usable.
-- rulesofthegame: keep the full original bullet list as provided (not the rewrite).
+- message: start with a friendly, concise interpretation or refinement signal in the user's language, such as the equivalent of "I think I understand what you mean" or "What do you think of this suggestion?", then briefly explain why the local rewrite helps.
+- refined_formulation: propose a minimally edited version of ONLY the affected rule or smallest affected cluster, keeping the original intention and making it more usable.
+- rulesofthegame=""
 - question=""
+- statements: keep PREVIOUS_STATEMENTS unchanged until the user accepts the proposal
 
 If the user accepts the refined rule (e.g., says "yes", "fits", "good", etc.):
 - action="ASK"
-  
-  Example: If statements = ["We are punctual", "We strive for excellence"] after accepting refined rule, message MUST start with:
-  
-  So far we have these 2 Rules of the Game:
-  
-  • We are punctual
-  • We strive for excellence
 - refined_formulation=""
 - question=""
 - rulesofthegame=""
@@ -555,6 +561,11 @@ If the user explicitly asks to adjust a rule (e.g., "make it broader", "make it 
 - Then abstract/adjust as needed and add the adjusted version to statements, replacing the old version if it was already in statements.
 - refined_formulation=""
 - rulesofthegame=""
+
+Full-set fallback rule (HARD)
+- A full 3 to 5 rule rewrite is the exception, not the default.
+- Use it only when the user explicitly asks for a complete rewrite/consolidation or when the current input cannot be mapped locally with enough confidence.
+- When you use this fallback, say briefly that you are proposing a full sharpened set because local mapping was not reliable enough.
 
 ${RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT}
 `;
