@@ -5,10 +5,12 @@ import {
   actionRoleForStateKey,
   buildInitialDreamScoringScores,
   dreamExerciseButtonLabelKeyForState,
+  parseWordingChoiceInstruction,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
   shouldRetainDreamScoringClientScores,
   shouldRenderPurposeStepIntroVideo,
+  shouldShowTextInputForWordingChoice,
   shouldSuppressPromptForWordingChoice,
   shouldSuppressMainCardForWordingChoice,
 } from "../ui/lib/ui_render.js";
@@ -78,6 +80,45 @@ test("shouldSuppressPromptForWordingChoice hides the prompt while wording-choice
     }),
     false
   );
+});
+
+test("shouldShowTextInputForWordingChoice hides free input while a wording-choice picker is active", () => {
+  assert.equal(
+    shouldShowTextInputForWordingChoice({
+      textSubmitAvailable: true,
+      uiViewVariant: "wording_choice",
+      wordingChoiceActive: true,
+      requireWordingPick: true,
+    }),
+    false
+  );
+  assert.equal(
+    shouldShowTextInputForWordingChoice({
+      textSubmitAvailable: true,
+      uiViewVariant: "default",
+      wordingChoiceActive: false,
+      requireWordingPick: false,
+    }),
+    true
+  );
+});
+
+test("parseWordingChoiceInstruction separates retained bullets from the picker instruction", () => {
+  const parsed = parseWordingChoiceInstruction([
+    "These points already stay in the final list:",
+    "",
+    "• Strategisch bedrijfs- en communicatieadvies",
+    "• Traditionele communicatiediensten (zoals DTP, posters, campagnes)",
+    "",
+    "Choose the version that fits best for the remaining difference.",
+  ].join("\n"));
+
+  assert.equal(parsed.retainedHeading, "These points already stay in the final list:");
+  assert.deepEqual(parsed.retainedItems, [
+    "Strategisch bedrijfs- en communicatieadvies",
+    "Traditionele communicatiediensten (zoals DTP, posters, campagnes)",
+  ]);
+  assert.equal(parsed.instructionText, "Choose the version that fits best for the remaining difference.");
 });
 
 test("resolveActionCodeForStateKey falls back to action contract when lean state omits start action", () => {

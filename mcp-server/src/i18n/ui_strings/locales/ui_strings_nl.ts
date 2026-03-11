@@ -173,6 +173,7 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "optionsDisplayError": "We kunnen deze opties nu niet veilig weergeven. Probeer het opnieuw.",
     "ppt.heading.dream": "Droom",
     "ppt.heading.entity": "Entiteit",
+    "ppt.heading.bigwhy": "Grote Waarom",
     "ppt.heading.productsservices": "Producten en Diensten",
     "ppt.heading.purpose": "Bestaansreden",
     "ppt.heading.role": "Rol",
@@ -183,6 +184,9 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "entity.suggestion.template": "Wat denk je van de formulering:\n{0}",
     "presentation.error": "Het genereren van de presentatie is mislukt. Controleer of het sjabloon bestaat en probeer het opnieuw.",
     "presentation.ready": "Je presentatie is klaar.",
+    "presentation.recapIntro": "Dit is wat je zei:",
+    "presentation.recapVisibleFeedback":
+      "De samenvatting staat al in beeld. Geef aan wat je wilt aanpassen of maak nu je presentatie.",
     "prestart.headline": "Bouw stap voor stap een compleet Business Model en Strategie Canvas.",
     "prestart.loading": "Vertaling laden…",
     "prestart.meta.how.label": "Hoe het werkt",

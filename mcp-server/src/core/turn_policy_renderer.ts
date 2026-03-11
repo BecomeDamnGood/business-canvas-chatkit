@@ -16,6 +16,7 @@ import {
   strategyStatementsFromSources,
 } from "./turn_policy/strategy_helpers.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
+import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
 import {
   evaluateRulesRuntimeGate,
   RULESOFTHEGAME_MAX_RULES,
@@ -872,6 +873,13 @@ function sectionAwareRecapText(raw: string, section: RecapSectionKey): string {
   return dedupeListItems(candidateLines).join("\n").trim();
 }
 
+function productsServicesItemsFromRecap(raw: string): string[] {
+  const scoped = sectionAwareRecapText(raw, "productsservices") || String(raw || "");
+  return productsServicesItemsFromText(scoped, {
+    comparableText,
+  });
+}
+
 function splitCamelTitleItems(raw: string): string[] {
   const tokens = String(raw || "")
     .replace(/\r/g, " ")
@@ -895,22 +903,6 @@ function splitCamelTitleItems(raw: string): string[] {
   if (current.length > 0) chunks.push(current.join(" ").trim());
   const cleaned = chunks.map((line) => String(line || "").trim()).filter(Boolean);
   return cleaned.length >= 2 ? cleaned : [];
-}
-
-function productsServicesItemsFromRecap(raw: string): string[] {
-  const scoped = sectionAwareRecapText(raw, "productsservices") || String(raw || "");
-  const bulletItems = extractBulletStatements(scoped);
-  if (bulletItems.length >= 1) return dedupeListItems(bulletItems);
-  const punctSplit = String(scoped || "")
-    .replace(/\r/g, "\n")
-    .split(/[;\n,]+/)
-    .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
-    .filter(Boolean);
-  if (punctSplit.length >= 2) return dedupeListItems(punctSplit);
-  const titleSplit = splitCamelTitleItems(scoped);
-  if (titleSplit.length >= 2) return dedupeListItems(titleSplit);
-  const single = String(scoped || "").trim();
-  return single ? [single] : [];
 }
 
 function genericListItemsFromRecap(raw: string, section?: RecapSectionKey): string[] {

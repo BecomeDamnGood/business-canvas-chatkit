@@ -275,6 +275,7 @@ test("applyStateUpdate canonicalizes presentation recap into section blocks with
       current_step: "presentation",
       step_0_final: "Venture: consultancy | Name: Mindd | Status: existing",
       dream_final: "Build calm around complex choices.",
+      bigwhy_final: "Create calm through honest communication.",
       strategy_final: "• Focus on trusted advisory\n• Win on clarity",
       productsservices_final: "• Strategy sessions\n• Decision frameworks",
       rulesofthegame_final: "• Tell the truth\n• Keep it practical",
@@ -290,9 +291,40 @@ test("applyStateUpdate canonicalizes presentation recap into section blocks with
 
   const value = String((next as any).provisional_by_step?.presentation || "");
   assert.match(value, /^This is what you said:/);
-  assert.match(value, /\n\nVenture: consultancy\nName: Mindd\n\nDream: Build calm around complex choices\./);
+  assert.match(value, /\n\nVenture:\nconsultancy\n\nName:\nMindd\n\nDream:\nBuild calm around complex choices\./);
+  assert.match(value, /\n\nBig Why:\nCreate calm through honest communication\./);
   assert.match(value, /\n\nStrategy:\n• Focus on trusted advisory\n• Win on clarity/);
   assert.match(value, /\n\nProducts and Services:\n• Strategy sessions\n• Decision frameworks/);
   assert.match(value, /\n\nRules of the Game:\n• Tell the truth\n• Keep it practical/);
   assert.equal(String((next as any).last_specialist_result?.presentation_brief || ""), value);
+});
+
+test("applyStateUpdate canonicalizes presentation recap with Dutch localized headings", () => {
+  const helpers = buildHelpers();
+  const next = helpers.applyStateUpdate({
+    prev: {
+      current_step: "presentation",
+      ui_strings: {
+        "presentation.recapIntro": "Dit is wat je zei:",
+        "recap.label.venture": "Type bedrijf",
+        "recap.label.name": "Naam",
+        "ppt.heading.bigwhy": "Grote Waarom",
+      },
+      step_0_final: "Venture: agency | Name: Mindd | Status: existing",
+      bigwhy_final: "Mensen verdienen toegang tot eerlijke verhalen.",
+    } as any,
+    decision: { current_step: "presentation", specialist_to_call: "Presentation" } as any,
+    specialistResult: {
+      presentation_brief: "flattened recap",
+      refined_formulation: "",
+    },
+    showSessionIntroUsed: "false",
+  });
+
+  const value = String((next as any).provisional_by_step?.presentation || "");
+  assert.match(value, /^Dit is wat je zei:/);
+  assert.match(value, /\n\nType bedrijf:\nagency\n\nNaam:\nMindd/);
+  assert.match(value, /\n\nGrote Waarom:\nMensen verdienen toegang tot eerlijke verhalen\./);
+  assert.equal(value.includes("This is what you said:"), false);
+  assert.equal(value.includes("grote waarom:"), false);
 });

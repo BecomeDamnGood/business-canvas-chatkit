@@ -101,6 +101,19 @@ test("wordingSelectionMessage normalizes explicit products/services selection to
   assert.equal((output.match(/^• /gm) || []).length, 4);
 });
 
+test("wordingSelectionMessage keeps a products/services item with internal commas intact", () => {
+  const helpers = buildHelpers();
+  const output = helpers.wordingSelectionMessage(
+    "productsservices",
+    { business_name: "Mindd" } as any,
+    "ProductsAndServices",
+    "Traditionele communicatiediensten (zoals DTP, posters, campagnes)"
+  );
+
+  assert.equal((output.match(/^• /gm) || []).length, 1);
+  assert.match(output, /• Traditionele communicatiediensten \(zoals DTP, posters, campagnes\)/);
+});
+
 test("wordingSelectionMessage normalizes explicit rules selection to bullets", () => {
   const helpers = buildHelpers();
   const runOn = "We leveren op afspraken We communiceren direct We kiezen kwaliteit boven snelheid";

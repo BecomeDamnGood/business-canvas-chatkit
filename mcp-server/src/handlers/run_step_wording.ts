@@ -698,13 +698,15 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         .map((line) => String(line || "").trim())
         .filter(Boolean);
       if (sentenceItems.length >= 2) return mergeListItems([], sentenceItems);
-      const commaItems = String(userRaw || "")
-        .replace(/\r/g, "\n")
-        .split(/\s*,\s*/)
-        .map((line) => String(line || "").trim())
-        .filter(Boolean);
-      if (commaItems.length >= 2 && (suggestionItems.length >= 2 || commaItems.length >= 3)) {
-        return mergeListItems([], commaItems);
+      if (stepId !== deps.productsservicesStepId) {
+        const commaItems = String(userRaw || "")
+          .replace(/\r/g, "\n")
+          .split(/\s*,\s*/)
+          .map((line) => String(line || "").trim())
+          .filter(Boolean);
+        if (commaItems.length >= 2 && (suggestionItems.length >= 2 || commaItems.length >= 3)) {
+          return mergeListItems([], commaItems);
+        }
       }
     }
     if (stepId !== deps.dreamStepId || items.length !== 1) return items;
@@ -1042,6 +1044,126 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     };
   }
 
+  function buildOverlapConsolidationComparePlan(params: {
+    baseItems: string[];
+    userItems: string[];
+    suggestionItems: string[];
+    deltaUserItems: string[];
+    preferDeltaGrouping: boolean;
+  }): BusinessListComparePlan | null {
+    if (!params.preferDeltaGrouping) return null;
+    const baseItems = mergeListItems([], params.baseItems);
+    const userItems = mergeListItems([], params.userItems);
+    const suggestionItems = mergeListItems([], params.suggestionItems);
+    const deltaUserItems = mergeListItems([], params.deltaUserItems);
+    if (baseItems.length === 0 || userItems.length < 2 || suggestionItems.length === 0 || deltaUserItems.length === 0) {
+      return null;
+    }
+
+    const baseKeys = new Set(baseItems.map((line) => deps.canonicalizeComparableText(line)).filter(Boolean));
+    const deltaKeys = new Set(deltaUserItems.map((line) => deps.canonicalizeComparableText(line)).filter(Boolean));
+    if (baseKeys.size === 0 || deltaKeys.size === 0) return null;
+
+    let best:
+      | {
+          suggestionIndex: number;
+          userIndexes: number[];
+          averageScore: number;
+          strongestBaseScore: number;
+        }
+      | null = null;
+
+    for (let suggestionIndex = 0; suggestionIndex < suggestionItems.length; suggestionIndex += 1) {
+      const suggestion = suggestionItems[suggestionIndex];
+      const suggestionComparable = deps.canonicalizeComparableText(suggestion);
+      if (!suggestionComparable || baseKeys.has(suggestionComparable)) continue;
+      const matchedBaseIndexes: number[] = [];
+      const matchedDeltaIndexes: number[] = [];
+      let scoreTotal = 0;
+      let scoreCount = 0;
+      let strongestBaseScore = 0;
+
+      for (let userIndex = 0; userIndex < userItems.length; userIndex += 1) {
+        const userItem = userItems[userIndex];
+        const comparable = deps.canonicalizeComparableText(userItem);
+        if (!comparable) continue;
+        const score = itemSimilarity(userItem, suggestion);
+        if (score < 0.38) continue;
+        if (baseKeys.has(comparable)) {
+          matchedBaseIndexes.push(userIndex);
+          strongestBaseScore = Math.max(strongestBaseScore, score);
+        }
+        if (deltaKeys.has(comparable)) {
+          matchedDeltaIndexes.push(userIndex);
+        }
+        scoreTotal += score;
+        scoreCount += 1;
+      }
+
+      const userIndexes = Array.from(new Set([...matchedBaseIndexes, ...matchedDeltaIndexes])).sort((a, b) => a - b);
+      if (matchedBaseIndexes.length === 0 || matchedDeltaIndexes.length === 0 || userIndexes.length < 2) continue;
+
+      const averageScore = scoreCount > 0 ? scoreTotal / scoreCount : 0;
+      if (strongestBaseScore < 0.45 || averageScore < 0.42) continue;
+
+      if (
+        !best ||
+        userIndexes.length > best.userIndexes.length ||
+        (userIndexes.length === best.userIndexes.length && averageScore > best.averageScore)
+      ) {
+        best = {
+          suggestionIndex,
+          userIndexes,
+          averageScore,
+          strongestBaseScore,
+        };
+      }
+    }
+
+    if (!best) return null;
+
+    const clusteredUserIndexes = new Set(best.userIndexes);
+    const unit = createCompareUnit({
+      id: "unit_1",
+      userItems: best.userIndexes.map((index) => userItems[index]).filter(Boolean),
+      suggestionItems: [suggestionItems[best.suggestionIndex]].filter(Boolean),
+      confidence: "fallback",
+    });
+    if (unit.user_items.length < 2 || unit.suggestion_items.length === 0) return null;
+
+    const segments: WordingChoiceCompareSegment[] = [];
+    let retainedBuffer: string[] = [];
+    let unitInserted = false;
+    const flushRetained = () => {
+      if (retainedBuffer.length === 0) return;
+      segments.push({ kind: "retained", items: retainedBuffer });
+      retainedBuffer = [];
+    };
+
+    for (let index = 0; index < userItems.length; index += 1) {
+      const item = userItems[index];
+      if (!item) continue;
+      if (clusteredUserIndexes.has(index)) {
+        flushRetained();
+        if (!unitInserted) {
+          segments.push({ kind: "unit", unit_id: unit.id });
+          unitInserted = true;
+        }
+        continue;
+      }
+      retainedBuffer.push(item);
+    }
+    flushRetained();
+    if (!unitInserted) return null;
+
+    return {
+      mode: "grouped_units",
+      units: [unit],
+      segments,
+      initialUnit: unit,
+    };
+  }
+
   function longestCommonListAnchors(
     userItems: string[],
     suggestionItems: string[]
@@ -1083,12 +1205,27 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
   }
 
   function buildBusinessListComparePlan(params: {
+    baseItems: string[];
     userItems: string[];
     suggestionItems: string[];
+    deltaUserItems: string[];
+    preferDeltaGrouping: boolean;
   }): BusinessListComparePlan | null {
-    const userItems = params.userItems.map((line) => String(line || "").trim()).filter(Boolean);
-    const suggestionItems = params.suggestionItems.map((line) => String(line || "").trim()).filter(Boolean);
+    const userItems = mergeListItems([], params.userItems.map((line) => String(line || "").trim()).filter(Boolean));
+    const suggestionItems = mergeListItems(
+      [],
+      params.suggestionItems.map((line) => String(line || "").trim()).filter(Boolean)
+    );
     if (userItems.length === 0 || suggestionItems.length === 0) return null;
+
+    const overlapConsolidationPlan = buildOverlapConsolidationComparePlan({
+      baseItems: params.baseItems,
+      userItems,
+      suggestionItems,
+      deltaUserItems: params.deltaUserItems,
+      preferDeltaGrouping: params.preferDeltaGrouping,
+    });
+    if (overlapConsolidationPlan) return overlapConsolidationPlan;
 
     const anchors = longestCommonListAnchors(userItems, suggestionItems);
     if (anchors.length === 0 && userItems.length > 1 && suggestionItems.length > 1) {
@@ -1447,10 +1584,13 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
 
   function pickWordingSuggestionList(currentSpecialist: Record<string, unknown>, fallbackText: string): string[] {
     if (Array.isArray(currentSpecialist.statements) && currentSpecialist.statements.length > 0) {
-      return currentSpecialist.statements.map((line) => String(line || "").trim()).filter(Boolean);
+      return mergeListItems(
+        [],
+        currentSpecialist.statements.map((line) => String(line || "").trim()).filter(Boolean)
+      );
     }
     const refined = String(currentSpecialist.refined_formulation || "").trim();
-    return deps.parseListItems(refined || fallbackText);
+    return mergeListItems([], deps.parseListItems(refined || fallbackText));
   }
 
   function isRefineAdjustRouteToken(token: string): boolean {
@@ -1609,6 +1749,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       ? fallbackUserItems
       : userItems;
     let suggestionItems = mode === "list" ? diffListItems(baseItems, suggestionFullItems) : [];
+    let localUserItems = mode === "list"
+      ? (effectiveUserItems.length > 0 ? [...effectiveUserItems] : [...fallbackUserItems])
+      : [];
     if (mode === "list") {
       const listIntent = resolveBusinessListIntent({
         stepId,
@@ -1624,8 +1767,13 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         effectiveUserItems = listIntent.userItems;
         suggestionItems = listIntent.suggestionItems;
         normalizedUser = listIntent.normalizedUser || normalizedUser;
+        localUserItems = listIntent.userItems;
       }
     }
+    const compareDeltaListSemantics = listSemantics;
+    localUserItems = mode === "list"
+      ? mergeListItems([], localUserItems.length > 0 ? localUserItems : (effectiveUserItems.length > 0 ? effectiveUserItems : fallbackUserItems))
+      : [];
     if (mode === "list" && isBusinessListIntentScope(stepId)) {
       const fullUserItems = mergeListItems(
         listSemantics === "full" ? [] : baseItems,
@@ -1748,8 +1896,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const comparePlan =
       mode === "list" && isBusinessListIntentScope(stepId)
         ? buildBusinessListComparePlan({
+            baseItems,
             userItems: effectiveUserItems,
             suggestionItems,
+            deltaUserItems: localUserItems,
+            preferDeltaGrouping: compareDeltaListSemantics === "delta",
           })
         : null;
     if (comparePlan) {

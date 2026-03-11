@@ -22,7 +22,7 @@ type SectionSpec = {
 const PRESENTATION_RECAP_SECTION_SPECS: Array<[PresentationRecapSectionId, SectionSpec]> = [
   ["dream", { finalField: "dream_final", labelKey: "ppt.heading.dream", forceList: false }],
   ["purpose", { finalField: "purpose_final", labelKey: "ppt.heading.purpose", forceList: false }],
-  ["bigwhy", { finalField: "bigwhy_final", labelKey: "offtopic.step.bigwhy", forceList: false }],
+  ["bigwhy", { finalField: "bigwhy_final", labelKey: "ppt.heading.bigwhy", forceList: false }],
   ["role", { finalField: "role_final", labelKey: "ppt.heading.role", forceList: false }],
   ["entity", { finalField: "entity_final", labelKey: "ppt.heading.entity", forceList: false }],
   ["strategy", { finalField: "strategy_final", labelKey: "ppt.heading.strategy", forceList: true }],
@@ -161,7 +161,10 @@ function buildStep0Block(state: CanvasState): string {
   if (!venture && !name) return "";
   const ventureLabel = uiStringFromStateMap(state, "recap.label.venture");
   const nameLabel = uiStringFromStateMap(state, "recap.label.name");
-  return [`${ventureLabel}: ${venture}`, `${nameLabel}: ${name}`].join("\n").trim();
+  const blocks: string[] = [];
+  if (venture) blocks.push(`${ventureLabel}:\n${venture}`);
+  if (name) blocks.push(`${nameLabel}:\n${name}`);
+  return blocks.join("\n\n").trim();
 }
 
 function buildSectionBlock(state: CanvasState, spec: SectionSpec): string {
@@ -174,7 +177,7 @@ function buildSectionBlock(state: CanvasState, spec: SectionSpec): string {
   }
   const inline = inlineValueForSection(rawValue);
   if (!inline) return "";
-  return `${label}: ${inline}`;
+  return `${label}:\n${inline}`;
 }
 
 export function buildCanonicalPresentationRecap(state: CanvasState): string {
@@ -229,7 +232,7 @@ export function isStructuredPresentationRecap(raw: unknown): boolean {
       continue;
     }
     if (!isLabelOnlyLine(lines[0])) return false;
-    if (!lines.slice(1).every((line) => isListLine(line))) return false;
+    if (!lines.slice(1).every((line) => !isLabelOnlyLine(line))) return false;
     seenSection = true;
   }
   return seenSection;

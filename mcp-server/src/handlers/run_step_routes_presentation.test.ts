@@ -383,6 +383,8 @@ test("presentation make route rebuilds a flattened stored recap into structured 
   } as any);
 
   const text = String((response as any).text || "");
+  assert.match(text, /\n\nVenture:\nconsultancy\n\nName:\nMindd/);
+  assert.match(text, /\n\nDream:\nBuild calm around complex choices\./);
   assert.match(text, /\n\nStrategy:\n• Focus on trusted advisory\n• Win on clarity/);
   assert.match(text, /\n\nProducts and Services:\n• Strategy sessions\n• Decision frameworks/);
   assert.match(text, /\n\nRules of the Game:\n• Tell the truth\n• Keep it practical/);

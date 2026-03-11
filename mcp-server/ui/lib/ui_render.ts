@@ -92,6 +92,20 @@ export function shouldSuppressPromptForWordingChoice(params: {
   );
 }
 
+export function shouldShowTextInputForWordingChoice(params: {
+  textSubmitAvailable?: boolean;
+  uiViewVariant?: string | null;
+  wordingChoiceActive?: boolean;
+  requireWordingPick?: boolean;
+}): boolean {
+  if (params.textSubmitAvailable !== true) return false;
+  return !shouldSuppressPromptForWordingChoice({
+    uiViewVariant: params.uiViewVariant,
+    wordingChoiceActive: params.wordingChoiceActive,
+    requireWordingPick: params.requireWordingPick,
+  });
+}
+
 export function shouldRenderPurposeStepIntroVideo(params: {
   currentStep?: string | null;
   showStepIntroChrome?: boolean;
@@ -221,6 +235,49 @@ function uiText(lang: string | null | undefined, key: string, _fallback: string)
   const translated = String(t(lang, key) || "").trim();
   if (translated) return translated;
   return "";
+}
+
+export function parseWordingChoiceInstruction(instructionRaw: string): {
+  retainedHeading: string;
+  retainedItems: string[];
+  instructionText: string;
+} {
+  const instruction = String(instructionRaw || "").replace(/\r/g, "\n").trim();
+  if (!instruction) {
+    return { retainedHeading: "", retainedItems: [], instructionText: "" };
+  }
+  const lines = instruction
+    .split("\n")
+    .map((line) => String(line || "").trim());
+  const firstBulletIndex = lines.findIndex((line) => /^(?:[-*•·]|\d+[\).])\s+/.test(line));
+  if (firstBulletIndex < 0) {
+    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+  }
+
+  let bulletEndIndex = firstBulletIndex;
+  while (bulletEndIndex < lines.length && /^(?:[-*•·]|\d+[\).])\s+/.test(lines[bulletEndIndex])) {
+    bulletEndIndex += 1;
+  }
+
+  const retainedHeading = lines
+    .slice(0, firstBulletIndex)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  const retainedItems = lines
+    .slice(firstBulletIndex, bulletEndIndex)
+    .map((line) => line.replace(/^\s*(?:[-*•·]|\d+[\).])\s+/, "").trim())
+    .filter(Boolean);
+  const instructionText = lines
+    .slice(bulletEndIndex)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
+  if (!retainedHeading || retainedItems.length === 0) {
+    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+  }
+  return { retainedHeading, retainedItems, instructionText: instructionText || instruction };
 }
 
 function normalizeDreamScoreValue(raw: unknown): string {
@@ -707,6 +764,9 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   const userListEl = document.getElementById("wordingChoiceUserList");
   const suggestionTextEl = document.getElementById("wordingChoiceSuggestionText");
   const suggestionListEl = document.getElementById("wordingChoiceSuggestionList");
+  const retainedWrapEl = document.getElementById("wordingChoiceRetained");
+  const retainedHeadingEl = document.getElementById("wordingChoiceRetainedHeading");
+  const retainedListEl = document.getElementById("wordingChoiceRetainedList");
   const instructionEl = document.getElementById("wordingChoiceInstruction");
   const userBtn = document.getElementById("wordingChoicePickUser") as HTMLButtonElement | null;
   const suggestionBtn = document.getElementById("wordingChoicePickSuggestion") as HTMLButtonElement | null;
@@ -717,6 +777,9 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     !userListEl ||
     !suggestionTextEl ||
     !suggestionListEl ||
+    !retainedWrapEl ||
+    !retainedHeadingEl ||
+    !retainedListEl ||
     !instructionEl ||
     !userBtn ||
     !suggestionBtn
@@ -752,6 +815,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];
   const suggestionItems = Array.isArray(wording.suggestion_items) ? wording.suggestion_items : [];
   const instruction = String(wording.instruction || "").trim() || t(lang, "wordingChoiceInstruction");
+  const instructionParts = parseWordingChoiceInstruction(instruction);
   const ensureLabelColon = (value: string): string => {
     const trimmed = String(value || "").trim();
     if (!trimmed) return "";
@@ -774,7 +838,16 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
 
   headingEl.textContent = "";
   (headingEl as HTMLElement).style.display = "none";
-  instructionEl.textContent = instruction;
+  retainedHeadingEl.textContent = instructionParts.retainedHeading;
+  retainedListEl.innerHTML = "";
+  for (const item of instructionParts.retainedItems) {
+    const li = document.createElement("li");
+    li.textContent = item;
+    retainedListEl.appendChild(li);
+  }
+  (retainedWrapEl as HTMLElement).style.display =
+    instructionParts.retainedHeading && instructionParts.retainedItems.length > 0 ? "block" : "none";
+  instructionEl.textContent = instructionParts.instructionText || instruction;
   userTextEl.textContent = userLabel || uiText(lang, "wordingChoiceHeading", "");
   suggestionTextEl.textContent =
     suggestionLabel || uiText(lang, "wordingChoiceSuggestionLabel", "");
@@ -1594,8 +1667,14 @@ export function render(overrideToolOutput?: unknown): void {
 
   const textSubmitActionCode = actionCodeForRole(result, "text_submit");
   const textSubmitAvailable = textSubmitActionCode.length > 0;
-  inputWrap.style.display = textSubmitAvailable ? "flex" : "none";
-  if (!textSubmitAvailable) setSendEnabled(false);
+  const showTextSubmit = shouldShowTextInputForWordingChoice({
+    textSubmitAvailable,
+    uiViewVariant,
+    wordingChoiceActive,
+    requireWordingPick,
+  });
+  inputWrap.style.display = showTextSubmit ? "flex" : "none";
+  if (!showTextSubmit) setSendEnabled(false);
   const sde = document.getElementById("btnStartDreamExercise");
   const sb = document.getElementById("btnSwitchToSelfDream");
 

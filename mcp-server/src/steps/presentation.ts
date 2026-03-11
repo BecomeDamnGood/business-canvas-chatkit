@@ -144,11 +144,6 @@ INTRO output:
   
   You can share any adjustments you'd like to make by typing them here, or you can approve this summary so it can be turned into a professional presentation."
 
-1) Create The Business Strategy Canvas Builder Presentation
-
-[blank line]
-Tell me what to adjust or create your presentation
-
 - refined_formulation: show the recap, localized, built ONLY from the finals, so the summary appears directly below the intro:
   Start with one line: "This is what you said:" (localized).
   Then add one blank line (empty line).
@@ -173,7 +168,7 @@ Tell me what to adjust or create your presentation
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:
 
 - "__ROUTE__PRESENTATION_CHANGE__" → Follow route: I want to change something in the summary (output action="REFINE" with change question)
-- "__ROUTE__PRESENTATION_MAKE__" → Follow route: Create The Business Strategy Canvas Builder Presentation (output action="ASK" with recap and confirmation question)
+- "__ROUTE__PRESENTATION_MAKE__" → Follow route: create the presentation now (output action="ASK" with recap and confirmation question)
 - "__ROUTE__PRESENTATION_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
 Route tokens are explicit and deterministic - follow the exact route logic as defined in the instructions. Never treat route tokens as user text input.

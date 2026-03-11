@@ -257,6 +257,7 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "meta.topic.noStartingPoint.body":
     "This Canvas Builder is designed to turn an idea or an existing direction into concrete strategic choices and a coherent story. It works best when you already have an initial direction, even if it is still rough. If you have no starting point at all or no clear problem area yet, it is usually better to explore a first idea first and then use this process to sharpen and structure it.",
   "ppt.heading.purpose": "Purpose",
+  "ppt.heading.bigwhy": "Big Why",
   "ppt.heading.role": "Role",
   "ppt.heading.strategy": "Strategy",
   "ppt.heading.entity": "Entity",

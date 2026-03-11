@@ -221,3 +221,14 @@ test("explain-light profile keeps schema and route sections while shrinking non-
     "compact explain profile should drop full ask/refine sections that are not needed for explain turns"
   );
 });
+
+test("presentation instructions do not inject CTA copy that belongs to runtime buttons or prompts", () => {
+  assert.equal(
+    PRESENTATION_INSTRUCTIONS.includes("Create The Business Strategy Canvas Builder Presentation"),
+    false
+  );
+  assert.equal(
+    PRESENTATION_INSTRUCTIONS.includes("Tell me what to adjust or create your presentation"),
+    false
+  );
+});

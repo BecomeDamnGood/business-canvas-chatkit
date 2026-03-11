@@ -5,6 +5,7 @@ import {
 } from "../core/state.js";
 import { buildContextSafeLastSpecialistResult } from "./run_step_context_whitelist.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
+import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
 
 type ParseStep0FinalFn = (raw: string, fallbackName: string) => { name?: string } | null | undefined;
 
@@ -103,52 +104,10 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     return out;
   }
 
-  function splitCamelTitleItems(raw: string): string[] {
-    const tokens = String(raw || "")
-      .replace(/\r/g, " ")
-      .replace(/\n/g, " ")
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
-    if (tokens.length < 3) return [];
-    const chunks: string[] = [];
-    let current: string[] = [];
-    for (const token of tokens) {
-      const plain = token.replace(/^[("'\[]+|[)"'\],.;:!?]+$/g, "");
-      const startsUpper = /^\p{Lu}/u.test(plain);
-      if (startsUpper && current.length > 0) {
-        chunks.push(current.join(" ").trim());
-        current = [token];
-      } else {
-        current.push(token);
-      }
-    }
-    if (current.length > 0) chunks.push(current.join(" ").trim());
-    const cleaned = chunks
-      .map((chunk) => chunk.replace(/\s+/g, " ").trim())
-      .filter(Boolean);
-    return cleaned.length >= 2 ? cleaned : [];
-  }
-
   function productsServicesItemsFromValue(rawValue: string): string[] {
-    const raw = String(rawValue || "").trim();
-    if (!raw) return [];
-    const parsed = deps.parseListItems(raw)
-      .map((line) => String(line || "").trim())
-      .filter(Boolean);
-    if (parsed.length >= 2) return dedupeItems(parsed);
-
-    const punctSplit = raw
-      .replace(/\r/g, "\n")
-      .split(/[;\n,]+/)
-      .map((line) => String(line || "").replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
-      .filter(Boolean);
-    if (punctSplit.length >= 2) return dedupeItems(punctSplit);
-
-    const titleSplit = splitCamelTitleItems(raw);
-    if (titleSplit.length >= 2) return dedupeItems(titleSplit);
-
-    return dedupeItems([raw]);
+    return productsServicesItemsFromText(rawValue, {
+      comparableText: deps.canonicalizeComparableText,
+    });
   }
 
   function localeTokenSet(state: CanvasState | null | undefined, key: string): string[] {

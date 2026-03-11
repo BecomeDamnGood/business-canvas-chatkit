@@ -267,6 +267,33 @@ test("known-facts recap keeps products/services and rules as bullet sections", (
   assert.match(message, /•\s*Lever iteratief en transparant op/i);
 });
 
+test("known-facts recap keeps products/services items with internal commas as one bullet", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "productsservices";
+  (state as any).business_name = "Mindd";
+  (state as any).productsservices_final = [
+    "Traditionele communicatiediensten (zoals DTP, posters, campagnes)",
+    "Strategisch bedrijfs- en communicatieadvies",
+  ].join("\n");
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "productsservices",
+    state,
+    specialist: {
+      action: "ASK",
+      wants_recap: true,
+      question: "Ga verder met producten en diensten",
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.match(message, /products.*services\s*:/i);
+  assert.match(message, /•\s*Traditionele communicatiediensten \(zoals DTP, posters, campagnes\)/i);
+  assert.equal(message.includes("• posters"), false);
+  assert.equal(message.includes("• campagnes)"), false);
+});
+
 test("known-facts recap includes provisional rules when only statements-backed staging exists", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";

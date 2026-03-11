@@ -1496,6 +1496,45 @@
         font-size: var(--font-size-sm);
         font-weight: 400;
         color: var(--text-mid);
+        white-space: pre-line;
+      }
+
+      .wordingChoiceRetained {
+        border: 1px solid var(--divider);
+        border-radius: var(--r-lg);
+        background: rgba(255, 255, 255, 0.45);
+        padding: 14px 16px;
+      }
+
+      .wordingChoiceRetainedHeading {
+        margin: 0 0 10px 0;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-mid);
+      }
+
+      .wordingChoiceRetainedList {
+        margin: 0;
+        padding-left: 0;
+        list-style: none;
+      }
+
+      .wordingChoiceRetainedList li {
+        margin: 0 0 var(--space-2) 0;
+        position: relative;
+        padding-left: 16px;
+        color: var(--text-dark);
+      }
+
+      .wordingChoiceRetainedList li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.55em;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--orange);
       }
       
       /* ─── Thinking (in-card text, for widget) ─── */
@@ -1756,6 +1795,10 @@
               <div class="wordingChoiceText" id="wordingChoiceSuggestionText"></div>
               <ul class="wordingChoiceList" id="wordingChoiceSuggestionList"></ul>
               <button class="choiceBtn wordingChoiceSelectBtn" id="wordingChoicePickSuggestion" type="button"></button>
+            </div>
+            <div class="wordingChoiceRetained" id="wordingChoiceRetained" style="display:none">
+              <div class="wordingChoiceRetainedHeading" id="wordingChoiceRetainedHeading"></div>
+              <ul class="wordingChoiceRetainedList" id="wordingChoiceRetainedList"></ul>
             </div>
             <div class="wordingChoiceInstruction" id="wordingChoiceInstruction"></div>
           </div>
@@ -4142,6 +4185,32 @@
     if (translated) return translated;
     return "";
   }
+  function parseWordingChoiceInstruction2(instructionRaw) {
+    const instruction = String(instructionRaw || "").replace(/\r/g, "\n").trim();
+    if (!instruction) {
+      return { retainedHeading: "", retainedItems: [], instructionText: "" };
+    }
+    const lines = instruction.split("\n").map((line) => String(line || "").trim());
+    const firstBulletIndex = lines.findIndex((line) => /^(?:[-*•·]|\d+[\).])\s+/.test(line));
+    if (firstBulletIndex < 0) {
+      return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+    }
+    let bulletEndIndex = firstBulletIndex;
+    while (bulletEndIndex < lines.length && /^(?:[-*•·]|\d+[\).])\s+/.test(lines[bulletEndIndex])) {
+      bulletEndIndex += 1;
+    }
+    const retainedHeading = lines.slice(0, firstBulletIndex).filter(Boolean).join("\n").trim();
+    const retainedItems = lines.slice(firstBulletIndex, bulletEndIndex).map((line) => line.replace(/^\s*(?:[-*•·]|\d+[\).])\s+/, "").trim()).filter(Boolean);
+    const instructionText = lines.slice(bulletEndIndex).filter(Boolean).join("\n").trim();
+    if (!retainedHeading || retainedItems.length === 0) {
+      return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+    }
+    return {
+      retainedHeading,
+      retainedItems,
+      instructionText: instructionText || instruction
+    };
+  }
   function activeStepLabel(stepId, stepTitle, lang) {
     const explicitTitle = String(stepTitle || "").trim();
     if (explicitTitle) return explicitTitle;
@@ -4405,10 +4474,13 @@
     const userListEl = document.getElementById("wordingChoiceUserList");
     const suggestionTextEl = document.getElementById("wordingChoiceSuggestionText");
     const suggestionListEl = document.getElementById("wordingChoiceSuggestionList");
+    const retainedWrapEl = document.getElementById("wordingChoiceRetained");
+    const retainedHeadingEl = document.getElementById("wordingChoiceRetainedHeading");
+    const retainedListEl = document.getElementById("wordingChoiceRetainedList");
     const instructionEl = document.getElementById("wordingChoiceInstruction");
     const userBtn = document.getElementById("wordingChoicePickUser");
     const suggestionBtn = document.getElementById("wordingChoicePickSuggestion");
-    if (!wrap || !headingEl || !userTextEl || !userListEl || !suggestionTextEl || !suggestionListEl || !instructionEl || !userBtn || !suggestionBtn) {
+    if (!wrap || !headingEl || !userTextEl || !userListEl || !suggestionTextEl || !suggestionListEl || !retainedWrapEl || !retainedHeadingEl || !retainedListEl || !instructionEl || !userBtn || !suggestionBtn) {
       return false;
     }
     const uiPayload = resultData && typeof resultData.ui === "object" && resultData.ui ? resultData.ui : {};
@@ -4426,6 +4498,7 @@
     const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];
     const suggestionItems = Array.isArray(wording.suggestion_items) ? wording.suggestion_items : [];
     const instruction = String(wording.instruction || "").trim() || t(lang, "wordingChoiceInstruction");
+    const instructionParts = parseWordingChoiceInstruction2(instruction);
     const ensureLabelColon = (value) => {
       const trimmed = String(value || "").trim();
       if (!trimmed) return "";
@@ -4436,7 +4509,15 @@
     const normalizeListItem = (value) => String(value || "").replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "").trim();
     headingEl.textContent = "";
     headingEl.style.display = "none";
-    instructionEl.textContent = instruction;
+    retainedHeadingEl.textContent = instructionParts.retainedHeading;
+    retainedListEl.innerHTML = "";
+    for (const item of instructionParts.retainedItems) {
+      const li = document.createElement("li");
+      li.textContent = item;
+      retainedListEl.appendChild(li);
+    }
+    retainedWrapEl.style.display = instructionParts.retainedHeading && instructionParts.retainedItems.length > 0 ? "block" : "none";
+    instructionEl.textContent = instructionParts.instructionText || instruction;
     userTextEl.textContent = userLabel || uiText2(lang, "wordingChoiceHeading", "");
     suggestionTextEl.textContent = suggestionLabel || uiText2(lang, "wordingChoiceSuggestionLabel", "");
     if (mode === "list") {

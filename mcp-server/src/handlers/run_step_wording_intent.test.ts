@@ -622,6 +622,50 @@ test("buildWordingChoiceFromTurn creates grouped compare unit for free-text stra
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
 });
 
+test("buildWordingChoiceFromTurn groups overlapping strategy points on the user side against one merged suggestion", () => {
+  const helpers = buildHelpers(true);
+  const existingStatements = [
+    "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
+    "Prototyping en MVP's bouwen als show what we can do for you",
+  ];
+  const mergedSuggestion = [
+    "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
+    "Prototyping en MVP's bouwen als show what we can do for you",
+  ];
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "strategy",
+    state: {} as any,
+    activeSpecialist: "Strategy",
+    previousSpecialist: {
+      statements: existingStatements,
+      strategy: existingStatements.join("\n"),
+    },
+    specialistResult: {
+      message: "Je voorstel lijkt sterk op een bestaand focuspunt.",
+      refined_formulation: mergedSuggestion.join("\n"),
+      statements: mergedSuggestion,
+    },
+    userTextRaw:
+      "Altijd gericht investeren in AI-technologieen die de impact van klantcommunicatie vergroten",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(result.wordingChoice?.mode, "list");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.deepEqual(result.wordingChoice?.user_items, [
+    "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
+    "Altijd gericht investeren in AI-technologieen die de impact van klantcommunicatie vergroten",
+  ]);
+  assert.deepEqual(result.wordingChoice?.suggestion_items, [
+    "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
+  ]);
+  assert.match(String(result.wordingChoice?.instruction || ""), /Prototyping en MVP's bouwen/i);
+  assert.deepEqual((result.specialist as Record<string, unknown>).statements, existingStatements);
+  assert.equal(String((result.specialist as Record<string, unknown>).strategy || ""), existingStatements.join("\n"));
+});
+
 test("buildWordingChoiceFromTurn keeps strategy 7-to-8 overflow as a local consolidation suggestion with retained bullets", () => {
   const helpers = buildHelpers(true);
   const previousStatements = [
@@ -921,6 +965,45 @@ test("buildWordingChoiceFromTurn keeps productsservices anchorless 2-to-3 rewrit
   assert.equal((result.wordingChoice?.suggestion_items || []).length >= 1, true);
 });
 
+test("buildWordingChoiceFromTurn keeps productsservices retained items with internal commas intact", () => {
+  const helpers = buildHelpers(true);
+  const retainedItem = "Traditionele communicatiediensten (zoals DTP, posters, campagnes)";
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "productsservices",
+    state: {} as any,
+    activeSpecialist: "ProductsServices",
+    previousSpecialist: {
+      statements: [],
+      productsservices: "",
+    },
+    specialistResult: {
+      message: "This is the sharpened offer set.",
+      refined_formulation: [
+        retainedItem,
+        "Strategisch bedrijfs- en communicatieadvies",
+      ].join("\n"),
+      statements: [
+        retainedItem,
+        "Strategisch bedrijfs- en communicatieadvies",
+      ],
+    },
+    userTextRaw: [
+      retainedItem,
+      "Strategisch advies",
+    ].join("\n"),
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.deepEqual(
+    ((result.specialist as Record<string, unknown>).wording_choice_compare_segments as Array<Record<string, unknown>>)
+      .filter((segment) => String(segment.kind || "") === "retained")
+      .flatMap((segment) => ((segment.items as string[]) || []).map((line) => String(line || ""))),
+    [retainedItem]
+  );
+});
+
 test("buildWordingChoiceFromTurn falls back to legacy full-set compare when anchorless business list matching is too uncertain", () => {
   const helpers = buildHelpers(true);
   const result = helpers.buildWordingChoiceFromTurn({
@@ -1065,6 +1148,7 @@ test("buildWordingChoiceFromTurn directly accepts one valid strategy sentence wh
 
 test("applyWordingPickSelection resolves grouped compare units into one final productsservices list", () => {
   const helpers = buildHelpers(true);
+  const preservedCommaItem = "Traditionele communicatiediensten (zoals DTP, posters, campagnes)";
   const state = {
     current_step: "productsservices",
     active_specialist: "ProductsServices",
@@ -1094,9 +1178,9 @@ test("applyWordingPickSelection resolves grouped compare units into one final pr
         {
           id: "unit_2",
           user_items: ["Branding retainers"],
-          suggestion_items: ["Brand systems"],
+          suggestion_items: [preservedCommaItem],
           user_text: "Branding retainers",
-          suggestion_text: "Brand systems",
+          suggestion_text: preservedCommaItem,
           resolution: "",
           confidence: "anchored",
         },
@@ -1131,11 +1215,11 @@ test("applyWordingPickSelection resolves grouped compare units into one final pr
   assert.deepEqual((second.specialist.statements as string[]) || [], [
     "Strategy workshops",
     "AI websites",
-    "Brand systems",
+    preservedCommaItem,
   ]);
   assert.equal(
     String((second.specialist.productsservices as string) || ""),
-    ["Strategy workshops", "AI websites", "Brand systems"].join("\n")
+    ["Strategy workshops", "AI websites", preservedCommaItem].join("\n")
   );
 });
 
