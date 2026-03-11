@@ -432,18 +432,41 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       String((specialist as any)?.wording_choice_pending || "").trim() === "true" ||
       Boolean((flagsOverride || {}).require_wording_pick);
     const suggestDreamBuilder = String((specialist as any)?.suggest_dreambuilder || "").trim() === "true";
+    const persistedDreamScores =
+      Array.isArray((effectiveState as any)?.dream_scores) &&
+      ((effectiveState as any).dream_scores as unknown[]).some(
+        (row) => Array.isArray(row) && row.length > 0
+      );
+    const persistedDreamTopClusters =
+      Array.isArray((effectiveState as any)?.dream_top_clusters) &&
+      ((effectiveState as any).dream_top_clusters as unknown[]).length > 0;
+    const persistedDreamScoreContext = persistedDreamScores && persistedDreamTopClusters;
+    const forceDreamBuilderRefine =
+      effectiveStepId === DREAM_STEP_ID &&
+      (
+        dreamRuntimeMode === "builder_refine" ||
+        (
+          persistedDreamScoreContext &&
+          (
+            contractMenuId === "DREAM_EXPLAINER_MENU_REFINE" ||
+            String((effectiveState as any)?.dream_awaiting_direction || "").trim() === "false"
+          )
+        )
+      );
     const dreamBuilderFlowActive =
       effectiveStepId === DREAM_STEP_ID &&
       (
         dreamRuntimeMode === "builder_collect" ||
         dreamRuntimeMode === "builder_refine" ||
         dreamRuntimeMode === "builder_scoring" ||
+        forceDreamBuilderRefine ||
         suggestDreamBuilder ||
         contractMenuId.startsWith("DREAM_EXPLAINER_MENU_")
       );
     let viewVariant: UiViewVariant = "default";
     if (
       effectiveStepId === DREAM_STEP_ID &&
+      !forceDreamBuilderRefine &&
       ((scoringPhase && hasClusters && Math.max(statementsCount, canonicalStatementsCount) >= 20) ||
         dreamRuntimeMode === "builder_scoring")
     ) {
@@ -452,7 +475,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       viewVariant = "wording_choice";
     } else if (dreamBuilderFlowActive) {
       viewVariant =
-        dreamRuntimeMode === "builder_refine" || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
+        forceDreamBuilderRefine || contractMenuId === "DREAM_EXPLAINER_MENU_REFINE"
           ? "dream_builder_refine"
           : "dream_builder_collect";
     }

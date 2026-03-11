@@ -6,6 +6,7 @@ import {
   buildInitialDreamScoringScores,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
+  shouldRetainDreamScoringClientScores,
   shouldRenderPurposeStepIntroVideo,
   shouldSuppressPromptForWordingChoice,
   shouldSuppressMainCardForWordingChoice,
@@ -170,6 +171,43 @@ test("buildInitialDreamScoringScores prefers in-progress client values over pers
   });
 
   assert.deepEqual(scores, [["4", ""], ["10"]]);
+});
+
+test("buildInitialDreamScoringScores keeps client-entered values during a scoring rerender before persisted scores arrive", () => {
+  const scores = buildInitialDreamScoringScores({
+    clientScores: [[9, 8], [7, 7]],
+    persistedScores: [],
+    clusters: [
+      { statement_indices: [0, 1] },
+      { statement_indices: [2, 3] },
+    ],
+  });
+
+  assert.deepEqual(scores, [["9", "8"], ["7", "7"]]);
+});
+
+test("shouldRetainDreamScoringClientScores only keeps the buffer while dream scoring is still visible", () => {
+  assert.equal(
+    shouldRetainDreamScoringClientScores({
+      currentStep: "dream",
+      isScoringView: true,
+    }),
+    true
+  );
+  assert.equal(
+    shouldRetainDreamScoringClientScores({
+      currentStep: "dream",
+      isScoringView: false,
+    }),
+    false
+  );
+  assert.equal(
+    shouldRetainDreamScoringClientScores({
+      currentStep: "purpose",
+      isScoringView: true,
+    }),
+    false
+  );
 });
 
 test("benProfileVideoUrlForLang returns only configured language-specific videos", () => {

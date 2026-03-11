@@ -1200,6 +1200,24 @@ function shouldUpdateRenderCache(params: {
       preserve_safety_reason: "not_applicable",
     };
   }
+  if (
+    params.orderingReason === "older_epoch" ||
+    params.orderingReason === "older_response_seq" ||
+    params.orderingReason === "host_session_mismatch"
+  ) {
+    return {
+      should_persist: false,
+      decision_reason: params.orderingReason,
+      preserve_safety_reason: "stale_ordering",
+    };
+  }
+  if (params.source === "call_run_step" && params.incomingSignal.explicit_error) {
+    return {
+      should_persist: true,
+      decision_reason: "active_dispatch_explicit_error",
+      preserve_safety_reason: "not_applicable",
+    };
+  }
   if (params.current.renderable && !params.incoming.renderable) {
     const preserveSafety = resolveCachePreserveSafety({
       source: params.source,
@@ -1604,6 +1622,21 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
   };
   const incomingOrdering = incomingOrderingRaw;
   const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
+  const currentCachedPayload = getLastToolOutput();
+  const currentCachedResolved = resolveWidgetPayload(currentCachedPayload);
+  const currentCachedResult = currentCachedResolved.result;
+  const currentCachedOrdering = readBootstrapOrderingState(toRecord(currentCachedResult.state));
+  const renderOrderingBase = hasValidBootstrapOrdering(currentCachedOrdering) ? currentCachedOrdering : currentOrdering;
+  const renderOrderingDecision = decideOrderingPatch(renderOrderingBase, incomingOrdering);
+  const renderCacheDecision = shouldUpdateRenderCache({
+    source,
+    currentHasPayload: Object.keys(currentCachedPayload).length > 0,
+    incoming: evaluatePayloadQuality(result),
+    current: evaluatePayloadQuality(currentCachedResult),
+    incomingSignal: readIncomingLivenessSignal(result),
+    orderingReason: renderOrderingDecision.reason,
+  });
+  const shouldPersistIncomingRender = renderCacheDecision.should_persist;
   const continuityPatch = buildWidgetStateContinuityPatch({
     currentWidgetState: currentWidget,
     incomingState: toRecord(result.state),
@@ -1617,11 +1650,26 @@ export function handleToolResultAndMaybeScheduleBootstrapRetry(
     widgetPatch.response_seq = incomingOrdering.responseSeq;
     widgetPatch.host_widget_session_id = incomingOrdering.hostWidgetSessionId;
   }
-  if (Object.keys(widgetPatch).length > 0) {
+  const shouldApplyWidgetPatch =
+    !incomingHasOrdering ||
+    renderOrderingDecision.apply ||
+    renderOrderingDecision.reason === "same_response_seq";
+  if (shouldApplyWidgetPatch && Object.keys(widgetPatch).length > 0) {
     setWidgetStateSafe(widgetPatch);
   }
-  setLastToolOutput(normalized);
-  if (_render) _render(normalized);
+  if (shouldPersistIncomingRender) {
+    setLastToolOutput(normalized);
+    if (_render) _render(normalized);
+  } else if (isDevEnv()) {
+    console.log("[ui_render_cache_preserved]", {
+      source,
+      ordering_reason: renderOrderingDecision.reason,
+      decision_reason: renderCacheDecision.decision_reason,
+      preserve_safety_reason: renderCacheDecision.preserve_safety_reason,
+      incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+      current_tuple: describeBootstrapOrdering(renderOrderingBase),
+    });
+  }
   const hydration = maybeScheduleBootstrapRetry(resolved);
   if (isDevEnv()) {
     console.log("[ui_bootstrap_state]", {

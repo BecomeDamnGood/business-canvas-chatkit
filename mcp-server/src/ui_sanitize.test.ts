@@ -8,6 +8,7 @@ import {
   callRunStep,
   handleToolResultAndMaybeScheduleBootstrapRetry,
   initActionsConfig,
+  toolData,
   widgetState,
 } from "../ui/lib/ui_actions.ts";
 import { readDreamBuilderViewContract, renderChoiceButtons, resolveWidgetBodyText } from "../ui/lib/ui_render.ts";
@@ -978,6 +979,103 @@ test("widget continuity respects explicit canonical clears in the same session",
     assert.equal(String(persisted.dream_final || ""), "");
     assert.deepEqual((persisted.provisional_by_step || {}) as Record<string, unknown>, {});
     assert.deepEqual((persisted.provisional_source_by_step || {}) as Record<string, unknown>, {});
+  } finally {
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalLatest === undefined) delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+    else (globalThis as Record<string, unknown>).__BSC_LATEST__ = originalLatest;
+    if (originalLastToolOutput === undefined) delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+    else (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = originalLastToolOutput;
+  }
+});
+
+test("incoming stale dream scoring payloads do not overwrite a newer refine render", { concurrency: false }, () => {
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  const originalLastToolOutput = (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  try {
+    const host = {
+      widgetState: {} as Record<string, unknown>,
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+    };
+    (globalThis as unknown as { openai?: unknown }).openai = host;
+    initActionsConfig({
+      render: () => {},
+      t: () => "",
+    });
+
+    handleToolResultAndMaybeScheduleBootstrapRetry({
+      _meta: {
+        widget_result: {
+          current_step_id: "dream",
+          state: {
+            current_step: "dream",
+            __dream_runtime_mode: "builder_refine",
+            dream_awaiting_direction: "false",
+            dream_scores: [[9, 8], [7, 7]],
+            dream_top_clusters: [{ theme: "Vertrouwen", average: 8.5 }],
+            bootstrap_session_id: "sess-1",
+            bootstrap_epoch: 1,
+            response_seq: 6,
+            host_widget_session_id: "host-1",
+          },
+          ui: {
+            view: {
+              mode: "interactive",
+              variant: "dream_builder_refine",
+            },
+          },
+          specialist: {
+            message: "Mindd droomt van een wereld waarin vertrouwen richting geeft.",
+          },
+        },
+      },
+    });
+
+    handleToolResultAndMaybeScheduleBootstrapRetry({
+      _meta: {
+        widget_result: {
+          current_step_id: "dream",
+          state: {
+            current_step: "dream",
+            __dream_runtime_mode: "builder_scoring",
+            bootstrap_session_id: "sess-1",
+            bootstrap_epoch: 1,
+            response_seq: 5,
+            host_widget_session_id: "host-1",
+          },
+          ui: {
+            view: {
+              mode: "interactive",
+              variant: "dream_builder_scoring",
+            },
+          },
+          specialist: {
+            scoring_phase: "true",
+            statements: Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`),
+            clusters: [
+              {
+                theme: "Vertrouwen",
+                statement_indices: [0, 1],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const persistedPayload = toolData();
+    const persistedResult = (((persistedPayload as Record<string, unknown>)._meta || {}) as Record<string, unknown>)
+      .widget_result as Record<string, unknown>;
+    const persistedUi = (persistedResult.ui || {}) as Record<string, unknown>;
+    const persistedView = (persistedUi.view || {}) as Record<string, unknown>;
+    const persistedState = (persistedResult.state || {}) as Record<string, unknown>;
+
+    assert.equal(String(persistedView.variant || ""), "dream_builder_refine");
+    assert.equal(String(persistedState.__dream_runtime_mode || ""), "builder_refine");
+    assert.equal(String(widgetState().response_seq || ""), "6");
   } finally {
     if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
     else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;

@@ -250,6 +250,13 @@ export function buildInitialDreamScoringScores(params: {
   });
 }
 
+export function shouldRetainDreamScoringClientScores(params: {
+  currentStep?: string | null;
+  isScoringView: boolean;
+}): boolean {
+  return String(params.currentStep || "").trim() === "dream" && params.isScoringView;
+}
+
 function benAvatarCandidates(): string[] {
   const candidates: string[] = [];
   try {
@@ -1431,7 +1438,6 @@ export function render(overrideToolOutput?: unknown): void {
         }
         const actionCode = actionCodeForRole(result, "score_submit");
         if (!actionCode) return;
-        win.__dreamScoringScores = [];
         callRunStep(actionCode, { __pending_scores: payload });
       };
     }
@@ -1463,6 +1469,10 @@ export function render(overrideToolOutput?: unknown): void {
   if (scoringPanelPost) {
     scoringPanelPost.classList.remove("visible");
     scoringPanelPost.style.display = "none";
+  }
+  const scoringWindow = globalThis as unknown as { __dreamScoringScores?: unknown[][] };
+  if (!shouldRetainDreamScoringClientScores({ currentStep: current, isScoringView })) {
+    scoringWindow.__dreamScoringScores = [];
   }
   if (cardDescEl) cardDescEl.style.display = "block";
   const promptPost = document.getElementById("prompt");

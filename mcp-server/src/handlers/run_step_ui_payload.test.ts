@@ -126,6 +126,43 @@ test("attachRegistryPayload keeps statements visible while dream-builder scoring
   assert.equal(payload.ui?.view?.dream_builder_statements_visible, true);
 });
 
+test("attachRegistryPayload keeps accepted dream score submits in refine even when stale scoring specialist fields remain", () => {
+  const helpers = buildHelpers();
+  const statements = Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`);
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "Mindd droomt van een wereld waarin vertrouwen richting geeft.",
+      prompt: "",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_refine",
+        dream_awaiting_direction: "false",
+        dream_builder_statements: statements,
+        dream_scores: [[9, 8], [7, 7]],
+        dream_top_clusters: [{ theme: "Vertrouwen", average: 8.5 }],
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
+      suggest_dreambuilder: "true",
+      scoring_phase: "true",
+      statements,
+      clusters: [
+        {
+          theme: "Future",
+          statement_indices: statements.map((_, index) => index),
+        },
+      ],
+      __canonical_text: "Mindd droomt van een wereld waarin vertrouwen richting geeft.",
+      message: "Mindd droomt van een wereld waarin vertrouwen richting geeft.",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, "dream_builder_refine");
+});
+
 test("attachRegistryPayload forwards structured single-value content into ui.content", () => {
   const helpers = buildHelpers();
   const canonical = "Een strategisch reclamebureau voor complexe keuzes";
