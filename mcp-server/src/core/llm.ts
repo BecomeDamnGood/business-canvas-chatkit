@@ -120,19 +120,50 @@ function getApiKey(): string {
   return normalizeOpenAIApiKey(process.env.OPENAI_API_KEY);
 }
 
-let _client: OpenAIClient | null = null;
+type OpenAIClientCache =
+  | {
+      client: OpenAIClient;
+      apiKey: string;
+      injected: false;
+    }
+  | {
+      client: OpenAIClient;
+      apiKey: "";
+      injected: true;
+    };
+
+let _clientCache: OpenAIClientCache | null = null;
 function getClient(): OpenAIClient {
-  if (_client) return _client;
-  _client = new OpenAI({ apiKey: getApiKey() });
-  return _client;
+  if (_clientCache?.injected) return _clientCache.client;
+  const apiKey = getApiKey();
+  if (_clientCache && !_clientCache.injected && _clientCache.apiKey === apiKey) {
+    return _clientCache.client;
+  }
+  const client = new OpenAI({ apiKey });
+  _clientCache = {
+    client,
+    apiKey,
+    injected: false,
+  };
+  return client;
 }
 
 export function __setTestClient(client: OpenAIClient | null) {
-  _client = client;
+  _clientCache = client
+    ? {
+        client,
+        apiKey: "",
+        injected: true,
+      }
+    : null;
 }
 
 export function __hasInjectedTestClient(): boolean {
-  return _client !== null;
+  return _clientCache?.injected === true;
+}
+
+export function __getClientForTest(): OpenAIClient {
+  return getClient();
 }
 
 function extractOutputText(resp: any): string {

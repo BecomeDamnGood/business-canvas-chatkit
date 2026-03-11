@@ -41,25 +41,6 @@ type RunStepRuntimePreflightPorts<TPayload extends Record<string, unknown>> = {
     clickedActionCodeForNoRepeat: string;
     response: TPayload | null;
   }>;
-  handleLegacyPreflight: (params: {
-    state: CanvasState;
-    rawLegacyMarkers: string[];
-    localeHint: string;
-    buildFailClosedState: (
-      state: CanvasState,
-      reason: "session_upgrade_required" | "contract_violation" | "invalid_state",
-      params: { requestedLang: string }
-    ) => CanvasState;
-    attachRegistryPayload: (
-      payload: Record<string, unknown>,
-      specialist: Record<string, unknown>,
-      flagsOverride?: Record<string, boolean | string>
-    ) => TPayload;
-    finalizeResponse: (payload: TPayload) => TPayload;
-  }) => {
-    response: TPayload | null;
-    blockingMarkerClass: string;
-  };
   applyActionCodeNormalization: (params: {
     state: CanvasState;
     actionCodeRaw: string;
@@ -96,7 +77,6 @@ export async function runStepRuntimePreflightLayer<TPayload extends Record<strin
   ports: RunStepRuntimePreflightPorts<TPayload>;
   runtime: {
     state: CanvasState;
-    rawLegacyMarkers: string[];
     isBootstrapPollCall: boolean;
     actionCodeRaw: string;
     userMessage: string;

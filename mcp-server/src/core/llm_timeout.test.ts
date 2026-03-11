@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { callStrictJson, __normalizeOpenAIApiKeyForTest, __parseRetryAfterMsForTest, __setTestClient } from "./llm.js";
+import {
+  callStrictJson,
+  __getClientForTest,
+  __normalizeOpenAIApiKeyForTest,
+  __parseRetryAfterMsForTest,
+  __setTestClient,
+} from "./llm.js";
 
 test("normalize OpenAI key accepts raw and JSON secret formats", () => {
   assert.equal(__normalizeOpenAIApiKeyForTest("sk-test-raw"), "sk-test-raw");
@@ -230,4 +236,21 @@ test("callStrictJson only prepends glossary when explicitly requested", async ()
   assert.equal(seenSystemPrompts.length, 2);
   assert.equal(seenSystemPrompts[0], "Return JSON.");
   assert.match(seenSystemPrompts[1], /^## CANVAS TERM GLOSSARY/);
+});
+
+test("getClient refreshes cached OpenAI client when API key changes", () => {
+  const prevKey = process.env.OPENAI_API_KEY;
+  __setTestClient(null);
+  process.env.OPENAI_API_KEY = "sk-rotation-a";
+  const first = __getClientForTest();
+  const second = __getClientForTest();
+  assert.equal(first, second);
+
+  process.env.OPENAI_API_KEY = "sk-rotation-b";
+  const third = __getClientForTest();
+  assert.notEqual(first, third);
+
+  __setTestClient(null);
+  if (prevKey === undefined) delete process.env.OPENAI_API_KEY;
+  else process.env.OPENAI_API_KEY = prevKey;
 });

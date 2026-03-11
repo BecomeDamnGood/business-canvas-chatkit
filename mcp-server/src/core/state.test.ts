@@ -8,6 +8,7 @@ import {
   STEP_FINAL_FIELD_BY_STEP_ID,
   getDefaultState,
   getFinalsSnapshot,
+  isSupportedStateVersion,
   migrateState,
   normalizeState,
 } from "./state.js";
@@ -149,6 +150,21 @@ test("migrateState: v6 language_source maps legacy transport source to locale_hi
     language_source: "webplus_i18n",
   });
   assert.equal(migrated.language_source, "locale_hint");
+});
+
+test("state version support: only known versions are accepted for migration", () => {
+  assert.equal(isSupportedStateVersion(CURRENT_STATE_VERSION), true);
+  assert.equal(isSupportedStateVersion("14"), false);
+});
+
+test("migrateState: unknown future version fails closed", () => {
+  assert.throws(
+    () => migrateState({
+      ...getDefaultState(),
+      state_version: "14",
+    }),
+    /Unsupported state_version/
+  );
 });
 
 test("normalizeState: bewaart idempotency metadata uit runtime/server", () => {

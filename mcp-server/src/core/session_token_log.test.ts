@@ -4,7 +4,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { appendSessionTokenLog, __parseSessionLogDataForTests } from "./session_token_log.js";
+import {
+  appendSessionTokenLog,
+  __parseSessionLogDataForTests,
+  sessionTokenFileLoggingEnabled,
+} from "./session_token_log.js";
 
 function tempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "bsc-session-log-"));
@@ -86,7 +90,7 @@ test("session token log creates markdown file and appends turns", () => {
   const parsed = __parseSessionLogDataForTests(first.filePath);
   assert.ok(parsed, "machine marker should be parsable");
   assert.equal(parsed?.turns.length, 2);
-  assert.equal(parsed?.turns[0]?.company_name, "UnknownCompany");
+  assert.equal("company_name" in (parsed?.turns[0] || {}), false);
   assert.equal(parsed?.turns[1]?.subcalls?.length, 1);
   assert.equal(parsed?.turns[1]?.subcalls?.[0]?.call_id, "llm_call_001");
   assert.equal(parsed?.turns[1]?.subcalls?.[0]?.usage.total_tokens, 270);
@@ -103,7 +107,7 @@ test("session token log creates markdown file and appends turns", () => {
   assert.match(summary, /^Session summary$/m);
   assert.match(
     summary,
-    /2026-02-17 10:56:00 UTC - UnknownCompany - gpt-4\.1 <300> - gpt-4o-mini <160> - Total tokens <460>/
+    /2026-02-17 10:56:00 UTC - gpt-4\.1 <300> - gpt-4o-mini <160> - Total tokens <460>/
   );
 });
 
@@ -185,7 +189,7 @@ test("session token log shows unknown when provider usage is missing", () => {
 
   const summaryPath = path.join(dir, "TEMP-session-summary.log");
   const summary = fs.readFileSync(summaryPath, "utf-8");
-  assert.match(summary, /2026-02-17 12:00:00 UTC - UnknownCompany - gpt-4\.1 <unknown> - Total tokens <unknown>/);
+  assert.match(summary, /2026-02-17 12:00:00 UTC - gpt-4\.1 <unknown> - Total tokens <unknown>/);
 });
 
 test("session token log negeert onveilige expliciete filePath", () => {
@@ -254,4 +258,31 @@ test("session token log purges expired session files op basis van retentie", () 
   }
 
   assert.equal(fs.existsSync(oldFile), false);
+});
+
+test("session token file logging defaults to local-only unless explicitly enabled", () => {
+  const previousLocalDev = process.env.LOCAL_DEV;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousDiskFlag = process.env.BSC_SESSION_TOKEN_LOG_TO_DISK;
+
+  try {
+    delete process.env.BSC_SESSION_TOKEN_LOG_TO_DISK;
+    process.env.LOCAL_DEV = "0";
+    process.env.NODE_ENV = "production";
+    assert.equal(sessionTokenFileLoggingEnabled(), false);
+
+    process.env.LOCAL_DEV = "1";
+    assert.equal(sessionTokenFileLoggingEnabled(), true);
+
+    process.env.LOCAL_DEV = "0";
+    process.env.BSC_SESSION_TOKEN_LOG_TO_DISK = "1";
+    assert.equal(sessionTokenFileLoggingEnabled(), true);
+  } finally {
+    if (previousLocalDev === undefined) delete process.env.LOCAL_DEV;
+    else process.env.LOCAL_DEV = previousLocalDev;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousDiskFlag === undefined) delete process.env.BSC_SESSION_TOKEN_LOG_TO_DISK;
+    else process.env.BSC_SESSION_TOKEN_LOG_TO_DISK = previousDiskFlag;
+  }
 });

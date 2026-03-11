@@ -340,6 +340,17 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  */
 export const CURRENT_STATE_VERSION = "13";
 export const DEFAULT_VIEW_CONTRACT_VERSION = "v3_ssot_rigid";
+const SUPPORTED_STATE_VERSION_MAX = Number.parseInt(CURRENT_STATE_VERSION, 10);
+export const SUPPORTED_STATE_VERSIONS = Array.from(
+  { length: Number.isFinite(SUPPORTED_STATE_VERSION_MAX) && SUPPORTED_STATE_VERSION_MAX > 0 ? SUPPORTED_STATE_VERSION_MAX : 0 },
+  (_, index) => String(index + 1)
+);
+
+export function isSupportedStateVersion(raw: unknown): boolean {
+  const version = String(raw ?? "").trim();
+  if (!version) return false;
+  return SUPPORTED_STATE_VERSIONS.includes(version);
+}
 
 /**
  * Hard defaults (no nulls)
@@ -752,6 +763,9 @@ export function migrateState(raw: unknown): CanvasState {
 
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
+  if (!isSupportedStateVersion(s.state_version)) {
+    throw new Error(`Unsupported state_version: ${String(s.state_version || "")}`);
+  }
 
   // v12 -> v13: persist Dream Builder resume context across requests.
   if (s.state_version === "12") {

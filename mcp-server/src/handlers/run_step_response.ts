@@ -1,4 +1,4 @@
-import { appendSessionTokenLog } from "../core/session_token_log.js";
+import { appendSessionTokenLog, sessionTokenFileLoggingEnabled } from "../core/session_token_log.js";
 import type { CanvasState } from "../core/state.js";
 import { finalizeResponseContractInternals } from "./turn_contract.js";
 
@@ -406,7 +406,7 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       delete finalResponse.__canonical_view_decision;
     }
 
-    if (!deps.tokenLoggingEnabled) return finalResponse as unknown as T;
+    if (!deps.tokenLoggingEnabled || !sessionTokenFileLoggingEnabled()) return finalResponse as unknown as T;
     try {
       const responseState = (finalResponse as any)?.state as CanvasState | undefined;
       if (!responseState) return finalResponse as unknown as T;
@@ -446,7 +446,6 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       );
       const latencyMs =
         Number.isFinite(latencyRaw) && latencyRaw >= 0 ? Math.round(latencyRaw) : null;
-      const companyName = String((responseState as any).business_name || "").trim() || "UnknownCompany";
       const appendResult = appendSessionTokenLog({
         sessionId,
         sessionStartedAt,
@@ -461,7 +460,6 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
           intent_type: intentType,
           routing_source: routingSource,
           latency_ms: latencyMs,
-          company_name: companyName,
           attempts: tokenUsage.attempts,
           usage: tokenUsage.usage,
           ...(subcalls.length > 0 ? { subcalls } : {}),

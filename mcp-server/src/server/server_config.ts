@@ -60,6 +60,11 @@ const isLocalDev = process.env.LOCAL_DEV === "1";
 
 const VERSION = safeString(process.env.VERSION ?? "").trim() || "v119";
 const IMAGE_DIGEST = safeString(process.env.IMAGE_DIGEST ?? "").trim();
+const DIAGNOSTICS_BEARER_TOKEN = safeString(process.env.DIAGNOSTICS_BEARER_TOKEN ?? "").trim();
+const MCP_CORS_ALLOW_ORIGINS = safeString(process.env.MCP_CORS_ALLOW_ORIGINS ?? "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 const OPENAI_APPS_CHALLENGE_TOKEN = safeString(process.env.OPENAI_APPS_CHALLENGE_TOKEN ?? "").trim();
@@ -137,9 +142,11 @@ const normalizeIdempotencyKey = normalizeIngressIdempotencyKey;
 export {
   BOOTSTRAP_SESSION_ID_PREFIX,
   BOOTSTRAP_SESSION_REGISTRY_TTL_MS,
+  DIAGNOSTICS_BEARER_TOKEN,
   IDEMPOTENCY_ENTRY_TTL_MS,
   IDEMPOTENCY_ERROR_CODES,
   IMAGE_DIGEST,
+  MCP_CORS_ALLOW_ORIGINS,
   MCP_PATH,
   MCP_SIMULATED_HANDLE_DELAY_MS,
   MAX_REQUEST_SIZE_BYTES,

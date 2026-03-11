@@ -8,6 +8,7 @@ interface RateLimitStore {
   };
 }
 
+// Process-local by design for this single-instance app. Move to a shared store before multi-instance rollout.
 const store: RateLimitStore = {};
 
 // Configurable limits (can be overridden via env vars)

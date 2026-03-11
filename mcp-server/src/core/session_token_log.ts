@@ -34,7 +34,6 @@ export type SessionTurnLogEntry = {
   intent_type?: string;
   routing_source?: string;
   latency_ms?: number | null;
-  company_name?: string;
   attempts: number;
   usage: SessionTurnTokenUsage;
   subcalls?: SessionSubcallLogEntry[];
@@ -67,6 +66,12 @@ export type AppendSessionTokenLogResult = {
 const DATA_MARKER_PREFIX = "SESSION_LOG_DATA:";
 const SESSION_LOG_FILE_RE = /^session-\d{4}-\d{2}-\d{2}-\d{6}-[a-zA-Z0-9_-]{1,80}\.md$/;
 const SESSION_SUMMARY_FILE = "TEMP-session-summary.log";
+
+export function sessionTokenFileLoggingEnabled(): boolean {
+  const raw = String(process.env.BSC_SESSION_TOKEN_LOG_TO_DISK ?? "").trim().toLowerCase();
+  if (raw) return !["0", "false", "off", "no"].includes(raw);
+  return process.env.LOCAL_DEV === "1" || String(process.env.NODE_ENV || "").trim().toLowerCase() === "test";
+}
 
 function normalizeToken(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
@@ -120,7 +125,6 @@ function normalizeTurn(turn: SessionTurnLogEntry): SessionTurnLogEntry {
     intent_type: String((turn as any)?.intent_type || "").trim(),
     routing_source: String((turn as any)?.routing_source || "").trim(),
     latency_ms: latencyMs,
-    company_name: String((turn as any)?.company_name || "").trim() || "UnknownCompany",
     attempts: Number.isFinite(turn.attempts) ? Math.max(0, Math.trunc(turn.attempts)) : 0,
     usage: {
       input_tokens: normalizeToken(turn.usage?.input_tokens),
@@ -332,10 +336,10 @@ function renderMarkdown(data: SessionLogData): string {
     ? turns
       .map((turn) => {
         const subcallCount = Array.isArray(turn.subcalls) ? turn.subcalls.length : 0;
-        return `| ${turn.timestamp} | ${turn.turn_id} | ${turn.step_id} | ${turn.specialist} | ${turn.model} | ${turn.action_code} | ${turn.intent_type} | ${turn.routing_source} | ${formatNullableNumber(turn.latency_ms ?? null)} | ${turn.company_name} | ${turn.attempts} | ${subcallCount} | ${formatToken(turn.usage.input_tokens)} | ${formatToken(turn.usage.output_tokens)} | ${formatToken(turn.usage.total_tokens)} |`;
+        return `| ${turn.timestamp} | ${turn.turn_id} | ${turn.step_id} | ${turn.specialist} | ${turn.model} | ${turn.action_code} | ${turn.intent_type} | ${turn.routing_source} | ${formatNullableNumber(turn.latency_ms ?? null)} | ${turn.attempts} | ${subcallCount} | ${formatToken(turn.usage.input_tokens)} | ${formatToken(turn.usage.output_tokens)} | ${formatToken(turn.usage.total_tokens)} |`;
       })
       .join("\n")
-    : "| - | - | - | - | - | - | - | - | - | - | - | - | - | - | - |";
+    : "| - | - | - | - | - | - | - | - | - | - | - | - | - | - |";
 
   const subcallRows = turns
     .flatMap((turn) => {
@@ -368,8 +372,8 @@ function renderMarkdown(data: SessionLogData): string {
     "",
     "## Turn Log",
     "",
-    "| timestamp | turn_id | step | specialist | model | action_code | intent_type | routing_source | latency_ms | company_name | attempts | subcalls | input_tokens | output_tokens | total_tokens |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| timestamp | turn_id | step | specialist | model | action_code | intent_type | routing_source | latency_ms | attempts | subcalls | input_tokens | output_tokens | total_tokens |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     turnRows,
     "",
     "## Subcall Log",
@@ -408,17 +412,11 @@ function parseSummaryTimestamp(iso: string): string {
 function aggregateModelsForSummary(turns: SessionTurnLogEntry[]): {
   modelParts: string[];
   totalTokens: number | null;
-  companyName: string;
 } {
   const byModel = new Map<string, { total: number; unknown: boolean }>();
-  let companyName = "UnknownCompany";
   let totalTokens = 0;
   let totalUnknown = false;
   for (const turn of turns) {
-    if (companyName === "UnknownCompany") {
-      const candidate = String(turn.company_name || "").trim();
-      if (candidate) companyName = candidate;
-    }
     const model = String(turn.model || "unknown").trim() || "unknown";
     const current = byModel.get(model) || { total: 0, unknown: false };
     if (turn.usage.total_tokens === null) current.unknown = true;
@@ -433,7 +431,6 @@ function aggregateModelsForSummary(turns: SessionTurnLogEntry[]): {
   return {
     modelParts,
     totalTokens: totalUnknown ? null : totalTokens,
-    companyName,
   };
 }
 
@@ -445,7 +442,7 @@ function buildSessionSummaryEntry(data: SessionLogData): SessionSummaryEntry {
   const totalPart = `Total tokens <${summary.totalTokens === null ? "unknown" : String(summary.totalTokens)}>`;
   return {
     key,
-    line: `${key} - ${summary.companyName || "UnknownCompany"} - ${models} - ${totalPart}`,
+    line: `${key} - ${models} - ${totalPart}`,
   };
 }
 

@@ -24,6 +24,7 @@ type RunStepPreflightDeps = {
   actionBootstrapPollToken: string;
   normalizeState: (state: unknown) => CanvasState;
   migrateState: (state: CanvasState) => CanvasState;
+  isSupportedStateVersion: (value: unknown) => boolean;
   normalizeStateLanguageSource: (value: unknown) => string;
   detectLegacySessionMarkers: (state: CanvasState) => string[];
   detectInvalidContractStateMarkers: (state: Record<string, unknown>) => string[];
@@ -53,9 +54,11 @@ type InitializePreflightParams = {
 
 type InitializePreflightResult = {
   state: CanvasState;
+  serverState: RunStepServerTransientState;
   rawLegacyMarkers: string[];
   migrationApplied: boolean;
   migrationFromVersion: string;
+  unsupportedStateVersion: boolean;
   transientTextSubmit: string;
   transientPendingScores: number[][] | null;
   isBootstrapPollCall: boolean;
@@ -102,24 +105,6 @@ type BootstrapPollPreprocessResult<TResponse> = {
   response: TResponse | null;
 };
 
-type LegacyPreflightParams<TResponse> = {
-  state: CanvasState;
-  rawLegacyMarkers: string[];
-  localeHint: string;
-  buildFailClosedState: (
-    state: CanvasState,
-    reason: "session_upgrade_required" | "contract_violation" | "invalid_state",
-    params: { requestedLang: string }
-  ) => CanvasState;
-  attachRegistryPayload: (payload: any, specialist: any, flagsOverride?: Record<string, boolean | string>) => any;
-  finalizeResponse: (payload: any) => TResponse;
-};
-
-type LegacyPreflightResult<TResponse> = {
-  response: TResponse | null;
-  blockingMarkerClass: string;
-};
-
 type NormalizeActionCodeParams = {
   state: CanvasState;
   actionCodeRaw: string;
@@ -146,6 +131,13 @@ const SESSION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_SESSION_TURN_INDEX = 1_000_000;
 
+export type RunStepServerTransientState = {
+  sessionId: string;
+  sessionStartedAt: string;
+  sessionTurnIndex: number;
+  uiPhaseByStep: Record<string, string>;
+};
+
 function normalizeIncomingSessionId(raw: unknown): string {
   const value = String(raw || "").trim();
   if (!value) return "";
@@ -166,6 +158,18 @@ function normalizeIncomingSessionTurnIndex(raw: unknown): number | null {
   const normalized = Math.trunc(n);
   if (normalized > MAX_SESSION_TURN_INDEX) return MAX_SESSION_TURN_INDEX;
   return normalized;
+}
+
+export function applyRunStepServerTransients(
+  state: CanvasState,
+  serverState: RunStepServerTransientState
+): CanvasState {
+  const runtimeState = state as Record<string, unknown>;
+  runtimeState.__session_id = serverState.sessionId;
+  runtimeState.__session_started_at = serverState.sessionStartedAt;
+  runtimeState.__session_turn_index = serverState.sessionTurnIndex;
+  runtimeState.__ui_phase_by_step = { ...serverState.uiPhaseByStep };
+  return state;
 }
 
 export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
@@ -198,21 +202,28 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
 
     const rawStateContractMarkers = deps.detectInvalidContractStateMarkers(rawState);
     let state = deps.normalizeState(params.args.state ?? {});
+    const incomingStateVersion = String(rawState.state_version ?? "").trim();
     const preMigrateStateVersion = String((state as any).state_version || "").trim();
     let migrationApplied = false;
     let migrationFromVersion = "";
+    const unsupportedStateVersion =
+      incomingStateVersion !== "" && !deps.isSupportedStateVersion(incomingStateVersion);
     if (preMigrateStateVersion && preMigrateStateVersion !== deps.currentStateVersion) {
       migrationFromVersion = preMigrateStateVersion;
     }
-    try {
-      state = deps.migrateState(state);
-      if (migrationFromVersion && String((state as any).state_version || "") === deps.currentStateVersion) {
-        migrationApplied = true;
+    if (!unsupportedStateVersion) {
+      try {
+        state = deps.migrateState(state);
+        if (migrationFromVersion && String((state as any).state_version || "") === deps.currentStateVersion) {
+          migrationApplied = true;
+        }
+      } catch {
+        if (!migrationFromVersion) {
+          migrationFromVersion = preMigrateStateVersion || "";
+        }
       }
-    } catch {
-      if (!migrationFromVersion) {
-        migrationFromVersion = preMigrateStateVersion || "";
-      }
+    } else if (!migrationFromVersion) {
+      migrationFromVersion = incomingStateVersion;
     }
     const incomingLanguageSource = deps.normalizeStateLanguageSource((rawState as any).language_source);
     if (incomingLanguageSource && !deps.normalizeStateLanguageSource((state as any).language_source)) {
@@ -233,37 +244,27 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       rawState && typeof (rawState as any).__ui_phase_by_step === "object" && (rawState as any).__ui_phase_by_step !== null
         ? ((rawState as any).__ui_phase_by_step as Record<string, unknown>)
         : null;
-    if (incomingPhaseRaw) {
-      const phaseByStep = Object.fromEntries(
+    const uiPhaseByStep = incomingPhaseRaw
+      ? Object.fromEntries(
         Object.entries(incomingPhaseRaw)
           .map(([stepId, contractId]) => [String(stepId || "").trim(), String(contractId || "").trim()])
           .filter(([stepId, contractId]) => stepId && contractId)
-      );
-      if (Object.keys(phaseByStep).length > 0) {
-        (state as any).__ui_phase_by_step = phaseByStep;
-      }
-    }
+      )
+      : {};
 
     const incomingSessionId = normalizeIncomingSessionId((rawState as any).__session_id);
     const incomingSessionStartedAt = normalizeIncomingSessionStartedAt((rawState as any).__session_started_at);
     const incomingSessionTurnIndex = normalizeIncomingSessionTurnIndex((rawState as any).__session_turn_index);
-    if (incomingSessionId) (state as any).__session_id = incomingSessionId;
-    if (incomingSessionStartedAt) (state as any).__session_started_at = incomingSessionStartedAt;
+    const serverState: RunStepServerTransientState = {
+      sessionId: incomingSessionId || crypto.randomUUID(),
+      sessionStartedAt: incomingSessionStartedAt || new Date().toISOString(),
+      sessionTurnIndex: incomingSessionTurnIndex ?? 0,
+      uiPhaseByStep,
+    };
     // __session_log_file is server-owned and never trusted from client state.
-    if (incomingSessionTurnIndex !== null) {
-      (state as any).__session_turn_index = incomingSessionTurnIndex;
-    }
-    if (!String((state as any).__session_id || "").trim()) {
-      (state as any).__session_id = crypto.randomUUID();
-      (state as any).__session_started_at = new Date().toISOString();
-      (state as any).__session_turn_index = 0;
-    }
-    if (!String((state as any).__session_started_at || "").trim()) {
-      (state as any).__session_started_at = new Date().toISOString();
-    }
-    const previousTurnIndex = Number((state as any).__session_turn_index || 0);
+    const previousTurnIndex = Number(serverState.sessionTurnIndex || 0);
     const nextTurnIndex = Number.isFinite(previousTurnIndex) ? previousTurnIndex + 1 : 1;
-    (state as any).__session_turn_index = nextTurnIndex;
+    serverState.sessionTurnIndex = nextTurnIndex;
     const requestScopedTurnId = String((rawState as any).__request_id || "").trim();
     (state as any).__session_turn_id = requestScopedTurnId || crypto.randomUUID();
     if ((state as any).__ui_telemetry) {
@@ -311,9 +312,11 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
     const actionCodeRaw = userMessageCandidate.startsWith("ACTION_") ? userMessageCandidate : "";
     return {
       state,
+      serverState,
       rawLegacyMarkers,
       migrationApplied,
       migrationFromVersion,
+      unsupportedStateVersion,
       transientTextSubmit,
       transientPendingScores,
       isBootstrapPollCall,
@@ -367,34 +370,6 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
       clickedActionCodeForNoRepeat,
       clickedLabelForNoRepeat,
       response: null,
-    };
-  }
-
-  function handleLegacyPreflight<TResponse>(
-    params: LegacyPreflightParams<TResponse>
-  ): LegacyPreflightResult<TResponse> {
-    const legacyMarkers = Array.from(
-      new Set([
-        ...params.rawLegacyMarkers,
-        ...deps.detectLegacySessionMarkers(params.state),
-        ...deps.detectInvalidContractStateMarkers(params.state as unknown as Record<string, unknown>),
-      ])
-    );
-    if (legacyMarkers.length > 0) {
-      deps.logStructuredEvent?.({
-        severity: "info",
-        event: "legacy_preflight_ignored",
-        state: params.state,
-        step_id: String((params.state as any).current_step || deps.step0Id),
-        details: {
-          marker_count: legacyMarkers.length,
-          markers: legacyMarkers,
-        },
-      });
-    }
-    return {
-      response: null,
-      blockingMarkerClass: "none",
     };
   }
 
@@ -487,7 +462,6 @@ export function createRunStepPreflightHelpers(deps: RunStepPreflightDeps) {
   return {
     initializeRunStepPreflight,
     preprocessBootstrapPoll,
-    handleLegacyPreflight,
     applyActionCodeNormalization,
     deriveIntentTypeForRouting,
   };

@@ -7,7 +7,7 @@ export { createRunStepPipelineHelpers } from "./run_step_pipeline.js";
 export { createRunStepPolicyMetaHelpers } from "./run_step_policy_meta.js";
 export { createRunStepStep0DisplayHelpers } from "./run_step_step0.js";
 export { createRunStepPresentationHelpers } from "./run_step_presentation.js";
-export { createRunStepPreflightHelpers } from "./run_step_preflight.js";
+export { applyRunStepServerTransients, createRunStepPreflightHelpers } from "./run_step_preflight.js";
 export { createTurnResponseEngine } from "./run_step_turn_response_engine.js";
 export { createRunStepRuntimeFinalizeLayer } from "./run_step_runtime_finalize.js";
 export { createRunStepRuntimeTextHelpers } from "./run_step_runtime_finalize.js";

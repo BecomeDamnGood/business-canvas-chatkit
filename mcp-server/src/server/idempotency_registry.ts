@@ -18,6 +18,7 @@ type IdempotencyRegistryEntry = {
   resultForClient?: Record<string, unknown>;
 };
 
+// Process-local by design for this single-instance app. Move to a shared store before multi-instance rollout.
 const idempotencyRegistry = new Map<string, IdempotencyRegistryEntry>();
 
 function toStableHashValue(value: unknown, depth = 0): unknown {

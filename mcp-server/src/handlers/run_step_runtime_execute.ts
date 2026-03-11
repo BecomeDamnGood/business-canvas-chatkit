@@ -13,7 +13,7 @@ export async function runStepRuntimeExecute(
     resolveHolisticPolicyFlags,
     normalizeStateLanguageSource, logStructuredEvent, createStructuredLogContextFromState,
     deriveTransitionEventFromLegacy, orchestrateFromTransition, envFlagEnabled, createTurnLlmAccumulator,
-    registerTurnLlmCall, normalizeUsage, runStepPreflightHelpers, createRunStepRuntimeFinalizeLayer,
+    registerTurnLlmCall, normalizeUsage, runStepPreflightHelpers, applyRunStepServerTransients, createRunStepRuntimeFinalizeLayer,
     resolveModelForCall, shouldLogLocalDevDiagnostics, isUiTranslationFastModelV1Enabled,
     isUiI18nV3LangBootstrapEnabled, isUiStartTriggerLangResolveV1Enabled, isInteractiveLocaleReady,
     normalizeLangCode, ensureUiStringsForState, resolveLanguageForTurn, parseMenuFromContractIdForStep,
@@ -156,10 +156,34 @@ export async function runStepRuntimeExecute(
     inputMode,
     uiI18nTelemetry,
   });
+  let state = applyRunStepServerTransients(preflight.state, preflight.serverState);
+  if (preflight.unsupportedStateVersion) {
+    const blockedState = buildFailClosedState(state, "session_upgrade_required", {
+      requestedLang: localeHint,
+    });
+    return {
+      ok: false,
+      tool: "run_step",
+      current_step_id: String(blockedState.current_step || STEP_0_ID),
+      active_specialist: String((blockedState as Record<string, unknown>).active_specialist || ""),
+      text: "",
+      prompt: "",
+      specialist: {},
+      registry_version: ACTIONCODE_REGISTRY.version,
+      state: blockedState,
+      error: {
+        type: "session_upgrade_required",
+        category: "contract",
+        severity: "fatal",
+        retryable: false,
+        message: "Session state version is newer than this server.",
+        retry_action: "restart_session",
+        required_action: "restart_session",
+      },
+    };
+  }
   migrationApplied = preflight.migrationApplied;
   migrationFromVersion = preflight.migrationFromVersion;
-  let state = preflight.state;
-  let rawLegacyMarkers = preflight.rawLegacyMarkers;
   const transientTextSubmit = preflight.transientTextSubmit;
   const transientPendingScores = preflight.transientPendingScores;
   const isBootstrapPollCall = preflight.isBootstrapPollCall;
@@ -239,7 +263,6 @@ export async function runStepRuntimeExecute(
     ports: runStepPreflightHelpers,
     runtime: {
       state,
-      rawLegacyMarkers,
       isBootstrapPollCall,
       actionCodeRaw,
       userMessage,

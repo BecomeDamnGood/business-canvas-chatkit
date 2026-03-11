@@ -3,6 +3,7 @@ import { resolveModelForCall } from "../core/model_routing.js";
 import {
   CURRENT_STATE_VERSION,
   getFinalsSnapshot,
+  isSupportedStateVersion,
   normalizeState,
   migrateState,
   normalizeStateLanguageSource,
@@ -113,6 +114,7 @@ export {
   resolveModelForCall,
   CURRENT_STATE_VERSION,
   getFinalsSnapshot,
+  isSupportedStateVersion,
   normalizeState,
   migrateState,
   normalizeStateLanguageSource,

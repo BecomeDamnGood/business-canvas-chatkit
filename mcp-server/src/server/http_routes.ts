@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -31,8 +31,10 @@ import {
 } from "./observability.js";
 import {
   BOOTSTRAP_SESSION_REGISTRY_TTL_MS,
+  DIAGNOSTICS_BEARER_TOKEN,
   IDEMPOTENCY_ENTRY_TTL_MS,
   IMAGE_DIGEST,
+  MCP_CORS_ALLOW_ORIGINS,
   MCP_PATH,
   MCP_SIMULATED_HANDLE_DELAY_MS,
   MAX_REQUEST_SIZE_BYTES,
@@ -53,6 +55,133 @@ import { summarizeIdempotencyRegistry } from "./idempotency_registry.js";
 import { createAppServer } from "./mcp_registration.js";
 import { resolveBaseUrl } from "./run_step_model_result.js";
 import { loadUiHtml } from "./run_step_transport.js";
+
+const DEFAULT_UI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ui");
+const UI_ALLOWED_FILES = new Set(["step-card.bundled.html"]);
+const DEFAULT_SHUTDOWN_GRACE_MS = 10_000;
+const MCP_CORS_ALLOWED_METHODS = "POST, GET, DELETE, OPTIONS";
+const MCP_CORS_ALLOWED_HEADERS =
+  "Content-Type, Accept, Authorization, Last-Event-ID, Mcp-Session-Id, Mcp-Protocol-Version, X-Correlation-Id";
+
+function isWithinDirectory(baseDir: string, candidatePath: string): boolean {
+  const relative = path.relative(baseDir, candidatePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+export function resolveUiAssetPath(pathname: string, uiDir = DEFAULT_UI_DIR): string | null {
+  if (pathname === "/ui/step-card" || pathname === "/ui/step-card/") {
+    return path.join(uiDir, "step-card.bundled.html");
+  }
+  if (!pathname.startsWith("/ui/")) return null;
+  const rest = pathname.slice("/ui/".length).replace(/\/$/, "") || "index.html";
+  if (!UI_ALLOWED_FILES.has(rest)) return null;
+  const resolved = path.resolve(path.join(uiDir, rest));
+  if (!isWithinDirectory(uiDir, resolved)) return null;
+  return resolved;
+}
+
+type ProcessShutdownControllerOptions = {
+  shutdownGraceMs?: number;
+  exitProcess?: (code: number) => void;
+  logger?: Pick<typeof console, "log" | "warn" | "error">;
+};
+
+export function createProcessShutdownController(
+  server: Server,
+  options: ProcessShutdownControllerOptions = {}
+): {
+  handleSignal: (signal: NodeJS.Signals) => Promise<void>;
+  register: () => () => void;
+} {
+  const shutdownGraceMs = Number(options.shutdownGraceMs) > 0
+    ? Math.trunc(Number(options.shutdownGraceMs))
+    : DEFAULT_SHUTDOWN_GRACE_MS;
+  const exitProcess = options.exitProcess ?? ((code: number) => process.exit(code));
+  const logger = options.logger ?? console;
+  let shutdownPromise: Promise<void> | null = null;
+
+  const handleSignal = (signal: NodeJS.Signals): Promise<void> => {
+    if (shutdownPromise) return shutdownPromise;
+    shutdownPromise = new Promise((resolve) => {
+      logger.log(`[shutdown] Received ${signal}, draining HTTP server.`);
+      let settled = false;
+      let forceTimer: NodeJS.Timeout | null = null;
+      const finish = (code: number, err?: unknown) => {
+        if (settled) return;
+        settled = true;
+        if (forceTimer) clearTimeout(forceTimer);
+        if (err) {
+          logger.error("[shutdown] HTTP server close failed:", err);
+        }
+        exitProcess(code);
+        resolve();
+      };
+      forceTimer = setTimeout(() => {
+        logger.warn(`[shutdown] Grace period exceeded after ${shutdownGraceMs}ms; forcing exit.`);
+        finish(1);
+      }, shutdownGraceMs);
+      forceTimer.unref?.();
+      server.close((err) => {
+        if (err && (err as NodeJS.ErrnoException).code !== "ERR_SERVER_NOT_RUNNING") {
+          finish(1, err);
+          return;
+        }
+        finish(0);
+      });
+    });
+    return shutdownPromise;
+  };
+
+  const register = (): (() => void) => {
+    const onSigterm = () => {
+      void handleSignal("SIGTERM");
+    };
+    const onSigint = () => {
+      void handleSignal("SIGINT");
+    };
+    process.on("SIGTERM", onSigterm);
+    process.on("SIGINT", onSigint);
+    return () => {
+      process.removeListener("SIGTERM", onSigterm);
+      process.removeListener("SIGINT", onSigint);
+    };
+  };
+
+  return {
+    handleSignal,
+    register,
+  };
+}
+
+export function diagnosticsAccessAllowed(params: {
+  authorizationHeader?: unknown;
+  isLocalDev?: boolean;
+  bearerToken?: string;
+}): boolean {
+  if (params.isLocalDev === true) return true;
+  const expectedToken = String(params.bearerToken || "").trim();
+  if (!expectedToken) return false;
+  const header = safeString(params.authorizationHeader ?? "").trim();
+  return header === `Bearer ${expectedToken}`;
+}
+
+export function resolveAllowedMcpCorsOrigin(
+  originHeader: unknown,
+  allowedOrigins: readonly string[] = MCP_CORS_ALLOW_ORIGINS
+): string {
+  const origin = safeString(originHeader ?? "").trim();
+  if (!origin) return "";
+  return allowedOrigins.includes(origin) ? origin : "";
+}
+
+function applyMcpCorsHeaders(res: any, allowedOrigin: string): void {
+  if (!allowedOrigin) return;
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Access-Control-Allow-Methods", MCP_CORS_ALLOWED_METHODS);
+  res.setHeader("Access-Control-Allow-Headers", MCP_CORS_ALLOWED_HEADERS);
+  res.setHeader("Access-Control-Max-Age", "600");
+  res.setHeader("Vary", "Origin");
+}
 
 const httpServer = async (req: any, res: any) => {
   const hostHeader = safeString(req?.headers?.host ?? "localhost");
@@ -85,6 +214,18 @@ const httpServer = async (req: any, res: any) => {
     const correlationId = getCorrelationId(req);
     const traceId = getTraceId(req) || correlationId;
     ensureCorrelationHeader(res, correlationId);
+    if (
+      isDiagnosticsEndpoint &&
+      !diagnosticsAccessAllowed({
+        authorizationHeader: req?.headers?.authorization,
+        isLocalDev,
+        bearerToken: DIAGNOSTICS_BEARER_TOKEN,
+      })
+    ) {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("Not found");
+      return;
+    }
     if (isVersionEndpoint) {
       res.writeHead(200, { "content-type": "text/plain" });
       if (req.method === "GET") {
@@ -277,15 +418,12 @@ const httpServer = async (req: any, res: any) => {
 
   // Static root for /ui/* – runtime only requires step-card.bundled.html.
   if (req.method === "GET" && url.pathname.startsWith("/ui/")) {
-    const uiDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ui");
-    let filePath: string;
-    if (url.pathname === "/ui/step-card" || url.pathname === "/ui/step-card/") {
-      filePath = path.join(uiDir, "step-card.bundled.html");
-    } else {
-      const rest = url.pathname.slice("/ui/".length).replace(/\/$/, "") || "index.html";
-      filePath = path.join(uiDir, rest);
+    const resolved = resolveUiAssetPath(url.pathname, DEFAULT_UI_DIR);
+    if (!resolved) {
+      res.writeHead(404, { "content-type": "text/plain" });
+      res.end("Not found");
+      return;
     }
-    const resolved = path.resolve(filePath);
     try {
       const stat = fs.statSync(resolved);
       const fileName = path.basename(resolved);
@@ -333,8 +471,16 @@ const httpServer = async (req: any, res: any) => {
   if (url.pathname === MCP_PATH && req.method && MCP_METHODS.has(req.method)) {
     const correlationId = getCorrelationId(req);
     const traceId = getTraceId(req) || correlationId;
+    const allowedCorsOrigin = resolveAllowedMcpCorsOrigin(req?.headers?.origin);
     (req as any).__correlationId = correlationId;
     ensureCorrelationHeader(res, correlationId);
+    applyMcpCorsHeaders(res, allowedCorsOrigin);
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
 
     const acceptHeader = getHeader(req, "accept");
     const contentType = getHeader(req, "content-type");
@@ -571,9 +717,16 @@ const httpServer = async (req: any, res: any) => {
   res.writeHead(404).end("Not Found");
 };
 
-httpServer.listen = createServer(httpServer).listen.bind(createServer(httpServer));
+type StartServerOptions = {
+  host?: string;
+  port?: number;
+  registerSignalHandlers?: boolean;
+  shutdownGraceMs?: number;
+  exitProcess?: (code: number) => void;
+  logger?: Pick<typeof console, "log" | "warn" | "error">;
+};
 
-async function startServer(): Promise<void> {
+async function startServer(options: StartServerOptions = {}): Promise<Server> {
   try {
     await getRunStep();
   } catch (err) {
@@ -581,14 +734,38 @@ async function startServer(): Promise<void> {
     process.exit(1);
   }
 
-  httpServer.listen(port, host, () => {
-    console.log(
-      `Business Canvas MCP server listening on http://${host}:${port}${MCP_PATH} (${VERSION})`
-    );
-    if (isLocalDev) {
-      console.log(`Local dev: MCP http://localhost:${port}${MCP_PATH}  UI http://localhost:${port}/ui/step-card`);
-    }
+  const listenHost = options.host ?? host;
+  const listenPort = options.port ?? port;
+  const logger = options.logger ?? console;
+  const server = createServer(httpServer);
+  const shutdownController = createProcessShutdownController(server, {
+    shutdownGraceMs: options.shutdownGraceMs,
+    exitProcess: options.exitProcess,
+    logger,
   });
+  const removeSignalHandlers = options.registerSignalHandlers === false
+    ? () => {}
+    : shutdownController.register();
+  server.once("close", removeSignalHandlers);
+  await new Promise<void>((resolve, reject) => {
+    const onError = (err: Error) => {
+      server.removeListener("error", onError);
+      removeSignalHandlers();
+      reject(err);
+    };
+    server.once("error", onError);
+    server.listen(listenPort, listenHost, () => {
+      server.removeListener("error", onError);
+      resolve();
+    });
+  });
+  logger.log(
+    `Business Canvas MCP server listening on http://${listenHost}:${listenPort}${MCP_PATH} (${VERSION})`
+  );
+  if (isLocalDev) {
+    logger.log(`Local dev: MCP http://localhost:${listenPort}${MCP_PATH}  UI http://localhost:${listenPort}/ui/step-card`);
+  }
+  return server;
 }
 
 export { httpServer, startServer };

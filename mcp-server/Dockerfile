@@ -57,7 +57,24 @@ RUN if [ -d "assets/presentation/fonts" ]; then \
       echo "No custom fonts found at assets/presentation/fonts; skipping font install"; \
     fi
 
+# Run the app as a dedicated non-root user. LibreOffice and unzip process
+# user-derived presentation content, so they must not run as root.
+RUN groupadd --system appuser \
+  && useradd --system --gid appuser --create-home --home-dir /home/appuser appuser \
+  && mkdir -p /home/appuser/.config /home/appuser/.cache /tmp/business-canvas-presentations \
+  && chown -R appuser:appuser /app /home/appuser /tmp/business-canvas-presentations
+
+ENV HOME=/home/appuser
+ENV XDG_CONFIG_HOME=/home/appuser/.config
+ENV XDG_CACHE_HOME=/home/appuser/.cache
+ENV TMPDIR=/tmp
+
+USER appuser
+
 ENV PORT=8787
 EXPOSE 8787
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8787/health').then((res) => { if (!res.ok) process.exit(1); }).catch(() => process.exit(1))"
 
 CMD ["node", "dist/server.js"]

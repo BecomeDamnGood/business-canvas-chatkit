@@ -29,6 +29,32 @@ function buildHelpers() {
   });
 }
 
+function buildTokenLoggingHelpers() {
+  return createRunStepResponseHelpers({
+    applyUiClientActionContract: () => {},
+    parseMenuFromContractIdForStep: () => "",
+    labelKeysForMenuActionCodes: () => [],
+    onUiParityError: () => {},
+    attachRegistryPayload: (payload) => payload,
+    uiI18nTelemetry: {},
+    tokenLoggingEnabled: true,
+    baselineModel: "gpt-5-mini",
+    getMigrationApplied: () => false,
+    getMigrationFromVersion: () => "",
+    getBlockingMarkerClass: () => "none",
+    resolveTurnTokenUsage: () => ({
+      usage: {
+        input_tokens: 12,
+        output_tokens: 8,
+        total_tokens: 20,
+        provider_available: true,
+      },
+      attempts: 1,
+      models: ["gpt-5-mini"],
+    }),
+  });
+}
+
 test("finalizeResponse logs wording-choice render decisions with compare and prompt fields", () => {
   const helpers = buildHelpers();
   const captured: string[] = [];
@@ -110,3 +136,41 @@ test("finalizeResponse logs wording-choice render decisions with compare and pro
   assert.equal(event.wording_choice_suggestion_items_count, 4);
 });
 
+test("finalizeResponse skips session log file writes unless disk logging is explicitly enabled", () => {
+  const previousLocalDev = process.env.LOCAL_DEV;
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousDiskFlag = process.env.BSC_SESSION_TOKEN_LOG_TO_DISK;
+  process.env.LOCAL_DEV = "0";
+  process.env.NODE_ENV = "production";
+  delete process.env.BSC_SESSION_TOKEN_LOG_TO_DISK;
+
+  try {
+    const helpers = buildTokenLoggingHelpers();
+    const response = helpers.finalizeResponse({
+      ok: true,
+      tool: "run_step",
+      current_step_id: "dream",
+      active_specialist: "Dream",
+      text: "ok",
+      specialist: {
+        ui_contract_id: "dream:valid_output:DREAM_CONFIRM:v1",
+      },
+      state: {
+        current_step: "dream",
+        active_specialist: "Dream",
+        __session_id: "session-123",
+        __session_started_at: "2026-03-11T10:00:00.000Z",
+        __session_turn_id: "turn-123",
+      } as any,
+    });
+
+    assert.equal("__session_log_file" in ((response as any).state || {}), false);
+  } finally {
+    if (previousLocalDev === undefined) delete process.env.LOCAL_DEV;
+    else process.env.LOCAL_DEV = previousLocalDev;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousDiskFlag === undefined) delete process.env.BSC_SESSION_TOKEN_LOG_TO_DISK;
+    else process.env.BSC_SESSION_TOKEN_LOG_TO_DISK = previousDiskFlag;
+  }
+});
