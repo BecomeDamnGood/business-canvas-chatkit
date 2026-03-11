@@ -2,23 +2,23 @@
 
 Dit document laat per taal zien welke keys nog gelijk zijn aan EN en dus nog vertaald moeten worden.
 
-Totaal keys in catalogus: **231**.
+Totaal keys in catalogus: **232**.
 
 ## Wat moet vertaald worden
 
 | Taal | Reeds vertaald | Nog te vertalen | Doelbestand |
 |---|---:|---:|---|
-| `nl` | 224 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_nl.ts` |
-| `pt-BR` | 224 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_pt_br.ts` |
-| `es` | 224 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_es.ts` |
-| `fr` | 221 | 10 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_fr.ts` |
-| `de` | 222 | 9 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_de.ts` |
-| `hi` | 224 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_hi.ts` |
-| `id` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_id.ts` |
-| `it` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_it.ts` |
-| `ja` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_ja.ts` |
-| `ko` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_ko.ts` |
-| `zh-Hans` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_zh_hans.ts` |
+| `nl` | 225 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_nl.ts` |
+| `pt-BR` | 225 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_pt_br.ts` |
+| `es` | 225 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_es.ts` |
+| `fr` | 222 | 10 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_fr.ts` |
+| `de` | 223 | 9 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_de.ts` |
+| `hi` | 225 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_hi.ts` |
+| `id` | 224 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_id.ts` |
+| `it` | 224 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_it.ts` |
+| `ja` | 224 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_ja.ts` |
+| `ko` | 224 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_ko.ts` |
+| `zh-Hans` | 224 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_zh_hans.ts` |
 
 ## Instructie voor een agent
 

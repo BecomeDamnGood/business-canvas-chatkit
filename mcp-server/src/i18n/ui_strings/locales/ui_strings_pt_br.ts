@@ -29,6 +29,7 @@ export const UI_STRINGS_LOCALE_PT_BR: Record<string, string> = {
     "dreamBuilder.question.base": "Ao olhar de 5 a 10 anos à frente, quais grandes oportunidades ou ameaças você vê e quais mudanças positivas você espera? Formule isso como declarações claras.",
     "dreamBuilder.question.more": "O que mais você vê mudando no futuro, positivo ou negativo? Deixe sua imaginação correr solta e formule isso como declarações claras.",
     "dreamBuilder.startExercise": "Iniciar o exercício",
+    "dreamBuilder.resumeExercise": "Continue com o pequeno exercício que ajuda a definir seu sonho.",
     "dreamBuilder.statements.count": "N declarações de um mínimo de 20 até agora",
     "dreamBuilder.statements.empty": "Ainda não há declarações.",
     "dreamBuilder.statements.title": "Suas declarações de Sonho",

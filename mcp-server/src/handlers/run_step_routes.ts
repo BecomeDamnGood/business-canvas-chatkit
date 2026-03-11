@@ -14,6 +14,7 @@ import {
 } from "./run_step_ports.js";
 import { canonicalPresentationRecapForState } from "./run_step_presentation_recap.js";
 import { STEP_0_BOOTSTRAP_SPECIALIST } from "../steps/step_0_bootstrap.js";
+import { getDreamBuilderResumeContext } from "./dream_builder_resume.js";
 
 export type RenderedRouteOutput = RunStepRenderedRouteOutput;
 export type RouteRegistryContext = RunStepRouteRegistryRequest;
@@ -66,83 +67,6 @@ function flattenRunStepRoutePorts<TResponse>(ports: RunStepRoutePorts<TResponse>
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") return {};
   return value as Record<string, unknown>;
-}
-
-type DreamTopCluster = { theme: string; average: number };
-
-function readStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.map((entry) => String(entry || "").trim()).filter(Boolean)
-    : [];
-}
-
-function readDreamScoreMatrix(value: unknown): number[][] {
-  return Array.isArray(value)
-    ? value
-      .map((row) =>
-        Array.isArray(row)
-          ? row
-            .map((entry) => (typeof entry === "number" && Number.isFinite(entry) ? entry : null))
-            .filter((entry): entry is number => entry !== null)
-          : []
-      )
-      .filter((row) => row.length > 0)
-    : [];
-}
-
-function readDreamTopClusters(value: unknown): DreamTopCluster[] {
-  return Array.isArray(value)
-    ? value
-      .map((entry) => {
-        const record = asRecord(entry);
-        const theme = String(record.theme || "").trim();
-        const average = typeof record.average === "number" && Number.isFinite(record.average)
-          ? record.average
-          : null;
-        if (!theme || average === null) return null;
-        return { theme, average };
-      })
-      .filter((entry): entry is DreamTopCluster => Boolean(entry))
-    : [];
-}
-
-function sameStringArray(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) return false;
-  return left.every((entry, index) => entry === right[index]);
-}
-
-function getDreamBuilderResumeContext(state: CanvasState) {
-  const stateRecord = state as Record<string, unknown>;
-  const canonicalStatements = readStringArray(stateRecord.dream_builder_statements);
-  const scoringStatements = readStringArray(stateRecord.dream_scoring_statements);
-  const lastStatements = readStringArray(asRecord(stateRecord.last_specialist_result).statements);
-  const statements =
-    canonicalStatements.length > 0
-      ? canonicalStatements
-      : scoringStatements.length > 0
-        ? scoringStatements
-        : lastStatements;
-  const scores = readDreamScoreMatrix(stateRecord.dream_scores);
-  const topClusters = readDreamTopClusters(stateRecord.dream_top_clusters);
-  const hasSavedScoreContext =
-    scoringStatements.length > 0 ||
-    scores.length > 0 ||
-    topClusters.length > 0 ||
-    String(stateRecord.dream_awaiting_direction ?? "").trim() === "true";
-  const hasReusableScoreContext =
-    statements.length >= 20 &&
-    topClusters.length > 0 &&
-    (scoringStatements.length === 0 || sameStringArray(statements, scoringStatements)) &&
-    (scores.length > 0 || topClusters.length > 0);
-
-  return {
-    statements,
-    scoringStatements,
-    scores,
-    topClusters,
-    hasSavedScoreContext,
-    hasReusableScoreContext,
-  };
 }
 
 function sanitizeStep0SeedToken(raw: unknown, fallback = ""): string {

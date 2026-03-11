@@ -77,6 +77,7 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",
   "invariant.prompt.ask.default": "Share your thoughts or choose an option.",
   "dreamBuilder.startExercise": "Start the exercise",
+  "dreamBuilder.resumeExercise": "Continue with the short exercise that helps define your dream.",
   "dreamBuilder.question.base":
     "Looking 5 to 10 years ahead, which major opportunities or threats do you see, and which positive changes do you hope for? Formulate them as clear statements.",
   "dreamBuilder.question.more":

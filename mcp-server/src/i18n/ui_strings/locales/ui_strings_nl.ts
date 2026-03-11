@@ -29,6 +29,7 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "dreamBuilder.question.base": "Als je 5 tot 10 jaar vooruitkijkt, welke grote kansen of dreigingen zie je, en welke positieve veranderingen hoop je? Formuleer dit als duidelijke uitspraken.",
     "dreamBuilder.question.more": "Wat zie je nog meer veranderen in de toekomst, positief of negatief? Laat je verbeelding de vrije loop en formuleer dit als duidelijke uitspraken.",
     "dreamBuilder.startExercise": "Start de oefening",
+    "dreamBuilder.resumeExercise": "Ga verder met de kleine oefening die helpt om je droom te definiëren.",
     "dreamBuilder.statements.count": "N statements van minimaal 20 tot nu toe",
     "dreamBuilder.statements.empty": "Nog geen statements.",
     "dreamBuilder.statements.title": "Jouw droom-statements",

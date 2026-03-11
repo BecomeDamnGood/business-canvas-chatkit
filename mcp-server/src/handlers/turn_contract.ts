@@ -2,8 +2,10 @@ import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
 import type { CanvasState } from "../core/state.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
+import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 import { STEP_0_ID } from "../steps/step_0_validation.js";
 import { buildCanonicalWidgetState } from "./run_step_canonical_widget_state.js";
+import { dreamBuilderExerciseLabelKey } from "./dream_builder_resume.js";
 import { stampResponseContentLocale } from "./locale_continuity.js";
 import {
   CONTRACT_BOOTSTRAP_PHASES,
@@ -168,11 +170,30 @@ function hasStartAction(response: RunStepContractResponse, state: Record<string,
   return actions.some((action) => String(action?.action_code || "").trim() === "ACTION_START");
 }
 
+function uiLabelForKey(state: Record<string, unknown>, labelKey: string): string {
+  const stateUiStrings = toRecord(state.ui_strings);
+  const localized = String(stateUiStrings[labelKey] || "").trim();
+  if (localized) return localized;
+  return String(UI_STRINGS_DEFAULT[labelKey] || "").trim();
+}
+
+function actionLabelKeyMatchesState(
+  state: Record<string, unknown>,
+  actionCode: string,
+  actualLabelKey: string,
+  expectedLabelKey: string
+): boolean {
+  if (actualLabelKey === expectedLabelKey) return true;
+  if (actionCode !== "ACTION_DREAM_INTRO_START_EXERCISE") return false;
+  return actualLabelKey === dreamBuilderExerciseLabelKey(state);
+}
+
 function buildStateActionDescriptor(
   state: Record<string, unknown>,
   role: UiActionRole
 ): {
   actionCode: string;
+  label: string;
   labelKey: string;
   surface: UiActionSurface;
   intent: Record<string, unknown>;
@@ -184,6 +205,7 @@ function buildStateActionDescriptor(
     if (!actionCode) return null;
     return {
       actionCode,
+      label: uiLabelForKey(state, "btnStart"),
       labelKey: "btnStart",
       surface: "primary",
       intent: { type: "CONTINUE" },
@@ -194,9 +216,11 @@ function buildStateActionDescriptor(
     const actionCode = String(state.ui_action_text_submit || "").trim();
     if (!actionCode) return null;
     const payloadMode = String(state.ui_action_text_submit_payload_mode || "text").trim().toLowerCase();
+    const labelKey = payloadMode === "scores" ? "btnScoringContinue" : "sendTitle";
     return {
       actionCode,
-      labelKey: payloadMode === "scores" ? "btnScoringContinue" : "sendTitle",
+      label: uiLabelForKey(state, labelKey),
+      labelKey,
       surface: "text_input",
       intent: payloadMode === "scores" ? { type: "SUBMIT_SCORES", scores: [] } : { type: "SUBMIT_TEXT", text: "" },
       primary: true,
@@ -208,6 +232,7 @@ function buildStateActionDescriptor(
     if (!actionCode) return null;
     return {
       actionCode,
+      label: uiLabelForKey(state, "btnScoringContinue"),
       labelKey: "btnScoringContinue",
       surface: "primary",
       intent: { type: "SUBMIT_SCORES", scores: [] },
@@ -219,6 +244,7 @@ function buildStateActionDescriptor(
     if (!actionCode) return null;
     return {
       actionCode,
+      label: uiLabelForKey(state, "wordingChoice.chooseVersion"),
       labelKey: "wordingChoice.chooseVersion",
       surface: "wording_choice",
       intent: { type: "WORDING_PICK", choice: "user" },
@@ -230,6 +256,7 @@ function buildStateActionDescriptor(
     if (!actionCode) return null;
     return {
       actionCode,
+      label: uiLabelForKey(state, "wordingChoice.chooseVersion"),
       labelKey: "wordingChoice.chooseVersion",
       surface: "wording_choice",
       intent: { type: "WORDING_PICK", choice: "suggestion" },
@@ -239,9 +266,11 @@ function buildStateActionDescriptor(
   if (role === "dream_start_exercise") {
     const actionCode = String(state.ui_action_dream_start_exercise || "").trim();
     if (!actionCode) return null;
+    const labelKey = dreamBuilderExerciseLabelKey(state);
     return {
       actionCode,
-      labelKey: "dreamBuilder.startExercise",
+      label: uiLabelForKey(state, labelKey),
+      labelKey,
       surface: "auxiliary",
       intent: { type: "START_EXERCISE", exerciseType: "dream_builder" },
       primary: false,
@@ -252,6 +281,7 @@ function buildStateActionDescriptor(
     if (!actionCode) return null;
     return {
       actionCode,
+      label: uiLabelForKey(state, "btnSwitchToSelfDream"),
       labelKey: "btnSwitchToSelfDream",
       surface: "auxiliary",
       intent: { type: "ROUTE", route: "__ROUTE__DREAM_SWITCH_TO_SELF__" },
@@ -306,7 +336,13 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
         if (String(entry.action_code || "").trim() !== normalizedCode) continue;
         entry.role = role;
         entry.surface = descriptor.surface;
-        if (!String(entry.label_key || "").trim()) entry.label_key = descriptor.labelKey;
+        if (role === "dream_start_exercise") {
+          entry.label_key = descriptor.labelKey;
+          entry.label = descriptor.label;
+        } else {
+          if (!String(entry.label_key || "").trim()) entry.label_key = descriptor.labelKey;
+          if (!String(entry.label || "").trim()) entry.label = descriptor.label;
+        }
         if (role === "text_submit" && descriptor.payloadMode) {
           entry.payload_mode = descriptor.payloadMode;
         }
@@ -316,7 +352,7 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
     seenByActionCode.add(normalizedCode);
     unifiedActions.push({
       id: `state_${role}`,
-      label: "",
+      label: descriptor.label,
       label_key: descriptor.labelKey,
       action_code: normalizedCode,
       intent: descriptor.intent,
@@ -523,7 +559,9 @@ export function validateUiPayloadContractParity(
     const labelKey = labelKeyRaw || labelKeyForMenuAction(menuId, actionCode, i);
     const label = String(action.label || "").trim();
     if (actionCode !== actionCodes[i]) return `ui_actions_actioncode_mismatch_at_${i + 1}`;
-    if (labelKey !== expectedLabelKeys[i]) return `ui_actions_label_key_mismatch_at_${i + 1}`;
+    if (!actionLabelKeyMatchesState(((response.state as Record<string, unknown> | undefined) || {}), actionCode, labelKey, expectedLabelKeys[i])) {
+      return `ui_actions_label_key_mismatch_at_${i + 1}`;
+    }
     if (!label) return `ui_actions_label_missing_at_${i + 1}`;
   }
   return null;

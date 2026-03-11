@@ -29,6 +29,7 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "dreamBuilder.question.base": "5年から10年先を見たとき、どんな大きな機会や脅威が見えますか？また、どんな前向きな変化を望みますか？それらを明確なステートメントとして書いてください。",
     "dreamBuilder.question.more": "未来に向けて、ほかに何が変わると思いますか？良いことでも悪いことでもかまいません。想像力を自由に広げ、明確なステートメントとして書いてください。",
     "dreamBuilder.startExercise": "エクササイズを開始",
+    "dreamBuilder.resumeExercise": "夢を定義するのに役立つ小さなエクササイズを続ける。",
     "dreamBuilder.statements.count": "これまでに最低20件のうち N 件のステートメント",
     "dreamBuilder.statements.empty": "まだステートメントがありません。",
     "dreamBuilder.statements.title": "あなたの 夢 ステートメント",

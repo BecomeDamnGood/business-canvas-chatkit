@@ -29,6 +29,7 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "dreamBuilder.question.base": "5년에서 10년 앞을 내다볼 때, 어떤 큰 기회나 위협이 보이나요? 그리고 어떤 긍정적인 변화들을 바라나요? 이를 명확한 문장들로 작성해 주세요.",
     "dreamBuilder.question.more": "앞으로 또 무엇이 바뀔 것 같나요? 긍정적이든 부정적이든 좋습니다. 상상력을 마음껏 펼쳐 명확한 문장들로 작성해 주세요.",
     "dreamBuilder.startExercise": "연습 시작하기",
+    "dreamBuilder.resumeExercise": "꿈을 정의하는 데 도움이 되는 작은 연습을 이어서 해요.",
     "dreamBuilder.statements.count": "현재까지 최소 20개 중 N개 문장",
     "dreamBuilder.statements.empty": "아직 문장이 없습니다.",
     "dreamBuilder.statements.title": "당신의 꿈 문장",

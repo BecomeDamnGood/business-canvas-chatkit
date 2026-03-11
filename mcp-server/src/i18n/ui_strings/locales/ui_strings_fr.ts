@@ -29,6 +29,7 @@ export const UI_STRINGS_LOCALE_FR: Record<string, string> = {
     "dreamBuilder.question.base": "Si tu te projettes à 5 à 10 ans, quelles grandes opportunités ou menaces vois-tu, et quels changements positifs espères-tu ? Formule-les en affirmations claires.",
     "dreamBuilder.question.more": "Que vois-tu d’autre changer dans le futur, positivement ou négativement ? Laisse libre cours à ton imagination et formule-le en affirmations claires.",
     "dreamBuilder.startExercise": "Commencer l’exercice",
+    "dreamBuilder.resumeExercise": "Continue avec le petit exercice qui aide à définir ton rêve.",
     "dreamBuilder.statements.count": "N affirmations sur un minimum de 20 pour l’instant",
     "dreamBuilder.statements.empty": "Aucune affirmation pour le moment.",
     "dreamBuilder.statements.title": "Tes affirmations Rêve",

@@ -29,6 +29,7 @@ export const UI_STRINGS_LOCALE_HI: Record<string, string> = {
     "dreamBuilder.question.base": "यदि आप 5 से 10 साल आगे देखें, तो आपको कौन-से बड़े अवसर या खतरे दिखते हैं, और आप कौन-से सकारात्मक बदलावों की उम्मीद करते हैं? इन्हें स्पष्ट कथनों के रूप में लिखें।",
     "dreamBuilder.question.more": "भविष्य में और क्या बदलता हुआ दिखता है, सकारात्मक या नकारात्मक? अपनी कल्पना को खुला छोड़ें और इन्हें स्पष्ट कथनों के रूप में लिखें।",
     "dreamBuilder.startExercise": "अभ्यास शुरू करें",
+    "dreamBuilder.resumeExercise": "उस छोटे अभ्यास के साथ आगे बढ़ें जो आपके सपने को परिभाषित करने में मदद करता है।",
     "dreamBuilder.statements.count": "अब तक कम से कम 20 में से N कथन",
     "dreamBuilder.statements.empty": "अभी कोई कथन नहीं।",
     "dreamBuilder.statements.title": "आपके सपना कथन",

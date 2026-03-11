@@ -29,6 +29,7 @@ export const UI_STRINGS_LOCALE_ZH_HANS: Record<string, string> = {
     "dreamBuilder.question.base": "如果你把目光放到未来5到10年，你看到了哪些重大机会或威胁，又希望出现哪些积极变化？请把它们写成清晰的陈述。",
     "dreamBuilder.question.more": "你还看到未来会发生哪些变化（积极或消极）？尽情发挥想象力，并把它们写成清晰的陈述。",
     "dreamBuilder.startExercise": "开始练习",
+    "dreamBuilder.resumeExercise": "继续进行有助于定义你梦想的小练习。",
     "dreamBuilder.statements.count": "目前 N 条陈述（至少需要 20 条）",
     "dreamBuilder.statements.empty": "暂无陈述。",
     "dreamBuilder.statements.title": "你的 梦想 陈述",

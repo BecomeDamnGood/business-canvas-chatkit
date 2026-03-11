@@ -33,6 +33,7 @@ import {
   resetHydrationRetryCycle,
 } from "./ui_actions.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
+import { dreamBuilderExerciseLabelKey } from "../../src/handlers/dream_builder_resume.js";
 
 function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -101,6 +102,12 @@ export function shouldRenderPurposeStepIntroVideo(params: {
   if (params.showStepIntroChrome !== true) return false;
   if (params.wordingChoiceActive === true) return false;
   return Boolean(purposeStepVideoUrlForLang(params.lang));
+}
+
+export function dreamExerciseButtonLabelKeyForState(
+  state: Record<string, unknown> | null | undefined
+): "dreamBuilder.startExercise" | "dreamBuilder.resumeExercise" {
+  return dreamBuilderExerciseLabelKey(state);
 }
 
 function actionContractActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
@@ -1647,7 +1654,7 @@ export function render(overrideToolOutput?: unknown): void {
   if (btnGoToNextStepEl2) btnGoToNextStepEl2.textContent = t(lang, "btnGoToNextStep");
   const btnStartDreamExerciseEl = document.getElementById("btnStartDreamExercise");
   if (btnStartDreamExerciseEl) {
-    btnStartDreamExerciseEl.textContent = t(lang, "dreamBuilder.startExercise");
+    btnStartDreamExerciseEl.textContent = t(lang, dreamExerciseButtonLabelKeyForState(state));
     (btnStartDreamExerciseEl as HTMLButtonElement).disabled = getIsLoading();
   }
   const btnSwitchToSelfDreamEl = document.getElementById("btnSwitchToSelfDream");

@@ -42,6 +42,7 @@ export const UI_STRINGS_LOCALE_HU: Record<string, string> = {
     "dreamBuilder.question.base": "Ha 5-10 évre előre tekintesz, milyen nagy lehetőségeket vagy fenyegetéseket látsz, és milyen pozitív változásokat remélsz? Fogalmazd meg őket világos állításokként.",
     "dreamBuilder.question.more": "Mit látsz még változni a jövőben, pozitív vagy negatív irányban? Engedd szabadon a fantáziádat, és fogalmazd meg világos állításokként.",
     "dreamBuilder.startExercise": "Gyakorlat indítása",
+    "dreamBuilder.resumeExercise": "Folytasd azt a rövid gyakorlatot, amely segít meghatározni az álmodat.",
     "dreamBuilder.statements.count": "N állítás a jelenlegi minimum 20-ból eddig",
     "dreamBuilder.statements.empty": "Még nincs egyetlen állítás sem.",
     "dreamBuilder.statements.title": "Az Álom állításaid",

@@ -42,6 +42,7 @@ export const UI_STRINGS_LOCALE_RU: Record<string, string> = {
     "dreamBuilder.question.base": "Если смотреть на 5-10 лет вперёд, какие большие возможности или угрозы вы видите и каких позитивных изменений вы надеетесь добиться? Сформулируйте это как чёткие утверждения.",
     "dreamBuilder.question.more": "Что ещё, по-вашему, будет меняться в будущем — в хорошую или плохую сторону? Дайте волю воображению и сформулируйте это как чёткие утверждения.",
     "dreamBuilder.startExercise": "Начать упражнение",
+    "dreamBuilder.resumeExercise": "Продолжи небольшое упражнение, которое поможет определить твою мечту.",
     "dreamBuilder.statements.count": "N утверждений из минимум 20 на данный момент",
     "dreamBuilder.statements.empty": "Пока нет утверждений.",
     "dreamBuilder.statements.title": "Утверждения вашей мечты",

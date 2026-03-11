@@ -5,6 +5,7 @@ import { UI_STRINGS_CATALOG_BY_LOCALE } from "./ui_strings_catalog.js";
 import { UI_STRINGS_SOURCE_EN } from "./ui_strings_defaults.js";
 
 const DREAM_COPY_KEYS = [
+  "dreamBuilder.resumeExercise",
   "dreamBuilder.question.base",
   "dreamBuilder.question.more",
   "dreamBuilder.switchSelf.headline",

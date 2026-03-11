@@ -29,6 +29,7 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "dreamBuilder.question.base": "Jika Anda melihat 5 hingga 10 tahun ke depan, peluang atau ancaman besar apa yang Anda lihat, dan perubahan positif apa yang Anda harapkan? Rumuskan sebagai pernyataan yang jelas.",
     "dreamBuilder.question.more": "Apa lagi yang Anda lihat akan berubah di masa depan, positif maupun negatif? Biarkan imajinasi Anda mengalir bebas dan rumuskan sebagai pernyataan yang jelas.",
     "dreamBuilder.startExercise": "Mulai latihan",
+    "dreamBuilder.resumeExercise": "Lanjutkan latihan kecil yang membantu mendefinisikan mimpi Anda.",
     "dreamBuilder.statements.count": "N pernyataan dari minimal 20 sejauh ini",
     "dreamBuilder.statements.empty": "Belum ada pernyataan.",
     "dreamBuilder.statements.title": "Pernyataan Mimpi Anda",

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   actionRoleForStateKey,
   buildInitialDreamScoringScores,
+  dreamExerciseButtonLabelKeyForState,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
   shouldRetainDreamScoringClientScores,
@@ -184,6 +185,27 @@ test("buildInitialDreamScoringScores keeps client-entered values during a scorin
   });
 
   assert.deepEqual(scores, [["9", "8"], ["7", "7"]]);
+});
+
+test("dreamExerciseButtonLabelKeyForState keeps start copy for first-time Dream Builder entry", () => {
+  assert.equal(dreamExerciseButtonLabelKeyForState({}), "dreamBuilder.startExercise");
+});
+
+test("dreamExerciseButtonLabelKeyForState switches to resume copy when Dream Builder context can be resumed", () => {
+  assert.equal(
+    dreamExerciseButtonLabelKeyForState({
+      dream_builder_statements: ["Statement 1", "Statement 2"],
+    }),
+    "dreamBuilder.resumeExercise"
+  );
+  assert.equal(
+    dreamExerciseButtonLabelKeyForState({
+      dream_scoring_statements: Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`),
+      dream_top_clusters: [{ theme: "Trust", average: 8.5 }],
+      dream_scores: [[9, 8]],
+    }),
+    "dreamBuilder.resumeExercise"
+  );
 });
 
 test("shouldRetainDreamScoringClientScores only keeps the buffer while dream scoring is still visible", () => {

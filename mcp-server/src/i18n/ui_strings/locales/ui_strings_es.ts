@@ -29,6 +29,7 @@ export const UI_STRINGS_LOCALE_ES: Record<string, string> = {
     "dreamBuilder.question.base": "Si miras de 5 a 10 años hacia adelante, ¿qué grandes oportunidades o amenazas ves y qué cambios positivos esperas? Formúlalos como afirmaciones claras.",
     "dreamBuilder.question.more": "¿Qué más ves que cambiará en el futuro, para bien o para mal? Deja volar tu imaginación y formúlalo como afirmaciones claras.",
     "dreamBuilder.startExercise": "Iniciar el ejercicio",
+    "dreamBuilder.resumeExercise": "Continúa con el pequeño ejercicio que ayuda a definir tu sueño.",
     "dreamBuilder.statements.count": "N afirmaciones de un mínimo de 20 hasta ahora",
     "dreamBuilder.statements.empty": "Aún no hay afirmaciones.",
     "dreamBuilder.statements.title": "Tus afirmaciones de Sueño",

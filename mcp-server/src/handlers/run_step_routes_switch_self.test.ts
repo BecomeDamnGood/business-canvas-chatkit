@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { dreamBuilderExerciseLabelKey } from "./dream_builder_resume.js";
 
 import { createRunStepRouteHelpers } from "./run_step_routes.js";
 
@@ -376,6 +377,7 @@ test("dream_switch_to_self clears staged dream value but preserves Dream Builder
   ]);
   assert.deepEqual(state.dream_scores, [[8, 9], [7, 8]]);
   assert.deepEqual(state.dream_top_clusters, [{ theme: "Transparantie", average: 8.5 }]);
+  assert.equal(dreamBuilderExerciseLabelKey(state), "dreamBuilder.resumeExercise");
 });
 
 test("dream_start_exercise reuses saved Dream Builder score context when it still matches the statements", async () => {
