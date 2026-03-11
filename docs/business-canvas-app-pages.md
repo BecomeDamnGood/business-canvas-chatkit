@@ -46,7 +46,7 @@ Business Canvas App Privacy Policy
 
 Last updated: March 11, 2026
 
-This Privacy Policy explains how the Business Canvas app by Mindd, operating under the name Ben Steenstra, processes information when you use the app through ChatGPT.
+This Privacy Policy explains how the Business Canvas app by Mindd, operating under the name Ben Steenstra, processes information when you use the app through supported AI clients and integrations, including ChatGPT and Claude.
 
 1. Who we are
 
@@ -82,9 +82,13 @@ We process this information to:
 - protect the service against abuse, enforce rate limits, and troubleshoot errors
 - understand usage at a technical flow level, such as which steps are shown, when wording-choice interactions occur, and whether presentation generation succeeds or fails
 
-5. Use of OpenAI services
+5. Use of AI client platforms and OpenAI services
 
-The app uses OpenAI API services to process user input and generate output. Information you submit through the app may therefore be sent to OpenAI for that purpose.
+The app may be accessed through supported AI client platforms and integrations, including ChatGPT and Claude.
+
+The app itself uses OpenAI API services to process user input and generate output. Information you submit through the app may therefore be sent to OpenAI for that purpose.
+
+If you access the app through a third-party AI client platform, that platform may also process your information in accordance with its own terms and privacy policy.
 
 6. Hosting and infrastructure
 
@@ -151,7 +155,7 @@ Business Canvas App Terms of Use
 
 Last updated: March 11, 2026
 
-These Terms of Use govern your use of the Business Canvas app made available by Mindd, operating under the name Ben Steenstra, through ChatGPT.
+These Terms of Use govern your use of the Business Canvas app made available by Mindd, operating under the name Ben Steenstra, through supported AI clients and integrations, including ChatGPT and Claude.
 
 1. Operator details
 
@@ -236,5 +240,5 @@ These Terms are governed by the laws applicable in The Netherlands, unless manda
 
 - Prefer dedicated app pages instead of only generic site-wide privacy and terms pages.
 - Use public, indexable URLs if you want reviewers and users to open them easily.
-- Add the final privacy URL and terms URL to the OpenAI app configuration.
+- Add the final privacy URL and terms URL to the relevant app configuration(s).
 - After publishing the pages, update the Terms page so section 10 links to the final privacy page URL.

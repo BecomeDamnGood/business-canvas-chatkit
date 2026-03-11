@@ -1583,6 +1583,7 @@ test("bundled prestart intro movie uses language-mapped SSOT links", () => {
   assert.match(source, /fr:\s*"https:\/\/youtu\.be\/WalQNHy1DRo"/);
   assert.match(source, /it:\s*"https:\/\/youtu\.be\/XUMJ44mXQ6Y"/);
   assert.match(source, /ja:\s*"https:\/\/youtu\.be\/o1di1BkDdKA"/);
+  assert.match(source, /ru:\s*"https:\/\/youtu\.be\/PYKWjxQqFNg"/);
 });
 
 test("bundled prestart intro movie hides iframe when no language-specific link exists", () => {
@@ -1601,6 +1602,7 @@ test("bundled ben profile movie uses language-mapped SSOT links and hides when u
   assert.match(source, /it:\s*"https:\/\/youtu\.be\/S7_GwDJZIAs"/);
   assert.match(source, /de:\s*"https:\/\/youtu\.be\/T18fvylOojg"/);
   assert.match(source, /es:\s*"https:\/\/youtu\.be\/eLSh19ZZ2yM"/);
+  assert.match(source, /ru:\s*"https:\/\/youtu\.be\/urvyVjsnl-Q"/);
   assert.match(source, /function benProfileVideoUrlForLang\(lang\)/);
   assert.match(source, /const videoUrl = benProfileVideoUrlForLang\(lang\);/);
   assert.match(source, /if \(!videoUrl\) return;/);
@@ -1614,6 +1616,7 @@ test("bundled dream-step intro movie uses language-mapped SSOT links and hides w
   assert.match(source, /it:\s*"https:\/\/youtu\.be\/g-fbHy78uIw"/);
   assert.match(source, /de:\s*"https:\/\/youtu\.be\/KtzkZFE4m5Q"/);
   assert.match(source, /es:\s*"https:\/\/youtu\.be\/-36ryKgLiPo"/);
+  assert.match(source, /ru:\s*"https:\/\/youtu\.be\/tgtOxDmdrQM"/);
   assert.match(source, /function dreamStepVideoUrlForLang\(lang\)/);
   assert.match(source, /const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView;/);
   assert.match(source, /appendDreamStepIntroVideo\(cardDescEl, lang\);/);
@@ -1630,6 +1633,7 @@ test("bundled purpose-step intro movie uses language-mapped SSOT links and hides
   assert.match(source, /fr:\s*"https:\/\/youtu\.be\/EqoczF4mnGc"/);
   assert.match(source, /it:\s*"https:\/\/youtu\.be\/tISM_mLZDgk"/);
   assert.match(source, /nl:\s*"https:\/\/youtu\.be\/oS0tKfpLaYg"/);
+  assert.match(source, /ru:\s*"https:\/\/youtu\.be\/IbLMHOMLwHU"/);
   assert.match(source, /function purposeStepVideoUrlForLang\(lang\)/);
   assert.match(source, /const shouldAppendPurposeStepVideo = current === "purpose" && showStepIntroChrome;/);
   assert.match(source, /appendPurposeStepIntroVideo\(cardDescEl, lang\);/);

@@ -281,6 +281,7 @@ test("benProfileVideoUrlForLang returns only configured language-specific videos
   assert.match(benProfileVideoUrlForLang("es"), /youtube-nocookie\.com\/embed\/eLSh19ZZ2yM/);
   assert.match(benProfileVideoUrlForLang("fr"), /youtube-nocookie\.com\/embed\/0soI44DLOxY/);
   assert.match(benProfileVideoUrlForLang("ja"), /youtube-nocookie\.com\/embed\/o5Z0e4_Aolg/);
+  assert.match(benProfileVideoUrlForLang("ru"), /youtube-nocookie\.com\/embed\/urvyVjsnl-Q/);
   assert.equal(benProfileVideoUrlForLang("pt-BR"), "");
 });
 
@@ -291,6 +292,7 @@ test("dreamStepVideoUrlForLang returns only configured language-specific videos"
   assert.match(dreamStepVideoUrlForLang("de"), /youtube-nocookie\.com\/embed\/KtzkZFE4m5Q/);
   assert.match(dreamStepVideoUrlForLang("es"), /youtube-nocookie\.com\/embed\/-36ryKgLiPo/);
   assert.match(dreamStepVideoUrlForLang("fr"), /youtube-nocookie\.com\/embed\/ajUsijJzyiY/);
+  assert.match(dreamStepVideoUrlForLang("ru"), /youtube-nocookie\.com\/embed\/tgtOxDmdrQM/);
   assert.equal(dreamStepVideoUrlForLang("pt-BR"), "");
 });
 
@@ -301,6 +303,7 @@ test("purposeStepVideoUrlForLang returns only configured language-specific video
   assert.match(purposeStepVideoUrlForLang("fr"), /youtube-nocookie\.com\/embed\/EqoczF4mnGc/);
   assert.match(purposeStepVideoUrlForLang("it"), /youtube-nocookie\.com\/embed\/tISM_mLZDgk/);
   assert.match(purposeStepVideoUrlForLang("nl"), /youtube-nocookie\.com\/embed\/oS0tKfpLaYg/);
+  assert.match(purposeStepVideoUrlForLang("ru"), /youtube-nocookie\.com\/embed\/IbLMHOMLwHU/);
 });
 
 test("shouldRenderPurposeStepIntroVideo returns true for configured languages in intro state", () => {

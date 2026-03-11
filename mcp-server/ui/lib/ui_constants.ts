@@ -42,6 +42,7 @@ const PRESTART_INTRO_VIDEO_BY_LANG: Record<string, string> = {
   fr: "https://youtu.be/WalQNHy1DRo",
   it: "https://youtu.be/XUMJ44mXQ6Y",
   ja: "https://youtu.be/o1di1BkDdKA",
+  ru: "https://youtu.be/PYKWjxQqFNg",
 };
 
 const BEN_PROFILE_VIDEO_BY_LANG: Record<string, string> = {
@@ -52,6 +53,7 @@ const BEN_PROFILE_VIDEO_BY_LANG: Record<string, string> = {
   es: "https://youtu.be/eLSh19ZZ2yM",
   fr: "https://youtu.be/0soI44DLOxY",
   ja: "https://youtu.be/o5Z0e4_Aolg",
+  ru: "https://youtu.be/urvyVjsnl-Q",
 };
 
 const DREAM_STEP_VIDEO_BY_LANG: Record<string, string> = {
@@ -61,6 +63,7 @@ const DREAM_STEP_VIDEO_BY_LANG: Record<string, string> = {
   de: "https://youtu.be/KtzkZFE4m5Q",
   es: "https://youtu.be/-36ryKgLiPo",
   fr: "https://youtu.be/ajUsijJzyiY",
+  ru: "https://youtu.be/tgtOxDmdrQM",
 };
 
 const PURPOSE_STEP_VIDEO_BY_LANG: Record<string, string> = {
@@ -70,6 +73,7 @@ const PURPOSE_STEP_VIDEO_BY_LANG: Record<string, string> = {
   fr: "https://youtu.be/EqoczF4mnGc",
   it: "https://youtu.be/tISM_mLZDgk",
   nl: "https://youtu.be/oS0tKfpLaYg",
+  ru: "https://youtu.be/IbLMHOMLwHU",
 };
 
 function normalizeYouTubeEmbedUrl(rawUrl: string): string {
