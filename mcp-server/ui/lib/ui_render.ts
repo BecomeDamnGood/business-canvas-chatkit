@@ -129,6 +129,7 @@ type ActionDescriptor = {
 const ACTION_ROLE_BY_STATE_KEY: Record<string, string> = {
   ui_action_start: "start",
   ui_action_text_submit: "text_submit",
+  ui_action_score_submit: "score_submit",
   ui_action_wording_pick_user: "wording_pick_user",
   ui_action_wording_pick_suggestion: "wording_pick_suggestion",
   ui_action_dream_start_exercise: "dream_start_exercise",
@@ -1358,7 +1359,6 @@ export function render(overrideToolOutput?: unknown): void {
       const filled = allScoringFilled();
       const promptEl = document.getElementById("prompt");
       if (promptEl) promptEl.style.display = filled ? "block" : "none";
-      if (inputWrap) inputWrap.style.display = filled ? "flex" : "none";
     }
 
     updateScoringDreamQuestionVisibility();
@@ -1400,11 +1400,23 @@ export function render(overrideToolOutput?: unknown): void {
           }
           payload.push(row);
         }
-        const actionCode = actionCodeForRole(result, "text_submit");
+        const actionCode = actionCodeForRole(result, "score_submit");
         if (!actionCode) return;
         win.__dreamScoringScores = [];
         callRunStep(actionCode, { __pending_scores: payload });
       };
+    }
+
+    const textSubmitActionCode = actionCodeForRole(result, "text_submit");
+    const textSubmitAvailable = textSubmitActionCode.length > 0;
+    inputWrap.style.display = textSubmitAvailable ? "flex" : "none";
+    const input = document.getElementById("input");
+    if (input) (input as HTMLInputElement).placeholder = t(lang, "inputPlaceholder");
+    if (!textSubmitAvailable) {
+      setSendEnabled(false);
+    } else {
+      const inputVal = ((input as HTMLInputElement | null)?.value || "").trim();
+      setSendEnabled(inputVal.length > 0);
     }
 
     const latestScoringState = retainCanonicalStepContinuity(

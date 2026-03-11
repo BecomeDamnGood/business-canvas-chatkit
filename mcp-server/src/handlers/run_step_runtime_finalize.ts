@@ -920,7 +920,7 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
       dreamRuntimeMode === "builder_refine";
     const suggestDreamBuilder = String(lastSpecialist.suggest_dreambuilder || "").trim().toLowerCase() === "true";
     const interactiveSession = started;
-    const textSubmitUsesScores =
+    const scoreSubmitAvailable =
       interactiveSession &&
       isDreamStep &&
       isDreamExplainer &&
@@ -936,13 +936,15 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     setStateAction("ui_action_start", currentStep === "step_0" && !started ? "ACTION_START" : "");
     setStateAction(
       "ui_action_text_submit",
-      interactiveSession
-        ? (textSubmitUsesScores ? "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" : "ACTION_TEXT_SUBMIT")
-        : ""
+      interactiveSession ? "ACTION_TEXT_SUBMIT" : ""
     );
     setStateAction(
       "ui_action_text_submit_payload_mode",
-      interactiveSession ? (textSubmitUsesScores ? "scores" : "text") : ""
+      interactiveSession ? "text" : ""
+    );
+    setStateAction(
+      "ui_action_score_submit",
+      scoreSubmitAvailable ? "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES" : ""
     );
     setStateAction(
       "ui_action_wording_pick_user",
@@ -954,7 +956,10 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     );
     setStateAction(
       "ui_action_dream_start_exercise",
-      interactiveSession && isDreamStep && !textSubmitUsesScores && (isDreamSpecialist || suggestDreamBuilder)
+      interactiveSession &&
+        isDreamStep &&
+        !scoreSubmitAvailable &&
+        (isDreamSpecialist || suggestDreamBuilder)
         ? "ACTION_DREAM_INTRO_START_EXERCISE"
         : ""
     );

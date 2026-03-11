@@ -4748,7 +4748,6 @@
         const filled = allScoringFilled();
         const promptEl2 = document.getElementById("prompt");
         if (promptEl2) promptEl2.style.display = filled ? "block" : "none";
-        if (inputWrap) inputWrap.style.display = filled ? "flex" : "none";
       };
       const clusters = specialist.clusters;
       if (cardDescEl) cardDescEl.style.display = "none";
@@ -4884,11 +4883,22 @@
             }
             payload.push(row);
           }
-          const actionCode = String(state.ui_action_text_submit || "").trim();
+          const actionCode = actionCodeFromState("ui_action_score_submit");
           if (!actionCode) return;
           win.__dreamScoringScores = [];
           callRunStep(actionCode, { __pending_scores: payload });
         };
+      }
+      const textSubmitActionCode = actionCodeFromState("ui_action_text_submit");
+      const textSubmitAvailable = textSubmitActionCode.length > 0;
+      inputWrap.style.display = textSubmitAvailable ? "flex" : "none";
+      const input = document.getElementById("input");
+      if (input) input.placeholder = t(lang, "inputPlaceholder");
+      if (!textSubmitAvailable) {
+        setSendEnabled(false);
+      } else {
+        const inputVal = (input?.value || "").trim();
+        setSendEnabled(inputVal.length > 0);
       }
       const latestScoringState = retainCanonicalStepContinuity(
         state,
@@ -5125,6 +5135,7 @@
     const roleMap = {
       ui_action_start: "start",
       ui_action_text_submit: "text_submit",
+      ui_action_score_submit: "score_submit",
       ui_action_wording_pick_user: "wording_pick_user",
       ui_action_wording_pick_suggestion: "wording_pick_suggestion",
       ui_action_dream_start_exercise: "dream_start_exercise",

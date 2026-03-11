@@ -91,6 +91,41 @@ test("attachRegistryPayload marks short canonical dream-builder coaching text as
   assert.equal(payload.ui?.view?.dream_builder_statements_visible, true);
 });
 
+test("attachRegistryPayload keeps statements visible while dream-builder scoring is active", () => {
+  const helpers = buildHelpers();
+  const statements = Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`);
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "Score each statement.",
+      prompt: "",
+      current_step_id: "dream",
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_scoring",
+        dream_builder_statements: statements,
+      } as any,
+    },
+    {
+      ui_contract_id: "dream:ASK:DREAM_EXPLAINER_MENU_SWITCH_SELF:v1",
+      suggest_dreambuilder: "true",
+      scoring_phase: "true",
+      statements,
+      clusters: [
+        {
+          theme: "Future",
+          statement_indices: statements.map((_, index) => index),
+        },
+      ],
+      __canonical_text: "Score each statement.",
+      message: "Score each statement.",
+    }
+  );
+
+  assert.equal(payload.ui?.view?.variant, "dream_builder_scoring");
+  assert.equal(payload.ui?.view?.dream_builder_statements_visible, true);
+});
+
 test("attachRegistryPayload forwards structured single-value content into ui.content", () => {
   const helpers = buildHelpers();
   const canonical = "Een strategisch reclamebureau voor complexe keuzes";

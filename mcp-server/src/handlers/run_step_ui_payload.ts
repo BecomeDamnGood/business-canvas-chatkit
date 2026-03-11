@@ -470,9 +470,9 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     const contentPayload = shouldSuppressSingleValueContent ? undefined : rawContentPayload;
     const view = deps.deriveUiViewPayload(viewVariant);
     const dreamBuilderStatementsVisible =
-      (viewVariant === "dream_builder_collect" || viewVariant === "dream_builder_refine") &&
+      dreamBuilderFlowActive &&
       canonicalStatementsCount > 0 &&
-      canonicalStatementsCount < 20;
+      (viewVariant === "dream_builder_scoring" || canonicalStatementsCount < 20);
     const dreamBuilderBodyMode =
       dreamBuilderFlowActive && viewVariant !== "dream_builder_scoring"
         ? inferDreamBuilderBodyMode(canonicalText)

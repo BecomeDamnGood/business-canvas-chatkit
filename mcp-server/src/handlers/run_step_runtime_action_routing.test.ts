@@ -163,6 +163,37 @@ test("runStepRuntimeActionRoutingLayer keeps pending state for free-text turns w
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
 });
 
+test("runStepRuntimeActionRoutingLayer keeps dream scoring free text available for reclustering input", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "dream",
+    active_specialist: "DreamExplainer",
+    __dream_runtime_mode: "builder_scoring",
+    last_specialist_result: {
+      scoring_phase: "true",
+      suggest_dreambuilder: "true",
+      statements: Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`),
+      clusters: [
+        {
+          theme: "Future",
+          statement_indices: Array.from({ length: 20 }, (_, index) => index),
+        },
+      ],
+    },
+  };
+  params.runtime.userMessage = "Nog een extra statement over meer vertrouwen tussen mensen.";
+  params.action.getDreamRuntimeMode = (state: Record<string, unknown>) =>
+    String(state.__dream_runtime_mode || "self") as any;
+  params.wording.isWordingChoiceEligibleContext = () => false;
+  params.state.shouldTreatAsStepContributingInput = () => true;
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "Nog een extra statement over meer vertrouwen tussen mensen.");
+  assert.equal(String((result.state as Record<string, unknown>).__dream_runtime_mode || ""), "builder_scoring");
+});
+
 test("runStepRuntimeActionRoutingLayer strips stale single-value content before rebuilding a resumed picker payload", async () => {
   const params = buildParams(true) as any;
   params.runtime.actionCodeRaw = "ACTION_TARGETGROUP_POSTREFINE_CONFIRM";

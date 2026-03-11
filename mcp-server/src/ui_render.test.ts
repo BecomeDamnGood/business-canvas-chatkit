@@ -120,6 +120,31 @@ test("resolveActionPayloadModeForStateKey falls back to action contract payload 
   assert.equal(resolveActionPayloadModeForStateKey(result, {}, "ui_action_text_submit"), "scores");
 });
 
+test("resolveActionCodeForStateKey resolves dedicated score submit actions from the action contract", () => {
+  const result = {
+    ui: {
+      action_contract: {
+        actions: [
+          {
+            role: "text_submit",
+            action_code: "ACTION_TEXT_SUBMIT",
+            payload_mode: "text",
+          },
+          {
+            role: "score_submit",
+            action_code: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
+          },
+        ],
+      },
+    },
+  };
+
+  assert.equal(actionRoleForStateKey("ui_action_score_submit"), "score_submit");
+  assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_score_submit"), "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
+  assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_text_submit"), "ACTION_TEXT_SUBMIT");
+  assert.equal(resolveActionPayloadModeForStateKey(result, {}, "ui_action_text_submit"), "text");
+});
+
 test("benProfileVideoUrlForLang returns only configured language-specific videos", () => {
   assert.match(benProfileVideoUrlForLang("nl"), /youtube-nocookie\.com\/embed\/5TLxnL2OkQo/);
   assert.match(benProfileVideoUrlForLang("en"), /youtube-nocookie\.com\/embed\/kV4oF2mUZXI/);

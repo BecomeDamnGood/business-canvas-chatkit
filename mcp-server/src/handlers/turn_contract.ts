@@ -21,6 +21,7 @@ type UiActionRole =
   | "choice"
   | "start"
   | "text_submit"
+  | "score_submit"
   | "wording_pick_user"
   | "wording_pick_suggestion"
   | "dream_start_exercise"
@@ -78,6 +79,7 @@ const UI_ACTION_ROLES = new Set<UiActionRole>([
   "choice",
   "start",
   "text_submit",
+  "score_submit",
   "wording_pick_user",
   "wording_pick_suggestion",
   "dream_start_exercise",
@@ -95,6 +97,7 @@ const UI_ACTION_SURFACES = new Set<UiActionSurface>([
 function defaultSurfaceForRole(role: UiActionRole): UiActionSurface {
   if (role === "start") return "primary";
   if (role === "text_submit") return "text_input";
+  if (role === "score_submit") return "primary";
   if (role === "wording_pick_user" || role === "wording_pick_suggestion") return "wording_choice";
   if (role === "dream_start_exercise" || role === "dream_switch_to_self") return "auxiliary";
   return "choice";
@@ -200,6 +203,17 @@ function buildStateActionDescriptor(
       payloadMode: payloadMode === "scores" ? "scores" : "text",
     };
   }
+  if (role === "score_submit") {
+    const actionCode = String((state as Record<string, unknown>).ui_action_score_submit || "").trim();
+    if (!actionCode) return null;
+    return {
+      actionCode,
+      labelKey: "btnScoringContinue",
+      surface: "primary",
+      intent: { type: "SUBMIT_SCORES", scores: [] },
+      primary: true,
+    };
+  }
   if (role === "wording_pick_user") {
     const actionCode = String(state.ui_action_wording_pick_user || "").trim();
     if (!actionCode) return null;
@@ -276,6 +290,7 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
   const stateRoles: UiActionRole[] = [
     "start",
     "text_submit",
+    "score_submit",
     "wording_pick_user",
     "wording_pick_suggestion",
     "dream_start_exercise",
@@ -344,6 +359,9 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
     allowedRoles.add("start");
   } else if (mode === "interactive") {
     allowedRoles.add("text_submit");
+    if (variant === "dream_builder_scoring") {
+      allowedRoles.add("score_submit");
+    }
     if (hasChoiceActions) {
       allowedRoles.add("choice");
     } else if (variant === "wording_choice") {
