@@ -218,6 +218,9 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "scoring.aria.scoreInput": "Score 1 to 10",
   "presentation.ready": "Your presentation is ready.",
   "presentation.error": "Presentation generation failed. Please check that the template exists and try again.",
+  "presentation.recapIntro": "This is what you said:",
+  "presentation.recapVisibleFeedback":
+    "The summary is already visible on screen. Tell me what to adjust, or create the presentation.",
   "meta.benProfile.paragraph1":
     "My name is Ben Steenstra (1973). I am a Dutch serial entrepreneur, executive coach, author, and public speaker, and I help people grow their businesses while staying grounded in what feels truly meaningful for them.",
   "meta.benProfile.paragraph2":

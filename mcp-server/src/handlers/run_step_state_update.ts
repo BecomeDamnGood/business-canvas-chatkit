@@ -1,5 +1,6 @@
 import type { BoolString, CanvasState, ProvisionalSource } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
+import { canonicalPresentationRecapForState } from "./run_step_presentation_recap.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 
 type DreamRuntimeMode = "self" | "builder_collect" | "builder_scoring" | "builder_refine";
@@ -293,11 +294,19 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       );
     }
     if (nextStep === deps.presentationStepId) {
-      stageFieldValue(
-        deps.presentationStepId,
-        specialistResult?.presentation_brief,
-        specialistResult?.refined_formulation
-      );
+      const presentationRecap = canonicalPresentationRecapForState(nextState, specialistResult?.presentation_brief);
+      if (presentationRecap) {
+        if (specialistResult && typeof specialistResult === "object") {
+          specialistResult.presentation_brief = presentationRecap;
+          if (
+            typeof specialistResult?.refined_formulation === "string" &&
+            String(specialistResult.refined_formulation || "").trim()
+          ) {
+            specialistResult.refined_formulation = presentationRecap;
+          }
+        }
+        stageFieldValue(deps.presentationStepId, presentationRecap);
+      }
     }
 
     (nextState as any).last_specialist_result =

@@ -22,6 +22,7 @@ import {
   RULESOFTHEGAME_MIN_RULES,
 } from "../steps/rulesofthegame_runtime_policy.js";
 import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
+import { isStructuredPresentationRecap } from "../handlers/run_step_presentation_recap.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -115,6 +116,7 @@ function isRenderableAcceptedValue(stepId: string, raw: unknown): boolean {
   const value = String(raw || "").trim();
   if (!value) return false;
   if (stepId === "dream") return isStageableDreamCandidate(value);
+  if (stepId === "presentation") return isStructuredPresentationRecap(value);
   return true;
 }
 
@@ -1340,6 +1342,22 @@ function knownValueForStep(state: CanvasState, stepId: string): string {
   return isRenderableAcceptedValue(stepId, provisional) ? provisional : "";
 }
 
+function isPersistentRecapContextStep(stepId: string): boolean {
+  return stepId === "presentation";
+}
+
+function persistentRecapContextFeedback(stepId: string, state: CanvasState): string {
+  if (stepId !== "presentation") return "";
+  return uiStringFromState(
+    state,
+    "presentation.recapVisibleFeedback",
+    uiDefaultString(
+      "presentation.recapVisibleFeedback",
+      "The summary is already visible on screen. Tell me what to adjust, or create the presentation."
+    )
+  ).trim();
+}
+
 function buildKnownFactsRecap(state: CanvasState): string {
   const blocks: string[] = [];
 
@@ -1604,9 +1622,16 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     String((specialistForDisplay as any).message ?? "").trim() ||
     String((specialistForDisplay as any).refined_formulation ?? "").trim();
   if (recapRequested) {
-    const knownRecap = buildKnownFactsRecap(state);
-    if (knownRecap) {
-      answerText = knownRecap;
+    if (isPersistentRecapContextStep(stepId)) {
+      const persistentFeedback = persistentRecapContextFeedback(stepId, state);
+      if (persistentFeedback) {
+        answerText = persistentFeedback;
+      }
+    } else {
+      const knownRecap = buildKnownFactsRecap(state);
+      if (knownRecap) {
+        answerText = knownRecap;
+      }
     }
   }
   const recapText = String(recapBody || "").trim();

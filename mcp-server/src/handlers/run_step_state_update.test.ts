@@ -267,3 +267,32 @@ test("applyStateUpdate skips purpose staging for framing intro values", () => {
   });
   assert.equal(String((next as any).provisional_by_step?.purpose || ""), "");
 });
+
+test("applyStateUpdate canonicalizes presentation recap into section blocks with bullets", () => {
+  const helpers = buildHelpers();
+  const next = helpers.applyStateUpdate({
+    prev: {
+      current_step: "presentation",
+      step_0_final: "Venture: consultancy | Name: Mindd | Status: existing",
+      dream_final: "Build calm around complex choices.",
+      strategy_final: "• Focus on trusted advisory\n• Win on clarity",
+      productsservices_final: "• Strategy sessions\n• Decision frameworks",
+      rulesofthegame_final: "• Tell the truth\n• Keep it practical",
+    } as any,
+    decision: { current_step: "presentation", specialist_to_call: "Presentation" } as any,
+    specialistResult: {
+      presentation_brief:
+        "This is what you said: Dream: Build calm around complex choices. Strategy: Focus on trusted advisory and win on clarity.",
+      refined_formulation: "",
+    },
+    showSessionIntroUsed: "false",
+  });
+
+  const value = String((next as any).provisional_by_step?.presentation || "");
+  assert.match(value, /^This is what you said:/);
+  assert.match(value, /\n\nVenture: consultancy\nName: Mindd\n\nDream: Build calm around complex choices\./);
+  assert.match(value, /\n\nStrategy:\n• Focus on trusted advisory\n• Win on clarity/);
+  assert.match(value, /\n\nProducts and Services:\n• Strategy sessions\n• Decision frameworks/);
+  assert.match(value, /\n\nRules of the Game:\n• Tell the truth\n• Keep it practical/);
+  assert.equal(String((next as any).last_specialist_result?.presentation_brief || ""), value);
+});

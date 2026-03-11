@@ -319,6 +319,40 @@ test("known-facts recap output is markup-free for user-facing text", () => {
   assert.doesNotMatch(message, /<[^>]+>/);
 });
 
+test("presentation recap requests keep the existing recap visible without rendering a second recap block", () => {
+  const state = getDefaultState();
+  const recap =
+    "This is what you said:\n\nDream: Build calm around complex choices.\n\nPurpose: Turn complexity into clarity.";
+  (state as any).current_step = "presentation";
+  (state as any).active_specialist = "Presentation";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { presentation: recap };
+  (state as any).provisional_source_by_step = { presentation: "user_input" };
+  (state as any).ui_strings = {
+    "presentation.recapVisibleFeedback":
+      "The summary is already visible on screen. Tell me what to adjust, or create the presentation.",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "presentation",
+    state,
+    specialist: {
+      action: "ASK",
+      wants_recap: true,
+      user_intent: "RECAP_REQUEST",
+      meta_topic: "RECAP",
+      message: "This should be replaced",
+      question: "",
+    },
+    previousSpecialist: {},
+  });
+
+  const message = String((rendered.specialist as any).message || "");
+  assert.match(message, /The summary is already visible on screen/i);
+  assert.equal(message.split("This is what you said:").length - 1, 1);
+  assert.equal(message.split("Dream: Build calm around complex choices.").length - 1, 1);
+});
+
 test("rulesofthegame does not expose confirm when fewer than 3 rules are accepted", () => {
   const state = getDefaultState();
   (state as any).current_step = "rulesofthegame";
@@ -1270,7 +1304,15 @@ test("single-value confirm steps keep confirm actions for user-driven current-va
 
 test("presentation accepted provisional remains valid output without synthetic confirm action", () => {
   const state = getDefaultState();
-  const canonical = "Mindd helpt complexe keuzes vertalen naar een heldere, overtuigende presentatie.";
+  const canonical = [
+    "This is what you said:",
+    "",
+    "Dream: Mindd helpt complexe keuzes vertalen naar heldere keuzes.",
+    "",
+    "Strategy:",
+    "• Focus op trusted advisory",
+    "• Win op helderheid",
+  ].join("\n");
   (state as any).current_step = "presentation";
   (state as any).active_specialist = "Presentation";
   (state as any).business_name = "Mindd";

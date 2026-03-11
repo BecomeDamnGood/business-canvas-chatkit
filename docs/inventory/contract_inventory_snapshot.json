@@ -1,7 +1,7 @@
 {
   "snapshot_version": "2026-02-26.1",
   "ssot_versions": {
-    "current_state_version": "12",
+    "current_state_version": "13",
     "default_view_contract_version": "v3_ssot_rigid",
     "view_contract_version": "v3_ssot_rigid",
     "ui_contract_version": "2026-02-21-ux-contract-v3-key-first",

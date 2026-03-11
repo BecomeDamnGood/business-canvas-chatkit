@@ -58,6 +58,29 @@ test("finals persistence: normalizeState preserves existing finals", () => {
   assert.equal(snapshot.purpose_final, "Purpose text");
 });
 
+test("normalizeState: bewaart Dream Builder hervatcontext", () => {
+  const normalized = normalizeState({
+    ...getDefaultState(),
+    dream_builder_statements: ["Meer vertrouwen in media", "Betere mentale gezondheid"],
+    dream_scoring_statements: ["Meer vertrouwen in media", "Betere mentale gezondheid"],
+    dream_scores: [[8, 9], [7, 8]],
+    dream_top_clusters: [{ theme: "Vertrouwen", average: 8.5 }],
+    dream_awaiting_direction: "true",
+  });
+
+  assert.deepEqual(normalized.dream_builder_statements, [
+    "Meer vertrouwen in media",
+    "Betere mentale gezondheid",
+  ]);
+  assert.deepEqual(normalized.dream_scoring_statements, [
+    "Meer vertrouwen in media",
+    "Betere mentale gezondheid",
+  ]);
+  assert.deepEqual(normalized.dream_scores, [[8, 9], [7, 8]]);
+  assert.deepEqual(normalized.dream_top_clusters, [{ theme: "Vertrouwen", average: 8.5 }]);
+  assert.equal(normalized.dream_awaiting_direction, "true");
+});
+
 test("state migration: legacy sessions are hard-reset and clear legacy finals", () => {
   const raw = {
     state_version: "1",

@@ -1,4 +1,5 @@
 import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
+import { isStructuredPresentationRecap } from "./run_step_presentation_recap.js";
 
 function normalizeCandidateSurface(raw: unknown): string {
   return String(raw || "")
@@ -38,9 +39,12 @@ export function looksLikeExamplesFramingLine(raw: unknown): boolean {
 }
 
 export function isValidStepValueForStorage(stepId: string, raw: unknown): boolean {
+  if (stepId === "presentation") {
+    return isStructuredPresentationRecap(String(raw || ""));
+  }
   const value = normalizeCandidateSurface(raw);
   if (!value) return false;
-  if (stepId !== "step_0" && stepId !== "presentation" && looksLikeExamplesFramingLine(value)) return false;
+  if (stepId !== "step_0" && looksLikeExamplesFramingLine(value)) return false;
   if (stepId === "dream") return isStageableDreamCandidate(value);
   return true;
 }

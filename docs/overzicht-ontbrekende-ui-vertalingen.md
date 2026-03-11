@@ -2,23 +2,23 @@
 
 Dit document laat per taal zien welke keys nog gelijk zijn aan EN en dus nog vertaald moeten worden.
 
-Totaal keys in catalogus: **229**.
+Totaal keys in catalogus: **231**.
 
 ## Wat moet vertaald worden
 
 | Taal | Reeds vertaald | Nog te vertalen | Doelbestand |
 |---|---:|---:|---|
-| `nl` | 224 | 5 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_nl.ts` |
-| `pt-BR` | 224 | 5 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_pt_br.ts` |
-| `es` | 224 | 5 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_es.ts` |
-| `fr` | 221 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_fr.ts` |
-| `de` | 222 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_de.ts` |
-| `hi` | 224 | 5 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_hi.ts` |
-| `id` | 223 | 6 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_id.ts` |
-| `it` | 223 | 6 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_it.ts` |
-| `ja` | 223 | 6 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_ja.ts` |
-| `ko` | 223 | 6 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_ko.ts` |
-| `zh-Hans` | 223 | 6 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_zh_hans.ts` |
+| `nl` | 224 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_nl.ts` |
+| `pt-BR` | 224 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_pt_br.ts` |
+| `es` | 224 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_es.ts` |
+| `fr` | 221 | 10 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_fr.ts` |
+| `de` | 222 | 9 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_de.ts` |
+| `hi` | 224 | 7 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_hi.ts` |
+| `id` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_id.ts` |
+| `it` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_it.ts` |
+| `ja` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_ja.ts` |
+| `ko` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_ko.ts` |
+| `zh-Hans` | 223 | 8 | `mcp-server/src/i18n/ui_strings/locales/ui_strings_zh_hans.ts` |
 
 ## Instructie voor een agent
 
@@ -34,7 +34,7 @@ Totaal keys in catalogus: **229**.
 ### nl
 
 - Vertaald: **224**
-- Nog te vertalen: **5**
+- Nog te vertalen: **7**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_nl.ts`
 
 | Key | EN brontekst |
@@ -44,11 +44,13 @@ Totaal keys in catalogus: **229**.
 | `scoring.avg.empty` | — |
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### pt-BR
 
 - Vertaald: **224**
-- Nog te vertalen: **5**
+- Nog te vertalen: **7**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_pt_br.ts`
 
 | Key | EN brontekst |
@@ -58,11 +60,13 @@ Totaal keys in catalogus: **229**.
 | `scoring.avg.empty` | — |
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### es
 
 - Vertaald: **224**
-- Nog te vertalen: **5**
+- Nog te vertalen: **7**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_es.ts`
 
 | Key | EN brontekst |
@@ -72,11 +76,13 @@ Totaal keys in catalogus: **229**.
 | `scoring.avg.empty` | — |
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### fr
 
 - Vertaald: **221**
-- Nog te vertalen: **8**
+- Nog te vertalen: **10**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_fr.ts`
 
 | Key | EN brontekst |
@@ -89,11 +95,13 @@ Totaal keys in catalogus: **229**.
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
 | `media.image.alt` | Image |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### de
 
 - Vertaald: **222**
-- Nog te vertalen: **7**
+- Nog te vertalen: **9**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_de.ts`
 
 | Key | EN brontekst |
@@ -105,11 +113,13 @@ Totaal keys in catalogus: **229**.
 | `dev.error.prefix` | [ui_error] |
 | `ppt.heading.purpose` | Purpose |
 | `offtopic.step.purpose` | Purpose |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### hi
 
 - Vertaald: **224**
-- Nog te vertalen: **5**
+- Nog te vertalen: **7**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_hi.ts`
 
 | Key | EN brontekst |
@@ -119,11 +129,13 @@ Totaal keys in catalogus: **229**.
 | `scoring.avg.empty` | — |
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### id
 
 - Vertaald: **223**
-- Nog te vertalen: **6**
+- Nog te vertalen: **8**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_id.ts`
 
 | Key | EN brontekst |
@@ -134,11 +146,13 @@ Totaal keys in catalogus: **229**.
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
 | `offtopic.step.bigwhy` | Big Why |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### it
 
 - Vertaald: **223**
-- Nog te vertalen: **6**
+- Nog te vertalen: **8**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_it.ts`
 
 | Key | EN brontekst |
@@ -149,11 +163,13 @@ Totaal keys in catalogus: **229**.
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
 | `offtopic.step.bigwhy` | Big Why |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### ja
 
 - Vertaald: **223**
-- Nog te vertalen: **6**
+- Nog te vertalen: **8**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_ja.ts`
 
 | Key | EN brontekst |
@@ -164,11 +180,13 @@ Totaal keys in catalogus: **229**.
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
 | `offtopic.step.bigwhy` | Big Why |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### ko
 
 - Vertaald: **223**
-- Nog te vertalen: **6**
+- Nog te vertalen: **8**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_ko.ts`
 
 | Key | EN brontekst |
@@ -179,11 +197,13 @@ Totaal keys in catalogus: **229**.
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
 | `offtopic.step.bigwhy` | Big Why |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |
 
 ### zh-Hans
 
 - Vertaald: **223**
-- Nog te vertalen: **6**
+- Nog te vertalen: **8**
 - Bestand: `mcp-server/src/i18n/ui_strings/locales/ui_strings_zh_hans.ts`
 
 | Key | EN brontekst |
@@ -194,3 +214,5 @@ Totaal keys in catalogus: **229**.
 | `scoring.input.placeholder` | 0 |
 | `dev.error.prefix` | [ui_error] |
 | `offtopic.step.bigwhy` | Big Why |
+| `presentation.recapIntro` | This is what you said: |
+| `presentation.recapVisibleFeedback` | The summary is already visible on screen. Tell me what to adjust, or create the presentation. |

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createRunStepRuntimeStateHelpers } from "./run_step_runtime_state_helpers.js";
+import { RECAP_INSTRUCTION, createRunStepRuntimeStateHelpers } from "./run_step_runtime_state_helpers.js";
 import { canonicalizeComparableText, parseListItems } from "./run_step_wording_heuristics.js";
 
 function buildHelpers() {
@@ -34,6 +34,11 @@ function buildHelpers() {
     uiDefaultString: (key: string, fallback?: string) => String(defaults[key] || fallback || ""),
   });
 }
+
+test("RECAP_INSTRUCTION marks presentation as a persistent recap context", () => {
+  assert.match(RECAP_INSTRUCTION, /CURRENT_STEP_ID=presentation/);
+  assert.match(RECAP_INSTRUCTION, /do NOT restate the full recap in message/i);
+});
 
 test("wordingSelectionMessage normalizes explicit strategy selection to bullets", () => {
   const helpers = buildHelpers();

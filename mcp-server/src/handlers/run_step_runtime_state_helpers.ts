@@ -34,6 +34,7 @@ type CreateRunStepRuntimeStateHelpersDeps = {
  */
 export const RECAP_INSTRUCTION = `UNIVERSAL RECAP (every step)
 - If the user asks to summarize or recap what has been established so far (in any wording or language), set wants_recap=true. Do not use language-specific keyword lists; infer from intent.
+- Special case for CURRENT_STEP_ID=presentation: the recap is already the persistent on-screen context. Still set wants_recap=true, but do NOT restate the full recap in message. Give a short localized note that the summary is already visible and invite the user to adjust it or create the presentation.
 - When wants_recap=true: set message to show the recap, localized, built ONLY from the finals:
   Start with one line: "This is what we have established so far based on our dialogue:" (localized).
   Then add one blank line (empty line).

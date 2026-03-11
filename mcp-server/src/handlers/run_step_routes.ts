@@ -12,6 +12,7 @@ import {
   type RunStepRenderedRouteOutput,
   type RunStepRoutePorts,
 } from "./run_step_ports.js";
+import { canonicalPresentationRecapForState } from "./run_step_presentation_recap.js";
 import { STEP_0_BOOTSTRAP_SPECIALIST } from "../steps/step_0_bootstrap.js";
 
 export type RenderedRouteOutput = RunStepRenderedRouteOutput;
@@ -65,6 +66,83 @@ function flattenRunStepRoutePorts<TResponse>(ports: RunStepRoutePorts<TResponse>
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") return {};
   return value as Record<string, unknown>;
+}
+
+type DreamTopCluster = { theme: string; average: number };
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : [];
+}
+
+function readDreamScoreMatrix(value: unknown): number[][] {
+  return Array.isArray(value)
+    ? value
+      .map((row) =>
+        Array.isArray(row)
+          ? row
+            .map((entry) => (typeof entry === "number" && Number.isFinite(entry) ? entry : null))
+            .filter((entry): entry is number => entry !== null)
+          : []
+      )
+      .filter((row) => row.length > 0)
+    : [];
+}
+
+function readDreamTopClusters(value: unknown): DreamTopCluster[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => {
+        const record = asRecord(entry);
+        const theme = String(record.theme || "").trim();
+        const average = typeof record.average === "number" && Number.isFinite(record.average)
+          ? record.average
+          : null;
+        if (!theme || average === null) return null;
+        return { theme, average };
+      })
+      .filter((entry): entry is DreamTopCluster => Boolean(entry))
+    : [];
+}
+
+function sameStringArray(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((entry, index) => entry === right[index]);
+}
+
+function getDreamBuilderResumeContext(state: CanvasState) {
+  const stateRecord = state as Record<string, unknown>;
+  const canonicalStatements = readStringArray(stateRecord.dream_builder_statements);
+  const scoringStatements = readStringArray(stateRecord.dream_scoring_statements);
+  const lastStatements = readStringArray(asRecord(stateRecord.last_specialist_result).statements);
+  const statements =
+    canonicalStatements.length > 0
+      ? canonicalStatements
+      : scoringStatements.length > 0
+        ? scoringStatements
+        : lastStatements;
+  const scores = readDreamScoreMatrix(stateRecord.dream_scores);
+  const topClusters = readDreamTopClusters(stateRecord.dream_top_clusters);
+  const hasSavedScoreContext =
+    scoringStatements.length > 0 ||
+    scores.length > 0 ||
+    topClusters.length > 0 ||
+    String(stateRecord.dream_awaiting_direction ?? "").trim() === "true";
+  const hasReusableScoreContext =
+    statements.length >= 20 &&
+    topClusters.length > 0 &&
+    (scoringStatements.length === 0 || sameStringArray(statements, scoringStatements)) &&
+    (scores.length > 0 || topClusters.length > 0);
+
+  return {
+    statements,
+    scoringStatements,
+    scores,
+    topClusters,
+    hasSavedScoreContext,
+    hasReusableScoreContext,
+  };
 }
 
 function sanitizeStep0SeedToken(raw: unknown, fallback = ""): string {
@@ -124,11 +202,57 @@ function clearDreamStateForSwitchToSelf(state: CanvasState, dreamStepId: string)
     delete provisionalSourceByStep[dreamStepId];
   }
   (next as Record<string, unknown>).provisional_source_by_step = provisionalSourceByStep;
-
-  (next as Record<string, unknown>).dream_builder_statements = [];
-  (next as Record<string, unknown>).dream_scores = [];
-  (next as Record<string, unknown>).dream_top_clusters = [];
   return next;
+}
+
+function provisionalValueForStep(state: CanvasState, stepId: string): string {
+  const raw =
+    state &&
+    typeof (state as Record<string, unknown>).provisional_by_step === "object" &&
+    (state as Record<string, unknown>).provisional_by_step !== null
+      ? ((state as Record<string, unknown>).provisional_by_step as Record<string, unknown>)
+      : {};
+  return String(raw[stepId] || "").trim();
+}
+
+function presentationPersistentRecapValue(
+  state: CanvasState,
+  previousSpecialist: Record<string, unknown>,
+  presentationStepId: string
+): string {
+  const previousBrief = String(previousSpecialist.presentation_brief || "").trim();
+  const provisional = provisionalValueForStep(state, presentationStepId);
+  const finalField = getFinalFieldForStepId(presentationStepId);
+  const finalValue = finalField ? String((state as Record<string, unknown>)[finalField] || "").trim() : "";
+  return canonicalPresentationRecapForState(state, previousBrief || provisional || finalValue);
+}
+
+function withPresentationRecapProvisional(
+  state: CanvasState,
+  presentationStepId: string,
+  recap: string
+): CanvasState {
+  const trimmed = String(recap || "").trim();
+  if (!trimmed) return state;
+  const provisionalByStep =
+    state &&
+    typeof (state as Record<string, unknown>).provisional_by_step === "object" &&
+    (state as Record<string, unknown>).provisional_by_step !== null
+      ? { ...((state as Record<string, unknown>).provisional_by_step as Record<string, unknown>) }
+      : {};
+  provisionalByStep[presentationStepId] = trimmed;
+  const provisionalSourceByStep =
+    state &&
+    typeof (state as Record<string, unknown>).provisional_source_by_step === "object" &&
+    (state as Record<string, unknown>).provisional_source_by_step !== null
+      ? { ...((state as Record<string, unknown>).provisional_source_by_step as Record<string, unknown>) }
+      : {};
+  provisionalSourceByStep[presentationStepId] = "action_route";
+  return {
+    ...state,
+    provisional_by_step: provisionalByStep as Record<string, string>,
+    provisional_source_by_step: provisionalSourceByStep as CanvasState["provisional_source_by_step"],
+  };
 }
 
 type RouteTurnIntent = {
@@ -206,6 +330,52 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
       contractMetaOverride: renderedResult.value.contractMeta,
       debug: intent.debug,
     });
+  }
+
+  async function finalizeRenderedRoutePayload(
+    context: RouteRegistryContext,
+    intent: RouteTurnIntent,
+    payloadExtras?: Record<string, unknown>
+  ): Promise<TResponse> {
+    const renderedResult = deps.turnResponseEngine.renderValidateRecover({
+      state: intent.state,
+      specialist: intent.specialist,
+      previousSpecialist: intent.previousSpecialist,
+      telemetry: context.uiI18nTelemetry,
+      onContractViolation: ({ state, stepId, activeSpecialist, rendered, reason }) =>
+        buildRenderedContractViolationPayload({
+          state,
+          stepId,
+          activeSpecialist,
+          rendered: rendered as unknown as RenderedRouteOutput,
+          reason,
+        }),
+    });
+    if (!renderedResult.ok) return renderedResult.payload;
+
+    const stateWithUi = await deps.ensureUiStrings(renderedResult.value.state, context.userMessage);
+
+    return finalizeRoutePayload(
+      deps.attachRegistryPayload(
+        {
+          ok: true as const,
+          tool: "run_step" as const,
+          current_step_id: String((stateWithUi as Record<string, unknown>).current_step || ""),
+          active_specialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
+          text: deps.buildTextForWidget({ specialist: renderedResult.value.specialist, state: stateWithUi }),
+          prompt: deps.pickPrompt(renderedResult.value.specialist),
+          specialist: renderedResult.value.specialist,
+          state: stateWithUi,
+          ...(payloadExtras || {}),
+        },
+        renderedResult.value.specialist,
+        context.responseUiFlags,
+        renderedResult.value.actionCodes,
+        renderedResult.value.renderedActions,
+        null,
+        renderedResult.value.contractMeta
+      )
+    );
   }
 
   const registryById: Record<string, SpecialRouteHandler<TResponse>> = {
@@ -332,6 +502,14 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         String((context.state as Record<string, unknown>).current_step || "") === deps.presentationStepId &&
         context.userMessage === deps.presentationMakeRouteToken,
       handle: async (context) => {
+        const previousSpecialist = asRecord(
+          (context.state as Record<string, unknown>).last_specialist_result || {}
+        );
+        const persistentRecap = presentationPersistentRecapValue(
+          context.state,
+          previousSpecialist,
+          deps.presentationStepId
+        );
         try {
           const assets = deps.generatePresentationAssets(context.state);
 
@@ -345,40 +523,40 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             action: "ASK",
             message,
             question: "",
-            refined_formulation: "",
-            presentation_brief: "",
+            refined_formulation: persistentRecap,
+            presentation_brief: persistentRecap,
             wants_recap: false,
             is_offtopic: false,
             user_intent: "STEP_INPUT",
             meta_topic: "NONE",
           };
+          const nextState: CanvasState = {
+            ...context.state,
+            active_specialist: deps.presentationSpecialist,
+          };
+          const nextStateWithRecap = withPresentationRecapProvisional(
+            nextState,
+            deps.presentationStepId,
+            persistentRecap
+          );
+          (nextStateWithRecap as Record<string, unknown>).presentation_asset_fingerprint = assets.assetFingerprint;
 
-          const payload = deps.attachRegistryPayload(
+          return finalizeRenderedRoutePayload(
+            context,
             {
-              ok: true as const,
-              tool: "run_step" as const,
-              current_step_id: String((context.state as Record<string, unknown>).current_step || ""),
-              active_specialist: deps.presentationSpecialist,
-              text: deps.buildTextForWidget({ specialist, state: context.state }),
-              prompt: "",
+              state: nextStateWithRecap,
               specialist,
+              previousSpecialist,
+              responseUiFlags: context.responseUiFlags,
+            },
+            {
               presentation_assets: {
                 pdf_url: assets.pdfUrl,
                 png_url: assets.pngUrl,
                 base_name: assets.baseName,
               },
-              state: {
-                ...(context.state as Record<string, unknown>),
-                active_specialist: deps.presentationSpecialist,
-                last_specialist_result: specialist,
-                presentation_asset_fingerprint: assets.assetFingerprint,
-              },
-            },
-            specialist,
-            context.responseUiFlags
+            }
           );
-
-          return finalizeRoutePayload(payload as unknown as TResponse);
         } catch {
           console.error("[presentation] Generation failed");
 
@@ -395,34 +573,29 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             action: "ASK",
             message,
             question: "",
-            refined_formulation: "",
-            presentation_brief: "",
+            refined_formulation: persistentRecap,
+            presentation_brief: persistentRecap,
             wants_recap: false,
             is_offtopic: false,
             user_intent: "STEP_INPUT",
             meta_topic: "NONE",
           };
-
-          const payload = deps.attachRegistryPayload(
-            {
-              ok: true as const,
-              tool: "run_step" as const,
-              current_step_id: String((context.state as Record<string, unknown>).current_step || ""),
-              active_specialist: deps.presentationSpecialist,
-              text: deps.buildTextForWidget({ specialist, state: context.state }),
-              prompt: "",
-              specialist,
-              state: {
-                ...(context.state as Record<string, unknown>),
-                active_specialist: deps.presentationSpecialist,
-                last_specialist_result: specialist,
-              },
-            },
-            specialist,
-            context.responseUiFlags
+          const nextState: CanvasState = {
+            ...context.state,
+            active_specialist: deps.presentationSpecialist,
+          };
+          const nextStateWithRecap = withPresentationRecapProvisional(
+            nextState,
+            deps.presentationStepId,
+            persistentRecap
           );
 
-          return finalizeRoutePayload(payload as unknown as TResponse);
+          return finalizeRenderedRoutePayload(context, {
+            state: nextStateWithRecap,
+            specialist,
+            previousSpecialist,
+            responseUiFlags: context.responseUiFlags,
+          });
         }
       },
     },
@@ -921,15 +1094,35 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
         context.userMessage === deps.dreamStartExerciseRouteToken,
       handle: async (context) => {
-        deps.setDreamRuntimeMode(context.state, "builder_collect");
+        const resumeContext = getDreamBuilderResumeContext(context.state);
+        const startState: CanvasState = { ...context.state };
+
+        if (resumeContext.statements.length > 0) {
+          (startState as Record<string, unknown>).dream_builder_statements = resumeContext.statements;
+        }
+
+        if (resumeContext.hasReusableScoreContext) {
+          deps.setDreamRuntimeMode(startState, "builder_scoring");
+          (startState as Record<string, unknown>).dream_awaiting_direction = "true";
+        } else {
+          deps.setDreamRuntimeMode(startState, "builder_collect");
+          (startState as Record<string, unknown>).dream_awaiting_direction = "false";
+          if (resumeContext.hasSavedScoreContext) {
+            (startState as Record<string, unknown>).dream_scores = [];
+            (startState as Record<string, unknown>).dream_top_clusters = [];
+            (startState as Record<string, unknown>).dream_scoring_statements = [];
+          }
+        }
+
+        const routeUserMessage = resumeContext.hasReusableScoreContext ? "" : context.userMessage;
 
         const forcedDecision = {
           specialist_to_call: deps.dreamExplainerSpecialist,
-          specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: ${context.userMessage}`,
+          specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: ${routeUserMessage}`,
           current_step: deps.dreamStepId,
-          intro_shown_for_step: String((context.state as Record<string, unknown>).intro_shown_for_step ?? ""),
+          intro_shown_for_step: String((startState as Record<string, unknown>).intro_shown_for_step ?? ""),
           intro_shown_session:
-            (context.state as Record<string, unknown>).intro_shown_session === "true" ? "true" : "false",
+            (startState as Record<string, unknown>).intro_shown_session === "true" ? "true" : "false",
           show_step_intro: "false",
           show_session_intro: "false",
         } as unknown as OrchestratorOutput;
@@ -937,19 +1130,19 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const callDreamExplainer = await deps.callSpecialistStrictSafe(
           {
             model: context.model,
-            state: context.state,
+            state: startState,
             decision: forcedDecision,
-            userMessage: context.userMessage,
+            userMessage: routeUserMessage,
           },
-          deps.buildRoutingContext(context.userMessage),
-          context.state
+          deps.buildRoutingContext(routeUserMessage),
+          startState
         );
 
         if (!callDreamExplainer.ok) return finalizeRoutePayload(callDreamExplainer.payload);
         deps.rememberLlmCall(callDreamExplainer.value);
 
         const nextStateDream = deps.applyStateUpdate({
-          prev: context.state,
+          prev: startState,
           decision: forcedDecision,
           specialistResult: callDreamExplainer.value.specialistResult,
           showSessionIntroUsed: "false",
@@ -971,7 +1164,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
 
         if (dreamScoringPhase && dreamHasClusters) {
           deps.setDreamRuntimeMode(nextStateDream, "builder_scoring");
-        } else if (deps.getDreamRuntimeMode(context.state) === "builder_scoring" && !dreamScoringPhase) {
+        } else if (deps.getDreamRuntimeMode(startState) === "builder_scoring" && !dreamScoringPhase) {
           deps.setDreamRuntimeMode(nextStateDream, "builder_refine");
         } else {
           deps.setDreamRuntimeMode(nextStateDream, "builder_collect");
@@ -986,6 +1179,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             attempts: callDreamExplainer.value.attempts,
             language: context.lang,
             meta_user_message_ignored: false,
+            resumed_builder_context: resumeContext.statements.length > 0,
+            reused_saved_score_context: resumeContext.hasReusableScoreContext,
           },
         });
       },

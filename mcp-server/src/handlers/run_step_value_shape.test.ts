@@ -28,8 +28,22 @@ test("isValidStepValueForStorage rejects framing lines for non-step0/presentatio
   assert.equal(isValidStepValueForStorage("targetgroup", value), false);
 });
 
-test("isValidStepValueForStorage keeps step0 and presentation permissive", () => {
+test("isValidStepValueForStorage keeps step0 permissive", () => {
   const value = "Hier zijn drie korte voorbeelden van een Purpose voor Mindd:.";
   assert.equal(isValidStepValueForStorage("step_0", value), true);
-  assert.equal(isValidStepValueForStorage("presentation", value), true);
+});
+
+test("isValidStepValueForStorage requires structured presentation recaps", () => {
+  const flat = "This is what you said: Dream: Build calm around complex choices. Strategy: Focus on clarity.";
+  const structured = [
+    "This is what you said:",
+    "",
+    "Dream: Build calm around complex choices.",
+    "",
+    "Strategy:",
+    "• Focus on clarity",
+    "• Win on trust",
+  ].join("\n");
+  assert.equal(isValidStepValueForStorage("presentation", flat), false);
+  assert.equal(isValidStepValueForStorage("presentation", structured), true);
 });

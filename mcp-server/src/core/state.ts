@@ -58,6 +58,10 @@ export const DreamRuntimeModeZod = z.enum([
   "builder_refine",
 ]);
 export type DreamRuntimeMode = z.infer<typeof DreamRuntimeModeZod>;
+const DreamTopClusterZod = z.object({
+  theme: z.string(),
+  average: z.number().finite(),
+});
 export const PROVISIONAL_SOURCES = [
   "user_input",
   "wording_pick",
@@ -313,6 +317,10 @@ export const CanvasStateZod = z.object({
   provisional_source_by_step: z.record(z.string(), ProvisionalSourceZod),
   __dream_runtime_mode: DreamRuntimeModeZod,
   dream_builder_statements: z.array(z.string()),
+  dream_scoring_statements: z.array(z.string()),
+  dream_scores: z.array(z.array(z.number().finite())),
+  dream_top_clusters: z.array(DreamTopClusterZod),
+  dream_awaiting_direction: BoolStringZod,
 
   // shared convenience fields
   business_name: z.string(),
@@ -330,7 +338,7 @@ export type CanvasState = z.infer<typeof CanvasStateZod>;
  * Current state schema version
  * Bump when you change defaults/fields in a way that needs migration.
  */
-export const CURRENT_STATE_VERSION = "12";
+export const CURRENT_STATE_VERSION = "13";
 export const DEFAULT_VIEW_CONTRACT_VERSION = "v3_ssot_rigid";
 
 /**
@@ -394,6 +402,10 @@ export function getDefaultState(): CanvasState {
     provisional_source_by_step: {},
     __dream_runtime_mode: "self",
     dream_builder_statements: [],
+    dream_scoring_statements: [],
+    dream_scores: [],
+    dream_top_clusters: [],
+    dream_awaiting_direction: "false",
 
     business_name: "TBD",
     normalized_user_input: "",
@@ -610,6 +622,36 @@ export function normalizeState(raw: unknown): CanvasState {
   const dream_builder_statements = dreamBuilderStatementsRaw
     .map((line) => String(line || "").trim())
     .filter(Boolean);
+  const dreamScoringStatementsRaw = Array.isArray((r as any).dream_scoring_statements)
+    ? ((r as any).dream_scoring_statements as unknown[])
+    : [];
+  const dream_scoring_statements = dreamScoringStatementsRaw
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const dreamScoresRaw = Array.isArray((r as any).dream_scores) ? ((r as any).dream_scores as unknown[]) : [];
+  const dream_scores = dreamScoresRaw
+    .map((row) =>
+      Array.isArray(row)
+        ? row
+          .map((value) => (typeof value === "number" && Number.isFinite(value) ? value : null))
+          .filter((value): value is number => value !== null)
+        : []
+    )
+    .filter((row) => row.length > 0);
+  const dreamTopClustersRaw = Array.isArray((r as any).dream_top_clusters)
+    ? ((r as any).dream_top_clusters as unknown[])
+    : [];
+  const dream_top_clusters = dreamTopClustersRaw
+    .map((entry) => {
+      const record = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+      const theme = String(record.theme || "").trim();
+      const average = typeof record.average === "number" && Number.isFinite(record.average) ? record.average : null;
+      if (!theme || average === null) return null;
+      return { theme, average };
+    })
+    .filter((entry): entry is { theme: string; average: number } => Boolean(entry));
+  const dream_awaiting_direction =
+    String((r as any).dream_awaiting_direction ?? d.dream_awaiting_direction).trim() === "true" ? "true" : "false";
 
   const business_name = String(r.business_name ?? d.business_name) || "TBD";
   const normalized_user_input = String((r as any).normalized_user_input ?? d.normalized_user_input).trim();
@@ -684,6 +726,10 @@ export function normalizeState(raw: unknown): CanvasState {
     provisional_source_by_step,
     __dream_runtime_mode,
     dream_builder_statements,
+    dream_scoring_statements,
+    dream_scores,
+    dream_top_clusters,
+    dream_awaiting_direction,
 
     business_name,
     normalized_user_input,
@@ -707,6 +753,22 @@ export function migrateState(raw: unknown): CanvasState {
   // If already current, done
   if (s.state_version === CURRENT_STATE_VERSION) return s;
 
+  // v12 -> v13: persist Dream Builder resume context across requests.
+  if (s.state_version === "12") {
+    s = {
+      ...s,
+      state_version: "13",
+      dream_scoring_statements: Array.isArray((s as any).dream_scoring_statements)
+        ? (s as any).dream_scoring_statements
+        : [],
+      dream_scores: Array.isArray((s as any).dream_scores) ? (s as any).dream_scores : [],
+      dream_top_clusters: Array.isArray((s as any).dream_top_clusters) ? (s as any).dream_top_clusters : [],
+      dream_awaiting_direction:
+        String((s as any).dream_awaiting_direction ?? "false").trim() === "true" ? "true" : "false",
+    };
+    return CanvasStateZod.parse(s);
+  }
+
   // v11 -> v12: add canonical locale field (BCP47-like) while keeping language as base code.
   if (s.state_version === "11") {
     const locale = normalizeLocaleTag(
@@ -719,7 +781,7 @@ export function migrateState(raw: unknown): CanvasState {
       locale,
       language,
     };
-    return CanvasStateZod.parse(s);
+    return migrateState(s);
   }
 
   // v10 -> v11: add explicit ui fallback metadata.
