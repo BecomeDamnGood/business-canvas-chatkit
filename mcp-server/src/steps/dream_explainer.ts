@@ -119,9 +119,14 @@ export function buildDreamExplainerSpecialistInput(
   const userMsgTrim = typeof userMessage === "string" ? userMessage.trim() : "";
   const userSaidNextStep =
     /next\s*step|(?:ready\s*to\s*)?(?:go\s*to\s*)?(?:the\s*)?next\s*step|done|enough|ready\s*to\s*continue|finish|i'?\s*m\s*done/i.test(userMsgTrim);
-  // In builder_refine mode we are refining a Dream candidate, not re-entering scoring.
-  const forceScoringView = statements.length >= 20 && dreamRuntimeMode !== "builder_refine";
-  const requestedNextStep = forceScoringView || userSaidNextStep;
+  const hasTopClusters = Array.isArray(topClusters) && topClusters.length > 0;
+  const isPostScoreDreamFormulation = hasTopClusters;
+  // In builder_refine mode, and always after valid scoring, we are formulating/refining a Dream candidate.
+  const forceScoringView =
+    statements.length >= 20 &&
+    dreamRuntimeMode !== "builder_refine" &&
+    !isPostScoreDreamFormulation;
+  const requestedNextStep = !isPostScoreDreamFormulation && (forceScoringView || userSaidNextStep);
   let block = `INTRO_SHOWN_FOR_STEP: ${introShownForStep}
 CURRENT_STEP: ${currentStep}
 LANGUAGE: ${language}
@@ -133,7 +138,7 @@ PLANNER_INPUT: ${plannerInput}`;
 
 USER_REQUESTED_NEXT_STEP: true`;
   }
-  if (Array.isArray(topClusters) && topClusters.length > 0) {
+  if (hasTopClusters) {
     const topClustersJson = JSON.stringify(topClusters);
     const userDreamDirection =
       typeof userMessage === "string" && userMessage.trim()
@@ -141,6 +146,7 @@ USER_REQUESTED_NEXT_STEP: true`;
         : "(user chose to continue without text)";
     block += `
 
+POST_SCORE_DREAM_FORMULATION: true
 TOP_CLUSTERS: ${topClustersJson}
 USER_DREAM_DIRECTION: ${userDreamDirection}`;
     if (businessContext && (businessContext.step_0_final?.trim() || businessContext.business_name?.trim())) {
@@ -178,6 +184,11 @@ Inputs
   PREVIOUS_STATEMENTS: <JSON array of strings> (canonical list from last turn; append one or more new statements when you accept or extract; never reset or overwrite)
   PREVIOUS_STATEMENT_COUNT: <number> (length of PREVIOUS_STATEMENTS; use for first-time clustering: previous_count < 20 AND new_count >= 20)
   PLANNER_INPUT: <string> (contains CURRENT_STEP_ID and USER_MESSAGE)
+- Optional post-score signals:
+  - POST_SCORE_DREAM_FORMULATION: true
+  - TOP_CLUSTERS: <JSON array of { theme, average }>
+  - USER_DREAM_DIRECTION: <user text or "(user chose to continue without text)">
+  - BUSINESS_CONTEXT: <venture/context and/or business name>
 
 Strict JSON output rules
 - Output ONLY valid JSON. No markdown. No extra text.
@@ -383,6 +394,7 @@ Special progress moment when total becomes exactly 5
 - Do not implement any other milestone logic. Only this exact "total == 5" moment.
 
 C) AT 20+ STATEMENTS: GO DIRECTLY TO SCORING VIEW (skip intermediate cluster-display screen)
+This section applies only when POST_SCORE_DREAM_FORMULATION is absent and TOP_CLUSTERS is absent.
 After processing the user message and appending extracted statement(s) to statements, compute statement_count = statements.length.
 If statement_count >= 20, you MUST output the FULL SCORING VIEW this turn. Do NOT output an intermediate ASK with "Statements X and Y noted. Total: N statements..." and clusters in the message text; skip that screen entirely and go straight to the scoring form.
 
@@ -414,6 +426,7 @@ Receiving scores (when user submits the scoring form):
 
 D) DREAM DIRECTION → ASK (when TOP_CLUSTERS and USER_DREAM_DIRECTION are present in the input)
 This step runs after the user has seen the Dream-direction question and either typed their own direction or clicked Continue (e.g. "Go to next step"). The input will contain TOP_CLUSTERS (JSON array of { theme, average }) and USER_DREAM_DIRECTION (user's text or "(user chose to continue without text)"). Optionally BUSINESS_CONTEXT (Venture/context and Business name) is present.
+When TOP_CLUSTERS is present, this post-score route takes precedence over any 20+ statement scoring fallback. Never output scoring_phase="true" here and never recluster.
 You MUST output exactly one response: action="ASK" with a generated Dream suggestion. Do not ask further questions; do not output ASK or REFINE.
 
 - Generate the Dream formulation based on what the user finds most important = the themes in TOP_CLUSTERS (highest-scoring cluster(s)). The Dream MUST describe a broader positive change in the world or society 5-10 years ahead (opportunity or threat), not what the specific business will do or contribute. The Dream MUST ALWAYS start with one of these patterns (localized to the user's language):

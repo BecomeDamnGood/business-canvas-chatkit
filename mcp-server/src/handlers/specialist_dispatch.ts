@@ -474,6 +474,8 @@ export async function callSpecialistStrict(
           business_name: String((state as any).business_name ?? "").trim(),
         }
       : undefined;
+    const plannerDreamRuntimeMode =
+      topClusters && topClusters.length > 0 ? "builder_refine" : deps.getDreamRuntimeMode(state);
     const plannerInput = buildDreamExplainerSpecialistInput(
       userMessage,
       (state as any).intro_shown_for_step,
@@ -482,7 +484,7 @@ export async function callSpecialistStrict(
       previousStatements,
       topClusters,
       businessContext,
-      deps.getDreamRuntimeMode(state)
+      plannerDreamRuntimeMode
     );
 
     const res = await callStrictJson<DreamExplainerOutput>({

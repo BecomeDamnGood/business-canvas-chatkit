@@ -25,6 +25,39 @@ test("buildDreamExplainerSpecialistInput with empty previous statements", () => 
   assert.ok(input.includes("PREVIOUS_STATEMENTS: []"), "empty array in input");
 });
 
+test("buildDreamExplainerSpecialistInput suppresses next-step scoring fallback after valid scoring", () => {
+  const input = buildDreamExplainerSpecialistInput(
+    "",
+    "dream",
+    "dream",
+    "nl",
+    Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`),
+    [{ theme: "Vertrouwen", average: 8.5 }],
+    { business_name: "Mindd" },
+    "builder_scoring"
+  );
+
+  assert.ok(input.includes("POST_SCORE_DREAM_FORMULATION: true"));
+  assert.ok(input.includes("TOP_CLUSTERS:"));
+  assert.ok(input.includes("USER_DREAM_DIRECTION: (user chose to continue without text)"));
+  assert.ok(!input.includes("USER_REQUESTED_NEXT_STEP: true"));
+});
+
+test("buildDreamExplainerSpecialistInput still requests scoring fallback before scores exist", () => {
+  const input = buildDreamExplainerSpecialistInput(
+    "",
+    "dream",
+    "dream",
+    "nl",
+    Array.from({ length: 20 }, (_, index) => `Statement ${index + 1}`),
+    undefined,
+    undefined,
+    "builder_scoring"
+  );
+
+  assert.ok(input.includes("USER_REQUESTED_NEXT_STEP: true"));
+});
+
 test("statement list: count equals statements.length", () => {
   const output: DreamExplainerOutput = {
     action: "ASK",

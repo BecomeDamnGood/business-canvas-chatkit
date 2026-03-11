@@ -216,6 +216,40 @@ function uiText(lang: string | null | undefined, key: string, _fallback: string)
   return "";
 }
 
+function normalizeDreamScoreValue(raw: unknown): string {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return "";
+  const num = Number(trimmed);
+  if (Number.isNaN(num) || num < 1 || num > 10) return "";
+  return String(Math.round(num));
+}
+
+function normalizeDreamScoreMatrix(raw: unknown): string[][] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((row) =>
+    Array.isArray(row)
+      ? row.map((value) => normalizeDreamScoreValue(value))
+      : []
+  );
+}
+
+export function buildInitialDreamScoringScores(params: {
+  clientScores?: unknown;
+  persistedScores?: unknown;
+  clusters: Array<{ statement_indices?: unknown[] }>;
+}): string[][] {
+  const clientScores = normalizeDreamScoreMatrix(params.clientScores);
+  const persistedScores = normalizeDreamScoreMatrix(params.persistedScores);
+  const hasClientValues = clientScores.some((row) => row.some((value) => value !== ""));
+  const sourceScores = hasClientValues ? clientScores : persistedScores;
+
+  return params.clusters.map((cluster, clusterIndex) => {
+    const statementIndices = Array.isArray(cluster.statement_indices) ? cluster.statement_indices : [];
+    const sourceRow = Array.isArray(sourceScores[clusterIndex]) ? sourceScores[clusterIndex] : [];
+    return statementIndices.map((_, statementIndex) => normalizeDreamScoreValue(sourceRow[statementIndex]));
+  });
+}
+
 function benAvatarCandidates(): string[] {
   const candidates: string[] = [];
   try {
@@ -1240,17 +1274,12 @@ export function render(overrideToolOutput?: unknown): void {
     }
 
     const win = globalThis as unknown as { __dreamScoringScores?: unknown[][] };
-    if (!win.__dreamScoringScores) win.__dreamScoringScores = [];
+    win.__dreamScoringScores = buildInitialDreamScoringScores({
+      clientScores: win.__dreamScoringScores,
+      persistedScores: state.dream_scores,
+      clusters,
+    });
     const scoringScores = win.__dreamScoringScores;
-    for (let ci = 0; ci < clusters.length; ci++) {
-      if (!scoringScores[ci]) scoringScores[ci] = [];
-      const indices = clusters[ci].statement_indices || [];
-      for (let si = 0; si < indices.length; si++) {
-        if (scoringScores[ci][si] === undefined) scoringScores[ci][si] = "";
-      }
-      scoringScores[ci].length = indices.length;
-    }
-    scoringScores.length = clusters.length;
 
     const scoringClustersEl = document.getElementById("scoringClusters");
     if (!scoringClustersEl) return;

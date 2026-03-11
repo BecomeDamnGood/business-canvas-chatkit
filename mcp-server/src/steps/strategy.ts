@@ -119,7 +119,7 @@ The user message contains:
 - INTRO_SHOWN_FOR_STEP: <string>
 - CURRENT_STEP: <string>
 - LANGUAGE: <string>
-- PREVIOUS_STATEMENTS: <JSON array of strings> (canonical list from last turn; append one or more new statements when you accept or extract; never reset or overwrite)
+- PREVIOUS_STATEMENTS: <JSON array of strings> (canonical accepted list from the last turn; keep unrelated focus points verbatim, append only for genuinely new focus points, and mutate locally when the user clearly edits, replaces, or removes an existing focus point)
 - PREVIOUS_STATEMENT_COUNT: <number> (length of PREVIOUS_STATEMENTS; use for dynamic prompt text)
 - PLANNER_INPUT: <string> (contains CURRENT_STEP_ID and USER_MESSAGE)
 
@@ -412,10 +412,17 @@ Output
 
 After the user provides answers to these questions, evaluate their input and propose a Strategy via REFINE or ASK based on what they said.
 
-E.1) Statement persistence (critical)
-- You receive PREVIOUS_STATEMENTS (JSON array) each turn. When you accept or extract a new strategic focus point, append it to statements: statements = PREVIOUS_STATEMENTS + [new_focus_point]. Never reset or overwrite; count MUST equal statements.length.
+E.1) Canonical statement handling (critical)
+- You receive PREVIOUS_STATEMENTS (JSON array) each turn. Treat it as the canonical accepted list from the last turn.
+- statements is NOT append-only in all cases.
+- Priority order:
+  1) If the user clearly targets an existing focus point for remove, replace, or edit, mutate only that resolved focus point and keep all unrelated focus points unchanged.
+  2) If the user contributes one genuinely new and unique focus point, append only that new focus point.
+  3) If the user gives rough wording that still needs interpretation, keep the proposal local/pending via REFINE until the user accepts it.
+  4) Only fall back to a full 4 to 7 focus-point rewrite when the user explicitly asks for it, asks for consolidation, or local mapping is no longer defensible.
+- Keep the original order of unrelated accepted focus points wherever possible.
 - Each focus point is one short line (one strategic choice/focus).
-- After accepting a focus point, output action="ASK" with the dynamic prompt text.
+- After accepting a new focus point or a clear local mutation, output action="ASK" with the dynamic prompt text.
 
 Statement display (HARD)
 - When the user enters a new strategic statement via the text field and it is accepted:
@@ -480,6 +487,10 @@ Default evaluation mode (HARD)
 - Strategy is incremental and conservative by default.
 - Treat PREVIOUS_STATEMENTS as the canonical accepted list.
 - Preserve accepted bullets verbatim unless a tiny local wording repair or an explicit merge is clearly needed.
+- Follow this priority order:
+  1) local mutation against the existing list when that is defensible,
+  2) otherwise a local pending proposal via REFINE or grouped compare,
+  3) full rewrite only under the explicit exception conditions below.
 - A small addition, rough wording, or free-text explanation is NOT permission to rebuild the whole strategy.
 - Only generate a full 4 to 7 focus-point set when:
   1) the user explicitly asks for a full rewrite or full consolidation,

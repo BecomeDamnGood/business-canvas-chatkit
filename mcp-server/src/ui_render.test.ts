@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   actionRoleForStateKey,
+  buildInitialDreamScoringScores,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
   shouldRenderPurposeStepIntroVideo,
@@ -143,6 +144,32 @@ test("resolveActionCodeForStateKey resolves dedicated score submit actions from 
   assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_score_submit"), "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
   assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_text_submit"), "ACTION_TEXT_SUBMIT");
   assert.equal(resolveActionPayloadModeForStateKey(result, {}, "ui_action_text_submit"), "text");
+});
+
+test("buildInitialDreamScoringScores reuses persisted dream scores when client cache is empty", () => {
+  const scores = buildInitialDreamScoringScores({
+    clientScores: [],
+    persistedScores: [[8, 9], [7]],
+    clusters: [
+      { statement_indices: [0, 1] },
+      { statement_indices: [2] },
+    ],
+  });
+
+  assert.deepEqual(scores, [["8", "9"], ["7"]]);
+});
+
+test("buildInitialDreamScoringScores prefers in-progress client values over persisted dream scores", () => {
+  const scores = buildInitialDreamScoringScores({
+    clientScores: [[4, ""], ["10"]],
+    persistedScores: [[8, 9], [7]],
+    clusters: [
+      { statement_indices: [0, 1] },
+      { statement_indices: [2] },
+    ],
+  });
+
+  assert.deepEqual(scores, [["4", ""], ["10"]]);
 });
 
 test("benProfileVideoUrlForLang returns only configured language-specific videos", () => {

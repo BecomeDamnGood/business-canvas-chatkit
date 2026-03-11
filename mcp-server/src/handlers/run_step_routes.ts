@@ -668,8 +668,9 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           },
         };
 
-        deps.setDreamRuntimeMode(nextStateScores, "builder_scoring");
+        deps.setDreamRuntimeMode(nextStateScores, "builder_refine");
         (nextStateScores as Record<string, unknown>).dream_builder_statements = statements;
+        (nextStateScores as Record<string, unknown>).dream_scoring_statements = statements;
         (nextStateScores as Record<string, unknown>).dream_scores = parsedScores;
         (nextStateScores as Record<string, unknown>).dream_top_clusters = topClusters;
         (nextStateScores as Record<string, unknown>).dream_awaiting_direction = "true";
@@ -1102,7 +1103,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         }
 
         if (resumeContext.hasReusableScoreContext) {
-          deps.setDreamRuntimeMode(startState, "builder_scoring");
+          deps.setDreamRuntimeMode(startState, "builder_refine");
           (startState as Record<string, unknown>).dream_awaiting_direction = "true";
         } else {
           deps.setDreamRuntimeMode(startState, "builder_collect");
@@ -1165,6 +1166,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         if (dreamScoringPhase && dreamHasClusters) {
           deps.setDreamRuntimeMode(nextStateDream, "builder_scoring");
         } else if (deps.getDreamRuntimeMode(startState) === "builder_scoring" && !dreamScoringPhase) {
+          deps.setDreamRuntimeMode(nextStateDream, "builder_refine");
+        } else if (deps.getDreamRuntimeMode(startState) === "builder_refine" && !dreamScoringPhase) {
           deps.setDreamRuntimeMode(nextStateDream, "builder_refine");
         } else {
           deps.setDreamRuntimeMode(nextStateDream, "builder_collect");

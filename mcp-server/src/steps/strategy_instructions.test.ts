@@ -63,3 +63,29 @@ test("Strategy instructions keep local proposals pending instead of auto-committ
     "instructions must no longer auto-accept refined strategy proposals"
   );
 });
+
+test("Strategy instructions define PREVIOUS_STATEMENTS as canonical but not append-only", () => {
+  const text = STRATEGY_INSTRUCTIONS;
+  assert.ok(
+    text.includes("statements is NOT append-only in all cases."),
+    "instructions must explicitly allow local strategy mutations"
+  );
+  assert.ok(
+    text.includes("If the user clearly targets an existing focus point for remove, replace, or edit, mutate only that resolved focus point"),
+    "instructions must prioritize targeted local mutations before append behavior"
+  );
+  assert.ok(
+    text.includes("If the user contributes one genuinely new and unique focus point, append only that new focus point."),
+    "instructions must keep append behavior limited to genuine additions"
+  );
+  assert.equal(
+    text.includes("append one or more new statements when you accept or extract; never reset or overwrite"),
+    false,
+    "instructions must not keep the legacy append-only rule"
+  );
+  assert.equal(
+    text.includes("When you accept or extract a new strategic focus point, append it to statements: statements = PREVIOUS_STATEMENTS + [new_focus_point]. Never reset or overwrite"),
+    false,
+    "instructions must not reintroduce append-only statement persistence"
+  );
+});

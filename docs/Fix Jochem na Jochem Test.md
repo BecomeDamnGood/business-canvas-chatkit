@@ -131,6 +131,64 @@ Harde regels
 ### Toestemming
 - Als je wilt dat deze fix ook echt wordt geïmplementeerd, geef dan eerst expliciet toestemming voor uitvoering.
 
+## Results
+
+### Agent instructie
+```text
+Doel
+Voer een volledige fix-audit uit op alle fixes in dit document, in de volgorde waarin ze in het document staan. Controleer per fix of de oplossing echt correct en volledig is geïmplementeerd, of er nog iets ontbreekt, of fixes elkaar bijten, en of de analyse aanleiding geeft tot aanvullende correcties of regressietests.
+
+Context
+- Werk in de bestaande repository en gebruik de actuele code als bron van waarheid.
+- Er kunnen al niet-gecommitte wijzigingen in de worktree staan. Overschrijf of revert niets dat je niet zelf hebt gemaakt.
+- Behandel dit als een audit/review-opdracht, niet als een implementatieopdracht, tenzij een duidelijke bevinding alleen hard te maken is met een minimale reproduceerbare test.
+
+Werkwijze
+1. Lees dit document volledig en maak een lijst van alle afzonderlijke fixes.
+2. Loop elke fix stuk voor stuk na:
+   - controleer of de bedoelde invariant nu echt wordt afgedwongen
+   - controleer server-state, routing, specialist-instructies, UI-state, widgetgedrag, contracts en tests waar relevant
+   - controleer of de fix alleen symptoombestrijding is of structureel op de juiste laag zit
+3. Controleer daarna fix-overstijgend:
+   - of twee of meer fixes elkaar functioneel tegenspreken
+   - of een latere fix een eerdere fix onbedoeld deels terugdraait
+   - of er gaten zitten tussen backend-state, frontend-rendering en specialist-prompting
+   - of bestaande tests de invariant echt dekken of slechts een happy path
+4. Controleer expliciet op vergeten zaken:
+   - ontbrekende regressietests
+   - state die wel wordt opgeslagen maar niet wordt hergebruikt
+   - UI die nog stale of lege data kan tonen
+   - contract- of i18n-impact die nog niet consequent is verwerkt
+   - hervat- of resume-scenario's
+5. Voeg je bevindingen direct toe onder het kopje `## Results` in dit document.
+
+Rapportagevorm
+- Werk onder `## Results`.
+- Voeg eerst een korte samenvatting toe:
+  - auditdatum
+  - aantal fixes gecontroleerd
+  - overall conclusie: `correct`, `grotendeels correct met restpunten`, of `onvolledig`
+- Voeg daarna per fix een blok toe met exact deze velden:
+  - `Fix:`
+  - `Status:` `correct` | `gedeeltelijk correct` | `onjuist` | `niet verifieerbaar`
+  - `Bewijs:`
+  - `Ontbreekt nog:`
+  - `Bijt met andere fix(s):`
+  - `Aanvullende actie nodig:`
+- Sluit af met een sectie `Overkoepelende bevindingen` en een sectie `Aanbevolen vervolgacties`.
+
+Harde regels
+- Geen aannames zonder codebewijs.
+- Geen oppervlakkige “ziet er goed uit”-conclusies.
+- Als iets niet hard verifieerbaar is, benoem exact welke observatie of test ontbreekt.
+- Als je een risico ziet dat nog geen bug is maar wel waarschijnlijk regressie kan geven, noteer dat expliciet.
+- Als nieuwe issues buiten scope blijken maar rechtstreeks uit de fixes voortkomen, neem ze op als aanvullende bevinding.
+- Bewaar bestaande inhoud in dit document; voeg alleen auditresultaten toe.
+```
+
+### Bevindingen
+- Nog niet uitgevoerd in deze beurt. Gebruik de instructie hierboven om de volledige fix-audit uit te voeren en vul daarna hieronder per fix de resultaten aan.
+
 ---
 
 ## Fix 2 - Presentation moet de recap zichtbaar houden bij `Maak presentatie`, en recap-vragen mogen daar geen dubbele content meer tonen
@@ -1103,49 +1161,284 @@ Waarom dit de juiste oplossing is:
 - dit voorkomt dat score-submit semantisch ongedaan wordt gemaakt door een generieke fallback
 - en dit maakt zichtbaar dat de ingevulde scores echt gebruikt zijn voor het Droomvoorstel
 
+---
+
+## Fix 9 - Strategy-instructies mogen lokale mutaties niet meer tegenspreken, en deze invariant moet end-to-end bewezen worden
+
+### Probleem in mensentaal
+- Fix 4 heeft Strategy al grotendeels de goede kant op geduwd:
+  - lokale suggesties
+  - behoud van bestaande bullets
+  - en niet te snel een volledige 4-7-set herschrijven
+- Maar er zit nog een inhoudelijke tegenspraak in de Strategy-instructies zelf.
+- In dezelfde instructies staat namelijk nog een oudere regel die zegt dat `PREVIOUS_STATEMENTS` bij accept/extract moet worden geappend en `never reset or overwrite`.
+- Dat botst met de nieuwere logica voor:
+  - remove
+  - replace
+  - edit
+  - en andere lokale mutaties van bestaande bullets
+- Daardoor is de implementatierichting wel goed, maar de specialistinstructie intern nog niet volledig consistent.
+- Daarnaast ontbreekt nog een hard end-to-end bewijs dat een kleine toevoeging bij een bestaande Strategy-set niet alsnog doorschiet naar een volledige 4-7 rewrite.
+
+### Scopegrens
+- Deze fix gaat specifiek over de resterende structurele onvolledigheid in Strategy na Fix 4 en Fix 5.
+- Deze fix gaat over:
+  - de Strategy-specialistinstructies
+  - en de regressietestdekking voor echte specialistflows
+- Deze fix gaat niet over:
+  - nieuwe UX-copy buiten wat strikt nodig is voor de invariant
+  - Products and Services of Rules of the Game opnieuw herontwerpen
+  - een algemene herbouw van wording-choice
+- Wel moet deze fix expliciet de spanning met de lokale edit-semantiek oplossen.
+
+### Input (zoals nu bewezen uit de audit)
+- In `mcp-server/src/steps/strategy.ts:122` staat nog:
+  - `append one or more new statements when you accept or extract; never reset or overwrite`
+- In datzelfde bestand staan later juist al lokale mutatieroutes voor:
+  - `__BUSINESS_LIST_REMOVE__`
+  - `__BUSINESS_LIST_REPLACE__`
+  - `__BUSINESS_LIST_EDIT__`
+- En in de lagere lagen is het gedrag verder al grotendeels goed ingericht:
+  - wording-choice houdt lokale voorstellen pending
+  - runtime classificeert list-edit intent vooraf
+  - render bewaart bestaande bullets zichtbaar
+- Wat nog ontbreekt:
+  - de instructies moeten intern consistent worden gemaakt
+  - en er moet een echte regressietest komen voor:
+    - bestaande 3-6 bullets
+    - kleine nieuwe toevoeging
+    - uitkomst blijft lokaal
+    - geen full-set rewrite
+
+### Eerste analyse (grote lijnen, met concrete codebevindingen)
+- In `mcp-server/src/steps/strategy.ts` staan twee semantieken tegelijk:
+  - oud append-only gedrag bij `PREVIOUS_STATEMENTS`
+  - en nieuw lokaal mutatiegedrag via route-tokens en incremental rules
+- In `mcp-server/src/handlers/run_step_pipeline.ts` wordt vrije tekst voor Strategy al vooraf geclassificeerd via `resolveBusinessListTurn(...)`, waardoor remove/replace/edit niet meer als gewone append-input binnenkomt.
+- In `mcp-server/src/handlers/run_step_business_list_turn.ts` wordt die lokale mutatie ook daadwerkelijk afgedwongen.
+- In `mcp-server/src/handlers/run_step_wording_intent.test.ts` is al bewezen dat wording-choice lokale voorstellen behoudt en niet onnodig full-set gaat.
+- Maar zolang de specialistinstructie zelf intern tegenstrijdig blijft, blijft er een reëel risico dat het model in randgevallen toch de verkeerde prioriteit kiest.
+- Hoog-over betekent dit:
+  - de onderliggende runtime is al slimmer geworden
+  - maar de Strategy-agent krijgt nog niet één volledig consistente bron van waarheid
+  - en de kritieke invariant is nog niet end-to-end hard gemaakt met een echte specialist/regressietest
+
+### Definitieve invariant
+- Voor Strategy is `PREVIOUS_STATEMENTS` niet langer append-only in alle gevallen.
+- Bij lokale mutatie-intentie moet de specialist expliciet begrijpen dat bestaande bullets doelgericht aangepast, vervangen of verwijderd mogen worden.
+- Een kleine toevoeging of aanscherping bij een bestaande Strategy-set mag niet automatisch escaleren naar een volledige 4-7 rewrite.
+- Full-set rewrite blijft een uitzondering en moet alleen gebeuren onder de al bedoelde expliciete voorwaarden.
+- Deze invariant moet niet alleen in instructietekst bestaan, maar ook hard bewezen worden in regressietests die dicht genoeg op de echte specialistflow zitten.
+
+### Enige oplossing
+- Maak de Strategy-instructies intern semantisch consistent met de al ingevoerde lokale edit-architectuur, en voeg een echte regressietest toe die de lokale-add invariant hard bewijst.
+
+Concreet:
+1. Verwijder of herschrijf de legacy append-only formulering in `mcp-server/src/steps/strategy.ts` zodat die niet langer botst met remove/replace/edit-routes.
+2. Definieer daar expliciet dat `PREVIOUS_STATEMENTS`:
+   - canoniek blijft
+   - maar lokaal gemuteerd mag worden wanneer de user een gerichte edit-, replace- of remove-intentie heeft
+   - en alleen append-only is bij echte nieuwe focuspunten
+3. Controleer dat de instructietekst dezelfde prioriteitsvolgorde uitdrukt als de runtime:
+   - eerst lokale mutatie als dat verdedigbaar is
+   - pas daarna grouped compare / pending suggestion
+   - en full rewrite alleen als expliciete uitzondering
+4. Voeg een echte Strategy-regressietest toe voor het scenario:
+   - bestaande 3-6 bullets
+   - user voegt één kleine focus of aanscherping toe
+   - resultaat blijft lokaal
+   - bestaande bullets blijven behouden
+   - geen spontane complete 4-7 herset
+5. Laat die test niet alleen wording-choice-normalisatie bewijzen, maar zo dicht mogelijk op de specialist-/pipeline-semantiek zitten.
+6. Controleer daarna expliciet of Fix 4 en Fix 5 nog steeds consistent op elkaar aansluiten.
+
+Waarom dit de juiste oplossing is:
+- dit haalt de enige nog bewezen inhoudelijke tegenstrijdigheid weg uit de Strategy-fixketen
+- dit brengt specialistinstructies in lijn met de runtime die lokale list-edits al ondersteunt
+- en dit maakt het resterende regressierisico hard toetsbaar in plaats van impliciet
+
 ### Agent instructie (copy-paste, implementatieopdracht)
 ```text
 Context
-Na een geldige Dream Builder score-submit moet het systeem een Droom formuleren op basis van de hoogste scorethema's. In de praktijk lijkt de flow nu soms terug te vallen naar een nieuwe scoring/herclustering-staat waarbij ingevulde waarden weer leeg of `0` lijken.
+Fix 4 is nog niet volledig af. De Strategy-flow is grotendeels al lokaal/incremental gemaakt, maar in `mcp-server/src/steps/strategy.ts` staat nog een oude append-only instructieregel voor `PREVIOUS_STATEMENTS` die botst met de nieuwere remove/replace/edit-semantiek. Daarnaast ontbreekt nog een echte regressietest die hard bewijst dat een kleine toevoeging bij een bestaande Strategy-set niet alsnog onterecht escaleert naar een volledige 4-7 rewrite.
 
 Concrete codebevinding
-- In `mcp-server/src/handlers/run_step_routes.ts` bestaat al een expliciet score-submitpad:
-  - lees scores in
-  - bereken cluster averages
-  - bepaal `dream_top_clusters`
-  - roep `DreamExplainer` direct opnieuw aan voor Dream-formulering
-- In `mcp-server/src/steps/dream_explainer.ts` staat ook expliciet dat na score-ontvangst de flow naar Dream-direction / Dream-formulation hoort te gaan.
-- Tegelijk bevat de generieke DreamExplainer-logica een `20+ statements` scoring-fallback.
-- In de widget worden scores tijdelijk client-side bewaard, maar bij een nieuwe scoring-render weer leeg geïnitialiseerd als er geen hergebruik van bestaande score-state plaatsvindt.
+- In `mcp-server/src/steps/strategy.ts:122` staat nog:
+  - `append one or more new statements when you accept or extract; never reset or overwrite`
+- In hetzelfde bestand staan later al expliciete lokale mutatieregels voor:
+  - `__BUSINESS_LIST_REMOVE__`
+  - `__BUSINESS_LIST_REPLACE__`
+  - `__BUSINESS_LIST_EDIT__`
+- In `mcp-server/src/handlers/run_step_pipeline.ts` en `mcp-server/src/handlers/run_step_business_list_turn.ts` wordt lokale list-edit intent al voorgeclassificeerd en afgedwongen.
+- In `mcp-server/src/handlers/run_step_wording_intent.test.ts` is al bewijs dat wording-choice lokale voorstellen pending en lokaal houdt.
+- Het resterende probleem zit dus niet primair in de runtime, maar in een nog tegenstrijdige specialistinstructie plus ontbrekende end-to-end regressiedekking.
 
 Opdracht
-Herstel deze contractbreuk zodat score-submit altijd leidt tot Dream-formulering op basis van de hoogste scores, en niet terugvalt naar een hernieuwde scoring-view met lege waarden.
+Maak deze Strategy-fix volledig af door de instructies intern consistent te maken met de lokale mutatiearchitectuur, en voeg een regressietest toe die de lokale-add invariant hard bewijst.
 
 Voer precies deze oplossing uit:
-1. Maak score-submit een expliciete overgang naar de post-score Dream-formuleringsfase.
-2. Gebruik `dream_top_clusters` als verplichte input voor de daaropvolgende Dream-formulering.
-3. Voorkom dat de generieke `20+ statements => scoring_phase=true` logica deze route opnieuw overneemt.
-4. Maak de post-score state machine expliciet en stabiel:
-   - scores ontvangen
-   - top clusters bepaald
-   - Dream-formulering gestart
-   - builder_refine / equivalent vervolgstate actief
-5. Als de scoring-view toch opnieuw kan renderen, vul die vanuit bestaande score-state in plaats van met lege of `0`-waarden.
-6. Neem copy-impact meteen mee in het holistische ontwerp als extra uitleg of labelwijziging functioneel nodig blijkt.
-7. Als nieuwe tekstkeys nodig zijn:
-   - zet ze meteen in de juiste functionele categorie/namespace
-   - registreer ze in `docs/overzicht-ontbrekende-ui-vertalingen.md`
-   - vraag apart toestemming voordat je alle talen bijwerkt
+1. Verwijder of herschrijf de legacy append-only regel in `mcp-server/src/steps/strategy.ts` zodat die niet meer botst met lokale remove/replace/edit-semantiek.
+2. Maak expliciet onderscheid in de instructies tussen:
+   - echt nieuw focuspunt toevoegen => append
+   - lokale mutatie van bestaand focuspunt => doelgericht vervangen/verwijderen/herschrijven
+3. Zorg dat de instructies dezelfde prioriteitsvolgorde volgen als de runtime:
+   - lokale mutatie eerst
+   - pending/local suggestion waar nodig
+   - full 4-7 rewrite alleen als expliciete uitzondering
+4. Voeg een echte regressietest toe voor dit scenario:
+   - Strategy heeft al 3-6 bestaande bullets
+   - user voegt één kleine nieuwe focus of aanscherping toe
+   - resultaat blijft lokaal
+   - bestaande bullets blijven behouden
+   - geen volledige 4-7 rewrite
+5. Laat die test zo dicht mogelijk op echte specialist-/pipeline-semantiek zitten; niet alleen op wording-choice postprocessing.
+6. Controleer dat deze fix niet botst met de bestaande lokale edit-routes uit Fix 5.
 
 Harde regels
-- Geen hardcoded tekst in code; gebruik de bestaande contract-, UI-string- en i18n-structuur.
-- Geen quick fix of symptoombestrijding; los dit structureel op in de juiste laag.
-- Niet opnieuw clusteren als vervanging voor een geldige score-submit.
-- Geen oplossing die eerder ingevulde scores visueel laat verdwijnen zonder expliciete reset.
-- Geen workaround die alleen de knoptekst of prompttekst aanpast.
-- Geen client-only patch als de server-state machine nog steeds terugvalt naar scoring.
-- Gebruik de bestaande scoredata als bron van waarheid voor de vervolgstap.
+- Geen quick fix die alleen de audittekst mooier maakt zonder de onderliggende instructie tegenstrijdigheid op te lossen.
+- Geen append-only instructieregel laten staan als lokale mutaties elders al officieel ondersteund worden.
+- Geen full-set rewrite als impliciete default terug introduceren.
+- Geen test toevoegen die alleen happy-path wording-choice dekt maar de echte invariant niet bewijst.
+- Respecteer de bestaande incremental/conservative richting van Fix 4.
 ```
 
 ### Toestemming
 - Als je wilt dat deze fix ook echt wordt geïmplementeerd, geef dan eerst expliciet toestemming voor uitvoering.
+
+## Results
+
+### Audit samenvatting
+- Auditdatum: 2026-03-11
+- Aantal fixes gecontroleerd: 8
+- Gerichte verificatie: vanuit `mcp-server/` draaide `TS_NODE_TRANSPILE_ONLY=true node --loader ts-node/esm --test ...` over de relevante route-, renderer-, payload-, wording- en instructietests; resultaat: `142/142` tests groen
+- Overall conclusie: `grotendeels correct met restpunten`
+
+### Fix-audit
+
+Fix: `Fix 1 - Terugschakelen naar zelf de Droom formuleren mag de Dream Builder-inhoud niet wissen als de user later terug wil naar Dream Builder`
+Status: `correct`
+Bewijs:
+- In `mcp-server/src/handlers/run_step_routes.ts:180-205` wist `clearDreamStateForSwitchToSelf(...)` alleen nog de staged/final Dream-output en niet meer `dream_builder_statements`, `dream_scores` of `dream_top_clusters`.
+- In `mcp-server/src/handlers/run_step_routes.ts:114-145` wordt hervatbare builder-context expliciet afgeleid uit bewaarde statements, scores en top-clusters.
+- In `mcp-server/src/handlers/run_step_routes.ts:1097-1115` en `:1166-1174` herstart `dream_start_exercise` met herbruikbare scorecontext in `builder_refine`, en gooit het verouderde scorecontext alleen weg als statements niet meer matchen.
+- `mcp-server/src/handlers/run_step_routes_switch_self.test.ts` bewijst drie kernscenario's: statebehoud bij switch-to-self, hervatten met geldige scorecontext, en bewust droppen van stale scorecontext.
+Ontbreekt nog:
+- Geen blokkerend restpunt aangetroffen.
+Bijt met andere fix(s):
+- Nee. Deze fix sluit juist aan op Fix 7 en Fix 8 doordat scorestate nu kan doorleven.
+Aanvullende actie nodig:
+- Nee.
+
+Fix: `Fix 2 - Presentation moet de recap zichtbaar houden bij Maak presentatie, en recap-vragen mogen daar geen dubbele content meer tonen`
+Status: `correct`
+Bewijs:
+- In `mcp-server/src/handlers/run_step_routes.ts:499-559` vult `presentation_generate` nu `refined_formulation` en `presentation_brief` met `persistentRecap` in plaats van leeg terug te sturen.
+- In `mcp-server/src/handlers/run_step_routes.ts:218-255` wordt die recap persistent uit state/final/provisional opgebouwd en opnieuw in provisional state gezet.
+- In `mcp-server/src/core/turn_policy_renderer.ts:1368-1377` bestaat nu expliciete `presentation.recapVisibleFeedback`; recap-requests in `presentation` krijgen dus stap-specifieke feedback in plaats van een tweede recapblok.
+- In `mcp-server/src/handlers/run_step_routes_presentation.test.ts` slaagt de test `presentation make route keeps recap visible while adding presentation assets`.
+- In `mcp-server/src/core/turn_policy_renderer.test.ts` slaagt de test `presentation recap requests keep the existing recap visible without rendering a second recap block`.
+Ontbreekt nog:
+- Geen blokkerend restpunt aangetroffen.
+Bijt met andere fix(s):
+- Nee. Deze fix versterkt Fix 3.
+Aanvullende actie nodig:
+- Nee.
+
+Fix: `Fix 3 - Presentation recap moet kopjes en bullets behouden; de samenvatting mag niet vlakgeslagen worden tot lopende tekst`
+Status: `correct`
+Bewijs:
+- In `mcp-server/src/handlers/run_step_presentation_recap.ts` bouwt `buildCanonicalPresentationRecap(...)` section-based output met listbehoud voor `strategy`, `productsservices` en `rulesofthegame`; `canonicalPresentationRecapForState(...)` weigert vlakgeslagen fallback behalve als die al gestructureerd is.
+- In `mcp-server/src/handlers/run_step_state_update.test.ts` slaagt `applyStateUpdate canonicalizes presentation recap into section blocks with bullets`.
+- In `mcp-server/src/handlers/run_step_value_shape.test.ts` slaagt `isValidStepValueForStorage requires structured presentation recaps`; een vlakke recap wordt dus niet meer als geldige persisted waarde geaccepteerd.
+- In `mcp-server/src/core/turn_policy_renderer.test.ts` blijven run-on sourcewaarden voor strategy/products/rules in de recap alsnog als bullets renderen.
+Ontbreekt nog:
+- Geen blokkerend restpunt aangetroffen.
+Bijt met andere fix(s):
+- Nee. Deze fix is de structurele onderlaag voor Fix 2.
+Aanvullende actie nodig:
+- Nee.
+
+Fix: `Fix 4 - Strategy moet lokale suggesties doen en bestaande bullets behouden, niet te snel een volledige 4-7-set genereren`
+Status: `gedeeltelijk correct`
+Bewijs:
+- De bedoelde richting is duidelijk geïmplementeerd in `mcp-server/src/steps/strategy.ts:479-540`: incremental/conservative default, lokale reformulering, pending voorstellen en overflow-consolidatie.
+- De wording-choice laag ondersteunt dit ook: `mcp-server/src/handlers/run_step_wording_intent.test.ts` laat o.a. slagen voor `keeps free-text strategy proposals pending instead of committing them`, `keeps strategy 7-to-8 overflow as a local consolidation suggestion with retained bullets` en `compares strategy wording choices per differing compare unit`.
+- De renderlaag bewaart bestaande bullets zichtbaar tijdens wording-choice (`mcp-server/src/core/turn_policy_renderer.test.ts`).
+- Restpunt: `mcp-server/src/steps/strategy.ts:122` zegt nog steeds dat `PREVIOUS_STATEMENTS` bij accept/extract moet worden geappend en "never reset or overwrite". Dat botst inhoudelijk met de later toegevoegde lokale replace/remove/edit-routes in `:126-130` en `:490-520`.
+Ontbreekt nog:
+- De Strategy-instructies bevatten nog een legacy append-only zin die semantisch tegen de lokale mutatieregels in werkt.
+- Ik zie geen end-to-end specialisttest die hard bewijst dat een kleine toevoeging in een echte Strategy-call nooit alsnog in een full 4-7 rewrite eindigt; de huidige dekking zit vooral in instructietests en wording-choice-normalisatie.
+Bijt met andere fix(s):
+- Lichte spanning met Fix 5: dezelfde Strategy-instructie bevat zowel lokale edit-routes als een append-only regel.
+Aanvullende actie nodig:
+- Verwijder of herschrijf de legacy append-only formulering in `mcp-server/src/steps/strategy.ts:122`.
+- Voeg een echte Strategy specialist/regressietest toe voor "kleine toevoeging bij bestaande 3-6 bullets blijft lokaal".
+
+Fix: `Fix 5 - Wijzig- en verwijderopdrachten in Strategy, Products and Services en Rules of the Game moeten als edit-intentie worden herkend, niet als nieuwe input`
+Status: `correct`
+Bewijs:
+- In `mcp-server/src/handlers/run_step_pipeline.ts:565-603` wordt vrije tekst in deze drie stappen eerst door `resolveBusinessListTurn(...)` geclassificeerd, daarna via `routePrompt` aan de specialist gevoerd en na de specialistcall via `applyBusinessListTurnResolution(...)` genormaliseerd.
+- In `mcp-server/src/handlers/run_step_business_list_turn.ts:334-424` worden remove/replace/edit-intenties apart behandeld; bij onduidelijk target volgt een `clarify`-route in plaats van append.
+- In `mcp-server/src/handlers/run_step_business_list_turn.test.ts` slagen voor alle drie de stappen de remove-, replace-, rewrite- en clarify-scenario's.
+- In `mcp-server/src/handlers/run_step_wording_intent.test.ts` slaagt ook `buildWordingChoiceFromTurn treats remove-line requests as list edit intent in business list steps`.
+Ontbreekt nog:
+- Geen blokkerend restpunt aangetroffen.
+- Kleine enhancementmogelijkheid: index/ordinal shortcuts zoals "verwijder nummer 2" worden niet direct naar een exact item opgelost in `run_step_business_list_turn.ts:145-217`, maar vallen veilig terug op `clarify` in plaats van append. Dat is geen invariantbreuk.
+Bijt met andere fix(s):
+- Alleen de genoemde instructiespanning met Fix 4 in Strategy-copy; de runtimeclassificatie zelf bijt niet.
+Aanvullende actie nodig:
+- Nee voor de fix zelf.
+
+Fix: `Fix 6 - Purpose-video's bestaan wel per taal, maar worden door de intro-gate niet getoond`
+Status: `correct`
+Bewijs:
+- In `mcp-server/src/core/turn_policy_renderer.ts:259-269` is nu een semantische gate geïntroduceerd via `isSemanticPurposeIntroVisibleState(...)` op basis van Purpose-menu/status/wording-choice in plaats van alleen `sourceAction === "INTRO"`.
+- In `mcp-server/src/core/turn_policy_renderer.ts:1850-1858` wordt `ui_show_step_intro_chrome` voor Purpose uit die semantische gate afgeleid.
+- In `mcp-server/ui/lib/ui_render.ts` blijft de client alleen renderen als Purpose introchrome zichtbaar is en er voor de taal een URL bestaat; de SSOT-video mapping zelf blijft in `ui_constants.ts`.
+- Tests slagen voor intro-family menu zichtbaar, refine verborgen, wording-choice verborgen, en talen zonder video verborgen in `turn_policy_renderer.test.ts` en `ui_render.test.ts`.
+Ontbreekt nog:
+- Geen blokkerend restpunt aangetroffen.
+Bijt met andere fix(s):
+- Nee.
+Aanvullende actie nodig:
+- Nee.
+
+Fix: `Fix 7 - Dream Builder scoring mag het tekstinvoerveld niet weghalen zodra er 20+ statements zijn`
+Status: `correct`
+Bewijs:
+- In `mcp-server/src/handlers/run_step_runtime_finalize.ts:936-948` blijven `ui_action_text_submit` en `ui_action_score_submit` nu naast elkaar bestaan.
+- In `mcp-server/src/handlers/run_step_ui_payload.ts` krijgt scoring-state expliciet de variant `dream_builder_scoring` met `dream_builder_statements_visible=true`; dit is afgedekt door `run_step_ui_payload.test.ts`.
+- In `mcp-server/ui/lib/ui_render.ts:1276-1450` rendert de scoring-view zowel scorevelden als opnieuw het gewone text-submit pad (`textSubmitAvailable`), in plaats van een exclusieve scoremodus.
+- `mcp-server/src/handlers/step_contracts.test.ts` bewijst expliciet dat in dream-builder scoring zowel text-submit als score-submit in state en action contract aanwezig zijn.
+Ontbreekt nog:
+- Geen blokkerend restpunt aangetroffen.
+Bijt met andere fix(s):
+- Nee. Deze fix maakt Fix 8 juist betrouwbaar, omdat score-submit nu niet langer het enige invoerpad hoeft te zijn.
+Aanvullende actie nodig:
+- Nee.
+
+Fix: `Fix 8 - Na score-submit moet Dream Builder direct een droom formuleren op basis van de hoogste scores, niet opnieuw clusteren met lege waarden`
+Status: `correct`
+Bewijs:
+- In `mcp-server/src/handlers/run_step_routes.ts:603-725` leest `dream_submit_scores` de scores in, berekent top-clusters, slaat `dream_scores` en `dream_top_clusters` op, zet runtime naar `builder_refine`, en roept daarna direct opnieuw `DreamExplainer` aan voor de Droomformulering.
+- In `mcp-server/src/steps/dream_explainer.ts:122-139` en `:427-440` krijgt post-score Dream-formulering voorrang op de generieke `20+ => scoring` fallback zodra `TOP_CLUSTERS` aanwezig zijn.
+- In `mcp-server/ui/lib/ui_render.ts:1276-1281` worden persisted `state.dream_scores` opnieuw gebruikt als scoring-view toch weer opent; de UI valt dus niet terug naar lege velden.
+- `mcp-server/src/handlers/run_step_routes_switch_self.test.ts` bevat en laat slagen: `dream_submit_scores immediately transitions into Dream formulation with stored score context`.
+- `mcp-server/src/steps/dream_explainer.test.ts` laat slagen dat `buildDreamExplainerSpecialistInput` de scoring fallback onderdrukt zodra geldige top-clusters aanwezig zijn.
+Ontbreekt nog:
+- Geen blokkerend restpunt aangetroffen.
+Bijt met andere fix(s):
+- Nee. Sluit aan op Fix 1 en Fix 7.
+Aanvullende actie nodig:
+- Nee.
+
+## Overkoepelende bevindingen
+- De fixes rond Presentation (Fix 2 en Fix 3) zijn structureel en zitten op de juiste laag: state-staging, renderpolicy en route-output zijn nu consistent.
+- De fixes rond Dream Builder (Fix 1, 7 en 8) vormen nu een coherente keten: builder-context blijft bewaard, scoring heeft dubbel invoerpad, en score-submit leidt rechtstreeks naar Dream-formulering met persistente scorestate.
+- De business-list fixes (Fix 4 en 5) zijn grotendeels goed samengebracht in runtimeclassificatie + wording-choice. Het enige inhoudelijke restpunt dat ik hard kan bewijzen zit in Strategy-instructies: daar staat nog een oude append-only regel naast de nieuwe lokale mutatieregels.
+- Ik heb geen harde codebevinding gevonden dat een latere fix een eerdere fix functioneel terugdraait.
+
+## Aanbevolen vervolgacties
+- Corrigeer de conflicterende Strategy-instructieregel op `mcp-server/src/steps/strategy.ts:122`, zodat append-only semantiek niet meer botst met replace/remove/edit-routes.
+- Voeg een echte end-to-end Strategy specialisttest toe voor het scenario: bestaande 3-6 bullets + kleine nieuwe toevoeging => lokale suggestie, geen full-set rewrite.
+- Optioneel: breid `run_step_business_list_turn.ts` uit met directe ordinal/index-resolutie (`bullet 2`, `tweede punt`) om clarify-turns verder te verminderen; dit is usability-verbetering, geen blocker.
