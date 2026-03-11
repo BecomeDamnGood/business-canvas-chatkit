@@ -179,6 +179,21 @@ test("normalizeState: bewaart idempotency metadata uit runtime/server", () => {
   assert.equal(normalized.idempotency_error_code, "idempotency_replay");
 });
 
+test("normalizeState: bewaart presentation asset metadata voor vervolgrenders", () => {
+  const normalized = normalizeState({
+    ...getDefaultState(),
+    current_step: "presentation",
+    presentation_asset_pdf_url: "https://cdn.example.com/mindd.pdf",
+    presentation_asset_png_url: "https://cdn.example.com/mindd.png",
+    presentation_asset_base_name: "mindd-presentation",
+    presentation_asset_fingerprint: "asset-123",
+  });
+  assert.equal(normalized.presentation_asset_pdf_url, "https://cdn.example.com/mindd.pdf");
+  assert.equal(normalized.presentation_asset_png_url, "https://cdn.example.com/mindd.png");
+  assert.equal(normalized.presentation_asset_base_name, "mindd-presentation");
+  assert.equal(normalized.presentation_asset_fingerprint, "asset-123");
+});
+
 test("normalizeState: ongeldige idempotency_outcome wordt fail-closed naar leeg", () => {
   const normalized = normalizeState({
     ...getDefaultState(),

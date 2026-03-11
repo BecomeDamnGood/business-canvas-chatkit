@@ -305,6 +305,10 @@ export const CanvasStateZod = z.object({
   productsservices_final: z.string(),
   rulesofthegame_final: z.string(),
   presentation_brief_final: z.string(),
+  presentation_asset_pdf_url: z.string(),
+  presentation_asset_png_url: z.string(),
+  presentation_asset_base_name: z.string(),
+  presentation_asset_fingerprint: z.string(),
   step0_bootstrap: z.object({
     venture: z.string(),
     name: z.string(),
@@ -402,6 +406,10 @@ export function getDefaultState(): CanvasState {
     productsservices_final: "",
     rulesofthegame_final: "",
     presentation_brief_final: "",
+    presentation_asset_pdf_url: "",
+    presentation_asset_png_url: "",
+    presentation_asset_base_name: "",
+    presentation_asset_fingerprint: "",
     step0_bootstrap: {
       venture: "",
       name: "",
@@ -583,6 +591,10 @@ export function normalizeState(raw: unknown): CanvasState {
   const productsservices_final = String(r.productsservices_final ?? d.productsservices_final);
   const rulesofthegame_final = String(r.rulesofthegame_final ?? d.rulesofthegame_final);
   const presentation_brief_final = String(r.presentation_brief_final ?? d.presentation_brief_final);
+  const presentation_asset_pdf_url = String(r.presentation_asset_pdf_url ?? d.presentation_asset_pdf_url).trim();
+  const presentation_asset_png_url = String(r.presentation_asset_png_url ?? d.presentation_asset_png_url).trim();
+  const presentation_asset_base_name = String(r.presentation_asset_base_name ?? d.presentation_asset_base_name).trim();
+  const presentation_asset_fingerprint = String(r.presentation_asset_fingerprint ?? d.presentation_asset_fingerprint).trim();
   const step0_bootstrap_raw =
     typeof r.step0_bootstrap === "object" && r.step0_bootstrap !== null
       ? (r.step0_bootstrap as Record<string, unknown>)
@@ -731,6 +743,10 @@ export function normalizeState(raw: unknown): CanvasState {
     productsservices_final,
     rulesofthegame_final,
     presentation_brief_final,
+    presentation_asset_pdf_url,
+    presentation_asset_png_url,
+    presentation_asset_base_name,
+    presentation_asset_fingerprint,
     step0_bootstrap,
 
     provisional_by_step,

@@ -485,6 +485,9 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             deps.presentationStepId,
             persistentRecap
           );
+          (nextStateWithRecap as Record<string, unknown>).presentation_asset_pdf_url = assets.pdfUrl;
+          (nextStateWithRecap as Record<string, unknown>).presentation_asset_png_url = assets.pngUrl;
+          (nextStateWithRecap as Record<string, unknown>).presentation_asset_base_name = assets.baseName;
           (nextStateWithRecap as Record<string, unknown>).presentation_asset_fingerprint = assets.assetFingerprint;
 
           return finalizeRenderedRoutePayload(

@@ -400,6 +400,25 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
         attachRegistryPayload: deps.attachRegistryPayload,
       }
     ) as Record<string, unknown>;
+    const finalResponseState =
+      finalResponse.state && typeof finalResponse.state === "object"
+        ? (finalResponse.state as Record<string, unknown>)
+        : {};
+    if (
+      !finalResponse.presentation_assets &&
+      String(finalResponseState.current_step || "").trim() === "presentation"
+    ) {
+      const pdfUrl = String(finalResponseState.presentation_asset_pdf_url || "").trim();
+      const pngUrl = String(finalResponseState.presentation_asset_png_url || "").trim();
+      const baseName = String(finalResponseState.presentation_asset_base_name || "").trim();
+      if (pdfUrl && pngUrl) {
+        finalResponse.presentation_assets = {
+          pdf_url: pdfUrl,
+          png_url: pngUrl,
+          ...(baseName ? { base_name: baseName } : {}),
+        };
+      }
+    }
     const canonicalViewDecisionRaw =
       finalResponse.__canonical_view_decision &&
       typeof finalResponse.__canonical_view_decision === "object" &&

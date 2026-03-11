@@ -248,3 +248,28 @@ test("finalizeResponse skips session log file writes unless disk logging is expl
     else process.env.BSC_SESSION_TOKEN_LOG_TO_DISK = previousDiskFlag;
   }
 });
+
+test("finalizeResponse re-attaches persisted presentation assets for follow-up presentation turns", () => {
+  const helpers = buildHelpers();
+  const response = helpers.finalizeResponse({
+    ok: true,
+    tool: "run_step",
+    current_step_id: "presentation",
+    active_specialist: "Presentation",
+    text: "Your presentation is ready.",
+    specialist: {
+      ui_contract_id: "presentation:valid_output:PRESENTATION_MENU_ASK:v1",
+    },
+    state: {
+      current_step: "presentation",
+      active_specialist: "Presentation",
+      presentation_asset_pdf_url: "https://cdn.example.com/mindd.pdf",
+      presentation_asset_png_url: "https://cdn.example.com/mindd.png",
+      presentation_asset_base_name: "mindd-presentation",
+    } as any,
+  });
+
+  assert.equal((response as any).presentation_assets?.pdf_url, "https://cdn.example.com/mindd.pdf");
+  assert.equal((response as any).presentation_assets?.png_url, "https://cdn.example.com/mindd.png");
+  assert.equal((response as any).presentation_assets?.base_name, "mindd-presentation");
+});

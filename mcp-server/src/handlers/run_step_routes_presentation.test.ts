@@ -191,6 +191,9 @@ test("presentation make route keeps recap visible while adding presentation asse
   assert.equal((response as any).presentation_assets?.png_url, "https://cdn.example.com/mindd.png");
   assert.match(String((response as any).text || ""), /Your presentation is ready\./);
   assert.match(String((response as any).text || ""), /This is what you said:/);
+  assert.equal(String((response as any).state?.presentation_asset_pdf_url || ""), "https://cdn.example.com/mindd.pdf");
+  assert.equal(String((response as any).state?.presentation_asset_png_url || ""), "https://cdn.example.com/mindd.png");
+  assert.equal(String((response as any).state?.presentation_asset_base_name || ""), "mindd-presentation");
   assert.equal(String((response as any).state?.presentation_asset_fingerprint || ""), "asset-123");
 });
 
