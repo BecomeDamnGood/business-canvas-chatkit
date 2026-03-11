@@ -49,6 +49,39 @@ test("readBusinessListReferenceItems prefers visible statements from the last sp
   assert.deepEqual(items, ["Recurring revenue", "Operational simplicity"]);
 });
 
+test("strategy first free-text input without reference items stays an add turn", () => {
+  const firstInput = [
+    "Altijd investeren in de nieuwste AI-technologieen die relevant zijn voor onze klanten",
+    "Prototyping en MVP's bouwen als show what we can do for you",
+  ].join("\n");
+  const resolution = resolveBusinessListTurn({
+    stepId: "strategy",
+    userMessage: firstInput,
+    referenceItems: [],
+  });
+
+  assert.equal(resolution.kind, "add");
+  if (resolution.kind !== "add") throw new Error("expected add resolution");
+  assert.equal(resolution.routePrompt, firstInput);
+});
+
+test("business-list mutation routing only activates once reference items exist", () => {
+  const userMessage = 'verwijder "Operational simplicity"';
+  const withoutReferenceItems = resolveBusinessListTurn({
+    stepId: "strategy",
+    userMessage,
+    referenceItems: [],
+  });
+  const withReferenceItems = resolveBusinessListTurn({
+    stepId: "strategy",
+    userMessage,
+    referenceItems: ["Recurring revenue", "Operational simplicity"],
+  });
+
+  assert.equal(withoutReferenceItems.kind, "add");
+  assert.equal(withReferenceItems.kind, "remove");
+});
+
 for (const stepCase of STEP_CASES) {
   test(`${stepCase.stepId} remove commands resolve to list mutation instead of append`, () => {
     const targetItem = stepCase.items[1];

@@ -314,21 +314,8 @@ export function resolveBusinessListTurn(params: {
   };
   if (!isBusinessListStep(stepId) || !userMessage) return defaultAdd;
   if (referenceItems.length === 0) {
-    return {
-      kind: "clarify",
-      stepId,
-      userMessage,
-      referenceItems,
-      routePrompt: rewriteRoutePrompt({
-        token: BUSINESS_LIST_ROUTE_CLARIFY,
-        stepId,
-        userMessage,
-        referenceItems,
-        extraLines: ["CLARIFY_REASON: missing_reference"],
-      }),
-      reason: "missing_reference",
-      targetItems: [],
-    };
+    // Local list mutations only make sense once there is an existing canonical list to target.
+    return defaultAdd;
   }
 
   if (LIST_REMOVE_VERB.test(userMessage)) {

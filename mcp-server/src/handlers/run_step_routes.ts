@@ -13,6 +13,10 @@ import {
   type RunStepRoutePorts,
 } from "./run_step_ports.js";
 import { canonicalPresentationRecapForState } from "./run_step_presentation_recap.js";
+import {
+  createStructuredLogContextFromState,
+  logStructuredEvent,
+} from "./run_step_response.js";
 import { STEP_0_BOOTSTRAP_SPECIALIST } from "../steps/step_0_bootstrap.js";
 import { getDreamBuilderResumeContext } from "./dream_builder_resume.js";
 
@@ -75,6 +79,12 @@ function sanitizeStep0SeedToken(raw: unknown, fallback = ""): string {
     .replace(/\s+/g, " ")
     .trim();
   return value || String(fallback || "").trim();
+}
+
+function numericTurnIndex(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.trunc(parsed);
 }
 
 const SubmitScoresPayloadSchema = z.object({
@@ -436,6 +446,18 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         );
         try {
           const assets = deps.generatePresentationAssets(context.state);
+          logStructuredEvent(
+            "info",
+            "app_usage_presentation_generated",
+            createStructuredLogContextFromState(context.state, {
+              step_id: deps.presentationStepId,
+            }),
+            {
+              analytics_schema: "bsc_app_usage_v1",
+              session_turn_index: numericTurnIndex((context.state as Record<string, unknown>).__session_turn_index),
+              output_formats: ["pptx", "pdf", "png"],
+            }
+          );
 
           const message = deps.uiStringFromStateMap(
             context.state,
@@ -482,6 +504,18 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             }
           );
         } catch {
+          logStructuredEvent(
+            "warn",
+            "app_usage_presentation_generation_failed",
+            createStructuredLogContextFromState(context.state, {
+              step_id: deps.presentationStepId,
+            }),
+            {
+              analytics_schema: "bsc_app_usage_v1",
+              session_turn_index: numericTurnIndex((context.state as Record<string, unknown>).__session_turn_index),
+              failure_stage: "asset_generation",
+            }
+          );
           console.error("[presentation] Generation failed");
 
           const message = deps.uiStringFromStateMap(

@@ -572,3 +572,175 @@ test("runPostSpecialistPipeline keeps strategy local when a small addition is an
   const compareUnits = ((payload.specialist as Record<string, unknown>).wording_choice_compare_units as Array<Record<string, unknown>>) || [];
   assert.equal(compareUnits.length >= 1, true);
 });
+
+test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a grouped compare picker", async () => {
+  const existingStatements = [
+    "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
+    "Prototyping en MVP's bouwen als show what we can do for you",
+  ];
+  const userAddition =
+    "Altijd gericht investeren in AI-technologieen die de impact van klantcommunicatie vergroten";
+  let specialistUserMessage = "";
+  const helpers = buildStrategyPipelineHarness({
+    specialistResult: {
+      action: "ASK",
+      message: "Je voorstel lijkt sterk op een bestaand focuspunt.",
+      question: "Wil je het bestaande punt vervangen of beide behouden?",
+      refined_formulation: [
+        "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
+        "Prototyping en MVP's bouwen als show what we can do for you",
+      ].join("\n"),
+      strategy: [
+        "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
+        "Prototyping en MVP's bouwen als show what we can do for you",
+      ].join("\n"),
+      statements: [
+        "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
+        "Prototyping en MVP's bouwen als show what we can do for you",
+      ],
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    onSpecialistCall: (userMessage) => {
+      specialistUserMessage = userMessage;
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: userAddition,
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "en",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "strategy",
+        active_specialist: "Strategy",
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: existingStatements,
+          strategy: existingStatements.join("\n"),
+          refined_formulation: existingStatements.join("\n"),
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: userAddition,
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: userAddition,
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "strategy",
+          specialist_to_call: "Strategy",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(specialistUserMessage, userAddition);
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_variant || ""), "grouped_list_units");
+  assert.ok(payload.wordingChoiceOverride);
+  assert.deepEqual(payload.wordingChoiceOverride?.user_items, [
+    "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
+    "Altijd gericht investeren in AI-technologieen die de impact van klantcommunicatie vergroten",
+  ]);
+  assert.deepEqual(payload.wordingChoiceOverride?.suggestion_items, [
+    "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
+  ]);
+  assert.match(String(payload.wordingChoiceOverride?.instruction || ""), /Prototyping en MVP's bouwen/i);
+});
+
+test("runPostSpecialistPipeline sends first multiline strategy input straight to the specialist when no list exists", async () => {
+  const firstInput = [
+    "Altijd investeren in de nieuwste AI-technologieen die relevant zijn voor onze klanten",
+    "Prototyping en MVP's bouwen als show what we can do for you",
+  ].join("\n");
+  let specialistUserMessage = "";
+  const helpers = buildStrategyPipelineHarness({
+    specialistResult: {
+      action: "ASK",
+      message: "I structured your first strategy ideas.",
+      question: "What else belongs in this strategy?",
+      refined_formulation: firstInput,
+      strategy: firstInput,
+      statements: [
+        "Altijd investeren in de nieuwste AI-technologieen die relevant zijn voor onze klanten",
+        "Prototyping en MVP's bouwen als show what we can do for you",
+      ],
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    onSpecialistCall: (userMessage) => {
+      specialistUserMessage = userMessage;
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: firstInput,
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "en",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "strategy",
+        active_specialist: "Strategy",
+        provisional_by_step: {},
+        last_specialist_result: {},
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: firstInput,
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: firstInput,
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "strategy",
+          specialist_to_call: "Strategy",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(specialistUserMessage, firstInput);
+  assert.equal(specialistUserMessage.startsWith("__BUSINESS_LIST_CLARIFY__"), false);
+  assert.equal(String((payload.specialist as Record<string, unknown>).__business_list_turn_preclassified || ""), "");
+});

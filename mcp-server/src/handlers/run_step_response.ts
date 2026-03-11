@@ -132,6 +132,78 @@ function stringArrayLength(value: unknown): number {
     : 0;
 }
 
+function numericTurnIndex(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.trunc(parsed);
+}
+
+function emitUsageAnalyticsEvents(
+  response: Record<string, unknown>,
+  state: Record<string, unknown>
+): void {
+  const ui = asLogRecord(response.ui);
+  const uiView = asLogRecord(ui.view);
+  const uiWordingChoice = asLogRecord(ui.wording_choice);
+  const specialist =
+    Object.keys(asLogRecord(state.last_specialist_result)).length > 0
+      ? asLogRecord(state.last_specialist_result)
+      : asLogRecord(response.specialist);
+  const decisionContext = createLogContext(response, state);
+  const sessionTurnIndex = numericTurnIndex(state.__session_turn_index);
+  const uiViewMode = trimmedString(uiView.mode).toLowerCase();
+  const uiViewVariant = trimmedString(uiView.variant).toLowerCase();
+  const wordingChoicePending = trimmedString(specialist.wording_choice_pending).toLowerCase() === "true";
+  const wordingChoiceEnabled = uiWordingChoice.enabled === true || wordingChoicePending;
+  const wordingChoiceMode = trimmedString(
+    uiWordingChoice.mode || specialist.wording_choice_mode
+  ).toLowerCase();
+  const wordingChoicePresentation = trimmedString(specialist.wording_choice_presentation).toLowerCase();
+  const wordingChoiceVariant = trimmedString(
+    uiWordingChoice.variant || specialist.wording_choice_variant
+  ).toLowerCase();
+  const wordingChoiceTargetField = trimmedString(specialist.wording_choice_target_field).toLowerCase();
+  const wordingChoiceSelected = trimmedString(specialist.wording_choice_selected).toLowerCase();
+  const analyticsBase = {
+    analytics_schema: "bsc_app_usage_v1",
+    session_turn_index: sessionTurnIndex,
+    ui_view_mode: uiViewMode,
+    ui_view_variant: uiViewVariant,
+  };
+
+  if (sessionTurnIndex === 1) {
+    logStructuredEvent("info", "app_usage_session_started", decisionContext, {
+      ...analyticsBase,
+    });
+  }
+
+  logStructuredEvent("info", "app_usage_step_viewed", decisionContext, {
+    ...analyticsBase,
+    wording_choice_enabled: wordingChoiceEnabled ? "true" : "false",
+  });
+
+  if (wordingChoiceEnabled) {
+    logStructuredEvent("info", "app_usage_wording_choice_shown", decisionContext, {
+      ...analyticsBase,
+      wording_choice_mode: wordingChoiceMode,
+      wording_choice_presentation: wordingChoicePresentation,
+      wording_choice_variant: wordingChoiceVariant,
+      wording_choice_target_field: wordingChoiceTargetField,
+    });
+  }
+
+  if (wordingChoiceSelected === "user" || wordingChoiceSelected === "suggestion") {
+    logStructuredEvent("info", "app_usage_wording_choice_selected", decisionContext, {
+      ...analyticsBase,
+      wording_choice_mode: wordingChoiceMode,
+      wording_choice_presentation: wordingChoicePresentation,
+      wording_choice_variant: wordingChoiceVariant,
+      wording_choice_target_field: wordingChoiceTargetField,
+      selection: wordingChoiceSelected,
+    });
+  }
+}
+
 function buildUiRenderDecisionLogDetails(
   response: Record<string, unknown>,
   state: Record<string, unknown>
@@ -402,6 +474,7 @@ export function createRunStepResponseHelpers(deps: RunStepResponseDeps) {
       decisionContext,
       buildUiRenderDecisionLogDetails(finalResponse, stateForDecision)
     );
+    emitUsageAnalyticsEvents(finalResponse, stateForDecision);
     if (Object.prototype.hasOwnProperty.call(finalResponse, "__canonical_view_decision")) {
       delete finalResponse.__canonical_view_decision;
     }

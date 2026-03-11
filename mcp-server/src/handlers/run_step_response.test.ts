@@ -134,6 +134,80 @@ test("finalizeResponse logs wording-choice render decisions with compare and pro
   assert.equal(event.wording_choice_suggestion_label, "Dit zou mijn suggestie zijn:");
   assert.equal(event.wording_choice_user_items_count, 3);
   assert.equal(event.wording_choice_suggestion_items_count, 4);
+
+  const usageEvents = captured.map((line) => JSON.parse(line));
+  const stepViewed = usageEvents.find((entry) => entry.event === "app_usage_step_viewed");
+  const wordingShown = usageEvents.find((entry) => entry.event === "app_usage_wording_choice_shown");
+
+  assert.ok(stepViewed);
+  assert.equal(stepViewed.analytics_schema, "bsc_app_usage_v1");
+  assert.equal(stepViewed.step_id, "strategy");
+  assert.equal(stepViewed.wording_choice_enabled, "true");
+  assert.equal(stepViewed.ui_view_variant, "wording_choice");
+
+  assert.ok(wordingShown);
+  assert.equal(wordingShown.wording_choice_mode, "list");
+  assert.equal(wordingShown.wording_choice_target_field, "");
+  assert.equal(wordingShown.wording_choice_presentation, "picker");
+});
+
+test("finalizeResponse emits session start and wording selection analytics without free-text content", () => {
+  const helpers = buildHelpers();
+  const captured: string[] = [];
+  const originalConsoleLog = console.log;
+  console.log = (...args: unknown[]) => {
+    captured.push(args.map((value) => String(value)).join(" "));
+  };
+
+  try {
+    helpers.finalizeResponse({
+      ok: true,
+      tool: "run_step",
+      current_step_id: "productsservices",
+      active_specialist: "ProductsServices",
+      text: "Je keuze is verwerkt.",
+      specialist: {
+        ui_contract_id: "productsservices:valid_output:PRODUCTSSERVICES_MENU_CONFIRM:v1",
+      },
+      state: {
+        current_step: "productsservices",
+        active_specialist: "ProductsServices",
+        bootstrap_session_id: "bs_usage",
+        __session_turn_index: 1,
+        last_specialist_result: {
+          wording_choice_selected: "suggestion",
+          wording_choice_mode: "list",
+          wording_choice_presentation: "picker",
+          wording_choice_variant: "grouped_list_units",
+          wording_choice_target_field: "productsservices",
+          wording_choice_pending: "false",
+        },
+      } as any,
+      ui: {
+        view: {
+          mode: "interactive",
+          variant: "step_question",
+        },
+      },
+    });
+  } finally {
+    console.log = originalConsoleLog;
+  }
+
+  const events = captured.map((line) => JSON.parse(line));
+  const sessionStarted = events.find((entry) => entry.event === "app_usage_session_started");
+  const wordingSelected = events.find((entry) => entry.event === "app_usage_wording_choice_selected");
+
+  assert.ok(sessionStarted);
+  assert.equal(sessionStarted.analytics_schema, "bsc_app_usage_v1");
+  assert.equal(sessionStarted.session_turn_index, 1);
+  assert.equal(sessionStarted.text, undefined);
+
+  assert.ok(wordingSelected);
+  assert.equal(wordingSelected.selection, "suggestion");
+  assert.equal(wordingSelected.wording_choice_target_field, "productsservices");
+  assert.equal(wordingSelected.wording_choice_variant, "grouped_list_units");
+  assert.equal(wordingSelected.message, undefined);
 });
 
 test("finalizeResponse skips session log file writes unless disk logging is explicitly enabled", () => {
