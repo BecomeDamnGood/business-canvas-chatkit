@@ -31,6 +31,7 @@ import {
   uiLang,
   resolveWidgetPayload,
   resetHydrationRetryCycle,
+  applyPendingWidgetScroll,
 } from "./ui_actions.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 import { dreamBuilderExerciseLabelKey } from "../../src/handlers/dream_builder_resume.js";
@@ -1261,6 +1262,7 @@ export function render(overrideToolOutput?: unknown): void {
       previewImg.src = String(presentationAssets.png_url);
       previewLink.href = String(presentationAssets.pdf_url);
       previewDownload.href = String(presentationAssets.pdf_url);
+      applyPendingWidgetScroll();
     } else {
       previewWrap.classList.remove("visible");
       previewImg.removeAttribute("src");

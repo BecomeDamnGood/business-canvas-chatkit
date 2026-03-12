@@ -39,6 +39,7 @@ let bridgeSeq = 0;
 const pendingBridgeCalls = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void }>();
 let bridgeTargetOriginCache: string | null = null;
 let bridgeTargetOriginSource = "";
+let pendingWidgetScrollTarget: "" | "presentation_preview" = "";
 type TransportStatus = "unknown" | "ready_callTool" | "ready_bridge" | "unavailable";
 
 export function initActionsConfig(config: {
@@ -53,6 +54,65 @@ export function initActionsConfig(config: {
 
 export function setBridgeEnabled(enabled: boolean): void {
   bridgeEnabled = enabled;
+}
+
+function isHtmlElement(value: unknown): value is HTMLElement {
+  return typeof HTMLElement !== "undefined" && value instanceof HTMLElement;
+}
+
+function scrollWidgetTop(): void {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  const topAnchor =
+    document.getElementById("stepper") ||
+    document.querySelector(".card") ||
+    document.body;
+  try {
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  } catch {
+    window.scrollTo(0, 0);
+  }
+  if (document.documentElement) document.documentElement.scrollTop = 0;
+  if (document.body) document.body.scrollTop = 0;
+  const scrollingElement = document.scrollingElement;
+  if (scrollingElement) scrollingElement.scrollTop = 0;
+  if (isHtmlElement(topAnchor)) {
+    try {
+      topAnchor.scrollIntoView({ block: "start", behavior: "smooth" });
+    } catch {
+      topAnchor.scrollIntoView(true);
+    }
+  }
+}
+
+function scrollPresentationPreviewIntoView(): boolean {
+  if (typeof document === "undefined") return false;
+  const preview = document.getElementById("presentationPreview");
+  if (!preview || !preview.classList.contains("visible")) return false;
+  try {
+    preview.scrollIntoView({ block: "start", behavior: "smooth" });
+  } catch {
+    preview.scrollIntoView(true);
+  }
+  return true;
+}
+
+function isPresentationMakeAction(messageText: string): boolean {
+  const normalized = String(messageText || "").trim().toUpperCase();
+  return normalized === "ACTION_PRESENTATION_MAKE" || normalized === "__ROUTE__PRESENTATION_MAKE__";
+}
+
+export function prepareWidgetScrollForAction(messageText: string): void {
+  const normalized = String(messageText || "").trim().toUpperCase();
+  if (!normalized || normalized === ACTION_BOOTSTRAP_POLL) return;
+  scrollWidgetTop();
+  pendingWidgetScrollTarget = isPresentationMakeAction(normalized)
+    ? "presentation_preview"
+    : "";
+}
+
+export function applyPendingWidgetScroll(): void {
+  if (pendingWidgetScrollTarget !== "presentation_preview") return;
+  if (scrollPresentationPreviewIntoView()) pendingWidgetScrollTarget = "";
 }
 
 function oa(): unknown {
@@ -2339,6 +2399,7 @@ export async function callRunStep(
     });
   }
 
+  prepareWidgetScrollForAction(messageText);
   setLoading(true);
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null;

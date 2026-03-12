@@ -379,20 +379,6 @@ function nextStepOf(step: StepId): StepId {
   return order[Math.min(idx + 1, order.length - 1)];
 }
 
-function isClearYes(userMessage: string, lang?: string): boolean {
-  const t = (userMessage || "").trim().toLowerCase();
-  if (!t) return false;
-
-  // keep it strict (1-6 words rule of thumb)
-  const wordCount = t.split(/\s+/).filter(Boolean).length;
-  if (wordCount > 6) return false;
-
-  const yesSet = new Set(["yes", "yep", "yeah", "sure", "ok", "okay", "proceed", "lets go", "let's go", "go"]);
-  if (yesSet.has(t)) return true;
-  if (t === "y" || t === "1") return true;
-  return false;
-}
-
 function buildTextForWidget(specialistJson: any): string {
   const parts: string[] = [];
   const msg = String(specialistJson?.message ?? "").trim();
@@ -619,46 +605,18 @@ export async function runCanvasStep(args: {
 
   let activeSpecialist = "";
   let specialistJson: any = null;
-
-  // deterministic readiness gating for Step 1:
-  // only proceed if previous output was a readiness question AND we already have a stored step_0 line.
-  const prev = state.last_specialist_result || {};
-  const readinessAsked =
-    state.current_step === "step_0" &&
-    prev?.action === "CONFIRM" &&
-    typeof prev?.confirmation_question === "string" &&
-    prev.confirmation_question.trim() !== "" &&
-    prev?.proceed_to_dream === "false";
-
-  const canProceedFromStep0 = readinessAsked && isClearYes(userMessage, state.language) && !!state.step_0;
-
-  // Chain: step_0 "clear yes" => proceed_to_dream => immediately run Dream in same tool call
+  // Chain: step_0 proceed_to_dream => immediately run Dream in same tool call
   while (hops < MAX_HOPS) {
     hops++;
 
     if (state.current_step === "step_0") {
       activeSpecialist = "ValidationAndBusinessName";
+      const r = await runValidationAgent(apiKey, model, userMessage, state, showSessionIntro);
+      specialistJson = r.value;
 
-      if (canProceedFromStep0) {
-        // exact proceed payload (no extra text)
-        specialistJson = {
-          action: "CONFIRM",
-          message: "",
-          question: "",
-          refined_formulation: "",
-          confirmation_question: "",
-          business_name: state.business_name ?? "TBD",
-          proceed_to_dream: "true",
-          step_0: state.step_0 ?? "",
-        };
-      } else {
-        const r = await runValidationAgent(apiKey, model, userMessage, state, showSessionIntro);
-        specialistJson = r.value;
-
-        // store baseline
-        state.business_name = specialistJson.business_name || "TBD";
-        state.step_0 = specialistJson.step_0 || state.step_0 || "";
-      }
+      // store baseline
+      state.business_name = specialistJson.business_name || "TBD";
+      state.step_0 = specialistJson.step_0 || state.step_0 || "";
 
       state.active_specialist = activeSpecialist;
       state.last_specialist_result = specialistJson;
@@ -756,6 +714,40 @@ export async function runCanvasStep(args: {
       specialistJson = r.value;
 
       state.strategy = specialistJson.strategy || state.strategy || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
+
+      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
+      break;
+    }
+
+    if (state.current_step === "targetgroup") {
+      activeSpecialist = "TargetGroup";
+      const r = await runGenericAgent(apiKey, model, "Target Group", userMessage, state, GenericJsonSchema, GenericSchema);
+      specialistJson = r.value;
+
+      state.targetgroup = specialistJson.value || state.targetgroup || "";
+      state.active_specialist = activeSpecialist;
+      state.last_specialist_result = specialistJson;
+
+      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
+      break;
+    }
+
+    if (state.current_step === "productsservices") {
+      activeSpecialist = "ProductsAndServices";
+      const r = await runGenericAgent(
+        apiKey,
+        model,
+        "Products and Services",
+        userMessage,
+        state,
+        GenericJsonSchema,
+        GenericSchema
+      );
+      specialistJson = r.value;
+
+      state.productsservices = specialistJson.value || state.productsservices || "";
       state.active_specialist = activeSpecialist;
       state.last_specialist_result = specialistJson;
 

@@ -15,6 +15,7 @@ import {
   shouldSuppressMainCardForWordingChoice,
 } from "../ui/lib/ui_render.js";
 import {
+  prestartIntroVideoUrlForLang,
   benProfileVideoUrlForLang,
   dreamStepVideoUrlForLang,
   purposeStepVideoUrlForLang,
@@ -277,6 +278,34 @@ test("shouldRetainDreamScoringClientScores only keeps the buffer while dream sco
   );
 });
 
+test("prestartIntroVideoUrlForLang returns newly added AWS welcome videos for supported languages", () => {
+  assert.equal(
+    prestartIntroVideoUrlForLang("pt-BR"),
+    "https://mycanvasvideos.s3.amazonaws.com/welcome/Sobre%20o%20Business%20Strategy%20Canvas%20Builder.mp4"
+  );
+  assert.equal(
+    prestartIntroVideoUrlForLang("hi"),
+    "https://mycanvasvideos.s3.amazonaws.com/welcome/%E0%A4%AC%E0%A4%BF%E0%A4%9C%E0%A4%BC%E0%A4%A8%E0%A5%87%E0%A4%B8%20%E0%A4%B8%E0%A5%8D%E0%A4%9F%E0%A5%8D%E0%A4%B0%E0%A5%88%E0%A4%9F%E0%A5%87%E0%A4%9C%E0%A5%80%20%E0%A4%95%E0%A5%88%E0%A4%A8%E0%A4%B5%E0%A4%B8%20%E0%A4%AC%E0%A4%BF%E0%A4%B2%E0%A5%8D%E0%A4%A1%E0%A4%B0%20%E0%A4%95%E0%A5%87%20%E0%A4%AC%E0%A4%BE%E0%A4%B0%E0%A5%87%20%E0%A4%AE%E0%A5%87%E0%A4%82.mp4"
+  );
+  assert.equal(
+    prestartIntroVideoUrlForLang("id"),
+    "https://mycanvasvideos.s3.amazonaws.com/welcome/Tentang%20Business%20Strategy%20Canvas%20Builder.mp4"
+  );
+  assert.equal(
+    prestartIntroVideoUrlForLang("ko"),
+    "https://mycanvasvideos.s3.amazonaws.com/welcome/%E1%84%87%E1%85%B5%E1%84%8C%E1%85%B3%E1%84%82%E1%85%B5%E1%84%89%E1%85%B3%20%E1%84%8C%E1%85%A5%E1%86%AB%E1%84%85%E1%85%A3%E1%86%A8%20%E1%84%8F%E1%85%A2%E1%86%AB%E1%84%87%E1%85%A5%E1%84%89%E1%85%B3%20%E1%84%87%E1%85%B5%E1%86%AF%E1%84%83%E1%85%A5%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4"
+  );
+  assert.equal(
+    prestartIntroVideoUrlForLang("zh-Hans"),
+    "https://mycanvasvideos.s3.amazonaws.com/welcome/%E5%85%B3%E4%BA%8E%20Business%20Strategy%20Canvas%20Builder.mp4"
+  );
+  assert.equal(
+    prestartIntroVideoUrlForLang("hu"),
+    "https://mycanvasvideos.s3.amazonaws.com/welcome/A%20Business%20Strategy%20Canvas%20Builderro%CC%8Bl.mp4"
+  );
+  assert.equal(prestartIntroVideoUrlForLang("ar"), "");
+});
+
 test("benProfileVideoUrlForLang returns only configured language-specific videos", () => {
   assert.equal(
     benProfileVideoUrlForLang("nl"),
@@ -310,7 +339,31 @@ test("benProfileVideoUrlForLang returns only configured language-specific videos
     benProfileVideoUrlForLang("ru"),
     "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%D0%9E%20%D0%91%D0%B5%D0%BD%D0%B5%20%D0%A1%D1%82%D0%B5%D0%BD%D1%81%D1%82%D1%80%D0%B5.mp4"
   );
-  assert.equal(benProfileVideoUrlForLang("pt-BR"), "");
+  assert.equal(
+    benProfileVideoUrlForLang("pt-BR"),
+    "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/Sobre%20Ben%20Steenstra.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("hi"),
+    "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E0%A4%AC%E0%A5%87%E0%A4%A8%20%E0%A4%B8%E0%A5%8D%E0%A4%9F%E0%A5%80%E0%A4%A8%E0%A4%B8%E0%A5%8D%E0%A4%9F%E0%A5%8D%E0%A4%B0%E0%A4%BE%20%E0%A4%95%E0%A5%87%20%E0%A4%AC%E0%A4%BE%E0%A4%B0%E0%A5%87%20%E0%A4%AE%E0%A5%87%E0%A4%82.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("id"),
+    "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/Tentang%20Ben%20Steenstra.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("ko"),
+    "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E1%84%87%E1%85%A6%E1%86%AB%20%E1%84%89%E1%85%B3%E1%84%90%E1%85%B5%E1%86%AB%E1%84%89%E1%85%B3%E1%84%90%E1%85%B3%E1%84%85%E1%85%A1%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("zh-Hans"),
+    "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E5%85%B3%E4%BA%8E%20Ben%20Steenstra.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("hu"),
+    "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/Ben%20Steenstra%CC%81ro%CC%81l.mp4"
+  );
+  assert.equal(benProfileVideoUrlForLang("ar"), "");
 });
 
 test("dreamStepVideoUrlForLang returns only configured language-specific videos", () => {
@@ -342,7 +395,35 @@ test("dreamStepVideoUrlForLang returns only configured language-specific videos"
     dreamStepVideoUrlForLang("ru"),
     "https://mycanvasvideos.s3.amazonaws.com/dream/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9C%D0%B5%D1%87%D1%82%D0%B0%C2%BB.mp4"
   );
-  assert.equal(dreamStepVideoUrlForLang("pt-BR"), "");
+  assert.equal(
+    dreamStepVideoUrlForLang("pt-BR"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/Sobre%20a%20etapa%20do%20sonho.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("hi"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/%E0%A4%B8%E0%A4%AA%E0%A4%A8%E0%A5%87%20%E0%A4%95%E0%A5%87%20%E0%A4%9A%E0%A4%B0%E0%A4%A3%20%E0%A4%95%E0%A5%87%20%E0%A4%AC%E0%A4%BE%E0%A4%B0%E0%A5%87%20%E0%A4%AE%E0%A5%87%E0%A4%82.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("id"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/Tentang%20langkah%20mimpi.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("ja"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/%E5%A4%A2%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%95%E3%82%9A%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("ko"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/%E1%84%81%E1%85%AE%E1%86%B7%20%E1%84%83%E1%85%A1%E1%86%AB%E1%84%80%E1%85%A8%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("zh-Hans"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/%E5%85%B3%E4%BA%8E%E6%A2%A6%E6%83%B3%E6%AD%A5%E9%AA%A4.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("hu"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/Az%20a%CC%81lom%20le%CC%81pe%CC%81sro%CC%8Bl.mp4"
+  );
+  assert.equal(dreamStepVideoUrlForLang("ar"), "");
 });
 
 test("purposeStepVideoUrlForLang returns only configured language-specific videos", () => {
@@ -374,6 +455,35 @@ test("purposeStepVideoUrlForLang returns only configured language-specific video
     purposeStepVideoUrlForLang("ru"),
     "https://mycanvasvideos.s3.amazonaws.com/purpose/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9F%D1%80%D0%B5%D0%B4%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5%C2%BB.mp4"
   );
+  assert.equal(
+    purposeStepVideoUrlForLang("pt-BR"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/Sobre%20a%20etapa%20do%20propo%CC%81sito%20%28raza%CC%83o%20de%20existir%29.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("hi"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/%E0%A4%85%E0%A4%B8%E0%A5%8D%E0%A4%A4%E0%A4%BF%E0%A4%A4%E0%A5%8D%E0%A4%B5%20%E0%A4%95%E0%A5%87%20%E0%A4%89%E0%A4%A6%E0%A5%8D%E0%A4%A6%E0%A5%87%E0%A4%B6%E0%A5%8D%E0%A4%AF%20%E0%A4%B5%E0%A4%BE%E0%A4%B2%E0%A5%87%20%E0%A4%9A%E0%A4%B0%E0%A4%A3%20%E0%A4%95%E0%A5%87%20%E0%A4%AC%E0%A4%BE%E0%A4%B0%E0%A5%87%20%E0%A4%AE%E0%A5%87%E0%A4%82rpose-H.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("id"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/Tentang%20langkah%20purpose%20%28alasan%20keberadaan%29.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("ja"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/%E5%AD%98%E5%9C%A8%E6%84%8F%E7%BE%A9%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%95%E3%82%9A%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("ko"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/%E1%84%8C%E1%85%A9%E1%86%AB%E1%84%8C%E1%85%A2%20%E1%84%8B%E1%85%B5%E1%84%8B%E1%85%B2%20%E1%84%83%E1%85%A1%E1%86%AB%E1%84%80%E1%85%A8%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("zh-Hans"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/%E5%85%B3%E4%BA%8E%E5%AD%98%E5%9C%A8%E6%84%8F%E4%B9%89%E6%AD%A5%E9%AA%A4.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("hu"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/A%20le%CC%81teze%CC%81s%20e%CC%81rtelme%CC%81nek%20le%CC%81pe%CC%81se%CC%81ro%CC%8Bl.mp4"
+  );
+  assert.equal(purposeStepVideoUrlForLang("ar"), "");
 });
 
 test("shouldRenderPurposeStepIntroVideo returns true for configured languages in intro state", () => {
@@ -394,7 +504,7 @@ test("shouldRenderPurposeStepIntroVideo returns false for languages without a co
       currentStep: "purpose",
       showStepIntroChrome: true,
       wordingChoiceActive: false,
-      lang: "pt-BR",
+      lang: "ar",
     }),
     false
   );
