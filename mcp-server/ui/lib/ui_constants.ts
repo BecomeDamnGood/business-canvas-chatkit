@@ -35,70 +35,46 @@ export type PrestartContent = {
 };
 
 const PRESTART_INTRO_VIDEO_BY_LANG: Record<string, string> = {
-  en: "https://youtu.be/JjlY4iGWSi8",
-  nl: "https://youtu.be/FD3BZit8evg",
-  de: "https://youtu.be/dMnAR-eVedo",
-  es: "https://youtu.be/hEfq_ciotPk",
-  fr: "https://youtu.be/WalQNHy1DRo",
-  it: "https://youtu.be/XUMJ44mXQ6Y",
-  ja: "https://youtu.be/o1di1BkDdKA",
-  ru: "https://youtu.be/PYKWjxQqFNg",
+  en: "https://mycanvasvideos.s3.amazonaws.com/welcome/About%20the%20Business%20Strategy%20Canvas%20Builder.mp4",
+  nl: "https://mycanvasvideos.s3.amazonaws.com/welcome/Over%20de%20Business%20Strategy%20Canvas%20Builder.mp4",
+  de: "https://mycanvasvideos.s3.amazonaws.com/welcome/U%CC%88ber%20den%20Business%20Strategy%20Canvas%20Builder.mp4",
+  es: "https://mycanvasvideos.s3.amazonaws.com/welcome/Acerca%20del%20Business%20Strategy%20Canvas%20Builder.mp4",
+  fr: "https://mycanvasvideos.s3.amazonaws.com/welcome/A%CC%80%20propos%20du%20Business%20Strategy%20Canvas%20Builder.mp4",
+  it: "https://mycanvasvideos.s3.amazonaws.com/welcome/Sul%20Business%20Strategy%20Canvas%20Builder.mp4",
+  ja: "https://mycanvasvideos.s3.amazonaws.com/welcome/Business%20Strategy%20Canvas%20Builder%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6.mp4",
+  ru: "https://mycanvasvideos.s3.amazonaws.com/welcome/%D0%9E%20%D0%BA%D0%BE%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D0%BE%D1%80%D0%B5%20Business%20Strategy%20Canvas.mp4",
 };
 
 const BEN_PROFILE_VIDEO_BY_LANG: Record<string, string> = {
-  en: "https://youtu.be/kV4oF2mUZXI",
-  nl: "https://youtu.be/5TLxnL2OkQo",
-  it: "https://youtu.be/S7_GwDJZIAs",
-  de: "https://youtu.be/T18fvylOojg",
-  es: "https://youtu.be/eLSh19ZZ2yM",
-  fr: "https://youtu.be/0soI44DLOxY",
-  ja: "https://youtu.be/o5Z0e4_Aolg",
-  ru: "https://youtu.be/urvyVjsnl-Q",
+  en: "https://mycanvasvideos.s3.amazonaws.com/About%20Ben%20Steenstra.mp4",
+  nl: "https://mycanvasvideos.s3.amazonaws.com/Over%20Ben%20Steenstra.mp4",
+  it: "https://mycanvasvideos.s3.amazonaws.com/Su%20Ben%20Steenstra.mp4",
+  de: "https://mycanvasvideos.s3.amazonaws.com/Uber%20Ben%20Steenstra.mp4",
+  es: "https://mycanvasvideos.s3.amazonaws.com/Acerca%20de%20Ben%20Steenstra.mp4",
+  fr: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/A%CC%80_propos_de_Ben_Steenstra.mp4",
+  ja: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E3%80%8C%E3%83%98%E3%82%99%E3%83%B3%E3%83%BB%E3%82%B9%E3%83%86%E3%82%A3%E3%83%BC%E3%83%B3%E3%82%B9%E3%83%88%E3%83%A9%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6%E3%80%8D.mp4",
+  ru: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%D0%9E%20%D0%91%D0%B5%D0%BD%D0%B5%20%D0%A1%D1%82%D0%B5%D0%BD%D1%81%D1%82%D1%80%D0%B5.mp4",
 };
 
 const DREAM_STEP_VIDEO_BY_LANG: Record<string, string> = {
-  en: "https://youtu.be/94cmzR2w62o",
-  nl: "https://youtu.be/kksn8roVbQg",
-  it: "https://youtu.be/g-fbHy78uIw",
-  de: "https://youtu.be/KtzkZFE4m5Q",
-  es: "https://youtu.be/-36ryKgLiPo",
-  fr: "https://youtu.be/ajUsijJzyiY",
-  ru: "https://youtu.be/tgtOxDmdrQM",
+  en: "https://mycanvasvideos.s3.amazonaws.com/dream/About%20the%20Dream%20Step.mp4",
+  nl: "https://mycanvasvideos.s3.amazonaws.com/dream/Over%20de%20Droom%20Stap.mp4",
+  it: "https://mycanvasvideos.s3.amazonaws.com/dream/Sul%20passo%20del%20Sogno.mp4",
+  de: "https://mycanvasvideos.s3.amazonaws.com/dream/U%CC%88ber%20den%20Schritt%20%E2%80%9ETraum%E2%80%9C.mp4",
+  es: "https://mycanvasvideos.s3.amazonaws.com/dream/Sobre%20el%20paso%20del%20Suen%CC%83o.mp4",
+  fr: "https://mycanvasvideos.s3.amazonaws.com/dream/A%CC%80%20propos%20du%20Re%CC%82ve.mp4",
+  ru: "https://mycanvasvideos.s3.amazonaws.com/dream/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9C%D0%B5%D1%87%D1%82%D0%B0%C2%BB.mp4",
 };
 
 const PURPOSE_STEP_VIDEO_BY_LANG: Record<string, string> = {
-  en: "https://youtu.be/OhtRcBRmiQ0",
-  de: "https://youtu.be/OfG_T2VDhtg",
-  es: "https://youtu.be/TTU7vAkaVJA",
-  fr: "https://youtu.be/EqoczF4mnGc",
-  it: "https://youtu.be/tISM_mLZDgk",
-  nl: "https://youtu.be/oS0tKfpLaYg",
-  ru: "https://youtu.be/IbLMHOMLwHU",
+  en: "https://mycanvasvideos.s3.amazonaws.com/purpose/About%20Purpose.mp4",
+  de: "https://mycanvasvideos.s3.amazonaws.com/purpose/U%CC%88ber_den_Daseinsgrund.mp4",
+  es: "https://mycanvasvideos.s3.amazonaws.com/purpose/Sobre_el_propo%CC%81sito_de_existir.mp4",
+  fr: "https://mycanvasvideos.s3.amazonaws.com/purpose/A%CC%80_propos_de_la_raison_d%E2%80%99e%CC%82tre.mp4",
+  it: "https://mycanvasvideos.s3.amazonaws.com/purpose/Sul%20perche%CC%81%20di%20esistere.mp4",
+  nl: "https://mycanvasvideos.s3.amazonaws.com/purpose/Over%20je%20bestaansrecht.mp4",
+  ru: "https://mycanvasvideos.s3.amazonaws.com/purpose/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9F%D1%80%D0%B5%D0%B4%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5%C2%BB.mp4",
 };
-
-function normalizeYouTubeEmbedUrl(rawUrl: string): string {
-  const input = String(rawUrl || "").trim();
-  if (!input) return "";
-  let parsed: URL;
-  try {
-    parsed = new URL(input);
-  } catch {
-    return "";
-  }
-  const host = parsed.hostname.toLowerCase();
-  let videoId = "";
-  if (host === "youtu.be") {
-    videoId = parsed.pathname.replace(/^\/+/, "").split("/")[0] || "";
-  } else if (host.endsWith("youtube.com")) {
-    if (parsed.pathname.startsWith("/watch")) {
-      videoId = String(parsed.searchParams.get("v") || "").trim();
-    } else if (parsed.pathname.startsWith("/embed/")) {
-      videoId = parsed.pathname.replace(/^\/embed\//, "").split("/")[0] || "";
-    }
-  }
-  if (!/^[A-Za-z0-9_-]{6,}$/.test(videoId)) return "";
-  return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`;
-}
 
 function normalizeHttpUrl(rawUrl: string | null | undefined): string {
   const input = String(rawUrl || "").trim();
@@ -110,40 +86,6 @@ function normalizeHttpUrl(rawUrl: string | null | undefined): string {
   } catch {
     return "";
   }
-}
-
-export function augmentYouTubeEmbedUrl(
-  embedUrl: string,
-  options: {
-    providerOrigin?: string | null | undefined;
-    widgetReferrer?: string | null | undefined;
-  } = {}
-): string {
-  const input = String(embedUrl || "").trim();
-  if (!input) return "";
-
-  let parsed: URL;
-  try {
-    parsed = new URL(input);
-  } catch {
-    return input;
-  }
-
-  const host = parsed.hostname.toLowerCase();
-  const isYouTubeEmbed =
-    host === "www.youtube.com" ||
-    host === "youtube.com" ||
-    host === "www.youtube-nocookie.com" ||
-    host === "youtube-nocookie.com";
-  if (!isYouTubeEmbed) return input;
-
-  const providerOrigin = normalizeHttpUrl(options.providerOrigin);
-  if (providerOrigin) parsed.searchParams.set("origin", providerOrigin);
-
-  const widgetReferrer = normalizeHttpUrl(options.widgetReferrer);
-  if (widgetReferrer) parsed.searchParams.set("widget_referrer", widgetReferrer);
-
-  return parsed.toString();
 }
 
 const CRITICAL_PRESTART_KEYS = [
@@ -227,25 +169,25 @@ export function prestartWelcomeForLang(lang: string | null | undefined): string 
 export function prestartIntroVideoUrlForLang(lang: string | null | undefined): string {
   const langBase = baseLang(lang);
   if (!langBase) return "";
-  return normalizeYouTubeEmbedUrl(PRESTART_INTRO_VIDEO_BY_LANG[langBase] || "");
+  return normalizeHttpUrl(PRESTART_INTRO_VIDEO_BY_LANG[langBase] || "");
 }
 
 export function benProfileVideoUrlForLang(lang: string | null | undefined): string {
   const langBase = baseLang(lang);
   if (!langBase) return "";
-  return normalizeYouTubeEmbedUrl(BEN_PROFILE_VIDEO_BY_LANG[langBase] || "");
+  return normalizeHttpUrl(BEN_PROFILE_VIDEO_BY_LANG[langBase] || "");
 }
 
 export function dreamStepVideoUrlForLang(lang: string | null | undefined): string {
   const langBase = baseLang(lang);
   if (!langBase) return "";
-  return normalizeYouTubeEmbedUrl(DREAM_STEP_VIDEO_BY_LANG[langBase] || "");
+  return normalizeHttpUrl(DREAM_STEP_VIDEO_BY_LANG[langBase] || "");
 }
 
 export function purposeStepVideoUrlForLang(lang: string | null | undefined): string {
   const langBase = baseLang(lang);
   if (!langBase) return "";
-  return normalizeYouTubeEmbedUrl(PURPOSE_STEP_VIDEO_BY_LANG[langBase] || "");
+  return normalizeHttpUrl(PURPOSE_STEP_VIDEO_BY_LANG[langBase] || "");
 }
 
 export function hasPrestartContentForLang(lang: string | null | undefined): boolean {

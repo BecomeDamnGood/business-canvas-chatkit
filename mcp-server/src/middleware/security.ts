@@ -10,6 +10,7 @@ interface CSPOptions {
     scripts?: string[];
     styles?: string[];
     images?: string[];
+    media?: string[];
     connects?: string[];
     frames?: string[];
   };
@@ -30,12 +31,10 @@ const DEFAULT_CSP_OPTIONS: CSPOptions = {
     scripts: [],
     styles: [],
     images: [],
+    media: ["https://mycanvasvideos.s3.amazonaws.com"],
     connects: [],
     frames: [
       "'self'",
-      "https://www.youtube.com",
-      "https://www.youtube-nocookie.com",
-      "https://youtu.be",
       "https://app.heygen.com",
     ],
   },
@@ -90,6 +89,13 @@ export function buildCSPHeader(options: CSPOptions = DEFAULT_CSP_OPTIONS): strin
     imgSrc.push(...options.allowedDomains.images);
   }
   directives.push(`img-src ${imgSrc.join(" ")}`);
+
+  // Media sources (for <audio>/<video>)
+  const mediaSrc: string[] = ["'self'", "blob:"];
+  if (options.allowedDomains?.media) {
+    mediaSrc.push(...options.allowedDomains.media);
+  }
+  directives.push(`media-src ${mediaSrc.join(" ")}`);
 
   // Object sources (for embeds)
   directives.push("object-src 'none'");

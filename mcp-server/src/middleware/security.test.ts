@@ -10,11 +10,9 @@ test("CSP header is strict enough for OpenAI app baseline", () => {
   assert.match(csp, /script-src 'self' 'unsafe-inline'/);
   assert.match(csp, /style-src 'self' 'unsafe-inline'/);
   assert.match(csp, /img-src 'self' data: blob: https:/);
+  assert.match(csp, /media-src 'self' blob: https:\/\/mycanvasvideos\.s3\.amazonaws\.com/);
   assert.match(csp, /object-src 'none'/);
-  assert.match(
-    csp,
-    /frame-src 'self' https:\/\/www\.youtube\.com https:\/\/www\.youtube-nocookie\.com https:\/\/youtu\.be https:\/\/app\.heygen\.com/
-  );
+  assert.match(csp, /frame-src 'self' https:\/\/app\.heygen\.com/);
   assert.match(csp, /upgrade-insecure-requests/);
   assert.match(csp, /block-all-mixed-content/);
 

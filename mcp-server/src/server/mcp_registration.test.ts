@@ -25,6 +25,7 @@ test("resource metadata includes OpenAI standard ui.csp/domain plus compatibilit
   assert.match(source, /connectDomains:/);
   assert.match(source, /resourceDomains:/);
   assert.match(source, /frameDomains,/);
+  assert.match(source, /const s3VideoOrigin = "https:\/\/mycanvasvideos\.s3\.amazonaws\.com"/);
   assert.match(source, /ui:\s*\{\s*csp:\s*widgetUiCsp,/);
   assert.match(source, /widgetOrigin \? \{ domain: widgetOrigin \} : \{\}/);
   assert.match(source, /"openai\/widgetCSP": widgetCompatCsp/);

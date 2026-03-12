@@ -1576,17 +1576,12 @@ test("bundled runtime retains canonical step continuity for latest render cache"
 test("bundled prestart intro movie uses language-mapped SSOT links", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /const PRESTART_INTRO_VIDEO_BY_LANG = \{/);
-  assert.match(source, /en:\s*"https:\/\/youtu\.be\/JjlY4iGWSi8"/);
-  assert.match(source, /nl:\s*"https:\/\/youtu\.be\/FD3BZit8evg"/);
-  assert.match(source, /de:\s*"https:\/\/youtu\.be\/dMnAR-eVedo"/);
-  assert.match(source, /es:\s*"https:\/\/youtu\.be\/hEfq_ciotPk"/);
-  assert.match(source, /fr:\s*"https:\/\/youtu\.be\/WalQNHy1DRo"/);
-  assert.match(source, /it:\s*"https:\/\/youtu\.be\/XUMJ44mXQ6Y"/);
-  assert.match(source, /ja:\s*"https:\/\/youtu\.be\/o1di1BkDdKA"/);
-  assert.match(source, /ru:\s*"https:\/\/youtu\.be\/PYKWjxQqFNg"/);
+  assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/welcome\/About%20the%20Business%20Strategy%20Canvas%20Builder\.mp4"/);
+  assert.match(source, /ja:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/welcome\/Business%20Strategy%20Canvas%20Builder/);
+  assert.match(source, /ru:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/welcome\/%D0%9E%20%D0%BA%D0%BE%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D0%BE%D1%80%D0%B5%20Business%20Strategy%20Canvas\.mp4"/);
 });
 
-test("bundled prestart intro movie hides iframe when no language-specific link exists", () => {
+test("bundled prestart intro movie hides video when no language-specific link exists", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /function prestartIntroVideoUrlForLang\(lang\)/);
   assert.match(source, /const introVideoUrl = prestartIntroVideoUrlForLang\(lang\);/);
@@ -1597,12 +1592,10 @@ test("bundled prestart intro movie hides iframe when no language-specific link e
 test("bundled ben profile movie uses language-mapped SSOT links and hides when unavailable", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /const BEN_PROFILE_VIDEO_BY_LANG = \{/);
-  assert.match(source, /en:\s*"https:\/\/youtu\.be\/kV4oF2mUZXI"/);
-  assert.match(source, /nl:\s*"https:\/\/youtu\.be\/5TLxnL2OkQo"/);
-  assert.match(source, /it:\s*"https:\/\/youtu\.be\/S7_GwDJZIAs"/);
-  assert.match(source, /de:\s*"https:\/\/youtu\.be\/T18fvylOojg"/);
-  assert.match(source, /es:\s*"https:\/\/youtu\.be\/eLSh19ZZ2yM"/);
-  assert.match(source, /ru:\s*"https:\/\/youtu\.be\/urvyVjsnl-Q"/);
+  assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/About%20Ben%20Steenstra\.mp4"/);
+  assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/bensteenstra\/A%CC%80_propos_de_Ben_Steenstra\.mp4"/);
+  assert.match(source, /ja:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/bensteenstra\/%E3%80%8C/);
+  assert.match(source, /ru:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/bensteenstra\/%D0%9E%20%D0%91%D0%B5%D0%BD%D0%B5/);
   assert.match(source, /function benProfileVideoUrlForLang\(lang\)/);
   assert.match(source, /const videoUrl = benProfileVideoUrlForLang\(lang\);/);
   assert.match(source, /if \(!videoUrl\) return;/);
@@ -1611,12 +1604,10 @@ test("bundled ben profile movie uses language-mapped SSOT links and hides when u
 test("bundled dream-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /const DREAM_STEP_VIDEO_BY_LANG = \{/);
-  assert.match(source, /en:\s*"https:\/\/youtu\.be\/94cmzR2w62o"/);
-  assert.match(source, /nl:\s*"https:\/\/youtu\.be\/kksn8roVbQg"/);
-  assert.match(source, /it:\s*"https:\/\/youtu\.be\/g-fbHy78uIw"/);
-  assert.match(source, /de:\s*"https:\/\/youtu\.be\/KtzkZFE4m5Q"/);
-  assert.match(source, /es:\s*"https:\/\/youtu\.be\/-36ryKgLiPo"/);
-  assert.match(source, /ru:\s*"https:\/\/youtu\.be\/tgtOxDmdrQM"/);
+  assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/About%20the%20Dream%20Step\.mp4"/);
+  assert.match(source, /de:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/U%CC%88ber%20den%20Schritt%20%E2%80%9ETraum%E2%80%9C\.mp4"/);
+  assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/A%CC%80%20propos%20du%20Re%CC%82ve\.mp4"/);
+  assert.match(source, /ru:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9C%D0%B5%D1%87%D1%82%D0%B0%C2%BB\.mp4"/);
   assert.match(source, /function dreamStepVideoUrlForLang\(lang\)/);
   assert.match(source, /const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView;/);
   assert.match(source, /appendDreamStepIntroVideo\(cardDescEl, lang\);/);
@@ -1627,13 +1618,10 @@ test("bundled dream-step intro movie uses language-mapped SSOT links and hides w
 test("bundled purpose-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /const PURPOSE_STEP_VIDEO_BY_LANG = \{/);
-  assert.match(source, /en:\s*"https:\/\/youtu\.be\/OhtRcBRmiQ0"/);
-  assert.match(source, /de:\s*"https:\/\/youtu\.be\/OfG_T2VDhtg"/);
-  assert.match(source, /es:\s*"https:\/\/youtu\.be\/TTU7vAkaVJA"/);
-  assert.match(source, /fr:\s*"https:\/\/youtu\.be\/EqoczF4mnGc"/);
-  assert.match(source, /it:\s*"https:\/\/youtu\.be\/tISM_mLZDgk"/);
-  assert.match(source, /nl:\s*"https:\/\/youtu\.be\/oS0tKfpLaYg"/);
-  assert.match(source, /ru:\s*"https:\/\/youtu\.be\/IbLMHOMLwHU"/);
+  assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/purpose\/About%20Purpose\.mp4"/);
+  assert.match(source, /de:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/purpose\/U%CC%88ber_den_Daseinsgrund\.mp4"/);
+  assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/purpose\/A%CC%80_propos_de_la_raison_d%E2%80%99e%CC%82tre\.mp4"/);
+  assert.match(source, /ru:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/purpose\/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9F%D1%80%D0%B5%D0%B4%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5%C2%BB\.mp4"/);
   assert.match(source, /function purposeStepVideoUrlForLang\(lang\)/);
   assert.match(source, /const shouldAppendPurposeStepVideo = current === "purpose" && showStepIntroChrome;/);
   assert.match(source, /appendPurposeStepIntroVideo\(cardDescEl, lang\);/);
@@ -1641,11 +1629,13 @@ test("bundled purpose-step intro movie uses language-mapped SSOT links and hides
   assert.match(source, /if \(!videoUrl\) return;/);
 });
 
-test("bundled YouTube embeds include explicit host context for mobile runtimes", () => {
+test("bundled video embeds render as HTML5 video with direct S3 sources", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /function augmentYouTubeEmbedUrl\(embedUrl, options = \{\}\)/);
-  assert.match(source, /parsed\.searchParams\.set\("origin", providerOrigin\)/);
-  assert.match(source, /parsed\.searchParams\.set\("widget_referrer", widgetReferrer\)/);
-  assert.match(source, /iframe\.src = augmentYouTubeEmbedUrl\(safeVideoUrl, \{/);
-  assert.match(source, /iframe\.referrerPolicy = "strict-origin-when-cross-origin"/);
+  assert.match(source, /videoWrap\.className = "cardDesc-video";/);
+  assert.match(source, /const video = document\.createElement\("video"\);/);
+  assert.match(source, /video\.src = safeVideoUrl;/);
+  assert.match(source, /video\.controls = true;/);
+  assert.match(source, /video\.playsInline = true;/);
+  assert.doesNotMatch(source, /function augmentYouTubeEmbedUrl\(embedUrl, options = \{\}\)/);
+  assert.doesNotMatch(source, /iframe\.src = /);
 });

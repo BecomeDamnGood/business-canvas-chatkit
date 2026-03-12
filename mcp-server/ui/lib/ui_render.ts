@@ -11,7 +11,6 @@ import {
   benProfileVideoUrlForLang,
   dreamStepVideoUrlForLang,
   purposeStepVideoUrlForLang,
-  augmentYouTubeEmbedUrl,
   hasPrestartContentForLang,
   getSectionTitle,
   setRuntimeUiStrings,
@@ -32,7 +31,6 @@ import {
   uiLang,
   resolveWidgetPayload,
   resetHydrationRetryCycle,
-  resolveAllowedHostOrigin,
 } from "./ui_actions.js";
 import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_state.js";
 import { dreamBuilderExerciseLabelKey } from "../../src/handlers/dream_builder_resume.js";
@@ -359,39 +357,18 @@ function prependBenProfileAvatar(cardDescEl: HTMLElement): void {
   cardDescEl.insertBefore(img, cardDescEl.firstChild);
 }
 
-function resolveWidgetProviderOrigin(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return String(new URL(window.location.href).origin || "").trim();
-  } catch {
-    return "";
-  }
-}
-
-function resolveWidgetReferrerContext(): string {
-  const hostOrigin = String(resolveAllowedHostOrigin() || "").trim();
-  if (hostOrigin && hostOrigin !== "*") return hostOrigin;
-  if (typeof document !== "undefined") {
-    const referrer = String(document.referrer || "").trim();
-    if (referrer) return referrer;
-  }
-  return "";
-}
-
 function appendVideoEmbed(cardDescEl: HTMLElement, videoUrl: string, title: string, prepend = false): void {
   const safeVideoUrl = String(videoUrl || "").trim();
   if (!cardDescEl || !safeVideoUrl) return;
   const videoWrap = appendTextNode("div", "cardDesc-video", "");
-  const iframe = document.createElement("iframe");
-  iframe.src = augmentYouTubeEmbedUrl(safeVideoUrl, {
-    providerOrigin: resolveWidgetProviderOrigin(),
-    widgetReferrer: resolveWidgetReferrerContext(),
-  });
-  iframe.title = String(title || "").trim() || "embedded-video";
-  iframe.setAttribute("allow", "autoplay; encrypted-media; fullscreen");
-  iframe.referrerPolicy = "strict-origin-when-cross-origin";
-  iframe.allowFullscreen = true;
-  videoWrap.appendChild(iframe);
+  const video = document.createElement("video");
+  video.src = safeVideoUrl;
+  video.controls = true;
+  video.playsInline = true;
+  video.preload = "metadata";
+  video.setAttribute("aria-label", String(title || "").trim() || "embedded-video");
+  video.setAttribute("controlsList", "nodownload");
+  videoWrap.appendChild(video);
   if (prepend) {
     cardDescEl.insertBefore(videoWrap, cardDescEl.firstChild);
     return;

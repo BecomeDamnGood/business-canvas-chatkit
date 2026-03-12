@@ -48,6 +48,7 @@ export const RUN_STEP_TOOL_ANNOTATIONS = Object.freeze({
 export const RUN_STEP_TOOL_SECURITY_SCHEMES = Object.freeze([{ type: "noauth" }] as const);
 
 function createAppServer(baseUrl: string): McpServer {
+  const s3VideoOrigin = "https://mycanvasvideos.s3.amazonaws.com";
   const widgetOrigin = (() => {
     const raw = String(baseUrl || "").trim();
     if (!raw) return "";
@@ -61,16 +62,13 @@ function createAppServer(baseUrl: string): McpServer {
     new Set(
       [
         widgetOrigin || "",
-        "https://www.youtube.com",
-        "https://www.youtube-nocookie.com",
-        "https://youtu.be",
         "https://app.heygen.com",
       ].filter(Boolean)
     )
   );
   const widgetUiCsp = {
-    connectDomains: widgetOrigin ? [widgetOrigin] : [],
-    resourceDomains: widgetOrigin ? [widgetOrigin] : [],
+    connectDomains: Array.from(new Set([widgetOrigin, s3VideoOrigin].filter(Boolean))),
+    resourceDomains: Array.from(new Set([widgetOrigin, s3VideoOrigin].filter(Boolean))),
     frameDomains,
   };
   const widgetCompatCsp = {

@@ -15,7 +15,6 @@ import {
   shouldSuppressMainCardForWordingChoice,
 } from "../ui/lib/ui_render.js";
 import {
-  augmentYouTubeEmbedUrl,
   benProfileVideoUrlForLang,
   dreamStepVideoUrlForLang,
   purposeStepVideoUrlForLang,
@@ -279,62 +278,102 @@ test("shouldRetainDreamScoringClientScores only keeps the buffer while dream sco
 });
 
 test("benProfileVideoUrlForLang returns only configured language-specific videos", () => {
-  assert.match(benProfileVideoUrlForLang("nl"), /youtube-nocookie\.com\/embed\/5TLxnL2OkQo/);
-  assert.match(benProfileVideoUrlForLang("en"), /youtube-nocookie\.com\/embed\/kV4oF2mUZXI/);
-  assert.match(benProfileVideoUrlForLang("it"), /youtube-nocookie\.com\/embed\/S7_GwDJZIAs/);
-  assert.match(benProfileVideoUrlForLang("de"), /youtube-nocookie\.com\/embed\/T18fvylOojg/);
-  assert.match(benProfileVideoUrlForLang("es"), /youtube-nocookie\.com\/embed\/eLSh19ZZ2yM/);
-  assert.match(benProfileVideoUrlForLang("fr"), /youtube-nocookie\.com\/embed\/0soI44DLOxY/);
-  assert.match(benProfileVideoUrlForLang("ja"), /youtube-nocookie\.com\/embed\/o5Z0e4_Aolg/);
-  assert.match(benProfileVideoUrlForLang("ru"), /youtube-nocookie\.com\/embed\/urvyVjsnl-Q/);
+  assert.equal(
+    benProfileVideoUrlForLang("nl"),
+    "https://mycanvasvideos.s3.amazonaws.com/Over%20Ben%20Steenstra.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("en"),
+    "https://mycanvasvideos.s3.amazonaws.com/About%20Ben%20Steenstra.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("it"),
+    "https://mycanvasvideos.s3.amazonaws.com/Su%20Ben%20Steenstra.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("de"),
+    "https://mycanvasvideos.s3.amazonaws.com/Uber%20Ben%20Steenstra.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("es"),
+    "https://mycanvasvideos.s3.amazonaws.com/Acerca%20de%20Ben%20Steenstra.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("fr"),
+    "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/A%CC%80_propos_de_Ben_Steenstra.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("ja"),
+    "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E3%80%8C%E3%83%98%E3%82%99%E3%83%B3%E3%83%BB%E3%82%B9%E3%83%86%E3%82%A3%E3%83%BC%E3%83%B3%E3%82%B9%E3%83%88%E3%83%A9%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6%E3%80%8D.mp4"
+  );
+  assert.equal(
+    benProfileVideoUrlForLang("ru"),
+    "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%D0%9E%20%D0%91%D0%B5%D0%BD%D0%B5%20%D0%A1%D1%82%D0%B5%D0%BD%D1%81%D1%82%D1%80%D0%B5.mp4"
+  );
   assert.equal(benProfileVideoUrlForLang("pt-BR"), "");
 });
 
 test("dreamStepVideoUrlForLang returns only configured language-specific videos", () => {
-  assert.match(dreamStepVideoUrlForLang("nl"), /youtube-nocookie\.com\/embed\/kksn8roVbQg/);
-  assert.match(dreamStepVideoUrlForLang("en"), /youtube-nocookie\.com\/embed\/94cmzR2w62o/);
-  assert.match(dreamStepVideoUrlForLang("it"), /youtube-nocookie\.com\/embed\/g-fbHy78uIw/);
-  assert.match(dreamStepVideoUrlForLang("de"), /youtube-nocookie\.com\/embed\/KtzkZFE4m5Q/);
-  assert.match(dreamStepVideoUrlForLang("es"), /youtube-nocookie\.com\/embed\/-36ryKgLiPo/);
-  assert.match(dreamStepVideoUrlForLang("fr"), /youtube-nocookie\.com\/embed\/ajUsijJzyiY/);
-  assert.match(dreamStepVideoUrlForLang("ru"), /youtube-nocookie\.com\/embed\/tgtOxDmdrQM/);
+  assert.equal(
+    dreamStepVideoUrlForLang("nl"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/Over%20de%20Droom%20Stap.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("en"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/About%20the%20Dream%20Step.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("it"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/Sul%20passo%20del%20Sogno.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("de"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/U%CC%88ber%20den%20Schritt%20%E2%80%9ETraum%E2%80%9C.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("es"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/Sobre%20el%20paso%20del%20Suen%CC%83o.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("fr"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/A%CC%80%20propos%20du%20Re%CC%82ve.mp4"
+  );
+  assert.equal(
+    dreamStepVideoUrlForLang("ru"),
+    "https://mycanvasvideos.s3.amazonaws.com/dream/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9C%D0%B5%D1%87%D1%82%D0%B0%C2%BB.mp4"
+  );
   assert.equal(dreamStepVideoUrlForLang("pt-BR"), "");
 });
 
 test("purposeStepVideoUrlForLang returns only configured language-specific videos", () => {
-  assert.match(purposeStepVideoUrlForLang("en"), /youtube-nocookie\.com\/embed\/OhtRcBRmiQ0/);
-  assert.match(purposeStepVideoUrlForLang("de"), /youtube-nocookie\.com\/embed\/OfG_T2VDhtg/);
-  assert.match(purposeStepVideoUrlForLang("es"), /youtube-nocookie\.com\/embed\/TTU7vAkaVJA/);
-  assert.match(purposeStepVideoUrlForLang("fr"), /youtube-nocookie\.com\/embed\/EqoczF4mnGc/);
-  assert.match(purposeStepVideoUrlForLang("it"), /youtube-nocookie\.com\/embed\/tISM_mLZDgk/);
-  assert.match(purposeStepVideoUrlForLang("nl"), /youtube-nocookie\.com\/embed\/oS0tKfpLaYg/);
-  assert.match(purposeStepVideoUrlForLang("ru"), /youtube-nocookie\.com\/embed\/IbLMHOMLwHU/);
-});
-
-test("augmentYouTubeEmbedUrl adds explicit mobile-safe YouTube context", () => {
-  const actual = augmentYouTubeEmbedUrl(
-    "https://www.youtube-nocookie.com/embed/OhtRcBRmiQ0?autoplay=1&rel=0&playsinline=1",
-    {
-      providerOrigin: "https://chat.openai.com",
-      widgetReferrer: "https://chat.openai.com/g/g-123",
-    }
+  assert.equal(
+    purposeStepVideoUrlForLang("en"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/About%20Purpose.mp4"
   );
-
-  assert.match(actual, /origin=https%3A%2F%2Fchat\.openai\.com/);
-  assert.match(actual, /widget_referrer=https%3A%2F%2Fchat\.openai\.com%2Fg%2Fg-123/);
-});
-
-test("augmentYouTubeEmbedUrl ignores invalid context inputs", () => {
-  const actual = augmentYouTubeEmbedUrl(
-    "https://www.youtube-nocookie.com/embed/OhtRcBRmiQ0?autoplay=1&rel=0&playsinline=1",
-    {
-      providerOrigin: "javascript:alert(1)",
-      widgetReferrer: "not-a-url",
-    }
+  assert.equal(
+    purposeStepVideoUrlForLang("de"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/U%CC%88ber_den_Daseinsgrund.mp4"
   );
-
-  assert.doesNotMatch(actual, /origin=/);
-  assert.doesNotMatch(actual, /widget_referrer=/);
+  assert.equal(
+    purposeStepVideoUrlForLang("es"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/Sobre_el_propo%CC%81sito_de_existir.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("fr"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/A%CC%80_propos_de_la_raison_d%E2%80%99e%CC%82tre.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("it"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/Sul%20perche%CC%81%20di%20esistere.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("nl"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/Over%20je%20bestaansrecht.mp4"
+  );
+  assert.equal(
+    purposeStepVideoUrlForLang("ru"),
+    "https://mycanvasvideos.s3.amazonaws.com/purpose/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9F%D1%80%D0%B5%D0%B4%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5%C2%BB.mp4"
+  );
 });
 
 test("shouldRenderPurposeStepIntroVideo returns true for configured languages in intro state", () => {
