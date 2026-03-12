@@ -68,6 +68,16 @@ function createAppServer(baseUrl: string): McpServer {
       ].filter(Boolean)
     )
   );
+  const widgetUiCsp = {
+    connectDomains: widgetOrigin ? [widgetOrigin] : [],
+    resourceDomains: widgetOrigin ? [widgetOrigin] : [],
+    frameDomains,
+  };
+  const widgetCompatCsp = {
+    connect_domains: widgetUiCsp.connectDomains,
+    resource_domains: widgetUiCsp.resourceDomains,
+    frame_domains: widgetUiCsp.frameDomains,
+  };
   const server = new McpServer(
     {
       name: "business-canvas-chatkit",
@@ -101,12 +111,12 @@ function createAppServer(baseUrl: string): McpServer {
             uri: uiResourceUri,
             text: loadUiHtml(baseUrl),
             _meta: {
-              "openai/widgetDescription": "Business Strategy Canvas Builder widget UI",
-              "openai/widgetCSP": {
-                connect_domains: widgetOrigin ? [widgetOrigin] : [],
-                resource_domains: widgetOrigin ? [widgetOrigin] : [],
-                frame_domains: frameDomains,
+              ui: {
+                csp: widgetUiCsp,
+                ...(widgetOrigin ? { domain: widgetOrigin } : {}),
               },
+              "openai/widgetDescription": "Business Strategy Canvas Builder widget UI",
+              "openai/widgetCSP": widgetCompatCsp,
               ...(widgetOrigin ? { "openai/widgetDomain": widgetOrigin } : {}),
             },
           },
