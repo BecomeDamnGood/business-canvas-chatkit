@@ -981,7 +981,7 @@
         padding: 0;
       }
       
-      /* Inline video player for step intros and welcome content */
+      /* Prestart video embed – set PRESTART_SHOW_VIDEO=false in renderPrestartContent to remove */
       .cardDesc .cardDesc-video {
         position: relative;
         width: 100%;
@@ -990,16 +990,14 @@
         border-radius: var(--r-md);
         overflow: hidden;
         aspect-ratio: 16/9;
-        background: #000;
       }
-      .cardDesc .cardDesc-video video {
+      .cardDesc .cardDesc-video iframe {
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
         border: none;
-        display: block;
       }
       
       /* Meta row – links uitgelijnd */
@@ -1932,102 +1930,66 @@
     }
   };
   const PRESTART_INTRO_VIDEO_BY_LANG = {
-    en: "https://mycanvasvideos.s3.amazonaws.com/welcome/About%20the%20Business%20Strategy%20Canvas%20Builder.mp4",
-    nl: "https://mycanvasvideos.s3.amazonaws.com/welcome/Over%20de%20Business%20Strategy%20Canvas%20Builder.mp4",
-    de: "https://mycanvasvideos.s3.amazonaws.com/welcome/U%CC%88ber%20den%20Business%20Strategy%20Canvas%20Builder.mp4",
-    es: "https://mycanvasvideos.s3.amazonaws.com/welcome/Acerca%20del%20Business%20Strategy%20Canvas%20Builder.mp4",
-    fr: "https://mycanvasvideos.s3.amazonaws.com/welcome/A%CC%80%20propos%20du%20Business%20Strategy%20Canvas%20Builder.mp4",
-    it: "https://mycanvasvideos.s3.amazonaws.com/welcome/Sul%20Business%20Strategy%20Canvas%20Builder.mp4",
-    pt: "https://mycanvasvideos.s3.amazonaws.com/welcome/Sobre%20o%20Business%20Strategy%20Canvas%20Builder.mp4",
-    hi: "https://mycanvasvideos.s3.amazonaws.com/welcome/%E0%A4%AC%E0%A4%BF%E0%A4%9C%E0%A4%BC%E0%A4%A8%E0%A5%87%E0%A4%B8%20%E0%A4%B8%E0%A5%8D%E0%A4%9F%E0%A5%8D%E0%A4%B0%E0%A5%88%E0%A4%9F%E0%A5%87%E0%A4%9C%E0%A5%80%20%E0%A4%95%E0%A5%88%E0%A4%A8%E0%A4%B5%E0%A4%B8%20%E0%A4%AC%E0%A4%BF%E0%A4%B2%E0%A5%8D%E0%A4%A1%E0%A4%B0%20%E0%A4%95%E0%A5%87%20%E0%A4%AC%E0%A4%BE%E0%A4%B0%E0%A5%87%20%E0%A4%AE%E0%A5%87%E0%A4%82.mp4",
-    id: "https://mycanvasvideos.s3.amazonaws.com/welcome/Tentang%20Business%20Strategy%20Canvas%20Builder.mp4",
-    ja: "https://mycanvasvideos.s3.amazonaws.com/welcome/Business%20Strategy%20Canvas%20Builder%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6.mp4",
-    ko: "https://mycanvasvideos.s3.amazonaws.com/welcome/%E1%84%87%E1%85%B5%E1%84%8C%E1%85%B3%E1%84%82%E1%85%B5%E1%84%89%E1%85%B3%20%E1%84%8C%E1%85%A5%E1%86%AB%E1%84%85%E1%85%A3%E1%86%A8%20%E1%84%8F%E1%85%A2%E1%86%AB%E1%84%87%E1%85%A5%E1%84%89%E1%85%B3%20%E1%84%87%E1%85%B5%E1%86%AF%E1%84%83%E1%85%A5%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/welcome/%D0%9E%20%D0%BA%D0%BE%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D0%BE%D1%80%D0%B5%20Business%20Strategy%20Canvas.mp4"
-    ,
-    zh: "https://mycanvasvideos.s3.amazonaws.com/welcome/%E5%85%B3%E4%BA%8E%20Business%20Strategy%20Canvas%20Builder.mp4",
-    hu: "https://mycanvasvideos.s3.amazonaws.com/welcome/A%20Business%20Strategy%20Canvas%20Builderro%CC%8Bl.mp4"
+    en: "https://youtu.be/JjlY4iGWSi8",
+    nl: "https://youtu.be/FD3BZit8evg",
+    de: "https://youtu.be/dMnAR-eVedo",
+    es: "https://youtu.be/hEfq_ciotPk",
+    fr: "https://youtu.be/WalQNHy1DRo",
+    it: "https://youtu.be/XUMJ44mXQ6Y",
+    ja: "https://youtu.be/o1di1BkDdKA",
+    ru: "https://youtu.be/PYKWjxQqFNg"
   };
   const BEN_PROFILE_VIDEO_BY_LANG = {
-    en: "https://mycanvasvideos.s3.amazonaws.com/About%20Ben%20Steenstra.mp4",
-    nl: "https://mycanvasvideos.s3.amazonaws.com/Over%20Ben%20Steenstra.mp4",
-    it: "https://mycanvasvideos.s3.amazonaws.com/Su%20Ben%20Steenstra.mp4",
-    de: "https://mycanvasvideos.s3.amazonaws.com/Uber%20Ben%20Steenstra.mp4",
-    es: "https://mycanvasvideos.s3.amazonaws.com/Acerca%20de%20Ben%20Steenstra.mp4",
-    pt: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/Sobre%20Ben%20Steenstra.mp4",
-    fr: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/A%CC%80_propos_de_Ben_Steenstra.mp4",
-    hi: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E0%A4%AC%E0%A5%87%E0%A4%A8%20%E0%A4%B8%E0%A5%8D%E0%A4%9F%E0%A5%80%E0%A4%A8%E0%A4%B8%E0%A5%8D%E0%A4%9F%E0%A5%8D%E0%A4%B0%E0%A4%BE%20%E0%A4%95%E0%A5%87%20%E0%A4%AC%E0%A4%BE%E0%A4%B0%E0%A5%87%20%E0%A4%AE%E0%A5%87%E0%A4%82.mp4",
-    id: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/Tentang%20Ben%20Steenstra.mp4",
-    ja: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E3%80%8C%E3%83%98%E3%82%99%E3%83%B3%E3%83%BB%E3%82%B9%E3%83%86%E3%82%A3%E3%83%BC%E3%83%B3%E3%82%B9%E3%83%88%E3%83%A9%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6%E3%80%8D.mp4",
-    ko: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E1%84%87%E1%85%A6%E1%86%AB%20%E1%84%89%E1%85%B3%E1%84%90%E1%85%B5%E1%86%AB%E1%84%89%E1%85%B3%E1%84%90%E1%85%B3%E1%84%85%E1%85%A1%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%D0%9E%20%D0%91%D0%B5%D0%BD%D0%B5%20%D0%A1%D1%82%D0%B5%D0%BD%D1%81%D1%82%D1%80%D0%B5.mp4"
-    ,
-    zh: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E5%85%B3%E4%BA%8E%20Ben%20Steenstra.mp4",
-    hu: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/Ben%20Steenstra%CC%81ro%CC%81l.mp4"
+    en: "https://youtu.be/kV4oF2mUZXI",
+    nl: "https://youtu.be/5TLxnL2OkQo",
+    it: "https://youtu.be/S7_GwDJZIAs",
+    de: "https://youtu.be/T18fvylOojg",
+    es: "https://youtu.be/eLSh19ZZ2yM",
+    fr: "https://youtu.be/0soI44DLOxY",
+    ja: "https://youtu.be/o5Z0e4_Aolg",
+    ru: "https://youtu.be/urvyVjsnl-Q"
   };
   const DREAM_STEP_VIDEO_BY_LANG = {
-    en: "https://mycanvasvideos.s3.amazonaws.com/dream/About%20the%20Dream%20Step.mp4",
-    nl: "https://mycanvasvideos.s3.amazonaws.com/dream/Over%20de%20Droom%20Stap.mp4",
-    it: "https://mycanvasvideos.s3.amazonaws.com/dream/Sul%20passo%20del%20Sogno.mp4",
-    de: "https://mycanvasvideos.s3.amazonaws.com/dream/U%CC%88ber%20den%20Schritt%20%E2%80%9ETraum%E2%80%9C.mp4",
-    es: "https://mycanvasvideos.s3.amazonaws.com/dream/Sobre%20el%20paso%20del%20Suen%CC%83o.mp4",
-    fr: "https://mycanvasvideos.s3.amazonaws.com/dream/A%CC%80%20propos%20du%20Re%CC%82ve.mp4",
-    pt: "https://mycanvasvideos.s3.amazonaws.com/dream/Sobre%20a%20etapa%20do%20sonho.mp4",
-    hi: "https://mycanvasvideos.s3.amazonaws.com/dream/%E0%A4%B8%E0%A4%AA%E0%A4%A8%E0%A5%87%20%E0%A4%95%E0%A5%87%20%E0%A4%9A%E0%A4%B0%E0%A4%A3%20%E0%A4%95%E0%A5%87%20%E0%A4%AC%E0%A4%BE%E0%A4%B0%E0%A5%87%20%E0%A4%AE%E0%A5%87%E0%A4%82.mp4",
-    id: "https://mycanvasvideos.s3.amazonaws.com/dream/Tentang%20langkah%20mimpi.mp4",
-    ja: "https://mycanvasvideos.s3.amazonaws.com/dream/%E5%A4%A2%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%95%E3%82%9A%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6.mp4",
-    ko: "https://mycanvasvideos.s3.amazonaws.com/dream/%E1%84%81%E1%85%AE%E1%86%B7%20%E1%84%83%E1%85%A1%E1%86%AB%E1%84%80%E1%85%A8%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/dream/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9C%D0%B5%D1%87%D1%82%D0%B0%C2%BB.mp4"
-    ,
-    zh: "https://mycanvasvideos.s3.amazonaws.com/dream/%E5%85%B3%E4%BA%8E%E6%A2%A6%E6%83%B3%E6%AD%A5%E9%AA%A4.mp4",
-    hu: "https://mycanvasvideos.s3.amazonaws.com/dream/Az%20a%CC%81lom%20le%CC%81pe%CC%81sro%CC%8Bl.mp4"
+    en: "https://youtu.be/94cmzR2w62o",
+    nl: "https://youtu.be/kksn8roVbQg",
+    it: "https://youtu.be/g-fbHy78uIw",
+    de: "https://youtu.be/KtzkZFE4m5Q",
+    es: "https://youtu.be/-36ryKgLiPo",
+    fr: "https://youtu.be/ajUsijJzyiY",
+    ru: "https://youtu.be/tgtOxDmdrQM"
   };
   const PURPOSE_STEP_VIDEO_BY_LANG = {
-    en: "https://mycanvasvideos.s3.amazonaws.com/purpose/About%20Purpose.mp4",
-    de: "https://mycanvasvideos.s3.amazonaws.com/purpose/U%CC%88ber_den_Daseinsgrund.mp4",
-    es: "https://mycanvasvideos.s3.amazonaws.com/purpose/Sobre_el_propo%CC%81sito_de_existir.mp4",
-    fr: "https://mycanvasvideos.s3.amazonaws.com/purpose/A%CC%80_propos_de_la_raison_d%E2%80%99e%CC%82tre.mp4",
-    it: "https://mycanvasvideos.s3.amazonaws.com/purpose/Sul%20perche%CC%81%20di%20esistere.mp4",
-    nl: "https://mycanvasvideos.s3.amazonaws.com/purpose/Over%20je%20bestaansrecht.mp4",
-    pt: "https://mycanvasvideos.s3.amazonaws.com/purpose/Sobre%20a%20etapa%20do%20propo%CC%81sito%20%28raza%CC%83o%20de%20existir%29.mp4",
-    hi: "https://mycanvasvideos.s3.amazonaws.com/purpose/%E0%A4%85%E0%A4%B8%E0%A5%8D%E0%A4%A4%E0%A4%BF%E0%A4%A4%E0%A5%8D%E0%A4%B5%20%E0%A4%95%E0%A5%87%20%E0%A4%89%E0%A4%A6%E0%A5%8D%E0%A4%A6%E0%A5%87%E0%A4%B6%E0%A5%8D%E0%A4%AF%20%E0%A4%B5%E0%A4%BE%E0%A4%B2%E0%A5%87%20%E0%A4%9A%E0%A4%B0%E0%A4%A3%20%E0%A4%95%E0%A5%87%20%E0%A4%AC%E0%A4%BE%E0%A4%B0%E0%A5%87%20%E0%A4%AE%E0%A5%87%E0%A4%82rpose-H.mp4",
-    id: "https://mycanvasvideos.s3.amazonaws.com/purpose/Tentang%20langkah%20purpose%20%28alasan%20keberadaan%29.mp4",
-    ja: "https://mycanvasvideos.s3.amazonaws.com/purpose/%E5%AD%98%E5%9C%A8%E6%84%8F%E7%BE%A9%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%95%E3%82%9A%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6.mp4",
-    ko: "https://mycanvasvideos.s3.amazonaws.com/purpose/%E1%84%8C%E1%85%A9%E1%86%AB%E1%84%8C%E1%85%A2%20%E1%84%8B%E1%85%B5%E1%84%8B%E1%85%B2%20%E1%84%83%E1%85%A1%E1%86%AB%E1%84%80%E1%85%A8%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/purpose/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9F%D1%80%D0%B5%D0%B4%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5%C2%BB.mp4"
-    ,
-    zh: "https://mycanvasvideos.s3.amazonaws.com/purpose/%E5%85%B3%E4%BA%8E%E5%AD%98%E5%9C%A8%E6%84%8F%E4%B9%89%E6%AD%A5%E9%AA%A4.mp4",
-    hu: "https://mycanvasvideos.s3.amazonaws.com/purpose/A%20le%CC%81teze%CC%81s%20e%CC%81rtelme%CC%81nek%20le%CC%81pe%CC%81se%CC%81ro%CC%8Bl.mp4"
+    en: "https://youtu.be/OhtRcBRmiQ0",
+    de: "https://youtu.be/OfG_T2VDhtg",
+    es: "https://youtu.be/TTU7vAkaVJA",
+    fr: "https://youtu.be/EqoczF4mnGc",
+    it: "https://youtu.be/tISM_mLZDgk",
+    nl: "https://youtu.be/oS0tKfpLaYg",
+    ru: "https://youtu.be/IbLMHOMLwHU"
   };
-  const BIGWHY_STEP_VIDEO_BY_LANG = {
-    en: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/The%20Big%20Why%20step.mp4",
-    nl: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/De_grote_waarom_stap.mp4",
-    de: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/Der%20Schritt%20des%20gro%C3%9Fen%20Warums.mp4",
-    es: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/El%20paso%20del%20Gran%20Porque%CC%81.mp4",
-    fr: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/L%E2%80%99e%CC%81tape%20du%20Grand%20Pourquoi.mp4",
-    it: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/Il%20passo%20del%20Grande%20Perche%CC%81.mp4",
-    pt: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/A%20etapa%20do%20Grande%20Porque%CC%82.mp4",
-    id: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/Langkah%20%E2%80%9CMengapa%20Besar%E2%80%9D.mp4",
-    ja: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%E3%83%92%E3%82%99%E3%83%83%E3%82%AF%E3%82%99%E3%83%BB%E3%83%9B%E3%83%AF%E3%82%A4%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%95%E3%82%9A.mp4",
-    ko: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%E1%84%87%E1%85%B5%E1%86%A8%20%E1%84%8B%E1%85%AA%E1%84%8B%E1%85%B5%20%E1%84%83%E1%85%A1%E1%86%AB%E1%84%80%E1%85%A8.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%D0%A8%D0%B0%D0%B3%20%C2%AB%D0%91%D0%BE%D0%BB%D1%8C%D1%88%D0%BE%D0%B3%D0%BE%20%D0%9F%D0%BE%D1%87%D0%B5%D0%BC%D1%83%C2%BB.mp4",
-    zh: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%E2%80%9C%E4%BC%9F%E5%A4%A7%E4%B8%BA%E4%BB%80%E4%B9%88%E2%80%9D%E6%AD%A5%E9%AA%A4.mp4",
-    hu: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/A%20Nagy%20Mie%CC%81rt%20le%CC%81pe%CC%81s.mp4"
-  };
-  const ROLE_STEP_VIDEO_BY_LANG = {
-    en: "https://mycanvasvideos.s3.amazonaws.com/The_Role_step.mp4",
-    nl: "https://mycanvasvideos.s3.amazonaws.com/De_rol_stap.mp4",
-    de: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-German.mp4",
-    es: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Spanish.mp4",
-    fr: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-French.mp4",
-    it: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Italian.mp4",
-    pt: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Portuguese%20(Brazil).mp4",
-    hi: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Hindi.mp4",
-    id: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Indonesian.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Russian.mp4",
-    zh: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Chinese%20(Mandarin%2C%20Simplified).mp4",
-    hu: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Hungarian%20(Hungary).mp4"
-  };
+  function normalizeYouTubeEmbedUrl(rawUrl) {
+    const input = String(rawUrl || "").trim();
+    if (!input) return "";
+    let parsed;
+    try {
+      parsed = new URL(input);
+    } catch {
+      return "";
+    }
+    const host = parsed.hostname.toLowerCase();
+    let videoId = "";
+    if (host === "youtu.be") {
+      videoId = parsed.pathname.replace(/^\/+/, "").split("/")[0] || "";
+    } else if (host.endsWith("youtube.com")) {
+      if (parsed.pathname.startsWith("/watch")) {
+        videoId = String(parsed.searchParams.get("v") || "").trim();
+      } else if (parsed.pathname.startsWith("/embed/")) {
+        videoId = parsed.pathname.replace(/^\/embed\//, "").split("/")[0] || "";
+      }
+    }
+    if (!/^[A-Za-z0-9_-]{6,}$/.test(videoId)) return "";
+    return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`;
+  }
   function normalizeHttpUrl(rawUrl) {
     const input = String(rawUrl || "").trim();
     if (!input) return "";
@@ -2038,6 +2000,24 @@
     } catch {
       return "";
     }
+  }
+  function augmentYouTubeEmbedUrl(embedUrl, options = {}) {
+    const input = String(embedUrl || "").trim();
+    if (!input) return "";
+    let parsed;
+    try {
+      parsed = new URL(input);
+    } catch {
+      return input;
+    }
+    const host = parsed.hostname.toLowerCase();
+    const isYouTubeEmbed = host === "www.youtube.com" || host === "youtube.com" || host === "www.youtube-nocookie.com" || host === "youtube-nocookie.com";
+    if (!isYouTubeEmbed) return input;
+    const providerOrigin = normalizeHttpUrl(options.providerOrigin);
+    if (providerOrigin) parsed.searchParams.set("origin", providerOrigin);
+    const widgetReferrer = normalizeHttpUrl(options.widgetReferrer);
+    if (widgetReferrer) parsed.searchParams.set("widget_referrer", widgetReferrer);
+    return parsed.toString();
   }
   function baseLang(lang) {
     const l = String(lang || "").trim().toLowerCase();
@@ -2080,50 +2060,22 @@
   function prestartIntroVideoUrlForLang(lang) {
     const langBase = baseLang(lang);
     if (!langBase) return "";
-    return normalizeHttpUrl(PRESTART_INTRO_VIDEO_BY_LANG[langBase] || "");
+    return normalizeYouTubeEmbedUrl(PRESTART_INTRO_VIDEO_BY_LANG[langBase] || "");
   }
   function benProfileVideoUrlForLang(lang) {
     const langBase = baseLang(lang);
     if (!langBase) return "";
-    return normalizeHttpUrl(BEN_PROFILE_VIDEO_BY_LANG[langBase] || "");
+    return normalizeYouTubeEmbedUrl(BEN_PROFILE_VIDEO_BY_LANG[langBase] || "");
   }
   function dreamStepVideoUrlForLang(lang) {
     const langBase = baseLang(lang);
     if (!langBase) return "";
-    return normalizeHttpUrl(DREAM_STEP_VIDEO_BY_LANG[langBase] || "");
+    return normalizeYouTubeEmbedUrl(DREAM_STEP_VIDEO_BY_LANG[langBase] || "");
   }
   function purposeStepVideoUrlForLang(lang) {
     const langBase = baseLang(lang);
     if (!langBase) return "";
-    return normalizeHttpUrl(PURPOSE_STEP_VIDEO_BY_LANG[langBase] || "");
-  }
-  function bigWhyStepVideoUrlForLang(lang) {
-    const langBase = baseLang(lang);
-    if (!langBase) return "";
-    return normalizeHttpUrl(BIGWHY_STEP_VIDEO_BY_LANG[langBase] || "");
-  }
-  function roleStepVideoUrlForLang(lang) {
-    const langBase = baseLang(lang);
-    if (!langBase) return "";
-    return normalizeHttpUrl(ROLE_STEP_VIDEO_BY_LANG[langBase] || "");
-  }
-  function shouldRenderPurposeStepIntroVideo(params) {
-    if (String(params.currentStep || "").trim() !== "purpose") return false;
-    if (params.showStepIntroChrome !== true) return false;
-    if (params.wordingChoiceActive === true) return false;
-    return Boolean(purposeStepVideoUrlForLang(params.lang));
-  }
-  function shouldRenderBigWhyStepIntroVideo(params) {
-    if (String(params.currentStep || "").trim() !== "bigwhy") return false;
-    if (params.showStepIntroChrome !== true) return false;
-    if (params.wordingChoiceActive === true) return false;
-    return Boolean(bigWhyStepVideoUrlForLang(params.lang));
-  }
-  function shouldRenderRoleStepIntroVideo(params) {
-    if (String(params.currentStep || "").trim() !== "role") return false;
-    if (params.showStepIntroChrome !== true) return false;
-    if (params.wordingChoiceActive === true) return false;
-    return Boolean(roleStepVideoUrlForLang(params.lang));
+    return normalizeYouTubeEmbedUrl(PURPOSE_STEP_VIDEO_BY_LANG[langBase] || "");
   }
   function prestartContentForLang(lang) {
     return {
@@ -2407,7 +2359,6 @@
   var pendingBridgeCalls = /* @__PURE__ */ new Map();
   var bridgeTargetOriginCache = null;
   var bridgeTargetOriginSource = "";
-  var pendingWidgetScrollTarget = "";
   function initActionsConfig(config) {
     _render = config.render;
     _t = config.t;
@@ -2415,54 +2366,6 @@
   }
   function setBridgeEnabled(enabled) {
     bridgeEnabled = enabled;
-  }
-  function isHtmlElement(value) {
-    return typeof HTMLElement !== "undefined" && value instanceof HTMLElement;
-  }
-  function scrollWidgetTop() {
-    if (typeof document === "undefined" || typeof window === "undefined") return;
-    const topAnchor = document.getElementById("stepper") || document.querySelector(".card") || document.body;
-    try {
-      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-    } catch {
-      window.scrollTo(0, 0);
-    }
-    if (document.documentElement) document.documentElement.scrollTop = 0;
-    if (document.body) document.body.scrollTop = 0;
-    const scrollingElement = document.scrollingElement;
-    if (scrollingElement) scrollingElement.scrollTop = 0;
-    if (isHtmlElement(topAnchor)) {
-      try {
-        topAnchor.scrollIntoView({ block: "start", behavior: "smooth" });
-      } catch {
-        topAnchor.scrollIntoView(true);
-      }
-    }
-  }
-  function scrollPresentationPreviewIntoView() {
-    if (typeof document === "undefined") return false;
-    const preview = document.getElementById("presentationPreview");
-    if (!preview || !preview.classList.contains("visible")) return false;
-    try {
-      preview.scrollIntoView({ block: "start", behavior: "smooth" });
-    } catch {
-      preview.scrollIntoView(true);
-    }
-    return true;
-  }
-  function isPresentationMakeAction(messageText) {
-    const normalized = String(messageText || "").trim().toUpperCase();
-    return normalized === "ACTION_PRESENTATION_MAKE" || normalized === "__ROUTE__PRESENTATION_MAKE__";
-  }
-  function prepareWidgetScrollForAction(messageText) {
-    const normalized = String(messageText || "").trim().toUpperCase();
-    if (!normalized || normalized === ACTION_BOOTSTRAP_POLL) return;
-    scrollWidgetTop();
-    pendingWidgetScrollTarget = isPresentationMakeAction(normalized) ? "presentation_preview" : "";
-  }
-  function applyPendingWidgetScroll() {
-    if (pendingWidgetScrollTarget !== "presentation_preview") return;
-    if (scrollPresentationPreviewIntoView()) pendingWidgetScrollTarget = "";
   }
   function oa() {
     return globalThis.openai;
@@ -3797,7 +3700,6 @@
         user_message: messageText
       });
     }
-    prepareWidgetScrollForAction(messageText);
     setLoading(true);
     let timeoutId = null;
     let didTimeout = false;
@@ -4131,19 +4033,38 @@
     if (!cardDescEl || !safeVideoUrl) return;
     const videoWrap = document.createElement("div");
     videoWrap.className = "cardDesc-video";
-    const video = document.createElement("video");
-    video.src = safeVideoUrl;
-    video.controls = true;
-    video.playsInline = true;
-    video.preload = "metadata";
-    video.setAttribute("aria-label", String(title || "").trim() || "embedded-video");
-    video.setAttribute("controlsList", "nodownload");
-    videoWrap.appendChild(video);
+    const iframe = document.createElement("iframe");
+    iframe.src = augmentYouTubeEmbedUrl(safeVideoUrl, {
+      providerOrigin: resolveWidgetProviderOrigin(),
+      widgetReferrer: resolveWidgetReferrerContext()
+    });
+    iframe.title = String(title || "").trim() || "embedded-video";
+    iframe.setAttribute("allow", "autoplay; encrypted-media; fullscreen");
+    iframe.referrerPolicy = "strict-origin-when-cross-origin";
+    iframe.allowFullscreen = true;
+    videoWrap.appendChild(iframe);
     if (prepend) {
       cardDescEl.insertBefore(videoWrap, cardDescEl.firstChild);
       return;
     }
     cardDescEl.appendChild(videoWrap);
+  }
+  function resolveWidgetProviderOrigin() {
+    if (typeof window === "undefined") return "";
+    try {
+      return String(new URL(window.location.href).origin || "").trim();
+    } catch {
+      return "";
+    }
+  }
+  function resolveWidgetReferrerContext() {
+    const hostOrigin = String(resolveAllowedHostOrigin() || "").trim();
+    if (hostOrigin && hostOrigin !== "*") return hostOrigin;
+    if (typeof document !== "undefined") {
+      const referrer = String(document.referrer || "").trim();
+      if (referrer) return referrer;
+    }
+    return "";
   }
   function prependBenProfileVideo(cardDescEl, lang) {
     if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;
@@ -4162,18 +4083,6 @@
     const videoUrl = purposeStepVideoUrlForLang(lang);
     if (!videoUrl) return;
     appendVideoEmbed(cardDescEl, videoUrl, "purpose-step-video");
-  }
-  function appendBigWhyStepIntroVideo(cardDescEl, lang) {
-    if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;
-    const videoUrl = bigWhyStepVideoUrlForLang(lang);
-    if (!videoUrl) return;
-    appendVideoEmbed(cardDescEl, videoUrl, "bigwhy-step-video");
-  }
-  function appendRoleStepIntroVideo(cardDescEl, lang) {
-    if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;
-    const videoUrl = roleStepVideoUrlForLang(lang);
-    if (!videoUrl) return;
-    appendVideoEmbed(cardDescEl, videoUrl, "role-step-video");
   }
   function appendParagraph(el, lines) {
     const paragraph = lines.map((line) => String(line || "").trim()).filter(Boolean).join(" ");
@@ -4844,10 +4753,7 @@
     const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
     const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
     const uiQuestionText = String(uiPayload.questionText || "").trim();
-    const wordingChoicePayload = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
-    const uiFlags = uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags ? uiPayload.flags : {};
-    const wordingChoiceActive = isViewModeWordingChoice || wordingChoicePayload.enabled === true || String(uiFlags.require_wording_pick || "").trim() === "true";
-    const singleValueContent = wordingChoiceActive ? null : readSingleValueCardContent(uiPayload);
+    const singleValueContent = readSingleValueCardContent(uiPayload);
     const structuredActions = Array.isArray(uiPayload.actions) ? uiPayload.actions : [];
     const hasStructuredActions = structuredActions.length > 0;
     const promptBody = uiPayload.prompt && typeof uiPayload.prompt.body === "string" ? String(uiPayload.prompt.body || "") : "";
@@ -4877,37 +4783,16 @@
       const isBenProfile = String(specialist.meta_topic || "").trim().toUpperCase() === "BEN_PROFILE";
       const isStep0AskLayout = current === "step_0" && !isBenProfile;
       const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView;
-      const shouldAppendPurposeStepVideo = shouldRenderPurposeStepIntroVideo({
-        currentStep: current,
-        showStepIntroChrome,
-        wordingChoiceActive,
-        lang
-      });
-      const shouldAppendBigWhyStepVideo = shouldRenderBigWhyStepIntroVideo({
-        currentStep: current,
-        showStepIntroChrome,
-        wordingChoiceActive,
-        lang
-      });
-      const shouldAppendRoleStepVideo = shouldRenderRoleStepIntroVideo({
-        currentStep: current,
-        showStepIntroChrome,
-        wordingChoiceActive,
-        lang
-      });
+      const shouldAppendPurposeStepVideo = current === "purpose" && showStepIntroChrome;
       cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
       cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
       const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
-      if (!renderedSemanticContent && !wordingChoiceActive) {
+      if (!renderedSemanticContent) {
         renderStructuredText(cardDescEl, body || "");
         if (shouldAppendDreamStepVideo) {
           appendDreamStepIntroVideo(cardDescEl, lang);
         } else if (shouldAppendPurposeStepVideo) {
           appendPurposeStepIntroVideo(cardDescEl, lang);
-        } else if (shouldAppendBigWhyStepVideo) {
-          appendBigWhyStepIntroVideo(cardDescEl, lang);
-        } else if (shouldAppendRoleStepVideo) {
-          appendRoleStepIntroVideo(cardDescEl, lang);
         }
       }
       if (isBenProfile) {
@@ -4926,7 +4811,6 @@
         previewImg.src = String(presentationAssets.png_url);
         previewLink.href = String(presentationAssets.pdf_url);
         previewDownload.href = String(presentationAssets.pdf_url);
-        applyPendingWidgetScroll();
       } else {
         previewWrap.classList.remove("visible");
         previewImg.removeAttribute("src");

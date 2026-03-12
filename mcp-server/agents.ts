@@ -1,5 +1,5 @@
 // mcp-server/agents.ts
-import { z } from "zod";
+import { z, toJSONSchema } from "zod";
 
 export type StepId =
   | "step_0"
@@ -43,7 +43,7 @@ export type CanvasState = {
   presentation_brief?: string;
 
   // last specialist output (for readiness moment)
-  last_specialist_result?: any;
+  last_specialist_result?: unknown;
 };
 
 const DEFAULT_STATE: CanvasState = {
@@ -124,118 +124,30 @@ const PresentationSchema = z.object({
 });
 
 // -------------------- JSON SCHEMA (Responses API structured outputs) --------------------
-type JsonSchema = Record<string, any>;
+type JsonSchema = {
+  type: "object";
+  additionalProperties?: boolean;
+  title: string;
+  properties?: Record<string, unknown>;
+  required?: string[];
+} & Record<string, unknown>;
 
-function strictObjectSchema(name: string, properties: Record<string, any>, required: string[]): JsonSchema {
+function jsonSchemaFromZod(name: string, schema: z.ZodTypeAny): JsonSchema {
+  const generated = toJSONSchema(schema) as Record<string, unknown>;
+  const { $schema: _draft, ...rest } = generated;
   return {
+    ...(rest as Omit<JsonSchema, "title" | "type">),
     type: "object",
-    additionalProperties: false,
     title: name,
-    properties,
-    required,
   };
 }
 
-const STR = { type: "string" };
-const ACTION = { type: "string", enum: [...ActionEnum] };
-const BOOLSTR = { type: "string", enum: ["true", "false"] };
-
-const ValidationJsonSchema = strictObjectSchema(
-  "ValidationAndBusinessName",
-  {
-    action: ACTION,
-    message: STR,
-    question: STR,
-    refined_formulation: STR,
-    confirmation_question: STR,
-    business_name: STR,
-    proceed_to_dream: BOOLSTR,
-    step_0: STR,
-  },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "business_name", "proceed_to_dream", "step_0"]
-);
-
-const DreamJsonSchema = strictObjectSchema(
-  "Dream",
-  {
-    action: ACTION,
-    message: STR,
-    question: STR,
-    refined_formulation: STR,
-    confirmation_question: STR,
-    dream: STR,
-    suggest_dreambuilder: BOOLSTR,
-    proceed_to_dream: BOOLSTR,
-    proceed_to_purpose: BOOLSTR,
-  },
-  [
-    "action",
-    "message",
-    "question",
-    "refined_formulation",
-    "confirmation_question",
-    "dream",
-    "suggest_dreambuilder",
-    "proceed_to_dream",
-    "proceed_to_purpose",
-  ]
-);
-
-const GenericJsonSchema = strictObjectSchema(
-  "GenericStep",
-  {
-    action: ACTION,
-    message: STR,
-    question: STR,
-    refined_formulation: STR,
-    confirmation_question: STR,
-    value: STR,
-    proceed_to_next: BOOLSTR,
-  },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "value", "proceed_to_next"]
-);
-
-const StrategyJsonSchema = strictObjectSchema(
-  "Strategy",
-  {
-    action: ACTION,
-    message: STR,
-    question: STR,
-    refined_formulation: STR,
-    confirmation_question: STR,
-    strategy: STR,
-    proceed_to_next: BOOLSTR,
-  },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "strategy", "proceed_to_next"]
-);
-
-const RulesJsonSchema = strictObjectSchema(
-  "RulesOfTheGame",
-  {
-    action: ACTION,
-    message: STR,
-    question: STR,
-    refined_formulation: STR,
-    confirmation_question: STR,
-    rulesofthegame: STR,
-    proceed_to_next: BOOLSTR,
-  },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "rulesofthegame", "proceed_to_next"]
-);
-
-const PresentationJsonSchema = strictObjectSchema(
-  "Presentation",
-  {
-    action: ACTION,
-    message: STR,
-    question: STR,
-    refined_formulation: STR,
-    confirmation_question: STR,
-    presentation_brief: STR,
-    proceed_to_next: BOOLSTR,
-  },
-  ["action", "message", "question", "refined_formulation", "confirmation_question", "presentation_brief", "proceed_to_next"]
-);
+const ValidationJsonSchema = jsonSchemaFromZod("ValidationAndBusinessName", ValidationSchema);
+const DreamJsonSchema = jsonSchemaFromZod("Dream", DreamSchema);
+const GenericJsonSchema = jsonSchemaFromZod("GenericStep", GenericSchema);
+const StrategyJsonSchema = jsonSchemaFromZod("Strategy", StrategySchema);
+const RulesJsonSchema = jsonSchemaFromZod("RulesOfTheGame", RulesSchema);
+const PresentationJsonSchema = jsonSchemaFromZod("Presentation", PresentationSchema);
 
 // -------------------- intro text base (translated by model when show_session_intro=true) --------------------
 const SESSION_INTRO_EN =
@@ -245,6 +157,46 @@ const SESSION_INTRO_EN =
 
 // -------------------- OpenAI Responses structured outputs --------------------
 type OpenAIDebug = { response_id?: string; http_status?: number; parse_error?: string; output_preview?: string };
+type ValidationResult = z.infer<typeof ValidationSchema>;
+type DreamResult = z.infer<typeof DreamSchema>;
+type GenericResult = z.infer<typeof GenericSchema>;
+type StrategyResult = z.infer<typeof StrategySchema>;
+type RulesResult = z.infer<typeof RulesSchema>;
+type PresentationResult = z.infer<typeof PresentationSchema>;
+type SpecialistResult =
+  | ValidationResult
+  | DreamResult
+  | GenericResult
+  | StrategyResult
+  | RulesResult
+  | PresentationResult;
+type GenericStepResult = GenericResult | StrategyResult | RulesResult | PresentationResult;
+type GenericStepSchema =
+  | typeof GenericSchema
+  | typeof StrategySchema
+  | typeof RulesSchema
+  | typeof PresentationSchema;
+type GenericStepId = Exclude<StepId, "step_0" | "dream">;
+type GenericStepStateKey =
+  | "purpose"
+  | "bigwhy"
+  | "role"
+  | "entity"
+  | "strategy"
+  | "targetgroup"
+  | "productsservices"
+  | "rulesofthegame"
+  | "presentation_brief";
+type GenericStepResultKey = "value" | "strategy" | "rulesofthegame" | "presentation_brief";
+
+type GenericStepConfig = {
+  stepLabelEn: string;
+  jsonSchema: JsonSchema;
+  zodSchema: GenericStepSchema;
+  stateKey: GenericStepStateKey;
+  resultKey: GenericStepResultKey;
+  activeSpecialist: string;
+};
 
 class OpenAIJsonError extends Error {
   debug: OpenAIDebug;
@@ -255,22 +207,35 @@ class OpenAIJsonError extends Error {
   }
 }
 
-function extractResponsesOutputText(data: any): string {
-  const outputs = Array.isArray(data?.output) ? data.output : [];
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function extractResponsesOutputText(data: unknown): string {
+  const record = asRecord(data);
+  const outputs = Array.isArray(record.output) ? record.output : [];
   const chunks: string[] = [];
   for (const item of outputs) {
-    if (item?.type === "message" && item?.role === "assistant" && Array.isArray(item?.content)) {
-      for (const c of item.content) {
-        if (c?.type === "output_text" && typeof c?.text === "string") chunks.push(c.text);
+    const outputItem = asRecord(item);
+    if (
+      outputItem.type === "message" &&
+      outputItem.role === "assistant" &&
+      Array.isArray(outputItem.content)
+    ) {
+      for (const c of outputItem.content) {
+        const contentItem = asRecord(c);
+        if (contentItem.type === "output_text" && typeof contentItem.text === "string") {
+          chunks.push(contentItem.text);
+        }
       }
     }
   }
-  if (chunks.length === 0 && typeof data?.output_text === "string") return data.output_text;
-  if (chunks.length === 0 && typeof data?.text === "string") return data.text;
+  if (chunks.length === 0 && typeof record.output_text === "string") return record.output_text;
+  if (chunks.length === 0 && typeof record.text === "string") return record.text;
   return chunks.join("\n").trim();
 }
 
-function tryParseJson(text: string): any | null {
+function tryParseJson(text: string): unknown {
   const t = (text || "").trim();
   if (!t) return null;
   try {
@@ -337,11 +302,13 @@ async function callOpenAIJson({
     });
   }
 
-  const data: any = await res.json();
-  const responseId = typeof data?.id === "string" ? data.id : undefined;
+  const data = (await res.json()) as unknown;
+  const dataRecord = asRecord(data);
+  const responseId = typeof dataRecord.id === "string" ? dataRecord.id : undefined;
+  const parsedOutput = dataRecord.output_parsed;
 
-  if (data && typeof data === "object" && data.output_parsed && typeof data.output_parsed === "object") {
-    return { parsed: data.output_parsed, debug: { response_id: responseId } as OpenAIDebug };
+  if (parsedOutput && typeof parsedOutput === "object") {
+    return { parsed: parsedOutput, debug: { response_id: responseId } as OpenAIDebug };
   }
 
   const text = extractResponsesOutputText(data);
@@ -379,19 +346,109 @@ function nextStepOf(step: StepId): StepId {
   return order[Math.min(idx + 1, order.length - 1)];
 }
 
-function buildTextForWidget(specialistJson: any): string {
+function buildTextForWidget(specialistJson: unknown): string {
+  const specialist = asRecord(specialistJson);
   const parts: string[] = [];
-  const msg = String(specialistJson?.message ?? "").trim();
-  const refined = String(specialistJson?.refined_formulation ?? "").trim();
+  const msg = String(specialist.message ?? "").trim();
+  const refined = String(specialist.refined_formulation ?? "").trim();
   if (msg) parts.push(msg);
   if (refined) parts.push(refined);
   return parts.filter(Boolean).join("\n\n");
 }
 
-function pickPrompt(specialistJson: any): string {
-  const confirmQ = String(specialistJson?.confirmation_question ?? "").trim();
-  const q = String(specialistJson?.question ?? "").trim();
+function pickPrompt(specialistJson: unknown): string {
+  const specialist = asRecord(specialistJson);
+  const confirmQ = String(specialist.confirmation_question ?? "").trim();
+  const q = String(specialist.question ?? "").trim();
   return confirmQ || q || "";
+}
+
+export const GENERIC_STEP_CONFIG: Record<GenericStepId, GenericStepConfig> = {
+  purpose: {
+    stepLabelEn: "Purpose",
+    jsonSchema: GenericJsonSchema,
+    zodSchema: GenericSchema,
+    stateKey: "purpose",
+    resultKey: "value",
+    activeSpecialist: "Purpose",
+  },
+  bigwhy: {
+    stepLabelEn: "Big Why",
+    jsonSchema: GenericJsonSchema,
+    zodSchema: GenericSchema,
+    stateKey: "bigwhy",
+    resultKey: "value",
+    activeSpecialist: "BigWhy",
+  },
+  role: {
+    stepLabelEn: "Role",
+    jsonSchema: GenericJsonSchema,
+    zodSchema: GenericSchema,
+    stateKey: "role",
+    resultKey: "value",
+    activeSpecialist: "Role",
+  },
+  entity: {
+    stepLabelEn: "Entity",
+    jsonSchema: GenericJsonSchema,
+    zodSchema: GenericSchema,
+    stateKey: "entity",
+    resultKey: "value",
+    activeSpecialist: "Entity",
+  },
+  strategy: {
+    stepLabelEn: "Strategy",
+    jsonSchema: StrategyJsonSchema,
+    zodSchema: StrategySchema,
+    stateKey: "strategy",
+    resultKey: "strategy",
+    activeSpecialist: "Strategy",
+  },
+  targetgroup: {
+    stepLabelEn: "Target Group",
+    jsonSchema: GenericJsonSchema,
+    zodSchema: GenericSchema,
+    stateKey: "targetgroup",
+    resultKey: "value",
+    activeSpecialist: "TargetGroup",
+  },
+  productsservices: {
+    stepLabelEn: "Products and Services",
+    jsonSchema: GenericJsonSchema,
+    zodSchema: GenericSchema,
+    stateKey: "productsservices",
+    resultKey: "value",
+    activeSpecialist: "ProductsAndServices",
+  },
+  rulesofthegame: {
+    stepLabelEn: "Rules of the game",
+    jsonSchema: RulesJsonSchema,
+    zodSchema: RulesSchema,
+    stateKey: "rulesofthegame",
+    resultKey: "rulesofthegame",
+    activeSpecialist: "RulesOfTheGame",
+  },
+  presentation: {
+    stepLabelEn: "Presentation",
+    jsonSchema: PresentationJsonSchema,
+    zodSchema: PresentationSchema,
+    stateKey: "presentation_brief",
+    resultKey: "presentation_brief",
+    activeSpecialist: "Presentation",
+  },
+};
+
+function getGenericStepConfig(step: StepId): GenericStepConfig | null {
+  return step in GENERIC_STEP_CONFIG ? GENERIC_STEP_CONFIG[step as GenericStepId] : null;
+}
+
+function extractConfiguredValue(result: GenericStepResult, config: GenericStepConfig): string {
+  const rawValue = asRecord(result)[config.resultKey];
+  return typeof rawValue === "string" ? rawValue : "";
+}
+
+function shouldProceedToNext(result: GenericStepResult): boolean {
+  return asRecord(result).proceed_to_next === "true";
 }
 
 // -------------------- SYSTEM PROMPTS (lift logic 1:1; language mirrored; intro gate) --------------------
@@ -498,7 +555,7 @@ async function runValidationAgent(
 ): Promise<{ value: z.infer<typeof ValidationSchema>; debug?: OpenAIDebug }> {
   const system = validationSystem(showSessionIntro);
 
-  const prev = state.last_specialist_result || {};
+  const prev = asRecord(state.last_specialist_result);
   const user = [
     `CURRENT_STEP_ID: step_0`,
     `USER_MESSAGE: ${userMessage}`,
@@ -555,8 +612,44 @@ async function runGenericAgent(
   userMessage: string,
   state: CanvasState,
   jsonSchema: JsonSchema,
-  zodSchema: any
-): Promise<{ value: any; debug?: OpenAIDebug }> {
+  zodSchema: typeof GenericSchema
+): Promise<{ value: GenericResult; debug?: OpenAIDebug }>;
+async function runGenericAgent(
+  apiKey: string,
+  model: string,
+  stepLabelEn: string,
+  userMessage: string,
+  state: CanvasState,
+  jsonSchema: JsonSchema,
+  zodSchema: typeof StrategySchema
+): Promise<{ value: StrategyResult; debug?: OpenAIDebug }>;
+async function runGenericAgent(
+  apiKey: string,
+  model: string,
+  stepLabelEn: string,
+  userMessage: string,
+  state: CanvasState,
+  jsonSchema: JsonSchema,
+  zodSchema: typeof RulesSchema
+): Promise<{ value: RulesResult; debug?: OpenAIDebug }>;
+async function runGenericAgent(
+  apiKey: string,
+  model: string,
+  stepLabelEn: string,
+  userMessage: string,
+  state: CanvasState,
+  jsonSchema: JsonSchema,
+  zodSchema: typeof PresentationSchema
+): Promise<{ value: PresentationResult; debug?: OpenAIDebug }>;
+async function runGenericAgent(
+  apiKey: string,
+  model: string,
+  stepLabelEn: string,
+  userMessage: string,
+  state: CanvasState,
+  jsonSchema: JsonSchema,
+  zodSchema: GenericStepSchema
+): Promise<{ value: GenericStepResult; debug?: OpenAIDebug }> {
   const system = genericSystem(stepLabelEn);
   const user = [
     `CURRENT_STEP_ID: ${state.current_step}`,
@@ -580,7 +673,7 @@ async function runGenericAgent(
 export async function runCanvasStep(args: {
   current_step_id: string;
   user_message: string;
-  state?: Record<string, any>;
+  state?: Record<string, unknown>;
 }) {
   const apiKey = process.env.OPENAI_API_KEY || "";
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY env var");
@@ -604,7 +697,7 @@ export async function runCanvasStep(args: {
   let hops = 0;
 
   let activeSpecialist = "";
-  let specialistJson: any = null;
+  let specialistJson: SpecialistResult | null = null;
   // Chain: step_0 proceed_to_dream => immediately run Dream in same tool call
   while (hops < MAX_HOPS) {
     hops++;
@@ -656,127 +749,26 @@ export async function runCanvasStep(args: {
       break;
     }
 
-    if (state.current_step === "purpose") {
-      activeSpecialist = "Purpose";
-      const r = await runGenericAgent(apiKey, model, "Purpose", userMessage, state, GenericJsonSchema, GenericSchema);
-      specialistJson = r.value;
-
-      state.purpose = specialistJson.value || state.purpose || "";
-      state.active_specialist = activeSpecialist;
-      state.last_specialist_result = specialistJson;
-
-      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
-      break;
-    }
-
-    if (state.current_step === "bigwhy") {
-      activeSpecialist = "BigWhy";
-      const r = await runGenericAgent(apiKey, model, "Big Why", userMessage, state, GenericJsonSchema, GenericSchema);
-      specialistJson = r.value;
-
-      state.bigwhy = specialistJson.value || state.bigwhy || "";
-      state.active_specialist = activeSpecialist;
-      state.last_specialist_result = specialistJson;
-
-      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
-      break;
-    }
-
-    if (state.current_step === "role") {
-      activeSpecialist = "Role";
-      const r = await runGenericAgent(apiKey, model, "Role", userMessage, state, GenericJsonSchema, GenericSchema);
-      specialistJson = r.value;
-
-      state.role = specialistJson.value || state.role || "";
-      state.active_specialist = activeSpecialist;
-      state.last_specialist_result = specialistJson;
-
-      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
-      break;
-    }
-
-    if (state.current_step === "entity") {
-      activeSpecialist = "Entity";
-      const r = await runGenericAgent(apiKey, model, "Entity", userMessage, state, GenericJsonSchema, GenericSchema);
-      specialistJson = r.value;
-
-      state.entity = specialistJson.value || state.entity || "";
-      state.active_specialist = activeSpecialist;
-      state.last_specialist_result = specialistJson;
-
-      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
-      break;
-    }
-
-    if (state.current_step === "strategy") {
-      activeSpecialist = "Strategy";
-      const r = await runGenericAgent(apiKey, model, "Strategy", userMessage, state, StrategyJsonSchema, StrategySchema);
-      specialistJson = r.value;
-
-      state.strategy = specialistJson.strategy || state.strategy || "";
-      state.active_specialist = activeSpecialist;
-      state.last_specialist_result = specialistJson;
-
-      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
-      break;
-    }
-
-    if (state.current_step === "targetgroup") {
-      activeSpecialist = "TargetGroup";
-      const r = await runGenericAgent(apiKey, model, "Target Group", userMessage, state, GenericJsonSchema, GenericSchema);
-      specialistJson = r.value;
-
-      state.targetgroup = specialistJson.value || state.targetgroup || "";
-      state.active_specialist = activeSpecialist;
-      state.last_specialist_result = specialistJson;
-
-      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
-      break;
-    }
-
-    if (state.current_step === "productsservices") {
-      activeSpecialist = "ProductsAndServices";
+    const genericConfig = getGenericStepConfig(state.current_step);
+    if (genericConfig) {
+      activeSpecialist = genericConfig.activeSpecialist;
       const r = await runGenericAgent(
         apiKey,
         model,
-        "Products and Services",
+        genericConfig.stepLabelEn,
         userMessage,
         state,
-        GenericJsonSchema,
-        GenericSchema
+        genericConfig.jsonSchema,
+        genericConfig.zodSchema
       );
       specialistJson = r.value;
 
-      state.productsservices = specialistJson.value || state.productsservices || "";
+      const nextValue = extractConfiguredValue(specialistJson, genericConfig);
+      state[genericConfig.stateKey] = nextValue || state[genericConfig.stateKey] || "";
       state.active_specialist = activeSpecialist;
       state.last_specialist_result = specialistJson;
 
-      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
-      break;
-    }
-
-    if (state.current_step === "rulesofthegame") {
-      activeSpecialist = "RulesOfTheGame";
-      const r = await runGenericAgent(apiKey, model, "Rules of the game", userMessage, state, RulesJsonSchema, RulesSchema);
-      specialistJson = r.value;
-
-      state.rulesofthegame = specialistJson.rulesofthegame || state.rulesofthegame || "";
-      state.active_specialist = activeSpecialist;
-      state.last_specialist_result = specialistJson;
-
-      if (specialistJson.proceed_to_next === "true") state.current_step = nextStepOf(state.current_step);
-      break;
-    }
-
-    if (state.current_step === "presentation") {
-      activeSpecialist = "Presentation";
-      const r = await runGenericAgent(apiKey, model, "Presentation", userMessage, state, PresentationJsonSchema, PresentationSchema);
-      specialistJson = r.value;
-
-      state.presentation_brief = specialistJson.presentation_brief || state.presentation_brief || "";
-      state.active_specialist = activeSpecialist;
-      state.last_specialist_result = specialistJson;
-
+      if (shouldProceedToNext(specialistJson)) state.current_step = nextStepOf(state.current_step);
       break;
     }
 

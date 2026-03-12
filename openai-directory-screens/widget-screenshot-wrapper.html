@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Widget Screenshot Wrapper</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 706px;
+        height: 860px;
+        overflow: hidden;
+        background: #f5f0ea;
+      }
+
+      iframe {
+        display: block;
+        width: 706px;
+        height: 860px;
+        border: 0;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe
+      id="widgetFrame"
+      src="http://127.0.0.1:8787/ui/step-card?v=v89"
+      title="Business Strategy Canvas Builder"
+    ></iframe>
+    <script>
+      async function loadPayload() {
+        const response = await fetch("./step0-start-payload.json", { cache: "no-store" });
+        return response.json();
+      }
+
+      async function sendPayloadRepeatedly() {
+        const frame = document.getElementById("widgetFrame");
+        const payload = await loadPayload();
+        let attempts = 0;
+
+        const send = () => {
+          if (!frame.contentWindow) return;
+          frame.contentWindow.postMessage(
+            {
+              jsonrpc: "2.0",
+              method: "ui/notifications/tool-result",
+              params: payload,
+            },
+            "http://127.0.0.1:8787"
+          );
+          attempts += 1;
+          if (attempts >= 8) clearInterval(timer);
+        };
+
+        send();
+        const timer = setInterval(send, 400);
+      }
+
+      window.addEventListener("load", () => {
+        const frame = document.getElementById("widgetFrame");
+        frame.addEventListener("load", () => {
+          setTimeout(sendPayloadRepeatedly, 300);
+        });
+      });
+    </script>
+  </body>
+</html>

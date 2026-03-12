@@ -102,6 +102,37 @@ const PURPOSE_STEP_VIDEO_BY_LANG: Record<string, string> = {
   hu: "https://mycanvasvideos.s3.amazonaws.com/purpose/A%20le%CC%81teze%CC%81s%20e%CC%81rtelme%CC%81nek%20le%CC%81pe%CC%81se%CC%81ro%CC%8Bl.mp4",
 };
 
+const BIGWHY_STEP_VIDEO_BY_LANG: Record<string, string> = {
+  en: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/The%20Big%20Why%20step.mp4",
+  nl: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/De_grote_waarom_stap.mp4",
+  de: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/Der%20Schritt%20des%20gro%C3%9Fen%20Warums.mp4",
+  es: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/El%20paso%20del%20Gran%20Porque%CC%81.mp4",
+  fr: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/L%E2%80%99e%CC%81tape%20du%20Grand%20Pourquoi.mp4",
+  it: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/Il%20passo%20del%20Grande%20Perche%CC%81.mp4",
+  pt: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/A%20etapa%20do%20Grande%20Porque%CC%82.mp4",
+  id: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/Langkah%20%E2%80%9CMengapa%20Besar%E2%80%9D.mp4",
+  ja: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%E3%83%92%E3%82%99%E3%83%83%E3%82%AF%E3%82%99%E3%83%BB%E3%83%9B%E3%83%AF%E3%82%A4%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%95%E3%82%9A.mp4",
+  ko: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%E1%84%87%E1%85%B5%E1%86%A8%20%E1%84%8B%E1%85%AA%E1%84%8B%E1%85%B5%20%E1%84%83%E1%85%A1%E1%86%AB%E1%84%80%E1%85%A8.mp4",
+  ru: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%D0%A8%D0%B0%D0%B3%20%C2%AB%D0%91%D0%BE%D0%BB%D1%8C%D1%88%D0%BE%D0%B3%D0%BE%20%D0%9F%D0%BE%D1%87%D0%B5%D0%BC%D1%83%C2%BB.mp4",
+  zh: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%E2%80%9C%E4%BC%9F%E5%A4%A7%E4%B8%BA%E4%BB%80%E4%B9%88%E2%80%9D%E6%AD%A5%E9%AA%A4.mp4",
+  hu: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/A%20Nagy%20Mie%CC%81rt%20le%CC%81pe%CC%81s.mp4",
+};
+
+const ROLE_STEP_VIDEO_BY_LANG: Record<string, string> = {
+  en: "https://mycanvasvideos.s3.amazonaws.com/The_Role_step.mp4",
+  nl: "https://mycanvasvideos.s3.amazonaws.com/De_rol_stap.mp4",
+  de: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-German.mp4",
+  es: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Spanish.mp4",
+  fr: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-French.mp4",
+  it: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Italian.mp4",
+  pt: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Portuguese%20(Brazil).mp4",
+  hi: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Hindi.mp4",
+  id: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Indonesian.mp4",
+  ru: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Russian.mp4",
+  zh: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Chinese%20(Mandarin%2C%20Simplified).mp4",
+  hu: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Hungarian%20(Hungary).mp4",
+};
+
 function normalizeHttpUrl(rawUrl: string | null | undefined): string {
   const input = String(rawUrl || "").trim();
   if (!input) return "";
@@ -214,6 +245,18 @@ export function purposeStepVideoUrlForLang(lang: string | null | undefined): str
   const langBase = baseLang(lang);
   if (!langBase) return "";
   return normalizeHttpUrl(PURPOSE_STEP_VIDEO_BY_LANG[langBase] || "");
+}
+
+export function bigWhyStepVideoUrlForLang(lang: string | null | undefined): string {
+  const langBase = baseLang(lang);
+  if (!langBase) return "";
+  return normalizeHttpUrl(BIGWHY_STEP_VIDEO_BY_LANG[langBase] || "");
+}
+
+export function roleStepVideoUrlForLang(lang: string | null | undefined): string {
+  const langBase = baseLang(lang);
+  if (!langBase) return "";
+  return normalizeHttpUrl(ROLE_STEP_VIDEO_BY_LANG[langBase] || "");
 }
 
 export function hasPrestartContentForLang(lang: string | null | undefined): boolean {

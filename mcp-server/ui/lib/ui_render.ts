@@ -11,6 +11,8 @@ import {
   benProfileVideoUrlForLang,
   dreamStepVideoUrlForLang,
   purposeStepVideoUrlForLang,
+  bigWhyStepVideoUrlForLang,
+  roleStepVideoUrlForLang,
   hasPrestartContentForLang,
   getSectionTitle,
   setRuntimeUiStrings,
@@ -117,6 +119,30 @@ export function shouldRenderPurposeStepIntroVideo(params: {
   if (params.showStepIntroChrome !== true) return false;
   if (params.wordingChoiceActive === true) return false;
   return Boolean(purposeStepVideoUrlForLang(params.lang));
+}
+
+export function shouldRenderBigWhyStepIntroVideo(params: {
+  currentStep?: string | null;
+  showStepIntroChrome?: boolean;
+  wordingChoiceActive?: boolean;
+  lang?: string | null;
+}): boolean {
+  if (String(params.currentStep || "").trim() !== "bigwhy") return false;
+  if (params.showStepIntroChrome !== true) return false;
+  if (params.wordingChoiceActive === true) return false;
+  return Boolean(bigWhyStepVideoUrlForLang(params.lang));
+}
+
+export function shouldRenderRoleStepIntroVideo(params: {
+  currentStep?: string | null;
+  showStepIntroChrome?: boolean;
+  wordingChoiceActive?: boolean;
+  lang?: string | null;
+}): boolean {
+  if (String(params.currentStep || "").trim() !== "role") return false;
+  if (params.showStepIntroChrome !== true) return false;
+  if (params.wordingChoiceActive === true) return false;
+  return Boolean(roleStepVideoUrlForLang(params.lang));
 }
 
 export function dreamExerciseButtonLabelKeyForState(
@@ -396,6 +422,20 @@ function appendPurposeStepIntroVideo(cardDescEl: HTMLElement, lang: string | nul
   const videoUrl = purposeStepVideoUrlForLang(lang);
   if (!videoUrl) return;
   appendVideoEmbed(cardDescEl, videoUrl, "purpose-step-video");
+}
+
+function appendBigWhyStepIntroVideo(cardDescEl: HTMLElement, lang: string | null | undefined): void {
+  if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;
+  const videoUrl = bigWhyStepVideoUrlForLang(lang);
+  if (!videoUrl) return;
+  appendVideoEmbed(cardDescEl, videoUrl, "bigwhy-step-video");
+}
+
+function appendRoleStepIntroVideo(cardDescEl: HTMLElement, lang: string | null | undefined): void {
+  if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;
+  const videoUrl = roleStepVideoUrlForLang(lang);
+  if (!videoUrl) return;
+  appendVideoEmbed(cardDescEl, videoUrl, "role-step-video");
 }
 
 function activeStepLabel(
@@ -1234,6 +1274,20 @@ export function render(overrideToolOutput?: unknown): void {
         wordingChoiceActive,
         lang,
       });
+    const shouldAppendBigWhyStepVideo =
+      shouldRenderBigWhyStepIntroVideo({
+        currentStep: current,
+        showStepIntroChrome,
+        wordingChoiceActive,
+        lang,
+      });
+    const shouldAppendRoleStepVideo =
+      shouldRenderRoleStepIntroVideo({
+        currentStep: current,
+        showStepIntroChrome,
+        wordingChoiceActive,
+        lang,
+      });
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
     const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
@@ -1243,6 +1297,10 @@ export function render(overrideToolOutput?: unknown): void {
         appendDreamStepIntroVideo(cardDescEl, lang);
       } else if (shouldAppendPurposeStepVideo) {
         appendPurposeStepIntroVideo(cardDescEl, lang);
+      } else if (shouldAppendBigWhyStepVideo) {
+        appendBigWhyStepIntroVideo(cardDescEl, lang);
+      } else if (shouldAppendRoleStepVideo) {
+        appendRoleStepIntroVideo(cardDescEl, lang);
       }
     }
     if (isBenProfile) {

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { runCanvasStep } from "./agents.ts";
+import { GENERIC_STEP_CONFIG, runCanvasStep, type StepId } from "./agents.ts";
 
 type FetchCall = {
   url: string;
@@ -96,6 +96,95 @@ test("runCanvasStep handles productsservices without falling back to step_0", as
       assert.equal(
         String(result.state.productsservices || ""),
         "Strategy sessions and implementation support"
+      );
+    }
+  );
+});
+
+test("all post-dream generic steps are covered by the config map", () => {
+  const expected: StepId[] = [
+    "purpose",
+    "bigwhy",
+    "role",
+    "entity",
+    "strategy",
+    "targetgroup",
+    "productsservices",
+    "rulesofthegame",
+    "presentation",
+  ];
+
+  assert.deepEqual(Object.keys(GENERIC_STEP_CONFIG).sort(), expected.sort());
+});
+
+test("runCanvasStep maps strategy output into state.strategy", async () => {
+  process.env.OPENAI_API_KEY = "test-key";
+
+  await withMockFetch(
+    (call) => {
+      const schema = call.body?.text?.format?.schema;
+      assert.equal(schema?.type, "object");
+      assert.equal(schema?.additionalProperties, false);
+      assert.equal(schema?.title, "Strategy");
+      assert.equal(schema?.properties?.strategy?.type, "string");
+      assert.deepEqual(schema?.properties?.proceed_to_next?.enum, ["true", "false"]);
+      assert.ok(Array.isArray(schema?.required));
+      assert.ok(schema.required.includes("strategy"));
+
+      return makeJsonResponse({
+        output_parsed: {
+          action: "ASK",
+          message: "Strategy draft",
+          question: "What is your strategy?",
+          refined_formulation: "",
+          confirmation_question: "",
+          strategy: "Own a narrow premium niche",
+          proceed_to_next: "false",
+        },
+      });
+    },
+    async () => {
+      const result = await runCanvasStep({
+        current_step_id: "strategy",
+        user_message: "help me define strategy",
+        state: { current_step: "strategy" },
+      });
+
+      assert.equal(result.current_step_id, "strategy");
+      assert.equal(result.active_specialist, "Strategy");
+      assert.equal(String(result.state.strategy || ""), "Own a narrow premium niche");
+    }
+  );
+});
+
+test("runCanvasStep maps presentation output into state.presentation_brief", async () => {
+  process.env.OPENAI_API_KEY = "test-key";
+
+  await withMockFetch(
+    () =>
+      makeJsonResponse({
+        output_parsed: {
+          action: "ASK",
+          message: "Presentation draft",
+          question: "What should the presentation cover?",
+          refined_formulation: "",
+          confirmation_question: "",
+          presentation_brief: "A concise strategy deck for stakeholders",
+          proceed_to_next: "false",
+        },
+      }),
+    async () => {
+      const result = await runCanvasStep({
+        current_step_id: "presentation",
+        user_message: "make the brief",
+        state: { current_step: "presentation" },
+      });
+
+      assert.equal(result.current_step_id, "presentation");
+      assert.equal(result.active_specialist, "Presentation");
+      assert.equal(
+        String(result.state.presentation_brief || ""),
+        "A concise strategy deck for stakeholders"
       );
     }
   );

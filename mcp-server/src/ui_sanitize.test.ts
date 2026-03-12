@@ -1623,9 +1623,37 @@ test("bundled purpose-step intro movie uses language-mapped SSOT links and hides
   assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/purpose\/A%CC%80_propos_de_la_raison_d%E2%80%99e%CC%82tre\.mp4"/);
   assert.match(source, /ru:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/purpose\/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9F%D1%80%D0%B5%D0%B4%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5%C2%BB\.mp4"/);
   assert.match(source, /function purposeStepVideoUrlForLang\(lang\)/);
-  assert.match(source, /const shouldAppendPurposeStepVideo = current === "purpose" && showStepIntroChrome;/);
+  assert.match(source, /const shouldAppendPurposeStepVideo = shouldRenderPurposeStepIntroVideo\(\{/);
   assert.match(source, /appendPurposeStepIntroVideo\(cardDescEl, lang\);/);
   assert.match(source, /const videoUrl = purposeStepVideoUrlForLang\(lang\);/);
+  assert.match(source, /if \(!videoUrl\) return;/);
+});
+
+test("bundled bigwhy-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /const BIGWHY_STEP_VIDEO_BY_LANG = \{/);
+  assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Bigwhy\/The%20Big%20Why%20step\.mp4"/);
+  assert.match(source, /nl:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Bigwhy\/De_grote_waarom_stap\.mp4"/);
+  assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Bigwhy\/L%E2%80%99e%CC%81tape%20du%20Grand%20Pourquoi\.mp4"/);
+  assert.match(source, /zh:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Bigwhy\/%E2%80%9C%E4%BC%9F%E5%A4%A7%E4%B8%BA%E4%BB%80%E4%B9%88%E2%80%9D%E6%AD%A5%E9%AA%A4\.mp4"/);
+  assert.match(source, /function bigWhyStepVideoUrlForLang\(lang\)/);
+  assert.match(source, /const shouldAppendBigWhyStepVideo = shouldRenderBigWhyStepIntroVideo\(\{/);
+  assert.match(source, /appendBigWhyStepIntroVideo\(cardDescEl, lang\);/);
+  assert.match(source, /const videoUrl = bigWhyStepVideoUrlForLang\(lang\);/);
+  assert.match(source, /if \(!videoUrl\) return;/);
+});
+
+test("bundled role-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /const ROLE_STEP_VIDEO_BY_LANG = \{/);
+  assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/The_Role_step\.mp4"/);
+  assert.match(source, /nl:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/De_rol_stap\.mp4"/);
+  assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Role\/The_Role_step-French\.mp4"/);
+  assert.match(source, /zh:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Role\/The_Role_step-Chinese%20\(Mandarin%2C%20Simplified\)\.mp4"/);
+  assert.match(source, /function roleStepVideoUrlForLang\(lang\)/);
+  assert.match(source, /const shouldAppendRoleStepVideo = shouldRenderRoleStepIntroVideo\(\{/);
+  assert.match(source, /appendRoleStepIntroVideo\(cardDescEl, lang\);/);
+  assert.match(source, /const videoUrl = roleStepVideoUrlForLang\(lang\);/);
   assert.match(source, /if \(!videoUrl\) return;/);
 });
 

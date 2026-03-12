@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenAI Directory – Business Strategy Canvas Builder Screenshots</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --cream: #f5f0ea;
+        --text-dark: #1a1714;
+        --text-mid: #6b635a;
+        --orange: #e8742a;
+        --orange-soft: rgba(232,116,42,0.10);
+        --warning-bg: #fef2f2;
+        --warning-border: #fecaca;
+        --warning-text: #b91c1c;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px 24px 48px;
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--text-dark);
+        background: #fff;
+        max-width: 900px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      h1 {
+        font-size: 22px;
+        font-weight: 600;
+        margin: 0 0 24px;
+      }
+
+      h2 {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 20px 0 12px;
+      }
+
+      p, ul {
+        margin: 0 0 12px;
+        color: var(--text-mid);
+      }
+
+      ul {
+        padding-left: 20px;
+      }
+
+      li { margin-bottom: 6px; }
+
+      a {
+        color: var(--orange);
+        text-decoration: none;
+      }
+      a:hover { text-decoration: underline; }
+
+      .warning {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 16px;
+        margin: 20px 0;
+        background: var(--warning-bg);
+        border: 1px solid var(--warning-border);
+        border-radius: 8px;
+      }
+      .warning::before {
+        content: "!";
+        flex-shrink: 0;
+        width: 24px;
+        height: 24px;
+        background: var(--warning-text);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .warning p {
+        margin: 0;
+        color: var(--warning-text);
+        font-weight: 500;
+      }
+
+      .example-section {
+        margin: 32px 0;
+      }
+      .example-label {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-mid);
+        margin-bottom: 16px;
+      }
+
+      .example-row {
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+      .example-block {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .example-caption {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-mid);
+      }
+
+      /* Desktop browser mockup */
+      .browser-frame {
+        flex: 1;
+        min-width: 320px;
+        max-width: 706px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06);
+        overflow: hidden;
+      }
+      .browser-chrome {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: #f1f1f1;
+        border-bottom: 1px solid #e5e5e5;
+      }
+      .browser-dots {
+        display: flex;
+        gap: 6px;
+      }
+      .browser-dots span {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ddd;
+      }
+      .browser-dots span:nth-child(1) { background: #ff5f57; }
+      .browser-dots span:nth-child(2) { background: #febc2e; }
+      .browser-dots span:nth-child(3) { background: #28c840; }
+      .browser-url {
+        flex: 1;
+        margin: 0 12px;
+        padding: 8px 14px;
+        background: #fff;
+        border-radius: 6px;
+        font-size: 12px;
+        color: var(--text-mid);
+        border: 1px solid #e5e5e5;
+      }
+      .browser-url::before {
+        content: "chatgpt.com";
+      }
+      .browser-content {
+        background: var(--cream);
+        min-height: 400px;
+      }
+      .browser-content img {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: 860px;
+        object-fit: contain;
+      }
+
+      /* Mobile phone mockup */
+      .phone-frame {
+        flex: 0 0 auto;
+        width: 280px;
+        background: #1a1a1a;
+        border-radius: 32px;
+        padding: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      }
+      .phone-screen {
+        background: var(--cream);
+        border-radius: 24px;
+        overflow: hidden;
+        aspect-ratio: 9/19.5;
+      }
+      .phone-notch {
+        height: 28px;
+        background: #1a1a1a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: #fff;
+      }
+      .phone-content {
+        height: calc(100% - 28px);
+        overflow: hidden;
+        background: var(--cream);
+      }
+      .phone-content img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top;
+      }
+
+      .upload-section {
+        margin-top: 40px;
+        padding: 24px;
+        border-radius: 12px;
+        text-align: center;
+        background: #fafafa;
+      }
+      .drop-zone {
+        margin-top: 16px;
+        min-height: 120px;
+        border: 2px dashed #e5e5e5;
+        border-radius: 8px;
+        padding: 20px;
+        background: #fff;
+      }
+      .drop-zone.dragover { border-color: var(--orange); background: var(--orange-soft); }
+      .drop-zone-placeholder {
+        color: var(--text-mid);
+        font-size: 13px;
+      }
+      .drop-zone-previews {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: center;
+        margin-top: 12px;
+      }
+      .preview-thumb {
+        width: 120px;
+        height: 120px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid #e5e5e5;
+      }
+      .upload-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 24px;
+        background: var(--orange);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .upload-btn:hover {
+        background: #d6631f;
+      }
+      .upload-btn svg {
+        width: 20px;
+        height: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Screenshots for OpenAI Directory</h1>
+
+    <h2>Requirements & Content Rules</h2>
+    <ul>
+      <li><strong>Screenshots:</strong> Minimum 1, maximum 4, all in 2x (retina) quality.</li>
+      <li><strong>Formats:</strong> PNG or JPG.</li>
+      <li><strong>Dimensions:</strong> Width 706px, height 400–860px (860px recommended).</li>
+      <li><strong>Figma template:</strong> Use the <a href="#" target="_blank" rel="noopener">public Figma template</a> to export compliant images easily.</li>
+      <li><strong>Content rules:</strong>
+        <ul>
+          <li>Show only the app widget UI (no ChatGPT UI).</li>
+          <li>Do not include user prompts or model responses in the image.</li>
+          <li>Avoid embedded text; localization happens via fields.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <div class="warning">
+      <p>Ignoring these content rules may lead to app rejection.</p>
+    </div>
+
+    <div class="example-section">
+      <div class="example-label">Example:</div>
+      <div class="example-row">
+        <div class="example-block">
+          <div class="example-caption">Desktop</div>
+          <div class="browser-frame">
+            <div class="browser-chrome">
+              <div class="browser-dots">
+                <span></span><span></span><span></span>
+              </div>
+              <div class="browser-url"></div>
+            </div>
+            <div class="browser-content">
+              <img src="widget-directory-full-706x860.png" alt="Business Strategy Canvas Builder – desktop" />
+            </div>
+          </div>
+        </div>
+        <div class="example-block">
+          <div class="example-caption">iPhone</div>
+          <div class="phone-frame">
+            <div class="phone-screen">
+              <div class="phone-notch">9:41</div>
+              <div class="phone-content">
+                <img src="widget-directory-tight-706x860.png" alt="Business Strategy Canvas Builder – iPhone" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="upload-section">
+      <button type="button" class="upload-btn" id="uploadBtn">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Upload images
+      </button>
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-zone-placeholder" id="dropPlaceholder">Drop images here or click above</div>
+        <div class="drop-zone-previews" id="dropPreviews"></div>
+      </div>
+    </div>
+
+    <script>
+      const dropZone = document.getElementById('dropZone');
+      const dropPlaceholder = document.getElementById('dropPlaceholder');
+      const dropPreviews = document.getElementById('dropPreviews');
+
+      function showPreviews(files) {
+        dropPlaceholder.style.display = files.length ? 'none' : 'block';
+        dropPreviews.innerHTML = '';
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          if (!f.type.startsWith('image/')) continue;
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(f);
+          img.alt = f.name;
+          img.className = 'preview-thumb';
+          dropPreviews.appendChild(img);
+        }
+      }
+
+      document.getElementById('uploadBtn').addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/png,image/jpeg,image/jpg';
+        input.multiple = true;
+        input.onchange = () => {
+          if (input.files.length) showPreviews(Array.from(input.files));
+        };
+        input.click();
+      });
+
+      dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+        if (files.length) showPreviews(files);
+      });
+    </script>
+  </body>
+</html>

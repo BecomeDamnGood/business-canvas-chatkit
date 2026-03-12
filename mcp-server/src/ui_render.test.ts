@@ -9,7 +9,9 @@ import {
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
   shouldRetainDreamScoringClientScores,
+  shouldRenderBigWhyStepIntroVideo,
   shouldRenderPurposeStepIntroVideo,
+  shouldRenderRoleStepIntroVideo,
   shouldShowTextInputForWordingChoice,
   shouldSuppressPromptForWordingChoice,
   shouldSuppressMainCardForWordingChoice,
@@ -19,6 +21,8 @@ import {
   benProfileVideoUrlForLang,
   dreamStepVideoUrlForLang,
   purposeStepVideoUrlForLang,
+  bigWhyStepVideoUrlForLang,
+  roleStepVideoUrlForLang,
 } from "../ui/lib/ui_constants.js";
 
 test("shouldSuppressMainCardForWordingChoice suppresses the main card for wording-choice view variants", () => {
@@ -486,6 +490,66 @@ test("purposeStepVideoUrlForLang returns only configured language-specific video
   assert.equal(purposeStepVideoUrlForLang("ar"), "");
 });
 
+test("bigWhyStepVideoUrlForLang returns only configured language-specific videos", () => {
+  assert.equal(
+    bigWhyStepVideoUrlForLang("en"),
+    "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/The%20Big%20Why%20step.mp4"
+  );
+  assert.equal(
+    bigWhyStepVideoUrlForLang("nl"),
+    "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/De_grote_waarom_stap.mp4"
+  );
+  assert.equal(
+    bigWhyStepVideoUrlForLang("de"),
+    "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/Der%20Schritt%20des%20gro%C3%9Fen%20Warums.mp4"
+  );
+  assert.equal(
+    bigWhyStepVideoUrlForLang("fr"),
+    "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/L%E2%80%99e%CC%81tape%20du%20Grand%20Pourquoi.mp4"
+  );
+  assert.equal(
+    bigWhyStepVideoUrlForLang("pt-BR"),
+    "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/A%20etapa%20do%20Grande%20Porque%CC%82.mp4"
+  );
+  assert.equal(
+    bigWhyStepVideoUrlForLang("ja"),
+    "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%E3%83%92%E3%82%99%E3%83%83%E3%82%AF%E3%82%99%E3%83%BB%E3%83%9B%E3%83%AF%E3%82%A4%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%95%E3%82%9A.mp4"
+  );
+  assert.equal(
+    bigWhyStepVideoUrlForLang("zh-Hans"),
+    "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%E2%80%9C%E4%BC%9F%E5%A4%A7%E4%B8%BA%E4%BB%80%E4%B9%88%E2%80%9D%E6%AD%A5%E9%AA%A4.mp4"
+  );
+  assert.equal(bigWhyStepVideoUrlForLang("hi"), "");
+});
+
+test("roleStepVideoUrlForLang returns only configured language-specific videos", () => {
+  assert.equal(
+    roleStepVideoUrlForLang("en"),
+    "https://mycanvasvideos.s3.amazonaws.com/The_Role_step.mp4"
+  );
+  assert.equal(
+    roleStepVideoUrlForLang("nl"),
+    "https://mycanvasvideos.s3.amazonaws.com/De_rol_stap.mp4"
+  );
+  assert.equal(
+    roleStepVideoUrlForLang("de"),
+    "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-German.mp4"
+  );
+  assert.equal(
+    roleStepVideoUrlForLang("fr"),
+    "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-French.mp4"
+  );
+  assert.equal(
+    roleStepVideoUrlForLang("pt-BR"),
+    "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Portuguese%20(Brazil).mp4"
+  );
+  assert.equal(
+    roleStepVideoUrlForLang("zh-Hans"),
+    "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-Chinese%20(Mandarin%2C%20Simplified).mp4"
+  );
+  assert.equal(roleStepVideoUrlForLang("ja"), "");
+});
+
 test("shouldRenderPurposeStepIntroVideo returns true for configured languages in intro state", () => {
   assert.equal(
     shouldRenderPurposeStepIntroVideo({
@@ -523,6 +587,66 @@ test("shouldRenderPurposeStepIntroVideo returns false outside intro state or whi
   assert.equal(
     shouldRenderPurposeStepIntroVideo({
       currentStep: "purpose",
+      showStepIntroChrome: true,
+      wordingChoiceActive: true,
+      lang: "en",
+    }),
+    false
+  );
+});
+
+test("shouldRenderBigWhyStepIntroVideo returns true only for configured intro states", () => {
+  assert.equal(
+    shouldRenderBigWhyStepIntroVideo({
+      currentStep: "bigwhy",
+      showStepIntroChrome: true,
+      wordingChoiceActive: false,
+      lang: "nl",
+    }),
+    true
+  );
+  assert.equal(
+    shouldRenderBigWhyStepIntroVideo({
+      currentStep: "bigwhy",
+      showStepIntroChrome: true,
+      wordingChoiceActive: false,
+      lang: "hi",
+    }),
+    false
+  );
+  assert.equal(
+    shouldRenderBigWhyStepIntroVideo({
+      currentStep: "bigwhy",
+      showStepIntroChrome: false,
+      wordingChoiceActive: false,
+      lang: "en",
+    }),
+    false
+  );
+});
+
+test("shouldRenderRoleStepIntroVideo returns true only for configured intro states", () => {
+  assert.equal(
+    shouldRenderRoleStepIntroVideo({
+      currentStep: "role",
+      showStepIntroChrome: true,
+      wordingChoiceActive: false,
+      lang: "en",
+    }),
+    true
+  );
+  assert.equal(
+    shouldRenderRoleStepIntroVideo({
+      currentStep: "role",
+      showStepIntroChrome: true,
+      wordingChoiceActive: false,
+      lang: "ja",
+    }),
+    false
+  );
+  assert.equal(
+    shouldRenderRoleStepIntroVideo({
+      currentStep: "role",
       showStepIntroChrome: true,
       wordingChoiceActive: true,
       lang: "en",
