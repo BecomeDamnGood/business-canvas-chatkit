@@ -1990,6 +1990,35 @@
     if (!/^[A-Za-z0-9_-]{6,}$/.test(videoId)) return "";
     return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`;
   }
+  function normalizeHttpUrl(rawUrl) {
+    const input = String(rawUrl || "").trim();
+    if (!input) return "";
+    try {
+      const parsed = new URL(input);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+      return parsed.toString();
+    } catch {
+      return "";
+    }
+  }
+  function augmentYouTubeEmbedUrl(embedUrl, options = {}) {
+    const input = String(embedUrl || "").trim();
+    if (!input) return "";
+    let parsed;
+    try {
+      parsed = new URL(input);
+    } catch {
+      return input;
+    }
+    const host = parsed.hostname.toLowerCase();
+    const isYouTubeEmbed = host === "www.youtube.com" || host === "youtube.com" || host === "www.youtube-nocookie.com" || host === "youtube-nocookie.com";
+    if (!isYouTubeEmbed) return input;
+    const providerOrigin = normalizeHttpUrl(options.providerOrigin);
+    if (providerOrigin) parsed.searchParams.set("origin", providerOrigin);
+    const widgetReferrer = normalizeHttpUrl(options.widgetReferrer);
+    if (widgetReferrer) parsed.searchParams.set("widget_referrer", widgetReferrer);
+    return parsed.toString();
+  }
   function baseLang(lang) {
     const l = String(lang || "").trim().toLowerCase();
     if (!l) return "";
@@ -4005,9 +4034,13 @@
     const videoWrap = document.createElement("div");
     videoWrap.className = "cardDesc-video";
     const iframe = document.createElement("iframe");
-    iframe.src = safeVideoUrl;
+    iframe.src = augmentYouTubeEmbedUrl(safeVideoUrl, {
+      providerOrigin: resolveWidgetProviderOrigin(),
+      widgetReferrer: resolveWidgetReferrerContext()
+    });
     iframe.title = String(title || "").trim() || "embedded-video";
     iframe.setAttribute("allow", "autoplay; encrypted-media; fullscreen");
+    iframe.referrerPolicy = "strict-origin-when-cross-origin";
     iframe.allowFullscreen = true;
     videoWrap.appendChild(iframe);
     if (prepend) {
@@ -4015,6 +4048,23 @@
       return;
     }
     cardDescEl.appendChild(videoWrap);
+  }
+  function resolveWidgetProviderOrigin() {
+    if (typeof window === "undefined") return "";
+    try {
+      return String(new URL(window.location.href).origin || "").trim();
+    } catch {
+      return "";
+    }
+  }
+  function resolveWidgetReferrerContext() {
+    const hostOrigin = String(resolveAllowedHostOrigin() || "").trim();
+    if (hostOrigin && hostOrigin !== "*") return hostOrigin;
+    if (typeof document !== "undefined") {
+      const referrer = String(document.referrer || "").trim();
+      if (referrer) return referrer;
+    }
+    return "";
   }
   function prependBenProfileVideo(cardDescEl, lang) {
     if (!cardDescEl || cardDescEl.querySelector(".cardDesc-video")) return;

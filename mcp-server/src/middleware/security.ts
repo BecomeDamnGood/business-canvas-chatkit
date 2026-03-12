@@ -11,6 +11,7 @@ interface CSPOptions {
     styles?: string[];
     images?: string[];
     connects?: string[];
+    frames?: string[];
   };
 }
 
@@ -30,6 +31,13 @@ const DEFAULT_CSP_OPTIONS: CSPOptions = {
     styles: [],
     images: [],
     connects: [],
+    frames: [
+      "'self'",
+      "https://www.youtube.com",
+      "https://www.youtube-nocookie.com",
+      "https://youtu.be",
+      "https://app.heygen.com",
+    ],
   },
 };
 
@@ -86,8 +94,10 @@ export function buildCSPHeader(options: CSPOptions = DEFAULT_CSP_OPTIONS): strin
   // Object sources (for embeds)
   directives.push("object-src 'none'");
 
-  // Frames are not needed inside the widget runtime.
-  directives.push("frame-src 'none'");
+  const frameSrc: string[] = options.allowedDomains?.frames?.length
+    ? [...options.allowedDomains.frames]
+    : ["'none'"];
+  directives.push(`frame-src ${frameSrc.join(" ")}`);
 
   // Base URI
   directives.push("base-uri 'self'");

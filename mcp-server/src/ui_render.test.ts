@@ -14,7 +14,12 @@ import {
   shouldSuppressPromptForWordingChoice,
   shouldSuppressMainCardForWordingChoice,
 } from "../ui/lib/ui_render.js";
-import { benProfileVideoUrlForLang, dreamStepVideoUrlForLang, purposeStepVideoUrlForLang } from "../ui/lib/ui_constants.js";
+import {
+  augmentYouTubeEmbedUrl,
+  benProfileVideoUrlForLang,
+  dreamStepVideoUrlForLang,
+  purposeStepVideoUrlForLang,
+} from "../ui/lib/ui_constants.js";
 
 test("shouldSuppressMainCardForWordingChoice suppresses the main card for wording-choice view variants", () => {
   assert.equal(
@@ -304,6 +309,32 @@ test("purposeStepVideoUrlForLang returns only configured language-specific video
   assert.match(purposeStepVideoUrlForLang("it"), /youtube-nocookie\.com\/embed\/tISM_mLZDgk/);
   assert.match(purposeStepVideoUrlForLang("nl"), /youtube-nocookie\.com\/embed\/oS0tKfpLaYg/);
   assert.match(purposeStepVideoUrlForLang("ru"), /youtube-nocookie\.com\/embed\/IbLMHOMLwHU/);
+});
+
+test("augmentYouTubeEmbedUrl adds explicit mobile-safe YouTube context", () => {
+  const actual = augmentYouTubeEmbedUrl(
+    "https://www.youtube-nocookie.com/embed/OhtRcBRmiQ0?autoplay=1&rel=0&playsinline=1",
+    {
+      providerOrigin: "https://chat.openai.com",
+      widgetReferrer: "https://chat.openai.com/g/g-123",
+    }
+  );
+
+  assert.match(actual, /origin=https%3A%2F%2Fchat\.openai\.com/);
+  assert.match(actual, /widget_referrer=https%3A%2F%2Fchat\.openai\.com%2Fg%2Fg-123/);
+});
+
+test("augmentYouTubeEmbedUrl ignores invalid context inputs", () => {
+  const actual = augmentYouTubeEmbedUrl(
+    "https://www.youtube-nocookie.com/embed/OhtRcBRmiQ0?autoplay=1&rel=0&playsinline=1",
+    {
+      providerOrigin: "javascript:alert(1)",
+      widgetReferrer: "not-a-url",
+    }
+  );
+
+  assert.doesNotMatch(actual, /origin=/);
+  assert.doesNotMatch(actual, /widget_referrer=/);
 });
 
 test("shouldRenderPurposeStepIntroVideo returns true for configured languages in intro state", () => {

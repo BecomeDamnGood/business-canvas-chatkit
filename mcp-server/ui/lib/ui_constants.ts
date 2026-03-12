@@ -100,6 +100,52 @@ function normalizeYouTubeEmbedUrl(rawUrl: string): string {
   return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1`;
 }
 
+function normalizeHttpUrl(rawUrl: string | null | undefined): string {
+  const input = String(rawUrl || "").trim();
+  if (!input) return "";
+  try {
+    const parsed = new URL(input);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+export function augmentYouTubeEmbedUrl(
+  embedUrl: string,
+  options: {
+    providerOrigin?: string | null | undefined;
+    widgetReferrer?: string | null | undefined;
+  } = {}
+): string {
+  const input = String(embedUrl || "").trim();
+  if (!input) return "";
+
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    return input;
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const isYouTubeEmbed =
+    host === "www.youtube.com" ||
+    host === "youtube.com" ||
+    host === "www.youtube-nocookie.com" ||
+    host === "youtube-nocookie.com";
+  if (!isYouTubeEmbed) return input;
+
+  const providerOrigin = normalizeHttpUrl(options.providerOrigin);
+  if (providerOrigin) parsed.searchParams.set("origin", providerOrigin);
+
+  const widgetReferrer = normalizeHttpUrl(options.widgetReferrer);
+  if (widgetReferrer) parsed.searchParams.set("widget_referrer", widgetReferrer);
+
+  return parsed.toString();
+}
+
 const CRITICAL_PRESTART_KEYS = [
   "prestart.headline",
   "prestart.proven.title",

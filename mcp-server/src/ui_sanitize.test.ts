@@ -1640,3 +1640,12 @@ test("bundled purpose-step intro movie uses language-mapped SSOT links and hides
   assert.match(source, /const videoUrl = purposeStepVideoUrlForLang\(lang\);/);
   assert.match(source, /if \(!videoUrl\) return;/);
 });
+
+test("bundled YouTube embeds include explicit host context for mobile runtimes", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /function augmentYouTubeEmbedUrl\(embedUrl, options = \{\}\)/);
+  assert.match(source, /parsed\.searchParams\.set\("origin", providerOrigin\)/);
+  assert.match(source, /parsed\.searchParams\.set\("widget_referrer", widgetReferrer\)/);
+  assert.match(source, /iframe\.src = augmentYouTubeEmbedUrl\(safeVideoUrl, \{/);
+  assert.match(source, /iframe\.referrerPolicy = "strict-origin-when-cross-origin"/);
+});
