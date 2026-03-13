@@ -82,6 +82,7 @@ export const UI_STRINGS_LOCALE_ES: Record<string, string> = {
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_EXPLAIN_MORE": "Explica por qué importa tener una Entidad",
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_FORMULATE": "Dame 3 sugerencias de Entidad",
     "menuLabel.PRESENTATION_MENU_ASK.ACTION_PRESENTATION_MAKE": "Crea mi presentación ahora",
+    "menuLabel.PRESENTATION_MENU_RECREATE.ACTION_PRESENTATION_MAKE": "Vuelve a crear mi presentación",
     "menuLabel.PRODUCTSSERVICES_MENU_CONFIRM.ACTION_PRODUCTSSERVICES_CONFIRM": "Esto es todo lo que ofrecemos, continúa al paso 10 Reglas del juego",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_CONFIRM_SINGLE": "Estoy satisfecho con esta redacción, por favor continúa al paso 4 el Gran Porqué.",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS": "Hazme 3 preguntas para ayudarme a definir el Razón de ser.",

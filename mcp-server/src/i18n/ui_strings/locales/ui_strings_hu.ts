@@ -94,6 +94,7 @@ export const UI_STRINGS_LOCALE_HU: Record<string, string> = {
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_EXPLAIN_MORE": "Magyarázd el, miért fontos egy Entitás",
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_FORMULATE": "Adj 3 Entitás-javaslatot",
     "menuLabel.PRESENTATION_MENU_ASK.ACTION_PRESENTATION_MAKE": "Készítsd el most a prezentációmat",
+    "menuLabel.PRESENTATION_MENU_RECREATE.ACTION_PRESENTATION_MAKE": "Készítsd el újra a prezentációmat",
     "menuLabel.PRODUCTSSERVICES_MENU_CONFIRM.ACTION_PRODUCTSSERVICES_CONFIRM": "Ez minden, amit kínálunk, folytatás a 10. lépéssel: Játékszabályok",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_CONFIRM_SINGLE": "Elégedett vagyok ezzel a megfogalmazással, kérlek folytasd a 4. lépéssel: Nagy Miért.",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS": "Tegyél fel 3 kérdést, hogy segíts meghatározni a Cél-t.",

@@ -802,7 +802,7 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
 
 function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: string): boolean {
   const wrap = document.getElementById("wordingChoiceWrap");
-  const headingEl = document.getElementById("wordingChoiceHeading");
+  const feedbackEl = document.getElementById("wordingChoiceFeedback");
   const userTextEl = document.getElementById("wordingChoiceUserText");
   const userListEl = document.getElementById("wordingChoiceUserList");
   const suggestionTextEl = document.getElementById("wordingChoiceSuggestionText");
@@ -815,7 +815,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
   const suggestionBtn = document.getElementById("wordingChoicePickSuggestion") as HTMLButtonElement | null;
   if (
     !wrap ||
-    !headingEl ||
+    !feedbackEl ||
     !userTextEl ||
     !userListEl ||
     !suggestionTextEl ||
@@ -851,6 +851,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
 
   const mode = String(wording.mode || "text") === "list" ? "list" : "text";
   const variant = String(wording.variant || "default").trim().toLowerCase();
+  const feedbackReasonText = String(wording.feedback_reason_text || "").trim();
   const userText = String(wording.user_text || "").trim();
   const suggestionText = String(wording.suggestion_text || "").trim();
   const userLabelFromPayload = String(wording.user_label || "").trim();
@@ -879,8 +880,8 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
       .replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "")
       .trim();
 
-  headingEl.textContent = "";
-  (headingEl as HTMLElement).style.display = "none";
+  feedbackEl.textContent = feedbackReasonText;
+  (feedbackEl as HTMLElement).style.display = feedbackReasonText ? "block" : "none";
   retainedHeadingEl.textContent = instructionParts.retainedHeading;
   retainedListEl.innerHTML = "";
   for (const item of instructionParts.retainedItems) {

@@ -31,6 +31,7 @@ import {
   resolveBusinessListTurn,
   type BusinessListTurnResolution,
 } from "./run_step_business_list_turn.js";
+import { isSingleValueFeedbackStep } from "../core/feedback_policy.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 type RunStepPipelineFlatPorts<TPayload> =
@@ -72,15 +73,6 @@ const AUTOSUGGEST_STEP_IDS = new Set<string>([
   "targetgroup",
   "productsservices",
   "rulesofthegame",
-]);
-
-const ACCEPTED_OUTPUT_SINGLE_VALUE_STEP_IDS = new Set<string>([
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "targetgroup",
 ]);
 
 function isNonContributingWordingIntent(intentRaw: string): boolean {
@@ -168,7 +160,7 @@ function pickCurrentAcceptedValueForStep(state: CanvasState, stepId: string): st
 }
 
 function isAcceptedOutputSingleValueStep(stepId: string): boolean {
-  return ACCEPTED_OUTPUT_SINGLE_VALUE_STEP_IDS.has(String(stepId || "").trim());
+  return isSingleValueFeedbackStep(stepId);
 }
 
 export async function shouldTreatTurnAsDreamCurrentValueFeedback(params: {
@@ -889,12 +881,14 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         deps.bumpUiI18nCounter(params.uiI18nTelemetry, "step0_escape_ready_recovered_count");
       }
     }
-    if (
+    const shouldBackfillSingleValueFeedbackReason =
+      isSingleValueFeedbackStep(currentStepIdForOfftopic) &&
+      submittedTextIntent === "feedback_on_current_value";
+    const shouldBackfillDreamPolicyFeedbackReason =
       currentStepIdForOfftopic === deps.dreamStepId &&
-      (
-        submittedTextIntent === "feedback_on_current_value" ||
-        Array.isArray((specialistResult as Record<string, unknown>).__dream_policy_violation_codes)
-      ) &&
+      Array.isArray((specialistResult as Record<string, unknown>).__dream_policy_violation_codes);
+    if (
+      (shouldBackfillSingleValueFeedbackReason || shouldBackfillDreamPolicyFeedbackReason) &&
       !String((specialistResult as Record<string, unknown>).feedback_reason_text || "").trim()
     ) {
       const fallbackReason = compactFeedbackReasonFromMessage(String(specialistResult.message || ""));

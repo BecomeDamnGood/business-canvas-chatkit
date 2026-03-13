@@ -126,7 +126,21 @@ function buildParams(intentEnabled: boolean) {
       }),
       isWordingPickRouteToken: () => false,
       isRefineAdjustRouteToken: () => false,
-      buildWordingChoiceFromTurn: () => ({ specialist: {}, wordingChoice: null }),
+      buildWordingChoiceFromTurn: (_params: any) => ({
+        specialist: {
+          ...buildBaseState().last_specialist_result,
+          wording_choice_pending: "true",
+        },
+        wordingChoice: {
+          enabled: true,
+          mode: "text" as const,
+          user_text: "updated user variant",
+          suggestion_text: "existing suggestion",
+          user_items: [],
+          suggestion_items: [],
+          instruction: "pick one",
+        },
+      }),
       pickWordingAgentBase: () => "",
       copyPendingWordingChoiceState: (specialistResult: Record<string, unknown>) => specialistResult,
     },
@@ -144,21 +158,26 @@ function buildParams(intentEnabled: boolean) {
   };
 }
 
-test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-text intent even when intent flow flag is disabled", async () => {
+test("runStepRuntimeActionRoutingLayer keeps new free-text variants inside the widget wording-choice flow even when intent flow flag is disabled", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(false) as any);
-  assert.equal(result.response, null);
+  assert.ok(result.response);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
   assert.equal(result.submittedTextIntent, "content_input");
   assert.equal(result.submittedTextAnchor, "user_input");
 });
 
-test("runStepRuntimeActionRoutingLayer keeps pending state for free-text turns when picker payload is unavailable", async () => {
+test("runStepRuntimeActionRoutingLayer keeps pending wording-choice inside the widget when picker payload is unavailable", async () => {
   const params = buildParams(false) as any;
+  params.runtime.userMessage = "Dat is niet wat ik bedoel.";
+  params.state.resolvePendingWordingChoiceIntent = () => ({
+    intent: "reject_suggestion_explicit" as const,
+    anchor: "suggestion" as const,
+  });
   params.wording.buildWordingChoiceFromPendingSpecialist = () => null;
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.equal(result.response, null);
+  assert.ok(result.response);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
 });
@@ -559,9 +578,9 @@ test("runStepRuntimeActionRoutingLayer keeps rules confirm blocked while grouped
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
 });
 
-test("runStepRuntimeActionRoutingLayer releases pending wording choice for free-text intent when enabled", async () => {
+test("runStepRuntimeActionRoutingLayer keeps free-text variants inside the widget wording-choice flow when enabled", async () => {
   const result = await runStepRuntimeActionRoutingLayer(buildParams(true) as any);
-  assert.equal(result.response, null);
+  assert.ok(result.response);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
   assert.equal(result.submittedTextIntent, "content_input");
@@ -601,7 +620,7 @@ test("runStepRuntimeActionRoutingLayer implicitly accepts suggestion on pending 
   };
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.equal(result.response, null);
+  assert.ok(result.response);
   assert.equal(result.userMessage, "");
   assert.equal(result.submittedTextIntent, "accept_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
@@ -626,7 +645,7 @@ test("runStepRuntimeActionRoutingLayer clears pending wording choice for feedbac
   };
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.equal(result.response, null);
+  assert.ok(result.response);
   assert.equal(implicitPickCalled, false);
   assert.equal(result.userMessage, "Dit raakt me nog niet echt.");
   assert.equal(result.submittedTextIntent, "feedback_on_suggestion");
@@ -655,7 +674,7 @@ test("runStepRuntimeActionRoutingLayer does not implicit-accept suggestion when 
   };
 
   const result = await runStepRuntimeActionRoutingLayer(params);
-  assert.equal(result.response, null);
+  assert.ok(result.response);
   assert.equal(implicitPickCalled, false);
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
@@ -704,6 +723,7 @@ test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Drea
   });
 
   const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.ok(result.response);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(result.submittedTextIntent, "accept_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
@@ -711,7 +731,7 @@ test("runStepRuntimeActionRoutingLayer handles explicit accept correctly in Drea
   assert.equal(String(specialist.wording_choice_selected || ""), "suggestion");
 });
 
-test("runStepRuntimeActionRoutingLayer keeps specialist path open for explicit reject in Dream pending flow", async () => {
+test("runStepRuntimeActionRoutingLayer keeps explicit reject inside the widget in Dream pending flow", async () => {
   const params = buildParams(true) as any;
   params.runtime.state = {
     current_step: "dream",
@@ -737,10 +757,150 @@ test("runStepRuntimeActionRoutingLayer keeps specialist path open for explicit r
   });
 
   const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.ok(result.response);
   const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
   assert.equal(result.submittedTextIntent, "reject_suggestion_explicit");
   assert.equal(result.submittedTextAnchor, "suggestion");
   assert.equal(String(specialist.wording_choice_pending || ""), "true");
+});
+
+test("runStepRuntimeActionRoutingLayer suspends the picker and renders a normal widget response for off-topic text", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.userMessage = "Wat is de hoofdstad van Frankrijk?";
+  params.state.isClearlyGeneralOfftopicInput = () => true;
+  params.state.shouldTreatAsStepContributingInput = () => false;
+  let normalizedOfftopic = false;
+  params.behavior.normalizeNonStep0OfftopicSpecialist = (incoming: any) => {
+    normalizedOfftopic = true;
+    return {
+      ...incoming.specialistResult,
+      is_offtopic: true,
+      wording_choice_pending: "false",
+    };
+  };
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+  assert.ok(result.response);
+  assert.equal(normalizedOfftopic, true);
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(String(specialist.is_offtopic || ""), "true");
+});
+
+test("runStepRuntimeActionRoutingLayer suspends pending wording choice for meta/help text instead of trapping it in the picker", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.userMessage = "Kun je uitleggen waarom je deze suggestie doet?";
+  params.state.shouldTreatAsStepContributingInput = () => false;
+  params.state.resolvePendingWordingChoiceIntent = () => ({
+    intent: "content_input" as const,
+    anchor: "user_input" as const,
+  });
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "Kun je uitleggen waarom je deze suggestie doet?");
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(
+    String(specialist.wording_choice_agent_current || ""),
+    "Industrial manufacturers with technical product development."
+  );
+});
+
+test("runStepRuntimeActionRoutingLayer suspends pending wording choice for locale-control text instead of forcing it into compare logic", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.userMessage = "Kun je vanaf nu in het Engels antwoorden?";
+  params.state.shouldTreatAsStepContributingInput = () => false;
+  params.state.resolvePendingWordingChoiceIntent = () => ({
+    intent: "content_input" as const,
+    anchor: "user_input" as const,
+  });
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "Kun je vanaf nu in het Engels antwoorden?");
+  const specialist = ((result.state as Record<string, unknown>).last_specialist_result || {}) as Record<string, unknown>;
+  assert.equal(String(specialist.wording_choice_pending || ""), "false");
+  assert.equal(
+    String(specialist.wording_choice_user_normalized || ""),
+    "I mean all companies that build complex products."
+  );
+});
+
+test("runStepRuntimeActionRoutingLayer lets refine-adjust action codes continue as specialist routes", async () => {
+  const scenarios = [
+    {
+      stepId: "dream",
+      activeSpecialist: "DreamExplainer",
+      actionCode: "ACTION_DREAM_EXPLAINER_REFINE_ADJUST",
+      expectedRoute: "__ROUTE__DREAM_EXPLAINER_REFINE__",
+    },
+    {
+      stepId: "purpose",
+      activeSpecialist: "Purpose",
+      actionCode: "ACTION_PURPOSE_REFINE_ADJUST",
+      expectedRoute: "__ROUTE__PURPOSE_REFINE__",
+    },
+    {
+      stepId: "bigwhy",
+      activeSpecialist: "BigWhy",
+      actionCode: "ACTION_BIGWHY_REFINE_ADJUST",
+      expectedRoute: "__ROUTE__BIGWHY_REFINE__",
+    },
+    {
+      stepId: "role",
+      activeSpecialist: "Role",
+      actionCode: "ACTION_ROLE_REFINE_ADJUST",
+      expectedRoute: "__ROUTE__ROLE_ADJUST__",
+    },
+    {
+      stepId: "entity",
+      activeSpecialist: "Entity",
+      actionCode: "ACTION_ENTITY_EXAMPLE_REFINE",
+      expectedRoute: "__ROUTE__ENTITY_REFINE__",
+    },
+    {
+      stepId: "rulesofthegame",
+      activeSpecialist: "RulesOfTheGame",
+      actionCode: "ACTION_RULES_REFINE_ADJUST",
+      expectedRoute: "__ROUTE__RULES_ADJUST__",
+    },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const params = buildParams(true) as any;
+    params.runtime.state = {
+      current_step: scenario.stepId,
+      active_specialist: scenario.activeSpecialist,
+      last_specialist_result: {
+        refined_formulation: "Current wording",
+      },
+    };
+    params.runtime.actionCodeRaw = scenario.actionCode;
+    params.runtime.userMessage = scenario.actionCode;
+    let rebuiltWordingChoice = false;
+    let pickedAgentBase = false;
+    params.wording.buildWordingChoiceFromTurn = () => {
+      rebuiltWordingChoice = true;
+      return { specialist: {}, wordingChoice: null };
+    };
+    params.wording.pickWordingAgentBase = () => {
+      pickedAgentBase = true;
+      return "";
+    };
+    params.action.processActionCode = (actionCodeInput: string) => {
+      if (actionCodeInput === scenario.actionCode) return scenario.expectedRoute;
+      return actionCodeInput;
+    };
+
+    const result = await runStepRuntimeActionRoutingLayer(params);
+    assert.equal(result.response, null);
+    assert.equal(result.userMessage, scenario.expectedRoute);
+    assert.equal(rebuiltWordingChoice, false);
+    assert.equal(pickedAgentBase, false);
+  }
 });
 
 test("runStepRuntimeActionRoutingLayer maps proceed text intent to current confirm action in widget mode", async () => {

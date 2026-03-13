@@ -82,6 +82,7 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_EXPLAIN_MORE": "엔터티가 왜 중요한지 설명해 주세요",
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_FORMULATE": "엔터티 제안 3가지를 보여 주세요",
     "menuLabel.PRESENTATION_MENU_ASK.ACTION_PRESENTATION_MAKE": "지금 제 프레젠테이션을 만들어 주세요",
+    "menuLabel.PRESENTATION_MENU_RECREATE.ACTION_PRESENTATION_MAKE": "제 프레젠테이션을 다시 만들어 주세요",
     "menuLabel.PRODUCTSSERVICES_MENU_CONFIRM.ACTION_PRODUCTSSERVICES_CONFIRM": "이것이 우리가 제공하는 전부입니다. 10단계 게임 규칙으로 진행해 주세요",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_CONFIRM_SINGLE": "이 표현이 마음에 듭니다. 4단계 큰 이유로 진행해 주세요.",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS": "제가 존재 이유를 정의할 수 있도록 질문 3개를 해주세요.",

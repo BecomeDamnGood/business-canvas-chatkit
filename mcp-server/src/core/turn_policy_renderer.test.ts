@@ -1042,6 +1042,93 @@ test("single-value valid output infers feedback reason from multi-sentence big w
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
+test("single-value valid output infers feedback reason across the single-value feedback family", () => {
+  const scenarios = [
+    {
+      stepId: "dream",
+      activeSpecialist: "Dream",
+      field: "dream",
+      canonical: "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.",
+      message:
+        "Je droom blijft nog te beschrijvend en mist een voelbaar toekomstbeeld. Ik heb hem aangescherpt zodat de ambitie direct menselijker en richtinggevender voelt.",
+      expected: "Je droom blijft nog te beschrijvend en mist een voelbaar toekomstbeeld.",
+    },
+    {
+      stepId: "purpose",
+      activeSpecialist: "Purpose",
+      field: "purpose",
+      canonical: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      message:
+        "Je bestaansreden blijft nog te breed en laat de bijdrage van Mindd onvoldoende voelen. Ik heb de formulering aangescherpt zodat de betekenis concreter overkomt.",
+      expected: "Je bestaansreden blijft nog te breed en laat de bijdrage van Mindd onvoldoende voelen.",
+    },
+    {
+      stepId: "bigwhy",
+      activeSpecialist: "BigWhy",
+      field: "bigwhy",
+      canonical: "Omdat mensen rust voelen wanneer complexe beslissingen eindelijk helder worden.",
+      message:
+        "Je grote waarom klinkt nog beschrijvend en mist emotionele urgentie. Ik heb hem compacter gemaakt zodat de diepere drijfveer direct voelbaar wordt.",
+      expected: "Je grote waarom klinkt nog beschrijvend en mist emotionele urgentie.",
+    },
+    {
+      stepId: "role",
+      activeSpecialist: "Role",
+      field: "role",
+      canonical: "Mindd maakt complexe keuzes zichtbaar en hanteerbaar voor ambitieuze teams.",
+      message:
+        "Je rol blijft nog te algemeen en laat nog niet scherp zien welke bijdrage Mindd levert. Ik heb hem verfijnd zodat de positionerende rol duidelijker naar voren komt.",
+      expected: "Je rol blijft nog te algemeen en laat nog niet scherp zien welke bijdrage Mindd levert.",
+    },
+    {
+      stepId: "entity",
+      activeSpecialist: "Entity",
+      field: "entity",
+      canonical: "Een strategisch creatief bureau",
+      message:
+        "Je entiteit blijft nog te generiek en geeft te weinig richting aan de positionering. Ik heb hem compacter gemaakt zodat het type organisatie directer herkenbaar wordt.",
+      expected: "Je entiteit blijft nog te generiek en geeft te weinig richting aan de positionering.",
+    },
+    {
+      stepId: "targetgroup",
+      activeSpecialist: "TargetGroup",
+      field: "targetgroup",
+      canonical: "Mensen die complexe keuzes moeten maken in hun werk of leven.",
+      message:
+        "Je doelgroep blijft nog te breed en maakt de relevante spanning onvoldoende concreet. Ik heb hem aangescherpt zodat duidelijker wordt voor wie Mindd echt betekenisvol is.",
+      expected: "Je doelgroep blijft nog te breed en maakt de relevante spanning onvoldoende concreet.",
+    },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const state = getDefaultState();
+    (state as any).current_step = scenario.stepId;
+    (state as any).active_specialist = scenario.activeSpecialist;
+    (state as any).business_name = "Mindd";
+    (state as any).provisional_by_step = { [scenario.stepId]: scenario.canonical };
+    (state as any).provisional_source_by_step = { [scenario.stepId]: "user_input" };
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: scenario.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        message: scenario.message,
+        question: "",
+        refined_formulation: scenario.canonical,
+        [scenario.field]: scenario.canonical,
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+    assert.equal(rendered.status, "valid_output");
+    assert.equal(String(uiContent.feedback_reason_text || ""), scenario.expected);
+    assert.equal(String(uiContent.canonical_text || ""), scenario.canonical);
+  }
+});
+
 test("single-value pending canonical wording hides canonical block, feedback reason, and stale ui content across steps", () => {
   const scenarios = [
     {
@@ -1117,9 +1204,11 @@ test("single-value pending canonical wording hides canonical block, feedback rea
   }
 });
 
-test("single-value valid output suppresses stale feedback reason after user picks own wording", () => {
+test("single-value valid output preserves feedback reason after user picks own wording", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.";
+  const feedbackReason =
+    "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.";
   (state as any).current_step = "dream";
   (state as any).active_specialist = "Dream";
   (state as any).business_name = "Mindd";
@@ -1136,8 +1225,7 @@ test("single-value valid output suppresses stale feedback reason after user pick
       refined_formulation: canonical,
       dream: canonical,
       wording_choice_selected: "user",
-      feedback_reason_text:
-        "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
+      feedback_reason_text: feedbackReason,
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -1147,7 +1235,7 @@ test("single-value valid output suppresses stale feedback reason after user pick
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
   assert.doesNotMatch(message, /toekomstbeeld waarin mensen zich zekerder/i);
-  assert.equal(String(uiContent.feedback_reason_text || ""), "");
+  assert.equal(String(uiContent.feedback_reason_text || ""), feedbackReason);
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 

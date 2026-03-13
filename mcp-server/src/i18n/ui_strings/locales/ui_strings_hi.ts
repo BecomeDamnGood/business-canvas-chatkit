@@ -82,6 +82,7 @@ export const UI_STRINGS_LOCALE_HI: Record<string, string> = {
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_EXPLAIN_MORE": "समझाएँ कि इकाई होना क्यों महत्वपूर्ण है",
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_FORMULATE": "मुझे Entity के 3 सुझाव दें",
     "menuLabel.PRESENTATION_MENU_ASK.ACTION_PRESENTATION_MAKE": "मेरी प्रस्तुति अभी बनाइए",
+    "menuLabel.PRESENTATION_MENU_RECREATE.ACTION_PRESENTATION_MAKE": "मेरी प्रस्तुति फिर से बनाइए",
     "menuLabel.PRODUCTSSERVICES_MENU_CONFIRM.ACTION_PRODUCTSSERVICES_CONFIRM": "हम यही सब प्रस्तुत करते हैं, चरण 10 खेल के नियम पर जाएँ",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_CONFIRM_SINGLE": "मैं इस शब्दांकन से संतुष्ट हूँ, कृपया चरण 4 बड़ा क्यों पर जाएँ।",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS": "मेरे अस्तित्व का कारण को परिभाषित करने में मदद के लिए 3 प्रश्न पूछें।",

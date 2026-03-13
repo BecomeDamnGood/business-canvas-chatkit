@@ -1430,13 +1430,11 @@
         margin-bottom: var(--space-5);
       }
 
-      .wordingChoiceHeading {
-        font-size: 9px;
-        font-weight: 400;
-        letter-spacing: 0.10em;
-        text-transform: uppercase;
-        color: var(--text-light);
-        margin-bottom: 8px;
+      .wordingChoiceFeedback {
+        font-size: 16px;
+        line-height: 1.45;
+        color: var(--text);
+        margin-bottom: 2px;
       }
 
       .wordingChoiceCard {
@@ -1792,7 +1790,7 @@
             </div>
           </div>
           <div class="wordingChoiceWrap" id="wordingChoiceWrap" style="display:none">
-            <div class="wordingChoiceHeading" id="wordingChoiceHeading"></div>
+            <div class="wordingChoiceFeedback" id="wordingChoiceFeedback" style="display:none"></div>
             <div class="wordingChoiceCard" id="wordingChoiceUserCard">
               <div class="wordingChoiceText" id="wordingChoiceUserText"></div>
               <ul class="wordingChoiceList" id="wordingChoiceUserList"></ul>
@@ -4673,7 +4671,7 @@
   }
   function renderWordingChoicePanel(resultData, lang) {
     const wrap = document.getElementById("wordingChoiceWrap");
-    const headingEl = document.getElementById("wordingChoiceHeading");
+    const feedbackEl = document.getElementById("wordingChoiceFeedback");
     const userTextEl = document.getElementById("wordingChoiceUserText");
     const userListEl = document.getElementById("wordingChoiceUserList");
     const suggestionTextEl = document.getElementById("wordingChoiceSuggestionText");
@@ -4684,7 +4682,7 @@
     const instructionEl = document.getElementById("wordingChoiceInstruction");
     const userBtn = document.getElementById("wordingChoicePickUser");
     const suggestionBtn = document.getElementById("wordingChoicePickSuggestion");
-    if (!wrap || !headingEl || !userTextEl || !userListEl || !suggestionTextEl || !suggestionListEl || !retainedWrapEl || !retainedHeadingEl || !retainedListEl || !instructionEl || !userBtn || !suggestionBtn) {
+    if (!wrap || !feedbackEl || !userTextEl || !userListEl || !suggestionTextEl || !suggestionListEl || !retainedWrapEl || !retainedHeadingEl || !retainedListEl || !instructionEl || !userBtn || !suggestionBtn) {
       return false;
     }
     const uiPayload = resultData && typeof resultData.ui === "object" && resultData.ui ? resultData.ui : {};
@@ -4697,6 +4695,7 @@
       return false;
     }
     const mode = String(wording.mode || "text") === "list" ? "list" : "text";
+    const feedbackReasonText = String(wording.feedback_reason_text || "").trim();
     const userText = String(wording.user_text || "").trim();
     const suggestionText = String(wording.suggestion_text || "").trim();
     const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];
@@ -4711,8 +4710,8 @@
     const userLabel = ensureLabelColon(t(lang, "wordingChoiceHeading"));
     const suggestionLabel = ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
     const normalizeListItem = (value) => String(value || "").replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "").trim();
-    headingEl.textContent = "";
-    headingEl.style.display = "none";
+    feedbackEl.textContent = feedbackReasonText;
+    feedbackEl.style.display = feedbackReasonText ? "block" : "none";
     retainedHeadingEl.textContent = instructionParts.retainedHeading;
     retainedListEl.innerHTML = "";
     for (const item of instructionParts.retainedItems) {

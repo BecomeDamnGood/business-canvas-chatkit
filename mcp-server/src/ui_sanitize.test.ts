@@ -1608,6 +1608,15 @@ test("bundled runtime fail-closes missing canonical widget payloads", () => {
   assert.match(source, /widget_result:/);
 });
 
+test("bundled wording-choice view exposes a dedicated compare feedback slot", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /class="wordingChoiceFeedback" id="wordingChoiceFeedback"/);
+  assert.match(source, /const feedbackEl = document\.getElementById\("wordingChoiceFeedback"\);/);
+  assert.match(source, /const feedbackReasonText = String\(wording\.feedback_reason_text \|\| ""\)\.trim\(\);/);
+  assert.match(source, /feedbackEl\.textContent = feedbackReasonText;/);
+  assert.match(source, /feedbackEl\.style\.display = feedbackReasonText \? "block" : "none";/);
+});
+
 test("bundled runtime retains canonical step continuity for latest render cache", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /function retainCanonicalStepContinuity\(preferred, \.\.\.fallbacks\)/);

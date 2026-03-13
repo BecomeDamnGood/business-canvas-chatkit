@@ -2,8 +2,11 @@ import { UI_STRINGS_SOURCE_EN } from "../../ui_strings_defaults.js";
 
 export const UI_STRINGS_LOCALE_AR: Record<string, string> = {
     ...UI_STRINGS_SOURCE_EN,
+    "menuLabel.PRESENTATION_MENU_RECREATE.ACTION_PRESENTATION_MAKE": "أعد إنشاء عرضي التقديمي",
     "rulesofthegame.count.template": "لديك الآن {0} من قواعد اللعبة. أنصحك بصياغة ما لا يقل عن {1} ولا يزيد عن {2} من قواعد اللعبة.",
     "rulesofthegame.current.template": "قواعد اللعبة الحالية لـ {0} هي:",
+    "wording.feedback.user_pick.ack.default": "لقد اخترت صياغتك الخاصة، وهذا لا بأس به.",
+    "wording.feedback.user_pick.reason.default": "هذا يحافظ على المعنى الأصلي لديك مع بقائه متوافقًا مع هذه الخطوة.",
     "wordingChoiceGroupedCompareUserLabel": "هذه هي صياغتك المختصرة:",
     "wordingChoiceGroupedCompareSuggestionLabel": "هذا هو اقتراحي:",
     "wordingChoiceGroupedCompareInstruction": "اختر النسخة التي تناسب الاختلاف المتبقي بشكل أفضل.",

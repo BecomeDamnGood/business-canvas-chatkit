@@ -862,6 +862,59 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     !String(userMessage || "").trim().startsWith("ACTION_") &&
     !String(userMessage || "").trim().startsWith("__ROUTE__") &&
     !wording.isWordingPickRouteToken(userMessage);
+  const buildWidgetResponse = async (params: {
+    nextState: CanvasState;
+    specialist: Record<string, unknown>;
+    wordingChoice?: WordingChoiceUiPayload | null;
+  }): Promise<RunStepRuntimeActionRoutingOutput<TPayload>> => {
+    const stateWithUi = await behavior.ensureUiStrings(params.nextState, userMessage);
+    state = stateWithUi;
+    const payload = params.wordingChoice
+      ? behavior.attachRegistryPayload(
+          {
+            ok: true,
+            tool: "run_step",
+            current_step_id: String(stateWithUi.current_step),
+            active_specialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
+            text: behavior.buildTextForWidget({ specialist: params.specialist, state: stateWithUi }),
+            prompt: behavior.pickPrompt(params.specialist),
+            specialist: params.specialist,
+            state: stateWithUi,
+          },
+          params.specialist,
+          { require_wording_pick: true },
+          [],
+          [],
+          params.wordingChoice
+        )
+      : behavior.attachRegistryPayload(
+          {
+            ok: true,
+            tool: "run_step",
+            current_step_id: String(stateWithUi.current_step),
+            active_specialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
+            text: behavior.buildTextForWidget({ specialist: params.specialist, state: stateWithUi }),
+            prompt: behavior.pickPrompt(params.specialist),
+            specialist: params.specialist,
+            state: stateWithUi,
+          },
+          params.specialist
+        );
+
+    return {
+      response: behavior.finalizeResponse(payload),
+      state,
+      userMessage,
+      submittedTextIntent,
+      submittedTextAnchor,
+      acceptedOutputUserTurnClassification,
+      responseUiFlags: null,
+      bigwhyMaxWords: BIGWHY_MAX_WORDS,
+      countWords,
+      pickBigWhyCandidate,
+      buildBigWhyTooLongFeedback,
+    };
+  };
   let hasPendingWordingChoice =
     runtime.wordingChoiceEnabled &&
     runtime.inputMode === "widget" &&
@@ -874,6 +927,23 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       action.getDreamRuntimeMode(state)
     ) &&
     hasRenderablePendingWordingChoice(pendingBeforeTurn);
+  const suspendPendingWordingChoice = (specialist: Record<string, unknown>) => {
+    const suspended = normalizePendingPickerSpecialistContract({
+      specialist: {
+        ...specialist,
+        wording_choice_pending: "false",
+        wording_choice_selected: "",
+        pending_suggestion_intent: "",
+        pending_suggestion_anchor: "",
+        pending_suggestion_feedback_text: "",
+        pending_suggestion_presentation_mode: "",
+      },
+      stepIdHint: String(state.current_step || ""),
+    });
+    (state as Record<string, unknown>).last_specialist_result = suspended;
+    pendingBeforeTurn = suspended;
+    hasPendingWordingChoice = false;
+  };
   const shouldResolvePendingWordingFromTextIntent =
     hasPendingWordingChoice &&
     hasFreeTextWhilePending &&
@@ -947,6 +1017,10 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         state = implicitSelection.nextState;
         userMessage = "";
         statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "wording_choice_implicit_accept_count");
+        return buildWidgetResponse({
+          nextState: state,
+          specialist: implicitSelection.specialist,
+        });
       } else {
         state = statePorts.clearStepInteractiveState(state, currentStepId);
         statePorts.bumpUiI18nCounter(runtime.uiI18nTelemetry, "state_hygiene_resets_count");
@@ -966,6 +1040,125 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
         action.getDreamRuntimeMode(state)
       ) &&
       hasRenderablePendingWordingChoice(pendingBeforeTurn);
+    if (hasPendingWordingChoice) {
+      if (isGeneralOfftopicInput) {
+        const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
+        state = stateWithUi;
+        const suspendedOfftopicSpecialist = behavior.normalizeNonStep0OfftopicSpecialist({
+          stepId: String(state.current_step || ""),
+          activeSpecialist: String((state as Record<string, unknown>).active_specialist || ""),
+          userMessage,
+          specialistResult: {
+            ...pendingBeforeTurn,
+            is_offtopic: true,
+          },
+          previousSpecialist: pendingBeforeTurn,
+          state: stateWithUi,
+        });
+        (state as Record<string, unknown>).last_specialist_result = suspendedOfftopicSpecialist;
+        return buildWidgetResponse({
+          nextState: state,
+          specialist: suspendedOfftopicSpecialist,
+        });
+      }
+
+      if (
+        pendingIntentResolution.intent === "content_input" &&
+        pendingIntentResolution.anchor === "user_input" &&
+        isStepContributingInput
+      ) {
+        const rebuilt = wording.buildWordingChoiceFromTurn({
+          stepId: currentStepId,
+          state,
+          activeSpecialist: String((state as Record<string, unknown>).active_specialist || ""),
+          previousSpecialist: pendingBeforeTurn,
+          specialistResult: wording.copyPendingWordingChoiceState(
+            {
+              ...pendingBeforeTurn,
+              refined_formulation: String(
+                pendingBeforeTurn.wording_choice_agent_current || pendingBeforeTurn.refined_formulation || ""
+              ).trim(),
+            },
+            pendingBeforeTurn
+          ),
+          userTextRaw: userMessage,
+          isOfftopic: false,
+          dreamRuntimeModeRaw: action.getDreamRuntimeMode(state),
+        });
+        const rebuiltSpecialist = rebuilt.wordingChoice
+          ? normalizePendingPickerSpecialistContract({
+              specialist: rebuilt.specialist,
+              stepIdHint: currentStepId,
+            })
+          : rebuilt.specialist;
+        (state as Record<string, unknown>).last_specialist_result = rebuiltSpecialist;
+        return buildWidgetResponse({
+          nextState: state,
+          specialist: rebuiltSpecialist,
+          wordingChoice: rebuilt.wordingChoice || null,
+        });
+      }
+
+      if (
+        pendingIntentResolution.anchor === "user_input" &&
+        !isStepContributingInput
+      ) {
+        suspendPendingWordingChoice(pendingBeforeTurn);
+      } else {
+        const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
+        state = stateWithUi;
+        let pendingSpecialist = {
+          ...pendingBeforeTurn,
+          ...(isGeneralOfftopicInput ? { is_offtopic: true } : {}),
+        };
+
+        if (isGeneralOfftopicInput && String(state.current_step || "") !== ids.step0Id) {
+          pendingSpecialist = behavior.normalizeNonStep0OfftopicSpecialist({
+            stepId: String(state.current_step || ""),
+            activeSpecialist: String((state as Record<string, unknown>).active_specialist || ""),
+            userMessage,
+            specialistResult: pendingSpecialist,
+            previousSpecialist: pendingBeforeTurn,
+            state: stateWithUi,
+          });
+        }
+
+        pendingSpecialist = normalizePendingPickerSpecialistContract({
+          specialist: pendingSpecialist,
+          stepIdHint: String(state.current_step || ""),
+        });
+
+        let pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
+          pendingSpecialist,
+          stateWithUi,
+          String((state as Record<string, unknown>).active_specialist || ""),
+          pendingBeforeTurn,
+          String(state.current_step || ""),
+          action.getDreamRuntimeMode(state)
+        );
+        if (!pendingChoice || pendingChoice.enabled !== true) {
+          pendingSpecialist = normalizePendingPickerSpecialistContract({
+            specialist: pendingBeforeTurn,
+            stepIdHint: String(state.current_step || ""),
+          });
+          pendingChoice = wording.buildWordingChoiceFromPendingSpecialist(
+            pendingSpecialist,
+            stateWithUi,
+            String((state as Record<string, unknown>).active_specialist || ""),
+            pendingBeforeTurn,
+            String(state.current_step || ""),
+            action.getDreamRuntimeMode(state)
+          );
+        }
+
+        (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
+        return buildWidgetResponse({
+          nextState: state,
+          specialist: pendingSpecialist,
+          wordingChoice: pendingChoice,
+        });
+      }
+    }
   }
 
   const hasPickerPendingWordingChoiceForTurn =
@@ -1116,75 +1309,6 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       pickBigWhyCandidate,
       buildBigWhyTooLongFeedback,
     };
-  }
-
-  const refineAdjustTurn = wording.isRefineAdjustRouteToken(userMessage);
-  if (refineAdjustTurn && runtime.wordingChoiceEnabled && runtime.inputMode === "widget") {
-    const stateWithUi = await behavior.ensureUiStrings(state, userMessage);
-    state = stateWithUi;
-    const prev =
-      ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
-    const rebuilt = wording.buildWordingChoiceFromTurn({
-      stepId: String(state.current_step || ""),
-      state,
-      activeSpecialist: String((state as Record<string, unknown>).active_specialist || ""),
-      previousSpecialist: prev,
-      specialistResult: prev,
-      userTextRaw: String(prev.wording_choice_user_normalized || prev.wording_choice_user_raw || "").trim(),
-      isOfftopic: false,
-      forcePending: true,
-    });
-    if (rebuilt.wordingChoice) {
-      const pendingSpecialist = normalizePendingPickerSpecialistContract({
-        specialist: rebuilt.specialist,
-        stepIdHint: String(state.current_step || ""),
-      });
-      (state as Record<string, unknown>).last_specialist_result = pendingSpecialist;
-      const payload = behavior.attachRegistryPayload(
-        {
-          ok: true,
-          tool: "run_step",
-          current_step_id: String(state.current_step),
-          active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
-          text: behavior.buildTextForWidget({ specialist: pendingSpecialist, state: stateWithUi }),
-          prompt: behavior.pickPrompt(pendingSpecialist),
-          specialist: pendingSpecialist,
-          state: stateWithUi,
-        },
-        pendingSpecialist,
-        { require_wording_pick: true },
-        [],
-        [],
-        rebuilt.wordingChoice
-      );
-      return {
-        response: behavior.finalizeResponse(payload),
-        state,
-        userMessage,
-        submittedTextIntent,
-        submittedTextAnchor,
-        acceptedOutputUserTurnClassification,
-        responseUiFlags: null,
-        bigwhyMaxWords: BIGWHY_MAX_WORDS,
-        countWords,
-        pickBigWhyCandidate,
-        buildBigWhyTooLongFeedback,
-      };
-    }
-  }
-
-  if (refineAdjustTurn) {
-    const prev =
-      ((state as Record<string, unknown>).last_specialist_result as Record<string, unknown>) || {};
-    const agentBase = wording.pickWordingAgentBase(prev);
-    if (agentBase) {
-      const nextPrev = {
-        ...prev,
-        refined_formulation: agentBase,
-        wording_choice_agent_current: agentBase,
-      };
-      (state as Record<string, unknown>).last_specialist_result = nextPrev;
-    }
   }
 
   const responseUiFlags = behavior.resolveResponseUiFlags(userMessage);

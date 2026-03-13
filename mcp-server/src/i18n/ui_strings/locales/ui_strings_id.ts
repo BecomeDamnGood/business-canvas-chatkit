@@ -82,6 +82,7 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_EXPLAIN_MORE": "Jelaskan mengapa memiliki Entitas itu penting",
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_FORMULATE": "Beri saya 3 saran Entitas",
     "menuLabel.PRESENTATION_MENU_ASK.ACTION_PRESENTATION_MAKE": "Buat presentasi saya sekarang",
+    "menuLabel.PRESENTATION_MENU_RECREATE.ACTION_PRESENTATION_MAKE": "Buat ulang presentasi saya",
     "menuLabel.PRODUCTSSERVICES_MENU_CONFIRM.ACTION_PRODUCTSSERVICES_CONFIRM": "Ini semua yang kami tawarkan, lanjut ke langkah 10 Aturan main",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_CONFIRM_SINGLE": "Saya puas dengan rumusan ini, mohon lanjut ke langkah 4 Alasan Utama.",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS": "Ajukan 3 pertanyaan untuk membantu saya mendefinisikan Alasan keberadaan.",

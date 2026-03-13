@@ -622,6 +622,208 @@ test("buildWordingChoiceFromTurn creates grouped compare unit for free-text stra
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_compare_mode || ""), "grouped_units");
 });
 
+test("buildWordingChoiceFromTurn exposes dynamic feedback reason across the single-value feedback family", () => {
+  const scenarios = [
+    {
+      stepId: "dream" as const,
+      activeSpecialist: "Dream",
+      heading: "Je huidige droom voor Mindd is:",
+      suggestion: "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.",
+      userTextRaw: "Wij willen dat mensen bewuster kiezen.",
+      message:
+        "Je droom blijft nog te beschrijvend en mist een voelbaar toekomstbeeld. Ik heb hem aangescherpt zodat de ambitie direct menselijker en richtinggevender voelt.",
+      expected: "Je droom blijft nog te beschrijvend en mist een voelbaar toekomstbeeld.",
+    },
+    {
+      stepId: "purpose" as const,
+      activeSpecialist: "Purpose",
+      heading: "Je huidige bestaansreden voor Mindd is:",
+      suggestion: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      userTextRaw: "Wij willen iets goeds doen.",
+      message:
+        "De huidige formulering blijft nog te algemeen en maakt niet concreet welke betekenis Mindd wil hebben. Ik heb hem aangescherpt zodat de bijdrage van Mindd helderder wordt.",
+      expected: "De huidige formulering blijft nog te algemeen en maakt niet concreet welke betekenis Mindd wil hebben.",
+    },
+    {
+      stepId: "bigwhy" as const,
+      activeSpecialist: "BigWhy",
+      heading: "Je huidige grote waarom voor Mindd is:",
+      suggestion: "Omdat mensen rust voelen wanneer complexe beslissingen eindelijk helder worden.",
+      userTextRaw: "Omdat we graag willen helpen.",
+      message:
+        "Je grote waarom klinkt nog beschrijvend en mist emotionele urgentie. Ik heb hem compacter gemaakt zodat de diepere drijfveer direct voelbaar wordt.",
+      expected: "Je grote waarom klinkt nog beschrijvend en mist emotionele urgentie.",
+    },
+    {
+      stepId: "role" as const,
+      activeSpecialist: "Role",
+      heading: "Je huidige rol voor Mindd is:",
+      suggestion: "Mindd maakt complexe keuzes zichtbaar en hanteerbaar voor ambitieuze teams.",
+      userTextRaw: "Wij maken mooie dingen zichtbaar.",
+      message:
+        "Je rol blijft nog te algemeen en laat nog niet scherp zien welke bijdrage Mindd levert. Ik heb hem verfijnd zodat de positionerende rol duidelijker naar voren komt.",
+      expected: "Je rol blijft nog te algemeen en laat nog niet scherp zien welke bijdrage Mindd levert.",
+    },
+    {
+      stepId: "entity" as const,
+      activeSpecialist: "Entity",
+      heading: "Je huidige entiteit voor Mindd is:",
+      suggestion: "Een strategisch creatief bureau",
+      userTextRaw: "Een bureau voor van alles en nog wat",
+      message:
+        "Je entiteit blijft nog te generiek en geeft te weinig richting aan de positionering. Ik heb hem compacter gemaakt zodat het type organisatie directer herkenbaar wordt.",
+      expected: "Je entiteit blijft nog te generiek en geeft te weinig richting aan de positionering.",
+    },
+    {
+      stepId: "targetgroup" as const,
+      activeSpecialist: "TargetGroup",
+      heading: "Je huidige doelgroep voor Mindd is:",
+      suggestion: "Mensen die complexe keuzes moeten maken in hun werk of leven.",
+      userTextRaw: "Iedereen die wel wat hulp kan gebruiken",
+      message:
+        "Je doelgroep blijft nog te breed en maakt de relevante spanning onvoldoende concreet. Ik heb hem aangescherpt zodat duidelijker wordt voor wie Mindd echt betekenisvol is.",
+      expected: "Je doelgroep blijft nog te breed en maakt de relevante spanning onvoldoende concreet.",
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const helpers = buildHeadingAwareSingleValueHelpers({
+      stepId: scenario.stepId,
+      heading: scenario.heading,
+      suggestion: scenario.suggestion,
+      equivalent: false,
+    });
+
+    const result = helpers.buildWordingChoiceFromTurn({
+      stepId: scenario.stepId,
+      state: {} as any,
+      activeSpecialist: scenario.activeSpecialist,
+      previousSpecialist: {},
+      specialistResult: {
+        message: scenario.message,
+        refined_formulation: scenario.suggestion,
+        [scenario.stepId]: "",
+      } as Record<string, unknown>,
+      userTextRaw: scenario.userTextRaw,
+      isOfftopic: false,
+    });
+
+    assert.ok(result.wordingChoice);
+    assert.equal(String(result.wordingChoice?.feedback_reason_text || ""), scenario.expected);
+  }
+});
+
+test("buildWordingChoiceFromTurn exposes dynamic feedback reason across grouped compare feedback family", () => {
+  const helpers = buildHelpers(true);
+  const scenarios = [
+    {
+      stepId: "strategy",
+      activeSpecialist: "Strategy",
+      field: "strategy",
+      previousItems: ["Recurring revenue", "Expert-led delivery"],
+      suggestionItems: ["Recurring revenue", "Expert-led delivery", "Operational focus"],
+      userTextRaw: "Operational simplicity",
+      message: "This suggestion sharpens the remaining difference into one clearer strategic choice.",
+      expected: "This suggestion sharpens the remaining difference into one clearer strategic choice.",
+    },
+    {
+      stepId: "productsservices",
+      activeSpecialist: "ProductsServices",
+      field: "productsservices",
+      previousItems: ["Strategy workshops", "Creative campaigns"],
+      suggestionItems: ["Strategy workshops", "Creative campaigns", "AI prototypes"],
+      userTextRaw: "AI flows",
+      message: "This suggestion keeps the list focused on the service change that still needs a decision.",
+      expected: "This suggestion keeps the list focused on the service change that still needs a decision.",
+    },
+    {
+      stepId: "rulesofthegame",
+      activeSpecialist: "RulesOfTheGame",
+      field: "rulesofthegame",
+      previousItems: ["We communicate proactively", "We keep promises"],
+      suggestionItems: ["We communicate proactively", "We keep promises", "We stay curious"],
+      userTextRaw: "We ask better questions",
+      message: "This suggestion narrows the remaining difference into one clearer behavioral choice.",
+      expected: "This suggestion narrows the remaining difference into one clearer behavioral choice.",
+    },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const result = helpers.buildWordingChoiceFromTurn({
+      stepId: scenario.stepId,
+      state: {} as any,
+      activeSpecialist: scenario.activeSpecialist,
+      previousSpecialist: {
+        statements: scenario.previousItems,
+        [scenario.field]: scenario.previousItems.join("\n"),
+      },
+      specialistResult: {
+        message: scenario.message,
+        refined_formulation: scenario.suggestionItems.join("\n"),
+        statements: scenario.suggestionItems,
+      },
+      userTextRaw: scenario.userTextRaw,
+      isOfftopic: false,
+    });
+
+    assert.ok(result.wordingChoice);
+    assert.equal(String(result.wordingChoice?.feedback_reason_text || ""), scenario.expected);
+  }
+});
+
+test("buildWordingChoiceFromTurn keeps grouped compare feedback optional when no contentful reason is available", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "productsservices",
+    state: {} as any,
+    activeSpecialist: "ProductsServices",
+    previousSpecialist: {
+      statements: ["Strategy workshops", "Creative campaigns"],
+      productsservices: ["Strategy workshops", "Creative campaigns"].join("\n"),
+    },
+    specialistResult: {
+      message: "I refined the list.",
+      refined_formulation: ["Strategy workshops", "Creative campaigns", "AI prototypes"].join("\n"),
+      statements: ["Strategy workshops", "Creative campaigns", "AI prototypes"],
+    },
+    userTextRaw: "AI flows",
+    isOfftopic: false,
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(String(result.wordingChoice?.feedback_reason_text || ""), "");
+});
+
+test("buildWordingChoiceFromTurn leaves grouped compare feedback empty when no unit-specific reason is available", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "strategy",
+    state: {} as any,
+    activeSpecialist: "Strategy",
+    previousSpecialist: {
+      statements: ["Recurring revenue", "Expert-led delivery"],
+      strategy: ["Recurring revenue", "Expert-led delivery"].join("\n"),
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_user_normalized: "Operational simplicity",
+      wording_choice_agent_current: ["Recurring revenue", "Expert-led delivery", "Operational focus"].join("\n"),
+    },
+    specialistResult: {
+      message: "Okay.",
+      refined_formulation: ["Recurring revenue", "Expert-led delivery", "Operational focus"].join("\n"),
+      statements: ["Recurring revenue", "Expert-led delivery", "Operational focus"],
+    },
+    userTextRaw: "Operational simplicity",
+    isOfftopic: false,
+    forcePending: true,
+    submittedTextIntent: "feedback_on_suggestion",
+    submittedTextAnchor: "suggestion",
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(String(result.wordingChoice?.feedback_reason_text || ""), "");
+});
+
 test("buildWordingChoiceFromTurn groups overlapping strategy points on the user side against one merged suggestion", () => {
   const helpers = buildHelpers(true);
   const existingStatements = [
@@ -1223,6 +1425,68 @@ test("applyWordingPickSelection resolves grouped compare units into one final pr
   );
 });
 
+test("applyWordingPickSelection does not carry stale feedback to the next grouped compare unit", () => {
+  const helpers = buildHelpers(true);
+  const state = {
+    current_step: "productsservices",
+    active_specialist: "ProductsServices",
+    last_specialist_result: {
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_target_field: "productsservices",
+      wording_choice_presentation: "picker",
+      wording_choice_variant: "grouped_list_units",
+      wording_choice_compare_mode: "grouped_units",
+      wording_choice_compare_cursor: "0",
+      wording_choice_compare_segments: [
+        { kind: "retained", items: ["Strategy workshops"] },
+        { kind: "unit", unit_id: "unit_1" },
+        { kind: "unit", unit_id: "unit_2" },
+      ],
+      wording_choice_compare_units: [
+        {
+          id: "unit_1",
+          user_items: ["AI flows"],
+          suggestion_items: ["AI-driven flows"],
+          user_text: "AI flows",
+          suggestion_text: "AI-driven flows",
+          feedback_reason_text: "This suggestion keeps the service wording more precise.",
+          resolution: "",
+          confidence: "anchored",
+        },
+        {
+          id: "unit_2",
+          user_items: ["Production support"],
+          suggestion_items: ["Production guidance"],
+          user_text: "Production support",
+          suggestion_text: "Production guidance",
+          feedback_reason_text: "",
+          resolution: "",
+          confidence: "anchored",
+        },
+      ],
+      wording_choice_user_items: ["AI flows"],
+      wording_choice_suggestion_items: ["AI-driven flows"],
+      wording_choice_user_normalized: "AI flows",
+      wording_choice_agent_current: "AI-driven flows",
+      feedback_reason_text: "This suggestion keeps the service wording more precise.",
+    },
+  } as any;
+
+  const first = helpers.applyWordingPickSelection({
+    stepId: "productsservices",
+    routeToken: "__WORDING_PICK_USER__",
+    state,
+  });
+
+  assert.equal(first.handled, true);
+  assert.equal(String(first.specialist.wording_choice_pending || ""), "true");
+  assert.equal(String(first.specialist.feedback_reason_text || ""), "");
+  assert.deepEqual((first.specialist.wording_choice_user_items as string[]) || [], ["Production support"]);
+  const nextUnits = ((first.specialist.wording_choice_compare_units as unknown[]) || []) as Record<string, unknown>[];
+  assert.equal(String(nextUnits[1]?.feedback_reason_text || ""), "");
+});
+
 test("applyWordingPickSelection keeps removals when user picks own edited list", () => {
   const helpers = buildHelpers(true);
   const applyResult = helpers.applyWordingPickSelection({
@@ -1476,10 +1740,12 @@ test("applyWordingPickSelection unwraps autosuggest heading before committing su
   assert.equal(String(applyResult.specialist.wording_choice_agent_current || ""), value);
 });
 
-test("applyWordingPickSelection does not carry suggestion rationale when user picks own single-value wording", () => {
+test("applyWordingPickSelection preserves feedback reason when user picks own single-value wording", () => {
   const heading = "Je huidige droom voor Mindd is:";
   const userValue = "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.";
   const suggestionValue = "Mindd droomt van een wereld waarin mensen zonder zorgen complexe keuzes durven maken.";
+  const feedbackReason =
+    "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.";
   const helpers = buildHeadingAwareSingleValueHelpers({
     stepId: "dream",
     heading,
@@ -1498,8 +1764,42 @@ test("applyWordingPickSelection does not carry suggestion rationale when user pi
         wording_choice_target_field: "dream",
         wording_choice_user_normalized: userValue,
         wording_choice_agent_current: suggestionValue,
-        feedback_reason_text:
-          "Ik heb het herschreven naar een toekomstbeeld waarin mensen zich zekerder en gerust voelen bij hun keuzes.",
+        feedback_reason_text: feedbackReason,
+      },
+    } as any,
+  });
+
+  assert.equal(applyResult.handled, true);
+  assert.equal(String(applyResult.specialist.wording_choice_selected || ""), "user");
+  assert.equal(String(applyResult.specialist.feedback_reason_text || ""), feedbackReason);
+  assert.match(String(applyResult.specialist.message || ""), /toekomstbeeld waarin mensen zich zekerder/i);
+  assert.match(String(applyResult.specialist.message || ""), /je huidige droom voor mindd is:/i);
+  assert.match(String(applyResult.specialist.message || ""), /mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken/i);
+});
+
+test("applyWordingPickSelection keeps only the acknowledgment when user picks own wording without explicit reason", () => {
+  const heading = "Je huidige droom voor Mindd is:";
+  const userValue = "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken.";
+  const suggestionValue = "Mindd droomt van een wereld waarin mensen zonder zorgen complexe keuzes durven maken.";
+  const helpers = buildHeadingAwareSingleValueHelpers({
+    stepId: "dream",
+    heading,
+    suggestion: suggestionValue,
+    equivalent: false,
+  });
+
+  const applyResult = helpers.applyWordingPickSelection({
+    stepId: "dream",
+    routeToken: "__WORDING_PICK_USER__",
+    state: {
+      current_step: "dream",
+      active_specialist: "Dream",
+      last_specialist_result: {
+        wording_choice_pending: "true",
+        wording_choice_mode: "text",
+        wording_choice_target_field: "dream",
+        wording_choice_user_normalized: userValue,
+        wording_choice_agent_current: suggestionValue,
       },
     } as any,
   });
@@ -1508,8 +1808,6 @@ test("applyWordingPickSelection does not carry suggestion rationale when user pi
   assert.equal(String(applyResult.specialist.wording_choice_selected || ""), "user");
   assert.equal(String(applyResult.specialist.feedback_reason_text || ""), "");
   assert.match(String(applyResult.specialist.message || ""), /je huidige droom voor mindd is:/i);
-  assert.match(String(applyResult.specialist.message || ""), /mindd droomt van een wereld waarin mensen met vertrouwen keuzes maken/i);
-  assert.doesNotMatch(String(applyResult.specialist.message || ""), /toekomstbeeld waarin mensen zich zekerder/i);
 });
 
 test("buildWordingChoiceFromTurn keeps canonical pending during forced pending feedback even when suggestion is equivalent", () => {
@@ -1566,7 +1864,7 @@ test("buildWordingChoiceFromTurn keeps canonical pending during forced pending f
     assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
     assert.equal(String((result.specialist as Record<string, unknown>).pending_suggestion_anchor || ""), "suggestion");
     assert.equal(String((result.specialist as Record<string, unknown>).pending_suggestion_intent || ""), "feedback_on_suggestion");
-    assert.notEqual(String((result.specialist as Record<string, unknown>).feedback_reason_text || "").trim(), "");
+    assert.equal(String((result.specialist as Record<string, unknown>).feedback_reason_text || "").trim(), "");
   }
 });
 

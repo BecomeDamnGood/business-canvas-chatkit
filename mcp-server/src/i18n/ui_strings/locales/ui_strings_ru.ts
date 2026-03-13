@@ -94,6 +94,7 @@ export const UI_STRINGS_LOCALE_RU: Record<string, string> = {
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_EXPLAIN_MORE": "Объясните, почему сущность имеет значение",
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_FORMULATE": "Дайте мне 3 варианта Сущности",
     "menuLabel.PRESENTATION_MENU_ASK.ACTION_PRESENTATION_MAKE": "Создать мою презентацию сейчас",
+    "menuLabel.PRESENTATION_MENU_RECREATE.ACTION_PRESENTATION_MAKE": "Создать мою презентацию заново",
     "menuLabel.PRODUCTSSERVICES_MENU_CONFIRM.ACTION_PRODUCTSSERVICES_CONFIRM": "Это всё, что мы предлагаем, перейти к шагу 10: Правила игры.",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_CONFIRM_SINGLE": "Меня устраивает эта формулировка, пожалуйста, перейдите к шагу 4: Главное «почему».",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS": "Задайте 3 вопроса, чтобы помочь мне определить предназначение.",

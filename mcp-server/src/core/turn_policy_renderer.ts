@@ -15,6 +15,7 @@ import {
   extractStatementCount,
   strategyStatementsFromSources,
 } from "./turn_policy/strategy_helpers.js";
+import { shouldInferSingleValueFeedbackReason } from "./feedback_policy.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
 import {
@@ -510,15 +511,13 @@ function isSingleValueHeadingLikeBlock(block: string): boolean {
   return !/[.!?]$/.test(normalized);
 }
 
-const SINGLE_VALUE_INFERRED_FEEDBACK_STEPS = new Set(["purpose", "bigwhy"]);
-
 function inferSingleValueFeedbackReason(params: {
   stepId: string;
   message: string;
   heading: string;
   canonicalValue: string;
 }): string {
-  if (!SINGLE_VALUE_INFERRED_FEEDBACK_STEPS.has(String(params.stepId || "").trim())) return "";
+  if (!shouldInferSingleValueFeedbackReason(params.stepId)) return "";
   const canonicalText = String(params.canonicalValue || "").trim();
   if (!canonicalText) return "";
   const blocks = canonicalParagraphBlocks(params.message);
@@ -1892,9 +1891,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
         .trim()
       : "";
   const explicitFeedbackReasonForDisplay =
-    wordingChoiceSelected === "user"
-      ? ""
-      : String((specialistForDisplay as any).feedback_reason_text || "").trim();
+    String((specialistForDisplay as any).feedback_reason_text || "").trim();
   const feedbackReasonForDisplay =
     explicitFeedbackReasonForDisplay ||
     inferSingleValueFeedbackReason({

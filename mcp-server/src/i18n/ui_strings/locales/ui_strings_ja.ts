@@ -82,6 +82,7 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_EXPLAIN_MORE": "エンティティ を持つことが重要な理由を説明してください",
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_FORMULATE": "エンティティ の候補を3つ見せてください",
     "menuLabel.PRESENTATION_MENU_ASK.ACTION_PRESENTATION_MAKE": "今すぐ私のプレゼンテーションを作成",
+    "menuLabel.PRESENTATION_MENU_RECREATE.ACTION_PRESENTATION_MAKE": "私のプレゼンテーションをもう一度作成",
     "menuLabel.PRODUCTSSERVICES_MENU_CONFIRM.ACTION_PRODUCTSSERVICES_CONFIRM": "これが私たちの提供内容すべてです。ステップ10 ゲームのルールに進んでください",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_CONFIRM_SINGLE": "この表現で満足です。ステップ4 大きな理由に進んでください。",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS": "存在意義 を定義するために3つ質問してください。",

@@ -27,6 +27,7 @@ export type WordingChoiceUiPayload = {
   enabled: boolean;
   mode: WordingChoiceMode;
   variant?: WordingChoiceVariant;
+  feedback_reason_text?: string;
   user_text: string;
   suggestion_text: string;
   user_label?: string;

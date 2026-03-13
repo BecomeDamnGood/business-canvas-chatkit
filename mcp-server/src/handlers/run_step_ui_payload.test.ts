@@ -282,6 +282,49 @@ test("attachRegistryPayload omits questionText while wording-choice picker is ac
   assert.equal(Object.prototype.hasOwnProperty.call(payload.ui || {}, "questionText"), false);
 });
 
+test("attachRegistryPayload preserves explicit compare feedback in wording-choice payloads", () => {
+  const helpers = buildHelpers();
+  const canonical = "Mindd exists to make complex choices understandable.";
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: canonical,
+      prompt: "",
+      current_step_id: "purpose",
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+      } as any,
+    },
+    {
+      ui_contract_id: "purpose:ASK:PURPOSE_MENU_REFINE:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "text",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "purpose",
+      wording_choice_user_normalized: "We want to do something good.",
+      wording_choice_agent_current: canonical,
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "text",
+      feedback_reason_text: "The current wording is still too broad and does not yet show the contribution clearly.",
+      user_text: "We want to do something good.",
+      suggestion_text: canonical,
+      user_items: [],
+      suggestion_items: [],
+      instruction: "Choose the wording that fits best.",
+    }
+  );
+
+  assert.equal(
+    payload.ui?.wording_choice?.feedback_reason_text,
+    "The current wording is still too broad and does not yet show the contribution clearly."
+  );
+});
+
 test("attachRegistryPayload keeps legacy payloads renderable when ui.content is absent", () => {
   const helpers = buildHelpers();
   const payload = helpers.attachRegistryPayload(
