@@ -40,7 +40,11 @@ const pendingBridgeCalls = new Map<string, { resolve: (v: unknown) => void; reje
 let bridgeTargetOriginCache: string | null = null;
 let bridgeTargetOriginSource = "";
 let pendingWidgetScrollTarget: "" | "presentation_preview" = "";
+let pendingWidgetScrollTimer: ReturnType<typeof setTimeout> | null = null;
 type TransportStatus = "unknown" | "ready_callTool" | "ready_bridge" | "unavailable";
+const DESKTOP_WIDGET_SCROLL_OFFSET_PX = 10;
+const MOBILE_WIDGET_SCROLL_DELAY_MS = 60;
+const MOBILE_WIDGET_MAX_WIDTH_PX = 480;
 
 export function initActionsConfig(config: {
   render: (overrideRaw?: unknown) => void;
@@ -60,28 +64,54 @@ function isHtmlElement(value: unknown): value is HTMLElement {
   return typeof HTMLElement !== "undefined" && value instanceof HTMLElement;
 }
 
+function viewportWidthPx(): number {
+  if (typeof window === "undefined") return 0;
+  const visualViewportWidth = Number(window.visualViewport?.width || 0);
+  if (Number.isFinite(visualViewportWidth) && visualViewportWidth > 0) return visualViewportWidth;
+  const innerWidth = Number(window.innerWidth || 0);
+  if (Number.isFinite(innerWidth) && innerWidth > 0) return innerWidth;
+  const documentWidth = Number(document.documentElement?.clientWidth || 0);
+  return Number.isFinite(documentWidth) && documentWidth > 0 ? documentWidth : 0;
+}
+
+function shouldUseMobileScrollBehavior(): boolean {
+  const viewportWidth = viewportWidthPx();
+  return viewportWidth > 0 && viewportWidth <= MOBILE_WIDGET_MAX_WIDTH_PX;
+}
+
+function blurWidgetInputFocus(): boolean {
+  if (typeof document === "undefined") return false;
+  const activeElement = document.activeElement as
+    | { id?: unknown; blur?: () => void }
+    | null;
+  if (!activeElement || typeof activeElement !== "object") return false;
+  if (String(activeElement.id || "").trim() !== "input") return false;
+  if (typeof activeElement.blur !== "function") return false;
+  activeElement.blur();
+  return true;
+}
+
 function scrollWidgetTop(): void {
   if (typeof document === "undefined" || typeof window === "undefined") return;
   const topAnchor =
     document.getElementById("stepper") ||
     document.querySelector(".card") ||
     document.body;
-  try {
-    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
-  } catch {
-    window.scrollTo(0, 0);
-  }
-  if (document.documentElement) document.documentElement.scrollTop = 0;
-  if (document.body) document.body.scrollTop = 0;
   const scrollingElement = document.scrollingElement;
-  if (scrollingElement) scrollingElement.scrollTop = 0;
-  if (isHtmlElement(topAnchor)) {
-    try {
-      topAnchor.scrollIntoView({ block: "start", behavior: "smooth" });
-    } catch {
-      topAnchor.scrollIntoView(true);
-    }
+  const currentScrollTop =
+    Number(window.scrollY || window.pageYOffset || scrollingElement?.scrollTop || document.documentElement?.scrollTop || document.body?.scrollTop || 0);
+  const anchorTop = isHtmlElement(topAnchor)
+    ? currentScrollTop + topAnchor.getBoundingClientRect().top
+    : 0;
+  const targetTop = Math.max(0, anchorTop + (shouldUseMobileScrollBehavior() ? 0 : DESKTOP_WIDGET_SCROLL_OFFSET_PX));
+  try {
+    window.scrollTo({ top: targetTop, left: 0, behavior: "smooth" });
+  } catch {
+    window.scrollTo(0, targetTop);
   }
+  if (document.documentElement) document.documentElement.scrollTop = targetTop;
+  if (document.body) document.body.scrollTop = targetTop;
+  if (scrollingElement) scrollingElement.scrollTop = targetTop;
 }
 
 function scrollPresentationPreviewIntoView(): boolean {
@@ -104,7 +134,19 @@ function isPresentationMakeAction(messageText: string): boolean {
 export function prepareWidgetScrollForAction(messageText: string): void {
   const normalized = String(messageText || "").trim().toUpperCase();
   if (!normalized || normalized === ACTION_BOOTSTRAP_POLL) return;
-  scrollWidgetTop();
+  const hadFocusedInput = blurWidgetInputFocus();
+  if (pendingWidgetScrollTimer) {
+    clearTimeout(pendingWidgetScrollTimer);
+    pendingWidgetScrollTimer = null;
+  }
+  if (hadFocusedInput && shouldUseMobileScrollBehavior()) {
+    pendingWidgetScrollTimer = setTimeout(() => {
+      pendingWidgetScrollTimer = null;
+      scrollWidgetTop();
+    }, MOBILE_WIDGET_SCROLL_DELAY_MS);
+  } else {
+    scrollWidgetTop();
+  }
   pendingWidgetScrollTarget = isPresentationMakeAction(normalized)
     ? "presentation_preview"
     : "";

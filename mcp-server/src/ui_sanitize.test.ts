@@ -1588,6 +1588,18 @@ test("bundled typography preview uses tighter general and card body line-height"
   assert.match(source, /\.cardDesc p,\s*[\s\S]*\.cardDesc \.section-body\s*\{[\s\S]*line-height:\s*1\.3;/);
 });
 
+test("bundled runtime blurs mobile input before deferred submit scroll and offsets desktop scroll", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /var DESKTOP_WIDGET_SCROLL_OFFSET_PX = 10;/);
+  assert.match(source, /var MOBILE_WIDGET_SCROLL_DELAY_MS = 60;/);
+  assert.match(source, /function blurWidgetInputFocus\(\)/);
+  assert.match(source, /const hadFocusedInput = blurWidgetInputFocus\(\);/);
+  assert.match(source, /if \(hadFocusedInput && shouldUseMobileScrollBehavior\(\)\) \{/);
+  assert.match(source, /pendingWidgetScrollTimer = setTimeout\(\(\) => \{/);
+  assert.match(source, /const targetTop = Math\.max\(0, anchorTop \+ \(shouldUseMobileScrollBehavior\(\) \? 0 : DESKTOP_WIDGET_SCROLL_OFFSET_PX\)\);/);
+  assert.doesNotMatch(source, /topAnchor\.scrollIntoView\(\{ block: "start", behavior: "smooth" \}\);/);
+});
+
 test("bundled runtime fail-closes missing canonical widget payloads", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /incoming_missing_widget_result/);
