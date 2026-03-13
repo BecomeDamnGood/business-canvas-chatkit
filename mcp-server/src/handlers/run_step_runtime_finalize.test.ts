@@ -395,6 +395,44 @@ test("buildTextForWidget falls back to products/services field bullets when mess
   assert.match(output, /• Branding/);
 });
 
+test("buildTextForWidget falls back to canonical products/services state when specialist payload is empty", () => {
+  const helpers = buildTextHelpers((stepId) => {
+    if (stepId !== "productsservices") return "";
+    return [
+      "De huidige producten en diensten van Mindd zijn:",
+      "",
+      "• Strategisch bedrijfs- en communicatieadvies",
+      "• Creatieve campagnes",
+      "• Graphic, motion- en interaction design",
+    ].join("\n");
+  });
+
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "productsservices:valid_output:PRODUCTSSERVICES_MENU_CONFIRM:v1",
+      message: "",
+      refined_formulation: "",
+      productsservices: "",
+    },
+    state: {
+      active_specialist: "ProductsServices",
+      current_step: "productsservices",
+      provisional_by_step: {
+        productsservices: [
+          "• Strategisch bedrijfs- en communicatieadvies",
+          "• Creatieve campagnes",
+          "• Graphic, motion- en interaction design",
+        ].join("\n"),
+      },
+    } as any,
+  });
+
+  assert.match(output, /De huidige producten en diensten van Mindd zijn:/);
+  assert.match(output, /• Strategisch bedrijfs- en communicatieadvies/);
+  assert.match(output, /• Creatieve campagnes/);
+  assert.match(output, /• Graphic, motion- en interaction design/);
+});
+
 test("buildTextForWidget avoids duplicate rules bullets when message already contains the same list", () => {
   const helpers = buildTextHelpers((stepId) => {
     if (stepId !== "rulesofthegame") return "";

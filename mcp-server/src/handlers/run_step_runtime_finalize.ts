@@ -784,7 +784,20 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       if (!stepId || !deps.fieldForStep(stepId)) return "";
       const field = deps.fieldForStep(stepId);
       const fieldValue = field ? String((specialist as Record<string, unknown>)?.[field] || "").trim() : "";
-      return refinedDisplay || refined || fieldValue;
+      const state = params.state && typeof params.state === "object"
+        ? (params.state as Record<string, unknown>)
+        : null;
+      const provisionalByStep =
+        state && typeof state.provisional_by_step === "object"
+          ? (state.provisional_by_step as Record<string, unknown>)
+          : {};
+      const finalField = `${stepId}_final`;
+      const stateBackedValue = String(
+        provisionalByStep?.[stepId] ||
+        (state ? state[finalField] : "") ||
+        ""
+      ).trim();
+      return refinedDisplay || refined || fieldValue || stateBackedValue;
     })();
     const selectionForCurrentValue = (() => {
       if (dreamBuilderCanonicalOnlyView || wordingPending) return "";

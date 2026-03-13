@@ -966,7 +966,14 @@ test("single-value valid output keeps feedback reason above canonical block when
   assert.match(message, /ik heb ai niet als kern opgenomen/i);
   assert.match(message, /current.*mindd.*is:/i);
   assert.equal(message.split(canonical).length - 1, 1);
-  assert.equal(String(uiContent.feedback_reason_text || ""), "Ik heb AI niet als kern opgenomen omdat je Droom effect-gericht blijft.");
+  assert.match(
+    String(uiContent.feedback_reason_text || ""),
+    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
+  );
+  assert.match(
+    String(uiContent.feedback_reason_text || ""),
+    /ik heb ai niet als kern opgenomen omdat je droom effect-gericht blijft/i
+  );
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
@@ -999,9 +1006,13 @@ test("single-value valid output infers feedback reason from multi-sentence purpo
   assert.equal(rendered.status, "valid_output");
   assert.match(message, /je beschrijving is nog te algemeen/i);
   assert.match(message, /based on your input i suggest the following purpose:/i);
-  assert.equal(
+  assert.match(
     String(uiContent.feedback_reason_text || ""),
-    "Je beschrijving is nog te algemeen en mist een duidelijk menselijk effect."
+    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
+  );
+  assert.match(
+    String(uiContent.feedback_reason_text || ""),
+    /je beschrijving is nog te algemeen en mist een duidelijk menselijk effect/i
   );
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
@@ -1035,9 +1046,13 @@ test("single-value valid output infers feedback reason from multi-sentence big w
   assert.equal(rendered.status, "valid_output");
   assert.match(message, /je grote waarom klinkt nog beschrijvend/i);
   assert.match(message, /based on your input i suggest the following big why:/i);
-  assert.equal(
+  assert.match(
     String(uiContent.feedback_reason_text || ""),
-    "Je grote waarom klinkt nog beschrijvend en mist emotionele urgentie."
+    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
+  );
+  assert.match(
+    String(uiContent.feedback_reason_text || ""),
+    /je grote waarom klinkt nog beschrijvend en mist emotionele urgentie/i
   );
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
@@ -1124,7 +1139,14 @@ test("single-value valid output infers feedback reason across the single-value f
 
     const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
     assert.equal(rendered.status, "valid_output");
-    assert.equal(String(uiContent.feedback_reason_text || ""), scenario.expected);
+    assert.match(
+      String(uiContent.feedback_reason_text || ""),
+      /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
+    );
+    assert.match(
+      String(uiContent.feedback_reason_text || ""),
+      new RegExp(scenario.expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+    );
     assert.equal(String(uiContent.canonical_text || ""), scenario.canonical);
   }
 });
@@ -1235,7 +1257,14 @@ test("single-value valid output preserves feedback reason after user picks own w
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
   assert.doesNotMatch(message, /toekomstbeeld waarin mensen zich zekerder/i);
-  assert.equal(String(uiContent.feedback_reason_text || ""), feedbackReason);
+  assert.match(
+    String(uiContent.feedback_reason_text || ""),
+    /(helemaal prima|completely okay)/i
+  );
+  assert.match(
+    String(uiContent.feedback_reason_text || ""),
+    /toekomstbeeld waarin mensen zich zekerder/i
+  );
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
@@ -1271,7 +1300,14 @@ test("dream single-value content strips duplicated leading feedback sentence fro
   });
 
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
-  assert.equal(String(uiContent.feedback_reason_text || ""), feedbackReason);
+  assert.match(
+    String(uiContent.feedback_reason_text || ""),
+    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
+  );
+  assert.match(
+    String(uiContent.feedback_reason_text || ""),
+    new RegExp(feedbackReason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+  );
   assert.equal(
     String(uiContent.support_text || ""),
     "Ik heb het beeld versterkt door te benadrukken dat mensen niet alleen zeker en vertrouwd willen kopen, maar vooral willen genieten van het plezier en de voldoening van hun keuzes."

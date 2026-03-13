@@ -16,6 +16,7 @@ import {
   strategyStatementsFromSources,
 } from "./turn_policy/strategy_helpers.js";
 import { shouldInferSingleValueFeedbackReason } from "./feedback_policy.js";
+import { formatCompareFeedbackForDisplay, formatUserPickFeedbackForDisplay } from "./feedback_display.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
 import {
@@ -541,9 +542,12 @@ function singleValueSupportText(params: {
   heading: string;
   canonicalValue: string;
   feedbackReasonText?: string;
+  rawFeedbackReasonText?: string;
 }): string {
   const feedbackReasonText = String(params.feedbackReasonText || "").trim();
+  const rawFeedbackReasonText = String(params.rawFeedbackReasonText || "").trim();
   const feedbackKey = comparableText(feedbackReasonText);
+  const rawFeedbackKey = comparableText(rawFeedbackReasonText);
   const blocks = canonicalParagraphBlocks(params.message);
   const filtered = blocks
     .map((block, index) => {
@@ -551,6 +555,7 @@ function singleValueSupportText(params: {
       const nextBlock = String(blocks[index + 1] || "").trim();
       if (!blockKey) return "";
       if (feedbackKey && blockKey === feedbackKey) return "";
+      if (rawFeedbackKey && blockKey === rawFeedbackKey) return "";
       if (isSingleValueHeadingBlock(block, params.heading)) return "";
       if (
         isSingleValueHeadingLikeBlock(block) &&
@@ -559,7 +564,14 @@ function singleValueSupportText(params: {
         return "";
       }
       if (isSingleValueCanonicalBlock(block, params.heading, params.canonicalValue)) return "";
-      return feedbackKey ? stripLeadingFeedbackSentence(block, feedbackReasonText) : block;
+      if (feedbackKey) {
+        const withoutFormatted = stripLeadingFeedbackSentence(block, feedbackReasonText);
+        if (rawFeedbackReasonText) {
+          return stripLeadingFeedbackSentence(withoutFormatted, rawFeedbackReasonText);
+        }
+        return withoutFormatted;
+      }
+      return rawFeedbackReasonText ? stripLeadingFeedbackSentence(block, rawFeedbackReasonText) : block;
     })
     .map((block) => String(block || "").trim())
     .filter((block) => {
@@ -580,6 +592,7 @@ function buildSingleValueUiContent(params: {
   message: string;
   canonicalValue: string;
   feedbackReasonText?: string;
+  rawFeedbackReasonText?: string;
 }): UiSingleValueContent | undefined {
   const { stepId, state, specialist, message, canonicalValue } = params;
   const canonicalText = String(canonicalValue || "").trim();
@@ -593,6 +606,7 @@ function buildSingleValueUiContent(params: {
     heading,
     canonicalValue: canonicalText,
     feedbackReasonText,
+    rawFeedbackReasonText: String(params.rawFeedbackReasonText || "").trim(),
   });
   return {
     kind: "single_value",
@@ -1892,7 +1906,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       : "";
   const explicitFeedbackReasonForDisplay =
     String((specialistForDisplay as any).feedback_reason_text || "").trim();
-  const feedbackReasonForDisplay =
+  const rawFeedbackReasonForDisplay =
     explicitFeedbackReasonForDisplay ||
     inferSingleValueFeedbackReason({
       stepId,
@@ -1900,6 +1914,18 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       heading: singleValueConfirmHeading(stepId, state),
       canonicalValue: pendingCanonicalValue || canonicalAcceptedValue,
     });
+  const feedbackReasonForDisplay =
+    String((specialistForDisplay as any).wording_choice_selected || "").trim() === "user"
+      ? formatUserPickFeedbackForDisplay({
+          stepId,
+          rawReason: rawFeedbackReasonForDisplay,
+          resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
+        })
+      : formatCompareFeedbackForDisplay({
+          stepId,
+          rawReason: rawFeedbackReasonForDisplay,
+          resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
+        });
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
     wordingPending &&
@@ -1917,6 +1943,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       heading: singleValueConfirmHeading(stepId, state),
       canonicalValue: pendingCanonicalValue,
       feedbackReasonText: feedbackReasonForDisplay,
+      rawFeedbackReasonText: rawFeedbackReasonForDisplay,
     });
   }
   const useSingleValueConfirmSsot =
@@ -1958,6 +1985,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     message: messageForDisplay,
     canonicalValue: singleValueUiCanonicalValue,
     feedbackReasonText: feedbackReasonForDisplay,
+    rawFeedbackReasonText: rawFeedbackReasonForDisplay,
   });
 
   const {

@@ -324,8 +324,13 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Gebruik de Business Strategy Canvas Builder-widget om door te gaan (niet het chatvak).",
     "wording.choice.context.default": "Kies alsjeblieft de bewoording die het beste past.",
-    "wording.feedback.user_pick.ack.default": "Je koos je eigen bewoording, en dat is oké.",
-    "wording.feedback.user_pick.reason.default": "Dit behoudt je oorspronkelijke betekenis en blijft in lijn met deze stap.",
+    "wording.feedback.compare.intro.template":
+      "Ik denk dat ik begrijp wat je bedoelt. Voor een sterke {0} helpt het om dit in gedachten te houden.",
+    "wording.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
+    "wording.feedback.user_pick.nudge.template":
+      "Tegelijk helpt het om in gedachten te houden wat een sterke {0} meestal krachtiger maakt.",
+    "wording.feedback.user_pick.reason.default":
+      "Houd wel in gedachten wat deze stap sterk maakt, zodat je formulering helder en passend blijft.",
     "wordingChoice.chooseVersion": "Kies deze versie",
     "wordingChoice.useInputFallback": "Gebruik deze input",
     "wordingChoiceHeading": "Dit is jouw input:",

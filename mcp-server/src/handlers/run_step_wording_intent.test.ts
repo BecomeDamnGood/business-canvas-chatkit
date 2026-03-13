@@ -14,8 +14,13 @@ function buildHelpers(intentEnabled: boolean) {
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wording.feedback.compare.intro.template":
+      "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
+    "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+    "wording.feedback.user_pick.nudge.template":
+      "At the same time, it helps to remember what usually makes a strong {0}.",
     "wording.feedback.user_pick.reason.default":
-      "This keeps your original meaning while staying aligned with this step.",
+      "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
@@ -113,8 +118,13 @@ function buildHeadingAwareSingleValueHelpers(params: {
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wording.feedback.compare.intro.template":
+      "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
+    "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+    "wording.feedback.user_pick.nudge.template":
+      "At the same time, it helps to remember what usually makes a strong {0}.",
     "wording.feedback.user_pick.reason.default":
-      "This keeps your original meaning while staying aligned with this step.",
+      "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
@@ -709,7 +719,9 @@ test("buildWordingChoiceFromTurn exposes dynamic feedback reason across the sing
     });
 
     assert.ok(result.wordingChoice);
-    assert.equal(String(result.wordingChoice?.feedback_reason_text || ""), scenario.expected);
+    const feedback = String(result.wordingChoice?.feedback_reason_text || "");
+    assert.match(feedback, /stronger/i);
+    assert.match(feedback, new RegExp(scenario.expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
   }
 });
 
@@ -767,7 +779,9 @@ test("buildWordingChoiceFromTurn exposes dynamic feedback reason across grouped 
     });
 
     assert.ok(result.wordingChoice);
-    assert.equal(String(result.wordingChoice?.feedback_reason_text || ""), scenario.expected);
+    const feedback = String(result.wordingChoice?.feedback_reason_text || "");
+    assert.match(feedback, /stronger/i);
+    assert.match(feedback, new RegExp(scenario.expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
   }
 });
 
@@ -1254,8 +1268,13 @@ test("buildWordingChoiceFromTurn directly accepts one valid strategy sentence wh
     wordingChoiceSuggestionLabel: "This would be my suggestion:",
     wordingChoiceInstruction: "Please click what suits you best.",
     "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wording.feedback.compare.intro.template":
+      "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
+    "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+    "wording.feedback.user_pick.nudge.template":
+      "At the same time, it helps to remember what usually makes a strong {0}.",
     "wording.feedback.user_pick.reason.default":
-      "This keeps your original meaning while staying aligned with this step.",
+      "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
   };

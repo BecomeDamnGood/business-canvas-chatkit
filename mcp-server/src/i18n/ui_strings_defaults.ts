@@ -72,8 +72,13 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   wordingChoiceSuggestionLabel: "This would be my suggestion:",
   wordingChoiceInstruction: "Please click what suits you best.",
   "wording.choice.context.default": "Please choose the wording that fits best.",
-  "wording.feedback.user_pick.ack.default": "You chose your own wording, and that's okay.",
-  "wording.feedback.user_pick.reason.default": "This keeps your original meaning while staying aligned with this step.",
+  "wording.feedback.compare.intro.template":
+    "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
+  "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+  "wording.feedback.user_pick.nudge.template":
+    "At the same time, it helps to remember what usually makes a strong {0}.",
+  "wording.feedback.user_pick.reason.default":
+    "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
   "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",
   "invariant.prompt.ask.default": "Share your thoughts or choose an option.",
   "dreamBuilder.startExercise": "Start the exercise",

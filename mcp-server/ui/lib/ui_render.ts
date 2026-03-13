@@ -880,7 +880,10 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
       .replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "")
       .trim();
 
-  feedbackEl.textContent = feedbackReasonText;
+  (feedbackEl as HTMLElement).innerHTML = "";
+  if (feedbackReasonText) {
+    renderStructuredText(feedbackEl, feedbackReasonText);
+  }
   (feedbackEl as HTMLElement).style.display = feedbackReasonText ? "block" : "none";
   retainedHeadingEl.textContent = instructionParts.retainedHeading;
   retainedListEl.innerHTML = "";

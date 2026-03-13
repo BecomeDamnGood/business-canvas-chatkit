@@ -214,6 +214,15 @@ function appendCanonicalValue(el: Element, line: string): void {
   el.appendChild(p);
 }
 
+function appendFeedbackNote(el: Element, raw: string): void {
+  const value = String(raw || "").trim();
+  if (!value) return;
+  const wrap = document.createElement("div");
+  wrap.className = "cardFeedbackNote";
+  appendStructuredText(wrap, value);
+  el.appendChild(wrap);
+}
+
 function appendList(el: Element, tagName: "ol" | "ul", className: string, items: string[]): void {
   const filtered = items
     .map((item) => ({ raw: String(item || "").trim(), clean: normalizeLineText(item) }))
@@ -333,7 +342,7 @@ export function renderSingleValueCardContent(
   if (!heading && !canonicalText && !supportText && !feedbackReasonText) {
     return false;
   }
-  if (feedbackReasonText) appendStructuredText(el, feedbackReasonText);
+  if (feedbackReasonText) appendFeedbackNote(el, feedbackReasonText);
   if (supportText) appendStructuredText(el, supportText);
   if (heading) appendHeading(el, heading);
   if (canonicalText) appendCanonicalValue(el, canonicalText);

@@ -1613,8 +1613,10 @@ test("bundled wording-choice view exposes a dedicated compare feedback slot", ()
   assert.match(source, /class="wordingChoiceFeedback" id="wordingChoiceFeedback"/);
   assert.match(source, /const feedbackEl = document\.getElementById\("wordingChoiceFeedback"\);/);
   assert.match(source, /const feedbackReasonText = String\(wording\.feedback_reason_text \|\| ""\)\.trim\(\);/);
-  assert.match(source, /feedbackEl\.textContent = feedbackReasonText;/);
+  assert.match(source, /renderStructuredText\(feedbackEl, feedbackReasonText\);/);
   assert.match(source, /feedbackEl\.style\.display = feedbackReasonText \? "block" : "none";/);
+  assert.match(source, /\.wordingChoiceFeedback p,/);
+  assert.match(source, /\.cardDesc \.cardFeedbackNote/);
 });
 
 test("bundled runtime retains canonical step continuity for latest render cache", () => {
