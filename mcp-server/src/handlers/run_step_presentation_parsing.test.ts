@@ -26,3 +26,54 @@ test("presentation section parser splits semicolon and bullet-like input without
     "Workshops",
   ]);
 });
+
+test("presentation recap helpers read edited scalar and list sections from a structured recap", () => {
+  const recap = [
+    "Dit is wat je zei:",
+    "",
+    "Droom:",
+    "Mindd maakt complexe keuzes rustig en helder.",
+    "",
+    "Producten en Diensten:",
+    "• Strategisch bedrijfs- en communicatieadvies",
+    "• Creatieve campagnes",
+    "• DTP, posters en traditionele communicatiemiddelen",
+  ].join("\n");
+
+  const state = {
+    ui_strings: {
+      "ppt.heading.dream": "Droom",
+      "ppt.heading.productsservices": "Producten en Diensten",
+    },
+  } as any;
+
+  const deps = {
+    uiDefaultString: (key: string) => {
+      if (key === "ppt.heading.dream") return "Dream";
+      if (key === "ppt.heading.productsservices") return "Products and Services";
+      return "";
+    },
+    uiStringFromStateMap: (currentState: any, key: string, fallback: string) =>
+      String(currentState?.ui_strings?.[key] || fallback || ""),
+  };
+
+  const dream = __testOnly.scalarSectionValueFromRecap({
+    recap,
+    state,
+    deps,
+    section: "dream",
+  });
+  const products = __testOnly.listSectionLinesFromRecap({
+    recap,
+    state,
+    deps,
+    section: "productsservices",
+  });
+
+  assert.equal(dream, "Mindd maakt complexe keuzes rustig en helder.");
+  assert.deepEqual(products, [
+    "Strategisch bedrijfs- en communicatieadvies",
+    "Creatieve campagnes",
+    "DTP, posters en traditionele communicatiemiddelen",
+  ]);
+});

@@ -6,9 +6,11 @@ import { execFileSync } from "node:child_process";
 
 import { getPresentationTemplatePath } from "../core/presentation_paths.js";
 import type { CanvasState } from "../core/state.js";
+import { isStructuredPresentationRecap } from "./run_step_presentation_recap.js";
 import { parseStep0Final } from "./run_step_step0.js";
 
 type SectionKey = "strategy" | "targetgroup" | "productsservices" | "rulesofthegame";
+type ScalarSectionKey = "dream" | "purpose" | "bigwhy" | "role" | "entity";
 
 type RunStepPresentationDeps = {
   uiDefaultString: (key: string, fallback?: string) => string;
@@ -24,6 +26,14 @@ const SECTION_LABELS: Record<SectionKey, string[]> = {
   targetgroup: ["target group", "doelgroep"],
   productsservices: ["products and services", "products & services", "producten en diensten"],
   rulesofthegame: ["rules of the game", "spelregels"],
+};
+
+const SCALAR_SECTION_LABEL_KEYS: Record<ScalarSectionKey, string> = {
+  dream: "ppt.heading.dream",
+  purpose: "ppt.heading.purpose",
+  bigwhy: "ppt.heading.bigwhy",
+  role: "ppt.heading.role",
+  entity: "ppt.heading.entity",
 };
 
 function normalizePresentationTextSingle(input: string): string {
@@ -129,6 +139,97 @@ function presentationLinesForSection(input: string, section: SectionKey): string
     }
   }
   const merged = dedupePresentationLines(scoped.length > 0 ? scoped : generic);
+  return merged.length > 0 ? merged : [""];
+}
+
+function acceptedPresentationRecapFromState(state: CanvasState): string {
+  const provisionalMap =
+    (state as Record<string, unknown>).provisional_by_step &&
+    typeof (state as Record<string, unknown>).provisional_by_step === "object"
+      ? ((state as Record<string, unknown>).provisional_by_step as Record<string, unknown>)
+      : {};
+  const candidates = [
+    String(provisionalMap.presentation || "").trim(),
+    String((state as Record<string, unknown>).presentation_brief_final || "").trim(),
+  ];
+  for (const candidate of candidates) {
+    if (isStructuredPresentationRecap(candidate)) return candidate;
+  }
+  return "";
+}
+
+function extractSectionBlock(params: {
+  recap: string;
+  labels: string[];
+}): string {
+  const recap = String(params.recap || "").replace(/\r/g, "\n").trim();
+  if (!recap) return "";
+  const labels = params.labels
+    .map((label) => normalizePresentationLine(label).replace(/\s*:\s*$/g, ""))
+    .filter(Boolean);
+  if (labels.length === 0) return "";
+  const blocks = recap
+    .split(/\n{2,}/)
+    .map((block) => String(block || "").trim())
+    .filter(Boolean);
+  for (const block of blocks) {
+    const lines = block
+      .split("\n")
+      .map((line) => normalizePresentationLine(line))
+      .filter(Boolean);
+    if (lines.length === 0) continue;
+    const [firstLine, ...rest] = lines;
+    for (const label of labels) {
+      const labelOnlyRe = new RegExp(`^${escapeRegExp(label)}\\s*:\\s*$`, "i");
+      if (labelOnlyRe.test(firstLine)) {
+        return rest.join("\n").trim();
+      }
+      const inlineRe = new RegExp(`^${escapeRegExp(label)}\\s*:\\s*(.+)$`, "i");
+      const inlineMatch = firstLine.match(inlineRe);
+      if (inlineMatch) {
+        return [String(inlineMatch[1] || "").trim(), ...rest].filter(Boolean).join("\n").trim();
+      }
+    }
+  }
+  return "";
+}
+
+function scalarSectionValueFromRecap(params: {
+  recap: string;
+  state: CanvasState;
+  deps: RunStepPresentationDeps;
+  section: ScalarSectionKey;
+}): string {
+  const labelKey = SCALAR_SECTION_LABEL_KEYS[params.section];
+  const fallback = params.deps.uiDefaultString(labelKey);
+  const localized = params.deps.uiStringFromStateMap(params.state, labelKey, fallback);
+  const block = extractSectionBlock({
+    recap: params.recap,
+    labels: [localized, fallback],
+  });
+  return normalizePresentationTextSingle(block);
+}
+
+function listSectionLinesFromRecap(params: {
+  recap: string;
+  state: CanvasState;
+  deps: RunStepPresentationDeps;
+  section: SectionKey;
+}): string[] {
+  const labelKey = `ppt.heading.${params.section}`;
+  const fallback = params.deps.uiDefaultString(labelKey);
+  const localized = params.deps.uiStringFromStateMap(params.state, labelKey, fallback);
+  const block = extractSectionBlock({
+    recap: params.recap,
+    labels: [localized, fallback, ...SECTION_LABELS[params.section]],
+  });
+  if (!block) return [""];
+  const lines = block
+    .split("\n")
+    .flatMap((line) => splitPresentationLineItems(line))
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const merged = dedupePresentationLines(lines);
   return merged.length > 0 ? merged : [""];
 }
 
@@ -303,6 +404,10 @@ function toStableFingerprintValue(value: unknown, depth = 0): unknown {
 
 export const __testOnly = {
   presentationLinesForSection,
+  acceptedPresentationRecapFromState,
+  extractSectionBlock,
+  scalarSectionValueFromRecap,
+  listSectionLinesFromRecap,
 };
 
 export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) {
@@ -321,6 +426,7 @@ export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) 
     labels: Record<string, string>,
     templatePath: string
   ): string {
+    const presentationRecap = acceptedPresentationRecapFromState(state);
     const templateStat = fs.statSync(templatePath);
     const payload = toStableFingerprintValue({
       schema_version: "presentation_asset_fingerprint_v1",
@@ -330,6 +436,7 @@ export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) 
         mtime_ms: Math.trunc(templateStat.mtimeMs),
       },
       labels,
+      presentation_recap: presentationRecap,
       content: {
         business_name: String((state as any).business_name ?? ""),
         step_0_final: String((state as any).step_0_final ?? ""),
@@ -376,22 +483,48 @@ export function createRunStepPresentationHelpers(deps: RunStepPresentationDeps) 
       return { fileName, filePath, outDir, assetFingerprint };
     }
 
-    const strategyLines = presentationLinesForSection(String((state as any).strategy_final ?? ""), "strategy");
-    const targetGroupLines = presentationLinesForSection(String((state as any).targetgroup_final ?? ""), "targetgroup");
-    const productsServicesLines = presentationLinesForSection(
-      String((state as any).productsservices_final ?? ""),
-      "productsservices"
-    );
-    const rulesLines = presentationLinesForSection(String((state as any).rulesofthegame_final ?? ""), "rulesofthegame");
+    const presentationRecap = acceptedPresentationRecapFromState(state);
+    const strategyLines = presentationRecap
+      ? listSectionLinesFromRecap({ recap: presentationRecap, state, deps, section: "strategy" })
+      : presentationLinesForSection(String((state as any).strategy_final ?? ""), "strategy");
+    const targetGroupLines = presentationRecap
+      ? listSectionLinesFromRecap({ recap: presentationRecap, state, deps, section: "targetgroup" })
+      : presentationLinesForSection(String((state as any).targetgroup_final ?? ""), "targetgroup");
+    const productsServicesLines = presentationRecap
+      ? listSectionLinesFromRecap({ recap: presentationRecap, state, deps, section: "productsservices" })
+      : presentationLinesForSection(String((state as any).productsservices_final ?? ""), "productsservices");
+    const rulesLines = presentationRecap
+      ? listSectionLinesFromRecap({ recap: presentationRecap, state, deps, section: "rulesofthegame" })
+      : presentationLinesForSection(String((state as any).rulesofthegame_final ?? ""), "rulesofthegame");
+    const bigWhyValue = presentationRecap
+      ? scalarSectionValueFromRecap({ recap: presentationRecap, state, deps, section: "bigwhy" }) ||
+        String((state as any).bigwhy_final ?? "")
+      : String((state as any).bigwhy_final ?? "");
+    const purposeValue = presentationRecap
+      ? scalarSectionValueFromRecap({ recap: presentationRecap, state, deps, section: "purpose" }) ||
+        String((state as any).purpose_final ?? "")
+      : String((state as any).purpose_final ?? "");
+    const roleValue = presentationRecap
+      ? scalarSectionValueFromRecap({ recap: presentationRecap, state, deps, section: "role" }) ||
+        String((state as any).role_final ?? "")
+      : String((state as any).role_final ?? "");
+    const entityValue = presentationRecap
+      ? scalarSectionValueFromRecap({ recap: presentationRecap, state, deps, section: "entity" }) ||
+        String((state as any).entity_final ?? "")
+      : String((state as any).entity_final ?? "");
+    const dreamValue = presentationRecap
+      ? scalarSectionValueFromRecap({ recap: presentationRecap, state, deps, section: "dream" }) ||
+        String((state as any).dream_final ?? "")
+      : String((state as any).dream_final ?? "");
 
     const replacements: Record<string, string> = {
       "{{BUSINESS_NAME}}": escapeXml(normalizePresentationTextSingle(name || "TBD")),
-      "{{BIG_WHY}}": escapeXml(normalizePresentationTextSingle(String((state as any).bigwhy_final ?? ""))),
-      "{{BIGWHY}}": escapeXml(normalizePresentationTextSingle(String((state as any).bigwhy_final ?? ""))),
-      "{{PURPOSE}}": escapeXml(normalizePresentationTextSingle(String((state as any).purpose_final ?? ""))),
-      "{{ROLE}}": escapeXml(normalizePresentationTextSingle(String((state as any).role_final ?? ""))),
-      "{{ENTITY}}": escapeXml(normalizePresentationTextSingle(String((state as any).entity_final ?? ""))),
-      "{{DREAM}}": escapeXml(normalizePresentationTextSingle(String((state as any).dream_final ?? ""))),
+      "{{BIG_WHY}}": escapeXml(normalizePresentationTextSingle(bigWhyValue)),
+      "{{BIGWHY}}": escapeXml(normalizePresentationTextSingle(bigWhyValue)),
+      "{{PURPOSE}}": escapeXml(normalizePresentationTextSingle(purposeValue)),
+      "{{ROLE}}": escapeXml(normalizePresentationTextSingle(roleValue)),
+      "{{ENTITY}}": escapeXml(normalizePresentationTextSingle(entityValue)),
+      "{{DREAM}}": escapeXml(normalizePresentationTextSingle(dreamValue)),
       "{{STRATEGY}}": escapeXml(strategyLines.join("\n")),
       "{{TARGET_GROUP}}": escapeXml(targetGroupLines.join("\n")),
       "{{PRODUCTS_SERVICES}}": escapeXml(productsServicesLines.join("\n")),

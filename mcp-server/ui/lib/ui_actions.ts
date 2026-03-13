@@ -97,21 +97,45 @@ function scrollWidgetTop(): void {
     document.getElementById("stepper") ||
     document.querySelector(".card") ||
     document.body;
-  const scrollingElement = document.scrollingElement;
-  const currentScrollTop =
-    Number(window.scrollY || window.pageYOffset || scrollingElement?.scrollTop || document.documentElement?.scrollTop || document.body?.scrollTop || 0);
-  const anchorTop = isHtmlElement(topAnchor)
-    ? currentScrollTop + topAnchor.getBoundingClientRect().top
-    : 0;
-  const targetTop = Math.max(0, anchorTop + (shouldUseMobileScrollBehavior() ? 0 : DESKTOP_WIDGET_SCROLL_OFFSET_PX));
-  try {
-    window.scrollTo({ top: targetTop, left: 0, behavior: "smooth" });
-  } catch {
-    window.scrollTo(0, targetTop);
+  const applyDesktopOffset = (): void => {
+    if (shouldUseMobileScrollBehavior()) return;
+    const scrollingElement = document.scrollingElement;
+    const currentTop = Number(
+      window.scrollY ||
+      window.pageYOffset ||
+      scrollingElement?.scrollTop ||
+      document.documentElement?.scrollTop ||
+      document.body?.scrollTop ||
+      0
+    );
+    const targetTop = Math.max(0, currentTop - DESKTOP_WIDGET_SCROLL_OFFSET_PX);
+    try {
+      window.scrollTo({ top: targetTop, left: 0, behavior: "smooth" });
+    } catch {
+      window.scrollTo(0, targetTop);
+    }
+    if (document.documentElement) document.documentElement.scrollTop = targetTop;
+    if (document.body) document.body.scrollTop = targetTop;
+    if (scrollingElement) scrollingElement.scrollTop = targetTop;
+  };
+  if (isHtmlElement(topAnchor)) {
+    try {
+      topAnchor.scrollIntoView({ block: "start", behavior: "smooth" });
+    } catch {
+      topAnchor.scrollIntoView(true);
+    }
+  } else {
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    } catch {
+      window.scrollTo(0, 0);
+    }
   }
-  if (document.documentElement) document.documentElement.scrollTop = targetTop;
-  if (document.body) document.body.scrollTop = targetTop;
-  if (scrollingElement) scrollingElement.scrollTop = targetTop;
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(() => applyDesktopOffset());
+  } else {
+    setTimeout(() => applyDesktopOffset(), 0);
+  }
 }
 
 function scrollPresentationPreviewIntoView(): boolean {

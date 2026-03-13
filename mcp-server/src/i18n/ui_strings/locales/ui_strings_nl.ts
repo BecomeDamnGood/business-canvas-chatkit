@@ -83,6 +83,7 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_EXPLAIN_MORE": "Leg uit waarom het hebben van een Entiteit belangrijk is",
     "menuLabel.ENTITY_MENU_INTRO.ACTION_ENTITY_INTRO_FORMULATE": "Geef me 3 suggesties voor mijn entiteit",
     "menuLabel.PRESENTATION_MENU_ASK.ACTION_PRESENTATION_MAKE": "Maak nu mijn presentatie",
+    "menuLabel.PRESENTATION_MENU_RECREATE.ACTION_PRESENTATION_MAKE": "Maak mijn presentatie opnieuw",
     "menuLabel.PRODUCTSSERVICES_MENU_CONFIRM.ACTION_PRODUCTSSERVICES_CONFIRM": "Dit is alles wat we aanbieden, ga door naar stap 10 Spelregels",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_CONFIRM_SINGLE": "Ik ben blij met deze formulering, ga alsjeblieft door naar stap 4 het Grote Waarom.",
     "menuLabel.PURPOSE_MENU_AFTER_CHOOSE.ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS": "Stel 3 vragen om mij te helpen de bestaansreden te definiëren.",

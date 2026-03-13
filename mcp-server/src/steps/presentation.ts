@@ -103,10 +103,13 @@ Additionally, the workflow provides the confirmed results of all steps as state 
 - targetgroup_final
 - productsservices_final
 - rulesofthegame_final
+- presentation_brief_final (may already contain the latest accepted edited recap)
 
 HARD:
-- Use ONLY these finals to build the recap.
-- Do NOT invent missing content.
+- Use the finals as the factual source of truth.
+- You MAY reorganize, shorten, reorder, group, or clarify the presentation recap when the user asks for adjustments.
+- You MAY use presentation_brief_final as the current accepted recap baseline when it is available.
+- Do NOT invent new business claims that are not grounded in the confirmed finals.
 - Do NOT depend on chat history to reconstruct content.
 
 3) OUTPUT SCHEMA (ALL FIELDS REQUIRED, NO NULLS)
@@ -181,10 +184,14 @@ Trigger:
 
 Output:
 - action="ASK"
-- message: show the recap, localized, built ONLY from the finals:
+- message: one short practical sentence acknowledging the requested adjustment (localized).
+- question=""
+- refined_formulation: an updated structured recap that incorporates the user's requested changes while staying grounded in the confirmed finals, using this exact formatting structure:
   Start with one line: "This is what you said:" (localized).
   Then add one blank line (empty line).
-  Then show the recap with the following formatting using plain-text labels only (no HTML/markup):
+  Then show the recap with the following formatting using plain-text labels only (no HTML/markup).
+  Preserve the same section labels and overall recap structure.
+  If the user requests ordering, prioritization, shortening, regrouping, or rewriting, apply that change directly inside the relevant section(s).
   (1) For step_0_final: parse the pattern "Venture: <venture_type> | Name: <business_name> | Status: <existing|starting>":
      - Format as "Venture: <venture_type>" (translate "Venture" to the user's language).
      - Directly below that: "Name: <business_name>" (translate "Name" to the user's language). Show this even if business_name is "TBD".
@@ -195,44 +202,11 @@ Output:
         "Label:" on its own line, then each bullet on its own line prefixed with "• " (convert "- " bullets to "• ").
       - If the value contains numbered lines (lines starting with "1.", "2.", "3.", etc. or "1)", "2)", "3)", etc.): format as:
         "Label:" on its own line, then each numbered line on its own line (preserve the numbering format).
-      - CRITICAL: Each final must be formatted separately. Do NOT combine content from strategy_final, targetgroup_final, productsservices_final, or rulesofthegame_final into one section. Each final has its own label and its own content.
-      - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
-- refined_formulation=""
-- question=""
-- presentation_brief=""
-
-Output:
-- action="REFINE"
-- message: one short practical sentence acknowledging they want to change something (localized).
-- question: ask ONE question only:
-  "Which part do you want to change, and what should the new version be?" (localized).
-- refined_formulation=""
-- question=""
-- presentation_brief=""
-
-Output:
-- action="ASK"
-- message=""
-- question=""
-- refined_formulation: a polished final recap built ONLY from the finals, using the same formatting structure as ASK:
-  Start with one line: "This is what you said:" (localized).
-  Then add one blank line (empty line).
-  Then show the recap with the following formatting using plain-text labels only (no HTML/markup):
-  (1) For step_0_final: parse the pattern "Venture: <venture_type> | Name: <business_name> | Status: <existing|starting>":
-     - Format as "Venture: <venture_type>" (translate "Venture" to the user's language).
-     - Directly below that: "Name: <business_name>" (translate "Name" to the user's language). Show this even if business_name is "TBD".
-     - Then one blank line (empty line).
-  (2) For all other non-empty finals (dream_final, purpose_final, bigwhy_final, role_final, entity_final, strategy_final, targetgroup_final, productsservices_final, rulesofthegame_final): 
-      - If the value is a single line: format as "Label: <value>" with Label in the user's language.
-      - If the value contains bullets (lines starting with "• " or "- "): format as:
-        "Label:" on its own line, then each bullet on its own line prefixed with "• " (convert "- " bullets to "• ").
-      - If the value contains numbered lines (lines starting with "1.", "2.", "3.", etc. or "1)", "2)", "3)", etc.): format as:
-        "Label:" on its own line, then each numbered line on its own line (preserve the numbering format).
-      - CRITICAL: Each final must be formatted separately. Do NOT combine content from strategy_final, targetgroup_final, productsservices_final, or rulesofthegame_final into one section. Each final has its own label and its own content.
+      - CRITICAL: Each section must remain separate. Do NOT combine content from strategy, targetgroup, productsservices, or rulesofthegame into one section. Each section has its own label and its own content.
       - After each step, ALWAYS add one blank line (empty line). Skip empty finals.
 - presentation_brief: identical to refined_formulation.
 - question: one line (localized):
-  Ask if they are satisfied with this summary and want to proceed to creating The Business Strategy Canvas Builder Presentation.
+  Ask if they are satisfied with this updated summary and want to create or recreate The Business Strategy Canvas Builder Presentation.
 
 
 ${buildSingleValueStepContractBlock("Presentation", "presentation_brief")}

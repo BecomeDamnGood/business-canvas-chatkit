@@ -1596,8 +1596,9 @@ test("bundled runtime blurs mobile input before deferred submit scroll and offse
   assert.match(source, /const hadFocusedInput = blurWidgetInputFocus\(\);/);
   assert.match(source, /if \(hadFocusedInput && shouldUseMobileScrollBehavior\(\)\) \{/);
   assert.match(source, /pendingWidgetScrollTimer = setTimeout\(\(\) => \{/);
-  assert.match(source, /const targetTop = Math\.max\(0, anchorTop \+ \(shouldUseMobileScrollBehavior\(\) \? 0 : DESKTOP_WIDGET_SCROLL_OFFSET_PX\)\);/);
-  assert.doesNotMatch(source, /topAnchor\.scrollIntoView\(\{ block: "start", behavior: "smooth" \}\);/);
+  assert.match(source, /topAnchor\.scrollIntoView\(\{ block: "start", behavior: "smooth" \}\);/);
+  assert.match(source, /const targetTop = Math\.max\(0, currentTop - DESKTOP_WIDGET_SCROLL_OFFSET_PX\);/);
+  assert.match(source, /window\.requestAnimationFrame\(\(\) => applyDesktopOffset\(\)\);/);
 });
 
 test("bundled runtime fail-closes missing canonical widget payloads", () => {

@@ -800,6 +800,18 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
       selectionForCurrentValue,
       currentSelectedValue
     );
+    if (!msg && !wordingPending && !isSingleValueValidOutput && isBulletConsistencyStep && currentSelectedValue) {
+      const currentValueListItems = extractStructuredListItems(currentSelectedValue);
+      const normalizedCurrentBody =
+        currentValueListItems.length >= 2
+          ? currentValueListItems.map((line) => `• ${line}`).join("\n")
+          : currentSelectedValue;
+      if (selectionCurrentParts.heading && selectionCurrentParts.body) {
+        msg = `${selectionCurrentParts.heading}\n\n${selectionCurrentParts.body}`.trim();
+      } else {
+        msg = normalizedCurrentBody;
+      }
+    }
     if (!dreamBuilderCanonicalOnlyView && !isSingleValueValidOutput && selectionCurrentParts.heading && selectionCurrentParts.body) {
       const msgComparable = deps.canonicalizeComparableText(msg);
       const headingComparable = deps.canonicalizeComparableText(selectionCurrentParts.heading);

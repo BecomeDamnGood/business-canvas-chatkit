@@ -1354,6 +1354,12 @@ function isPersistentRecapContextStep(stepId: string): boolean {
   return stepId === "presentation";
 }
 
+function hasGeneratedPresentationAssets(state: CanvasState): boolean {
+  const pdfUrl = String((state as any).presentation_asset_pdf_url || "").trim();
+  const pngUrl = String((state as any).presentation_asset_png_url || "").trim();
+  return Boolean(pdfUrl && pngUrl);
+}
+
 function persistentRecapContextFeedback(stepId: string, state: CanvasState): string {
   if (stepId !== "presentation") return "";
   return uiStringFromState(
@@ -1509,7 +1515,10 @@ function resolveMenuContract(params: {
   }
 
   const defaults = DEFAULT_MENU_BY_STATUS[stepId];
-  const defaultMenu = defaults ? String(defaults[status] || "").trim() : "";
+  let defaultMenu = defaults ? String(defaults[status] || "").trim() : "";
+  if (stepId === "presentation" && status === "valid_output" && hasGeneratedPresentationAssets(state)) {
+    defaultMenu = "PRESENTATION_MENU_RECREATE";
+  }
   const isOfftopic = specialist.is_offtopic === true;
   const ignorePhaseForOfftopicNoOutput = isOfftopic && status === "no_output";
   const forceDefaultMenuForValidOutput = stepId !== "step_0" && status === "valid_output";

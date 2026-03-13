@@ -328,3 +328,48 @@ test("applyStateUpdate canonicalizes presentation recap with Dutch localized hea
   assert.equal(value.includes("This is what you said:"), false);
   assert.equal(value.includes("grote waarom:"), false);
 });
+
+test("applyStateUpdate preserves a structured edited presentation recap instead of resetting to finals", () => {
+  const helpers = buildHelpers();
+  const editedRecap = [
+    "Dit is wat je zei:",
+    "",
+    "Type bedrijf:",
+    "agency",
+    "",
+    "Naam:",
+    "Mindd",
+    "",
+    "Producten en Diensten:",
+    "• Strategisch bedrijfs- en communicatieadvies",
+    "• Creatieve campagnes",
+    "• DTP, posters en traditionele communicatiemiddelen",
+  ].join("\n");
+
+  const next = helpers.applyStateUpdate({
+    prev: {
+      current_step: "presentation",
+      ui_strings: {
+        "presentation.recapIntro": "Dit is wat je zei:",
+        "recap.label.venture": "Type bedrijf",
+        "recap.label.name": "Naam",
+        "ppt.heading.productsservices": "Producten en Diensten",
+      },
+      step_0_final: "Venture: agency | Name: Mindd | Status: existing",
+      productsservices_final: [
+        "• DTP, posters en traditionele communicatiemiddelen",
+        "• Creatieve campagnes",
+        "• Strategisch bedrijfs- en communicatieadvies",
+      ].join("\n"),
+    } as any,
+    decision: { current_step: "presentation", specialist_to_call: "Presentation" } as any,
+    specialistResult: {
+      presentation_brief: editedRecap,
+      refined_formulation: editedRecap,
+    },
+    showSessionIntroUsed: "false",
+  });
+
+  assert.equal(String((next as any).provisional_by_step?.presentation || ""), editedRecap);
+  assert.equal(String((next as any).last_specialist_result?.presentation_brief || ""), editedRecap);
+});

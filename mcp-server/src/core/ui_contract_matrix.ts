@@ -344,7 +344,7 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   },
   ACTION_PRESENTATION_MAKE: {
     step_id: "presentation",
-    from_menu_ids: ["PRESENTATION_MENU_ASK"],
+    from_menu_ids: ["PRESENTATION_MENU_ASK", "PRESENTATION_MENU_RECREATE"],
     to_step_id: "presentation",
     render_mode: "no_buttons",
   },
@@ -501,6 +501,7 @@ export const MENU_LABELS: Record<string, string[]> = {
     "Give one concrete example (Rule versus poster slogan)",
   ],
   PRESENTATION_MENU_ASK: ["Create my presentation now"],
+  PRESENTATION_MENU_RECREATE: ["Recreate my presentation"],
 };
 
 function buildMenuLabelKey(menuId: string, actionCode: string, index: number): string {

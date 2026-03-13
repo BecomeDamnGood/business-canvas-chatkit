@@ -1475,6 +1475,45 @@ test("presentation accepted provisional remains valid output without synthetic c
   assert.equal(rendered.uiActionCodes.includes("ACTION_PRESENTATION_MAKE"), true);
 });
 
+test("presentation valid output switches CTA menu after assets already exist", () => {
+  const state = getDefaultState();
+  const canonical = [
+    "This is what you said:",
+    "",
+    "Dream:",
+    "Mindd helpt complexe keuzes vertalen naar heldere keuzes.",
+    "",
+    "Products and Services:",
+    "• Strategy",
+    "• Delivery",
+  ].join("\n");
+  (state as any).current_step = "presentation";
+  (state as any).active_specialist = "Presentation";
+  (state as any).business_name = "Mindd";
+  (state as any).presentation_asset_pdf_url = "https://cdn.example.com/mindd.pdf";
+  (state as any).presentation_asset_png_url = "https://cdn.example.com/mindd.png";
+  (state as any).provisional_by_step = { presentation: canonical };
+  (state as any).provisional_source_by_step = { presentation: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "presentation",
+    state,
+    specialist: {
+      action: "ASK",
+      message: "I reordered the presentation summary.",
+      question: "",
+      refined_formulation: canonical,
+      presentation_brief: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.contractId, "presentation:valid_output:PRESENTATION_MENU_RECREATE");
+  assert.deepEqual(rendered.uiActionCodes, ["ACTION_PRESENTATION_MAKE"]);
+  assert.equal(rendered.uiActions[0]?.label, "Recreate my presentation");
+});
+
 test("recap render suppresses duplicate single-value cards across accepted-output steps", () => {
   const cases = [
     {

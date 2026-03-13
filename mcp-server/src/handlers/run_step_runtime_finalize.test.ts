@@ -360,6 +360,41 @@ test("buildTextForWidget avoids duplicate products/services bullets when message
   assert.equal((output.match(/AI-tools en ondersteuning/g) || []).length, 1);
 });
 
+test("buildTextForWidget falls back to products/services field bullets when message and refined text are empty", () => {
+  const helpers = buildTextHelpers((stepId) => {
+    if (stepId !== "productsservices") return "";
+    return [
+      "De huidige producten en diensten van Mindd zijn:",
+      "",
+      "• AI-compatibele websites en apps",
+      "• AI-tools en ondersteuning",
+      "• Branding",
+    ].join("\n");
+  });
+
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "productsservices:valid_output:PRODUCTSSERVICES_MENU_CONFIRM:v1",
+      message: "",
+      refined_formulation: "",
+      productsservices: [
+        "• AI-compatibele websites en apps",
+        "• AI-tools en ondersteuning",
+        "• Branding",
+      ].join("\n"),
+    },
+    state: {
+      active_specialist: "ProductsServices",
+      current_step: "productsservices",
+    } as any,
+  });
+
+  assert.match(output, /De huidige producten en diensten van Mindd zijn:/);
+  assert.match(output, /• AI-compatibele websites en apps/);
+  assert.match(output, /• AI-tools en ondersteuning/);
+  assert.match(output, /• Branding/);
+});
+
 test("buildTextForWidget avoids duplicate rules bullets when message already contains the same list", () => {
   const helpers = buildTextHelpers((stepId) => {
     if (stepId !== "rulesofthegame") return "";

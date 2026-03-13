@@ -1316,6 +1316,40 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return mergeListItems([], visible);
   }
 
+  function hasInvalidRetainedOverlapInGroupedCompare(
+    segments: WordingChoiceCompareSegment[],
+    units: WordingChoiceCompareUnit[]
+  ): boolean {
+    const retainedKeys = new Set(
+      segments
+        .filter((segment): segment is Extract<WordingChoiceCompareSegment, { kind: "retained" }> => segment.kind === "retained")
+        .flatMap((segment) => segment.items)
+        .map((line) => deps.canonicalizeComparableText(line))
+        .filter(Boolean)
+    );
+    if (retainedKeys.size === 0) return false;
+    return units.some((unit) => {
+      const userOverlap = unit.user_items.some((line) => {
+        const key = deps.canonicalizeComparableText(line);
+        return Boolean(key) && retainedKeys.has(key);
+      });
+      const suggestionOverlap = unit.suggestion_items.some((line) => {
+        const key = deps.canonicalizeComparableText(line);
+        return Boolean(key) && retainedKeys.has(key);
+      });
+      if (!userOverlap && !suggestionOverlap) return false;
+      const userHasRemainingDifference = unit.user_items.some((line) => {
+        const key = deps.canonicalizeComparableText(line);
+        return Boolean(key) && !retainedKeys.has(key);
+      });
+      const suggestionHasRemainingDifference = unit.suggestion_items.some((line) => {
+        const key = deps.canonicalizeComparableText(line);
+        return Boolean(key) && !retainedKeys.has(key);
+      });
+      return !userHasRemainingDifference || !suggestionHasRemainingDifference;
+    });
+  }
+
   function nextUnresolvedCompareUnitIndex(
     units: WordingChoiceCompareUnit[],
     preferredIndex = 0

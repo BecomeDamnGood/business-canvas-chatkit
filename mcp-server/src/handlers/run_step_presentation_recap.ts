@@ -242,10 +242,19 @@ export function canonicalPresentationRecapForState(
   state: CanvasState,
   rawCandidate?: unknown
 ): string {
+  const fallback = normalizeMultilineWhitespace(rawCandidate);
+  if (isStructuredPresentationRecap(fallback)) return fallback;
+  const acceptedFromState = normalizeMultilineWhitespace(
+    String(
+      (state as Record<string, unknown>).presentation_brief_final ||
+      ((state as Record<string, unknown>).provisional_by_step as Record<string, unknown> | undefined)?.presentation ||
+      ""
+    )
+  );
+  if (isStructuredPresentationRecap(acceptedFromState)) return acceptedFromState;
   const canonical = buildCanonicalPresentationRecap(state);
   if (canonical) return canonical;
-  const fallback = normalizeMultilineWhitespace(rawCandidate);
-  return isStructuredPresentationRecap(fallback) ? fallback : "";
+  return "";
 }
 
 export const __testOnly = {
