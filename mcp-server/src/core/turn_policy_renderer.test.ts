@@ -737,7 +737,7 @@ test("single-value valid output from user input keeps autosuggest heading until 
   }
 });
 
-test("purpose semantic intro chrome stays visible for intro-family menus even without INTRO source action", () => {
+test("purpose semantic intro chrome stays hidden outside the actual intro screen", () => {
   const state = getDefaultState();
   (state as any).current_step = "purpose";
   (state as any).active_specialist = "Purpose";
@@ -754,7 +754,7 @@ test("purpose semantic intro chrome stays visible for intro-family menus even wi
     previousSpecialist: {},
   });
 
-  assert.equal(String((rendered.specialist as any).ui_show_step_intro_chrome || ""), "true");
+  assert.equal(String((rendered.specialist as any).ui_show_step_intro_chrome || ""), "");
   assert.equal(rendered.contractId, "purpose:no_output:PURPOSE_MENU_POST_ASK");
 });
 

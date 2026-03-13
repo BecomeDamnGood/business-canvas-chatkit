@@ -271,10 +271,11 @@ Output:
 If user chooses "Give me a few dream suggestions":
 - action="ASK"
 - message (localized):
-  - Provide exactly 2 Dream suggestions, each as one concise Dream line (no “first-person plural”).
+  - First write one short intro line (localized) with this meaning: "Here are three examples of a Dream for a {venture_type} like {company_name}." Use the known venture type and company name when available. If one is missing, keep the line natural and specific with the context that is known.
+  - Then provide exactly 3 Dream suggestions as a markdown bullet list (each line must start with "- "), with each bullet containing one concise Dream line (no “first-person plural”).
   - Base them only on the venture type + business name if known (do NOT invent extra facts).
   - Each suggestion MUST comply with Dream Quality Rules (section 8.5). Keep it effect-first and emotionally resonant. Do not mention tools, software, channels, methods, or measurable claims.
-  - End with one short line (localized): "I hope these suggestions inspire you to write your own Dream."
+  - After the 3 bullet suggestions, add exactly one blank line, then end with one short line (localized): "I hope these suggestions inspire you to write your own Dream."
 
 - refined_formulation=""
 - question=""

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import vm from "node:vm";
 import { renderInlineText, renderSingleValueCardContent, renderStructuredText } from "../ui/lib/ui_text.ts";
 import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.ts";
 import { canonicalizeWidgetPayload } from "../ui/lib/locale_bootstrap_runtime.ts";
@@ -1558,6 +1559,33 @@ test("bundled runtime does not retain legacy render-source fallbacks", () => {
   assert.match(source, /source:\s*"meta\.widget_result"/);
   assert.doesNotMatch(source, /source:\s*"structuredContent\.result"/);
   assert.doesNotMatch(source, /source:\s*"result"/);
+});
+
+test("bundled runtime inline script parses without syntax errors", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  const scriptMatch = source.match(/<script>([\s\S]*)<\/script>\s*<\/body>/);
+  assert.ok(scriptMatch, "expected bundled runtime inline script");
+  assert.doesNotThrow(() => {
+    new vm.Script(scriptMatch[1], { filename: "step-card.bundled.html:inline-script" });
+  });
+});
+
+test("bundled page body allows vertical scrolling", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /body\s*\{[\s\S]*overflow-x:\s*hidden;[\s\S]*overflow-y:\s*auto;/);
+});
+
+test("bundled prestart layout keeps bottom space outside the card", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /body > \.wrap\s*\{[\s\S]*padding-bottom:\s*15px;/);
+  assert.match(source, /\.card\s*\{[\s\S]*padding:\s*28px 40px 28px;/);
+});
+
+test("bundled typography preview uses tighter general and card body line-height", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /--line-height-normal:\s*1\.3;/);
+  assert.match(source, /\.cardDesc\s*\{[\s\S]*line-height:\s*1\.3;/);
+  assert.match(source, /\.cardDesc p,\s*[\s\S]*\.cardDesc \.section-body\s*\{[\s\S]*line-height:\s*1\.3;/);
 });
 
 test("bundled runtime fail-closes missing canonical widget payloads", () => {

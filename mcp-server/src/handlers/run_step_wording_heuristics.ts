@@ -540,6 +540,95 @@ function extractRoleSuggestionSentences(params: {
   return scored;
 }
 
+function extractBigWhySuggestionSentences(params: {
+  message: string;
+  ensureSentenceEnd: (value: string) => string;
+}): string[] {
+  const raw = String(params.message || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+  const blocked = [
+    /\bhere are\b.{0,32}\bbig\s*why\b.{0,32}\bexamples?\b/i,
+    /\bhere are\b.{0,32}\bbig\s*why\b.{0,32}\bsuggestions?\b/i,
+    /\bi hope\b/i,
+    /\bthese suggestions\b/i,
+    /\binspire you\b/i,
+    /\bwrite your own big why\b/i,
+    /\bchoose one for me\b/i,
+  ];
+  const lines = raw
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const fragments: string[] = [];
+  for (const line of lines) {
+    const bulletMatch = line.match(/^\s*(?:[-*•]|\d+[\).])\s*(.+)\s*$/);
+    if (bulletMatch) {
+      fragments.push(String(bulletMatch[1] || "").trim());
+      continue;
+    }
+    const parts = line
+      .split(/(?<=[.!?])\s+(?=\S)/)
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+    fragments.push(...parts);
+  }
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const fragment of fragments) {
+    const sentence = fragment.replace(/\s+/g, " ").trim();
+    if (!sentence || sentence.length < 24) continue;
+    if (sentence.endsWith("?")) continue;
+    if (blocked.some((re) => re.test(sentence))) continue;
+    if (looksLikeExamplesFramingLine(sentence)) continue;
+    if (tokenizeWords(sentence).length > 28) continue;
+    const key = canonicalizeComparableText(sentence);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(sentence);
+  }
+  return unique.map((sentence) => params.ensureSentenceEnd(sentence));
+}
+
+function extractEntitySuggestionPhrases(params: {
+  message: string;
+  normalizeEntityPhrase: (value: string) => string;
+}): string[] {
+  const raw = String(params.message || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+  const blocked = [
+    /\bhere are\b.{0,32}\bentity\b.{0,32}\bexamples?\b/i,
+    /\bhere are\b.{0,32}\bentity\b.{0,32}\bsuggestions?\b/i,
+    /\bi hope\b/i,
+    /\bthese suggestions\b/i,
+    /\binspire you\b/i,
+    /\bwrite your own entity\b/i,
+    /\bchoose one for me\b/i,
+  ];
+  const lines = raw
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const bulletMatch = line.match(/^\s*(?:[-*•]|\d+[\).])\s*(.+)\s*$/);
+    const candidateRaw = bulletMatch ? String(bulletMatch[1] || "").trim() : line;
+    if (!candidateRaw) continue;
+    if (blocked.some((re) => re.test(candidateRaw))) continue;
+    if (looksLikeExamplesFramingLine(candidateRaw)) continue;
+    const candidate = params.normalizeEntityPhrase(candidateRaw);
+    if (!candidate) continue;
+    const words = tokenizeWords(candidate);
+    if (words.length < 2 || words.length > 8) continue;
+    if (/[!?]/.test(candidate)) continue;
+    const key = canonicalizeComparableText(candidate);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(candidate);
+  }
+  return unique;
+}
+
 export function parseListItems(input: string): string[] {
   const raw = String(input || "").replace(/\r/g, "\n").trim();
   if (!raw) return [];
@@ -723,6 +812,7 @@ export function areEquivalentWordingVariants(params: {
 type RunStepWordingHeuristicDeps = {
   entityStepId: string;
   dreamStepId: string;
+  bigwhyStepId: string;
   roleStepId: string;
   fieldForStep: (stepId: string) => string;
   normalizeEntityPhrase: (value: string) => string;
@@ -797,6 +887,71 @@ export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeurist
       if (!isValidStepValueForStorage(deps.roleStepId, cleaned)) continue;
       const words = tokenizeWords(cleaned);
       if (words.length >= 5 && !cleaned.endsWith("?")) return cleaned;
+    }
+    return "";
+  }
+
+  function pickBigWhySuggestionFromPreviousState(
+    state: CanvasState,
+    previousSpecialist: Record<string, unknown>
+  ): string {
+    const previous = previousSpecialist && typeof previousSpecialist === "object"
+      ? previousSpecialist
+      : {};
+    const fromMessage = extractBigWhySuggestionSentences({
+      message: String((previous as any).message || ""),
+      ensureSentenceEnd: deps.ensureSentenceEnd,
+    });
+    for (const candidate of fromMessage) {
+      const cleaned = String(candidate || "").trim();
+      if (!cleaned) continue;
+      if (!isValidStepValueForStorage(deps.bigwhyStepId, cleaned)) continue;
+      return cleaned;
+    }
+    const fromFields = [
+      String((previous as any).bigwhy || "").trim(),
+      String((previous as any).refined_formulation || "").trim(),
+      String((((state as any).provisional_by_step || {})[deps.bigwhyStepId] || "")).trim(),
+      String((state as any).bigwhy_final || "").trim(),
+    ].filter(Boolean);
+    for (const candidate of fromFields) {
+      const cleaned = deps.ensureSentenceEnd(candidate);
+      if (!cleaned) continue;
+      if (!isValidStepValueForStorage(deps.bigwhyStepId, cleaned)) continue;
+      if (tokenizeWords(cleaned).length <= 28 && !cleaned.endsWith("?")) return cleaned;
+    }
+    return "";
+  }
+
+  function pickEntitySuggestionFromPreviousState(
+    state: CanvasState,
+    previousSpecialist: Record<string, unknown>
+  ): string {
+    const previous = previousSpecialist && typeof previousSpecialist === "object"
+      ? previousSpecialist
+      : {};
+    const fromMessage = extractEntitySuggestionPhrases({
+      message: String((previous as any).message || ""),
+      normalizeEntityPhrase: deps.normalizeEntityPhrase,
+    });
+    for (const candidate of fromMessage) {
+      const cleaned = deps.normalizeEntityPhrase(candidate);
+      if (!cleaned) continue;
+      if (!isValidStepValueForStorage(deps.entityStepId, cleaned)) continue;
+      return cleaned;
+    }
+    const fromFields = [
+      String((previous as any).entity || "").trim(),
+      String((previous as any).refined_formulation || "").trim(),
+      String((((state as any).provisional_by_step || {})[deps.entityStepId] || "")).trim(),
+      String((state as any).entity_final || "").trim(),
+    ].filter(Boolean);
+    for (const candidate of fromFields) {
+      const cleaned = deps.normalizeEntityPhrase(candidate);
+      if (!cleaned) continue;
+      if (!isValidStepValueForStorage(deps.entityStepId, cleaned)) continue;
+      const words = tokenizeWords(cleaned);
+      if (words.length >= 2 && words.length <= 8) return cleaned;
     }
     return "";
   }
@@ -878,6 +1033,8 @@ export function createRunStepWordingHeuristicHelpers(deps: RunStepWordingHeurist
   return {
     pickDualChoiceSuggestion,
     pickDreamSuggestionFromPreviousState,
+    pickBigWhySuggestionFromPreviousState,
+    pickEntitySuggestionFromPreviousState,
     pickRoleSuggestionFromPreviousState,
   };
 }

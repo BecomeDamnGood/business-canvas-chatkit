@@ -149,6 +149,11 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
     from_menu_ids: ["BIGWHY_MENU_FROM_EXPLAIN"],
     to_menu_id: "BIGWHY_MENU_FROM_GIVE",
   },
+  ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME: {
+    step_id: "bigwhy",
+    from_menu_ids: ["BIGWHY_MENU_FROM_GIVE"],
+    to_menu_id: "BIGWHY_MENU_REFINE",
+  },
   ACTION_BIGWHY_REFINE_ADJUST: {
     step_id: "bigwhy",
     from_menu_ids: ["BIGWHY_MENU_REFINE"],
@@ -199,11 +204,16 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   ACTION_ENTITY_INTRO_FORMULATE: {
     step_id: "entity",
     from_menu_ids: ["ENTITY_MENU_INTRO"],
-    to_menu_id: "ENTITY_MENU_EXAMPLE",
+    to_menu_id: "ENTITY_MENU_SUGGESTIONS",
   },
   ACTION_ENTITY_FORMULATE_FOR_ME: {
     step_id: "entity",
     from_menu_ids: ["ENTITY_MENU_FORMULATE"],
+    to_menu_id: "ENTITY_MENU_SUGGESTIONS",
+  },
+  ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME: {
+    step_id: "entity",
+    from_menu_ids: ["ENTITY_MENU_SUGGESTIONS"],
     to_menu_id: "ENTITY_MENU_EXAMPLE",
   },
   ACTION_ENTITY_EXAMPLE_REFINE: {
@@ -347,7 +357,7 @@ export const MENU_LABELS: Record<string, string[]> = {
     "Do a small exercise that helps to define your dream.",
   ],
   DREAM_MENU_WHY: [
-    "Give me a few dream suggestions",
+    "Give me 3 Dream suggestions",
     "Do a small exercise that helps to define your dream.",
   ],
   DREAM_MENU_SUGGESTIONS: [
@@ -398,11 +408,10 @@ export const MENU_LABELS: Record<string, string[]> = {
   ],
   BIGWHY_MENU_FROM_EXPLAIN: [
     "Ask 3 tough questions to find the Big Why.",
-    "Give me an example of the Big Why",
+    "Give me 3 Big Why suggestions",
   ],
   BIGWHY_MENU_FROM_GIVE: [
-    "Ask 3 tough questions to find the Big Why.",
-    "Explain the importance of a Big Why",
+    "Choose one for me",
   ],
   BIGWHY_MENU_REFINE: [
     "I'm happy with this wording, continue to step 5 Role",
@@ -422,10 +431,11 @@ export const MENU_LABELS: Record<string, string[]> = {
   ],
   ROLE_MENU_EXAMPLES: ["Choose one for me"],
   ENTITY_MENU_INTRO: [
-    "Give me an example how my entity could sound",
+    "Give me 3 Entity suggestions",
     "Explain why having an Entity matters",
   ],
-  ENTITY_MENU_FORMULATE: ["Formulate my entity for me"],
+  ENTITY_MENU_FORMULATE: ["Give me 3 Entity suggestions"],
+  ENTITY_MENU_SUGGESTIONS: ["Choose one for me"],
   ENTITY_MENU_EXAMPLE: [
     "I'm happy with this wording, continue to step 7 Strategy.",
     "Refine the wording for me please",

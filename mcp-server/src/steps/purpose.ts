@@ -373,7 +373,8 @@ Output
 - message (localized) must contain exactly this structure with real line breaks:
 
   First paragraph (introductory text, localized):
-  "Below are three Purpose formulations tailored to your Dream. Be inspired, or write your own."
+  "Here are three examples of a Purpose for a {venture_type} like {company_name}."
+  Use the known venture type and company name when available. If one is missing, keep the line natural and specific with the context that is known.
 
   Then provide exactly 3 Purpose examples as a markdown bullet list (each line must start with "- "). Each example must:
   - Be exactly one sentence in company voice (use company name if known, otherwise "we" in the user's language)
@@ -383,8 +384,8 @@ Output
   - Be written in the user's language
   - Not use first-person plural in the Purpose content itself (company voice, not "we" as plural)
 
-  After the 3 examples, add exactly one blank line, then add this reminder text (localized):
-  "Remember: A Purpose is not a goal or a result (like growth or profit). It's the meaning behind the business. The guiding principle that keeps you aligned with your Dream."
+  After the 3 examples, add exactly one blank line, then add this one short line (localized):
+  "I hope these suggestions inspire you to write your own Purpose."
 
 Anti-echo check (HARD) 
 Before outputting refined_formulation, verify that the core nouns and verbs are different from the confirmed outputs of all prior steps. Semantic overlap with a prior step is a quality failure, not a sign of consistency.

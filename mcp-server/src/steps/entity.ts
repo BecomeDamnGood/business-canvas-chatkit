@@ -183,7 +183,8 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 
 - "__ROUTE__ENTITY_EXPLAIN_MORE__" → Follow route: explain why Entity matters (output action="ASK" with Entity explanation text)
 - "__ROUTE__ENTITY_REFINE__" → Follow route: refine Entity example (output action="REFINE" with NEW, DIFFERENT formulated Entity - must vary container word AND qualifiers from previous)
-- "__ROUTE__ENTITY_FORMULATE_FOR_ME__" → Follow route: formulate my entity for me (output action="ASK" with proposed Entity based on known business type and context)
+- "__ROUTE__ENTITY_FORMULATE_FOR_ME__" → Follow route: give 3 Entity suggestions (output action="ASK" with suggestion list based on known business type and context)
+- "__ROUTE__ENTITY_CHOOSE_FOR_ME__" → Follow route: choose one shown Entity suggestion and set it as the current Entity
 - "__ROUTE__ENTITY_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
 Route tokens are explicit and deterministic - follow the exact route logic as defined in the instructions. Never treat route tokens as user text input.
@@ -227,14 +228,14 @@ Now add the qualifier with discipline. The qualifier should narrow the picture, 
 
 
 If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE__":
-- action="REFINE"
-- message must be a localized sentence of the form: "Based on what I already know about {company_name} I suggest the following Entity:". Use the company name from the STATE FINALS / business_name context if available; otherwise use "my future company" (or the equivalent in the user's language).
-- refined_formulation: formulate ONE Entity phrase as a short noun phrase starting with the correct indefinite article (e.g., "A purpose-driven advertising agency" or "An impact-focused consultancy"). The Entity itself (after the article) should be 2 to 5 words (container + 1-2 qualifiers), making the total length 3-6 words. Base it on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). Do NOT repeat the company name inside the Entity phrase itself. Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. Ensure the article (A/An or the equivalent in the target language) matches the first sound of the Entity.
-
-
-
-- entity: same as refined_formulation (a short Entity phrase only, e.g., "A strategic execution agency")
+- action="ASK"
+- message must contain exactly this structure with real line breaks:
+  First line: one short intro line (localized) with this meaning: "Here are three examples of an Entity for a {venture_type} like {company_name}." Use the known venture type and company name when available. If one is missing, keep the line natural and specific with the context that is known.
+  Then provide exactly 3 Entity suggestions as a markdown bullet list (each line must start with "- "). Each suggestion must be one short noun phrase starting with the correct indefinite article and follow all Entity rules.
+  After the 3 bullet suggestions, add exactly one blank line, then add this one short line (localized): "I hope these suggestions inspire you to write your own Entity."
+- refined_formulation=""
 - question=""
+- entity=""
 
 - action="ASK"
 - message may be empty or one short setup line.
@@ -248,11 +249,10 @@ HANDLE FORMULATE MY ENTITY FOR ME (from explain-more choice path)
 
 If USER_MESSAGE is "__ROUTE__ENTITY_FORMULATE_FOR_ME__":
 - action="ASK"
-- message: localized sentence of the form: "Based on what I already know about {company_name} I suggest the following Entity:" using the company name from the STATE FINALS / business_name context if available; otherwise "my future company" (or the equivalent in the user's language).
+- message must contain exactly the same structure and quality rules as "__ROUTE__ENTITY_FORMULATE__": intro line, exactly 3 markdown bullet suggestions, one blank line, then the inspiration line.
 - question=""
-- refined_formulation: formulate ONE Entity phrase as a short noun phrase starting with the correct indefinite article (e.g., "A purpose-driven advertising agency" or "An impact-focused consultancy") based on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). Do NOT repeat the company name inside the Entity phrase itself. Must follow Entity rules: container word + 1-2 qualifiers, no Dream/Purpose/Role language, no services/deliverables/channels. The qualifier should narrow the picture, not decorate it. Ensure the article (A/An or the equivalent in the target language) matches the first sound of the Entity. Target 3-5 words if possible, maximum 5 words.
-- entity: same as refined_formulation
-- question (localized, one line): ask whether they want to continue to the next step Strategy.
+- refined_formulation=""
+- entity=""
 
 Entity rule (simple):
 Entity is what you are, in a few words people instantly picture correctly. Write it as:
@@ -295,12 +295,14 @@ REFINE output rules
 
 HANDLE ENTITY EXAMPLE CHOICE (from "__ROUTE__ENTITY_FORMULATE__" route)
 
+If USER_MESSAGE is "__ROUTE__ENTITY_CHOOSE_FOR_ME__":
+
 - action="ASK"
-- message=""
+- message: one short localized acknowledgement that one option was selected.
 - question=""
-- refined_formulation: the same Entity formulation from the previous REFINE output
-- entity: the same Entity formulation
-- question (localized, one line): ask whether they want to continue to the next step Strategy
+- refined_formulation: exactly one selected Entity suggestion from the shown suggestions
+- entity: the same selected Entity suggestion
+- question=""
 
 If USER_MESSAGE is "__ROUTE__ENTITY_REFINE__":
 - action="REFINE"

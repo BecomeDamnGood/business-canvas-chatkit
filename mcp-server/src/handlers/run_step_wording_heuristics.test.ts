@@ -8,8 +8,10 @@ import {
   shouldTreatAsStepContributingInput,
 } from "./run_step_wording_heuristics.js";
 import {
+  pickBigWhySuggestionFromPreviousState,
   pickDualChoiceSuggestion,
   pickDreamSuggestionFromPreviousState,
+  pickEntitySuggestionFromPreviousState,
   pickRoleSuggestionFromPreviousState,
 } from "./run_step_wording_heuristics_defaults.js";
 
@@ -167,4 +169,38 @@ test("pickDualChoiceSuggestion ignores examples framing-only message for purpose
     ""
   );
   assert.equal(picked, "");
+});
+
+test("pickBigWhySuggestionFromPreviousState skips framing and tail lines", () => {
+  const picked = pickBigWhySuggestionFromPreviousState(
+    { business_name: "Mindd" } as any,
+    {
+      message: [
+        "Here are three examples of a Big Why for an advertising agency like Mindd.",
+        "- People should feel seen before they are persuaded.",
+        "- Brands should strengthen trust instead of extracting attention.",
+        "- Creative work should make public life more human and more honest.",
+        "",
+        "I hope these suggestions inspire you to write your own Big Why.",
+      ].join("\n"),
+    } as any
+  );
+  assert.equal(picked, "People should feel seen before they are persuaded.");
+});
+
+test("pickEntitySuggestionFromPreviousState skips framing and tail lines", () => {
+  const picked = pickEntitySuggestionFromPreviousState(
+    { business_name: "Mindd" } as any,
+    {
+      message: [
+        "Here are three examples of an Entity for an advertising agency like Mindd.",
+        "- A purpose-led advertising agency",
+        "- A values-driven brand studio",
+        "- An independent creative consultancy",
+        "",
+        "I hope these suggestions inspire you to write your own Entity.",
+      ].join("\n"),
+    } as any
+  );
+  assert.equal(picked, "A purpose-led advertising agency");
 });

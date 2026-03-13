@@ -329,7 +329,8 @@ Important:
 
 If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an explicit routing instruction:
 
-- "__ROUTE__BIGWHY_GIVE_EXAMPLE__" → Follow route B' (give example of Big Why, output action="REFINE" with Big Why formulation)
+- "__ROUTE__BIGWHY_GIVE_EXAMPLE__" → Follow route B' (give 3 Big Why suggestions, output action="ASK" with suggestion list)
+- "__ROUTE__BIGWHY_CHOOSE_FOR_ME__" → Follow route B'' (choose one shown Big Why suggestion and set it as the current Big Why)
 - "__ROUTE__BIGWHY_EXPLAIN_IMPORTANCE__" → Follow the deeper explanation route for why Big Why matters (output action="ASK" with explanation text only)
 - "__ROUTE__BIGWHY_ASK_3_QUESTIONS__" → Follow route C (ask 3 tough questions, output action="ASK" with first question)
 - "__ROUTE__BIGWHY_REFINE__" → Follow route E' (refine the Big Why, output action="REFINE" with a DIFFERENT Big Why formulation)
@@ -366,26 +367,26 @@ Output (HARD)
 
 
 Output
-- action="REFINE"
+- action="ASK"
 - message (localized) must contain exactly this structure with real line breaks:
 
-  First line: "Based on the Dream and Purpose of {company_name}, your Big Why could sound like this:"
-  (Use the company name from STATE FINALS context block if available; otherwise use "my future company" in the user's language.)
+  First line: one short intro line with this meaning: "Here are three examples of a Big Why for a {venture_type} like {company_name}." Use the known venture type and company name when available. If one is missing, keep the line natural and specific with the context that is known.
 
-  Then add exactly one blank line.
+  Then provide exactly 3 Big Why suggestions as a markdown bullet list (each line must start with "- "). Each suggestion must be exactly one sentence, max 28 words total, meaning-layer phrasing, no first-person plural, universal, and resonant with Dream and Purpose themes.
 
-- refined_formulation: provide exactly one Big Why sentence (one sentence, optionally a second, max 28 words total), meaning-layer phrasing, no first-person plural, universal, resonant with Dream and Purpose themes. Follow all Big Why rules: it must be a "should-be-true" statement about people or the world, not a policy, rule, or value label. CRITICAL: The Big Why must focus on WHY the Dream and Purpose have meaning and are important for people and society. It must explain the real reason why this matters - the deeper significance that makes Dream and Purpose relevant and worth pursuing, even when it costs and nobody applauds.
+  After the 3 bullet suggestions, add exactly one blank line, then add this one short line (localized): "I hope these suggestions inspire you to write your own Big Why."
 
-- question (localized) must contain exactly this structure with real line breaks:
+- refined_formulation=""
+- question=""
+- bigwhy=""
 
-  First line: "Are you content with this Big Why or do you want to refine it?"
+B'' ) Choose one for me (from "__ROUTE__BIGWHY_CHOOSE_FOR_ME__")
 
-  Then add exactly one blank line.
-
-
-
-  (blank line)
-
+Output
+- action="ASK"
+- message: one short localized acknowledgement that one option was selected.
+- refined_formulation: exactly one selected Big Why sentence from the shown suggestions (non-empty).
+- bigwhy: same sentence (non-empty).
 - question=""
 - bigwhy=""
 

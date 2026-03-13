@@ -358,12 +358,11 @@ Question 3:
 After the third answer, propose a refined Role sentence via REFINE (section 12).
 
 - action="ASK"
-- message must provide exactly 3 examples, each one sentence, following the example rules. After the three examples, add exactly one blank line, then add this question (localized): "Do any of these roles resonate with you?"
-- question must ask (localized, exact structure with real line breaks):
-
-
-(blank line)
-
+- message must contain exactly this structure with real line breaks:
+  First line: one short intro line (localized) with this meaning: "Here are three examples of a Role for a {venture_type} like {company_name}." Use the known venture type and company name when available. If one is missing, keep the line natural and specific with the context that is known.
+  Then provide exactly 3 Role suggestions as a markdown bullet list (each line must start with "- "). Each example must be exactly one sentence and follow all example rules.
+  After the 3 bullet suggestions, add exactly one blank line, then add this one short line (localized): "I hope these suggestions inspire you to write your own Role."
+- question=""
 - refined_formulation=""
 - question=""
 - role=""

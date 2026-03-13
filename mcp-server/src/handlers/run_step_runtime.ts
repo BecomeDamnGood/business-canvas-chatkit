@@ -127,6 +127,7 @@ import {
 } from "./run_step_policy_meta.js";
 import {
   ACTION_BOOTSTRAP_POLL_TOKEN,
+  BIGWHY_CHOOSE_FOR_ME_ROUTE_TOKEN,
   DREAM_EXPLAINER_ESCAPE_MENU_ID,
   DREAM_EXPLAINER_REFINE_MENU_ID,
   DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
@@ -135,6 +136,7 @@ import {
   DREAM_START_EXERCISE_ACTION_CODES,
   DREAM_START_EXERCISE_ROUTE_TOKEN,
   PRESENTATION_MAKE_ROUTE_TOKEN,
+  ENTITY_CHOOSE_FOR_ME_ROUTE_TOKEN,
   ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN,
   STRATEGY_CONSOLIDATE_ROUTE_TOKEN,
   SWITCH_TO_SELF_DREAM_TOKEN,
@@ -607,6 +609,7 @@ export const normalizeStep0OfftopicToAsk = step0DisplayHelpers.normalizeStep0Off
 const wordingHeuristicHelpers = createRunStepWordingHeuristicHelpers({
   entityStepId: ENTITY_STEP_ID,
   dreamStepId: DREAM_STEP_ID,
+  bigwhyStepId: BIGWHY_STEP_ID,
   roleStepId: ROLE_STEP_ID,
   fieldForStep,
   normalizeEntityPhrase,
@@ -614,7 +617,12 @@ const wordingHeuristicHelpers = createRunStepWordingHeuristicHelpers({
 });
 
 const pickDualChoiceSuggestion = wordingHeuristicHelpers.pickDualChoiceSuggestion;
-const { pickDreamSuggestionFromPreviousState, pickRoleSuggestionFromPreviousState } = wordingHeuristicHelpers;
+const {
+  pickDreamSuggestionFromPreviousState,
+  pickBigWhySuggestionFromPreviousState,
+  pickEntitySuggestionFromPreviousState,
+  pickRoleSuggestionFromPreviousState,
+} = wordingHeuristicHelpers;
 
 const uiPayloadHelpers = createRunStepUiPayloadHelpers({
   shouldLogLocalDevDiagnostics,
@@ -974,17 +982,19 @@ const runStepRuntimeExecuteDeps = {
   applyWordingPickSelection, isWordingPickRouteToken, isRefineAdjustRouteToken, buildWordingChoiceFromTurn,
   pickWordingAgentBase, copyPendingWordingChoiceState, normalizeNonStep0OfftopicSpecialist,
   uiStringFromStateMap, uiDefaultString, attachRegistryPayload, langFromState, UI_CONTRACT_VERSION,
-  DREAM_FORCE_REFINE_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, STRATEGY_SPECIALIST,
+  DREAM_FORCE_REFINE_ROUTE_PREFIX, STRATEGY_CONSOLIDATE_ROUTE_TOKEN, DREAM_SPECIALIST, BIGWHY_SPECIALIST, ENTITY_SPECIALIST, STRATEGY_SPECIALIST,
   callSpecialistStrictSafe, normalizeLocalizedConceptTerms, normalizeEntitySpecialistResult, applyCentralMetaTopicRouter,
   normalizeStep0AskDisplayContract, hasValidStep0Final, applyPostSpecialistStateMutations,
   isMetaOfftopicFallbackTurn, shouldTreatAsStepContributingInput, resolvePendingWordingChoiceIntent, hasDreamSpecialistCandidate,
   buildDreamRefineFallbackSpecialist, strategyStatementsForConsolidateGuard, enforceDreamBuilderQuestionProgress,
   applyMotivationQuotesContractV11, wordingSelectionMessage, applyStateUpdate, parseStep0Final,
   inferStep0SeedFromInitialMessage, step0ReadinessQuestion, step0CardDescForState, step0QuestionForState, generatePresentationAssets,
-  pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickRoleSuggestionFromPreviousState,
+  pickDreamSuggestionFromPreviousState, pickDreamCandidateFromState, pickBigWhySuggestionFromPreviousState,
+  pickRoleSuggestionFromPreviousState, pickEntitySuggestionFromPreviousState,
   runStepRuntimeSpecialRoutesLayer, runStepRuntimePostPipelineLayer,
   looksLikeMetaInstruction, ROLE_SPECIALIST, PRESENTATION_SPECIALIST, DREAM_PICK_ONE_ROUTE_TOKEN,
-  ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
+  BIGWHY_CHOOSE_FOR_ME_ROUTE_TOKEN, ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN, ENTITY_CHOOSE_FOR_ME_ROUTE_TOKEN,
+  PRESENTATION_MAKE_ROUTE_TOKEN, SWITCH_TO_SELF_DREAM_TOKEN,
   DREAM_START_EXERCISE_ROUTE_TOKEN,
   correctUserInputSurface, classifyAcceptedOutputUserTurn,
 };

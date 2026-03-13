@@ -63,6 +63,7 @@ function fieldForStep(stepId: string): string {
 const wordingHeuristicHelpers = createRunStepWordingHeuristicHelpers({
   entityStepId: ENTITY_STEP_ID,
   dreamStepId: DREAM_STEP_ID,
+  bigwhyStepId: BIGWHY_STEP_ID,
   roleStepId: ROLE_STEP_ID,
   fieldForStep,
   normalizeEntityPhrase,
@@ -71,6 +72,8 @@ const wordingHeuristicHelpers = createRunStepWordingHeuristicHelpers({
 
 export const pickDualChoiceSuggestion = wordingHeuristicHelpers.pickDualChoiceSuggestion;
 export const pickDreamSuggestionFromPreviousState = wordingHeuristicHelpers.pickDreamSuggestionFromPreviousState;
+export const pickBigWhySuggestionFromPreviousState = wordingHeuristicHelpers.pickBigWhySuggestionFromPreviousState;
+export const pickEntitySuggestionFromPreviousState = wordingHeuristicHelpers.pickEntitySuggestionFromPreviousState;
 export const pickRoleSuggestionFromPreviousState = wordingHeuristicHelpers.pickRoleSuggestionFromPreviousState;
 
 export {

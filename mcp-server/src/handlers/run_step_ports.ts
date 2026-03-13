@@ -89,15 +89,19 @@ export type RunStepRouteIdPorts = {
   dreamStepId: string;
   dreamSpecialist: string;
   dreamExplainerSpecialist: string;
+  bigwhySpecialist: string;
   roleStepId: string;
   roleSpecialist: string;
+  entitySpecialist: string;
   presentationStepId: string;
   presentationSpecialist: string;
 };
 
 export type RunStepRouteTokenPorts = {
   dreamPickOneRouteToken: string;
+  bigWhyChooseForMeRouteToken: string;
   roleChooseForMeRouteToken: string;
+  entityChooseForMeRouteToken: string;
   presentationMakeRouteToken: string;
   switchToSelfDreamToken: string;
   dreamStartExerciseRouteToken: string;
@@ -171,7 +175,9 @@ export type RunStepRouteResponsePorts<TResponse> = {
 export type RunStepRouteSuggestionPorts = {
   pickDreamSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
   pickDreamCandidateFromState: (state: CanvasState) => string;
+  pickBigWhySuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
   pickRoleSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
+  pickEntitySuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
 };
 
 export type RunStepRouteI18nPorts = {

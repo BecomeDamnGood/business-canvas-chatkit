@@ -44,7 +44,9 @@ type SpecialRouteHandler<TResponse> = {
 
 const ROUTE_REGISTRY_ORDER = [
   "synthetic_dream_pick",
+  "synthetic_bigwhy_pick",
   "synthetic_role_pick",
+  "synthetic_entity_pick",
   "presentation_generate",
   "dream_submit_scores",
   "dream_switch_to_self",
@@ -415,6 +417,120 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         } as unknown as OrchestratorOutput;
 
         let nextState = deps.applyStateUpdate({
+          prev: stateWithUi,
+          decision: forcedDecision,
+          specialistResult: specialist,
+          showSessionIntroUsed: "false",
+          provisionalSource: "action_route",
+        });
+        return finalizeRouteTurnIntent(context, {
+          state: nextState,
+          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
+          previousSpecialist,
+          responseUiFlags: context.responseUiFlags,
+        });
+      },
+    },
+
+    synthetic_bigwhy_pick: {
+      id: "synthetic_bigwhy_pick",
+      canHandle: (context) =>
+        String((context.state as Record<string, unknown>).current_step || "") === "bigwhy" &&
+        context.userMessage === deps.bigWhyChooseForMeRouteToken,
+      handle: async (context) => {
+        const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
+        const previousSpecialist = asRecord(
+          (stateWithUi as Record<string, unknown>).last_specialist_result || {}
+        );
+        const pickedSuggestion = deps.pickBigWhySuggestionFromPreviousState(stateWithUi, previousSpecialist);
+        if (!pickedSuggestion) return null;
+
+        const specialist = {
+          action: "ASK",
+          message: deps.wordingSelectionMessage(
+            "bigwhy",
+            stateWithUi,
+            String((stateWithUi as Record<string, unknown>).active_specialist || ""),
+            pickedSuggestion
+          ),
+          question: "",
+          refined_formulation: pickedSuggestion,
+          bigwhy: pickedSuggestion,
+          wants_recap: false,
+          is_offtopic: false,
+          user_intent: "STEP_INPUT",
+          meta_topic: "NONE",
+        };
+
+        const forcedDecision = {
+          specialist_to_call: deps.bigwhySpecialist,
+          specialist_input: "CURRENT_STEP_ID: bigwhy | USER_MESSAGE: __ROUTE__BIGWHY_CHOOSE_FOR_ME__",
+          current_step: "bigwhy",
+          intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
+          intro_shown_session:
+            String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
+          show_step_intro: "false",
+          show_session_intro: "false",
+        } as unknown as OrchestratorOutput;
+
+        const nextState = deps.applyStateUpdate({
+          prev: stateWithUi,
+          decision: forcedDecision,
+          specialistResult: specialist,
+          showSessionIntroUsed: "false",
+          provisionalSource: "action_route",
+        });
+        return finalizeRouteTurnIntent(context, {
+          state: nextState,
+          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
+          previousSpecialist,
+          responseUiFlags: context.responseUiFlags,
+        });
+      },
+    },
+
+    synthetic_entity_pick: {
+      id: "synthetic_entity_pick",
+      canHandle: (context) =>
+        String((context.state as Record<string, unknown>).current_step || "") === "entity" &&
+        context.userMessage === deps.entityChooseForMeRouteToken,
+      handle: async (context) => {
+        const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
+        const previousSpecialist = asRecord(
+          (stateWithUi as Record<string, unknown>).last_specialist_result || {}
+        );
+        const pickedSuggestion = deps.pickEntitySuggestionFromPreviousState(stateWithUi, previousSpecialist);
+        if (!pickedSuggestion) return null;
+
+        const specialist = {
+          action: "ASK",
+          message: deps.wordingSelectionMessage(
+            "entity",
+            stateWithUi,
+            String((stateWithUi as Record<string, unknown>).active_specialist || ""),
+            pickedSuggestion
+          ),
+          question: "",
+          refined_formulation: pickedSuggestion,
+          entity: pickedSuggestion,
+          wants_recap: false,
+          is_offtopic: false,
+          user_intent: "STEP_INPUT",
+          meta_topic: "NONE",
+        };
+
+        const forcedDecision = {
+          specialist_to_call: deps.entitySpecialist,
+          specialist_input: "CURRENT_STEP_ID: entity | USER_MESSAGE: __ROUTE__ENTITY_CHOOSE_FOR_ME__",
+          current_step: "entity",
+          intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
+          intro_shown_session:
+            String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
+          show_step_intro: "false",
+          show_session_intro: "false",
+        } as unknown as OrchestratorOutput;
+
+        const nextState = deps.applyStateUpdate({
           prev: stateWithUi,
           decision: forcedDecision,
           specialistResult: specialist,

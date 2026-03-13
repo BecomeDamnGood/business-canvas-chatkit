@@ -243,9 +243,6 @@ const SINGLE_VALUE_STRUCTURED_CONTENT_STEPS = new Set([
 
 const PURPOSE_INTRO_VIDEO_MENU_IDS = new Set([
   "PURPOSE_MENU_INTRO",
-  "PURPOSE_MENU_EXPLAIN",
-  "PURPOSE_MENU_POST_ASK",
-  "PURPOSE_MENU_EXAMPLES",
 ]);
 
 function menuRequiresKnownOutput(menuId: string): boolean {

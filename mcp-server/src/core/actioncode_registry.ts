@@ -60,6 +60,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE: { route: "__ROUTE__BIGWHY_EXPLAIN_IMPORTANCE__", step: "bigwhy" },
     ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS: { route: "__ROUTE__BIGWHY_ASK_3_QUESTIONS__", step: "bigwhy" },
     ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE: { route: "__ROUTE__BIGWHY_GIVE_EXAMPLE__", step: "bigwhy" },
+    ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME: { route: "__ROUTE__BIGWHY_CHOOSE_FOR_ME__", step: "bigwhy" },
     ACTION_BIGWHY_REFINE_CONFIRM: { route: "yes", step: "bigwhy", flags: ["confirm"] },
     ACTION_BIGWHY_REFINE_ADJUST: { route: "__ROUTE__BIGWHY_REFINE__", step: "bigwhy" },
     ACTION_BIGWHY_ESCAPE_CONTINUE: { route: "__ROUTE__BIGWHY_CONTINUE__", step: "bigwhy" },
@@ -78,6 +79,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     // Entity
     ACTION_ENTITY_INTRO_FORMULATE: { route: "__ROUTE__ENTITY_FORMULATE__", step: "entity" },
     ACTION_ENTITY_INTRO_EXPLAIN_MORE: { route: "__ROUTE__ENTITY_EXPLAIN_MORE__", step: "entity" },
+    ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME: { route: "__ROUTE__ENTITY_CHOOSE_FOR_ME__", step: "entity" },
     ACTION_ENTITY_EXAMPLE_CONFIRM: { route: "yes", step: "entity", flags: ["confirm"] },
     ACTION_ENTITY_EXAMPLE_REFINE: { route: "__ROUTE__ENTITY_REFINE__", step: "entity" },
     ACTION_ENTITY_FORMULATE_FOR_ME: { route: "__ROUTE__ENTITY_FORMULATE_FOR_ME__", step: "entity" },
@@ -212,8 +214,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE",
     ],
     BIGWHY_MENU_FROM_GIVE: [
-      "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS",
-      "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE",
+      "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
     ],
     BIGWHY_MENU_REFINE: [
       "ACTION_BIGWHY_REFINE_CONFIRM",
@@ -247,6 +248,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_ENTITY_INTRO_FORMULATE",
       "ACTION_ENTITY_INTRO_EXPLAIN_MORE",
     ],
+    ENTITY_MENU_SUGGESTIONS: ["ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME"],
     ENTITY_MENU_EXAMPLE: [
       "ACTION_ENTITY_EXAMPLE_CONFIRM",
       "ACTION_ENTITY_EXAMPLE_REFINE",
