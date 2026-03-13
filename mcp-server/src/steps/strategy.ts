@@ -334,6 +334,7 @@ If USER_MESSAGE is a route token (starts with "__ROUTE__"), interpret it as an e
 - "__ROUTE__STRATEGY_EXPLAIN_MORE__" → Follow route: explain again why Strategy matters (output action="ASK" with explanation text)
 - "__ROUTE__STRATEGY_ASK_3_QUESTIONS__" → Follow route: ask the 10 strategy clarification questions (output action="ASK" with those questions)
 - "__ROUTE__STRATEGY_GIVE_EXAMPLES__" → Follow route: give examples (output action="ASK" with 3 examples)
+- "__ROUTE__STRATEGY_CHOOSE_FOR_ME__" → Follow route: choose one shown example and set it as the current Strategy
 - "__ROUTE__STRATEGY_CONSOLIDATE__" → Follow route: consolidate focus points to a maximum of 7 while preserving core meaning
 - "__ROUTE__STRATEGY_FINISH_LATER__" → Follow route: finish later (output action="ASK" with gentle closing question)
 
@@ -464,7 +465,20 @@ Output
 - question=""
 - strategy=""
 
-D.1) Consolidate focus points (route-only)
+D.1) Choose one for me (from "__ROUTE__STRATEGY_CHOOSE_FOR_ME__")
+
+Trigger
+- USER_MESSAGE is "__ROUTE__STRATEGY_CHOOSE_FOR_ME__".
+
+Output
+- action="ASK"
+- message: one short localized acknowledgement that one example was selected.
+- refined_formulation: exactly one selected Strategy example from the shown examples, as plain focus-point lines with real line breaks (non-empty).
+- strategy: same selected Strategy example, as plain focus-point lines with real line breaks (non-empty).
+- statements: the same selected Strategy example as the canonical array of focus-point strings (4 to 7 items).
+- question=""
+
+D.2) Consolidate focus points (route-only)
 
 Trigger
 - USER_MESSAGE is "__ROUTE__STRATEGY_CONSOLIDATE__".

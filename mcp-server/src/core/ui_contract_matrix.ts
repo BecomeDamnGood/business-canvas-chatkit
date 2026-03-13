@@ -240,7 +240,12 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   ACTION_STRATEGY_ASK_GIVE_EXAMPLES: {
     step_id: "strategy",
     from_menu_ids: ["STRATEGY_MENU_ASK"],
-    to_menu_id: "STRATEGY_MENU_REFINE",
+    to_menu_id: "STRATEGY_MENU_EXAMPLES",
+  },
+  ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME: {
+    step_id: "strategy",
+    from_menu_ids: ["STRATEGY_MENU_EXAMPLES"],
+    to_menu_id: "STRATEGY_MENU_CONFIRM",
   },
   ACTION_STRATEGY_REFINE_EXPLAIN_MORE: {
     step_id: "strategy",
@@ -403,7 +408,7 @@ export const MENU_LABELS: Record<string, string[]> = {
     "I'm happy with this wording, please continue to step 4 the Big Why.",
   ],
   BIGWHY_MENU_INTRO: [
-    "Give me an example of the Big Why",
+    "Give me 3 Big Why suggestions",
     "Explain the importance of a Big Why",
   ],
   BIGWHY_MENU_FROM_EXPLAIN: [
@@ -446,8 +451,9 @@ export const MENU_LABELS: Record<string, string[]> = {
   STRATEGY_MENU_INTRO: ["Explain why a Strategy matters"],
   STRATEGY_MENU_ASK: [
     "Ask me some questions to clarify my Strategy",
-    "Show me an example of a Strategy for my business",
+    "Show me 3 examples of a Strategy for my business",
   ],
+  STRATEGY_MENU_EXAMPLES: ["Choose one for me"],
   STRATEGY_MENU_REFINE: ["Explain why a Strategy matters"],
   STRATEGY_MENU_QUESTIONS: ["Explain why a Strategy matters"],
   STRATEGY_MENU_CONFIRM: [

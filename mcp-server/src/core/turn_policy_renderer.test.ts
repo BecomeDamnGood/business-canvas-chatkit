@@ -93,6 +93,43 @@ test("strategy pending wording-choice render does not append canonical context b
   assert.equal(message.includes("Kies de versie") || message.includes("Dit is mijn suggestie"), true);
 });
 
+test("strategy examples render exposes choose-one action instead of the legacy refine-only menu", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "strategy";
+  (state as any).active_specialist = "Strategy";
+  (state as any).business_name = "Mindd";
+  (state as any).__ui_phase_by_step = {
+    strategy: buildUiContractId("strategy", "ASK", "STRATEGY_MENU_EXAMPLES"),
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "strategy",
+    state,
+    specialist: {
+      action: "ASK",
+      ui_contract_id: buildUiContractId("strategy", "ASK", "STRATEGY_MENU_EXAMPLES"),
+      message: [
+        "HERE ARE THREE EXAMPLE STRATEGIES FOR MINDD:",
+        "",
+        "EXAMPLE 1",
+        "- Focus on long-term partnerships",
+        "- Prioritize depth over volume",
+        "- Select clients that match the mission",
+        "- Invest in strategic learning",
+      ].join("\n"),
+      question: "Which example feels closest, and what would you change to make it fit?",
+      refined_formulation: "",
+      strategy: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {
+      ui_contract_id: buildUiContractId("strategy", "ASK", "STRATEGY_MENU_EXAMPLES"),
+    },
+  });
+
+  assert.deepEqual(rendered.uiActionCodes, ["ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME"]);
+});
+
 test("strategy wording-choice picker suppresses the normal step question", () => {
   const state = getDefaultState();
   (state as any).current_step = "strategy";

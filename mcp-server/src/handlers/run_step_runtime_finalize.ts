@@ -8,6 +8,7 @@ import type {
 } from "./run_step_ports.js";
 import { createTurnResponseEngine, type TurnResponseEngine } from "./run_step_turn_response_engine.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
+import { looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
 import { isSingleValueTextPickerState } from "./run_step_wording_picker_contract.js";
 
 export type RunStepRuntimeInputMode = "widget" | "chat";
@@ -113,6 +114,262 @@ function stripMarkupPreserveLines(value: string): string {
     .trim();
 }
 
+type StructuredSuggestionItemKind = "sentence" | "phrase";
+
+type StructuredSuggestionMenuConfig = {
+  stepId: string;
+  itemKind: StructuredSuggestionItemKind;
+};
+
+const STRUCTURED_SUGGESTION_MENU_CONFIG_BY_MENU_ID: Record<string, StructuredSuggestionMenuConfig> = {
+  DREAM_MENU_SUGGESTIONS: { stepId: "dream", itemKind: "sentence" },
+  PURPOSE_MENU_EXAMPLES: { stepId: "purpose", itemKind: "sentence" },
+  BIGWHY_MENU_FROM_GIVE: { stepId: "bigwhy", itemKind: "sentence" },
+  ROLE_MENU_EXAMPLES: { stepId: "role", itemKind: "sentence" },
+  ENTITY_MENU_SUGGESTIONS: { stepId: "entity", itemKind: "phrase" },
+};
+
+const STRUCTURED_SUGGESTION_STEP_LABEL_FALLBACKS: Record<string, string> = {
+  dream: "Dream",
+  purpose: "Purpose",
+  bigwhy: "Big Why",
+  role: "Role",
+  entity: "Entity",
+};
+
+function structuredSuggestionMenuConfigFor(contractStepId: string, menuId: string): StructuredSuggestionMenuConfig | null {
+  const config = STRUCTURED_SUGGESTION_MENU_CONFIG_BY_MENU_ID[String(menuId || "").trim().toUpperCase()];
+  if (!config) return null;
+  return config.stepId === String(contractStepId || "").trim() ? config : null;
+}
+
+function ensureStructuredSuggestionHeading(line: string): string {
+  const collapsed = String(line || "").replace(/\s+/g, " ").trim();
+  if (!collapsed) return "";
+  const withoutTrailingPunctuation = collapsed.replace(/[.!?:\u3002\uff01\uff1f\uff1a]+$/g, "").trim();
+  return withoutTrailingPunctuation ? `${withoutTrailingPunctuation}:` : "";
+}
+
+function looksLikeStructuredSuggestionIntro(text: string): boolean {
+  const collapsed = String(text || "").replace(/\s+/g, " ").trim();
+  if (!collapsed) return false;
+  if (looksLikeExamplesFramingLine(collapsed)) return true;
+  return /^(here(?:\s+are|\s+is)?|hier\s+zijn|voici|hier\s+sind|ecco|aqu[ií]\s+(?:hay|est[aá]n))\b.{0,160}\bsuggestions?\b/i.test(
+    collapsed
+  );
+}
+
+function looksLikeStructuredSuggestionOutro(text: string): boolean {
+  const collapsed = String(text || "").replace(/\s+/g, " ").trim();
+  if (!collapsed) return false;
+  return (
+    /\bi hope\b/i.test(collapsed) ||
+    /\bthese suggestions\b/i.test(collapsed) ||
+    /\bwrite your own\b/i.test(collapsed) ||
+    (/\binspir/i.test(collapsed) && /\byour own\b/i.test(collapsed)) ||
+    /\bchoose one for me\b/i.test(collapsed)
+  );
+}
+
+function structuredSuggestionStepLabel(
+  stepId: string,
+  stateUiStrings: Record<string, unknown>
+): string {
+  const fromPpt = String(stateUiStrings[`ppt.heading.${stepId}`] || "").trim();
+  if (fromPpt) return fromPpt;
+  const fromOfftopic = String(stateUiStrings[`offtopic.step.${stepId}`] || "").trim();
+  if (fromOfftopic) return fromOfftopic;
+  return STRUCTURED_SUGGESTION_STEP_LABEL_FALLBACKS[String(stepId || "").trim()] || String(stepId || "").trim();
+}
+
+function structuredSuggestionOutro(stepId: string, stateUiStrings: Record<string, unknown>): string {
+  const template = String(stateUiStrings["structuredSuggestions.outro.template"] || "").trim()
+    || "I hope these suggestions inspire you to write your own {0}.";
+  const stepLabel = structuredSuggestionStepLabel(stepId, stateUiStrings);
+  return String(template || "").replace(/\{0\}/g, stepLabel).trim();
+}
+
+function splitStructuredSuggestionLeadBlock(params: {
+  block: string;
+  itemKind: StructuredSuggestionItemKind;
+}): { intro: string; remainder: string } {
+  const block = String(params.block || "").replace(/\r/g, "\n").trim();
+  if (!block || !looksLikeStructuredSuggestionIntro(block)) {
+    return { intro: "", remainder: block };
+  }
+
+  const lines = block
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  if (lines.length >= 2) {
+    return {
+      intro: lines[0] || "",
+      remainder: lines.slice(1).join("\n").trim(),
+    };
+  }
+
+  const singleLine = lines[0] || block;
+  const inlineDashParts = singleLine
+    .split(/\s+-\s+/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+  if (inlineDashParts.length >= 2 && looksLikeStructuredSuggestionIntro(inlineDashParts[0])) {
+    return {
+      intro: inlineDashParts[0] || "",
+      remainder: inlineDashParts.slice(1).map((part) => `- ${part}`).join("\n").trim(),
+    };
+  }
+
+  const sentenceParts = singleLine
+    .split(/(?<=[.!?])\s+(?=\S)/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+  if (sentenceParts.length >= 2 && looksLikeStructuredSuggestionIntro(sentenceParts[0])) {
+    const remainder =
+      params.itemKind === "phrase"
+        ? sentenceParts.slice(1).map((part) => `- ${part.replace(/[.!?]+$/g, "").trim()}`).join("\n")
+        : sentenceParts.slice(1).map((part) => `- ${part}`).join("\n");
+    return {
+      intro: sentenceParts[0] || "",
+      remainder: remainder.trim(),
+    };
+  }
+
+  return { intro: singleLine, remainder: "" };
+}
+
+function extractStructuredSuggestionItems(params: {
+  raw: string;
+  itemKind: StructuredSuggestionItemKind;
+  tokenizeWords: (text: string) => string[];
+}): string[] {
+  const raw = String(params.raw || "").replace(/\r/g, "\n").trim();
+  if (!raw) return [];
+
+  const lines = raw
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const fragments: string[] = [];
+
+  for (const line of lines) {
+    if (!line) continue;
+    const bulletMatch = line.match(/^\s*(?:[-*•]|\d+[\).])\s*(.+)\s*$/);
+    const candidateRaw = bulletMatch ? String(bulletMatch[1] || "").trim() : line;
+    if (!candidateRaw) continue;
+    if (looksLikeStructuredSuggestionIntro(candidateRaw)) continue;
+    if (looksLikeStructuredSuggestionOutro(candidateRaw)) continue;
+
+    if (bulletMatch) {
+      fragments.push(candidateRaw);
+      continue;
+    }
+
+    const splitPattern =
+      params.itemKind === "phrase"
+        ? /(?:\s+-\s+|[;\n]+|(?<=[.!?])\s+(?=\S))/
+        : /(?:\s+-\s+|(?<=[.!?])\s+(?=\S))/;
+    const parts = candidateRaw
+      .split(splitPattern)
+      .map((part) => String(part || "").trim())
+      .filter(Boolean);
+    fragments.push(...(parts.length > 0 ? parts : [candidateRaw]));
+  }
+
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const fragment of fragments) {
+    const normalizedFragment = String(fragment || "").replace(/\s+/g, " ").trim();
+    if (!normalizedFragment) continue;
+    if (looksLikeStructuredSuggestionIntro(normalizedFragment)) continue;
+    if (looksLikeStructuredSuggestionOutro(normalizedFragment)) continue;
+
+    let candidate =
+      params.itemKind === "phrase"
+        ? normalizedFragment.replace(/[.!?]+$/g, "").trim()
+        : normalizedFragment;
+    if (!candidate || candidate.endsWith("?")) continue;
+
+    const words = params.tokenizeWords(candidate);
+    if (params.itemKind === "phrase") {
+      if (words.length < 2 || words.length > 10) continue;
+    } else {
+      if (words.length < 5) continue;
+      if (!/[.!?]$/.test(candidate)) candidate = `${candidate}.`;
+    }
+
+    const key = String(candidate || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(candidate);
+  }
+
+  return unique;
+}
+
+function normalizeStructuredSuggestionMessage(params: {
+  contractStepId: string;
+  menuId: string;
+  messageRaw: string;
+  stateUiStrings: Record<string, unknown>;
+  tokenizeWords: (text: string) => string[];
+}): string {
+  const config = structuredSuggestionMenuConfigFor(params.contractStepId, params.menuId);
+  if (!config) return String(params.messageRaw || "").trim();
+
+  const message = String(params.messageRaw || "").replace(/\r/g, "\n").trim();
+  if (!message) return "";
+
+  const blocks = message
+    .split(/\n{2,}/)
+    .map((block) => String(block || "").trim())
+    .filter(Boolean);
+
+  let intro = "";
+  let outro = "";
+  if (blocks.length > 0 && looksLikeStructuredSuggestionIntro(blocks[0])) {
+    const lead = splitStructuredSuggestionLeadBlock({
+      block: String(blocks.shift() || "").trim(),
+      itemKind: config.itemKind,
+    });
+    intro = lead.intro;
+    if (lead.remainder) blocks.unshift(lead.remainder);
+  }
+  if (blocks.length > 0 && looksLikeStructuredSuggestionOutro(blocks[blocks.length - 1])) {
+    outro = String(blocks.pop() || "").trim();
+  }
+
+  if (!intro) {
+    const firstLine = message
+      .split("\n")
+      .map((line) => String(line || "").trim())
+      .find(Boolean) || "";
+    if (looksLikeStructuredSuggestionIntro(firstLine)) {
+      intro = firstLine;
+    }
+  }
+
+  const items = extractStructuredSuggestionItems({
+    raw: blocks.join("\n\n").trim() || message,
+    itemKind: config.itemKind,
+    tokenizeWords: params.tokenizeWords,
+  }).slice(0, 3);
+
+  if (items.length === 0) return message;
+
+  const parts: string[] = [];
+  const heading = ensureStructuredSuggestionHeading(intro);
+  if (heading) parts.push(heading);
+  parts.push(items.map((item) => `- ${item}`).join("\n"));
+  parts.push(outro || structuredSuggestionOutro(config.stepId, params.stateUiStrings));
+  return parts.filter(Boolean).join("\n\n").trim();
+}
+
 function pickPrompt(specialist: Record<string, unknown>): string {
   const q = stripMarkupPreserveLines(String(specialist?.question ?? ""));
   return q || "";
@@ -176,49 +433,6 @@ function stripPromptEchoFromMessage(
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-function normalizePurposeExamplesMessage(contractStepId: string, menuId: string, messageRaw: string): string {
-  if (contractStepId !== "purpose" || menuId !== "PURPOSE_MENU_EXAMPLES") {
-    return String(messageRaw || "").trim();
-  }
-  const message = String(messageRaw || "").replace(/\r/g, "\n").trim();
-  if (!message) return "";
-  const blocks = message
-    .split(/\n{2,}/)
-    .map((block) => String(block || "").trim())
-    .filter(Boolean);
-  if (blocks.length < 3) return message;
-  const hasListMarkers = (value: string): boolean => /^(?:\s*[-*•]|\s*\d+[\).])\s+/m.test(String(value || ""));
-  const normalizeSentenceBlock = (value: string): string =>
-    String(value || "")
-      .replace(/\n+/g, " ")
-      .replace(/\s{2,}/g, " ")
-      .trim();
-  const isSentenceLike = (value: string): boolean => {
-    const plain = normalizeSentenceBlock(value);
-    if (!plain) return false;
-    if (hasListMarkers(plain)) return false;
-    if (plain.length < 18 || plain.length > 280) return false;
-    if (/:$/.test(plain)) return false;
-    if (/^[A-Z0-9 .,'’"-]{6,}$/.test(plain)) return false;
-    return /[.!?]$/.test(plain);
-  };
-  const intro = blocks[0];
-  const tail = blocks[blocks.length - 1];
-  const middle = blocks.slice(1, blocks.length - 1);
-  const middleExamples = middle.filter(isSentenceLike);
-  if (middleExamples.length < 2 || middleExamples.length !== middle.length) {
-    const allAfterIntro = blocks.slice(1);
-    const allExamples = allAfterIntro.filter(isSentenceLike);
-    if (allExamples.length < 2 || allExamples.length !== allAfterIntro.length) {
-      return message;
-    }
-    const bullets = allAfterIntro.map((line) => `- ${normalizeSentenceBlock(line)}`).join("\n");
-    return [intro, bullets].join("\n\n").trim();
-  }
-  const bullets = middle.map((line) => `- ${normalizeSentenceBlock(line)}`).join("\n");
-  return [intro, bullets, tail].join("\n\n").trim();
 }
 
 export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersDeps) {
@@ -417,7 +631,13 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     const promptFromSpecialist = stripMarkupPreserveLines(String(specialist?.question ?? ""));
     const promptOverride = stripMarkupPreserveLines(String(params.questionTextOverride || ""));
     const prompt = promptOverride || promptFromSpecialist;
-    msg = normalizePurposeExamplesMessage(contractStepId, menuId, msg);
+    msg = normalizeStructuredSuggestionMessage({
+      contractStepId,
+      menuId,
+      messageRaw: msg,
+      stateUiStrings,
+      tokenizeWords: deps.tokenizeWords,
+    });
     let refined = stripMarkupPreserveLines(String(specialist?.refined_formulation ?? ""));
     if (!wordingPending) {
       const field = deps.fieldForStep(contractStepId);

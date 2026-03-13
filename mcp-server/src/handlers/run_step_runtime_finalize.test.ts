@@ -11,7 +11,10 @@ function buildTextHelpers(wordingSelectionMessage: (
 ) => string) {
   return createRunStepRuntimeTextHelpers({
     dreamStepId: "dream",
-    parseMenuFromContractIdForStep: () => "",
+    parseMenuFromContractIdForStep: (contractIdRaw: unknown) => {
+      const parts = String(contractIdRaw || "").split(":");
+      return String(parts[2] || "").trim();
+    },
     canonicalizeComparableText: (value: string) =>
       String(value || "")
         .toLowerCase()
@@ -162,6 +165,108 @@ test("buildTextForWidget always shows current heading for Big Why when message o
 
   assert.match(output, new RegExp(heading));
   assert.match(output, /Mensen zouden altijd toegang moeten hebben/);
+});
+
+test("buildTextForWidget normalizes structured suggestion menus into heading, bullets, and outro", () => {
+  const helpers = buildTextHelpers(() => "");
+  const scenarios = [
+    {
+      contract: "dream:ASK:DREAM_MENU_SUGGESTIONS:v1",
+      stepId: "dream",
+      message: [
+        "Here are three examples of a Dream for an advertising agency like Mindd.",
+        "",
+        "Mindd dreams of a world in which creative ideas help brands connect with people on a deeper, more meaningful level.",
+        "",
+        "Mindd dreams of a world in which advertising inspires trust and brings genuine value to everyday lives.",
+        "",
+        "Mindd dreams of a world in which brands communicate with honesty, making people feel understood and respected.",
+      ].join("\n"),
+      expectedHeading: "Here are three examples of a Dream for an advertising agency like Mindd:",
+      expectedItems: [
+        "Mindd dreams of a world in which creative ideas help brands connect with people on a deeper, more meaningful level.",
+        "Mindd dreams of a world in which advertising inspires trust and brings genuine value to everyday lives.",
+        "Mindd dreams of a world in which brands communicate with honesty, making people feel understood and respected.",
+      ],
+      expectedOutro: "I hope these suggestions inspire you to write your own Dream.",
+    },
+    {
+      contract: "bigwhy:ASK:BIGWHY_MENU_FROM_GIVE:v1",
+      stepId: "bigwhy",
+      message: [
+        "Here are three Big Why suggestions for Mindd, each reflecting the deeper meaning behind your Dream and Purpose.",
+        "",
+        "People should feel more deeply understood by the messages that shape their choices.",
+        "Communication should strengthen trust between brands and the people they serve.",
+        "Creative work should move culture toward more honest and human connection.",
+      ].join("\n"),
+      expectedHeading: "Here are three Big Why suggestions for Mindd, each reflecting the deeper meaning behind your Dream and Purpose:",
+      expectedItems: [
+        "People should feel more deeply understood by the messages that shape their choices.",
+        "Communication should strengthen trust between brands and the people they serve.",
+        "Creative work should move culture toward more honest and human connection.",
+      ],
+      expectedOutro: "I hope these suggestions inspire you to write your own Big Why.",
+    },
+    {
+      contract: "role:ASK:ROLE_MENU_EXAMPLES:v1",
+      stepId: "role",
+      message: [
+        "Here are three examples of a Role for an advertising agency like Mindd.",
+        "",
+        "- Mindd connects brands and people by translating creative ideas into meaningful experiences that foster genuine connection.",
+        "- Mindd aligns business goals with human insight, ensuring every campaign bridges the gap between brands and their audiences.",
+        "- Mindd translates complex brand messages into relatable stories, making it easier for people to feel understood and valued.",
+        "",
+        "I hope these suggestions inspire you to write your own Role.",
+      ].join("\n"),
+      expectedHeading: "Here are three examples of a Role for an advertising agency like Mindd:",
+      expectedItems: [
+        "Mindd connects brands and people by translating creative ideas into meaningful experiences that foster genuine connection.",
+        "Mindd aligns business goals with human insight, ensuring every campaign bridges the gap between brands and their audiences.",
+        "Mindd translates complex brand messages into relatable stories, making it easier for people to feel understood and valued.",
+      ],
+      expectedOutro: "I hope these suggestions inspire you to write your own Role.",
+    },
+    {
+      contract: "entity:ASK:ENTITY_MENU_SUGGESTIONS:v1",
+      stepId: "entity",
+      message: [
+        "Here are three examples of an Entity for an advertising agency like Mindd.",
+        "",
+        "A creative brand agency.",
+        "An experiential marketing studio.",
+        "A purpose-driven advertising collective.",
+      ].join("\n"),
+      expectedHeading: "Here are three examples of an Entity for an advertising agency like Mindd:",
+      expectedItems: [
+        "A creative brand agency",
+        "An experiential marketing studio",
+        "A purpose-driven advertising collective",
+      ],
+      expectedOutro: "I hope these suggestions inspire you to write your own Entity.",
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const output = helpers.buildTextForWidget({
+      specialist: {
+        ui_contract_id: scenario.contract,
+        message: scenario.message,
+        refined_formulation: "",
+      },
+      state: {
+        active_specialist: scenario.stepId,
+        current_step: scenario.stepId,
+      } as any,
+    });
+
+    assert.match(output, new RegExp(scenario.expectedHeading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    for (const item of scenario.expectedItems) {
+      assert.match(output, new RegExp(`- ${item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    }
+    assert.match(output, new RegExp(scenario.expectedOutro.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 });
 
 test("buildTextForWidget avoids duplicate strategy bullets when message already contains the same list", () => {

@@ -189,6 +189,7 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "contract.headline.refine.withoutOptions": "Refine your {0} for {1}.",
   "contract.headline.withOptions": "{0} your {1} for {2} or choose an option.",
   "contract.headline.withoutOptions": "{0} your {1} for {2}.",
+  "structuredSuggestions.outro.template": "I hope these suggestions inspire you to write your own {0}.",
   "contract.recap.noOutput": "We have not yet defined the {0}.",
   "recap.label.venture": "Venture",
   "recap.label.name": "Name",
