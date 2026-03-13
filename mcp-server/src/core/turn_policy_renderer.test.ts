@@ -1268,6 +1268,50 @@ test("single-value valid output preserves feedback reason after user picks own w
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
+test("single-value valid output strips autosuggest framing after user picks own wording", () => {
+  const state = getDefaultState();
+  const canonical =
+    "Mindd bestaat om bij te dragen aan een wereld waarin communicatie en verhalen authentiek, eerlijk en origineel zijn.";
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { purpose: canonical };
+  (state as any).provisional_source_by_step = { purpose: "wording_pick" };
+  (state as any).ui_strings = {
+    "autosuggest.prefix.template": "Op basis van je input stel ik de volgende {0} voor:",
+    "ppt.heading.purpose": "Bestaansreden",
+    "wording.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
+    "wording.feedback.user_pick.nudge.template":
+      "Tegelijk helpt het om in gedachten te houden wat een sterke {0} meestal krachtiger maakt.",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: [
+        "Op basis van je input stel ik de volgende bestaansreden voor:",
+        "",
+        "JE HUIDIGE BESTAANSREDEN VOOR MINDD IS",
+        canonical,
+      ].join("\n"),
+      question: "",
+      refined_formulation: canonical,
+      purpose: canonical,
+      wording_choice_selected: "user",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  const supportText = String(uiContent.support_text || "");
+  assert.equal(rendered.status, "valid_output");
+  assert.doesNotMatch(supportText, /op basis van je input stel ik de volgende bestaansreden voor/i);
+  assert.equal(String(uiContent.canonical_text || ""), canonical);
+});
+
 test("dream single-value content strips duplicated leading feedback sentence from support text", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen met plezier en vertrouwen hun aankopen doen.";

@@ -5347,8 +5347,18 @@
     const choiceMode = !requireWordingPick && (renderedChoiceButtons || hasStructuredActions);
     const textSubmitActionCode = actionCodeFromState("ui_action_text_submit");
     const textSubmitAvailable = textSubmitActionCode.length > 0;
-    inputWrap.style.display = textSubmitAvailable ? "flex" : "none";
-    if (!textSubmitAvailable) setSendEnabled(false);
+    const showTextSubmit = textSubmitAvailable;
+    const disableTextSubmit = requireWordingPick === true;
+    inputWrap.style.display = showTextSubmit ? "flex" : "none";
+    const inputEl2 = document.getElementById("input");
+    if (inputEl2) {
+      if (disableTextSubmit) inputEl2.value = "";
+      inputEl2.disabled = disableTextSubmit;
+      inputEl2.readOnly = disableTextSubmit;
+      inputEl2.setAttribute("aria-disabled", disableTextSubmit ? "true" : "false");
+      inputEl2.tabIndex = disableTextSubmit ? -1 : 0;
+    }
+    if (!showTextSubmit || disableTextSubmit) setSendEnabled(false);
     const sde = document.getElementById("btnStartDreamExercise");
     const sb = document.getElementById("btnSwitchToSelfDream");
     if (choiceMode) {
@@ -5636,12 +5646,17 @@
   }
   function syncSendButtonState(input) {
     if (!input || getIsLoading()) return;
+    if (input.disabled === true || input.readOnly === true) {
+      setSendEnabled(false);
+      return;
+    }
     const inputVal = (input.value || "").trim();
     setSendEnabled(inputVal.length > 0);
   }
   function submitWidgetInput() {
     if (getIsLoading()) return;
     const input = document.getElementById("input");
+    if (input?.disabled === true || input?.readOnly === true) return;
     const inputVal = (input?.value || "").trim();
     if (!inputVal) return;
     const submitActionCode = actionCodeFromState("ui_action_text_submit");

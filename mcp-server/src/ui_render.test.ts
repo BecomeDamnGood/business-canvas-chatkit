@@ -12,6 +12,7 @@ import {
   shouldRenderBigWhyStepIntroVideo,
   shouldRenderPurposeStepIntroVideo,
   shouldRenderRoleStepIntroVideo,
+  shouldDisableTextInputForWordingChoice,
   shouldShowTextInputForWordingChoice,
   shouldSuppressPromptForWordingChoice,
   shouldSuppressMainCardForWordingChoice,
@@ -91,7 +92,7 @@ test("shouldSuppressPromptForWordingChoice hides the prompt while wording-choice
   );
 });
 
-test("shouldShowTextInputForWordingChoice hides free input while a wording-choice picker is active", () => {
+test("shouldShowTextInputForWordingChoice keeps the field visible while a wording-choice picker is active", () => {
   assert.equal(
     shouldShowTextInputForWordingChoice({
       textSubmitAvailable: true,
@@ -99,7 +100,7 @@ test("shouldShowTextInputForWordingChoice hides free input while a wording-choic
       wordingChoiceActive: true,
       requireWordingPick: true,
     }),
-    false
+    true
   );
   assert.equal(
     shouldShowTextInputForWordingChoice({
@@ -109,6 +110,21 @@ test("shouldShowTextInputForWordingChoice hides free input while a wording-choic
       requireWordingPick: false,
     }),
     true
+  );
+});
+
+test("shouldDisableTextInputForWordingChoice disables free input while a wording-choice picker is active", () => {
+  assert.equal(
+    shouldDisableTextInputForWordingChoice({
+      requireWordingPick: true,
+    }),
+    true
+  );
+  assert.equal(
+    shouldDisableTextInputForWordingChoice({
+      requireWordingPick: false,
+    }),
+    false
   );
 });
 

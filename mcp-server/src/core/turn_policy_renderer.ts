@@ -16,7 +16,7 @@ import {
   strategyStatementsFromSources,
 } from "./turn_policy/strategy_helpers.js";
 import { shouldInferSingleValueFeedbackReason } from "./feedback_policy.js";
-import { formatCompareFeedbackForDisplay, formatUserPickFeedbackForDisplay } from "./feedback_display.js";
+import { feedbackStepLabel, formatCompareFeedbackForDisplay, formatUserPickFeedbackForDisplay } from "./feedback_display.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
 import {
@@ -473,6 +473,43 @@ function stripLeadingFeedbackSentence(block: string, feedbackReasonText: string)
   const firstSentence = String(sentences[0] || "").trim();
   if (comparableText(firstSentence) !== normalizedFeedback) return String(block || "").trim();
   return sentences.slice(1).join(" ").trim();
+}
+
+function autosuggestSuggestionFramingTexts(stepId: string, state: CanvasState): string[] {
+  const template = uiStringFromState(
+    state,
+    "autosuggest.prefix.template",
+    uiDefaultString("autosuggest.prefix.template")
+  );
+  const stepLabel = feedbackStepLabel(
+    stepId,
+    (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback))
+  );
+  const rendered = String(template || "").replace(/\{0\}/g, stepLabel).trim();
+  return rendered ? [rendered] : [];
+}
+
+function stripParagraphBlocksByComparableMatch(message: string, candidates: string[]): string {
+  const candidateKeys = candidates
+    .map((value) => comparableText(value))
+    .filter(Boolean);
+  if (candidateKeys.length === 0) return String(message || "").trim();
+  const kept = canonicalParagraphBlocks(message).filter((block) => {
+    const blockKey = comparableText(block);
+    return blockKey && !candidateKeys.includes(blockKey);
+  });
+  return kept.join("\n\n").trim();
+}
+
+function stripSuggestionFramingForUserPick(params: {
+  stepId: string;
+  state: CanvasState;
+  message: string;
+}): string {
+  return stripParagraphBlocksByComparableMatch(
+    params.message,
+    autosuggestSuggestionFramingTexts(params.stepId, params.state)
+  );
 }
 
 function isSingleValueCanonicalBlock(block: string, heading: string, canonicalValue: string): boolean {
@@ -1906,16 +1943,22 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       : "";
   const explicitFeedbackReasonForDisplay =
     String((specialistForDisplay as any).feedback_reason_text || "").trim();
+  const isUserPickedWording =
+    String((specialistForDisplay as any).wording_choice_selected || "").trim() === "user";
   const rawFeedbackReasonForDisplay =
-    explicitFeedbackReasonForDisplay ||
-    inferSingleValueFeedbackReason({
-      stepId,
-      message: String(message || ""),
-      heading: singleValueConfirmHeading(stepId, state),
-      canonicalValue: pendingCanonicalValue || canonicalAcceptedValue,
-    });
+    isUserPickedWording
+      ? explicitFeedbackReasonForDisplay
+      : (
+          explicitFeedbackReasonForDisplay ||
+          inferSingleValueFeedbackReason({
+            stepId,
+            message: String(message || ""),
+            heading: singleValueConfirmHeading(stepId, state),
+            canonicalValue: pendingCanonicalValue || canonicalAcceptedValue,
+          })
+        );
   const feedbackReasonForDisplay =
-    String((specialistForDisplay as any).wording_choice_selected || "").trim() === "user"
+    isUserPickedWording
       ? formatUserPickFeedbackForDisplay({
           stepId,
           rawReason: rawFeedbackReasonForDisplay,
@@ -1933,10 +1976,17 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !String(message || "").trim()
       ? uiStringFromState(
           state,
-          "wording.choice.context.default",
-          ""
-        )
+      "wording.choice.context.default",
+      ""
+    )
       : message;
+  if (wordingChoiceSelected === "user") {
+    messageForDisplay = stripSuggestionFramingForUserPick({
+      stepId,
+      state,
+      message: messageForDisplay,
+    });
+  }
   if (wordingPending && wordingPresentation === "canonical" && pendingCanonicalValue) {
     messageForDisplay = singleValueSupportText({
       message: messageForDisplay,

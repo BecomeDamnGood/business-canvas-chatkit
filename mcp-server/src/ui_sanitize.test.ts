@@ -1619,6 +1619,17 @@ test("bundled wording-choice view exposes a dedicated compare feedback slot", ()
   assert.match(source, /\.cardDesc \.cardFeedbackNote/);
 });
 
+test("bundled wording-choice picker keeps text input visible but inert until a choice is made", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /const disableTextSubmit = requireWordingPick === true;/);
+  assert.match(source, /inputEl2\.disabled = disableTextSubmit;/);
+  assert.match(source, /inputEl2\.readOnly = disableTextSubmit;/);
+  assert.match(source, /inputEl2\.tabIndex = disableTextSubmit \? -1 : 0;/);
+  assert.match(source, /if \(!showTextSubmit \|\| disableTextSubmit\) setSendEnabled\(false\);/);
+  assert.match(source, /if \(input\.disabled === true \|\| input\.readOnly === true\) \{/);
+  assert.match(source, /if \(input\?\.disabled === true \|\| input\?\.readOnly === true\) return;/);
+});
+
 test("bundled runtime retains canonical step continuity for latest render cache", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /function retainCanonicalStepContinuity\(preferred, \.\.\.fallbacks\)/);

@@ -102,11 +102,18 @@ export function shouldShowTextInputForWordingChoice(params: {
   requireWordingPick?: boolean;
 }): boolean {
   if (params.textSubmitAvailable !== true) return false;
+  if (params.requireWordingPick === true) return true;
   return !shouldSuppressPromptForWordingChoice({
     uiViewVariant: params.uiViewVariant,
     wordingChoiceActive: params.wordingChoiceActive,
     requireWordingPick: params.requireWordingPick,
   });
+}
+
+export function shouldDisableTextInputForWordingChoice(params: {
+  requireWordingPick?: boolean;
+}): boolean {
+  return params.requireWordingPick === true;
 }
 
 export function shouldRenderPurposeStepIntroVideo(params: {
@@ -1739,8 +1746,19 @@ export function render(overrideToolOutput?: unknown): void {
     wordingChoiceActive,
     requireWordingPick,
   });
+  const disableTextSubmit = shouldDisableTextInputForWordingChoice({
+    requireWordingPick,
+  });
   inputWrap.style.display = showTextSubmit ? "flex" : "none";
-  if (!showTextSubmit) setSendEnabled(false);
+  const inputEl = document.getElementById("input") as HTMLTextAreaElement | null;
+  if (inputEl) {
+    if (disableTextSubmit) inputEl.value = "";
+    inputEl.disabled = disableTextSubmit;
+    inputEl.readOnly = disableTextSubmit;
+    inputEl.setAttribute("aria-disabled", disableTextSubmit ? "true" : "false");
+    inputEl.tabIndex = disableTextSubmit ? -1 : 0;
+  }
+  if (!showTextSubmit || disableTextSubmit) setSendEnabled(false);
   const sde = document.getElementById("btnStartDreamExercise");
   const sb = document.getElementById("btnSwitchToSelfDream");
 
