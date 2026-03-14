@@ -7,7 +7,7 @@ import {
   pickCurrentStepValueForFeedback,
   resolveProvisionalSourceForTurn,
   resolveWordingChoiceSeedUserText,
-  shouldTreatTurnAsDreamCurrentValueFeedback,
+  shouldTreatTurnAsCurrentValueFeedback,
   shouldForcePendingWordingChoiceFromIntent,
 } from "./run_step_pipeline.js";
 import { createRunStepWordingHelpers } from "./run_step_wording.js";
@@ -392,7 +392,7 @@ test("resolveWordingChoiceSeedUserText returns empty seed for feedback on curren
   );
 });
 
-test("pickCurrentStepValueForFeedback prefers provisional Dream over final", () => {
+test("pickCurrentStepValueForFeedback prefers provisional value over final for single-value steps", () => {
   assert.equal(
     pickCurrentStepValueForFeedback({
       provisional_by_step: { dream: "Provisional dream" },
@@ -400,11 +400,18 @@ test("pickCurrentStepValueForFeedback prefers provisional Dream over final", () 
     } as any, "dream"),
     "Provisional dream"
   );
+  assert.equal(
+    pickCurrentStepValueForFeedback({
+      provisional_by_step: { bigwhy: "Provisional big why" },
+      bigwhy_final: "Final big why",
+    } as any, "bigwhy"),
+    "Provisional big why"
+  );
 });
 
-test("shouldTreatTurnAsDreamCurrentValueFeedback detects Dream formulation feedback without pending picker", async () => {
+test("shouldTreatTurnAsCurrentValueFeedback detects single-value formulation feedback without pending picker", async () => {
   assert.equal(
-    await shouldTreatTurnAsDreamCurrentValueFeedback({
+    await shouldTreatTurnAsCurrentValueFeedback({
       state: {
         current_step: "dream",
         dream_final: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes durven maken.",
@@ -422,7 +429,7 @@ test("shouldTreatTurnAsDreamCurrentValueFeedback detects Dream formulation feedb
     true
   );
   assert.equal(
-    await shouldTreatTurnAsDreamCurrentValueFeedback({
+    await shouldTreatTurnAsCurrentValueFeedback({
       state: {
         current_step: "dream",
         dream_final: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes durven maken.",
@@ -438,6 +445,24 @@ test("shouldTreatTurnAsDreamCurrentValueFeedback detects Dream formulation feedb
       submittedTextIntent: "",
     }),
     false
+  );
+  assert.equal(
+    await shouldTreatTurnAsCurrentValueFeedback({
+      state: {
+        current_step: "bigwhy",
+        bigwhy_final: "Mindd bestaat zodat authentieke communicatie echte waarden weer centraal zet.",
+      } as any,
+      stepId: "bigwhy",
+      userMessage: "Kun je deze gekozen Grote Waarom korter en krachtiger maken?",
+      model: "gpt-5-mini",
+      classifyAcceptedOutputUserTurn: async () => ({
+        turn_kind: "feedback_on_existing_content",
+        user_variant_is_stepworthy: false,
+      }),
+      actionCodeRaw: "",
+      submittedTextIntent: "",
+    }),
+    true
   );
 });
 

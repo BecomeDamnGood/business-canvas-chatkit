@@ -144,10 +144,12 @@ export function resolveWordingChoiceSeedUserText(params: {
 }
 
 export function pickCurrentStepValueForFeedback(state: CanvasState, stepId: string): string {
-  const provisional = String(((state as Record<string, unknown>).provisional_by_step as Record<string, unknown> | undefined)?.[stepId] || "").trim();
+  const provisional = String(
+    ((state as Record<string, unknown>).provisional_by_step as Record<string, unknown> | undefined)?.[stepId] || ""
+  ).trim();
   if (provisional) return provisional;
-  if (stepId === "dream") return String((state as Record<string, unknown>).dream_final || "").trim();
-  return "";
+  const finalField = getFinalFieldForStepId(stepId);
+  return finalField ? String((state as Record<string, unknown>)[finalField] || "").trim() : "";
 }
 
 function pickCurrentAcceptedValueForStep(state: CanvasState, stepId: string): string {
@@ -163,7 +165,7 @@ function isAcceptedOutputSingleValueStep(stepId: string): boolean {
   return isSingleValueFeedbackStep(stepId);
 }
 
-export async function shouldTreatTurnAsDreamCurrentValueFeedback(params: {
+export async function shouldTreatTurnAsCurrentValueFeedback(params: {
   state: CanvasState;
   stepId: string;
   userMessage: string;
@@ -185,7 +187,7 @@ export async function shouldTreatTurnAsDreamCurrentValueFeedback(params: {
   const userMessage = String(params.userMessage || "").trim();
   const actionCodeRaw = String(params.actionCodeRaw || "").trim();
   const submittedTextIntent = String(params.submittedTextIntent || "").trim();
-  if (stepId !== "dream" || !userMessage || actionCodeRaw) return false;
+  if (!isSingleValueFeedbackStep(stepId) || !userMessage || actionCodeRaw) return false;
   if (submittedTextIntent) return false;
   const currentValue = pickCurrentStepValueForFeedback(params.state, stepId);
   if (!currentValue) return false;
@@ -202,8 +204,9 @@ export async function shouldTreatTurnAsDreamCurrentValueFeedback(params: {
   );
 }
 
-function stateWithDreamCurrentValueFeedbackContext(
+function stateWithCurrentValueFeedbackContext(
   state: CanvasState,
+  stepId: string,
   currentValue: string,
   feedbackText: string
 ): CanvasState {
@@ -214,7 +217,7 @@ function stateWithDreamCurrentValueFeedbackContext(
       ...last,
       wording_choice_pending: "true",
       wording_choice_mode: "text",
-      wording_choice_target_field: "dream",
+      wording_choice_target_field: stepId,
       wording_choice_user_raw: currentValue,
       wording_choice_user_normalized: currentValue,
       wording_choice_agent_current: currentValue,
@@ -225,7 +228,7 @@ function stateWithDreamCurrentValueFeedbackContext(
       pending_suggestion_feedback_text: feedbackText,
       pending_suggestion_presentation_mode: "canonical",
       refined_formulation: currentValue,
-      dream: currentValue,
+      [stepId]: currentValue,
     },
   };
 }
@@ -521,8 +524,8 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       currentSpecialist: currentSpecialistAtTurnStart,
       dreamRuntimeMode: deps.getDreamRuntimeMode(state),
     });
-    const currentDreamValueForFeedback = pickCurrentStepValueForFeedback(state, deps.dreamStepId);
-    const dreamCurrentValueFeedback = await shouldTreatTurnAsDreamCurrentValueFeedback({
+    const currentValueForFeedback = pickCurrentStepValueForFeedback(state, currentStepId);
+    const currentValueFeedback = await shouldTreatTurnAsCurrentValueFeedback({
       state,
       stepId: currentStepId,
       userMessage,
@@ -532,13 +535,13 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       actionCodeRaw: params.actionCodeRaw,
       submittedTextIntent,
     });
-    if (dreamCurrentValueFeedback) {
+    if (currentValueFeedback) {
       submittedTextIntent = "feedback_on_current_value";
       submittedTextAnchor = "current_value";
       submittedUserText = userMessage;
     }
-    const stateForSpecialist = dreamCurrentValueFeedback
-      ? stateWithDreamCurrentValueFeedbackContext(state, currentDreamValueForFeedback, userMessage)
+    const stateForSpecialist = currentValueFeedback
+      ? stateWithCurrentValueFeedbackContext(state, currentStepId, currentValueForFeedback, userMessage)
       : state;
     const businessListTurnResolution: BusinessListTurnResolution | null =
       isBusinessListStep(currentStepId) &&
