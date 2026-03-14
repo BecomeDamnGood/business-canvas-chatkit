@@ -1,22 +1,11 @@
 // src/core/state.ts
 import { z } from "zod";
+import { STEP_REGISTRY_BY_STEP_ID, STEP_REGISTRY_ORDER } from "../steps/step_registry.js";
 
 /**
  * Canonical step IDs (expand later as you add steps)
  */
-export const CANONICAL_STEPS = [
-  "step_0",
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "strategy",
-  "targetgroup",
-  "productsservices",
-  "rulesofthegame",
-  "presentation",
-] as const;
+export const CANONICAL_STEPS = STEP_REGISTRY_ORDER;
 
 export type CanonicalStepId = (typeof CANONICAL_STEPS)[number];
 
@@ -29,17 +18,17 @@ export function isCanonicalStepId(x: unknown): x is CanonicalStepId {
  * Keep this map as the single owner for step/final routing.
  */
 export const STEP_FINAL_FIELD_BY_STEP_ID = {
-  step_0: "step_0_final",
-  dream: "dream_final",
-  purpose: "purpose_final",
-  bigwhy: "bigwhy_final",
-  role: "role_final",
-  entity: "entity_final",
-  strategy: "strategy_final",
-  targetgroup: "targetgroup_final",
-  productsservices: "productsservices_final",
-  rulesofthegame: "rulesofthegame_final",
-  presentation: "presentation_brief_final",
+  step_0: STEP_REGISTRY_BY_STEP_ID.step_0.finalField,
+  dream: STEP_REGISTRY_BY_STEP_ID.dream.finalField,
+  purpose: STEP_REGISTRY_BY_STEP_ID.purpose.finalField,
+  bigwhy: STEP_REGISTRY_BY_STEP_ID.bigwhy.finalField,
+  role: STEP_REGISTRY_BY_STEP_ID.role.finalField,
+  entity: STEP_REGISTRY_BY_STEP_ID.entity.finalField,
+  strategy: STEP_REGISTRY_BY_STEP_ID.strategy.finalField,
+  targetgroup: STEP_REGISTRY_BY_STEP_ID.targetgroup.finalField,
+  productsservices: STEP_REGISTRY_BY_STEP_ID.productsservices.finalField,
+  rulesofthegame: STEP_REGISTRY_BY_STEP_ID.rulesofthegame.finalField,
+  presentation: STEP_REGISTRY_BY_STEP_ID.presentation.finalField,
 } as const satisfies Record<CanonicalStepId, string>;
 
 export type StepFinalField = (typeof STEP_FINAL_FIELD_BY_STEP_ID)[CanonicalStepId];
@@ -152,6 +141,15 @@ function normalizeIdempotencyOutcome(raw: unknown): IdempotencyOutcome {
 export const UI_STRINGS_STATUSES = ["pending", "critical_ready", "ready"] as const;
 export const UiStringsStatusZod = z.enum(UI_STRINGS_STATUSES);
 export type UiStringsStatus = z.infer<typeof UiStringsStatusZod>;
+export const SUGGESTION_STATE_MODES = ["suggestions", "examples"] as const;
+export const SuggestionStateModeZod = z.enum(SUGGESTION_STATE_MODES);
+export type SuggestionStateMode = z.infer<typeof SuggestionStateModeZod>;
+export const SuggestionStateEntryZod = z.object({
+  items: z.array(z.string()),
+  mode: SuggestionStateModeZod,
+  valid_for_action_codes: z.array(z.string()),
+});
+export type SuggestionStateEntry = z.infer<typeof SuggestionStateEntryZod>;
 export const UI_BOOTSTRAP_STATUSES = ["init", "awaiting_locale", "ready"] as const;
 export const UiBootstrapStatusZod = z.enum(UI_BOOTSTRAP_STATUSES);
 export type UiBootstrapStatus = z.infer<typeof UiBootstrapStatusZod>;
@@ -319,6 +317,7 @@ export const CanvasStateZod = z.object({
   // staged per-step value (chosen wording before explicit next-step confirm)
   provisional_by_step: z.record(z.string(), z.string()),
   provisional_source_by_step: z.record(z.string(), ProvisionalSourceZod),
+  suggestion_state_by_step: z.record(z.string(), SuggestionStateEntryZod),
   __dream_runtime_mode: DreamRuntimeModeZod,
   dream_builder_statements: z.array(z.string()),
   dream_scoring_statements: z.array(z.string()),
@@ -419,6 +418,7 @@ export function getDefaultState(): CanvasState {
 
     provisional_by_step: {},
     provisional_source_by_step: {},
+    suggestion_state_by_step: {},
     __dream_runtime_mode: "self",
     dream_builder_statements: [],
     dream_scoring_statements: [],
@@ -632,6 +632,37 @@ export function normalizeState(raw: unknown): CanvasState {
       })
       .filter((entry): entry is readonly [string, "user_input" | "wording_pick" | "action_route" | "system_generated"] => Boolean(entry))
   );
+  const suggestion_state_raw =
+    typeof r.suggestion_state_by_step === "object" && r.suggestion_state_by_step !== null
+      ? (r.suggestion_state_by_step as Record<string, unknown>)
+      : {};
+  const suggestion_state_by_step = Object.fromEntries(
+    Object.entries(suggestion_state_raw)
+      .map(([stepId, entry]) => {
+        const record = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+        const modeRaw = String(record.mode || "").trim();
+        const mode: SuggestionStateMode =
+          modeRaw === "examples" || modeRaw === "suggestions" ? modeRaw : "suggestions";
+        const items = Array.isArray(record.items)
+          ? (record.items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
+          : [];
+        const valid_for_action_codes = Array.isArray(record.valid_for_action_codes)
+          ? (record.valid_for_action_codes as unknown[])
+              .map((value) => String(value || "").trim().toUpperCase())
+              .filter(Boolean)
+          : [];
+        if (items.length === 0 || valid_for_action_codes.length === 0) return null;
+        return [
+          String(stepId || "").trim(),
+          {
+            items,
+            mode,
+            valid_for_action_codes,
+          },
+        ] as const;
+      })
+      .filter((entry): entry is readonly [string, SuggestionStateEntry] => Boolean(entry))
+  );
   const dreamRuntimeModeRaw = String((r as any).__dream_runtime_mode ?? d.__dream_runtime_mode).trim();
   const __dream_runtime_mode: DreamRuntimeMode =
     dreamRuntimeModeRaw === "builder_collect" ||
@@ -751,6 +782,7 @@ export function normalizeState(raw: unknown): CanvasState {
 
     provisional_by_step,
     provisional_source_by_step,
+    suggestion_state_by_step,
     __dream_runtime_mode,
     dream_builder_statements,
     dream_scoring_statements,

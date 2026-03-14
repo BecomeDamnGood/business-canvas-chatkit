@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import { getFinalFieldForStepId, type CanvasState } from "../core/state.js";
+import { chooseForMeContractForStep, type ChooseForMeField } from "../core/choose_for_me_contract.js";
 import { buildUiContractId } from "../core/ui_contract_id.js";
 import {
   type RunStepContext,
@@ -12,6 +13,7 @@ import {
   type RunStepRenderedRouteOutput,
   type RunStepRoutePorts,
 } from "./run_step_ports.js";
+import type { TurnResponseRenderFailureContext } from "./run_step_turn_response_engine.js";
 import { canonicalPresentationRecapForState } from "./run_step_presentation_recap.js";
 import {
   createStructuredLogContextFromState,
@@ -33,7 +35,6 @@ type RunStepRouteFlatPorts<TResponse> =
   & RunStepRoutePorts<TResponse>["presentation"]
   & RunStepRoutePorts<TResponse>["specialist"]
   & RunStepRoutePorts<TResponse>["response"]
-  & RunStepRoutePorts<TResponse>["suggestions"]
   & RunStepRoutePorts<TResponse>["i18n"];
 
 type SpecialRouteHandler<TResponse> = {
@@ -44,9 +45,11 @@ type SpecialRouteHandler<TResponse> = {
 
 const ROUTE_REGISTRY_ORDER = [
   "synthetic_dream_pick",
+  "synthetic_purpose_pick",
   "synthetic_bigwhy_pick",
   "synthetic_role_pick",
   "synthetic_entity_pick",
+  "synthetic_strategy_pick",
   "presentation_generate",
   "dream_submit_scores",
   "dream_switch_to_self",
@@ -65,7 +68,6 @@ function flattenRunStepRoutePorts<TResponse>(ports: RunStepRoutePorts<TResponse>
     ...ports.presentation,
     ...ports.specialist,
     ...ports.response,
-    ...ports.suggestions,
     ...ports.i18n,
   };
 }
@@ -111,20 +113,6 @@ function parseSubmitScoresPayload(
     return null;
   }
   return null;
-}
-
-function withRenderedMessageFallback(
-  specialist: Record<string, unknown>,
-  renderedMessage: string
-): Record<string, unknown> {
-  const rendered = String(renderedMessage || "").trim();
-  if (!rendered) return specialist;
-  const current = String((specialist as Record<string, unknown>).message || "").trim();
-  if (current && current === rendered) return specialist;
-  return {
-    ...specialist,
-    message: rendered,
-  };
 }
 
 function clearDreamStateForSwitchToSelf(state: CanvasState, dreamStepId: string): CanvasState {
@@ -205,6 +193,64 @@ function withPresentationRecapProvisional(
   };
 }
 
+type ChooseForMeConfig = {
+  routeId: string;
+  token: string;
+  specialistToCall: string;
+  stepId: string;
+  field: ChooseForMeField;
+};
+
+function parseMenuIdFromContractId(contractIdRaw: unknown): string {
+  const parts = String(contractIdRaw || "").trim().split(":");
+  return String(parts[2] || "").trim().toUpperCase();
+}
+
+function currentMenuIdForStep(state: CanvasState, stepId: string): string {
+  const phaseByStep =
+    state &&
+    typeof (state as Record<string, unknown>).__ui_phase_by_step === "object" &&
+    (state as Record<string, unknown>).__ui_phase_by_step !== null
+      ? ((state as Record<string, unknown>).__ui_phase_by_step as Record<string, unknown>)
+      : {};
+  const fromPhase = parseMenuIdFromContractId(phaseByStep[stepId]);
+  if (fromPhase) return fromPhase;
+  const last = asRecord((state as Record<string, unknown>).last_specialist_result || {});
+  return parseMenuIdFromContractId(last.ui_contract_id);
+}
+
+function suggestionStateForStep(
+  state: CanvasState,
+  stepId: string
+): { items: string[]; mode: string; valid_for_action_codes: string[] } | null {
+  const raw =
+    state &&
+    typeof (state as Record<string, unknown>).suggestion_state_by_step === "object" &&
+    (state as Record<string, unknown>).suggestion_state_by_step !== null
+      ? ((state as Record<string, unknown>).suggestion_state_by_step as Record<string, unknown>)
+      : {};
+  const entry = raw[stepId];
+  if (!entry || typeof entry !== "object") return null;
+  const record = entry as Record<string, unknown>;
+  const items = Array.isArray(record.items)
+    ? (record.items as unknown[]).map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  const valid_for_action_codes = Array.isArray(record.valid_for_action_codes)
+    ? (record.valid_for_action_codes as unknown[]).map((value) => String(value || "").trim().toUpperCase()).filter(Boolean)
+    : [];
+  const mode = String(record.mode || "").trim();
+  if (items.length === 0 || valid_for_action_codes.length === 0) return null;
+  return { items, mode, valid_for_action_codes };
+}
+
+function strategyStatementsFromSelectedValue(value: string): string[] {
+  return String(value || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
+    .filter(Boolean);
+}
+
 type RouteTurnIntent = {
   state: CanvasState;
   specialist: Record<string, unknown>;
@@ -258,7 +304,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
       specialist: intent.specialist,
       previousSpecialist: intent.previousSpecialist,
       telemetry: context.uiI18nTelemetry,
-      onContractViolation: ({ state, stepId, activeSpecialist, rendered, reason }) =>
+      onContractViolation: ({ state, stepId, activeSpecialist, rendered, reason }: TurnResponseRenderFailureContext) =>
         buildRenderedContractViolationPayload({
           state,
           stepId,
@@ -292,7 +338,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
       specialist: intent.specialist,
       previousSpecialist: intent.previousSpecialist,
       telemetry: context.uiI18nTelemetry,
-      onContractViolation: ({ state, stepId, activeSpecialist, rendered, reason }) =>
+      onContractViolation: ({ state, stepId, activeSpecialist, rendered, reason }: TurnResponseRenderFailureContext) =>
         buildRenderedContractViolationPayload({
           state,
           stepId,
@@ -328,273 +374,142 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     );
   }
 
+  async function rebuildCurrentRouteScreen(
+    context: RouteRegistryContext,
+    state: CanvasState,
+    previousSpecialist: Record<string, unknown>
+  ): Promise<TResponse> {
+    return finalizeRouteTurnIntent(context, {
+      state,
+      specialist: asRecord((state as Record<string, unknown>).last_specialist_result || {}),
+      previousSpecialist,
+      responseUiFlags: context.responseUiFlags,
+    });
+  }
+
+  function createSyntheticChooseForMeHandler(config: ChooseForMeConfig): SpecialRouteHandler<TResponse> {
+    return {
+      id: config.routeId,
+      canHandle: (context) =>
+        String((context.state as Record<string, unknown>).current_step || "") === config.stepId &&
+        context.userMessage === config.token,
+      handle: async (context) => {
+        const contract = chooseForMeContractForStep(config.stepId);
+        if (!contract) return null;
+        const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
+        const previousSpecialist = asRecord(
+          (stateWithUi as Record<string, unknown>).last_specialist_result || {}
+        );
+        const currentMenuId = currentMenuIdForStep(stateWithUi, config.stepId);
+        const suggestionState = suggestionStateForStep(stateWithUi, config.stepId);
+        if (
+          currentMenuId !== contract.menuId ||
+          !suggestionState ||
+          !suggestionState.valid_for_action_codes.includes(contract.actionCode) ||
+          suggestionState.items.length === 0
+        ) {
+          return rebuildCurrentRouteScreen(context, stateWithUi, previousSpecialist);
+        }
+
+        const pickedSuggestion = String(suggestionState.items[0] || "").trim();
+        if (!pickedSuggestion) {
+          return rebuildCurrentRouteScreen(context, stateWithUi, previousSpecialist);
+        }
+
+        const specialist: Record<string, unknown> = {
+          action: "ASK",
+          message: deps.wordingSelectionMessage(
+            config.stepId,
+            stateWithUi,
+            String((stateWithUi as Record<string, unknown>).active_specialist || ""),
+            pickedSuggestion
+          ),
+          question: "",
+          refined_formulation: pickedSuggestion,
+          wants_recap: false,
+          is_offtopic: false,
+          user_intent: "STEP_INPUT",
+          meta_topic: "NONE",
+          [config.field]: pickedSuggestion,
+        };
+        if (config.field === "strategy") {
+          specialist.statements = strategyStatementsFromSelectedValue(pickedSuggestion);
+        }
+
+        const forcedDecision = {
+          specialist_to_call: config.specialistToCall,
+          specialist_input: `CURRENT_STEP_ID: ${config.stepId} | USER_MESSAGE: ${config.token}`,
+          current_step: config.stepId,
+          intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
+          intro_shown_session:
+            String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
+          show_step_intro: "false",
+          show_session_intro: "false",
+        } as unknown as OrchestratorOutput;
+
+        const nextState = deps.applyStateUpdate({
+          prev: stateWithUi,
+          decision: forcedDecision,
+          specialistResult: specialist,
+          showSessionIntroUsed: "false",
+          provisionalSource: "action_route",
+        });
+        if (config.stepId === deps.dreamStepId) {
+          deps.setDreamRuntimeMode(nextState, "self");
+        }
+        return finalizeRouteTurnIntent(context, {
+          state: nextState,
+          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
+          previousSpecialist,
+          responseUiFlags: context.responseUiFlags,
+        });
+      },
+    };
+  }
+
   const registryById: Record<string, SpecialRouteHandler<TResponse>> = {
-    synthetic_dream_pick: {
-      id: "synthetic_dream_pick",
-      canHandle: (context) =>
-        String((context.state as Record<string, unknown>).current_step || "") === deps.dreamStepId &&
-        context.userMessage === deps.dreamPickOneRouteToken,
-      handle: async (context) => {
-        const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
-        const previousSpecialist = asRecord(
-          (stateWithUi as Record<string, unknown>).last_specialist_result || {}
-        );
-        const renderedPreviousText = deps.buildTextForWidget({
-          specialist: previousSpecialist,
-          state: stateWithUi,
-        });
-        const pickedSuggestion =
-          deps.pickDreamSuggestionFromPreviousState(stateWithUi, previousSpecialist) ||
-          deps.pickDreamSuggestionFromPreviousState(
-            stateWithUi,
-            withRenderedMessageFallback(previousSpecialist, renderedPreviousText)
-          );
-        if (!pickedSuggestion) return null;
-
-        const specialist = {
-          action: "ASK",
-          message: deps.wordingSelectionMessage(
-            deps.dreamStepId,
-            stateWithUi,
-            String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-            pickedSuggestion
-          ),
-          question: "",
-          refined_formulation: pickedSuggestion,
-          dream: pickedSuggestion,
-          suggest_dreambuilder: "false",
-          wants_recap: false,
-          is_offtopic: false,
-          user_intent: "STEP_INPUT",
-          meta_topic: "NONE",
-        };
-
-        const forcedDecision = {
-          specialist_to_call: deps.dreamSpecialist,
-          specialist_input: `CURRENT_STEP_ID: ${deps.dreamStepId} | USER_MESSAGE: ${deps.dreamPickOneRouteToken}`,
-          current_step: deps.dreamStepId,
-          intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
-          intro_shown_session:
-            String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
-          show_step_intro: "false",
-          show_session_intro: "false",
-        } as unknown as OrchestratorOutput;
-
-        let nextState = deps.applyStateUpdate({
-          prev: stateWithUi,
-          decision: forcedDecision,
-          specialistResult: specialist,
-          showSessionIntroUsed: "false",
-          provisionalSource: "action_route",
-        });
-
-        deps.setDreamRuntimeMode(nextState, "self");
-        return finalizeRouteTurnIntent(context, {
-          state: nextState,
-          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
-          previousSpecialist,
-          responseUiFlags: context.responseUiFlags,
-        });
-      },
-    },
-
-    synthetic_role_pick: {
-      id: "synthetic_role_pick",
-      canHandle: (context) =>
-        String((context.state as Record<string, unknown>).current_step || "") === deps.roleStepId &&
-        context.userMessage === deps.roleChooseForMeRouteToken,
-      handle: async (context) => {
-        const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
-        const previousSpecialist = asRecord(
-          (stateWithUi as Record<string, unknown>).last_specialist_result || {}
-        );
-        const renderedPreviousText = deps.buildTextForWidget({
-          specialist: previousSpecialist,
-          state: stateWithUi,
-        });
-        const pickedSuggestion =
-          deps.pickRoleSuggestionFromPreviousState(stateWithUi, previousSpecialist) ||
-          deps.pickRoleSuggestionFromPreviousState(
-            stateWithUi,
-            withRenderedMessageFallback(previousSpecialist, renderedPreviousText)
-          );
-        if (!pickedSuggestion) return null;
-
-        const specialist = {
-          action: "ASK",
-          message: deps.wordingSelectionMessage(
-            deps.roleStepId,
-            stateWithUi,
-            String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-            pickedSuggestion
-          ),
-          question: "",
-          refined_formulation: pickedSuggestion,
-          role: pickedSuggestion,
-          wants_recap: false,
-          is_offtopic: false,
-          user_intent: "STEP_INPUT",
-          meta_topic: "NONE",
-        };
-
-        const forcedDecision = {
-          specialist_to_call: deps.roleSpecialist,
-          specialist_input: `CURRENT_STEP_ID: ${deps.roleStepId} | USER_MESSAGE: ${deps.roleChooseForMeRouteToken}`,
-          current_step: deps.roleStepId,
-          intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
-          intro_shown_session:
-            String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
-          show_step_intro: "false",
-          show_session_intro: "false",
-        } as unknown as OrchestratorOutput;
-
-        let nextState = deps.applyStateUpdate({
-          prev: stateWithUi,
-          decision: forcedDecision,
-          specialistResult: specialist,
-          showSessionIntroUsed: "false",
-          provisionalSource: "action_route",
-        });
-        return finalizeRouteTurnIntent(context, {
-          state: nextState,
-          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
-          previousSpecialist,
-          responseUiFlags: context.responseUiFlags,
-        });
-      },
-    },
-
-    synthetic_bigwhy_pick: {
-      id: "synthetic_bigwhy_pick",
-      canHandle: (context) =>
-        String((context.state as Record<string, unknown>).current_step || "") === "bigwhy" &&
-        context.userMessage === deps.bigWhyChooseForMeRouteToken,
-      handle: async (context) => {
-        const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
-        const previousSpecialist = asRecord(
-          (stateWithUi as Record<string, unknown>).last_specialist_result || {}
-        );
-        const renderedPreviousText = deps.buildTextForWidget({
-          specialist: previousSpecialist,
-          state: stateWithUi,
-        });
-        const pickedSuggestion =
-          deps.pickBigWhySuggestionFromPreviousState(stateWithUi, previousSpecialist) ||
-          deps.pickBigWhySuggestionFromPreviousState(
-            stateWithUi,
-            withRenderedMessageFallback(previousSpecialist, renderedPreviousText)
-          );
-        if (!pickedSuggestion) return null;
-
-        const specialist = {
-          action: "ASK",
-          message: deps.wordingSelectionMessage(
-            "bigwhy",
-            stateWithUi,
-            String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-            pickedSuggestion
-          ),
-          question: "",
-          refined_formulation: pickedSuggestion,
-          bigwhy: pickedSuggestion,
-          wants_recap: false,
-          is_offtopic: false,
-          user_intent: "STEP_INPUT",
-          meta_topic: "NONE",
-        };
-
-        const forcedDecision = {
-          specialist_to_call: deps.bigwhySpecialist,
-          specialist_input: "CURRENT_STEP_ID: bigwhy | USER_MESSAGE: __ROUTE__BIGWHY_CHOOSE_FOR_ME__",
-          current_step: "bigwhy",
-          intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
-          intro_shown_session:
-            String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
-          show_step_intro: "false",
-          show_session_intro: "false",
-        } as unknown as OrchestratorOutput;
-
-        const nextState = deps.applyStateUpdate({
-          prev: stateWithUi,
-          decision: forcedDecision,
-          specialistResult: specialist,
-          showSessionIntroUsed: "false",
-          provisionalSource: "action_route",
-        });
-        return finalizeRouteTurnIntent(context, {
-          state: nextState,
-          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
-          previousSpecialist,
-          responseUiFlags: context.responseUiFlags,
-        });
-      },
-    },
-
-    synthetic_entity_pick: {
-      id: "synthetic_entity_pick",
-      canHandle: (context) =>
-        String((context.state as Record<string, unknown>).current_step || "") === "entity" &&
-        context.userMessage === deps.entityChooseForMeRouteToken,
-      handle: async (context) => {
-        const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
-        const previousSpecialist = asRecord(
-          (stateWithUi as Record<string, unknown>).last_specialist_result || {}
-        );
-        const renderedPreviousText = deps.buildTextForWidget({
-          specialist: previousSpecialist,
-          state: stateWithUi,
-        });
-        const pickedSuggestion =
-          deps.pickEntitySuggestionFromPreviousState(stateWithUi, previousSpecialist) ||
-          deps.pickEntitySuggestionFromPreviousState(
-            stateWithUi,
-            withRenderedMessageFallback(previousSpecialist, renderedPreviousText)
-          );
-        if (!pickedSuggestion) return null;
-
-        const specialist = {
-          action: "ASK",
-          message: deps.wordingSelectionMessage(
-            "entity",
-            stateWithUi,
-            String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-            pickedSuggestion
-          ),
-          question: "",
-          refined_formulation: pickedSuggestion,
-          entity: pickedSuggestion,
-          wants_recap: false,
-          is_offtopic: false,
-          user_intent: "STEP_INPUT",
-          meta_topic: "NONE",
-        };
-
-        const forcedDecision = {
-          specialist_to_call: deps.entitySpecialist,
-          specialist_input: "CURRENT_STEP_ID: entity | USER_MESSAGE: __ROUTE__ENTITY_CHOOSE_FOR_ME__",
-          current_step: "entity",
-          intro_shown_for_step: String((stateWithUi as Record<string, unknown>).intro_shown_for_step ?? ""),
-          intro_shown_session:
-            String((stateWithUi as Record<string, unknown>).intro_shown_session ?? "") === "true" ? "true" : "false",
-          show_step_intro: "false",
-          show_session_intro: "false",
-        } as unknown as OrchestratorOutput;
-
-        const nextState = deps.applyStateUpdate({
-          prev: stateWithUi,
-          decision: forcedDecision,
-          specialistResult: specialist,
-          showSessionIntroUsed: "false",
-          provisionalSource: "action_route",
-        });
-        return finalizeRouteTurnIntent(context, {
-          state: nextState,
-          specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
-          previousSpecialist,
-          responseUiFlags: context.responseUiFlags,
-        });
-      },
-    },
+    synthetic_dream_pick: createSyntheticChooseForMeHandler({
+      routeId: "synthetic_dream_pick",
+      token: deps.dreamPickOneRouteToken,
+      specialistToCall: deps.dreamSpecialist,
+      stepId: deps.dreamStepId,
+      field: "dream",
+    }),
+    synthetic_purpose_pick: createSyntheticChooseForMeHandler({
+      routeId: "synthetic_purpose_pick",
+      token: deps.purposeChooseForMeRouteToken,
+      specialistToCall: deps.purposeSpecialist,
+      stepId: deps.purposeStepId,
+      field: "purpose",
+    }),
+    synthetic_bigwhy_pick: createSyntheticChooseForMeHandler({
+      routeId: "synthetic_bigwhy_pick",
+      token: deps.bigWhyChooseForMeRouteToken,
+      specialistToCall: deps.bigwhySpecialist,
+      stepId: "bigwhy",
+      field: "bigwhy",
+    }),
+    synthetic_role_pick: createSyntheticChooseForMeHandler({
+      routeId: "synthetic_role_pick",
+      token: deps.roleChooseForMeRouteToken,
+      specialistToCall: deps.roleSpecialist,
+      stepId: deps.roleStepId,
+      field: "role",
+    }),
+    synthetic_entity_pick: createSyntheticChooseForMeHandler({
+      routeId: "synthetic_entity_pick",
+      token: deps.entityChooseForMeRouteToken,
+      specialistToCall: deps.entitySpecialist,
+      stepId: "entity",
+      field: "entity",
+    }),
+    synthetic_strategy_pick: createSyntheticChooseForMeHandler({
+      routeId: "synthetic_strategy_pick",
+      token: deps.strategyChooseForMeRouteToken,
+      specialistToCall: deps.strategySpecialist,
+      stepId: deps.strategyStepId,
+      field: "strategy",
+    }),
 
     presentation_generate: {
       id: "presentation_generate",

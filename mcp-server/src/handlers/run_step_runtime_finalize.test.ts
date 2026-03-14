@@ -269,6 +269,79 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
   }
 });
 
+test("deriveSuggestionStateForWidget captures visible sentence suggestions for Dream", () => {
+  const helpers = buildTextHelpers(() => "");
+  const specialist = {
+    ui_contract_id: "dream:ASK:DREAM_MENU_SUGGESTIONS:v1",
+    message: [
+      "Here are three examples of a Dream for an advertising agency like Mindd.",
+      "",
+      "Mindd dreams of a world in which creative ideas help brands connect with people on a deeper, more meaningful level.",
+      "",
+      "Mindd dreams of a world in which advertising inspires trust and brings genuine value to everyday lives.",
+      "",
+      "Mindd dreams of a world in which brands communicate with honesty, making people feel understood and respected.",
+    ].join("\n"),
+  } as Record<string, unknown>;
+
+  const snapshot = helpers.deriveSuggestionStateForWidget({ specialist, state: {} as any });
+
+  assert.deepEqual(snapshot, {
+    stepId: "dream",
+    mode: "suggestions",
+    items: [
+      "Mindd dreams of a world in which creative ideas help brands connect with people on a deeper, more meaningful level.",
+      "Mindd dreams of a world in which advertising inspires trust and brings genuine value to everyday lives.",
+      "Mindd dreams of a world in which brands communicate with honesty, making people feel understood and respected.",
+    ],
+    valid_for_action_codes: ["ACTION_DREAM_SUGGESTIONS_PICK_ONE"],
+  });
+});
+
+test("deriveSuggestionStateForWidget captures multiline Strategy examples as plain line blocks", () => {
+  const helpers = buildTextHelpers(() => "");
+  const specialist = {
+    ui_contract_id: "strategy:ASK:STRATEGY_MENU_EXAMPLES:v1",
+    message: [
+      "HERE ARE THREE EXAMPLE STRATEGIES FOR MINDD:",
+      "",
+      "EXAMPLE 1",
+      "- Focus on long-term partnerships",
+      "- Prioritize depth over volume",
+      "- Select clients that match the mission",
+      "- Invest in strategic learning",
+      "",
+      "EXAMPLE 2",
+      "- Build a culture of curiosity",
+      "- Protect time for reflection",
+      "- Choose quality over speed",
+      "- Work with values-aligned clients",
+    ].join("\n"),
+  } as Record<string, unknown>;
+
+  const snapshot = helpers.deriveSuggestionStateForWidget({ specialist, state: {} as any });
+
+  assert.deepEqual(snapshot, {
+    stepId: "strategy",
+    mode: "examples",
+    items: [
+      [
+        "Focus on long-term partnerships",
+        "Prioritize depth over volume",
+        "Select clients that match the mission",
+        "Invest in strategic learning",
+      ].join("\n"),
+      [
+        "Build a culture of curiosity",
+        "Protect time for reflection",
+        "Choose quality over speed",
+        "Work with values-aligned clients",
+      ].join("\n"),
+    ],
+    valid_for_action_codes: ["ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME"],
+  });
+});
+
 test("buildTextForWidget avoids duplicate strategy bullets when message already contains the same list", () => {
   const helpers = buildTextHelpers((stepId) => {
     if (stepId !== "strategy") return "";

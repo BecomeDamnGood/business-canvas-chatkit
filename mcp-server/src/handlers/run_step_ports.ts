@@ -89,9 +89,13 @@ export type RunStepRouteIdPorts = {
   dreamStepId: string;
   dreamSpecialist: string;
   dreamExplainerSpecialist: string;
+  purposeStepId: string;
+  purposeSpecialist: string;
   bigwhySpecialist: string;
   roleStepId: string;
   roleSpecialist: string;
+  strategyStepId: string;
+  strategySpecialist: string;
   entitySpecialist: string;
   presentationStepId: string;
   presentationSpecialist: string;
@@ -99,9 +103,11 @@ export type RunStepRouteIdPorts = {
 
 export type RunStepRouteTokenPorts = {
   dreamPickOneRouteToken: string;
+  purposeChooseForMeRouteToken: string;
   bigWhyChooseForMeRouteToken: string;
   roleChooseForMeRouteToken: string;
   entityChooseForMeRouteToken: string;
+  strategyChooseForMeRouteToken: string;
   presentationMakeRouteToken: string;
   switchToSelfDreamToken: string;
   dreamStartExerciseRouteToken: string;
@@ -172,14 +178,6 @@ export type RunStepRouteResponsePorts<TResponse> = {
   turnResponseEngine: TurnResponseEngine<TResponse>;
 };
 
-export type RunStepRouteSuggestionPorts = {
-  pickDreamSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
-  pickDreamCandidateFromState: (state: CanvasState) => string;
-  pickBigWhySuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
-  pickRoleSuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
-  pickEntitySuggestionFromPreviousState: (state: CanvasState, previousSpecialist: Record<string, unknown>) => string;
-};
-
 export type RunStepRouteI18nPorts = {
   bumpUiI18nCounter: (telemetry: unknown, key: string) => void;
 };
@@ -194,7 +192,6 @@ export type RunStepRoutePorts<TResponse> = {
   presentation: RunStepRoutePresentationPorts;
   specialist: RunStepRouteSpecialistPorts<TResponse>;
   response: RunStepRouteResponsePorts<TResponse>;
-  suggestions: RunStepRouteSuggestionPorts;
   i18n: RunStepRouteI18nPorts;
 };
 

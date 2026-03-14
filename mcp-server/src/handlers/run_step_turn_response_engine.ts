@@ -1,4 +1,5 @@
 import type { CanvasState } from "../core/state.js";
+import { chooseForMeContractForStep } from "../core/choose_for_me_contract.js";
 import type { TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
@@ -24,6 +25,15 @@ type TurnResponseEngineDeps<TPayload> = {
   };
   applyUiPhaseByStep: (state: CanvasState, stepId: string, contractId: string) => void;
   buildTextForWidget: (params: { specialist: Record<string, unknown>; state?: CanvasState | null }) => string;
+  deriveSuggestionStateForWidget: (params: {
+    specialist: Record<string, unknown>;
+    state?: CanvasState | null;
+  }) => {
+    stepId: string;
+    items: string[];
+    mode: "suggestions" | "examples";
+    valid_for_action_codes: string[];
+  } | null;
   pickPrompt: (specialist: Record<string, unknown>) => string;
   attachRegistryPayload: (
     payload: Record<string, unknown>,
@@ -92,6 +102,11 @@ export type TurnResponseEngine<TPayload> = {
 export function createTurnResponseEngine<TPayload>(
   deps: TurnResponseEngineDeps<TPayload>
 ): TurnResponseEngine<TPayload> {
+  function menuIdFromContractId(contractId: string): string {
+    const parts = String(contractId || "").trim().split(":");
+    return String(parts[2] || "").trim().toUpperCase();
+  }
+
   function renderValidateRecover(params: {
     state: CanvasState;
     specialist: Record<string, unknown>;
@@ -125,6 +140,32 @@ export function createTurnResponseEngine<TPayload>(
       deps.applyUiPhaseByStep(nextState, stepId, contractId);
     }
     (nextState as Record<string, unknown>).last_specialist_result = rendered.specialist;
+    const currentMap =
+      typeof (nextState as Record<string, unknown>).suggestion_state_by_step === "object" &&
+      (nextState as Record<string, unknown>).suggestion_state_by_step !== null
+        ? {
+            ...((nextState as Record<string, unknown>).suggestion_state_by_step as Record<string, unknown>),
+          }
+        : {};
+    const suggestionState = deps.deriveSuggestionStateForWidget({
+      specialist: rendered.specialist,
+      state: nextState,
+    });
+    if (suggestionState && suggestionState.stepId) {
+      currentMap[suggestionState.stepId] = {
+        items: [...suggestionState.items],
+        mode: suggestionState.mode,
+        valid_for_action_codes: [...suggestionState.valid_for_action_codes],
+      };
+    }
+    const chooseForMeContract = chooseForMeContractForStep(stepId);
+    if (chooseForMeContract) {
+      const currentMenuId = menuIdFromContractId(contractId);
+      if (currentMenuId !== chooseForMeContract.menuId) {
+        delete currentMap[stepId];
+      }
+    }
+    (nextState as Record<string, unknown>).suggestion_state_by_step = currentMap;
 
     return {
       ok: true,

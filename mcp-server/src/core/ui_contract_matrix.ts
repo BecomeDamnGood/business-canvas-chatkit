@@ -1,4 +1,5 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
+import { CHOOSE_FOR_ME_CONTRACTS } from "./choose_for_me_contract.js";
 import { buildUiContractId } from "./ui_contract_id.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
@@ -17,6 +18,17 @@ export type UiMenuTransition = {
   render_mode?: "menu" | "no_buttons";
   from_menu_ids?: string[];
 };
+
+const CHOOSE_FOR_ME_TRANSITIONS = Object.fromEntries(
+  CHOOSE_FOR_ME_CONTRACTS.map((contract) => [
+    contract.actionCode,
+    {
+      step_id: contract.stepId,
+      from_menu_ids: [contract.menuId],
+      to_menu_id: contract.nextMenuId,
+    } satisfies UiMenuTransition,
+  ])
+) as Record<string, UiMenuTransition>;
 
 export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
   ACTION_STEP0_READY_START: {
@@ -49,11 +61,6 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
     step_id: "dream",
     from_menu_ids: ["DREAM_MENU_WHY"],
     to_menu_id: "DREAM_EXPLAINER_MENU_SWITCH_SELF",
-  },
-  ACTION_DREAM_SUGGESTIONS_PICK_ONE: {
-    step_id: "dream",
-    from_menu_ids: ["DREAM_MENU_SUGGESTIONS"],
-    to_menu_id: "DREAM_MENU_REFINE",
   },
   ACTION_DREAM_SUGGESTIONS_START_EXERCISE: {
     step_id: "dream",
@@ -107,11 +114,6 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
     from_menu_ids: ["PURPOSE_MENU_EXPLAIN", "PURPOSE_MENU_POST_ASK"],
     to_menu_id: "PURPOSE_MENU_EXAMPLES",
   },
-  ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME: {
-    step_id: "purpose",
-    from_menu_ids: ["PURPOSE_MENU_EXAMPLES"],
-    to_menu_id: "PURPOSE_MENU_AFTER_CHOOSE",
-  },
   ACTION_PURPOSE_REFINE_ADJUST: {
     step_id: "purpose",
     from_menu_ids: ["PURPOSE_MENU_REFINE"],
@@ -149,11 +151,6 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
     from_menu_ids: ["BIGWHY_MENU_FROM_EXPLAIN"],
     to_menu_id: "BIGWHY_MENU_FROM_GIVE",
   },
-  ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME: {
-    step_id: "bigwhy",
-    from_menu_ids: ["BIGWHY_MENU_FROM_GIVE"],
-    to_menu_id: "BIGWHY_MENU_REFINE",
-  },
   ACTION_BIGWHY_REFINE_ADJUST: {
     step_id: "bigwhy",
     from_menu_ids: ["BIGWHY_MENU_REFINE"],
@@ -179,11 +176,6 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
     step_id: "role",
     from_menu_ids: ["ROLE_MENU_ASK"],
     to_menu_id: "ROLE_MENU_EXAMPLES",
-  },
-  ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME: {
-    step_id: "role",
-    from_menu_ids: ["ROLE_MENU_EXAMPLES"],
-    to_menu_id: "ROLE_MENU_REFINE",
   },
   ACTION_ROLE_REFINE_ADJUST: {
     step_id: "role",
@@ -211,11 +203,6 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
     from_menu_ids: ["ENTITY_MENU_FORMULATE"],
     to_menu_id: "ENTITY_MENU_SUGGESTIONS",
   },
-  ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME: {
-    step_id: "entity",
-    from_menu_ids: ["ENTITY_MENU_SUGGESTIONS"],
-    to_menu_id: "ENTITY_MENU_EXAMPLE",
-  },
   ACTION_ENTITY_EXAMPLE_REFINE: {
     step_id: "entity",
     from_menu_ids: ["ENTITY_MENU_EXAMPLE"],
@@ -241,11 +228,6 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
     step_id: "strategy",
     from_menu_ids: ["STRATEGY_MENU_ASK"],
     to_menu_id: "STRATEGY_MENU_EXAMPLES",
-  },
-  ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME: {
-    step_id: "strategy",
-    from_menu_ids: ["STRATEGY_MENU_EXAMPLES"],
-    to_menu_id: "STRATEGY_MENU_CONFIRM",
   },
   ACTION_STRATEGY_REFINE_EXPLAIN_MORE: {
     step_id: "strategy",
@@ -348,6 +330,7 @@ export const NEXT_MENU_BY_ACTIONCODE: Record<string, UiMenuTransition> = {
     to_step_id: "presentation",
     render_mode: "no_buttons",
   },
+  ...CHOOSE_FOR_ME_TRANSITIONS,
 };
 
 export const MENU_LABELS: Record<string, string[]> = {

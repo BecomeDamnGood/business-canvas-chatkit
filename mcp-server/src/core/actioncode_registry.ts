@@ -1,3 +1,5 @@
+import { CHOOSE_FOR_ME_CONTRACTS, chooseForMeActionCodeForStep } from "./choose_for_me_contract.js";
+
 export type ActionCodeEntry = {
   route: string;
   step: string;
@@ -15,6 +17,13 @@ export type ActionCodeRegistryShape = {
 export const ACTIONCODE_REGISTRY_VERSION =
   (process.env.ACTIONCODE_REGISTRY_VERSION || "").trim() || "dev";
 
+const CHOOSE_FOR_ME_ACTIONS = Object.fromEntries(
+  CHOOSE_FOR_ME_CONTRACTS.map((contract) => [
+    contract.actionCode,
+    { route: contract.routeToken, step: contract.stepId },
+  ])
+) as Record<string, ActionCodeEntry>;
+
 export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
   version: ACTIONCODE_REGISTRY_VERSION,
   actions: {
@@ -27,7 +36,6 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_DREAM_INTRO_START_EXERCISE: { route: "__ROUTE__DREAM_START_EXERCISE__", step: "dream" },
     ACTION_DREAM_WHY_GIVE_SUGGESTIONS: { route: "__ROUTE__DREAM_GIVE_SUGGESTIONS__", step: "dream" },
     ACTION_DREAM_WHY_START_EXERCISE: { route: "__ROUTE__DREAM_START_EXERCISE__", step: "dream" },
-    ACTION_DREAM_SUGGESTIONS_PICK_ONE: { route: "__ROUTE__DREAM_PICK_ONE__", step: "dream" },
     ACTION_DREAM_SUGGESTIONS_START_EXERCISE: { route: "__ROUTE__DREAM_START_EXERCISE__", step: "dream" },
     ACTION_DREAM_REFINE_CONFIRM: { route: "yes", step: "dream", flags: ["confirm"] },
     ACTION_DREAM_REFINE_START_EXERCISE: { route: "__ROUTE__DREAM_START_EXERCISE__", step: "dream" },
@@ -48,7 +56,6 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_PURPOSE_EXPLAIN_ASK_3_QUESTIONS: { route: "__ROUTE__PURPOSE_ASK_3_QUESTIONS__", step: "purpose" },
     ACTION_PURPOSE_EXPLAIN_GIVE_EXAMPLES: { route: "__ROUTE__PURPOSE_GIVE_EXAMPLES__", step: "purpose" },
     ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS: { route: "__ROUTE__PURPOSE_ASK_3_QUESTIONS__", step: "purpose" },
-    ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME: { route: "__ROUTE__PURPOSE_CHOOSE_FOR_ME__", step: "purpose" },
     ACTION_PURPOSE_REFINE_CONFIRM: { route: "yes", step: "purpose", flags: ["confirm"] },
     ACTION_PURPOSE_REFINE_ADJUST: { route: "__ROUTE__PURPOSE_REFINE__", step: "purpose" },
     ACTION_PURPOSE_CONFIRM_SINGLE: { route: "yes", step: "purpose", flags: ["confirm"] },
@@ -60,7 +67,6 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE: { route: "__ROUTE__BIGWHY_EXPLAIN_IMPORTANCE__", step: "bigwhy" },
     ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS: { route: "__ROUTE__BIGWHY_ASK_3_QUESTIONS__", step: "bigwhy" },
     ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE: { route: "__ROUTE__BIGWHY_GIVE_EXAMPLE__", step: "bigwhy" },
-    ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME: { route: "__ROUTE__BIGWHY_CHOOSE_FOR_ME__", step: "bigwhy" },
     ACTION_BIGWHY_REFINE_CONFIRM: { route: "yes", step: "bigwhy", flags: ["confirm"] },
     ACTION_BIGWHY_REFINE_ADJUST: { route: "__ROUTE__BIGWHY_REFINE__", step: "bigwhy" },
     ACTION_BIGWHY_ESCAPE_CONTINUE: { route: "__ROUTE__BIGWHY_CONTINUE__", step: "bigwhy" },
@@ -74,12 +80,10 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_ROLE_REFINE_ADJUST: { route: "__ROUTE__ROLE_ADJUST__", step: "role" },
     ACTION_ROLE_ESCAPE_CONTINUE: { route: "__ROUTE__ROLE_CONTINUE__", step: "role" },
     ACTION_ROLE_ESCAPE_FINISH_LATER: { route: "__ROUTE__ROLE_FINISH_LATER__", step: "role" },
-    ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME: { route: "__ROUTE__ROLE_CHOOSE_FOR_ME__", step: "role" },
 
     // Entity
     ACTION_ENTITY_INTRO_FORMULATE: { route: "__ROUTE__ENTITY_FORMULATE__", step: "entity" },
     ACTION_ENTITY_INTRO_EXPLAIN_MORE: { route: "__ROUTE__ENTITY_EXPLAIN_MORE__", step: "entity" },
-    ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME: { route: "__ROUTE__ENTITY_CHOOSE_FOR_ME__", step: "entity" },
     ACTION_ENTITY_EXAMPLE_CONFIRM: { route: "yes", step: "entity", flags: ["confirm"] },
     ACTION_ENTITY_EXAMPLE_REFINE: { route: "__ROUTE__ENTITY_REFINE__", step: "entity" },
     ACTION_ENTITY_FORMULATE_FOR_ME: { route: "__ROUTE__ENTITY_FORMULATE_FOR_ME__", step: "entity" },
@@ -93,7 +97,6 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE: { route: "__ROUTE__STRATEGY_EXPLAIN_MORE__", step: "strategy" },
     ACTION_STRATEGY_ASK_3_QUESTIONS: { route: "__ROUTE__STRATEGY_ASK_3_QUESTIONS__", step: "strategy" },
     ACTION_STRATEGY_ASK_GIVE_EXAMPLES: { route: "__ROUTE__STRATEGY_GIVE_EXAMPLES__", step: "strategy" },
-    ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME: { route: "__ROUTE__STRATEGY_CHOOSE_FOR_ME__", step: "strategy" },
     ACTION_STRATEGY_ASK_WRITE: { route: "__ROUTE__STRATEGY_FORMULATE__", step: "strategy", status: "active" },
     ACTION_STRATEGY_CONSOLIDATE: { route: "__ROUTE__STRATEGY_CONSOLIDATE__", step: "strategy" },
     ACTION_STRATEGY_CONFIRM_SATISFIED: { route: "__ROUTE__STRATEGY_CONFIRM_SATISFIED__", step: "strategy" },
@@ -135,6 +138,8 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_TEXT_SUBMIT: { route: "", step: "system", status: "system" },
     ACTION_WORDING_PICK_USER: { route: "__WORDING_PICK_USER__", step: "system", status: "system" },
     ACTION_WORDING_PICK_SUGGESTION: { route: "__WORDING_PICK_SUGGESTION__", step: "system", status: "system" },
+
+    ...CHOOSE_FOR_ME_ACTIONS,
   },
   menus: {
     // Step 0
@@ -151,7 +156,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_DREAM_WHY_START_EXERCISE",
     ],
     DREAM_MENU_SUGGESTIONS: [
-      "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
+      chooseForMeActionCodeForStep("dream"),
       "ACTION_DREAM_SUGGESTIONS_START_EXERCISE",
     ],
     DREAM_MENU_REFINE: [
@@ -189,7 +194,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ],
     PURPOSE_MENU_EXAMPLES: [
       "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS",
-      "ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME",
+      chooseForMeActionCodeForStep("purpose"),
     ],
     PURPOSE_MENU_AFTER_CHOOSE: [
       "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS",
@@ -215,7 +220,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE",
     ],
     BIGWHY_MENU_FROM_GIVE: [
-      "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
+      chooseForMeActionCodeForStep("bigwhy"),
     ],
     BIGWHY_MENU_REFINE: [
       "ACTION_BIGWHY_REFINE_CONFIRM",
@@ -242,14 +247,14 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_ROLE_ESCAPE_CONTINUE",
       "ACTION_ROLE_ESCAPE_FINISH_LATER",
     ],
-    ROLE_MENU_EXAMPLES: ["ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME"],
+    ROLE_MENU_EXAMPLES: [chooseForMeActionCodeForStep("role")],
 
     // Entity
     ENTITY_MENU_INTRO: [
       "ACTION_ENTITY_INTRO_FORMULATE",
       "ACTION_ENTITY_INTRO_EXPLAIN_MORE",
     ],
-    ENTITY_MENU_SUGGESTIONS: ["ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME"],
+    ENTITY_MENU_SUGGESTIONS: [chooseForMeActionCodeForStep("entity")],
     ENTITY_MENU_EXAMPLE: [
       "ACTION_ENTITY_EXAMPLE_CONFIRM",
       "ACTION_ENTITY_EXAMPLE_REFINE",
@@ -267,7 +272,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_STRATEGY_ASK_3_QUESTIONS",
       "ACTION_STRATEGY_ASK_GIVE_EXAMPLES",
     ],
-    STRATEGY_MENU_EXAMPLES: ["ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME"],
+    STRATEGY_MENU_EXAMPLES: [chooseForMeActionCodeForStep("strategy")],
     STRATEGY_MENU_REFINE: ["ACTION_STRATEGY_REFINE_EXPLAIN_MORE"],
     STRATEGY_MENU_QUESTIONS: ["ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE"],
     STRATEGY_MENU_CONFIRM: [

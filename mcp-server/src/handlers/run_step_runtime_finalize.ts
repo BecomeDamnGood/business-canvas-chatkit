@@ -105,6 +105,8 @@ function stripChoiceInstructionNoise(value: string): string {
   return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+import { chooseForMeContractForMenu } from "../core/choose_for_me_contract.js";
+
 function stripMarkupPreserveLines(value: string): string {
   return String(value || "")
     .replace(/\r/g, "\n")
@@ -115,20 +117,14 @@ function stripMarkupPreserveLines(value: string): string {
     .trim();
 }
 
-type StructuredSuggestionItemKind = "sentence" | "phrase";
-
 type StructuredSuggestionMenuConfig = {
   stepId: string;
-  itemKind: StructuredSuggestionItemKind;
+  itemKind: "sentence" | "phrase" | "multiline_list";
+  mode: "suggestions" | "examples";
+  validActionCodes: string[];
 };
-
-const STRUCTURED_SUGGESTION_MENU_CONFIG_BY_MENU_ID: Record<string, StructuredSuggestionMenuConfig> = {
-  DREAM_MENU_SUGGESTIONS: { stepId: "dream", itemKind: "sentence" },
-  PURPOSE_MENU_EXAMPLES: { stepId: "purpose", itemKind: "sentence" },
-  BIGWHY_MENU_FROM_GIVE: { stepId: "bigwhy", itemKind: "sentence" },
-  ROLE_MENU_EXAMPLES: { stepId: "role", itemKind: "sentence" },
-  ENTITY_MENU_SUGGESTIONS: { stepId: "entity", itemKind: "phrase" },
-};
+type StructuredSuggestionItemKind = StructuredSuggestionMenuConfig["itemKind"];
+type StructuredSuggestionMode = StructuredSuggestionMenuConfig["mode"];
 
 const STRUCTURED_SUGGESTION_STEP_LABEL_FALLBACKS: Record<string, string> = {
   dream: "Dream",
@@ -136,12 +132,18 @@ const STRUCTURED_SUGGESTION_STEP_LABEL_FALLBACKS: Record<string, string> = {
   bigwhy: "Big Why",
   role: "Role",
   entity: "Entity",
+  strategy: "Strategy",
 };
 
 function structuredSuggestionMenuConfigFor(contractStepId: string, menuId: string): StructuredSuggestionMenuConfig | null {
-  const config = STRUCTURED_SUGGESTION_MENU_CONFIG_BY_MENU_ID[String(menuId || "").trim().toUpperCase()];
+  const config = chooseForMeContractForMenu(contractStepId, menuId);
   if (!config) return null;
-  return config.stepId === String(contractStepId || "").trim() ? config : null;
+  return {
+    stepId: config.stepId,
+    itemKind: config.itemKind,
+    mode: config.mode,
+    validActionCodes: [config.actionCode],
+  };
 }
 
 function ensureStructuredSuggestionHeading(line: string): string {
@@ -295,6 +297,8 @@ function extractStructuredSuggestionItems(params: {
     const words = params.tokenizeWords(candidate);
     if (params.itemKind === "phrase") {
       if (words.length < 2 || words.length > 10) continue;
+    } else if (params.itemKind === "multiline_list") {
+      continue;
     } else {
       if (words.length < 5) continue;
       if (!/[.!?]$/.test(candidate)) candidate = `${candidate}.`;
@@ -313,6 +317,50 @@ function extractStructuredSuggestionItems(params: {
   return unique;
 }
 
+function looksLikeStrategyExampleMarker(line: string): boolean {
+  const collapsed = String(line || "").replace(/\s+/g, " ").trim();
+  if (!collapsed) return false;
+  return /^(?:example|voorbeeld|ejemplo|exemple|beispiel|esempio|exemplo|пример|उदाहरण|예시|例)\s*\d+\s*:?$/i.test(
+    collapsed
+  );
+}
+
+function extractStructuredStrategyExampleItems(raw: string): string[] {
+  const blocks = String(raw || "")
+    .replace(/\r/g, "\n")
+    .split(/\n{2,}/)
+    .map((block) => String(block || "").trim())
+    .filter(Boolean);
+  const items: string[] = [];
+  const seen = new Set<string>();
+  for (const block of blocks) {
+    const lines = block
+      .split("\n")
+      .map((line) => String(line || "").trim())
+      .filter(Boolean);
+    if (lines.length === 0) continue;
+    const bulletLines = lines
+      .filter((line) => /^(?:[-*•]|\d+[\).])\s+/.test(line))
+      .map((line) => line.replace(/^(?:[-*•]|\d+[\).])\s+/, "").trim())
+      .filter(Boolean);
+    if (bulletLines.length < 2) continue;
+    const nonBulletLines = lines.filter((line) => !/^(?:[-*•]|\d+[\).])\s+/.test(line));
+    if (nonBulletLines.length > 0 && !nonBulletLines.every((line) => looksLikeStrategyExampleMarker(line))) {
+      continue;
+    }
+    const candidate = bulletLines.join("\n").trim();
+    const key = candidate
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    items.push(candidate);
+  }
+  return items.slice(0, 3);
+}
+
 function normalizeStructuredSuggestionMessage(params: {
   contractStepId: string;
   menuId: string;
@@ -322,6 +370,7 @@ function normalizeStructuredSuggestionMessage(params: {
 }): string {
   const config = structuredSuggestionMenuConfigFor(params.contractStepId, params.menuId);
   if (!config) return String(params.messageRaw || "").trim();
+  if (config.itemKind === "multiline_list") return String(params.messageRaw || "").trim();
 
   const message = String(params.messageRaw || "").replace(/\r/g, "\n").trim();
   if (!message) return "";
@@ -435,6 +484,13 @@ function stripPromptEchoFromMessage(
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+type SuggestionStateSnapshot = {
+  stepId: string;
+  items: string[];
+  mode: StructuredSuggestionMode;
+  valid_for_action_codes: string[];
+};
 
 export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersDeps) {
   function buildTextForWidget(params: {
@@ -953,8 +1009,45 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
     return parts.join("\n\n").trim();
   }
 
+  function deriveSuggestionStateForWidget(params: {
+    specialist: Record<string, unknown>;
+    state?: CanvasState | null;
+  }): SuggestionStateSnapshot | null {
+    const contractId = String((params.specialist as Record<string, unknown>)?.ui_contract_id || "").trim();
+    if (!contractId) return null;
+    const contractParts = contractId.split(":");
+    const contractStepId = String(contractParts[0] || "").trim();
+    const menuId = deps.parseMenuFromContractIdForStep(contractId, contractStepId).toUpperCase();
+    const config = structuredSuggestionMenuConfigFor(contractStepId, menuId);
+    if (!config) return null;
+
+    const renderedText = buildTextForWidget({
+      specialist: params.specialist,
+      state: params.state || null,
+    });
+    if (!renderedText) return null;
+
+    const items =
+      config.itemKind === "multiline_list"
+        ? extractStructuredStrategyExampleItems(renderedText)
+        : extractStructuredSuggestionItems({
+            raw: renderedText,
+            itemKind: config.itemKind,
+            tokenizeWords: deps.tokenizeWords,
+          }).slice(0, 3);
+    if (items.length === 0) return null;
+
+    return {
+      stepId: config.stepId,
+      items,
+      mode: config.mode,
+      valid_for_action_codes: [...config.validActionCodes],
+    };
+  }
+
   return {
     buildTextForWidget,
+    deriveSuggestionStateForWidget,
     pickPrompt,
     stripChoiceInstructionNoise,
   };
@@ -1052,6 +1145,15 @@ type RunStepRuntimeFinalizeResponseDeps<TPayload> = {
     questionTextOverride?: string;
     state?: CanvasState | null;
   }) => string;
+  deriveSuggestionStateForWidget: (params: {
+    specialist: Record<string, unknown>;
+    state?: CanvasState | null;
+  }) => {
+    stepId: string;
+    items: string[];
+    mode: "suggestions" | "examples";
+    valid_for_action_codes: string[];
+  } | null;
   pickPrompt: (specialist: Record<string, unknown>) => string;
   renderFreeTextTurnPolicy: RunStepRenderFreeTextTurnPolicy;
   validateRenderedContractOrRecover: RunStepValidateRenderedContractOrRecover;
@@ -1245,6 +1347,7 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     validateRenderedContractOrRecover: response.validateRenderedContractOrRecover,
     applyUiPhaseByStep: response.applyUiPhaseByStep,
     buildTextForWidget: response.buildTextForWidget,
+    deriveSuggestionStateForWidget: response.deriveSuggestionStateForWidget,
     pickPrompt: response.pickPrompt,
     attachRegistryPayload: response.attachRegistryPayload,
     finalizeResponse: (payload) => finalizeResponse(payload),
