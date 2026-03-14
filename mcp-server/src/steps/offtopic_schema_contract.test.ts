@@ -87,3 +87,62 @@ test("all specialist schemas require meta_topic enum field", () => {
     assert.ok(shape && shape.meta_topic, `${item.name}: zod shape has meta_topic`);
   }
 });
+
+test("all ordinary interactive specialist schemas require step_support_state enum field", () => {
+  const eligible = CASES.filter(
+    (item) => item.name !== "step_0" && item.name !== "presentation" && item.name !== "dream_explainer"
+  );
+  for (const item of eligible) {
+    const required = Array.isArray(item.jsonSchema?.required) ? item.jsonSchema.required : [];
+    assert.ok(required.includes("step_support_state"), `${item.name}: required includes step_support_state`);
+    assert.equal(
+      item.jsonSchema?.properties?.step_support_state?.type,
+      "string",
+      `${item.name}: step_support_state type=string`
+    );
+    assert.deepEqual(
+      item.jsonSchema?.properties?.step_support_state?.enum,
+      ["ok", "stuck"],
+      `${item.name}: step_support_state enum matches support contract`
+    );
+    const shape = (item.zodSchema as any)?.shape;
+    assert.ok(shape && shape.step_support_state, `${item.name}: zod shape has step_support_state`);
+  }
+});
+
+test("dream_explainer keeps user_state and does not expose step_support_state", () => {
+  const item = CASES.find((entry) => entry.name === "dream_explainer");
+  assert.ok(item);
+  const required = Array.isArray(item?.jsonSchema?.required) ? item?.jsonSchema?.required : [];
+  assert.ok(required.includes("user_state"), "dream_explainer: required includes user_state");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(item?.jsonSchema?.properties || {}, "step_support_state"),
+    false,
+    "dream_explainer: must not expose step_support_state"
+  );
+  const shape = (item?.zodSchema as any)?.shape;
+  assert.ok(shape?.user_state, "dream_explainer: zod shape has user_state");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(shape || {}, "step_support_state"),
+    false,
+    "dream_explainer: zod shape must not have step_support_state"
+  );
+});
+
+test("presentation exposes neither user_state nor step_support_state", () => {
+  const item = CASES.find((entry) => entry.name === "presentation");
+  assert.ok(item);
+  const required = Array.isArray(item?.jsonSchema?.required) ? item?.jsonSchema?.required : [];
+  assert.equal(required.includes("user_state"), false, "presentation: no user_state");
+  assert.equal(required.includes("step_support_state"), false, "presentation: no step_support_state");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(item?.jsonSchema?.properties || {}, "user_state"),
+    false,
+    "presentation: no user_state property"
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(item?.jsonSchema?.properties || {}, "step_support_state"),
+    false,
+    "presentation: no step_support_state property"
+  );
+});

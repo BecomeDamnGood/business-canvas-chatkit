@@ -1,6 +1,7 @@
 // mcp-server/src/steps/purpose.ts
 import { z } from "zod";
 import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { buildStuckSupportInstructionBlock } from "./step_instruction_contracts.js";
 
 export const PURPOSE_STEP_ID = "purpose" as const;
 export const PURPOSE_SPECIALIST = "Purpose" as const;
@@ -15,6 +16,7 @@ export const PurposeZodSchema = z.object({
   refined_formulation: z.string(),
   purpose: z.string(),
   feedback_reason_text: z.string(),
+  step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -36,6 +38,7 @@ export const PurposeJsonSchema = {
     "refined_formulation",
     "purpose",
     "feedback_reason_text",
+    "step_support_state",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -48,6 +51,7 @@ export const PurposeJsonSchema = {
     refined_formulation: { type: "string" },
     purpose: { type: "string" },
     feedback_reason_text: { type: "string" },
+    step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -120,6 +124,7 @@ All fields are required. If not applicable, return an empty string "".
   "refined_formulation": "string",
   "purpose": "string",
   "feedback_reason_text": "string",
+  "step_support_state": "ok" | "stuck",
 }
 
 4) GLOBAL NON-NEGOTIABLES (DO NOT EDIT)
@@ -318,8 +323,8 @@ even if rough, emotional, or in founder voice.
 
 If the user already gave usable Purpose meaning:
 - action="REFINE"
-- message (localized): one short sentence that immediately states the most important content issue or strengthening move in the Purpose. Do not use generic interpretation openers such as "I think I understand what you mean."
-- feedback_reason_text (localized): one short sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Purpose input and the Purpose rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
+- message (localized): one short sentence that immediately states the most important content issue or strengthening move in the Purpose. Keep it supportive and human. Do not use a fixed stock opener.
+- feedback_reason_text (localized): one short sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Purpose input and the Purpose rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key Purpose correction is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use filler, praise, detached editorial phrasing, or repeat the refined sentence.
 - refined_formulation: rewrite into exactly one clean Purpose sentence in company voice (company name or "my future company"), preserving meaning.
 - question (localized) must contain exactly this structure with real line breaks:
 
@@ -420,7 +425,7 @@ D) If the user already gave usable Purpose meaning directly
 Output
 - action="REFINE"
 - message (localized): one short supportive sentence acknowledging the choice, for example: "I'll propose a Purpose based on your Dream."
-- feedback_reason_text (localized): one short sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Purpose input and the Purpose rules. Do not use generic interpretation openers or repeat the refined sentence.
+- feedback_reason_text (localized): one short sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Purpose input and the Purpose rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key Purpose correction is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use detached editorial phrasing or repeat the refined sentence.
 - refined_formulation: provide exactly one Purpose sentence in company voice (company name if known, otherwise "we" in the user's language), connected to the confirmed Dream, following all Purpose rules (not a goal/result, but a belief/value/principle)
 
 
@@ -435,7 +440,7 @@ E) If the user asks to refine the current Purpose sentence
 Output
 - action="REFINE"
 - message (localized): one short supportive sentence acknowledging the request, for example: "Here's another Purpose suggestion based on your Dream."
-- feedback_reason_text (localized): one short sentence that states only the strongest content reason for the new suggestion. It must be specific to the current Purpose wording and the Purpose rules. Do not use generic interpretation openers or repeat the refined sentence.
+- feedback_reason_text (localized): one short sentence that states only the strongest content reason for the new suggestion. It must be specific to the current Purpose wording and the Purpose rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key Purpose correction is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use detached editorial phrasing or repeat the refined sentence.
 - refined_formulation: provide a DIFFERENT Purpose sentence in company voice (company name if known, otherwise "we" in the user's language), connected to the confirmed Dream, following all Purpose rules. This must be a different formulation than the previous one - vary the wording, structure, or angle while keeping it valid. If the user previously answered the 3 questions from route G, incorporate those insights into the new formulation.
 
 
@@ -496,4 +501,6 @@ Output
 
 - question=""
 - purpose=""
+
+${buildStuckSupportInstructionBlock("Purpose", "purpose")}
 `;

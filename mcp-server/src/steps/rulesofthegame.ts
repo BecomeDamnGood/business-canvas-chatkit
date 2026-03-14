@@ -2,6 +2,7 @@
 import { z } from "zod";
 import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
 import { RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT } from "./rulesofthegame_contract.js";
+import { buildStuckSupportInstructionBlock } from "./step_instruction_contracts.js";
 
 export const RULESOFTHEGAME_STEP_ID = "rulesofthegame" as const;
 export const RULESOFTHEGAME_SPECIALIST = "RulesOfTheGame" as const;
@@ -16,6 +17,7 @@ export const RulesOfTheGameZodSchema = z.object({
   refined_formulation: z.string(),
   rulesofthegame: z.string(),
   feedback_reason_text: z.string(),
+  step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -38,6 +40,7 @@ export const RulesOfTheGameJsonSchema = {
     "refined_formulation",
     "rulesofthegame",
     "feedback_reason_text",
+    "step_support_state",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -51,6 +54,7 @@ export const RulesOfTheGameJsonSchema = {
     refined_formulation: { type: "string" },
     rulesofthegame: { type: "string" },
     feedback_reason_text: { type: "string" },
+    step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -168,6 +172,7 @@ Output schema fields (must always be present)
   "refined_formulation": "string",
   "rulesofthegame": "string",
   "feedback_reason_text": "string",
+  "step_support_state": "ok" | "stuck",
   "wants_recap": "boolean",
   "is_offtopic": "boolean",
   "meta_topic": "NONE" | "MODEL_VALUE" | "MODEL_CREDIBILITY" | "BEN_PROFILE" | "TOOL_AUDIENCE" | "STEP_SKIP_NOT_SUPPORTED" | "STEP_POINTLESS" | "STEP_BACK_NOT_SUPPORTED" | "CANVAS_VALUE" | "SESSION_STORAGE" | "PRESENTATION_MEDIA_NOT_SUPPORTED" | "NO_STARTING_POINT" | "RECAP",
@@ -570,6 +575,8 @@ Full-set fallback rule (HARD)
 - A full 3 to 5 rule rewrite is the exception, not the default.
 - Use it only when the user explicitly asks for a complete rewrite/consolidation or when the current input cannot be mapped locally with enough confidence.
 - When you use this fallback, say briefly that you are proposing a full sharpened set because local mapping was not reliable enough.
+
+${buildStuckSupportInstructionBlock("Rules of the Game", "rulesofthegame", { preserveStatements: true })}
 
 ${RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT}
 `;

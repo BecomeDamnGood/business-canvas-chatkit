@@ -1,6 +1,7 @@
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import { getFinalFieldForStepId, type CanvasState } from "../core/state.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
+import { applyStepStuckSupportAfterSpecialist } from "../core/stuck_support.js";
 import {
   buildUiContractId,
   parseUiContractId,
@@ -880,6 +881,14 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       decision: decision1,
       specialistResult,
       provisionalSource: provisionalSourceForMutation,
+    });
+
+    applyStepStuckSupportAfterSpecialist({
+      state: nextState,
+      stepId: String(decision1.current_step || ""),
+      activeSpecialist: String(nextState.active_specialist || decision1.specialist_to_call || ""),
+      specialist: specialistResult,
+      actionCodeRaw: params.actionCodeRaw,
     });
 
     if (autoSuggestApplied) {

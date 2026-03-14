@@ -1,6 +1,7 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
 import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "./menu_contract.js";
 import { getFinalFieldForStepId, type CanvasState } from "./state.js";
+import { currentTurnSupportMode } from "./stuck_support.js";
 import { actionCodeToIntent } from "./actioncode_intent.js";
 import type { RenderedAction, UiSingleValueContent } from "../contracts/ui_actions.js";
 import {
@@ -273,6 +274,14 @@ function isSemanticPurposeIntroVisibleState(params: {
 }
 
 function renderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
+  const supportMode = currentTurnSupportMode({
+    state,
+    stepId,
+    activeSpecialist: String((state as any).active_specialist || ""),
+  });
+  if (supportMode === "stuck_questions" || supportMode === "stuck_exit") {
+    return "no_buttons";
+  }
   const phaseMap =
     (state as any).__ui_render_mode_by_step && typeof (state as any).__ui_render_mode_by_step === "object"
       ? ((state as any).__ui_render_mode_by_step as Record<string, unknown>)
@@ -607,6 +616,7 @@ function buildSingleValueUiContent(params: {
   specialist: Record<string, unknown>;
   message: string;
   canonicalValue: string;
+  headingOverride?: string;
   feedbackReasonText?: string;
   rawFeedbackReasonText?: string;
 }): UiSingleValueContent | undefined {
@@ -615,7 +625,7 @@ function buildSingleValueUiContent(params: {
   if (!canonicalText) return undefined;
   if (!SINGLE_VALUE_STRUCTURED_CONTENT_STEPS.has(stepId)) return undefined;
   if (isDreamBuilderSingleValueContext(stepId, state, specialist)) return undefined;
-  const heading = singleValueConfirmHeading(stepId, state);
+  const heading = String(params.headingOverride || "").trim() || singleValueConfirmHeading(stepId, state);
   const feedbackReasonText = String(params.feedbackReasonText || "").trim();
   const supportText = singleValueSupportText({
     message,

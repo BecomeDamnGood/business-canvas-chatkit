@@ -3,6 +3,7 @@ import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { MENU_LABEL_DEFAULTS, labelKeyForMenuAction } from "../core/menu_contract.js";
 import { NEXT_MENU_BY_ACTIONCODE, UI_CONTRACT_VERSION } from "../core/ui_contract_matrix.js";
 import { parseUiContractMenuForStep, parseUiContractStatusForStep } from "../core/ui_contract_id.js";
+import { currentTurnSupportMode } from "../core/stuck_support.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import type { RenderedAction, UiContentPayload } from "../contracts/ui_actions.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
@@ -278,6 +279,14 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
   function inferUiRenderModeForStep(state: CanvasState, stepId: string): "menu" | "no_buttons" {
     const safeStepId = String(stepId || "").trim();
     if (!safeStepId) return "menu";
+    const supportMode = currentTurnSupportMode({
+      state,
+      stepId: safeStepId,
+      activeSpecialist: String((state as any).active_specialist || ""),
+    });
+    if (supportMode === "stuck_questions" || supportMode === "stuck_exit") {
+      return "no_buttons";
+    }
     const existing =
       (state as any).__ui_render_mode_by_step && typeof (state as any).__ui_render_mode_by_step === "object"
         ? ((state as any).__ui_render_mode_by_step as Record<string, unknown>)

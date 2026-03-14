@@ -5,6 +5,8 @@ const GLOBAL_CONTEXT_KEYS = new Set([
   "message",
   "question",
   "refined_formulation",
+  "user_state",
+  "step_support_state",
   "wants_recap",
   "is_offtopic",
   "user_intent",

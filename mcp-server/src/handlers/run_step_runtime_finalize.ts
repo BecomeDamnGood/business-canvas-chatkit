@@ -1,4 +1,5 @@
 import type { CanvasState } from "../core/state.js";
+import { currentTurnSupportMode } from "../core/stuck_support.js";
 
 import { createRunStepResponseHelpers } from "./run_step_response.js";
 import type {
@@ -1179,13 +1180,20 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     };
 
     setStateAction("ui_action_start", currentStep === "step_0" && !started ? "ACTION_START" : "");
+    const supportMode = currentTurnSupportMode({
+      state: stateRef as CanvasState,
+      stepId: currentStep,
+      activeSpecialist,
+    });
+    const textSubmitAvailable =
+      interactiveSession && supportMode !== "stuck_exit";
     setStateAction(
       "ui_action_text_submit",
-      interactiveSession ? "ACTION_TEXT_SUBMIT" : ""
+      textSubmitAvailable ? "ACTION_TEXT_SUBMIT" : ""
     );
     setStateAction(
       "ui_action_text_submit_payload_mode",
-      interactiveSession ? "text" : ""
+      textSubmitAvailable ? "text" : ""
     );
     setStateAction(
       "ui_action_score_submit",

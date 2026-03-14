@@ -130,6 +130,40 @@ test("strategy examples render exposes choose-one action instead of the legacy r
   assert.deepEqual(rendered.uiActionCodes, ["ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME"]);
 });
 
+test("stuck support questions mode suppresses step buttons for eligible steps", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+  (state as any).__step_support_mode_by_step = { purpose: "stuck_questions" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: [
+        "Ik merk dat deze stap nog niet helder voelt.",
+        "",
+        "- Welke overtuiging onder deze droom raakt je het meest?",
+        "- Welke menselijke behoefte wil je hier beschermen?",
+        "- Waar zou je ook voor blijven staan als het lastig wordt?",
+      ].join("\n"),
+      question: "",
+      purpose: "",
+      refined_formulation: "",
+      feedback_reason_text: "",
+      step_support_state: "stuck",
+      is_offtopic: false,
+      wants_recap: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+    previousSpecialist: {},
+  });
+
+  assert.deepEqual(rendered.uiActionCodes, []);
+});
+
 test("strategy wording-choice picker suppresses the normal step question", () => {
   const state = getDefaultState();
   (state as any).current_step = "strategy";

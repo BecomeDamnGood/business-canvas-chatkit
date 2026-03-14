@@ -165,6 +165,36 @@ test("non-step0 meta sections declare runtime-owned meta rendering", () => {
   }
 });
 
+test("presentation instructions stay outside stuck-support vocabulary", () => {
+  assert.equal(
+    PRESENTATION_INSTRUCTIONS.includes("step_support_state"),
+    false,
+    "presentation instructions must not mention step_support_state"
+  );
+  assert.equal(
+    PRESENTATION_INSTRUCTIONS.includes("current_step_support_mode"),
+    false,
+    "presentation instructions must not mention current_step_support_mode"
+  );
+  assert.equal(
+    PRESENTATION_INSTRUCTIONS.includes("current_step_stuck_count"),
+    false,
+    "presentation instructions must not mention current_step_stuck_count"
+  );
+});
+
+test("dream explainer keeps user_state semantics and does not adopt step_support_state", () => {
+  assert.ok(
+    DREAM_EXPLAINER_INSTRUCTIONS.includes('user_state: "ok" | "stuck"'),
+    "dream explainer instructions must keep user_state"
+  );
+  assert.equal(
+    DREAM_EXPLAINER_INSTRUCTIONS.includes("step_support_state"),
+    false,
+    "dream explainer instructions must not mention step_support_state"
+  );
+});
+
 test("targetgroup/productsservices planner input does not duplicate STATE FINALS context", () => {
   const targetInput = buildTargetGroupSpecialistInput(
     "USER_MESSAGE: define my segment",

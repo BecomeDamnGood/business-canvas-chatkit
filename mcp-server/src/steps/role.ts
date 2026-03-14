@@ -16,6 +16,7 @@ export const RoleZodSchema = z.object({
   refined_formulation: z.string(),
   role: z.string(),
   feedback_reason_text: z.string(),
+  step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -37,6 +38,7 @@ export const RoleJsonSchema = {
     "refined_formulation",
     "role",
     "feedback_reason_text",
+    "step_support_state",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -49,6 +51,7 @@ export const RoleJsonSchema = {
     refined_formulation: { type: "string" },
     role: { type: "string" },
     feedback_reason_text: { type: "string" },
+    step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -114,6 +117,7 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   "refined_formulation": "string",
   "role": "string",
   "feedback_reason_text": "string",
+  "step_support_state": "ok" | "stuck",
 }
 
 4) GLOBAL NON-NEGOTIABLES
@@ -385,7 +389,7 @@ D) Choose one for me (from "__ROUTE__ROLE_CHOOSE_FOR_ME__")
 A) If the user gives true activity language (deliverables, channels, services)
 - action="REFINE"
 - message (localized): short, direct: it describes execution; Role sits one level higher.
-- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Role input and the Role rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Role input and the Role rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key Role correction is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use filler, praise, detached editorial phrasing, or repeat the refined sentence.
 - refined_formulation: provide one improved Role sentence that removes channels/deliverables and emphasizes stable position and effect, using company name or "my future company", never first-person plural.
 - question=""
 - role=""
@@ -393,7 +397,7 @@ A) If the user gives true activity language (deliverables, channels, services)
 B) If the user gives a valid Role direction but it is missing effect or boundary
 - action="REFINE"
 - message (localized): short and supportive: it is Role-level; sharpen so it guides choices.
-- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Role input and the Role rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Role input and the Role rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key Role correction is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use filler, praise, detached editorial phrasing, or repeat the refined sentence.
 - refined_formulation: provide one improved Role sentence with “so that” effect and an implied boundary, company language only, never first-person plural.
 - question=""
 - role=""

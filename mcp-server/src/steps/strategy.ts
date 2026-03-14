@@ -16,6 +16,7 @@ export const StrategyZodSchema = z.object({
   refined_formulation: z.string(),
   strategy: z.string(),
   feedback_reason_text: z.string(),
+  step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -38,6 +39,7 @@ export const StrategyJsonSchema = {
     "refined_formulation",
     "strategy",
     "feedback_reason_text",
+    "step_support_state",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -51,6 +53,7 @@ export const StrategyJsonSchema = {
     refined_formulation: { type: "string" },
     strategy: { type: "string" },
     feedback_reason_text: { type: "string" },
+    step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -144,6 +147,7 @@ All fields are required. If not applicable, return an empty string "".
   "refined_formulation": "string",
   "strategy": "string",
   "feedback_reason_text": "string",
+  "step_support_state": "ok" | "stuck",
   "statements": ["array of strings"]
 }
 

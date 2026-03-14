@@ -1,6 +1,7 @@
 // mcp-server/src/steps/dream.ts
 import { z } from "zod";
 import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { buildStuckSupportInstructionBlock } from "./step_instruction_contracts.js";
 
 export const DREAM_STEP_ID = "dream" as const;
 export const DREAM_STEP_LABEL = "Dream" as const;
@@ -16,6 +17,7 @@ export const DreamZodSchema = z.object({
   refined_formulation: z.string(),
   dream: z.string(),
   feedback_reason_text: z.string(),
+  step_support_state: z.enum(["ok", "stuck"]),
   suggest_dreambuilder: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
@@ -38,6 +40,7 @@ export const DreamJsonSchema = {
     "refined_formulation",
     "dream",
     "feedback_reason_text",
+    "step_support_state",
     "suggest_dreambuilder",
     "wants_recap",
     "is_offtopic",
@@ -51,6 +54,7 @@ export const DreamJsonSchema = {
     refined_formulation: { type: "string" },
     dream: { type: "string" },
     feedback_reason_text: { type: "string" },
+    step_support_state: { type: "string", enum: ["ok", "stuck"] },
     suggest_dreambuilder: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
@@ -112,6 +116,7 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   "refined_formulation": "string",
   "dream": "string",
   "feedback_reason_text": "string",
+  "step_support_state": "ok" | "stuck",
   "suggest_dreambuilder": "true" | "false",
   "wants_recap": false,
   "is_offtopic": false
@@ -326,7 +331,7 @@ If any forbidden item appears, or human impact/emotional resonance is missing, c
 REFINE
 - action="REFINE"
 - message: one short localized sentence that explicitly says what still did not fit the Dream rules and how you corrected it. Name the content issue itself, for example too tool-first, too execution-first, too internal, too vague, too task-first, or missing human effect. No generic praise, no process talk.
-- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Dream input and the Dream rules. Do not use generic interpretation openers or repeat the full suggested Dream.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Dream input and the Dream rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key Dream correction is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use generic interpretation openers, detached editorial phrasing, or repeat the full suggested Dream.
 - refined_formulation: one improved Dream line that complies with section 8 and section 8.5 (effect-first, emotionally resonant, no pitch, no KPIs, no execution talk, no absolutes, no task-first core).
 
 - question=""
@@ -357,6 +362,8 @@ ASK (Dream is concrete enough)
 
 17) READINESS MOMENT (HARD)
 Only when the previous assistant message asked the question about continuing to Purpose:
+
+${buildStuckSupportInstructionBlock("Dream", "dream")}
 
 18) FINAL QA CHECKLIST
 - Valid JSON only, no extra keys, no markdown.

@@ -1,7 +1,6 @@
 // mcp-server/src/steps/presentation.ts
 import { z } from "zod";
 import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
-import { buildSingleValueStepContractBlock } from "./step_instruction_contracts.js";
 
 export const PRESENTATION_STEP_ID = "presentation" as const;
 export const PRESENTATION_SPECIALIST = "Presentation" as const;
@@ -207,10 +206,6 @@ Output:
 - presentation_brief: identical to refined_formulation.
 - question: one line (localized):
   Ask if they are satisfied with this updated summary and want to create or recreate The Business Strategy Canvas Builder Presentation.
-
-
-${buildSingleValueStepContractBlock("Presentation", "presentation_brief")}
-
 7) ESCAPE (OFF-TOPIC)
 
 Trigger:

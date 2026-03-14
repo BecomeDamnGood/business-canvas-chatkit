@@ -3,6 +3,7 @@ import {
   type CanvasState,
   type ProvisionalSource,
 } from "../core/state.js";
+import { resolveSpecialistSupportFamily } from "../core/stuck_support.js";
 import { buildContextSafeLastSpecialistResult } from "./run_step_context_whitelist.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
@@ -691,6 +692,31 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
             "- Reason code meanings: rules_min_count=fewer than 3 valid rules; rules_max_count=more than 5 rules; rules_pending_choice=an unresolved wording choice exists; rules_missing_accepted_output=visible rules are not yet accepted as the current set.",
           ].join("\n")
         : "";
+    const currentStepId = String((state as any).current_step || "").trim();
+    const currentActiveSpecialist = String((state as any).active_specialist || "").trim();
+    const stuckCountMap =
+      (state as any).__step_stuck_count_by_step && typeof (state as any).__step_stuck_count_by_step === "object"
+        ? ((state as any).__step_stuck_count_by_step as Record<string, unknown>)
+        : {};
+    const supportModeMap =
+      (state as any).__step_support_mode_by_step && typeof (state as any).__step_support_mode_by_step === "object"
+        ? ((state as any).__step_support_mode_by_step as Record<string, unknown>)
+        : {};
+    const currentStepStuckCount = Number(stuckCountMap[currentStepId] ?? 0) || 0;
+    const currentStepSupportMode = String(supportModeMap[currentStepId] || "normal").trim() || "normal";
+    const stuckSupportLines =
+      resolveSpecialistSupportFamily({
+        stepId: currentStepId,
+        activeSpecialist: currentActiveSpecialist,
+      }) === "core_step"
+        ? [
+            "",
+            "STUCK SUPPORT STATE (do not output this section)",
+            `- current_step_stuck_count: ${String(Math.max(0, Math.trunc(currentStepStuckCount)))}`,
+            `- current_step_support_mode: ${safe(currentStepSupportMode)}`,
+            "- If the user is clearly stuck, use this state to decide whether this is a first stuck turn, the 3-question helper stage, or the final graceful exit stage.",
+          ].join("\n")
+        : "";
 
     return `STATE FINALS (canonical; use for recap; do not invent)
 ${finalsLines}
@@ -702,6 +728,7 @@ STATE META (do not output this section)
 - intro_shown_session: ${safe((state as any).intro_shown_session)}
 ${pendingSuggestionContractLines}
 ${proceedRequestContractLines}
+${stuckSupportLines}
 - last_specialist_result_json: ${safe(last)}`;
   }
 

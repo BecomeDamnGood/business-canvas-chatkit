@@ -1,6 +1,7 @@
 // mcp-server/src/steps/targetgroup.ts
 import { z } from "zod";
 import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { buildStuckSupportInstructionBlock } from "./step_instruction_contracts.js";
 
 export const TARGETGROUP_STEP_ID = "targetgroup" as const;
 export const TARGETGROUP_SPECIALIST = "TargetGroup" as const;
@@ -15,6 +16,7 @@ export const TargetGroupZodSchema = z.object({
   refined_formulation: z.string(),
   targetgroup: z.string(),
   feedback_reason_text: z.string(),
+  step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -36,6 +38,7 @@ export const TargetGroupJsonSchema = {
     "refined_formulation",
     "targetgroup",
     "feedback_reason_text",
+    "step_support_state",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -48,6 +51,7 @@ export const TargetGroupJsonSchema = {
     refined_formulation: { type: "string" },
     targetgroup: { type: "string" },
     feedback_reason_text: { type: "string" },
+    step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -128,6 +132,7 @@ All fields are required. If not applicable, return an empty string "".
   "refined_formulation": "string",
   "targetgroup": "string",
   "feedback_reason_text": "string",
+  "step_support_state": "ok" | "stuck",
   "wants_recap": boolean
 }
 
@@ -264,7 +269,7 @@ Required response behavior when invalid input happens:
 - If Strategy is already very specific, refine further by choosing a focused subset (for example: a subset of industries or company sizes) rather than repeating all Strategy adjectives.
 - Ask the user to confirm if that interpretation is what they mean.
 - message: Include explanation and shoemaker logic (localized). Do NOT repeat the refined_formulation text in the message field.
-- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Target Group input and the Target Group rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Target Group input and the Target Group rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key Target Group correction is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use filler, praise, detached editorial phrasing, or repeat the refined sentence.
 - refined_formulation: The proposed specific interpretation (exact one sentence, one primary target group, maximum 7 words). When the user has provided a clear and specific segment description (industries, company types, roles), refined_formulation must reflect that user-defined segment (possibly narrowed or cleaned up) and MUST NOT introduce a completely different segment. The refined_formulation must already obey the same global non-repetition rule and \"do not repeat Strategy terms\" rules that apply to the final targetgroup in section 9: never restate or repeat information that is already present in Strategy or other STATE FINALS, unless the user explicitly asks you to mention that specific information again.
 
 
@@ -413,5 +418,7 @@ POST-PROCESSING RULES (REPLACE OLD ONES)
   Sentence 2 (optional): include only for clearly off-topic/nonsense input.
   Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "my future company".
 - Do not reset to another step. Stay in Target Group.
+
+${buildStuckSupportInstructionBlock("Target Group", "targetgroup")}
 
 END OF INSTRUCTIONS`;

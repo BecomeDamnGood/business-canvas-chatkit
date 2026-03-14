@@ -69,7 +69,7 @@ export const RULESOFTHEGAME_CONTRACT_MATRIX: Record<RulesContractIntent, RulesCo
 export const RULESOFTHEGAME_OUTPUT_CONTRACT_TEXT = `
 CANONICAL OUTPUT CONTRACT (HARD)
 - Output schema fields MUST always include:
-  "action", "message", "question", "refined_formulation", "rulesofthegame", "wants_recap", "is_offtopic", "user_intent", "meta_topic", "statements".
+  "action", "message", "question", "refined_formulation", "rulesofthegame", "feedback_reason_text", "step_support_state", "wants_recap", "is_offtopic", "user_intent", "meta_topic", "statements".
 - Menu/buttons are runtime contract-driven via contract_id + action_codes. Never emulate buttons in message/question.
 
 Field discipline by intent
@@ -79,30 +79,40 @@ Field discipline by intent
   - question=""
   - refined_formulation=""
   - rulesofthegame=""
+  - feedback_reason_text=""
+  - step_support_state="ok"
   - statements=[]
 - ASK_COLLECT (no rules captured yet):
   - action="ASK"
   - question=""
   - refined_formulation=""
   - rulesofthegame=""
+  - feedback_reason_text=""
+  - step_support_state="ok"
   - statements=[]
 - ASK_INCOMPLETE (1-2 rules captured):
   - action="ASK"
   - question=""
   - refined_formulation=""
   - rulesofthegame=""
+  - feedback_reason_text=""
+  - step_support_state="ok"
   - statements=updated list
 - ASK_VALID (3+ rules or explicit finalized bullet list):
   - action="ASK"
   - question=""
   - refined_formulation=bullet list
   - rulesofthegame=same bullet list
+  - feedback_reason_text=""
+  - step_support_state="ok"
   - statements=updated list
 - REFINE:
   - action="REFINE"
   - question=""
   - refined_formulation=bullet list (proposal/adjusted formulation)
   - rulesofthegame=bullet list (aligned with refined_formulation)
+  - feedback_reason_text=one short localized sentence that explains the strongest local rewrite reason
+  - step_support_state="ok" unless the user is clearly stuck and you are returning the stuck helper or exit flow
   - statements=preserved or updated list
 - ESCAPE:
   - action="ESCAPE"
@@ -110,6 +120,8 @@ Field discipline by intent
   - question=""
   - refined_formulation=""
   - rulesofthegame=""
+  - feedback_reason_text=""
+  - step_support_state="ok"
   - statements=preserve PREVIOUS_STATEMENTS
 `;
 

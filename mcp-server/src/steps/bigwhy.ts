@@ -16,6 +16,7 @@ export const BigWhyZodSchema = z.object({
   refined_formulation: z.string(),
   bigwhy: z.string(),
   feedback_reason_text: z.string(),
+  step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -37,6 +38,7 @@ export const BigWhyJsonSchema = {
     "refined_formulation",
     "bigwhy",
     "feedback_reason_text",
+    "step_support_state",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -49,6 +51,7 @@ export const BigWhyJsonSchema = {
     refined_formulation: { type: "string" },
     bigwhy: { type: "string" },
     feedback_reason_text: { type: "string" },
+    step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -129,6 +132,7 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   "refined_formulation": "string",
   "bigwhy": "string",
   "feedback_reason_text": "string",
+  "step_support_state": "ok" | "stuck",
 }
 
 
@@ -445,7 +449,7 @@ Common failure modes and how to handle them:
 2) If it is a generic value label (example: "Integrity" / "Respect" without meaning)
 - action="REFINE"
 - message: ask for a "should-be-true" sentence and one consequence that would become non-negotiable (localized).
-- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Big Why input and the Big Why rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Big Why input and the Big Why rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key Big Why correction is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use filler, praise, detached editorial phrasing, or repeat the refined sentence.
 - refined_formulation: propose one sentence that spells it out, universal, and resonant with Dream and Purpose themes.
 - question: ask what to adjust (localized).
 - question=""
@@ -463,7 +467,7 @@ Common failure modes and how to handle them:
 Output
 - action="REFINE"
 - message (localized): one short supportive sentence acknowledging the request, for example: "Here's another Big Why suggestion based on your Dream and Purpose."
-- feedback_reason_text: one short localized sentence that states only the strongest content reason for the new suggestion. It must be specific to the current Big Why wording and the Big Why rules. Do not use generic interpretation openers or repeat the refined sentence.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the new suggestion. It must be specific to the current Big Why wording and the Big Why rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key Big Why correction is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use detached editorial phrasing or repeat the refined sentence.
 - refined_formulation: provide a DIFFERENT Big Why sentence (one sentence, optionally a second, max 28 words total), meaning-layer phrasing, no first-person plural, universal, resonant with Dream and Purpose themes. This must be a different formulation than the previous one - vary the wording, structure, or angle while keeping it valid and following all Big Why rules. CRITICAL: The Big Why must focus on WHY the Dream and Purpose have meaning and are important for people and society. It must explain the real reason why this matters - the deeper significance that makes Dream and Purpose relevant and worth pursuing, even when it costs and nobody applauds.
 - question (localized) must contain exactly this structure with real line breaks:
 

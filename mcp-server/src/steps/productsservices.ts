@@ -1,6 +1,7 @@
 // mcp-server/src/steps/productsservices.ts
 import { z } from "zod";
 import { SpecialistMetaTopicJsonSchema, SpecialistMetaTopicZod, SpecialistUserIntentJsonSchema, SpecialistUserIntentZod } from "./user_intent.js";
+import { buildStuckSupportInstructionBlock } from "./step_instruction_contracts.js";
 
 export const PRODUCTSSERVICES_STEP_ID = "productsservices" as const;
 export const PRODUCTSSERVICES_SPECIALIST = "ProductsServices" as const;
@@ -15,6 +16,7 @@ export const ProductsServicesZodSchema = z.object({
   refined_formulation: z.string(),
   productsservices: z.string(),
   feedback_reason_text: z.string(),
+  step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -37,6 +39,7 @@ export const ProductsServicesJsonSchema = {
     "refined_formulation",
     "productsservices",
     "feedback_reason_text",
+    "step_support_state",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -50,6 +53,7 @@ export const ProductsServicesJsonSchema = {
     refined_formulation: { type: "string" },
     productsservices: { type: "string" },
     feedback_reason_text: { type: "string" },
+    step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -141,6 +145,7 @@ All fields are required. If not applicable, return an empty string "".
   "refined_formulation": "string",
   "productsservices": "string",
   "feedback_reason_text": "string",
+  "step_support_state": "ok" | "stuck",
   "wants_recap": boolean,
   "statements": ["array of strings"]
 }
@@ -229,7 +234,7 @@ Route-only local edit handling (HARD)
   - keep every unrelated item exactly as-is
   - output action="ASK" when the rewrite is clear enough to accept directly
   - output action="REFINE" only if you need the user to approve a sharper phrasing for that one target item
-  - when output action="REFINE", set feedback_reason_text to one short localized sentence that states only the strongest content reason for the local rewrite. It must be specific to the user's Products and Services input and the step rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
+  - when output action="REFINE", set feedback_reason_text to one short localized sentence that states only the strongest content reason for the local rewrite. It must be specific to the user's Products and Services input and the step rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key content reason is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use filler, praise, detached editorial phrasing, or repeat the refined sentence.
   - never append EDIT_INSTRUCTION as a new product/service item
   - statements must stay item-level and canonical
 - When USER_MESSAGE starts with "__BUSINESS_LIST_CLARIFY__":
@@ -247,7 +252,7 @@ Output format:
   - A single clear statement, OR
   - A short grouped list with core categories only (recommend 3 to 7 items maximum)
 - message: Start with the sentence "This is what you offer your clients according to your input:" (localized), then add one empty line, then show the validated/summarized products and services as a bullet list (localized). Format the list as a bullet list with dashes: each item on a new line with "- [item text]". If it is a single statement, show it as one line after the intro sentence. If it is a list, show each item with a dash on a new line after the intro sentence and blank line.
-- feedback_reason_text: set this to "" when action="ASK". When action="REFINE", set it to one short localized sentence that states only the strongest content reason for the local rewrite. It must be specific to the user's Products and Services input and the step rules. Do not use generic interpretation openers, filler, praise, or repeat the displayed list.
+- feedback_reason_text: set this to "" when action="ASK". When action="REFINE", set it to one short localized sentence that states only the strongest content reason for the local rewrite. It must be specific to the user's Products and Services input and the step rules, written in a warm and non-judgmental agent voice, and phrased so the user can feel understood before the key content reason is named. Do that naturally for the exact case, not with a fixed stock opener. Do not use filler, praise, detached editorial phrasing, or repeat the displayed list.
 
 
 Is this everything [Company name] offers or is there more? (localized; use business_name if known, otherwise "<my future company>")
@@ -302,5 +307,7 @@ When saving productsservices_final (action="ASK"), enforce:
   Sentence 2 (optional): include only for clearly off-topic/nonsense input.
   Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "my future company".
 - Do not reset to another step. Stay in Products and Services.
+
+${buildStuckSupportInstructionBlock("Products and Services", "productsservices", { preserveStatements: true })}
 
 END OF INSTRUCTIONS`;
