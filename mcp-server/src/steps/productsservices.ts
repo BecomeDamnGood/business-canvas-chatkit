@@ -14,6 +14,7 @@ export const ProductsServicesZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   productsservices: z.string(),
+  feedback_reason_text: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -35,6 +36,7 @@ export const ProductsServicesJsonSchema = {
     "question",
     "refined_formulation",
     "productsservices",
+    "feedback_reason_text",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -47,6 +49,7 @@ export const ProductsServicesJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     productsservices: { type: "string" },
+    feedback_reason_text: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -137,6 +140,7 @@ All fields are required. If not applicable, return an empty string "".
   "question": "string",
   "refined_formulation": "string",
   "productsservices": "string",
+  "feedback_reason_text": "string",
   "wants_recap": boolean,
   "statements": ["array of strings"]
 }
@@ -182,6 +186,7 @@ Replace "we offer solutions" with the tailored phrase based on business type.
 - refined_formulation=""
 - question=""
 - productsservices=""
+- feedback_reason_text=""
 - statements: PREVIOUS_STATEMENTS
 - wants_recap=false
 
@@ -206,6 +211,7 @@ Route-only local edit handling (HARD)
 - When USER_MESSAGE starts with "__BUSINESS_LIST_REMOVE__":
   - output action="ASK"
   - message: short confirmation that the item was removed
+  - feedback_reason_text=""
   - question: ask what else should be sharpened in the products and services
   - refined_formulation: bullet list of the updated products/services
   - productsservices: the updated products/services list
@@ -213,6 +219,7 @@ Route-only local edit handling (HARD)
 - When USER_MESSAGE starts with "__BUSINESS_LIST_REPLACE__":
   - output action="ASK"
   - message: short confirmation that the item was updated
+  - feedback_reason_text=""
   - question: ask what else should be sharpened in the products and services
   - refined_formulation: bullet list of the updated products/services
   - productsservices: the updated products/services list
@@ -222,11 +229,13 @@ Route-only local edit handling (HARD)
   - keep every unrelated item exactly as-is
   - output action="ASK" when the rewrite is clear enough to accept directly
   - output action="REFINE" only if you need the user to approve a sharper phrasing for that one target item
+  - when output action="REFINE", set feedback_reason_text to one short localized sentence that states only the strongest content reason for the local rewrite. It must be specific to the user's Products and Services input and the step rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
   - never append EDIT_INSTRUCTION as a new product/service item
   - statements must stay item-level and canonical
 - When USER_MESSAGE starts with "__BUSINESS_LIST_CLARIFY__":
   - output action="ASK"
   - message: briefly state that the system is not yet sure which current item is meant
+  - feedback_reason_text=""
   - question: ask the user to name or quote the exact current product/service item
   - refined_formulation=""
   - productsservices: preserve the current accepted summary
@@ -238,6 +247,7 @@ Output format:
   - A single clear statement, OR
   - A short grouped list with core categories only (recommend 3 to 7 items maximum)
 - message: Start with the sentence "This is what you offer your clients according to your input:" (localized), then add one empty line, then show the validated/summarized products and services as a bullet list (localized). Format the list as a bullet list with dashes: each item on a new line with "- [item text]". If it is a single statement, show it as one line after the intro sentence. If it is a list, show each item with a dash on a new line after the intro sentence and blank line.
+- feedback_reason_text: set this to "" when action="ASK". When action="REFINE", set it to one short localized sentence that states only the strongest content reason for the local rewrite. It must be specific to the user's Products and Services input and the step rules. Do not use generic interpretation openers, filler, praise, or repeat the displayed list.
 
 
 Is this everything [Company name] offers or is there more? (localized; use business_name if known, otherwise "<my future company>")
@@ -260,6 +270,7 @@ Refine your Products and Services or go to next step Rules of the Game
 - refined_formulation: The final summary (single statement or short grouped list, 3-7 items max) - this will be displayed below the message
 - question: "Continue to next step Rules of the Game"
 - productsservices: The final summary (single statement or short grouped list, 3-7 items max)
+- feedback_reason_text=""
 - statements: canonical accepted item list that backs the summary
 - wants_recap=false
 

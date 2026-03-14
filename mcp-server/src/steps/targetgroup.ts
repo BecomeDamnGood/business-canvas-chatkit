@@ -14,6 +14,7 @@ export const TargetGroupZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   targetgroup: z.string(),
+  feedback_reason_text: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -34,6 +35,7 @@ export const TargetGroupJsonSchema = {
     "question",
     "refined_formulation",
     "targetgroup",
+    "feedback_reason_text",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -45,6 +47,7 @@ export const TargetGroupJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     targetgroup: { type: "string" },
+    feedback_reason_text: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -124,6 +127,7 @@ All fields are required. If not applicable, return an empty string "".
   "question": "string",
   "refined_formulation": "string",
   "targetgroup": "string",
+  "feedback_reason_text": "string",
   "wants_recap": boolean
 }
 
@@ -157,6 +161,7 @@ Where:
 - refined_formulation=""
 - question=""
 - targetgroup=""
+- feedback_reason_text=""
 - wants_recap=false
 
 6) EXPLAIN-MORE SCREEN (B) - Must be used verbatim
@@ -187,6 +192,7 @@ Where:
 - refined_formulation=""
 - question=""
 - targetgroup=""
+- feedback_reason_text=""
 - wants_recap=false
 
 7) FIVE-QUESTION MODE (C) - No scripted lead-in sentences
@@ -258,11 +264,13 @@ Required response behavior when invalid input happens:
 - If Strategy is already very specific, refine further by choosing a focused subset (for example: a subset of industries or company sizes) rather than repeating all Strategy adjectives.
 - Ask the user to confirm if that interpretation is what they mean.
 - message: Include explanation and shoemaker logic (localized). Do NOT repeat the refined_formulation text in the message field.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Target Group input and the Target Group rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
 - refined_formulation: The proposed specific interpretation (exact one sentence, one primary target group, maximum 7 words). When the user has provided a clear and specific segment description (industries, company types, roles), refined_formulation must reflect that user-defined segment (possibly narrowed or cleaned up) and MUST NOT introduce a completely different segment. The refined_formulation must already obey the same global non-repetition rule and \"do not repeat Strategy terms\" rules that apply to the final targetgroup in section 9: never restate or repeat information that is already present in Strategy or other STATE FINALS, unless the user explicitly asks you to mention that specific information again.
 
 
 - question=""
 - targetgroup="" (do not save yet)
+- feedback_reason_text must not repeat message or refined_formulation
 - wants_recap=false
 
 IMPORTANT - Handling follow-up questions after REFINE:
@@ -382,6 +390,7 @@ POST-PROCESSING RULES (REPLACE OLD ONES)
 - refined_formulation=""
 - question: "Continue to next step Products and Services"
 - targetgroup: The final one-sentence target group (maximum 10 words)
+- feedback_reason_text=""
 - wants_recap=false
 
 11) LANGUAGE RULE (CRITICAL)

@@ -15,6 +15,7 @@ export const EntityZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   entity: z.string(),
+  feedback_reason_text: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -35,6 +36,7 @@ export const EntityJsonSchema = {
     "question",
     "refined_formulation",
     "entity",
+    "feedback_reason_text",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -46,6 +48,7 @@ export const EntityJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     entity: { type: "string" },
+    feedback_reason_text: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -144,6 +147,7 @@ Output schema fields (must always be present)
 "question": "string",
 "refined_formulation": "string",
 "entity": "string",
+"feedback_reason_text": "string",
 }
 CRITICAL RENDERING RULE
 Scope guard
@@ -288,6 +292,7 @@ REFINE output rules
 - The container word is correct, but too generic.
 - Add one to a few words so an outsider gets a clear picture.
 - Keep it short, not a sentence.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Entity input and the Entity rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
 - refined_formulation: provide ONE suggested short phrase (2 to 5 words, prefer 3-5 words) based only on what the user implied. Do not invent new facts.
 - question: one short question (user language) asking what to adjust in the qualifier.
 - question=""
@@ -302,11 +307,13 @@ If USER_MESSAGE is "__ROUTE__ENTITY_CHOOSE_FOR_ME__":
 - question=""
 - refined_formulation: exactly one selected Entity suggestion from the shown suggestions
 - entity: the same selected Entity suggestion
+- feedback_reason_text=""
 - question=""
 
 If USER_MESSAGE is "__ROUTE__ENTITY_REFINE__":
 - action="REFINE"
 - message must be exactly this text (localized, in the user's language): "This how your entity could sound like:"
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the new suggestion. It must be specific to the current Entity wording and the Entity rules. Do not use generic interpretation openers or repeat the refined sentence.
 - refined_formulation: formulate a COMPLETELY NEW Entity phrase as a short noun phrase with a correct indefinite article (e.g., "A purpose-driven consultancy"). The Entity phrase should be 2 to 5 words after the article (container + 1-2 qualifiers), making the total length 3-6 words. Base it on known information from step_0_final (venture type, business name), dream_final, purpose_final, bigwhy_final, role_final (if available). 
 
 CRITICAL VARIATION RULE (HARD): You MUST generate a DIFFERENT Entity than the previous one. Check the previous assistant output's refined_formulation field (or entity field) and ensure your new formulation is completely different:
@@ -329,6 +336,7 @@ When it is good:
 - message=""
 - refined_formulation: the final short phrase.
 - entity: the same final short phrase.
+- feedback_reason_text=""
 - question (localized): "Does this capture the Entity of {company_name}, and do you want to continue to the next step?" Use the company name from the STATE FINALS / business_name context if available; otherwise use "my future company" (or the equivalent in the user's language).
 
 ${buildSingleValueStepContractBlock("Entity", "entity")}

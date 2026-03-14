@@ -113,6 +113,20 @@ function parseSubmitScoresPayload(
   return null;
 }
 
+function withRenderedMessageFallback(
+  specialist: Record<string, unknown>,
+  renderedMessage: string
+): Record<string, unknown> {
+  const rendered = String(renderedMessage || "").trim();
+  if (!rendered) return specialist;
+  const current = String((specialist as Record<string, unknown>).message || "").trim();
+  if (current && current === rendered) return specialist;
+  return {
+    ...specialist,
+    message: rendered,
+  };
+}
+
 function clearDreamStateForSwitchToSelf(state: CanvasState, dreamStepId: string): CanvasState {
   const next: CanvasState = { ...state };
   const finalField = getFinalFieldForStepId(dreamStepId);
@@ -325,7 +339,16 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const previousSpecialist = asRecord(
           (stateWithUi as Record<string, unknown>).last_specialist_result || {}
         );
-        const pickedSuggestion = deps.pickDreamSuggestionFromPreviousState(stateWithUi, previousSpecialist);
+        const renderedPreviousText = deps.buildTextForWidget({
+          specialist: previousSpecialist,
+          state: stateWithUi,
+        });
+        const pickedSuggestion =
+          deps.pickDreamSuggestionFromPreviousState(stateWithUi, previousSpecialist) ||
+          deps.pickDreamSuggestionFromPreviousState(
+            stateWithUi,
+            withRenderedMessageFallback(previousSpecialist, renderedPreviousText)
+          );
         if (!pickedSuggestion) return null;
 
         const specialist = {
@@ -385,7 +408,16 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const previousSpecialist = asRecord(
           (stateWithUi as Record<string, unknown>).last_specialist_result || {}
         );
-        const pickedSuggestion = deps.pickRoleSuggestionFromPreviousState(stateWithUi, previousSpecialist);
+        const renderedPreviousText = deps.buildTextForWidget({
+          specialist: previousSpecialist,
+          state: stateWithUi,
+        });
+        const pickedSuggestion =
+          deps.pickRoleSuggestionFromPreviousState(stateWithUi, previousSpecialist) ||
+          deps.pickRoleSuggestionFromPreviousState(
+            stateWithUi,
+            withRenderedMessageFallback(previousSpecialist, renderedPreviousText)
+          );
         if (!pickedSuggestion) return null;
 
         const specialist = {
@@ -442,7 +474,16 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const previousSpecialist = asRecord(
           (stateWithUi as Record<string, unknown>).last_specialist_result || {}
         );
-        const pickedSuggestion = deps.pickBigWhySuggestionFromPreviousState(stateWithUi, previousSpecialist);
+        const renderedPreviousText = deps.buildTextForWidget({
+          specialist: previousSpecialist,
+          state: stateWithUi,
+        });
+        const pickedSuggestion =
+          deps.pickBigWhySuggestionFromPreviousState(stateWithUi, previousSpecialist) ||
+          deps.pickBigWhySuggestionFromPreviousState(
+            stateWithUi,
+            withRenderedMessageFallback(previousSpecialist, renderedPreviousText)
+          );
         if (!pickedSuggestion) return null;
 
         const specialist = {
@@ -499,7 +540,16 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const previousSpecialist = asRecord(
           (stateWithUi as Record<string, unknown>).last_specialist_result || {}
         );
-        const pickedSuggestion = deps.pickEntitySuggestionFromPreviousState(stateWithUi, previousSpecialist);
+        const renderedPreviousText = deps.buildTextForWidget({
+          specialist: previousSpecialist,
+          state: stateWithUi,
+        });
+        const pickedSuggestion =
+          deps.pickEntitySuggestionFromPreviousState(stateWithUi, previousSpecialist) ||
+          deps.pickEntitySuggestionFromPreviousState(
+            stateWithUi,
+            withRenderedMessageFallback(previousSpecialist, renderedPreviousText)
+          );
         if (!pickedSuggestion) return null;
 
         const specialist = {

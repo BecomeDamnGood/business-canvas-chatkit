@@ -178,6 +178,200 @@ test("dream_switch_to_self uses catalog copy for switch-to-self body", async () 
   );
 });
 
+test("dream choose-for-me falls back to rendered suggestion text when previous raw message is empty", async () => {
+  let specialistCalled = false;
+  const renderedSuggestions = [
+    "Hier zijn drie voorbeelden van een Droom voor een agency als Mindd:",
+    "",
+    "• Mindd droomt van een wereld waarin creativiteit mensen verbindt en merken betekenisvol contact maken met hun publiek.",
+    "• Mindd droomt van een wereld waarin bedrijven hun unieke verhaal moeiteloos kunnen delen en echte relaties opbouwen met hun klanten.",
+    "• Mindd droomt van een wereld waarin communicatie bijdraagt aan vertrouwen, inspiratie en groei voor iedereen die betrokken is.",
+    "",
+    "Ik hoop dat deze suggesties je inspireren om je eigen Droom te schrijven.",
+  ].join("\n");
+
+  const ports: any = {
+    ids: {
+      step0Id: "step_0",
+      dreamStepId: "dream",
+      roleStepId: "role",
+      strategyStepId: "strategy",
+      presentationStepId: "presentation",
+      dreamSpecialist: "Dream",
+      dreamExplainerSpecialist: "DreamExplainer",
+      roleSpecialist: "Role",
+      presentationSpecialist: "Presentation",
+      bigwhySpecialist: "BigWhy",
+      entitySpecialist: "Entity",
+    },
+    tokens: {
+      dreamPickOneRouteToken: "__ROUTE__DREAM_PICK_ONE__",
+      bigWhyChooseForMeRouteToken: "__ROUTE__BIGWHY_CHOOSE_FOR_ME__",
+      roleChooseForMeRouteToken: "__ROUTE__ROLE_CHOOSE_FOR_ME__",
+      entityChooseForMeRouteToken: "__ROUTE__ENTITY_CHOOSE_FOR_ME__",
+      presentationMakeRouteToken: "__ROUTE__PRESENTATION_MAKE__",
+      switchToSelfDreamToken: "__SWITCH_TO_SELF_DREAM__",
+      dreamStartExerciseRouteToken: "__ROUTE__DREAM_START_EXERCISE__",
+    },
+    wording: {
+      wordingSelectionMessage: (_stepId: string, _state: Record<string, unknown>, _active = "", selected = "") =>
+        String(selected || ""),
+      pickPrompt: (specialist: Record<string, unknown>) => String(specialist.question || ""),
+      buildTextForWidget: () => renderedSuggestions,
+    },
+    state: {
+      applyStateUpdate: ({ prev, specialistResult }: { prev: Record<string, unknown>; specialistResult: Record<string, unknown> }) => ({
+        ...prev,
+        last_specialist_result: specialistResult,
+        provisional_by_step: {
+          ...((prev.provisional_by_step as Record<string, unknown> | undefined) || {}),
+          dream: specialistResult.dream,
+        },
+      }),
+      setDreamRuntimeMode: (state: Record<string, unknown>, mode: string) => {
+        state.__dream_runtime_mode = mode;
+      },
+      getDreamRuntimeMode: () => "self",
+      isUiStateHygieneSwitchV1Enabled: () => false,
+      clearStepInteractiveState: (state: Record<string, unknown>) => state,
+    },
+    contracts: {
+      renderFreeTextTurnPolicy: () => {
+        throw new Error("renderFreeTextTurnPolicy should not be called in this test");
+      },
+      validateRenderedContractOrRecover: () => {
+        throw new Error("validateRenderedContractOrRecover should not be called in this test");
+      },
+      applyUiPhaseByStep: () => {},
+      ensureUiStrings: async (state: Record<string, unknown>) => state as any,
+      buildContractId: () => "",
+    },
+    step0: {
+      ensureStartState: async () => {
+        throw new Error("ensureStartState should not be called in this test");
+      },
+      parseStep0Final: () => ({ name: "Mindd" }),
+      inferStep0SeedFromInitialMessage: () => "",
+      step0ReadinessQuestion: () => "",
+      step0CardDescForState: () => "",
+      step0QuestionForState: () => "",
+    },
+    presentation: {
+      generatePresentationAssets: () => {
+        throw new Error("generatePresentationAssets should not be called in this test");
+      },
+      uiStringFromStateMap: (_state: Record<string, unknown>, _key: string, fallback: string) => fallback,
+      uiDefaultString: (_key: string, fallback = "") => fallback,
+    },
+    specialist: {
+      callSpecialistStrictSafe: async () => {
+        specialistCalled = true;
+        throw new Error("callSpecialistStrictSafe should not be called in this test");
+      },
+      buildRoutingContext: () => ({}),
+      rememberLlmCall: () => {},
+    },
+    response: {
+      attachRegistryPayload: (payload: Record<string, unknown>) => payload,
+      finalizeResponse: (payload: Record<string, unknown>) => payload,
+      turnResponseEngine: {
+        renderValidateRecover: (params: { state: any; specialist: any }) => ({
+          ok: true,
+          value: {
+            state: params.state,
+            specialist: params.specialist,
+            renderedStatus: "valid_output",
+            actionCodes: [],
+            renderedActions: [],
+            contractMeta: {
+              contractId: "dream:valid_output:DREAM_MENU_REFINE",
+              contractVersion: "1",
+              textKeys: [],
+            },
+          },
+        }),
+        attachAndFinalize: (params: { state: any; specialist: any }) => ({
+          ok: true,
+          tool: "run_step",
+          specialist: params.specialist,
+          state: params.state,
+        }),
+        finalize: (payload: Record<string, unknown>) => payload,
+      },
+    },
+    suggestions: {
+      pickDreamSuggestionFromPreviousState: (_state: Record<string, unknown>, previous: Record<string, unknown>) => {
+        const message = String(previous.message || "");
+        const lines = message
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line.startsWith("• "));
+        return lines.length > 0 ? lines[0].replace(/^•\s*/, "").trim() : "";
+      },
+      pickDreamCandidateFromState: () => "",
+      pickBigWhySuggestionFromPreviousState: () => "",
+      pickRoleSuggestionFromPreviousState: () => "",
+      pickEntitySuggestionFromPreviousState: () => "",
+    },
+    i18n: {
+      bumpUiI18nCounter: () => {},
+    },
+  };
+
+  const helpers = createRunStepRouteHelpers<any>(ports);
+  const response = await helpers.handleSpecialRouteRegistry({
+    routing: {
+      userMessage: "__ROUTE__DREAM_PICK_ONE__",
+      actionCodeRaw: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: true,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: true,
+    },
+    rendering: {
+      uiI18nTelemetry: {},
+      lang: "nl",
+      ensureUiStrings: async (state: Record<string, unknown>) => state as any,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        business_name: "Mindd",
+        active_specialist: "Dream",
+        last_specialist_result: {
+          action: "ASK",
+          message: "",
+          refined_formulation: "",
+          dream: "",
+        },
+      },
+      transientPendingScores: null,
+      submittedUserText: "",
+      rawNormalized: "__ROUTE__DREAM_PICK_ONE__",
+      pristineAtEntry: false,
+    },
+    specialist: {
+      model: "gpt-test",
+      decideOrchestration: () => ({} as any),
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.ok(response, "expected dream pick route response");
+  assert.equal(specialistCalled, false);
+  const specialist = (response as Record<string, any>).specialist || {};
+  assert.equal(
+    String(specialist.dream || ""),
+    "Mindd droomt van een wereld waarin creativiteit mensen verbindt en merken betekenisvol contact maken met hun publiek."
+  );
+  assert.equal(
+    String(specialist.refined_formulation || ""),
+    "Mindd droomt van een wereld waarin creativiteit mensen verbindt en merken betekenisvol contact maken met hun publiek."
+  );
+});
+
 test("dream_switch_to_self clears staged dream value but preserves Dream Builder resume context", async () => {
   let specialistCalled = false;
   const ports: any = {

@@ -15,6 +15,7 @@ export const RoleZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   role: z.string(),
+  feedback_reason_text: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -35,6 +36,7 @@ export const RoleJsonSchema = {
     "question",
     "refined_formulation",
     "role",
+    "feedback_reason_text",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -46,6 +48,7 @@ export const RoleJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     role: { type: "string" },
+    feedback_reason_text: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -110,6 +113,7 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   "question": "string",
   "refined_formulation": "string",
   "role": "string",
+  "feedback_reason_text": "string",
 }
 
 4) GLOBAL NON-NEGOTIABLES
@@ -381,6 +385,7 @@ D) Choose one for me (from "__ROUTE__ROLE_CHOOSE_FOR_ME__")
 A) If the user gives true activity language (deliverables, channels, services)
 - action="REFINE"
 - message (localized): short, direct: it describes execution; Role sits one level higher.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Role input and the Role rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
 - refined_formulation: provide one improved Role sentence that removes channels/deliverables and emphasizes stable position and effect, using company name or "my future company", never first-person plural.
 - question=""
 - role=""
@@ -388,6 +393,7 @@ A) If the user gives true activity language (deliverables, channels, services)
 B) If the user gives a valid Role direction but it is missing effect or boundary
 - action="REFINE"
 - message (localized): short and supportive: it is Role-level; sharpen so it guides choices.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Role input and the Role rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
 - refined_formulation: provide one improved Role sentence with “so that” effect and an implied boundary, company language only, never first-person plural.
 - question=""
 - role=""
@@ -397,6 +403,7 @@ C) If the user gives a strong Role sentence already
 - message=""
 - refined_formulation: final Role sentence (one sentence only), company language only, never first-person plural.
 - role: same final Role sentence.
+- feedback_reason_text=""
 - question (localized, one line): ask whether they want to continue to the next step Entity.
 
 
@@ -404,6 +411,7 @@ C) If the user gives a strong Role sentence already
 - message=""
 - refined_formulation: the same sentence from the previous refined_formulation
 - role: the same sentence
+- feedback_reason_text=""
 - question (localized): ask whether they want to continue to the next step Entity
 
 - action="ASK"
@@ -411,6 +419,7 @@ C) If the user gives a strong Role sentence already
 - question (localized, one line): "What would you like to change in the sentence: the first part (position), the 'so that' effect, or the boundary?"
 - refined_formulation=""
 - role=""
+- feedback_reason_text=""
 
 ${buildSingleValueStepContractBlock("Role", "role")}
 

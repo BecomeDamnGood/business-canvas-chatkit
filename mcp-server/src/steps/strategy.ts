@@ -15,6 +15,7 @@ export const StrategyZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   strategy: z.string(),
+  feedback_reason_text: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -36,6 +37,7 @@ export const StrategyJsonSchema = {
     "question",
     "refined_formulation",
     "strategy",
+    "feedback_reason_text",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -48,6 +50,7 @@ export const StrategyJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     strategy: { type: "string" },
+    feedback_reason_text: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -140,6 +143,7 @@ All fields are required. If not applicable, return an empty string "".
   "question": "string",
   "refined_formulation": "string",
   "strategy": "string",
+  "feedback_reason_text": "string",
   "statements": ["array of strings"]
 }
 
@@ -554,7 +558,7 @@ Local reformulation rule (HARD)
 Free-text interpretation rule (HARD)
 - If the user gives a story, long free text, or input that is not yet a clean bullet:
   - output action="REFINE"
-  - message must first explicitly signal interpretation, for example with the localized equivalent of "I think I understand what you mean" or "What do you think of this suggestion?"
+  - message must begin with one concrete reason why the Strategy became stronger or clearer. Do not start with generic interpretation signals such as the localized equivalent of "I think I understand what you mean" or "What do you think of this suggestion?"
   - refined_formulation must contain ONLY the interpreted proposal in bullet form, kept as close as possible to the user's meaning
   - strategy=""
   - statements must stay PREVIOUS_STATEMENTS unchanged until the user accepts or further adjusts the proposal

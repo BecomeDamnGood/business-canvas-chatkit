@@ -15,8 +15,12 @@ import {
   extractStatementCount,
   strategyStatementsFromSources,
 } from "./turn_policy/strategy_helpers.js";
-import { shouldInferSingleValueFeedbackReason } from "./feedback_policy.js";
-import { feedbackStepLabel, formatCompareFeedbackForDisplay, formatUserPickFeedbackForDisplay } from "./feedback_display.js";
+import {
+  feedbackStepLabel,
+  formatCompareFeedbackForDisplay,
+  formatUserPickFeedbackForDisplay,
+  sanitizeFeedbackReasonForDisplay,
+} from "./feedback_display.js";
 import { UI_STRINGS_SOURCE_EN } from "../i18n/ui_strings_defaults.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
 import {
@@ -547,31 +551,6 @@ function isSingleValueHeadingLikeBlock(block: string): boolean {
   const words = normalized.split(" ").filter(Boolean);
   if (words.length === 0 || words.length > 12) return false;
   return !/[.!?]$/.test(normalized);
-}
-
-function inferSingleValueFeedbackReason(params: {
-  stepId: string;
-  message: string;
-  heading: string;
-  canonicalValue: string;
-}): string {
-  if (!shouldInferSingleValueFeedbackReason(params.stepId)) return "";
-  const canonicalText = String(params.canonicalValue || "").trim();
-  if (!canonicalText) return "";
-  const blocks = canonicalParagraphBlocks(params.message);
-  const candidates = blocks.filter((block) => {
-    const trimmed = String(block || "").trim();
-    if (!trimmed) return false;
-    if (isSingleValueHeadingBlock(trimmed, params.heading)) return false;
-    if (isSingleValueCanonicalBlock(trimmed, params.heading, canonicalText)) return false;
-    return true;
-  });
-  if (candidates.length === 0) return "";
-  const firstBlock = String(candidates[0] || "").trim();
-  if (!firstBlock) return "";
-  const sentences = sentenceBoundaryBlocks(firstBlock);
-  if (sentences.length < 2 && candidates.length < 2) return "";
-  return String(sentences[0] || firstBlock).replace(/\s+/g, " ").trim();
 }
 
 function singleValueSupportText(params: {
@@ -1943,20 +1922,14 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       : "";
   const explicitFeedbackReasonForDisplay =
     String((specialistForDisplay as any).feedback_reason_text || "").trim();
+  const sanitizedExplicitFeedbackReasonForDisplay = sanitizeFeedbackReasonForDisplay({
+    stepId,
+    rawReason: explicitFeedbackReasonForDisplay,
+    resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
+  });
   const isUserPickedWording =
     String((specialistForDisplay as any).wording_choice_selected || "").trim() === "user";
-  const rawFeedbackReasonForDisplay =
-    isUserPickedWording
-      ? explicitFeedbackReasonForDisplay
-      : (
-          explicitFeedbackReasonForDisplay ||
-          inferSingleValueFeedbackReason({
-            stepId,
-            message: String(message || ""),
-            heading: singleValueConfirmHeading(stepId, state),
-            canonicalValue: pendingCanonicalValue || canonicalAcceptedValue,
-          })
-        );
+  const rawFeedbackReasonForDisplay = sanitizedExplicitFeedbackReasonForDisplay;
   const feedbackReasonForDisplay =
     isUserPickedWording
       ? formatUserPickFeedbackForDisplay({

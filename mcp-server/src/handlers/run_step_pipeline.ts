@@ -230,20 +230,6 @@ function stateWithDreamCurrentValueFeedbackContext(
   };
 }
 
-function compactFeedbackReasonFromMessage(messageRaw: string): string {
-  const message = String(messageRaw || "").replace(/\r/g, " ").replace(/\s+/g, " ").trim();
-  if (!message) return "";
-  const sentences = message
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => String(part || "").trim())
-    .filter(Boolean);
-  for (const sentence of sentences) {
-    if (sentence.length < 18) continue;
-    return sentence;
-  }
-  return message;
-}
-
 type AutoSuggestPlan = {
   eligible: boolean;
   stepId: string;
@@ -881,25 +867,6 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         deps.bumpUiI18nCounter(params.uiI18nTelemetry, "step0_escape_ready_recovered_count");
       }
     }
-    const shouldBackfillSingleValueFeedbackReason =
-      isSingleValueFeedbackStep(currentStepIdForOfftopic) &&
-      submittedTextIntent === "feedback_on_current_value";
-    const shouldBackfillDreamPolicyFeedbackReason =
-      currentStepIdForOfftopic === deps.dreamStepId &&
-      Array.isArray((specialistResult as Record<string, unknown>).__dream_policy_violation_codes);
-    if (
-      (shouldBackfillSingleValueFeedbackReason || shouldBackfillDreamPolicyFeedbackReason) &&
-      !String((specialistResult as Record<string, unknown>).feedback_reason_text || "").trim()
-    ) {
-      const fallbackReason = compactFeedbackReasonFromMessage(String(specialistResult.message || ""));
-      if (fallbackReason) {
-        specialistResult = {
-          ...specialistResult,
-          feedback_reason_text: fallbackReason,
-        };
-      }
-    }
-
     const provisionalSourceForMutation = resolveProvisionalSourceForTurn({
       actionCodeRaw: params.actionCodeRaw,
       submittedTextIntent,

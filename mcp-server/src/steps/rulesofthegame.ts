@@ -15,6 +15,7 @@ export const RulesOfTheGameZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   rulesofthegame: z.string(),
+  feedback_reason_text: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -36,6 +37,7 @@ export const RulesOfTheGameJsonSchema = {
     "question",
     "refined_formulation",
     "rulesofthegame",
+    "feedback_reason_text",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -48,6 +50,7 @@ export const RulesOfTheGameJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     rulesofthegame: { type: "string" },
+    feedback_reason_text: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -164,6 +167,7 @@ Output schema fields (must always be present)
   "question": "string",
   "refined_formulation": "string",
   "rulesofthegame": "string",
+  "feedback_reason_text": "string",
   "wants_recap": "boolean",
   "is_offtopic": "boolean",
   "meta_topic": "NONE" | "MODEL_VALUE" | "MODEL_CREDIBILITY" | "BEN_PROFILE" | "TOOL_AUDIENCE" | "STEP_SKIP_NOT_SUPPORTED" | "STEP_POINTLESS" | "STEP_BACK_NOT_SUPPORTED" | "CANVAS_VALUE" | "SESSION_STORAGE" | "PRESENTATION_MEDIA_NOT_SUPPORTED" | "NO_STARTING_POINT" | "RECAP",
@@ -447,7 +451,7 @@ USER LISTENING RULE (HARD)
 Free-text interpretation rule (HARD)
 - If the user gives a story, long free text, or operational explanation that is not yet a clean rule:
   - output action="REFINE"
-  - message must first explicitly signal interpretation, for example with the localized equivalent of "I think I understand what you mean" or "What do you think of this suggestion?"
+  - message must begin with one concrete reason why the rewrite helps the Rules of the Game. Do not start with generic interpretation signals such as the localized equivalent of "I think I understand what you mean" or "What do you think of this suggestion?"
   - refined_formulation must contain ONLY the interpreted rule proposal in bullet form, kept as close as possible to the user's meaning
   - rulesofthegame=""
   - statements must stay PREVIOUS_STATEMENTS unchanged until the user accepts or further adjusts the proposal
@@ -527,7 +531,7 @@ ASK output (when acceptable)
 REFINE output (when refinement is truly needed)
 HARD rule: do not lecture, do not reject the whole list.
 - action="REFINE"
-- message: start with a friendly, concise interpretation or refinement signal in the user's language, such as the equivalent of "I think I understand what you mean" or "What do you think of this suggestion?", then briefly explain why the local rewrite helps.
+- message: start with one short, concrete reason why the local rewrite helps. Do not use a generic interpretation opener such as the equivalent of "I think I understand what you mean" or "What do you think of this suggestion?"
 - refined_formulation: propose a minimally edited version of ONLY the affected rule or smallest affected cluster, keeping the original intention and making it more usable.
 - rulesofthegame=""
 - question=""

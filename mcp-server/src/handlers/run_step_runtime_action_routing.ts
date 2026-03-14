@@ -217,6 +217,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     if (String(specialist.wording_choice_pending || "").trim() !== "true") return false;
     const mode = String(specialist.wording_choice_mode || "text").trim() === "list" ? "list" : "text";
     const stepId = String(specialist.wording_choice_target_field || "").trim();
+    const hasExplicitFeedbackReason = Boolean(String(specialist.feedback_reason_text || "").trim());
     const userText = String(specialist.wording_choice_user_normalized || specialist.wording_choice_user_raw || "").trim();
     const suggestionText = String(specialist.wording_choice_agent_current || specialist.refined_formulation || "").trim();
     const userItems = normalizeItems(specialist.wording_choice_user_items);
@@ -224,7 +225,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     if (mode === "list") {
       const hasUser = userItems.length > 0 || Boolean(userText);
       const hasSuggestion = suggestionItems.length > 0 || Boolean(suggestionText);
-      return hasUser && hasSuggestion;
+      return hasUser && hasSuggestion && hasExplicitFeedbackReason;
     }
     if (
       pendingWordingChoicePresentation(specialist) === "picker" &&
@@ -233,7 +234,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ) {
       return false;
     }
-    return Boolean(userText && suggestionText);
+    return Boolean(userText && suggestionText && hasExplicitFeedbackReason);
   };
 
   const pendingWordingChoicePresentation = (specialist: Record<string, unknown>): "picker" | "canonical" =>

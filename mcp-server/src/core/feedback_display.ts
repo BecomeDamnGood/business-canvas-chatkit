@@ -15,6 +15,34 @@ function ensureSentence(value: string): string {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
+function isGenericFeedbackAcknowledgementSentence(input: string): boolean {
+  const sentence = String(input || "").trim();
+  if (!sentence) return false;
+  const patterns = [
+    /^(?:that|this|dat|dit)\s+(?:is|feels|sounds)\s+(?:a\s+|een\s+)?(?:good|great|strong|solid|goed|sterk|prima)\b/i,
+    /^(?:good|great|strong|solid)\s+(?:start|beginning|starting point|point|insight)\b/i,
+    /^(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt|inzicht)\b/i,
+    /^(?:dat|dit)\s+is\s+een\s+(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt)\b/i,
+    /^(?:i think i understand what you mean|i understand what you mean|ik denk dat ik begrijp wat je bedoelt|ik begrijp wat je bedoelt)\b/i,
+  ];
+  return patterns.some((pattern) => pattern.test(sentence));
+}
+
+export function sanitizeFeedbackReasonForDisplay(params: {
+  stepId: string;
+  rawReason: string;
+  resolveString: FeedbackStringResolver;
+}): string {
+  const reason = ensureSentence(params.rawReason);
+  if (!reason) return "";
+  if (isGenericFeedbackAcknowledgementSentence(reason)) return "";
+  const stepLabel = feedbackStepLabel(params.stepId, params.resolveString);
+  const introTemplate = params.resolveString("wording.feedback.compare.intro.template", "");
+  const intro = ensureSentence(String(introTemplate || "").replace(/\{0\}/g, stepLabel));
+  if (intro && normalizeComparable(reason) === normalizeComparable(intro)) return "";
+  return reason;
+}
+
 function stripStepPrefix(value: string): string {
   return String(value || "")
     .replace(/^(?:step|stap)\s+\d+\s*:\s*/i, "")
@@ -47,16 +75,7 @@ export function formatCompareFeedbackForDisplay(params: {
   rawReason: string;
   resolveString: FeedbackStringResolver;
 }): string {
-  const reason = ensureSentence(params.rawReason);
-  if (!reason) return "";
-  const stepLabel = feedbackStepLabel(params.stepId, params.resolveString);
-  const introTemplate = params.resolveString("wording.feedback.compare.intro.template", "");
-  const intro = ensureSentence(String(introTemplate || "").replace(/\{0\}/g, stepLabel));
-  if (!intro) return reason;
-  const introComparable = normalizeComparable(intro);
-  const reasonComparable = normalizeComparable(reason);
-  if (introComparable && reasonComparable.startsWith(introComparable)) return reason;
-  return `${intro}\n\n${reason}`.trim();
+  return sanitizeFeedbackReasonForDisplay(params);
 }
 
 export function formatUserPickFeedbackForDisplay(params: {
@@ -70,7 +89,7 @@ export function formatUserPickFeedbackForDisplay(params: {
   );
   const nudgeTemplate = params.resolveString("wording.feedback.user_pick.nudge.template", "");
   const nudge = ensureSentence(String(nudgeTemplate || "").replace(/\{0\}/g, stepLabel));
-  const reason = ensureSentence(params.rawReason);
+  const reason = sanitizeFeedbackReasonForDisplay(params);
   if (reason) {
     return [acknowledgment, nudge, reason].filter(Boolean).join("\n\n").trim();
   }

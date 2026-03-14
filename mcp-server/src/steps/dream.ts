@@ -15,6 +15,7 @@ export const DreamZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   dream: z.string(),
+  feedback_reason_text: z.string(),
   suggest_dreambuilder: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
@@ -36,6 +37,7 @@ export const DreamJsonSchema = {
     "question",
     "refined_formulation",
     "dream",
+    "feedback_reason_text",
     "suggest_dreambuilder",
     "wants_recap",
     "is_offtopic",
@@ -48,6 +50,7 @@ export const DreamJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     dream: { type: "string" },
+    feedback_reason_text: { type: "string" },
     suggest_dreambuilder: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
@@ -108,6 +111,7 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   "question": "string",
   "refined_formulation": "string",
   "dream": "string",
+  "feedback_reason_text": "string",
   "suggest_dreambuilder": "true" | "false",
   "wants_recap": false,
   "is_offtopic": false
@@ -212,6 +216,7 @@ INTRO output (HARD)
 - refined_formulation=""
 - question=""
 - dream=""
+- feedback_reason_text=""
 - suggest_dreambuilder="false"
 
 10) OFF-TOPIC (HARD)
@@ -225,6 +230,7 @@ If the user message is clearly off-topic for Dream and not a META question:
 - refined_formulation=""
 - question=""
 - dream=""
+- feedback_reason_text=""
 - suggest_dreambuilder="false"
 
 11) META QUESTIONS (ALLOWED, CLASSIFY, RUNTIME HANDLES COPY)
@@ -286,10 +292,12 @@ If user chooses "Give me a few dream suggestions":
 - action="ASK"
 - message (localized): one short line confirming the exercise will start now.
 - question: one short question in the TARGET OUTPUT LANGUAGE (LANGUAGE if provided, otherwise mirror USER_MESSAGE) asking if the user is ready to start the exercise.
+- feedback_reason_text=""
 - suggest_dreambuilder="true"
 - all other content fields empty strings
 
 - action="ASK"
+- feedback_reason_text=""
 - suggest_dreambuilder="true"
 - all text fields empty strings
 
@@ -298,6 +306,7 @@ If the previous assistant asked readiness and user says NO:
 - message: brief acknowledgement, localized
 - question:
 
+- feedback_reason_text=""
 - suggest_dreambuilder="false"
 - other fields empty
 
@@ -317,10 +326,12 @@ If any forbidden item appears, or human impact/emotional resonance is missing, c
 REFINE
 - action="REFINE"
 - message: one short localized sentence that explicitly says what still did not fit the Dream rules and how you corrected it. Name the content issue itself, for example too tool-first, too execution-first, too internal, too vague, too task-first, or missing human effect. No generic praise, no process talk.
+- feedback_reason_text: one short localized sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Dream input and the Dream rules. Do not use generic interpretation openers or repeat the full suggested Dream.
 - refined_formulation: one improved Dream line that complies with section 8 and section 8.5 (effect-first, emotionally resonant, no pitch, no KPIs, no execution talk, no absolutes, no task-first core).
 
 - question=""
 - dream=""
+- feedback_reason_text must not repeat message or refined_formulation
 - suggest_dreambuilder="false"
 
 16.5) HANDLE REFINE CONFIRMATION (HARD)
@@ -330,6 +341,7 @@ If the user clearly accepts the refined wording:
 - message=""
 - refined_formulation: the same Dream sentence from the previous REFINE's refined_formulation
 - dream: the same Dream sentence (final confirmed Dream)
+- feedback_reason_text=""
 - question (localized): ask if this captures the Dream and whether to continue to Purpose.
 - suggest_dreambuilder="false"
 
@@ -339,6 +351,7 @@ ASK (Dream is concrete enough)
 - question=""
 - refined_formulation: one concise Dream line (no “first-person plural”), MUST use business name if known.
 - dream: same as refined_formulation
+- feedback_reason_text=""
 - question (localized): ask if this captures the Dream and whether to continue to Purpose.
 - suggest_dreambuilder="false"
 

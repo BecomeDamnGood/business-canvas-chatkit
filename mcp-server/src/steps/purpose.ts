@@ -14,6 +14,7 @@ export const PurposeZodSchema = z.object({
   question: z.string(),
   refined_formulation: z.string(),
   purpose: z.string(),
+  feedback_reason_text: z.string(),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
   user_intent: SpecialistUserIntentZod,
@@ -34,6 +35,7 @@ export const PurposeJsonSchema = {
     "question",
     "refined_formulation",
     "purpose",
+    "feedback_reason_text",
     "wants_recap",
     "is_offtopic",
     "user_intent",
@@ -45,6 +47,7 @@ export const PurposeJsonSchema = {
     question: { type: "string" },
     refined_formulation: { type: "string" },
     purpose: { type: "string" },
+    feedback_reason_text: { type: "string" },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
     user_intent: SpecialistUserIntentJsonSchema,
@@ -116,6 +119,7 @@ All fields are required. If not applicable, return an empty string "".
   "question": "string",
   "refined_formulation": "string",
   "purpose": "string",
+  "feedback_reason_text": "string",
 }
 
 4) GLOBAL NON-NEGOTIABLES (DO NOT EDIT)
@@ -314,8 +318,8 @@ even if rough, emotional, or in founder voice.
 
 If the user already gave usable Purpose meaning:
 - action="REFINE"
-- message (localized) must start with:
-  "I think I understand what you mean."
+- message (localized): one short sentence that immediately states the most important content issue or strengthening move in the Purpose. Do not use generic interpretation openers such as "I think I understand what you mean."
+- feedback_reason_text (localized): one short sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Purpose input and the Purpose rules. Do not use generic interpretation openers, filler, praise, or repeat the refined sentence.
 - refined_formulation: rewrite into exactly one clean Purpose sentence in company voice (company name or "my future company"), preserving meaning.
 - question (localized) must contain exactly this structure with real line breaks:
 
@@ -327,6 +331,7 @@ If the user already gave usable Purpose meaning:
 
 - question=""
 - purpose=""
+- feedback_reason_text=""
 
 If the user did NOT give usable Purpose meaning:
 - action="ASK"
@@ -336,6 +341,7 @@ If the user did NOT give usable Purpose meaning:
 - refined_formulation=""
 - question=""
 - purpose=""
+- feedback_reason_text=""
 
 
 CRITICAL anti-repeat rule
@@ -364,6 +370,7 @@ Output
 - refined_formulation=""
 - question=""
 - purpose=""
+- feedback_reason_text=""
 
 
 B) Give 3 Purpose examples (from "__ROUTE__PURPOSE_GIVE_EXAMPLES__")
@@ -394,6 +401,7 @@ Before outputting refined_formulation, verify that the core nouns and verbs are 
 - refined_formulation=""
 - question=""
 - purpose=""
+- feedback_reason_text=""
 
 
 C) Choose one for me (from "__ROUTE__PURPOSE_CHOOSE_FOR_ME__")
@@ -404,6 +412,7 @@ Output
 - refined_formulation: choose exactly one of the 3 shown Purpose examples and use it unchanged as the selected Purpose sentence (non-empty). Pick the example that best fits the confirmed Dream and available context.
 - purpose: same sentence (non-empty).
 - question=""
+- feedback_reason_text=""
 
 
 D) If the user already gave usable Purpose meaning directly
@@ -411,6 +420,7 @@ D) If the user already gave usable Purpose meaning directly
 Output
 - action="REFINE"
 - message (localized): one short supportive sentence acknowledging the choice, for example: "I'll propose a Purpose based on your Dream."
+- feedback_reason_text (localized): one short sentence that states only the strongest content reason for the suggestion. It must be specific to the user's Purpose input and the Purpose rules. Do not use generic interpretation openers or repeat the refined sentence.
 - refined_formulation: provide exactly one Purpose sentence in company voice (company name if known, otherwise "we" in the user's language), connected to the confirmed Dream, following all Purpose rules (not a goal/result, but a belief/value/principle)
 
 
@@ -425,6 +435,7 @@ E) If the user asks to refine the current Purpose sentence
 Output
 - action="REFINE"
 - message (localized): one short supportive sentence acknowledging the request, for example: "Here's another Purpose suggestion based on your Dream."
+- feedback_reason_text (localized): one short sentence that states only the strongest content reason for the new suggestion. It must be specific to the current Purpose wording and the Purpose rules. Do not use generic interpretation openers or repeat the refined sentence.
 - refined_formulation: provide a DIFFERENT Purpose sentence in company voice (company name if known, otherwise "we" in the user's language), connected to the confirmed Dream, following all Purpose rules. This must be a different formulation than the previous one - vary the wording, structure, or angle while keeping it valid. If the user previously answered the 3 questions from route G, incorporate those insights into the new formulation.
 
 
@@ -441,6 +452,7 @@ Output
 - refined_formulation: the same Purpose sentence from the previous REFINE
 - purpose: the same Purpose sentence (final confirmed Purpose)
 - question=""
+- feedback_reason_text=""
 
 
 Output

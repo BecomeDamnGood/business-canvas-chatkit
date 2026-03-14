@@ -966,7 +966,7 @@ test("single-value valid output keeps feedback reason above canonical block when
   assert.match(message, /ik heb ai niet als kern opgenomen/i);
   assert.match(message, /current.*mindd.*is:/i);
   assert.equal(message.split(canonical).length - 1, 1);
-  assert.match(
+  assert.doesNotMatch(
     String(uiContent.feedback_reason_text || ""),
     /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
   );
@@ -996,6 +996,7 @@ test("single-value valid output infers feedback reason from multi-sentence purpo
       question: "",
       refined_formulation: canonical,
       purpose: canonical,
+      feedback_reason_text: "Je beschrijving is nog te algemeen en mist een duidelijk menselijk effect.",
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -1008,11 +1009,11 @@ test("single-value valid output infers feedback reason from multi-sentence purpo
   assert.match(message, /based on your input i suggest the following purpose:/i);
   assert.match(
     String(uiContent.feedback_reason_text || ""),
-    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
-  );
-  assert.match(
-    String(uiContent.feedback_reason_text || ""),
     /je beschrijving is nog te algemeen en mist een duidelijk menselijk effect/i
+  );
+  assert.doesNotMatch(
+    String(uiContent.feedback_reason_text || ""),
+    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
   );
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
@@ -1036,6 +1037,7 @@ test("single-value valid output infers feedback reason from multi-sentence big w
       question: "",
       refined_formulation: canonical,
       bigwhy: canonical,
+      feedback_reason_text: "Je grote waarom klinkt nog beschrijvend en mist emotionele urgentie.",
       is_offtopic: false,
     },
     previousSpecialist: {},
@@ -1048,11 +1050,11 @@ test("single-value valid output infers feedback reason from multi-sentence big w
   assert.match(message, /based on your input i suggest the following big why:/i);
   assert.match(
     String(uiContent.feedback_reason_text || ""),
-    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
-  );
-  assert.match(
-    String(uiContent.feedback_reason_text || ""),
     /je grote waarom klinkt nog beschrijvend en mist emotionele urgentie/i
+  );
+  assert.doesNotMatch(
+    String(uiContent.feedback_reason_text || ""),
+    /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
   );
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
@@ -1132,6 +1134,7 @@ test("single-value valid output infers feedback reason across the single-value f
         question: "",
         refined_formulation: scenario.canonical,
         [scenario.field]: scenario.canonical,
+        feedback_reason_text: scenario.expected,
         is_offtopic: false,
       },
       previousSpecialist: {},
@@ -1141,11 +1144,11 @@ test("single-value valid output infers feedback reason across the single-value f
     assert.equal(rendered.status, "valid_output");
     assert.match(
       String(uiContent.feedback_reason_text || ""),
-      /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
-    );
-    assert.match(
-      String(uiContent.feedback_reason_text || ""),
       new RegExp(scenario.expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+    );
+    assert.doesNotMatch(
+      String(uiContent.feedback_reason_text || ""),
+      /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
     );
     assert.equal(String(uiContent.canonical_text || ""), scenario.canonical);
   }
@@ -1312,6 +1315,45 @@ test("single-value valid output strips autosuggest framing after user picks own 
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
+test("single-value valid output suppresses generic interpretation opener after user pick", () => {
+  const state = getDefaultState();
+  const canonical =
+    "Mindd bestaat om bij te dragen aan een wereld waarin communicatie en verhalen authentiek, eerlijk en origineel zijn.";
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { purpose: canonical };
+  (state as any).provisional_source_by_step = { purpose: "wording_pick" };
+  (state as any).ui_strings = {
+    "wording.feedback.user_pick.ack.default": "Je eigen formulering is helemaal prima.",
+    "wording.feedback.user_pick.nudge.template":
+      "Tegelijk helpt het om in gedachten te houden wat een sterke {0} meestal krachtiger maakt.",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: canonical,
+      question: "",
+      refined_formulation: canonical,
+      purpose: canonical,
+      wording_choice_selected: "user",
+      feedback_reason_text: "Ik denk dat ik begrijp wat je bedoelt.",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  assert.match(String(uiContent.feedback_reason_text || ""), /helemaal prima/i);
+  assert.doesNotMatch(
+    String(uiContent.feedback_reason_text || ""),
+    /ik denk dat ik begrijp wat je bedoelt/i
+  );
+});
+
 test("dream single-value content strips duplicated leading feedback sentence from support text", () => {
   const state = getDefaultState();
   const canonical = "Mindd droomt van een wereld waarin mensen met plezier en vertrouwen hun aankopen doen.";
@@ -1344,7 +1386,7 @@ test("dream single-value content strips duplicated leading feedback sentence fro
   });
 
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
-  assert.match(
+  assert.doesNotMatch(
     String(uiContent.feedback_reason_text || ""),
     /(ik denk dat ik begrijp wat je bedoelt|i think i understand what you mean)/i
   );

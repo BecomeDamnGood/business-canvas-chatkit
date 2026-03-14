@@ -1,6 +1,10 @@
 import type { CanvasState, ProvisionalSource } from "../core/state.js";
 import { isSingleValueFeedbackStep } from "../core/feedback_policy.js";
-import { formatCompareFeedbackForDisplay, formatUserPickFeedbackForDisplay } from "../core/feedback_display.js";
+import {
+  formatCompareFeedbackForDisplay,
+  formatUserPickFeedbackForDisplay,
+  sanitizeFeedbackReasonForDisplay,
+} from "../core/feedback_display.js";
 import type { WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
 import { resolveBusinessListTurn } from "./run_step_business_list_turn.js";
@@ -171,18 +175,6 @@ function normalizeCompareResolution(raw: unknown): WordingChoiceCompareResolutio
 
 function normalizeCompareConfidence(raw: unknown): WordingChoiceCompareConfidence {
   return String(raw || "").trim() === "fallback" ? "fallback" : "anchored";
-}
-
-function isGenericFeedbackAcknowledgementSentence(input: string): boolean {
-  const sentence = String(input || "").trim();
-  if (!sentence) return false;
-  const patterns = [
-    /^(?:that|this|dat|dit)\s+(?:is|feels|sounds)\s+(?:a\s+|een\s+)?(?:good|great|strong|solid|goed|sterk|prima)\b/i,
-    /^(?:good|great|strong|solid)\s+(?:start|beginning|starting point|point|insight)\b/i,
-    /^(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt|inzicht)\b/i,
-    /^(?:dat|dit)\s+is\s+een\s+(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt)\b/i,
-  ];
-  return patterns.some((pattern) => pattern.test(sentence));
 }
 
 function normalizeCompareUnits(raw: unknown): WordingChoiceCompareUnit[] {
@@ -1450,92 +1442,19 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
   }
 
-  function extractFeedbackReasonSentenceFromSpecialistMessage(params: {
-    messageRaw: string;
-    suggestionRaw: string;
-    userRaw: string;
-    knownItems: string[];
-    state?: CanvasState | null;
-    specialist?: Record<string, unknown> | null;
-  }): string {
-    const source = String(params.messageRaw || "").replace(/\r/g, "\n").trim();
-    if (!source) return "";
-    const suggestionComparable = deps.canonicalizeComparableText(String(params.suggestionRaw || ""));
-    const userComparable = deps.canonicalizeComparableText(String(params.userRaw || ""));
-    const knownComparables = new Set(
-      params.knownItems
-        .map((line) => deps.canonicalizeComparableText(line))
-        .filter(Boolean)
-    );
-    const lines = source
-      .split(/\n+/)
-      .map((line) => deps.stripChoiceInstructionNoise(String(line || "").replace(/<[^>]+>/g, " ").trim()))
-      .map((line) => line.replace(/^\s*(?:[-*•]|\d+[\).])\s*/, "").trim())
-      .filter(Boolean);
-    const blockedComparables = wordingScaffoldComparables(params.state || null, params.specialist || null);
-    const candidates: string[] = [];
-    for (const line of lines) {
-      if (isWordingScaffoldLine(line, blockedComparables)) continue;
-      const lineComparable = deps.canonicalizeComparableText(line);
-      if (!lineComparable) continue;
-      if (knownComparables.has(lineComparable)) continue;
-      if (
-        (suggestionComparable && (lineComparable === suggestionComparable || lineComparable.includes(suggestionComparable))) ||
-        (userComparable && (lineComparable === userComparable || lineComparable.includes(userComparable)))
-      ) {
-        continue;
-      }
-      const sentences = line
-        .split(/(?<=[.!?])\s+/)
-        .map((part) => String(part || "").trim())
-        .filter(Boolean);
-      for (const sentence of sentences) {
-        const normalized = sentence.replace(/\s+/g, " ").trim();
-        if (!normalized) continue;
-        if (isWordingScaffoldLine(normalized, blockedComparables)) continue;
-        const sentenceComparable = deps.canonicalizeComparableText(normalized);
-        if (!sentenceComparable) continue;
-        if (
-          (suggestionComparable &&
-            (sentenceComparable === suggestionComparable || sentenceComparable.includes(suggestionComparable))) ||
-          (userComparable && (sentenceComparable === userComparable || sentenceComparable.includes(userComparable))) ||
-          knownComparables.has(sentenceComparable)
-        ) {
-          continue;
-        }
-        if (deps.tokenizeWords(normalized).length < 5) continue;
-        if (isGenericFeedbackAcknowledgementSentence(normalized)) continue;
-        candidates.push(normalized);
-      }
-    }
-    if (candidates.length === 0) return "";
-    return normalizeCompactFeedbackSentence(candidates[0], "");
-  }
-
   function resolveFeedbackReasonFromSpecialist(state: CanvasState, prev: Record<string, unknown>): string {
-    const reasonKey = String(prev.feedback_reason_key || "").trim();
+    const resolveString = (key: string, fallback = "") =>
+      deps.uiStringFromStateMap(state, key, fallback || deps.uiDefaultString(key, fallback));
+    const stepId = String((state as any)?.current_step || "").trim();
     const reasonText = String(prev.feedback_reason_text || "").trim();
-    if (reasonKey) {
-      const reasonUiKey = `wording.feedback.reason.${reasonKey}`;
-      const fallback = shouldUseDefaultFallback(state) ? deps.uiDefaultString(reasonUiKey, "") : "";
-      const fromMap = deps.uiStringFromStateMap(state, reasonUiKey, fallback);
-      if (fromMap) return normalizeCompactFeedbackSentence(fromMap, "");
-    }
     if (reasonText) {
-      return normalizeCompactFeedbackSentence(reasonText, "");
+      const sanitized = sanitizeFeedbackReasonForDisplay({
+        stepId,
+        rawReason: normalizeCompactFeedbackSentence(reasonText, ""),
+        resolveString,
+      });
+      if (sanitized) return sanitized;
     }
-    const fallbackFromMessage = extractFeedbackReasonSentenceFromSpecialistMessage({
-      messageRaw: String(prev.message || ""),
-      suggestionRaw: String(prev.wording_choice_agent_current || prev.refined_formulation || ""),
-      userRaw: String(prev.wording_choice_user_normalized || prev.wording_choice_user_raw || ""),
-      knownItems: mergeListItems(
-        Array.isArray(prev.wording_choice_base_items) ? toTrimmedStringArray(prev.wording_choice_base_items) : [],
-        Array.isArray(prev.wording_choice_suggestion_items) ? toTrimmedStringArray(prev.wording_choice_suggestion_items) : []
-      ),
-      state,
-      specialist: prev,
-    });
-    if (fallbackFromMessage) return fallbackFromMessage;
     return "";
   }
 
@@ -1555,17 +1474,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     userRaw: string;
     knownItems: string[];
   }): string {
-    const dynamicReason = extractFeedbackReasonSentenceFromSpecialistMessage({
-      messageRaw: String(params.specialistResult.message || ""),
-      suggestionRaw: params.suggestionRaw,
-      userRaw: params.userRaw,
-      knownItems: params.knownItems,
-      state: params.state,
-      specialist: params.specialistResult,
-    });
-    if (dynamicReason) return dynamicReason;
-    void params;
-    return "";
+    void params.suggestionRaw;
+    void params.userRaw;
+    void params.knownItems;
+    return resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
   }
 
   function resolveGroupedCompareFeedbackForUnit(params: {
@@ -1573,14 +1485,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     unit: WordingChoiceCompareUnit;
     state: CanvasState;
   }): string {
-    return extractFeedbackReasonSentenceFromSpecialistMessage({
-      messageRaw: String(params.specialistResult.message || ""),
-      suggestionRaw: params.unit.suggestion_text,
-      userRaw: params.unit.user_text,
-      knownItems: mergeListItems(params.unit.user_items, params.unit.suggestion_items),
-      state: params.state,
-      specialist: params.specialistResult,
-    });
+    void params.unit;
+    return resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
   }
 
   function withGroupedCompareUnitFeedback(params: {
@@ -1588,22 +1494,15 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     specialistResult: Record<string, unknown>;
     state: CanvasState;
   }): BusinessListComparePlan {
-    let assigned = false;
+    const sharedFeedbackReason = resolveGroupedCompareFeedbackForUnit({
+      specialistResult: params.specialistResult,
+      unit: params.plan.initialUnit,
+      state: params.state,
+    });
     const units = params.plan.units.map((unit) => {
-      if (assigned) {
-        return {
-          ...unit,
-          feedback_reason_text: "",
-        } satisfies WordingChoiceCompareUnit;
-      }
-      assigned = true;
       return {
         ...unit,
-        feedback_reason_text: resolveGroupedCompareFeedbackForUnit({
-          specialistResult: params.specialistResult,
-          unit,
-          state: params.state,
-        }),
+        feedback_reason_text: sharedFeedbackReason,
       } satisfies WordingChoiceCompareUnit;
     });
     return {
@@ -1631,6 +1530,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     });
     const retainedItems = visibleRetainedItemsForGroupedCompare(params.segments, params.units);
     const feedbackReasonText = String(currentUnit.feedback_reason_text || "").trim();
+    if (!feedbackReasonText) return null;
     const resolveString = (key: string, fallback = "") =>
       deps.uiStringFromStateMap(params.state || null, key, fallback || deps.uiDefaultString(key, fallback));
     return {
@@ -2099,6 +1999,14 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     if (presentation === "canonical") {
       return { specialist: enriched, wordingChoice: null };
     }
+    if (!feedbackReason) {
+      enriched.wording_choice_presentation = "canonical";
+      return { specialist: enriched, wordingChoice: null };
+    }
+    if (comparePlan && !String(comparePlan.initialUnit.feedback_reason_text || "").trim()) {
+      enriched.wording_choice_presentation = "canonical";
+      return { specialist: enriched, wordingChoice: null };
+    }
     const wordingChoice: WordingChoiceUiPayload =
       comparePlan
         ? (groupedCompareWordingChoicePayload({
@@ -2218,7 +2126,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
             nextPayload.suggestion_label || prevRaw.wording_choice_suggestion_label || ""
           ),
           feedback_reason_key: "",
-          feedback_reason_text: "",
+          feedback_reason_text: String(nextUnit.feedback_reason_text || "").trim(),
           pending_suggestion_intent: "",
           pending_suggestion_anchor: "",
           pending_suggestion_seed_source: "",
@@ -2490,6 +2398,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const userLabel = String(specialist?.wording_choice_user_label || "").trim() || wordingLabels.userLabel || "";
     const suggestionLabel =
       String(specialist?.wording_choice_suggestion_label || "").trim() || wordingLabels.suggestionLabel || "";
+    const feedbackReasonText = resolveFeedbackReasonFromSpecialist((state || {}) as CanvasState, specialist);
     const fallbackUserText = stripMarkupPreserveLines(
       String(
         comparePayload?.user_text ||
@@ -2515,13 +2424,12 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const resolvedSuggestionItems = mode === "list" && suggestionItems.length === 0
       ? pickWordingSuggestionList(specialist, fallbackSuggestionText)
       : suggestionItems;
+    if (!feedbackReasonText) return null;
     return {
       enabled: true,
       mode,
       ...(variant === "clarify_dual" ? { variant: "clarify_dual" as const } : {}),
-      ...(String(specialist?.feedback_reason_text || "").trim()
-        ? { feedback_reason_text: String(specialist?.feedback_reason_text || "").trim() }
-        : {}),
+      ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
       ...(userLabel ? { user_label: userLabel } : {}),
       ...(suggestionLabel ? { suggestion_label: suggestionLabel } : {}),
       user_text: fallbackUserText,
