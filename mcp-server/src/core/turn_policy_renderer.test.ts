@@ -1682,6 +1682,46 @@ test("single-value confirm steps keep confirm actions for user-driven current-va
   }
 });
 
+test("single-value current-value refinement uses its own state without wording-choice pending", () => {
+  const state = getDefaultState();
+  const canonical = "Mindd bestaat om complexe keuzes begrijpelijk en menselijk te maken.";
+  (state as any).current_step = "purpose";
+  (state as any).active_specialist = "Purpose";
+  (state as any).business_name = "Mindd";
+  (state as any).purpose_final = "Mindd bestaat om complexe keuzes begrijpelijk te maken.";
+  (state as any).provisional_by_step = { purpose: canonical };
+  (state as any).provisional_source_by_step = { purpose: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "purpose",
+    state,
+    specialist: {
+      action: "ASK",
+      message: [
+        "Ik heb je formulering compacter gemaakt.",
+        "",
+        "Op basis van je input stel ik de volgende bestaansreden voor",
+      ].join("\n"),
+      question: "",
+      refined_formulation: canonical,
+      purpose: canonical,
+      feedback_reason_text: "Ik heb je formulering compacter gemaakt.",
+      current_value_refinement_pending: "true",
+      current_value_refinement_target_field: "purpose",
+      current_value_refinement_feedback_text: "Ik heb je formulering compacter gemaakt.",
+      current_value_refinement_anchor_value: "Mindd bestaat om complexe keuzes begrijpelijk te maken.",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.status, "valid_output");
+  assert.equal(rendered.uiActionCodes.includes("ACTION_PURPOSE_REFINE_CONFIRM"), true);
+  assert.equal(String((rendered.specialist as any).ui_content?.canonical_text || ""), canonical);
+  assert.match(String((rendered.specialist as any).message || ""), /Op basis van je input stel ik/i);
+  assert.equal(String((rendered.specialist as any).wording_choice_pending || ""), "");
+});
+
 test("presentation accepted provisional remains valid output without synthetic confirm action", () => {
   const state = getDefaultState();
   const canonical = [

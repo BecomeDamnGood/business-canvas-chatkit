@@ -4,6 +4,10 @@ import {
   type ProvisionalSource,
 } from "../core/state.js";
 import { resolveSpecialistSupportFamily } from "../core/stuck_support.js";
+import {
+  hasGroupedCompareListSemantics,
+  isInteractiveSupportStep,
+} from "../steps/step_registry.js";
 import { buildContextSafeLastSpecialistResult } from "./run_step_context_whitelist.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
 import { productsServicesItemsFromText } from "../shared/productsservices_items.js";
@@ -191,25 +195,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
   }
 
   function isBulletConsistencyStep(stepId: string): boolean {
-    return (
-      stepId === deps.strategyStepId ||
-      stepId === deps.productsservicesStepId ||
-      stepId === deps.rulesofthegameStepId
-    );
+    return hasGroupedCompareListSemantics(stepId);
   }
 
   function isInformationalContextPolicyStep(stepId: string): boolean {
-    return (
-      stepId === deps.dreamStepId ||
-      stepId === deps.purposeStepId ||
-      stepId === deps.bigwhyStepId ||
-      stepId === deps.roleStepId ||
-      stepId === deps.entityStepId ||
-      stepId === deps.strategyStepId ||
-      stepId === deps.targetgroupStepId ||
-      stepId === deps.productsservicesStepId ||
-      stepId === deps.rulesofthegameStepId
-    );
+    return isInteractiveSupportStep(stepId);
   }
 
   const FINAL_FIELD_BY_STEP_ID: Record<string, string> = { ...STEP_FINAL_FIELD_BY_STEP_ID };
@@ -340,6 +330,10 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
       pending_suggestion_seed_source: "",
       pending_suggestion_feedback_text: "",
       pending_suggestion_presentation_mode: "",
+      current_value_refinement_pending: "false",
+      current_value_refinement_target_field: "",
+      current_value_refinement_feedback_text: "",
+      current_value_refinement_anchor_value: "",
       proceed_request_intent: "",
       proceed_block_reason_codes: [],
       proceed_block_rule_count: 0,

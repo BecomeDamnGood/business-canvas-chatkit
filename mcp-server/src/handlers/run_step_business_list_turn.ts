@@ -1,5 +1,6 @@
 import type { CanvasState } from "../core/state.js";
 import { STEP_FINAL_FIELD_BY_STEP_ID } from "../core/state.js";
+import { hasGroupedCompareListSemantics } from "../steps/step_registry.js";
 import {
   canonicalizeComparableText,
   normalizeLightUserInput,
@@ -11,8 +12,6 @@ export const BUSINESS_LIST_ROUTE_REMOVE = "__BUSINESS_LIST_REMOVE__";
 export const BUSINESS_LIST_ROUTE_REPLACE = "__BUSINESS_LIST_REPLACE__";
 export const BUSINESS_LIST_ROUTE_EDIT = "__BUSINESS_LIST_EDIT__";
 export const BUSINESS_LIST_ROUTE_CLARIFY = "__BUSINESS_LIST_CLARIFY__";
-
-const BUSINESS_LIST_STEP_IDS = new Set(["strategy", "productsservices", "rulesofthegame"]);
 
 const LIST_REMOVE_VERB =
   /\b(remove|delete|drop|omit|exclude|verwijder|schrap|haal\s+weg|weglaten|wegdoen)\b/i;
@@ -265,7 +264,7 @@ function rewriteRoutePrompt(params: {
 }
 
 export function isBusinessListStep(stepId: string): boolean {
-  return BUSINESS_LIST_STEP_IDS.has(String(stepId || "").trim());
+  return hasGroupedCompareListSemantics(stepId);
 }
 
 export function readBusinessListReferenceItems(state: CanvasState, stepId: string): string[] {

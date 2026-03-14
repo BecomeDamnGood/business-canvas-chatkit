@@ -228,6 +228,35 @@ test("dream choose-for-me picks the first structured suggestion without speciali
   );
 });
 
+test("dream choose-for-me returns an invalid-state error when the suggestion snapshot is missing", async () => {
+  const helpers = createRunStepRouteHelpers<any>(buildRoutePorts());
+  const response = await helpers.handleSpecialRouteRegistry(
+    buildRouteContext(
+      {
+        current_step: "dream",
+        active_specialist: "Dream",
+        __ui_phase_by_step: {
+          dream: "dream:ASK:DREAM_MENU_SUGGESTIONS:v1",
+        },
+        last_specialist_result: {
+          action: "ASK",
+          ui_contract_id: "dream:ASK:DREAM_MENU_SUGGESTIONS:v1",
+          message: "Rendered suggestions screen",
+        },
+      },
+      "__ROUTE__DREAM_PICK_ONE__",
+      "ACTION_DREAM_SUGGESTIONS_PICK_ONE"
+    )
+  );
+
+  assert.equal((response as Record<string, any>).ok, false);
+  assert.equal((response as Record<string, any>).error?.type, "invalid_state");
+  assert.equal(
+    (response as Record<string, any>).error?.details?.reason,
+    "missing_or_mismatched_suggestion_snapshot"
+  );
+});
+
 test("strategy choose-for-me keeps the full first example block and canonical statements", async () => {
   const helpers = createRunStepRouteHelpers<any>(buildRoutePorts());
   const firstExample = [
@@ -276,7 +305,7 @@ test("strategy choose-for-me keeps the full first example block and canonical st
   ]);
 });
 
-test("choose-for-me guard consumes the action and keeps the current screen when structured state is missing", async () => {
+test("choose-for-me guard returns a visible invalid-state error when structured state is missing", async () => {
   const helpers = createRunStepRouteHelpers<any>(buildRoutePorts());
   const response = await helpers.handleSpecialRouteRegistry(
     buildRouteContext(
@@ -297,8 +326,10 @@ test("choose-for-me guard consumes the action and keeps the current screen when 
     )
   );
 
-  assert.ok(response);
-  const specialist = (response as Record<string, any>).specialist || {};
-  assert.equal(String(specialist.message || ""), "Hier zijn drie voorbeelden van een Droom voor Mindd.");
-  assert.equal(String(specialist.dream || ""), "");
+  assert.equal((response as Record<string, any>).ok, false);
+  assert.equal((response as Record<string, any>).error?.type, "invalid_state");
+  assert.equal(
+    (response as Record<string, any>).error?.details?.reason,
+    "missing_or_mismatched_suggestion_snapshot"
+  );
 });

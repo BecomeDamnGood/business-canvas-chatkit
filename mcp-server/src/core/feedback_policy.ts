@@ -1,30 +1,17 @@
+import {
+  isGroupedListWordingStep,
+  isSingleValueWordingStep,
+} from "../steps/step_registry.js";
+
 export type PendingWordingFeedbackMode = "text" | "list";
 export type PendingWordingFeedbackRequirement = "required" | "optional";
 
-export const SINGLE_VALUE_FEEDBACK_STEP_IDS = [
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "targetgroup",
-] as const;
-
-export const GROUPED_COMPARE_FEEDBACK_STEP_IDS = [
-  "strategy",
-  "productsservices",
-  "rulesofthegame",
-] as const;
-
-const SINGLE_VALUE_FEEDBACK_STEP_ID_SET = new Set<string>(SINGLE_VALUE_FEEDBACK_STEP_IDS);
-const GROUPED_COMPARE_FEEDBACK_STEP_ID_SET = new Set<string>(GROUPED_COMPARE_FEEDBACK_STEP_IDS);
-
 export function isSingleValueFeedbackStep(stepId: string): boolean {
-  return SINGLE_VALUE_FEEDBACK_STEP_ID_SET.has(String(stepId || "").trim());
+  return isSingleValueWordingStep(stepId);
 }
 
 export function isGroupedCompareFeedbackStep(stepId: string): boolean {
-  return GROUPED_COMPARE_FEEDBACK_STEP_ID_SET.has(String(stepId || "").trim());
+  return isGroupedListWordingStep(stepId);
 }
 
 export function pendingWordingFeedbackRequirement(params: {

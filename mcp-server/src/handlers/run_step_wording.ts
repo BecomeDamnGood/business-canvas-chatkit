@@ -1,5 +1,5 @@
 import type { CanvasState, ProvisionalSource } from "../core/state.js";
-import { isSingleValueFeedbackStep } from "../core/feedback_policy.js";
+import { isSingleValueWordingStep } from "../steps/step_registry.js";
 import {
   formatCompareFeedbackForDisplay,
   formatUserPickFeedbackForDisplay,
@@ -1625,7 +1625,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
   }
 
   function isAcceptedOutputSingleValueTextStep(stepId: string, mode: WordingChoiceMode): boolean {
-    return mode === "text" && isSingleValueFeedbackStep(stepId);
+    return mode === "text" && isSingleValueWordingStep(stepId);
   }
 
   function stripUnsupportedReformulationClaims(messageRaw: string): string {

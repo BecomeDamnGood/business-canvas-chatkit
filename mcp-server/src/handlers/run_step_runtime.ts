@@ -73,7 +73,6 @@ import {
 import {
   createRunStepUiPayloadHelpers,
   createRunStepWordingHelpers,
-  createRunStepWordingHeuristicHelpers,
   createRunStepStateUpdateHelpers,
   createRunStepPolicyMetaHelpers,
   createRunStepStep0DisplayHelpers,
@@ -87,6 +86,7 @@ import {
   runStepRuntimeSpecialRoutesLayer,
   runStepRuntimePostPipelineLayer,
 } from "./run_step_modules.js";
+import { pickDualChoiceSuggestion } from "./run_step_wording_heuristics_defaults.js";
 import {
   createRunStepI18nRuntimeHelpers,
   type UiI18nTelemetryCounters,
@@ -608,18 +608,6 @@ const step0DisplayHelpers = createRunStepStep0DisplayHelpers({
 
 export const normalizeStep0AskDisplayContract = step0DisplayHelpers.normalizeStep0AskDisplayContract;
 export const normalizeStep0OfftopicToAsk = step0DisplayHelpers.normalizeStep0OfftopicToAsk;
-
-const wordingHeuristicHelpers = createRunStepWordingHeuristicHelpers({
-  entityStepId: ENTITY_STEP_ID,
-  dreamStepId: DREAM_STEP_ID,
-  bigwhyStepId: BIGWHY_STEP_ID,
-  roleStepId: ROLE_STEP_ID,
-  fieldForStep,
-  normalizeEntityPhrase,
-  ensureSentenceEnd,
-});
-
-const pickDualChoiceSuggestion = wordingHeuristicHelpers.pickDualChoiceSuggestion;
 
 const uiPayloadHelpers = createRunStepUiPayloadHelpers({
   shouldLogLocalDevDiagnostics,

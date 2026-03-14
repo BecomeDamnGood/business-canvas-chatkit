@@ -1,20 +1,9 @@
 import type { CanvasState } from "./state.js";
+import { isInteractiveSupportStep } from "../steps/step_registry.js";
 
 export type StepSupportMode = "normal" | "stuck_questions" | "stuck_exit";
 export type StepSupportState = "ok" | "stuck";
 export type SpecialistSupportFamily = "core_step" | "dream_explainer" | "excluded";
-
-const ELIGIBLE_STEP_IDS = new Set([
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "strategy",
-  "targetgroup",
-  "productsservices",
-  "rulesofthegame",
-]);
 
 function readMap(state: CanvasState, key: string): Record<string, unknown> {
   const raw = (state as Record<string, unknown>)[key];
@@ -26,7 +15,7 @@ function writeMap(state: CanvasState, key: string, value: Record<string, unknown
 }
 
 export function isStuckSupportEligibleStep(stepId: string): boolean {
-  return ELIGIBLE_STEP_IDS.has(String(stepId || "").trim());
+  return isInteractiveSupportStep(stepId);
 }
 
 export function resolveSpecialistSupportFamily(params: {
@@ -34,7 +23,8 @@ export function resolveSpecialistSupportFamily(params: {
   activeSpecialist?: string;
 }): SpecialistSupportFamily {
   const stepId = String(params.stepId || "").trim();
-  if (!stepId || stepId === "presentation" || stepId === "step0") return "excluded";
+  if (!stepId) return "excluded";
+  // DreamExplainer is a special subflow under `dream`, not a registry-backed step family.
   if (String(params.activeSpecialist || "").trim() === "DreamExplainer") return "dream_explainer";
   return isStuckSupportEligibleStep(stepId) ? "core_step" : "excluded";
 }

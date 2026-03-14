@@ -11,6 +11,7 @@ import { createTurnResponseEngine, type TurnResponseEngine } from "./run_step_tu
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import { looksLikeExamplesFramingLine } from "./run_step_value_shape.js";
 import { isSingleValueTextPickerState } from "./run_step_wording_picker_contract.js";
+import { hasGroupedCompareListSemantics } from "../steps/step_registry.js";
 
 export type RunStepRuntimeInputMode = "widget" | "chat";
 
@@ -105,7 +106,7 @@ function stripChoiceInstructionNoise(value: string): string {
   return kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-import { chooseForMeContractForMenu } from "../core/choose_for_me_contract.js";
+import { getChooseForMeRegistryEntryForMenu } from "../steps/step_registry.js";
 
 function stripMarkupPreserveLines(value: string): string {
   return String(value || "")
@@ -136,13 +137,13 @@ const STRUCTURED_SUGGESTION_STEP_LABEL_FALLBACKS: Record<string, string> = {
 };
 
 function structuredSuggestionMenuConfigFor(contractStepId: string, menuId: string): StructuredSuggestionMenuConfig | null {
-  const config = chooseForMeContractForMenu(contractStepId, menuId);
-  if (!config) return null;
+  const entry = getChooseForMeRegistryEntryForMenu(contractStepId, menuId);
+  if (!entry) return null;
   return {
-    stepId: config.stepId,
-    itemKind: config.itemKind,
-    mode: config.mode,
-    validActionCodes: [config.actionCode],
+    stepId: entry.stepId,
+    itemKind: entry.chooseForMe.itemKind,
+    mode: entry.chooseForMe.mode,
+    validActionCodes: [entry.chooseForMe.actionCode],
   };
 }
 
@@ -727,9 +728,7 @@ export function createRunStepRuntimeTextHelpers(deps: RunStepRuntimeTextHelpersD
         .filter(Boolean)
         .map((line) => normalizeForDedupe(line))
         .filter(Boolean);
-    const isBulletConsistencyStep = ["strategy", "productsservices", "rulesofthegame"].includes(
-      String(contractStepId || "").trim()
-    );
+    const isBulletConsistencyStep = hasGroupedCompareListSemantics(contractStepId);
     const extractStructuredListItems = (value: string): string[] => {
       const lines = String(value || "")
         .replace(/\r/g, "\n")

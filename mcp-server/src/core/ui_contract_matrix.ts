@@ -1,6 +1,6 @@
 import { ACTIONCODE_REGISTRY } from "./actioncode_registry.js";
-import { CHOOSE_FOR_ME_CONTRACTS } from "./choose_for_me_contract.js";
 import { buildUiContractId } from "./ui_contract_id.js";
+import { CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES } from "../steps/step_registry.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -20,12 +20,12 @@ export type UiMenuTransition = {
 };
 
 const CHOOSE_FOR_ME_TRANSITIONS = Object.fromEntries(
-  CHOOSE_FOR_ME_CONTRACTS.map((contract) => [
-    contract.actionCode,
+  CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES.map((entry) => [
+    entry.chooseForMe.actionCode,
     {
-      step_id: contract.stepId,
-      from_menu_ids: [contract.menuId],
-      to_menu_id: contract.nextMenuId,
+      step_id: entry.stepId,
+      from_menu_ids: [entry.chooseForMe.menuId],
+      to_menu_id: entry.chooseForMe.nextMenuId,
     } satisfies UiMenuTransition,
   ])
 ) as Record<string, UiMenuTransition>;

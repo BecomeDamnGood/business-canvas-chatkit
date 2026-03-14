@@ -2,8 +2,11 @@ import { z } from "zod";
 
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import { getFinalFieldForStepId, type CanvasState } from "../core/state.js";
-import { chooseForMeContractForStep, type ChooseForMeField } from "../core/choose_for_me_contract.js";
 import { buildUiContractId } from "../core/ui_contract_id.js";
+import {
+  getChooseForMeRegistryEntry,
+  type StepRegistryChooseForMeField as ChooseForMeField,
+} from "../steps/step_registry.js";
 import {
   type RunStepContext,
   type RunStepRouteRegistryRequest,
@@ -295,6 +298,39 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     );
   }
 
+  function buildInvalidInteractiveStatePayload(params: {
+    state: CanvasState;
+    stepId: string;
+    activeSpecialist: string;
+    message: string;
+    retryAction: string;
+    details: Record<string, unknown>;
+  }): TResponse {
+    return deps.attachRegistryPayload(
+      {
+        ok: false as const,
+        tool: "run_step" as const,
+        current_step_id: String(params.stepId),
+        active_specialist: String(params.activeSpecialist || ""),
+        text: "",
+        prompt: "",
+        specialist: {},
+        state: params.state,
+        error: {
+          type: "invalid_state",
+          category: "contract",
+          severity: "fatal",
+          retryable: false,
+          message: params.message,
+          retry_action: params.retryAction,
+          required_action: params.retryAction,
+          details: params.details,
+        },
+      },
+      {}
+    );
+  }
+
   async function finalizeRouteTurnIntent(
     context: RouteRegistryContext,
     intent: RouteTurnIntent
@@ -374,19 +410,6 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
     );
   }
 
-  async function rebuildCurrentRouteScreen(
-    context: RouteRegistryContext,
-    state: CanvasState,
-    previousSpecialist: Record<string, unknown>
-  ): Promise<TResponse> {
-    return finalizeRouteTurnIntent(context, {
-      state,
-      specialist: asRecord((state as Record<string, unknown>).last_specialist_result || {}),
-      previousSpecialist,
-      responseUiFlags: context.responseUiFlags,
-    });
-  }
-
   function createSyntheticChooseForMeHandler(config: ChooseForMeConfig): SpecialRouteHandler<TResponse> {
     return {
       id: config.routeId,
@@ -394,8 +417,8 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         String((context.state as Record<string, unknown>).current_step || "") === config.stepId &&
         context.userMessage === config.token,
       handle: async (context) => {
-        const contract = chooseForMeContractForStep(config.stepId);
-        if (!contract) return null;
+        const chooseForMeEntry = getChooseForMeRegistryEntry(config.stepId);
+        if (!chooseForMeEntry) return null;
         const stateWithUi = await deps.ensureUiStrings(context.state, context.userMessage);
         const previousSpecialist = asRecord(
           (stateWithUi as Record<string, unknown>).last_specialist_result || {}
@@ -403,17 +426,44 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const currentMenuId = currentMenuIdForStep(stateWithUi, config.stepId);
         const suggestionState = suggestionStateForStep(stateWithUi, config.stepId);
         if (
-          currentMenuId !== contract.menuId ||
+          currentMenuId !== chooseForMeEntry.chooseForMe.menuId ||
           !suggestionState ||
-          !suggestionState.valid_for_action_codes.includes(contract.actionCode) ||
+          !suggestionState.valid_for_action_codes.includes(chooseForMeEntry.chooseForMe.actionCode) ||
           suggestionState.items.length === 0
         ) {
-          return rebuildCurrentRouteScreen(context, stateWithUi, previousSpecialist);
+          return buildInvalidInteractiveStatePayload({
+            state: stateWithUi,
+            stepId: config.stepId,
+            activeSpecialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
+            message: "Choose-for-me requires a valid suggestion snapshot for the current menu.",
+            retryAction: chooseForMeEntry.chooseForMe.actionCode,
+            details: {
+              reason: "missing_or_mismatched_suggestion_snapshot",
+              current_menu_id: currentMenuId,
+              expected_menu_id: chooseForMeEntry.chooseForMe.menuId,
+              expected_action_code: chooseForMeEntry.chooseForMe.actionCode,
+              has_suggestion_state: Boolean(suggestionState),
+              valid_for_action_codes: suggestionState?.valid_for_action_codes || [],
+              item_count: suggestionState?.items.length || 0,
+            },
+          });
         }
 
         const pickedSuggestion = String(suggestionState.items[0] || "").trim();
         if (!pickedSuggestion) {
-          return rebuildCurrentRouteScreen(context, stateWithUi, previousSpecialist);
+          return buildInvalidInteractiveStatePayload({
+            state: stateWithUi,
+            stepId: config.stepId,
+            activeSpecialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
+            message: "Choose-for-me found an empty suggestion in the current snapshot.",
+            retryAction: chooseForMeEntry.chooseForMe.actionCode,
+            details: {
+              reason: "empty_first_suggestion",
+              current_menu_id: currentMenuId,
+              expected_menu_id: chooseForMeEntry.chooseForMe.menuId,
+              expected_action_code: chooseForMeEntry.chooseForMe.actionCode,
+            },
+          });
         }
 
         const specialist: Record<string, unknown> = {

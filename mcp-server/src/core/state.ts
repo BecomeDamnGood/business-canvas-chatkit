@@ -18,17 +18,9 @@ export function isCanonicalStepId(x: unknown): x is CanonicalStepId {
  * Keep this map as the single owner for step/final routing.
  */
 export const STEP_FINAL_FIELD_BY_STEP_ID = {
-  step_0: STEP_REGISTRY_BY_STEP_ID.step_0.finalField,
-  dream: STEP_REGISTRY_BY_STEP_ID.dream.finalField,
-  purpose: STEP_REGISTRY_BY_STEP_ID.purpose.finalField,
-  bigwhy: STEP_REGISTRY_BY_STEP_ID.bigwhy.finalField,
-  role: STEP_REGISTRY_BY_STEP_ID.role.finalField,
-  entity: STEP_REGISTRY_BY_STEP_ID.entity.finalField,
-  strategy: STEP_REGISTRY_BY_STEP_ID.strategy.finalField,
-  targetgroup: STEP_REGISTRY_BY_STEP_ID.targetgroup.finalField,
-  productsservices: STEP_REGISTRY_BY_STEP_ID.productsservices.finalField,
-  rulesofthegame: STEP_REGISTRY_BY_STEP_ID.rulesofthegame.finalField,
-  presentation: STEP_REGISTRY_BY_STEP_ID.presentation.finalField,
+  ...(Object.fromEntries(
+    STEP_REGISTRY_ORDER.map((stepId) => [stepId, STEP_REGISTRY_BY_STEP_ID[stepId].finalField])
+  ) as Record<CanonicalStepId, string>),
 } as const satisfies Record<CanonicalStepId, string>;
 
 export type StepFinalField = (typeof STEP_FINAL_FIELD_BY_STEP_ID)[CanonicalStepId];

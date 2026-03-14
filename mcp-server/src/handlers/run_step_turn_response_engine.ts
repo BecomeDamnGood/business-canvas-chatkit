@@ -1,9 +1,9 @@
 import type { CanvasState } from "../core/state.js";
-import { chooseForMeContractForStep } from "../core/choose_for_me_contract.js";
 import type { TurnPolicyRenderResult } from "../core/turn_policy_renderer.js";
 import type { RenderedAction } from "../contracts/ui_actions.js";
 import type { UiI18nTelemetryCounters } from "./run_step_i18n_runtime.js";
 import type { UiContractMeta, WordingChoiceUiPayload } from "./run_step_ui_payload.js";
+import { getChooseForMeRegistryEntry } from "../steps/step_registry.js";
 
 type TurnResponseEngineDeps<TPayload> = {
   renderFreeTextTurnPolicy: (params: {
@@ -158,10 +158,10 @@ export function createTurnResponseEngine<TPayload>(
         valid_for_action_codes: [...suggestionState.valid_for_action_codes],
       };
     }
-    const chooseForMeContract = chooseForMeContractForStep(stepId);
-    if (chooseForMeContract) {
+    const chooseForMeEntry = getChooseForMeRegistryEntry(stepId);
+    if (chooseForMeEntry) {
       const currentMenuId = menuIdFromContractId(contractId);
-      if (currentMenuId !== chooseForMeContract.menuId) {
+      if (currentMenuId !== chooseForMeEntry.chooseForMe.menuId) {
         delete currentMap[stepId];
       }
     }

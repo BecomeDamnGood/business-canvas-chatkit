@@ -1,11 +1,4 @@
-const SINGLE_VALUE_PICKER_STEP_IDS = new Set([
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "targetgroup",
-]);
+import { isSingleValueWordingStep } from "../steps/step_registry.js";
 
 function normalizedMode(modeRaw: unknown): "text" | "list" {
   return String(modeRaw || "").trim() === "list" ? "list" : "text";
@@ -23,7 +16,7 @@ export function isPickerPresentation(presentationRaw: unknown): boolean {
 }
 
 export function isSingleValueTextPickerStep(stepId: string, modeRaw: unknown): boolean {
-  return normalizedMode(modeRaw) === "text" && SINGLE_VALUE_PICKER_STEP_IDS.has(String(stepId || "").trim());
+  return normalizedMode(modeRaw) === "text" && isSingleValueWordingStep(stepId);
 }
 
 export function isSingleValueTextPickerState(params: {

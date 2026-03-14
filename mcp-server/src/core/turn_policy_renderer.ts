@@ -31,6 +31,10 @@ import {
 } from "../steps/rulesofthegame_runtime_policy.js";
 import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
 import { isStructuredPresentationRecap } from "../handlers/run_step_presentation_recap.js";
+import {
+  hasGroupedCompareListSemantics,
+  isSingleValueWordingStep,
+} from "../steps/step_registry.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -235,18 +239,13 @@ function isConfirmActionCode(actionCode: string): boolean {
   return upper.includes("_CONFIRM") || upper.includes("FINAL_CONTINUE");
 }
 
-const SINGLE_VALUE_CONFIRM_VISIBILITY_STEPS = new Set([
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "targetgroup",
-]);
+function shouldEnforceSingleValueConfirmVisibility(stepId: string): boolean {
+  return isSingleValueWordingStep(stepId) && String(stepId || "").trim() !== "dream";
+}
 
-const SINGLE_VALUE_STRUCTURED_CONTENT_STEPS = new Set([
-  ...SINGLE_VALUE_CONFIRM_VISIBILITY_STEPS,
-  "dream",
-]);
+function hasSingleValueStructuredContent(stepId: string): boolean {
+  return isSingleValueWordingStep(stepId);
+}
 
 const PURPOSE_INTRO_VIDEO_MENU_IDS = new Set([
   "PURPOSE_MENU_INTRO",
@@ -623,7 +622,7 @@ function buildSingleValueUiContent(params: {
   const { stepId, state, specialist, message, canonicalValue } = params;
   const canonicalText = String(canonicalValue || "").trim();
   if (!canonicalText) return undefined;
-  if (!SINGLE_VALUE_STRUCTURED_CONTENT_STEPS.has(stepId)) return undefined;
+  if (!hasSingleValueStructuredContent(stepId)) return undefined;
   if (isDreamBuilderSingleValueContext(stepId, state, specialist)) return undefined;
   const heading = String(params.headingOverride || "").trim() || singleValueConfirmHeading(stepId, state);
   const feedbackReasonText = String(params.feedbackReasonText || "").trim();
@@ -1433,7 +1432,7 @@ function buildKnownFactsRecap(state: CanvasState): string {
     if (!value) continue;
     const label = offTopicStepLabel(stepId, state);
     if (!label) continue;
-    if (stepId === "strategy" || stepId === "productsservices" || stepId === "rulesofthegame") {
+    if (hasGroupedCompareListSemantics(stepId)) {
       const recapItems = recapListItemsForStep(stepId, state, value);
       if (recapItems.length > 0) {
         blocks.push(`${label}:\n${recapItems.map((item) => `• ${item}`).join("\n")}`);
@@ -1581,7 +1580,7 @@ function resolveMenuContract(params: {
     : defaultMenu;
   if (
     status === "no_output" &&
-    SINGLE_VALUE_CONFIRM_VISIBILITY_STEPS.has(stepId) &&
+    shouldEnforceSingleValueConfirmVisibility(stepId) &&
     menuRequiresKnownOutput(menuId)
   ) {
     menuId = menuIsValidForStep(defaultMenu) ? defaultMenu : "";
@@ -1631,14 +1630,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const statusSource = isOfftopic ? prev : specialist;
   const { status, confirmEligible, recapBody, statementCount } = computeStatus(stepId, state, statusSource, prev);
   const candidateText = extractCandidate(stepId, statusSource, prev);
-  const statementOfftopicSteps = new Set(["dream", "purpose", "bigwhy", "role", "entity", "targetgroup", "presentation"]);
+  const allowStatementOfftopicPromotion =
+    stepId !== "step_0" && !hasGroupedCompareListSemantics(stepId);
   const allowOfftopicPromotion = !isConfirmGateAcceptedOnlyV1Enabled();
   const promoteIncompleteToValidForOfftopic =
     allowOfftopicPromotion &&
     isOfftopic &&
     status === "incomplete_output" &&
     !confirmEligible &&
-    statementOfftopicSteps.has(stepId) &&
+    allowStatementOfftopicPromotion &&
     Boolean(candidateText);
   const effectiveStatus: TurnOutputStatus = promoteIncompleteToValidForOfftopic ? "valid_output" : status;
   let effectiveConfirmEligible = promoteIncompleteToValidForOfftopic ? true : confirmEligible;
@@ -1870,7 +1870,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   let safeLabels = resolved.labels;
   let safeLabelKeys = resolved.labelKeys;
   const canonicalAcceptedValue = acceptedCanonicalValueForStep(stepId, state);
-  const shouldEnforceConfirmVisibility = SINGLE_VALUE_CONFIRM_VISIBILITY_STEPS.has(stepId);
+  const shouldEnforceConfirmVisibility = shouldEnforceSingleValueConfirmVisibility(stepId);
   if (shouldEnforceConfirmVisibility && safeActionCodes.some((code) => isConfirmActionCode(code)) && !canonicalAcceptedValue) {
     const retainedIndices = safeActionCodes
       .map((code, idx) => (isConfirmActionCode(code) ? -1 : idx))
@@ -1884,6 +1884,15 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     String((specialistForDisplay as any).wording_choice_presentation || "").trim() === "canonical"
       ? "canonical"
       : "picker";
+  const currentValueRefinementPending =
+    String((specialistForDisplay as any).current_value_refinement_pending || "").trim() === "true" &&
+    String((specialistForDisplay as any).current_value_refinement_target_field || "").trim() === stepId;
+  const currentValueRefinementCanonicalValue =
+    currentValueRefinementPending
+      ? String(
+          (specialistForDisplay as any)[stepId] || (specialistForDisplay as any).refined_formulation || ""
+        ).trim()
+      : "";
   const showStepIntroChrome =
     stepId === "purpose"
       ? isSemanticPurposeIntroVisibleState({
@@ -1952,6 +1961,22 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
           rawReason: rawFeedbackReasonForDisplay,
           resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
         });
+  const rawCurrentValueRefinementFeedbackForDisplay =
+    currentValueRefinementPending
+      ? String((specialistForDisplay as any).current_value_refinement_feedback_text || "").trim()
+      : "";
+  const currentValueRefinementFeedbackForDisplay =
+    currentValueRefinementPending
+      ? formatCompareFeedbackForDisplay({
+          stepId,
+          rawReason: rawCurrentValueRefinementFeedbackForDisplay,
+          resolveString: (key, fallback = "") => uiStringFromState(state, key, uiDefaultString(key, fallback)),
+        })
+      : "";
+  const effectiveFeedbackReasonForDisplay =
+    currentValueRefinementFeedbackForDisplay || feedbackReasonForDisplay;
+  const effectiveRawFeedbackReasonForDisplay =
+    rawCurrentValueRefinementFeedbackForDisplay || rawFeedbackReasonForDisplay;
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
     wordingPending &&
@@ -1975,8 +2000,16 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       message: messageForDisplay,
       heading: singleValueConfirmHeading(stepId, state),
       canonicalValue: pendingCanonicalValue,
-      feedbackReasonText: feedbackReasonForDisplay,
-      rawFeedbackReasonText: rawFeedbackReasonForDisplay,
+      feedbackReasonText: effectiveFeedbackReasonForDisplay,
+      rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
+    });
+  } else if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
+    messageForDisplay = singleValueSupportText({
+      message: messageForDisplay,
+      heading: singleValueConfirmHeading(stepId, state),
+      canonicalValue: currentValueRefinementCanonicalValue,
+      feedbackReasonText: effectiveFeedbackReasonForDisplay,
+      rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
     });
   }
   const useSingleValueConfirmSsot =
@@ -1985,6 +2018,7 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     effectiveStatus === "valid_output" &&
     !isOfftopic &&
     !wordingPending &&
+    !currentValueRefinementPending &&
     !recapRequested;
   if (useSingleValueConfirmSsot) {
     const canonicalMessage = singleValueConfirmCanonicalMessage(stepId, state, canonicalAcceptedValue);
@@ -2001,11 +2035,14 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
   const singleValueUiCanonicalValue = (() => {
     if (recapRequested) return "";
     if (isOfftopic) return "";
+    if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
+      return currentValueRefinementCanonicalValue;
+    }
     if (
       !wordingPending &&
       effectiveStatus === "valid_output" &&
       canonicalAcceptedValue &&
-      SINGLE_VALUE_STRUCTURED_CONTENT_STEPS.has(stepId)
+      hasSingleValueStructuredContent(stepId)
     ) {
       return canonicalAcceptedValue;
     }
@@ -2017,8 +2054,8 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     specialist: specialistForDisplay,
     message: messageForDisplay,
     canonicalValue: singleValueUiCanonicalValue,
-    feedbackReasonText: feedbackReasonForDisplay,
-    rawFeedbackReasonText: rawFeedbackReasonForDisplay,
+    feedbackReasonText: effectiveFeedbackReasonForDisplay,
+    rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
   });
 
   const {

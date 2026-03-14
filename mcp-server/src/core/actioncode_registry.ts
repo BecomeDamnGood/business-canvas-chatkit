@@ -1,4 +1,7 @@
-import { CHOOSE_FOR_ME_CONTRACTS, chooseForMeActionCodeForStep } from "./choose_for_me_contract.js";
+import {
+  CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES,
+  getChooseForMeActionCodeForStep,
+} from "../steps/step_registry.js";
 
 export type ActionCodeEntry = {
   route: string;
@@ -18,9 +21,9 @@ export const ACTIONCODE_REGISTRY_VERSION =
   (process.env.ACTIONCODE_REGISTRY_VERSION || "").trim() || "dev";
 
 const CHOOSE_FOR_ME_ACTIONS = Object.fromEntries(
-  CHOOSE_FOR_ME_CONTRACTS.map((contract) => [
-    contract.actionCode,
-    { route: contract.routeToken, step: contract.stepId },
+  CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES.map((entry) => [
+    entry.chooseForMe.actionCode,
+    { route: entry.chooseForMe.routeToken, step: entry.stepId },
   ])
 ) as Record<string, ActionCodeEntry>;
 
@@ -156,7 +159,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_DREAM_WHY_START_EXERCISE",
     ],
     DREAM_MENU_SUGGESTIONS: [
-      chooseForMeActionCodeForStep("dream"),
+      getChooseForMeActionCodeForStep("dream"),
       "ACTION_DREAM_SUGGESTIONS_START_EXERCISE",
     ],
     DREAM_MENU_REFINE: [
@@ -194,7 +197,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ],
     PURPOSE_MENU_EXAMPLES: [
       "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS",
-      chooseForMeActionCodeForStep("purpose"),
+      getChooseForMeActionCodeForStep("purpose"),
     ],
     PURPOSE_MENU_AFTER_CHOOSE: [
       "ACTION_PURPOSE_EXAMPLES_ASK_3_QUESTIONS",
@@ -220,7 +223,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE",
     ],
     BIGWHY_MENU_FROM_GIVE: [
-      chooseForMeActionCodeForStep("bigwhy"),
+      getChooseForMeActionCodeForStep("bigwhy"),
     ],
     BIGWHY_MENU_REFINE: [
       "ACTION_BIGWHY_REFINE_CONFIRM",
@@ -247,14 +250,14 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_ROLE_ESCAPE_CONTINUE",
       "ACTION_ROLE_ESCAPE_FINISH_LATER",
     ],
-    ROLE_MENU_EXAMPLES: [chooseForMeActionCodeForStep("role")],
+    ROLE_MENU_EXAMPLES: [getChooseForMeActionCodeForStep("role")],
 
     // Entity
     ENTITY_MENU_INTRO: [
       "ACTION_ENTITY_INTRO_FORMULATE",
       "ACTION_ENTITY_INTRO_EXPLAIN_MORE",
     ],
-    ENTITY_MENU_SUGGESTIONS: [chooseForMeActionCodeForStep("entity")],
+    ENTITY_MENU_SUGGESTIONS: [getChooseForMeActionCodeForStep("entity")],
     ENTITY_MENU_EXAMPLE: [
       "ACTION_ENTITY_EXAMPLE_CONFIRM",
       "ACTION_ENTITY_EXAMPLE_REFINE",
@@ -272,7 +275,7 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_STRATEGY_ASK_3_QUESTIONS",
       "ACTION_STRATEGY_ASK_GIVE_EXAMPLES",
     ],
-    STRATEGY_MENU_EXAMPLES: [chooseForMeActionCodeForStep("strategy")],
+    STRATEGY_MENU_EXAMPLES: [getChooseForMeActionCodeForStep("strategy")],
     STRATEGY_MENU_REFINE: ["ACTION_STRATEGY_REFINE_EXPLAIN_MORE"],
     STRATEGY_MENU_QUESTIONS: ["ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE"],
     STRATEGY_MENU_CONFIRM: [

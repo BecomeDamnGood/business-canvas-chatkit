@@ -1,6 +1,6 @@
 import type { LLMUsage } from "../core/llm.js";
 import type { CanvasState } from "../core/state.js";
-import { chooseForMeRouteTokenForStep } from "../core/choose_for_me_contract.js";
+import { getChooseForMeRouteTokenForStep } from "../steps/step_registry.js";
 
 export function shouldLogLocalDevDiagnostics(): boolean {
   return process.env.LOCAL_DEV === "1" || process.env.MENU_POLICY_DEBUG === "1";
@@ -55,13 +55,13 @@ export const DREAM_START_EXERCISE_ACTION_CODES = new Set<string>([
   "ACTION_DREAM_SUGGESTIONS_START_EXERCISE",
   "ACTION_DREAM_REFINE_START_EXERCISE",
 ]);
-export const DREAM_PICK_ONE_ROUTE_TOKEN = chooseForMeRouteTokenForStep("dream");
-export const PURPOSE_CHOOSE_FOR_ME_ROUTE_TOKEN = chooseForMeRouteTokenForStep("purpose");
-export const BIGWHY_CHOOSE_FOR_ME_ROUTE_TOKEN = chooseForMeRouteTokenForStep("bigwhy");
-export const ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN = chooseForMeRouteTokenForStep("role");
-export const ENTITY_CHOOSE_FOR_ME_ROUTE_TOKEN = chooseForMeRouteTokenForStep("entity");
+export const DREAM_PICK_ONE_ROUTE_TOKEN = getChooseForMeRouteTokenForStep("dream");
+export const PURPOSE_CHOOSE_FOR_ME_ROUTE_TOKEN = getChooseForMeRouteTokenForStep("purpose");
+export const BIGWHY_CHOOSE_FOR_ME_ROUTE_TOKEN = getChooseForMeRouteTokenForStep("bigwhy");
+export const ROLE_CHOOSE_FOR_ME_ROUTE_TOKEN = getChooseForMeRouteTokenForStep("role");
+export const ENTITY_CHOOSE_FOR_ME_ROUTE_TOKEN = getChooseForMeRouteTokenForStep("entity");
 export const DREAM_FORCE_REFINE_ROUTE_PREFIX = "__ROUTE__DREAM_FORCE_REFINE__";
-export const STRATEGY_CHOOSE_FOR_ME_ROUTE_TOKEN = chooseForMeRouteTokenForStep("strategy");
+export const STRATEGY_CHOOSE_FOR_ME_ROUTE_TOKEN = getChooseForMeRouteTokenForStep("strategy");
 export const STRATEGY_CONSOLIDATE_ROUTE_TOKEN = "__ROUTE__STRATEGY_CONSOLIDATE__";
 export const PRESENTATION_MAKE_ROUTE_TOKEN = "__ROUTE__PRESENTATION_MAKE__";
 export const SWITCH_TO_SELF_DREAM_TOKEN = "__SWITCH_TO_SELF_DREAM__";

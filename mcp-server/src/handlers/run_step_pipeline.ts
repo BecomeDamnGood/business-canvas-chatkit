@@ -33,6 +33,10 @@ import {
   type BusinessListTurnResolution,
 } from "./run_step_business_list_turn.js";
 import { isSingleValueFeedbackStep } from "../core/feedback_policy.js";
+import {
+  isInteractiveSupportStep,
+  supportsAutoSuggest,
+} from "../steps/step_registry.js";
 type RunPostSpecialistPipelineParams = RunStepPostSpecialistPipelineRequest;
 
 type RunStepPipelineFlatPorts<TPayload> =
@@ -63,18 +67,6 @@ function flattenRunStepPipelinePorts<TPayload>(
     ...ports.i18n,
   };
 }
-
-const AUTOSUGGEST_STEP_IDS = new Set<string>([
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "strategy",
-  "targetgroup",
-  "productsservices",
-  "rulesofthegame",
-]);
 
 function isNonContributingWordingIntent(intentRaw: string): boolean {
   const intent = String(intentRaw || "").trim();
@@ -228,9 +220,33 @@ function stateWithCurrentValueFeedbackContext(
       pending_suggestion_seed_source: "current_value",
       pending_suggestion_feedback_text: feedbackText,
       pending_suggestion_presentation_mode: "canonical",
+      current_value_refinement_pending: "true",
+      current_value_refinement_target_field: stepId,
+      current_value_refinement_feedback_text: "",
+      current_value_refinement_anchor_value: currentValue,
       refined_formulation: currentValue,
       [stepId]: currentValue,
     },
+  };
+}
+
+function withCurrentValueRefinementFields(params: {
+  specialistResult: Record<string, unknown>;
+  stepId: string;
+  anchorValue: string;
+}): Record<string, unknown> {
+  const { specialistResult, stepId, anchorValue } = params;
+  const targetValue =
+    String((specialistResult as Record<string, unknown>)[stepId] || "").trim() ||
+    String((specialistResult as Record<string, unknown>).refined_formulation || "").trim();
+  return {
+    ...clearPendingWordingChoiceFields(specialistResult),
+    current_value_refinement_pending: "true",
+    current_value_refinement_target_field: stepId,
+    current_value_refinement_feedback_text: String((specialistResult as Record<string, unknown>).feedback_reason_text || "").trim(),
+    current_value_refinement_anchor_value: anchorValue,
+    ...(targetValue ? { [stepId]: targetValue } : {}),
+    ...(targetValue ? { refined_formulation: targetValue } : {}),
   };
 }
 
@@ -253,7 +269,7 @@ function planAutoSuggest(params: {
   if (!stepId || stepId === params.step0Id || stepId === "presentation") {
     return { eligible: false, stepId, forceDreamSpecialist: false };
   }
-  if (!AUTOSUGGEST_STEP_IDS.has(stepId)) {
+  if (!supportsAutoSuggest(stepId) || !isInteractiveSupportStep(stepId)) {
     return { eligible: false, stepId, forceDreamSpecialist: false };
   }
   if (String(params.actionCodeRaw || "").trim()) {
@@ -303,6 +319,10 @@ function clearPendingWordingChoiceFields(specialistResult: Record<string, unknow
     pending_suggestion_seed_source: "",
     pending_suggestion_feedback_text: "",
     pending_suggestion_presentation_mode: "",
+    current_value_refinement_pending: "false",
+    current_value_refinement_target_field: "",
+    current_value_refinement_feedback_text: "",
+    current_value_refinement_anchor_value: "",
   };
 }
 
@@ -814,6 +834,13 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       previousSpecialist: asRecord(asStateRecord(state).last_specialist_result),
       state,
     });
+    if (submittedTextIntent === "feedback_on_current_value" && currentStepId) {
+      specialistResult = withCurrentValueRefinementFields({
+        specialistResult: asRecord(specialistResult),
+        stepId: currentStepId,
+        anchorValue: currentValueForFeedback,
+      });
+    }
     if (currentStepIdForOfftopic === deps.step0Id) {
       const sourceActionStep0 = String(specialistResult.action || "").trim().toUpperCase();
       let step0TurnIntent: "confirm_start" | "change_name" | "other" = "other";

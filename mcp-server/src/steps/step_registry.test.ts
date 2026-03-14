@@ -1,14 +1,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { CHOOSE_FOR_ME_CONTRACTS } from "../core/choose_for_me_contract.js";
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { NEXT_MENU_BY_ACTIONCODE } from "../core/ui_contract_matrix.js";
 import { CANONICAL_STEPS, STEP_FINAL_FIELD_BY_STEP_ID } from "../core/state.js";
-import { STEP_REGISTRY_BY_STEP_ID, STEP_REGISTRY_ORDER } from "./step_registry.js";
+import {
+  CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES,
+  STEP_REGISTRY_BY_STEP_ID,
+  STEP_REGISTRY_ORDER,
+} from "./step_registry.js";
 
 test("state canonical steps are sourced from the step registry order", () => {
   assert.deepEqual(CANONICAL_STEPS, STEP_REGISTRY_ORDER);
+});
+
+test("step registry order indexes and families stay internally consistent", () => {
+  for (const [index, stepId] of STEP_REGISTRY_ORDER.entries()) {
+    const entry = STEP_REGISTRY_BY_STEP_ID[stepId];
+    assert.equal(entry.orderIndex, index, `wrong orderIndex for ${stepId}`);
+    if (stepId === "step_0" || stepId === "presentation") {
+      assert.equal(entry.supportFamily, "none", `special flow ${stepId} must not be interactive support`);
+      assert.equal(entry.wordingFamily, "none", `special flow ${stepId} must not be in wording family`);
+      continue;
+    }
+    assert.equal(entry.supportFamily, "interactive_step", `wrong support family for ${stepId}`);
+    if (entry.stepKind === "list_value") {
+      assert.equal(entry.wordingFamily, "grouped_list", `wrong wording family for ${stepId}`);
+    } else {
+      assert.equal(entry.wordingFamily, "single_value", `wrong wording family for ${stepId}`);
+    }
+  }
 });
 
 test("state final field map stays aligned with the step registry", () => {
@@ -18,23 +39,26 @@ test("state final field map stays aligned with the step registry", () => {
 });
 
 test("choose-for-me contracts stay aligned with action registry and UI transitions", () => {
-  for (const contract of CHOOSE_FOR_ME_CONTRACTS) {
-    const action = ACTIONCODE_REGISTRY.actions[contract.actionCode];
-    assert.ok(action, `missing action registry entry for ${contract.actionCode}`);
-    assert.equal(action.step, contract.stepId, `wrong action step for ${contract.actionCode}`);
+  for (const entry of CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES) {
+    const { stepId } = entry;
+    const { actionCode, menuId, nextMenuId } = entry.chooseForMe;
+    const action = ACTIONCODE_REGISTRY.actions[actionCode];
+    assert.ok(action, `missing action registry entry for ${actionCode}`);
+    assert.equal(action.step, stepId, `wrong action step for ${actionCode}`);
 
-    const menuActions = ACTIONCODE_REGISTRY.menus[contract.menuId] || [];
+    const menuActions = ACTIONCODE_REGISTRY.menus[menuId] || [];
     assert.ok(
-      menuActions.includes(contract.actionCode),
-      `menu ${contract.menuId} must include ${contract.actionCode}`
+      menuActions.includes(actionCode),
+      `menu ${menuId} must include ${actionCode}`
     );
 
-    const transition = NEXT_MENU_BY_ACTIONCODE[contract.actionCode];
-    assert.ok(transition, `missing UI transition for ${contract.actionCode}`);
-    assert.equal(transition.step_id, contract.stepId, `wrong transition step for ${contract.actionCode}`);
+    const transition = NEXT_MENU_BY_ACTIONCODE[actionCode];
+    assert.ok(transition, `missing UI transition for ${actionCode}`);
+    assert.equal(transition.step_id, stepId, `wrong transition step for ${actionCode}`);
     assert.ok(
-      Array.isArray(transition.from_menu_ids) && transition.from_menu_ids.includes(contract.menuId),
-      `transition ${contract.actionCode} must allow from menu ${contract.menuId}`
+      Array.isArray(transition.from_menu_ids) && transition.from_menu_ids.includes(menuId),
+      `transition ${actionCode} must allow from menu ${menuId}`
     );
+    assert.equal(transition.to_menu_id, nextMenuId, `wrong next menu for ${actionCode}`);
   }
 });
