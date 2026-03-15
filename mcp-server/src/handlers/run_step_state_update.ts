@@ -1,4 +1,4 @@
-import type { BoolString, CanvasState, ProvisionalSource } from "../core/state.js";
+import { normalizeDreamBuilderStatements, type BoolString, type CanvasState, type ProvisionalSource } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import { canonicalPresentationRecapForState } from "./run_step_presentation_recap.js";
 import { isValidStepValueForStorage } from "./run_step_value_shape.js";
@@ -330,9 +330,7 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       decision.specialist_to_call === deps.dreamExplainerSpecialist &&
       Array.isArray(specialistResult?.statements)
     ) {
-      const canonicalStatements = (specialistResult.statements as unknown[])
-        .map((line) => String(line || "").trim())
-        .filter(Boolean);
+      const canonicalStatements = normalizeDreamBuilderStatements(specialistResult.statements);
       (nextState as any).dream_builder_statements = canonicalStatements;
     }
     if (
@@ -347,7 +345,7 @@ export function createRunStepStateUpdateHelpers(deps: RunStepStateUpdateDeps) {
       Array.isArray(specialistResult.statements) &&
       specialistResult.statements.length >= 20
     ) {
-      (nextState as any).dream_scoring_statements = specialistResult.statements;
+      (nextState as any).dream_scoring_statements = normalizeDreamBuilderStatements(specialistResult.statements);
     }
     if (String((nextState as any).current_step || "") === deps.dreamStepId) {
       if (decision.specialist_to_call === deps.dreamSpecialist) {

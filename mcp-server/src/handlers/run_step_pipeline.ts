@@ -1,7 +1,13 @@
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import { getFinalFieldForStepId, type CanvasState } from "../core/state.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
-import { applyStepStuckSupportAfterSpecialist } from "../core/stuck_support.js";
+import {
+  applyStepStuckSupportAfterSpecialist,
+  currentStepStuckCount,
+  currentStepSupportMode,
+  readStepSupportState,
+  resolveSpecialistSupportFamily,
+} from "../core/stuck_support.js";
 import {
   buildUiContractId,
   parseUiContractId,
@@ -158,6 +164,49 @@ function isAcceptedOutputSingleValueStep(stepId: string): boolean {
   return isSingleValueFeedbackStep(stepId);
 }
 
+async function resolveEffectiveStepSupportState(params: {
+  state: CanvasState;
+  stepId: string;
+  activeSpecialist: string;
+  specialistResult: Record<string, unknown>;
+  userMessage: string;
+  actionCodeRaw?: string;
+  model: string;
+  language?: string;
+  classifyStepStuckTurn?: (params: {
+    model: string;
+    stepId: string;
+    userMessage: string;
+    currentStepStuckCount?: number;
+    currentStepSupportMode?: string;
+    language?: string;
+  }) => Promise<{ is_stuck: boolean }>;
+}): Promise<"ok" | "stuck"> {
+  const baseState = readStepSupportState(params.specialistResult);
+  const stepId = String(params.stepId || "").trim();
+  const userMessage = String(params.userMessage || "").trim();
+  if (baseState === "stuck") return "stuck";
+  if (!stepId || !userMessage || String(params.actionCodeRaw || "").trim()) return baseState;
+  if (
+    resolveSpecialistSupportFamily({
+      stepId,
+      activeSpecialist: params.activeSpecialist,
+    }) !== "core_step"
+  ) {
+    return baseState;
+  }
+  if (!params.classifyStepStuckTurn) return baseState;
+  const classification = await params.classifyStepStuckTurn({
+    model: params.model,
+    stepId,
+    userMessage,
+    currentStepStuckCount: currentStepStuckCount(params.state, stepId),
+    currentStepSupportMode: currentStepSupportMode(params.state, stepId),
+    language: params.language,
+  });
+  return classification?.is_stuck ? "stuck" : baseState;
+}
+
 export async function shouldTreatTurnAsCurrentValueFeedback(params: {
   state: CanvasState;
   stepId: string;
@@ -208,18 +257,12 @@ function stateWithCurrentValueFeedbackContext(
     ...state,
     last_specialist_result: {
       ...last,
-      wording_choice_pending: "true",
-      wording_choice_mode: "text",
-      wording_choice_target_field: stepId,
-      wording_choice_user_raw: currentValue,
-      wording_choice_user_normalized: currentValue,
-      wording_choice_agent_current: currentValue,
-      wording_choice_presentation: "canonical",
       pending_suggestion_intent: "feedback_on_current_value",
       pending_suggestion_anchor: "current_value",
       pending_suggestion_seed_source: "current_value",
       pending_suggestion_feedback_text: feedbackText,
-      pending_suggestion_presentation_mode: "canonical",
+      pending_suggestion_presentation_mode: "",
+      feedback_mode: "refine_current",
       current_value_refinement_pending: "true",
       current_value_refinement_target_field: stepId,
       current_value_refinement_feedback_text: "",
@@ -245,6 +288,7 @@ function withCurrentValueRefinementFields(params: {
     current_value_refinement_target_field: stepId,
     current_value_refinement_feedback_text: String((specialistResult as Record<string, unknown>).feedback_reason_text || "").trim(),
     current_value_refinement_anchor_value: anchorValue,
+    feedback_mode: "refine_current",
     ...(targetValue ? { [stepId]: targetValue } : {}),
     ...(targetValue ? { refined_formulation: targetValue } : {}),
   };
@@ -314,6 +358,7 @@ function clearPendingWordingChoiceFields(specialistResult: Record<string, unknow
     wording_choice_compare_segments: [],
     wording_choice_user_variant_semantics: "",
     wording_choice_user_variant_stepworthy: "",
+    feedback_mode: "none",
     pending_suggestion_intent: "",
     pending_suggestion_anchor: "",
     pending_suggestion_seed_source: "",
@@ -909,6 +954,28 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       specialistResult,
       provisionalSource: provisionalSourceForMutation,
     });
+
+    const effectiveStepSupportState = await resolveEffectiveStepSupportState({
+      state: nextState,
+      stepId: String(decision1.current_step || ""),
+      activeSpecialist: String(nextState.active_specialist || decision1.specialist_to_call || ""),
+      specialistResult,
+      userMessage,
+      actionCodeRaw: params.actionCodeRaw,
+      model: params.model,
+      language: params.lang,
+      classifyStepStuckTurn: deps.classifyStepStuckTurn,
+    });
+    if (effectiveStepSupportState === "stuck" && readStepSupportState(specialistResult) !== "stuck") {
+      specialistResult = {
+        ...asRecord(specialistResult),
+        step_support_state: "stuck",
+      };
+      nextState = {
+        ...nextState,
+        last_specialist_result: specialistResult,
+      };
+    }
 
     applyStepStuckSupportAfterSpecialist({
       state: nextState,

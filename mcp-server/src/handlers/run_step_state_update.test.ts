@@ -373,3 +373,30 @@ test("applyStateUpdate preserves a structured edited presentation recap instead 
   assert.equal(String((next as any).provisional_by_step?.presentation || ""), editedRecap);
   assert.equal(String((next as any).last_specialist_result?.presentation_brief || ""), editedRecap);
 });
+
+test("applyPostSpecialistStateMutations dedupes DreamExplainer statements canonically", () => {
+  const helpers = buildHelpers();
+  const next = helpers.applyPostSpecialistStateMutations({
+    prevState: {
+      current_step: "dream",
+      dream_builder_statements: [
+        "Originele denkers zullen mismatches hebben met AI als het gaat om schoppen tegen bestaande denkbeelden, modellen en theorieën.",
+      ],
+      dream_scoring_statements: [],
+    } as any,
+    decision: { current_step: "dream", specialist_to_call: "DreamExplainer" } as any,
+    specialistResult: {
+      statements: [
+        "Originele denkers zullen mismatches hebben met AI als het gaat om schoppen tegen bestaande denkbeelden, modellen en theorieën.",
+        " Originele denkers zullen mismatches hebben met AI als het gaat om schoppen tegen bestaande denkbeelden, modellen en theorieën! ",
+        "Nieuwe mismatches ontstaan waar mens en model elkaar uitdagen.",
+      ],
+    } as any,
+    showSessionIntroUsed: "false",
+  });
+
+  assert.deepEqual((next as any).dream_builder_statements, [
+    "Originele denkers zullen mismatches hebben met AI als het gaat om schoppen tegen bestaande denkbeelden, modellen en theorieën.",
+    "Nieuwe mismatches ontstaan waar mens en model elkaar uitdagen.",
+  ]);
+});

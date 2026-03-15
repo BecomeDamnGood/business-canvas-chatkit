@@ -302,6 +302,14 @@ export type RunStepPipelineWordingPorts = {
     pendingUserVariant?: string;
     language?: string;
   }) => Promise<AcceptedOutputUserTurnClassification>;
+  classifyStepStuckTurn?: (params: {
+    model: string;
+    stepId: string;
+    userMessage: string;
+    currentStepStuckCount?: number;
+    currentStepSupportMode?: string;
+    language?: string;
+  }) => Promise<{ is_stuck: boolean }>;
   isWordingChoiceEligibleContext: (
     stepId: string,
     activeSpecialist: string,

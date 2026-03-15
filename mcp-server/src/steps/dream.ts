@@ -17,6 +17,7 @@ export const DreamZodSchema = z.object({
   refined_formulation: z.string(),
   dream: z.string(),
   feedback_reason_text: z.string(),
+  feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
   suggest_dreambuilder: z.enum(["true", "false"]),
   wants_recap: z.boolean(),
@@ -40,6 +41,7 @@ export const DreamJsonSchema = {
     "refined_formulation",
     "dream",
     "feedback_reason_text",
+    "feedback_mode",
     "step_support_state",
     "suggest_dreambuilder",
     "wants_recap",
@@ -54,6 +56,7 @@ export const DreamJsonSchema = {
     refined_formulation: { type: "string" },
     dream: { type: "string" },
     feedback_reason_text: { type: "string" },
+    feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
     suggest_dreambuilder: { type: "string", enum: ["true", "false"] },
     wants_recap: { type: "boolean" },
@@ -116,6 +119,7 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
   "refined_formulation": "string",
   "dream": "string",
   "feedback_reason_text": "string",
+  "feedback_mode": "none" | "affirm_input" | "compare_suggestion" | "refine_current",
   "step_support_state": "ok" | "stuck",
   "suggest_dreambuilder": "true" | "false",
   "wants_recap": false,
@@ -128,6 +132,11 @@ Return ONLY this JSON structure and ALWAYS include ALL fields:
 - Never output null. Use empty strings "".
 - Ask no more than one question per turn.
 - Do not output literal backslash-n. Use real line breaks inside strings.
+- feedback_mode is a hard semantic contract:
+  - "compare_suggestion" only when runtime should show "Your input / My suggestion"
+  - "affirm_input" when the user's Dream is already strong and you are only sharpening it
+  - "refine_current" when rewriting an already chosen current Dream after user feedback
+  - "none" for INTRO, ASK, ESCAPE, and normal valid confirms without a compare
 
 5) OUTPUT LANGUAGE (HARD)
 - Detect the language from USER_MESSAGE automatically. The user may write in any language (English, German, French, Spanish, Italian, Portuguese, or any other language). You must recognize the language and respond in the same language.

@@ -1,5 +1,5 @@
 import { __hasInjectedTestClient, callStrictJson, type LLMUsage } from "../core/llm.js";
-import type { CanvasState } from "../core/state.js";
+import { normalizeDreamBuilderStatements, type CanvasState } from "../core/state.js";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 
 import {
@@ -450,13 +450,13 @@ export async function callSpecialistStrict(
   if (specialist === DREAM_EXPLAINER_SPECIALIST) {
     const langExplicitExplainer = String((state as any).language ?? "").trim();
     const fromCanonical = Array.isArray((state as any).dream_builder_statements)
-      ? ((state as any).dream_builder_statements as string[])
+      ? normalizeDreamBuilderStatements((state as any).dream_builder_statements)
       : [];
     const fromLast = Array.isArray((state as any).last_specialist_result?.statements)
-      ? ((state as any).last_specialist_result.statements as string[])
+      ? normalizeDreamBuilderStatements((state as any).last_specialist_result.statements)
       : [];
     const fromScoring = Array.isArray((state as any).dream_scoring_statements)
-      ? ((state as any).dream_scoring_statements as string[])
+      ? normalizeDreamBuilderStatements((state as any).dream_scoring_statements)
       : [];
     const previousStatements =
       fromCanonical.length > 0

@@ -1700,6 +1700,8 @@ test("single-value current-value refinement uses its own state without wording-c
       message: [
         "Ik heb je formulering compacter gemaakt.",
         "",
+        "Ik heb de toon van de droom lichter gemaakt, zodat het toegankelijker en minder zwaar aanvoelt.",
+        "",
         "Op basis van je input stel ik de volgende bestaansreden voor",
       ].join("\n"),
       question: "",
@@ -1718,7 +1720,11 @@ test("single-value current-value refinement uses its own state without wording-c
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.uiActionCodes.includes("ACTION_PURPOSE_REFINE_CONFIRM"), true);
   assert.equal(String((rendered.specialist as any).ui_content?.canonical_text || ""), canonical);
-  assert.match(String((rendered.specialist as any).message || ""), /Op basis van je input stel ik/i);
+  assert.match(String((rendered.specialist as any).message || ""), /Purpose of Mindd is|jouw huidige bestaansreden/i);
+  assert.doesNotMatch(
+    String((rendered.specialist as any).message || ""),
+    /Ik heb de toon van de droom lichter gemaakt/i
+  );
   assert.equal(String((rendered.specialist as any).wording_choice_pending || ""), "");
 });
 

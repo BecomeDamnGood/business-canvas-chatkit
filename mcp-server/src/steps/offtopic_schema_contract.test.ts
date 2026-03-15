@@ -110,6 +110,28 @@ test("all ordinary interactive specialist schemas require step_support_state enu
   }
 });
 
+test("single-value specialist schemas require feedback_mode enum field", () => {
+  const eligible = CASES.filter((item) =>
+    ["dream", "purpose", "bigwhy", "role", "entity", "targetgroup"].includes(item.name)
+  );
+  for (const item of eligible) {
+    const required = Array.isArray(item.jsonSchema?.required) ? item.jsonSchema.required : [];
+    assert.ok(required.includes("feedback_mode"), `${item.name}: required includes feedback_mode`);
+    assert.equal(
+      item.jsonSchema?.properties?.feedback_mode?.type,
+      "string",
+      `${item.name}: feedback_mode type=string`
+    );
+    assert.deepEqual(
+      item.jsonSchema?.properties?.feedback_mode?.enum,
+      ["none", "affirm_input", "compare_suggestion", "refine_current"],
+      `${item.name}: feedback_mode enum matches single-value contract`
+    );
+    const shape = (item.zodSchema as any)?.shape;
+    assert.ok(shape && shape.feedback_mode, `${item.name}: zod shape has feedback_mode`);
+  }
+});
+
 test("dream_explainer keeps user_state and does not expose step_support_state", () => {
   const item = CASES.find((entry) => entry.name === "dream_explainer");
   assert.ok(item);

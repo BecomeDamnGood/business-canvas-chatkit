@@ -82,6 +82,27 @@ test("normalizeState: bewaart Dream Builder hervatcontext", () => {
   assert.equal(normalized.dream_awaiting_direction, "true");
 });
 
+test("normalizeState: dedupet canoniek gelijke Dream Builder statements", () => {
+  const normalized = normalizeState({
+    ...getDefaultState(),
+    dream_builder_statements: [
+      "Originele denkers zullen mismatches hebben met AI als het gaat om schoppen tegen bestaande denkbeelden, modellen en theorieën.",
+      " Originele denkers zullen mismatches hebben met AI als het gaat om schoppen tegen bestaande denkbeelden, modellen en theorieën! ",
+    ],
+    dream_scoring_statements: [
+      "Echte verhalen bouwen vertrouwen.",
+      "echte verhalen bouwen vertrouwen",
+    ],
+  });
+
+  assert.deepEqual(normalized.dream_builder_statements, [
+    "Originele denkers zullen mismatches hebben met AI als het gaat om schoppen tegen bestaande denkbeelden, modellen en theorieën.",
+  ]);
+  assert.deepEqual(normalized.dream_scoring_statements, [
+    "Echte verhalen bouwen vertrouwen.",
+  ]);
+});
+
 test("state migration: legacy sessions are hard-reset and clear legacy finals", () => {
   const raw = {
     state_version: "1",

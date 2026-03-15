@@ -2004,13 +2004,14 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
     });
   } else if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
-    messageForDisplay = singleValueSupportText({
-      message: messageForDisplay,
-      heading: singleValueConfirmHeading(stepId, state),
-      canonicalValue: currentValueRefinementCanonicalValue,
-      feedbackReasonText: effectiveFeedbackReasonForDisplay,
-      rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
-    });
+    const canonicalMessage = singleValueConfirmCanonicalMessage(
+      stepId,
+      state,
+      currentValueRefinementCanonicalValue
+    );
+    messageForDisplay = effectiveFeedbackReasonForDisplay
+      ? `${effectiveFeedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
+      : canonicalMessage;
   }
   const useSingleValueConfirmSsot =
     shouldEnforceConfirmVisibility &&

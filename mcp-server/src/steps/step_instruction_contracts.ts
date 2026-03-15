@@ -2,7 +2,7 @@ export function buildSingleValueStepContractBlock(stepLabel: string, fieldName: 
   return `
 CANONICAL OUTPUT CONTRACT (HARD)
 - Output schema fields MUST always include:
-  "action", "message", "question", "refined_formulation", "${fieldName}", "feedback_reason_text", "step_support_state", "wants_recap", "is_offtopic", "user_intent", "meta_topic".
+  "action", "message", "question", "refined_formulation", "${fieldName}", "feedback_reason_text", "feedback_mode", "step_support_state", "wants_recap", "is_offtopic", "user_intent", "meta_topic".
 - Menu/buttons are runtime contract-driven via contract_id + action_codes. Never emulate buttons in message/question.
 
 Field discipline by intent
@@ -13,6 +13,7 @@ Field discipline by intent
   - refined_formulation=""
   - ${fieldName}=""
   - feedback_reason_text=""
+  - feedback_mode="none"
   - step_support_state="ok"
 - ESCAPE:
   - action="ESCAPE"
@@ -21,6 +22,7 @@ Field discipline by intent
   - refined_formulation=""
   - ${fieldName}=""
   - feedback_reason_text=""
+  - feedback_mode="none"
   - step_support_state="ok"
 - REFINE:
   - action="REFINE"
@@ -28,6 +30,10 @@ Field discipline by intent
   - ${fieldName}=""
   - question=""
   - feedback_reason_text must be one short localized sentence that explains the single strongest reason for the suggestion. It must be content-specific, grounded in the user's input and the step criteria, and written in a warm, non-judgmental agent voice. Phrase it so the user can feel understood before the strongest content reason is named, but do that naturally for the specific case, not with a fixed stock opener. Do not use generic interpretation openers, filler, praise, process talk, detached editorial phrasing, or repeat the refined sentence.
+  - feedback_mode must be:
+    - "compare_suggestion" only when the runtime should show "Your input / My suggestion" because the suggestion is meaningfully preferable to the user's wording
+    - "affirm_input" when the user's wording is already strong and you are only lightly sharpening it
+    - "refine_current" when you are rewriting an already chosen current wording after user feedback
   - step_support_state="ok" unless the user is explicitly still stuck and you are returning the stuck helper or graceful exit flow below.
 - ASK (collect/incomplete):
   - action="ASK"
@@ -35,6 +41,7 @@ Field discipline by intent
   - ${fieldName}=""
   - question=""
   - feedback_reason_text=""
+  - feedback_mode="none"
   - step_support_state="ok" unless the user is clearly stuck as defined below.
 - ASK (valid/confirmed):
   - action="ASK"
@@ -42,6 +49,7 @@ Field discipline by intent
   - ${fieldName}=same as refined_formulation
   - question=""
   - feedback_reason_text=""
+  - feedback_mode="none"
   - step_support_state="ok"
 
 STUCK SUPPORT CONTRACT (HARD)

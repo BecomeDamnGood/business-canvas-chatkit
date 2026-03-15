@@ -16,6 +16,7 @@ export const TargetGroupZodSchema = z.object({
   refined_formulation: z.string(),
   targetgroup: z.string(),
   feedback_reason_text: z.string(),
+  feedback_mode: z.enum(["none", "affirm_input", "compare_suggestion", "refine_current"]),
   step_support_state: z.enum(["ok", "stuck"]),
   wants_recap: z.boolean(),
   is_offtopic: z.boolean(),
@@ -38,6 +39,7 @@ export const TargetGroupJsonSchema = {
     "refined_formulation",
     "targetgroup",
     "feedback_reason_text",
+    "feedback_mode",
     "step_support_state",
     "wants_recap",
     "is_offtopic",
@@ -51,6 +53,7 @@ export const TargetGroupJsonSchema = {
     refined_formulation: { type: "string" },
     targetgroup: { type: "string" },
     feedback_reason_text: { type: "string" },
+    feedback_mode: { type: "string", enum: ["none", "affirm_input", "compare_suggestion", "refine_current"] },
     step_support_state: { type: "string", enum: ["ok", "stuck"] },
     wants_recap: { type: "boolean" },
     is_offtopic: { type: "boolean" },
@@ -132,6 +135,7 @@ All fields are required. If not applicable, return an empty string "".
   "refined_formulation": "string",
   "targetgroup": "string",
   "feedback_reason_text": "string",
+  "feedback_mode": "none" | "affirm_input" | "compare_suggestion" | "refine_current",
   "step_support_state": "ok" | "stuck",
   "wants_recap": boolean
 }
@@ -409,6 +413,11 @@ POST-PROCESSING RULES (REPLACE OLD ONES)
 - Output ONLY valid JSON. No markdown. No extra keys. No extra text.
 - Output ALL fields every time.
 - Never output null. Use empty strings "".
+- feedback_mode is a hard semantic contract:
+  - "compare_suggestion" only when runtime should show "Your input / My suggestion"
+  - "affirm_input" when the user's Target Group is already strong and you are only sharpening it
+  - "refine_current" when rewriting an already chosen current Target Group after user feedback
+  - "none" for INTRO, ASK, ESCAPE, and normal valid confirms without a compare
 - Ask no more than one question per turn (except in five-question mode where all five are shown at once).
 
 13) OFF-TOPIC HANDLING

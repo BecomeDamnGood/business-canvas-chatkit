@@ -139,6 +139,14 @@ Patroon:
 Les:
 - refinement van gekozen tekst is een **ander** productgedrag dan `Your input / My suggestion`
 
+Extra regressie:
+- refinement-rendering gebruikte later nog steeds óók de vrije specialist-`message` naast `current_value_refinement_feedback_text`
+- gevolg: een tweede bijna-gelijke feedbackzin kon alsnog zichtbaar worden
+
+Oplossing:
+- refinement mag alleen renderen uit het structured refinement-contract
+- de vrije specialist-`message` is in dit pad geen tweede semantische bron meer
+
 ### 3. Renderer bleef semantiek bezitten
 Bewijs in de reeks:
 - `bfa1653`
@@ -225,3 +233,30 @@ Na deze analyse hoort het vervolg klein te blijven:
 Niet:
 - weer tegelijk feedback, UI copy, i18n en routegedrag verbouwen
 
+## Laatste fout en oplossing
+
+### Fout
+- `choose-for-me` was server-side omgezet naar een harde structured-state capability
+- maar de widget bewaarde `suggestion_state_by_step` niet in de persistente client-state
+- gevolg: de knop liep op de volgende klik in `invalid_state` en voelde voor de gebruiker alsof hij niets deed
+
+### Oplossing
+- `suggestion_state_by_step` is nu onderdeel gemaakt van dezelfde widget continuity/persist-laag als de andere step-state
+- dus de capability-state leeft nu echt door tussen render en klik
+- dit is een core state-lifecycle fix, geen route-fallback of UI-workaround
+
+### Fout
+- `Your input / My suggestion` ging ook open bij bevestigende feedback over de user-input
+- daardoor kreeg de gebruiker een compare-scherm terwijl de agent de input eigenlijk al sterk vond
+
+### Oplossing
+- single-value compare opent nu alleen nog bij expliciete `feedback_mode="compare_suggestion"`
+- `affirm_input` gaat naar canonical/confirm en niet naar compare
+
+### Fout
+- Dream Builder behandelde statements als append-only maar niet als unique
+- dezelfde zin kon daardoor opnieuw in de canonical statements-lijst belanden
+
+### Oplossing
+- Dream Builder statements worden nu canoniek gededupet in state-normalisatie, state-write en DreamExplainer-context
+- dezelfde gedachte kan daardoor niet meer als tweede canonical statement terugkomen

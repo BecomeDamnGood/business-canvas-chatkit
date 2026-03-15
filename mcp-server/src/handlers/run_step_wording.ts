@@ -13,6 +13,7 @@ type WordingChoiceMode = "text" | "list";
 type WordingChoiceVariant = "default" | "clarify_dual" | "grouped_list_units";
 type WordingChoiceListSemantics = "delta" | "full";
 type WordingChoicePresentation = "picker" | "canonical";
+type FeedbackMode = "none" | "affirm_input" | "compare_suggestion" | "refine_current";
 type WordingChoiceCompareMode = "" | "grouped_units";
 type WordingChoiceCompareResolution = "user" | "suggestion" | "";
 type WordingChoiceCompareConfidence = "anchored" | "fallback";
@@ -574,6 +575,19 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return "";
   }
 
+  function normalizeFeedbackMode(raw: unknown): FeedbackMode {
+    const value = String(raw || "").trim();
+    if (
+      value === "none" ||
+      value === "affirm_input" ||
+      value === "compare_suggestion" ||
+      value === "refine_current"
+    ) {
+      return value;
+    }
+    return "none";
+  }
+
   function resolveWordingChoicePresentation(params: {
     stepId: string;
     mode: WordingChoiceMode;
@@ -662,6 +676,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       pending_suggestion_seed_source: String(previous.pending_suggestion_seed_source || ""),
       pending_suggestion_feedback_text: String(previous.pending_suggestion_feedback_text || ""),
       pending_suggestion_presentation_mode: String(previous.pending_suggestion_presentation_mode || ""),
+      feedback_mode: String(previous.feedback_mode || "none"),
     };
   }
 
@@ -1945,6 +1960,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       variant,
     });
     const feedbackText = String(params.submittedFeedbackText || "").trim();
+    const feedbackMode = normalizeFeedbackMode(specialistResult.feedback_mode);
     const enriched: Record<string, unknown> = {
       ...specialistResult,
       message: pendingMessage,
@@ -1974,6 +1990,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           : "",
       feedback_reason_key: "",
       feedback_reason_text: feedbackReason,
+      feedback_mode: feedbackMode,
       pending_suggestion_intent: submittedIntent,
       pending_suggestion_anchor: submittedAnchor,
       pending_suggestion_seed_source: pendingSuggestionSeedSource,
@@ -1997,6 +2014,10 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     enriched.refined_formulation =
       committedText || String(previousSpecialist.refined_formulation || "").trim();
     if (presentation === "canonical") {
+      return { specialist: enriched, wordingChoice: null };
+    }
+    if (isAcceptedOutputSingleValueTextStep(stepId, mode) && feedbackMode !== "compare_suggestion") {
+      enriched.wording_choice_presentation = "canonical";
       return { specialist: enriched, wordingChoice: null };
     }
     if (!feedbackReason) {
@@ -2170,6 +2191,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           wording_choice_user_variant_stepworthy: "",
           feedback_reason_key: "",
           feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
+          feedback_mode: "none",
           pending_suggestion_intent: "",
           pending_suggestion_anchor: "",
           pending_suggestion_seed_source: "",
@@ -2275,6 +2297,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
         wording_choice_user_variant_stepworthy: "",
         feedback_reason_key: "",
         feedback_reason_text: pickedUser ? userPickFeedbackReason(state, prevRaw) : "",
+        feedback_mode: "none",
         pending_suggestion_intent: "",
         pending_suggestion_anchor: "",
         pending_suggestion_seed_source: "",
@@ -2398,6 +2421,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const userLabel = String(specialist?.wording_choice_user_label || "").trim() || wordingLabels.userLabel || "";
     const suggestionLabel =
       String(specialist?.wording_choice_suggestion_label || "").trim() || wordingLabels.suggestionLabel || "";
+    const feedbackMode = normalizeFeedbackMode(specialist?.feedback_mode);
     const feedbackReasonText = resolveFeedbackReasonFromSpecialist((state || {}) as CanvasState, specialist);
     const fallbackUserText = stripMarkupPreserveLines(
       String(
@@ -2425,6 +2449,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       ? pickWordingSuggestionList(specialist, fallbackSuggestionText)
       : suggestionItems;
     if (!feedbackReasonText) return null;
+    if (isAcceptedOutputSingleValueTextStep(stepId, mode) && feedbackMode !== "compare_suggestion") {
+      return null;
+    }
     return {
       enabled: true,
       mode,

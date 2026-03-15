@@ -224,6 +224,7 @@ test("buildWordingChoiceFromTurn keeps targetgroup in picker pending presentatio
     specialistResult: {
       message: "Doelgroep kiezen draait om focus.",
       feedback_reason_text: "Deze suggestie maakt de doelgroep concreter en beter afgebakend.",
+      feedback_mode: "compare_suggestion",
       refined_formulation: "Industrial manufacturers with technical product development.",
     },
     userTextRaw: "I mean all companies that develop and produce complex products.",
@@ -247,6 +248,7 @@ test("buildWordingChoiceFromTurn keeps targetgroup picker pending presentation f
     specialistResult: {
       message: "Een scherpere formulering helpt je later bij strategie.",
       feedback_reason_text: "Deze suggestie maakt de doelgroep concreter en beter bruikbaar voor de volgende stappen.",
+      feedback_mode: "compare_suggestion",
       refined_formulation: "Industrial manufacturers with technical product development.",
     },
     userTextRaw: "I mean all companies that develop and produce complex products.",
@@ -268,6 +270,7 @@ test("buildWordingChoiceFromTurn keeps Dream in picker pending presentation for 
     specialistResult: {
       message: "Een aangescherpte Droom helpt om later scherpe keuzes te maken.",
       feedback_reason_text: "Deze suggestie maakt de Droom menselijker en richtinggevender.",
+      feedback_mode: "compare_suggestion",
       refined_formulation: "Mindd droomt van een wereld waarin ondernemers rust ervaren in hun keuzes.",
       dream: "",
     } as Record<string, unknown>,
@@ -354,6 +357,7 @@ test("buildWordingChoiceFromTurn keeps Purpose in picker pending presentation fo
     specialistResult: {
       message: "Een aangescherpte Bestaansreden maakt je koers concreter.",
       feedback_reason_text: "Deze suggestie maakt de bestaansreden concreter en betekenisvoller.",
+      feedback_mode: "compare_suggestion",
       refined_formulation: "Mindd bestaat om ondernemers helderheid te geven in strategische keuzes.",
       purpose: "",
     } as Record<string, unknown>,
@@ -376,6 +380,7 @@ test("buildWordingChoiceFromTurn keeps Role in picker pending presentation for d
     specialistResult: {
       message: "Een scherpe Rol maakt je positionering stabiel.",
       feedback_reason_text: "Deze suggestie laat scherper zien welke rol Mindd voor anderen speelt.",
+      feedback_mode: "compare_suggestion",
       refined_formulation: "Mindd is de gids die ondernemers helpt koersvast te blijven.",
       role: "",
     } as Record<string, unknown>,
@@ -753,6 +758,7 @@ test("buildWordingChoiceFromTurn exposes dynamic feedback reason across the sing
       specialistResult: {
         message: scenario.message,
         feedback_reason_text: scenario.expected,
+        feedback_mode: "compare_suggestion",
         refined_formulation: scenario.suggestion,
         [scenario.stepId]: "",
       } as Record<string, unknown>,
@@ -1670,6 +1676,7 @@ test("buildWordingChoiceFromTurn strips markup from picker pending wording field
     specialistResult: {
       message: "Ik heb een suggestie gemaakt.",
       feedback_reason_text: "Deze suggestie maakt de doelgroep concreter en beter afgebakend.",
+      feedback_mode: "compare_suggestion",
       refined_formulation: "<strong>Technische mkb-bedrijven</strong> met complexe vraagstukken.",
     } as Record<string, unknown>,
     userTextRaw: "<strong>bedrijven</strong> met complexe producten",
@@ -2025,4 +2032,36 @@ test("buildWordingChoiceFromTurn bypasses contributing-input gate while forced p
   assert.equal(result.wordingChoice, null);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+});
+
+test("buildWordingChoiceFromTurn does not open compare when feedback mode affirms the user input", () => {
+  const helpers = buildHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "purpose",
+    state: {} as any,
+    activeSpecialist: "Purpose",
+    previousSpecialist: {},
+    specialistResult: {
+      message: "Je benoemt al duidelijk waar Mindd voor staat.",
+      refined_formulation:
+        "Mindd gelooft in authentieke, eerlijke en originele communicatie, zodat echte mensen en waarden centraal blijven.",
+      purpose:
+        "Mindd gelooft in authentieke, eerlijke en originele communicatie, zodat echte mensen en waarden centraal blijven.",
+      feedback_reason_text:
+        "Je benoemt al duidelijk de overtuiging die onder de Droom ligt en verwoordt waarom Mindd ertoe doet.",
+      feedback_mode: "affirm_input",
+    } as Record<string, unknown>,
+    userTextRaw:
+      "Mindd bestaat om bij te dragen aan een wereld waarin communicatie en verhalen authentiek, eerlijk en origineel zijn, zodat echte mensen en echte waarden centraal staan.",
+    isOfftopic: false,
+    forcePending: false,
+    submittedTextIntent: "content_input",
+    submittedTextAnchor: "user_input",
+    submittedFeedbackText: "",
+  });
+
+  assert.equal(result.wordingChoice, null);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "canonical");
+  assert.equal(String((result.specialist as Record<string, unknown>).feedback_mode || ""), "affirm_input");
 });

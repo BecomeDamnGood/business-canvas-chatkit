@@ -81,6 +81,33 @@ export function normalizeStateLanguageSource(raw: unknown): LanguageSource {
   return "";
 }
 
+function canonicalDreamBuilderStatementKey(raw: unknown): string {
+  return String(raw || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .toLowerCase()
+    .replace(/[’']/g, "'")
+    .replace(/[“”"]/g, '"')
+    .replace(/[.,!?;:()[\]{}]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function normalizeDreamBuilderStatements(rawStatements: unknown): string[] {
+  if (!Array.isArray(rawStatements)) return [];
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const raw of rawStatements) {
+    const text = String(raw || "").trim();
+    if (!text) continue;
+    const key = canonicalDreamBuilderStatementKey(text);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(text);
+  }
+  return deduped;
+}
+
 function normalizeLocaleTag(raw: unknown): string {
   const normalizedRaw = String(raw ?? "")
     .trim()
@@ -665,15 +692,11 @@ export function normalizeState(raw: unknown): CanvasState {
   const dreamBuilderStatementsRaw = Array.isArray((r as any).dream_builder_statements)
     ? ((r as any).dream_builder_statements as unknown[])
     : [];
-  const dream_builder_statements = dreamBuilderStatementsRaw
-    .map((line) => String(line || "").trim())
-    .filter(Boolean);
+  const dream_builder_statements = normalizeDreamBuilderStatements(dreamBuilderStatementsRaw);
   const dreamScoringStatementsRaw = Array.isArray((r as any).dream_scoring_statements)
     ? ((r as any).dream_scoring_statements as unknown[])
     : [];
-  const dream_scoring_statements = dreamScoringStatementsRaw
-    .map((line) => String(line || "").trim())
-    .filter(Boolean);
+  const dream_scoring_statements = normalizeDreamBuilderStatements(dreamScoringStatementsRaw);
   const dreamScoresRaw = Array.isArray((r as any).dream_scores) ? ((r as any).dream_scores as unknown[]) : [];
   const dream_scores = dreamScoresRaw
     .map((row) =>

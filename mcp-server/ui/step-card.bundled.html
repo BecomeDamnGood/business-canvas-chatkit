@@ -2810,6 +2810,27 @@
     const provisionalSourceByStep = toRecord2(source.provisional_source_by_step);
     return hasOwnKey(provisionalByStep, stepId) && String(provisionalByStep[stepId] || "").trim() === "" || hasOwnKey(provisionalSourceByStep, stepId) && String(provisionalSourceByStep[stepId] || "").trim() === "";
   }
+  function extractSuggestionStateContext(state) {
+    const source = state && typeof state === "object" ? state : {};
+    const rawMap = toRecord2(source.suggestion_state_by_step);
+    const next = {};
+    for (const [stepIdRaw, entryRaw] of Object.entries(rawMap)) {
+      const stepId = String(stepIdRaw || "").trim();
+      if (!stepId) continue;
+      const entry = toRecord2(entryRaw);
+      const items = Array.isArray(entry.items) ? entry.items.map((value) => String(value || "").trim()).filter(Boolean) : [];
+      const modeRaw = String(entry.mode || "").trim().toLowerCase();
+      const mode = modeRaw === "examples" ? "examples" : "suggestions";
+      const validForActionCodes = Array.isArray(entry.valid_for_action_codes) ? entry.valid_for_action_codes.map((value) => String(value || "").trim().toUpperCase()).filter(Boolean) : [];
+      if (items.length === 0 || validForActionCodes.length === 0) continue;
+      next[stepId] = {
+        items,
+        mode,
+        valid_for_action_codes: validForActionCodes
+      };
+    }
+    return next;
+  }
   function continuityScopeCompatible(preferred, fallback) {
     const preferredOrdering = readBootstrapOrderingState(preferred);
     const fallbackOrdering = readBootstrapOrderingState(fallback);
@@ -3006,6 +3027,8 @@
     }
     patch.provisional_by_step = Object.keys(nextAcceptedProvisionalByStep).length > 0 ? nextAcceptedProvisionalByStep : void 0;
     patch.provisional_source_by_step = Object.keys(nextAcceptedProvisionalSources).length > 0 ? nextAcceptedProvisionalSources : void 0;
+    const nextSuggestionState = extractSuggestionStateContext(params.incomingState);
+    patch.suggestion_state_by_step = Object.keys(nextSuggestionState).length > 0 ? nextSuggestionState : void 0;
     return patch;
   }
   function evaluatePayloadQuality(result) {

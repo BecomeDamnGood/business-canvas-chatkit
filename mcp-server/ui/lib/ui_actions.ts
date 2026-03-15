@@ -770,6 +770,36 @@ function hasExplicitCanonicalProvisionalClear(
   );
 }
 
+function extractSuggestionStateContext(
+  state: Record<string, unknown> | null | undefined
+): Record<string, { items: string[]; mode: "suggestions" | "examples"; valid_for_action_codes: string[] }> {
+  const source = state && typeof state === "object" ? state : {};
+  const rawMap = toRecord(source.suggestion_state_by_step);
+  const next: Record<string, { items: string[]; mode: "suggestions" | "examples"; valid_for_action_codes: string[] }> = {};
+  for (const [stepIdRaw, entryRaw] of Object.entries(rawMap)) {
+    const stepId = String(stepIdRaw || "").trim();
+    if (!stepId) continue;
+    const entry = toRecord(entryRaw);
+    const items = Array.isArray(entry.items)
+      ? entry.items.map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const modeRaw = String(entry.mode || "").trim().toLowerCase();
+    const mode = modeRaw === "examples" ? "examples" : "suggestions";
+    const validForActionCodes = Array.isArray(entry.valid_for_action_codes)
+      ? entry.valid_for_action_codes
+          .map((value) => String(value || "").trim().toUpperCase())
+          .filter(Boolean)
+      : [];
+    if (items.length === 0 || validForActionCodes.length === 0) continue;
+    next[stepId] = {
+      items,
+      mode,
+      valid_for_action_codes: validForActionCodes,
+    };
+  }
+  return next;
+}
+
 function continuityScopeCompatible(
   preferred: Record<string, unknown> | null | undefined,
   fallback: Record<string, unknown> | null | undefined
@@ -1003,6 +1033,10 @@ function buildWidgetStateContinuityPatch(params: {
     : undefined;
   patch.provisional_source_by_step = Object.keys(nextAcceptedProvisionalSources).length > 0
     ? nextAcceptedProvisionalSources
+    : undefined;
+  const nextSuggestionState = extractSuggestionStateContext(params.incomingState);
+  patch.suggestion_state_by_step = Object.keys(nextSuggestionState).length > 0
+    ? nextSuggestionState
     : undefined;
   return patch;
 }
