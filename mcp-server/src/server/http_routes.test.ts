@@ -43,6 +43,40 @@ test("startServer returns a listening http.Server without monkey-patched listen"
   }
 });
 
+test("ui widget route serves identical HEAD metadata without requiring a GET body", async () => {
+  const server = await startServer({
+    host: "127.0.0.1",
+    port: 0,
+    registerSignalHandlers: false,
+    logger: { log() {}, warn() {}, error() {} },
+  });
+
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object" && address.port > 0);
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    const getResponse = await fetch(`${baseUrl}/ui/step-card`);
+    const getBody = await getResponse.text();
+    const getContentType = getResponse.headers.get("content-type");
+    const getVersion = getResponse.headers.get("x-ui-version");
+
+    const headResponse = await fetch(`${baseUrl}/ui/step-card`, { method: "HEAD" });
+    const headBody = await headResponse.text();
+
+    assert.equal(getResponse.status, 200);
+    assert.ok(getBody.length > 0);
+    assert.equal(headResponse.status, 200);
+    assert.equal(headResponse.headers.get("content-type"), getContentType);
+    assert.equal(headResponse.headers.get("x-ui-version"), getVersion);
+    assert.equal(headBody, "");
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((err) => (err ? reject(err) : resolve()));
+    });
+  }
+});
+
 test("createProcessShutdownController drains the server and exits cleanly", async () => {
   const server = createServer((_req, res) => {
     res.end("ok");

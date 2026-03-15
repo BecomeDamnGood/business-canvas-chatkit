@@ -417,7 +417,7 @@ const httpServer = async (req: any, res: any) => {
   }
 
   // Static root for /ui/* – runtime only requires step-card.bundled.html.
-  if (req.method === "GET" && url.pathname.startsWith("/ui/")) {
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname.startsWith("/ui/")) {
     const resolved = resolveUiAssetPath(url.pathname, DEFAULT_UI_DIR);
     if (!resolved) {
       res.writeHead(404, { "content-type": "text/plain" });
@@ -445,19 +445,30 @@ const httpServer = async (req: any, res: any) => {
         "application/octet-stream";
       if (fileName === "step-card.bundled.html") {
         const withVersion = loadUiHtml(resolveBaseUrl(req));
-        res.writeHead(200, {
+        const headers = {
           "content-type": contentType,
+          "content-length": Buffer.byteLength(withVersion).toString(),
           "cache-control": "no-store",
           "x-ui-version": VERSION,
-        });
+        };
+        res.writeHead(200, headers);
+        if (req.method === "HEAD") {
+          res.end();
+          return;
+        }
         res.end(withVersion);
         return;
       }
       res.writeHead(200, {
         "content-type": contentType,
+        "content-length": stat.size,
         "cache-control": "no-store",
         "x-ui-version": VERSION,
       });
+      if (req.method === "HEAD") {
+        res.end();
+        return;
+      }
       fs.createReadStream(resolved).pipe(res);
     } catch {
       res.writeHead(404, { "content-type": "text/plain" });
