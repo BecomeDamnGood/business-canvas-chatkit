@@ -10,7 +10,6 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <base href="__WIDGET_BASE__" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230071e3'/></svg>" type="image/svg+xml" />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <title>The Business Strategy Canvas Builder</title>
     <style>
       /**
@@ -48,9 +47,9 @@
         --shadow-glow: 0 0 0 3px rgba(232,116,42,0.14);
       
         /* Typography */
-        --font-serif: 'DM Serif Display', Georgia, serif;
-        --font-sans: 'DM Sans', system-ui, sans-serif;
-        --font-mono: 'DM Mono', ui-monospace, monospace;
+        --font-serif: Georgia, "Times New Roman", serif;
+        --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
         --text-xs: 9px; --text-sm: 11px; --text-base: 13px;
         --text-md: 14px; --text-lg: 16px; --text-xl: 19px;
         --text-2xl: 24px; --text-3xl: 32px; --text-hero: 52px;
@@ -214,7 +213,7 @@
       body {
         margin: 0;
         min-height: 100vh;
-        font-family: 'DM Sans', sans-serif;
+        font-family: var(--font-sans);
         font-weight: 300;
         color: var(--text-dark);
         line-height: var(--line-height-normal);
@@ -591,7 +590,7 @@
         display: block;
         width: 100%;
         font-variant-numeric: tabular-nums;
-        font-family: 'DM Serif Display', serif;
+        font-family: var(--font-serif);
         font-size: 44px;
         font-weight: 700;
         color: var(--orange);
@@ -6672,6 +6671,7 @@
             });
           }
         }
+        render();
       } catch (e) {
         console.error(e);
       } finally {
@@ -6694,6 +6694,7 @@
       console.error("[local_dev_initial_ingest_failed]", String(err?.message || err || "unknown"));
     });
   }
+  render();
 })();
     
     </script>

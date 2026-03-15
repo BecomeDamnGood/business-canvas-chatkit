@@ -406,6 +406,7 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
             });
           }
         }
+        render();
       } catch (e) {
         console.error(e);
       } finally {
@@ -428,3 +429,4 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
       console.error("[local_dev_initial_ingest_failed]", String(err?.message || err || "unknown"));
     });
   }
+  render();

@@ -765,6 +765,8 @@ test("bundled runtime startup and ACTION_START flow stay on the simple happy-pat
   assert.doesNotMatch(source, /function renderStartupWaitShell\(/);
   assert.match(source, /tryInitialIngestFromHost\("set_globals"\);/);
   assert.doesNotMatch(source, /startup_fail_closed_no_canonical_payload/);
+  assert.match(source, /window\.addEventListener\("openai:set_globals", \(\) => \{[\s\S]*render\(\);[\s\S]*if \(getIsLoading\(\)\) setLoading\(false\);[\s\S]*\}\);/);
+  assert.match(source, /(?:const|var) initialIngested = tryInitialIngestFromHost\("set_globals"\);[\s\S]*render\(\);/);
 
   // Routing tolerates missing explicit view mode and keeps the interactive path live.
   assert.match(source, /const hasExplicitServerRouting =/);
@@ -2110,6 +2112,12 @@ test("bundled runtime keeps step title fallbacks unnumbered while preserving sec
   assert.match(source, /function stepperLabelForLang\(stepId, lang\)/);
   assert.match(source, /function getSectionTitle\(lang, stepId, businessName\)/);
   assert.match(source, /sectionTitleEl\.textContent = getSectionTitle\(lang, "step_0", ""\);/);
+});
+
+test("bundled runtime does not depend on external Google Fonts stylesheets", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /fonts\.googleapis\.com/);
+  assert.doesNotMatch(source, /fonts\.gstatic\.com/);
 });
 
 test("bundled page body allows vertical scrolling", () => {
