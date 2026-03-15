@@ -15,15 +15,31 @@ function ensureSentence(value: string): string {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
-function isGenericFeedbackAcknowledgementSentence(input: string): boolean {
+function splitFeedbackSentences(input: string): string[] {
+  const normalized = String(input || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return [];
+  return normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => ensureSentence(sentence))
+    .filter(Boolean);
+}
+
+function isPureGenericFeedbackAcknowledgementSentence(input: string): boolean {
   const sentence = String(input || "").trim();
   if (!sentence) return false;
   const patterns = [
-    /^(?:that|this|dat|dit)\s+(?:is|feels|sounds)\s+(?:a\s+|een\s+)?(?:good|great|strong|solid|goed|sterk|prima)\b/i,
-    /^(?:good|great|strong|solid)\s+(?:start|beginning|starting point|point|insight)\b/i,
-    /^(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt|inzicht)\b/i,
-    /^(?:dat|dit)\s+is\s+een\s+(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt)\b/i,
-    /^(?:i think i understand what you mean|i understand what you mean|ik denk dat ik begrijp wat je bedoelt|ik begrijp wat je bedoelt)\b/i,
+    /^(?:that|this|dat|dit)\s+(?:is|feels|sounds)\s+(?:a\s+|een\s+)?(?:good|great|strong|solid|goed|sterk|prima)\s+(?:start|beginning|starting point|point|insight|beginpunt|startpunt|inzicht)(?:\s+(?:already|al))?[.!?]*$/i,
+    /^(?:good|great|strong|solid)\s+(?:start|beginning|starting point|point|insight)[.!?]*$/i,
+    /^(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt|inzicht)[.!?]*$/i,
+    /^(?:dat|dit)\s+is\s+een\s+(?:goed|sterk|prima)\s+(?:beginpunt|start|startpunt|inzicht)[.!?]*$/i,
+    /^(?:i think i understand what you mean|i understand what you mean|ik denk dat ik begrijp wat je bedoelt|ik begrijp wat je bedoelt)[.!?]*$/i,
   ];
   return patterns.some((pattern) => pattern.test(sentence));
 }
@@ -33,14 +49,15 @@ export function sanitizeFeedbackReasonForDisplay(params: {
   rawReason: string;
   resolveString: FeedbackStringResolver;
 }): string {
-  const reason = ensureSentence(params.rawReason);
-  if (!reason) return "";
-  if (isGenericFeedbackAcknowledgementSentence(reason)) return "";
   const stepLabel = feedbackStepLabel(params.stepId, params.resolveString);
   const introTemplate = params.resolveString("wording.feedback.compare.intro.template", "");
   const intro = ensureSentence(String(introTemplate || "").replace(/\{0\}/g, stepLabel));
-  if (intro && normalizeComparable(reason) === normalizeComparable(intro)) return "";
-  return reason;
+  const candidate = splitFeedbackSentences(params.rawReason).find((sentence) => {
+    if (isPureGenericFeedbackAcknowledgementSentence(sentence)) return false;
+    if (intro && normalizeComparable(sentence) === normalizeComparable(intro)) return false;
+    return true;
+  });
+  return candidate || "";
 }
 
 function stripStepPrefix(value: string): string {
@@ -78,23 +95,28 @@ export function formatCompareFeedbackForDisplay(params: {
   return sanitizeFeedbackReasonForDisplay(params);
 }
 
+export function userPickAcknowledgmentForDisplay(resolveString: FeedbackStringResolver): string {
+  return ensureSentence(resolveString("wording.feedback.user_pick.ack.default", ""));
+}
+
+export function userPickFeedbackReasonForDisplay(params: {
+  stepId: string;
+  rawReason: string;
+  resolveString: FeedbackStringResolver;
+}): string {
+  const reason = sanitizeFeedbackReasonForDisplay(params);
+  if (reason) return reason;
+  return ensureSentence(
+    params.resolveString("wording.feedback.user_pick.reason.default", "")
+  );
+}
+
 export function formatUserPickFeedbackForDisplay(params: {
   stepId: string;
   rawReason: string;
   resolveString: FeedbackStringResolver;
 }): string {
-  const stepLabel = feedbackStepLabel(params.stepId, params.resolveString);
-  const acknowledgment = ensureSentence(
-    params.resolveString("wording.feedback.user_pick.ack.default", "")
-  );
-  const nudgeTemplate = params.resolveString("wording.feedback.user_pick.nudge.template", "");
-  const nudge = ensureSentence(String(nudgeTemplate || "").replace(/\{0\}/g, stepLabel));
-  const reason = sanitizeFeedbackReasonForDisplay(params);
-  if (reason) {
-    return [acknowledgment, nudge, reason].filter(Boolean).join("\n\n").trim();
-  }
-  const fallbackReason = ensureSentence(
-    params.resolveString("wording.feedback.user_pick.reason.default", "")
-  );
-  return [acknowledgment, fallbackReason].filter(Boolean).join("\n\n").trim();
+  const acknowledgment = userPickAcknowledgmentForDisplay(params.resolveString);
+  const reason = userPickFeedbackReasonForDisplay(params);
+  return [acknowledgment, reason].filter(Boolean).join("\n\n").trim();
 }

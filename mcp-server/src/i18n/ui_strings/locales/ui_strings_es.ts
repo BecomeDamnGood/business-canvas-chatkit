@@ -262,7 +262,11 @@ export const UI_STRINGS_LOCALE_ES: Record<string, string> = {
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Usa el widget de The Business Strategy Canvas Builder para continuar (no el cuadro de chat).",
     "wording.choice.context.default": "Por favor, elige la redacción que mejor encaje.",
+    "wording.feedback.compare.intro.template":
+      "Creo que entiendo lo que quieres decir. Para que {0} sea más sólido, conviene tener esto en cuenta.",
     "wording.feedback.user_pick.ack.default": "Elegiste tu propia redacción, y está bien.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "Tu formulación original trata sobre todo de tu propio deseo, mientras que Dream Builder pide un cambio más amplio en el mundo.",
     "wording.feedback.user_pick.reason.default": "Esto mantiene tu significado original y sigue alineado con este paso.",
     "wordingChoice.chooseVersion": "Elegir esta versión",
     "wordingChoice.useInputFallback": "Usar este texto",

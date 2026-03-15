@@ -262,7 +262,11 @@ export const UI_STRINGS_LOCALE_KO: Record<string, string> = {
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "계속하려면 Business Strategy Canvas Builder 위젯을 사용하세요(채팅창 아님).",
     "wording.choice.context.default": "가장 잘 맞는 표현을 선택해 주세요.",
+    "wording.feedback.compare.intro.template":
+      "무슨 뜻인지 이해한 것 같습니다. {0} 를 더 강하게 만들려면 이 점을 염두에 두는 것이 도움이 됩니다.",
     "wording.feedback.user_pick.ack.default": "당신이 직접 쓴 표현을 선택했으며, 괜찮습니다.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "원래 표현은 주로 당신 자신의 바람에 관한 반면, Dream Builder 는 세상에 더 넓은 변화를 요구합니다.",
     "wording.feedback.user_pick.reason.default": "원래 의미를 유지하면서도 이 단계와 일치하게 합니다.",
     "wordingChoice.chooseVersion": "이 버전 선택",
     "wordingChoice.useInputFallback": "이 입력 사용",

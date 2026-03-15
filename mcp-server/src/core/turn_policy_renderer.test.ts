@@ -1344,10 +1344,12 @@ test("single-value valid output preserves feedback reason after user picks own w
   const message = String((rendered.specialist as any).message || "");
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
-  assert.doesNotMatch(message, /toekomstbeeld waarin mensen zich zekerder/i);
-  assert.match(
-    String(uiContent.feedback_reason_text || ""),
-    /(helemaal prima|completely okay)/i
+  assert.match(message, /(helemaal prima|completely okay)/i);
+  assert.match(message, /toekomstbeeld waarin mensen zich zekerder/i);
+  assert.match(message, /the current dream of mindd is|je huidige droom voor mindd is/i);
+  assert.equal(
+    String(uiContent.support_text || ""),
+    "Your own wording is completely okay."
   );
   assert.match(
     String(uiContent.feedback_reason_text || ""),
@@ -1397,10 +1399,11 @@ test("single-value valid output strips autosuggest framing after user picks own 
   const supportText = String(uiContent.support_text || "");
   assert.equal(rendered.status, "valid_output");
   assert.doesNotMatch(supportText, /op basis van je input stel ik de volgende bestaansreden voor/i);
+  assert.match(supportText, /je eigen formulering is helemaal prima/i);
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
-test("single-value valid output suppresses generic interpretation opener after user pick", () => {
+test("single-value valid output falls back to user-pick feedback when the explicit reason is generic", () => {
   const state = getDefaultState();
   const canonical =
     "Mindd bestaat om bij te dragen aan een wereld waarin communicatie en verhalen authentiek, eerlijk en origineel zijn.";
@@ -1432,10 +1435,14 @@ test("single-value valid output suppresses generic interpretation opener after u
   });
 
   const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
-  assert.match(String(uiContent.feedback_reason_text || ""), /helemaal prima/i);
+  assert.equal(String(uiContent.support_text || ""), "Je eigen formulering is helemaal prima.");
   assert.doesNotMatch(
     String(uiContent.feedback_reason_text || ""),
     /ik denk dat ik begrijp wat je bedoelt/i
+  );
+  assert.match(
+    String(uiContent.feedback_reason_text || ""),
+    /keep in mind what makes this step strong|this keeps your original meaning while staying aligned with this step|dit behoudt je oorspronkelijke betekenis/i
   );
 });
 

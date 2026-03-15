@@ -11,6 +11,56 @@ import {
   shouldForcePendingWordingChoiceFromIntent,
 } from "./run_step_pipeline.js";
 import { createRunStepWordingHelpers } from "./run_step_wording.js";
+import { createRunStepUiPayloadHelpers } from "./run_step_ui_payload.js";
+import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
+
+function buildPipelineUiPayloadHelpers() {
+  return createRunStepUiPayloadHelpers({
+    shouldLogLocalDevDiagnostics: () => false,
+    pickPrompt: (specialist) => String((specialist as Record<string, unknown>)?.question || "").trim(),
+    buildTextForWidget: ({ specialist }) => {
+      const record = (specialist || {}) as Record<string, unknown>;
+      const candidates = [
+        String(record.__canonical_text || "").trim(),
+        String(record.dream || "").trim(),
+        String(record.purpose || "").trim(),
+        String(record.bigwhy || "").trim(),
+        String(record.role || "").trim(),
+        String(record.entity || "").trim(),
+        String(record.rulesofthegame || "").trim(),
+        String(record.refined_formulation || "").trim(),
+        String(record.message || "").trim(),
+      ].filter(Boolean);
+      return candidates[0] || "";
+    },
+    deriveBootstrapContract: () => ({ waiting: false, ready: true, retry_hint: false, phase: "ready" }),
+    deriveUiViewPayload: (variant) => (variant === "default" ? null : { variant }),
+    sanitizeWidgetActionCodes: (actionCodes) => actionCodes,
+    buildRenderedActionsFromMenu: () => [],
+    buildQuestionTextFromActions: (prompt) => String(prompt || "").trim(),
+    sanitizeEscapeInWidget: (specialist) => specialist,
+    isWidgetSuppressedEscapeMenuId: () => false,
+    enforcePromptInvariants: ({ specialist }) => specialist,
+    isUiI18nV2Enabled: () => false,
+    isMenuLabelKeysV1Enabled: () => false,
+    isUiI18nV3LangBootstrapEnabled: () => false,
+    isUiLocaleMetaV1Enabled: () => false,
+    isUiLangSourceResolverV1Enabled: () => false,
+    isUiStrictNonEnPendingV1Enabled: () => false,
+    isUiStep0LangResetGuardV1Enabled: () => false,
+    isUiBootstrapStateV1Enabled: () => false,
+    isUiPendingNoFallbackTextV1Enabled: () => false,
+    isUiStartTriggerLangResolveV1Enabled: () => false,
+    isUiLocaleReadyGateV1Enabled: () => false,
+    isUiNoPendingTextSuppressV1Enabled: () => false,
+    isUiBootstrapWaitRetryV1Enabled: () => false,
+    isUiBootstrapEventParityV1Enabled: () => false,
+    isUiBootstrapPollActionV1Enabled: () => false,
+    isUiWaitShellV2Enabled: () => false,
+    isUiTranslationFastModelV1Enabled: () => false,
+    isUiI18nCriticalKeysV1Enabled: () => false,
+  });
+}
 
 function buildPipelineWordingHelpers() {
   const defaultUi: Record<string, string> = {
@@ -53,6 +103,11 @@ function buildPipelineWordingHelpers() {
     fieldForStep: (stepId: string) => {
       if (stepId === "strategy") return "strategy";
       if (stepId === "dream") return "dream";
+      if (stepId === "purpose") return "purpose";
+      if (stepId === "bigwhy") return "bigwhy";
+      if (stepId === "role") return "role";
+      if (stepId === "entity") return "entity";
+      if (stepId === "rulesofthegame") return "rulesofthegame";
       return "";
     },
     parseListItems: (input: string) =>
@@ -282,6 +337,219 @@ function buildStrategyPipelineHarness(params: {
           contractMetaOverride: contractMetaOverride || null,
           debug: debug || null,
         }),
+        finalize: (payload) => payload,
+      },
+    },
+    guard: {
+      looksLikeMetaInstruction: () => false,
+    },
+    i18n: {
+      bumpUiI18nCounter: () => {},
+    },
+  });
+
+  return helpers;
+}
+
+function buildRefineAdjustPipelineHarness(params: {
+  stepId: string;
+  activeSpecialist: string;
+  specialistResult: Record<string, unknown>;
+  onSpecialistCall?: (userMessage: string) => void;
+  dreamRuntimeMode?: "self" | "builder_collect" | "builder_scoring" | "builder_refine";
+  initialState?: Record<string, unknown>;
+}) {
+  const wordingHelpers = buildPipelineWordingHelpers();
+  const uiPayloadHelpers = buildPipelineUiPayloadHelpers();
+  const helpers = createRunStepPipelineHelpers<any>({
+    ids: {
+      step0Id: "step0",
+      dreamStepId: "dream",
+      bigwhyStepId: "bigwhy",
+      strategyStepId: "strategy",
+      dreamSpecialist: "Dream",
+      dreamExplainerSpecialist: "DreamExplainer",
+      strategySpecialist: "Strategy",
+      dreamExplainerSwitchSelfMenuId: "DREAM_MENU",
+    },
+    policy: {
+      dreamForceRefineRoutePrefix: "__DREAM_FORCE_REFINE__",
+      strategyConsolidateRouteToken: "__ROUTE__STRATEGY_CONSOLIDATE__",
+      bigwhyMaxWords: 50,
+      uiContractVersion: "test",
+    },
+    specialist: {
+      buildRoutingContext: () => ({ enabled: true, shadow: false }),
+      callSpecialistStrictSafe: async ({ userMessage }) => {
+        params.onSpecialistCall?.(String(userMessage || ""));
+        return {
+          ok: true,
+          value: {
+            specialistResult: params.specialistResult,
+            attempts: 1,
+            usage: {},
+            model: "gpt-5-mini",
+          },
+        };
+      },
+    },
+    normalization: {
+      normalizeLocalizedConceptTerms: (specialist) => specialist,
+      normalizeEntitySpecialistResult: (_stepId, specialist) => specialist,
+      applyCentralMetaTopicRouter: ({ specialistResult }) => specialistResult,
+      normalizeNonStep0OfftopicSpecialist: ({ specialistResult }) => specialistResult,
+      normalizeStep0AskDisplayContract: (_stepId, specialist) => specialist,
+      hasValidStep0Final: () => false,
+    },
+    state: {
+      applyPostSpecialistStateMutations: ({ prevState, decision, specialistResult }) =>
+        ({
+          ...prevState,
+          current_step: String((decision as Record<string, unknown>).current_step || prevState.current_step || ""),
+          active_specialist: String(
+            (decision as Record<string, unknown>).specialist_to_call || prevState.active_specialist || ""
+          ),
+          last_specialist_result: specialistResult,
+        }) as any,
+      getDreamRuntimeMode: () => params.dreamRuntimeMode || "self",
+      isMetaOfftopicFallbackTurn: () => false,
+      shouldTreatAsStepContributingInput: () => true,
+      hasDreamSpecialistCandidate: () => false,
+      buildDreamRefineFallbackSpecialist: (base) => base,
+      strategyStatementsForConsolidateGuard: (result, state) => {
+        if (Array.isArray((result as Record<string, unknown>).statements)) {
+          return ((result as Record<string, unknown>).statements as unknown[])
+            .map((item) => String(item || "").trim())
+            .filter(Boolean);
+        }
+        const previous = (state as Record<string, unknown>).last_specialist_result as Record<string, unknown> | undefined;
+        if (Array.isArray(previous?.statements)) {
+          return (previous.statements as unknown[]).map((item) => String(item || "").trim()).filter(Boolean);
+        }
+        return [];
+      },
+      pickBigWhyCandidate: () => "",
+      countWords: (text: string) =>
+        String(text || "")
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean).length,
+      buildBigWhyTooLongFeedback: () => ({}),
+      enforceDreamBuilderQuestionProgress: (specialistResult) => specialistResult,
+      applyMotivationQuotesContractV11: ({ specialistResult }) => ({
+        specialistResult,
+        suppressChoices: false,
+      }),
+    },
+    render: {
+      renderFreeTextTurnPolicy: () => ({
+        status: "incomplete_output",
+        confirmEligible: false,
+        specialist: {},
+        uiActionCodes: [],
+        uiActions: [],
+        contractId: `${params.stepId}:ask:test`,
+        contractVersion: "test",
+        textKeys: [],
+      }),
+      validateRenderedContractOrRecover: ({ rendered, state }) => ({
+        rendered: {
+          status: "incomplete_output",
+          specialist: (rendered as Record<string, unknown>).specialist || {},
+          contractId: String(
+            ((rendered as Record<string, unknown>).specialist as Record<string, unknown> | undefined)?.ui_contract_id ||
+            `${params.stepId}:ASK:test`
+          ),
+          contractVersion: "test",
+          textKeys: [],
+          uiActionCodes: [],
+          uiActions: [],
+        },
+        state,
+        violation: null,
+      }),
+      applyUiPhaseByStep: () => {},
+      buildContractId: () => `${params.stepId}:ask:test`,
+    },
+    wording: {
+      classifyAcceptedOutputUserTurn: async () => ({
+        turn_kind: "step_variant",
+        user_variant_is_stepworthy: true,
+      }),
+      classifyStepStuckTurn: undefined,
+      isWordingChoiceEligibleContext: () => true,
+      buildWordingChoiceFromTurn: wordingHelpers.buildWordingChoiceFromTurn,
+      buildWordingChoiceFromPendingSpecialist: wordingHelpers.buildWordingChoiceFromPendingSpecialist,
+    },
+    response: {
+      attachRegistryPayload: (payload, specialist, flags, actionCodes, renderedActions, wordingChoice, contractMeta) => ({
+        ...payload,
+        specialist,
+        responseUiFlags: flags || null,
+        actionCodesOverride: actionCodes || null,
+        renderedActionsOverride: renderedActions || null,
+        wordingChoiceOverride: wordingChoice || null,
+        contractMetaOverride: contractMeta || null,
+      }),
+      turnResponseEngine: {
+        renderValidateRecover: ({ state, specialist }) => ({
+          ok: true,
+          value: {
+            state,
+            specialist,
+            renderedStatus: "incomplete_output",
+            actionCodes: null as any,
+            renderedActions: null as any,
+            contractMeta: {
+              contractId: String((specialist as Record<string, unknown>).ui_contract_id || `${params.stepId}:ASK:test`),
+              contractVersion: "test",
+              textKeys: [],
+            },
+          },
+        }),
+        attachAndFinalize: ({
+          state,
+          specialist,
+          responseUiFlags,
+          actionCodesOverride,
+          renderedActionsOverride,
+          wordingChoiceOverride,
+          contractMetaOverride,
+          debug,
+        }) => {
+          const attached = uiPayloadHelpers.attachRegistryPayload(
+            {
+              ok: true,
+              tool: "run_step",
+              current_step_id: String((state as Record<string, unknown>).current_step || ""),
+              active_specialist: String((state as Record<string, unknown>).active_specialist || ""),
+              text: uiPayloadHelpers
+                ? String(
+                    (specialist as Record<string, unknown>).__canonical_text ||
+                    (specialist as Record<string, unknown>)[String((state as Record<string, unknown>).current_step || "")] ||
+                    (specialist as Record<string, unknown>).refined_formulation ||
+                    (specialist as Record<string, unknown>).message ||
+                    ""
+                  ).trim()
+                : "",
+              prompt: String((specialist as Record<string, unknown>).question || "").trim(),
+              specialist,
+              state,
+            },
+            specialist,
+            responseUiFlags,
+            actionCodesOverride,
+            renderedActionsOverride,
+            wordingChoiceOverride,
+            contractMetaOverride
+          );
+          return {
+            ...attached,
+            wordingChoiceOverride: wordingChoiceOverride || null,
+            contractMetaOverride: contractMetaOverride || null,
+            debug: debug || null,
+          };
+        },
         finalize: (payload) => payload,
       },
     },
@@ -836,7 +1104,7 @@ test("runPostSpecialistPipeline recovers Dream Builder compare when a material r
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.ok(payload.wordingChoiceOverride);
   assert.match(
-    String(payload.wordingChoiceOverride?.feedback_reason_text || ""),
+    String(payload.wordingChoiceOverride?.compare_feedback?.text || ""),
     /broader change in the world/i
   );
 });
@@ -1114,6 +1382,208 @@ test("runPostSpecialistPipeline sends first multiline strategy input straight to
   assert.equal(specialistUserMessage, firstInput);
   assert.equal(specialistUserMessage.startsWith("__BUSINESS_LIST_CLARIFY__"), false);
   assert.equal(String((payload.specialist as Record<string, unknown>).__business_list_turn_preclassified || ""), "");
+});
+
+test("runPostSpecialistPipeline exposes a renderable next widget outcome for every visible refine-adjust action", async () => {
+  const scenarios = [
+    {
+      actionCode: "ACTION_DREAM_EXPLAINER_REFINE_ADJUST",
+      stepId: "dream",
+      activeSpecialist: "DreamExplainer",
+      menuId: "DREAM_EXPLAINER_MENU_REFINE",
+      route: "__ROUTE__DREAM_EXPLAINER_REFINE__",
+      dreamRuntimeMode: "builder_refine" as const,
+      previousValue: "Mindd droomt van een wereld waarin mensen bewuster kiezen.",
+      specialistResult: {
+        action: "ASK",
+        message: "I tightened the direction so the next choice stays focused on the broader change.",
+        question: "Which broader change should this dream emphasize more clearly?",
+        suggest_dreambuilder: "true",
+        ui_contract_id: "dream:incomplete_output:DREAM_EXPLAINER_MENU_REFINE",
+      },
+      expectedOutcome: "ask" as const,
+      expectedQuestion: "Which broader change should this dream emphasize more clearly?",
+      expectedText:
+        "I tightened the direction so the next choice stays focused on the broader change.",
+      expectedViewVariant: "dream_builder_refine",
+    },
+    {
+      actionCode: "ACTION_PURPOSE_REFINE_ADJUST",
+      stepId: "purpose",
+      activeSpecialist: "Purpose",
+      menuId: "PURPOSE_MENU_REFINE",
+      route: "__ROUTE__PURPOSE_REFINE__",
+      previousValue: "We help founders grow faster.",
+      specialistResult: {
+        action: "REFINE",
+        message: "I made the purpose more concrete for the kind of change you described.",
+        question: "Does this purpose fit better?",
+        refined_formulation: "We help founders turn difficult growth choices into confident decisions.",
+        purpose: "We help founders turn difficult growth choices into confident decisions.",
+        ui_contract_id: "purpose:valid_output:PURPOSE_MENU_REFINE",
+      },
+      expectedOutcome: "refine" as const,
+      expectedQuestion: "Does this purpose fit better?",
+      expectedText: "We help founders turn difficult growth choices into confident decisions.",
+    },
+    {
+      actionCode: "ACTION_BIGWHY_REFINE_ADJUST",
+      stepId: "bigwhy",
+      activeSpecialist: "BigWhy",
+      menuId: "BIGWHY_MENU_REFINE",
+      route: "__ROUTE__BIGWHY_REFINE__",
+      previousValue: "Because communication matters.",
+      specialistResult: {
+        action: "REFINE",
+        message: "I sharpened the underlying reason so it lands on the tension you named.",
+        question: "Does this Big Why fit better?",
+        refined_formulation: "Because better communication helps people make brave decisions without losing themselves.",
+        bigwhy: "Because better communication helps people make brave decisions without losing themselves.",
+        ui_contract_id: "bigwhy:valid_output:BIGWHY_MENU_REFINE",
+      },
+      expectedOutcome: "refine" as const,
+      expectedQuestion: "Does this Big Why fit better?",
+      expectedText:
+        "Because better communication helps people make brave decisions without losing themselves.",
+    },
+    {
+      actionCode: "ACTION_ROLE_REFINE_ADJUST",
+      stepId: "role",
+      activeSpecialist: "Role",
+      menuId: "ROLE_MENU_REFINE",
+      route: "__ROUTE__ROLE_ADJUST__",
+      previousValue: "Strategic guide",
+      specialistResult: {
+        action: "ASK",
+        message: "I need one more angle so I can adjust the role without making it too broad.",
+        question: "Do you want this role to sound more like a guide, a challenger, or an implementing partner?",
+        ui_contract_id: "role:incomplete_output:ROLE_MENU_REFINE",
+      },
+      expectedOutcome: "ask" as const,
+      expectedQuestion:
+        "Do you want this role to sound more like a guide, a challenger, or an implementing partner?",
+      expectedText: "I need one more angle so I can adjust the role without making it too broad.",
+    },
+    {
+      actionCode: "ACTION_ENTITY_EXAMPLE_REFINE",
+      stepId: "entity",
+      activeSpecialist: "Entity",
+      menuId: "ENTITY_MENU_EXAMPLE",
+      route: "__ROUTE__ENTITY_REFINE__",
+      previousValue: "A strategy agency",
+      specialistResult: {
+        action: "REFINE",
+        message: "I reformulated the entity so the category and qualifiers both move with your input.",
+        question: "Does this entity fit better?",
+        refined_formulation: "A strategic decision studio for complex growth questions.",
+        entity: "A strategic decision studio for complex growth questions.",
+        ui_contract_id: "entity:valid_output:ENTITY_MENU_EXAMPLE",
+      },
+      expectedOutcome: "refine" as const,
+      expectedQuestion: "Does this entity fit better?",
+      expectedText: "A strategic decision studio for complex growth questions.",
+    },
+    {
+      actionCode: "ACTION_RULES_REFINE_ADJUST",
+      stepId: "rulesofthegame",
+      activeSpecialist: "RulesOfTheGame",
+      menuId: "RULES_MENU_REFINE",
+      route: "__ROUTE__RULES_ADJUST__",
+      previousValue: "We always move fast.",
+      specialistResult: {
+        action: "ASK",
+        message: "I need one concrete trade-off so the rule can be adjusted without becoming vague.",
+        question: "When speed and care conflict, which one should this rule protect first?",
+        ui_contract_id: "rulesofthegame:incomplete_output:RULES_MENU_REFINE",
+      },
+      expectedOutcome: "ask" as const,
+      expectedQuestion: "When speed and care conflict, which one should this rule protect first?",
+      expectedText:
+        "I need one concrete trade-off so the rule can be adjusted without becoming vague.",
+    },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const registryEntry = ACTIONCODE_REGISTRY.actions[scenario.actionCode];
+    assert.ok(registryEntry, `missing registry entry for ${scenario.actionCode}`);
+    assert.equal(registryEntry.route, scenario.route);
+    assert.ok(
+      (ACTIONCODE_REGISTRY.menus[scenario.menuId] || []).includes(scenario.actionCode),
+      `${scenario.menuId} should expose ${scenario.actionCode}`
+    );
+
+    let specialistUserMessage = "";
+    const helpers = buildRefineAdjustPipelineHarness({
+      stepId: scenario.stepId,
+      activeSpecialist: scenario.activeSpecialist,
+      specialistResult: scenario.specialistResult,
+      dreamRuntimeMode: scenario.dreamRuntimeMode,
+      onSpecialistCall: (userMessage) => {
+        specialistUserMessage = userMessage;
+      },
+    });
+
+    const payload = await helpers.runPostSpecialistPipeline({
+      routing: {
+        userMessage: scenario.route,
+        actionCodeRaw: scenario.actionCode,
+        responseUiFlags: null,
+        inputMode: "widget",
+        wordingChoiceEnabled: true,
+        languageResolvedThisTurn: false,
+        isBootstrapPollCall: false,
+        motivationQuotesEnabled: false,
+      },
+      rendering: {
+        uiI18nTelemetry: null,
+        lang: "en",
+        ensureUiStrings: async (state) => state,
+      },
+      state: {
+        state: {
+          current_step: scenario.stepId,
+          active_specialist: scenario.activeSpecialist,
+          provisional_by_step: {},
+          last_specialist_result: {
+            refined_formulation: scenario.previousValue,
+            [scenario.stepId]: scenario.previousValue,
+          },
+        } as any,
+        transientPendingScores: null,
+        submittedUserText: "",
+        submittedTextIntent: "",
+        submittedTextAnchor: "",
+        rawNormalized: scenario.route,
+        pristineAtEntry: true,
+      },
+      specialist: {
+        model: "gpt-5-mini",
+        decideOrchestration: () =>
+          ({
+            current_step: scenario.stepId,
+            specialist_to_call: scenario.activeSpecialist,
+            show_session_intro: "false",
+            show_step_intro: "false",
+          }) as any,
+        rememberLlmCall: () => {},
+      },
+    } as any);
+
+    assert.equal(specialistUserMessage, scenario.route);
+    assert.ok(payload.ui, `${scenario.actionCode} should return a renderable ui payload`);
+    assert.deepEqual(payload.ui?.action_codes, ACTIONCODE_REGISTRY.menus[scenario.menuId]);
+    assert.equal(payload.ui?.contract_id, scenario.specialistResult.ui_contract_id);
+    assert.equal(payload.ui?.questionText, scenario.expectedQuestion);
+
+    if (scenario.expectedViewVariant) {
+      assert.equal(payload.ui?.view?.variant, scenario.expectedViewVariant);
+    }
+
+    assert.equal(payload.text, scenario.expectedText);
+    if (scenario.expectedOutcome === "refine") {
+      assert.notEqual(payload.text, scenario.previousValue);
+    }
+  }
 });
 
 test("runPostSpecialistPipeline escalates stuck support from server-side classifier even when specialist returns ok", async () => {

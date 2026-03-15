@@ -262,7 +262,11 @@ export const UI_STRINGS_LOCALE_ID: Record<string, string> = {
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "Gunakan widget Business Strategy Canvas Builder untuk melanjutkan (bukan kotak chat).",
     "wording.choice.context.default": "Silakan pilih kata-kata yang paling cocok.",
+    "wording.feedback.compare.intro.template":
+      "Saya rasa saya mengerti maksud Anda. Untuk membuat {0} lebih kuat, ada baiknya mengingat hal ini.",
     "wording.feedback.user_pick.ack.default": "Anda memilih kata-kata Anda sendiri, dan itu tidak masalah.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "Rumusan asli Anda terutama berbicara tentang keinginan Anda sendiri, sementara Dream Builder meminta perubahan yang lebih luas di dunia.",
     "wording.feedback.user_pick.reason.default": "Ini mempertahankan makna asli Anda sekaligus tetap selaras dengan langkah ini.",
     "wordingChoice.chooseVersion": "Pilih versi ini",
     "wordingChoice.useInputFallback": "Gunakan input ini",

@@ -4470,6 +4470,13 @@
       ...(feedbackReasonText ? { feedbackReasonText } : {})
     };
   }
+  function readWordingChoiceCompareFeedbackText(wordingChoiceRaw) {
+    const wordingChoice = toRecord2(wordingChoiceRaw);
+    const compareFeedback = toRecord2(wordingChoice.compare_feedback);
+    const compareFeedbackText = String(compareFeedback.text || "").trim();
+    if (compareFeedbackText) return compareFeedbackText;
+    return String(wordingChoice.feedback_reason_text || "").trim();
+  }
   function stepIndex(stepId) {
     const idx = ORDER.indexOf(stepId);
     return idx >= 0 ? idx : 0;
@@ -4803,7 +4810,7 @@
       return false;
     }
     const mode = String(wording.mode || "text") === "list" ? "list" : "text";
-    const feedbackReasonText = String(wording.feedback_reason_text || "").trim();
+    const feedbackReasonText = readWordingChoiceCompareFeedbackText(wording);
     const userText = String(wording.user_text || "").trim();
     const suggestionText = String(wording.suggestion_text || "").trim();
     const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];

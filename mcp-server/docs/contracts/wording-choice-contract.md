@@ -15,6 +15,8 @@ This contract governs A/B wording selection when both user and suggestion varian
 ## UI Behavior
 
 - Show comparison panel (text mode or list mode).
+- Compare payload exposes a dedicated `compare_feedback.text` field for the agent reason shown above the two compare cards.
+- The compare panel must only render when `compare_feedback.text` contains a valid, content-specific reason for this exact rewrite.
 - Block standard confirm/proceed actions until a pick is made.
 - View priority is strict:
 - DreamBuilder scoring view overrides wording-choice.

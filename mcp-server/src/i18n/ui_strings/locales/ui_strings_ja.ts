@@ -262,7 +262,11 @@ export const UI_STRINGS_LOCALE_JA: Record<string, string> = {
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "続行するには Business Strategy Canvas Builder のウィジェットを使用してください（チャット欄ではありません）。",
     "wording.choice.context.default": "最も合う言い回しを選んでください。",
+    "wording.feedback.compare.intro.template":
+      "言いたいことは分かる気がします。{0} をより強くするには、ここを意識すると役立ちます。",
     "wording.feedback.user_pick.ack.default": "あなた自身の言い回しを選びました。それで大丈夫です。",
+    "wording.feedback.dream_builder.rewrite.default":
+      "元の表現は主にあなた自身の願いに焦点を当てていますが、Dream Builder では世界におけるより広い変化が求められます。",
     "wording.feedback.user_pick.reason.default": "元の意味を保ちつつ、このステップに沿った形になります。",
     "wordingChoice.chooseVersion": "このバージョンを選ぶ",
     "wordingChoice.useInputFallback": "この入力を使う",

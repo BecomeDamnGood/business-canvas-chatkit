@@ -66,6 +66,16 @@ function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
   };
 }
 
+export function readWordingChoiceCompareFeedbackText(
+  wordingChoiceRaw: Record<string, unknown> | null | undefined
+): string {
+  const wordingChoice = toRecord(wordingChoiceRaw);
+  const compareFeedback = toRecord(wordingChoice.compare_feedback);
+  const compareFeedbackText = String(compareFeedback.text || "").trim();
+  if (compareFeedbackText) return compareFeedbackText;
+  return String(wordingChoice.feedback_reason_text || "").trim();
+}
+
 export function shouldSuppressMainCardForWordingChoice(
   uiPayloadRaw: Record<string, unknown> | null | undefined,
   uiViewVariantRaw: string | null | undefined
@@ -863,7 +873,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
 
   const mode = String(wording.mode || "text") === "list" ? "list" : "text";
   const variant = String(wording.variant || "default").trim().toLowerCase();
-  const feedbackReasonText = String(wording.feedback_reason_text || "").trim();
+  const feedbackReasonText = readWordingChoiceCompareFeedbackText(wording);
   const userText = String(wording.user_text || "").trim();
   const suggestionText = String(wording.suggestion_text || "").trim();
   const userLabelFromPayload = String(wording.user_label || "").trim();

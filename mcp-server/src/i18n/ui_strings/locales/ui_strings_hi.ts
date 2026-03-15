@@ -262,7 +262,11 @@ export const UI_STRINGS_LOCALE_HI: Record<string, string> = {
     "uiTitle.template": "Business Strategy Canvas Builder",
     "uiUseWidgetToContinue": "आगे बढ़ने के लिए Business Strategy Canvas Builder विजेट का उपयोग करें (चैट बॉक्स नहीं)।",
     "wording.choice.context.default": "कृपया सबसे उपयुक्त शब्दावली चुनें।",
+    "wording.feedback.compare.intro.template":
+      "मुझे लगता है कि मैं समझता/समझती हूं कि आप क्या कहना चाहते हैं। {0} को और मजबूत बनाने के लिए इसे ध्यान में रखना मददगार है।",
     "wording.feedback.user_pick.ack.default": "आपने अपनी शब्दावली चुनी, और यह ठीक है।",
+    "wording.feedback.dream_builder.rewrite.default":
+      "आपकी मूल पंक्ति मुख्य रूप से आपकी अपनी इच्छा पर केंद्रित है, जबकि Dream Builder दुनिया में एक बड़े बदलाव के बारे में पूछता है।",
     "wording.feedback.user_pick.reason.default": "यह आपके मूल अर्थ को बनाए रखता है और इस कदम के अनुरूप रहता है।",
     "wordingChoice.chooseVersion": "यह संस्करण चुनें",
     "wordingChoice.useInputFallback": "यह इनपुट उपयोग करें",

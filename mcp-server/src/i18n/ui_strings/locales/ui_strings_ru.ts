@@ -292,7 +292,11 @@ export const UI_STRINGS_LOCALE_RU: Record<string, string> = {
     "uiSubtitle": "Используйте виджет The Business Strategy Canvas Builder, чтобы продолжить (а не окно чата)",
     "uiUseWidgetToContinue": "Используйте виджет The Business Strategy Canvas Builder, чтобы продолжить (а не окно чата).",
     "wording.choice.context.default": "Пожалуйста, выберите формулировку, которая подходит лучше всего.",
+    "wording.feedback.compare.intro.template":
+      "Мне кажется, я понимаю, что вы имеете в виду. Чтобы {0} звучало сильнее, полезно помнить об этом.",
     "wording.feedback.user_pick.ack.default": "Вы выбрали свою собственную формулировку, и это нормально.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "Ваша исходная формулировка в основном говорит о вашем собственном желании, тогда как Dream Builder просит о более широком изменении в мире.",
     "wording.feedback.user_pick.reason.default": "Это сохраняет ваш исходный смысл и при этом соответствует данному шагу.",
     "wordingChoice.chooseVersion": "Выбрать эту версию",
     "wordingChoice.useInputFallback": "Использовать этот ввод",

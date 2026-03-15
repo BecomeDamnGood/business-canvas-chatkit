@@ -22,13 +22,17 @@ type CreateRunStepRuntimeActionHelpersDeps = {
 };
 
 export type WordingChoiceMode = "text" | "list";
-export type WordingChoiceVariant = "default" | "clarify_dual";
+export type WordingChoiceVariant = "default" | "clarify_dual" | "grouped_list_units";
+
+export type WordingChoiceCompareFeedbackUiPayload = {
+  text: string;
+};
 
 export type WordingChoiceUiPayload = {
   enabled: boolean;
   mode: WordingChoiceMode;
   variant?: WordingChoiceVariant;
-  feedback_reason_text?: string;
+  compare_feedback?: WordingChoiceCompareFeedbackUiPayload;
   user_text: string;
   suggestion_text: string;
   user_label?: string;

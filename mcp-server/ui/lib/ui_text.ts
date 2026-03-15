@@ -342,8 +342,8 @@ export function renderSingleValueCardContent(
   if (!heading && !canonicalText && !supportText && !feedbackReasonText) {
     return false;
   }
-  if (feedbackReasonText) appendFeedbackNote(el, feedbackReasonText);
   if (supportText) appendStructuredText(el, supportText);
+  if (feedbackReasonText) appendFeedbackNote(el, feedbackReasonText);
   if (heading) appendHeading(el, heading);
   if (canonicalText) appendCanonicalValue(el, canonicalText);
   return true;

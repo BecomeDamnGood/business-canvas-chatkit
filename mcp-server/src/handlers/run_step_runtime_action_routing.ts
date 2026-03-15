@@ -864,26 +864,49 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     !String(userMessage || "").trim().startsWith("ACTION_") &&
     !String(userMessage || "").trim().startsWith("__ROUTE__") &&
     !wording.isWordingPickRouteToken(userMessage);
+  const suspendPendingWordingChoiceSpecialist = (
+    specialist: Record<string, unknown>
+  ): Record<string, unknown> =>
+    normalizePendingPickerSpecialistContract({
+      specialist: {
+        ...specialist,
+        wording_choice_pending: "false",
+        wording_choice_selected: "",
+        pending_suggestion_intent: "",
+        pending_suggestion_anchor: "",
+        pending_suggestion_feedback_text: "",
+        pending_suggestion_presentation_mode: "",
+      },
+      stepIdHint: String(state.current_step || ""),
+    });
   const buildWidgetResponse = async (params: {
     nextState: CanvasState;
     specialist: Record<string, unknown>;
     wordingChoice?: WordingChoiceUiPayload | null;
   }): Promise<RunStepRuntimeActionRoutingOutput<TPayload>> => {
     const stateWithUi = await behavior.ensureUiStrings(params.nextState, userMessage);
+    const shouldSuspendPendingPicker =
+      (!params.wordingChoice || params.wordingChoice.enabled !== true) &&
+      String(params.specialist.wording_choice_pending || "").trim() === "true" &&
+      pendingWordingChoicePresentation(params.specialist) === "picker";
+    const responseSpecialist = shouldSuspendPendingPicker
+      ? suspendPendingWordingChoiceSpecialist(params.specialist)
+      : params.specialist;
+    (stateWithUi as Record<string, unknown>).last_specialist_result = responseSpecialist;
     state = stateWithUi;
-    const payload = params.wordingChoice
+    const payload = params.wordingChoice && params.wordingChoice.enabled === true
       ? behavior.attachRegistryPayload(
           {
             ok: true,
             tool: "run_step",
             current_step_id: String(stateWithUi.current_step),
             active_specialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-            text: behavior.buildTextForWidget({ specialist: params.specialist, state: stateWithUi }),
-            prompt: behavior.pickPrompt(params.specialist),
-            specialist: params.specialist,
+            text: behavior.buildTextForWidget({ specialist: responseSpecialist, state: stateWithUi }),
+            prompt: behavior.pickPrompt(responseSpecialist),
+            specialist: responseSpecialist,
             state: stateWithUi,
           },
-          params.specialist,
+          responseSpecialist,
           { require_wording_pick: true },
           [],
           [],
@@ -895,12 +918,12 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
             tool: "run_step",
             current_step_id: String(stateWithUi.current_step),
             active_specialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-            text: behavior.buildTextForWidget({ specialist: params.specialist, state: stateWithUi }),
-            prompt: behavior.pickPrompt(params.specialist),
-            specialist: params.specialist,
+            text: behavior.buildTextForWidget({ specialist: responseSpecialist, state: stateWithUi }),
+            prompt: behavior.pickPrompt(responseSpecialist),
+            specialist: responseSpecialist,
             state: stateWithUi,
           },
-          params.specialist
+          responseSpecialist
         );
 
     return {
@@ -930,18 +953,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ) &&
     hasRenderablePendingWordingChoice(pendingBeforeTurn);
   const suspendPendingWordingChoice = (specialist: Record<string, unknown>) => {
-    const suspended = normalizePendingPickerSpecialistContract({
-      specialist: {
-        ...specialist,
-        wording_choice_pending: "false",
-        wording_choice_selected: "",
-        pending_suggestion_intent: "",
-        pending_suggestion_anchor: "",
-        pending_suggestion_feedback_text: "",
-        pending_suggestion_presentation_mode: "",
-      },
-      stepIdHint: String(state.current_step || ""),
-    });
+    const suspended = suspendPendingWordingChoiceSpecialist(specialist);
     (state as Record<string, unknown>).last_specialist_result = suspended;
     pendingBeforeTurn = suspended;
     hasPendingWordingChoice = false;

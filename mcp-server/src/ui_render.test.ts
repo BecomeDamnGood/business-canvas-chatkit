@@ -6,6 +6,7 @@ import {
   buildInitialDreamScoringScores,
   dreamExerciseButtonLabelKeyForState,
   parseWordingChoiceInstruction,
+  readWordingChoiceCompareFeedbackText,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
   shouldRetainDreamScoringClientScores,
@@ -149,6 +150,27 @@ test("parseWordingChoiceInstruction separates retained bullets from the picker i
     "Traditionele communicatiediensten (zoals DTP, posters, campagnes)",
   ]);
   assert.equal(parsed.instructionText, "Choose the version that fits best for the remaining difference.");
+});
+
+test("readWordingChoiceCompareFeedbackText prefers the dedicated compare feedback contract", () => {
+  assert.equal(
+    readWordingChoiceCompareFeedbackText({
+      compare_feedback: {
+        text: "This suggestion makes the purpose more specific to the change you want to create.",
+      },
+      feedback_reason_text: "Legacy feedback should not win.",
+    }),
+    "This suggestion makes the purpose more specific to the change you want to create."
+  );
+});
+
+test("readWordingChoiceCompareFeedbackText falls back to the legacy compare field when needed", () => {
+  assert.equal(
+    readWordingChoiceCompareFeedbackText({
+      feedback_reason_text: "Legacy compare feedback.",
+    }),
+    "Legacy compare feedback."
+  );
 });
 
 test("resolveActionCodeForStateKey falls back to action contract when lean state omits start action", () => {

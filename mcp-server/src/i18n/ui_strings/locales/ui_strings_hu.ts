@@ -272,7 +272,11 @@ export const UI_STRINGS_LOCALE_HU: Record<string, string> = {
     "uiSubtitle": "A folytatáshoz használd a The Business Strategy Canvas Builder widgetet (ne a csevegőmezőt).",
     "uiUseWidgetToContinue": "A folytatáshoz használd a The Business Strategy Canvas Builder widgetet (ne a csevegőmezőt).",
     "wording.choice.context.default": "Kérlek válaszd ki azt a megfogalmazást, ami a legjobban illik.",
+    "wording.feedback.compare.intro.template":
+      "Azt hiszem, értem, mire gondolsz. Egy erősebb {0} érdekében érdemes ezt szem előtt tartani.",
     "wording.feedback.user_pick.ack.default": "A saját megfogalmazásodat választottad, és ez rendben van.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "Az eredeti megfogalmazásod főként a saját vágyadról szól, miközben a Dream Builder egy tágabb világbeli változást kér.",
     "wording.feedback.user_pick.reason.default": "Ez megőrzi az eredeti jelentésedet, miközben igazodik ehhez a lépéshez.",
     "wordingChoice.chooseVersion": "Válaszd ezt a verziót",
     "wordingChoice.useInputFallback": "Használd ezt a bevitelt",

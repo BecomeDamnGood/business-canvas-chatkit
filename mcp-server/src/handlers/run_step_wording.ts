@@ -1,9 +1,16 @@
 import type { CanvasState, ProvisionalSource } from "../core/state.js";
+import {
+  isPendingCompareFeedbackModeEligible,
+  pendingCompareFeedbackPolicy,
+  shouldSuppressPendingCompareForMissingFeedback,
+  userPickFeedbackPolicy,
+} from "../core/feedback_policy.js";
 import { isSingleValueWordingStep } from "../steps/step_registry.js";
 import {
   formatCompareFeedbackForDisplay,
-  formatUserPickFeedbackForDisplay,
   sanitizeFeedbackReasonForDisplay,
+  userPickAcknowledgmentForDisplay,
+  userPickFeedbackReasonForDisplay,
 } from "../core/feedback_display.js";
 import type { WordingChoiceUiPayload } from "./run_step_ui_payload.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
@@ -1536,18 +1543,17 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       .trim();
     const source = cleaned || fallback;
     if (!source) return "";
-    const firstSentence = source
-      .split(/(?<=[.!?])\s+/)
-      .map((part) => part.trim())
-      .filter(Boolean)[0] || source;
-    const normalized = firstSentence.charAt(0).toUpperCase() + firstSentence.slice(1);
+    const normalized = source.charAt(0).toUpperCase() + source.slice(1);
     return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
   }
 
-  function resolveFeedbackReasonFromSpecialist(state: CanvasState, prev: Record<string, unknown>): string {
+  function resolveFeedbackReasonFromSpecialist(
+    stepId: string,
+    state: CanvasState,
+    prev: Record<string, unknown>
+  ): string {
     const resolveString = (key: string, fallback = "") =>
       deps.uiStringFromStateMap(state, key, fallback || deps.uiDefaultString(key, fallback));
-    const stepId = String((state as any)?.current_step || "").trim();
     const reasonText = String(prev.feedback_reason_text || "").trim();
     if (reasonText) {
       const sanitized = sanitizeFeedbackReasonForDisplay({
@@ -1561,9 +1567,18 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
   }
 
   function userPickFeedbackReason(state: CanvasState, prev: Record<string, unknown>): string {
-    const explicitReason = resolveFeedbackReasonFromSpecialist(state, prev);
-    if (explicitReason) return explicitReason;
-    return "";
+    const stepId = String((state as any)?.current_step || "").trim();
+    const rawReason = resolveFeedbackReasonFromSpecialist(stepId, state, prev);
+    const resolveString = (key: string, fallback = "") =>
+      deps.uiStringFromStateMap(state, key, fallback || deps.uiDefaultString(key, fallback));
+    if (!rawReason && userPickFeedbackPolicy(stepId).fallbackBehavior === "allow_empty") {
+      return "";
+    }
+    return userPickFeedbackReasonForDisplay({
+      stepId,
+      rawReason,
+      resolveString,
+    });
   }
 
   function resolvePendingWordingFeedbackReason(params: {
@@ -1576,14 +1591,23 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     userRaw: string;
     knownItems: string[];
   }): string {
-    void params.mode;
     void params.knownItems;
-    const explicitReason = resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
+    const policy = pendingCompareFeedbackPolicy({
+      stepId: params.stepId,
+      mode: params.mode,
+      forcePending: params.forcePending,
+      isDreamBuilderMaterialRewrite:
+        params.stepId === deps.dreamStepId &&
+        params.mode === "list" &&
+        deps.isMaterialRewriteCandidate(params.userRaw, params.suggestionRaw),
+    });
+    const explicitReason = resolveFeedbackReasonFromSpecialist(
+      params.stepId,
+      params.state,
+      params.specialistResult
+    );
     if (explicitReason) return explicitReason;
-    if (
-      params.stepId === deps.dreamStepId &&
-      deps.isMaterialRewriteCandidate(params.userRaw, params.suggestionRaw)
-    ) {
+    if (policy.sourcePolicy === "dream_builder_material_rewrite_fallback") {
       return sanitizeFeedbackReasonForDisplay({
         stepId: params.stepId,
         rawReason: deps.uiStringFromStateMap(
@@ -1604,7 +1628,11 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     state: CanvasState;
   }): string {
     void params.unit;
-    return resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
+    return resolveFeedbackReasonFromSpecialist(
+      String((params.state as any)?.current_step || "").trim(),
+      params.state,
+      params.specialistResult
+    );
   }
 
   function withGroupedCompareUnitFeedback(params: {
@@ -1651,22 +1679,13 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     });
     const retainedItems = visibleRetainedItemsForGroupedCompare(params.segments, params.units);
     const feedbackReasonText = String(currentUnit.feedback_reason_text || "").trim();
-    if (!feedbackReasonText) return null;
-    const resolveString = (key: string, fallback = "") =>
-      deps.uiStringFromStateMap(params.state || null, key, fallback || deps.uiDefaultString(key, fallback));
+    const compareFeedback = buildCompareFeedbackPayload(params.stepId, params.state, feedbackReasonText);
+    if (!compareFeedback) return null;
     return {
       enabled: true,
       mode: "list",
       variant: "grouped_list_units",
-      ...(feedbackReasonText
-        ? {
-            feedback_reason_text: formatCompareFeedbackForDisplay({
-              stepId: params.stepId,
-              rawReason: feedbackReasonText,
-              resolveString,
-            }),
-          }
-        : {}),
+      compare_feedback: compareFeedback,
       ...((params.userLabel || labels.userLabel) ? { user_label: params.userLabel || labels.userLabel } : {}),
       ...((params.suggestionLabel || labels.suggestionLabel)
         ? { suggestion_label: params.suggestionLabel || labels.suggestionLabel }
@@ -1679,13 +1698,18 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     };
   }
 
-  function formattedCompareFeedback(stepId: string, state: CanvasState | null | undefined, rawReason: string): string {
-    return formatCompareFeedbackForDisplay({
+  function buildCompareFeedbackPayload(
+    stepId: string,
+    state: CanvasState | null | undefined,
+    rawReason: string
+  ): WordingChoiceUiPayload["compare_feedback"] | undefined {
+    const text = formatCompareFeedbackForDisplay({
       stepId,
       rawReason,
       resolveString: (key, fallback = "") =>
         deps.uiStringFromStateMap(state || null, key, fallback || deps.uiDefaultString(key, fallback)),
     });
+    return text ? { text } : undefined;
   }
 
   function userChoiceFeedbackMessage(
@@ -1700,15 +1724,15 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       prev.wording_choice_user_normalized || prev.wording_choice_user_raw || prev.refined_formulation || ""
     ).trim();
     const selection = deps.wordingSelectionMessage(stepId, state, activeSpecialist, selectedValue);
-    const rawFeedbackReason = userPickFeedbackReason(state, prev);
     const resolveString = (key: string, fallback = "") =>
       deps.uiStringFromStateMap(state, key, fallback || deps.uiDefaultString(key, fallback));
-    const feedbackReason = formatUserPickFeedbackForDisplay({
+    const acknowledgment = userPickAcknowledgmentForDisplay(resolveString);
+    const feedbackReason = userPickFeedbackReasonForDisplay({
       stepId,
-      rawReason: rawFeedbackReason,
+      rawReason: resolveFeedbackReasonFromSpecialist(stepId, state, prev),
       resolveString,
     });
-    const parts = [feedbackReason, selection].filter((part) => String(part || "").trim());
+    const parts = [acknowledgment, feedbackReason, selection].filter((part) => String(part || "").trim());
     return parts.join("\n\n").trim();
   }
 
@@ -2103,6 +2127,22 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     });
     const feedbackText = String(params.submittedFeedbackText || "").trim();
     const feedbackMode = normalizeFeedbackMode(specialistResult.feedback_mode);
+    const comparePolicy = pendingCompareFeedbackPolicy({
+      stepId,
+      mode,
+      forcePending: forcePending === true,
+      isDreamBuilderMaterialRewrite:
+        stepId === deps.dreamStepId &&
+        mode === "list" &&
+        deps.isMaterialRewriteCandidate(userRawSafe, suggestionRaw),
+    });
+    const compareFeedback = comparePlan
+      ? buildCompareFeedbackPayload(
+          stepId,
+          state,
+          String(comparePlan.initialUnit.feedback_reason_text || "").trim()
+        )
+      : buildCompareFeedbackPayload(stepId, state, feedbackReason);
     const enriched: Record<string, unknown> = {
       ...specialistResult,
       message: pendingMessage,
@@ -2158,15 +2198,15 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     if (presentation === "canonical") {
       return { specialist: enriched, wordingChoice: null };
     }
-    if (isAcceptedOutputSingleValueTextStep(stepId, mode) && feedbackMode !== "compare_suggestion") {
+    if (!isPendingCompareFeedbackModeEligible(comparePolicy, feedbackMode)) {
       enriched.wording_choice_presentation = "canonical";
       return { specialist: enriched, wordingChoice: null };
     }
-    if (!feedbackReason) {
+    if (shouldSuppressPendingCompareForMissingFeedback(comparePolicy, Boolean(compareFeedback))) {
       enriched.wording_choice_presentation = "canonical";
       return { specialist: enriched, wordingChoice: null };
     }
-    if (comparePlan && !String(comparePlan.initialUnit.feedback_reason_text || "").trim()) {
+    if (!compareFeedback) {
       enriched.wording_choice_presentation = "canonical";
       return { specialist: enriched, wordingChoice: null };
     }
@@ -2185,15 +2225,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
             enabled: true,
             mode,
             ...(variant !== "default" ? { variant } : {}),
-            ...(String(comparePlan.initialUnit.feedback_reason_text || "").trim()
-              ? {
-                  feedback_reason_text: formattedCompareFeedback(
-                    stepId,
-                    state,
-                    String(comparePlan.initialUnit.feedback_reason_text || "").trim()
-                  ),
-                }
-              : {}),
+            compare_feedback: compareFeedback,
             ...((comparePlan.userLabel || wordingLabels.userLabel)
               ? { user_label: comparePlan.userLabel || wordingLabels.userLabel }
               : {}),
@@ -2213,7 +2245,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
             enabled: true,
             mode,
             ...(variant !== "default" ? { variant } : {}),
-            ...(feedbackReason ? { feedback_reason_text: formattedCompareFeedback(stepId, state, feedbackReason) } : {}),
+            compare_feedback: compareFeedback,
             ...(wordingLabels.userLabel ? { user_label: wordingLabels.userLabel } : {}),
             ...(wordingLabels.suggestionLabel ? { suggestion_label: wordingLabels.suggestionLabel } : {}),
             user_text: normalizedUserSafe,
@@ -2547,6 +2579,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
           cursor: compareCursor,
         })
       : null;
+    if (compareMode === "grouped_units" && !comparePayload) {
+      return null;
+    }
     const userItems = (
       comparePayload?.user_items ||
       toTrimmedStringArray(specialist?.wording_choice_user_items)
@@ -2571,7 +2606,20 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const suggestionLabel =
       String(specialist?.wording_choice_suggestion_label || "").trim() || wordingLabels.suggestionLabel || "";
     const feedbackMode = normalizeFeedbackMode(specialist?.feedback_mode);
-    const feedbackReasonText = resolveFeedbackReasonFromSpecialist((state || {}) as CanvasState, specialist);
+    const comparePolicy = pendingCompareFeedbackPolicy({
+      stepId,
+      mode,
+      forcePending: true,
+    });
+    const feedbackReasonText = resolveFeedbackReasonFromSpecialist(
+      stepId,
+      (state || {}) as CanvasState,
+      specialist
+    );
+    const compareFeedback =
+      compareMode === "grouped_units"
+        ? comparePayload?.compare_feedback
+        : buildCompareFeedbackPayload(stepId, state, feedbackReasonText);
     const fallbackUserText = stripMarkupPreserveLines(
       String(
         comparePayload?.user_text ||
@@ -2597,15 +2645,18 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const resolvedSuggestionItems = mode === "list" && suggestionItems.length === 0
       ? pickWordingSuggestionList(specialist, fallbackSuggestionText)
       : suggestionItems;
-    if (!feedbackReasonText) return null;
-    if (isAcceptedOutputSingleValueTextStep(stepId, mode) && feedbackMode !== "compare_suggestion") {
+    if (!isPendingCompareFeedbackModeEligible(comparePolicy, feedbackMode)) {
       return null;
     }
+    if (shouldSuppressPendingCompareForMissingFeedback(comparePolicy, Boolean(compareFeedback))) {
+      return null;
+    }
+    if (!compareFeedback) return null;
     return {
       enabled: true,
       mode,
       ...(variant === "clarify_dual" ? { variant: "clarify_dual" as const } : {}),
-      ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
+      compare_feedback: compareFeedback,
       ...(userLabel ? { user_label: userLabel } : {}),
       ...(suggestionLabel ? { suggestion_label: suggestionLabel } : {}),
       user_text: fallbackUserText,

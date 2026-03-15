@@ -262,7 +262,11 @@ export const UI_STRINGS_LOCALE_ZH_HANS: Record<string, string> = {
     "uiTitle.template": "商业战略画布构建器",
     "uiUseWidgetToContinue": "请使用“商业战略画布构建器”小组件继续（不要使用聊天框）。",
     "wording.choice.context.default": "请选择最合适的表述。",
+    "wording.feedback.compare.intro.template":
+      "我想我明白你的意思了。为了让 {0} 更有力，记住这一点会有帮助。",
     "wording.feedback.user_pick.ack.default": "你选择了自己的表述，这没有问题。",
+    "wording.feedback.dream_builder.rewrite.default":
+      "你原来的表述主要围绕你自己的愿望，而 Dream Builder 要求的是世界中更广泛的变化。",
     "wording.feedback.user_pick.reason.default": "这样既保留你的原意，也与本步骤保持一致。",
     "wordingChoice.chooseVersion": "选择这个版本",
     "wordingChoice.useInputFallback": "使用这个输入",

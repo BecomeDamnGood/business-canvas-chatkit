@@ -676,6 +676,72 @@ test("renderSingleValueCardContent keeps semantic heading and canonical value se
   }
 });
 
+test("renderSingleValueCardContent renders acknowledgment before feedback and canonical content", { concurrency: false }, () => {
+  const originalDocument = (globalThis as unknown as { document: unknown }).document;
+  const fakeDocument = {
+    createDocumentFragment() {
+      return {
+        nodeType: 11,
+        childNodes: [] as unknown[],
+        appendChild(node: unknown) {
+          this.childNodes.push(node);
+          return node;
+        },
+      };
+    },
+    createTextNode(text: string) {
+      return { nodeType: 3, textContent: String(text) };
+    },
+    createElement(tag: string) {
+      return {
+        nodeType: 1,
+        tagName: String(tag).toUpperCase(),
+        className: "",
+        textContent: "",
+        childNodes: [] as unknown[],
+        get firstChild() {
+          return this.childNodes.length ? this.childNodes[0] : null;
+        },
+        removeChild() {
+          this.childNodes.shift();
+        },
+        appendChild(node: unknown) {
+          this.childNodes.push(node);
+          return node;
+        },
+      };
+    },
+  };
+  (globalThis as unknown as { document: unknown }).document = fakeDocument;
+  try {
+    const container = {
+      innerHTML: "",
+      childNodes: [] as unknown[],
+      appendChild(node: unknown) {
+        this.childNodes.push(node);
+        return node;
+      },
+    };
+
+    const rendered = renderSingleValueCardContent(container as unknown as Element, {
+      supportText: "Je koos je eigen bewoording, en dat is oké.",
+      feedbackReasonText: "Deze formulering werkt hier nog steeds omdat de verandering voor mensen helder blijft.",
+      heading: "Je huidige droom voor Mindd is",
+      canonicalText: "Mindd droomt van een wereld waarin mensen met vertrouwen complexe keuzes maken.",
+    });
+
+    assert.equal(rendered, true);
+    assert.equal(container.childNodes.length, 4);
+    assert.equal((container.childNodes[0] as any).tagName, "P");
+    assert.equal((container.childNodes[1] as any).tagName, "DIV");
+    assert.equal((container.childNodes[1] as any).className, "cardFeedbackNote");
+    assert.equal((container.childNodes[2] as any).className, "cardSubheading");
+    assert.equal((container.childNodes[3] as any).className, "cardCanonicalValue");
+  } finally {
+    (globalThis as unknown as { document: unknown }).document = originalDocument;
+  }
+});
+
 test("bundled runtime renders rich body into cardDesc via formatter and keeps unsafe targets out of innerHTML", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /function escapeHtml\(/);
@@ -2076,7 +2142,10 @@ test("bundled wording-choice view exposes a dedicated compare feedback slot", ()
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /class="wordingChoiceFeedback" id="wordingChoiceFeedback"/);
   assert.match(source, /const feedbackEl = document\.getElementById\("wordingChoiceFeedback"\);/);
-  assert.match(source, /const feedbackReasonText = String\(wording\.feedback_reason_text \|\| ""\)\.trim\(\);/);
+  assert.match(source, /function readWordingChoiceCompareFeedbackText\(wordingChoiceRaw\)/);
+  assert.match(source, /const compareFeedback = toRecord2\(wordingChoice\.compare_feedback\);/);
+  assert.match(source, /const compareFeedbackText = String\(compareFeedback\.text \|\| ""\)\.trim\(\);/);
+  assert.match(source, /const feedbackReasonText = readWordingChoiceCompareFeedbackText\(wording\);/);
   assert.match(source, /renderStructuredText\(feedbackEl, feedbackReasonText\);/);
   assert.match(source, /feedbackEl\.style\.display = feedbackReasonText \? "block" : "none";/);
   assert.match(source, /\.wordingChoiceFeedback p,/);

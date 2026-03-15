@@ -310,7 +310,9 @@ test("attachRegistryPayload preserves explicit compare feedback in wording-choic
     {
       enabled: true,
       mode: "text",
-      feedback_reason_text: "The current wording is still too broad and does not yet show the contribution clearly.",
+      compare_feedback: {
+        text: "The current wording is still too broad and does not yet show the contribution clearly.",
+      },
       user_text: "We want to do something good.",
       suggestion_text: canonical,
       user_items: [],
@@ -320,8 +322,53 @@ test("attachRegistryPayload preserves explicit compare feedback in wording-choic
   );
 
   assert.equal(
-    payload.ui?.wording_choice?.feedback_reason_text,
+    payload.ui?.wording_choice?.compare_feedback?.text,
     "The current wording is still too broad and does not yet show the contribution clearly."
+  );
+});
+
+test("attachRegistryPayload preserves grouped compare feedback in wording-choice payloads", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "",
+      prompt: "",
+      current_step_id: "strategy",
+      state: {
+        current_step: "strategy",
+        active_specialist: "Strategy",
+      } as any,
+    },
+    {
+      ui_contract_id: "strategy:ASK:STRATEGY_MENU_CONFIRM:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_presentation: "picker",
+      wording_choice_target_field: "strategy",
+      wording_choice_user_items: ["Operational simplicity"],
+      wording_choice_suggestion_items: ["Operational focus"],
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "list",
+      variant: "grouped_list_units",
+      compare_feedback: {
+        text: "This suggestion sharpens the remaining strategic difference into one clearer choice.",
+      },
+      user_text: "Operational simplicity",
+      suggestion_text: "Operational focus",
+      user_items: ["Operational simplicity"],
+      suggestion_items: ["Operational focus"],
+      instruction: "Choose the version that fits best for the remaining difference.",
+    }
+  );
+
+  assert.equal(
+    payload.ui?.wording_choice?.compare_feedback?.text,
+    "This suggestion sharpens the remaining strategic difference into one clearer choice."
   );
 });
 
