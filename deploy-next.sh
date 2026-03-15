@@ -18,6 +18,7 @@ cd "$REPO_PATH"
 echo "Running contract smoke gate..."
 (
   cd mcp-server
+  node scripts/build-ui.mjs --check
   node scripts/verify-ui-runtime-artifacts.mjs
   node --loader ts-node/esm scripts/contract-smoke.mjs
 )

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { renderInlineText, renderSingleValueCardContent, renderStructuredText } from "../ui/lib/ui_text.ts";
 import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.ts";
@@ -761,20 +763,20 @@ test("bundled runtime startup and ACTION_START flow stay on the simple happy-pat
 
   // Startup: no fail-closed blocked fallback, ingest once and continue.
   assert.doesNotMatch(source, /function renderStartupWaitShell\(/);
-  assert.match(source, /function scheduleStartupFailClosed\(/);
-  assert.doesNotMatch(source, /scheduleStartupFailClosed\("startup_no_initial_payload"\)/);
   assert.match(source, /tryInitialIngestFromHost\("set_globals"\);/);
   assert.doesNotMatch(source, /startup_fail_closed_no_canonical_payload/);
 
-  // Routing defaults to interactive when no explicit server mode is present.
-  assert.match(source, /const normalizedViewMode = hasExplicitServerRouting \? viewMode : "interactive";/);
+  // Routing tolerates missing explicit view mode and keeps the interactive path live.
+  assert.match(source, /const hasExplicitServerRouting =/);
+  assert.match(source, /if \(!hasExplicitServerRouting\) \{/);
+  assert.match(source, /\[ui_contract_missing_view_mode_tolerated\]/);
 
   // ACTION_START: no strict liveness fail-closed path.
   assert.doesNotMatch(source, /scheduleStartAckRecoveryPoll\(/);
   assert.doesNotMatch(source, /result\?\.ack_status \|\| responseState\.ack_status \|\| responseLiveness\.ack_status/);
   assert.doesNotMatch(source, /result\?\.state_advanced \?\? responseState\.state_advanced \?\? responseLiveness\.state_advanced/);
   assert.doesNotMatch(source, /\[ui_start_dispatch_not_advanced_fail_closed\]/);
-  assert.doesNotMatch(source, /\[ui_contract_interactive_content_absent\]/);
+  assert.match(source, /\[ui_contract_interactive_content_absent\]/);
 });
 
 test("canonical widget payload only accepts _meta.widget_result authority", () => {
@@ -2090,13 +2092,23 @@ test("bundled runtime inline script parses without syntax errors", () => {
   });
 });
 
+test("bundled runtime stays in sync with the source-owned UI generator", () => {
+  const repoRoot = fileURLToPath(new URL("..", import.meta.url));
+  assert.doesNotThrow(() => {
+    execFileSync(process.execPath, ["scripts/build-ui.mjs", "--check"], {
+      cwd: repoRoot,
+      stdio: "pipe",
+    });
+  });
+});
+
 test("bundled runtime keeps step title fallbacks unnumbered while preserving section title lookup", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /"title\.step_0": "Validation & Business Name"/);
-  assert.match(source, /"title\.step_0": "Validatie & Bedrijfsnaam"/);
+  assert.match(source, /titleKey:\s*"title\.step_0"/);
   assert.doesNotMatch(source, /"title\.step_0": "Step 1: Validation & Business Name"/);
   assert.doesNotMatch(source, /"title\.step_0": "Stap 1: Validatie & Bedrijfsnaam"/);
-  assert.match(source, /function stepperLabelForLang\(lang, stepId\)/);
+  assert.match(source, /function stepperLabelForLang\(stepId, lang\)/);
+  assert.match(source, /function getSectionTitle\(lang, stepId, businessName\)/);
   assert.match(source, /sectionTitleEl\.textContent = getSectionTitle\(lang, "step_0", ""\);/);
 });
 
@@ -2134,7 +2146,7 @@ test("bundled runtime blurs mobile input before deferred submit scroll and offse
 test("bundled runtime fail-closes missing canonical widget payloads", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /incoming_missing_widget_result/);
-  assert.match(source, /Canonical widget payload is missing in tool response\./);
+  assert.match(source, /runtime\.error\.canonical_widget_payload_missing/);
   assert.match(source, /widget_result:/);
 });
 
@@ -2143,7 +2155,7 @@ test("bundled wording-choice view exposes a dedicated compare feedback slot", ()
   assert.match(source, /class="wordingChoiceFeedback" id="wordingChoiceFeedback"/);
   assert.match(source, /const feedbackEl = document\.getElementById\("wordingChoiceFeedback"\);/);
   assert.match(source, /function readWordingChoiceCompareFeedbackText\(wordingChoiceRaw\)/);
-  assert.match(source, /const compareFeedback = toRecord2\(wordingChoice\.compare_feedback\);/);
+  assert.match(source, /const compareFeedback = toRecord\d+\(wordingChoice\.compare_feedback\);/);
   assert.match(source, /const compareFeedbackText = String\(compareFeedback\.text \|\| ""\)\.trim\(\);/);
   assert.match(source, /const feedbackReasonText = readWordingChoiceCompareFeedbackText\(wording\);/);
   assert.match(source, /renderStructuredText\(feedbackEl, feedbackReasonText\);/);
@@ -2154,7 +2166,7 @@ test("bundled wording-choice view exposes a dedicated compare feedback slot", ()
 
 test("bundled wording-choice picker keeps text input visible but inert until a choice is made", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /const disableTextSubmit = requireWordingPick === true;/);
+  assert.match(source, /const disableTextSubmit = shouldDisableTextInputForWordingChoice\(\{/);
   assert.match(source, /inputEl2\.disabled = disableTextSubmit;/);
   assert.match(source, /inputEl2\.readOnly = disableTextSubmit;/);
   assert.match(source, /inputEl2\.tabIndex = disableTextSubmit \? -1 : 0;/);
@@ -2171,7 +2183,7 @@ test("bundled runtime retains canonical step continuity for latest render cache"
 
 test("bundled prestart intro movie uses language-mapped SSOT links", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /const PRESTART_INTRO_VIDEO_BY_LANG = \{/);
+  assert.match(source, /PRESTART_INTRO_VIDEO_BY_LANG = \{/);
   assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/welcome\/About%20the%20Business%20Strategy%20Canvas%20Builder\.mp4"/);
   assert.match(source, /ja:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/welcome\/Business%20Strategy%20Canvas%20Builder/);
   assert.match(source, /ru:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/welcome\/%D0%9E%20%D0%BA%D0%BE%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D0%BE%D1%80%D0%B5%20Business%20Strategy%20Canvas\.mp4"/);
@@ -2187,7 +2199,7 @@ test("bundled prestart intro movie hides video when no language-specific link ex
 
 test("bundled ben profile movie uses language-mapped SSOT links and hides when unavailable", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /const BEN_PROFILE_VIDEO_BY_LANG = \{/);
+  assert.match(source, /BEN_PROFILE_VIDEO_BY_LANG = \{/);
   assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/About%20Ben%20Steenstra\.mp4"/);
   assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/bensteenstra\/A%CC%80_propos_de_Ben_Steenstra\.mp4"/);
   assert.match(source, /ja:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/bensteenstra\/%E3%80%8C/);
@@ -2199,13 +2211,13 @@ test("bundled ben profile movie uses language-mapped SSOT links and hides when u
 
 test("bundled dream-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /const DREAM_STEP_VIDEO_BY_LANG = \{/);
+  assert.match(source, /DREAM_STEP_VIDEO_BY_LANG = \{/);
   assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/About%20the%20Dream%20Step\.mp4"/);
   assert.match(source, /de:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/U%CC%88ber%20den%20Schritt%20%E2%80%9ETraum%E2%80%9C\.mp4"/);
   assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/A%CC%80%20propos%20du%20Re%CC%82ve\.mp4"/);
   assert.match(source, /ru:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/dream\/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9C%D0%B5%D1%87%D1%82%D0%B0%C2%BB\.mp4"/);
   assert.match(source, /function dreamStepVideoUrlForLang\(lang\)/);
-  assert.match(source, /const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView;/);
+  assert.match(source, /const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView && !wordingChoiceActive;/);
   assert.match(source, /appendDreamStepIntroVideo\(cardDescEl, lang\);/);
   assert.match(source, /const videoUrl = dreamStepVideoUrlForLang\(lang\);/);
   assert.match(source, /if \(!videoUrl\) return;/);
@@ -2213,7 +2225,7 @@ test("bundled dream-step intro movie uses language-mapped SSOT links and hides w
 
 test("bundled purpose-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /const PURPOSE_STEP_VIDEO_BY_LANG = \{/);
+  assert.match(source, /PURPOSE_STEP_VIDEO_BY_LANG = \{/);
   assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/purpose\/About%20Purpose\.mp4"/);
   assert.match(source, /de:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/purpose\/U%CC%88ber_den_Daseinsgrund\.mp4"/);
   assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/purpose\/A%CC%80_propos_de_la_raison_d%E2%80%99e%CC%82tre\.mp4"/);
@@ -2227,7 +2239,7 @@ test("bundled purpose-step intro movie uses language-mapped SSOT links and hides
 
 test("bundled bigwhy-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /const BIGWHY_STEP_VIDEO_BY_LANG = \{/);
+  assert.match(source, /BIGWHY_STEP_VIDEO_BY_LANG = \{/);
   assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Bigwhy\/The%20Big%20Why%20step\.mp4"/);
   assert.match(source, /nl:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Bigwhy\/De_grote_waarom_stap\.mp4"/);
   assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Bigwhy\/L%E2%80%99e%CC%81tape%20du%20Grand%20Pourquoi\.mp4"/);
@@ -2241,7 +2253,7 @@ test("bundled bigwhy-step intro movie uses language-mapped SSOT links and hides 
 
 test("bundled role-step intro movie uses language-mapped SSOT links and hides when unavailable", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /const ROLE_STEP_VIDEO_BY_LANG = \{/);
+  assert.match(source, /ROLE_STEP_VIDEO_BY_LANG = \{/);
   assert.match(source, /en:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/The_Role_step\.mp4"/);
   assert.match(source, /nl:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/De_rol_stap\.mp4"/);
   assert.match(source, /fr:\s*"https:\/\/mycanvasvideos\.s3\.amazonaws\.com\/Role\/The_Role_step-French\.mp4"/);
@@ -2255,7 +2267,7 @@ test("bundled role-step intro movie uses language-mapped SSOT links and hides wh
 
 test("bundled video embeds render as HTML5 video with direct S3 sources", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
-  assert.match(source, /videoWrap\.className = "cardDesc-video";/);
+  assert.match(source, /const videoWrap = appendTextNode\("div", "cardDesc-video", ""\);/);
   assert.match(source, /const video = document\.createElement\("video"\);/);
   assert.match(source, /video\.src = safeVideoUrl;/);
   assert.match(source, /video\.controls = true;/);

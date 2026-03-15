@@ -1869,11 +1869,13 @@
       <div id="debugOverlay" class="" aria-hidden="true"></div>
     </div>
 
-    <script>/* bundled iife */
+    <script>
+
+/* bundled iife */
 "use strict";
 (() => {
-  // ui/lib/ui_constants.ts
-  var ORDER = [
+  // src/steps/step_registry.ts
+  var STEP_REGISTRY_ORDER = [
     "step_0",
     "dream",
     "purpose",
@@ -1886,86 +1888,291 @@
     "rulesofthegame",
     "presentation"
   ];
-  var CRITICAL_PRESTART_KEYS = [
-    "prestart.headline",
-    "prestart.proven.title",
-    "prestart.proven.body",
-    "prestart.outcomes.title",
-    "prestart.outcomes.item1",
-    "prestart.outcomes.item2",
-    "prestart.outcomes.item3",
-    "prestart.meta.how.label",
-    "prestart.meta.how.value",
-    "prestart.meta.time.label",
-    "prestart.meta.time.value"
-  ];
-  var CRITICAL_UI_KEYS_STEP0_SET = /* @__PURE__ */ new Set([
-    "title.step_0",
-    "stepLabel.validation",
-    "sectionTitle.step_0",
-    "uiSubtitle",
-    "uiUseWidgetToContinue",
-    "startHint",
-    "inputPlaceholder",
-    "btnStart",
-    "btnGoToNextStep",
-    "prestartWelcome",
-    ...CRITICAL_PRESTART_KEYS,
-    "prestart.loading",
-    "step0.carddesc",
-    "step0.question.initial",
-    "step0.readiness.statement.existing",
-    "step0.readiness.statement.starting",
-    "step0.readiness.suffix",
-    "transient.rate_limited",
-    "transient.timeout"
-  ]);
-  var runtimeUiStrings = {};
-  var LOCAL_PRESTART_FALLBACK_UI = {
-    en: {
-      "title.step_0": "Validation & Business Name",
-      "stepLabel.validation": "Validation",
-      "sectionTitle.step_0": "Validation & Business Name",
-      "btnStart": "Start the process with Validation & Business Name",
-      "byText": "A business model by",
-      "startHint": "Click Start to begin.",
-      "prestartWelcome": "Build a complete Business Model and Strategy Canvas step by step.",
-      "prestart.loading": "Loading translation...",
-      "prestart.headline": "Build a complete Business Model and Strategy Canvas step by step.",
-      "prestart.proven.title": "The Proven Standard",
-      "prestart.proven.body": "A globally used strategy canvas, built through Ben Steenstra's step-by-step method of questioning and structured development.",
-      "prestart.outcomes.title": "At the end you will have",
-      "prestart.outcomes.item1": "A focused canvas that fits on one page",
-      "prestart.outcomes.item2": "A presentation you can use immediately (PPTX)",
-      "prestart.outcomes.item3": "A plan your team can align on",
-      "prestart.meta.how.label": "How it works",
-      "prestart.meta.how.value": "One question at a time",
-      "prestart.meta.time.label": "Time",
-      "prestart.meta.time.value": "10-15 minutes"
+  var STEP_REGISTRY_BY_STEP_ID = {
+    step_0: {
+      stepId: "step_0",
+      orderIndex: 0,
+      titleKey: "title.step_0",
+      stepperLabelKey: "stepLabel.validation",
+      sectionTitleMode: "plain_key",
+      sectionTitleKey: "sectionTitle.step_0",
+      sectionTitleWithBusinessKey: "",
+      sectionTitleWithoutBusinessKey: "",
+      finalField: "step_0_final",
+      specialistId: "ValidationAndBusinessName",
+      stepKind: "bootstrap",
+      listSemantics: "none",
+      wordingFamily: "none",
+      supportFamily: "none",
+      presentationMode: "bootstrap",
+      chooseForMe: null
     },
-    nl: {
-      "title.step_0": "Validatie & Bedrijfsnaam",
-      "stepLabel.validation": "Validatie",
-      "sectionTitle.step_0": "Validatie & Bedrijfsnaam",
-      "btnStart": "Start het proces met Validatie & Bedrijfsnaam",
-      "byText": "Een businessmodel van:",
-      "startHint": "Klik op Start om te beginnen.",
-      "prestartWelcome": "Bouw stap voor stap een compleet Business Model en Strategie Canvas.",
-      "prestart.loading": "Vertaling laden...",
-      "prestart.headline": "Bouw stap voor stap een compleet Business Model en Strategie Canvas.",
-      "prestart.proven.title": "De Bewezen Standaard",
-      "prestart.proven.body": "Een wereldwijd toegepast strategiecanvas dat door teams over de hele wereld wordt gebruikt, opgebouwd via Ben Steenstra's unieke stap-voor-stap methode van bevragen en gestructureerde ontwikkeling.",
-      "prestart.outcomes.title": "Aan het einde heb je",
-      "prestart.outcomes.item1": "Een gefocust canvas dat op een pagina past",
-      "prestart.outcomes.item2": "Een presentatie die je direct kunt gebruiken (PPTX)",
-      "prestart.outcomes.item3": "Een plan waar je team zich op kan afstemmen",
-      "prestart.meta.how.label": "Hoe het werkt",
-      "prestart.meta.how.value": "Een vraag tegelijk",
-      "prestart.meta.time.label": "Tijd",
-      "prestart.meta.time.value": "10-15 minuten"
+    dream: {
+      stepId: "dream",
+      orderIndex: 1,
+      titleKey: "title.dream",
+      stepperLabelKey: "title.dream",
+      sectionTitleMode: "plain_key",
+      sectionTitleKey: "sectionTitle.dream",
+      sectionTitleWithBusinessKey: "",
+      sectionTitleWithoutBusinessKey: "",
+      finalField: "dream_final",
+      specialistId: "Dream",
+      stepKind: "single_value",
+      listSemantics: "none",
+      wordingFamily: "single_value",
+      supportFamily: "interactive_step",
+      presentationMode: "interactive",
+      chooseForMe: {
+        routeToken: "__ROUTE__DREAM_PICK_ONE__",
+        menuId: "DREAM_MENU_SUGGESTIONS",
+        actionCode: "ACTION_DREAM_SUGGESTIONS_PICK_ONE",
+        nextMenuId: "DREAM_MENU_REFINE",
+        mode: "suggestions",
+        itemKind: "sentence",
+        field: "dream"
+      }
+    },
+    purpose: {
+      stepId: "purpose",
+      orderIndex: 2,
+      titleKey: "title.purpose",
+      stepperLabelKey: "title.purpose",
+      sectionTitleMode: "business_name_template",
+      sectionTitleKey: "",
+      sectionTitleWithBusinessKey: "sectionTitle.purposeOf",
+      sectionTitleWithoutBusinessKey: "sectionTitle.purposeOfFuture",
+      finalField: "purpose_final",
+      specialistId: "Purpose",
+      stepKind: "single_value",
+      listSemantics: "none",
+      wordingFamily: "single_value",
+      supportFamily: "interactive_step",
+      presentationMode: "interactive",
+      chooseForMe: {
+        routeToken: "__ROUTE__PURPOSE_CHOOSE_FOR_ME__",
+        menuId: "PURPOSE_MENU_EXAMPLES",
+        actionCode: "ACTION_PURPOSE_EXAMPLES_CHOOSE_FOR_ME",
+        nextMenuId: "PURPOSE_MENU_AFTER_CHOOSE",
+        mode: "examples",
+        itemKind: "sentence",
+        field: "purpose"
+      }
+    },
+    bigwhy: {
+      stepId: "bigwhy",
+      orderIndex: 3,
+      titleKey: "title.bigwhy",
+      stepperLabelKey: "title.bigwhy",
+      sectionTitleMode: "business_name_template",
+      sectionTitleKey: "",
+      sectionTitleWithBusinessKey: "sectionTitle.bigwhyOf",
+      sectionTitleWithoutBusinessKey: "sectionTitle.bigwhyOfFuture",
+      finalField: "bigwhy_final",
+      specialistId: "BigWhy",
+      stepKind: "single_value",
+      listSemantics: "none",
+      wordingFamily: "single_value",
+      supportFamily: "interactive_step",
+      presentationMode: "interactive",
+      chooseForMe: {
+        routeToken: "__ROUTE__BIGWHY_CHOOSE_FOR_ME__",
+        menuId: "BIGWHY_MENU_FROM_GIVE",
+        actionCode: "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
+        nextMenuId: "BIGWHY_MENU_REFINE",
+        mode: "suggestions",
+        itemKind: "sentence",
+        field: "bigwhy"
+      }
+    },
+    role: {
+      stepId: "role",
+      orderIndex: 4,
+      titleKey: "title.role",
+      stepperLabelKey: "title.role",
+      sectionTitleMode: "business_name_template",
+      sectionTitleKey: "",
+      sectionTitleWithBusinessKey: "sectionTitle.roleOf",
+      sectionTitleWithoutBusinessKey: "sectionTitle.roleOfFuture",
+      finalField: "role_final",
+      specialistId: "Role",
+      stepKind: "single_value",
+      listSemantics: "none",
+      wordingFamily: "single_value",
+      supportFamily: "interactive_step",
+      presentationMode: "interactive",
+      chooseForMe: {
+        routeToken: "__ROUTE__ROLE_CHOOSE_FOR_ME__",
+        menuId: "ROLE_MENU_EXAMPLES",
+        actionCode: "ACTION_ROLE_EXAMPLES_CHOOSE_FOR_ME",
+        nextMenuId: "ROLE_MENU_REFINE",
+        mode: "examples",
+        itemKind: "sentence",
+        field: "role"
+      }
+    },
+    entity: {
+      stepId: "entity",
+      orderIndex: 5,
+      titleKey: "title.entity",
+      stepperLabelKey: "title.entity",
+      sectionTitleMode: "business_name_template",
+      sectionTitleKey: "",
+      sectionTitleWithBusinessKey: "sectionTitle.entityOf",
+      sectionTitleWithoutBusinessKey: "sectionTitle.entityOfFuture",
+      finalField: "entity_final",
+      specialistId: "Entity",
+      stepKind: "single_value",
+      listSemantics: "none",
+      wordingFamily: "single_value",
+      supportFamily: "interactive_step",
+      presentationMode: "interactive",
+      chooseForMe: {
+        routeToken: "__ROUTE__ENTITY_CHOOSE_FOR_ME__",
+        menuId: "ENTITY_MENU_SUGGESTIONS",
+        actionCode: "ACTION_ENTITY_SUGGESTIONS_CHOOSE_FOR_ME",
+        nextMenuId: "ENTITY_MENU_EXAMPLE",
+        mode: "suggestions",
+        itemKind: "phrase",
+        field: "entity"
+      }
+    },
+    strategy: {
+      stepId: "strategy",
+      orderIndex: 6,
+      titleKey: "title.strategy",
+      stepperLabelKey: "title.strategy",
+      sectionTitleMode: "business_name_template",
+      sectionTitleKey: "",
+      sectionTitleWithBusinessKey: "sectionTitle.strategyOf",
+      sectionTitleWithoutBusinessKey: "sectionTitle.strategyOfFuture",
+      finalField: "strategy_final",
+      specialistId: "Strategy",
+      stepKind: "list_value",
+      listSemantics: "grouped_compare",
+      wordingFamily: "grouped_list",
+      supportFamily: "interactive_step",
+      presentationMode: "interactive",
+      chooseForMe: {
+        routeToken: "__ROUTE__STRATEGY_CHOOSE_FOR_ME__",
+        menuId: "STRATEGY_MENU_EXAMPLES",
+        actionCode: "ACTION_STRATEGY_EXAMPLES_CHOOSE_FOR_ME",
+        nextMenuId: "STRATEGY_MENU_CONFIRM",
+        mode: "examples",
+        itemKind: "multiline_list",
+        field: "strategy"
+      }
+    },
+    targetgroup: {
+      stepId: "targetgroup",
+      orderIndex: 7,
+      titleKey: "title.targetgroup",
+      stepperLabelKey: "title.targetgroup",
+      sectionTitleMode: "business_name_template",
+      sectionTitleKey: "",
+      sectionTitleWithBusinessKey: "sectionTitle.targetgroupOf",
+      sectionTitleWithoutBusinessKey: "sectionTitle.targetgroupOfFuture",
+      finalField: "targetgroup_final",
+      specialistId: "TargetGroup",
+      stepKind: "single_value",
+      listSemantics: "none",
+      wordingFamily: "single_value",
+      supportFamily: "interactive_step",
+      presentationMode: "interactive",
+      chooseForMe: null
+    },
+    productsservices: {
+      stepId: "productsservices",
+      orderIndex: 8,
+      titleKey: "title.productsservices",
+      stepperLabelKey: "title.productsservices",
+      sectionTitleMode: "business_name_template",
+      sectionTitleKey: "",
+      sectionTitleWithBusinessKey: "sectionTitle.productsservicesOf",
+      sectionTitleWithoutBusinessKey: "sectionTitle.productsservicesOfFuture",
+      finalField: "productsservices_final",
+      specialistId: "ProductsServices",
+      stepKind: "list_value",
+      listSemantics: "grouped_compare",
+      wordingFamily: "grouped_list",
+      supportFamily: "interactive_step",
+      presentationMode: "interactive",
+      chooseForMe: null
+    },
+    rulesofthegame: {
+      stepId: "rulesofthegame",
+      orderIndex: 9,
+      titleKey: "title.rulesofthegame",
+      stepperLabelKey: "title.rulesofthegame",
+      sectionTitleMode: "business_name_template",
+      sectionTitleKey: "",
+      sectionTitleWithBusinessKey: "sectionTitle.rulesofthegameOf",
+      sectionTitleWithoutBusinessKey: "sectionTitle.rulesofthegameOfFuture",
+      finalField: "rulesofthegame_final",
+      specialistId: "RulesOfTheGame",
+      stepKind: "list_value",
+      listSemantics: "grouped_compare",
+      wordingFamily: "grouped_list",
+      supportFamily: "interactive_step",
+      presentationMode: "interactive",
+      chooseForMe: null
+    },
+    presentation: {
+      stepId: "presentation",
+      orderIndex: 10,
+      titleKey: "title.presentation",
+      stepperLabelKey: "title.presentation",
+      sectionTitleMode: "presentation_key",
+      sectionTitleKey: "sectionTitle.presentation",
+      sectionTitleWithBusinessKey: "",
+      sectionTitleWithoutBusinessKey: "",
+      finalField: "presentation_brief_final",
+      specialistId: "Presentation",
+      stepKind: "presentation",
+      listSemantics: "none",
+      wordingFamily: "none",
+      supportFamily: "none",
+      presentationMode: "presentation",
+      chooseForMe: null
     }
   };
-  const PRESTART_INTRO_VIDEO_BY_LANG = {
+  function getStepRegistryEntry(stepId) {
+    const normalized = String(stepId || "").trim();
+    return STEP_REGISTRY_BY_STEP_ID[normalized] || null;
+  }
+  function getChooseForMeRegistryEntry(stepId) {
+    const entry = getStepRegistryEntry(stepId);
+    if (!entry || !entry.chooseForMe) return null;
+    return entry;
+  }
+  var CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES = STEP_REGISTRY_ORDER.map((stepId) => getChooseForMeRegistryEntry(stepId)).filter((entry) => Boolean(entry));
+  function getStepTitleKey(stepId) {
+    return getStepRegistryEntry(stepId)?.titleKey || "";
+  }
+  function getStepStepperLabelKey(stepId) {
+    return getStepRegistryEntry(stepId)?.stepperLabelKey || "";
+  }
+  function hasKnownBusinessName(rawBusinessName) {
+    const businessName = String(rawBusinessName || "").trim();
+    return Boolean(businessName) && businessName !== "TBD";
+  }
+  function formatStepSectionTitle(params) {
+    const entry = getStepRegistryEntry(params.stepId);
+    if (!entry) return "";
+    if (entry.sectionTitleMode === "business_name_template") {
+      const businessName = String(params.businessName || "").trim();
+      if (hasKnownBusinessName(businessName)) {
+        const template = String(params.getString(entry.sectionTitleWithBusinessKey) || "").trim();
+        if (template) return template.replace(/\{0\}/g, businessName);
+      }
+      return String(params.getString(entry.sectionTitleWithoutBusinessKey) || "").trim();
+    }
+    return String(params.getString(entry.sectionTitleKey) || "").trim();
+  }
+
+  // ui/lib/ui_constants.ts
+  var ORDER = [...STEP_REGISTRY_ORDER];
+  var PRESTART_INTRO_VIDEO_BY_LANG = {
     en: "https://mycanvasvideos.s3.amazonaws.com/welcome/About%20the%20Business%20Strategy%20Canvas%20Builder.mp4",
     nl: "https://mycanvasvideos.s3.amazonaws.com/welcome/Over%20de%20Business%20Strategy%20Canvas%20Builder.mp4",
     de: "https://mycanvasvideos.s3.amazonaws.com/welcome/U%CC%88ber%20den%20Business%20Strategy%20Canvas%20Builder.mp4",
@@ -1977,12 +2184,11 @@
     id: "https://mycanvasvideos.s3.amazonaws.com/welcome/Tentang%20Business%20Strategy%20Canvas%20Builder.mp4",
     ja: "https://mycanvasvideos.s3.amazonaws.com/welcome/Business%20Strategy%20Canvas%20Builder%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6.mp4",
     ko: "https://mycanvasvideos.s3.amazonaws.com/welcome/%E1%84%87%E1%85%B5%E1%84%8C%E1%85%B3%E1%84%82%E1%85%B5%E1%84%89%E1%85%B3%20%E1%84%8C%E1%85%A5%E1%86%AB%E1%84%85%E1%85%A3%E1%86%A8%20%E1%84%8F%E1%85%A2%E1%86%AB%E1%84%87%E1%85%A5%E1%84%89%E1%85%B3%20%E1%84%87%E1%85%B5%E1%86%AF%E1%84%83%E1%85%A5%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/welcome/%D0%9E%20%D0%BA%D0%BE%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D0%BE%D1%80%D0%B5%20Business%20Strategy%20Canvas.mp4"
-    ,
+    ru: "https://mycanvasvideos.s3.amazonaws.com/welcome/%D0%9E%20%D0%BA%D0%BE%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%82%D0%BE%D1%80%D0%B5%20Business%20Strategy%20Canvas.mp4",
     zh: "https://mycanvasvideos.s3.amazonaws.com/welcome/%E5%85%B3%E4%BA%8E%20Business%20Strategy%20Canvas%20Builder.mp4",
     hu: "https://mycanvasvideos.s3.amazonaws.com/welcome/A%20Business%20Strategy%20Canvas%20Builderro%CC%8Bl.mp4"
   };
-  const BEN_PROFILE_VIDEO_BY_LANG = {
+  var BEN_PROFILE_VIDEO_BY_LANG = {
     en: "https://mycanvasvideos.s3.amazonaws.com/About%20Ben%20Steenstra.mp4",
     nl: "https://mycanvasvideos.s3.amazonaws.com/Over%20Ben%20Steenstra.mp4",
     it: "https://mycanvasvideos.s3.amazonaws.com/Su%20Ben%20Steenstra.mp4",
@@ -1994,12 +2200,11 @@
     id: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/Tentang%20Ben%20Steenstra.mp4",
     ja: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E3%80%8C%E3%83%98%E3%82%99%E3%83%B3%E3%83%BB%E3%82%B9%E3%83%86%E3%82%A3%E3%83%BC%E3%83%B3%E3%82%B9%E3%83%88%E3%83%A9%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6%E3%80%8D.mp4",
     ko: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E1%84%87%E1%85%A6%E1%86%AB%20%E1%84%89%E1%85%B3%E1%84%90%E1%85%B5%E1%86%AB%E1%84%89%E1%85%B3%E1%84%90%E1%85%B3%E1%84%85%E1%85%A1%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%D0%9E%20%D0%91%D0%B5%D0%BD%D0%B5%20%D0%A1%D1%82%D0%B5%D0%BD%D1%81%D1%82%D1%80%D0%B5.mp4"
-    ,
+    ru: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%D0%9E%20%D0%91%D0%B5%D0%BD%D0%B5%20%D0%A1%D1%82%D0%B5%D0%BD%D1%81%D1%82%D1%80%D0%B5.mp4",
     zh: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/%E5%85%B3%E4%BA%8E%20Ben%20Steenstra.mp4",
     hu: "https://mycanvasvideos.s3.amazonaws.com/bensteenstra/Ben%20Steenstra%CC%81ro%CC%81l.mp4"
   };
-  const DREAM_STEP_VIDEO_BY_LANG = {
+  var DREAM_STEP_VIDEO_BY_LANG = {
     en: "https://mycanvasvideos.s3.amazonaws.com/dream/About%20the%20Dream%20Step.mp4",
     nl: "https://mycanvasvideos.s3.amazonaws.com/dream/Over%20de%20Droom%20Stap.mp4",
     it: "https://mycanvasvideos.s3.amazonaws.com/dream/Sul%20passo%20del%20Sogno.mp4",
@@ -2011,12 +2216,11 @@
     id: "https://mycanvasvideos.s3.amazonaws.com/dream/Tentang%20langkah%20mimpi.mp4",
     ja: "https://mycanvasvideos.s3.amazonaws.com/dream/%E5%A4%A2%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%95%E3%82%9A%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6.mp4",
     ko: "https://mycanvasvideos.s3.amazonaws.com/dream/%E1%84%81%E1%85%AE%E1%86%B7%20%E1%84%83%E1%85%A1%E1%86%AB%E1%84%80%E1%85%A8%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/dream/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9C%D0%B5%D1%87%D1%82%D0%B0%C2%BB.mp4"
-    ,
+    ru: "https://mycanvasvideos.s3.amazonaws.com/dream/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9C%D0%B5%D1%87%D1%82%D0%B0%C2%BB.mp4",
     zh: "https://mycanvasvideos.s3.amazonaws.com/dream/%E5%85%B3%E4%BA%8E%E6%A2%A6%E6%83%B3%E6%AD%A5%E9%AA%A4.mp4",
     hu: "https://mycanvasvideos.s3.amazonaws.com/dream/Az%20a%CC%81lom%20le%CC%81pe%CC%81sro%CC%8Bl.mp4"
   };
-  const PURPOSE_STEP_VIDEO_BY_LANG = {
+  var PURPOSE_STEP_VIDEO_BY_LANG = {
     en: "https://mycanvasvideos.s3.amazonaws.com/purpose/About%20Purpose.mp4",
     de: "https://mycanvasvideos.s3.amazonaws.com/purpose/U%CC%88ber_den_Daseinsgrund.mp4",
     es: "https://mycanvasvideos.s3.amazonaws.com/purpose/Sobre_el_propo%CC%81sito_de_existir.mp4",
@@ -2028,12 +2232,11 @@
     id: "https://mycanvasvideos.s3.amazonaws.com/purpose/Tentang%20langkah%20purpose%20%28alasan%20keberadaan%29.mp4",
     ja: "https://mycanvasvideos.s3.amazonaws.com/purpose/%E5%AD%98%E5%9C%A8%E6%84%8F%E7%BE%A9%E3%81%AE%E3%82%B9%E3%83%86%E3%83%83%E3%83%95%E3%82%9A%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6.mp4",
     ko: "https://mycanvasvideos.s3.amazonaws.com/purpose/%E1%84%8C%E1%85%A9%E1%86%AB%E1%84%8C%E1%85%A2%20%E1%84%8B%E1%85%B5%E1%84%8B%E1%85%B2%20%E1%84%83%E1%85%A1%E1%86%AB%E1%84%80%E1%85%A8%20%E1%84%89%E1%85%A9%E1%84%80%E1%85%A2.mp4",
-    ru: "https://mycanvasvideos.s3.amazonaws.com/purpose/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9F%D1%80%D0%B5%D0%B4%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5%C2%BB.mp4"
-    ,
+    ru: "https://mycanvasvideos.s3.amazonaws.com/purpose/%D0%9E%20%D1%88%D0%B0%D0%B3%D0%B5%20%C2%AB%D0%9F%D1%80%D0%B5%D0%B4%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5%C2%BB.mp4",
     zh: "https://mycanvasvideos.s3.amazonaws.com/purpose/%E5%85%B3%E4%BA%8E%E5%AD%98%E5%9C%A8%E6%84%8F%E4%B9%89%E6%AD%A5%E9%AA%A4.mp4",
     hu: "https://mycanvasvideos.s3.amazonaws.com/purpose/A%20le%CC%81teze%CC%81s%20e%CC%81rtelme%CC%81nek%20le%CC%81pe%CC%81se%CC%81ro%CC%8Bl.mp4"
   };
-  const BIGWHY_STEP_VIDEO_BY_LANG = {
+  var BIGWHY_STEP_VIDEO_BY_LANG = {
     en: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/The%20Big%20Why%20step.mp4",
     nl: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/De_grote_waarom_stap.mp4",
     de: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/Der%20Schritt%20des%20gro%C3%9Fen%20Warums.mp4",
@@ -2048,7 +2251,7 @@
     zh: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/%E2%80%9C%E4%BC%9F%E5%A4%A7%E4%B8%BA%E4%BB%80%E4%B9%88%E2%80%9D%E6%AD%A5%E9%AA%A4.mp4",
     hu: "https://mycanvasvideos.s3.amazonaws.com/Bigwhy/A%20Nagy%20Mie%CC%81rt%20le%CC%81pe%CC%81s.mp4"
   };
-  const ROLE_STEP_VIDEO_BY_LANG = {
+  var ROLE_STEP_VIDEO_BY_LANG = {
     en: "https://mycanvasvideos.s3.amazonaws.com/The_Role_step.mp4",
     nl: "https://mycanvasvideos.s3.amazonaws.com/De_rol_stap.mp4",
     de: "https://mycanvasvideos.s3.amazonaws.com/Role/The_Role_step-German.mp4",
@@ -2073,11 +2276,42 @@
       return "";
     }
   }
-  function baseLang(lang) {
-    const l = String(lang || "").trim().toLowerCase();
-    if (!l) return "";
-    return l.split(/[-_]/)[0] || "";
-  }
+  var CRITICAL_PRESTART_KEYS = [
+    "prestart.headline",
+    "prestart.proven.title",
+    "prestart.proven.body",
+    "prestart.outcomes.title",
+    "prestart.outcomes.item1",
+    "prestart.outcomes.item2",
+    "prestart.outcomes.item3",
+    "prestart.meta.how.label",
+    "prestart.meta.how.value",
+    "prestart.meta.time.label",
+    "prestart.meta.time.value"
+  ];
+  var STEP0_REGISTRY_ENTRY = getStepRegistryEntry("step_0");
+  var CRITICAL_UI_KEYS_STEP0_SET = /* @__PURE__ */ new Set([
+    STEP0_REGISTRY_ENTRY?.titleKey || "title.step_0",
+    STEP0_REGISTRY_ENTRY?.stepperLabelKey || "stepLabel.validation",
+    STEP0_REGISTRY_ENTRY?.sectionTitleKey || "sectionTitle.step_0",
+    "uiSubtitle",
+    "uiUseWidgetToContinue",
+    "startHint",
+    "inputPlaceholder",
+    "btnStart",
+    "btnGoToNextStep",
+    "prestartWelcome",
+    ...CRITICAL_PRESTART_KEYS,
+    "prestart.loading",
+    "step0.carddesc",
+    "step0.question.initial",
+    "step0.readiness.statement.existing",
+    "step0.readiness.statement.starting",
+    "step0.readiness.suffix",
+    "transient.rate_limited",
+    "transient.timeout"
+  ]);
+  var runtimeUiStrings = {};
   function asRecord(value) {
     return value && typeof value === "object" && !Array.isArray(value) ? value : {};
   }
@@ -2093,67 +2327,24 @@
     }
     runtimeUiStrings = normalized;
   }
-  function t(lang, key) {
-    const fromRuntime = String(runtimeUiStrings[key] || "").trim();
-    if (fromRuntime) return fromRuntime;
-    const langBase = baseLang(lang);
-    const localized = String((LOCAL_PRESTART_FALLBACK_UI[langBase] || {})[key] || "").trim();
-    if (localized) return localized;
-    return String((LOCAL_PRESTART_FALLBACK_UI.en || {})[key] || "").trim();
+  function baseLang(lang) {
+    const l = String(lang || "").toLowerCase();
+    return l.split(/[-_]/)[0] || "default";
   }
-  var STEP_TITLE_KEYS = {
-    step_0: "title.step_0",
-    dream: "title.dream",
-    purpose: "title.purpose",
-    bigwhy: "title.bigwhy",
-    role: "title.role",
-    entity: "title.entity",
-    strategy: "title.strategy",
-    targetgroup: "title.targetgroup",
-    productsservices: "title.productsservices",
-    rulesofthegame: "title.rulesofthegame",
-    presentation: "title.presentation"
-  };
-  var STEP_STEPPER_LABEL_KEYS = {
-    step_0: "stepLabel.validation",
-    dream: "title.dream",
-    purpose: "title.purpose",
-    bigwhy: "title.bigwhy",
-    role: "title.role",
-    entity: "title.entity",
-    strategy: "title.strategy",
-    targetgroup: "title.targetgroup",
-    productsservices: "title.productsservices",
-    rulesofthegame: "title.rulesofthegame",
-    presentation: "title.presentation"
-  };
-  var STEP_SECTION_TITLE_CONFIG = {
-    step_0: { mode: "plain_key", key: "sectionTitle.step_0", withBusinessKey: "", withoutBusinessKey: "" },
-    dream: { mode: "plain_key", key: "sectionTitle.dream", withBusinessKey: "", withoutBusinessKey: "" },
-    purpose: { mode: "business_name_template", key: "", withBusinessKey: "sectionTitle.purposeOf", withoutBusinessKey: "sectionTitle.purposeOfFuture" },
-    bigwhy: { mode: "business_name_template", key: "", withBusinessKey: "sectionTitle.bigwhyOf", withoutBusinessKey: "sectionTitle.bigwhyOfFuture" },
-    role: { mode: "business_name_template", key: "", withBusinessKey: "sectionTitle.roleOf", withoutBusinessKey: "sectionTitle.roleOfFuture" },
-    entity: { mode: "business_name_template", key: "", withBusinessKey: "sectionTitle.entityOf", withoutBusinessKey: "sectionTitle.entityOfFuture" },
-    strategy: { mode: "business_name_template", key: "", withBusinessKey: "sectionTitle.strategyOf", withoutBusinessKey: "sectionTitle.strategyOfFuture" },
-    targetgroup: { mode: "business_name_template", key: "", withBusinessKey: "sectionTitle.targetgroupOf", withoutBusinessKey: "sectionTitle.targetgroupOfFuture" },
-    productsservices: { mode: "business_name_template", key: "", withBusinessKey: "sectionTitle.productsservicesOf", withoutBusinessKey: "sectionTitle.productsservicesOfFuture" },
-    rulesofthegame: { mode: "business_name_template", key: "", withBusinessKey: "sectionTitle.rulesofthegameOf", withoutBusinessKey: "sectionTitle.rulesofthegameOfFuture" },
-    presentation: { mode: "presentation_key", key: "sectionTitle.presentation", withBusinessKey: "", withoutBusinessKey: "" }
-  };
+  function t(_lang, key) {
+    return String(runtimeUiStrings[key] || "").trim();
+  }
   function titlesForLang(lang) {
     const titles = {};
     for (const step of ORDER) {
-      const titleKey = STEP_TITLE_KEYS[step] || "";
+      const titleKey = getStepTitleKey(step);
       titles[step] = titleKey ? t(lang, titleKey) : "";
     }
     return titles;
   }
-  function stepperLabelForLang(lang, stepId) {
-    const key = STEP_STEPPER_LABEL_KEYS[stepId] || "";
+  function stepperLabelForLang(stepId, lang) {
+    const key = getStepStepperLabelKey(stepId);
     return key ? t(lang, key) : "";
-  }
-  function hasPrestartContentForLang(lang) {
-    return CRITICAL_PRESTART_KEYS.every((key) => String(t(lang, key) || "").trim().length > 0);
   }
   function prestartIntroVideoUrlForLang(lang) {
     const langBase = baseLang(lang);
@@ -2185,24 +2376,6 @@
     if (!langBase) return "";
     return normalizeHttpUrl(ROLE_STEP_VIDEO_BY_LANG[langBase] || "");
   }
-  function shouldRenderPurposeStepIntroVideo(params) {
-    if (String(params.currentStep || "").trim() !== "purpose") return false;
-    if (params.showStepIntroChrome !== true) return false;
-    if (params.wordingChoiceActive === true) return false;
-    return Boolean(purposeStepVideoUrlForLang(params.lang));
-  }
-  function shouldRenderBigWhyStepIntroVideo(params) {
-    if (String(params.currentStep || "").trim() !== "bigwhy") return false;
-    if (params.showStepIntroChrome !== true) return false;
-    if (params.wordingChoiceActive === true) return false;
-    return Boolean(bigWhyStepVideoUrlForLang(params.lang));
-  }
-  function shouldRenderRoleStepIntroVideo(params) {
-    if (String(params.currentStep || "").trim() !== "role") return false;
-    if (params.showStepIntroChrome !== true) return false;
-    if (params.wordingChoiceActive === true) return false;
-    return Boolean(roleStepVideoUrlForLang(params.lang));
-  }
   function prestartContentForLang(lang) {
     return {
       headline: t(lang, "prestart.headline"),
@@ -2220,19 +2393,299 @@
     };
   }
   function getSectionTitle(lang, stepId, businessName) {
-    const config = STEP_SECTION_TITLE_CONFIG[stepId];
-    if (!config) return "";
-    if (config.mode === "business_name_template") {
-      const normalizedBusinessName = String(businessName || "").trim();
-      if (normalizedBusinessName && normalizedBusinessName !== "TBD") {
-        const template = t(lang, config.withBusinessKey);
-        if (template) return template.replace(/\{0\}/g, normalizedBusinessName);
-      }
-      return t(lang, config.withoutBusinessKey);
-    }
-    return t(lang, config.key);
+    return formatStepSectionTitle({
+      stepId,
+      businessName,
+      getString: (key) => t(lang, key)
+    });
   }
   var CRITICAL_UI_KEYS_STEP0 = [...CRITICAL_UI_KEYS_STEP0_SET];
+
+  // ui/lib/ui_text.ts
+  function latestWidgetLangForText() {
+    const latest = globalThis.__BSC_LATEST__;
+    const state = latest?.state && typeof latest.state === "object" ? latest.state : {};
+    return String(latest?.lang || state.ui_strings_lang || state.language || "en").trim().toLowerCase();
+  }
+  function escapeHtml(s) {
+    if (s == null) return "";
+    const div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+  }
+  function stripInlineText(raw) {
+    let s = String(raw || "");
+    s = s.replace(/<[^>]*>/g, "");
+    return s;
+  }
+  function renderInlineText(el, raw) {
+    if (!el) return;
+    const s = String(raw || "");
+    const fragment = document.createDocumentFragment();
+    let buf = "";
+    let bold = false;
+    let i = 0;
+    function appendLineWithLinks(line) {
+      const value = String(line || "");
+      const urlPattern = /https?:\/\/[^\s<>"']+/g;
+      let cursor = 0;
+      let m = null;
+      while ((m = urlPattern.exec(value)) !== null) {
+        const fullMatch = String(m[0] || "");
+        const start = Number(m.index || 0);
+        if (start > cursor) {
+          fragment.appendChild(document.createTextNode(value.slice(cursor, start)));
+        }
+        let url = fullMatch;
+        let trailing = "";
+        while (/[).,!?;:]$/.test(url)) {
+          trailing = url.slice(-1) + trailing;
+          url = url.slice(0, -1);
+        }
+        if (url) {
+          const a = document.createElement("a");
+          a.textContent = url;
+          a.href = url;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer";
+          a.className = "inlineLink";
+          fragment.appendChild(a);
+        }
+        if (trailing) {
+          fragment.appendChild(document.createTextNode(trailing));
+        }
+        cursor = start + fullMatch.length;
+      }
+      if (cursor < value.length) {
+        fragment.appendChild(document.createTextNode(value.slice(cursor)));
+      }
+    }
+    function appendTextPreservingLines(text, useBold) {
+      const normalized = String(text || "").replace(/\r\n?/g, "\n");
+      const lines = normalized.split("\n");
+      for (let idx = 0; idx < lines.length; idx += 1) {
+        const line = lines[idx] ?? "";
+        if (useBold) {
+          const strong = document.createElement("strong");
+          strong.textContent = line;
+          fragment.appendChild(strong);
+        } else {
+          appendLineWithLinks(line);
+        }
+        if (idx < lines.length - 1) {
+          fragment.appendChild(document.createElement("br"));
+        }
+      }
+    }
+    function flush() {
+      if (!buf) return;
+      appendTextPreservingLines(buf, bold);
+      buf = "";
+    }
+    while (i < s.length) {
+      const lt = s.indexOf("<", i);
+      if (lt === -1) {
+        buf += s.slice(i);
+        break;
+      }
+      buf += s.slice(i, lt);
+      const gt = s.indexOf(">", lt + 1);
+      if (gt === -1) {
+        buf += s.slice(lt);
+        break;
+      }
+      const tag = s.slice(lt + 1, gt).trim().toLowerCase();
+      if (tag === "strong") {
+        flush();
+        bold = true;
+      } else if (tag === "/strong") {
+        flush();
+        bold = false;
+      }
+      i = gt + 1;
+    }
+    flush();
+    while (el.firstChild) el.removeChild(el.firstChild);
+    el.appendChild(fragment);
+  }
+  function clearElementChildren(el) {
+    if (!el) return;
+    const target = el;
+    if (typeof target.removeChild === "function") {
+      while (target.firstChild) target.removeChild(target.firstChild);
+      return;
+    }
+    if ("innerHTML" in target) {
+      target.innerHTML = "";
+    }
+  }
+  function normalizeLineText(raw) {
+    return stripInlineText(raw).replace(/\s+/g, " ").trim();
+  }
+  function isHeadingLikeLine(line) {
+    if (!line) return false;
+    if (line.endsWith(":")) return true;
+    return /^\s*<strong>\s*[^<][\s\S]{0,200}<\/strong>\s*$/i.test(line);
+  }
+  function extractOrderedItem(line) {
+    const text = normalizeLineText(line);
+    const m = text.match(/^\d+[\.\)]\s+(.+)$/);
+    return m ? m[1].trim() : null;
+  }
+  function extractBulletItem(line) {
+    const text = normalizeLineText(line);
+    const m = text.match(/^(?:[-*•])\s+(.+)$/);
+    return m ? m[1].trim() : null;
+  }
+  function extractMarkdownImage(line) {
+    const raw = String(line || "").trim();
+    if (!raw) return null;
+    const m = raw.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+    if (!m) return null;
+    const alt = String(m[1] || "").trim() || String(t(latestWidgetLangForText(), "media.image.alt") || "").trim();
+    const url = String(m[2] || "").trim();
+    if (!url) return null;
+    return { alt, url };
+  }
+  function appendImage(el, image) {
+    const img = document.createElement("img");
+    img.className = "cardDesc-image";
+    img.src = image.url;
+    img.alt = image.alt;
+    el.appendChild(img);
+  }
+  function appendParagraph(el, lines) {
+    const paragraph = lines.map((line) => String(line || "").trim()).filter(Boolean).join("\n");
+    const paragraphCheck = normalizeLineText(paragraph);
+    if (!paragraphCheck) return;
+    if (!paragraph) return;
+    const p = document.createElement("p");
+    renderInlineText(p, paragraph);
+    el.appendChild(p);
+  }
+  function appendHeading(el, line) {
+    const textRaw = String(line || "").trim().replace(/^<strong>\s*/i, "").replace(/\s*<\/strong>$/i, "").replace(/:$/, "");
+    const textCheck = normalizeLineText(textRaw);
+    if (!textCheck) return;
+    const p = document.createElement("p");
+    p.className = "cardSubheading";
+    renderInlineText(p, textRaw);
+    el.appendChild(p);
+  }
+  function appendCanonicalValue(el, line) {
+    const textRaw = String(line || "").trim();
+    const textCheck = normalizeLineText(textRaw);
+    if (!textCheck) return;
+    const p = document.createElement("p");
+    p.className = "cardCanonicalValue";
+    renderInlineText(p, textRaw);
+    el.appendChild(p);
+  }
+  function appendFeedbackNote(el, raw) {
+    const value = String(raw || "").trim();
+    if (!value) return;
+    const wrap = document.createElement("div");
+    wrap.className = "cardFeedbackNote";
+    appendStructuredText(wrap, value);
+    el.appendChild(wrap);
+  }
+  function appendList(el, tagName, className, items) {
+    const filtered = items.map((item) => ({ raw: String(item || "").trim(), clean: normalizeLineText(item) })).filter((item) => item.clean.length > 0);
+    if (!filtered.length) return;
+    const list = document.createElement(tagName);
+    list.className = className;
+    for (const item of filtered) {
+      const li = document.createElement("li");
+      renderInlineText(li, item.raw);
+      list.appendChild(li);
+    }
+    el.appendChild(list);
+  }
+  function renderStructuredText(el, raw) {
+    if (!el) return;
+    clearElementChildren(el);
+    appendStructuredText(el, raw);
+  }
+  function appendStructuredText(el, raw) {
+    const source = String(raw || "").replace(/\r\n?/g, "\n");
+    if (!source.trim()) return;
+    const lines = source.split("\n");
+    let i = 0;
+    while (i < lines.length) {
+      const currentRaw = String(lines[i] || "");
+      const current = currentRaw.trim();
+      if (!current) {
+        i += 1;
+        continue;
+      }
+      const imageLine = extractMarkdownImage(currentRaw);
+      if (imageLine) {
+        appendImage(el, imageLine);
+        i += 1;
+        continue;
+      }
+      const orderedFirst = extractOrderedItem(currentRaw);
+      if (orderedFirst) {
+        const items = [orderedFirst];
+        i += 1;
+        while (i < lines.length) {
+          const candidate = extractOrderedItem(String(lines[i] || ""));
+          if (!candidate) break;
+          items.push(candidate);
+          i += 1;
+        }
+        appendList(el, "ul", "structuredList structuredListBullet", items);
+        continue;
+      }
+      const bulletFirst = extractBulletItem(currentRaw);
+      if (bulletFirst) {
+        const items = [bulletFirst];
+        i += 1;
+        while (i < lines.length) {
+          const candidate = extractBulletItem(String(lines[i] || ""));
+          if (!candidate) break;
+          items.push(candidate);
+          i += 1;
+        }
+        appendList(el, "ul", "structuredList structuredListBullet", items);
+        continue;
+      }
+      if (isHeadingLikeLine(currentRaw)) {
+        appendHeading(el, currentRaw);
+        i += 1;
+        continue;
+      }
+      const paragraphLines = [currentRaw];
+      i += 1;
+      while (i < lines.length) {
+        const candidateRaw = String(lines[i] || "");
+        const candidate = candidateRaw.trim();
+        if (!candidate) break;
+        if (extractOrderedItem(candidateRaw) || extractBulletItem(candidateRaw) || isHeadingLikeLine(candidateRaw)) {
+          break;
+        }
+        paragraphLines.push(candidateRaw);
+        i += 1;
+      }
+      appendParagraph(el, paragraphLines);
+    }
+  }
+  function renderSingleValueCardContent(el, content) {
+    if (!el) return false;
+    clearElementChildren(el);
+    const heading = String(content?.heading || "").trim();
+    const canonicalText = String(content?.canonicalText || "").trim();
+    const supportText = String(content?.supportText || "").trim();
+    const feedbackReasonText = String(content?.feedbackReasonText || "").trim();
+    if (!heading && !canonicalText && !supportText && !feedbackReasonText) {
+      return false;
+    }
+    if (supportText) appendStructuredText(el, supportText);
+    if (feedbackReasonText) appendFeedbackNote(el, feedbackReasonText);
+    if (heading) appendHeading(el, heading);
+    if (canonicalText) appendCanonicalValue(el, canonicalText);
+    return true;
+  }
 
   // ui/lib/ui_state.ts
   var _isLoading = false;
@@ -2259,23 +2712,23 @@
   }
 
   // ui/lib/locale_bootstrap_runtime.ts
-  var WIDGET_RESULT_KEYS = /* @__PURE__ */ new Set([
-    "state",
-    "ui",
-    "prompt",
-    "text",
-    "specialist",
-    "current_step_id",
-    "model_result_shape_version",
-    "ui_strings",
-    "ui_strings_lang",
-    "language"
-  ]);
   function toRecord(value) {
     return value && typeof value === "object" && !Array.isArray(value) ? value : {};
   }
   function toLower(value) {
     return String(value || "").trim().toLowerCase();
+  }
+  function parsePositiveInt(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.trunc(n);
+  }
+  function normalizeUiStringsStatus(raw) {
+    const status = toLower(raw);
+    if (status === "ready" || status === "pending" || status === "critical_ready") return status;
+    if (status === "full_ready") return "critical_ready";
+    if (status === "error") return "pending";
+    return "unknown";
   }
   function normalizeBootstrapPhase(raw) {
     const phase = toLower(raw);
@@ -2284,98 +2737,54 @@
     }
     return "";
   }
-  function normalizeUiStringsStatus(raw) {
-    const status = toLower(raw);
-    if (status === "ready" || status === "pending" || status === "critical_ready") {
-      return status;
-    }
-    if (status === "full_ready") return "critical_ready";
-    if (status === "error") return "pending";
-    return "unknown";
-  }
-  function isWidgetResultLike(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const rec = value;
-    const keys = Object.keys(rec);
-    if (!keys.length) return false;
-    if (typeof rec.html === "string" && keys.length <= 2) return false;
-    const state = rec.state;
-    if (state !== void 0 && (typeof state !== "object" || state === null || Array.isArray(state))) {
-      return false;
-    }
-    for (const key of keys) {
-      if (WIDGET_RESULT_KEYS.has(key)) return true;
-    }
-    return false;
-  }
-  function parsePositiveInt(value) {
-    if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value);
-    if (typeof value === "string") {
-      const n = Number(value);
-      if (Number.isFinite(n) && n > 0) return Math.trunc(n);
-    }
-    return 0;
-  }
-  function sessionInfoForResult(result) {
-    const state = toRecord(result.state);
+  function mergeMeta(target, source) {
+    const targetMeta = toRecord(target._meta);
+    const sourceWrappedMeta = toRecord(source._meta);
+    const sourceMeta = Object.keys(sourceWrappedMeta).length > 0 ? sourceWrappedMeta : source;
     return {
-      bootstrap_session_id: String(state.bootstrap_session_id || "").trim(),
-      bootstrap_epoch: parsePositiveInt(state.bootstrap_epoch),
-      response_seq: parsePositiveInt(state.response_seq),
-      host_widget_session_id: String(
-        state.host_widget_session_id || ""
-      ).trim()
+      ...target,
+      _meta: {
+        ...targetMeta,
+        ...sourceMeta
+      }
     };
   }
   function mergeToolOutputWithResponseMetadata(toolOutputRaw, toolResponseMetadataRaw) {
     const toolOutput = toRecord(toolOutputRaw);
-    const metadata = toRecord(toolResponseMetadataRaw);
-    const merged = Object.keys(toolOutput).length ? { ...toolOutput } : {};
-    if (!Object.keys(metadata).length) return merged;
-    const mergedMeta = toRecord(merged._meta);
-    const wrappedMetadataMeta = toRecord(metadata._meta);
-    const metadataMeta = Object.keys(wrappedMetadataMeta).length ? wrappedMetadataMeta : metadata;
-    merged._meta = { ...mergedMeta, ...metadataMeta };
-    return merged;
+    const toolResponseMetadata = toRecord(toolResponseMetadataRaw);
+    if (!Object.keys(toolOutput).length && !Object.keys(toolResponseMetadata).length) return {};
+    return mergeMeta(toolOutput, toolResponseMetadata);
   }
-  function reasonCodeForMeta(context) {
-    if (context === "root") return "meta_widget_result_root";
-    return "meta_widget_result_tool_output";
-  }
-  function pickMetaWidgetResult(container, context) {
+  function pickMetaWidgetResult(container) {
     const meta = toRecord(container._meta);
-    const candidate = meta.widget_result;
-    if (!isWidgetResultLike(candidate)) return null;
-    return {
-      result: candidate,
-      source: "meta.widget_result",
-      reason_code: reasonCodeForMeta(context)
-    };
+    const candidate = toRecord(meta.widget_result);
+    return candidate;
   }
-  function resolveWidgetResultFromKnownShapes(raw) {
+  function looksLikeWidgetResult(candidateRaw) {
+    const candidate = toRecord(candidateRaw);
+    if (!Object.keys(candidate).length) return false;
+    if (Object.keys(toRecord(candidate.state)).length > 0) return true;
+    if (String(candidate.current_step_id || "").trim()) return true;
+    if (Object.keys(toRecord(candidate.ui)).length > 0) return true;
+    if (String(candidate.prompt || "").trim()) return true;
+    if (String(candidate.text || "").trim()) return true;
+    return false;
+  }
+  function resolveMetaWidgetResult(raw) {
     const root = toRecord(raw);
-    const mergedToolOutput = mergeToolOutputWithResponseMetadata(
-      root.toolOutput,
-      root.toolResponseMetadata
-    );
-    const candidates = [
-      { context: "root", payload: root }
-    ];
-    if (Object.keys(mergedToolOutput).length) {
-      candidates.push({ context: "toolOutput", payload: mergedToolOutput });
+    const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
+    const fromRootMeta = pickMetaWidgetResult(root);
+    if (looksLikeWidgetResult(fromRootMeta)) {
+      return { result: fromRootMeta, source: "meta.widget_result", reason_code: "meta_widget_result" };
     }
-    for (const candidate of candidates) {
-      const pickedMeta = pickMetaWidgetResult(candidate.payload, candidate.context);
-      if (pickedMeta) return pickedMeta;
+    const fromToolOutputMeta = pickMetaWidgetResult(toolOutput);
+    if (looksLikeWidgetResult(fromToolOutputMeta)) {
+      return { result: fromToolOutputMeta, source: "meta.widget_result", reason_code: "meta_widget_result" };
     }
-    return {
-      result: {},
-      source: "none",
-      reason_code: "none"
-    };
+    return { result: {}, source: "none", reason_code: "none" };
   }
   function canonicalizeWidgetPayload(raw) {
-    const selected = resolveWidgetResultFromKnownShapes(raw);
+    const selected = resolveMetaWidgetResult(raw);
     if (!Object.keys(selected.result).length) {
       return {
         envelope: {},
@@ -2399,72 +2808,60 @@
     const state = toRecord(result.state);
     const fromStateLanguage = toLower(state.language);
     if (fromStateLanguage) return { language: fromStateLanguage, source: "state.language" };
-    const fromStateRequestedLang = toLower(state.ui_strings_requested_lang);
-    if (fromStateRequestedLang) {
-      return { language: fromStateRequestedLang, source: "state.ui_strings_requested_lang" };
-    }
-    const fromStateUiLang = toLower(state.ui_strings_lang);
-    if (fromStateUiLang) return { language: fromStateUiLang, source: "state.ui_strings_lang" };
+    const fromRequested = toLower(state.ui_strings_requested_lang);
+    if (fromRequested) return { language: fromRequested, source: "state.ui_strings_requested_lang" };
+    const fromUiLang = toLower(state.ui_strings_lang);
+    if (fromUiLang) return { language: fromUiLang, source: "state.ui_strings_lang" };
     return { language: "", source: "none" };
   }
-  function normalizeUiStringsStatusFromResult(result) {
+  function sessionInfoForResult(result) {
     const state = toRecord(result.state);
-    return normalizeUiStringsStatus(state.ui_strings_status);
+    const responseKind = String(state.response_kind || result.response_kind || "").trim();
+    return {
+      bootstrap_session_id: String(state.bootstrap_session_id || "").trim(),
+      bootstrap_epoch: parsePositiveInt(state.bootstrap_epoch),
+      response_seq: parsePositiveInt(state.response_seq),
+      response_kind: responseKind === "run_step" ? "run_step" : "",
+      host_widget_session_id: String(state.host_widget_session_id || "").trim()
+    };
+  }
+  function resolveWidgetPayload(raw) {
+    const canonical = canonicalizeWidgetPayload(raw);
+    const result = canonical.result;
+    const state = toRecord(result.state);
+    const language = resolveLanguageForPayload(result);
+    const ordering = sessionInfoForResult(result);
+    const resolvedBase = {
+      result,
+      source: canonical.source,
+      source_reason_code: canonical.reason_code,
+      has_state: Object.keys(state).length > 0,
+      resolved_language: language.language,
+      resolved_language_source: language.source,
+      ui_strings_status: normalizeUiStringsStatus(state.ui_strings_status),
+      shape_version: String(result.model_result_shape_version || "").trim(),
+      needs_hydration: false,
+      waiting_reason: "none",
+      bootstrap_phase: normalizeBootstrapPhase(state.bootstrap_phase || result.bootstrap_phase),
+      bootstrap_session_id: ordering.bootstrap_session_id,
+      bootstrap_epoch: ordering.bootstrap_epoch,
+      response_seq: ordering.response_seq,
+      response_kind: ordering.response_kind,
+      host_widget_session_id: ordering.host_widget_session_id
+    };
+    return resolvedBase;
   }
   function computeHydrationState(resolved) {
     const state = toRecord(resolved.result.state);
     const hasState = Object.keys(state).length > 0;
     const currentStep = hasState ? String(state.current_step || "").trim() : "";
     const needsHydration = !hasState || !currentStep;
-    const uiGateStatus = toLower(state.ui_gate_status);
-    const terminalGate = uiGateStatus === "blocked" || uiGateStatus === "failed";
-    const i18nPending = !terminalGate && uiGateStatus === "waiting_locale";
-    let waitingReason = "none";
-    if (!terminalGate && needsHydration) waitingReason = "missing_state";
-    if (!terminalGate && i18nPending) waitingReason = "i18n_pending";
     return {
       needs_hydration: needsHydration,
       retry_count: 0,
       retry_exhausted: false,
-      waiting_reason: waitingReason
+      waiting_reason: "none"
     };
-  }
-  function resolveWidgetPayload(raw) {
-    const canonical = canonicalizeWidgetPayload(raw);
-    const result = canonical.result;
-    const payloadSource = canonical.source;
-    const sessionInfo = sessionInfoForResult(result);
-    const state = toRecord(result.state);
-    const hasState = Object.keys(state).length > 0;
-    const { language, source: languageSource } = resolveLanguageForPayload(result);
-    const shapeVersion = String(result.model_result_shape_version || "").trim();
-    const bootstrapPhase = normalizeBootstrapPhase(state.bootstrap_phase || result.bootstrap_phase);
-    const temp = {
-      result,
-      source: payloadSource,
-      source_reason_code: canonical.reason_code,
-      has_state: hasState,
-      resolved_language: language,
-      resolved_language_source: languageSource,
-      ui_strings_status: normalizeUiStringsStatusFromResult(result),
-      shape_version: shapeVersion,
-      needs_hydration: false,
-      waiting_reason: "none",
-      bootstrap_phase: bootstrapPhase,
-      bootstrap_session_id: sessionInfo.bootstrap_session_id,
-      bootstrap_epoch: sessionInfo.bootstrap_epoch,
-      response_seq: sessionInfo.response_seq,
-      response_kind: (() => {
-        const kind = String(state.response_kind || result.response_kind || "").trim();
-        if (kind === "run_step") return kind;
-        return "";
-      })(),
-      host_widget_session_id: sessionInfo.host_widget_session_id
-    };
-    const hydration = computeHydrationState(temp);
-    temp.needs_hydration = hydration.needs_hydration;
-    temp.waiting_reason = hydration.waiting_reason;
-    return temp;
   }
 
   // ui/lib/ui_actions.ts
@@ -2519,7 +2916,9 @@
     const applyDesktopOffset = () => {
       if (shouldUseMobileScrollBehavior()) return;
       const scrollingElement = document.scrollingElement;
-      const currentTop = Number(window.scrollY || window.pageYOffset || scrollingElement?.scrollTop || document.documentElement?.scrollTop || document.body?.scrollTop || 0);
+      const currentTop = Number(
+        window.scrollY || window.pageYOffset || scrollingElement?.scrollTop || document.documentElement?.scrollTop || document.body?.scrollTop || 0
+      );
       const targetTop = Math.max(0, currentTop - DESKTOP_WIDGET_SCROLL_OFFSET_PX);
       try {
         window.scrollTo({ top: targetTop, left: 0, behavior: "smooth" });
@@ -2719,6 +3118,175 @@
     if (!Number.isFinite(n) || n <= 0) return 0;
     return Math.trunc(n);
   }
+  var clientIngestSeq = 0;
+  var clientIngestLastTsMs = 0;
+  function nextClientIngestClock() {
+    const nowMs = Date.now();
+    const tsMs = nowMs > clientIngestLastTsMs ? nowMs : clientIngestLastTsMs + 1;
+    const deltaMs = clientIngestLastTsMs > 0 ? tsMs - clientIngestLastTsMs : 0;
+    clientIngestLastTsMs = tsMs;
+    clientIngestSeq += 1;
+    return {
+      client_ingest_ts_ms: tsMs,
+      client_ingest_seq: clientIngestSeq,
+      client_ingest_delta_ms: deltaMs
+    };
+  }
+  function stableKeyFingerprint(record, maxKeys = 8) {
+    const keys = Object.keys(record).sort();
+    if (keys.length === 0) return "-";
+    const clipped = keys.slice(0, maxKeys).join(",");
+    if (keys.length <= maxKeys) return clipped;
+    return `${clipped},+${keys.length - maxKeys}`;
+  }
+  function boolFlag(value) {
+    return value ? "1" : "0";
+  }
+  function isNonEmptyRecord(value) {
+    return Object.keys(toRecord2(value)).length > 0;
+  }
+  function shapeFingerprint(raw) {
+    const root = toRecord2(raw);
+    const rootToolOutput = toRecord2(root.toolOutput);
+    const rootStructured = toRecord2(root.structuredContent);
+    const toolStructured = toRecord2(rootToolOutput.structuredContent);
+    const rootMeta = toRecord2(root._meta);
+    const toolMeta = toRecord2(rootToolOutput._meta);
+    return [
+      `rk:${stableKeyFingerprint(root)}`,
+      `tk:${stableKeyFingerprint(rootToolOutput)}`,
+      `sk:${stableKeyFingerprint(rootStructured)}`,
+      `tsk:${stableKeyFingerprint(toolStructured)}`,
+      `rwr:${boolFlag(isNonEmptyRecord(root._widget_result))}`,
+      `twr:${boolFlag(isNonEmptyRecord(rootToolOutput._widget_result))}`,
+      `swr:${boolFlag(isNonEmptyRecord(rootStructured._widget_result))}`,
+      `tswr:${boolFlag(isNonEmptyRecord(toolStructured._widget_result))}`,
+      `rmwr:${boolFlag(isNonEmptyRecord(rootMeta.widget_result))}`,
+      `tmwr:${boolFlag(isNonEmptyRecord(toolMeta.widget_result))}`
+    ].join("|");
+  }
+  function coalesceString(...values) {
+    for (const value of values) {
+      const text = String(value || "").trim();
+      if (text) return text;
+    }
+    return "";
+  }
+  function readCorrelationFromRaw(raw) {
+    const root = toRecord2(raw);
+    const meta = toRecord2(root._meta);
+    const requestInfo = toRecord2(root.requestInfo);
+    const headers = toRecord2(requestInfo.headers);
+    const state = toRecord2(resolveWidgetPayload2(raw).result.state);
+    return coalesceString(
+      root.correlation_id,
+      meta.correlation_id,
+      meta["x-correlation-id"],
+      meta["x-request-id"],
+      headers["x-correlation-id"],
+      headers["x-request-id"],
+      state.correlation_id,
+      state["x-correlation-id"]
+    );
+  }
+  function readRequestIdFromRaw(raw) {
+    const root = toRecord2(raw);
+    const meta = toRecord2(root._meta);
+    const state = toRecord2(resolveWidgetPayload2(raw).result.state);
+    return coalesceString(
+      root.request_id,
+      root.__request_id,
+      meta.request_id,
+      meta["x-request-id"],
+      state.request_id,
+      state.__request_id
+    );
+  }
+  function readClientActionIdFromResult(result) {
+    const state = toRecord2(result.state);
+    const stateLiveness = toRecord2(state.ui_action_liveness);
+    return coalesceString(
+      result.client_action_id_echo,
+      state.client_action_id_echo,
+      stateLiveness.client_action_id_echo,
+      state.__client_action_id
+    );
+  }
+  function resolveClientCorrelation(params) {
+    const correlationFromResult = coalesceString(
+      params.result.correlation_id,
+      toRecord2(params.result.state).correlation_id
+    );
+    return {
+      correlation_id: coalesceString(correlationFromResult, readCorrelationFromRaw(params.raw)),
+      client_action_id: coalesceString(
+        readClientActionIdFromResult(params.result),
+        params.fallbackClientActionId
+      ),
+      request_id: coalesceString(
+        params.fallbackRequestId,
+        readRequestIdFromRaw(params.raw),
+        toRecord2(params.result.state).request_id
+      )
+    };
+  }
+  function buildClientIngestContext(params) {
+    const clock = nextClientIngestClock();
+    const correlation = resolveClientCorrelation({
+      raw: params.raw,
+      result: params.resolved.result,
+      fallbackClientActionId: params.fallbackClientActionId,
+      fallbackRequestId: params.fallbackRequestId
+    });
+    return {
+      ...clock,
+      ...correlation,
+      payload_shape_fingerprint: shapeFingerprint(params.raw),
+      payload_source: params.resolved.source,
+      payload_reason_code: params.resolved.source_reason_code
+    };
+  }
+  function logClientIngestObservation(params) {
+    console.log("[ui_ingest_event]", {
+      source: params.source,
+      phase: params.phase,
+      ...params.context
+    });
+  }
+  var STEP0_CONTINUITY_FIELDS = [
+    "business_name",
+    "step_0_final",
+    "step0_bootstrap"
+  ];
+  var CANONICAL_CONTINUITY_STEP_IDS = [
+    "dream",
+    "purpose",
+    "bigwhy",
+    "role",
+    "entity",
+    "strategy",
+    "targetgroup",
+    "productsservices",
+    "rulesofthegame",
+    "presentation"
+  ];
+  var CANONICAL_FINAL_FIELD_BY_STEP_ID = {
+    dream: "dream_final",
+    purpose: "purpose_final",
+    bigwhy: "bigwhy_final",
+    role: "role_final",
+    entity: "entity_final",
+    strategy: "strategy_final",
+    targetgroup: "targetgroup_final",
+    productsservices: "productsservices_final",
+    rulesofthegame: "rulesofthegame_final",
+    presentation: "presentation_brief_final"
+  };
+  var ACCEPTED_CANONICAL_PROVISIONAL_SOURCES = /* @__PURE__ */ new Set([
+    "user_input",
+    "wording_pick",
+    "action_route"
+  ]);
   function readBootstrapOrderingState(raw) {
     const state = raw && typeof raw === "object" ? raw : {};
     return {
@@ -2729,7 +3297,7 @@
     };
   }
   function hasValidBootstrapOrdering(ordering) {
-    return Boolean(ordering.sessionId) && ordering.epoch > 0 && ordering.responseSeq > 0;
+    return Boolean(ordering.sessionId) && ordering.epoch > 0 && ordering.responseSeq > 0 && Boolean(ordering.hostWidgetSessionId);
   }
   function describeBootstrapOrdering(ordering) {
     return {
@@ -2763,7 +3331,7 @@
     if (!hasValidBootstrapOrdering(fromWidget)) return fromNext;
     if (fromNext.sessionId !== fromWidget.sessionId) return fromNext;
     if (fromNext.hostWidgetSessionId && fromWidget.hostWidgetSessionId && fromNext.hostWidgetSessionId !== fromWidget.hostWidgetSessionId) {
-      return fromNext;
+      return fromWidget;
     }
     if (fromWidget.epoch > fromNext.epoch) return fromWidget;
     if (fromWidget.epoch < fromNext.epoch) return fromNext;
@@ -2778,10 +3346,10 @@
     const source = String(bootstrap.source || "").trim();
     if (!venture && !name && !source) return {};
     return {
-      ...(venture ? { venture } : {}),
-      ...(name ? { name } : {}),
-      ...(venture && name ? { status } : {}),
-      ...(source ? { source } : {})
+      ...venture ? { venture } : {},
+      ...name ? { name } : {},
+      ...venture && name ? { status } : {},
+      ...source ? { source } : {}
     };
   }
   function isKnownBusinessName(raw) {
@@ -2800,24 +3368,13 @@
   }
   function normalizeAcceptedCanonicalSource(raw) {
     const source = String(raw || "").trim();
-    return source === "user_input" || source === "wording_pick" || source === "action_route" ? source : "";
+    return ACCEPTED_CANONICAL_PROVISIONAL_SOURCES.has(source) ? source : "";
   }
   function extractCanonicalContinuityContext(state) {
     const source = state && typeof state === "object" ? state : {};
     const finals = {};
-    const finalFields = {
-      dream: "dream_final",
-      purpose: "purpose_final",
-      bigwhy: "bigwhy_final",
-      role: "role_final",
-      entity: "entity_final",
-      strategy: "strategy_final",
-      targetgroup: "targetgroup_final",
-      productsservices: "productsservices_final",
-      rulesofthegame: "rulesofthegame_final",
-      presentation: "presentation_brief_final"
-    };
-    for (const finalField of Object.values(finalFields)) {
+    for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
+      const finalField = CANONICAL_FINAL_FIELD_BY_STEP_ID[stepId];
       const finalValue = String(source[finalField] || "").trim();
       if (finalValue) finals[finalField] = finalValue;
     }
@@ -2825,7 +3382,7 @@
     const provisionalSourceByStep = toRecord2(source.provisional_source_by_step);
     const acceptedProvisionalByStep = {};
     const acceptedProvisionalSources = {};
-    for (const stepId of Object.keys(finalFields)) {
+    for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
       const value = String(provisionalByStep[stepId] || "").trim();
       const sourceValue = normalizeAcceptedCanonicalSource(provisionalSourceByStep[stepId]);
       if (!value || !sourceValue) continue;
@@ -2865,6 +3422,28 @@
     }
     return next;
   }
+  function resolveSuggestionStateContinuity(preferred, ...fallbacks) {
+    const preferredState = preferred && typeof preferred === "object" ? preferred : {};
+    if (hasOwnKey(preferredState, "suggestion_state_by_step")) {
+      return {
+        present: true,
+        state: extractSuggestionStateContext(preferredState)
+      };
+    }
+    for (const fallback of fallbacks) {
+      if (!continuityScopeCompatible(preferredState, fallback || {})) continue;
+      const candidate = extractSuggestionStateContext(fallback || {});
+      if (Object.keys(candidate).length === 0) continue;
+      return {
+        present: true,
+        state: candidate
+      };
+    }
+    return {
+      present: false,
+      state: {}
+    };
+  }
   function continuityScopeCompatible(preferred, fallback) {
     const preferredOrdering = readBootstrapOrderingState(preferred);
     const fallbackOrdering = readBootstrapOrderingState(fallback);
@@ -2889,9 +3468,9 @@
     const step0FinalFromState = String(source.step_0_final || "").replace(/\s+/g, " ").trim();
     const step0FinalFromBootstrap = composeStep0FinalFromBootstrap(bootstrap);
     return {
-      ...(Object.keys(bootstrap).length > 0 ? { step0_bootstrap: bootstrap } : {}),
-      ...((businessNameFromState || businessNameFromBootstrap) ? { business_name: businessNameFromState || businessNameFromBootstrap } : {}),
-      ...((step0FinalFromState || step0FinalFromBootstrap) ? { step_0_final: step0FinalFromState || step0FinalFromBootstrap } : {})
+      ...Object.keys(bootstrap).length > 0 ? { step0_bootstrap: bootstrap } : {},
+      ...businessNameFromState || businessNameFromBootstrap ? { business_name: businessNameFromState || businessNameFromBootstrap } : {},
+      ...step0FinalFromState || step0FinalFromBootstrap ? { step_0_final: step0FinalFromState || step0FinalFromBootstrap } : {}
     };
   }
   function retainStep0Continuity(preferred, ...fallbacks) {
@@ -2900,38 +3479,30 @@
       if (!continuityScopeCompatible(next, fallback || {})) continue;
       const nextContext = extractStep0ContinuityContext(next);
       const fallbackContext = extractStep0ContinuityContext(fallback || {});
-      if (!Object.keys(toRecord2(nextContext.step0_bootstrap)).length && Object.keys(toRecord2(fallbackContext.step0_bootstrap)).length) {
-        next.step0_bootstrap = fallbackContext.step0_bootstrap;
-      }
-      if (!String(nextContext.business_name || "").trim() && String(fallbackContext.business_name || "").trim()) {
-        next.business_name = fallbackContext.business_name;
-      }
-      if (!String(nextContext.step_0_final || "").trim() && String(fallbackContext.step_0_final || "").trim()) {
-        next.step_0_final = fallbackContext.step_0_final;
+      for (const field of STEP0_CONTINUITY_FIELDS) {
+        if (field === "step0_bootstrap") {
+          if (!Object.keys(toRecord2(nextContext.step0_bootstrap)).length && Object.keys(toRecord2(fallbackContext.step0_bootstrap)).length) {
+            next.step0_bootstrap = fallbackContext.step0_bootstrap;
+          }
+          continue;
+        }
+        if (String(nextContext[field] || "").trim()) continue;
+        const fallbackValue = fallbackContext[field];
+        if (String(fallbackValue || "").trim()) {
+          next[field] = fallbackValue;
+        }
       }
     }
     const normalizedContext = extractStep0ContinuityContext(next);
     return {
       ...next,
-      ...(Object.keys(toRecord2(normalizedContext.step0_bootstrap)).length ? { step0_bootstrap: normalizedContext.step0_bootstrap } : {}),
-      ...(String(normalizedContext.business_name || "").trim() ? { business_name: normalizedContext.business_name } : {}),
-      ...(String(normalizedContext.step_0_final || "").trim() ? { step_0_final: normalizedContext.step_0_final } : {})
+      ...Object.keys(toRecord2(normalizedContext.step0_bootstrap)).length ? { step0_bootstrap: normalizedContext.step0_bootstrap } : {},
+      ...String(normalizedContext.business_name || "").trim() ? { business_name: normalizedContext.business_name } : {},
+      ...String(normalizedContext.step_0_final || "").trim() ? { step_0_final: normalizedContext.step_0_final } : {}
     };
   }
   function retainCanonicalStepContinuity(preferred, ...fallbacks) {
     let next = retainStep0Continuity(preferred, ...fallbacks);
-    const finalFields = {
-      dream: "dream_final",
-      purpose: "purpose_final",
-      bigwhy: "bigwhy_final",
-      role: "role_final",
-      entity: "entity_final",
-      strategy: "strategy_final",
-      targetgroup: "targetgroup_final",
-      productsservices: "productsservices_final",
-      rulesofthegame: "rulesofthegame_final",
-      presentation: "presentation_brief_final"
-    };
     for (const fallback of fallbacks) {
       if (!continuityScopeCompatible(next, fallback || {})) continue;
       const fallbackState = fallback && typeof fallback === "object" ? fallback : {};
@@ -2942,7 +3513,8 @@
       const nextProvisional = { ...nextProvisionalRaw };
       const nextSources = { ...nextSourceRaw };
       let mapsChanged = false;
-      for (const [stepId, finalField] of Object.entries(finalFields)) {
+      for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
+        const finalField = CANONICAL_FINAL_FIELD_BY_STEP_ID[stepId];
         const nextHasExplicitFinal = hasOwnKey(next, finalField);
         const nextFinalValue = String(next[finalField] || "").trim();
         const fallbackFinalValue = String(fallbackState[finalField] || "").trim();
@@ -2979,21 +3551,25 @@
       }
     }
     const normalizedContext = extractCanonicalContinuityContext(next);
+    const suggestionStateContext = resolveSuggestionStateContinuity(next, ...fallbacks);
     return {
       ...next,
       ...normalizedContext.finals,
-      ...(Object.keys(normalizedContext.provisional_by_step).length ? {
+      ...Object.keys(normalizedContext.provisional_by_step).length ? {
         provisional_by_step: {
           ...toRecord2(next.provisional_by_step),
           ...normalizedContext.provisional_by_step
         }
-      } : {}),
-      ...(Object.keys(normalizedContext.provisional_source_by_step).length ? {
+      } : {},
+      ...Object.keys(normalizedContext.provisional_source_by_step).length ? {
         provisional_source_by_step: {
           ...toRecord2(next.provisional_source_by_step),
           ...normalizedContext.provisional_source_by_step
         }
-      } : {})
+      } : {},
+      ...suggestionStateContext.present ? {
+        suggestion_state_by_step: Object.keys(suggestionStateContext.state).length > 0 ? suggestionStateContext.state : void 0
+      } : {}
     };
   }
   function buildWidgetStateContinuityPatch(params) {
@@ -3001,18 +3577,6 @@
     const retained = retainCanonicalStepContinuity(params.incomingState, params.currentWidgetState);
     const currentCanonicalContext = extractCanonicalContinuityContext(params.currentWidgetState);
     const retainedCanonicalContext = extractCanonicalContinuityContext(retained);
-    const finalFields = {
-      dream: "dream_final",
-      purpose: "purpose_final",
-      bigwhy: "bigwhy_final",
-      role: "role_final",
-      entity: "entity_final",
-      strategy: "strategy_final",
-      targetgroup: "targetgroup_final",
-      productsservices: "productsservices_final",
-      rulesofthegame: "rulesofthegame_final",
-      presentation: "presentation_brief_final"
-    };
     const patch = resetContinuity ? {
       business_name: void 0,
       step_0_final: void 0,
@@ -3021,13 +3585,14 @@
       provisional_source_by_step: void 0
     } : {};
     if (resetContinuity) {
-      for (const finalField of Object.values(finalFields)) patch[finalField] = void 0;
+      for (const finalField of Object.values(CANONICAL_FINAL_FIELD_BY_STEP_ID)) patch[finalField] = void 0;
     }
     const retainedContext = extractStep0ContinuityContext(retained);
     if (String(retainedContext.business_name || "").trim()) patch.business_name = retainedContext.business_name;
     if (String(retainedContext.step_0_final || "").trim()) patch.step_0_final = retainedContext.step_0_final;
     if (Object.keys(toRecord2(retainedContext.step0_bootstrap)).length) patch.step0_bootstrap = retainedContext.step0_bootstrap;
-    for (const [stepId, finalField] of Object.entries(finalFields)) {
+    for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
+      const finalField = CANONICAL_FINAL_FIELD_BY_STEP_ID[stepId];
       const retainedFinalValue = String(retainedCanonicalContext.finals[finalField] || "").trim();
       if (hasOwnKey(params.incomingState, finalField) && String(params.incomingState[finalField] || "").trim() === "") {
         patch[finalField] = void 0;
@@ -3043,7 +3608,7 @@
     }
     const nextAcceptedProvisionalByStep = { ...currentCanonicalContext.provisional_by_step };
     const nextAcceptedProvisionalSources = { ...currentCanonicalContext.provisional_source_by_step };
-    for (const stepId of Object.keys(finalFields)) {
+    for (const stepId of CANONICAL_CONTINUITY_STEP_IDS) {
       if (hasExplicitCanonicalProvisionalClear(params.incomingState, stepId)) {
         delete nextAcceptedProvisionalByStep[stepId];
         delete nextAcceptedProvisionalSources[stepId];
@@ -3061,8 +3626,13 @@
     }
     patch.provisional_by_step = Object.keys(nextAcceptedProvisionalByStep).length > 0 ? nextAcceptedProvisionalByStep : void 0;
     patch.provisional_source_by_step = Object.keys(nextAcceptedProvisionalSources).length > 0 ? nextAcceptedProvisionalSources : void 0;
-    const nextSuggestionState = extractSuggestionStateContext(params.incomingState);
-    patch.suggestion_state_by_step = Object.keys(nextSuggestionState).length > 0 ? nextSuggestionState : void 0;
+    const suggestionStateContext = resetContinuity ? {
+      present: hasOwnKey(params.incomingState, "suggestion_state_by_step"),
+      state: extractSuggestionStateContext(params.incomingState)
+    } : resolveSuggestionStateContinuity(params.incomingState, params.currentWidgetState);
+    if (suggestionStateContext.present) {
+      patch.suggestion_state_by_step = Object.keys(suggestionStateContext.state).length > 0 ? suggestionStateContext.state : void 0;
+    }
     return patch;
   }
   function evaluatePayloadQuality(result) {
@@ -3074,12 +3644,14 @@
     const promptObj = toRecord2(uiPayload.prompt);
     const specialist = toRecord2(result.specialist);
     const viewMode = String(uiView.mode || "").trim().toLowerCase();
+    const viewVariant = String(uiView.variant || "").trim();
     const uiStrings = toRecord2(state.ui_strings);
     const hasUiStrings = Object.keys(uiStrings).length > 0;
-    const hasInteractiveContent = String(result.text || "").trim().length > 0 || String(result.prompt || "").trim().length > 0 || String(promptObj.body || "").trim().length > 0 || String(uiPayload.questionText || "").trim().length > 0 || String(uiContent.heading || "").trim().length > 0 || String(uiContent.canonical_text || "").trim().length > 0 || String(uiContent.support_text || "").trim().length > 0 || String(uiContent.feedback_reason_text || "").trim().length > 0 || String(specialist.message || "").trim().length > 0 || String(specialist.question || "").trim().length > 0 || String(specialist.refined_formulation || "").trim().length > 0 || Array.isArray(actionContract.actions) && actionContract.actions.length > 0;
+    const hasDreamBuilderStatements = (uiView.dream_builder_statements_visible === true || (viewVariant === "dream_builder_collect" || viewVariant === "dream_builder_refine") && uiView.dream_builder_statements_visible !== false) && (Array.isArray(specialist.statements) && specialist.statements.length > 0 || Array.isArray(state.dream_builder_statements) && state.dream_builder_statements.length > 0);
+    const hasInteractiveContent = String(result.text || "").trim().length > 0 || String(result.prompt || "").trim().length > 0 || String(promptObj.body || "").trim().length > 0 || String(uiPayload.questionText || "").trim().length > 0 || String(uiContent.heading || "").trim().length > 0 || String(uiContent.canonical_text || "").trim().length > 0 || String(uiContent.support_text || "").trim().length > 0 || String(uiContent.feedback_reason_text || "").trim().length > 0 || hasDreamBuilderStatements || String(specialist.message || "").trim().length > 0 || String(specialist.question || "").trim().length > 0 || String(specialist.refined_formulation || "").trim().length > 0 || Array.isArray(actionContract.actions) && actionContract.actions.length > 0;
     const hasState = Object.keys(state).length > 0;
     const hasCurrentStep = String(state.current_step || "").trim().length > 0 || String(result.current_step_id || "").trim().length > 0;
-    const renderable = viewMode === "prestart" && hasUiStrings || viewMode === "interactive" && hasInteractiveContent || viewMode === "waiting_locale" || viewMode === "recovery" || viewMode === "blocked" || viewMode === "failed";
+    const renderable = viewMode === "prestart" && hasUiStrings || viewMode === "interactive" && hasInteractiveContent || viewMode === "blocked";
     let score = 0;
     if (viewMode) score += 40;
     if (hasState) score += 10;
@@ -3094,19 +3666,6 @@
       renderable,
       score
     };
-  }
-  function shouldAcceptSameTupleUpgrade(params) {
-    if (params.incoming.renderable && !params.current.renderable) return true;
-    if (params.incoming.hasUiStrings && !params.current.hasUiStrings) return true;
-    if (params.incoming.hasInteractiveContent && !params.current.hasInteractiveContent) return true;
-    return params.incoming.score > params.current.score;
-  }
-  function coalesceDiagnosticString() {
-    for (let index = 0; index < arguments.length; index += 1) {
-      const text = String(arguments[index] || "").trim();
-      if (text) return text;
-    }
-    return "";
   }
   function looksLikeDiagnosticResult(candidateRaw) {
     const candidate = toRecord2(candidateRaw);
@@ -3139,31 +3698,47 @@
     const incomingResult = Object.keys(toRecord2(params.incomingResult)).length > 0 ? toRecord2(params.incomingResult) : resolveDiagnosticIncomingResult(params.incomingRaw);
     const incomingState = toRecord2(incomingResult.state);
     const stateSource = Object.keys(incomingState).length > 0 ? incomingState : currentState;
-    const currentStep = String(incomingState.current_step || incomingResult.current_step_id || currentState.current_step || params.currentResult.current_step_id || "step_0").trim() || "step_0";
+    const currentStep = String(
+      incomingState.current_step || incomingResult.current_step_id || currentState.current_step || params.currentResult.current_step_id || "step_0"
+    ).trim() || "step_0";
     const language = String(
       stateSource.language || stateSource.ui_strings_lang || stateSource.ui_strings_requested_lang || "en"
     ).trim().toLowerCase() || "en";
     const uiStringsRequestedLang = String(
       stateSource.ui_strings_requested_lang || stateSource.ui_strings_lang || language
     ).trim() || language;
-    const ackStatus = String(
-      incomingResult.ack_status || incomingState.ack_status || toRecord2(incomingState.ui_action_liveness).ack_status || ""
-    ).trim().toLowerCase();
-    const stateAdvancedRaw = incomingResult.state_advanced ?? incomingState.state_advanced ?? toRecord2(incomingState.ui_action_liveness).state_advanced ?? false;
-    const stateAdvanced = stateAdvancedRaw === true || String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
-    const reasonCode = String(
-      incomingResult.reason_code || incomingState.reason_code || toRecord2(incomingState.ui_action_liveness).reason_code || ""
-    ).trim().toLowerCase();
-    const actionCodeEcho = coalesceDiagnosticString(
+    const liveness = readIncomingLivenessSignal(incomingResult);
+    const incomingLiveness = toRecord2(incomingState.ui_action_liveness);
+    const actionCodeEcho = coalesceString(
       incomingResult.action_code_echo,
       incomingState.action_code_echo,
-      toRecord2(incomingState.ui_action_liveness).action_code_echo
-    ).toUpperCase();
-    const clientActionIdEcho = coalesceDiagnosticString(
+      incomingLiveness.action_code_echo
+    ).trim().toUpperCase();
+    const clientActionIdEcho = coalesceString(
       incomingResult.client_action_id_echo,
       incomingState.client_action_id_echo,
-      toRecord2(incomingState.ui_action_liveness).client_action_id_echo
+      incomingLiveness.client_action_id_echo
     );
+    const requestId = coalesceString(
+      incomingState.request_id,
+      incomingState.__request_id,
+      incomingResult.request_id,
+      incomingResult.__request_id
+    );
+    const correlationId = coalesceString(
+      incomingState.correlation_id,
+      incomingState.__correlation_id,
+      incomingResult.correlation_id,
+      incomingResult.__correlation_id
+    );
+    const bootstrapSessionId = String(
+      stateSource.bootstrap_session_id || currentState.bootstrap_session_id || ""
+    ).trim();
+    const bootstrapEpoch = parsePositiveInt2(stateSource.bootstrap_epoch || currentState.bootstrap_epoch);
+    const responseSeq = parsePositiveInt2(stateSource.response_seq || currentState.response_seq);
+    const hostWidgetSessionId = String(
+      stateSource.host_widget_session_id || currentState.host_widget_session_id || ""
+    ).trim();
     const failClosedState = {
       current_step: currentStep,
       started: String(stateSource.started || currentState.started || "false").trim().toLowerCase() === "true" ? "true" : "false",
@@ -3174,70 +3749,169 @@
       ui_gate_status: "blocked",
       ui_gate_reason: "contract_violation",
       bootstrap_phase: "failed",
-      reason_code: "incoming_missing_widget_result",
-      bootstrap_session_id: String(stateSource.bootstrap_session_id || currentState.bootstrap_session_id || "").trim(),
-      bootstrap_epoch: parsePositiveInt2(stateSource.bootstrap_epoch || currentState.bootstrap_epoch),
-      response_seq: parsePositiveInt2(stateSource.response_seq || currentState.response_seq),
-      host_widget_session_id: String(stateSource.host_widget_session_id || currentState.host_widget_session_id || "").trim()
+      reason_code: "incoming_missing_widget_result"
     };
-    if (Object.keys(toRecord2(stateSource.ui_strings)).length > 0) failClosedState.ui_strings = toRecord2(stateSource.ui_strings);
-    if (ackStatus || actionCodeEcho || clientActionIdEcho) {
+    if (bootstrapSessionId) failClosedState.bootstrap_session_id = bootstrapSessionId;
+    if (bootstrapEpoch > 0) failClosedState.bootstrap_epoch = bootstrapEpoch;
+    if (responseSeq > 0) failClosedState.response_seq = responseSeq;
+    if (hostWidgetSessionId) failClosedState.host_widget_session_id = hostWidgetSessionId;
+    if (requestId) failClosedState.request_id = requestId;
+    if (correlationId) failClosedState.correlation_id = correlationId;
+    if (Object.keys(toRecord2(stateSource.ui_strings)).length > 0) {
+      failClosedState.ui_strings = toRecord2(stateSource.ui_strings);
+    } else if (Object.keys(toRecord2(currentState.ui_strings)).length > 0) {
+      failClosedState.ui_strings = toRecord2(currentState.ui_strings);
+    }
+    if (liveness.has_liveness || actionCodeEcho || clientActionIdEcho) {
       failClosedState.ui_action_liveness = {
-        ...(ackStatus ? {
-          ack_status: ackStatus,
-          state_advanced: stateAdvanced,
-          reason_code: stateAdvanced ? "" : reasonCode || "state_not_advanced"
-        } : {}),
-        ...(actionCodeEcho ? { action_code_echo: actionCodeEcho } : {}),
-        ...(clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {})
+        ...liveness.has_liveness ? {
+          ack_status: liveness.ack_status,
+          state_advanced: liveness.state_advanced,
+          reason_code: liveness.reason_code
+        } : {},
+        ...actionCodeEcho ? { action_code_echo: actionCodeEcho } : {},
+        ...clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {}
       };
     }
     return {
       _meta: {
         widget_result: {
-        current_step_id: currentStep,
-        ok: false,
-        ...(ackStatus ? {
-          ack_status: ackStatus,
-          state_advanced: stateAdvanced,
-          reason_code: stateAdvanced ? "" : reasonCode || "state_not_advanced"
-        } : {}),
-        ...(actionCodeEcho ? { action_code_echo: actionCodeEcho } : {}),
-        ...(clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {}),
-        error: {
-          type: "contract_violation",
-          message: "Canonical widget payload is missing in tool response.",
-          reason: "incoming_missing_widget_result"
-        },
-        state: {
-          ...failClosedState
-        },
-        ui: {
-          flags: {
-            bootstrap_waiting_locale: false,
-            bootstrap_interactive_ready: false,
-            tuple_incomplete_fail_closed: true,
-            tuple_fail_closed_reason: "incoming_missing_widget_result"
+          current_step_id: currentStep,
+          ok: false,
+          error: {
+            type: "contract_violation",
+            message: uiText(
+              failClosedState || {},
+              "runtime.error.canonical_widget_payload_missing",
+              ""
+            ),
+            reason: "incoming_missing_widget_result"
           },
-          view: {
-            mode: "blocked",
-            waiting_locale: false
+          ...liveness.has_liveness ? {
+            ack_status: liveness.ack_status,
+            state_advanced: liveness.state_advanced,
+            reason_code: liveness.reason_code
+          } : {},
+          ...actionCodeEcho ? { action_code_echo: actionCodeEcho } : {},
+          ...clientActionIdEcho ? { client_action_id_echo: clientActionIdEcho } : {},
+          state: failClosedState,
+          ui: {
+            flags: {
+              bootstrap_waiting_locale: false,
+              bootstrap_interactive_ready: false,
+              tuple_incomplete_fail_closed: true,
+              tuple_fail_closed_reason: "incoming_missing_widget_result"
+            },
+            view: {
+              mode: "blocked",
+              waiting_locale: false
+            }
           }
-        }
         }
       }
     };
   }
-  function shouldUpdateRenderCache(params) {
-    if (params.sameTupleUpgradeAccepted) return true;
-    if (!params.currentHasPayload) return true;
-    if (params.orderingReason === "new_session" || params.orderingReason === "new_epoch") return true;
-    if (params.current.renderable && !params.incoming.renderable) return false;
-    if (params.incoming.renderable && !params.current.renderable) return true;
-    if (params.incoming.renderable && params.current.renderable) {
-      return params.incoming.score >= params.current.score;
+  function readIncomingLivenessSignal(result) {
+    const state = toRecord2(result.state);
+    const stateLiveness = toRecord2(state.ui_action_liveness);
+    const ackRaw = coalesceString(result.ack_status, state.ack_status, stateLiveness.ack_status);
+    const hasLiveness = ackRaw.length > 0;
+    const ackStatus = hasLiveness ? normalizeActionAckStatus(ackRaw) : "rejected";
+    const stateAdvanced = parseBool(
+      result.state_advanced ?? state.state_advanced ?? stateLiveness.state_advanced ?? false
+    );
+    const reasonCode = coalesceString(
+      result.reason_code,
+      state.reason_code,
+      stateLiveness.reason_code
+    ).trim().toLowerCase();
+    const hasErrorObject = Object.keys(toRecord2(result.error)).length > 0;
+    const explicitError = hasErrorObject || hasLiveness && (ackStatus !== "accepted" || !stateAdvanced);
+    return {
+      has_liveness: hasLiveness,
+      ack_status: ackStatus,
+      state_advanced: stateAdvanced,
+      reason_code: hasLiveness ? stateAdvanced ? "" : reasonCode || "state_not_advanced" : "",
+      has_error_object: hasErrorObject,
+      explicit_error: explicitError
+    };
+  }
+  function resolveCachePreserveSafety(params) {
+    if (params.source === "call_run_step") {
+      return { allowPreserve: false, reason: "unsafe_active_dispatch" };
     }
-    return params.incoming.score >= params.current.score;
+    if (params.orderingReason === "new_session" || params.orderingReason === "new_epoch") {
+      return { allowPreserve: false, reason: "unsafe_new_scope" };
+    }
+    if (params.incomingSignal.explicit_error) {
+      return { allowPreserve: false, reason: "unsafe_explicit_error" };
+    }
+    if (params.incoming.viewMode === "blocked" || params.incoming.viewMode === "failed") {
+      return { allowPreserve: false, reason: "unsafe_terminal_view" };
+    }
+    return { allowPreserve: true, reason: "safe_passive_non_renderable" };
+  }
+  function shouldUpdateRenderCache(params) {
+    if (!params.currentHasPayload) {
+      return {
+        should_persist: true,
+        decision_reason: "no_current_cache",
+        preserve_safety_reason: "not_applicable"
+      };
+    }
+    if (params.orderingReason === "new_session" || params.orderingReason === "new_epoch") {
+      return {
+        should_persist: true,
+        decision_reason: params.orderingReason,
+        preserve_safety_reason: "not_applicable"
+      };
+    }
+    if (params.orderingReason === "older_epoch" || params.orderingReason === "older_response_seq" || params.orderingReason === "host_session_mismatch") {
+      return {
+        should_persist: false,
+        decision_reason: params.orderingReason,
+        preserve_safety_reason: "stale_ordering"
+      };
+    }
+    if (params.source === "call_run_step" && params.incomingSignal.explicit_error) {
+      return {
+        should_persist: true,
+        decision_reason: "active_dispatch_explicit_error",
+        preserve_safety_reason: "not_applicable"
+      };
+    }
+    if (params.current.renderable && !params.incoming.renderable) {
+      const preserveSafety = resolveCachePreserveSafety({
+        source: params.source,
+        orderingReason: params.orderingReason,
+        incoming: params.incoming,
+        incomingSignal: params.incomingSignal
+      });
+      return {
+        should_persist: !preserveSafety.allowPreserve,
+        decision_reason: preserveSafety.allowPreserve ? "preserve_cache" : "force_persist_non_renderable",
+        preserve_safety_reason: preserveSafety.reason
+      };
+    }
+    if (params.incoming.renderable && !params.current.renderable) {
+      return {
+        should_persist: true,
+        decision_reason: "incoming_renderable_upgrade",
+        preserve_safety_reason: "not_applicable"
+      };
+    }
+    if (params.incoming.renderable && params.current.renderable) {
+      return {
+        should_persist: params.incoming.score >= params.current.score,
+        decision_reason: params.incoming.score >= params.current.score ? "incoming_score_not_lower" : "incoming_score_lower",
+        preserve_safety_reason: "not_applicable"
+      };
+    }
+    return {
+      should_persist: params.incoming.score >= params.current.score,
+      decision_reason: params.incoming.score >= params.current.score ? "incoming_score_not_lower" : "incoming_score_lower",
+      preserve_safety_reason: "not_applicable"
+    };
   }
   function bootstrapPollSignatureFromState(state) {
     const s = state && typeof state === "object" ? state : {};
@@ -3260,6 +3934,13 @@
   }
   function normalizeToolResult(raw) {
     const canonical = canonicalizeWidgetPayload(raw);
+    if (Object.keys(canonical.envelope).length > 0) {
+      return {
+        normalized: canonical.envelope,
+        source: canonical.source,
+        reasonCode: canonical.reason_code
+      };
+    }
     return {
       normalized: canonical.envelope,
       source: canonical.source,
@@ -3274,6 +3955,14 @@
     if (!Object.keys(normalized).length) return;
     try {
       globalThis.__BSC_LAST_TOOL_OUTPUT__ = normalized;
+    } catch {
+    }
+    dispatchActionContractReady();
+  }
+  function dispatchActionContractReady() {
+    if (typeof window === "undefined") return;
+    try {
+      window.dispatchEvent(new CustomEvent("bsc:action_contract_ready"));
     } catch {
     }
   }
@@ -3299,21 +3988,7 @@
     const next = { ...ws, ...patch || {} };
     const orderingKeys = ["bootstrap_session_id", "bootstrap_epoch", "response_seq", "host_widget_session_id"];
     const includesOrderingPatch = orderingKeys.some((key) => Object.prototype.hasOwnProperty.call(patch || {}, key));
-    if (includesOrderingPatch) {
-      const currentOrdering = readBootstrapOrderingState(ws);
-      const incomingOrdering = readBootstrapOrderingState(next);
-      const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
-      if (!orderingDecision.apply && hasValidBootstrapOrdering(incomingOrdering)) {
-        for (const key of orderingKeys) {
-          next[key] = ws[key];
-        }
-        console.warn("[ui_ordering_patch_dropped]", {
-          reason: orderingDecision.reason,
-          incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-          current_tuple: describeBootstrapOrdering(currentOrdering)
-        });
-      }
-    }
+    const orderingBefore = readBootstrapOrderingState(ws);
     const keys = Object.keys(next);
     const stableSerialize = (value, seen = /* @__PURE__ */ new WeakSet()) => {
       if (value === null) return "null";
@@ -3325,7 +4000,8 @@
       if (Array.isArray(value)) {
         return `[${value.map((entry) => stableSerialize(entry, seen)).join(",")}]`;
       }
-      return `{${Object.keys(value).sort().map((key) => `${key}:${stableSerialize(value[key], seen)}`).join(",")}}`;
+      const record = value;
+      return `{${Object.keys(record).sort().map((key) => `${key}:${stableSerialize(record[key], seen)}`).join(",")}}`;
     };
     let changed = false;
     for (const k of keys) {
@@ -3334,9 +4010,26 @@
         break;
       }
     }
-    if (!changed) return;
+    if (!changed) {
+      if (includesOrderingPatch) {
+        console.log("[ui_widgetstate_persist_skipped_no_change]", {
+          reason: "no_change",
+          current_tuple: describeBootstrapOrdering(orderingBefore),
+          incoming_tuple: describeBootstrapOrdering(readBootstrapOrderingState(next))
+        });
+      }
+      return;
+    }
     try {
       o.setWidgetState(next);
+      if (includesOrderingPatch) {
+        const finalOrdering = readBootstrapOrderingState(next);
+        console.log("[ui_widgetstate_persist_applied]", {
+          reason: "applied",
+          previous_tuple: describeBootstrapOrdering(orderingBefore),
+          next_tuple: describeBootstrapOrdering(finalOrdering)
+        });
+      }
     } catch {
     }
   }
@@ -3375,153 +4068,130 @@
   function maybeScheduleBootstrapRetry(resolved) {
     return computeHydrationState2(resolved);
   }
-  function resetHydrationRetryCycle(opts) {
-    if (opts?.trigger_poll !== true) return;
-    const source = String(opts?.source || "manual");
-    const latest = globalThis.__BSC_LATEST__ || {};
-    const latestState = toRecord2(latest.state);
-    if (isDevEnv()) {
-      console.log("[recovery_retry_clicked]", {
-        source,
-        has_state: Object.keys(latestState).length > 0
-      });
-    }
-    void callRunStep(ACTION_BOOTSTRAP_POLL, {
-      ...latestState,
-      __bootstrap_poll: "true",
-      __hydrate_poll: "true",
-      __manual_retry: "true"
-    });
-  }
   function handleToolResultAndMaybeScheduleBootstrapRetry(raw, opts) {
-    const source = String(opts?.source || "unknown");
+    const source = opts?.source || "unknown";
     const normalizedResult = normalizeToolResult(raw);
-    const currentCachedResolved = resolveWidgetPayload2(getLastToolOutput());
-    const currentCachedResult = currentCachedResolved.result;
     let normalized = normalizedResult.normalized;
     if (!Object.keys(normalized).length) {
+      const resolvedForDrop = resolveWidgetPayload2(raw);
+      const ingestContext2 = buildClientIngestContext({
+        raw,
+        resolved: resolvedForDrop,
+        fallbackClientActionId: opts?.client_action_id,
+        fallbackRequestId: opts?.request_id
+      });
+      logClientIngestObservation({
+        source,
+        phase: "dropped_no_widget_result",
+        context: ingestContext2
+      });
       console.warn("[ui_ingest_dropped_no_widget_result]", {
         source,
         payload_source: normalizedResult.source,
-        payload_reason_code: normalizedResult.reasonCode
+        payload_reason_code: normalizedResult.reasonCode,
+        correlation_id: ingestContext2.correlation_id,
+        client_action_id: ingestContext2.client_action_id,
+        request_id: ingestContext2.request_id,
+        client_ingest_ts_ms: ingestContext2.client_ingest_ts_ms,
+        client_ingest_seq: ingestContext2.client_ingest_seq,
+        payload_shape_fingerprint: ingestContext2.payload_shape_fingerprint
       });
       if (source === "call_run_step") {
-        normalized = buildTupleFailClosedEnvelope({
-          currentResult: currentCachedResult,
+        const failClosedEnvelope = buildTupleFailClosedEnvelope({
+          currentResult: resolveWidgetPayload2(getLastToolOutput()).result,
           incomingRaw: raw
         });
+        const failClosedResolved = resolveWidgetPayload2(failClosedEnvelope);
+        console.warn("[ui_ingest_fail_closed_missing_widget_result]", {
+          source,
+          correlation_id: ingestContext2.correlation_id,
+          client_action_id: ingestContext2.client_action_id,
+          request_id: ingestContext2.request_id,
+          client_ingest_ts_ms: ingestContext2.client_ingest_ts_ms,
+          client_ingest_seq: ingestContext2.client_ingest_seq,
+          payload_shape_fingerprint: ingestContext2.payload_shape_fingerprint,
+          fail_closed_reason: "incoming_missing_widget_result",
+          fail_closed_step: String(
+            toRecord2(failClosedResolved.result.state).current_step || failClosedResolved.result.current_step_id || ""
+          )
+        });
+        normalized = failClosedEnvelope;
       } else {
-        return {};
+        const cached = getLastToolOutput();
+        if (Object.keys(cached).length > 0) {
+          normalized = cached;
+        } else {
+          if (_render) _render(raw);
+          return resolvedForDrop.result;
+        }
       }
     }
     const resolved = resolveWidgetPayload2(normalized);
+    const ingestContext = buildClientIngestContext({
+      raw,
+      resolved,
+      fallbackClientActionId: opts?.client_action_id,
+      fallbackRequestId: opts?.request_id
+    });
+    logClientIngestObservation({
+      source,
+      phase: "received",
+      context: ingestContext
+    });
     const result = resolved.result;
-    const currentQuality = evaluatePayloadQuality(currentCachedResult);
-    const incomingQuality = evaluatePayloadQuality(result);
-    const currentOrdering = readBootstrapOrderingState(widgetState());
-    const incomingOrdering = {
+    const currentWidget = widgetState();
+    const currentOrdering = readBootstrapOrderingState(currentWidget);
+    const incomingOrderingRaw = {
       sessionId: resolved.bootstrap_session_id,
       epoch: resolved.bootstrap_epoch,
       responseSeq: resolved.response_seq,
       hostWidgetSessionId: resolved.host_widget_session_id
     };
+    const incomingOrdering = incomingOrderingRaw;
+    const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
+    const currentCachedPayload = getLastToolOutput();
+    const currentCachedResolved = resolveWidgetPayload2(currentCachedPayload);
+    const currentCachedResult = currentCachedResolved.result;
+    const currentCachedOrdering = readBootstrapOrderingState(toRecord2(currentCachedResult.state));
+    const renderOrderingBase = hasValidBootstrapOrdering(currentCachedOrdering) ? currentCachedOrdering : currentOrdering;
+    const renderOrderingDecision = decideOrderingPatch(renderOrderingBase, incomingOrdering);
+    const renderCacheDecision = shouldUpdateRenderCache({
+      source,
+      currentHasPayload: Object.keys(currentCachedPayload).length > 0,
+      incoming: evaluatePayloadQuality(result),
+      current: evaluatePayloadQuality(currentCachedResult),
+      incomingSignal: readIncomingLivenessSignal(result),
+      orderingReason: renderOrderingDecision.reason
+    });
+    const shouldPersistIncomingRender = renderCacheDecision.should_persist;
     const continuityPatch = buildWidgetStateContinuityPatch({
-      currentWidgetState: widgetState(),
+      currentWidgetState: currentWidget,
       incomingState: toRecord2(result.state)
     });
-    const incomingHasOrdering = hasValidBootstrapOrdering(incomingOrdering);
-    const currentHasOrdering = hasValidBootstrapOrdering(currentOrdering);
-    const orderingDecision = decideOrderingPatch(currentOrdering, incomingOrdering);
-    let sameTupleUpgradeAccepted = false;
-    if (incomingHasOrdering && !orderingDecision.apply) {
-      if (orderingDecision.reason === "same_response_seq" && shouldAcceptSameTupleUpgrade({
-        incoming: incomingQuality,
-        current: currentQuality
-      })) {
-        sameTupleUpgradeAccepted = true;
-        console.log("[ui_ordering_same_seq_upgrade_accepted]", {
-          source,
-          payload_source: resolved.source,
-          payload_reason_code: resolved.source_reason_code,
-          incoming_quality_score: incomingQuality.score,
-          current_quality_score: currentQuality.score,
-          incoming_renderable: incomingQuality.renderable,
-          current_renderable: currentQuality.renderable,
-          incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-          current_tuple: describeBootstrapOrdering(currentOrdering)
-        });
-      } else {
-        console.warn("[ui_ordering_dropped_stale]", {
-          source,
-          reason: orderingDecision.reason,
-          payload_source: resolved.source,
-          payload_reason_code: resolved.source_reason_code,
-          incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-          current_tuple: describeBootstrapOrdering(currentOrdering)
-        });
-        return {};
-      }
+    const widgetPatch = {
+      ...continuityPatch
+    };
+    if (incomingHasOrdering) {
+      widgetPatch.bootstrap_session_id = incomingOrdering.sessionId;
+      widgetPatch.bootstrap_epoch = incomingOrdering.epoch;
+      widgetPatch.response_seq = incomingOrdering.responseSeq;
+      widgetPatch.host_widget_session_id = incomingOrdering.hostWidgetSessionId;
     }
-    if (!incomingHasOrdering) {
-      console.warn("[ui_ingest_tuple_incomplete_fail_closed]", {
-        source,
-        reason: "incoming_missing_tuple",
-        payload_source: resolved.source,
-        payload_reason_code: resolved.source_reason_code,
-        incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-        current_tuple: describeBootstrapOrdering(currentOrdering),
-        current_tuple_present: currentHasOrdering
-      });
-      if (currentHasOrdering && source !== "call_run_step") {
-        return {};
-      }
-      const failClosedEnvelope = buildTupleFailClosedEnvelope({
-        currentResult: currentCachedResult,
-        incomingRaw: raw,
-        incomingResult: result
-      });
-      setLastToolOutput(failClosedEnvelope);
-      if (_render) _render(failClosedEnvelope);
-      return resolveWidgetPayload2(failClosedEnvelope).result;
+    const shouldApplyWidgetPatch = !incomingHasOrdering || renderOrderingDecision.apply || renderOrderingDecision.reason === "same_response_seq";
+    if (shouldApplyWidgetPatch && Object.keys(widgetPatch).length > 0) {
+      setWidgetStateSafe(widgetPatch);
     }
-    if (incomingHasOrdering && orderingDecision.apply) {
-      setWidgetStateSafe({
-        ...continuityPatch,
-        bootstrap_session_id: incomingOrdering.sessionId,
-        bootstrap_epoch: incomingOrdering.epoch,
-        response_seq: incomingOrdering.responseSeq,
-        host_widget_session_id: incomingOrdering.hostWidgetSessionId
-      });
-      console.log("[ui_ordering_applied]", {
-        source,
-        reason: orderingDecision.reason,
-        payload_source: resolved.source,
-        payload_reason_code: resolved.source_reason_code,
-        incoming_tuple: describeBootstrapOrdering(incomingOrdering),
-        current_tuple: describeBootstrapOrdering(currentOrdering)
-      });
-    } else if (Object.keys(continuityPatch).length > 0) {
-      setWidgetStateSafe(continuityPatch);
-    }
-    const shouldPersistToRenderCache = shouldUpdateRenderCache({
-      currentHasPayload: Object.keys(currentCachedResult).length > 0,
-      incoming: incomingQuality,
-      current: currentQuality,
-      sameTupleUpgradeAccepted,
-      orderingReason: orderingDecision.reason
-    });
-    if (shouldPersistToRenderCache) {
+    if (shouldPersistIncomingRender) {
       setLastToolOutput(normalized);
       if (_render) _render(normalized);
-    } else {
-      console.warn("[ui_ingest_ack_cache_preserved]", {
+    } else if (isDevEnv()) {
+      console.log("[ui_render_cache_preserved]", {
         source,
-        payload_source: resolved.source,
-        payload_reason_code: resolved.source_reason_code,
-        incoming_quality_score: incomingQuality.score,
-        current_quality_score: currentQuality.score,
-        incoming_renderable: incomingQuality.renderable,
-        current_renderable: currentQuality.renderable
+        ordering_reason: renderOrderingDecision.reason,
+        decision_reason: renderCacheDecision.decision_reason,
+        preserve_safety_reason: renderCacheDecision.preserve_safety_reason,
+        incoming_tuple: describeBootstrapOrdering(incomingOrdering),
+        current_tuple: describeBootstrapOrdering(renderOrderingBase)
       });
     }
     const hydration = maybeScheduleBootstrapRetry(resolved);
@@ -3540,7 +4210,9 @@
         resolved_language_source: resolved.resolved_language_source,
         ui_strings_status: resolved.ui_strings_status,
         bootstrap_phase: resolved.bootstrap_phase,
-        gate_status: String((result?.state || {}).ui_gate_status || "")
+        gate_status: String((result?.state || {}).ui_gate_status || ""),
+        current_tuple: describeBootstrapOrdering(currentOrdering),
+        incoming_tuple: describeBootstrapOrdering(incomingOrdering)
       });
     }
     return result;
@@ -3774,17 +4446,11 @@
     const inputEl2 = document.getElementById("input");
     const sendEl2 = document.getElementById("send");
     const btnStart2 = document.getElementById("btnStart");
-    const btnGoToNextStep = document.getElementById("btnGoToNextStep");
-    const btnStartDreamExercise2 = document.getElementById("btnStartDreamExercise");
-    const btnSwitchToSelfDream2 = document.getElementById("btnSwitchToSelfDream");
     const wordingChoicePickUser2 = document.getElementById("wordingChoicePickUser");
     const wordingChoicePickSuggestion2 = document.getElementById("wordingChoicePickSuggestion");
     if (inputEl2) inputEl2.disabled = loading;
     if (sendEl2) sendEl2.disabled = loading;
     if (btnStart2) btnStart2.disabled = loading;
-    if (btnGoToNextStep) btnGoToNextStep.disabled = loading;
-    if (btnStartDreamExercise2) btnStartDreamExercise2.disabled = loading;
-    if (btnSwitchToSelfDream2) btnSwitchToSelfDream2.disabled = loading;
     if (wordingChoicePickUser2) wordingChoicePickUser2.disabled = loading;
     if (wordingChoicePickSuggestion2) wordingChoicePickSuggestion2.disabled = loading;
     document.querySelectorAll("#choiceWrap button").forEach((b) => {
@@ -3844,21 +4510,135 @@
     }
     return { localeHint: "", localeHintSource: "none" };
   }
+  function normalizeActionAckStatus(raw) {
+    const normalized = String(raw || "").trim().toLowerCase();
+    if (normalized === "accepted") return "accepted";
+    if (normalized === "rejected") return "rejected";
+    if (normalized === "timeout") return "timeout";
+    if (normalized === "dropped") return "dropped";
+    return "rejected";
+  }
+  function parseBool(value) {
+    return value === true || String(value || "").trim().toLowerCase() === "true";
+  }
+  function generateClientActionId(actionCode) {
+    const suffix = Math.random().toString(36).slice(2, 10);
+    return `ca_${Date.now()}_${String(actionCode || "ACTION").trim().toLowerCase()}_${suffix}`;
+  }
+  function ensureClientActionIdOnState(state, actionCode) {
+    const existing = String(state.__client_action_id || "").trim();
+    if (existing) return existing;
+    const generated = generateClientActionId(actionCode);
+    state.__client_action_id = generated;
+    return generated;
+  }
+  function extractActionLiveness(result, fallback) {
+    const state = toRecord2(result.state);
+    const stateLiveness = toRecord2(state.ui_action_liveness);
+    const ackStatus = normalizeActionAckStatus(
+      result.ack_status || state.ack_status || stateLiveness.ack_status || "rejected"
+    );
+    const stateAdvanced = parseBool(
+      result.state_advanced ?? state.state_advanced ?? stateLiveness.state_advanced ?? false
+    );
+    const reasonCode = String(
+      result.reason_code || state.reason_code || stateLiveness.reason_code || ""
+    ).trim().toLowerCase();
+    const actionCodeEcho = String(
+      result.action_code_echo || state.action_code_echo || stateLiveness.action_code_echo || fallback.action_code
+    ).trim().toUpperCase();
+    const clientActionIdEcho = String(
+      result.client_action_id_echo || state.client_action_id_echo || stateLiveness.client_action_id_echo || fallback.client_action_id
+    ).trim();
+    return {
+      ack_status: ackStatus,
+      state_advanced: stateAdvanced,
+      reason_code: stateAdvanced ? "" : reasonCode || "state_not_advanced",
+      action_code_echo: actionCodeEcho,
+      client_action_id_echo: clientActionIdEcho
+    };
+  }
+  function actionLivenessFailureClass(liveness) {
+    const ackStatus = normalizeActionAckStatus(liveness.ack_status);
+    if (ackStatus === "timeout") return "timeout";
+    if (ackStatus === "dropped") return "dropped";
+    if (ackStatus === "rejected") return "rejected";
+    if (ackStatus === "accepted" && !liveness.state_advanced) return "accepted_no_advance";
+    return "none";
+  }
+  function resolveActionLivenessNotice(state, liveness) {
+    const failureClass = actionLivenessFailureClass(liveness);
+    const reasonCode = String(liveness.reason_code || "").trim().toLowerCase() || "state_not_advanced";
+    if (failureClass === "timeout") {
+      return {
+        failure_class: failureClass,
+        reason_code: reasonCode || "timeout",
+        message: uiText(state || {}, "transient.timeout", "")
+      };
+    }
+    if (failureClass === "rejected" && reasonCode.includes("rate_limit")) {
+      return {
+        failure_class: failureClass,
+        reason_code: reasonCode,
+        message: uiText(state || {}, "transient.rate_limited", "")
+      };
+    }
+    if (failureClass === "dropped" || failureClass === "rejected" || failureClass === "accepted_no_advance") {
+      const base = uiText(state || {}, "error.contract.body", "");
+      const message = base ? `${base} (${reasonCode})` : reasonCode;
+      return {
+        failure_class: failureClass,
+        reason_code: reasonCode,
+        message
+      };
+    }
+    return { failure_class: "none", reason_code: "", message: "" };
+  }
   async function callRunStep(message, extraState) {
     const o = oa();
     const messageText = String(message || "").trim();
     const isStartAction = messageText === "ACTION_START";
     const cleanExtraState = extraState && typeof extraState === "object" ? { ...extraState } : void 0;
+    const latestSnapshot = globalThis.__BSC_LATEST__ || {};
+    const latestState = toRecord2(latestSnapshot.state);
+    const persistedWidgetState = widgetState();
+    const activeClientState = retainCanonicalStepContinuity(
+      Object.keys(latestState).length > 0 ? latestState : persistedWidgetState,
+      latestState,
+      persistedWidgetState
+    );
     const transportStatus = resolveTransportStatus();
     const hasCallTool = transportStatus === "ready_callTool";
     const hasBridgePath = transportStatus === "ready_bridge" || transportStatus === "unknown";
     if (!hasCallTool && !hasBridgePath) {
-      if (isStartAction) {
-        setWidgetStateSafe({
-          start_dispatch_state: "failed",
-          transport_ready: "false"
-        });
+      const livenessState = Object.assign({}, activeClientState, persistedWidgetState);
+      if (cleanExtraState && typeof cleanExtraState === "object") {
+        Object.assign(livenessState, cleanExtraState);
       }
+      const clientActionId2 = ensureClientActionIdOnState(
+        livenessState,
+        messageText || "TEXT_INPUT"
+      );
+      const actionCodeEcho = String(messageText || "TEXT_INPUT").trim().toUpperCase();
+      const livenessNotice = resolveActionLivenessNotice(livenessState, {
+        ack_status: "rejected",
+        state_advanced: false,
+        reason_code: "transport_unavailable"
+      });
+      const unavailablePatch = {
+        __client_action_id: clientActionId2,
+        ui_action_liveness_ack_status: "rejected",
+        ui_action_liveness_state_advanced: "false",
+        ui_action_liveness_reason_code: "transport_unavailable",
+        ui_action_liveness_failure_class: livenessNotice.failure_class,
+        ui_action_liveness_action_code: actionCodeEcho,
+        ui_action_liveness_client_action_id: clientActionId2
+      };
+      if (isStartAction) {
+        unavailablePatch.start_dispatch_state = "failed";
+        unavailablePatch.transport_ready = "false";
+      }
+      setWidgetStateSafe(unavailablePatch);
       console.warn("[ui_transport_unavailable]", {
         action_code: messageText,
         transport_status: transportStatus
@@ -3868,8 +4648,7 @@
       );
       console.warn("run_step: host did not provide callTool or MCP bridge");
       const errEl = document.getElementById("cardDesc");
-      const latest2 = globalThis.__BSC_LATEST__;
-      const state2 = latest2?.state || {};
+      const state2 = latestState;
       if (errEl && _t) errEl.textContent = _t(uiLang(state2), "errorMessage");
       return;
     }
@@ -3884,14 +4663,6 @@
       if (hasToolOutput && !isBootstrapPollCall) return;
       if (!persistedStarted && !isBootstrapPollCall) return;
     }
-    const latest = globalThis.__BSC_LATEST__ || {};
-    const latestState = toRecord2(latest.state);
-    const persistedWidgetState = widgetState();
-    const activeClientState = retainCanonicalStepContinuity(
-      Object.keys(latestState).length > 0 ? latestState : persistedWidgetState,
-      latestState,
-      persistedWidgetState
-    );
     const state = Object.keys(activeClientState).length > 0 ? activeClientState : { current_step: "step_0" };
     const baseState = state;
     const ws = persistedWidgetState;
@@ -3931,10 +4702,31 @@
       bootstrapPollInFlight = true;
       bootstrapPollInFlightSignature = bootstrapPollSignature;
     }
+    const ensuredClientActionId = ensureClientActionIdOnState(
+      nextState,
+      messageText || "TEXT_INPUT"
+    );
     const requestId = String(nextState.__request_id || "");
-    const clientActionId = String(nextState.__client_action_id || "");
+    const clientActionId = ensuredClientActionId;
+    const requestCorrelationId = coalesceString(
+      nextState.correlation_id,
+      nextState.__correlation_id,
+      requestId
+    );
+    const requestTransport = hasCallTool ? "callTool" : "bridge";
     const startedAt = Date.now();
     const debugCalls = isDevEnv();
+    console.log("[ui_calltool_request_shape]", {
+      correlation_id: requestCorrelationId,
+      client_action_id: clientActionId,
+      request_id: requestId,
+      action_code: String(messageText || "").trim().toUpperCase(),
+      transport_status: transportStatus,
+      transport_primary: requestTransport,
+      request_shape_fingerprint: shapeFingerprint(payload),
+      payload_source: "pre_resolve",
+      payload_reason_code: "pre_resolve"
+    });
     if (debugCalls) {
       console.log("[ui_run_step_request]", {
         request_id: requestId,
@@ -3960,6 +4752,12 @@
         });
       }
       setInlineNotice(uiText(nextState, "transient.timeout", ""));
+      if (isStartAction) {
+        setWidgetStateSafe({
+          start_dispatch_state: "failed",
+          transport_ready: "true"
+        });
+      }
       setLoading(false);
     }, timeoutMs);
     try {
@@ -4000,8 +4798,26 @@
       const normalizedRaw = toRecord2(resp);
       const resolvedResponse = resolveWidgetPayload2(normalizedRaw);
       const directResult = resolvedResponse.result;
+      const responseCorrelation = resolveClientCorrelation({
+        raw: normalizedRaw,
+        result: directResult,
+        fallbackClientActionId: clientActionId,
+        fallbackRequestId: requestId
+      });
+      console.log("[ui_calltool_response_shape]", {
+        correlation_id: responseCorrelation.correlation_id,
+        client_action_id: responseCorrelation.client_action_id,
+        request_id: responseCorrelation.request_id,
+        action_code: String(messageText || "").trim().toUpperCase(),
+        transport_used: transportUsed,
+        response_shape_fingerprint: shapeFingerprint(normalizedRaw),
+        payload_source: resolvedResponse.source,
+        payload_reason_code: resolvedResponse.source_reason_code
+      });
       const ingestedResult = handleToolResultAndMaybeScheduleBootstrapRetry(normalizedRaw, {
-        source: "call_run_step"
+        source: "call_run_step",
+        client_action_id: clientActionId,
+        request_id: requestId
       });
       const hasIngestedResult = Object.keys(ingestedResult).length > 0;
       const orderingAfterIngest = readBootstrapOrderingState(widgetState());
@@ -4010,19 +4826,6 @@
       const result = hasIngestedResult ? ingestedResult : directResult;
       const errorObj = result?.error;
       const transientRetryError = result?.ok === false && errorObj && (errorObj.type === "timeout" || errorObj.type === "rate_limited") && (errorObj.retry_action === "retry_same_action" || errorObj.type === "rate_limited");
-      if (transientRetryError) {
-        if (errorObj.type === "rate_limited") {
-          setInlineNotice(
-            errorObj.user_message || uiText(nextState, "transient.rate_limited", "")
-          );
-          lockRateLimit(errorObj.retry_after_ms ?? 1500);
-        } else {
-          setInlineNotice(
-            errorObj.user_message || uiText(nextState, "transient.timeout", "")
-          );
-        }
-        return;
-      }
       if (debugCalls) {
         console.log("[ui_dispatch_ack_only]", {
           request_id: requestId,
@@ -4035,11 +4838,98 @@
           response_ingested: hasIngestedResult
         });
       }
-      if (isStartAction) {
-        setWidgetStateSafe({
-          start_dispatch_state: hasIngestedResult || orderingAdvanced ? "ready" : "ready",
-          transport_ready: "true"
+      const responseViewMode = String(
+        toRecord2(
+          toRecord2(
+            result?.ui
+          ).view
+        ).mode || ""
+      ).trim().toLowerCase();
+      const hasServerLiveness = String(result.ack_status || "").trim() !== "" || String(toRecord2(result?.state).ack_status || "").trim() !== "" || String(toRecord2(toRecord2(result?.state).ui_action_liveness).ack_status || "").trim() !== "";
+      const resultState = toRecord2(result?.state);
+      const responseCurrentStep = String(resultState.current_step || result?.current_step_id || "").trim();
+      const requestCurrentStep = String(nextState.current_step || "").trim();
+      const stepAdvanced = Boolean(responseCurrentStep) && responseCurrentStep !== requestCurrentStep;
+      const fallbackStateAdvanced = result?.ok === false ? false : hasIngestedResult && (orderingAdvanced || stepAdvanced);
+      const fallbackAckStatus = result?.ok !== false ? "accepted" : (errorObj?.type || "").toLowerCase() === "timeout" ? "timeout" : "rejected";
+      const liveness = hasServerLiveness ? extractActionLiveness(result, { action_code: messageText, client_action_id: clientActionId }) : {
+        ack_status: fallbackAckStatus,
+        state_advanced: fallbackStateAdvanced,
+        reason_code: fallbackStateAdvanced ? "" : errorObj?.type || "state_not_advanced",
+        action_code_echo: String(messageText || "").trim().toUpperCase(),
+        client_action_id_echo: clientActionId
+      };
+      const livenessNotice = resolveActionLivenessNotice(nextState, liveness);
+      const hasExplicitError = livenessNotice.failure_class !== "none";
+      console.log("[ui_action_liveness_ack]", {
+        action_code: liveness.action_code_echo,
+        client_action_id: liveness.client_action_id_echo,
+        correlation_id: responseCorrelation.correlation_id,
+        request_id: responseCorrelation.request_id,
+        ack_status: liveness.ack_status,
+        state_advanced: liveness.state_advanced,
+        reason_code: liveness.reason_code,
+        failure_class: livenessNotice.failure_class,
+        payload_source: resolvedResponse.source,
+        payload_reason_code: resolvedResponse.source_reason_code,
+        ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
+        ordering_after: describeBootstrapOrdering(orderingAfterIngest)
+      });
+      setWidgetStateSafe({
+        ui_action_liveness_ack_status: liveness.ack_status,
+        ui_action_liveness_state_advanced: liveness.state_advanced ? "true" : "false",
+        ui_action_liveness_reason_code: liveness.reason_code,
+        ui_action_liveness_failure_class: livenessNotice.failure_class,
+        ui_action_liveness_action_code: liveness.action_code_echo,
+        ui_action_liveness_client_action_id: liveness.client_action_id_echo
+      });
+      if (hasExplicitError) {
+        console.warn("[ui_action_liveness_explicit_error]", {
+          action_code: liveness.action_code_echo,
+          client_action_id: liveness.client_action_id_echo,
+          ack_status: liveness.ack_status,
+          reason_code: liveness.reason_code,
+          failure_class: livenessNotice.failure_class
         });
+        if (transientRetryError && errorObj?.type === "rate_limited") {
+          setInlineNotice(errorObj.user_message || uiText(nextState, "transient.rate_limited", ""));
+          lockRateLimit(errorObj.retry_after_ms ?? 1500);
+        } else if (transientRetryError && errorObj?.type === "timeout") {
+          setInlineNotice(errorObj.user_message || uiText(nextState, "transient.timeout", ""));
+        } else {
+          setInlineNotice(livenessNotice.message);
+        }
+        if (liveness.ack_status === "accepted" && !liveness.state_advanced) {
+          console.warn("[ui_action_dispatch_ack_without_state_advance]", {
+            action_code: String(messageText || "").trim().toUpperCase(),
+            correlation_id: responseCorrelation.correlation_id,
+            client_action_id: liveness.client_action_id_echo,
+            request_id: responseCorrelation.request_id,
+            response_ingested: hasIngestedResult,
+            ordering_advanced: orderingAdvanced,
+            payload_source: resolvedResponse.source,
+            payload_reason_code: resolvedResponse.source_reason_code,
+            response_view_mode: responseViewMode,
+            failure_class: livenessNotice.failure_class,
+            preserve_expected_visible_error: true,
+            ordering_before: describeBootstrapOrdering(orderingBeforeIngest),
+            ordering_after: describeBootstrapOrdering(orderingAfterIngest)
+          });
+        }
+        if (isStartAction) {
+          setWidgetStateSafe({
+            start_dispatch_state: "failed",
+            transport_ready: "true"
+          });
+        }
+        if (transientRetryError) return;
+      } else {
+        if (isStartAction) {
+          setWidgetStateSafe({
+            start_dispatch_state: "ready",
+            transport_ready: "true"
+          });
+        }
       }
     } catch (e) {
       if (didTimeout) return;
@@ -4086,158 +4976,234 @@
     }
   }
 
-  // ui/lib/ui_text.ts
-  function latestWidgetLangForText() {
-    const latest = globalThis.__BSC_LATEST__;
-    const state = latest?.state && typeof latest.state === "object" ? latest.state : {};
-    return String(latest?.lang || state.ui_strings_lang || state.language || "en").trim().toLowerCase();
+  // src/handlers/dream_builder_resume.ts
+  function asRecord2(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
   }
-  function escapeHtml(s) {
-    if (s == null) return "";
-    const div = document.createElement("div");
-    div.textContent = s;
-    return div.innerHTML;
+  function readStringArray(value) {
+    return Array.isArray(value) ? value.map((entry) => String(entry || "").trim()).filter(Boolean) : [];
   }
-  function stripInlineText(raw) {
-    let s = String(raw || "");
-    s = s.replace(/<[^>]*>/g, "");
-    return s;
+  function readDreamScoreMatrix(value) {
+    return Array.isArray(value) ? value.map(
+      (row) => Array.isArray(row) ? row.map((entry) => typeof entry === "number" && Number.isFinite(entry) ? entry : null).filter((entry) => entry !== null) : []
+    ).filter((row) => row.length > 0) : [];
   }
-  function renderInlineText(el, raw) {
-    if (!el) return;
-    const s = String(raw || "");
-    const fragment = document.createDocumentFragment();
-    let buf = "";
-    let bold = false;
-    let i = 0;
-    function appendLineWithLinks(line) {
-      const value = String(line || "");
-      const urlPattern = /https?:\/\/[^\s<>"']+/g;
-      let cursor = 0;
-      let m = null;
-      while ((m = urlPattern.exec(value)) !== null) {
-        const fullMatch = String(m[0] || "");
-        const start = Number(m.index || 0);
-        if (start > cursor) {
-          fragment.appendChild(document.createTextNode(value.slice(cursor, start)));
-        }
-        let url = fullMatch;
-        let trailing = "";
-        while (/[).,!?;:]$/.test(url)) {
-          trailing = url.slice(-1) + trailing;
-          url = url.slice(0, -1);
-        }
-        if (url) {
-          const a = document.createElement("a");
-          a.textContent = url;
-          a.href = url;
-          a.target = "_blank";
-          a.rel = "noopener noreferrer";
-          a.className = "inlineLink";
-          fragment.appendChild(a);
-        }
-        if (trailing) {
-          fragment.appendChild(document.createTextNode(trailing));
-        }
-        cursor = start + fullMatch.length;
-      }
-      if (cursor < value.length) {
-        fragment.appendChild(document.createTextNode(value.slice(cursor)));
-      }
+  function readDreamTopClusters(value) {
+    return Array.isArray(value) ? value.map((entry) => {
+      const record = asRecord2(entry);
+      const theme = String(record.theme || "").trim();
+      const average = typeof record.average === "number" && Number.isFinite(record.average) ? record.average : null;
+      if (!theme || average === null) return null;
+      return { theme, average };
+    }).filter((entry) => Boolean(entry)) : [];
+  }
+  function sameStringArray(left, right) {
+    if (left.length !== right.length) return false;
+    return left.every((entry, index) => entry === right[index]);
+  }
+  function getDreamBuilderResumeContext(state) {
+    const stateRecord = asRecord2(state);
+    const canonicalStatements = readStringArray(stateRecord.dream_builder_statements);
+    const scoringStatements = readStringArray(stateRecord.dream_scoring_statements);
+    const lastStatements = readStringArray(asRecord2(stateRecord.last_specialist_result).statements);
+    const statements = canonicalStatements.length > 0 ? canonicalStatements : scoringStatements.length > 0 ? scoringStatements : lastStatements;
+    const scores = readDreamScoreMatrix(stateRecord.dream_scores);
+    const topClusters = readDreamTopClusters(stateRecord.dream_top_clusters);
+    const hasSavedScoreContext = scoringStatements.length > 0 || scores.length > 0 || topClusters.length > 0 || String(stateRecord.dream_awaiting_direction ?? "").trim() === "true";
+    const hasReusableScoreContext = statements.length >= 20 && topClusters.length > 0 && (scoringStatements.length === 0 || sameStringArray(statements, scoringStatements)) && (scores.length > 0 || topClusters.length > 0);
+    return {
+      statements,
+      scoringStatements,
+      scores,
+      topClusters,
+      hasSavedScoreContext,
+      hasReusableScoreContext
+    };
+  }
+  function shouldResumeDreamBuilderExercise(state) {
+    const resumeContext = getDreamBuilderResumeContext(state);
+    return resumeContext.statements.length > 0 || resumeContext.hasReusableScoreContext;
+  }
+  function dreamBuilderExerciseLabelKey(state) {
+    return shouldResumeDreamBuilderExercise(state) ? "dreamBuilder.resumeExercise" : "dreamBuilder.startExercise";
+  }
+
+  // ui/lib/ui_render.ts
+  function toRecord3(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  }
+  function readSingleValueCardContent(uiPayload) {
+    const content = toRecord3(uiPayload.content);
+    if (String(content.kind || "").trim() !== "single_value") return null;
+    const heading = String(content.heading || "").trim();
+    const canonicalText = String(content.canonical_text || "").trim();
+    const supportText = String(content.support_text || "").trim();
+    const feedbackReasonText = String(content.feedback_reason_text || "").trim();
+    if (!heading && !canonicalText && !supportText && !feedbackReasonText) return null;
+    return {
+      ...heading ? { heading } : {},
+      ...canonicalText ? { canonicalText } : {},
+      ...supportText ? { supportText } : {},
+      ...feedbackReasonText ? { feedbackReasonText } : {}
+    };
+  }
+  function readWordingChoiceCompareFeedbackText(wordingChoiceRaw) {
+    const wordingChoice = toRecord3(wordingChoiceRaw);
+    const compareFeedback = toRecord3(wordingChoice.compare_feedback);
+    const compareFeedbackText = String(compareFeedback.text || "").trim();
+    if (compareFeedbackText) return compareFeedbackText;
+    return String(wordingChoice.feedback_reason_text || "").trim();
+  }
+  function shouldSuppressMainCardForWordingChoice(uiPayloadRaw, uiViewVariantRaw) {
+    const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
+    const uiViewVariant = String(uiViewVariantRaw || "").trim();
+    const wordingChoicePayload = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
+    const flags = toRecord3(uiPayload.flags);
+    return uiViewVariant === "wording_choice" || wordingChoicePayload.enabled === true || String(flags.require_wording_pick || "").trim() === "true";
+  }
+  function shouldSuppressPromptForWordingChoice(params) {
+    return String(params.uiViewVariant || "").trim() === "wording_choice" || params.wordingChoiceActive === true || params.requireWordingPick === true;
+  }
+  function shouldShowTextInputForWordingChoice(params) {
+    if (params.textSubmitAvailable !== true) return false;
+    if (params.requireWordingPick === true) return true;
+    return !shouldSuppressPromptForWordingChoice({
+      uiViewVariant: params.uiViewVariant,
+      wordingChoiceActive: params.wordingChoiceActive,
+      requireWordingPick: params.requireWordingPick
+    });
+  }
+  function shouldDisableTextInputForWordingChoice(params) {
+    return params.requireWordingPick === true;
+  }
+  function shouldRenderPurposeStepIntroVideo(params) {
+    if (String(params.currentStep || "").trim() !== "purpose") return false;
+    if (params.showStepIntroChrome !== true) return false;
+    if (params.wordingChoiceActive === true) return false;
+    return Boolean(purposeStepVideoUrlForLang(params.lang));
+  }
+  function shouldRenderBigWhyStepIntroVideo(params) {
+    if (String(params.currentStep || "").trim() !== "bigwhy") return false;
+    if (params.showStepIntroChrome !== true) return false;
+    if (params.wordingChoiceActive === true) return false;
+    return Boolean(bigWhyStepVideoUrlForLang(params.lang));
+  }
+  function shouldRenderRoleStepIntroVideo(params) {
+    if (String(params.currentStep || "").trim() !== "role") return false;
+    if (params.showStepIntroChrome !== true) return false;
+    if (params.wordingChoiceActive === true) return false;
+    return Boolean(roleStepVideoUrlForLang(params.lang));
+  }
+  function dreamExerciseButtonLabelKeyForState(state) {
+    return dreamBuilderExerciseLabelKey(state);
+  }
+  function actionContractActionsForResult(resultData) {
+    const uiPayload = toRecord3(resultData.ui);
+    const actionContract = toRecord3(uiPayload.action_contract);
+    if (Array.isArray(actionContract.actions)) {
+      return actionContract.actions.map((entry) => toRecord3(entry)).filter((entry) => String(entry.action_code || "").trim().length > 0);
     }
-    function appendTextPreservingLines(text, useBold) {
-      const normalized = String(text || "").replace(/\r\n?/g, "\n");
-      const lines = normalized.split("\n");
-      for (let idx = 0; idx < lines.length; idx += 1) {
-        const line = lines[idx] ?? "";
-        if (useBold) {
-          const strong = document.createElement("strong");
-          strong.textContent = line;
-          fragment.appendChild(strong);
-        } else {
-          appendLineWithLinks(line);
-        }
-        if (idx < lines.length - 1) {
-          fragment.appendChild(document.createElement("br"));
-        }
-      }
+    return [];
+  }
+  function actionDescriptorForRole(resultData, role) {
+    const roleNorm = String(role || "").trim().toLowerCase();
+    if (!roleNorm) return null;
+    const actions = actionContractActionsForResult(resultData);
+    for (const action of actions) {
+      if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
+      const actionCode = String(action.action_code || "").trim();
+      if (!actionCode) continue;
+      return {
+        actionCode,
+        payloadMode: String(action.payload_mode || "").trim().toLowerCase()
+      };
     }
-    function flush() {
-      if (!buf) return;
-      appendTextPreservingLines(buf, bold);
-      buf = "";
+    return null;
+  }
+  function actionLabelForRole(resultData, role) {
+    const roleNorm = String(role || "").trim().toLowerCase();
+    if (!roleNorm) return null;
+    const actions = actionContractActionsForResult(resultData);
+    for (const action of actions) {
+      if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
+      return {
+        label: stripInlineText(String(action.label || "")).trim(),
+        labelKey: String(action.label_key || "").trim()
+      };
     }
-    while (i < s.length) {
-      const lt = s.indexOf("<", i);
-      if (lt === -1) {
-        buf += s.slice(i);
-        break;
-      }
-      buf += s.slice(i, lt);
-      const gt = s.indexOf(">", lt + 1);
-      if (gt === -1) {
-        buf += s.slice(lt);
-        break;
-      }
-      const tag = s.slice(lt + 1, gt).trim().toLowerCase();
-      if (tag === "strong") {
-        flush();
-        bold = true;
-      } else if (tag === "/strong") {
-        flush();
-        bold = false;
-      }
-      i = gt + 1;
+    return null;
+  }
+  function actionCodeForRole(resultData, role) {
+    return actionDescriptorForRole(resultData, role)?.actionCode || "";
+  }
+  function choiceActionsForResult(resultData) {
+    return actionContractActionsForResult(resultData).filter((action) => {
+      const role = String(action.role || "").trim().toLowerCase();
+      return role === "choice" || role === "dream_start_exercise";
+    });
+  }
+  function stepIndex(stepId) {
+    const idx = ORDER.indexOf(stepId);
+    return idx >= 0 ? idx : 0;
+  }
+  function extractStepTitle(stepId, lang) {
+    const titles = titlesForLang(lang);
+    const fullTitle = titles[stepId] || "";
+    return fullTitle.replace(/^[^\d]*\d+:\s*/, "");
+  }
+  function uiText2(lang, key, _fallback) {
+    const translated = String(t(lang, key) || "").trim();
+    if (translated) return translated;
+    return "";
+  }
+  function parseWordingChoiceInstruction(instructionRaw) {
+    const instruction = String(instructionRaw || "").replace(/\r/g, "\n").trim();
+    if (!instruction) {
+      return { retainedHeading: "", retainedItems: [], instructionText: "" };
     }
-    flush();
-    while (el.firstChild) el.removeChild(el.firstChild);
-    el.appendChild(fragment);
-  }
-  function clearElementChildren(el) {
-    if (!el) return;
-    const target = el;
-    if (typeof target.removeChild === "function") {
-      while (target.firstChild) target.removeChild(target.firstChild);
-      return;
+    const lines = instruction.split("\n").map((line) => String(line || "").trim());
+    const firstBulletIndex = lines.findIndex((line) => /^(?:[-*•·]|\d+[\).])\s+/.test(line));
+    if (firstBulletIndex < 0) {
+      return { retainedHeading: "", retainedItems: [], instructionText: instruction };
     }
-    if ("innerHTML" in target) {
-      target.innerHTML = "";
+    let bulletEndIndex = firstBulletIndex;
+    while (bulletEndIndex < lines.length && /^(?:[-*•·]|\d+[\).])\s+/.test(lines[bulletEndIndex])) {
+      bulletEndIndex += 1;
     }
+    const retainedHeading = lines.slice(0, firstBulletIndex).filter(Boolean).join("\n").trim();
+    const retainedItems = lines.slice(firstBulletIndex, bulletEndIndex).map((line) => line.replace(/^\s*(?:[-*•·]|\d+[\).])\s+/, "").trim()).filter(Boolean);
+    const instructionText = lines.slice(bulletEndIndex).filter(Boolean).join("\n").trim();
+    if (!retainedHeading || retainedItems.length === 0) {
+      return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+    }
+    return { retainedHeading, retainedItems, instructionText: instructionText || instruction };
   }
-  function normalizeLineText(raw) {
-    return stripInlineText(raw).replace(/\s+/g, " ").trim();
+  function normalizeDreamScoreValue(raw) {
+    const trimmed = String(raw ?? "").trim();
+    if (!trimmed) return "";
+    const num = Number(trimmed);
+    if (Number.isNaN(num) || num < 1 || num > 10) return "";
+    return String(Math.round(num));
   }
-  function isHeadingLikeLine(line) {
-    if (!line) return false;
-    if (line.endsWith(":")) return true;
-    return /^\s*<strong>\s*[^<][\s\S]{0,200}<\/strong>\s*$/i.test(line);
+  function normalizeDreamScoreMatrix(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map(
+      (row) => Array.isArray(row) ? row.map((value) => normalizeDreamScoreValue(value)) : []
+    );
   }
-  function extractOrderedItem(line) {
-    const text = normalizeLineText(line);
-    const m = text.match(/^\d+[\.\)]\s+(.+)$/);
-    return m ? m[1].trim() : null;
+  function buildInitialDreamScoringScores(params) {
+    const clientScores = normalizeDreamScoreMatrix(params.clientScores);
+    const persistedScores = normalizeDreamScoreMatrix(params.persistedScores);
+    const hasClientValues = clientScores.some((row) => row.some((value) => value !== ""));
+    const sourceScores = hasClientValues ? clientScores : persistedScores;
+    return params.clusters.map((cluster, clusterIndex) => {
+      const statementIndices = Array.isArray(cluster.statement_indices) ? cluster.statement_indices : [];
+      const sourceRow = Array.isArray(sourceScores[clusterIndex]) ? sourceScores[clusterIndex] : [];
+      return statementIndices.map((_, statementIndex) => normalizeDreamScoreValue(sourceRow[statementIndex]));
+    });
   }
-  function extractBulletItem(line) {
-    const text = normalizeLineText(line);
-    const m = text.match(/^(?:[-*•])\s+(.+)$/);
-    return m ? m[1].trim() : null;
-  }
-  function extractMarkdownImage(line) {
-    const raw = String(line || "").trim();
-    if (!raw) return null;
-    const m = raw.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
-    if (!m) return null;
-    const alt = String(m[1] || "").trim() || String(t(latestWidgetLangForText(), "media.image.alt") || "").trim();
-    const url = String(m[2] || "").trim();
-    if (!url) return null;
-    return { alt, url };
-  }
-  function appendImage(el, image) {
-    const img = document.createElement("img");
-    img.className = "cardDesc-image";
-    img.src = image.url;
-    img.alt = image.alt;
-    el.appendChild(img);
+  function shouldRetainDreamScoringClientScores(params) {
+    return String(params.currentStep || "").trim() === "dream" && params.isScoringView;
   }
   function benAvatarCandidates() {
     const candidates = [];
@@ -4246,7 +5212,7 @@
       if (base) {
         candidates.push(new URL("assets/ben-steenstra.webp", base).href);
       }
-    } catch (_) {
+    } catch {
     }
     candidates.push("/ui/assets/ben-steenstra.webp");
     return Array.from(new Set(candidates.map((value) => String(value || "").trim()).filter(Boolean)));
@@ -4275,8 +5241,7 @@
   function appendVideoEmbed(cardDescEl, videoUrl, title, prepend = false) {
     const safeVideoUrl = String(videoUrl || "").trim();
     if (!cardDescEl || !safeVideoUrl) return;
-    const videoWrap = document.createElement("div");
-    videoWrap.className = "cardDesc-video";
+    const videoWrap = appendTextNode("div", "cardDesc-video", "");
     const video = document.createElement("video");
     video.src = safeVideoUrl;
     video.controls = true;
@@ -4321,206 +5286,10 @@
     if (!videoUrl) return;
     appendVideoEmbed(cardDescEl, videoUrl, "role-step-video");
   }
-  function appendParagraph(el, lines) {
-    const paragraph = lines.map((line) => String(line || "").trim()).filter(Boolean).join(" ");
-    const paragraphCheck = normalizeLineText(paragraph);
-    if (!paragraphCheck) return;
-    if (!paragraph) return;
-    const p = document.createElement("p");
-    renderInlineText(p, paragraph);
-    el.appendChild(p);
-  }
-  function appendHeading(el, line) {
-    const textRaw = String(line || "").trim().replace(/^<strong>\s*/i, "").replace(/\s*<\/strong>$/i, "").replace(/:$/, "");
-    const textCheck = normalizeLineText(textRaw);
-    if (!textCheck) return;
-    const p = document.createElement("p");
-    p.className = "cardSubheading";
-    renderInlineText(p, textRaw);
-    el.appendChild(p);
-  }
-  function appendCanonicalValue(el, line) {
-    const textRaw = String(line || "").trim();
-    const textCheck = normalizeLineText(textRaw);
-    if (!textCheck) return;
-    const p = document.createElement("p");
-    p.className = "cardCanonicalValue";
-    renderInlineText(p, textRaw);
-    el.appendChild(p);
-  }
-  function appendFeedbackNote(el, raw) {
-    const value = String(raw || "").trim();
-    if (!value) return;
-    const wrap = document.createElement("div");
-    wrap.className = "cardFeedbackNote";
-    appendStructuredText(wrap, value);
-    el.appendChild(wrap);
-  }
-  function appendList(el, tagName, className, items) {
-    const filtered = items.map((item) => ({ raw: String(item || "").trim(), clean: normalizeLineText(item) })).filter((item) => item.clean.length > 0);
-    if (!filtered.length) return;
-    const list = document.createElement(tagName);
-    list.className = className;
-    for (const item of filtered) {
-      const li = document.createElement("li");
-      renderInlineText(li, item.raw);
-      list.appendChild(li);
-    }
-    el.appendChild(list);
-  }
-  function renderStructuredText(el, raw) {
-    if (!el) return;
-    clearElementChildren(el);
-    appendStructuredText(el, raw);
-  }
-  function appendStructuredText(el, raw) {
-    const source = String(raw || "").replace(/\r\n?/g, "\n");
-    if (!source.trim()) return;
-    const lines = source.split("\n");
-    let i = 0;
-    while (i < lines.length) {
-      const currentRaw = String(lines[i] || "");
-      const current = currentRaw.trim();
-      if (!current) {
-        i += 1;
-        continue;
-      }
-      const imageLine = extractMarkdownImage(currentRaw);
-      if (imageLine) {
-        appendImage(el, imageLine);
-        i += 1;
-        continue;
-      }
-      const orderedFirst = extractOrderedItem(currentRaw);
-      if (orderedFirst) {
-        const items = [orderedFirst];
-        i += 1;
-        while (i < lines.length) {
-          const candidate = extractOrderedItem(String(lines[i] || ""));
-          if (!candidate) break;
-          items.push(candidate);
-          i += 1;
-        }
-        appendList(el, "ul", "structuredList structuredListBullet", items);
-        continue;
-      }
-      const bulletFirst = extractBulletItem(currentRaw);
-      if (bulletFirst) {
-        const items = [bulletFirst];
-        i += 1;
-        while (i < lines.length) {
-          const candidate = extractBulletItem(String(lines[i] || ""));
-          if (!candidate) break;
-          items.push(candidate);
-          i += 1;
-        }
-        appendList(el, "ul", "structuredList structuredListBullet", items);
-        continue;
-      }
-      if (isHeadingLikeLine(currentRaw)) {
-        appendHeading(el, currentRaw);
-        i += 1;
-        continue;
-      }
-      const paragraphLines = [currentRaw];
-      i += 1;
-      while (i < lines.length) {
-        const candidateRaw = String(lines[i] || "");
-        const candidate = candidateRaw.trim();
-        if (!candidate) break;
-        if (extractOrderedItem(candidateRaw) || extractBulletItem(candidateRaw) || isHeadingLikeLine(candidateRaw)) {
-          break;
-        }
-        paragraphLines.push(candidateRaw);
-        i += 1;
-      }
-      appendParagraph(el, paragraphLines);
-    }
-  }
-  function renderSingleValueCardContent(el, content) {
-    if (!el) return false;
-    clearElementChildren(el);
-    const heading = String(content?.heading || "").trim();
-    const canonicalText = String(content?.canonicalText || "").trim();
-    const supportText = String(content?.supportText || "").trim();
-    const feedbackReasonText = String(content?.feedbackReasonText || "").trim();
-    if (!heading && !canonicalText && !supportText && !feedbackReasonText) {
-      return false;
-    }
-    if (feedbackReasonText) appendFeedbackNote(el, feedbackReasonText);
-    if (supportText) appendStructuredText(el, supportText);
-    if (heading) appendHeading(el, heading);
-    if (canonicalText) appendCanonicalValue(el, canonicalText);
-    return true;
-  }
-
-  // ui/lib/ui_render.ts
-  function readSingleValueCardContent(uiPayload) {
-    const content = toRecord2(uiPayload.content);
-    if (String(content.kind || "").trim() !== "single_value") return null;
-    const heading = String(content.heading || "").trim();
-    const canonicalText = String(content.canonical_text || "").trim();
-    const supportText = String(content.support_text || "").trim();
-    const feedbackReasonText = String(content.feedback_reason_text || "").trim();
-    if (!heading && !canonicalText && !supportText && !feedbackReasonText) return null;
-    return {
-      ...(heading ? { heading } : {}),
-      ...(canonicalText ? { canonicalText } : {}),
-      ...(supportText ? { supportText } : {}),
-      ...(feedbackReasonText ? { feedbackReasonText } : {})
-    };
-  }
-  function readWordingChoiceCompareFeedbackText(wordingChoiceRaw) {
-    const wordingChoice = toRecord2(wordingChoiceRaw);
-    const compareFeedback = toRecord2(wordingChoice.compare_feedback);
-    const compareFeedbackText = String(compareFeedback.text || "").trim();
-    if (compareFeedbackText) return compareFeedbackText;
-    return String(wordingChoice.feedback_reason_text || "").trim();
-  }
-  function stepIndex(stepId) {
-    const idx = ORDER.indexOf(stepId);
-    return idx >= 0 ? idx : 0;
-  }
-  function extractStepTitle(stepId, lang) {
-    const titles = titlesForLang(lang);
-    const fullTitle = titles[stepId] || "";
-    return fullTitle.replace(/^[^\d]*\d+:\s*/, "");
-  }
-  function uiText2(lang, key, _fallback) {
-    const translated = String(t(lang, key) || "").trim();
-    if (translated) return translated;
-    return "";
-  }
-  function parseWordingChoiceInstruction2(instructionRaw) {
-    const instruction = String(instructionRaw || "").replace(/\r/g, "\n").trim();
-    if (!instruction) {
-      return { retainedHeading: "", retainedItems: [], instructionText: "" };
-    }
-    const lines = instruction.split("\n").map((line) => String(line || "").trim());
-    const firstBulletIndex = lines.findIndex((line) => /^(?:[-*•·]|\d+[\).])\s+/.test(line));
-    if (firstBulletIndex < 0) {
-      return { retainedHeading: "", retainedItems: [], instructionText: instruction };
-    }
-    let bulletEndIndex = firstBulletIndex;
-    while (bulletEndIndex < lines.length && /^(?:[-*•·]|\d+[\).])\s+/.test(lines[bulletEndIndex])) {
-      bulletEndIndex += 1;
-    }
-    const retainedHeading = lines.slice(0, firstBulletIndex).filter(Boolean).join("\n").trim();
-    const retainedItems = lines.slice(firstBulletIndex, bulletEndIndex).map((line) => line.replace(/^\s*(?:[-*•·]|\d+[\).])\s+/, "").trim()).filter(Boolean);
-    const instructionText = lines.slice(bulletEndIndex).filter(Boolean).join("\n").trim();
-    if (!retainedHeading || retainedItems.length === 0) {
-      return { retainedHeading: "", retainedItems: [], instructionText: instruction };
-    }
-    return {
-      retainedHeading,
-      retainedItems,
-      instructionText: instructionText || instruction
-    };
-  }
   function activeStepLabel(stepId, stepTitle, lang) {
     const explicitTitle = String(stepTitle || "").trim();
     if (explicitTitle) return explicitTitle;
-    const stepperLabel = stepperLabelForLang(lang, stepId);
+    const stepperLabel = stepperLabelForLang(stepId, lang);
     if (stepperLabel) return stepperLabel;
     return extractStepTitle(stepId, lang);
   }
@@ -4547,16 +5316,13 @@
       el.appendChild(s);
     }
   }
-  function normalizeChoiceLine(value) {
-    return String(value || "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!?]+$/g, "").trim();
-  }
   function readDreamBuilderViewContract(uiViewRaw) {
-    const uiView2 = uiViewRaw && typeof uiViewRaw === "object" ? uiViewRaw : {};
-    const variant = String(uiView2.variant || "").trim();
+    const uiView = uiViewRaw && typeof uiViewRaw === "object" ? uiViewRaw : {};
+    const variant = String(uiView.variant || "").trim();
     const active = variant === "dream_builder_collect" || variant === "dream_builder_refine" || variant === "dream_builder_scoring";
-    const bodyModeRaw = String(uiView2.dream_builder_body_mode || "").trim();
+    const bodyModeRaw = String(uiView.dream_builder_body_mode || "").trim();
     const bodyMode = bodyModeRaw === "none" || bodyModeRaw === "support_only" || bodyModeRaw === "full_narrative" ? bodyModeRaw : "";
-    const rawStatementsVisible = uiView2.dream_builder_statements_visible;
+    const rawStatementsVisible = uiView.dream_builder_statements_visible;
     const hasExplicitStatementsVisible = rawStatementsVisible === true || rawStatementsVisible === false;
     return {
       active,
@@ -4568,16 +5334,17 @@
   function resolveWidgetBodyText(params) {
     const resultText = typeof params.resultText === "string" ? String(params.resultText || "").trim() : "";
     const promptBody = String(params.promptBody || "");
-    const specialist2 = params.specialist || {};
-    const specialistText = String(specialist2.message || "").trim() || String(specialist2.refined_formulation || "").trim() || String(specialist2.question || "").trim();
-    const dreamBuilderViewContract2 = params.dreamBuilderViewContract || readDreamBuilderViewContract(null);
-    if (params.currentStep === "dream" && dreamBuilderViewContract2.active) {
-      if (typeof params.resultText === "string")
-        return resultText;
-      if (dreamBuilderViewContract2.bodyMode === "none")
-        return "";
+    const specialist = params.specialist || {};
+    const specialistText = String(specialist.message || "").trim() || String(specialist.refined_formulation || "").trim() || String(specialist.question || "").trim();
+    const dreamBuilderViewContract = params.dreamBuilderViewContract || readDreamBuilderViewContract(null);
+    if (params.currentStep === "dream" && dreamBuilderViewContract.active) {
+      if (typeof params.resultText === "string") return resultText;
+      if (dreamBuilderViewContract.bodyMode === "none") return "";
     }
     return resultText || specialistText || promptBody;
+  }
+  function normalizeChoiceLine(value) {
+    return String(value || "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!?]+$/g, "").trim();
   }
   function stripStructuredChoiceLines(promptRaw, lang) {
     const blockedLines = [
@@ -4648,112 +5415,28 @@
     metaRow.appendChild(metaTime);
     cardDesc.appendChild(metaRow);
   }
-  function renderPrestartSkeleton(cardDesc, lang) {
-    clearElement(cardDesc);
-    const skeleton = appendTextNode("div", "skeleton-stack", "");
-    skeleton.appendChild(appendTextNode("div", "skeleton-line", ""));
-    skeleton.appendChild(appendTextNode("div", "skeleton-line", ""));
-    skeleton.appendChild(appendTextNode("div", "skeleton-line", ""));
-    cardDesc.appendChild(skeleton);
-  }
-  function renderBootstrapWaitShell(cardDesc, lang) {
-    clearElement(cardDesc);
-    const shell = appendTextNode("div", "bootstrap-wait-shell", "");
-    shell.style.display = "grid";
-    shell.style.gap = "14px";
-    const waitTitle = uiText2(lang, "prestart.loading", "");
-    if (waitTitle) {
-      shell.appendChild(
-        appendTextNode(
-          "div",
-          "bootstrap-wait-title",
-          waitTitle
-        )
-      );
-    }
-    for (const width of ["68%", "92%", "84%", "56%"]) {
-      const line = appendTextNode("div", "skeleton-line", "");
-      line.style.width = width;
-      line.style.height = "12px";
-      line.style.borderRadius = "999px";
-      line.style.opacity = "0.9";
-      shell.appendChild(line);
-    }
-    cardDesc.appendChild(shell);
-  }
-  function renderHydrationRecovery(cardDesc, lang) {
-    clearElement(cardDesc);
-    const shell = appendTextNode("div", "bootstrap-wait-shell", "");
-    shell.style.display = "grid";
-    shell.style.gap = "12px";
-    shell.appendChild(
-      appendTextNode(
-        "div",
-        "bootstrap-recovery-title",
-        uiText2(lang, "hydration.retry.title", "")
-      )
-    );
-    shell.appendChild(
-      appendTextNode(
-        "div",
-        "bootstrap-recovery-copy",
-        uiText2(lang, "hydration.retry.body", "")
-      )
-    );
-    const btn = appendTextNode(
-      "button",
-      "choiceBtn",
-      uiText2(lang, "hydration.retry.action", "")
-    );
-    btn.id = "btnHydrationRetry";
-    btn.type = "button";
-    shell.appendChild(btn);
-    cardDesc.appendChild(shell);
-  }
-  function blockedMessageForReason(lang, reason, fallbackMessage) {
-    if (reason === "session_upgrade_required") {
-      return {
-        title: uiText2(lang, "error.session_upgrade.title", ""),
-        body: uiText2(lang, "error.session_upgrade.body", "") || fallbackMessage || ""
-      };
-    }
-    if (reason === "contract_violation") {
-      return {
-        title: uiText2(lang, "error.contract.title", ""),
-        body: uiText2(lang, "error.contract.body", "") || fallbackMessage || ""
-      };
-    }
+  function readActionLiveness(result, state) {
+    const stateLiveness = toRecord3(state.ui_action_liveness);
+    const ackStatus = String(result.ack_status || state.ack_status || stateLiveness.ack_status || "").trim().toLowerCase();
+    if (!ackStatus) return null;
+    const stateAdvancedRaw = result.state_advanced ?? state.state_advanced ?? stateLiveness.state_advanced ?? true;
+    const stateAdvanced = stateAdvancedRaw === true || String(stateAdvancedRaw || "").trim().toLowerCase() === "true";
     return {
-      title: uiText2(lang, "error.generic.title", ""),
-      body: uiText2(lang, "error.generic.body", "") || fallbackMessage || ""
+      ack_status: ackStatus,
+      state_advanced: stateAdvanced,
+      reason_code: String(result.reason_code || state.reason_code || stateLiveness.reason_code || "").trim().toLowerCase(),
+      action_code_echo: String(result.action_code_echo || state.action_code_echo || stateLiveness.action_code_echo || "").trim().toUpperCase(),
+      client_action_id_echo: String(
+        result.client_action_id_echo || state.client_action_id_echo || stateLiveness.client_action_id_echo || ""
+      ).trim()
     };
-  }
-  function renderBlockedState(cardDesc, lang, title, body) {
-    clearElement(cardDesc);
-    const shell = appendTextNode("div", "bootstrap-wait-shell", "");
-    shell.style.display = "grid";
-    shell.style.gap = "12px";
-    shell.appendChild(appendTextNode("div", "bootstrap-recovery-title", title));
-    shell.appendChild(appendTextNode("div", "bootstrap-recovery-copy", body));
-    cardDesc.appendChild(shell);
-  }
-  function actionContractActionsForResult(resultData) {
-    const uiPayload = resultData && typeof resultData.ui === "object" && resultData.ui ? resultData.ui : {};
-    const actionContract = uiPayload && typeof uiPayload.action_contract === "object" && uiPayload.action_contract ? uiPayload.action_contract : {};
-    if (!Array.isArray(actionContract.actions)) return [];
-    return actionContract.actions.filter((action) => action && typeof action === "object" && String(action.action_code || "").trim().length > 0);
-  }
-  function choiceActionsForResult(resultData) {
-    return actionContractActionsForResult(resultData).filter((action) => {
-      const role = String(action.role || "").trim().toLowerCase();
-      return role === "choice" || role === "dream_start_exercise";
-    });
   }
   function renderChoiceButtons(choices, resultData) {
     const wrap = document.getElementById("choiceWrap");
     if (!wrap) return;
     wrap.innerHTML = "";
-    const state = resultData?.state || {};
+    const state = toRecord3(resultData?.state);
+    const lang = uiLang(state);
     const structuredActions = choiceActionsForResult(resultData);
     const _unusedChoices = Array.isArray(choices) ? choices : [];
     if (structuredActions.length === 0) {
@@ -4810,20 +5493,23 @@
       return false;
     }
     const mode = String(wording.mode || "text") === "list" ? "list" : "text";
+    const variant = String(wording.variant || "default").trim().toLowerCase();
     const feedbackReasonText = readWordingChoiceCompareFeedbackText(wording);
     const userText = String(wording.user_text || "").trim();
     const suggestionText = String(wording.suggestion_text || "").trim();
+    const userLabelFromPayload = String(wording.user_label || "").trim();
+    const suggestionLabelFromPayload = String(wording.suggestion_label || "").trim();
     const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];
     const suggestionItems = Array.isArray(wording.suggestion_items) ? wording.suggestion_items : [];
     const instruction = String(wording.instruction || "").trim() || t(lang, "wordingChoiceInstruction");
-    const instructionParts = parseWordingChoiceInstruction2(instruction);
+    const instructionParts = parseWordingChoiceInstruction(instruction);
     const ensureLabelColon = (value) => {
       const trimmed = String(value || "").trim();
       if (!trimmed) return "";
       return /[:]\s*$/.test(trimmed) ? trimmed : `${trimmed}:`;
     };
-    const userLabel = ensureLabelColon(t(lang, "wordingChoiceHeading"));
-    const suggestionLabel = ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
+    const userLabel = userLabelFromPayload ? ensureLabelColon(userLabelFromPayload) : variant === "clarify_dual" ? ensureLabelColon(t(lang, "wordingChoiceHeading")) : ensureLabelColon(t(lang, "wordingChoiceHeading"));
+    const suggestionLabel = suggestionLabelFromPayload ? ensureLabelColon(suggestionLabelFromPayload) : variant === "clarify_dual" ? ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel")) : ensureLabelColon(t(lang, "wordingChoiceSuggestionLabel"));
     const normalizeListItem = (value) => String(value || "").replace(/^\s*(?:[-*•·]\s+|\d+[\.\)]\s+)/, "").trim();
     feedbackEl.innerHTML = "";
     if (feedbackReasonText) {
@@ -4875,13 +5561,6 @@
     wrap.style.display = "flex";
     return enabled;
   }
-  function revealWidgetRoot() {
-    if (globalThis.__BSC_UI_REVEALED__ === true) return;
-    globalThis.__BSC_UI_REVEALED__ = true;
-    if (typeof document !== "undefined" && document.body) {
-      document.body.setAttribute("data-bsc-ready", "1");
-    }
-  }
   function render(overrideToolOutput) {
     const data = toolData(overrideToolOutput);
     if (data && Object.keys(data).length) setLastToolOutput(data);
@@ -4896,11 +5575,7 @@
     const overrideStrings = state?.ui_strings && typeof state.ui_strings === "object" ? state.ui_strings : null;
     const overrideLang = String(state?.ui_strings_lang || "").trim().toLowerCase();
     const localeCandidate = resolved.resolved_language || String(state?.language || "").trim().toLowerCase();
-    const ambientState = widgetState();
-    const ambientLang = String(
-      ambientState.ui_strings_lang || ambientState.language || ambientState.locale || ""
-    ).trim().toLowerCase();
-    const lang = overrideLang || localeCandidate || ambientLang || "en";
+    const lang = overrideLang || localeCandidate || "en";
     const latestRoot = globalThis.__BSC_LATEST__;
     const latestState = latestRoot?.state && typeof latestRoot.state === "object" ? latestRoot.state : {};
     const stateForLatest = retainCanonicalStepContinuity(
@@ -4912,17 +5587,71 @@
       lang
     };
     const uiView = uiPayload && typeof uiPayload.view === "object" && uiPayload.view ? uiPayload.view : {};
-    const viewMode = String(uiView.mode || "").trim().toLowerCase();
+    const uiStringsStatus = String(state?.ui_strings_status || "").trim().toLowerCase();
+    const actionLiveness = readActionLiveness(result, state);
+    const hasExplicitActionError = Boolean(actionLiveness) && (String(actionLiveness?.ack_status || "") !== "accepted" || actionLiveness?.state_advanced !== true);
+    const viewModeRaw = String(uiView.mode || "").trim().toLowerCase();
+    const viewMode = viewModeRaw === "waiting_locale" || viewModeRaw === "recovery" || viewModeRaw === "blocked" || viewModeRaw === "failed" ? "prestart" : viewModeRaw;
+    const uiGateReason = String(state?.ui_gate_reason || "").trim().toLowerCase();
+    const serverExplicitWaiting = false;
     const serverExplicitPrestart = viewMode === "prestart";
     const serverExplicitInteractive = viewMode === "interactive";
-    const hasExplicitServerRouting = serverExplicitPrestart || serverExplicitInteractive;
-    const normalizedViewMode = hasExplicitServerRouting ? viewMode : "interactive";
-    const showPreStart = normalizedViewMode === "prestart";
-    const showInteractive = normalizedViewMode === "interactive";
-    if (showPreStart || showInteractive) revealWidgetRoot();
+    const serverExplicitRecovery = false;
+    const serverExplicitBlocked = false;
+    const serverExplicitFailed = false;
+    const hasExplicitServerRouting = serverExplicitWaiting || serverExplicitPrestart || serverExplicitInteractive || serverExplicitRecovery || serverExplicitBlocked || serverExplicitFailed;
+    const startupPayloadMissing = Object.keys(result || {}).length === 0 && Object.keys(state).length === 0;
     const overrideStringsMap = overrideStrings;
     const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
     if (hasOverrideStrings) setRuntimeUiStrings(overrideStringsMap);
+    const badge = document.getElementById("badge");
+    const inputWrap = document.getElementById("inputWrap");
+    const btnStart2 = document.getElementById("btnStart");
+    const startHint = document.getElementById("startHint");
+    if (!inputWrap || !btnStart2 || !startHint) return;
+    const isLoading = getIsLoading();
+    const startActionCode = actionCodeForRole(result, "start");
+    const hasStartAction = startActionCode.length > 0;
+    if (!hasExplicitServerRouting) {
+      console.warn("[ui_contract_missing_view_mode_tolerated]", {
+        payload_source: resolved.source,
+        view_mode: viewMode || "",
+        ui_gate_status: String(state?.ui_gate_status || "").trim().toLowerCase(),
+        bootstrap_phase: String(state?.bootstrap_phase || "").trim().toLowerCase()
+      });
+      const choiceWrap = document.getElementById("choiceWrap");
+      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+      const cardDesc = document.getElementById("cardDesc");
+      const prompt = document.getElementById("prompt");
+      const uiSubtitle = document.getElementById("uiSubtitle");
+      const sectionTitleEl2 = document.getElementById("sectionTitle");
+      inputWrap.style.display = "none";
+      if (choiceWrap) choiceWrap.style.display = "none";
+      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      if (prompt) prompt.textContent = "";
+      if (uiSubtitle) {
+        uiSubtitle.textContent = "";
+        uiSubtitle.style.display = "none";
+      }
+      if (sectionTitleEl2) sectionTitleEl2.textContent = getSectionTitle(lang, "step_0", "");
+      btnStart2.style.display = "inline-flex";
+      startHint.textContent = uiText2(lang, "startHint", "");
+      startHint.style.display = startHint.textContent ? "block" : "none";
+      buildStepper(0, "", lang);
+      if (badge) {
+        badge.textContent = "01";
+        badge.style.display = "block";
+      }
+      if (cardDesc) {
+        const prestartEl = cardDesc;
+        prestartEl.classList.remove("has-grid");
+        prestartEl.classList.remove("is-step0-ask-layout");
+        if (startupPayloadMissing) renderPrestartContent(prestartEl, lang);
+        else renderPrestartContent(prestartEl, lang);
+      }
+      if (isLoading) setLoading(false);
+      return;
+    }
     if (transientError) {
       if (errorObj.type === "rate_limited") {
         setInlineNotice(
@@ -4936,20 +5665,53 @@
       }
       if (result?.ok === false) return;
     } else {
-      clearInlineNotice();
+      if (hasExplicitActionError && actionLiveness) {
+        const livenessNotice = resolveActionLivenessNotice(state, actionLiveness);
+        setInlineNotice(livenessNotice.message);
+      } else {
+        clearInlineNotice();
+      }
     }
+    const showPreStart = serverExplicitPrestart;
     const current = !showPreStart ? state.current_step || "step_0" : "step_0";
     const idx = stepIndex(current);
-    const stepTitle = stepperLabelForLang(lang, current) || extractStepTitle(current, lang);
+    const stepTitle = serverExplicitWaiting ? "" : stepperLabelForLang(current, lang) || extractStepTitle(current, lang);
     buildStepper(idx, stepTitle, lang);
-    const badge = document.getElementById("badge");
     if (badge) badge.textContent = String(idx + 1).padStart(2, "0");
-    const inputWrap = document.getElementById("inputWrap");
-    const btnStart2 = document.getElementById("btnStart");
-    const startHint = document.getElementById("startHint");
-    if (!inputWrap || !btnStart2 || !startHint) return;
-    const startActionCode = String(state?.ui_action_start || "").trim();
-    const hasStartAction = startActionCode.length > 0;
+    if (serverExplicitWaiting || serverExplicitRecovery || serverExplicitBlocked || serverExplicitFailed) {
+      inputWrap.style.display = "none";
+      const choiceWrap = document.getElementById("choiceWrap");
+      if (choiceWrap) choiceWrap.style.display = "none";
+      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+      const cardDesc = document.getElementById("cardDesc");
+      const prompt = document.getElementById("prompt");
+      const uiSubtitle = document.getElementById("uiSubtitle");
+      if (badge) {
+        badge.textContent = "";
+        badge.style.display = "none";
+      }
+      const waitingSectionTitle = document.getElementById("sectionTitle");
+      if (waitingSectionTitle) waitingSectionTitle.textContent = "";
+      if (cardDesc) {
+        const prestartEl = cardDesc;
+        prestartEl.classList.remove("has-grid");
+        prestartEl.classList.remove("is-step0-ask-layout");
+        renderPrestartContent(prestartEl, lang);
+      }
+      if (prompt) prompt.textContent = "";
+      if (uiSubtitle) {
+        uiSubtitle.textContent = "";
+        uiSubtitle.style.display = "none";
+      }
+      startHint.textContent = "";
+      startHint.style.display = "none";
+      btnStart2.style.display = "none";
+      setSessionStarted(false);
+      setSessionWelcomeShown(false);
+      if (isLoading) setLoading(false);
+      return;
+    }
     setStaticStrings(lang);
     const specialist = result?.specialist || {};
     const sectionTitleEl = document.getElementById("sectionTitle");
@@ -4984,16 +5746,19 @@
       const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
       if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
       btnStart2.style.display = hasStartAction ? "inline-flex" : "none";
+      if (!hasStartAction) {
+        console.warn("[ui_contract_missing_start_action]", {
+          current_step: String(state?.current_step || "").trim() || "step_0",
+          ui_gate_status: String(state?.ui_gate_status || "").trim().toLowerCase()
+        });
+      }
       const cardDesc = document.getElementById("cardDesc");
       const prompt = document.getElementById("prompt");
       if (cardDesc) {
         const prestartEl = cardDesc;
-        const hasPrestartContent = hasPrestartContentForLang(lang);
-        const showSkeleton = !hasPrestartContent;
         prestartEl.classList.remove("has-grid");
         prestartEl.classList.remove("is-step0-ask-layout");
-        if (showSkeleton) renderPrestartSkeleton(prestartEl, lang);
-        else renderPrestartContent(prestartEl, lang);
+        renderPrestartContent(prestartEl, lang);
       }
       if (prompt) prompt.textContent = "";
       if (!hasStartAction) {
@@ -5003,7 +5768,7 @@
         startHint.textContent = "";
         startHint.style.display = "none";
       }
-      if (getIsLoading()) setLoading(false);
+      if (isLoading) setLoading(false);
       btnStart2.disabled = getIsLoading() || !hasStartAction;
       return;
     }
@@ -5020,14 +5785,12 @@
     const isViewModeDreamBuilderScoring = uiViewVariant === "dream_builder_scoring";
     const dreamBuilderViewContract = readDreamBuilderViewContract(uiView);
     const uiQuestionText = String(uiPayload.questionText || "").trim();
-    const wordingChoicePayload = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
-    const wordingChoiceActive = isViewModeWordingChoice || wordingChoicePayload.enabled === true || String(uiFlags.require_wording_pick || "").trim() === "true";
+    const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(uiPayload, uiViewVariant);
     const singleValueContent = wordingChoiceActive ? null : readSingleValueCardContent(uiPayload);
     const structuredActions = choiceActionsForResult(result);
     const hasStructuredActions = structuredActions.length > 0;
     const promptBody = uiPayload.prompt && typeof uiPayload.prompt.body === "string" ? String(uiPayload.prompt.body || "") : "";
     const promptRaw = uiQuestionText || String(specialist.question || "").trim() || (result?.prompt && typeof result.prompt === "string" ? result.prompt : "") || promptBody;
-    let promptSource = promptRaw;
     const bodyRaw = resolveWidgetBodyText({
       currentStep: current,
       resultText: result?.text,
@@ -5035,6 +5798,7 @@
       promptBody,
       dreamBuilderViewContract
     });
+    let promptSource = promptRaw;
     let body;
     if (isDreamDirectionView && promptSource) {
       body = promptSource;
@@ -5046,12 +5810,20 @@
     const hasBodyContent = stripInlineText(String(body || "")).trim().length > 0;
     const hasPromptContent = stripInlineText(String(promptSource || "")).trim().length > 0;
     const hasRenderableInteractiveContent = hasSemanticCardContent || hasBodyContent || hasPromptContent || hasStructuredActions;
+    if (!hasRenderableInteractiveContent) {
+      console.warn("[ui_contract_interactive_content_absent]", {
+        current_step: current,
+        view_mode: viewMode || "",
+        payload_source: resolved.source,
+        reason_code: "interactive_content_absent"
+      });
+    }
     if (cardDescEl) {
       cardDescEl.style.display = "block";
       cardDescEl.classList.add("has-grid");
       const isBenProfile = String(specialist.meta_topic || "").trim().toUpperCase() === "BEN_PROFILE";
       const isStep0AskLayout = current === "step_0" && !isBenProfile;
-      const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView;
+      const shouldAppendDreamStepVideo = current === "dream" && showStepIntroChrome && dreamRuntimeMode === "self" && !isDreamDirectionView && !wordingChoiceActive;
       const shouldAppendPurposeStepVideo = shouldRenderPurposeStepIntroVideo({
         currentStep: current,
         showStepIntroChrome,
@@ -5128,18 +5900,19 @@
     const statementsCountEl = document.getElementById("statementsCount");
     const statementsListEl = document.getElementById("statementsList");
     const specialistStatements = result?.specialist?.statements;
-    let statementsArray = Array.isArray(specialistStatements) ? specialistStatements : [];
+    const canonicalDreamStatements = Array.isArray(state.dream_builder_statements) && state.dream_builder_statements.length > 0 ? state.dream_builder_statements : [];
+    let statementsArray = canonicalDreamStatements.length > 0 ? canonicalDreamStatements : Array.isArray(specialistStatements) ? specialistStatements : [];
     const lastStatements = Array.isArray(lastSpecialist.statements) ? lastSpecialist.statements : [];
     if (current === "dream" && isDreamExplainerMode && (!statementsArray || statementsArray.length === 0)) {
       if (lastStatements.length > 0) {
         statementsArray = lastStatements;
-      } else if (Array.isArray(state.dream_builder_statements) && state.dream_builder_statements.length > 0) {
-        statementsArray = state.dream_builder_statements;
+      } else if (canonicalDreamStatements.length > 0) {
+        statementsArray = canonicalDreamStatements;
       }
     }
     const isScoringView = current === "dream" && (isViewModeDreamBuilderScoring || isDreamExplainerMode && String(specialist.scoring_phase || "") === "true" && Array.isArray(specialist.clusters) && specialist.clusters.length > 0 && Array.isArray(statementsArray) && statementsArray.length >= 20);
     if (isScoringView) {
-      let updateScoringClusterHeader = function(ci) {
+      let updateScoringClusterHeader2 = function(ci) {
         const clusterDiv = document.querySelector(
           '.scoringCluster[data-cluster-index="' + ci + '"]'
         );
@@ -5161,7 +5934,7 @@
         const headerEl = clusterDiv.querySelector(".scoringClusterHeader");
         if (headerEl)
           headerEl.innerHTML = '<span class="themeName">' + escapeHtml(themeName) + "</span>" + avgHtml;
-      }, allScoringFilled = function() {
+      }, allScoringFilled2 = function() {
         for (let ci = 0; ci < clusters.length; ci++) {
           for (let si = 0; si < (scoringScores[ci] || []).length; si++) {
             const v = scoringScores[ci][si];
@@ -5170,11 +5943,12 @@
           }
         }
         return true;
-      }, updateScoringDreamQuestionVisibility = function() {
-        const filled = allScoringFilled();
+      }, updateScoringDreamQuestionVisibility2 = function() {
+        const filled = allScoringFilled2();
         const promptEl2 = document.getElementById("prompt");
         if (promptEl2) promptEl2.style.display = filled ? "block" : "none";
       };
+      var updateScoringClusterHeader = updateScoringClusterHeader2, allScoringFilled = allScoringFilled2, updateScoringDreamQuestionVisibility = updateScoringDreamQuestionVisibility2;
       const clusters = specialist.clusters;
       if (cardDescEl) cardDescEl.style.display = "none";
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
@@ -5194,15 +5968,15 @@
       }
       inputWrap.style.display = "none";
       const btnSelfDream = document.getElementById("btnSwitchToSelfDream");
-      const switchToSelfAction = actionDescriptorFromLatestContract("dream_switch_to_self");
-      const switchToSelfLabel = actionLabelFromLatestContract("dream_switch_to_self");
+      const switchToSelfActionCode = actionCodeForRole(result, "dream_switch_to_self");
+      const switchToSelfLabel = actionLabelForRole(result, "dream_switch_to_self");
       if (btnSelfDream) {
-        btnSelfDream.style.display = switchToSelfAction?.actionCode ? "inline-flex" : "none";
+        btnSelfDream.style.display = switchToSelfActionCode ? "inline-flex" : "none";
         btnSelfDream.textContent = switchToSelfLabel?.label || (switchToSelfLabel?.labelKey ? t(lang, switchToSelfLabel.labelKey) : t(lang, "btnSwitchToSelfDream"));
         btnSelfDream.disabled = getIsLoading();
         btnSelfDream.onclick = () => {
-          if (!switchToSelfAction?.actionCode || getIsLoading()) return;
-          callRunStep(switchToSelfAction.actionCode);
+          if (!switchToSelfActionCode || getIsLoading()) return;
+          callRunStep(switchToSelfActionCode);
         };
       }
       const scoringPanelEl = document.getElementById("scoringPanel");
@@ -5216,17 +5990,12 @@
         scoringIntro.textContent = introLines.join("\n");
       }
       const win = globalThis;
-      if (!win.__dreamScoringScores) win.__dreamScoringScores = [];
+      win.__dreamScoringScores = buildInitialDreamScoringScores({
+        clientScores: win.__dreamScoringScores,
+        persistedScores: state.dream_scores,
+        clusters
+      });
       const scoringScores = win.__dreamScoringScores;
-      for (let ci = 0; ci < clusters.length; ci++) {
-        if (!scoringScores[ci]) scoringScores[ci] = [];
-        const indices = clusters[ci].statement_indices || [];
-        for (let si = 0; si < indices.length; si++) {
-          if (scoringScores[ci][si] === void 0) scoringScores[ci][si] = "";
-        }
-        scoringScores[ci].length = indices.length;
-      }
-      scoringScores.length = clusters.length;
       const scoringClustersEl = document.getElementById("scoringClusters");
       if (!scoringClustersEl) return;
       scoringClustersEl.innerHTML = "";
@@ -5262,51 +6031,51 @@
           const stSpan = document.createElement("span");
           stSpan.className = "statementText";
           stSpan.textContent = stText;
-          const input2 = document.createElement("input");
-          input2.type = "text";
-          input2.inputMode = "numeric";
-          input2.className = "scoreInput";
-          input2.setAttribute("data-cluster", String(cii));
-          input2.setAttribute("data-statement", String(si));
+          const input3 = document.createElement("input");
+          input3.type = "text";
+          input3.inputMode = "numeric";
+          input3.className = "scoreInput";
+          input3.setAttribute("data-cluster", String(cii));
+          input3.setAttribute("data-statement", String(si));
           const rawVal = scoringScores[cii][si];
           const numVal = rawVal !== "" && rawVal !== void 0 ? Number(rawVal) : NaN;
-          input2.value = !isNaN(numVal) && numVal >= 1 && numVal <= 10 ? String(Math.round(numVal)) : "";
-          input2.placeholder = uiText2(lang, "scoring.input.placeholder", "");
-          input2.setAttribute("aria-label", uiText2(lang, "scoring.aria.scoreInput", ""));
+          input3.value = !isNaN(numVal) && numVal >= 1 && numVal <= 10 ? String(Math.round(numVal)) : "";
+          input3.placeholder = uiText2(lang, "scoring.input.placeholder", "");
+          input3.setAttribute("aria-label", uiText2(lang, "scoring.aria.scoreInput", ""));
           row.appendChild(stSpan);
-          row.appendChild(input2);
+          row.appendChild(input3);
           if (rowsEl) rowsEl.appendChild(row);
         }
         scoringClustersEl.appendChild(clusterDiv);
       }
-      updateScoringDreamQuestionVisibility();
-      scoringClustersEl.querySelectorAll(".scoreInput").forEach((input2) => {
-        input2.addEventListener("input", () => {
-          const ci = parseInt(input2.getAttribute("data-cluster") || "0", 10);
-          const si = parseInt(input2.getAttribute("data-statement") || "0", 10);
-          let val = input2.value.trim();
+      updateScoringDreamQuestionVisibility2();
+      scoringClustersEl.querySelectorAll(".scoreInput").forEach((input3) => {
+        input3.addEventListener("input", () => {
+          const ci = parseInt(input3.getAttribute("data-cluster") || "0", 10);
+          const si = parseInt(input3.getAttribute("data-statement") || "0", 10);
+          let val = input3.value.trim();
           const n = Number(val);
           if (val !== "" && (isNaN(n) || n < 1 || n > 10)) {
-            input2.value = "";
+            input3.value = "";
             val = "";
           } else if (val !== "" && n >= 1 && n <= 10) {
-            input2.value = String(Math.round(n));
-            val = input2.value;
+            input3.value = String(Math.round(n));
+            val = input3.value;
           }
           scoringScores[ci][si] = val;
-          updateScoringClusterHeader(ci);
+          updateScoringClusterHeader2(ci);
           const btnScoringContinue = document.getElementById("btnScoringContinue");
           if (btnScoringContinue)
-            btnScoringContinue.disabled = !allScoringFilled();
-          updateScoringDreamQuestionVisibility();
+            btnScoringContinue.disabled = !allScoringFilled2();
+          updateScoringDreamQuestionVisibility2();
         });
       });
       const btnScoringContinueEl = document.getElementById("btnScoringContinue");
       if (btnScoringContinueEl) {
         btnScoringContinueEl.textContent = t(lang, "btnScoringContinue");
-        btnScoringContinueEl.disabled = !allScoringFilled();
+        btnScoringContinueEl.disabled = !allScoringFilled2();
         btnScoringContinueEl.onclick = () => {
-          if (!allScoringFilled() || getIsLoading()) return;
+          if (!allScoringFilled2() || getIsLoading()) return;
           const payload = [];
           for (let ci = 0; ci < clusters.length; ci++) {
             const row = [];
@@ -5316,22 +6085,21 @@
             }
             payload.push(row);
           }
-          const actionCode = actionCodeFromState("ui_action_score_submit");
+          const actionCode = actionCodeForRole(result, "score_submit");
           if (!actionCode) return;
-          win.__dreamScoringScores = [];
           callRunStep(actionCode, { __pending_scores: payload });
         };
       }
-      const textSubmitActionCode = actionCodeFromState("ui_action_text_submit");
-      const textSubmitAvailable = textSubmitActionCode.length > 0;
-      inputWrap.style.display = textSubmitAvailable ? "flex" : "none";
-      const input = document.getElementById("input");
-      if (input) input.placeholder = t(lang, "inputPlaceholder");
-      if (!textSubmitAvailable) {
+      const textSubmitActionCode2 = actionCodeForRole(result, "text_submit");
+      const textSubmitAvailable2 = textSubmitActionCode2.length > 0;
+      inputWrap.style.display = textSubmitAvailable2 ? "flex" : "none";
+      const input2 = document.getElementById("input");
+      if (input2) input2.placeholder = t(lang, "inputPlaceholder");
+      if (!textSubmitAvailable2) {
         setSendEnabled(false);
       } else {
-        const inputVal = (input?.value || "").trim();
-        setSendEnabled(inputVal.length > 0);
+        const inputVal2 = (input2?.value || "").trim();
+        setSendEnabled(inputVal2.length > 0);
       }
       const latestScoringState = retainCanonicalStepContinuity(
         state,
@@ -5345,6 +6113,10 @@
     if (scoringPanelPost) {
       scoringPanelPost.classList.remove("visible");
       scoringPanelPost.style.display = "none";
+    }
+    const scoringWindow = globalThis;
+    if (!shouldRetainDreamScoringClientScores({ currentStep: current, isScoringView })) {
+      scoringWindow.__dreamScoringScores = [];
     }
     if (cardDescEl) cardDescEl.style.display = "block";
     const promptPost = document.getElementById("prompt");
@@ -5385,6 +6157,14 @@
     } else {
       if (statementsPanelEl) statementsPanelEl.style.display = "none";
     }
+    let requireWordingPick = false;
+    const suppressWordingChoice = isViewModeDreamBuilderScoring;
+    if (!suppressWordingChoice) {
+      requireWordingPick = renderWordingChoicePanel(result, lang);
+    } else {
+      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
+      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    }
     let choicesArr = [];
     let promptText = isDreamDirectionView ? "" : promptSource;
     const shouldStripStructuredPrompt = isViewModeWordingChoice || !hasStructuredActions;
@@ -5396,13 +6176,12 @@
       choicesArr = [];
       promptText = isDreamDirectionView ? "" : promptSource;
     }
-    let requireWordingPick = false;
-    const suppressWordingChoice = isViewModeDreamBuilderScoring;
-    if (!suppressWordingChoice) {
-      requireWordingPick = renderWordingChoicePanel(result, lang);
-    } else {
-      const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
-      if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    if (shouldSuppressPromptForWordingChoice({
+      uiViewVariant,
+      wordingChoiceActive,
+      requireWordingPick
+    })) {
+      promptText = "";
     }
     const promptEl = document.getElementById("prompt");
     if (promptEl) {
@@ -5428,10 +6207,17 @@
       return choiceWrap.childNodes.length > 0;
     })();
     const choiceMode = !requireWordingPick && (renderedChoiceButtons || hasStructuredActions);
-    const textSubmitActionCode = actionCodeFromState("ui_action_text_submit");
+    const textSubmitActionCode = actionCodeForRole(result, "text_submit");
     const textSubmitAvailable = textSubmitActionCode.length > 0;
-    const showTextSubmit = textSubmitAvailable;
-    const disableTextSubmit = requireWordingPick === true;
+    const showTextSubmit = shouldShowTextInputForWordingChoice({
+      textSubmitAvailable,
+      uiViewVariant,
+      wordingChoiceActive,
+      requireWordingPick
+    });
+    const disableTextSubmit = shouldDisableTextInputForWordingChoice({
+      requireWordingPick
+    });
     inputWrap.style.display = showTextSubmit ? "flex" : "none";
     const inputEl2 = document.getElementById("input");
     if (inputEl2) {
@@ -5570,7 +6356,7 @@
   }
   function latestWidgetResult() {
     const data = toolData();
-    const resolved = resolveWidgetPayload(data);
+    const resolved = resolveWidgetPayload2(data);
     return resolved.result && typeof resolved.result === "object" ? resolved.result : {};
   }
   function actionRoleForStateKey(stateKey) {
@@ -5599,23 +6385,6 @@
       return {
         actionCode,
         payloadMode: String(action.payload_mode || "").trim().toLowerCase()
-      };
-    }
-    return null;
-  }
-  function actionLabelFromLatestContract(role) {
-    const roleNorm = String(role || "").trim().toLowerCase();
-    if (!roleNorm) return null;
-    const result = latestWidgetResult();
-    const ui = result && typeof result.ui === "object" ? result.ui : {};
-    const actionContract = ui && typeof ui.action_contract === "object" ? ui.action_contract : {};
-    const actions = Array.isArray(actionContract.actions) ? actionContract.actions : [];
-    for (const action of actions) {
-      if (!action || typeof action !== "object") continue;
-      if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
-      return {
-        label: stripInlineText(String(action.label || "")).trim(),
-        labelKey: String(action.label_key || "").trim()
       };
     }
     return null;
@@ -5671,9 +6440,6 @@
     ingestHostPayload(payload, source);
     notifyHostTransportSignal("set_globals");
     return true;
-  }
-  function scheduleStartupFailClosed(_reason) {
-    return;
   }
   if (isLocalDev && typeof window !== "undefined") {
     const reportDevError = (message, file, line, col) => {
@@ -5914,7 +6680,7 @@
     });
   }
   ensureLocalDevOpenAiShim();
-  const initialIngested = tryInitialIngestFromHost("set_globals");
+  var initialIngested = tryInitialIngestFromHost("set_globals");
   if (!initialIngested && isLocalDev) {
     callToolViaLocalMcp("run_step", {
       current_step_id: "step_0",
@@ -5929,7 +6695,7 @@
     });
   }
 })();
-
-</script>
+    
+    </script>
   </body>
 </html>
