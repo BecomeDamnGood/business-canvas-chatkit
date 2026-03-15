@@ -79,6 +79,8 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
     "At the same time, it helps to remember what usually makes a strong {0}.",
   "wording.feedback.user_pick.reason.default":
     "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
+  "wording.feedback.dream_builder.rewrite.default":
+    "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
   "generic.choicePrompt.shareOrOption": "Share your thoughts or choose an option",
   "invariant.prompt.ask.default": "Share your thoughts or choose an option.",
   "dreamBuilder.startExercise": "Start the exercise",

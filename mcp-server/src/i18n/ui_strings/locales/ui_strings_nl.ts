@@ -353,6 +353,8 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
       "Tegelijk helpt het om in gedachten te houden wat een sterke {0} meestal krachtiger maakt.",
     "wording.feedback.user_pick.reason.default":
       "Houd wel in gedachten wat deze stap sterk maakt, zodat je formulering helder en passend blijft.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "Je oorspronkelijke zin gaat vooral over je eigen wens, terwijl Dream Builder vraagt om een bredere verandering in de wereld.",
     "wordingChoice.chooseVersion": "Kies deze versie",
     "wordingChoice.useInputFallback": "Gebruik deze input",
     "wordingChoiceHeading": "Dit is jouw input:",

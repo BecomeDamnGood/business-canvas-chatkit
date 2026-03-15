@@ -33,6 +33,9 @@ test("dream_switch_to_self uses catalog copy for switch-to-self body", async () 
       applyStateUpdate: () => {
         throw new Error("applyStateUpdate should not be called in this test");
       },
+      applyPostSpecialistStateMutations: () => {
+        throw new Error("applyPostSpecialistStateMutations should not be called in this test");
+      },
       setDreamRuntimeMode: (state: Record<string, unknown>, mode: string) => {
         state.__dream_runtime_mode = mode;
       },
@@ -207,6 +210,9 @@ test("dream_switch_to_self clears staged dream value but preserves Dream Builder
     state: {
       applyStateUpdate: () => {
         throw new Error("applyStateUpdate should not be called in this test");
+      },
+      applyPostSpecialistStateMutations: () => {
+        throw new Error("applyPostSpecialistStateMutations should not be called in this test");
       },
       setDreamRuntimeMode: (state: Record<string, unknown>, mode: string) => {
         state.__dream_runtime_mode = mode;
@@ -411,6 +417,16 @@ test("dream_start_exercise reuses saved Dream Builder score context when it stil
         ...prev,
         last_specialist_result: specialistResult,
       }),
+      applyPostSpecialistStateMutations: ({
+        prevState,
+        specialistResult,
+      }: {
+        prevState: Record<string, unknown>;
+        specialistResult: Record<string, unknown>;
+      }) => ({
+        ...prevState,
+        last_specialist_result: specialistResult,
+      }),
       setDreamRuntimeMode: (state: Record<string, unknown>, mode: string) => {
         state.__dream_runtime_mode = mode;
       },
@@ -597,6 +613,16 @@ test("dream_submit_scores immediately transitions into Dream formulation with st
     state: {
       applyStateUpdate: ({ prev, specialistResult }: { prev: Record<string, unknown>; specialistResult: Record<string, unknown> }) => ({
         ...prev,
+        last_specialist_result: specialistResult,
+      }),
+      applyPostSpecialistStateMutations: ({
+        prevState,
+        specialistResult,
+      }: {
+        prevState: Record<string, unknown>;
+        specialistResult: Record<string, unknown>;
+      }) => ({
+        ...prevState,
         last_specialist_result: specialistResult,
       }),
       setDreamRuntimeMode: (state: Record<string, unknown>, mode: string) => {
@@ -789,6 +815,16 @@ test("dream_start_exercise drops stale score context when statements no longer m
     state: {
       applyStateUpdate: ({ prev, specialistResult }: { prev: Record<string, unknown>; specialistResult: Record<string, unknown> }) => ({
         ...prev,
+        last_specialist_result: specialistResult,
+      }),
+      applyPostSpecialistStateMutations: ({
+        prevState,
+        specialistResult,
+      }: {
+        prevState: Record<string, unknown>;
+        specialistResult: Record<string, unknown>;
+      }) => ({
+        ...prevState,
         last_specialist_result: specialistResult,
       }),
       setDreamRuntimeMode: (state: Record<string, unknown>, mode: string) => {

@@ -1489,10 +1489,26 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     userRaw: string;
     knownItems: string[];
   }): string {
-    void params.suggestionRaw;
-    void params.userRaw;
+    void params.mode;
     void params.knownItems;
-    return resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
+    const explicitReason = resolveFeedbackReasonFromSpecialist(params.state, params.specialistResult);
+    if (explicitReason) return explicitReason;
+    if (
+      params.stepId === deps.dreamStepId &&
+      deps.isMaterialRewriteCandidate(params.userRaw, params.suggestionRaw)
+    ) {
+      return sanitizeFeedbackReasonForDisplay({
+        stepId: params.stepId,
+        rawReason: deps.uiStringFromStateMap(
+          params.state,
+          "wording.feedback.dream_builder.rewrite.default",
+          deps.uiDefaultString("wording.feedback.dream_builder.rewrite.default", "")
+        ),
+        resolveString: (key, fallback = "") =>
+          deps.uiStringFromStateMap(params.state, key, fallback || deps.uiDefaultString(key, fallback)),
+      });
+    }
+    return "";
   }
 
   function resolveGroupedCompareFeedbackForUnit(params: {

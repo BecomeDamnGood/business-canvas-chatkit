@@ -126,6 +126,12 @@ export type RunStepRouteWordingPorts = {
 
 export type RunStepRouteStatePorts = {
   applyStateUpdate: (params: any) => CanvasState;
+  applyPostSpecialistStateMutations: (params: {
+    prevState: CanvasState;
+    decision: OrchestratorOutput;
+    specialistResult: any;
+    provisionalSource: ProvisionalSource;
+  }) => CanvasState;
   setDreamRuntimeMode: (state: CanvasState, mode: RunStepDreamRuntimeMode) => void;
   getDreamRuntimeMode: (state: CanvasState) => RunStepDreamRuntimeMode;
   isUiStateHygieneSwitchV1Enabled: () => boolean;

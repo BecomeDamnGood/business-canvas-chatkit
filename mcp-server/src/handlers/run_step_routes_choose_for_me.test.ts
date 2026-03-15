@@ -68,6 +68,39 @@ function buildRoutePorts() {
           },
         } as any;
       },
+      applyPostSpecialistStateMutations: ({
+        prevState,
+        decision,
+        specialistResult,
+      }: {
+        prevState: Record<string, unknown>;
+        decision: Record<string, unknown>;
+        specialistResult: Record<string, unknown>;
+      }) => {
+        const stepId = String(decision.current_step || "");
+        const currentValue =
+          String(specialistResult[stepId] || "") ||
+          String(specialistResult.dream || "") ||
+          String(specialistResult.purpose || "") ||
+          String(specialistResult.bigwhy || "") ||
+          String(specialistResult.role || "") ||
+          String(specialistResult.entity || "") ||
+          String(specialistResult.strategy || "");
+        const nextState = {
+          ...prevState,
+          current_step: stepId,
+          active_specialist: String(decision.specialist_to_call || ""),
+          last_specialist_result: specialistResult,
+          provisional_by_step: {
+            ...(((prevState as any).provisional_by_step as Record<string, unknown> | undefined) || {}),
+            ...(stepId && currentValue ? { [stepId]: currentValue } : {}),
+          },
+        } as any;
+        if (stepId === "dream" && String(decision.specialist_to_call || "") === "Dream") {
+          nextState.__dream_runtime_mode = "self";
+        }
+        return nextState;
+      },
       setDreamRuntimeMode: (state: Record<string, unknown>, mode: string) => {
         state.__dream_runtime_mode = mode;
       },

@@ -25,6 +25,8 @@ function buildPipelineWordingHelpers() {
     "wording.choice.context.default": "Please choose the wording that fits best.",
     "wording.feedback.user_pick.reason.default":
       "This keeps your original meaning while staying aligned with this step.",
+    "wording.feedback.dream_builder.rewrite.default":
+      "Your original wording is mainly about your own wish, while Dream Builder asks for a broader change in the world.",
     "wordingChoice.chooseVersion": "Choose this version",
     "wordingChoice.useInputFallback": "Use this input",
     "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
@@ -76,8 +78,14 @@ function buildPipelineWordingHelpers() {
         .filter(Boolean),
     isMaterialRewriteCandidate: () => true,
     shouldTreatAsStepContributingInput: () => true,
-    pickDualChoiceSuggestion: (_stepId, specialistResult) =>
-      String((specialistResult as Record<string, unknown>)?.refined_formulation || "").trim(),
+    pickDualChoiceSuggestion: (_stepId, specialistResult) => {
+      const record = (specialistResult as Record<string, unknown>) || {};
+      const refined = String(record.refined_formulation || "").trim();
+      if (refined) return refined;
+      return Array.isArray(record.statements)
+        ? (record.statements as unknown[]).map((line) => String(line || "").trim()).filter(Boolean).join("\n")
+        : "";
+    },
     areEquivalentWordingVariants: ({ userItems, suggestionItems }) =>
       JSON.stringify(userItems.map(canonicalize)) === JSON.stringify(suggestionItems.map(canonicalize)),
     normalizeEntityPhrase: (input: string) => String(input || "").trim(),
@@ -707,6 +715,107 @@ test("runPostSpecialistPipeline restores Dream Builder canonical statements when
   assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
   assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
   assert.ok(payload.wordingChoiceOverride);
+});
+
+test("runPostSpecialistPipeline recovers Dream Builder compare when a material rewrite is returned without explicit feedback_reason_text", async () => {
+  const existingStatements = [
+    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+  ];
+  const helpers = buildStrategyPipelineHarness({
+    specialistResult: {
+      action: "ASK",
+      message:
+        "Je uitspraken zijn sterk persoonlijk en gaan vooral over wat jij wilt bereiken. In deze oefening zoeken we naar bredere veranderingen in de wereld of de samenleving.",
+      question:
+        "Als je 5 tot 10 jaar vooruitkijkt, welke grote kansen of dreigingen zie je, en welke positieve veranderingen hoop je?",
+      feedback_reason_text: "",
+      refined_formulation: [
+        "Over 5 tot 10 jaar zullen meer mensen werk zoeken dat zichtbaar bijdraagt aan het leven van anderen.",
+        "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
+      ].join("\n"),
+      dream: "",
+      statements: [
+        "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+        "Over 5 tot 10 jaar zullen meer mensen werk zoeken dat zichtbaar bijdraagt aan het leven van anderen.",
+        "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
+      ],
+      suggest_dreambuilder: "true",
+      scoring_phase: "false",
+      clusters: [],
+      user_state: "ok",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: [
+        "I want my work to make a positive difference in people's lives.",
+        "I want to build something that lasts beyond me.",
+      ].join("\n\n"),
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "en",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: existingStatements,
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: existingStatements,
+          dream: existingStatements.join("\n"),
+          refined_formulation: existingStatements.join("\n"),
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: [
+        "I want my work to make a positive difference in people's lives.",
+        "I want to build something that lasts beyond me.",
+      ].join("\n\n"),
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: [
+        "I want my work to make a positive difference in people's lives.",
+        "I want to build something that lasts beyond me.",
+      ].join("\n\n"),
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
+  assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
+  assert.ok(payload.wordingChoiceOverride);
+  assert.match(
+    String(payload.wordingChoiceOverride?.feedback_reason_text || ""),
+    /broader change in the world/i
+  );
 });
 
 test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a grouped compare picker", async () => {

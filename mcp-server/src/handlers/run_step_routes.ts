@@ -3,7 +3,6 @@ import { z } from "zod";
 import type { OrchestratorOutput } from "../core/orchestrator.js";
 import {
   getFinalFieldForStepId,
-  normalizeDreamBuilderStatements,
   type CanvasState,
 } from "../core/state.js";
 import { buildUiContractId } from "../core/ui_contract_id.js";
@@ -508,16 +507,12 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           show_session_intro: "false",
         } as unknown as OrchestratorOutput;
 
-        const nextState = deps.applyStateUpdate({
-          prev: stateWithUi,
+        const nextState = deps.applyPostSpecialistStateMutations({
+          prevState: stateWithUi,
           decision: forcedDecision,
           specialistResult: specialist,
-          showSessionIntroUsed: "false",
           provisionalSource: "action_route",
         });
-        if (config.stepId === deps.dreamStepId) {
-          deps.setDreamRuntimeMode(nextState, "self");
-        }
         return finalizeRouteTurnIntent(context, {
           state: nextState,
           specialist: asRecord((nextState as Record<string, unknown>).last_specialist_result || {}),
@@ -801,11 +796,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         deps.rememberLlmCall(callFormulation.value);
 
         const formulationResult = callFormulation.value.specialistResult;
-        const nextStateFormulation = deps.applyStateUpdate({
-          prev: nextStateScores,
+        const nextStateFormulation = deps.applyPostSpecialistStateMutations({
+          prevState: nextStateScores,
           decision: forcedDecision,
           specialistResult: formulationResult,
-          showSessionIntroUsed: "false",
           provisionalSource: "system_generated",
         });
 
@@ -1239,34 +1233,12 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         if (!callDreamExplainer.ok) return finalizeRoutePayload(callDreamExplainer.payload);
         deps.rememberLlmCall(callDreamExplainer.value);
 
-        const nextStateDream = deps.applyStateUpdate({
-          prev: startState,
+        const nextStateDream = deps.applyPostSpecialistStateMutations({
+          prevState: startState,
           decision: forcedDecision,
           specialistResult: callDreamExplainer.value.specialistResult,
-          showSessionIntroUsed: "false",
           provisionalSource: "action_route",
         });
-
-        if (Array.isArray(callDreamExplainer.value.specialistResult?.statements)) {
-          (nextStateDream as Record<string, unknown>).dream_builder_statements =
-            normalizeDreamBuilderStatements(callDreamExplainer.value.specialistResult.statements);
-        }
-
-        const dreamScoringPhase =
-          String(callDreamExplainer.value.specialistResult?.scoring_phase ?? "") === "true";
-        const dreamHasClusters =
-          Array.isArray(callDreamExplainer.value.specialistResult?.clusters) &&
-          (callDreamExplainer.value.specialistResult.clusters as unknown[]).length > 0;
-
-        if (dreamScoringPhase && dreamHasClusters) {
-          deps.setDreamRuntimeMode(nextStateDream, "builder_scoring");
-        } else if (deps.getDreamRuntimeMode(startState) === "builder_scoring" && !dreamScoringPhase) {
-          deps.setDreamRuntimeMode(nextStateDream, "builder_refine");
-        } else if (deps.getDreamRuntimeMode(startState) === "builder_refine" && !dreamScoringPhase) {
-          deps.setDreamRuntimeMode(nextStateDream, "builder_refine");
-        } else {
-          deps.setDreamRuntimeMode(nextStateDream, "builder_collect");
-        }
         return finalizeRouteTurnIntent(context, {
           state: nextStateDream,
           specialist: asRecord((nextStateDream as Record<string, unknown>).last_specialist_result || {}),
