@@ -19,6 +19,7 @@ import {
   stampResponseContentLocale,
 } from "./handlers/locale_continuity.ts";
 import { buildTransientFallbackSpecialist } from "./handlers/specialist_dispatch_fallbacks.ts";
+import { setRuntimeUiStrings } from "../ui/lib/ui_constants.ts";
 
 test("renderInlineText builds STRONG nodes safely", { concurrency: false }, () => {
   const originalDocument = (globalThis as unknown as { document: unknown }).document;
@@ -259,6 +260,191 @@ test("resolveWidgetBodyText keeps empty canonical dream-builder body authoritati
   });
 
   assert.equal(body, "");
+});
+
+test("renderChoiceButtons renders auxiliary contract actions in the shared choice list", { concurrency: false }, () => {
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
+  try {
+    const wrap = {
+      innerHTML: "",
+      style: { display: "" },
+      childNodes: [] as unknown[],
+      appendChild(node: unknown) {
+        this.childNodes.push(node);
+        return node;
+      },
+    };
+    const fakeDocument = {
+      getElementById(id: string) {
+        if (id === "choiceWrap") return wrap;
+        return null;
+      },
+      createElement(tag: string) {
+        return {
+          tagName: String(tag || "").toUpperCase(),
+          className: "",
+          type: "",
+          textContent: "",
+          disabled: false,
+          addEventListener() {},
+        };
+      },
+    };
+    (globalThis as unknown as { document?: unknown }).document = fakeDocument;
+    setIsLoading(false);
+
+    renderChoiceButtons([], {
+      state: { current_step: "dream" },
+      ui: {
+        action_contract: {
+          actions: [
+            {
+              id: "a1",
+              label: "Vertel me meer over waarom een droom belangrijk is",
+              action_code: "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+              role: "choice",
+            },
+            {
+              id: "a2",
+              label: "Doe een kleine oefening die helpt om je droom te definieren.",
+              action_code: "ACTION_DREAM_INTRO_START_EXERCISE",
+              role: "dream_start_exercise",
+            },
+          ],
+        },
+      },
+    } as any);
+
+    const buttons = wrap.childNodes.filter(
+      (node: unknown) => node && (node as { tagName?: string }).tagName === "BUTTON"
+    ) as Array<{ textContent?: string }>;
+    assert.equal(buttons.length, 2);
+    assert.deepEqual(
+      buttons.map((button) => String(button.textContent || "")),
+      [
+        "Vertel me meer over waarom een droom belangrijk is",
+        "Doe een kleine oefening die helpt om je droom te definieren.",
+      ]
+    );
+  } finally {
+    setRuntimeUiStrings({});
+    (globalThis as unknown as { document?: unknown }).document = originalDocument;
+  }
+});
+
+test("renderChoiceButtons keeps switch-to-self actions out of the shared choice list", { concurrency: false }, () => {
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
+  try {
+    const wrap = {
+      innerHTML: "",
+      style: { display: "block" },
+      childNodes: [] as unknown[],
+      appendChild(node: unknown) {
+        this.childNodes.push(node);
+        return node;
+      },
+    };
+    const fakeDocument = {
+      getElementById(id: string) {
+        if (id === "choiceWrap") return wrap;
+        return null;
+      },
+      createElement(tag: string) {
+        return {
+          tagName: String(tag || "").toUpperCase(),
+          className: "",
+          type: "",
+          textContent: "",
+          disabled: false,
+          addEventListener() {},
+        };
+      },
+    };
+    (globalThis as unknown as { document?: unknown }).document = fakeDocument;
+    setIsLoading(false);
+
+    renderChoiceButtons([], {
+      state: { current_step: "dream" },
+      ui: {
+        action_contract: {
+          actions: [
+            {
+              id: "a1",
+              label: "Terugschakelen naar zelf het droom formuleren",
+              action_code: "ACTION_DREAM_SWITCH_TO_SELF",
+              role: "dream_switch_to_self",
+            },
+          ],
+        },
+      },
+    } as any);
+
+    const buttons = wrap.childNodes.filter(
+      (node: unknown) => node && (node as { tagName?: string }).tagName === "BUTTON"
+    );
+    assert.equal(buttons.length, 0);
+    assert.equal(String(wrap.style.display || ""), "none");
+  } finally {
+    (globalThis as unknown as { document?: unknown }).document = originalDocument;
+  }
+});
+
+test("renderChoiceButtons stays hidden when no shared choice actions are available", { concurrency: false }, () => {
+  const originalDocument = (globalThis as unknown as { document: unknown }).document;
+  const wrap = {
+    innerHTML: "",
+    style: { display: "block" },
+    childNodes: [] as unknown[],
+    appendChild(node: unknown) {
+      this.childNodes.push(node);
+    },
+  };
+  const inlineNotice = {
+    textContent: "",
+    style: { display: "none" },
+  };
+  const fakeDocument = {
+    getElementById(id: string) {
+      if (id === "choiceWrap") return wrap;
+      if (id === "inlineNotice") return inlineNotice;
+      return null;
+    },
+    createElement(tag: string) {
+      return {
+        tagName: String(tag || "").toUpperCase(),
+        className: "",
+        type: "",
+        textContent: "",
+        disabled: false,
+        addEventListener() {},
+      };
+    },
+  };
+  try {
+    (globalThis as unknown as { document?: unknown }).document = fakeDocument;
+    setRuntimeUiStrings({
+      "error.contract.body": "Ververs de pagina of start een nieuwe sessie.",
+    });
+    setIsLoading(false);
+
+    renderChoiceButtons([], {
+      state: {
+        current_step: "dream",
+      },
+      ui: {
+        action_codes: ["ACTION_DREAM_INTRO_EXPLAIN_MORE"],
+        action_contract: {
+          actions: [],
+        },
+      },
+    } as any);
+
+    assert.equal(wrap.style.display, "none");
+    assert.equal(String(inlineNotice.textContent || ""), "");
+    assert.equal(String(inlineNotice.style.display || ""), "none");
+  } finally {
+    (globalThis as unknown as { document?: unknown }).document = originalDocument;
+  }
 });
 
 test("renderStructuredText groups paragraphs, ordered lists, and bullets", { concurrency: false }, () => {
@@ -1836,6 +2022,16 @@ test("bundled runtime inline script parses without syntax errors", () => {
   assert.doesNotThrow(() => {
     new vm.Script(scriptMatch[1], { filename: "step-card.bundled.html:inline-script" });
   });
+});
+
+test("bundled runtime keeps step title fallbacks unnumbered while preserving section title lookup", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /"title\.step_0": "Validation & Business Name"/);
+  assert.match(source, /"title\.step_0": "Validatie & Bedrijfsnaam"/);
+  assert.doesNotMatch(source, /"title\.step_0": "Step 1: Validation & Business Name"/);
+  assert.doesNotMatch(source, /"title\.step_0": "Stap 1: Validatie & Bedrijfsnaam"/);
+  assert.match(source, /function stepperLabelForLang\(lang, stepId\)/);
+  assert.match(source, /sectionTitleEl\.textContent = getSectionTitle\(lang, "step_0", ""\);/);
 });
 
 test("bundled page body allows vertical scrolling", () => {

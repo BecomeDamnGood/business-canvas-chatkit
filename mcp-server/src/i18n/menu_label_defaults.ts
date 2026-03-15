@@ -54,6 +54,7 @@ export const MENU_LABEL_DEFAULTS: Record<string, string> = {
   "menuLabel.STRATEGY_MENU_REFINE.ACTION_STRATEGY_REFINE_EXPLAIN_MORE": "Explain why a Strategy matters",
   "menuLabel.STRATEGY_MENU_QUESTIONS.ACTION_STRATEGY_QUESTIONS_EXPLAIN_MORE": "Explain why a Strategy matters",
   "menuLabel.STRATEGY_MENU_CONFIRM.ACTION_STRATEGY_REFINE_EXPLAIN_MORE": "Explain why a Strategy matters",
+  "menuLabel.STRATEGY_MENU_CONFIRM.ACTION_STRATEGY_CONSOLIDATE": "Consolidate my focus points for me, please",
   "menuLabel.STRATEGY_MENU_CONFIRM.ACTION_STRATEGY_CONFIRM_SATISFIED": "I'm satisfied with my strategy, continue to step 8 Target Group.",
   "menuLabel.STRATEGY_MENU_FINAL_CONFIRM.ACTION_STRATEGY_FINAL_CONTINUE": "I'm satisfied with my strategy, continue to step 8 Target Group.",
   "menuLabel.TARGETGROUP_MENU_INTRO.ACTION_TARGETGROUP_INTRO_EXPLAIN_MORE": "Explain me more about Target Groups",

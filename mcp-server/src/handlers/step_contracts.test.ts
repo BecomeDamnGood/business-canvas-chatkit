@@ -164,20 +164,11 @@ test("dream intro contract keeps start copy for first-time exercise entry", () =
           "dreamBuilder.startExercise": "Start the exercise",
           "dreamBuilder.resumeExercise": "Continue with the short exercise that helps define your dream.",
         },
-        ui_action_dream_start_exercise: "ACTION_DREAM_INTRO_START_EXERCISE",
       } as any,
       ui: {
         contract_id: "dream::incomplete_output::DREAM_MENU_INTRO",
         action_codes: ["ACTION_DREAM_INTRO_START_EXERCISE"],
         expected_choice_count: 1,
-        actions: [
-          {
-            id: "choice_1",
-            label: "Do a small exercise that helps define your dream.",
-            label_key: "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE",
-            action_code: "ACTION_DREAM_INTRO_START_EXERCISE",
-          },
-        ],
       },
     } as any,
     {
@@ -193,8 +184,81 @@ test("dream intro contract keeps start copy for first-time exercise entry", () =
     .actions as Array<Record<string, unknown>>;
   const exerciseAction = actions.find((action) => String(action.role || "") === "dream_start_exercise");
 
+  assert.equal(String((((response.state || {}) as Record<string, unknown>).ui_action_dream_start_exercise || "")), "");
   assert.equal(String(exerciseAction?.label_key || ""), "dreamBuilder.startExercise");
   assert.equal(String(exerciseAction?.label || ""), "Start the exercise");
+});
+
+test("interactive contract keeps menu choices and auxiliary Dream actions side by side", () => {
+  const response = finalizeResponseContractInternals(
+    {
+      ok: true,
+      current_step_id: "dream",
+      text: "",
+      prompt: "",
+      specialist: {},
+      state: {
+        started: "true",
+        current_step: "dream",
+        ui_strings: {
+          "dreamBuilder.startExercise": "Start the exercise",
+        },
+      } as any,
+      ui: {
+        view: {
+          mode: "interactive",
+        },
+        contract_id: "dream::incomplete_output::DREAM_MENU_INTRO",
+        action_codes: [
+          "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+          "ACTION_DREAM_INTRO_START_EXERCISE",
+        ],
+        expected_choice_count: 2,
+        actions: [
+          {
+            id: "choice_1",
+            label: "Vertel me meer over waarom een droom belangrijk is",
+            label_key: "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_EXPLAIN_MORE",
+            action_code: "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+          },
+          {
+            id: "choice_2",
+            label: "Doe een kleine oefening die helpt om je droom te definieren.",
+            label_key: "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE",
+            action_code: "ACTION_DREAM_INTRO_START_EXERCISE",
+          },
+        ],
+      },
+    } as any,
+    {
+      applyUiClientActionContract: () => {},
+      parseMenuFromContractIdForStep: () => "DREAM_MENU_INTRO",
+      labelKeysForMenuActionCodes: () => [
+        "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_EXPLAIN_MORE",
+        "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE",
+      ],
+      onUiParityError: () => {},
+      attachRegistryPayload: (payload) => payload,
+    }
+  );
+
+  const actions = ((((response.ui || {}) as Record<string, unknown>).action_contract || {}) as Record<string, unknown>)
+    .actions as Array<Record<string, unknown>>;
+
+  assert.ok(
+    actions.some(
+      (action) =>
+        String(action.action_code || "") === "ACTION_DREAM_INTRO_EXPLAIN_MORE" &&
+        String(action.role || "") === "choice"
+    )
+  );
+  assert.ok(
+    actions.some(
+      (action) =>
+        String(action.action_code || "") === "ACTION_DREAM_INTRO_START_EXERCISE" &&
+        String(action.role || "") === "dream_start_exercise"
+    )
+  );
 });
 
 test("dream intro contract switches to resume copy when Dream Builder context exists after switching to self", () => {
@@ -215,20 +279,11 @@ test("dream intro contract switches to resume copy when Dream Builder context ex
           "dreamBuilder.startExercise": "Start the exercise",
           "dreamBuilder.resumeExercise": "Continue with the short exercise that helps define your dream.",
         },
-        ui_action_dream_start_exercise: "ACTION_DREAM_INTRO_START_EXERCISE",
       } as any,
       ui: {
         contract_id: "dream::incomplete_output::DREAM_MENU_INTRO",
         action_codes: ["ACTION_DREAM_INTRO_START_EXERCISE"],
         expected_choice_count: 1,
-        actions: [
-          {
-            id: "choice_1",
-            label: "Do a small exercise that helps define your dream.",
-            label_key: "menuLabel.DREAM_MENU_INTRO.ACTION_DREAM_INTRO_START_EXERCISE",
-            action_code: "ACTION_DREAM_INTRO_START_EXERCISE",
-          },
-        ],
       },
     } as any,
     {
@@ -244,6 +299,7 @@ test("dream intro contract switches to resume copy when Dream Builder context ex
   const actions = ((ui.action_contract || {}) as Record<string, unknown>).actions as Array<Record<string, unknown>>;
   const exerciseAction = actions.find((action) => String(action.role || "") === "dream_start_exercise");
 
+  assert.equal(String((((response.state || {}) as Record<string, unknown>).ui_action_dream_start_exercise || "")), "");
   assert.equal(String(exerciseAction?.label_key || ""), "dreamBuilder.resumeExercise");
   assert.equal(
     String(exerciseAction?.label || ""),

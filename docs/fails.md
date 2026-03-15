@@ -260,3 +260,59 @@ Niet:
 ### Oplossing
 - Dream Builder statements worden nu canoniek gededupet in state-normalisatie, state-write en DreamExplainer-context
 - dezelfde gedachte kan daardoor niet meer als tweede canonical statement terugkomen
+
+### Fout
+- de `Purpose`-vraagflow liep per ongeluk door de structured-suggestions normalizer
+- gevolg: introregels werden bullets, de 3 echte vragen verdwenen en de standaardzin `Ik hoop dat deze suggesties...` werd onterecht toegevoegd
+
+### Oplossing
+- de runtime herkent deze vraagflow nu als vragenpad en normaliseert hem niet meer als examples/suggestions-scherm
+- intro, genummerde vragen en opdracht blijven daardoor intact
+
+### Fout
+- Dream `choose-for-me` gebruikte nog een oud synthetisch routepad buiten de canonieke post-specialist stateflow
+- gevolg: de knop kon wel renderen maar niet betrouwbaar dezelfde compare/runtime-semantiek gebruiken als de rest van de core
+
+### Oplossing
+- Dream `choose-for-me` loopt nu via dezelfde canonieke post-specialist mutatiegrens als de gewone runtime
+- daardoor is er nog maar één core-pad voor state, wording-keuze en vervolgmodus
+
+### Fout
+- Dream Builder kon een materiële herschrijving nog stil auto-committen als de agent vergat expliciete `feedback_reason_text` mee te geven
+- gevolg: geen `Your input / My suggestion`, maar direct herschreven tekst in de flow
+
+### Oplossing
+- Dream Builder faalt nu gesloten naar compare: bij een materiële rewrite zonder expliciete reden opent alsnog pending wording-choice
+- de gebruiker ziet daardoor weer eerst `Your input / My suggestion` vóór iets canoniek verandert
+
+### Fout
+- er stond nog user-facing runtime-copy hardcoded in gewone code buiten de vertaalcatalogi
+- gevolg: niet alle schermtekst kwam uit agent-output of i18n, en locale-discipline bleef daardoor onvolledig
+
+### Oplossing
+- user-facing runtime-copy is nu uit business-logic gehaald en ondergebracht in de i18n-catalogi
+- vaste app-copy komt nu alleen nog uit agent-output of vertaalbestanden
+
+### Fout
+- `choose-for-me` had nog steeds twee owners: action-routing zette sommige knoppen al vooruit naar het doelmenu terwijl de special route nog verwachtte dat de state op het bronmenu stond
+- gevolg: de knop klikte wel, maar kon in `invalid_state` eindigen en voor de gebruiker als “er gebeurt niets” voelen
+
+### Oplossing
+- choose-for-me actions zijn nu expliciet route-owned in de action registry
+- action-routing pre-transitiont deze actions niet meer; de special route is weer de enige owner van validatie, keuze en menu-overgang
+
+### Fout
+- de Dream Builder flow kon input met een al bestaande droom in state nog verkeerd zien als feedback op de huidige droom
+- gevolg: `Your input / My suggestion` werd overgeslagen terwijl de input eigenlijk door compare moest
+
+### Oplossing
+- Dream Builder runtime-modes blokkeren nu die `current-value feedback`-afslag
+- builder-input blijft daardoor in de compare-flow en kan niet meer stil via de gewone droom-feedbackroute lekken
+
+### Fout
+- de deploy-smoke brak door een runtime action-port die wel gebruikt maar niet doorgegeven werd
+- gevolg: `deploy next` stopte al in `contract-smoke` met `shouldPretransitionActionCode is not defined`
+
+### Oplossing
+- de ontbrekende runtime-port is nu weer expliciet doorgegeven in `run_step_runtime_execute`
+- de smoke gate slaagt weer en deploy kan daardoor normaal doorlopen

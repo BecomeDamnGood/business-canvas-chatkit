@@ -32,8 +32,10 @@ import {
 import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
 import { isStructuredPresentationRecap } from "../handlers/run_step_presentation_recap.js";
 import {
+  formatStepSectionTitle,
   hasGroupedCompareListSemantics,
   isSingleValueWordingStep,
+  STEP_REGISTRY_ORDER,
 } from "../steps/step_registry.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
@@ -387,9 +389,11 @@ function offTopicCompanyName(state: CanvasState): string {
 
 function offTopicCurrentContextHeading(stepId: string, state: CanvasState): string {
   if (stepId === "rulesofthegame") {
-    const key = "sectionTitle.rulesofthegameOf";
-    const template = uiStringFromState(state, key, uiDefaultString(key));
-    const rendered = String(template || "").replace(/\{0\}/g, offTopicCompanyName(state)).trim();
+    const rendered = formatStepSectionTitle({
+      stepId,
+      businessName: offTopicCompanyName(state),
+      getString: (key) => uiStringFromState(state, key, uiDefaultString(key)),
+    }).trim();
     if (!rendered) return "";
     const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
     return base ? `${base}:` : "";
@@ -1057,9 +1061,11 @@ function rulesOfTheGameRecapBlock(state: CanvasState, recapText: string): string
     wordingChoicePending: false,
   }).items;
   if (items.length === 0) return String(recapText || "").trim();
-  const key = "sectionTitle.rulesofthegameOf";
-  const template = uiStringFromState(state, key, uiDefaultString(key));
-  const rendered = String(template || "").replace(/\{0\}/g, offTopicCompanyName(state)).trim();
+  const rendered = formatStepSectionTitle({
+    stepId: "rulesofthegame",
+    businessName: offTopicCompanyName(state),
+    getString: (key) => uiStringFromState(state, key, uiDefaultString(key)),
+  }).trim();
   const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
   const heading = base ? `${base}:` : "";
   const bullets = items.map((line) => `• ${line}`).join("\n");
@@ -1357,17 +1363,9 @@ function computeStatus(
   return { status: "no_output", confirmEligible: false, recapBody: "", statementCount };
 }
 
-const RECAP_KNOWN_STEP_ORDER = [
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "strategy",
-  "targetgroup",
-  "productsservices",
-  "rulesofthegame",
-] as const;
+const RECAP_KNOWN_STEP_ORDER = STEP_REGISTRY_ORDER.filter(
+  (stepId) => stepId !== "step_0" && stepId !== "presentation"
+);
 
 function isRecapRequestedSpecialist(specialist: Record<string, unknown>): boolean {
   const wantsRecap =

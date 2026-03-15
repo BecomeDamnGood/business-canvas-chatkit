@@ -1272,12 +1272,6 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     const dreamExplainerSpecialist = response.getDreamExplainerSpecialist();
     const isDreamStep = currentStep === dreamStepId;
     const isDreamExplainer = activeSpecialist === dreamExplainerSpecialist;
-    const isDreamSpecialist = isDreamStep && !isDreamExplainer;
-    const dreamBuilderModeActive =
-      dreamRuntimeMode === "builder_collect" ||
-      dreamRuntimeMode === "builder_scoring" ||
-      dreamRuntimeMode === "builder_refine";
-    const suggestDreamBuilder = String(lastSpecialist.suggest_dreambuilder || "").trim().toLowerCase() === "true";
     const interactiveSession = started;
     const scoreSubmitAvailable =
       interactiveSession &&
@@ -1319,21 +1313,6 @@ export function createRunStepRuntimeFinalizeLayer<TPayload extends Record<string
     setStateAction(
       "ui_action_wording_pick_suggestion",
       interactiveSession && wordingPending ? "ACTION_WORDING_PICK_SUGGESTION" : ""
-    );
-    setStateAction(
-      "ui_action_dream_start_exercise",
-      interactiveSession &&
-        isDreamStep &&
-        !scoreSubmitAvailable &&
-        (isDreamSpecialist || suggestDreamBuilder)
-        ? "ACTION_DREAM_INTRO_START_EXERCISE"
-        : ""
-    );
-    setStateAction(
-      "ui_action_dream_switch_to_self",
-      interactiveSession && isDreamStep && (isDreamExplainer || dreamBuilderModeActive)
-        ? "ACTION_DREAM_SWITCH_TO_SELF"
-        : ""
     );
   };
 

@@ -1,5 +1,6 @@
 import type { CanvasState } from "../core/state.js";
 import type { TurnOutputStatus } from "../core/turn_policy_renderer.js";
+import { formatStepSectionTitle } from "../steps/step_registry.js";
 import { STEP_0_ID } from "../steps/step_0_validation.js";
 import { DREAM_STEP_ID } from "../steps/dream.js";
 import { DREAM_EXPLAINER_SPECIALIST } from "../steps/dream_explainer.js";
@@ -359,11 +360,14 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
 
   function offTopicCurrentContextLine(stepId: string, state: CanvasState): string {
     if (stepId === RULESOFTHEGAME_STEP_ID) {
-      const key = "sectionTitle.rulesofthegameOf";
-      const template = uiStringLocaleFirst(state, key);
+      const template = formatStepSectionTitle({
+        stepId,
+        businessName: offTopicCompanyName(state),
+        getString: (key) => uiStringLocaleFirst(state, key),
+      }).trim();
       if (!template) return "";
       return ensureSentenceEnd(
-        formatIndexedTemplate(template, [offTopicCompanyName(state)]).trim()
+        template
       );
     }
     const template = uiStringLocaleFirst(state, "offtopic.current.template");
@@ -378,10 +382,11 @@ export function createRunStepPolicyMetaHelpers(deps: RunStepPolicyMetaDeps) {
 
   function offTopicCurrentContextHeading(stepId: string, state: CanvasState): string {
     if (stepId === RULESOFTHEGAME_STEP_ID) {
-      const key = "sectionTitle.rulesofthegameOf";
-      const template = uiStringLocaleFirst(state, key);
-      if (!template) return "";
-      const rendered = formatIndexedTemplate(template, [offTopicCompanyName(state)]).trim();
+      const rendered = formatStepSectionTitle({
+        stepId,
+        businessName: offTopicCompanyName(state),
+        getString: (key) => uiStringLocaleFirst(state, key),
+      }).trim();
       if (!rendered) return "";
       const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
       return base ? `${base}:` : "";

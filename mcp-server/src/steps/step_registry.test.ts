@@ -6,6 +6,9 @@ import { NEXT_MENU_BY_ACTIONCODE } from "../core/ui_contract_matrix.js";
 import { CANONICAL_STEPS, STEP_FINAL_FIELD_BY_STEP_ID } from "../core/state.js";
 import {
   CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES,
+  formatStepSectionTitle,
+  getStepStepperLabelKey,
+  getStepTitleKey,
   STEP_REGISTRY_BY_STEP_ID,
   STEP_REGISTRY_ORDER,
 } from "./step_registry.js";
@@ -18,6 +21,15 @@ test("step registry order indexes and families stay internally consistent", () =
   for (const [index, stepId] of STEP_REGISTRY_ORDER.entries()) {
     const entry = STEP_REGISTRY_BY_STEP_ID[stepId];
     assert.equal(entry.orderIndex, index, `wrong orderIndex for ${stepId}`);
+    assert.ok(entry.titleKey, `missing titleKey for ${stepId}`);
+    assert.ok(entry.stepperLabelKey, `missing stepperLabelKey for ${stepId}`);
+    assert.ok(entry.sectionTitleMode, `missing sectionTitleMode for ${stepId}`);
+    if (entry.sectionTitleMode === "business_name_template") {
+      assert.ok(entry.sectionTitleWithBusinessKey, `missing sectionTitleWithBusinessKey for ${stepId}`);
+      assert.ok(entry.sectionTitleWithoutBusinessKey, `missing sectionTitleWithoutBusinessKey for ${stepId}`);
+    } else {
+      assert.ok(entry.sectionTitleKey, `missing sectionTitleKey for ${stepId}`);
+    }
     if (stepId === "step_0" || stepId === "presentation") {
       assert.equal(entry.supportFamily, "none", `special flow ${stepId} must not be interactive support`);
       assert.equal(entry.wordingFamily, "none", `special flow ${stepId} must not be in wording family`);
@@ -30,6 +42,54 @@ test("step registry order indexes and families stay internally consistent", () =
       assert.equal(entry.wordingFamily, "single_value", `wrong wording family for ${stepId}`);
     }
   }
+});
+
+test("step registry title helpers stay aligned with registry metadata", () => {
+  for (const stepId of STEP_REGISTRY_ORDER) {
+    const entry = STEP_REGISTRY_BY_STEP_ID[stepId];
+    assert.equal(getStepTitleKey(stepId), entry.titleKey);
+    assert.equal(getStepStepperLabelKey(stepId), entry.stepperLabelKey);
+  }
+});
+
+test("formatStepSectionTitle preserves plain and company-aware section title selection", () => {
+  assert.equal(
+    formatStepSectionTitle({
+      stepId: "step_0",
+      businessName: "Mindd",
+      getString: (key) =>
+        ({
+          "sectionTitle.step_0": "Validation & Business Name",
+        })[key] || "",
+    }),
+    "Validation & Business Name"
+  );
+
+  assert.equal(
+    formatStepSectionTitle({
+      stepId: "purpose",
+      businessName: "Mindd",
+      getString: (key) =>
+        ({
+          "sectionTitle.purposeOf": "The Purpose of {0}",
+          "sectionTitle.purposeOfFuture": "The Purpose of my future company",
+        })[key] || "",
+    }),
+    "The Purpose of Mindd"
+  );
+
+  assert.equal(
+    formatStepSectionTitle({
+      stepId: "purpose",
+      businessName: "TBD",
+      getString: (key) =>
+        ({
+          "sectionTitle.purposeOf": "The Purpose of {0}",
+          "sectionTitle.purposeOfFuture": "The Purpose of my future company",
+        })[key] || "",
+    }),
+    "The Purpose of my future company"
+  );
 });
 
 test("state final field map stays aligned with the step registry", () => {

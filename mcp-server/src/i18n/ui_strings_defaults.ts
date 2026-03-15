@@ -3,6 +3,7 @@
  */
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "../core/menu_contract.js";
+import { getStepRegistryEntry, getStepTitleKey } from "../steps/step_registry.js";
 const PRESTART_TEXT_DEFAULT = {
   headline: "Build a complete Business Model and Strategy Canvas step by step.",
   provenTitle: "The Proven Standard",
@@ -22,17 +23,17 @@ const PRESTART_WELCOME_DEFAULT = PRESTART_TEXT_DEFAULT.headline;
 
 
 export const UI_STRINGS_DEFAULT: Record<string, string> = {
-  "title.step_0": "Step 1: Validation & Business Name",
-  "title.dream": "Step 2: Dream",
-  "title.purpose": "Step 3: Purpose",
-  "title.bigwhy": "Step 4: Big Why",
-  "title.role": "Step 5: Role",
-  "title.entity": "Step 6: Entity",
-  "title.strategy": "Step 7: Strategy",
-  "title.targetgroup": "Step 8: Target Group",
-  "title.productsservices": "Step 9: Products and Services",
-  "title.rulesofthegame": "Step 10: Rules of the game",
-  "title.presentation": "Step 11: Presentation",
+  "title.step_0": "Validation & Business Name",
+  "title.dream": "Dream",
+  "title.purpose": "Purpose",
+  "title.bigwhy": "Big Why",
+  "title.role": "Role",
+  "title.entity": "Entity",
+  "title.strategy": "Strategy",
+  "title.targetgroup": "Target Group",
+  "title.productsservices": "Products and Services",
+  "title.rulesofthegame": "Rules of the game",
+  "title.presentation": "Presentation",
   prestartWelcome: PRESTART_WELCOME_DEFAULT,
   "prestart.headline": PRESTART_TEXT_DEFAULT.headline,
   "prestart.proven.title": PRESTART_TEXT_DEFAULT.provenTitle,
@@ -69,6 +70,10 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
   wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
   wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
+  wordingChoiceDreamBuilderKeepBothLabel: "Keep both statements:",
+  wordingChoiceDreamBuilderMergeLabel: "Merge into one statement:",
+  wordingChoiceDreamBuilderMergeInstruction:
+    "Choose whether you want to keep both similar statements or merge them into one stronger statement.",
   wordingChoiceSuggestionLabel: "This would be my suggestion:",
   wordingChoiceInstruction: "Please click what suits you best.",
   "wording.choice.context.default": "Please choose the wording that fits best.",
@@ -430,26 +435,25 @@ export const CRITICAL_UI_KEYS_INTERACTIVE_BASE: string[] = [
   "error.generic.body",
 ].filter((key) => UI_STRINGS_KEYS.includes(key));
 
-const STEP_TITLE_KEYS: Record<string, string> = {
-  step_0: "title.step_0",
-  dream: "title.dream",
-  purpose: "title.purpose",
-  bigwhy: "title.bigwhy",
-  role: "title.role",
-  entity: "title.entity",
-  strategy: "title.strategy",
-  targetgroup: "title.targetgroup",
-  productsservices: "title.productsservices",
-  rulesofthegame: "title.rulesofthegame",
-  presentation: "title.presentation",
-};
-
 export function criticalUiKeysForStep(stepIdRaw: string): string[] {
   const stepId = String(stepIdRaw || "").trim().toLowerCase();
   if (stepId === "step_0") return CRITICAL_UI_KEYS_STEP0;
-  const titleKey = STEP_TITLE_KEYS[stepId];
+  const titleKey = getStepTitleKey(stepId);
   const keys = new Set<string>(CRITICAL_UI_KEYS_INTERACTIVE_BASE);
   if (titleKey && UI_STRINGS_KEYS.includes(titleKey)) keys.add(titleKey);
+  const sectionEntry = getStepRegistryEntry(stepId);
+  if (sectionEntry?.sectionTitleKey && UI_STRINGS_KEYS.includes(sectionEntry.sectionTitleKey)) {
+    keys.add(sectionEntry.sectionTitleKey);
+  }
+  if (sectionEntry?.sectionTitleWithBusinessKey && UI_STRINGS_KEYS.includes(sectionEntry.sectionTitleWithBusinessKey)) {
+    keys.add(sectionEntry.sectionTitleWithBusinessKey);
+  }
+  if (
+    sectionEntry?.sectionTitleWithoutBusinessKey &&
+    UI_STRINGS_KEYS.includes(sectionEntry.sectionTitleWithoutBusinessKey)
+  ) {
+    keys.add(sectionEntry.sectionTitleWithoutBusinessKey);
+  }
   return [...keys];
 }
 

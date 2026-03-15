@@ -89,6 +89,9 @@ type BusinessListComparePlan = {
   units: WordingChoiceCompareUnit[];
   segments: WordingChoiceCompareSegment[];
   initialUnit: WordingChoiceCompareUnit;
+  userLabel?: string;
+  suggestionLabel?: string;
+  instruction?: string;
 };
 
 type RunStepWordingDeps = {
@@ -399,6 +402,27 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     const localized = uiStringLocaleFirst(state, "wordingChoiceGroupedCompareSuggestionLabel").trim();
     if (localized) return localized;
     return clarifySuggestionLabelForState(state);
+  }
+
+  function dreamBuilderKeepBothLabelForState(state: CanvasState | null | undefined): string {
+    return (
+      uiStringLocaleFirst(state, "wordingChoiceDreamBuilderKeepBothLabel").trim() ||
+      "Keep both statements"
+    );
+  }
+
+  function dreamBuilderMergeLabelForState(state: CanvasState | null | undefined): string {
+    return (
+      uiStringLocaleFirst(state, "wordingChoiceDreamBuilderMergeLabel").trim() ||
+      "Merge into one statement"
+    );
+  }
+
+  function dreamBuilderMergeInstructionForState(state: CanvasState | null | undefined): string {
+    return (
+      uiStringLocaleFirst(state, "wordingChoiceDreamBuilderMergeInstruction").trim() ||
+      "Choose whether you want to keep both statements or merge them into one stronger statement."
+    );
   }
 
   function groupedListInstructionForState(
@@ -1290,6 +1314,69 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     };
   }
 
+  function buildDreamBuilderNearDuplicateComparePlan(params: {
+    state: CanvasState | null | undefined;
+    baseItems: string[];
+    userItems: string[];
+    suggestionItems: string[];
+  }): BusinessListComparePlan | null {
+    const baseItems = mergeListItems([], params.baseItems);
+    const userItems = mergeListItems([], params.userItems);
+    const suggestionItems = mergeListItems([], params.suggestionItems);
+    if (baseItems.length === 0 || userItems.length !== 1 || suggestionItems.length !== 1) return null;
+
+    const newItem = String(userItems[0] || "").trim();
+    const mergedItem = String(suggestionItems[0] || "").trim();
+    if (!newItem || !mergedItem) return null;
+
+    const newKey = deps.canonicalizeComparableText(newItem);
+    const mergedKey = deps.canonicalizeComparableText(mergedItem);
+    if (!newKey || !mergedKey || newKey === mergedKey) return null;
+
+    let bestIndex = -1;
+    let bestScore = 0;
+    for (let index = 0; index < baseItems.length; index += 1) {
+      const existing = String(baseItems[index] || "").trim();
+      const existingKey = deps.canonicalizeComparableText(existing);
+      if (!existing || !existingKey || existingKey === newKey) continue;
+      const scoreToNew = itemSimilarity(existing, newItem);
+      const scoreToMerged = itemSimilarity(existing, mergedItem);
+      const averageScore = (scoreToNew + scoreToMerged) / 2;
+      if (scoreToNew < 0.34 || scoreToMerged < 0.32) continue;
+      if (averageScore <= bestScore) continue;
+      bestIndex = index;
+      bestScore = averageScore;
+    }
+    if (bestIndex < 0 || bestScore < 0.33) return null;
+
+    const existing = String(baseItems[bestIndex] || "").trim();
+    if (!existing) return null;
+    const unit = createCompareUnit({
+      id: "unit_1",
+      userItems: [existing, newItem],
+      suggestionItems: [mergedItem],
+      confidence: "fallback",
+    });
+    if (unit.user_items.length !== 2 || unit.suggestion_items.length !== 1) return null;
+
+    const segments: WordingChoiceCompareSegment[] = [];
+    const before = baseItems.slice(0, bestIndex);
+    const after = baseItems.slice(bestIndex + 1);
+    if (before.length > 0) segments.push({ kind: "retained", items: before });
+    segments.push({ kind: "unit", unit_id: unit.id });
+    if (after.length > 0) segments.push({ kind: "retained", items: after });
+
+    return {
+      mode: "grouped_units",
+      units: [unit],
+      segments,
+      initialUnit: unit,
+      userLabel: dreamBuilderKeepBothLabelForState(params.state),
+      suggestionLabel: dreamBuilderMergeLabelForState(params.state),
+      instruction: dreamBuilderMergeInstructionForState(params.state),
+    };
+  }
+
   function selectedItemsForCompareUnit(unit: WordingChoiceCompareUnit): string[] {
     if (unit.resolution === "user") return unit.user_items;
     if (unit.resolution === "suggestion") return unit.suggestion_items;
@@ -1549,6 +1636,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     units: WordingChoiceCompareUnit[];
     segments: WordingChoiceCompareSegment[];
     cursor: number;
+    userLabel?: string;
+    suggestionLabel?: string;
+    instruction?: string;
   }): WordingChoiceUiPayload | null {
     const nextIndex = nextUnresolvedCompareUnitIndex(params.units, params.cursor);
     if (nextIndex < 0) return null;
@@ -1577,13 +1667,15 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
             }),
           }
         : {}),
-      ...(labels.userLabel ? { user_label: labels.userLabel } : {}),
-      ...(labels.suggestionLabel ? { suggestion_label: labels.suggestionLabel } : {}),
+      ...((params.userLabel || labels.userLabel) ? { user_label: params.userLabel || labels.userLabel } : {}),
+      ...((params.suggestionLabel || labels.suggestionLabel)
+        ? { suggestion_label: params.suggestionLabel || labels.suggestionLabel }
+        : {}),
       user_text: currentUnit.user_text,
       suggestion_text: currentUnit.suggestion_text,
       user_items: currentUnit.user_items,
       suggestion_items: currentUnit.suggestion_items,
-      instruction: groupedListInstructionForState(params.state, retainedItems),
+      instruction: params.instruction || groupedListInstructionForState(params.state, retainedItems),
     };
   }
 
@@ -1959,15 +2051,35 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       looksLikeDualClarificationPrompt(previousSpecialist)
         ? "clarify_dual"
         : "default";
+    const compareSuggestionItems =
+      mode === "list"
+        ? mergeListItems(
+            [],
+            suggestionItems.length > 0 ? suggestionItems : deps.parseListItems(String(suggestionRaw || "").trim())
+          )
+        : [];
     const rawComparePlan =
-      mode === "list" && isBusinessListIntentScope(stepId)
-        ? buildBusinessListComparePlan({
-            baseItems,
-            userItems: effectiveUserItems,
-            suggestionItems,
-            deltaUserItems: localUserItems,
-            preferDeltaGrouping: compareDeltaListSemantics === "delta",
-          })
+      mode === "list"
+        ? (
+            isBusinessListIntentScope(stepId)
+              ? buildBusinessListComparePlan({
+                  baseItems,
+                  userItems: effectiveUserItems,
+                  suggestionItems: compareSuggestionItems,
+                  deltaUserItems: localUserItems,
+                  preferDeltaGrouping: compareDeltaListSemantics === "delta",
+                })
+              : (
+                  dreamBuilderContext
+                    ? buildDreamBuilderNearDuplicateComparePlan({
+                        state,
+                        baseItems,
+                        userItems: localUserItems.length > 0 ? localUserItems : effectiveUserItems,
+                        suggestionItems: compareSuggestionItems,
+                      })
+                    : null
+                )
+          )
         : null;
     const comparePlan = rawComparePlan
       ? withGroupedCompareUnitFeedback({
@@ -2007,8 +2119,8 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       wording_choice_target_field: targetField,
       wording_choice_presentation: presentation,
       wording_choice_variant: variant === "default" ? "" : variant,
-      wording_choice_user_label: wordingLabels.userLabel || "",
-      wording_choice_suggestion_label: wordingLabels.suggestionLabel || "",
+      wording_choice_user_label: comparePlan?.userLabel || wordingLabels.userLabel || "",
+      wording_choice_suggestion_label: comparePlan?.suggestionLabel || wordingLabels.suggestionLabel || "",
       wording_choice_compare_mode: comparePlan?.mode || "",
       wording_choice_compare_cursor: comparePlan ? "0" : "",
       wording_choice_compare_units: comparePlan?.units || [],
@@ -2066,6 +2178,9 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
             units: comparePlan.units,
             segments: comparePlan.segments,
             cursor: 0,
+            userLabel: comparePlan.userLabel,
+            suggestionLabel: comparePlan.suggestionLabel,
+            instruction: comparePlan.instruction,
           }) || {
             enabled: true,
             mode,
@@ -2079,13 +2194,17 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
                   ),
                 }
               : {}),
-            ...(wordingLabels.userLabel ? { user_label: wordingLabels.userLabel } : {}),
-            ...(wordingLabels.suggestionLabel ? { suggestion_label: wordingLabels.suggestionLabel } : {}),
+            ...((comparePlan.userLabel || wordingLabels.userLabel)
+              ? { user_label: comparePlan.userLabel || wordingLabels.userLabel }
+              : {}),
+            ...((comparePlan.suggestionLabel || wordingLabels.suggestionLabel)
+              ? { suggestion_label: comparePlan.suggestionLabel || wordingLabels.suggestionLabel }
+              : {}),
             user_text: comparePlan.initialUnit.user_text,
             suggestion_text: comparePlan.initialUnit.suggestion_text,
             user_items: comparePlan.initialUnit.user_items,
             suggestion_items: comparePlan.initialUnit.suggestion_items,
-            instruction: groupedListInstructionForState(
+            instruction: comparePlan.instruction || groupedListInstructionForState(
               state,
               visibleRetainedItemsForGroupedCompare(comparePlan.segments, comparePlan.units)
             ),

@@ -1,4 +1,5 @@
 import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
+import { actionCodeToIntent } from "../core/actioncode_intent.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
 import type { CanvasState } from "../core/state.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
@@ -172,21 +173,7 @@ function hasStartAction(response: RunStepContractResponse, state: Record<string,
 }
 
 function uiLabelForKey(state: Record<string, unknown>, labelKey: string): string {
-  const stateUiStrings = toRecord(state.ui_strings);
-  const localized = String(stateUiStrings[labelKey] || "").trim();
-  if (localized) return localized;
-  return String(UI_STRINGS_DEFAULT[labelKey] || "").trim();
-}
-
-function actionLabelKeyMatchesState(
-  state: Record<string, unknown>,
-  actionCode: string,
-  actualLabelKey: string,
-  expectedLabelKey: string
-): boolean {
-  if (actualLabelKey === expectedLabelKey) return true;
-  if (actionCode !== "ACTION_DREAM_INTRO_START_EXERCISE") return false;
-  return actualLabelKey === dreamBuilderExerciseLabelKey(state);
+  return String(resolveUiStringForState(state, labelKey, UI_STRINGS_DEFAULT[labelKey] || "") || "").trim();
 }
 
 function buildStateActionDescriptor(
@@ -264,58 +251,84 @@ function buildStateActionDescriptor(
       primary: false,
     };
   }
-  if (role === "dream_start_exercise") {
-    const actionCode = String(state.ui_action_dream_start_exercise || "").trim();
-    if (!actionCode) return null;
-    const labelKey = dreamBuilderExerciseLabelKey(state);
-    return {
-      actionCode,
-      label: uiLabelForKey(state, labelKey),
-      labelKey,
-      surface: "auxiliary",
-      intent: { type: "START_EXERCISE", exerciseType: "dream_builder" },
-      primary: false,
-    };
-  }
-  if (role === "dream_switch_to_self") {
-    const actionCode = String(state.ui_action_dream_switch_to_self || "").trim();
-    if (!actionCode) return null;
-    return {
-      actionCode,
-      label: uiLabelForKey(state, "btnSwitchToSelfDream"),
-      labelKey: "btnSwitchToSelfDream",
-      surface: "auxiliary",
-      intent: { type: "ROUTE", route: "__ROUTE__DREAM_SWITCH_TO_SELF__" },
-      primary: false,
-    };
-  }
   return null;
 }
 
-function ensureUnifiedUiActionContract(response: RunStepContractResponse): void {
+function roleForActionCode(actionCodeRaw: unknown): UiActionRole {
+  const actionCode = String(actionCodeRaw || "").trim().toUpperCase();
+  if (actionCode === "ACTION_START") return "start";
+  if (actionCode === "ACTION_TEXT_SUBMIT") return "text_submit";
+  if (actionCode === "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES") return "score_submit";
+  if (actionCode === "ACTION_WORDING_PICK_USER") return "wording_pick_user";
+  if (actionCode === "ACTION_WORDING_PICK_SUGGESTION") return "wording_pick_suggestion";
+  if (actionCode === "ACTION_DREAM_SWITCH_TO_SELF") return "dream_switch_to_self";
+  if (/^ACTION_DREAM_.+START_EXERCISE$/.test(actionCode)) return "dream_start_exercise";
+  return "choice";
+}
+
+function labelKeyForContractAction(params: {
+  state: Record<string, unknown>;
+  menuId: string;
+  actionCode: string;
+  index: number;
+  labelKeys: string[];
+}): string {
+  const role = roleForActionCode(params.actionCode);
+  if (role === "dream_start_exercise") {
+    return dreamBuilderExerciseLabelKey(params.state);
+  }
+  const labelKey = String(params.labelKeys[params.index] || "").trim();
+  return labelKey || labelKeyForMenuAction(params.menuId, params.actionCode, params.index);
+}
+
+function buildMenuContractActions(
+  response: RunStepContractResponse,
+  deps: UiParityDeps
+): Array<Record<string, unknown>> {
   const state = toRecord(response.state);
   const ui = toRecord(response.ui);
-  const existingActions = Array.isArray(ui.actions) ? (ui.actions as Array<Record<string, unknown>>) : [];
-  const seenByActionCode = new Set<string>();
-  const unifiedActions: Array<Record<string, unknown>> = [];
-
-  for (let i = 0; i < existingActions.length; i += 1) {
-    const action = toRecord(existingActions[i]);
-    const actionCode = String(action.action_code || "").trim();
-    if (!actionCode || seenByActionCode.has(actionCode)) continue;
-    const role = normalizeUiActionRole(action.role, "choice");
-    const surface = normalizeUiActionSurface(action.surface, defaultSurfaceForRole(role));
-    seenByActionCode.add(actionCode);
-    unifiedActions.push({
-      ...action,
-      id: String(action.id || `choice_${i + 1}`),
+  const actionCodes = Array.isArray(ui.action_codes)
+    ? (ui.action_codes as unknown[]).map((code) => String(code || "").trim()).filter(Boolean)
+    : [];
+  if (actionCodes.length === 0) return [];
+  const stepId =
+    String(response.current_step_id || "").trim() ||
+    String(state.current_step || "").trim();
+  const contractId = String(ui.contract_id || "").trim();
+  const menuId = stepId && contractId ? deps.parseMenuFromContractIdForStep(contractId, stepId) : "";
+  const labelKeys = menuId ? deps.labelKeysForMenuActionCodes(menuId, actionCodes) : [];
+  return actionCodes.map((actionCode, index) => {
+    const role = roleForActionCode(actionCode);
+    const surface = defaultSurfaceForRole(role);
+    const labelKey = labelKeyForContractAction({
+      state,
+      menuId,
+      actionCode,
+      index,
+      labelKeys,
+    });
+    const route = String(ACTIONCODE_REGISTRY.actions[actionCode]?.route || actionCode).trim();
+    return {
+      id: `choice_${index + 1}`,
+      label: uiLabelForKey(state, labelKey),
+      label_key: labelKey,
       action_code: actionCode,
-      label: String(action.label || "").trim(),
-      label_key: String(action.label_key || "").trim(),
+      intent: actionCodeToIntent({ actionCode, route }),
+      primary: index === 0,
       role,
       surface,
-      source: "ui.actions",
-    });
+      source: "menu_action_contract",
+    };
+  });
+}
+
+function ensureUnifiedUiActionContract(response: RunStepContractResponse, deps: UiParityDeps): void {
+  const state = toRecord(response.state);
+  const ui = toRecord(response.ui);
+  const seenByActionCode = new Set<string>();
+  const unifiedActions = buildMenuContractActions(response, deps);
+  for (const action of unifiedActions) {
+    seenByActionCode.add(String(action.action_code || "").trim());
   }
 
   const stateRoles: UiActionRole[] = [
@@ -324,8 +337,6 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
     "score_submit",
     "wording_pick_user",
     "wording_pick_suggestion",
-    "dream_start_exercise",
-    "dream_switch_to_self",
   ];
   for (const role of stateRoles) {
     const descriptor = buildStateActionDescriptor(state, role);
@@ -337,13 +348,8 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
         if (String(entry.action_code || "").trim() !== normalizedCode) continue;
         entry.role = role;
         entry.surface = descriptor.surface;
-        if (role === "dream_start_exercise") {
-          entry.label_key = descriptor.labelKey;
-          entry.label = descriptor.label;
-        } else {
-          if (!String(entry.label_key || "").trim()) entry.label_key = descriptor.labelKey;
-          if (!String(entry.label || "").trim()) entry.label = descriptor.label;
-        }
+        if (!String(entry.label_key || "").trim()) entry.label_key = descriptor.labelKey;
+        if (!String(entry.label || "").trim()) entry.label = descriptor.label;
         if (role === "text_submit" && descriptor.payloadMode) {
           entry.payload_mode = descriptor.payloadMode;
         }
@@ -374,7 +380,6 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse): void 
 }
 
 function applyDeterministicUiActionRenderPolicy(response: RunStepContractResponse): void {
-  const state = toRecord(response.state);
   const ui = toRecord(response.ui);
   const actionContract = toRecord(ui.action_contract);
   const actions = Array.isArray(actionContract.actions)
@@ -382,42 +387,12 @@ function applyDeterministicUiActionRenderPolicy(response: RunStepContractRespons
     : [];
   if (actions.length === 0) return;
 
-  const view = toRecord(ui.view);
-  const mode = String(view.mode || "").trim().toLowerCase();
-  const variant = String(view.variant || "").trim().toLowerCase();
-  const currentStep = String(response.current_step_id || state.current_step || "").trim();
-  const bypassInteractiveStep0RoleGate = mode === "interactive" && currentStep === STEP_0_ID;
-  const hasChoiceActions = actions.some(
-    (action) => normalizeUiActionRole(action.role, "choice") === "choice"
-  );
-
-  const allowedRoles = new Set<UiActionRole>();
-  if (mode === "prestart") {
-    allowedRoles.add("start");
-  } else if (mode === "interactive") {
-    allowedRoles.add("text_submit");
-    if (variant === "dream_builder_scoring") {
-      allowedRoles.add("score_submit");
-    }
-    if (hasChoiceActions) {
-      allowedRoles.add("choice");
-    } else if (variant === "wording_choice") {
-      allowedRoles.add("wording_pick_user");
-      allowedRoles.add("wording_pick_suggestion");
-    } else {
-      allowedRoles.add("choice");
-      allowedRoles.add("dream_start_exercise");
-      allowedRoles.add("dream_switch_to_self");
-    }
-  }
-
   const filteredActions: Array<Record<string, unknown>> = [];
   const seenByActionCode = new Set<string>();
   for (const action of actions) {
     const actionCode = String(action.action_code || "").trim();
     if (!actionCode || seenByActionCode.has(actionCode)) continue;
     const role = normalizeUiActionRole(action.role, "choice");
-    if (!bypassInteractiveStep0RoleGate && !allowedRoles.has(role)) continue;
     seenByActionCode.add(actionCode);
     filteredActions.push({
       ...action,
@@ -549,18 +524,35 @@ export function validateUiPayloadContractParity(
   if (!stepId || !contractId) return "ui_contract_missing_step_or_contract_id";
   const menuId = deps.parseMenuFromContractIdForStep(contractId, stepId);
   if (!menuId) return "ui_contract_missing_menu_id";
-  const actions = Array.isArray(ui.actions) ? (ui.actions as Array<Record<string, unknown>>) : [];
-  if (actions.length !== actionCodes.length) return "ui_actions_count_mismatch";
+  const actionContract = toRecord(ui.action_contract);
+  const contractActions = Array.isArray(actionContract.actions)
+    ? (actionContract.actions as Array<Record<string, unknown>>)
+    : [];
+  const usedIndices = new Set<number>();
   const expectedLabelKeys = deps.labelKeysForMenuActionCodes(menuId, actionCodes);
   if (expectedLabelKeys.length !== actionCodes.length) return "ui_contract_labelkeys_or_actioncodes_mismatch";
   for (let i = 0; i < actionCodes.length; i += 1) {
-    const action = actions[i] || {};
+    let matchedIndex = -1;
+    for (let j = 0; j < contractActions.length; j += 1) {
+      if (usedIndices.has(j)) continue;
+      if (String(contractActions[j]?.action_code || "").trim() !== actionCodes[i]) continue;
+      matchedIndex = j;
+      break;
+    }
+    if (matchedIndex < 0) return `ui_actions_actioncode_mismatch_at_${i + 1}`;
+    usedIndices.add(matchedIndex);
+    const action = contractActions[matchedIndex] || {};
     const actionCode = String(action.action_code || "").trim();
-    const labelKeyRaw = String(action.label_key || "").trim();
-    const labelKey = labelKeyRaw || labelKeyForMenuAction(menuId, actionCode, i);
+    const labelKey = String(action.label_key || "").trim();
     const label = String(action.label || "").trim();
-    if (actionCode !== actionCodes[i]) return `ui_actions_actioncode_mismatch_at_${i + 1}`;
-    if (!actionLabelKeyMatchesState(((response.state as Record<string, unknown> | undefined) || {}), actionCode, labelKey, expectedLabelKeys[i])) {
+    const expectedLabelKey = labelKeyForContractAction({
+      state: ((response.state as Record<string, unknown> | undefined) || {}),
+      menuId,
+      actionCode,
+      index: i,
+      labelKeys: expectedLabelKeys,
+    });
+    if (!labelKey || labelKey !== expectedLabelKey) {
       return `ui_actions_label_key_mismatch_at_${i + 1}`;
     }
     if (!label) return `ui_actions_label_missing_at_${i + 1}`;
@@ -658,7 +650,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
       options.onUiParityError();
     }
   }
-  ensureUnifiedUiActionContract(finalResponse);
+  ensureUnifiedUiActionContract(finalResponse, options);
   const canonicalViewDecision = applyCanonicalWidgetState(finalResponse);
   applyDeterministicUiActionRenderPolicy(finalResponse);
   (finalResponse as Record<string, unknown>).__canonical_view_decision = canonicalViewDecision;

@@ -15,6 +15,7 @@ import {
   roleStepVideoUrlForLang,
   hasPrestartContentForLang,
   getSectionTitle,
+  stepperLabelForLang,
   setRuntimeUiStrings,
 } from "./ui_constants.js";
 import { escapeHtml, renderInlineText, renderSingleValueCardContent, renderStructuredText, stripInlineText } from "./ui_text.js";
@@ -166,13 +167,6 @@ function actionContractActionsForResult(resultData: Record<string, unknown>): Ar
       .map((entry) => toRecord(entry))
       .filter((entry) => String(entry.action_code || "").trim().length > 0);
   }
-  const legacyActions = Array.isArray(uiPayload.actions) ? (uiPayload.actions as unknown[]) : [];
-  if (legacyActions.length > 0) {
-    console.warn("[ui_action_contract_missing_actions]", {
-      legacy_actions_count: legacyActions.length,
-      current_step: String((resultData.state as Record<string, unknown> | undefined)?.current_step || ""),
-    });
-  }
   return [];
 }
 
@@ -187,8 +181,6 @@ const ACTION_ROLE_BY_STATE_KEY: Record<string, string> = {
   ui_action_score_submit: "score_submit",
   ui_action_wording_pick_user: "wording_pick_user",
   ui_action_wording_pick_suggestion: "wording_pick_suggestion",
-  ui_action_dream_start_exercise: "dream_start_exercise",
-  ui_action_dream_switch_to_self: "dream_switch_to_self",
 };
 
 const ACTION_PAYLOAD_MODE_STATE_KEY_BY_STATE_KEY: Record<string, string> = {
@@ -211,6 +203,23 @@ function actionDescriptorForRole(resultData: Record<string, unknown>, role: stri
   return null;
 }
 
+function actionLabelForRole(
+  resultData: Record<string, unknown>,
+  role: string
+): { label: string; labelKey: string } | null {
+  const roleNorm = String(role || "").trim().toLowerCase();
+  if (!roleNorm) return null;
+  const actions = actionContractActionsForResult(resultData);
+  for (const action of actions) {
+    if (String(action.role || "").trim().toLowerCase() !== roleNorm) continue;
+    return {
+      label: stripInlineText(String(action.label || "")).trim(),
+      labelKey: String(action.label_key || "").trim(),
+    };
+  }
+  return null;
+}
+
 function actionCodeForRole(resultData: Record<string, unknown>, role: string): string {
   return actionDescriptorForRole(resultData, role)?.actionCode || "";
 }
@@ -226,10 +235,9 @@ export function resolveActionCodeForStateKey(
 ): string {
   const state = toRecord(stateRaw);
   const role = actionRoleForStateKey(stateKey);
-  if (role) {
-    const actionCodeFromContract = actionCodeForRole(resultData, role);
-    if (actionCodeFromContract) return actionCodeFromContract;
-  }
+  if (!role) return "";
+  const actionCodeFromContract = actionCodeForRole(resultData, role);
+  if (actionCodeFromContract) return actionCodeFromContract;
   return String(state[stateKey] || "").trim();
 }
 
@@ -249,13 +257,14 @@ export function resolveActionPayloadModeForStateKey(
 }
 
 function choiceActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
-  return actionContractActionsForResult(resultData).filter(
-    (action) => String(action.role || "").trim().toLowerCase() === "choice"
-  );
+  return actionContractActionsForResult(resultData).filter((action) => {
+    const role = String(action.role || "").trim().toLowerCase();
+    return role === "choice" || role === "dream_start_exercise";
+  });
 }
 
 function stepIndex(stepId: string): number {
-  const idx = ORDER.indexOf(stepId);
+  const idx = ORDER.indexOf(stepId as (typeof ORDER)[number]);
   return idx >= 0 ? idx : 0;
 }
 
@@ -452,7 +461,8 @@ function activeStepLabel(
 ): string {
   const explicitTitle = String(stepTitle || "").trim();
   if (explicitTitle) return explicitTitle;
-  if (stepId === "step_0") return uiText(lang, "stepLabel.validation", "");
+  const stepperLabel = stepperLabelForLang(stepId, lang);
+  if (stepperLabel) return stepperLabel;
   return extractStepTitle(stepId, lang);
 }
 
@@ -767,17 +777,12 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   if (!wrap) return;
   wrap.innerHTML = "";
 
-  const state = (resultData?.state as Record<string, unknown>) || {};
-  const uiPayload = toRecord(resultData?.ui);
+  const state = toRecord(resultData?.state);
+  const lang = uiLang(state);
   const structuredActions = choiceActionsForResult(resultData);
   const _unusedChoices = Array.isArray(choices) ? choices : [];
   void _unusedChoices;
-  const lang = uiLang(state);
   if (structuredActions.length === 0) {
-    const hasLegacyActions = Array.isArray(uiPayload.actions) && uiPayload.actions.length > 0;
-    if (hasLegacyActions) {
-      setInlineNotice(uiText(lang, "error.contract.body", ""));
-    }
     wrap.style.display = "none";
     return;
   }
@@ -1053,7 +1058,7 @@ export function render(overrideToolOutput?: unknown): void {
       uiSubtitle.textContent = "";
       (uiSubtitle as HTMLElement).style.display = "none";
     }
-    if (sectionTitleEl) sectionTitleEl.textContent = uiText(lang, "sectionTitle.step_0", "");
+    if (sectionTitleEl) sectionTitleEl.textContent = getSectionTitle(lang, "step_0", "");
     (btnStart as HTMLElement).style.display = "inline-flex";
     startHint.textContent = uiText(lang, "startHint", "");
     (startHint as HTMLElement).style.display = startHint.textContent ? "block" : "none";
@@ -1102,9 +1107,7 @@ export function render(overrideToolOutput?: unknown): void {
   const idx = stepIndex(current);
   const stepTitle = serverExplicitWaiting
     ? ""
-    : current === "step_0"
-      ? uiText(lang, "stepLabel.validation", "")
-      : extractStepTitle(current, lang);
+    : stepperLabelForLang(current, lang) || extractStepTitle(current, lang);
   buildStepper(idx, stepTitle, lang);
   if (badge) badge.textContent = String(idx + 1).padStart(2, "0");
 
@@ -1155,7 +1158,7 @@ export function render(overrideToolOutput?: unknown): void {
 
   if (sectionTitleEl) {
     if (showPreStart && current === "step_0") {
-      sectionTitleEl.textContent = uiText(lang, "sectionTitle.step_0", "");
+      sectionTitleEl.textContent = getSectionTitle(lang, "step_0", "");
     } else if (!showPreStart && current !== "step_0" && showStepIntroChrome) {
       const businessName = String((state?.business_name || "")).trim();
       sectionTitleEl.textContent = getSectionTitle(lang, current, businessName);
@@ -1419,9 +1422,18 @@ export function render(overrideToolOutput?: unknown): void {
     }
     inputWrap.style.display = "none";
     const btnSelfDream = document.getElementById("btnSwitchToSelfDream");
+    const switchToSelfActionCode = actionCodeForRole(result, "dream_switch_to_self");
+    const switchToSelfLabel = actionLabelForRole(result, "dream_switch_to_self");
     if (btnSelfDream) {
-      (btnSelfDream as HTMLElement).style.display = "inline-flex";
-      btnSelfDream.textContent = t(lang, "btnSwitchToSelfDream");
+      (btnSelfDream as HTMLElement).style.display = switchToSelfActionCode ? "inline-flex" : "none";
+      btnSelfDream.textContent =
+        switchToSelfLabel?.label ||
+        (switchToSelfLabel?.labelKey ? t(lang, switchToSelfLabel.labelKey) : t(lang, "btnSwitchToSelfDream"));
+      (btnSelfDream as HTMLButtonElement).disabled = getIsLoading();
+      (btnSelfDream as HTMLButtonElement).onclick = () => {
+        if (!switchToSelfActionCode || getIsLoading()) return;
+        callRunStep(switchToSelfActionCode);
+      };
     }
 
     const scoringPanelEl = document.getElementById("scoringPanel");
@@ -1765,7 +1777,6 @@ export function render(overrideToolOutput?: unknown): void {
   if (!showTextSubmit || disableTextSubmit) setSendEnabled(false);
   const sde = document.getElementById("btnStartDreamExercise");
   const sb = document.getElementById("btnSwitchToSelfDream");
-
   if (choiceMode) {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "flex";
@@ -1801,8 +1812,8 @@ export function render(overrideToolOutput?: unknown): void {
         active_specialist: activeSpecialist,
         "specialist.action": String(specialist.action || ""),
         promptRaw200: (promptRaw || "").slice(0, 200),
-              choicesLength: choicesArr.length,
-              choiceLabels: choicesArr.map((c) => c.label),
+        choicesLength: structuredActions.length,
+        choiceLabels: structuredActions.map((action) => String(action.label || "").trim()).filter(Boolean),
         isDreamStepPreExercise,
         isDreamExplainerMode,
         isLoading: getIsLoading(),

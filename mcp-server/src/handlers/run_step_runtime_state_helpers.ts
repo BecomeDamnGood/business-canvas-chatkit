@@ -5,6 +5,7 @@ import {
 } from "../core/state.js";
 import { resolveSpecialistSupportFamily } from "../core/stuck_support.js";
 import {
+  formatStepSectionTitle,
   hasGroupedCompareListSemantics,
   isInteractiveSupportStep,
 } from "../steps/step_registry.js";
@@ -171,10 +172,11 @@ export function createRunStepRuntimeStateHelpers(deps: CreateRunStepRuntimeState
     state: CanvasState | null | undefined,
     companyName: string
   ): string {
-    const key = "sectionTitle.rulesofthegameOf";
-    const fallback = deps.uiDefaultString(key);
-    const template = localizedUiString(state, key, fallback);
-    const rendered = String(template || "").replace(/\{0\}/g, companyName).trim();
+    const rendered = formatStepSectionTitle({
+      stepId: deps.rulesofthegameStepId,
+      businessName: companyName,
+      getString: (key) => localizedUiString(state, key, deps.uiDefaultString(key)),
+    }).trim();
     if (!rendered) return "";
     const base = rendered.replace(/[.!?。！？]+$/g, "").replace(/\s*:\s*$/g, "").trim();
     return base ? `${base}:` : "";

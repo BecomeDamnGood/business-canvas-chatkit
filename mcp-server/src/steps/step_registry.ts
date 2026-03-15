@@ -18,6 +18,7 @@ export type StepRegistryListSemantics = "none" | "grouped_compare";
 export type StepRegistryWordingFamily = "none" | "single_value" | "grouped_list";
 export type StepRegistrySupportFamily = "none" | "interactive_step";
 export type StepRegistryPresentationMode = "bootstrap" | "interactive" | "presentation";
+export type StepRegistrySectionTitleMode = "plain_key" | "business_name_template" | "presentation_key";
 export type StepRegistryChooseForMeMode = "suggestions" | "examples";
 export type StepRegistryChooseForMeItemKind = "sentence" | "phrase" | "multiline_list";
 export type StepRegistryChooseForMeField =
@@ -41,6 +42,12 @@ export type StepRegistryChooseForMe = {
 export type StepRegistryEntry = {
   stepId: StepRegistryStepId;
   orderIndex: number;
+  titleKey: string;
+  stepperLabelKey: string;
+  sectionTitleMode: StepRegistrySectionTitleMode;
+  sectionTitleKey: string;
+  sectionTitleWithBusinessKey: string;
+  sectionTitleWithoutBusinessKey: string;
   finalField: string;
   specialistId: string;
   stepKind: StepRegistryStepKind;
@@ -59,6 +66,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   step_0: {
     stepId: "step_0",
     orderIndex: 0,
+    titleKey: "title.step_0",
+    stepperLabelKey: "stepLabel.validation",
+    sectionTitleMode: "plain_key",
+    sectionTitleKey: "sectionTitle.step_0",
+    sectionTitleWithBusinessKey: "",
+    sectionTitleWithoutBusinessKey: "",
     finalField: "step_0_final",
     specialistId: "ValidationAndBusinessName",
     stepKind: "bootstrap",
@@ -71,6 +84,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   dream: {
     stepId: "dream",
     orderIndex: 1,
+    titleKey: "title.dream",
+    stepperLabelKey: "title.dream",
+    sectionTitleMode: "plain_key",
+    sectionTitleKey: "sectionTitle.dream",
+    sectionTitleWithBusinessKey: "",
+    sectionTitleWithoutBusinessKey: "",
     finalField: "dream_final",
     specialistId: "Dream",
     stepKind: "single_value",
@@ -91,6 +110,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   purpose: {
     stepId: "purpose",
     orderIndex: 2,
+    titleKey: "title.purpose",
+    stepperLabelKey: "title.purpose",
+    sectionTitleMode: "business_name_template",
+    sectionTitleKey: "",
+    sectionTitleWithBusinessKey: "sectionTitle.purposeOf",
+    sectionTitleWithoutBusinessKey: "sectionTitle.purposeOfFuture",
     finalField: "purpose_final",
     specialistId: "Purpose",
     stepKind: "single_value",
@@ -111,6 +136,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   bigwhy: {
     stepId: "bigwhy",
     orderIndex: 3,
+    titleKey: "title.bigwhy",
+    stepperLabelKey: "title.bigwhy",
+    sectionTitleMode: "business_name_template",
+    sectionTitleKey: "",
+    sectionTitleWithBusinessKey: "sectionTitle.bigwhyOf",
+    sectionTitleWithoutBusinessKey: "sectionTitle.bigwhyOfFuture",
     finalField: "bigwhy_final",
     specialistId: "BigWhy",
     stepKind: "single_value",
@@ -131,6 +162,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   role: {
     stepId: "role",
     orderIndex: 4,
+    titleKey: "title.role",
+    stepperLabelKey: "title.role",
+    sectionTitleMode: "business_name_template",
+    sectionTitleKey: "",
+    sectionTitleWithBusinessKey: "sectionTitle.roleOf",
+    sectionTitleWithoutBusinessKey: "sectionTitle.roleOfFuture",
     finalField: "role_final",
     specialistId: "Role",
     stepKind: "single_value",
@@ -151,6 +188,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   entity: {
     stepId: "entity",
     orderIndex: 5,
+    titleKey: "title.entity",
+    stepperLabelKey: "title.entity",
+    sectionTitleMode: "business_name_template",
+    sectionTitleKey: "",
+    sectionTitleWithBusinessKey: "sectionTitle.entityOf",
+    sectionTitleWithoutBusinessKey: "sectionTitle.entityOfFuture",
     finalField: "entity_final",
     specialistId: "Entity",
     stepKind: "single_value",
@@ -171,6 +214,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   strategy: {
     stepId: "strategy",
     orderIndex: 6,
+    titleKey: "title.strategy",
+    stepperLabelKey: "title.strategy",
+    sectionTitleMode: "business_name_template",
+    sectionTitleKey: "",
+    sectionTitleWithBusinessKey: "sectionTitle.strategyOf",
+    sectionTitleWithoutBusinessKey: "sectionTitle.strategyOfFuture",
     finalField: "strategy_final",
     specialistId: "Strategy",
     stepKind: "list_value",
@@ -191,6 +240,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   targetgroup: {
     stepId: "targetgroup",
     orderIndex: 7,
+    titleKey: "title.targetgroup",
+    stepperLabelKey: "title.targetgroup",
+    sectionTitleMode: "business_name_template",
+    sectionTitleKey: "",
+    sectionTitleWithBusinessKey: "sectionTitle.targetgroupOf",
+    sectionTitleWithoutBusinessKey: "sectionTitle.targetgroupOfFuture",
     finalField: "targetgroup_final",
     specialistId: "TargetGroup",
     stepKind: "single_value",
@@ -203,6 +258,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   productsservices: {
     stepId: "productsservices",
     orderIndex: 8,
+    titleKey: "title.productsservices",
+    stepperLabelKey: "title.productsservices",
+    sectionTitleMode: "business_name_template",
+    sectionTitleKey: "",
+    sectionTitleWithBusinessKey: "sectionTitle.productsservicesOf",
+    sectionTitleWithoutBusinessKey: "sectionTitle.productsservicesOfFuture",
     finalField: "productsservices_final",
     specialistId: "ProductsServices",
     stepKind: "list_value",
@@ -215,6 +276,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   rulesofthegame: {
     stepId: "rulesofthegame",
     orderIndex: 9,
+    titleKey: "title.rulesofthegame",
+    stepperLabelKey: "title.rulesofthegame",
+    sectionTitleMode: "business_name_template",
+    sectionTitleKey: "",
+    sectionTitleWithBusinessKey: "sectionTitle.rulesofthegameOf",
+    sectionTitleWithoutBusinessKey: "sectionTitle.rulesofthegameOfFuture",
     finalField: "rulesofthegame_final",
     specialistId: "RulesOfTheGame",
     stepKind: "list_value",
@@ -227,6 +294,12 @@ export const STEP_REGISTRY_BY_STEP_ID = {
   presentation: {
     stepId: "presentation",
     orderIndex: 10,
+    titleKey: "title.presentation",
+    stepperLabelKey: "title.presentation",
+    sectionTitleMode: "presentation_key",
+    sectionTitleKey: "sectionTitle.presentation",
+    sectionTitleWithBusinessKey: "",
+    sectionTitleWithoutBusinessKey: "",
     finalField: "presentation_brief_final",
     specialistId: "Presentation",
     stepKind: "presentation",
@@ -257,6 +330,37 @@ export const CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES: readonly StepRegistryChooseFor
 
 export function getChooseForMeActionCodeForStep(stepId: string): string {
   return getChooseForMeRegistryEntry(stepId)?.chooseForMe.actionCode || "";
+}
+
+export function getStepTitleKey(stepId: string): string {
+  return getStepRegistryEntry(stepId)?.titleKey || "";
+}
+
+export function getStepStepperLabelKey(stepId: string): string {
+  return getStepRegistryEntry(stepId)?.stepperLabelKey || "";
+}
+
+function hasKnownBusinessName(rawBusinessName: string | null | undefined): boolean {
+  const businessName = String(rawBusinessName || "").trim();
+  return Boolean(businessName) && businessName !== "TBD";
+}
+
+export function formatStepSectionTitle(params: {
+  stepId: string;
+  businessName?: string | null;
+  getString: (key: string) => string;
+}): string {
+  const entry = getStepRegistryEntry(params.stepId);
+  if (!entry) return "";
+  if (entry.sectionTitleMode === "business_name_template") {
+    const businessName = String(params.businessName || "").trim();
+    if (hasKnownBusinessName(businessName)) {
+      const template = String(params.getString(entry.sectionTitleWithBusinessKey) || "").trim();
+      if (template) return template.replace(/\{0\}/g, businessName);
+    }
+    return String(params.getString(entry.sectionTitleWithoutBusinessKey) || "").trim();
+  }
+  return String(params.getString(entry.sectionTitleKey) || "").trim();
 }
 
 export function getChooseForMeRouteTokenForStep(stepId: string): string {

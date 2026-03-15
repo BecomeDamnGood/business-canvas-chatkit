@@ -2,22 +2,17 @@
  * SSOT UI constants and key-based i18n helpers.
  * UI copy is sourced from server-provided state.ui_strings only.
  */
+import {
+  STEP_REGISTRY_ORDER,
+  formatStepSectionTitle,
+  getStepRegistryEntry,
+  getStepStepperLabelKey,
+  getStepTitleKey,
+} from "../../src/steps/step_registry.js";
 
 export const STRATEGY_STEP_ID = "strategy";
 
-export const ORDER = [
-  "step_0",
-  "dream",
-  "purpose",
-  "bigwhy",
-  "role",
-  "entity",
-  "strategy",
-  "targetgroup",
-  "productsservices",
-  "rulesofthegame",
-  "presentation",
-];
+export const ORDER = [...STEP_REGISTRY_ORDER];
 
 export type PrestartContent = {
   headline: string;
@@ -159,10 +154,11 @@ const CRITICAL_PRESTART_KEYS = [
   "prestart.meta.time.value",
 ];
 
+const STEP0_REGISTRY_ENTRY = getStepRegistryEntry("step_0");
 const CRITICAL_UI_KEYS_STEP0_SET = new Set<string>([
-  "title.step_0",
-  "stepLabel.validation",
-  "sectionTitle.step_0",
+  STEP0_REGISTRY_ENTRY?.titleKey || "title.step_0",
+  STEP0_REGISTRY_ENTRY?.stepperLabelKey || "stepLabel.validation",
+  STEP0_REGISTRY_ENTRY?.sectionTitleKey || "sectionTitle.step_0",
   "uiSubtitle",
   "uiUseWidgetToContinue",
   "startHint",
@@ -214,9 +210,15 @@ export function t(_lang: string | null | undefined, key: string): string {
 export function titlesForLang(lang: string | null | undefined): Record<string, string> {
   const titles: Record<string, string> = {};
   for (const step of ORDER) {
-    titles[step] = t(lang, "title." + step);
+    const titleKey = getStepTitleKey(step);
+    titles[step] = titleKey ? t(lang, titleKey) : "";
   }
   return titles;
+}
+
+export function stepperLabelForLang(stepId: string, lang: string | null | undefined): string {
+  const key = getStepStepperLabelKey(stepId);
+  return key ? t(lang, key) : "";
 }
 
 export function prestartWelcomeForLang(lang: string | null | undefined): string {
@@ -285,34 +287,11 @@ export function getSectionTitle(
   stepId: string,
   businessName: string | null | undefined
 ): string {
-  if (stepId === "step_0") return t(lang, "title.step_0");
-  if (stepId === "dream") return t(lang, "sectionTitle.dream");
-  if (stepId === "presentation") return t(lang, "sectionTitle.presentation");
-
-  const hasBusinessName =
-    businessName &&
-    String(businessName).trim() !== "" &&
-    String(businessName).trim() !== "TBD";
-
-  const stepsWithCompany = new Set([
-    "purpose",
-    "bigwhy",
-    "role",
-    "entity",
-    "strategy",
-    "targetgroup",
-    "productsservices",
-    "rulesofthegame",
-  ]);
-
-  if (stepsWithCompany.has(stepId)) {
-    const template = t(lang, "sectionTitle." + stepId + "Of");
-    const noName = t(lang, "sectionTitle." + stepId + "OfFuture");
-    if (hasBusinessName && template) return template.replace(/\{0\}/g, String(businessName).trim());
-    return noName;
-  }
-
-  return t(lang, "title." + stepId);
+  return formatStepSectionTitle({
+    stepId,
+    businessName,
+    getString: (key) => t(lang, key),
+  });
 }
 
 export const CRITICAL_UI_KEYS_STEP0: string[] = [...CRITICAL_UI_KEYS_STEP0_SET];

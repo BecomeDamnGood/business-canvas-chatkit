@@ -24,7 +24,12 @@ import {
   purposeStepVideoUrlForLang,
   bigWhyStepVideoUrlForLang,
   roleStepVideoUrlForLang,
+  getSectionTitle,
+  setRuntimeUiStrings,
+  stepperLabelForLang,
+  titlesForLang,
 } from "../ui/lib/ui_constants.js";
+import { STEP_REGISTRY_ORDER } from "./steps/step_registry.js";
 
 test("shouldSuppressMainCardForWordingChoice suppresses the main card for wording-choice view variants", () => {
   assert.equal(
@@ -164,10 +169,10 @@ test("resolveActionCodeForStateKey falls back to action contract when lean state
   assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_start"), "ACTION_START");
 });
 
-test("resolveActionCodeForStateKey keeps state fallback when action contract is absent", () => {
+test("resolveActionCodeForStateKey does not fall back to legacy non-transport state keys", () => {
   assert.equal(
     resolveActionCodeForStateKey({}, { ui_action_dream_switch_to_self: "__ROUTE__DREAM_SWITCH_TO_SELF__" }, "ui_action_dream_switch_to_self"),
-    "__ROUTE__DREAM_SWITCH_TO_SELF__"
+    ""
   );
 });
 
@@ -272,6 +277,75 @@ test("dreamExerciseButtonLabelKeyForState switches to resume copy when Dream Bui
     }),
     "dreamBuilder.resumeExercise"
   );
+});
+
+test("titlesForLang exposes unnumbered step titles while stepper labels keep current UX", () => {
+  setRuntimeUiStrings({
+    "title.step_0": "Validation & Business Name",
+    "title.dream": "Dream",
+    "title.purpose": "Purpose",
+    "title.bigwhy": "Big Why",
+    "title.role": "Role",
+    "title.entity": "Entity",
+    "title.strategy": "Strategy",
+    "title.targetgroup": "Target Group",
+    "title.productsservices": "Products and Services",
+    "title.rulesofthegame": "Rules of the game",
+    "title.presentation": "Presentation",
+    "stepLabel.validation": "Validation",
+  });
+
+  const titles = titlesForLang("en");
+  assert.deepEqual(Object.keys(titles), [...STEP_REGISTRY_ORDER]);
+  assert.equal(titles.step_0, "Validation & Business Name");
+  assert.equal(titles.dream, "Dream");
+  assert.equal(stepperLabelForLang("step_0", "en"), "Validation");
+  assert.equal(stepperLabelForLang("dream", "en"), "Dream");
+});
+
+test("getSectionTitle preserves section title behavior for step_0, dream, presentation and business-name steps", () => {
+  setRuntimeUiStrings({
+    "sectionTitle.step_0": "Validation & Business Name",
+    "sectionTitle.dream": "Your Dream",
+    "sectionTitle.presentation": "Create your Presentation",
+    "sectionTitle.purposeOf": "The Purpose of {0}",
+    "sectionTitle.purposeOfFuture": "The Purpose of my future company",
+  });
+
+  assert.equal(getSectionTitle("en", "step_0", "Mindd"), "Validation & Business Name");
+  assert.equal(getSectionTitle("en", "dream", "Mindd"), "Your Dream");
+  assert.equal(getSectionTitle("en", "presentation", "Mindd"), "Create your Presentation");
+  assert.equal(getSectionTitle("en", "purpose", "Mindd"), "The Purpose of Mindd");
+  assert.equal(getSectionTitle("en", "purpose", "TBD"), "The Purpose of my future company");
+  assert.equal(getSectionTitle("en", "purpose", ""), "The Purpose of my future company");
+});
+
+test("registry-derived title helpers preserve nl and es business-name section title behavior", () => {
+  setRuntimeUiStrings({
+    "title.dream": "Droom",
+    "title.purpose": "Bestaansreden",
+    "stepLabel.validation": "Validatie",
+    "sectionTitle.step_0": "Validatie & Bedrijfsnaam",
+    "sectionTitle.purposeOf": "De bestaansreden van {0}",
+    "sectionTitle.purposeOfFuture": "De bestaansreden van je toekomstige bedrijf",
+  });
+  assert.equal(stepperLabelForLang("step_0", "nl"), "Validatie");
+  assert.equal(stepperLabelForLang("dream", "nl"), "Droom");
+  assert.equal(getSectionTitle("nl", "purpose", "Mindd"), "De bestaansreden van Mindd");
+  assert.equal(getSectionTitle("nl", "purpose", "TBD"), "De bestaansreden van je toekomstige bedrijf");
+
+  setRuntimeUiStrings({
+    "title.dream": "Sueño",
+    "title.purpose": "Razón de ser",
+    "stepLabel.validation": "Validación",
+    "sectionTitle.step_0": "Validación y nombre del negocio",
+    "sectionTitle.purposeOf": "La razón de ser de {0}",
+    "sectionTitle.purposeOfFuture": "La razón de ser de tu futura empresa",
+  });
+  assert.equal(stepperLabelForLang("step_0", "es"), "Validación");
+  assert.equal(stepperLabelForLang("dream", "es"), "Sueño");
+  assert.equal(getSectionTitle("es", "purpose", "Mindd"), "La razón de ser de Mindd");
+  assert.equal(getSectionTitle("es", "purpose", ""), "La razón de ser de tu futura empresa");
 });
 
 test("shouldRetainDreamScoringClientScores only keeps the buffer while dream scoring is still visible", () => {

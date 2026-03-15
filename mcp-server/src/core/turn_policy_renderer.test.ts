@@ -53,6 +53,57 @@ test("strategy wording-pick render always appends canonical bullet context and n
   );
 });
 
+test("strategy confirm render exposes consolidate action when focus points overflow", () => {
+  const statements = [
+    "Focus op het ontwikkelen van concepten die mensen inspireren tot zelfontplooiing",
+    "Selectief zijn in het aannemen van opdrachten die aansluiten bij de eigen waarden",
+    "Kwaliteit en diepgang altijd boven snelheid of volume stellen",
+    "Samenwerken met klanten die passen bij de waarden en energie van Mindd",
+    "Ruimte houden voor experiment en vernieuwing in elk traject",
+    "Meetbare strategische impact als vast onderdeel van elk voorstel",
+    "Voorkeur geven aan langdurige samenwerkingen boven losse projecten",
+    "Expliciet kiezen voor klanten met maatschappelijke relevantie",
+  ];
+
+  const state = getDefaultState();
+  (state as any).current_step = "strategy";
+  (state as any).active_specialist = "Strategy";
+  (state as any).business_name = "Mindd";
+  (state as any).provisional_by_step = { strategy: statements.join("\n") };
+  (state as any).provisional_source_by_step = { strategy: "user_input" };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "strategy",
+    state,
+    specialist: {
+      action: "ASK",
+      ui_contract_id: buildUiContractId("strategy", "valid_output", "STRATEGY_MENU_CONFIRM"),
+      question: "Klopt deze strategie voor Mindd?",
+      message: statements.join("\n"),
+      strategy: statements.join("\n"),
+      refined_formulation: statements.join("\n"),
+      statements,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(
+    rendered.uiActionCodes.includes("ACTION_STRATEGY_CONSOLIDATE"),
+    true,
+    "bundel/consolidate moet beschikbaar zijn bij meer dan 7 focuspunten"
+  );
+  assert.equal(
+    rendered.uiActionCodes.includes("ACTION_STRATEGY_REFINE_EXPLAIN_MORE"),
+    false,
+    "refine/explain-more moet verborgen blijven terwijl consolidate actief is"
+  );
+  assert.equal(
+    rendered.uiActionCodes.includes("ACTION_STRATEGY_CONFIRM_SATISFIED"),
+    true,
+    "bevestig/ga door moet beschikbaar blijven in het confirm-menu"
+  );
+});
+
 test("strategy pending wording-choice render does not append canonical context block", () => {
   const state = getDefaultState();
   const statements = [
