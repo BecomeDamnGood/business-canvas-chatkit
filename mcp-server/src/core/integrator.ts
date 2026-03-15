@@ -1,5 +1,6 @@
 // src/core/integrator.ts
 import { z } from "zod";
+import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 import type { CanvasState, BoolString } from "./state.js";
 
 /**
@@ -31,23 +32,30 @@ export type RenderedOutput = {
   };
 };
 
-const SESSION_INTRO =
-  `Build a complete Business Model and Strategy Canvas step by step.
+function sessionIntroForState(state: CanvasState): string {
+  const headline = resolveUiStringForState(state as Record<string, unknown>, "prestart.headline", "");
+  const provenTitle = resolveUiStringForState(state as Record<string, unknown>, "prestart.proven.title", "");
+  const provenBody = resolveUiStringForState(state as Record<string, unknown>, "prestart.proven.body", "");
+  const outcomesTitle = resolveUiStringForState(state as Record<string, unknown>, "prestart.outcomes.title", "");
+  const outcome1 = resolveUiStringForState(state as Record<string, unknown>, "prestart.outcomes.item1", "");
+  const outcome2 = resolveUiStringForState(state as Record<string, unknown>, "prestart.outcomes.item2", "");
+  const outcome3 = resolveUiStringForState(state as Record<string, unknown>, "prestart.outcomes.item3", "");
+  const howLabel = resolveUiStringForState(state as Record<string, unknown>, "prestart.meta.how.label", "");
+  const howValue = resolveUiStringForState(state as Record<string, unknown>, "prestart.meta.how.value", "");
+  const timeLabel = resolveUiStringForState(state as Record<string, unknown>, "prestart.meta.time.label", "");
+  const timeValue = resolveUiStringForState(state as Record<string, unknown>, "prestart.meta.time.value", "");
 
-<strong>The Proven Standard</strong>
-A globally implemented strategy canvas used by teams worldwide, built through Ben Steenstra's unique step-by-step method of questioning and structured development.
-
-<strong>By the end you'll have</strong><ul>
-<li>A focused canvas that fits on one page</li>
-<li>A presentation you can use immediately (PPTX)</li>
-<li>A plan your team can align around</li>
-</ul><strong>How it works</strong>
-One question at a time. Clear input, structured output.
-
-<strong>Time</strong>
-Estimated time: 10–15 minutes.`;
-
-
+  return [
+    headline,
+    `<strong>${provenTitle}</strong>\n${provenBody}`,
+    `<strong>${outcomesTitle}</strong><ul>\n<li>${outcome1}</li>\n<li>${outcome2}</li>\n<li>${outcome3}</li>\n</ul>`,
+    `<strong>${howLabel}</strong>\n${howValue}`,
+    `<strong>${timeLabel}</strong>\n${timeValue}.`,
+  ]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
 
 function normalizeLineBreaks(s: string): string {
   return String(s ?? "").replace(/\r\n/g, "\n").trim();
@@ -92,7 +100,11 @@ export function integrateUserFacingOutput(params: {
 
   // Fallback if specialist is missing/unparseable
   if (!parsed.success) {
-    const fallback = "What would you like to do next?";
+    const fallback = resolveUiStringForState(
+      params.state as Record<string, unknown>,
+      "integrator.next_prompt",
+      ""
+    );
     return { text: fallback, debug: { rendered_parts: [{ key: "fallback", value: fallback }] } };
   }
 
@@ -101,7 +113,7 @@ export function integrateUserFacingOutput(params: {
   // Session intro (1× per session) - extra guard using state.intro_shown_session
   const introAlreadyShown = String((params.state as any).intro_shown_session ?? "") === "true";
   if (params.show_session_intro === "true" && !introAlreadyShown) {
-    addPart(parts, debugParts, "session_intro", SESSION_INTRO);
+    addPart(parts, debugParts, "session_intro", sessionIntroForState(params.state));
   }
 
   // Specialist fields (block mode preserves line breaks)

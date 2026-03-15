@@ -1192,6 +1192,274 @@ test("callRunStep keeps accepted canonical step continuity in outbound state whe
   }
 });
 
+test("handleToolResultAndMaybeScheduleBootstrapRetry preserves choose-for-me snapshot when a later payload omits it", { concurrency: false }, () => {
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  const originalLastToolOutput = (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  try {
+    const host = {
+      widgetState: {} as Record<string, unknown>,
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+    };
+    (globalThis as unknown as { openai?: unknown }).openai = host;
+    initActionsConfig({
+      render: () => {},
+      t: () => "",
+    });
+
+    handleToolResultAndMaybeScheduleBootstrapRetry({
+      _meta: {
+        widget_result: {
+          current_step_id: "dream",
+          state: {
+            current_step: "dream",
+            bootstrap_session_id: "sess-1",
+            bootstrap_epoch: 1,
+            response_seq: 1,
+            host_widget_session_id: "host-1",
+            suggestion_state_by_step: {
+              dream: {
+                items: ["Mindd droomt van een wereld waarin creativiteit mensen verbindt."],
+                mode: "suggestions",
+                valid_for_action_codes: ["ACTION_DREAM_SUGGESTIONS_PICK_ONE"],
+              },
+            },
+          },
+          ui: {
+            view: {
+              mode: "interactive",
+            },
+          },
+          specialist: {
+            message: "Rendered suggestions screen",
+          },
+        },
+      },
+    });
+
+    handleToolResultAndMaybeScheduleBootstrapRetry({
+      _meta: {
+        widget_result: {
+          current_step_id: "dream",
+          state: {
+            current_step: "dream",
+            bootstrap_session_id: "sess-1",
+            bootstrap_epoch: 1,
+            response_seq: 2,
+            host_widget_session_id: "host-1",
+          },
+          ui: {
+            view: {
+              mode: "interactive",
+            },
+          },
+          specialist: {
+            message: "Rendered follow-up without snapshot",
+          },
+        },
+      },
+    });
+
+    assert.deepEqual((widgetState().suggestion_state_by_step || {}) as Record<string, unknown>, {
+      dream: {
+        items: ["Mindd droomt van een wereld waarin creativiteit mensen verbindt."],
+        mode: "suggestions",
+        valid_for_action_codes: ["ACTION_DREAM_SUGGESTIONS_PICK_ONE"],
+      },
+    });
+  } finally {
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalLatest === undefined) delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+    else (globalThis as Record<string, unknown>).__BSC_LATEST__ = originalLatest;
+    if (originalLastToolOutput === undefined) delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+    else (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = originalLastToolOutput;
+  }
+});
+
+test("handleToolResultAndMaybeScheduleBootstrapRetry clears choose-for-me snapshot when the server sends an explicit empty map", { concurrency: false }, () => {
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  const originalLastToolOutput = (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  try {
+    const host = {
+      widgetState: {} as Record<string, unknown>,
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+    };
+    (globalThis as unknown as { openai?: unknown }).openai = host;
+    initActionsConfig({
+      render: () => {},
+      t: () => "",
+    });
+
+    handleToolResultAndMaybeScheduleBootstrapRetry({
+      _meta: {
+        widget_result: {
+          current_step_id: "dream",
+          state: {
+            current_step: "dream",
+            bootstrap_session_id: "sess-1",
+            bootstrap_epoch: 1,
+            response_seq: 1,
+            host_widget_session_id: "host-1",
+            suggestion_state_by_step: {
+              dream: {
+                items: ["Mindd droomt van een wereld waarin creativiteit mensen verbindt."],
+                mode: "suggestions",
+                valid_for_action_codes: ["ACTION_DREAM_SUGGESTIONS_PICK_ONE"],
+              },
+            },
+          },
+          ui: {
+            view: {
+              mode: "interactive",
+            },
+          },
+          specialist: {
+            message: "Rendered suggestions screen",
+          },
+        },
+      },
+    });
+
+    handleToolResultAndMaybeScheduleBootstrapRetry({
+      _meta: {
+        widget_result: {
+          current_step_id: "dream",
+          state: {
+            current_step: "dream",
+            bootstrap_session_id: "sess-1",
+            bootstrap_epoch: 1,
+            response_seq: 2,
+            host_widget_session_id: "host-1",
+            suggestion_state_by_step: {},
+          },
+          ui: {
+            view: {
+              mode: "interactive",
+            },
+          },
+          specialist: {
+            message: "Rendered follow-up with explicit snapshot clear",
+          },
+        },
+      },
+    });
+
+    assert.equal((widgetState() as Record<string, unknown>).suggestion_state_by_step, undefined);
+  } finally {
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalLatest === undefined) delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+    else (globalThis as Record<string, unknown>).__BSC_LATEST__ = originalLatest;
+    if (originalLastToolOutput === undefined) delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+    else (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = originalLastToolOutput;
+  }
+});
+
+test("callRunStep keeps choose-for-me snapshot in outbound state when latest render omitted it", { concurrency: false }, async () => {
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
+  const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
+  const originalLastToolOutput = (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+  const originalWindow = (globalThis as unknown as { window?: unknown }).window;
+  setIsLoading(false);
+  try {
+    let capturedPayload: Record<string, unknown> | null = null;
+    const host = {
+      widgetState: {
+        started: "true",
+        current_step: "dream",
+        bootstrap_session_id: "sess-1",
+        bootstrap_epoch: 1,
+        response_seq: 5,
+        host_widget_session_id: "host-1",
+        suggestion_state_by_step: {
+          dream: {
+            items: ["Mindd droomt van een wereld waarin creativiteit mensen verbindt."],
+            mode: "suggestions",
+            valid_for_action_codes: ["ACTION_DREAM_SUGGESTIONS_PICK_ONE"],
+          },
+        },
+      } as Record<string, unknown>,
+      setWidgetState(next: Record<string, unknown>) {
+        this.widgetState = next;
+      },
+      async callTool(_name: string, args: unknown) {
+        capturedPayload = args as Record<string, unknown>;
+        return {
+          _meta: {
+            widget_result: {
+              current_step_id: "dream",
+              state: {
+                current_step: "dream",
+                bootstrap_session_id: "sess-1",
+                bootstrap_epoch: 1,
+                response_seq: 6,
+                host_widget_session_id: "host-1",
+              },
+            },
+          },
+        };
+      },
+    };
+    (globalThis as unknown as { openai?: unknown }).openai = host;
+    (globalThis as unknown as { document?: unknown }).document = {
+      getElementById() {
+        return null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+    };
+    (globalThis as unknown as { window?: unknown }).window = undefined;
+    (globalThis as Record<string, unknown>).__BSC_LATEST__ = {
+      state: {
+        current_step: "dream",
+        bootstrap_session_id: "sess-1",
+        bootstrap_epoch: 1,
+        response_seq: 5,
+        host_widget_session_id: "host-1",
+      },
+      lang: "nl",
+    };
+    initActionsConfig({
+      render: () => {},
+      t: () => "",
+    });
+
+    await callRunStep("ACTION_DREAM_SUGGESTIONS_PICK_ONE");
+
+    assert.ok(capturedPayload);
+    assert.deepEqual(
+      ((capturedPayload?.state || {}) as Record<string, unknown>).suggestion_state_by_step,
+      {
+        dream: {
+          items: ["Mindd droomt van een wereld waarin creativiteit mensen verbindt."],
+          mode: "suggestions",
+          valid_for_action_codes: ["ACTION_DREAM_SUGGESTIONS_PICK_ONE"],
+        },
+      }
+    );
+  } finally {
+    setIsLoading(false);
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
+    else (globalThis as unknown as { document?: unknown }).document = originalDocument;
+    if (originalWindow === undefined) delete (globalThis as unknown as { window?: unknown }).window;
+    else (globalThis as unknown as { window?: unknown }).window = originalWindow;
+    if (originalLatest === undefined) delete (globalThis as Record<string, unknown>).__BSC_LATEST__;
+    else (globalThis as Record<string, unknown>).__BSC_LATEST__ = originalLatest;
+    if (originalLastToolOutput === undefined) delete (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__;
+    else (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__ = originalLastToolOutput;
+  }
+});
+
 test("dream confirm advances to purpose when the server returns an accepted canonical widget payload", { concurrency: false }, async () => {
   const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
   const originalDocument = (globalThis as unknown as { document?: unknown }).document;

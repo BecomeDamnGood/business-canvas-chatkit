@@ -3,6 +3,7 @@ import {
   dropIncompatibleLastSpecialistResult,
   resolveStateLocaleAuthority,
 } from "./locale_continuity.js";
+import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 
 export async function runStepRuntimeExecute(
   rawArgs: unknown,
@@ -66,7 +67,10 @@ export async function runStepRuntimeExecute(
         category: "contract",
         severity: "fatal",
         retryable: false,
-        message: "Input validation error for run_step.",
+        message: resolveUiStringForState(
+          ingressParsed.blockedState as Record<string, unknown>,
+          "runtime.error.ingress_invalid"
+        ),
         retry_action: "restart_session",
         required_action: "restart_session",
         details: ingressParsed.issues,
@@ -177,7 +181,10 @@ export async function runStepRuntimeExecute(
         category: "contract",
         severity: "fatal",
         retryable: false,
-        message: "Session state version is newer than this server.",
+        message: resolveUiStringForState(
+          blockedState as Record<string, unknown>,
+          "runtime.error.session_state_newer"
+        ),
         retry_action: "restart_session",
         required_action: "restart_session",
       },

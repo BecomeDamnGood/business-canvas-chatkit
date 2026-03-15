@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 import { safeString } from "../server_safe_string.js";
 
 import { normalizeIdempotencyKey } from "./server_config.js";
@@ -287,7 +288,7 @@ function classifyRunStepExecutionError(err: any): RunStepErrorClassification {
       severity: "fatal",
       type: "contract_violation",
       retry_action: "restart_session",
-      user_message: "Sessie ongeldig, start opnieuw.",
+      user_message: String(UI_STRINGS_DEFAULT["server.error.contract_reset"] || ""),
       code: code || "contract_violation",
     };
   }
@@ -297,7 +298,7 @@ function classifyRunStepExecutionError(err: any): RunStepErrorClassification {
       severity: "transient",
       type: "infra_transient",
       retry_action: "retry_same_action",
-      user_message: "Probeer opnieuw.",
+      user_message: String(UI_STRINGS_DEFAULT["server.error.retry"] || ""),
       code: code || (status === 429 ? "rate_limited" : status === 408 ? "timeout" : "infra_transient"),
     };
   }
@@ -306,7 +307,7 @@ function classifyRunStepExecutionError(err: any): RunStepErrorClassification {
     severity: "fatal",
     type: "server_error",
     retry_action: "reload",
-    user_message: "Probeer opnieuw.",
+    user_message: String(UI_STRINGS_DEFAULT["server.error.retry"] || ""),
     code: code || "server_error",
   };
 }

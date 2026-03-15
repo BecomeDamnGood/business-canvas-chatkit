@@ -1362,7 +1362,14 @@ export function render(overrideToolOutput?: unknown): void {
   const statementsCountEl = document.getElementById("statementsCount");
   const statementsListEl = document.getElementById("statementsList");
   const specialistStatements = (result?.specialist as Record<string, unknown>)?.statements;
-  let statementsArray = Array.isArray(specialistStatements) ? (specialistStatements as string[]) : [];
+  const canonicalDreamStatements =
+    Array.isArray(state.dream_builder_statements) &&
+    (state.dream_builder_statements as unknown[]).length > 0
+      ? (state.dream_builder_statements as string[])
+      : [];
+  let statementsArray = canonicalDreamStatements.length > 0
+    ? canonicalDreamStatements
+    : (Array.isArray(specialistStatements) ? (specialistStatements as string[]) : []);
   const lastStatements = Array.isArray((lastSpecialist as { statements?: unknown[] }).statements)
     ? (lastSpecialist as { statements: unknown[] }).statements
     : [];
@@ -1373,11 +1380,8 @@ export function render(overrideToolOutput?: unknown): void {
   ) {
     if (lastStatements.length > 0) {
       statementsArray = lastStatements as string[];
-    } else if (
-      Array.isArray(state.dream_builder_statements) &&
-      (state.dream_builder_statements as unknown[]).length > 0
-    ) {
-      statementsArray = state.dream_builder_statements as string[];
+    } else if (canonicalDreamStatements.length > 0) {
+      statementsArray = canonicalDreamStatements;
     }
   }
 

@@ -269,6 +269,41 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
   }
 });
 
+test("buildTextForWidget keeps purpose discovery questions intact when examples-menu copy contains a question flow", () => {
+  const helpers = buildTextHelpers(() => "");
+  const output = helpers.buildTextForWidget({
+    specialist: {
+      ui_contract_id: "purpose:ASK:PURPOSE_MENU_EXAMPLES:v1",
+      message: [
+        "Het is heel begrijpelijk dat deze stap lastig kan zijn.",
+        "",
+        "De bestaansreden van een bedrijf is niet altijd direct duidelijk en vraagt soms om wat verdieping.",
+        "",
+        "Om je te helpen, kun je proberen antwoord te geven op deze drie punten:",
+        "",
+        "1. Wat raakt jou hier persoonlijk het meest en waarom?",
+        "2. Welke overtuiging moet waar zijn om dit na te blijven streven?",
+        "3. Welke menselijke behoefte wordt dan eindelijk beter vervuld?",
+      ].join("\n"),
+      refined_formulation: "",
+    },
+    state: {
+      active_specialist: "purpose",
+      current_step: "purpose",
+      ui_strings: {
+        "structuredSuggestions.outro.template": "Ik hoop dat deze suggesties je inspireren om je eigen {0} te schrijven.",
+      },
+    } as any,
+  });
+
+  assert.match(output, /^Het is heel begrijpelijk dat deze stap lastig kan zijn\./);
+  assert.match(output, /1\. Wat raakt jou hier persoonlijk het meest en waarom\?/);
+  assert.match(output, /2\. Welke overtuiging moet waar zijn om dit na te blijven streven\?/);
+  assert.match(output, /3\. Welke menselijke behoefte wordt dan eindelijk beter vervuld\?/);
+  assert.doesNotMatch(output, /^- Het is heel begrijpelijk/m);
+  assert.doesNotMatch(output, /Ik hoop dat deze suggesties je inspireren/i);
+});
+
 test("deriveSuggestionStateForWidget captures visible sentence suggestions for Dream", () => {
   const helpers = buildTextHelpers(() => "");
   const specialist = {

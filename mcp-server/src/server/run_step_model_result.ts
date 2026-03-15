@@ -4,6 +4,7 @@ import {
   RUN_STEP_TOOL_INPUT_SCHEMA_VERSION,
   RUN_STEP_TOOL_OUTPUT_SCHEMA_VERSION,
 } from "../contracts/mcp_tool_contract.js";
+import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 import { safeString } from "../server_safe_string.js";
 
 import { getHeader } from "./observability.js";
@@ -14,6 +15,14 @@ import {
   port,
 } from "./server_config.js";
 import { normalizeBootstrapSessionId } from "./ordering_parity.js";
+
+function uiStringForState(state: Record<string, unknown>, key: string): string {
+  const uiStrings =
+    state.ui_strings && typeof state.ui_strings === "object"
+      ? (state.ui_strings as Record<string, unknown>)
+      : {};
+  return safeString(uiStrings[key] || UI_STRINGS_DEFAULT[key] || "").trim();
+}
 
 function buildModelSafeResult(result: Record<string, unknown>): Record<string, unknown> {
   const state =
@@ -31,11 +40,8 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   const currentStep = safeString(result.current_step_id || state.current_step || "step_0");
   const started = safeString(state.started || "");
   const isStarted = started.toLowerCase() === "true";
-  const uiStrings =
-    state.ui_strings && typeof state.ui_strings === "object"
-      ? (state.ui_strings as Record<string, unknown>)
-      : {};
-  const startHint = safeString(uiStrings.startHint || "").trim();
+  const startHint = uiStringForState(state, "startHint");
+  const openAppToContinue = uiStringForState(state, "app.open_to_continue");
   const initialUserMessage = safeString(state.initial_user_message || "");
   const locale = safeString((result as any).locale || state.locale || "");
   const language = safeString((result as any).language || state.language || "");
@@ -189,8 +195,8 @@ function buildModelSafeResult(result: Record<string, unknown>): Record<string, u
   if (runStepInputSchemaVersion) safeState.run_step_input_schema_version = runStepInputSchemaVersion;
   if (runStepOutputSchemaVersion) safeState.run_step_output_schema_version = runStepOutputSchemaVersion;
   // Keep model-visible transport renderable for fallback paths without exposing rich content.
-  const modelSafePrompt = !isStarted ? (startHint || "Open de app om verder te gaan.") : "";
-  const modelSafeText = result.ok === true ? modelSafePrompt : "Open de app om verder te gaan.";
+  const modelSafePrompt = !isStarted ? (startHint || openAppToContinue) : "";
+  const modelSafeText = result.ok === true ? modelSafePrompt : openAppToContinue;
   return {
     model_result_shape_version: RUN_STEP_MODEL_RESULT_SHAPE_VERSION,
     ok: result.ok === true,
@@ -234,6 +240,10 @@ function buildContentFromResult(
 ): string {
   // App-only contract: keep chat silent on success.
   if (!result || typeof result !== "object") return "";
+  const state =
+    result.state && typeof result.state === "object"
+      ? (result.state as Record<string, unknown>)
+      : {};
   const uiObj = (result as any).ui && typeof (result as any).ui === "object" ? (result as any).ui : {};
   const flags =
     uiObj.flags && typeof uiObj.flags === "object"
@@ -241,7 +251,7 @@ function buildContentFromResult(
       : {};
   const waitingLocale = flags.bootstrap_waiting_locale === true;
   const hasError = Boolean((result as any).error);
-  if (hasError) return "Open de app om verder te gaan.";
+  if (hasError) return uiStringForState(state, "app.open_to_continue");
   if (waitingLocale) return "";
   if (options?.isFirstStart) return "";
   return "";

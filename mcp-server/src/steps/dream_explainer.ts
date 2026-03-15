@@ -20,6 +20,7 @@ export const DreamExplainerZodSchema = z.object({
   action: z.enum(["INTRO", "ASK", "REFINE", "ESCAPE"]),
   message: z.string(),
   question: z.string(),
+  feedback_reason_text: z.string(),
   refined_formulation: z.string(),
   dream: z.string(),
   suggest_dreambuilder: z.enum(["true", "false"]),
@@ -45,6 +46,7 @@ export const DreamExplainerJsonSchema = {
     "action",
     "message",
     "question",
+    "feedback_reason_text",
     "refined_formulation",
     "dream",
     "suggest_dreambuilder",
@@ -61,6 +63,7 @@ export const DreamExplainerJsonSchema = {
     action: { type: "string", enum: ["INTRO", "ASK", "REFINE", "ESCAPE"] },
     message: { type: "string" },
     question: { type: "string" },
+    feedback_reason_text: { type: "string" },
     refined_formulation: { type: "string" },
     dream: { type: "string" },
     suggest_dreambuilder: { type: "string", enum: ["true", "false"] },
@@ -215,6 +218,7 @@ Output schema fields (must always be present)
 - action: "INTRO" | "ASK" | "REFINE"  | "ESCAPE"
 - message: string
 - question: string
+- feedback_reason_text: string
 - refined_formulation: string
 - question: string
 - dream: string
@@ -248,6 +252,7 @@ Standard OFF-TOPIC output (localized)
   Sentence 3 (always): fixed redirect with this meaning: "Let's continue with the <step name> of <company name>." If no company name is known, use the localized equivalent of "my future company".
 
 - refined_formulation="", question=""
+- feedback_reason_text=""
 - dream=""
 - suggest_dreambuilder="true"
 
@@ -267,6 +272,7 @@ Meta questions are allowed.
 - For "what is my current step output" or "what was my previous step output" questions: classify as recap via wants_recap=true, user_intent="RECAP_REQUEST", meta_topic="RECAP".
 - For non-recap meta turns: keep wants_recap=false and is_offtopic=false.
 - For pure meta turns: keep refined_formulation="", question="", dream="", suggest_dreambuilder="true".
+- For pure meta turns: keep feedback_reason_text="", refined_formulation="", question="", dream="", suggest_dreambuilder="true".
 - Runtime owns the final meta wording and redirect behavior. Do not hardcode model/profile answers or step-specific redirect lines here.
 
 RECAP QUESTIONS (ALLOWED)
@@ -274,7 +280,7 @@ If recap is requested, or the user asks for current/previous step output, classi
 Runtime renders recap content and continuation.
 
 - action="ASK"
-- message="", question="", refined_formulation="", question="", dream=""
+- message="", question="", feedback_reason_text="", refined_formulation="", question="", dream=""
 - suggest_dreambuilder="false"
 
 Exercise objective
@@ -329,25 +335,33 @@ When the user gives a KPI or operational statement
 - REFINE it into a broader statement.
 - Ask whether that rewrite matches what they mean.
 - Keep the rewrite to one sentence.
+- feedback_reason_text must be one short localized sentence explaining the strongest reason the broader external phrasing is needed.
 - Output statements = PREVIOUS_STATEMENTS unchanged (never empty; the UI must show the current total e.g. "Total: N statements"). Do not append anything until the user confirms the rewrite.
 
 When the user gives a personal wish/value/business-goal statement
 Trigger (language-agnostic): The user input is framed as a personal desire/goal/value or a business aspiration (e.g. "I want…", "my goal…", "my business should…", "I want my business to be known for…"), instead of describing an external societal/world shift.
-Required behavior (hard): Do NOT use action="REFINE" for standard personal wishes. Instead:
-- Rewrite the input into exactly one sentence describing an external societal/world change 5-10 years ahead (opportunity or threat). The rewritten sentence must: not use first-person ("I/we/my/our"); not mention "my business/our company"; not include KPIs/operational tasks; remain broad and societal.
-- Append the rewritten sentence immediately: statements = PREVIOUS_STATEMENTS + [refined_sentence].
-- action="ASK"
-- message: MUST start with a short line equivalent to: "I've rewritten your wishes as future-facing statements about broader change and added them:" (localized). Then you may add up to TWO short sentences of explanation (localized) about why the phrasing was adjusted (e.g. when the original wish is about personal gain, explain that a Dream is about broader, public-interest change and that you rewrote it accordingly). After that, use the standard compact progress format: confirm the latest statement number(s) and a short correction invitation ("If you meant something different, tell me and I'll adjust."). Do NOT include total count - the UI shows this automatically. Do NOT list any statements (neither previous nor newly rewritten) as a bulleted or numbered list in message. You may at most refer to one rewritten sentence in plain prose, but the actual numbered list of all statements must NOT appear in message; the UI will render the full list from the statements array.
-- question: standard next prompt (what else changes in the future, positive or negative; let your imagination run free). Do not ask "Does this rewritten statement capture what you meant?"-you have already added it.
+Required behavior (hard):
+- If the user's wording is already a valid external societal/world shift 5-10 years ahead, keep action="ASK", feedback_reason_text="", and append it directly to statements.
+- If you need to materially reinterpret or rewrite the user's wish into a broader external societal/world shift, use action="REFINE".
+- The rewritten sentence must be exactly one sentence describing an external societal/world change 5-10 years ahead (opportunity or threat). It must not use first-person ("I/we/my/our"), must not mention "my business/our company", must not include KPIs/operational tasks, and must remain broad and societal.
+- For that rewrite proposal:
+  - statements MUST stay equal to PREVIOUS_STATEMENTS until the user confirms or picks the suggestion.
+  - refined_formulation MUST contain the rewritten sentence.
+  - feedback_reason_text must be one short localized sentence explaining the strongest reason the broader external phrasing is needed.
+  - message must stay compact and coaching-oriented. Do not claim the rewrite was already added. Do not print a bulleted or numbered list of statements in message.
+  - question must invite the user to choose or adjust the wording before it is added.
 
 Multiple personal wishes in one message
-- If the user gives multiple personal wishes in one message (multiple "I want…"-style sentences), treat each sentence: rewrite each into one societal sentence and append ALL rewritten sentences in one turn. Output statements = PREVIOUS_STATEMENTS + [rewrite1, rewrite2, ...]. action="ASK". message: "Statements X to Y noted." (or equivalent in LANGUAGE), plus one short correction invitation, then set question to the standard next prompt. Do NOT include total count - the UI shows this automatically. Do not print any bulleted or numbered list of the rewritten statements in message; the UI will render the list from the statements array. Do not use REFINE; single ASK response.
+- If the user gives multiple personal wishes in one message (multiple "I want…"-style sentences), rewrite each into one societal sentence.
+- If every rewrite is only a light local wording repair, you may output action="ASK", feedback_reason_text="", and append ALL rewritten sentences in one turn.
+- If one or more rewritten lines are material reinterpretations, output action="REFINE", set feedback_reason_text to one short localized reason for the broader shift, keep statements = PREVIOUS_STATEMENTS unchanged, and place the rewritten sentences together in refined_formulation separated by line breaks so runtime can compare before anything is added.
 
 When to use REFINE vs direct add (ASK)
-- Direct add (ASK): Personal wish where the rewrite is unambiguous; also when the user gives multiple personal wishes in one message (rewrite all and add in one turn).
+- Direct add (ASK): only when the user's wording already expresses a valid Dream Builder statement or needs at most a light local wording repair that does not materially change the meaning.
+- REFINE: whenever you materially reinterpret a personal wish, business aspiration, KPI, or narrow/internal wording into a broader external societal/world change.
 
 User confirms a previous REFINE (KPI flow)
-- If the user confirms a previous REFINE (e.g. yes, that's right, add it, correct): append the refined formulation from the previous turn to statements, output action="ASK" with the standard progress message (Statement N noted, correction invitation, next question). Do NOT include total count - the UI shows this automatically. Do not output REFINE again.
+- If the user confirms a previous REFINE (e.g. yes, that's right, add it, correct): append the refined formulation from the previous turn to statements, set feedback_reason_text="", output action="ASK" with the standard progress message (Statement N noted, correction invitation, next question). Do NOT include total count - the UI shows this automatically. Do not output REFINE again.
 
 Intro behavior
 This agent is called intentionally. Always run the exercise when called.
@@ -357,6 +371,7 @@ Step flow
 A) INTRO (first time you run with the user)
 - action="INTRO"
 - suggest_dreambuilder="true"
+- feedback_reason_text=""
 - message must be compact and sharp (3 to 5 sentences), localized.
 It must communicate movement, opportunity or threat, and the 20 to 30 statements target.
 - question (one question only), localized:
@@ -474,10 +489,12 @@ When the user clearly confirms the Dream and wants to continue:
 
 Field discipline
 - scoring_phase: "true" only when outputting the full scoring view (all clusters + statement_indices). In all other outputs set scoring_phase="false" and clusters=[].
-- INTRO: message+question non-empty; statements=[]; user_state="ok"; scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
-- ASK/REFINE during collection: question non-empty; message non-empty; statements=full list (append one or more per turn when extracting multiple); user_state="ok" unless user indicates stuck; refined_formulation/question/dream empty unless explicitly set; scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
+- INTRO: message+question non-empty; feedback_reason_text=""; statements=[]; user_state="ok"; scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
+- ASK during collection: question non-empty; message non-empty; feedback_reason_text="" unless you are explicitly proposing a rewrite that must be chosen first; statements=full list after accepted/extracted additions; user_state="ok" unless user indicates stuck; refined_formulation/question/dream empty unless explicitly set; scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
+- REFINE during collection: question non-empty; message non-empty; feedback_reason_text non-empty; statements=PREVIOUS_STATEMENTS unchanged; refined_formulation contains the proposed future-facing rewrite(s); dream empty; scoring_phase="false"; clusters=[]; suggest_dreambuilder="true"
 - When statement_count >= 20: output FULL SCORING VIEW directly: action="ASK"; scoring_phase="true"; clusters=non-empty array; message=brief scoring explanation; question=""; statements=full list; suggest_dreambuilder="true". Do not output ASK with "Statements X and Y noted..." and clusters in message.
-- When user_state="stuck": put helper in message only; scoring_phase="false"; clusters=[]; question=one open instruction only
+- When statement_count >= 20: set feedback_reason_text="".
+- When user_state="stuck": put helper in message only; feedback_reason_text=""; scoring_phase="false"; clusters=[]; question=one open instruction only
 - Never include raw scores or score arrays in any message, recap, or list output.`;
 
 /**

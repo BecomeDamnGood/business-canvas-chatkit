@@ -105,6 +105,109 @@ function buildHelpers(intentEnabled: boolean) {
   });
 }
 
+function buildDreamBuilderHelpers(intentEnabled: boolean) {
+  const defaultUi: Record<string, string> = {
+    wordingChoiceHeading: "This is your input:",
+    wordingChoiceInterpretedListHeading: "This is what I took from your input:",
+    wordingChoiceGroupedCompareUserLabel: "This is your compact wording:",
+    wordingChoiceGroupedCompareSuggestionLabel: "This is my suggestion:",
+    wordingChoiceGroupedCompareInstruction: "Choose the version that fits best for the remaining difference.",
+    wordingChoiceGroupedCompareRetainedHeading: "These points already stay in the final list:",
+    wordingChoiceSuggestionLabel: "This would be my suggestion:",
+    wordingChoiceInstruction: "Please click what suits you best.",
+    "wording.choice.context.default": "Please choose the wording that fits best.",
+    "wording.feedback.compare.intro.template":
+      "I think I understand what you mean. For a stronger {0}, it helps to keep this in mind.",
+    "wording.feedback.user_pick.ack.default": "Your own wording is completely okay.",
+    "wording.feedback.user_pick.nudge.template":
+      "At the same time, it helps to remember what usually makes a strong {0}.",
+    "wording.feedback.user_pick.reason.default":
+      "Keep in mind what makes this step strong, so your wording stays clear and aligned.",
+    "wordingChoice.chooseVersion": "Choose this version",
+    "wordingChoice.useInputFallback": "Use this input",
+    "autosuggest.prefix.template": "Based on your input I suggest the following {0}:",
+    "offtopic.step.dream": "Dream",
+    "offtopic.step.purpose": "Purpose",
+    "offtopic.step.bigwhy": "Big Why",
+    "offtopic.step.role": "Role",
+    "offtopic.step.entity": "Entity",
+    "offtopic.step.targetgroup": "Target Group",
+  };
+  return createRunStepWordingHelpers({
+    step0Id: "step0",
+    presentationStepId: "presentation",
+    dreamStepId: "dream",
+    strategyStepId: "strategy",
+    productsservicesStepId: "productsservices",
+    rulesofthegameStepId: "rulesofthegame",
+    entityStepId: "entity",
+    dreamExplainerSpecialist: "DreamExplainer",
+    normalizeDreamRuntimeMode: (raw) =>
+      String(raw || "").trim() === "builder_collect" ? "builder_collect" : "self",
+    uiDefaultString: (key: string) => defaultUi[key] || "",
+    uiStringFromStateMap: (state, key, fallback) => {
+      const fromState = String(((state as any)?.ui_strings || {})[key] || "").trim();
+      return fromState || fallback;
+    },
+    fieldForStep: (stepId: string) => {
+      if (stepId === "dream") return "dream";
+      if (stepId === "purpose") return "purpose";
+      if (stepId === "bigwhy") return "bigwhy";
+      if (stepId === "role") return "role";
+      if (stepId === "entity") return "entity";
+      if (stepId === "targetgroup") return "targetgroup";
+      if (stepId === "strategy") return "strategy";
+      if (stepId === "productsservices") return "productsservices";
+      if (stepId === "rulesofthegame") return "rulesofthegame";
+      return "";
+    },
+    parseListItems: (input: string) =>
+      String(input || "")
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    splitSentenceItems: (input: string) =>
+      String(input || "")
+        .split(/[.!?]+\s+/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    normalizeListUserInput: (input: string) => String(input || "").trim(),
+    normalizeLightUserInput: (input: string) => String(input || "").trim(),
+    normalizeUserInputAgainstSuggestion: (input: string) => String(input || "").trim(),
+    canonicalizeComparableText: (input: string) =>
+      String(input || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    stripChoiceInstructionNoise: (input: string) => String(input || "").trim(),
+    tokenizeWords: (input: string) =>
+      String(input || "")
+        .toLowerCase()
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter(Boolean),
+    isMaterialRewriteCandidate: () => true,
+    shouldTreatAsStepContributingInput: () => true,
+    pickDualChoiceSuggestion: (_stepId, specialistResult) =>
+      String((specialistResult as Record<string, unknown>)?.refined_formulation || "").trim(),
+    areEquivalentWordingVariants: () => false,
+    normalizeEntityPhrase: (input: string) => String(input || "").trim(),
+    withProvisionalValue: (state) => state,
+    renderFreeTextTurnPolicy: () => ({
+      specialist: {},
+      contractId: "",
+      contractVersion: "",
+      textKeys: [],
+    }),
+    applyUiPhaseByStep: () => {},
+    isUiWordingFeedbackKeyedV1Enabled: () => false,
+    isWordingChoiceIntentV1Enabled: () => intentEnabled,
+    bumpUiI18nCounter: () => {},
+    wordingSelectionMessage: () => "",
+  });
+}
+
 function buildHeadingAwareSingleValueHelpers(params: {
   stepId: "dream" | "purpose" | "bigwhy" | "role" | "entity" | "targetgroup";
   heading: string;
@@ -281,6 +384,46 @@ test("buildWordingChoiceFromTurn keeps Dream in picker pending presentation for 
   assert.ok(result.wordingChoice);
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
   assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_presentation || ""), "picker");
+});
+
+test("buildWordingChoiceFromTurn keeps Dream Builder statements canonical while a rewritten addition is still pending", () => {
+  const helpers = buildDreamBuilderHelpers(true);
+  const result = helpers.buildWordingChoiceFromTurn({
+    stepId: "dream",
+    state: {
+      current_step: "dream",
+      __dream_runtime_mode: "builder_collect",
+    } as any,
+    activeSpecialist: "DreamExplainer",
+    previousSpecialist: {
+      statements: [
+        "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+      ],
+      dream:
+        "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+    },
+    specialistResult: {
+      message: "Ik heb je wens breder vertaald naar maatschappelijke verandering.",
+      feedback_reason_text:
+        "Je oorspronkelijke zin ging vooral over jouw wens, terwijl Dream Builder een bredere verandering in de wereld vraagt.",
+      refined_formulation:
+        "Over 5 tot 10 jaar zullen meer mensen werk zoeken dat zichtbaar bijdraagt aan het leven van anderen.",
+      statements: [
+        "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+        "Over 5 tot 10 jaar zullen meer mensen werk zoeken dat zichtbaar bijdraagt aan het leven van anderen.",
+      ],
+      suggest_dreambuilder: "true",
+    } as Record<string, unknown>,
+    userTextRaw: "I want my work to make a positive difference in people's lives.",
+    isOfftopic: false,
+    dreamRuntimeModeRaw: "builder_collect",
+  });
+
+  assert.ok(result.wordingChoice);
+  assert.equal(String((result.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.deepEqual((result.specialist as Record<string, unknown>).statements, [
+    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+  ]);
 });
 
 test("buildWordingChoiceFromTurn suppresses Dream picker when user text is only raw source content", () => {
@@ -1513,6 +1656,55 @@ test("applyWordingPickSelection resolves grouped compare units into one final pr
     String((second.specialist.productsservices as string) || ""),
     ["Strategy workshops", "AI websites", preservedCommaItem].join("\n")
   );
+});
+
+test("applyWordingPickSelection persists accepted Dream Builder statements into canonical state", () => {
+  const helpers = buildDreamBuilderHelpers(true);
+  const applyResult = helpers.applyWordingPickSelection({
+    stepId: "dream",
+    routeToken: "__WORDING_PICK_SUGGESTION__",
+    state: {
+      current_step: "dream",
+      active_specialist: "DreamExplainer",
+      __dream_runtime_mode: "builder_collect",
+      dream_builder_statements: [
+        "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+      ],
+      last_specialist_result: {
+        wording_choice_pending: "true",
+        wording_choice_mode: "list",
+        wording_choice_target_field: "dream",
+        wording_choice_presentation: "picker",
+        wording_choice_base_items: [
+          "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+        ],
+        wording_choice_user_items: [
+          "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+        ],
+        wording_choice_suggestion_items: [
+          "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
+        ],
+        wording_choice_user_normalized:
+          "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+        wording_choice_agent_current:
+          "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
+        feedback_reason_text:
+          "Deze suggestie vertaalt je wens naar een bredere maatschappelijke verandering.",
+        refined_formulation:
+          "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
+      },
+    } as any,
+  });
+
+  assert.equal(applyResult.handled, true);
+  assert.deepEqual((applyResult.nextState as any).dream_builder_statements, [
+    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+    "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
+  ]);
+  assert.deepEqual((applyResult.specialist as Record<string, unknown>).statements, [
+    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+    "Er zal meer waarde worden gehecht aan het creëren van iets dat generaties overstijgt en blijvende betekenis heeft.",
+  ]);
 });
 
 test("applyWordingPickSelection keeps explicit agent feedback available for the next grouped compare unit", () => {

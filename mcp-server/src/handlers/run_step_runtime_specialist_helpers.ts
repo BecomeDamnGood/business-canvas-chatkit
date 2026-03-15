@@ -29,7 +29,7 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     return deps.uiStringFromStateMap(
       state || null,
       "offtopic.companyFallback",
-      deps.uiDefaultString("offtopic.companyFallback", "my future company")
+      deps.uiDefaultString("offtopic.companyFallback", "")
     );
   }
 
@@ -43,26 +43,26 @@ export function createRunStepRuntimeSpecialistHelpers(deps: CreateRunStepRuntime
     const baseLang = (langRaw || localeRaw).split(/[-_]/)[0] || "";
     if (!baseLang || baseLang === "en") return specialist;
 
-    const mapTerm = (key: string, fallback: string): string =>
-      deps.uiStringFromStateMap(state || null, key, deps.uiDefaultString(key, fallback));
+    const mapTerm = (key: string): string =>
+      deps.uiStringFromStateMap(state || null, key, deps.uiDefaultString(key, ""));
     const companyRef = companyReferenceForState(state);
 
     const replacements: Array<{ pattern: RegExp; value: string }> = [
       { pattern: /<\s*my future company\s*>/gi, value: companyRef },
       { pattern: /\bmy future company\b/gi, value: companyRef },
-      { pattern: /\bRules of the Game\b/gi, value: mapTerm("offtopic.step.rulesofthegame", "Rules of the game") },
-      { pattern: /\bProducts and Services\b/gi, value: mapTerm("offtopic.step.productsservices", "Products and Services") },
-      { pattern: /\bTarget Group\b/gi, value: mapTerm("offtopic.step.targetgroup", "Target Group") },
-      { pattern: /\bBig Why\b/gi, value: mapTerm("offtopic.step.bigwhy", "Big Why") },
-      { pattern: /\bPurpose\b/gi, value: mapTerm("offtopic.step.purpose", "Purpose") },
-      { pattern: /\bDream\b/gi, value: mapTerm("offtopic.step.dream", "Dream") },
-      { pattern: /\bRole\b/gi, value: mapTerm("offtopic.step.role", "Role") },
-      { pattern: /\bEntity\b/gi, value: mapTerm("offtopic.step.entity", "Entity") },
-      { pattern: /\bStrategy\b/gi, value: mapTerm("offtopic.step.strategy", "Strategy") },
-      { pattern: /\bWhy\b/gi, value: mapTerm("concept.why", "Why") },
-      { pattern: /\bVenture\b(?=\s*:)/gi, value: mapTerm("recap.label.venture", "Venture") },
-      { pattern: /\bName\b(?=\s*:)/gi, value: mapTerm("recap.label.name", "Name") },
-      { pattern: /\bStatus\b(?=\s*:)/gi, value: mapTerm("recap.label.status", "Status") },
+      { pattern: /\bRules of the Game\b/gi, value: mapTerm("offtopic.step.rulesofthegame") },
+      { pattern: /\bProducts and Services\b/gi, value: mapTerm("offtopic.step.productsservices") },
+      { pattern: /\bTarget Group\b/gi, value: mapTerm("offtopic.step.targetgroup") },
+      { pattern: /\bBig Why\b/gi, value: mapTerm("offtopic.step.bigwhy") },
+      { pattern: /\bPurpose\b/gi, value: mapTerm("offtopic.step.purpose") },
+      { pattern: /\bDream\b/gi, value: mapTerm("offtopic.step.dream") },
+      { pattern: /\bRole\b/gi, value: mapTerm("offtopic.step.role") },
+      { pattern: /\bEntity\b/gi, value: mapTerm("offtopic.step.entity") },
+      { pattern: /\bStrategy\b/gi, value: mapTerm("offtopic.step.strategy") },
+      { pattern: /\bWhy\b/gi, value: mapTerm("concept.why") },
+      { pattern: /\bVenture\b(?=\s*:)/gi, value: mapTerm("recap.label.venture") },
+      { pattern: /\bName\b(?=\s*:)/gi, value: mapTerm("recap.label.name") },
+      { pattern: /\bStatus\b(?=\s*:)/gi, value: mapTerm("recap.label.status") },
     ].filter((entry) => String(entry.value || "").trim().length > 0);
 
     const localizeText = (input: unknown): string => {

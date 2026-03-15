@@ -1403,10 +1403,7 @@ function persistentRecapContextFeedback(stepId: string, state: CanvasState): str
   return uiStringFromState(
     state,
     "presentation.recapVisibleFeedback",
-    uiDefaultString(
-      "presentation.recapVisibleFeedback",
-      "The summary is already visible on screen. Tell me what to adjust, or create the presentation."
-    )
+    uiDefaultString("presentation.recapVisibleFeedback", "")
   ).trim();
 }
 

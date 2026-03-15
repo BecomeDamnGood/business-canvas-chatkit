@@ -3,6 +3,7 @@ import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../
 import type { CanvasState } from "../core/state.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
 import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
+import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 import { STEP_0_ID } from "../steps/step_0_validation.js";
 import { buildCanonicalWidgetState } from "./run_step_canonical_widget_state.js";
 import { dreamBuilderExerciseLabelKey } from "./dream_builder_resume.js";
@@ -599,7 +600,7 @@ export function buildContractFailurePayload(
     state,
     error: {
       type: "contract_warning",
-      message: "RunStep response contract warning.",
+      message: resolveUiStringForState(state, "runtime.error.contract_warning"),
       reason: reasonCode,
       required_action: "continue_session",
     },

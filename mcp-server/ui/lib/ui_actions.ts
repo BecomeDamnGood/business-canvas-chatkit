@@ -800,6 +800,35 @@ function extractSuggestionStateContext(
   return next;
 }
 
+function resolveSuggestionStateContinuity(
+  preferred: Record<string, unknown> | null | undefined,
+  ...fallbacks: Array<Record<string, unknown> | null | undefined>
+): {
+  present: boolean;
+  state: Record<string, { items: string[]; mode: "suggestions" | "examples"; valid_for_action_codes: string[] }>;
+} {
+  const preferredState = preferred && typeof preferred === "object" ? preferred : {};
+  if (hasOwnKey(preferredState, "suggestion_state_by_step")) {
+    return {
+      present: true,
+      state: extractSuggestionStateContext(preferredState),
+    };
+  }
+  for (const fallback of fallbacks) {
+    if (!continuityScopeCompatible(preferredState, fallback || {})) continue;
+    const candidate = extractSuggestionStateContext(fallback || {});
+    if (Object.keys(candidate).length === 0) continue;
+    return {
+      present: true,
+      state: candidate,
+    };
+  }
+  return {
+    present: false,
+    state: {},
+  };
+}
+
 function continuityScopeCompatible(
   preferred: Record<string, unknown> | null | undefined,
   fallback: Record<string, unknown> | null | undefined
@@ -947,6 +976,7 @@ export function retainCanonicalStepContinuity(
   }
 
   const normalizedContext = extractCanonicalContinuityContext(next);
+  const suggestionStateContext = resolveSuggestionStateContinuity(next, ...fallbacks);
   return {
     ...next,
     ...normalizedContext.finals,
@@ -964,6 +994,14 @@ export function retainCanonicalStepContinuity(
           ...toRecord(next.provisional_source_by_step),
           ...normalizedContext.provisional_source_by_step,
         },
+      }
+      : {}),
+    ...(suggestionStateContext.present
+      ? {
+        suggestion_state_by_step:
+          Object.keys(suggestionStateContext.state).length > 0
+            ? suggestionStateContext.state
+            : undefined,
       }
       : {}),
   };
@@ -1034,10 +1072,17 @@ function buildWidgetStateContinuityPatch(params: {
   patch.provisional_source_by_step = Object.keys(nextAcceptedProvisionalSources).length > 0
     ? nextAcceptedProvisionalSources
     : undefined;
-  const nextSuggestionState = extractSuggestionStateContext(params.incomingState);
-  patch.suggestion_state_by_step = Object.keys(nextSuggestionState).length > 0
-    ? nextSuggestionState
-    : undefined;
+  const suggestionStateContext = resetContinuity
+    ? {
+      present: hasOwnKey(params.incomingState, "suggestion_state_by_step"),
+      state: extractSuggestionStateContext(params.incomingState),
+    }
+    : resolveSuggestionStateContinuity(params.incomingState, params.currentWidgetState);
+  if (suggestionStateContext.present) {
+    patch.suggestion_state_by_step = Object.keys(suggestionStateContext.state).length > 0
+      ? suggestionStateContext.state
+      : undefined;
+  }
   return patch;
 }
 
@@ -1259,7 +1304,11 @@ function buildTupleFailClosedEnvelope(params: {
         ok: false,
         error: {
           type: "contract_violation",
-          message: "Canonical widget payload is missing in tool response.",
+          message: uiText(
+            (failClosedState as Record<string, unknown>) || {},
+            "runtime.error.canonical_widget_payload_missing",
+            ""
+          ),
           reason: "incoming_missing_widget_result",
         },
         ...(liveness.has_liveness ? {

@@ -45,6 +45,7 @@ import {
   buildDreamExplainerSpecialistInput,
   type DreamExplainerOutput,
 } from "../steps/dream_explainer.js";
+import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 
 import {
   PURPOSE_STEP_ID,
@@ -783,8 +784,14 @@ export async function callSpecialistStrict(
   return {
     specialistResult: {
       action: "ESCAPE",
-      message: "I can only help you here with The Business Strategy Canvas Builder.",
-      question: "Do you want to continue with verification now?",
+      message: resolveUiStringForState(
+        state as Record<string, unknown>,
+        "runtime.error.unsupported_specialist.message"
+      ),
+      question: resolveUiStringForState(
+        state as Record<string, unknown>,
+        "runtime.error.unsupported_specialist.question"
+      ),
       refined_formulation: "",
       business_name: "TBD",
       step_0: "",

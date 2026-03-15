@@ -44,10 +44,15 @@ function buildPipelineWordingHelpers() {
     rulesofthegameStepId: "rulesofthegame",
     entityStepId: "entity",
     dreamExplainerSpecialist: "DreamExplainer",
-    normalizeDreamRuntimeMode: () => "self",
+    normalizeDreamRuntimeMode: (raw) =>
+      String(raw || "").trim() === "builder_collect" ? "builder_collect" : "self",
     uiDefaultString: (key: string) => defaultUi[key] || "",
     uiStringFromStateMap: (_state, _key, fallback) => fallback,
-    fieldForStep: (stepId: string) => (stepId === "strategy" ? "strategy" : ""),
+    fieldForStep: (stepId: string) => {
+      if (stepId === "strategy") return "strategy";
+      if (stepId === "dream") return "dream";
+      return "";
+    },
     parseListItems: (input: string) =>
       String(input || "")
         .split(/\n+/)
@@ -145,14 +150,25 @@ function buildStrategyPipelineHarness(params: {
       hasValidStep0Final: () => false,
     },
     state: {
-      applyPostSpecialistStateMutations: ({ prevState, decision, specialistResult }) => ({
-        ...prevState,
-        current_step: String((decision as Record<string, unknown>).current_step || prevState.current_step || ""),
-        active_specialist: String(
-          (decision as Record<string, unknown>).specialist_to_call || prevState.active_specialist || ""
-        ),
-        last_specialist_result: specialistResult,
-      }),
+      applyPostSpecialistStateMutations: ({ prevState, decision, specialistResult }) => {
+        const nextState = {
+          ...prevState,
+          current_step: String((decision as Record<string, unknown>).current_step || prevState.current_step || ""),
+          active_specialist: String(
+            (decision as Record<string, unknown>).specialist_to_call || prevState.active_specialist || ""
+          ),
+          last_specialist_result: specialistResult,
+        } as Record<string, unknown>;
+        if (
+          String((decision as Record<string, unknown>).specialist_to_call || "").trim() === "DreamExplainer" &&
+          Array.isArray((specialistResult as Record<string, unknown>).statements)
+        ) {
+          nextState.dream_builder_statements = ((specialistResult as Record<string, unknown>).statements as unknown[])
+            .map((line) => String(line || "").trim())
+            .filter(Boolean);
+        }
+        return nextState as any;
+      },
       getDreamRuntimeMode: () => "self",
       isMetaOfftopicFallbackTurn: () => false,
       shouldTreatAsStepContributingInput: () => true,
@@ -519,6 +535,8 @@ test("runPostSpecialistPipeline keeps strategy local when a small addition is an
       action: "ASK",
       message: "I sharpened the strategy set.",
       question: "Does this fit?",
+      feedback_reason_text:
+        "This suggestion keeps the remaining strategy difference concrete and easy to compare.",
       refined_formulation: [
         "Build predictable revenue through long-term implementation retainers",
         "Partner early with executive and operational stakeholders",
@@ -607,6 +625,90 @@ test("runPostSpecialistPipeline keeps strategy local when a small addition is an
   assert.equal(compareUnits.length >= 1, true);
 });
 
+test("runPostSpecialistPipeline restores Dream Builder canonical statements when a rewrite stays pending", async () => {
+  const existingStatements = [
+    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+  ];
+  const helpers = buildStrategyPipelineHarness({
+    specialistResult: {
+      action: "REFINE",
+      message: "Ik heb je wens vertaald naar een bredere verandering.",
+      question: "Past deze formulering beter?",
+      feedback_reason_text:
+        "Je oorspronkelijke zin ging vooral over jouw wens, terwijl Dream Builder een bredere verandering in de wereld vraagt.",
+      refined_formulation:
+        "Over 5 tot 10 jaar zullen meer mensen werk zoeken dat zichtbaar bijdraagt aan het leven van anderen.",
+      dream: "",
+      statements: [
+        "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+        "Over 5 tot 10 jaar zullen meer mensen werk zoeken dat zichtbaar bijdraagt aan het leven van anderen.",
+      ],
+      suggest_dreambuilder: "true",
+      scoring_phase: "false",
+      clusters: [],
+      user_state: "ok",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: "I want my work to make a positive difference in people's lives.",
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "en",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_builder_statements: existingStatements,
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: existingStatements,
+          dream: existingStatements.join("\n"),
+          refined_formulation: existingStatements.join("\n"),
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: "I want my work to make a positive difference in people's lives.",
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: "I want my work to make a positive difference in people's lives.",
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
+  assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
+  assert.ok(payload.wordingChoiceOverride);
+});
+
 test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a grouped compare picker", async () => {
   const existingStatements = [
     "Altijd gericht investeren in relevante technologische innovaties die de impact van klantcommunicatie vergroten",
@@ -620,6 +722,8 @@ test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a 
       action: "ASK",
       message: "Je voorstel lijkt sterk op een bestaand focuspunt.",
       question: "Wil je het bestaande punt vervangen of beide behouden?",
+      feedback_reason_text:
+        "Deze suggestie maakt het overblijvende verschil concreet en goed vergelijkbaar.",
       refined_formulation: [
         "Altijd gericht investeren in relevante AI-technologieen die de impact van klantcommunicatie vergroten",
         "Prototyping en MVP's bouwen als show what we can do for you",

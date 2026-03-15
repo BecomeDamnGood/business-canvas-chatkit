@@ -43,6 +43,28 @@ export const UI_STRINGS_LOCALE_NL: Record<string, string> = {
     "error.contract.title": "De app-status is ongeldig.",
     "error.generic.body": "Ververs en probeer het opnieuw.",
     "error.generic.title": "Er ging iets mis.",
+    "runtime.error.contract_violation": "De gerenderde output schendt het UI-contract.",
+    "runtime.error.contract_warning": "Waarschuwing voor het RunStep-responsecontract.",
+    "runtime.error.choose_for_me.invalid_snapshot":
+      "Kies-er-één-voor-mij vereist een geldige suggestiesnapshot voor het huidige menu.",
+    "runtime.error.choose_for_me.empty_suggestion":
+      "Kies-er-één-voor-mij vond een lege suggestie in de huidige snapshot.",
+    "runtime.error.unsupported_specialist.message":
+      "Ik kan je hier alleen helpen met The Business Strategy Canvas Builder.",
+    "runtime.error.unsupported_specialist.question":
+      "Wil je nu doorgaan met de verificatie?",
+    "runtime.error.ingress_invalid": "Invoervalidatie voor run_step is mislukt.",
+    "runtime.error.session_state_newer": "De sessiestatus is nieuwer dan deze server.",
+    "runtime.error.canonical_widget_payload_missing":
+      "De canonieke widget-payload ontbreekt in de toolrespons.",
+    "transport.idempotency.conflict":
+      "Deze idempotency key is al gebruikt met een ander request.",
+    "transport.idempotency.inflight":
+      "Een request met dezelfde idempotency key wordt al verwerkt.",
+    "server.error.contract_reset": "Sessie ongeldig, start opnieuw.",
+    "server.error.retry": "Probeer opnieuw.",
+    "integrator.next_prompt": "Wat wil je hierna doen?",
+    "app.open_to_continue": "Open de app om verder te gaan.",
     "error.session_upgrade.body": "Start een nieuwe sessie om door te gaan.",
     "error.session_upgrade.title": "Deze sessie moet opnieuw worden gestart.",
     "error.unknownAction": "We konden deze keuze niet verwerken. Ververs en probeer het opnieuw.",

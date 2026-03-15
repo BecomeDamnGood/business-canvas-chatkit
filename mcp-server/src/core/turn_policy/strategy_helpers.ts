@@ -1,3 +1,4 @@
+import { UI_STRINGS_DEFAULT } from "../../i18n/ui_strings_defaults.js";
 import type { CanvasState } from "../state.js";
 
 type UiStringResolver = (state: CanvasState, key: string, fallback: string) => string;
@@ -60,7 +61,7 @@ function strategySummaryLine(state: CanvasState, count: number, uiStringFromStat
   const template = uiStringFromState(
     state,
     "strategy.focuspoints.count.template",
-    "You now have {0} focus points within your strategy. I advise you to formulate at least 4 but maximum 7 focus points."
+    String(UI_STRINGS_DEFAULT["strategy.focuspoints.count.template"] || "")
   );
   const line = String(template || "").replace("{0}", String(count)).trim();
   if (!line) return "";
@@ -75,7 +76,7 @@ function strategyOverflowWarningLine(state: CanvasState, uiStringFromState: UiSt
   const template = uiStringFromState(
     state,
     "strategy.focuspoints.warning.template",
-    "I strongly advice you to only add a maximum of 7 focus points. can I consolidate this for you?"
+    String(UI_STRINGS_DEFAULT["strategy.focuspoints.warning.template"] || "")
   );
   const line = String(template || "").trim();
   return /[.!?]$/.test(line) ? line : `${line}.`;
@@ -89,7 +90,7 @@ function strategyCurrentHeading(
   const template = uiStringFromState(
     state,
     "strategy.current.template",
-    "Your current Strategy for {0} is:"
+    String(UI_STRINGS_DEFAULT["strategy.current.template"] || "")
   );
   const line = String(template || "")
     .replace("{0}", companyNameForPrompt(state))

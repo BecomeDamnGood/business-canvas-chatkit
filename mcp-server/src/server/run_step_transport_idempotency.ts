@@ -1,4 +1,5 @@
 import { getDefaultState, normalizeState } from "../core/state.js";
+import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 import { safeString } from "../server_safe_string.js";
 
 import {
@@ -162,7 +163,10 @@ export function preflightIdempotency(params: {
         incomingOrdering,
         errorType: "idempotency_conflict",
         errorCode: IDEMPOTENCY_ERROR_CODES.CONFLICT,
-        message: "Deze idempotency key is al gebruikt met een ander request.",
+        message: resolveUiStringForState(
+          context.stateForTool as Record<string, unknown>,
+          "transport.idempotency.conflict"
+        ),
         retryAction: "regenerate_key",
         outcome: "conflict",
       });
@@ -233,7 +237,10 @@ export function preflightIdempotency(params: {
       incomingOrdering,
       errorType: "idempotency_inflight",
       errorCode: IDEMPOTENCY_ERROR_CODES.INFLIGHT,
-      message: "Een request met dezelfde idempotency key wordt al verwerkt.",
+      message: resolveUiStringForState(
+        context.stateForTool as Record<string, unknown>,
+        "transport.idempotency.inflight"
+      ),
       retryAction: "retry_same_key",
       outcome: "inflight",
     });

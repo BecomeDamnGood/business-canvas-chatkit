@@ -212,6 +212,28 @@ export const UI_STRINGS_DEFAULT: Record<string, string> = {
   "error.contract.body": "Please refresh or start a new session.",
   "error.generic.title": "Something went wrong.",
   "error.generic.body": "Please refresh and try again.",
+  "runtime.error.contract_violation": "Rendered output violates the UI contract.",
+  "runtime.error.contract_warning": "RunStep response contract warning.",
+  "runtime.error.choose_for_me.invalid_snapshot":
+    "Choose-for-me requires a valid suggestion snapshot for the current menu.",
+  "runtime.error.choose_for_me.empty_suggestion":
+    "Choose-for-me found an empty suggestion in the current snapshot.",
+  "runtime.error.unsupported_specialist.message":
+    "I can only help you here with The Business Strategy Canvas Builder.",
+  "runtime.error.unsupported_specialist.question":
+    "Do you want to continue with verification now?",
+  "runtime.error.ingress_invalid": "Input validation error for run_step.",
+  "runtime.error.session_state_newer": "Session state version is newer than this server.",
+  "runtime.error.canonical_widget_payload_missing":
+    "Canonical widget payload is missing in tool response.",
+  "transport.idempotency.conflict":
+    "This idempotency key has already been used with a different request.",
+  "transport.idempotency.inflight":
+    "A request with the same idempotency key is already being processed.",
+  "server.error.contract_reset": "Session invalid, restart.",
+  "server.error.retry": "Please try again.",
+  "integrator.next_prompt": "What would you like to do next?",
+  "app.open_to_continue": "Open the app to continue.",
   "dev.error.prefix": "[ui_error]",
   "dev.error.unknown": "unknown error",
   "dev.error.unhandled_rejection": "unhandled rejection",

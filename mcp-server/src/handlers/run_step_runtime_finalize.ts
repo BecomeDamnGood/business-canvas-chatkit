@@ -1,5 +1,6 @@
 import type { CanvasState } from "../core/state.js";
 import { currentTurnSupportMode } from "../core/stuck_support.js";
+import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 
 import { createRunStepResponseHelpers } from "./run_step_response.js";
 import type {
@@ -188,7 +189,7 @@ function structuredSuggestionStepLabel(
 
 function structuredSuggestionOutro(stepId: string, stateUiStrings: Record<string, unknown>): string {
   const template = String(stateUiStrings["structuredSuggestions.outro.template"] || "").trim()
-    || "I hope these suggestions inspire you to write your own {0}.";
+    || String(UI_STRINGS_DEFAULT["structuredSuggestions.outro.template"] || "").trim();
   const stepLabel = structuredSuggestionStepLabel(stepId, stateUiStrings);
   return String(template || "").replace(/\{0\}/g, stepLabel).trim();
 }
@@ -241,6 +242,16 @@ function splitStructuredSuggestionLeadBlock(params: {
   }
 
   return { intro: singleLine, remainder: "" };
+}
+
+function looksLikeStructuredDiscoveryQuestions(raw: string): boolean {
+  const lines = String(raw || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const numberedQuestionLines = lines.filter((line) => /^\d+[\).]\s+.+\?\s*$/.test(line));
+  return numberedQuestionLines.length >= 3;
 }
 
 function extractStructuredSuggestionItems(params: {
@@ -375,6 +386,7 @@ function normalizeStructuredSuggestionMessage(params: {
 
   const message = String(params.messageRaw || "").replace(/\r/g, "\n").trim();
   if (!message) return "";
+  if (looksLikeStructuredDiscoveryQuestions(message)) return message;
 
   const blocks = message
     .split(/\n{2,}/)

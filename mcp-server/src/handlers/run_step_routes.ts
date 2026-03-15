@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 import type { OrchestratorOutput } from "../core/orchestrator.js";
-import { getFinalFieldForStepId, type CanvasState } from "../core/state.js";
+import {
+  getFinalFieldForStepId,
+  normalizeDreamBuilderStatements,
+  type CanvasState,
+} from "../core/state.js";
 import { buildUiContractId } from "../core/ui_contract_id.js";
 import {
   getChooseForMeRegistryEntry,
@@ -24,6 +28,7 @@ import {
 } from "./run_step_response.js";
 import { STEP_0_BOOTSTRAP_SPECIALIST } from "../steps/step_0_bootstrap.js";
 import { getDreamBuilderResumeContext } from "./dream_builder_resume.js";
+import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 
 export type RenderedRouteOutput = RunStepRenderedRouteOutput;
 export type RouteRegistryContext = RunStepRouteRegistryRequest;
@@ -288,7 +293,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         state: params.state,
         error: {
           type: "contract_violation",
-          message: "Rendered output violates the UI contract.",
+          message: resolveUiStringForState(params.state as Record<string, unknown>, "runtime.error.contract_violation"),
           reason: params.reason,
           step: String(params.stepId || ""),
           contract_id: params.rendered.contractId,
@@ -435,7 +440,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             state: stateWithUi,
             stepId: config.stepId,
             activeSpecialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-            message: "Choose-for-me requires a valid suggestion snapshot for the current menu.",
+            message: resolveUiStringForState(
+              stateWithUi as Record<string, unknown>,
+              "runtime.error.choose_for_me.invalid_snapshot"
+            ),
             retryAction: chooseForMeEntry.chooseForMe.actionCode,
             details: {
               reason: "missing_or_mismatched_suggestion_snapshot",
@@ -455,7 +463,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
             state: stateWithUi,
             stepId: config.stepId,
             activeSpecialist: String((stateWithUi as Record<string, unknown>).active_specialist || ""),
-            message: "Choose-for-me found an empty suggestion in the current snapshot.",
+            message: resolveUiStringForState(
+              stateWithUi as Record<string, unknown>,
+              "runtime.error.choose_for_me.empty_suggestion"
+            ),
             retryAction: chooseForMeEntry.chooseForMe.actionCode,
             details: {
               reason: "empty_first_suggestion",
@@ -655,10 +666,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
           const message = deps.uiStringFromStateMap(
             context.state,
             "presentation.error",
-            deps.uiDefaultString(
-              "presentation.error",
-              "Presentation generation failed. Please check that the template exists and try again."
-            )
+            deps.uiDefaultString("presentation.error", "")
           );
 
           const specialist = {
@@ -1137,13 +1145,10 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
         const startResolution = await deps.ensureStartState(context.state, langSeed);
         const stateWithUi = startResolution.state;
         const fallbackCardDesc = String(
-          deps.uiDefaultString("step0.carddesc", "Just to set the context, we'll start with the basics.")
+          deps.uiDefaultString("step0.carddesc", "")
         ).trim();
         const fallbackQuestion = String(
-          deps.uiDefaultString(
-            "step0.question.initial",
-            "To get started, what kind of business are you running or planning, and what is its name?"
-          )
+          deps.uiDefaultString("step0.question.initial", "")
         ).trim();
         const step0CardDesc = String(deps.step0CardDescForState(stateWithUi) || "").trim() || fallbackCardDesc;
         const step0Question = String(deps.step0QuestionForState(stateWithUi) || "").trim() || fallbackQuestion;
@@ -1244,9 +1249,7 @@ export function createRunStepRouteHelpers<TResponse>(ports: RunStepRoutePorts<TR
 
         if (Array.isArray(callDreamExplainer.value.specialistResult?.statements)) {
           (nextStateDream as Record<string, unknown>).dream_builder_statements =
-            (callDreamExplainer.value.specialistResult.statements as unknown[])
-              .map((line) => String(line || "").trim())
-              .filter(Boolean);
+            normalizeDreamBuilderStatements(callDreamExplainer.value.specialistResult.statements);
         }
 
         const dreamScoringPhase =

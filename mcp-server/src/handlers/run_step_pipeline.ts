@@ -31,6 +31,7 @@ import {
 } from "./run_step_type_guards.js";
 import { normalizePendingPickerSpecialistContract } from "./run_step_wording_picker_contract.js";
 import type { AcceptedOutputUserTurnClassification } from "./run_step_accepted_output_semantics.js";
+import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 import {
   applyBusinessListTurnResolution,
   isBusinessListStep,
@@ -563,7 +564,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       stepId: params.stepId,
       activeSpecialist: params.activeSpecialist,
       specialistSnapshot: params.rendered.specialist,
-      message: "Rendered output violates the UI contract.",
+      message: resolveUiStringForState(params.state as Record<string, unknown>, "runtime.error.contract_violation"),
       reason: params.reason,
       extraError: {
         contract_id: params.rendered.contractId,
@@ -1125,6 +1126,12 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
         acceptedOutputUserTurnClassification,
       });
       specialistResult = rebuilt.specialist;
+      nextState = deps.applyPostSpecialistStateMutations({
+        prevState: nextState,
+        decision: finalDecision,
+        specialistResult,
+        provisionalSource: provisionalSourceForMutation,
+      });
     }
     asStateRecord(nextState).last_specialist_result = specialistResult;
     if (

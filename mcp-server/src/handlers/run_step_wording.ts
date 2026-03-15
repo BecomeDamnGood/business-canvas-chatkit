@@ -1610,6 +1610,20 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     return { ...result, [field]: value };
   }
 
+  function withAcceptedListSelectionState(
+    state: CanvasState,
+    stepId: string,
+    selectedItems: string[]
+  ): CanvasState {
+    if (stepId !== deps.dreamStepId) return state;
+    const canonicalItems = mergeListItems([], selectedItems);
+    return {
+      ...state,
+      dream_builder_statements: canonicalItems,
+      ...(canonicalItems.length >= 20 ? { dream_scoring_statements: canonicalItems } : {}),
+    } as CanvasState;
+  }
+
   function pickWordingAgentBase(lastSpecialistResult: unknown): string {
     const result = lastSpecialistResult && typeof lastSpecialistResult === "object"
       ? (lastSpecialistResult as Record<string, unknown>)
@@ -2229,7 +2243,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
       };
       const selectedContractId = String(rendered.contractId || selectedWithContract.ui_contract_id || "");
       const nextState: CanvasState = {
-        ...stateForRender,
+        ...withAcceptedListSelectionState(stateForRender, stepId, composedItems),
         last_specialist_result: selectedWithContract,
       };
       deps.applyUiPhaseByStep(nextState, stepId, selectedContractId);
@@ -2335,7 +2349,7 @@ export function createRunStepWordingHelpers(deps: RunStepWordingDeps) {
     };
     const selectedContractId = String(rendered.contractId || selectedWithContract.ui_contract_id || "");
     const nextState: CanvasState = {
-      ...stateForRender,
+      ...withAcceptedListSelectionState(stateForRender, stepId, mergedPickedItems),
       last_specialist_result: selectedWithContract,
     };
     deps.applyUiPhaseByStep(nextState, stepId, selectedContractId);
