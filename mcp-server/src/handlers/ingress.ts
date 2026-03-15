@@ -20,6 +20,8 @@ export const ALLOWED_TRANSIENT_STATE_KEYS = new Set<string>([
   "__ui_telemetry",
   "__ui_phase_by_step",
   "__ui_render_mode_by_step",
+  "__step_stuck_count_by_step",
+  "__step_support_mode_by_step",
   "__client_action_id",
   "__session_id",
   "__session_started_at",
