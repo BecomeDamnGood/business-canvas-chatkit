@@ -408,6 +408,7 @@ export async function runStepRuntimeExecute(
       processActionCode,
       firstConfirmActionCodeForMenu,
       firstGuidanceActionCodeForMenu,
+      shouldPretransitionActionCode,
       setDreamRuntimeMode,
       getDreamRuntimeMode,
     },

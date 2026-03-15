@@ -107,6 +107,7 @@ function buildPipelineWordingHelpers() {
 function buildStrategyPipelineHarness(params: {
   specialistResult: Record<string, unknown>;
   onSpecialistCall?: (userMessage: string) => void;
+  dreamRuntimeMode?: "self" | "builder_collect" | "builder_scoring" | "builder_refine";
   classifyStepStuckTurn?: (params: {
     model: string;
     stepId: string;
@@ -177,7 +178,7 @@ function buildStrategyPipelineHarness(params: {
         }
         return nextState as any;
       },
-      getDreamRuntimeMode: () => "self",
+      getDreamRuntimeMode: () => params.dreamRuntimeMode || "self",
       isMetaOfftopicFallbackTurn: () => false,
       shouldTreatAsStepContributingInput: () => true,
       hasDreamSpecialistCandidate: () => false,
@@ -499,6 +500,28 @@ test("shouldTreatTurnAsCurrentValueFeedback detects single-value formulation fee
   );
 });
 
+test("shouldTreatTurnAsCurrentValueFeedback never hijacks Dream Builder turns into current-value feedback", async () => {
+  assert.equal(
+    await shouldTreatTurnAsCurrentValueFeedback({
+      state: {
+        current_step: "dream",
+        dream_final: "Mindd droomt van een wereld waarin mensen met vertrouwen keuzes durven maken.",
+      } as any,
+      stepId: "dream",
+      userMessage: "I want my work to make a positive difference in people's lives.",
+      model: "gpt-5-mini",
+      dreamRuntimeModeRaw: "builder_collect",
+      classifyAcceptedOutputUserTurn: async () => ({
+        turn_kind: "feedback_on_existing_content",
+        user_variant_is_stepworthy: false,
+      }),
+      actionCodeRaw: "",
+      submittedTextIntent: "",
+    }),
+    false
+  );
+});
+
 test("shouldForcePendingWordingChoiceFromIntent forces pending only for suggestion-anchored feedback/reject intents", () => {
   assert.equal(
     shouldForcePendingWordingChoiceFromIntent({
@@ -816,6 +839,107 @@ test("runPostSpecialistPipeline recovers Dream Builder compare when a material r
     String(payload.wordingChoiceOverride?.feedback_reason_text || ""),
     /broader change in the world/i
   );
+});
+
+test("runPostSpecialistPipeline keeps Dream Builder compare active even when a canonical dream already exists", async () => {
+  const existingStatements = [
+    "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+  ];
+  const helpers = buildStrategyPipelineHarness({
+    dreamRuntimeMode: "builder_collect",
+    specialistResult: {
+      action: "ASK",
+      message:
+        "Je uitspraken zijn heel persoonlijk en gaan vooral over wat jij wilt bereiken. In deze oefening zoeken we naar bredere veranderingen in de wereld of de samenleving.",
+      question:
+        "Als je 5 tot 10 jaar vooruitkijkt, welke grote kansen of dreigingen zie je, en welke positieve veranderingen hoop je?",
+      feedback_reason_text: "",
+      refined_formulation: [
+        "Over 5 tot 10 jaar zal het belangrijker zijn dat werk een positieve impact heeft op het leven van mensen.",
+        "Bedrijven zullen vaker een afspiegeling zijn van de waarden en identiteit van hun oprichters.",
+      ].join("\n"),
+      dream:
+        "Mindd droomt van een wereld waarin mensen en organisaties keuzes maken die zichtbaar goed doen.",
+      statements: [
+        "Over 5 tot 10 jaar zullen meer mensen streven naar werk dat een positieve impact heeft op het leven van anderen.",
+        "Over 5 tot 10 jaar zal het belangrijker zijn dat werk een positieve impact heeft op het leven van mensen.",
+        "Bedrijven zullen vaker een afspiegeling zijn van de waarden en identiteit van hun oprichters.",
+      ],
+      suggest_dreambuilder: "true",
+      scoring_phase: "false",
+      clusters: [],
+      user_state: "ok",
+      wants_recap: false,
+      is_offtopic: false,
+      user_intent: "STEP_INPUT",
+      meta_topic: "NONE",
+    },
+  });
+
+  const payload = await helpers.runPostSpecialistPipeline({
+    routing: {
+      userMessage: [
+        "I want my work to make a positive difference in people's lives.",
+        "I want my business to reflect who I am and what I stand for.",
+      ].join("\n\n"),
+      actionCodeRaw: "",
+      responseUiFlags: null,
+      inputMode: "widget",
+      wordingChoiceEnabled: true,
+      languageResolvedThisTurn: false,
+      isBootstrapPollCall: false,
+      motivationQuotesEnabled: false,
+    },
+    rendering: {
+      uiI18nTelemetry: null,
+      lang: "en",
+      ensureUiStrings: async (state) => state,
+    },
+    state: {
+      state: {
+        current_step: "dream",
+        active_specialist: "DreamExplainer",
+        __dream_runtime_mode: "builder_collect",
+        dream_final:
+          "Mindd droomt van een wereld waarin mensen en organisaties keuzes maken die zichtbaar goed doen.",
+        dream_builder_statements: existingStatements,
+        provisional_by_step: {},
+        last_specialist_result: {
+          statements: existingStatements,
+          dream: existingStatements.join("\n"),
+          refined_formulation: existingStatements.join("\n"),
+        },
+      } as any,
+      transientPendingScores: null,
+      submittedUserText: [
+        "I want my work to make a positive difference in people's lives.",
+        "I want my business to reflect who I am and what I stand for.",
+      ].join("\n\n"),
+      submittedTextIntent: "content_input",
+      submittedTextAnchor: "user_input",
+      rawNormalized: [
+        "I want my work to make a positive difference in people's lives.",
+        "I want my business to reflect who I am and what I stand for.",
+      ].join("\n\n"),
+      pristineAtEntry: true,
+    },
+    specialist: {
+      model: "gpt-5-mini",
+      decideOrchestration: () =>
+        ({
+          current_step: "dream",
+          specialist_to_call: "DreamExplainer",
+          show_session_intro: "false",
+          show_step_intro: "false",
+        }) as any,
+      rememberLlmCall: () => {},
+    },
+  } as any);
+
+  assert.equal(String((payload.specialist as Record<string, unknown>).wording_choice_pending || ""), "true");
+  assert.deepEqual((payload.specialist as Record<string, unknown>).statements, existingStatements);
+  assert.deepEqual((payload.state as Record<string, unknown>).dream_builder_statements, existingStatements);
+  assert.ok(payload.wordingChoiceOverride);
 });
 
 test("runPostSpecialistPipeline keeps overlapping strategy merge proposals in a grouped compare picker", async () => {

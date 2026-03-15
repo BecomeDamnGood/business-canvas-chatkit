@@ -284,6 +284,7 @@ const runtimeActionHelpers = createRunStepRuntimeActionHelpers({
 });
 const {
   processActionCode,
+  shouldPretransitionActionCode,
   deriveUiViewPayload,
   isConfirmActionCode,
   menuHasConfirmAction,

@@ -214,6 +214,7 @@ export async function shouldTreatTurnAsCurrentValueFeedback(params: {
   userMessage: string;
   model: string;
   language?: string;
+  dreamRuntimeModeRaw?: unknown;
   classifyAcceptedOutputUserTurn: (params: {
     model: string;
     stepId: string;
@@ -232,6 +233,10 @@ export async function shouldTreatTurnAsCurrentValueFeedback(params: {
   const submittedTextIntent = String(params.submittedTextIntent || "").trim();
   if (!isSingleValueFeedbackStep(stepId) || !userMessage || actionCodeRaw) return false;
   if (submittedTextIntent) return false;
+  if (stepId === "dream") {
+    const dreamRuntimeMode = String(params.dreamRuntimeModeRaw || "").trim();
+    if (dreamRuntimeMode && dreamRuntimeMode !== "self") return false;
+  }
   const currentValue = pickCurrentStepValueForFeedback(params.state, stepId);
   if (!currentValue) return false;
   const classification = await params.classifyAcceptedOutputUserTurn({
@@ -598,6 +603,7 @@ export function createRunStepPipelineHelpers<TPayload>(ports: RunStepPipelinePor
       userMessage,
       model: params.model,
       language: params.lang,
+      dreamRuntimeModeRaw: deps.getDreamRuntimeMode(state),
       classifyAcceptedOutputUserTurn: deps.classifyAcceptedOutputUserTurn,
       actionCodeRaw: params.actionCodeRaw,
       submittedTextIntent,

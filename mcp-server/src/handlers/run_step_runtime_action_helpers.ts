@@ -2,6 +2,7 @@ import type { CanvasState } from "../core/state.js";
 
 type ActioncodeRegistryEntry = {
   route?: string;
+  dispatch_owner?: "action_routing" | "special_route" | "state_action";
   flags?: string[];
 };
 
@@ -80,6 +81,17 @@ export function createRunStepRuntimeActionHelpers(deps: CreateRunStepRuntimeActi
     return actionCode;
   }
 
+  function dispatchOwnerForActionCode(actionCode: string): "action_routing" | "special_route" | "state_action" {
+    const entry = deps.actioncodeRegistry.actions[actionCode];
+    const owner = String(entry?.dispatch_owner || "").trim();
+    if (owner === "special_route" || owner === "state_action") return owner;
+    return "action_routing";
+  }
+
+  function shouldPretransitionActionCode(actionCode: string): boolean {
+    return dispatchOwnerForActionCode(actionCode) === "action_routing";
+  }
+
   function deriveUiViewPayload(variant: UiViewVariant): UiViewPayload | null {
     if (variant === "default") return null;
     return { variant };
@@ -136,6 +148,8 @@ export function createRunStepRuntimeActionHelpers(deps: CreateRunStepRuntimeActi
 
   return {
     processActionCode,
+    dispatchOwnerForActionCode,
+    shouldPretransitionActionCode,
     deriveUiViewPayload,
     isConfirmActionCode,
     menuHasConfirmAction,

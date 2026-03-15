@@ -91,6 +91,7 @@ function buildParams(intentEnabled: boolean) {
       processActionCode: (actionCodeInput: string) => actionCodeInput,
       firstConfirmActionCodeForMenu: () => "",
       firstGuidanceActionCodeForMenu: () => "",
+      shouldPretransitionActionCode: () => true,
       setDreamRuntimeMode: () => {},
       getDreamRuntimeMode: () => "self" as const,
     },
@@ -211,6 +212,44 @@ test("runStepRuntimeActionRoutingLayer keeps dream scoring free text available f
   assert.equal(result.response, null);
   assert.equal(result.userMessage, "Nog een extra statement over meer vertrouwen tussen mensen.");
   assert.equal(String((result.state as Record<string, unknown>).__dream_runtime_mode || ""), "builder_scoring");
+});
+
+test("runStepRuntimeActionRoutingLayer does not pretransition special-route-owned actions", async () => {
+  const params = buildParams(true) as any;
+  params.runtime.state = {
+    current_step: "dream",
+    active_specialist: "Dream",
+    __ui_phase_by_step: {
+      dream: "dream:ASK:DREAM_MENU_SUGGESTIONS:v1",
+    },
+    last_specialist_result: {},
+  };
+  params.runtime.actionCodeRaw = "ACTION_DREAM_SUGGESTIONS_PICK_ONE";
+  params.runtime.userMessage = "ACTION_DREAM_SUGGESTIONS_PICK_ONE";
+  params.action.nextMenuByActionCode = {
+    ACTION_DREAM_SUGGESTIONS_PICK_ONE: {
+      step_id: "dream",
+      from_menu_ids: ["DREAM_MENU_SUGGESTIONS"],
+      to_menu_id: "DREAM_MENU_REFINE",
+    },
+  };
+  params.action.resolveActionCodeTransition = () => ({
+    targetStepId: "dream",
+    targetMenuId: "DREAM_MENU_REFINE",
+    renderMode: "menu" as const,
+  });
+  params.action.shouldPretransitionActionCode = (actionCode: string) =>
+    actionCode !== "ACTION_DREAM_SUGGESTIONS_PICK_ONE";
+  params.action.processActionCode = () => "__ROUTE__DREAM_PICK_ONE__";
+
+  const result = await runStepRuntimeActionRoutingLayer(params);
+
+  assert.equal(result.response, null);
+  assert.equal(result.userMessage, "__ROUTE__DREAM_PICK_ONE__");
+  assert.equal(
+    String((((result.state as Record<string, unknown>).__ui_phase_by_step as Record<string, unknown>) || {}).dream || ""),
+    "dream:ASK:DREAM_MENU_SUGGESTIONS:v1"
+  );
 });
 
 test("runStepRuntimeActionRoutingLayer strips stale single-value content before rebuilding a resumed picker payload", async () => {

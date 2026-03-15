@@ -93,6 +93,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
     ) => string;
     firstConfirmActionCodeForMenu: (menuId: string) => string;
     firstGuidanceActionCodeForMenu: (menuId: string) => string;
+    shouldPretransitionActionCode: (actionCode: string) => boolean;
     setDreamRuntimeMode: (
       state: CanvasState,
       mode: "self" | "builder_collect" | "builder_scoring" | "builder_refine"
@@ -805,7 +806,7 @@ export async function runStepRuntimeActionRoutingLayer<TPayload extends Record<s
       // Keep the turn alive and let processActionCode/text flow decide next behavior.
     }
 
-    if (resolvedTransition) {
+    if (resolvedTransition && action.shouldPretransitionActionCode(safeActionCodeInput)) {
       action.setUiRenderModeByStep(
         state,
         resolvedTransition.targetStepId,

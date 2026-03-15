@@ -6,6 +6,7 @@ import {
 export type ActionCodeEntry = {
   route: string;
   step: string;
+  dispatch_owner?: "action_routing" | "special_route" | "state_action";
   flags?: string[];
   status?: "active" | "legacy" | "system";
 };
@@ -23,7 +24,7 @@ export const ACTIONCODE_REGISTRY_VERSION =
 const CHOOSE_FOR_ME_ACTIONS = Object.fromEntries(
   CHOOSE_FOR_ME_STEP_REGISTRY_ENTRIES.map((entry) => [
     entry.chooseForMe.actionCode,
-    { route: entry.chooseForMe.routeToken, step: entry.stepId },
+    { route: entry.chooseForMe.routeToken, step: entry.stepId, dispatch_owner: "special_route" },
   ])
 ) as Record<string, ActionCodeEntry>;
 
@@ -36,15 +37,35 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
 
     // Dream
     ACTION_DREAM_INTRO_EXPLAIN_MORE: { route: "__ROUTE__DREAM_EXPLAIN_MORE__", step: "dream" },
-    ACTION_DREAM_INTRO_START_EXERCISE: { route: "__ROUTE__DREAM_START_EXERCISE__", step: "dream" },
+    ACTION_DREAM_INTRO_START_EXERCISE: {
+      route: "__ROUTE__DREAM_START_EXERCISE__",
+      step: "dream",
+      dispatch_owner: "special_route",
+    },
     ACTION_DREAM_WHY_GIVE_SUGGESTIONS: { route: "__ROUTE__DREAM_GIVE_SUGGESTIONS__", step: "dream" },
-    ACTION_DREAM_WHY_START_EXERCISE: { route: "__ROUTE__DREAM_START_EXERCISE__", step: "dream" },
-    ACTION_DREAM_SUGGESTIONS_START_EXERCISE: { route: "__ROUTE__DREAM_START_EXERCISE__", step: "dream" },
+    ACTION_DREAM_WHY_START_EXERCISE: {
+      route: "__ROUTE__DREAM_START_EXERCISE__",
+      step: "dream",
+      dispatch_owner: "special_route",
+    },
+    ACTION_DREAM_SUGGESTIONS_START_EXERCISE: {
+      route: "__ROUTE__DREAM_START_EXERCISE__",
+      step: "dream",
+      dispatch_owner: "special_route",
+    },
     ACTION_DREAM_REFINE_CONFIRM: { route: "yes", step: "dream", flags: ["confirm"] },
-    ACTION_DREAM_REFINE_START_EXERCISE: { route: "__ROUTE__DREAM_START_EXERCISE__", step: "dream" },
+    ACTION_DREAM_REFINE_START_EXERCISE: {
+      route: "__ROUTE__DREAM_START_EXERCISE__",
+      step: "dream",
+      dispatch_owner: "special_route",
+    },
     ACTION_DREAM_ESCAPE_CONTINUE: { route: "__ROUTE__DREAM_CONTINUE__", step: "dream" },
     ACTION_DREAM_ESCAPE_FINISH_LATER: { route: "__ROUTE__DREAM_FINISH_LATER__", step: "dream" },
-    ACTION_DREAM_SWITCH_TO_SELF: { route: "__SWITCH_TO_SELF_DREAM__", step: "dream" },
+    ACTION_DREAM_SWITCH_TO_SELF: {
+      route: "__SWITCH_TO_SELF_DREAM__",
+      step: "dream",
+      dispatch_owner: "special_route",
+    },
 
     // DreamExplainer
     ACTION_DREAM_EXPLAINER_CONTINUE: { route: "__ROUTE__DREAM_EXPLAINER_CONTINUE__", step: "dream" },
@@ -52,7 +73,11 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
     ACTION_DREAM_EXPLAINER_REFINE_CONFIRM: { route: "__ROUTE__DREAM_EXPLAINER_CONTINUE_TO_PURPOSE__", step: "dream" },
     ACTION_DREAM_EXPLAINER_REFINE_ADJUST: { route: "__ROUTE__DREAM_EXPLAINER_REFINE__", step: "dream" },
     ACTION_DREAM_EXPLAINER_NEXT_STEP: { route: "Next step", step: "dream" },
-    ACTION_DREAM_EXPLAINER_SUBMIT_SCORES: { route: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES", step: "dream" },
+    ACTION_DREAM_EXPLAINER_SUBMIT_SCORES: {
+      route: "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES",
+      step: "dream",
+      dispatch_owner: "special_route",
+    },
 
     // Purpose
     ACTION_PURPOSE_INTRO_EXPLAIN_MORE: { route: "__ROUTE__PURPOSE_EXPLAIN_MORE__", step: "purpose" },
@@ -132,15 +157,29 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
 
     // Presentation
     ACTION_PRESENTATION_CHANGE: { route: "__ROUTE__PRESENTATION_CHANGE__", step: "presentation", status: "active" },
-    ACTION_PRESENTATION_MAKE: { route: "__ROUTE__PRESENTATION_MAKE__", step: "presentation" },
+    ACTION_PRESENTATION_MAKE: {
+      route: "__ROUTE__PRESENTATION_MAKE__",
+      step: "presentation",
+      dispatch_owner: "special_route",
+    },
     ACTION_PRESENTATION_ESCAPE_CONTINUE: { route: "__ROUTE__PRESENTATION_CONTINUE__", step: "presentation" },
     ACTION_PRESENTATION_ESCAPE_FINISH_LATER: { route: "__ROUTE__PRESENTATION_FINISH_LATER__", step: "presentation" },
 
     // Generic/system
-    ACTION_START: { route: "", step: "system", status: "system" },
-    ACTION_TEXT_SUBMIT: { route: "", step: "system", status: "system" },
-    ACTION_WORDING_PICK_USER: { route: "__WORDING_PICK_USER__", step: "system", status: "system" },
-    ACTION_WORDING_PICK_SUGGESTION: { route: "__WORDING_PICK_SUGGESTION__", step: "system", status: "system" },
+    ACTION_START: { route: "", step: "system", dispatch_owner: "state_action", status: "system" },
+    ACTION_TEXT_SUBMIT: { route: "", step: "system", dispatch_owner: "state_action", status: "system" },
+    ACTION_WORDING_PICK_USER: {
+      route: "__WORDING_PICK_USER__",
+      step: "system",
+      dispatch_owner: "state_action",
+      status: "system",
+    },
+    ACTION_WORDING_PICK_SUGGESTION: {
+      route: "__WORDING_PICK_SUGGESTION__",
+      step: "system",
+      dispatch_owner: "state_action",
+      status: "system",
+    },
 
     ...CHOOSE_FOR_ME_ACTIONS,
   },
