@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
+import { UI_STRINGS_DEFAULT } from "./i18n/ui_strings_defaults.ts";
 import { renderInlineText, renderSingleValueCardContent, renderStructuredText } from "../ui/lib/ui_text.ts";
 import { extractChoicesFromPrompt } from "../ui/lib/ui_choices.ts";
 import { canonicalizeWidgetPayload } from "../ui/lib/locale_bootstrap_runtime.ts";
@@ -14,8 +15,9 @@ import {
   toolData,
   widgetState,
 } from "../ui/lib/ui_actions.ts";
-import { readDreamBuilderViewContract, renderChoiceButtons, resolveWidgetBodyText } from "../ui/lib/ui_render.ts";
+import { readDreamBuilderViewContract, render, renderChoiceButtons, resolveWidgetBodyText } from "../ui/lib/ui_render.ts";
 import { setIsLoading } from "../ui/lib/ui_state.ts";
+import { buildContentFromResult, buildModelSafeResult } from "./server/run_step_model_result.ts";
 import {
   dropIncompatibleLastSpecialistResult,
   stampResponseContentLocale,
@@ -147,6 +149,136 @@ test("renderInlineText auto-links plain URLs", { concurrency: false }, () => {
     assert.equal(links[0].className, "inlineLink");
   } finally {
     (globalThis as unknown as { document: unknown }).document = originalDocument;
+  }
+});
+
+test("render reveals the hidden widget body before DOM-specific rendering continues", { concurrency: false }, () => {
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalRevealed = (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
+  const bodyAttributes: Record<string, string> = {};
+  const fakeDocument = {
+    body: {
+      setAttribute(name: string, value: string) {
+        bodyAttributes[String(name)] = String(value);
+      },
+    },
+    getElementById() {
+      return null;
+    },
+  };
+  (globalThis as unknown as { document?: unknown }).document = fakeDocument;
+  (globalThis as unknown as { openai?: unknown }).openai = {
+    toolOutput: {},
+    toolResponseMetadata: {},
+  };
+  delete (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
+
+  try {
+    assert.doesNotThrow(() => {
+      render();
+    });
+    assert.equal(bodyAttributes["data-bsc-ready"], "1");
+    assert.equal((globalThis as Record<string, unknown>).__BSC_UI_REVEALED__, true);
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
+    else (globalThis as unknown as { document?: unknown }).document = originalDocument;
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalRevealed === undefined) delete (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
+    else (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__ = originalRevealed;
+  }
+});
+
+test("render emits visibility telemetry when the widget body is unavailable", { concurrency: false }, () => {
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
+  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalWarn = console.warn;
+  const originalRevealed = (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
+  const originalVisibilityWarning = (globalThis as Record<string, unknown>).__BSC_UI_VISIBILITY_WARNING__;
+  const warnings: unknown[][] = [];
+  const fakeDocument = {
+    getElementById() {
+      return null;
+    },
+  };
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args);
+  };
+  (globalThis as unknown as { document?: unknown }).document = fakeDocument;
+  (globalThis as unknown as { openai?: unknown }).openai = {
+    toolOutput: {},
+    toolResponseMetadata: {},
+  };
+  delete (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
+  delete (globalThis as Record<string, unknown>).__BSC_UI_VISIBILITY_WARNING__;
+
+  try {
+    assert.doesNotThrow(() => {
+      render();
+    });
+    assert.equal(warnings.length, 1);
+    assert.equal(String(warnings[0]?.[0] || ""), "[ui_root_visibility_issue]");
+    assert.deepEqual(warnings[0]?.[1], {
+      reason: "missing_body",
+      body_present: false,
+      data_bsc_ready: "",
+    });
+  } finally {
+    console.warn = originalWarn;
+    if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
+    else (globalThis as unknown as { document?: unknown }).document = originalDocument;
+    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
+    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
+    if (originalRevealed === undefined) delete (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
+    else (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__ = originalRevealed;
+    if (originalVisibilityWarning === undefined) delete (globalThis as Record<string, unknown>).__BSC_UI_VISIBILITY_WARNING__;
+    else (globalThis as Record<string, unknown>).__BSC_UI_VISIBILITY_WARNING__ = originalVisibilityWarning;
+  }
+});
+
+test("model-safe transcript fallbacks stay non-empty even when localized strings are blank", () => {
+  const originalOpenApp = UI_STRINGS_DEFAULT["app.open_to_continue"];
+  const originalStartHint = UI_STRINGS_DEFAULT.startHint;
+  UI_STRINGS_DEFAULT["app.open_to_continue"] = "";
+  UI_STRINGS_DEFAULT.startHint = "";
+
+  try {
+    const modelErrorResult = buildModelSafeResult({
+      ok: false,
+      state: {
+        ui_strings: {
+          "app.open_to_continue": "   ",
+          startHint: "   ",
+        },
+      },
+    });
+    assert.equal(modelErrorResult.text, "Open the app to continue.");
+
+    const modelPrestartResult = buildModelSafeResult({
+      ok: true,
+      state: {
+        started: "false",
+        ui_strings: {
+          "app.open_to_continue": "   ",
+          startHint: "   ",
+        },
+      },
+    });
+    assert.equal(modelPrestartResult.prompt, "Click Start to begin.");
+
+    const content = buildContentFromResult({
+      error: { type: "timeout" },
+      state: {
+        ui_strings: {
+          "app.open_to_continue": "   ",
+        },
+      },
+    });
+    assert.equal(content, "Open the app to continue.");
+  } finally {
+    UI_STRINGS_DEFAULT["app.open_to_continue"] = originalOpenApp;
+    UI_STRINGS_DEFAULT.startHint = originalStartHint;
   }
 });
 
@@ -2107,6 +2239,14 @@ test("bundled runtime retains OpenAI host fallback render sources after meta.wid
   assert.match(source, /source:\s*"structured_content\.result"/);
   assert.match(source, /source:\s*"result"/);
   assert.match(source, /source:\s*"direct"/);
+});
+
+test("bundled runtime reveals the hidden widget body during render bootstrap", () => {
+  const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  assert.match(source, /function revealWidgetRoot\(\)/);
+  assert.match(source, /document\.body\.setAttribute\("data-bsc-ready", "1"\)/);
+  assert.match(source, /function render\(overrideToolOutput\)\s*\{\s*revealWidgetRoot\(\);/);
+  assert.match(source, /\[ui_root_visibility_issue\]/);
 });
 
 test("bundled runtime inline script parses without syntax errors", () => {

@@ -16,12 +16,18 @@ import {
 } from "./server_config.js";
 import { normalizeBootstrapSessionId } from "./ordering_parity.js";
 
+const NON_EMPTY_UI_STRING_FALLBACKS: Record<string, string> = {
+  "app.open_to_continue": "Open the app to continue.",
+  startHint: "Click Start to begin.",
+};
+
 function uiStringForState(state: Record<string, unknown>, key: string): string {
   const uiStrings =
     state.ui_strings && typeof state.ui_strings === "object"
       ? (state.ui_strings as Record<string, unknown>)
       : {};
-  return safeString(uiStrings[key] || UI_STRINGS_DEFAULT[key] || "").trim();
+  const resolved = safeString(uiStrings[key] || UI_STRINGS_DEFAULT[key] || "").trim();
+  return resolved || safeString(NON_EMPTY_UI_STRING_FALLBACKS[key] || "").trim();
 }
 
 function buildModelSafeResult(result: Record<string, unknown>): Record<string, unknown> {

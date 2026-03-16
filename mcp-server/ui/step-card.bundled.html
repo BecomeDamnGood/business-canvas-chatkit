@@ -5467,6 +5467,30 @@
       ).trim()
     };
   }
+  function warnWidgetRootVisibilityIssue(reason) {
+    const root = globalThis;
+    const signature = `warned:${reason}`;
+    if (root.__BSC_UI_VISIBILITY_WARNING__ === signature) return;
+    root.__BSC_UI_VISIBILITY_WARNING__ = signature;
+    const body = typeof document !== "undefined" && document.body ? document.body : null;
+    console.warn("[ui_root_visibility_issue]", {
+      reason,
+      body_present: Boolean(body),
+      data_bsc_ready: body && typeof body.getAttribute === "function" ? body.getAttribute("data-bsc-ready") || "" : ""
+    });
+  }
+  function revealWidgetRoot() {
+    if (globalThis.__BSC_UI_REVEALED__ === true) return;
+    globalThis.__BSC_UI_REVEALED__ = true;
+    if (typeof document === "undefined" || !document.body) {
+      warnWidgetRootVisibilityIssue("missing_body");
+      return;
+    }
+    document.body.setAttribute("data-bsc-ready", "1");
+    if (typeof document.body.getAttribute === "function" && document.body.getAttribute("data-bsc-ready") !== "1") {
+      warnWidgetRootVisibilityIssue("attribute_still_hidden");
+    }
+  }
   function renderChoiceButtons(choices, resultData) {
     const wrap = document.getElementById("choiceWrap");
     if (!wrap) return;
@@ -5603,6 +5627,7 @@
     return enabled;
   }
   function render(overrideToolOutput) {
+    revealWidgetRoot();
     const data = toolData(overrideToolOutput);
     if (data && Object.keys(data).length) setLastToolOutput(data);
     const resolved = resolveWidgetPayload2(data);

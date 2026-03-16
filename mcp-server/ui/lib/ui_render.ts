@@ -764,6 +764,38 @@ function renderBlockedState(cardDesc: HTMLElement, lang: string, title: string, 
   cardDesc.appendChild(shell);
 }
 
+function warnWidgetRootVisibilityIssue(reason: "missing_body" | "attribute_still_hidden"): void {
+  const root = globalThis as Record<string, unknown>;
+  const signature = `warned:${reason}`;
+  if (root.__BSC_UI_VISIBILITY_WARNING__ === signature) return;
+  root.__BSC_UI_VISIBILITY_WARNING__ = signature;
+  const body =
+    typeof document !== "undefined" && document.body
+      ? (document.body as HTMLElement & { getAttribute?: (name: string) => string | null })
+      : null;
+  console.warn("[ui_root_visibility_issue]", {
+    reason,
+    body_present: Boolean(body),
+    data_bsc_ready: body && typeof body.getAttribute === "function" ? body.getAttribute("data-bsc-ready") || "" : "",
+  });
+}
+
+function revealWidgetRoot(): void {
+  if ((globalThis as Record<string, unknown>).__BSC_UI_REVEALED__ === true) return;
+  (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__ = true;
+  if (typeof document === "undefined" || !document.body) {
+    warnWidgetRootVisibilityIssue("missing_body");
+    return;
+  }
+  document.body.setAttribute("data-bsc-ready", "1");
+  if (
+    typeof (document.body as HTMLElement & { getAttribute?: (name: string) => string | null }).getAttribute === "function" &&
+    (document.body as HTMLElement & { getAttribute: (name: string) => string | null }).getAttribute("data-bsc-ready") !== "1"
+  ) {
+    warnWidgetRootVisibilityIssue("attribute_still_hidden");
+  }
+}
+
 export function renderChoiceButtons(choices: Choice[] | null | undefined, resultData: Record<string, unknown>): void {
   const wrap = document.getElementById("choiceWrap");
   if (!wrap) return;
@@ -944,6 +976,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
 }
 
 export function render(overrideToolOutput?: unknown): void {
+  revealWidgetRoot();
   const data = toolData(overrideToolOutput);
 
   if (data && Object.keys(data).length) setLastToolOutput(data);
