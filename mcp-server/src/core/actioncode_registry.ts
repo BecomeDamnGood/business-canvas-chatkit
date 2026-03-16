@@ -262,7 +262,9 @@ export const ACTIONCODE_REGISTRY: ActionCodeRegistryShape = {
       "ACTION_BIGWHY_EXPLAIN_GIVE_EXAMPLE",
     ],
     BIGWHY_MENU_FROM_GIVE: [
+      "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS",
       getChooseForMeActionCodeForStep("bigwhy"),
+      "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE",
     ],
     BIGWHY_MENU_REFINE: [
       "ACTION_BIGWHY_REFINE_CONFIRM",

@@ -14,9 +14,11 @@ export type RunStepBase = {
   specialist: Record<string, unknown>;
   registry_version: string;
   ui?: {
-    action_codes?: string[];
-    expected_choice_count?: number;
-    actions?: RenderedAction[];
+    action_contract?: {
+      version?: string;
+      source?: string;
+      actions?: RenderedAction[];
+    };
     questionText?: string;
     content?: UiContentPayload;
     contract_id?: string;

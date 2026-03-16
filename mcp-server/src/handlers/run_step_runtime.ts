@@ -936,9 +936,11 @@ type RunStepBase = {
   specialist: Record<string, unknown>;
   registry_version: string;
   ui?: {
-    action_codes?: string[];
-    expected_choice_count?: number;
-    actions?: RenderedAction[];
+    action_contract?: {
+      version?: string;
+      source?: string;
+      actions?: RenderedAction[];
+    };
     questionText?: string;
     contract_id?: string;
     contract_version?: string;
@@ -976,7 +978,7 @@ const runStepRuntimeExecuteDeps = {
   PURPOSE_STEP_ID, BIGWHY_STEP_ID, ROLE_STEP_ID, ENTITY_STEP_ID, STRATEGY_STEP_ID, TARGETGROUP_STEP_ID,
   PRODUCTSSERVICES_STEP_ID, RULESOFTHEGAME_STEP_ID, PRESENTATION_STEP_ID, DREAM_EXPLAINER_SWITCH_SELF_MENU_ID,
   NEXT_MENU_BY_ACTIONCODE, DREAM_START_EXERCISE_ACTION_CODES, resolveActionCodeTransition,
-  setUiRenderModeByStep, buildContractId, processActionCode, firstConfirmActionCodeForMenu, firstGuidanceActionCodeForMenu, setDreamRuntimeMode, provisionalValueForStep,
+  setUiRenderModeByStep, buildContractId, processActionCode, firstConfirmActionCodeForMenu, firstGuidanceActionCodeForMenu, shouldPretransitionActionCode, setDreamRuntimeMode, provisionalValueForStep,
   clearProvisionalValue, clearStepInteractiveState, isUiStateHygieneSwitchV1Enabled,
   isClearlyGeneralOfftopicInput, isWordingChoiceEligibleContext, buildWordingChoiceFromPendingSpecialist,
   applyWordingPickSelection, isWordingPickRouteToken, isRefineAdjustRouteToken, buildWordingChoiceFromTurn,

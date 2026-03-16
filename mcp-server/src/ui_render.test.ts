@@ -8,6 +8,7 @@ import {
   parseWordingChoiceInstruction,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
+  surfaceActionsForResult,
   shouldRetainDreamScoringClientScores,
   shouldRenderBigWhyStepIntroVideo,
   shouldRenderPurposeStepIntroVideo,
@@ -217,6 +218,49 @@ test("resolveActionCodeForStateKey resolves dedicated score submit actions from 
   assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_score_submit"), "ACTION_DREAM_EXPLAINER_SUBMIT_SCORES");
   assert.equal(resolveActionCodeForStateKey(result, {}, "ui_action_text_submit"), "ACTION_TEXT_SUBMIT");
   assert.equal(resolveActionPayloadModeForStateKey(result, {}, "ui_action_text_submit"), "text");
+});
+
+test("surfaceActionsForResult keeps the action contract as the only render authority per surface", () => {
+  const result = {
+    state: { current_step: "dream", language: "en" },
+    ui: {
+      action_contract: {
+        actions: [
+          {
+            role: "choice",
+            surface: "choice",
+            action_code: "ACTION_DREAM_INTRO_EXPLAIN_MORE",
+            label: "Tell me more about why a dream matters",
+          },
+          {
+            role: "dream_start_exercise",
+            surface: "auxiliary",
+            action_code: "ACTION_DREAM_INTRO_START_EXERCISE",
+            label: "Do a small exercise that helps to define your dream.",
+          },
+          {
+            role: "start",
+            surface: "primary",
+            action_code: "ACTION_START",
+            label: "Start",
+          },
+        ],
+      },
+    },
+  };
+
+  assert.deepEqual(
+    surfaceActionsForResult(result, "choice").map((action) => action.actionCode),
+    ["ACTION_DREAM_INTRO_EXPLAIN_MORE"]
+  );
+  assert.deepEqual(
+    surfaceActionsForResult(result, "auxiliary").map((action) => action.actionCode),
+    ["ACTION_DREAM_INTRO_START_EXERCISE"]
+  );
+  assert.deepEqual(
+    surfaceActionsForResult(result, "primary").map((action) => action.actionCode),
+    ["ACTION_START"]
+  );
 });
 
 test("buildInitialDreamScoringScores reuses persisted dream scores when client cache is empty", () => {

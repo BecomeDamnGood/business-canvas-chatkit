@@ -1269,19 +1269,6 @@
         box-shadow: var(--shadow-glow);
       }
       
-      .scoringContinueWrap {
-        margin-top: var(--space-10);
-      }
-      
-      .scoringContinueWrap .btn {
-        min-width: 140px;
-      }
-      
-      .scoringContinueWrap .btn:disabled {
-        opacity: 1;
-        cursor: not-allowed;
-      }
-      
       /* ─── Prompt ─── */
       .prompt {
         font-family: var(--font-serif);
@@ -1598,6 +1585,24 @@
         flex-wrap: wrap;
         align-items: flex-start;
       }
+
+      .primaryActionWrap {
+        display: none;
+        flex-wrap: wrap;
+        gap: var(--space-4);
+        width: 100%;
+      }
+
+      .auxiliaryActionWrap {
+        display: none;
+        flex-direction: column;
+        gap: var(--space-4);
+        width: 100%;
+      }
+
+      .auxiliaryActionWrap .btn {
+        width: 100%;
+      }
       
       .btn {
         display: inline-flex;
@@ -1815,9 +1820,6 @@
           <div id="scoringPanel" class="scoringPanel">
             <div class="scoringIntro" id="scoringIntro"></div>
             <div id="scoringClusters"></div>
-            <div class="scoringContinueWrap">
-              <button type="button" class="btn primary" id="btnScoringContinue" disabled>Formulate my dream based on what I find important.</button>
-            </div>
           </div>
           <div class="wordingChoiceWrap" id="wordingChoiceWrap" style="display:none">
             <div class="wordingChoiceFeedback" id="wordingChoiceFeedback" style="display:none"></div>
@@ -1856,10 +1858,8 @@
               </div>
             </button>
             <div class="startHint" id="startHint"></div>
-            <button class="btn primary" id="btnGoToNextStep" style="display:none"></button>
-            <button class="btn primary" id="btnStartDreamExercise" style="display:none"></button>
-            <button class="btn" id="btnSwitchToSelfDream" style="display:none"></button>
-            <button class="btn primary" id="btnDreamConfirm" style="display:none"></button>
+            <div class="primaryActionWrap" id="primaryActionWrap" style="display:none"></div>
+            <div class="auxiliaryActionWrap" id="auxiliaryActionWrap" style="display:none"></div>
           </div>
           <div class="status" id="status"></div>
         </div>

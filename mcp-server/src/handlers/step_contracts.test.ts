@@ -259,6 +259,12 @@ test("interactive contract keeps menu choices and auxiliary Dream actions side b
         String(action.role || "") === "dream_start_exercise"
     )
   );
+  assert.equal(Object.prototype.hasOwnProperty.call((response.ui || {}) as Record<string, unknown>, "actions"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call((response.ui || {}) as Record<string, unknown>, "action_codes"), false);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call((response.ui || {}) as Record<string, unknown>, "expected_choice_count"),
+    false
+  );
 });
 
 test("dream intro contract switches to resume copy when Dream Builder context exists after switching to self", () => {

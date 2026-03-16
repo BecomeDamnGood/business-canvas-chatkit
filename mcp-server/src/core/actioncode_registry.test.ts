@@ -13,3 +13,11 @@ test("all choose-for-me actions are registry-owned by special routes", () => {
     );
   }
 });
+
+test("bigwhy suggestions menu keeps choose-for-me alongside the legacy follow-up choices", () => {
+  assert.deepEqual(ACTIONCODE_REGISTRY.menus.BIGWHY_MENU_FROM_GIVE, [
+    "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS",
+    "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
+    "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE",
+  ]);
+});

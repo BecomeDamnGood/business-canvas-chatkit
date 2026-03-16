@@ -2268,6 +2268,23 @@ test("bundled runtime stays in sync with the source-owned UI generator", () => {
   });
 });
 
+test("template and bundle no longer ship legacy dedicated Dream button ids", () => {
+  const template = fs.readFileSync(new URL("../ui/step-card.template.html", import.meta.url), "utf8");
+  const bundled = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+  const legacyIds = [
+    "btnScoringContinue",
+    "btnGoToNextStep",
+    "btnStartDreamExercise",
+    "btnSwitchToSelfDream",
+    "btnDreamConfirm",
+  ];
+
+  for (const legacyId of legacyIds) {
+    assert.equal(template.includes(`id="${legacyId}"`), false, `template still ships ${legacyId}`);
+    assert.equal(bundled.includes(`id="${legacyId}"`), false, `bundle still ships ${legacyId}`);
+  }
+});
+
 test("bundled runtime keeps step title fallbacks unnumbered while preserving section title lookup", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /titleKey:\s*"title\.step_0"/);

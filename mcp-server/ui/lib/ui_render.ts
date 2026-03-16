@@ -182,6 +182,16 @@ type ActionDescriptor = {
   payloadMode: string;
 };
 
+type RenderableContractAction = {
+  actionCode: string;
+  label: string;
+  labelKey: string;
+  payloadMode: string;
+  role: string;
+  surface: string;
+  primary: boolean;
+};
+
 const ACTION_ROLE_BY_STATE_KEY: Record<string, string> = {
   ui_action_start: "start",
   ui_action_text_submit: "text_submit",
@@ -249,10 +259,122 @@ export function resolveActionPayloadModeForStateKey(
   return fallbackStateKey ? String(state[fallbackStateKey] || "").trim().toLowerCase() : "";
 }
 
-function choiceActionsForResult(resultData: Record<string, unknown>): Array<Record<string, unknown>> {
-  return actionContractActionsForResult(resultData).filter(
-    (action) => String(action.role || "").trim().toLowerCase() === "choice"
-  );
+function defaultSurfaceForActionRole(role: string): string {
+  const normalizedRole = String(role || "").trim().toLowerCase();
+  if (normalizedRole === "start") return "primary";
+  if (normalizedRole === "text_submit") return "text_input";
+  if (normalizedRole === "score_submit") return "primary";
+  if (normalizedRole === "wording_pick_user" || normalizedRole === "wording_pick_suggestion") {
+    return "wording_choice";
+  }
+  if (normalizedRole === "dream_start_exercise" || normalizedRole === "dream_switch_to_self") {
+    return "auxiliary";
+  }
+  return "choice";
+}
+
+function normalizeRenderableContractAction(
+  actionRaw: Record<string, unknown>,
+  lang: string
+): RenderableContractAction | null {
+  const actionCode = String(actionRaw.action_code || "").trim();
+  if (!actionCode) return null;
+  const role = String(actionRaw.role || "").trim().toLowerCase() || "choice";
+  const surface =
+    String(actionRaw.surface || "").trim().toLowerCase() || defaultSurfaceForActionRole(role);
+  const labelKey = String(actionRaw.label_key || "").trim();
+  const labelFromPayload = stripInlineText(String(actionRaw.label || "")).trim();
+  const label = labelFromPayload || (labelKey ? String(t(lang, labelKey) || "").trim() : "");
+  if (!label) return null;
+  return {
+    actionCode,
+    label,
+    labelKey,
+    payloadMode: String(actionRaw.payload_mode || "").trim().toLowerCase(),
+    role,
+    surface,
+    primary: actionRaw.primary === true,
+  };
+}
+
+export function surfaceActionsForResult(
+  resultData: Record<string, unknown>,
+  surface: string,
+  langOverride?: string | null
+): RenderableContractAction[] {
+  const lang = String(langOverride || uiLang((resultData?.state as Record<string, unknown>) || {})).trim().toLowerCase() || "en";
+  const normalizedSurface = String(surface || "").trim().toLowerCase();
+  if (!normalizedSurface) return [];
+  return actionContractActionsForResult(resultData)
+    .map((action) => normalizeRenderableContractAction(action, lang))
+    .filter((action): action is RenderableContractAction => Boolean(action))
+    .filter((action) => action.surface === normalizedSurface);
+}
+
+function choiceActionsForResult(resultData: Record<string, unknown>): RenderableContractAction[] {
+  return surfaceActionsForResult(resultData, "choice");
+}
+
+function collectPendingScoresForContractAction(): number[][] {
+  const scoringScores =
+    (globalThis as unknown as { __dreamScoringScores?: unknown[][] }).__dreamScoringScores || [];
+  const payload: number[][] = [];
+  for (let ci = 0; ci < scoringScores.length; ci += 1) {
+    const row = Array.isArray(scoringScores[ci]) ? scoringScores[ci] : [];
+    const normalizedRow: number[] = [];
+    for (let si = 0; si < row.length; si += 1) {
+      const value = Number(row[si]);
+      normalizedRow.push(isNaN(value) ? 0 : Math.max(1, Math.min(10, value)));
+    }
+    payload.push(normalizedRow);
+  }
+  return payload;
+}
+
+function dispatchContractAction(action: RenderableContractAction): void {
+  if (getIsLoading()) return;
+  if (action.role === "start") {
+    setSessionStarted(true);
+    setSessionWelcomeShown(false);
+    callRunStep(action.actionCode, { started: "true" });
+    return;
+  }
+  if (action.role === "score_submit") {
+    callRunStep(action.actionCode, { __pending_scores: collectPendingScoresForContractAction() });
+    return;
+  }
+  callRunStep(action.actionCode);
+}
+
+function renderActionSurfaceButtons(params: {
+  containerId: string;
+  actions: RenderableContractAction[];
+  className: string;
+}): void {
+  const container = document.getElementById(params.containerId);
+  if (!container) return;
+  container.innerHTML = "";
+  if (params.actions.length === 0) {
+    (container as HTMLElement).style.display = "none";
+    return;
+  }
+
+  for (const action of params.actions) {
+    const button = document.createElement("button");
+    button.className = params.className;
+    button.type = "button";
+    button.textContent = action.label;
+    button.disabled = getIsLoading();
+    button.setAttribute("data-bsc-action-code", action.actionCode);
+    button.setAttribute("data-bsc-action-role", action.role);
+    button.setAttribute("data-bsc-action-surface", action.surface);
+    button.addEventListener("click", () => {
+      dispatchContractAction(action);
+    });
+    container.appendChild(button);
+  }
+
+  (container as HTMLElement).style.display = "flex";
 }
 
 function stepIndex(stepId: string): number {
@@ -819,10 +941,10 @@ export function renderChoiceButtons(choices: Choice[] | null | undefined, result
   wrap.style.display = "flex";
   const isLoading = getIsLoading();
   for (const action of structuredActions) {
-    const labelKey = String(action?.label_key || "").trim();
-    const labelFromPayload = stripInlineText(String(action?.label || "")).trim();
+    const labelKey = String(action.labelKey || "").trim();
+    const labelFromPayload = stripInlineText(String(action.label || "")).trim();
     const label = labelFromPayload || (labelKey ? String(t(lang, labelKey) || "").trim() : "");
-    const actionCode = String(action?.action_code || "").trim();
+    const actionCode = String(action.actionCode || "").trim();
     if (!label || !actionCode) continue;
     const btn = document.createElement("button");
     btn.className = "choiceBtn";
@@ -1063,6 +1185,8 @@ export function render(overrideToolOutput?: unknown): void {
   const inputWrap = document.getElementById("inputWrap");
   const btnStart = document.getElementById("btnStart");
   const startHint = document.getElementById("startHint");
+  const primaryActionWrap = document.getElementById("primaryActionWrap");
+  const auxiliaryActionWrap = document.getElementById("auxiliaryActionWrap");
   if (!inputWrap || !btnStart || !startHint) return;
   const isLoading = getIsLoading();
   const startActionCode = actionCodeForRole(result, "start");
@@ -1083,13 +1207,21 @@ export function render(overrideToolOutput?: unknown): void {
     inputWrap.style.display = "none";
     if (choiceWrap) choiceWrap.style.display = "none";
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
+    if (primaryActionWrap) (primaryActionWrap as HTMLElement).style.display = "none";
+    if (auxiliaryActionWrap) (auxiliaryActionWrap as HTMLElement).style.display = "none";
     if (prompt) prompt.textContent = "";
     if (uiSubtitle) {
       uiSubtitle.textContent = "";
       (uiSubtitle as HTMLElement).style.display = "none";
     }
     if (sectionTitleEl) sectionTitleEl.textContent = getSectionTitle(lang, "step_0", "");
-    (btnStart as HTMLElement).style.display = "inline-flex";
+    (btnStart as HTMLElement).style.display = "none";
+    renderActionSurfaceButtons({
+      containerId: "primaryActionWrap",
+      actions: surfaceActionsForResult(result, "primary", lang).filter((action) => action.role === "start"),
+      className: "btn primary",
+    });
+    if (auxiliaryActionWrap) (auxiliaryActionWrap as HTMLElement).style.display = "none";
     startHint.textContent = uiText(lang, "startHint", "");
     (startHint as HTMLElement).style.display = startHint.textContent ? "block" : "none";
     buildStepper(0, "", lang);
@@ -1170,6 +1302,8 @@ export function render(overrideToolOutput?: unknown): void {
     startHint.textContent = "";
     (startHint as HTMLElement).style.display = "none";
     (btnStart as HTMLElement).style.display = "none";
+    if (primaryActionWrap) (primaryActionWrap as HTMLElement).style.display = "none";
+    if (auxiliaryActionWrap) (auxiliaryActionWrap as HTMLElement).style.display = "none";
     setSessionStarted(false);
     setSessionWelcomeShown(false);
     if (isLoading) setLoading(false);
@@ -1208,12 +1342,21 @@ export function render(overrideToolOutput?: unknown): void {
   const isDreamStepPreExercise = false;
 
   if (showPreStart) {
+    const startActions = surfaceActionsForResult(result, "primary", lang).filter(
+      (action) => action.role === "start"
+    );
     inputWrap.style.display = "none";
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
-    (btnStart as HTMLElement).style.display = hasStartAction ? "inline-flex" : "none";
+    (btnStart as HTMLElement).style.display = "none";
+    renderActionSurfaceButtons({
+      containerId: "primaryActionWrap",
+      actions: startActions,
+      className: "btn primary",
+    });
+    if (auxiliaryActionWrap) (auxiliaryActionWrap as HTMLElement).style.display = "none";
     if (!hasStartAction) {
       console.warn("[ui_contract_missing_start_action]", {
         current_step: String((state?.current_step || "")).trim() || "step_0",
@@ -1440,22 +1583,12 @@ export function render(overrideToolOutput?: unknown): void {
     if (choiceWrap) choiceWrap.style.display = "none";
     const wordingChoiceWrap = document.getElementById("wordingChoiceWrap");
     if (wordingChoiceWrap) wordingChoiceWrap.style.display = "none";
-    const hideBtns = ["btnGoToNextStep", "btnStartDreamExercise"];
-    for (const id of hideBtns) {
-      const el = document.getElementById(id);
-      if (el) (el as HTMLElement).style.display = "none";
-    }
     const showPrompt = document.getElementById("prompt");
     if (showPrompt) {
       showPrompt.textContent = t(lang, "scoringDreamQuestion");
       showPrompt.style.display = "none";
     }
     inputWrap.style.display = "none";
-    const btnSelfDream = document.getElementById("btnSwitchToSelfDream");
-    if (btnSelfDream) {
-      (btnSelfDream as HTMLElement).style.display = "inline-flex";
-      btnSelfDream.textContent = t(lang, "btnSwitchToSelfDream");
-    }
 
     const scoringPanelEl = document.getElementById("scoringPanel");
     if (scoringPanelEl) {
@@ -1587,7 +1720,28 @@ export function render(overrideToolOutput?: unknown): void {
       if (promptEl) promptEl.style.display = filled ? "block" : "none";
     }
 
+    function syncScoringActionAvailability(): void {
+      const scoreSubmitEnabled = allScoringFilled();
+      document.querySelectorAll('[data-bsc-action-role="score_submit"]').forEach((button) => {
+        (button as HTMLButtonElement).disabled = getIsLoading() || !scoreSubmitEnabled;
+      });
+    }
+
+    renderActionSurfaceButtons({
+      containerId: "primaryActionWrap",
+      actions: surfaceActionsForResult(result, "primary", lang).filter(
+        (action) => action.role === "score_submit"
+      ),
+      className: "btn primary",
+    });
+    renderActionSurfaceButtons({
+      containerId: "auxiliaryActionWrap",
+      actions: surfaceActionsForResult(result, "auxiliary", lang),
+      className: "btn",
+    });
+
     updateScoringDreamQuestionVisibility();
+    syncScoringActionAvailability();
 
     scoringClustersEl.querySelectorAll(".scoreInput").forEach((input) => {
       input.addEventListener("input", () => {
@@ -1604,33 +1758,10 @@ export function render(overrideToolOutput?: unknown): void {
         }
         scoringScores[ci][si] = val;
         updateScoringClusterHeader(ci);
-        const btnScoringContinue = document.getElementById("btnScoringContinue");
-        if (btnScoringContinue)
-          (btnScoringContinue as HTMLButtonElement).disabled = !allScoringFilled();
+        syncScoringActionAvailability();
         updateScoringDreamQuestionVisibility();
       });
     });
-
-    const btnScoringContinueEl = document.getElementById("btnScoringContinue");
-    if (btnScoringContinueEl) {
-      btnScoringContinueEl.textContent = t(lang, "btnScoringContinue");
-      (btnScoringContinueEl as HTMLButtonElement).disabled = !allScoringFilled();
-      btnScoringContinueEl.onclick = () => {
-        if (!allScoringFilled() || getIsLoading()) return;
-        const payload: number[][] = [];
-        for (let ci = 0; ci < clusters.length; ci++) {
-          const row: number[] = [];
-          for (let si = 0; si < (scoringScores[ci] || []).length; si++) {
-            const v = Number(scoringScores[ci][si]);
-            row.push(isNaN(v) ? 0 : Math.max(1, Math.min(10, v)));
-          }
-          payload.push(row);
-        }
-        const actionCode = actionCodeForRole(result, "score_submit");
-        if (!actionCode) return;
-        callRunStep(actionCode, { __pending_scores: payload });
-      };
-    }
 
     const textSubmitActionCode = actionCodeForRole(result, "text_submit");
     const textSubmitAvailable = textSubmitActionCode.length > 0;
@@ -1796,33 +1927,31 @@ export function render(overrideToolOutput?: unknown): void {
     inputEl.tabIndex = disableTextSubmit ? -1 : 0;
   }
   if (!showTextSubmit || disableTextSubmit) setSendEnabled(false);
-  const sde = document.getElementById("btnStartDreamExercise");
-  const sb = document.getElementById("btnSwitchToSelfDream");
   if (choiceMode) {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "flex";
-    if (sde) (sde as HTMLElement).style.display = "none";
-    if (sb) (sb as HTMLElement).style.display = "none";
   } else {
     const choiceWrap = document.getElementById("choiceWrap");
     if (choiceWrap) choiceWrap.style.display = "none";
-    if (sde) (sde as HTMLElement).style.display = "none";
-    if (sb) (sb as HTMLElement).style.display = "none";
   }
-
-  const btnGoToNextStepEl = document.getElementById("btnGoToNextStep");
-  if (btnGoToNextStepEl) {
-    (btnGoToNextStepEl as HTMLElement).style.display = "none";
-    (btnGoToNextStepEl as HTMLButtonElement).disabled = getIsLoading();
-  }
-
-  const isDreamConfirm = false;
-  const btnDreamConfirmEl = document.getElementById("btnDreamConfirm");
-  if (btnDreamConfirmEl) {
-    (btnDreamConfirmEl as HTMLElement).style.display =
-      isDreamConfirm && !getIsLoading() ? "inline-flex" : "none";
-    (btnDreamConfirmEl as HTMLButtonElement).disabled = getIsLoading();
-  }
+  const primaryActions = requireWordingPick
+    ? []
+    : surfaceActionsForResult(result, "primary", lang).filter(
+        (action) => action.role !== "start" && action.role !== "score_submit"
+      );
+  const auxiliaryActions = requireWordingPick
+    ? []
+    : surfaceActionsForResult(result, "auxiliary", lang);
+  renderActionSurfaceButtons({
+    containerId: "primaryActionWrap",
+    actions: primaryActions,
+    className: "btn primary",
+  });
+  renderActionSurfaceButtons({
+    containerId: "auxiliaryActionWrap",
+    actions: auxiliaryActions,
+    className: "btn",
+  });
 
   const debugMode = /\bdebug=1\b/.test(String(typeof window !== "undefined" ? window.location.search : ""));
   const debugEl = document.getElementById("debugOverlay");
@@ -1847,24 +1976,6 @@ export function render(overrideToolOutput?: unknown): void {
       debugEl.classList.remove("visible");
       debugEl.setAttribute("aria-hidden", "true");
     }
-  }
-
-  const btnGoToNextStepEl2 = document.getElementById("btnGoToNextStep");
-  if (btnGoToNextStepEl2) btnGoToNextStepEl2.textContent = t(lang, "btnGoToNextStep");
-  const btnStartDreamExerciseEl = document.getElementById("btnStartDreamExercise");
-  if (btnStartDreamExerciseEl) {
-    btnStartDreamExerciseEl.textContent = t(lang, dreamExerciseButtonLabelKeyForState(state));
-    (btnStartDreamExerciseEl as HTMLButtonElement).disabled = getIsLoading();
-  }
-  const btnSwitchToSelfDreamEl = document.getElementById("btnSwitchToSelfDream");
-  if (btnSwitchToSelfDreamEl) {
-    btnSwitchToSelfDreamEl.textContent = t(lang, "btnSwitchToSelfDream");
-    (btnSwitchToSelfDreamEl as HTMLButtonElement).disabled = getIsLoading();
-  }
-  const btnDreamConfirmEl2 = document.getElementById("btnDreamConfirm");
-  if (btnDreamConfirmEl2) {
-    btnDreamConfirmEl2.textContent = t(lang, "btnDreamConfirm");
-    (btnDreamConfirmEl2 as HTMLButtonElement).disabled = getIsLoading();
   }
 
   const input = document.getElementById("input");

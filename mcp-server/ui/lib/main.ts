@@ -357,36 +357,6 @@ import { getIsLoading, setSessionStarted, setSessionWelcomeShown } from "./ui_st
       callRunStep(actionCode, { started: "true" });
     });
   }
-  var btnStartDreamExercise = document.getElementById("btnStartDreamExercise");
-  if (btnStartDreamExercise) {
-    btnStartDreamExercise.addEventListener("click", () => {
-      if (getIsLoading()) return;
-      const actionCode = actionDescriptorFromLatestContract("dream_start_exercise")?.actionCode || "";
-      if (!actionCode) {
-        console.warn("[ui_action_missing]", { role: "dream_start_exercise" });
-        setInlineNotice(
-          uiStringFromContract("error.contract.body")
-        );
-        return;
-      }
-      callRunStep(actionCode);
-    });
-  }
-  var btnSwitchToSelfDream = document.getElementById("btnSwitchToSelfDream");
-  if (btnSwitchToSelfDream) {
-    btnSwitchToSelfDream.addEventListener("click", () => {
-      if (getIsLoading()) return;
-      const actionCode = actionDescriptorFromLatestContract("dream_switch_to_self")?.actionCode || "";
-      if (!actionCode) {
-        console.warn("[ui_action_missing]", { role: "dream_switch_to_self" });
-        setInlineNotice(
-          uiStringFromContract("error.contract.body")
-        );
-        return;
-      }
-      callRunStep(actionCode);
-    });
-  }
   if (typeof window !== "undefined") {
     window.addEventListener("openai:set_globals", () => {
       try {
