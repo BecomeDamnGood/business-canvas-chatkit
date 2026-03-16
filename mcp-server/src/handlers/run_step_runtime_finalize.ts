@@ -1,5 +1,6 @@
 import type { CanvasState } from "../core/state.js";
 import { currentTurnSupportMode } from "../core/stuck_support.js";
+import { deriveStructuredSuggestionsContent } from "../core/structured_suggestions.js";
 import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
 
 import { createRunStepResponseHelpers } from "./run_step_response.js";
@@ -382,54 +383,24 @@ function normalizeStructuredSuggestionMessage(params: {
 }): string {
   const config = structuredSuggestionMenuConfigFor(params.contractStepId, params.menuId);
   if (!config) return String(params.messageRaw || "").trim();
-  if (config.itemKind === "multiline_list") return String(params.messageRaw || "").trim();
-
   const message = String(params.messageRaw || "").replace(/\r/g, "\n").trim();
   if (!message) return "";
   if (looksLikeStructuredDiscoveryQuestions(message)) return message;
-
-  const blocks = message
-    .split(/\n{2,}/)
-    .map((block) => String(block || "").trim())
-    .filter(Boolean);
-
-  let intro = "";
-  let outro = "";
-  if (blocks.length > 0 && looksLikeStructuredSuggestionIntro(blocks[0])) {
-    const lead = splitStructuredSuggestionLeadBlock({
-      block: String(blocks.shift() || "").trim(),
-      itemKind: config.itemKind,
-    });
-    intro = lead.intro;
-    if (lead.remainder) blocks.unshift(lead.remainder);
-  }
-  if (blocks.length > 0 && looksLikeStructuredSuggestionOutro(blocks[blocks.length - 1])) {
-    outro = String(blocks.pop() || "").trim();
-  }
-
-  if (!intro) {
-    const firstLine = message
-      .split("\n")
-      .map((line) => String(line || "").trim())
-      .find(Boolean) || "";
-    if (looksLikeStructuredSuggestionIntro(firstLine)) {
-      intro = firstLine;
-    }
-  }
-
-  const items = extractStructuredSuggestionItems({
-    raw: blocks.join("\n\n").trim() || message,
-    itemKind: config.itemKind,
-    tokenizeWords: params.tokenizeWords,
-  }).slice(0, 3);
-
-  if (items.length === 0) return message;
-
+  const content = deriveStructuredSuggestionsContent({
+    stepId: params.contractStepId,
+    menuId: params.menuId,
+    message,
+    uiStrings: params.stateUiStrings,
+  });
+  if (!content || content.items.length === 0) return message;
   const parts: string[] = [];
-  const heading = ensureStructuredSuggestionHeading(intro);
-  if (heading) parts.push(heading);
-  parts.push(items.map((item) => `- ${item}`).join("\n"));
-  parts.push(outro || structuredSuggestionOutro(config.stepId, params.stateUiStrings));
+  if (content.heading) parts.push(content.heading);
+  if (content.item_style === "blocks") {
+    parts.push(content.items.join("\n\n"));
+  } else {
+    parts.push(content.items.map((item) => `- ${item}`).join("\n"));
+  }
+  if (content.outro) parts.push(content.outro);
   return parts.filter(Boolean).join("\n\n").trim();
 }
 

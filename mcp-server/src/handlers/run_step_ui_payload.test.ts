@@ -195,6 +195,78 @@ test("attachRegistryPayload forwards structured single-value content into ui.con
   });
 });
 
+test("attachRegistryPayload forwards structured suggestion content into ui.content", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "fallback text",
+      prompt: "",
+      current_step_id: "bigwhy",
+      state: {
+        current_step: "bigwhy",
+        active_specialist: "BigWhy",
+      } as any,
+    },
+    {
+      ui_contract_id: "bigwhy:no_output:BIGWHY_MENU_FROM_GIVE:v1",
+      __canonical_text: "fallback text",
+      message: "fallback text",
+      ui_content: {
+        kind: "structured_suggestions",
+        heading: "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN VOOR MINDD",
+        items: [
+          "Voorstel 1",
+          "Voorstel 2",
+          "Voorstel 3",
+        ],
+        outro: "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+        item_style: "bullets",
+      },
+    }
+  );
+
+  assert.deepEqual(payload.ui?.content, {
+    kind: "structured_suggestions",
+    heading: "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN VOOR MINDD",
+    items: ["Voorstel 1", "Voorstel 2", "Voorstel 3"],
+    outro: "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+    item_style: "bullets",
+  });
+});
+
+test("attachRegistryPayload forwards explicit single-value feedback contracts into ui.feedback_contract", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "",
+      prompt: "",
+      current_step_id: "purpose",
+      state: {
+        current_step: "purpose",
+        active_specialist: "Purpose",
+      } as any,
+    },
+    {
+      ui_contract_id: "purpose:valid_output:PURPOSE_MENU_REFINE:v1",
+      ui_feedback_contract: {
+        kind: "single_value_canonical_suggestion",
+        heading: "Op basis van je input stel ik de volgende bestaansreden voor:",
+        suggested_value: "Mindd bestaat om complexe keuzes begrijpelijk en menselijk te maken.",
+        rationale: "Ik heb de formulering zachter en vriendelijker gemaakt.",
+      },
+    }
+  );
+
+  assert.deepEqual(payload.ui?.feedback_contract, {
+    version: "2026-03-16.feedback_contract.v1",
+    kind: "single_value_canonical_suggestion",
+    mode: "text",
+    heading: "Op basis van je input stel ik de volgende bestaansreden voor:",
+    suggested_value: "Mindd bestaat om complexe keuzes begrijpelijk en menselijk te maken.",
+    rationale: "Ik heb de formulering zachter en vriendelijker gemaakt.",
+  });
+});
+
 test("attachRegistryPayload suppresses single-value ui.content while wording-choice picker is active", () => {
   const helpers = buildHelpers();
   const canonical = "Mindd droomt van een wereld waarin keuzes rust geven.";

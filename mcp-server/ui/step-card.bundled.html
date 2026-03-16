@@ -2677,6 +2677,30 @@
     if (canonicalText) appendCanonicalValue(el, canonicalText);
     return true;
   }
+  function renderStructuredSuggestionsCardContent(el, content) {
+    if (!el) return false;
+    clearElementChildren(el);
+    const heading = String(content?.heading || "").trim();
+    const items = Array.isArray(content?.items) ? content.items.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    const outro = String(content?.outro || "").trim();
+    const itemStyle = content?.itemStyle === "blocks" ? "blocks" : "bullets";
+    if (!heading && items.length === 0 && !outro) return false;
+    if (heading) appendHeading(el, heading);
+    if (items.length > 0) {
+      if (itemStyle === "blocks") {
+        for (const item of items) {
+          const wrap = document.createElement("div");
+          wrap.className = "structuredSuggestionBlock";
+          appendStructuredText(wrap, item);
+          el.appendChild(wrap);
+        }
+      } else {
+        appendList(el, "ul", "structuredList structuredListBullet", items);
+      }
+    }
+    if (outro) appendParagraph(el, [outro]);
+    return true;
+  }
 
   // ui/lib/ui_state.ts
   var _isLoading = false;
@@ -5080,6 +5104,21 @@
       ...feedbackReasonText ? { feedbackReasonText } : {}
     };
   }
+  function readStructuredSuggestionsCardContent(uiPayload) {
+    const content = toRecord3(uiPayload.content);
+    if (String(content.kind || "").trim() !== "structured_suggestions") return null;
+    const heading = String(content.heading || "").trim();
+    const items = normalizeStringArray(content.items);
+    const outro = String(content.outro || "").trim();
+    const itemStyle = String(content.item_style || "").trim() === "blocks" ? "blocks" : "bullets";
+    if (!heading && items.length === 0 && !outro) return null;
+    return {
+      ...heading ? { heading } : {},
+      ...items.length > 0 ? { items } : {},
+      ...outro ? { outro } : {},
+      itemStyle
+    };
+  }
   function shouldSuppressMainCardForWordingChoice(uiPayloadRaw, uiViewVariantRaw) {
     const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
     const feedbackContract = readFeedbackContract(uiPayload);
@@ -5954,6 +5993,7 @@
     const uiQuestionText = String(uiPayload.questionText || "").trim();
     const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(uiPayload, uiViewVariant);
     const singleValueContent = wordingChoiceActive ? null : readSingleValueCardContent(uiPayload);
+    const structuredSuggestionsContent = wordingChoiceActive ? null : readStructuredSuggestionsCardContent(uiPayload);
     const structuredActions = choiceActionsForResult(result);
     const hasStructuredActions = structuredActions.length > 0;
     const promptBody = uiPayload.prompt && typeof uiPayload.prompt.body === "string" ? String(uiPayload.prompt.body || "") : "";
@@ -6011,7 +6051,7 @@
       });
       cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
       cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
-      const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
+      const renderedSemanticContent = renderStructuredSuggestionsCardContent(cardDescEl, structuredSuggestionsContent) || renderSingleValueCardContent(cardDescEl, singleValueContent);
       if (!renderedSemanticContent && !wordingChoiceActive) {
         renderStructuredText(cardDescEl, body || "");
         if (shouldAppendDreamStepVideo) {

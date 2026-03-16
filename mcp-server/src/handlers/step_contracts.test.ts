@@ -479,7 +479,7 @@ test("feedback contract derives the single-value compare family from wording-cho
   );
 });
 
-test("feedback contract derives the canonical single-value suggestion family from ui content", () => {
+test("feedback contract keeps the canonical single-value suggestion family when the server publishes it explicitly", () => {
   const response = finalizeResponseContractInternals(
     {
       ok: true,
@@ -495,12 +495,13 @@ test("feedback contract derives the canonical single-value suggestion family fro
         view: {
           mode: "interactive",
         },
-        content: {
-          kind: "single_value",
+        feedback_contract: {
+          version: "2026-03-16.feedback_contract.v1",
+          kind: "single_value_canonical_suggestion",
           heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
-          canonical_text: "Wij bestaan om mensen op een positieve manier te inspireren om hun volledige potentieel te ontdekken.",
+          suggested_value: "Wij bestaan om mensen op een positieve manier te inspireren om hun volledige potentieel te ontdekken.",
           support_text: "Deze formulering klinkt uitnodigend en legt de nadruk op positiviteit.",
-          feedback_reason_text: "Je huidige formulering blijft nog te algemeen.",
+          rationale: "Je huidige formulering blijft nog te algemeen.",
         },
       },
     } as any,

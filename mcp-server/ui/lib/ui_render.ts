@@ -18,7 +18,14 @@ import {
   stepperLabelForLang,
   setRuntimeUiStrings,
 } from "./ui_constants.js";
-import { escapeHtml, renderInlineText, renderSingleValueCardContent, renderStructuredText, stripInlineText } from "./ui_text.js";
+import {
+  escapeHtml,
+  renderInlineText,
+  renderSingleValueCardContent,
+  renderStructuredSuggestionsCardContent,
+  renderStructuredText,
+  stripInlineText,
+} from "./ui_text.js";
 import type { Choice } from "./ui_choices.js";
 import {
   callRunStep,
@@ -149,6 +156,27 @@ function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
     ...(canonicalText ? { canonicalText } : {}),
     ...(supportText ? { supportText } : {}),
     ...(feedbackReasonText ? { feedbackReasonText } : {}),
+  };
+}
+
+function readStructuredSuggestionsCardContent(uiPayload: Record<string, unknown>): {
+  heading?: string;
+  items?: string[];
+  outro?: string;
+  itemStyle?: "bullets" | "blocks";
+} | null {
+  const content = toRecord(uiPayload.content);
+  if (String(content.kind || "").trim() !== "structured_suggestions") return null;
+  const heading = String(content.heading || "").trim();
+  const items = normalizeStringArray(content.items);
+  const outro = String(content.outro || "").trim();
+  const itemStyle = String(content.item_style || "").trim() === "blocks" ? "blocks" : "bullets";
+  if (!heading && items.length === 0 && !outro) return null;
+  return {
+    ...(heading ? { heading } : {}),
+    ...(items.length > 0 ? { items } : {}),
+    ...(outro ? { outro } : {}),
+    itemStyle,
   };
 }
 
@@ -1508,6 +1536,7 @@ export function render(overrideToolOutput?: unknown): void {
   const uiQuestionText = String(uiPayload.questionText || "").trim();
   const wordingChoiceActive = shouldSuppressMainCardForWordingChoice(uiPayload, uiViewVariant);
   const singleValueContent = wordingChoiceActive ? null : readSingleValueCardContent(uiPayload);
+  const structuredSuggestionsContent = wordingChoiceActive ? null : readStructuredSuggestionsCardContent(uiPayload);
   const structuredActions = choiceActionsForResult(result);
   const hasStructuredActions = structuredActions.length > 0;
   const promptBody =
@@ -1583,7 +1612,9 @@ export function render(overrideToolOutput?: unknown): void {
       });
     cardDescEl.classList.toggle("is-step0-ask-layout", isStep0AskLayout);
     cardDescEl.classList.toggle("is-ben-profile", isBenProfile);
-    const renderedSemanticContent = renderSingleValueCardContent(cardDescEl, singleValueContent);
+    const renderedSemanticContent =
+      renderStructuredSuggestionsCardContent(cardDescEl, structuredSuggestionsContent) ||
+      renderSingleValueCardContent(cardDescEl, singleValueContent);
     if (!renderedSemanticContent && !wordingChoiceActive) {
       renderStructuredText(cardDescEl, body || "");
       if (shouldAppendDreamStepVideo) {

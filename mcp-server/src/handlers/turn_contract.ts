@@ -235,25 +235,6 @@ function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): voi
     return;
   }
 
-  if (String(uiContent.kind || "").trim() === "single_value") {
-    const heading = String(uiContent.heading || "").trim();
-    const canonicalText = String(uiContent.canonical_text || "").trim();
-    const supportText = String(uiContent.support_text || "").trim();
-    const contentFeedbackReasonText = String(uiContent.feedback_reason_text || "").trim();
-    if (heading || canonicalText || supportText || contentFeedbackReasonText) {
-      ui.feedback_contract = {
-        version: "2026-03-16.feedback_contract.v1",
-        kind: "single_value_canonical_suggestion",
-        ...(heading ? { heading } : {}),
-        ...(canonicalText ? { suggested_value: canonicalText } : {}),
-        ...(supportText ? { support_text: supportText } : {}),
-        ...(contentFeedbackReasonText ? { rationale: contentFeedbackReasonText } : {}),
-      };
-      response.ui = ui;
-      return;
-    }
-  }
-
   delete ui.feedback_contract;
   response.ui = ui;
 }
@@ -316,11 +297,25 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
   const question =
     String(uiPayload.questionText || "").trim() ||
     String(specialist.question || "").trim();
+  const uiContentKind = String(uiContent.kind || "").trim();
   const hasStructuredContent =
-    String(uiContent.heading || "").trim().length > 0 ||
-    String(uiContent.canonical_text || "").trim().length > 0 ||
-    String(uiContent.support_text || "").trim().length > 0 ||
-    String(uiContent.feedback_reason_text || "").trim().length > 0;
+    (
+      uiContentKind === "structured_suggestions" &&
+      (
+        String(uiContent.heading || "").trim().length > 0 ||
+        normalizeStringArray(uiContent.items).length > 0 ||
+        String(uiContent.outro || "").trim().length > 0
+      )
+    ) ||
+    (
+      uiContentKind !== "structured_suggestions" &&
+      (
+        String(uiContent.heading || "").trim().length > 0 ||
+        String(uiContent.canonical_text || "").trim().length > 0 ||
+        String(uiContent.support_text || "").trim().length > 0 ||
+        String(uiContent.feedback_reason_text || "").trim().length > 0
+      )
+    );
   const hasStructuredFeedback =
     String(uiFeedback.heading || "").trim().length > 0 ||
     String(uiFeedback.support_text || "").trim().length > 0 ||

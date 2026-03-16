@@ -166,18 +166,101 @@ function toRecord(value: unknown): Record<string, unknown> {
 function normalizeUiContentPayload(raw: unknown): UiContentPayload | undefined {
   const record = toRecord(raw);
   const kind = String(record.kind || "").trim();
-  if (kind !== "single_value") return undefined;
+  if (kind === "single_value") {
+    const heading = String(record.heading || "").trim();
+    const canonicalText = String(record.canonical_text || "").trim();
+    const supportText = String(record.support_text || "").trim();
+    const feedbackReasonText = String(record.feedback_reason_text || "").trim();
+    if (!heading && !canonicalText && !supportText && !feedbackReasonText) return undefined;
+    return {
+      kind: "single_value",
+      ...(heading ? { heading } : {}),
+      ...(canonicalText ? { canonical_text: canonicalText } : {}),
+      ...(supportText ? { support_text: supportText } : {}),
+      ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
+    };
+  }
+  if (kind === "structured_suggestions") {
+    const heading = String(record.heading || "").trim();
+    const items = Array.isArray(record.items)
+      ? record.items.map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const outro = String(record.outro || "").trim();
+    const itemStyle = String(record.item_style || "").trim() === "blocks" ? "blocks" : "bullets";
+    if (!heading && items.length === 0 && !outro) return undefined;
+    return {
+      kind: "structured_suggestions",
+      ...(heading ? { heading } : {}),
+      ...(items.length > 0 ? { items } : {}),
+      ...(outro ? { outro } : {}),
+      item_style: itemStyle,
+    };
+  }
+  return undefined;
+}
+
+function normalizeUiFeedbackContract(raw: unknown): Record<string, unknown> | undefined {
+  const record = toRecord(raw);
+  const kind = String(record.kind || "").trim();
+  if (
+    kind !== "single_value_canonical_suggestion" &&
+    kind !== "single_value_compare" &&
+    kind !== "list_edit_compare" &&
+    kind !== "list_duplicate_merge_compare"
+  ) {
+    return undefined;
+  }
+  const mode = String(record.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
   const heading = String(record.heading || "").trim();
-  const canonicalText = String(record.canonical_text || "").trim();
   const supportText = String(record.support_text || "").trim();
-  const feedbackReasonText = String(record.feedback_reason_text || "").trim();
-  if (!heading && !canonicalText && !supportText && !feedbackReasonText) return undefined;
+  const rationale = String(record.rationale || "").trim();
+  const currentLabel = String(record.current_label || "").trim();
+  const suggestedLabel = String(record.suggested_label || "").trim();
+  const currentValue = String(record.current_value || "").trim();
+  const suggestedValue = String(record.suggested_value || "").trim();
+  const retainedHeading = String(record.retained_heading || "").trim();
+  const instruction = String(record.instruction || "").trim();
+  const currentItems = Array.isArray(record.current_items)
+    ? record.current_items.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  const suggestedItems = Array.isArray(record.suggested_items)
+    ? record.suggested_items.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  const retainedItems = Array.isArray(record.retained_items)
+    ? record.retained_items.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  if (
+    !heading &&
+    !supportText &&
+    !rationale &&
+    !currentLabel &&
+    !suggestedLabel &&
+    !currentValue &&
+    !suggestedValue &&
+    !retainedHeading &&
+    !instruction &&
+    currentItems.length === 0 &&
+    suggestedItems.length === 0 &&
+    retainedItems.length === 0
+  ) {
+    return undefined;
+  }
   return {
-    kind: "single_value",
+    version: "2026-03-16.feedback_contract.v1",
+    kind,
+    mode,
     ...(heading ? { heading } : {}),
-    ...(canonicalText ? { canonical_text: canonicalText } : {}),
     ...(supportText ? { support_text: supportText } : {}),
-    ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
+    ...(rationale ? { rationale } : {}),
+    ...(currentLabel ? { current_label: currentLabel } : {}),
+    ...(suggestedLabel ? { suggested_label: suggestedLabel } : {}),
+    ...(currentValue ? { current_value: currentValue } : {}),
+    ...(suggestedValue ? { suggested_value: suggestedValue } : {}),
+    ...(currentItems.length > 0 ? { current_items: currentItems } : {}),
+    ...(suggestedItems.length > 0 ? { suggested_items: suggestedItems } : {}),
+    ...(retainedHeading ? { retained_heading: retainedHeading } : {}),
+    ...(retainedItems.length > 0 ? { retained_items: retainedItems } : {}),
+    ...(instruction ? { instruction } : {}),
   };
 }
 
@@ -344,6 +427,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     actions?: RenderedAction[];
     questionText?: string;
     content?: UiContentPayload;
+    feedback_contract?: Record<string, unknown>;
     contract_id?: string;
     contract_version?: string;
     text_keys?: string[];
@@ -498,6 +582,9 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         ? {}
         : (questionText ? { questionText } : {});
     const rawContentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
+    const rawFeedbackContractPayload = normalizeUiFeedbackContract(
+      (specialist as Record<string, unknown>)?.ui_feedback_contract
+    );
     const shouldSuppressSingleValueContent =
       Boolean(rawContentPayload) &&
       isSingleValueTextPickerState({
@@ -537,6 +624,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
           ...questionTextPayload,
           ...(contentPayload ? { content: contentPayload } : {}),
+          ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -545,10 +633,18 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
         };
       }
-      if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload || contentPayload) {
+      if (
+        Object.keys(flags).length > 0 ||
+        wordingChoiceOverride ||
+        contractMeta.contractId ||
+        viewPayload ||
+        contentPayload ||
+        rawFeedbackContractPayload
+      ) {
         return {
           ...questionTextPayload,
           ...(contentPayload ? { content: contentPayload } : {}),
+          ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -563,10 +659,17 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
     if (menuId) {
       if (deps.isWidgetSuppressedEscapeMenuId(menuId)) {
         if (localDev) flags.escape_menu_suppressed = true;
-        if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || contentPayload) {
+        if (
+          Object.keys(flags).length > 0 ||
+          wordingChoiceOverride ||
+          contractMeta.contractId ||
+          contentPayload ||
+          rawFeedbackContractPayload
+        ) {
           return {
             ...questionTextPayload,
             ...(contentPayload ? { content: contentPayload } : {}),
+            ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
             ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
             ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
             ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -585,10 +688,18 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           flags.escape_actioncodes_suppressed = true;
         }
         if (safeCodes.length === 0) {
-          if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload || contentPayload) {
+          if (
+            Object.keys(flags).length > 0 ||
+            wordingChoiceOverride ||
+            contractMeta.contractId ||
+            viewPayload ||
+            contentPayload ||
+            rawFeedbackContractPayload
+          ) {
             return {
               ...questionTextPayload,
               ...(contentPayload ? { content: contentPayload } : {}),
+              ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
               ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
               ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
               ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -606,6 +717,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(renderedActions.length > 0 ? { actions: renderedActions } : {}),
           ...questionTextPayload,
           ...(contentPayload ? { content: contentPayload } : {}),
+          ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
           ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
           ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
@@ -615,10 +727,18 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         };
       }
     }
-    if (Object.keys(flags).length > 0 || wordingChoiceOverride || contractMeta.contractId || viewPayload || contentPayload) {
+    if (
+      Object.keys(flags).length > 0 ||
+      wordingChoiceOverride ||
+      contractMeta.contractId ||
+      viewPayload ||
+      contentPayload ||
+      rawFeedbackContractPayload
+    ) {
       return {
         ...questionTextPayload,
         ...(contentPayload ? { content: contentPayload } : {}),
+        ...(rawFeedbackContractPayload ? { feedback_contract: rawFeedbackContractPayload } : {}),
         ...(contractMeta.contractId ? { contract_id: contractMeta.contractId } : {}),
         ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),

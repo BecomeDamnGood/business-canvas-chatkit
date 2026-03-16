@@ -792,15 +792,15 @@ test("dream valid output from user-input summary uses autosuggest heading instea
     previousSpecialist: {},
   });
 
-  const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+  const feedbackContract = (rendered.specialist as any).ui_feedback_contract as Record<string, unknown>;
   assert.equal(rendered.status, "valid_output");
-  assert.equal(String(uiContent.kind || ""), "single_value");
+  assert.equal(String(feedbackContract.kind || ""), "single_value_canonical_suggestion");
   assert.equal(
-    String(uiContent.heading || ""),
+    String(feedbackContract.heading || ""),
     "Based on your input I suggest the following Dream:"
   );
-  assert.doesNotMatch(String(uiContent.heading || ""), /current.*dream.*mindd.*is:/i);
-  assert.equal(String(uiContent.canonical_text || ""), canonical);
+  assert.doesNotMatch(String(feedbackContract.heading || ""), /current.*dream.*mindd.*is:/i);
+  assert.equal(String(feedbackContract.suggested_value || ""), canonical);
 });
 
 test("single-value valid output from user input keeps autosuggest heading until wording pick or final commit", () => {
@@ -851,11 +851,11 @@ test("single-value valid output from user input keeps autosuggest heading until 
       previousSpecialist: {},
     });
 
-    const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+    const feedbackContract = (rendered.specialist as any).ui_feedback_contract as Record<string, unknown>;
     assert.equal(rendered.status, "valid_output");
-    assert.equal(String(uiContent.kind || ""), "single_value");
-    assert.equal(String(uiContent.heading || ""), current.expectedHeading);
-    assert.equal(String(uiContent.canonical_text || ""), current.canonical);
+    assert.equal(String(feedbackContract.kind || ""), "single_value_canonical_suggestion");
+    assert.equal(String(feedbackContract.heading || ""), current.expectedHeading);
+    assert.equal(String(feedbackContract.suggested_value || ""), current.canonical);
   }
 });
 
@@ -1233,6 +1233,109 @@ test("bigwhy follow-up menu survives current-value refinement states", () => {
     String((rendered.specialist as any).question || ""),
     "Verfijn je grote waarom voor Mindd of kies een optie."
   );
+});
+
+test("choose-for-me suggestion menus publish explicit structured suggestion content for the widget", () => {
+  const scenarios = [
+    {
+      stepId: "bigwhy",
+      specialistLabel: "BigWhy",
+      contractId: buildUiContractId("bigwhy", "no_output", "BIGWHY_MENU_FROM_GIVE"),
+      message: [
+        "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD",
+        "",
+        "- Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
+        "- Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
+        "- Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+      ].join("\n"),
+      expectedHeading:
+        "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD:",
+      expectedOutro: "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+    },
+    {
+      stepId: "purpose",
+      specialistLabel: "Purpose",
+      contractId: buildUiContractId("purpose", "no_output", "PURPOSE_MENU_EXAMPLES"),
+      message: [
+        "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD",
+        "",
+        "- Mindd bestaat om mensen te helpen complexe keuzes met rust en vertrouwen te maken.",
+        "- Mindd bestaat om moeilijke informatie om te zetten in helderheid die mensen verder helpt.",
+        "- Mindd bestaat om mensen richting te geven wanneer belangrijke beslissingen overweldigend voelen.",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+      ].join("\n"),
+      expectedHeading: "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD:",
+      expectedOutro: "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+    },
+    {
+      stepId: "entity",
+      specialistLabel: "Entity",
+      contractId: buildUiContractId("entity", "no_output", "ENTITY_MENU_SUGGESTIONS"),
+      message: [
+        "HIER ZIJN DRIE MOGELIJKE ENTITY-FORMULERINGEN VOOR MINDD",
+        "",
+        "- Een strategisch communicatiebureau.",
+        "- Een mensgerichte merkpartner.",
+        "- Een creatieve veranderstudio.",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen Entity te schrijven.",
+      ].join("\n"),
+      expectedHeading: "HIER ZIJN DRIE MOGELIJKE ENTITY-FORMULERINGEN VOOR MINDD:",
+      expectedOutro: "Ik hoop dat deze suggesties je inspireren om je eigen Entity te schrijven.",
+      expectedItems: [
+        "Een strategisch communicatiebureau",
+        "Een mensgerichte merkpartner",
+        "Een creatieve veranderstudio",
+      ],
+    },
+  ] as const;
+
+  for (const scenario of scenarios) {
+    const state = getDefaultState();
+    (state as any).current_step = scenario.stepId;
+    (state as any).active_specialist = scenario.specialistLabel;
+    (state as any).business_name = "Mindd";
+    (state as any).ui_strings = {
+      "structuredSuggestions.outro.template": "Ik hoop dat deze suggesties je inspireren om je eigen {0} te schrijven.",
+      [`offtopic.step.${scenario.stepId}`]:
+        scenario.stepId === "bigwhy"
+          ? "Grote Waarom"
+          : scenario.stepId === "purpose"
+            ? "bestaansreden"
+            : "Entity",
+    };
+
+    const rendered = renderFreeTextTurnPolicy({
+      stepId: scenario.stepId,
+      state,
+      specialist: {
+        action: "ASK",
+        ui_contract_id: scenario.contractId,
+        message: scenario.message,
+        question: "",
+        refined_formulation: "",
+        is_offtopic: false,
+      },
+      previousSpecialist: {},
+    });
+
+    const uiContent = (rendered.specialist as any).ui_content as Record<string, unknown>;
+    assert.equal(String(uiContent.kind || ""), "structured_suggestions");
+    assert.equal(String(uiContent.heading || ""), scenario.expectedHeading);
+    assert.deepEqual(
+      uiContent.items,
+      scenario.expectedItems ||
+        scenario.message
+          .split("\n")
+          .filter((line) => line.startsWith("- "))
+          .map((line) => line.replace(/^- /, ""))
+    );
+    assert.equal(String(uiContent.outro || ""), scenario.expectedOutro);
+    assert.equal(String(uiContent.item_style || ""), "bullets");
+  }
 });
 
 test("single-value valid output infers feedback reason across the single-value feedback family", () => {
@@ -1868,8 +1971,19 @@ test("single-value current-value refinement uses its own state without wording-c
 
   assert.equal(rendered.status, "valid_output");
   assert.equal(rendered.uiActionCodes.includes("ACTION_PURPOSE_REFINE_CONFIRM"), true);
-  assert.equal(String((rendered.specialist as any).ui_content?.canonical_text || ""), canonical);
-  assert.match(String((rendered.specialist as any).message || ""), /Purpose of Mindd is|jouw huidige bestaansreden/i);
+  assert.equal(String((rendered.specialist as any).ui_content || ""), "");
+  assert.equal(
+    String((rendered.specialist as any).ui_feedback_contract?.suggested_value || ""),
+    canonical
+  );
+  assert.match(
+    String((rendered.specialist as any).ui_feedback_contract?.heading || ""),
+    /Based on your input|Op basis van je input/i
+  );
+  assert.doesNotMatch(
+    String((rendered.specialist as any).message || ""),
+    /Purpose of Mindd is|jouw huidige bestaansreden/i
+  );
   assert.doesNotMatch(
     String((rendered.specialist as any).message || ""),
     /Ik heb de toon van de droom lichter gemaakt/i

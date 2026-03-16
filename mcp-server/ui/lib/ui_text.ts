@@ -329,6 +329,13 @@ export type SingleValueCardContent = {
   feedbackReasonText?: string | null;
 };
 
+export type StructuredSuggestionsCardContent = {
+  heading?: string | null;
+  items?: string[] | null;
+  outro?: string | null;
+  itemStyle?: "bullets" | "blocks" | null;
+};
+
 export function renderSingleValueCardContent(
   el: Element | null,
   content: SingleValueCardContent | null | undefined
@@ -346,5 +353,35 @@ export function renderSingleValueCardContent(
   if (feedbackReasonText) appendFeedbackNote(el, feedbackReasonText);
   if (heading) appendHeading(el, heading);
   if (canonicalText) appendCanonicalValue(el, canonicalText);
+  return true;
+}
+
+export function renderStructuredSuggestionsCardContent(
+  el: Element | null,
+  content: StructuredSuggestionsCardContent | null | undefined
+): boolean {
+  if (!el) return false;
+  clearElementChildren(el);
+  const heading = String(content?.heading || "").trim();
+  const items = Array.isArray(content?.items)
+    ? content.items.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  const outro = String(content?.outro || "").trim();
+  const itemStyle = content?.itemStyle === "blocks" ? "blocks" : "bullets";
+  if (!heading && items.length === 0 && !outro) return false;
+  if (heading) appendHeading(el, heading);
+  if (items.length > 0) {
+    if (itemStyle === "blocks") {
+      for (const item of items) {
+        const wrap = document.createElement("div");
+        wrap.className = "structuredSuggestionBlock";
+        appendStructuredText(wrap, item);
+        el.appendChild(wrap);
+      }
+    } else {
+      appendList(el, "ul", "structuredList structuredListBullet", items);
+    }
+  }
+  if (outro) appendParagraph(el, [outro]);
   return true;
 }

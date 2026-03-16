@@ -22,7 +22,17 @@ export const UiSingleValueContentZod = z.object({
 
 export type UiSingleValueContent = z.infer<typeof UiSingleValueContentZod>;
 
-export const UiContentPayloadZod = z.union([UiSingleValueContentZod]);
+export const UiStructuredSuggestionsContentZod = z.object({
+  kind: z.literal("structured_suggestions"),
+  heading: z.string().optional(),
+  items: z.array(z.string()).optional(),
+  outro: z.string().optional(),
+  item_style: z.enum(["bullets", "blocks"]).optional(),
+});
+
+export type UiStructuredSuggestionsContent = z.infer<typeof UiStructuredSuggestionsContentZod>;
+
+export const UiContentPayloadZod = z.union([UiSingleValueContentZod, UiStructuredSuggestionsContentZod]);
 
 export type UiContentPayload = z.infer<typeof UiContentPayloadZod>;
 

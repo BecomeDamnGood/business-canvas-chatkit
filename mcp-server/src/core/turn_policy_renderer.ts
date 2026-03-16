@@ -3,7 +3,11 @@ import { MENU_LABEL_DEFAULTS, MENU_LABEL_KEYS, labelKeyForMenuAction } from "./m
 import { getFinalFieldForStepId, type CanvasState } from "./state.js";
 import { currentTurnSupportMode } from "./stuck_support.js";
 import { actionCodeToIntent } from "./actioncode_intent.js";
-import type { RenderedAction, UiSingleValueContent } from "../contracts/ui_actions.js";
+import type {
+  RenderedAction,
+  UiSingleValueContent,
+  UiStructuredSuggestionsContent,
+} from "../contracts/ui_actions.js";
 import {
   DEFAULT_MENU_BY_STATUS,
   UI_CONTRACT_VERSION,
@@ -33,10 +37,12 @@ import { isStageableDreamCandidate } from "../steps/dream_runtime_policy.js";
 import { isStructuredPresentationRecap } from "../handlers/run_step_presentation_recap.js";
 import {
   formatStepSectionTitle,
+  getChooseForMeRegistryEntryForMenu,
   hasGroupedCompareListSemantics,
   isSingleValueWordingStep,
   STEP_REGISTRY_ORDER,
 } from "../steps/step_registry.js";
+import { deriveStructuredSuggestionsContent } from "./structured_suggestions.js";
 
 export type TurnOutputStatus = "no_output" | "incomplete_output" | "valid_output";
 
@@ -643,6 +649,56 @@ function buildSingleValueUiContent(params: {
     canonical_text: canonicalText,
     ...(supportText ? { support_text: supportText } : {}),
     ...(feedbackReasonText ? { feedback_reason_text: feedbackReasonText } : {}),
+  };
+}
+
+function buildStructuredSuggestionsUiContent(params: {
+  stepId: string;
+  menuId: string;
+  state: CanvasState;
+  message: string;
+}): UiStructuredSuggestionsContent | undefined {
+  const chooseForMeEntry = getChooseForMeRegistryEntryForMenu(params.stepId, params.menuId);
+  if (!chooseForMeEntry) return undefined;
+  const content = deriveStructuredSuggestionsContent({
+    stepId: params.stepId,
+    menuId: params.menuId,
+    message: params.message,
+    uiStrings: params.state.ui_strings as Record<string, unknown> | undefined,
+  });
+  if (!content || content.items.length === 0) return undefined;
+  return content;
+}
+
+function buildSingleValueCanonicalFeedbackContract(params: {
+  stepId: string;
+  state: CanvasState;
+  message: string;
+  canonicalValue: string;
+  feedbackReasonText?: string;
+  rawFeedbackReasonText?: string;
+  headingOverride?: string;
+}): Record<string, unknown> | undefined {
+  const canonicalText = String(params.canonicalValue || "").trim();
+  if (!canonicalText) return undefined;
+  const heading = String(params.headingOverride || "").trim() || autoSuggestHeading(params.stepId, params.state);
+  const rationale = String(params.feedbackReasonText || "").trim();
+  const supportText = singleValueSupportText({
+    message: params.message,
+    heading,
+    canonicalValue: canonicalText,
+    feedbackReasonText: rationale,
+    rawFeedbackReasonText: String(params.rawFeedbackReasonText || "").trim(),
+  });
+  if (!heading && !canonicalText && !supportText && !rationale) return undefined;
+  return {
+    version: "2026-03-16.feedback_contract.v1",
+    kind: "single_value_canonical_suggestion",
+    mode: "text",
+    ...(heading ? { heading } : {}),
+    suggested_value: canonicalText,
+    ...(supportText ? { support_text: supportText } : {}),
+    ...(rationale ? { rationale } : {}),
   };
 }
 
@@ -1974,6 +2030,33 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     currentValueRefinementFeedbackForDisplay || feedbackReasonForDisplay;
   const effectiveRawFeedbackReasonForDisplay =
     rawCurrentValueRefinementFeedbackForDisplay || rawFeedbackReasonForDisplay;
+  const rawMessageForSemanticContracts = String(message || "").trim();
+  const singleValueUiCanonicalValue = (() => {
+    if (recapRequested) return "";
+    if (isOfftopic) return "";
+    if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
+      return currentValueRefinementCanonicalValue;
+    }
+    if (
+      !wordingPending &&
+      effectiveStatus === "valid_output" &&
+      canonicalAcceptedValue &&
+      hasSingleValueStructuredContent(stepId)
+    ) {
+      return canonicalAcceptedValue;
+    }
+    return "";
+  })();
+  const shouldPublishCanonicalSuggestionFeedbackContract =
+    Boolean(singleValueUiCanonicalValue) &&
+    (
+      currentValueRefinementPending ||
+      (
+        !wordingPending &&
+        effectiveStatus === "valid_output" &&
+        !shouldUseCurrentValueHeading(stepId, state)
+      )
+    );
   let messageForDisplay =
     isSemanticInvariantsV1Enabled() &&
     wordingPending &&
@@ -2001,14 +2084,13 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
       rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
     });
   } else if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
-    const canonicalMessage = singleValueConfirmCanonicalMessage(
-      stepId,
-      state,
-      currentValueRefinementCanonicalValue
-    );
-    messageForDisplay = effectiveFeedbackReasonForDisplay
-      ? `${effectiveFeedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
-      : canonicalMessage;
+    messageForDisplay = singleValueSupportText({
+      message: rawMessageForSemanticContracts,
+      heading: autoSuggestHeading(stepId, state),
+      canonicalValue: currentValueRefinementCanonicalValue,
+      feedbackReasonText: effectiveFeedbackReasonForDisplay,
+      rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
+    });
   }
   const useSingleValueConfirmSsot =
     shouldEnforceConfirmVisibility &&
@@ -2018,35 +2100,27 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     !wordingPending &&
     !currentValueRefinementPending &&
     !recapRequested;
-  if (useSingleValueConfirmSsot) {
+  if (useSingleValueConfirmSsot && !shouldPublishCanonicalSuggestionFeedbackContract) {
     const canonicalMessage = singleValueConfirmCanonicalMessage(stepId, state, canonicalAcceptedValue);
     messageForDisplay = feedbackReasonForDisplay
       ? `${feedbackReasonForDisplay}\n\n${canonicalMessage}`.trim()
       : canonicalMessage;
-  } else if (shouldEnforceConfirmVisibility && canonicalAcceptedValue && !wordingPending) {
+  } else if (
+    shouldEnforceConfirmVisibility &&
+    canonicalAcceptedValue &&
+    !wordingPending &&
+    !shouldPublishCanonicalSuggestionFeedbackContract
+  ) {
     messageForDisplay = ensureCanonicalContextBlockInMessage({
       message: messageForDisplay,
       canonicalValue: canonicalAcceptedValue,
       heading: offTopicCurrentContextHeading(stepId, state),
     });
   }
-  const singleValueUiCanonicalValue = (() => {
-    if (recapRequested) return "";
-    if (isOfftopic) return "";
-    if (currentValueRefinementPending && currentValueRefinementCanonicalValue) {
-      return currentValueRefinementCanonicalValue;
-    }
-    if (
-      !wordingPending &&
-      effectiveStatus === "valid_output" &&
-      canonicalAcceptedValue &&
-      hasSingleValueStructuredContent(stepId)
-    ) {
-      return canonicalAcceptedValue;
-    }
-    return "";
-  })();
-  const singleValueUiContent = buildSingleValueUiContent({
+  if (shouldPublishCanonicalSuggestionFeedbackContract) {
+    messageForDisplay = "";
+  }
+  const singleValueUiContent = shouldPublishCanonicalSuggestionFeedbackContract ? undefined : buildSingleValueUiContent({
     stepId,
     state,
     specialist: specialistForDisplay,
@@ -2054,6 +2128,22 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     canonicalValue: singleValueUiCanonicalValue,
     feedbackReasonText: effectiveFeedbackReasonForDisplay,
     rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
+  });
+  const singleValueUiFeedbackContract = shouldPublishCanonicalSuggestionFeedbackContract
+    ? buildSingleValueCanonicalFeedbackContract({
+        stepId,
+        state,
+        message: rawMessageForSemanticContracts,
+        canonicalValue: singleValueUiCanonicalValue,
+        feedbackReasonText: effectiveFeedbackReasonForDisplay,
+        rawFeedbackReasonText: effectiveRawFeedbackReasonForDisplay,
+      })
+    : undefined;
+  const structuredSuggestionsUiContent = buildStructuredSuggestionsUiContent({
+    stepId,
+    menuId,
+    state,
+    message: messageForDisplay,
   });
 
   const {
@@ -2067,7 +2157,12 @@ export function renderFreeTextTurnPolicy(params: TurnPolicyRenderParams): TurnPo
     message: messageForDisplay,
     question,
     ui_show_step_intro_chrome: showStepIntroChrome,
-    ...(singleValueUiContent ? { ui_content: singleValueUiContent } : {}),
+    ...(structuredSuggestionsUiContent
+      ? { ui_content: structuredSuggestionsUiContent }
+      : singleValueUiContent
+        ? { ui_content: singleValueUiContent }
+        : {}),
+    ...(singleValueUiFeedbackContract ? { ui_feedback_contract: singleValueUiFeedbackContract } : {}),
     ...((useSingleValueConfirmSsot || recapRequested) ? { __suppress_refined_append: "true" } : {}),
     ui_contract_id: contractId,
     ui_contract_version: UI_CONTRACT_VERSION,

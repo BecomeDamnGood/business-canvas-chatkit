@@ -246,6 +246,47 @@ test("buildTextForWidget normalizes structured suggestion menus into heading, bu
       ],
       expectedOutro: "I hope these suggestions inspire you to write your own Entity.",
     },
+    {
+      contract: "bigwhy:ASK:BIGWHY_MENU_FROM_GIVE:v1",
+      stepId: "bigwhy",
+      message: [
+        "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD",
+        "",
+        "- Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
+        "- Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
+        "- Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+      ].join("\n"),
+      expectedHeading:
+        "HIER ZIJN DRIE MOGELIJKE GROTE WAAROM-FORMULERINGEN DIE PASSEN BIJ DE DROOM EN BESTAANSREDEN VAN MINDD:",
+      expectedItems: [
+        "Mensen verdienen het om zich gezien en geraakt te voelen, zodat ze hun volledige potentieel kunnen ontdekken en benutten.",
+        "Echte verbinding en oprechte inspiratie zorgen ervoor dat mensen boven zichzelf uitstijgen, ongeacht hun achtergrond of omstandigheden.",
+        "Wanneer merken mensen oprecht raken, ontstaat er ruimte voor persoonlijke groei en langdurige positieve verandering in de samenleving.",
+      ],
+      expectedOutro: "Ik hoop dat deze suggesties je inspireren om je eigen Grote Waarom te schrijven.",
+    },
+    {
+      contract: "purpose:ASK:PURPOSE_MENU_EXAMPLES:v1",
+      stepId: "purpose",
+      message: [
+        "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD",
+        "",
+        "- Mindd bestaat om mensen te helpen complexe keuzes met rust en vertrouwen te maken.",
+        "- Mindd bestaat om moeilijke informatie om te zetten in helderheid die mensen verder helpt.",
+        "- Mindd bestaat om mensen richting te geven wanneer belangrijke beslissingen overweldigend voelen.",
+        "",
+        "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+      ].join("\n"),
+      expectedHeading: "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE BESTAANSREDEN VAN MINDD:",
+      expectedItems: [
+        "Mindd bestaat om mensen te helpen complexe keuzes met rust en vertrouwen te maken.",
+        "Mindd bestaat om moeilijke informatie om te zetten in helderheid die mensen verder helpt.",
+        "Mindd bestaat om mensen richting te geven wanneer belangrijke beslissingen overweldigend voelen.",
+      ],
+      expectedOutro: "Ik hoop dat deze suggesties je inspireren om je eigen bestaansreden te schrijven.",
+    },
   ];
 
   for (const scenario of scenarios) {

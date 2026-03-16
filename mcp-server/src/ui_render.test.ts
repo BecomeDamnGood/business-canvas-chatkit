@@ -78,6 +78,19 @@ test("shouldSuppressMainCardForWordingChoice keeps the main card enabled for non
     ),
     false
   );
+  assert.equal(
+    shouldSuppressMainCardForWordingChoice(
+      {
+        content: {
+          kind: "structured_suggestions",
+          heading: "Hier zijn drie mogelijke grote waarom-formuleringen",
+          items: ["Een", "Twee", "Drie"],
+        },
+      },
+      "default"
+    ),
+    false
+  );
 });
 
 test("readFeedbackContract normalizes canonical single-value feedback from the server contract", () => {
