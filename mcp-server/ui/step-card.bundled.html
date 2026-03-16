@@ -5080,13 +5080,12 @@
   function readSingleValueCardContent(uiPayload) {
     const feedbackContract = readFeedbackContract(uiPayload);
     if (feedbackContract?.kind === "single_value_canonical_suggestion") {
-      if (!feedbackContract.heading && !feedbackContract.suggestedValue && !feedbackContract.supportText && !feedbackContract.rationale) {
+      if (!feedbackContract.heading && !feedbackContract.suggestedValue && !feedbackContract.rationale) {
         return null;
       }
       return {
         ...feedbackContract.heading ? { heading: feedbackContract.heading } : {},
         ...feedbackContract.suggestedValue ? { canonicalText: feedbackContract.suggestedValue } : {},
-        ...feedbackContract.supportText ? { supportText: feedbackContract.supportText } : {},
         ...feedbackContract.rationale ? { feedbackReasonText: feedbackContract.rationale } : {}
       };
     }
