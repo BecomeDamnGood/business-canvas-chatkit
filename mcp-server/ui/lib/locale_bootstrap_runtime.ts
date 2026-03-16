@@ -180,8 +180,61 @@ function resolveMetaWidgetResult(raw: unknown): {
   return { result: {}, source: "none", reason_code: "none" };
 }
 
+function resolveFallbackWidgetResult(raw: unknown): {
+  result: Record<string, unknown>;
+  source: PayloadSource;
+  reason_code: PayloadReasonCode;
+} {
+  const root = toRecord(raw);
+  const toolOutput = mergeToolOutputWithResponseMetadata(root.toolOutput, root.toolResponseMetadata);
+  const candidates: Array<{ payload: unknown; source: PayloadSource; reason_code: PayloadReasonCode }> = [
+    {
+      payload: toRecord(root.structuredContent).result,
+      source: "structured_content.result",
+      reason_code: "structured_content_result",
+    },
+    {
+      payload: toRecord(toolOutput.structuredContent).result,
+      source: "structured_content.result",
+      reason_code: "structured_content_result",
+    },
+    {
+      payload: root.result,
+      source: "result",
+      reason_code: "result_fallback",
+    },
+    {
+      payload: toolOutput.result,
+      source: "result",
+      reason_code: "result_fallback",
+    },
+    {
+      payload: raw,
+      source: "direct",
+      reason_code: "direct_payload",
+    },
+    {
+      payload: toolOutput,
+      source: "direct",
+      reason_code: "direct_payload",
+    },
+  ];
+
+  for (const candidate of candidates) {
+    if (!looksLikeWidgetResult(candidate.payload)) continue;
+    return {
+      result: toRecord(candidate.payload),
+      source: candidate.source,
+      reason_code: candidate.reason_code,
+    };
+  }
+
+  return { result: {}, source: "none", reason_code: "none" };
+}
+
 export function canonicalizeWidgetPayload(raw: unknown): CanonicalWidgetEnvelope {
-  const selected = resolveMetaWidgetResult(raw);
+  const metaSelected = resolveMetaWidgetResult(raw);
+  const selected = Object.keys(metaSelected.result).length > 0 ? metaSelected : resolveFallbackWidgetResult(raw);
   if (!Object.keys(selected.result).length) {
     return {
       envelope: {},

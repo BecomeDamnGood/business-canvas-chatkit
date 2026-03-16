@@ -780,7 +780,7 @@ test("bundled runtime startup and ACTION_START flow stay on the simple happy-pat
   assert.match(source, /\[ui_contract_interactive_content_absent\]/);
 });
 
-test("canonical widget payload only accepts _meta.widget_result authority", () => {
+test("canonical widget payload prefers _meta.widget_result authority over fallback shapes", () => {
   const canonical = canonicalizeWidgetPayload({
     _meta: {
       widget_result: {
@@ -801,8 +801,10 @@ test("canonical widget payload only accepts _meta.widget_result authority", () =
   });
   assert.equal(canonical.source, "meta.widget_result");
   assert.equal(String((canonical.result.state as Record<string, unknown>).current_step || ""), "step_0");
+});
 
-  const droppedStructuredOnly = canonicalizeWidgetPayload({
+test("canonical widget payload falls back to structuredContent.result when OpenAI host only provides tool output", () => {
+  const fromStructuredOnly = canonicalizeWidgetPayload({
     structuredContent: {
       result: {
         current_step_id: "dream",
@@ -810,8 +812,31 @@ test("canonical widget payload only accepts _meta.widget_result authority", () =
       },
     },
   });
-  assert.equal(droppedStructuredOnly.source, "none");
-  assert.deepEqual(droppedStructuredOnly.result, {});
+  assert.equal(fromStructuredOnly.source, "structured_content.result");
+  assert.equal(String((fromStructuredOnly.result.state as Record<string, unknown>).current_step || ""), "dream");
+});
+
+test("canonical widget payload falls back to top-level result before dropping the payload", () => {
+  const fromResult = canonicalizeWidgetPayload({
+    result: {
+      current_step_id: "purpose",
+      state: { current_step: "purpose" },
+    },
+  });
+  assert.equal(fromResult.source, "result");
+  assert.equal(String((fromResult.result.state as Record<string, unknown>).current_step || ""), "purpose");
+});
+
+test("canonical widget payload drops unrelated payloads that do not resemble widget state", () => {
+  const dropped = canonicalizeWidgetPayload({
+    structuredContent: {
+      result: {
+        foo: "bar",
+      },
+    },
+  });
+  assert.equal(dropped.source, "none");
+  assert.deepEqual(dropped.result, {});
 });
 
 test("locale continuity drops locale-mismatched last specialist render state across current-value steps", () => {
@@ -1819,7 +1844,7 @@ test("dream confirm advances to purpose when the server returns an accepted cano
   }
 });
 
-test("callRunStep fail-closes active dispatches that return no canonical widget payload instead of reusing the stale card", { concurrency: false }, async () => {
+test("callRunStep accepts structuredContent.result during active dispatches instead of fail-closing to stale state", { concurrency: false }, async () => {
   const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
   const originalDocument = (globalThis as unknown as { document?: unknown }).document;
   const originalLatest = (globalThis as Record<string, unknown>).__BSC_LATEST__;
@@ -1921,9 +1946,8 @@ test("callRunStep fail-closes active dispatches that return no canonical widget 
     const renderedState = (rendered.state || {}) as Record<string, unknown>;
     assert.equal(String(rendered.current_step_id || ""), "purpose");
     assert.equal(String(renderedState.current_step || ""), "purpose");
-    assert.equal(String((rendered.error as Record<string, unknown>).type || ""), "contract_violation");
-    assert.equal(String((rendered.error as Record<string, unknown>).reason || ""), "incoming_missing_widget_result");
-    assert.equal(String(renderedState.ui_gate_reason || ""), "contract_violation");
+    assert.equal(String((rendered.error as Record<string, unknown> | undefined)?.type || ""), "");
+    assert.equal(String(renderedState.ui_gate_reason || ""), "");
     assert.equal(String(host.widgetState.ui_action_liveness_ack_status || ""), "accepted");
     assert.equal(String(host.widgetState.ui_action_liveness_state_advanced || ""), "true");
 
@@ -1931,7 +1955,7 @@ test("callRunStep fail-closes active dispatches that return no canonical widget 
       (globalThis as Record<string, unknown>).__BSC_LAST_TOOL_OUTPUT__
     ).result;
     assert.equal(String(cachedAfter.current_step_id || ""), "purpose");
-    assert.equal(String(((cachedAfter.state || {}) as Record<string, unknown>).ui_gate_reason || ""), "contract_violation");
+    assert.equal(String(((cachedAfter.state || {}) as Record<string, unknown>).ui_gate_reason || ""), "");
   } finally {
     setIsLoading(false);
     if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
@@ -2077,11 +2101,12 @@ test("accepted confirm actions across current-value steps render the next step",
   }
 });
 
-test("bundled runtime does not retain legacy render-source fallbacks", () => {
+test("bundled runtime retains OpenAI host fallback render sources after meta.widget_result", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /source:\s*"meta\.widget_result"/);
-  assert.doesNotMatch(source, /source:\s*"structuredContent\.result"/);
-  assert.doesNotMatch(source, /source:\s*"result"/);
+  assert.match(source, /source:\s*"structured_content\.result"/);
+  assert.match(source, /source:\s*"result"/);
+  assert.match(source, /source:\s*"direct"/);
 });
 
 test("bundled runtime inline script parses without syntax errors", () => {
