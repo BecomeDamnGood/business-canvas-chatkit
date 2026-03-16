@@ -2422,16 +2422,17 @@ test("bundled runtime fail-closes missing canonical widget payloads", () => {
   assert.match(source, /widget_result:/);
 });
 
-test("bundled wording-choice view renders legacy feedback_reason_text in the compare slot", () => {
+test("bundled wording-choice view prefers the server feedback contract over legacy wording-choice shadows", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /class="wordingChoiceFeedback" id="wordingChoiceFeedback"/);
   assert.match(source, /function readFeedbackContract\(uiPayloadRaw\)/);
   assert.match(source, /const feedbackEl = document\.getElementById\("wordingChoiceFeedback"\);/);
   assert.doesNotMatch(source, /function readWordingChoiceCompareFeedbackText\(wordingChoiceRaw\)/);
-  assert.match(source, /const feedbackReasonText = feedbackContract\?\.rationale \|\| String\(wording\.feedback_reason_text \|\| ""\)\.trim\(\);/);
+  assert.match(source, /const contractOwnedCompare = feedbackContractEnabled \|\| dreamBuilderCompareEnabled;/);
+  assert.match(source, /const feedbackReasonText = contractOwnedCompare/);
   assert.match(source, /renderStructuredText\(feedbackEl, feedbackReasonText\);/);
   assert.match(source, /feedbackContract = readFeedbackContract\(uiPayload\);/);
-  assert.match(source, /retainedHeading: feedbackContract\.retainedHeading,/);
+  assert.match(source, /retainedHeading: compareContract\?\.retainedHeading \|\| "",/);
   assert.match(source, /feedbackEl\.style\.display = feedbackReasonText \? "block" : "none";/);
   assert.match(source, /\.wordingChoiceFeedback p,/);
   assert.match(source, /\.cardDesc \.cardFeedbackNote/);

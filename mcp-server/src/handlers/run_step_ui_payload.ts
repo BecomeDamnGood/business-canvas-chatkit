@@ -292,6 +292,55 @@ function normalizeUiFeedbackContract(raw: unknown): Record<string, unknown> | un
   };
 }
 
+function buildFeedbackContractFromWordingChoice(
+  wordingChoice: WordingChoiceUiPayload | null | undefined
+): Record<string, unknown> | undefined {
+  if (!wordingChoice || wordingChoice.enabled !== true) return undefined;
+  const mode = String(wordingChoice.mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
+  const variant = String(wordingChoice.variant || "").trim().toLowerCase();
+  const rationale = String(wordingChoice.compare_feedback?.text || "").trim();
+  const currentLabel = String(wordingChoice.user_label || "").trim();
+  const suggestedLabel = String(wordingChoice.suggestion_label || "").trim();
+  const currentValue = String(wordingChoice.user_text || "").trim();
+  const suggestedValue = String(wordingChoice.suggestion_text || "").trim();
+  const instruction = String(wordingChoice.instruction || "").trim();
+  const currentItems = Array.isArray(wordingChoice.user_items)
+    ? wordingChoice.user_items.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  const suggestedItems = Array.isArray(wordingChoice.suggestion_items)
+    ? wordingChoice.suggestion_items.map((value) => String(value || "").trim()).filter(Boolean)
+    : [];
+  if (
+    !rationale &&
+    !currentLabel &&
+    !suggestedLabel &&
+    !currentValue &&
+    !suggestedValue &&
+    !instruction &&
+    currentItems.length === 0 &&
+    suggestedItems.length === 0
+  ) {
+    return undefined;
+  }
+  const kind =
+    mode === "list"
+      ? (variant === "grouped_list_units" ? "grouped_list_compare" : "list_edit_compare")
+      : "single_value_compare";
+  return {
+    version: "2026-03-16.feedback_contract.v1",
+    kind,
+    mode,
+    ...(rationale ? { rationale } : {}),
+    ...(currentLabel ? { current_label: currentLabel } : {}),
+    ...(suggestedLabel ? { suggested_label: suggestedLabel } : {}),
+    ...(currentValue ? { current_value: currentValue } : {}),
+    ...(suggestedValue ? { suggested_value: suggestedValue } : {}),
+    ...(currentItems.length > 0 ? { current_items: currentItems } : {}),
+    ...(suggestedItems.length > 0 ? { suggested_items: suggestedItems } : {}),
+    ...(instruction ? { instruction } : {}),
+  };
+}
+
 function normalizeDreamBuilderCompareContract(raw: unknown): DreamBuilderCompareContractPayload | undefined {
   const feedback = normalizeUiFeedbackContract(raw);
   if (!feedback) return undefined;
@@ -338,7 +387,6 @@ function buildDreamBuilderContract(params: {
   bodyMode?: DreamBuilderBodyMode;
   statements: string[];
   statementsVisible: boolean;
-  wordingChoiceOverride?: WordingChoiceUiPayload | null;
   feedbackContractPayload?: Record<string, unknown>;
 }): DreamBuilderContractPayload | undefined {
   if (params.stepId !== DREAM_STEP_ID) return undefined;
@@ -351,14 +399,10 @@ function buildDreamBuilderContract(params: {
   if (!hasDreamBuilderContext) return undefined;
 
   let phase: DreamBuilderContractPhase = "collect";
+  const compareFromFeedback = normalizeDreamBuilderCompareContract(params.feedbackContractPayload);
   if (params.viewVariant === "dream_builder_scoring") {
     phase = "scoring";
-  } else if (
-    params.wordingChoiceOverride?.enabled === true &&
-    String(params.wordingChoiceOverride.mode || "").trim() === "list"
-  ) {
-    phase = "compare";
-  } else if (normalizeDreamBuilderCompareContract(params.feedbackContractPayload)) {
+  } else if (compareFromFeedback) {
     phase = "compare";
   } else if (params.viewVariant === "dream_builder_refine") {
     phase = "refine";
@@ -373,35 +417,9 @@ function buildDreamBuilderContract(params: {
   if (params.bodyMode) contract.body_mode = params.bodyMode;
   if (params.questionText) contract.question = params.questionText;
 
-  const compareFromFeedback = normalizeDreamBuilderCompareContract(params.feedbackContractPayload);
   if (phase === "compare") {
     if (compareFromFeedback) {
       contract.compare = compareFromFeedback;
-    } else if (params.wordingChoiceOverride?.enabled === true) {
-      const compare: DreamBuilderCompareContractPayload = {
-        kind: "grouped_list_compare",
-      };
-      const compareFeedback = String(params.wordingChoiceOverride.compare_feedback?.text || "").trim();
-      const currentLabel = String(params.wordingChoiceOverride.user_label || "").trim();
-      const suggestedLabel = String(params.wordingChoiceOverride.suggestion_label || "").trim();
-      const currentValue = String(params.wordingChoiceOverride.user_text || "").trim();
-      const suggestedValue = String(params.wordingChoiceOverride.suggestion_text || "").trim();
-      const currentItems = Array.isArray(params.wordingChoiceOverride.user_items)
-        ? params.wordingChoiceOverride.user_items.map((value) => String(value || "").trim()).filter(Boolean)
-        : [];
-      const suggestedItems = Array.isArray(params.wordingChoiceOverride.suggestion_items)
-        ? params.wordingChoiceOverride.suggestion_items.map((value) => String(value || "").trim()).filter(Boolean)
-        : [];
-      const instruction = String(params.wordingChoiceOverride.instruction || "").trim();
-      if (compareFeedback) compare.rationale = compareFeedback;
-      if (currentLabel) compare.current_label = currentLabel;
-      if (suggestedLabel) compare.suggested_label = suggestedLabel;
-      if (currentValue) compare.current_value = currentValue;
-      if (suggestedValue) compare.suggested_value = suggestedValue;
-      if (currentItems.length > 0) compare.current_items = currentItems;
-      if (suggestedItems.length > 0) compare.suggested_items = suggestedItems;
-      if (instruction) compare.instruction = instruction;
-      contract.compare = compare;
     }
   }
 
@@ -726,9 +744,9 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         ? {}
         : (questionText ? { questionText } : {});
     const rawContentPayload = normalizeUiContentPayload((specialist as Record<string, unknown>)?.ui_content);
-    const rawFeedbackContractPayload = normalizeUiFeedbackContract(
-      (specialist as Record<string, unknown>)?.ui_feedback_contract
-    );
+    const rawFeedbackContractPayload =
+      normalizeUiFeedbackContract((specialist as Record<string, unknown>)?.ui_feedback_contract) ||
+      buildFeedbackContractFromWordingChoice(wordingChoiceOverride);
     const shouldSuppressSingleValueContent =
       Boolean(rawContentPayload) &&
       isSingleValueTextPickerState({
@@ -777,9 +795,13 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
       bodyMode: dreamBuilderBodyMode,
       statements: dreamBuilderStatements,
       statementsVisible: dreamBuilderStatementsVisible,
-      wordingChoiceOverride,
       feedbackContractPayload: rawFeedbackContractPayload,
     });
+    const shouldExposeLegacyWordingChoice =
+      Boolean(wordingChoiceOverride) && !rawFeedbackContractPayload;
+    const legacyWordingChoicePayload = shouldExposeLegacyWordingChoice
+      ? (wordingChoiceOverride || undefined)
+      : undefined;
     if (Array.isArray(actionCodesOverride)) {
       const safeOverrideCodes = deps.sanitizeWidgetActionCodes(
         actionCodesOverride.map((code) => String(code || "").trim()).filter(Boolean)
@@ -802,12 +824,12 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
           ...(viewPayload ? { view: viewPayload } : {}),
           flags,
-          ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+          ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
         };
       }
       if (
         Object.keys(flags).length > 0 ||
-        wordingChoiceOverride ||
+        shouldExposeLegacyWordingChoice ||
         contractMeta.contractId ||
         viewPayload ||
         contentPayload ||
@@ -823,7 +845,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
           ...(viewPayload ? { view: viewPayload } : {}),
           flags,
-          ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+          ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
         };
       }
       return undefined;
@@ -834,7 +856,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         if (localDev) flags.escape_menu_suppressed = true;
         if (
           Object.keys(flags).length > 0 ||
-          wordingChoiceOverride ||
+          shouldExposeLegacyWordingChoice ||
           contractMeta.contractId ||
           contentPayload ||
           rawFeedbackContractPayload
@@ -848,7 +870,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
             ...(contractMeta.contractVersion ? { contract_version: contractMeta.contractVersion } : {}),
             ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
             flags,
-            ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+            ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
           };
         }
         return undefined;
@@ -864,7 +886,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         if (safeCodes.length === 0) {
           if (
             Object.keys(flags).length > 0 ||
-            wordingChoiceOverride ||
+            shouldExposeLegacyWordingChoice ||
             contractMeta.contractId ||
             viewPayload ||
             contentPayload ||
@@ -880,7 +902,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
               ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
               ...(viewPayload ? { view: viewPayload } : {}),
               flags,
-              ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+              ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
             };
           }
           return undefined;
@@ -899,13 +921,13 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
           ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
           ...(viewPayload ? { view: viewPayload } : {}),
           flags,
-          ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+          ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
         };
       }
     }
     if (
       Object.keys(flags).length > 0 ||
-      wordingChoiceOverride ||
+      shouldExposeLegacyWordingChoice ||
       contractMeta.contractId ||
       viewPayload ||
       contentPayload ||
@@ -921,7 +943,7 @@ export function createRunStepUiPayloadHelpers(deps: UiPayloadHelperDeps) {
         ...(contractMeta.textKeys && contractMeta.textKeys.length > 0 ? { text_keys: contractMeta.textKeys } : {}),
         ...(viewPayload ? { view: viewPayload } : {}),
         flags,
-        ...(wordingChoiceOverride ? { wording_choice: wordingChoiceOverride } : {}),
+        ...(legacyWordingChoicePayload ? { wording_choice: legacyWordingChoicePayload } : {}),
       };
     }
     return undefined;

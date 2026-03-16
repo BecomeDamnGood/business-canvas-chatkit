@@ -326,6 +326,63 @@ test("attachRegistryPayload forwards explicit single-value feedback contracts in
     suggested_value: "Mindd bestaat om complexe keuzes begrijpelijk en menselijk te maken.",
     rationale: "Ik heb de formulering zachter en vriendelijker gemaakt.",
   });
+  assert.equal("wording_choice" in (payload.ui || {}), false);
+});
+
+test("attachRegistryPayload synthesizes compare feedback contracts from wording-choice payloads and omits the legacy UI shadow", () => {
+  const helpers = buildHelpers();
+  const payload = helpers.attachRegistryPayload(
+    {
+      text: "",
+      prompt: "",
+      current_step_id: "strategy",
+      state: {
+        current_step: "strategy",
+        active_specialist: "Strategy",
+      } as any,
+    },
+    {
+      ui_contract_id: "strategy:valid_output:STRATEGY_MENU_CONFIRM:v1",
+      wording_choice_pending: "true",
+      wording_choice_mode: "list",
+      wording_choice_variant: "grouped_list_units",
+      wording_choice_user_label: "Jouw compacte formulering",
+      wording_choice_suggestion_label: "Mijn suggestie",
+      wording_choice_user_items: ["Punt 1", "Punt 2"],
+      wording_choice_suggestion_items: ["Voorstel A"],
+    },
+    { require_wording_pick: true },
+    [],
+    [],
+    {
+      enabled: true,
+      mode: "list",
+      variant: "grouped_list_units",
+      compare_feedback: {
+        text: "Ik heb de resterende strategische keuze scherper gemaakt.",
+      },
+      user_text: "",
+      suggestion_text: "",
+      user_label: "Jouw compacte formulering",
+      suggestion_label: "Mijn suggestie",
+      user_items: ["Punt 1", "Punt 2"],
+      suggestion_items: ["Voorstel A"],
+      instruction: "Kies de versie die het beste past.",
+    }
+  );
+
+  assert.deepEqual(payload.ui?.feedback_contract, {
+    version: "2026-03-16.feedback_contract.v1",
+    kind: "grouped_list_compare",
+    mode: "list",
+    rationale: "Ik heb de resterende strategische keuze scherper gemaakt.",
+    current_label: "Jouw compacte formulering",
+    suggested_label: "Mijn suggestie",
+    current_items: ["Punt 1", "Punt 2"],
+    suggested_items: ["Voorstel A"],
+    instruction: "Kies de versie die het beste past.",
+  });
+  assert.equal("wording_choice" in (payload.ui || {}), false);
 });
 
 test("attachRegistryPayload suppresses single-value ui.content while wording-choice picker is active", () => {
@@ -371,7 +428,8 @@ test("attachRegistryPayload suppresses single-value ui.content while wording-cho
 
   assert.equal(payload.ui?.view?.variant, "wording_choice");
   assert.equal(payload.ui?.content, undefined);
-  assert.equal(payload.ui?.wording_choice?.enabled, true);
+  assert.equal(String(payload.ui?.feedback_contract?.kind || ""), "single_value_compare");
+  assert.equal("wording_choice" in (payload.ui || {}), false);
 });
 
 test("attachRegistryPayload omits questionText while wording-choice picker is active", () => {
@@ -455,9 +513,10 @@ test("attachRegistryPayload preserves explicit compare feedback in wording-choic
   );
 
   assert.equal(
-    payload.ui?.wording_choice?.compare_feedback?.text,
+    String(payload.ui?.feedback_contract?.rationale || ""),
     "The current wording is still too broad and does not yet show the contribution clearly."
   );
+  assert.equal("wording_choice" in (payload.ui || {}), false);
 });
 
 test("attachRegistryPayload preserves grouped compare feedback in wording-choice payloads", () => {
@@ -500,9 +559,10 @@ test("attachRegistryPayload preserves grouped compare feedback in wording-choice
   );
 
   assert.equal(
-    payload.ui?.wording_choice?.compare_feedback?.text,
+    String(payload.ui?.feedback_contract?.rationale || ""),
     "This suggestion sharpens the remaining strategic difference into one clearer choice."
   );
+  assert.equal("wording_choice" in (payload.ui || {}), false);
 });
 
 test("attachRegistryPayload keeps legacy payloads renderable when ui.content is absent", () => {

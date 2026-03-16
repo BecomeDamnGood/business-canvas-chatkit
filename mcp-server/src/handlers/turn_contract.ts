@@ -245,6 +245,15 @@ function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): voi
   response.ui = ui;
 }
 
+function stripLegacyUiWordingChoice(response: RunStepContractResponse): void {
+  const ui = toRecord(response.ui);
+  const feedback = toRecord(ui.feedback_contract);
+  const feedbackKind = String(feedback.kind || "").trim();
+  if (!UI_FEEDBACK_KINDS.has(feedbackKind as UiFeedbackKind)) return;
+  delete ui.wording_choice;
+  response.ui = ui;
+}
+
 function defaultSurfaceForRole(role: UiActionRole): UiActionSurface {
   if (role === "start") return "primary";
   if (role === "text_submit") return "text_input";
@@ -915,6 +924,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
     labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
   });
   ensureUnifiedUiFeedbackContract(finalResponse);
+  stripLegacyUiWordingChoice(finalResponse);
   const finalUi = toRecord(finalResponse.ui);
   delete finalUi.actions;
   delete finalUi.action_codes;

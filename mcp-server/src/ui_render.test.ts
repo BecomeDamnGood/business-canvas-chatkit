@@ -253,6 +253,47 @@ test("readDreamBuilderContract normalizes explicit Dream Builder compare ownersh
   });
 });
 
+test("readFeedbackContract stays authoritative over malformed legacy wording-choice compare shadows", () => {
+  const feedbackContract = readFeedbackContract({
+    feedback_contract: {
+      kind: "grouped_list_compare",
+      mode: "list",
+      rationale: "Contractuele feedback",
+      current_label: "Jouw input",
+      suggested_label: "Mijn suggestie",
+      current_items: ["Punt 1"],
+      suggested_items: ["Punt 2"],
+      instruction: "Kies de versie die past.",
+    },
+    wording_choice: {
+      enabled: true,
+      mode: "list",
+      user_label: "Verkeerd label",
+      suggestion_label: "Nog een verkeerd label",
+      user_items: ["Verkeerd punt"],
+      suggestion_items: ["Nog een verkeerd punt"],
+      instruction: "Verkeerde instructie",
+    },
+  });
+
+  assert.deepEqual(feedbackContract, {
+    kind: "grouped_list_compare",
+    mode: "list",
+    rationale: "Contractuele feedback",
+    heading: "",
+    supportText: "",
+    currentLabel: "Jouw input",
+    suggestedLabel: "Mijn suggestie",
+    currentValue: "",
+    suggestedValue: "",
+    currentItems: ["Punt 1"],
+    suggestedItems: ["Punt 2"],
+    retainedHeading: "",
+    retainedItems: [],
+    instruction: "Kies de versie die past.",
+  });
+});
+
 test("shouldSuppressPromptForWordingChoice hides the prompt while wording-choice is active", () => {
   assert.equal(
     shouldSuppressPromptForWordingChoice({

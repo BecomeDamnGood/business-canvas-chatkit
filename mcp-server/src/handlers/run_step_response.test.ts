@@ -151,6 +151,72 @@ test("finalizeResponse logs wording-choice render decisions with compare and pro
   assert.equal(wordingShown.wording_choice_presentation, "picker");
 });
 
+test("finalizeResponse logs wording-choice analytics from feedback_contract when the legacy ui shadow is removed", () => {
+  const helpers = buildHelpers();
+  const captured: string[] = [];
+  const originalConsoleLog = console.log;
+  console.log = (...args: unknown[]) => {
+    captured.push(args.map((value) => String(value)).join(" "));
+  };
+
+  try {
+    helpers.finalizeResponse({
+      ok: false,
+      tool: "run_step",
+      current_step_id: "strategy",
+      active_specialist: "Strategy",
+      text: "",
+      prompt: "Waar focus je nog meer op binnen je strategie?",
+      specialist: {
+        ui_contract_id: "strategy:valid_output:STRATEGY_MENU_CONFIRM:v1",
+      },
+      state: {
+        current_step: "strategy",
+        active_specialist: "Strategy",
+        bootstrap_session_id: "bs_feedback_contract",
+        last_specialist_result: {
+          wording_choice_pending: "true",
+          wording_choice_mode: "list",
+          wording_choice_presentation: "picker",
+          wording_choice_variant: "grouped_list_units",
+          wording_choice_target_field: "strategy",
+          wording_choice_selected: "",
+        },
+      } as any,
+      ui: {
+        view: {
+          mode: "interactive",
+          variant: "wording_choice",
+        },
+        feedback_contract: {
+          kind: "grouped_list_compare",
+          mode: "list",
+          current_label: "Jouw input",
+          suggested_label: "Mijn suggestie",
+          current_items: ["Punt 1", "Punt 2"],
+          suggested_items: ["Punt A"],
+          instruction: "Kies wat het beste past.",
+        },
+      },
+    });
+  } finally {
+    console.log = originalConsoleLog;
+  }
+
+  const event = captured
+    .map((line) => JSON.parse(line))
+    .find((entry) => entry.event === "run_step_ui_render_decision");
+
+  assert.ok(event);
+  assert.equal(event.wording_choice_enabled, "true");
+  assert.equal(event.wording_choice_mode, "list");
+  assert.equal(event.wording_choice_variant, "grouped_list_units");
+  assert.equal(event.wording_choice_user_label, "Jouw input");
+  assert.equal(event.wording_choice_suggestion_label, "Mijn suggestie");
+  assert.equal(event.wording_choice_user_items_count, 2);
+  assert.equal(event.wording_choice_suggestion_items_count, 1);
+});
+
 test("finalizeResponse emits session start and wording selection analytics without free-text content", () => {
   const helpers = buildHelpers();
   const captured: string[] = [];

@@ -5720,7 +5720,8 @@ ${String(item || "").trim()}`.trim())
     const requirePick = String(flags.require_wording_pick || "false") === "true";
     const feedbackContractEnabled = feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "grouped_list_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare";
     const dreamBuilderCompareEnabled = dreamBuilderContract?.phase === "compare" && dreamBuilderContract.compare?.kind === "grouped_list_compare";
-    const enabled = feedbackContractEnabled || dreamBuilderCompareEnabled || requirePick || wording.enabled === true;
+    const contractOwnedCompare = feedbackContractEnabled || dreamBuilderCompareEnabled;
+    const enabled = contractOwnedCompare || requirePick || wording.enabled === true;
     if (!enabled) {
       wrap.style.display = "none";
       return false;
@@ -5745,14 +5746,14 @@ ${String(item || "").trim()}`.trim())
       retainedItems: dreamBuilderContract?.compare?.retainedItems || [],
       instruction: String(dreamBuilderContract?.compare?.instruction || "").trim()
     } : feedbackContract;
-    const feedbackReasonText = compareContract?.rationale || String(wording.feedback_reason_text || "").trim();
-    const userText = compareContract?.currentValue || String(wording.user_text || "").trim();
-    const suggestionText = compareContract?.suggestedValue || String(wording.suggestion_text || "").trim();
-    const userLabelFromPayload = compareContract?.currentLabel || String(wording.user_label || "").trim();
-    const suggestionLabelFromPayload = compareContract?.suggestedLabel || String(wording.suggestion_label || "").trim();
-    const userItems = compareContract?.currentItems || (Array.isArray(wording.user_items) ? wording.user_items : []);
-    const suggestionItems = compareContract?.suggestedItems || (Array.isArray(wording.suggestion_items) ? wording.suggestion_items : []);
-    const instruction = compareContract?.instruction || legacyInstruction || t(lang, "wordingChoiceInstruction");
+    const feedbackReasonText = contractOwnedCompare ? String(compareContract?.rationale || "").trim() : String(compareContract?.rationale || wording.feedback_reason_text || "").trim();
+    const userText = contractOwnedCompare ? String(compareContract?.currentValue || "").trim() : String(compareContract?.currentValue || wording.user_text || "").trim();
+    const suggestionText = contractOwnedCompare ? String(compareContract?.suggestedValue || "").trim() : String(compareContract?.suggestedValue || wording.suggestion_text || "").trim();
+    const userLabelFromPayload = contractOwnedCompare ? String(compareContract?.currentLabel || "").trim() : String(compareContract?.currentLabel || wording.user_label || "").trim();
+    const suggestionLabelFromPayload = contractOwnedCompare ? String(compareContract?.suggestedLabel || "").trim() : String(compareContract?.suggestedLabel || wording.suggestion_label || "").trim();
+    const userItems = contractOwnedCompare ? compareContract?.currentItems || [] : compareContract?.currentItems || (Array.isArray(wording.user_items) ? wording.user_items : []);
+    const suggestionItems = contractOwnedCompare ? compareContract?.suggestedItems || [] : compareContract?.suggestedItems || (Array.isArray(wording.suggestion_items) ? wording.suggestion_items : []);
+    const instruction = contractOwnedCompare ? compareContract?.instruction || t(lang, "wordingChoiceInstruction") : compareContract?.instruction || legacyInstruction || t(lang, "wordingChoiceInstruction");
     const instructionParts = compareContract ? {
       retainedHeading: compareContract?.retainedHeading || "",
       retainedItems: compareContract?.retainedItems || [],

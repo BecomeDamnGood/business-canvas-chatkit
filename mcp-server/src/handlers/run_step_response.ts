@@ -132,6 +132,42 @@ function stringArrayLength(value: unknown): number {
     : 0;
 }
 
+function feedbackContractRecord(ui: Record<string, unknown>): Record<string, unknown> {
+  return asLogRecord(ui.feedback_contract);
+}
+
+function feedbackContractIsCompare(feedbackContract: Record<string, unknown>): boolean {
+  const kind = trimmedString(feedbackContract.kind).toLowerCase();
+  return (
+    kind === "single_value_compare" ||
+    kind === "grouped_list_compare" ||
+    kind === "list_edit_compare" ||
+    kind === "list_duplicate_merge_compare"
+  );
+}
+
+function wordingChoiceModeForLogs(
+  uiWordingChoice: Record<string, unknown>,
+  feedbackContract: Record<string, unknown>,
+  specialist: Record<string, unknown>
+): string {
+  return trimmedString(
+    uiWordingChoice.mode || feedbackContract.mode || specialist.wording_choice_mode
+  ).toLowerCase();
+}
+
+function wordingChoiceVariantForLogs(
+  uiWordingChoice: Record<string, unknown>,
+  feedbackContract: Record<string, unknown>,
+  specialist: Record<string, unknown>
+): string {
+  const explicit = trimmedString(uiWordingChoice.variant || specialist.wording_choice_variant).toLowerCase();
+  if (explicit) return explicit;
+  const kind = trimmedString(feedbackContract.kind).toLowerCase();
+  if (kind === "grouped_list_compare") return "grouped_list_units";
+  return "";
+}
+
 function numericTurnIndex(value: unknown): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return 0;
@@ -145,6 +181,7 @@ function emitUsageAnalyticsEvents(
   const ui = asLogRecord(response.ui);
   const uiView = asLogRecord(ui.view);
   const uiWordingChoice = asLogRecord(ui.wording_choice);
+  const uiFeedbackContract = feedbackContractRecord(ui);
   const specialist =
     Object.keys(asLogRecord(state.last_specialist_result)).length > 0
       ? asLogRecord(state.last_specialist_result)
@@ -154,14 +191,11 @@ function emitUsageAnalyticsEvents(
   const uiViewMode = trimmedString(uiView.mode).toLowerCase();
   const uiViewVariant = trimmedString(uiView.variant).toLowerCase();
   const wordingChoicePending = trimmedString(specialist.wording_choice_pending).toLowerCase() === "true";
-  const wordingChoiceEnabled = uiWordingChoice.enabled === true || wordingChoicePending;
-  const wordingChoiceMode = trimmedString(
-    uiWordingChoice.mode || specialist.wording_choice_mode
-  ).toLowerCase();
+  const wordingChoiceEnabled =
+    uiWordingChoice.enabled === true || feedbackContractIsCompare(uiFeedbackContract) || wordingChoicePending;
+  const wordingChoiceMode = wordingChoiceModeForLogs(uiWordingChoice, uiFeedbackContract, specialist);
   const wordingChoicePresentation = trimmedString(specialist.wording_choice_presentation).toLowerCase();
-  const wordingChoiceVariant = trimmedString(
-    uiWordingChoice.variant || specialist.wording_choice_variant
-  ).toLowerCase();
+  const wordingChoiceVariant = wordingChoiceVariantForLogs(uiWordingChoice, uiFeedbackContract, specialist);
   const wordingChoiceTargetField = trimmedString(specialist.wording_choice_target_field).toLowerCase();
   const wordingChoiceSelected = trimmedString(specialist.wording_choice_selected).toLowerCase();
   const analyticsBase = {
@@ -211,6 +245,7 @@ function buildUiRenderDecisionLogDetails(
   const ui = asLogRecord(response.ui);
   const uiView = asLogRecord(ui.view);
   const uiWordingChoice = asLogRecord(ui.wording_choice);
+  const uiFeedbackContract = feedbackContractRecord(ui);
   const specialist =
     Object.keys(asLogRecord(state.last_specialist_result)).length > 0
       ? asLogRecord(state.last_specialist_result)
@@ -218,7 +253,8 @@ function buildUiRenderDecisionLogDetails(
   const promptText = trimmedString(response.prompt);
   const questionText = trimmedString(ui.questionText);
   const wordingChoicePending = trimmedString(specialist.wording_choice_pending).toLowerCase() === "true";
-  const wordingChoiceEnabled = uiWordingChoice.enabled === true || wordingChoicePending;
+  const wordingChoiceEnabled =
+    uiWordingChoice.enabled === true || feedbackContractIsCompare(uiFeedbackContract) || wordingChoicePending;
   return {
     ui_view_mode: trimmedString(uiView.mode).toLowerCase(),
     ui_view_variant: trimmedString(uiView.variant).toLowerCase(),
@@ -230,13 +266,9 @@ function buildUiRenderDecisionLogDetails(
     question_len: questionText.length,
     wording_choice_enabled: wordingChoiceEnabled ? "true" : "false",
     wording_choice_pending: wordingChoicePending ? "true" : "false",
-    wording_choice_mode: trimmedString(
-      uiWordingChoice.mode || specialist.wording_choice_mode
-    ).toLowerCase(),
+    wording_choice_mode: wordingChoiceModeForLogs(uiWordingChoice, uiFeedbackContract, specialist),
     wording_choice_presentation: trimmedString(specialist.wording_choice_presentation).toLowerCase(),
-    wording_choice_variant: trimmedString(
-      uiWordingChoice.variant || specialist.wording_choice_variant
-    ).toLowerCase(),
+    wording_choice_variant: wordingChoiceVariantForLogs(uiWordingChoice, uiFeedbackContract, specialist),
     wording_choice_compare_mode: trimmedString(specialist.wording_choice_compare_mode).toLowerCase(),
     wording_choice_compare_cursor: trimmedString(specialist.wording_choice_compare_cursor),
     wording_choice_compare_units_count: Array.isArray(specialist.wording_choice_compare_units)
@@ -247,17 +279,17 @@ function buildUiRenderDecisionLogDetails(
       : 0,
     wording_choice_selected: trimmedString(specialist.wording_choice_selected).toLowerCase(),
     wording_choice_user_label: trimmedString(
-      uiWordingChoice.user_label || specialist.wording_choice_user_label
+      uiWordingChoice.user_label || uiFeedbackContract.current_label || specialist.wording_choice_user_label
     ),
     wording_choice_suggestion_label: trimmedString(
-      uiWordingChoice.suggestion_label || specialist.wording_choice_suggestion_label
+      uiWordingChoice.suggestion_label || uiFeedbackContract.suggested_label || specialist.wording_choice_suggestion_label
     ),
-    wording_choice_instruction: trimmedString(uiWordingChoice.instruction),
+    wording_choice_instruction: trimmedString(uiWordingChoice.instruction || uiFeedbackContract.instruction),
     wording_choice_user_items_count: stringArrayLength(
-      uiWordingChoice.user_items || specialist.wording_choice_user_items
+      uiWordingChoice.user_items || uiFeedbackContract.current_items || specialist.wording_choice_user_items
     ),
     wording_choice_suggestion_items_count: stringArrayLength(
-      uiWordingChoice.suggestion_items || specialist.wording_choice_suggestion_items
+      uiWordingChoice.suggestion_items || uiFeedbackContract.suggested_items || specialist.wording_choice_suggestion_items
     ),
   };
 }
