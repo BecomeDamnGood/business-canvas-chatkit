@@ -5049,7 +5049,7 @@
   }
   function normalizeFeedbackContractKind(raw) {
     const kind = String(raw || "").trim();
-    if (kind === "single_value_compare" || kind === "single_value_canonical_suggestion" || kind === "list_edit_compare" || kind === "list_duplicate_merge_compare") {
+    if (kind === "single_value_compare" || kind === "single_value_canonical_suggestion" || kind === "grouped_list_compare" || kind === "list_edit_compare" || kind === "list_duplicate_merge_compare") {
       return kind;
     }
     return "";
@@ -5138,7 +5138,7 @@ ${String(item || "").trim()}`.trim())
     const uiViewVariant = String(uiViewVariantRaw || "").trim();
     const wordingChoicePayload = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
     const flags = toRecord3(uiPayload.flags);
-    return feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare" || uiViewVariant === "wording_choice" || wordingChoicePayload.enabled === true || String(flags.require_wording_pick || "").trim() === "true";
+    return feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "grouped_list_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare" || uiViewVariant === "wording_choice" || wordingChoicePayload.enabled === true || String(flags.require_wording_pick || "").trim() === "true";
   }
   function shouldSuppressPromptForWordingChoice(params) {
     return String(params.uiViewVariant || "").trim() === "wording_choice" || params.wordingChoiceActive === true || params.requireWordingPick === true;
@@ -5677,7 +5677,7 @@ ${String(item || "").trim()}`.trim())
     const flags = uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags ? uiPayload.flags : {};
     const wording = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
     const requirePick = String(flags.require_wording_pick || "false") === "true";
-    const feedbackContractEnabled = feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare";
+    const feedbackContractEnabled = feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "grouped_list_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare";
     const enabled = feedbackContractEnabled || requirePick || wording.enabled === true;
     if (!enabled) {
       wrap.style.display = "none";
