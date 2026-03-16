@@ -6,6 +6,7 @@ import {
   buildInitialDreamScoringScores,
   dreamExerciseButtonLabelKeyForState,
   parseWordingChoiceInstruction,
+  readFeedbackContract,
   resolveActionCodeForStateKey,
   resolveActionPayloadModeForStateKey,
   surfaceActionsForResult,
@@ -71,6 +72,62 @@ test("shouldSuppressMainCardForWordingChoice keeps the main card enabled for non
         content: {
           kind: "single_value",
           heading: "Wat denk je van deze formulering",
+        },
+      },
+      "default"
+    ),
+    false
+  );
+});
+
+test("readFeedbackContract normalizes canonical single-value feedback from the server contract", () => {
+  const feedbackContract = readFeedbackContract({
+    feedback_contract: {
+      kind: "single_value_canonical_suggestion",
+      heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
+      suggested_value: "Wij bestaan om mensen positief in beweging te brengen.",
+      support_text: "Deze formulering is concreter en menselijker.",
+      rationale: "Je huidige zin blijft nog te algemeen.",
+    },
+  });
+
+  assert.deepEqual(feedbackContract, {
+    kind: "single_value_canonical_suggestion",
+    mode: "text",
+    rationale: "Je huidige zin blijft nog te algemeen.",
+    heading: "OP BASIS VAN JE INPUT STEL IK DE VOLGENDE BESTAANSREDEN VOOR",
+    supportText: "Deze formulering is concreter en menselijker.",
+    currentLabel: "",
+    suggestedLabel: "",
+    currentValue: "",
+    suggestedValue: "Wij bestaan om mensen positief in beweging te brengen.",
+    currentItems: [],
+    suggestedItems: [],
+    retainedHeading: "",
+    retainedItems: [],
+    instruction: "",
+  });
+});
+
+test("shouldSuppressMainCardForWordingChoice follows the feedback contract for compare families", () => {
+  assert.equal(
+    shouldSuppressMainCardForWordingChoice(
+      {
+        feedback_contract: {
+          kind: "list_duplicate_merge_compare",
+          mode: "list",
+        },
+      },
+      "default"
+    ),
+    true
+  );
+  assert.equal(
+    shouldSuppressMainCardForWordingChoice(
+      {
+        feedback_contract: {
+          kind: "single_value_canonical_suggestion",
+          mode: "text",
         },
       },
       "default"
@@ -234,7 +291,7 @@ test("surfaceActionsForResult keeps the action contract as the only render autho
           },
           {
             role: "dream_start_exercise",
-            surface: "auxiliary",
+            surface: "choice",
             action_code: "ACTION_DREAM_INTRO_START_EXERCISE",
             label: "Do a small exercise that helps to define your dream.",
           },
@@ -251,11 +308,11 @@ test("surfaceActionsForResult keeps the action contract as the only render autho
 
   assert.deepEqual(
     surfaceActionsForResult(result, "choice").map((action) => action.actionCode),
-    ["ACTION_DREAM_INTRO_EXPLAIN_MORE"]
+    ["ACTION_DREAM_INTRO_EXPLAIN_MORE", "ACTION_DREAM_INTRO_START_EXERCISE"]
   );
   assert.deepEqual(
     surfaceActionsForResult(result, "auxiliary").map((action) => action.actionCode),
-    ["ACTION_DREAM_INTRO_START_EXERCISE"]
+    []
   );
   assert.deepEqual(
     surfaceActionsForResult(result, "primary").map((action) => action.actionCode),

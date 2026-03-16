@@ -1144,6 +1144,97 @@ test("single-value valid output infers feedback reason from multi-sentence big w
   assert.equal(String(uiContent.canonical_text || ""), canonical);
 });
 
+test("bigwhy suggestions keep the follow-up menu and options headline from the server contract", () => {
+  const state = getDefaultState();
+  (state as any).current_step = "bigwhy";
+  (state as any).active_specialist = "BigWhy";
+  (state as any).business_name = "Mindd";
+  (state as any).ui_strings = {
+    "contract.headline.define.withOptions": "Definieer je {0} voor {1} of kies een optie.",
+    "offtopic.step.bigwhy": "grote waarom",
+    "menuLabel.BIGWHY_MENU_FROM_GIVE.ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS":
+      "Stel 3 pittige vragen om de Grote Waarom te vinden.",
+    "menuLabel.BIGWHY_MENU_FROM_GIVE.ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME": "Kies er één voor mij",
+    "menuLabel.BIGWHY_MENU_FROM_GIVE.ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE":
+      "Leg het belang van een Grote Waarom uit",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "bigwhy",
+    state,
+    specialist: {
+      action: "ASK",
+      ui_contract_id: buildUiContractId("bigwhy", "no_output", "BIGWHY_MENU_FROM_GIVE"),
+      message: [
+        "HIER ZIJN DRIE MOGELIJKE FORMULERINGEN VOOR DE GROTE WAAROM VAN MINDD:",
+        "- Suggestie 1",
+        "- Suggestie 2",
+        "- Suggestie 3",
+      ].join("\n"),
+      question: "",
+      refined_formulation: "",
+      bigwhy: "",
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.contractId, "bigwhy:no_output:BIGWHY_MENU_FROM_GIVE");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS",
+    "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
+    "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE",
+  ]);
+  assert.equal(
+    String((rendered.specialist as any).question || ""),
+    "Definieer je grote waarom voor Mindd of kies een optie."
+  );
+});
+
+test("bigwhy follow-up menu survives current-value refinement states", () => {
+  const state = getDefaultState();
+  const canonical =
+    "Omdat mensen richting vinden wanneer hun diepste overtuigingen eindelijk helder worden.";
+  (state as any).current_step = "bigwhy";
+  (state as any).active_specialist = "BigWhy";
+  (state as any).business_name = "Mindd";
+  (state as any).ui_strings = {
+    "contract.headline.refine.withOptions": "Verfijn je {0} voor {1} of kies een optie.",
+    "offtopic.step.bigwhy": "grote waarom",
+    "menuLabel.BIGWHY_MENU_FROM_GIVE.ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS":
+      "Stel 3 pittige vragen om de Grote Waarom te vinden.",
+    "menuLabel.BIGWHY_MENU_FROM_GIVE.ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME": "Kies er één voor mij",
+    "menuLabel.BIGWHY_MENU_FROM_GIVE.ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE":
+      "Leg het belang van een Grote Waarom uit",
+  };
+
+  const rendered = renderFreeTextTurnPolicy({
+    stepId: "bigwhy",
+    state,
+    specialist: {
+      action: "ASK",
+      ui_contract_id: buildUiContractId("bigwhy", "incomplete_output", "BIGWHY_MENU_FROM_GIVE"),
+      message: "Op basis van je input stel ik de volgende grote waarom voor.",
+      question: "",
+      refined_formulation: canonical,
+      bigwhy: canonical,
+      is_offtopic: false,
+    },
+    previousSpecialist: {},
+  });
+
+  assert.equal(rendered.contractId, "bigwhy:incomplete_output:BIGWHY_MENU_FROM_GIVE");
+  assert.deepEqual(rendered.uiActionCodes, [
+    "ACTION_BIGWHY_EXPLAIN_ASK_3_QUESTIONS",
+    "ACTION_BIGWHY_SUGGESTIONS_CHOOSE_FOR_ME",
+    "ACTION_BIGWHY_INTRO_EXPLAIN_IMPORTANCE",
+  ]);
+  assert.equal(
+    String((rendered.specialist as any).question || ""),
+    "Verfijn je grote waarom voor Mindd of kies een optie."
+  );
+});
+
 test("single-value valid output infers feedback reason across the single-value feedback family", () => {
   const scenarios = [
     {

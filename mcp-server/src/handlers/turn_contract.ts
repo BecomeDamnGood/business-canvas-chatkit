@@ -2,7 +2,7 @@ import { ACTIONCODE_REGISTRY } from "../core/actioncode_registry.js";
 import { VIEW_CONTRACT_VERSION as LOCALE_START_VIEW_CONTRACT_VERSION } from "../core/bootstrap_runtime.js";
 import type { CanvasState } from "../core/state.js";
 import { labelKeyForMenuAction } from "../core/menu_contract.js";
-import { UI_STRINGS_DEFAULT } from "../i18n/ui_strings_defaults.js";
+import { UI_STRINGS_DEFAULT, UI_STRINGS_WITH_MENU_KEYS } from "../i18n/ui_strings_defaults.js";
 import { resolveUiStringForState } from "../i18n/ui_strings_lookup.js";
 import { STEP_0_ID } from "../steps/step_0_validation.js";
 import { buildCanonicalWidgetState } from "./run_step_canonical_widget_state.js";
@@ -36,6 +36,12 @@ type UiActionSurface =
   | "text_input"
   | "wording_choice"
   | "auxiliary";
+
+type UiFeedbackKind =
+  | "single_value_compare"
+  | "single_value_canonical_suggestion"
+  | "list_edit_compare"
+  | "list_duplicate_merge_compare";
 
 type UiParityDeps = {
   parseMenuFromContractIdForStep: (contractIdRaw: unknown, stepId: string) => string;
@@ -97,12 +103,168 @@ const UI_ACTION_SURFACES = new Set<UiActionSurface>([
   "auxiliary",
 ]);
 
+const UI_FEEDBACK_KINDS = new Set<UiFeedbackKind>([
+  "single_value_compare",
+  "single_value_canonical_suggestion",
+  "list_edit_compare",
+  "list_duplicate_merge_compare",
+]);
+
+function normalizeStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+}
+
+function parseRetainedInstruction(rawInstruction: unknown): {
+  retainedHeading: string;
+  retainedItems: string[];
+  instructionText: string;
+} {
+  const instruction = String(rawInstruction || "").replace(/\r/g, "\n").trim();
+  if (!instruction) {
+    return { retainedHeading: "", retainedItems: [], instructionText: "" };
+  }
+  const lines = instruction
+    .split("\n")
+    .map((line) => String(line || "").trim());
+  const firstBulletIndex = lines.findIndex((line) => /^(?:[-*•·]|\d+[\).])\s+/.test(line));
+  if (firstBulletIndex < 0) {
+    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+  }
+
+  let bulletEndIndex = firstBulletIndex;
+  while (bulletEndIndex < lines.length && /^(?:[-*•·]|\d+[\).])\s+/.test(lines[bulletEndIndex])) {
+    bulletEndIndex += 1;
+  }
+
+  const retainedHeading = lines
+    .slice(0, firstBulletIndex)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  const retainedItems = lines
+    .slice(firstBulletIndex, bulletEndIndex)
+    .map((line) => line.replace(/^\s*(?:[-*•·]|\d+[\).])\s+/, "").trim())
+    .filter(Boolean);
+  const instructionText = lines
+    .slice(bulletEndIndex)
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  if (!retainedHeading || retainedItems.length === 0) {
+    return { retainedHeading: "", retainedItems: [], instructionText: instruction };
+  }
+  return { retainedHeading, retainedItems, instructionText: instructionText || instruction };
+}
+
+function ensureUnifiedUiFeedbackContract(response: RunStepContractResponse): void {
+  const ui = toRecord(response.ui);
+  const existing = toRecord(ui.feedback_contract);
+  const existingKind = String(existing.kind || "").trim();
+  if (UI_FEEDBACK_KINDS.has(existingKind as UiFeedbackKind)) {
+    return;
+  }
+
+  const uiContent = toRecord(ui.content);
+  const wordingChoice = toRecord(ui.wording_choice);
+  const uiFlags = toRecord(ui.flags);
+  const wordingEnabled =
+    wordingChoice.enabled === true ||
+    String(uiFlags.require_wording_pick || "").trim().toLowerCase() === "true";
+  const feedbackReasonText = String(
+    wordingChoice.feedback_reason_text ||
+      toRecord(wordingChoice.compare_feedback).text ||
+      ""
+  ).trim();
+  const userLabel = String(wordingChoice.user_label || "").trim();
+  const suggestionLabel = String(wordingChoice.suggestion_label || "").trim();
+  const userText = String(wordingChoice.user_text || "").trim();
+  const suggestionText = String(wordingChoice.suggestion_text || "").trim();
+  const userItems = normalizeStringArray(wordingChoice.user_items);
+  const suggestionItems = normalizeStringArray(wordingChoice.suggestion_items);
+  const wordingInstruction = String(wordingChoice.instruction || "").trim();
+  const parsedInstruction = parseRetainedInstruction(wordingInstruction);
+  const wordingMode = String(wordingChoice.mode || "text").trim().toLowerCase() === "list" ? "list" : "text";
+  const wordingVariant = String(wordingChoice.variant || "").trim().toLowerCase();
+
+  if (
+    wordingEnabled &&
+    wordingMode === "text" &&
+    (feedbackReasonText || userText || suggestionText || userLabel || suggestionLabel)
+  ) {
+    ui.feedback_contract = {
+      version: "2026-03-16.feedback_contract.v1",
+      kind: "single_value_compare",
+      mode: "text",
+      ...(feedbackReasonText ? { rationale: feedbackReasonText } : {}),
+      ...(userLabel ? { current_label: userLabel } : {}),
+      ...(suggestionLabel ? { suggested_label: suggestionLabel } : {}),
+      ...(userText ? { current_value: userText } : {}),
+      ...(suggestionText ? { suggested_value: suggestionText } : {}),
+      ...(parsedInstruction.retainedHeading ? { retained_heading: parsedInstruction.retainedHeading } : {}),
+      ...(parsedInstruction.retainedItems.length > 0 ? { retained_items: parsedInstruction.retainedItems } : {}),
+      ...(parsedInstruction.instructionText ? { instruction: parsedInstruction.instructionText } : {}),
+    };
+    response.ui = ui;
+    return;
+  }
+
+  if (
+    wordingEnabled &&
+    wordingMode === "list" &&
+    (feedbackReasonText || userItems.length > 0 || suggestionItems.length > 0)
+  ) {
+    ui.feedback_contract = {
+      version: "2026-03-16.feedback_contract.v1",
+      kind: wordingVariant === "grouped_list_units" ? "list_duplicate_merge_compare" : "list_edit_compare",
+      mode: "list",
+      ...(feedbackReasonText ? { rationale: feedbackReasonText } : {}),
+      ...(userLabel ? { current_label: userLabel } : {}),
+      ...(suggestionLabel ? { suggested_label: suggestionLabel } : {}),
+      ...(userText ? { current_value: userText } : {}),
+      ...(suggestionText ? { suggested_value: suggestionText } : {}),
+      ...(userItems.length > 0 ? { current_items: userItems } : {}),
+      ...(suggestionItems.length > 0 ? { suggested_items: suggestionItems } : {}),
+      ...(parsedInstruction.retainedHeading ? { retained_heading: parsedInstruction.retainedHeading } : {}),
+      ...(parsedInstruction.retainedItems.length > 0 ? { retained_items: parsedInstruction.retainedItems } : {}),
+      ...(parsedInstruction.instructionText ? { instruction: parsedInstruction.instructionText } : {}),
+    };
+    response.ui = ui;
+    return;
+  }
+
+  if (String(uiContent.kind || "").trim() === "single_value") {
+    const heading = String(uiContent.heading || "").trim();
+    const canonicalText = String(uiContent.canonical_text || "").trim();
+    const supportText = String(uiContent.support_text || "").trim();
+    const contentFeedbackReasonText = String(uiContent.feedback_reason_text || "").trim();
+    if (heading || canonicalText || supportText || contentFeedbackReasonText) {
+      ui.feedback_contract = {
+        version: "2026-03-16.feedback_contract.v1",
+        kind: "single_value_canonical_suggestion",
+        ...(heading ? { heading } : {}),
+        ...(canonicalText ? { suggested_value: canonicalText } : {}),
+        ...(supportText ? { support_text: supportText } : {}),
+        ...(contentFeedbackReasonText ? { rationale: contentFeedbackReasonText } : {}),
+      };
+      response.ui = ui;
+      return;
+    }
+  }
+
+  delete ui.feedback_contract;
+  response.ui = ui;
+}
+
 function defaultSurfaceForRole(role: UiActionRole): UiActionSurface {
   if (role === "start") return "primary";
   if (role === "text_submit") return "text_input";
   if (role === "score_submit") return "primary";
   if (role === "wording_pick_user" || role === "wording_pick_suggestion") return "wording_choice";
-  if (role === "dream_start_exercise" || role === "dream_switch_to_self") return "auxiliary";
+  if (role === "dream_start_exercise") return "choice";
+  if (role === "dream_switch_to_self") return "auxiliary";
   return "choice";
 }
 
@@ -123,6 +285,7 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
   const uiPrompt = toRecord(uiPayload.prompt);
   const uiView = toRecord(uiPayload.view);
   const uiContent = toRecord(uiPayload.content);
+  const uiFeedback = toRecord(uiPayload.feedback_contract);
   const actionContract = toRecord(uiPayload.action_contract);
   const specialist = toRecord(response.specialist);
   const stateRecord =
@@ -158,7 +321,15 @@ function hasRenderableResponseContent(response: RunStepContractResponse): boolea
     String(uiContent.canonical_text || "").trim().length > 0 ||
     String(uiContent.support_text || "").trim().length > 0 ||
     String(uiContent.feedback_reason_text || "").trim().length > 0;
-  return hasActions || hasDreamBuilderStatements || hasStructuredContent || Boolean(prompt) || Boolean(body) || Boolean(question);
+  const hasStructuredFeedback =
+    String(uiFeedback.heading || "").trim().length > 0 ||
+    String(uiFeedback.support_text || "").trim().length > 0 ||
+    String(uiFeedback.rationale || "").trim().length > 0 ||
+    String(uiFeedback.current_value || "").trim().length > 0 ||
+    String(uiFeedback.suggested_value || "").trim().length > 0 ||
+    normalizeStringArray(uiFeedback.current_items).length > 0 ||
+    normalizeStringArray(uiFeedback.suggested_items).length > 0;
+  return hasActions || hasDreamBuilderStatements || hasStructuredContent || hasStructuredFeedback || Boolean(prompt) || Boolean(body) || Boolean(question);
 }
 
 function hasStartAction(response: RunStepContractResponse, state: Record<string, unknown>): boolean {
@@ -173,7 +344,7 @@ function uiLabelForKey(state: Record<string, unknown>, labelKey: string): string
   const stateUiStrings = toRecord(state.ui_strings);
   const localized = String(stateUiStrings[labelKey] || "").trim();
   if (localized) return localized;
-  return String(UI_STRINGS_DEFAULT[labelKey] || "").trim();
+  return String(UI_STRINGS_WITH_MENU_KEYS[labelKey] || UI_STRINGS_DEFAULT[labelKey] || "").trim();
 }
 
 function actionLabelKeyMatchesState(
@@ -290,7 +461,7 @@ function buildStateActionDescriptor(
       actionCode,
       label: uiLabelForKey(state, labelKey),
       labelKey,
-      surface: "auxiliary",
+      surface: "choice",
       intent: { type: "START_EXERCISE", exerciseType: "dream_builder" },
       primary: false,
     };
@@ -328,14 +499,9 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse, deps?:
     const role = normalizeUiActionRole(action.role, inferredRole);
     const surface = normalizeUiActionSurface(action.surface, defaultSurfaceForRole(role));
     const descriptor = buildStateActionDescriptor(state, role);
-    const labelKey =
-      role === "dream_start_exercise"
-        ? String(descriptor?.labelKey || dreamBuilderExerciseLabelKey(state)).trim()
-        : String(action.label_key || descriptor?.labelKey || "").trim();
+    const labelKey = String(action.label_key || descriptor?.labelKey || "").trim();
     const label =
-      role === "dream_start_exercise"
-        ? String(descriptor?.label || uiLabelForKey(state, labelKey)).trim()
-        : String(action.label || descriptor?.label || "").trim();
+      String(action.label || (labelKey ? uiLabelForKey(state, labelKey) : "") || descriptor?.label || "").trim();
     seenByActionCode.add(actionCode);
     unifiedActions.push({
       ...action,
@@ -363,14 +529,8 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse, deps?:
       const surface = defaultSurfaceForRole(role);
       const descriptor = buildStateActionDescriptor(state, role);
       const fallbackLabelKey = menuId ? labelKeyForMenuAction(menuId, actionCode, i) : "";
-      const labelKey =
-        role === "dream_start_exercise"
-          ? String(descriptor?.labelKey || dreamBuilderExerciseLabelKey(state)).trim()
-          : String(descriptor?.labelKey || labelKeys[i] || fallbackLabelKey || "").trim();
-      const label =
-        role === "dream_start_exercise"
-          ? String(descriptor?.label || uiLabelForKey(state, labelKey)).trim()
-          : String(descriptor?.label || uiLabelForKey(state, labelKey) || "").trim();
+      const labelKey = String(labelKeys[i] || fallbackLabelKey || descriptor?.labelKey || "").trim();
+      const label = String(uiLabelForKey(state, labelKey) || descriptor?.label || "").trim();
       seenByActionCode.add(actionCode);
       unifiedActions.push({
         id: `menu_${i + 1}`,
@@ -398,6 +558,12 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse, deps?:
   for (const role of stateRoles) {
     const descriptor = buildStateActionDescriptor(state, role);
     if (!descriptor) continue;
+    if (
+      role === "dream_start_exercise" &&
+      unifiedActions.some((action) => normalizeUiActionRole(action.role, "choice") === "dream_start_exercise")
+    ) {
+      continue;
+    }
     const normalizedCode = String(descriptor.actionCode || "").trim();
     if (!normalizedCode) continue;
     if (seenByActionCode.has(normalizedCode)) {
@@ -405,10 +571,7 @@ function ensureUnifiedUiActionContract(response: RunStepContractResponse, deps?:
         if (String(entry.action_code || "").trim() !== normalizedCode) continue;
         entry.role = role;
         entry.surface = descriptor.surface;
-        if (role === "dream_start_exercise") {
-          entry.label_key = descriptor.labelKey;
-          entry.label = descriptor.label;
-        } else {
+        if (role !== "dream_start_exercise") {
           if (!String(entry.label_key || "").trim()) entry.label_key = descriptor.labelKey;
           if (!String(entry.label || "").trim()) entry.label = descriptor.label;
         }
@@ -744,6 +907,7 @@ export function finalizeResponseContractInternals<T extends RunStepContractRespo
     parseMenuFromContractIdForStep: options.parseMenuFromContractIdForStep,
     labelKeysForMenuActionCodes: options.labelKeysForMenuActionCodes,
   });
+  ensureUnifiedUiFeedbackContract(finalResponse);
   const finalUi = toRecord(finalResponse.ui);
   delete finalUi.actions;
   delete finalUi.action_codes;

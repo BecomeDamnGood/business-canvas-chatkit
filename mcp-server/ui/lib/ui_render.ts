@@ -45,12 +45,98 @@ function toRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+type FeedbackContractKind =
+  | "single_value_compare"
+  | "single_value_canonical_suggestion"
+  | "list_edit_compare"
+  | "list_duplicate_merge_compare";
+
+type NormalizedFeedbackContract = {
+  kind: FeedbackContractKind;
+  mode: "text" | "list";
+  rationale: string;
+  heading: string;
+  supportText: string;
+  currentLabel: string;
+  suggestedLabel: string;
+  currentValue: string;
+  suggestedValue: string;
+  currentItems: string[];
+  suggestedItems: string[];
+  retainedHeading: string;
+  retainedItems: string[];
+  instruction: string;
+};
+
+function normalizeStringArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+}
+
+function normalizeFeedbackContractKind(raw: unknown): FeedbackContractKind | "" {
+  const kind = String(raw || "").trim();
+  if (
+    kind === "single_value_compare" ||
+    kind === "single_value_canonical_suggestion" ||
+    kind === "list_edit_compare" ||
+    kind === "list_duplicate_merge_compare"
+  ) {
+    return kind;
+  }
+  return "";
+}
+
+export function readFeedbackContract(
+  uiPayloadRaw: Record<string, unknown> | null | undefined
+): NormalizedFeedbackContract | null {
+  const uiPayload = toRecord(uiPayloadRaw);
+  const feedback = toRecord(uiPayload.feedback_contract);
+  const kind = normalizeFeedbackContractKind(feedback.kind);
+  if (!kind) return null;
+  const mode = String(feedback.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+  return {
+    kind,
+    mode,
+    rationale: String(feedback.rationale || "").trim(),
+    heading: String(feedback.heading || "").trim(),
+    supportText: String(feedback.support_text || "").trim(),
+    currentLabel: String(feedback.current_label || "").trim(),
+    suggestedLabel: String(feedback.suggested_label || "").trim(),
+    currentValue: String(feedback.current_value || "").trim(),
+    suggestedValue: String(feedback.suggested_value || "").trim(),
+    currentItems: normalizeStringArray(feedback.current_items),
+    suggestedItems: normalizeStringArray(feedback.suggested_items),
+    retainedHeading: String(feedback.retained_heading || "").trim(),
+    retainedItems: normalizeStringArray(feedback.retained_items),
+    instruction: String(feedback.instruction || "").trim(),
+  };
+}
+
 function readSingleValueCardContent(uiPayload: Record<string, unknown>): {
   heading?: string;
   canonicalText?: string;
   supportText?: string;
   feedbackReasonText?: string;
 } | null {
+  const feedbackContract = readFeedbackContract(uiPayload);
+  if (feedbackContract?.kind === "single_value_canonical_suggestion") {
+    if (
+      !feedbackContract.heading &&
+      !feedbackContract.suggestedValue &&
+      !feedbackContract.supportText &&
+      !feedbackContract.rationale
+    ) {
+      return null;
+    }
+    return {
+      ...(feedbackContract.heading ? { heading: feedbackContract.heading } : {}),
+      ...(feedbackContract.suggestedValue ? { canonicalText: feedbackContract.suggestedValue } : {}),
+      ...(feedbackContract.supportText ? { supportText: feedbackContract.supportText } : {}),
+      ...(feedbackContract.rationale ? { feedbackReasonText: feedbackContract.rationale } : {}),
+    };
+  }
   const content = toRecord(uiPayload.content);
   if (String(content.kind || "").trim() !== "single_value") return null;
   const heading = String(content.heading || "").trim();
@@ -71,6 +157,7 @@ export function shouldSuppressMainCardForWordingChoice(
   uiViewVariantRaw: string | null | undefined
 ): boolean {
   const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
+  const feedbackContract = readFeedbackContract(uiPayload);
   const uiViewVariant = String(uiViewVariantRaw || "").trim();
   const wordingChoicePayload =
     uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice
@@ -78,6 +165,9 @@ export function shouldSuppressMainCardForWordingChoice(
       : {};
   const flags = toRecord(uiPayload.flags);
   return (
+    feedbackContract?.kind === "single_value_compare" ||
+    feedbackContract?.kind === "list_edit_compare" ||
+    feedbackContract?.kind === "list_duplicate_merge_compare" ||
     uiViewVariant === "wording_choice" ||
     wordingChoicePayload.enabled === true ||
     String(flags.require_wording_pick || "").trim() === "true"
@@ -267,7 +357,10 @@ function defaultSurfaceForActionRole(role: string): string {
   if (normalizedRole === "wording_pick_user" || normalizedRole === "wording_pick_suggestion") {
     return "wording_choice";
   }
-  if (normalizedRole === "dream_start_exercise" || normalizedRole === "dream_switch_to_self") {
+  if (normalizedRole === "dream_start_exercise") {
+    return "choice";
+  }
+  if (normalizedRole === "dream_switch_to_self") {
     return "auxiliary";
   }
   return "choice";
@@ -997,6 +1090,7 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
     resultData && typeof resultData.ui === "object" && resultData.ui
       ? (resultData.ui as Record<string, unknown>)
       : {};
+  const feedbackContract = readFeedbackContract(uiPayload);
   const flags =
     uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags
       ? (uiPayload.flags as Record<string, unknown>)
@@ -1006,23 +1100,35 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
       ? (uiPayload.wording_choice as Record<string, unknown>)
       : {};
   const requirePick = String(flags.require_wording_pick || "false") === "true";
-  const enabled = requirePick || wording.enabled === true;
+  const feedbackContractEnabled =
+    feedbackContract?.kind === "single_value_compare" ||
+    feedbackContract?.kind === "list_edit_compare" ||
+    feedbackContract?.kind === "list_duplicate_merge_compare";
+  const enabled = feedbackContractEnabled || requirePick || wording.enabled === true;
   if (!enabled) {
     (wrap as HTMLElement).style.display = "none";
     return false;
   }
 
-  const mode = String(wording.mode || "text") === "list" ? "list" : "text";
+  const legacyInstruction = String(wording.instruction || "").trim();
+  const legacyInstructionParts = parseWordingChoiceInstruction(legacyInstruction);
+  const mode = feedbackContract?.mode || (String(wording.mode || "text") === "list" ? "list" : "text");
   const variant = String(wording.variant || "default").trim().toLowerCase();
-  const feedbackReasonText = String(wording.feedback_reason_text || "").trim();
-  const userText = String(wording.user_text || "").trim();
-  const suggestionText = String(wording.suggestion_text || "").trim();
-  const userLabelFromPayload = String(wording.user_label || "").trim();
-  const suggestionLabelFromPayload = String(wording.suggestion_label || "").trim();
-  const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];
-  const suggestionItems = Array.isArray(wording.suggestion_items) ? wording.suggestion_items : [];
-  const instruction = String(wording.instruction || "").trim() || t(lang, "wordingChoiceInstruction");
-  const instructionParts = parseWordingChoiceInstruction(instruction);
+  const feedbackReasonText = feedbackContract?.rationale || String(wording.feedback_reason_text || "").trim();
+  const userText = feedbackContract?.currentValue || String(wording.user_text || "").trim();
+  const suggestionText = feedbackContract?.suggestedValue || String(wording.suggestion_text || "").trim();
+  const userLabelFromPayload = feedbackContract?.currentLabel || String(wording.user_label || "").trim();
+  const suggestionLabelFromPayload = feedbackContract?.suggestedLabel || String(wording.suggestion_label || "").trim();
+  const userItems = feedbackContract?.currentItems || (Array.isArray(wording.user_items) ? wording.user_items : []);
+  const suggestionItems = feedbackContract?.suggestedItems || (Array.isArray(wording.suggestion_items) ? wording.suggestion_items : []);
+  const instruction = feedbackContract?.instruction || legacyInstruction || t(lang, "wordingChoiceInstruction");
+  const instructionParts = feedbackContract
+    ? {
+        retainedHeading: feedbackContract.retainedHeading,
+        retainedItems: feedbackContract.retainedItems,
+        instructionText: feedbackContract.instruction || instruction,
+      }
+    : legacyInstructionParts;
   const ensureLabelColon = (value: string): string => {
     const trimmed = String(value || "").trim();
     if (!trimmed) return "";
@@ -1098,7 +1204,6 @@ function renderWordingChoicePanel(resultData: Record<string, unknown>, lang: str
 }
 
 export function render(overrideToolOutput?: unknown): void {
-  revealWidgetRoot();
   const data = toolData(overrideToolOutput);
 
   if (data && Object.keys(data).length) setLastToolOutput(data);
@@ -1106,6 +1211,10 @@ export function render(overrideToolOutput?: unknown): void {
   const resolved = resolveWidgetPayload(data);
   const result = resolved.result;
   const state = (result?.state as Record<string, unknown>) || {};
+  const startupPayloadMissing =
+    Object.keys(result || {}).length === 0 &&
+    Object.keys(state).length === 0;
+  if (!startupPayloadMissing) revealWidgetRoot();
   const errorObj = result?.error as { type?: string; user_message?: string; retry_after_ms?: number } | null;
   const transientError = errorObj && (errorObj.type === "rate_limited" || errorObj.type === "timeout");
   const uiPayload =
@@ -1175,9 +1284,6 @@ export function render(overrideToolOutput?: unknown): void {
     serverExplicitRecovery ||
     serverExplicitBlocked ||
     serverExplicitFailed;
-  const startupPayloadMissing =
-    Object.keys(result || {}).length === 0 &&
-    Object.keys(state).length === 0;
   const overrideStringsMap = overrideStrings as Record<string, string> | null;
   const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
   if (hasOverrideStrings) setRuntimeUiStrings(overrideStringsMap);

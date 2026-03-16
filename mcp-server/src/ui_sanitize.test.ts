@@ -152,7 +152,7 @@ test("renderInlineText auto-links plain URLs", { concurrency: false }, () => {
   }
 });
 
-test("render reveals the hidden widget body before DOM-specific rendering continues", { concurrency: false }, () => {
+test("render keeps the widget body hidden while awaiting the first host payload", { concurrency: false }, () => {
   const originalDocument = (globalThis as unknown as { document?: unknown }).document;
   const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
   const originalRevealed = (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
@@ -178,8 +178,8 @@ test("render reveals the hidden widget body before DOM-specific rendering contin
     assert.doesNotThrow(() => {
       render();
     });
-    assert.equal(bodyAttributes["data-bsc-ready"], "1");
-    assert.equal((globalThis as Record<string, unknown>).__BSC_UI_REVEALED__, true);
+    assert.equal(bodyAttributes["data-bsc-ready"], undefined);
+    assert.equal((globalThis as Record<string, unknown>).__BSC_UI_REVEALED__, undefined);
   } finally {
     if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
     else (globalThis as unknown as { document?: unknown }).document = originalDocument;
@@ -190,13 +190,76 @@ test("render reveals the hidden widget body before DOM-specific rendering contin
   }
 });
 
-test("render emits visibility telemetry when the widget body is unavailable", { concurrency: false }, () => {
+test("render reveals the hidden widget body once a real host payload is present", { concurrency: false }, () => {
   const originalDocument = (globalThis as unknown as { document?: unknown }).document;
-  const originalOpenAi = (globalThis as unknown as { openai?: unknown }).openai;
+  const originalRevealed = (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
+  const bodyAttributes: Record<string, string> = {};
+  const payload = {
+    _meta: {
+      widget_result: {
+        current_step_id: "step_0",
+        state: {
+          current_step: "step_0",
+        },
+        ui: {
+          view: {
+            mode: "prestart",
+          },
+        },
+      },
+    },
+  };
+  const fakeDocument = {
+    body: {
+      setAttribute(name: string, value: string) {
+        bodyAttributes[String(name)] = String(value);
+      },
+      getAttribute(name: string) {
+        return bodyAttributes[String(name)] ?? null;
+      },
+    },
+    getElementById() {
+      return null;
+    },
+  };
+  (globalThis as unknown as { document?: unknown }).document = fakeDocument;
+  delete (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
+
+  try {
+    assert.doesNotThrow(() => {
+      render(payload);
+    });
+    assert.equal(bodyAttributes["data-bsc-ready"], "1");
+    assert.equal((globalThis as Record<string, unknown>).__BSC_UI_REVEALED__, true);
+  } finally {
+    if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
+    else (globalThis as unknown as { document?: unknown }).document = originalDocument;
+    if (originalRevealed === undefined) delete (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
+    else (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__ = originalRevealed;
+  }
+});
+
+test("render emits visibility telemetry when the widget body is unavailable for a real host payload", { concurrency: false }, () => {
+  const originalDocument = (globalThis as unknown as { document?: unknown }).document;
   const originalWarn = console.warn;
   const originalRevealed = (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
   const originalVisibilityWarning = (globalThis as Record<string, unknown>).__BSC_UI_VISIBILITY_WARNING__;
   const warnings: unknown[][] = [];
+  const payload = {
+    _meta: {
+      widget_result: {
+        current_step_id: "step_0",
+        state: {
+          current_step: "step_0",
+        },
+        ui: {
+          view: {
+            mode: "prestart",
+          },
+        },
+      },
+    },
+  };
   const fakeDocument = {
     getElementById() {
       return null;
@@ -206,16 +269,12 @@ test("render emits visibility telemetry when the widget body is unavailable", { 
     warnings.push(args);
   };
   (globalThis as unknown as { document?: unknown }).document = fakeDocument;
-  (globalThis as unknown as { openai?: unknown }).openai = {
-    toolOutput: {},
-    toolResponseMetadata: {},
-  };
   delete (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
   delete (globalThis as Record<string, unknown>).__BSC_UI_VISIBILITY_WARNING__;
 
   try {
     assert.doesNotThrow(() => {
-      render();
+      render(payload);
     });
     assert.equal(warnings.length, 1);
     assert.equal(String(warnings[0]?.[0] || ""), "[ui_root_visibility_issue]");
@@ -228,8 +287,6 @@ test("render emits visibility telemetry when the widget body is unavailable", { 
     console.warn = originalWarn;
     if (originalDocument === undefined) delete (globalThis as unknown as { document?: unknown }).document;
     else (globalThis as unknown as { document?: unknown }).document = originalDocument;
-    if (originalOpenAi === undefined) delete (globalThis as unknown as { openai?: unknown }).openai;
-    else (globalThis as unknown as { openai?: unknown }).openai = originalOpenAi;
     if (originalRevealed === undefined) delete (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__;
     else (globalThis as Record<string, unknown>).__BSC_UI_REVEALED__ = originalRevealed;
     if (originalVisibilityWarning === undefined) delete (globalThis as Record<string, unknown>).__BSC_UI_VISIBILITY_WARNING__;
@@ -396,7 +453,7 @@ test("resolveWidgetBodyText keeps empty canonical dream-builder body authoritati
   assert.equal(body, "");
 });
 
-test("renderChoiceButtons keeps auxiliary dream actions out of the shared choice list", { concurrency: false }, () => {
+test("renderChoiceButtons keeps Dream exercise actions in the shared choice list when the contract marks them as choice actions", { concurrency: false }, () => {
   const originalDocument = (globalThis as unknown as { document?: unknown }).document;
   try {
     const wrap = {
@@ -443,6 +500,7 @@ test("renderChoiceButtons keeps auxiliary dream actions out of the shared choice
               label: "Doe een kleine oefening die helpt om je droom te definieren.",
               action_code: "ACTION_DREAM_INTRO_START_EXERCISE",
               role: "dream_start_exercise",
+              surface: "choice",
             },
           ],
         },
@@ -452,11 +510,12 @@ test("renderChoiceButtons keeps auxiliary dream actions out of the shared choice
     const buttons = wrap.childNodes.filter(
       (node: unknown) => node && (node as { tagName?: string }).tagName === "BUTTON"
     ) as Array<{ textContent?: string }>;
-    assert.equal(buttons.length, 1);
+    assert.equal(buttons.length, 2);
     assert.deepEqual(
       buttons.map((button) => String(button.textContent || "")),
       [
         "Vertel me meer over waarom een droom belangrijk is",
+        "Doe een kleine oefening die helpt om je droom te definieren.",
       ]
     );
   } finally {
@@ -892,12 +951,14 @@ test("bundled runtime renders rich body into cardDesc via formatter and keeps un
 test("bundled runtime startup and ACTION_START flow stay on the simple happy-path", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
 
-  // Startup: no fail-closed blocked fallback, ingest once and continue.
+  // Startup: no fail-closed blocked fallback, ingest once and wait for the first real payload.
   assert.doesNotMatch(source, /function renderStartupWaitShell\(/);
   assert.match(source, /tryInitialIngestFromHost\("set_globals"\);/);
   assert.doesNotMatch(source, /startup_fail_closed_no_canonical_payload/);
-  assert.match(source, /window\.addEventListener\("openai:set_globals", \(\) => \{[\s\S]*render\(\);[\s\S]*if \(getIsLoading\(\)\) setLoading\(false\);[\s\S]*\}\);/);
-  assert.match(source, /(?:const|var) initialIngested = tryInitialIngestFromHost\("set_globals"\);[\s\S]*render\(\);/);
+  assert.match(source, /window\.addEventListener\("openai:set_globals", \(\) => \{[\s\S]*ingestHostPayload\(payload, "set_globals"\);[\s\S]*if \(getIsLoading\(\)\) setLoading\(false\);[\s\S]*\}\);/);
+  assert.match(source, /console\.log\("\[startup_set_globals_empty_payload_ignored\]"/);
+  assert.doesNotMatch(source, /window\.addEventListener\("openai:set_globals", \(\) => \{[\s\S]*render\(\);/);
+  assert.doesNotMatch(source, /(?:const|var) initialIngested = tryInitialIngestFromHost\("set_globals"\);[\s\S]*render\(\);/);
 
   // Routing tolerates missing explicit view mode and keeps the interactive path live.
   assert.match(source, /const hasExplicitServerRouting =/);
@@ -2245,8 +2306,30 @@ test("bundled runtime reveals the hidden widget body during render bootstrap", (
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /function revealWidgetRoot\(\)/);
   assert.match(source, /document\.body\.setAttribute\("data-bsc-ready", "1"\)/);
-  assert.match(source, /function render\(overrideToolOutput\)\s*\{\s*revealWidgetRoot\(\);/);
+  assert.doesNotMatch(source, /function render\(overrideToolOutput\)\s*\{\s*revealWidgetRoot\(\);/);
+  assert.match(
+    source,
+    /const startupPayloadMissing = Object\.keys\(result \|\| \{\}\)\.length === 0 && Object\.keys\(state\)\.length === 0;\s*if \(!startupPayloadMissing\) revealWidgetRoot\(\);/
+  );
   assert.match(source, /\[ui_root_visibility_issue\]/);
+});
+
+test("template and bundle do not ship a visible startup loading shell", () => {
+  const template = fs.readFileSync(new URL("../ui/step-card.template.html", import.meta.url), "utf8");
+  const bundled = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
+
+  assert.equal(template.includes('<div class="bootstrap-wait-shell" style="display:grid;gap:14px">'), false);
+  assert.equal(template.includes('<div class="bootstrap-wait-title">Loading…</div>'), false);
+  assert.equal(bundled.includes('<div class="bootstrap-wait-shell" style="display:grid;gap:14px">'), false);
+  assert.equal(bundled.includes('<div class="bootstrap-wait-title">Loading…</div>'), false);
+});
+
+test("main bootstrap no longer forces a render before the first host payload arrives", () => {
+  const source = fs.readFileSync(new URL("../ui/lib/main.ts", import.meta.url), "utf8");
+  const setGlobalsListenerTail = source.slice(source.indexOf('window.addEventListener("openai:set_globals"'));
+
+  assert.equal(setGlobalsListenerTail.includes("\n        render();"), false);
+  assert.equal(source.trimEnd().endsWith("render();"), false);
 });
 
 test("bundled runtime inline script parses without syntax errors", () => {
@@ -2342,10 +2425,13 @@ test("bundled runtime fail-closes missing canonical widget payloads", () => {
 test("bundled wording-choice view renders legacy feedback_reason_text in the compare slot", () => {
   const source = fs.readFileSync(new URL("../ui/step-card.bundled.html", import.meta.url), "utf8");
   assert.match(source, /class="wordingChoiceFeedback" id="wordingChoiceFeedback"/);
+  assert.match(source, /function readFeedbackContract\(uiPayloadRaw\)/);
   assert.match(source, /const feedbackEl = document\.getElementById\("wordingChoiceFeedback"\);/);
   assert.doesNotMatch(source, /function readWordingChoiceCompareFeedbackText\(wordingChoiceRaw\)/);
-  assert.match(source, /const feedbackReasonText = String\(wording\.feedback_reason_text \|\| ""\)\.trim\(\);/);
+  assert.match(source, /const feedbackReasonText = feedbackContract\?\.rationale \|\| String\(wording\.feedback_reason_text \|\| ""\)\.trim\(\);/);
   assert.match(source, /renderStructuredText\(feedbackEl, feedbackReasonText\);/);
+  assert.match(source, /feedbackContract = readFeedbackContract\(uiPayload\);/);
+  assert.match(source, /retainedHeading: feedbackContract\.retainedHeading,/);
   assert.match(source, /feedbackEl\.style\.display = feedbackReasonText \? "block" : "none";/);
   assert.match(source, /\.wordingChoiceFeedback p,/);
   assert.match(source, /\.cardDesc \.cardFeedbackNote/);

@@ -1468,11 +1468,13 @@ function labelsForMenu(
     }
     if (matchedIndex < 0) return [];
     usedIndices.add(matchedIndex);
+    const key = String(labelKeys[filteredLabels.length] || "").trim();
+    const localized = uiStringFromState(state, key, "");
     const fallbackKey = String(fullLabelKeys[matchedIndex] || "").trim();
     const fallback = String(MENU_LABEL_DEFAULTS[fallbackKey] || "").trim();
-    if (!fallback) return [];
-    const key = String(labelKeys[filteredLabels.length] || "").trim();
-    filteredLabels.push(uiStringFromState(state, key, fallback));
+    const label = localized || fallback;
+    if (!label) return [];
+    filteredLabels.push(label);
   }
   if (filteredLabels.some((label) => !label)) return [];
   return filteredLabels;

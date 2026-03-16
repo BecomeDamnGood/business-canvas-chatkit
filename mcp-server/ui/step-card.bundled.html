@@ -1793,15 +1793,7 @@
           <div class="badge" id="badge">1</div>
           <div class="sectionTitle" id="sectionTitle"></div>
           <div class="cardTitle" id="cardTitle"></div>
-          <div class="cardDesc" id="cardDesc">
-            <div class="bootstrap-wait-shell" style="display:grid;gap:14px">
-              <div class="bootstrap-wait-title">Loading…</div>
-              <div class="skeleton-line" style="width:68%;height:12px;border-radius:999px;opacity:.9"></div>
-              <div class="skeleton-line" style="width:92%;height:12px;border-radius:999px;opacity:.9"></div>
-              <div class="skeleton-line" style="width:84%;height:12px;border-radius:999px;opacity:.9"></div>
-              <div class="skeleton-line" style="width:56%;height:12px;border-radius:999px;opacity:.9"></div>
-            </div>
-          </div>
+          <div class="cardDesc" id="cardDesc"></div>
           <div class="inlineNotice" id="inlineNotice"></div>
           <div class="presentationPreview" id="presentationPreview">
             <a class="presentationThumbLink" id="presentationThumbLink" target="_blank" rel="noopener noreferrer">
@@ -5027,7 +5019,53 @@
   function toRecord3(value) {
     return value && typeof value === "object" && !Array.isArray(value) ? value : {};
   }
+  function normalizeStringArray(raw) {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((value) => String(value || "").trim()).filter(Boolean);
+  }
+  function normalizeFeedbackContractKind(raw) {
+    const kind = String(raw || "").trim();
+    if (kind === "single_value_compare" || kind === "single_value_canonical_suggestion" || kind === "list_edit_compare" || kind === "list_duplicate_merge_compare") {
+      return kind;
+    }
+    return "";
+  }
+  function readFeedbackContract(uiPayloadRaw) {
+    const uiPayload = toRecord3(uiPayloadRaw);
+    const feedback = toRecord3(uiPayload.feedback_contract);
+    const kind = normalizeFeedbackContractKind(feedback.kind);
+    if (!kind) return null;
+    const mode = String(feedback.mode || "").trim().toLowerCase() === "list" ? "list" : "text";
+    return {
+      kind,
+      mode,
+      rationale: String(feedback.rationale || "").trim(),
+      heading: String(feedback.heading || "").trim(),
+      supportText: String(feedback.support_text || "").trim(),
+      currentLabel: String(feedback.current_label || "").trim(),
+      suggestedLabel: String(feedback.suggested_label || "").trim(),
+      currentValue: String(feedback.current_value || "").trim(),
+      suggestedValue: String(feedback.suggested_value || "").trim(),
+      currentItems: normalizeStringArray(feedback.current_items),
+      suggestedItems: normalizeStringArray(feedback.suggested_items),
+      retainedHeading: String(feedback.retained_heading || "").trim(),
+      retainedItems: normalizeStringArray(feedback.retained_items),
+      instruction: String(feedback.instruction || "").trim()
+    };
+  }
   function readSingleValueCardContent(uiPayload) {
+    const feedbackContract = readFeedbackContract(uiPayload);
+    if (feedbackContract?.kind === "single_value_canonical_suggestion") {
+      if (!feedbackContract.heading && !feedbackContract.suggestedValue && !feedbackContract.supportText && !feedbackContract.rationale) {
+        return null;
+      }
+      return {
+        ...feedbackContract.heading ? { heading: feedbackContract.heading } : {},
+        ...feedbackContract.suggestedValue ? { canonicalText: feedbackContract.suggestedValue } : {},
+        ...feedbackContract.supportText ? { supportText: feedbackContract.supportText } : {},
+        ...feedbackContract.rationale ? { feedbackReasonText: feedbackContract.rationale } : {}
+      };
+    }
     const content = toRecord3(uiPayload.content);
     if (String(content.kind || "").trim() !== "single_value") return null;
     const heading = String(content.heading || "").trim();
@@ -5044,10 +5082,11 @@
   }
   function shouldSuppressMainCardForWordingChoice(uiPayloadRaw, uiViewVariantRaw) {
     const uiPayload = uiPayloadRaw && typeof uiPayloadRaw === "object" ? uiPayloadRaw : {};
+    const feedbackContract = readFeedbackContract(uiPayload);
     const uiViewVariant = String(uiViewVariantRaw || "").trim();
     const wordingChoicePayload = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
     const flags = toRecord3(uiPayload.flags);
-    return uiViewVariant === "wording_choice" || wordingChoicePayload.enabled === true || String(flags.require_wording_pick || "").trim() === "true";
+    return feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare" || uiViewVariant === "wording_choice" || wordingChoicePayload.enabled === true || String(flags.require_wording_pick || "").trim() === "true";
   }
   function shouldSuppressPromptForWordingChoice(params) {
     return String(params.uiViewVariant || "").trim() === "wording_choice" || params.wordingChoiceActive === true || params.requireWordingPick === true;
@@ -5123,7 +5162,10 @@
     if (normalizedRole === "wording_pick_user" || normalizedRole === "wording_pick_suggestion") {
       return "wording_choice";
     }
-    if (normalizedRole === "dream_start_exercise" || normalizedRole === "dream_switch_to_self") {
+    if (normalizedRole === "dream_start_exercise") {
+      return "choice";
+    }
+    if (normalizedRole === "dream_switch_to_self") {
       return "auxiliary";
     }
     return "choice";
@@ -5579,25 +5621,33 @@
       return false;
     }
     const uiPayload = resultData && typeof resultData.ui === "object" && resultData.ui ? resultData.ui : {};
+    const feedbackContract = readFeedbackContract(uiPayload);
     const flags = uiPayload && typeof uiPayload.flags === "object" && uiPayload.flags ? uiPayload.flags : {};
     const wording = uiPayload && typeof uiPayload.wording_choice === "object" && uiPayload.wording_choice ? uiPayload.wording_choice : {};
     const requirePick = String(flags.require_wording_pick || "false") === "true";
-    const enabled = requirePick || wording.enabled === true;
+    const feedbackContractEnabled = feedbackContract?.kind === "single_value_compare" || feedbackContract?.kind === "list_edit_compare" || feedbackContract?.kind === "list_duplicate_merge_compare";
+    const enabled = feedbackContractEnabled || requirePick || wording.enabled === true;
     if (!enabled) {
       wrap.style.display = "none";
       return false;
     }
-    const mode = String(wording.mode || "text") === "list" ? "list" : "text";
+    const legacyInstruction = String(wording.instruction || "").trim();
+    const legacyInstructionParts = parseWordingChoiceInstruction(legacyInstruction);
+    const mode = feedbackContract?.mode || (String(wording.mode || "text") === "list" ? "list" : "text");
     const variant = String(wording.variant || "default").trim().toLowerCase();
-    const feedbackReasonText = String(wording.feedback_reason_text || "").trim();
-    const userText = String(wording.user_text || "").trim();
-    const suggestionText = String(wording.suggestion_text || "").trim();
-    const userLabelFromPayload = String(wording.user_label || "").trim();
-    const suggestionLabelFromPayload = String(wording.suggestion_label || "").trim();
-    const userItems = Array.isArray(wording.user_items) ? wording.user_items : [];
-    const suggestionItems = Array.isArray(wording.suggestion_items) ? wording.suggestion_items : [];
-    const instruction = String(wording.instruction || "").trim() || t(lang, "wordingChoiceInstruction");
-    const instructionParts = parseWordingChoiceInstruction(instruction);
+    const feedbackReasonText = feedbackContract?.rationale || String(wording.feedback_reason_text || "").trim();
+    const userText = feedbackContract?.currentValue || String(wording.user_text || "").trim();
+    const suggestionText = feedbackContract?.suggestedValue || String(wording.suggestion_text || "").trim();
+    const userLabelFromPayload = feedbackContract?.currentLabel || String(wording.user_label || "").trim();
+    const suggestionLabelFromPayload = feedbackContract?.suggestedLabel || String(wording.suggestion_label || "").trim();
+    const userItems = feedbackContract?.currentItems || (Array.isArray(wording.user_items) ? wording.user_items : []);
+    const suggestionItems = feedbackContract?.suggestedItems || (Array.isArray(wording.suggestion_items) ? wording.suggestion_items : []);
+    const instruction = feedbackContract?.instruction || legacyInstruction || t(lang, "wordingChoiceInstruction");
+    const instructionParts = feedbackContract ? {
+      retainedHeading: feedbackContract.retainedHeading,
+      retainedItems: feedbackContract.retainedItems,
+      instructionText: feedbackContract.instruction || instruction
+    } : legacyInstructionParts;
     const ensureLabelColon = (value) => {
       const trimmed = String(value || "").trim();
       if (!trimmed) return "";
@@ -5657,12 +5707,13 @@
     return enabled;
   }
   function render(overrideToolOutput) {
-    revealWidgetRoot();
     const data = toolData(overrideToolOutput);
     if (data && Object.keys(data).length) setLastToolOutput(data);
     const resolved = resolveWidgetPayload2(data);
     const result = resolved.result;
     const state = result?.state || {};
+    const startupPayloadMissing = Object.keys(result || {}).length === 0 && Object.keys(state).length === 0;
+    if (!startupPayloadMissing) revealWidgetRoot();
     const errorObj = result?.error;
     const transientError = errorObj && (errorObj.type === "rate_limited" || errorObj.type === "timeout");
     const uiPayload = result?.ui && typeof result.ui === "object" ? result.ui : {};
@@ -5696,7 +5747,6 @@
     const serverExplicitBlocked = false;
     const serverExplicitFailed = false;
     const hasExplicitServerRouting = serverExplicitWaiting || serverExplicitPrestart || serverExplicitInteractive || serverExplicitRecovery || serverExplicitBlocked || serverExplicitFailed;
-    const startupPayloadMissing = Object.keys(result || {}).length === 0 && Object.keys(state).length === 0;
     const overrideStringsMap = overrideStrings;
     const hasOverrideStrings = Boolean(overrideStringsMap) && Object.keys(overrideStringsMap || {}).length > 0;
     if (hasOverrideStrings) setRuntimeUiStrings(overrideStringsMap);
@@ -6718,7 +6768,6 @@
             });
           }
         }
-        render();
       } catch (e) {
         console.error(e);
       } finally {
@@ -6741,7 +6790,6 @@
       console.error("[local_dev_initial_ingest_failed]", String(err?.message || err || "unknown"));
     });
   }
-  render();
 })();
     
     </script>
